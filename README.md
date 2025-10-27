@@ -75,6 +75,19 @@ curl -s --request POST http://localhost:8080/api/channels/CHANNEL_ID/stream/star
   --data '{"renditions":["1080p","720p"]}'
 ```
 
+### Authentication tokens
+
+All authenticated endpoints expect the BitRiver Live session token to be supplied via the `Authorization` header using the
+standard Bearer format:
+
+```bash
+curl --request GET http://localhost:8080/api/auth/session \
+  --header "Authorization: Bearer SESSION_TOKEN"
+```
+
+Future releases will also support the same token stored in a secure `bitriver_session` cookie for browser clients. Query-string
+tokens are no longer accepted.
+
 To stop the session, POST to `/api/channels/CHANNEL_ID/stream/stop` with an optional `peakConcurrent` value. Chat messages can be posted to `/api/channels/CHANNEL_ID/chat` and retrieved with pagination (`?limit=25`).
 
 Once a creator has at least one friend on the platform, they can publish a profile that highlights their live channels, a MySpace-style “top eight”, and crypto donation addresses that the platform never touches:

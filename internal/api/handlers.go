@@ -175,9 +175,6 @@ func ExtractToken(r *http.Request) string {
 			return strings.TrimSpace(parts[1])
 		}
 	}
-	if token := r.URL.Query().Get("token"); token != "" {
-		return token
-	}
 	if cookie, err := r.Cookie("bitriver_session"); err == nil {
 		return cookie.Value
 	}
