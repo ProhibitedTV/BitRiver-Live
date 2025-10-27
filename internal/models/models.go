@@ -3,11 +3,13 @@ package models
 import "time"
 
 type User struct {
-	ID          string    `json:"id"`
-	DisplayName string    `json:"displayName"`
-	Email       string    `json:"email"`
-	Roles       []string  `json:"roles"`
-	CreatedAt   time.Time `json:"createdAt"`
+	ID           string    `json:"id"`
+	DisplayName  string    `json:"displayName"`
+	Email        string    `json:"email"`
+	Roles        []string  `json:"roles"`
+	PasswordHash string    `json:"passwordHash,omitempty"`
+	SelfSignup   bool      `json:"selfSignup"`
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 type Channel struct {

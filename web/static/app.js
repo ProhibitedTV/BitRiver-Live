@@ -953,17 +953,20 @@ function renderStreamControls() {
 }
 
 function computeInstallerScript(data) {
+    const mode = data.mode || "production";
+    const addr = data.addr || (mode === "production" ? ":80" : ":8080");
     const logDir = data.enableLogs ? `${data.dataDir}/logs` : "";
     const hostnameHint = data.hostname
         ? `# Reverse proxy hint: point ${data.hostname} to this service for HTTPS.`
-        : "# Configure your reverse proxy or tailnet to expose the service.";
+        : `# Configure your reverse proxy or tailnet to expose the service. ${mode === "production" ? "Port 80 is used by default." : "Development mode keeps the control center on :8080."}`;
     return `#!/usr/bin/env bash
 set -euo pipefail
 
 INSTALL_DIR="${data.installDir}"
 DATA_DIR="${data.dataDir}"
 SERVICE_USER="${data.serviceUser}"
-ADDR="${data.addr}"
+MODE="${mode}"
+ADDR="${addr}"
 DATA_FILE="$DATA_DIR/store.json"
 ${logDir ? `LOG_DIR="${logDir}"` : ""}
 
@@ -984,7 +987,8 @@ sudo install -m 0755 bitriver-live "$INSTALL_DIR/bitriver-live"
 rm -f bitriver-live
 
 cat <<'ENV' | sudo tee "$INSTALL_DIR/.env" >/dev/null
-BITRIVER_LIVE_ADDR=${data.addr}
+BITRIVER_LIVE_ADDR=${addr}
+BITRIVER_LIVE_MODE=${mode}
 BITRIVER_LIVE_DATA=$DATA_FILE
 ENV
 
@@ -1012,7 +1016,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now bitriver-live.service
 
 ${hostnameHint}
-echo "Service is running on $ADDR"
+echo "Service is running on $ADDR (${mode} mode)"
 `;
 }
 
@@ -1023,11 +1027,29 @@ function setupInstaller() {
     container.appendChild(template.content.cloneNode(true));
     const form = container.querySelector("#installer-form");
     const output = container.querySelector("#installer-output");
+    const modeField = form.elements.mode;
+    const addrField = form.elements.addr;
+    if (modeField && addrField) {
+        let manualOverride = false;
+        const syncAddress = () => {
+            if (manualOverride) {
+                return;
+            }
+            addrField.value = modeField.value === "production" ? ":80" : ":8080";
+        };
+        modeField.addEventListener("change", syncAddress);
+        addrField.addEventListener("input", () => {
+            manualOverride = true;
+        });
+        syncAddress();
+    }
     form.addEventListener("submit", (event) => {
         event.preventDefault();
         const formData = new FormData(form);
         const data = Object.fromEntries(formData.entries());
         data.enableLogs = form.elements.enableLogs.checked;
+        data.mode = data.mode || "production";
+        data.addr = data.addr || (data.mode === "production" ? ":80" : ":8080");
         const script = computeInstallerScript(data);
         output.value = script;
         output.focus();

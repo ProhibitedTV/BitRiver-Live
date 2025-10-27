@@ -2,6 +2,9 @@ package storage
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -28,6 +31,45 @@ type Storage struct {
 	mu       sync.RWMutex
 	filePath string
 	data     dataset
+}
+
+var (
+	ErrInvalidCredentials       = errors.New("invalid credentials")
+	ErrPasswordLoginUnsupported = errors.New("account does not support password login")
+)
+
+// CreateUserParams captures the attributes that can be set when creating a user.
+type CreateUserParams struct {
+	DisplayName string
+	Email       string
+	Password    string
+	Roles       []string
+	SelfSignup  bool
+}
+
+func normalizeRoles(input []string) []string {
+	if len(input) == 0 {
+		return nil
+	}
+	roles := make([]string, 0, len(input))
+	seen := make(map[string]struct{})
+	for _, role := range input {
+		trimmed := strings.TrimSpace(role)
+		if trimmed == "" {
+			continue
+		}
+		normalized := strings.ToLower(trimmed)
+		if _, exists := seen[normalized]; exists {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		roles = append(roles, normalized)
+	}
+	if len(roles) == 0 {
+		return nil
+	}
+	sort.Strings(roles)
+	return roles
 }
 
 func NewStorage(path string) (*Storage, error) {
@@ -122,22 +164,33 @@ func (s *Storage) generateStreamKey() (string, error) {
 
 // User operations
 
-func (s *Storage) CreateUser(displayName, email string, roles []string) (models.User, error) {
+func (s *Storage) CreateUser(params CreateUserParams) (models.User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	normalizedEmail := strings.TrimSpace(strings.ToLower(email))
+	normalizedEmail := strings.TrimSpace(strings.ToLower(params.Email))
 	if normalizedEmail == "" {
 		return models.User{}, errors.New("email is required")
 	}
 	for _, user := range s.data.Users {
 		if user.Email == normalizedEmail {
-			return models.User{}, fmt.Errorf("email %s already in use", email)
+			return models.User{}, fmt.Errorf("email %s already in use", params.Email)
 		}
 	}
 
-	if displayName = strings.TrimSpace(displayName); displayName == "" {
+	displayName := strings.TrimSpace(params.DisplayName)
+	if displayName == "" {
 		return models.User{}, errors.New("displayName is required")
+	}
+
+	roles := normalizeRoles(params.Roles)
+	if params.SelfSignup {
+		if params.Password == "" {
+			return models.User{}, errors.New("password is required for self-service signup")
+		}
+		if len(roles) == 0 {
+			roles = []string{"viewer"}
+		}
 	}
 
 	id, err := s.generateID()
@@ -145,13 +198,24 @@ func (s *Storage) CreateUser(displayName, email string, roles []string) (models.
 		return models.User{}, err
 	}
 
+	var passwordHash string
+	if params.Password != "" {
+		hashed, hashErr := hashPassword(params.Password)
+		if hashErr != nil {
+			return models.User{}, fmt.Errorf("hash password: %w", hashErr)
+		}
+		passwordHash = hashed
+	}
+
 	now := time.Now().UTC()
 	user := models.User{
-		ID:          id,
-		DisplayName: displayName,
-		Email:       normalizedEmail,
-		Roles:       append([]string{}, roles...),
-		CreatedAt:   now,
+		ID:           id,
+		DisplayName:  displayName,
+		Email:        normalizedEmail,
+		Roles:        roles,
+		PasswordHash: passwordHash,
+		SelfSignup:   params.SelfSignup,
+		CreatedAt:    now,
 	}
 
 	s.data.Users[id] = user
@@ -182,6 +246,79 @@ func (s *Storage) GetUser(id string) (models.User, bool) {
 	defer s.mu.RUnlock()
 	user, ok := s.data.Users[id]
 	return user, ok
+}
+
+// FindUserByEmail looks up a user by their normalized email address.
+func (s *Storage) FindUserByEmail(email string) (models.User, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	normalizedEmail := strings.TrimSpace(strings.ToLower(email))
+	for _, user := range s.data.Users {
+		if user.Email == normalizedEmail {
+			return user, true
+		}
+	}
+	return models.User{}, false
+}
+
+// AuthenticateUser verifies credentials and returns the matching user on success.
+func (s *Storage) AuthenticateUser(email, password string) (models.User, error) {
+	if password == "" {
+		return models.User{}, errors.New("password is required")
+	}
+	user, ok := s.FindUserByEmail(email)
+	if !ok {
+		return models.User{}, ErrInvalidCredentials
+	}
+	if user.PasswordHash == "" {
+		return models.User{}, ErrPasswordLoginUnsupported
+	}
+	if !verifyPassword(user.PasswordHash, password) {
+		return models.User{}, ErrInvalidCredentials
+	}
+	return user, nil
+}
+
+func hashPassword(password string) (string, error) {
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
+		return "", fmt.Errorf("generate salt: %w", err)
+	}
+	h := sha256.New()
+	if _, err := h.Write(salt); err != nil {
+		return "", fmt.Errorf("hash password: %w", err)
+	}
+	if _, err := h.Write([]byte(password)); err != nil {
+		return "", fmt.Errorf("hash password: %w", err)
+	}
+	digest := h.Sum(nil)
+	encodedSalt := base64.RawStdEncoding.EncodeToString(salt)
+	encodedDigest := base64.RawStdEncoding.EncodeToString(digest)
+	return encodedSalt + ":" + encodedDigest, nil
+}
+
+func verifyPassword(encodedHash, candidate string) bool {
+	parts := strings.Split(encodedHash, ":")
+	if len(parts) != 2 {
+		return false
+	}
+	salt, err := base64.RawStdEncoding.DecodeString(parts[0])
+	if err != nil {
+		return false
+	}
+	stored, err := base64.RawStdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return false
+	}
+	h := sha256.New()
+	if _, err := h.Write(salt); err != nil {
+		return false
+	}
+	if _, err := h.Write([]byte(candidate)); err != nil {
+		return false
+	}
+	computed := h.Sum(nil)
+	return len(computed) == len(stored) && subtle.ConstantTimeCompare(computed, stored) == 1
 }
 
 // UserUpdate represents the fields that can be modified for an existing user.
@@ -226,22 +363,7 @@ func (s *Storage) UpdateUser(id string, update UserUpdate) (models.User, error) 
 	}
 
 	if update.Roles != nil {
-		roles := make([]string, 0, len(*update.Roles))
-		seen := make(map[string]struct{})
-		for _, role := range *update.Roles {
-			trimmed := strings.TrimSpace(role)
-			if trimmed == "" {
-				continue
-			}
-			normalized := strings.ToLower(trimmed)
-			if _, exists := seen[normalized]; exists {
-				continue
-			}
-			seen[normalized] = struct{}{}
-			roles = append(roles, normalized)
-		}
-		sort.Strings(roles)
-		user.Roles = roles
+		user.Roles = normalizeRoles(*update.Roles)
 	}
 
 	s.data.Users[id] = user

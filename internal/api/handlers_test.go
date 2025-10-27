@@ -7,7 +7,9 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"bitriver-live/internal/auth"
 	"bitriver-live/internal/storage"
 )
 
@@ -19,7 +21,8 @@ func newTestHandler(t *testing.T) (*Handler, *storage.Storage) {
 	if err != nil {
 		t.Fatalf("NewStorage error: %v", err)
 	}
-	return NewHandler(store), store
+	sessions := auth.NewSessionManager(24 * time.Hour)
+	return NewHandler(store, sessions), store
 }
 
 func TestUsersEndpointCreatesAndListsUsers(t *testing.T) {
@@ -58,9 +61,76 @@ func TestUsersEndpointCreatesAndListsUsers(t *testing.T) {
 	}
 }
 
+func TestSignupAndLoginFlow(t *testing.T) {
+	handler, _ := newTestHandler(t)
+
+	signupPayload := map[string]string{
+		"displayName": "Viewer",
+		"email":       "viewer@example.com",
+		"password":    "supersecret",
+	}
+	body, _ := json.Marshal(signupPayload)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/signup", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.Signup(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected signup status 201, got %d", rec.Code)
+	}
+
+	var signed authResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &signed); err != nil {
+		t.Fatalf("decode signup response: %v", err)
+	}
+	if signed.Token == "" {
+		t.Fatal("expected signup response to include token")
+	}
+	if !signed.User.SelfSignup {
+		t.Fatal("expected user to be marked as self-signup")
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
+	req.Header.Set("Authorization", "Bearer "+signed.Token)
+	rec = httptest.NewRecorder()
+	handler.Session(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected session status 200, got %d", rec.Code)
+	}
+
+	loginPayload := map[string]string{
+		"email":    "viewer@example.com",
+		"password": "supersecret",
+	}
+	body, _ = json.Marshal(loginPayload)
+	req = httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(body))
+	rec = httptest.NewRecorder()
+	handler.Login(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected login status 200, got %d", rec.Code)
+	}
+
+	var loggedIn authResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &loggedIn); err != nil {
+		t.Fatalf("decode login response: %v", err)
+	}
+	if loggedIn.Token == signed.Token {
+		t.Fatal("expected login to issue a new session token")
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/auth/session", nil)
+	req.Header.Set("Authorization", "Bearer "+signed.Token)
+	rec = httptest.NewRecorder()
+	handler.Session(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected delete session status 204, got %d", rec.Code)
+	}
+}
+
 func TestChannelStreamLifecycle(t *testing.T) {
 	handler, store := newTestHandler(t)
-	user, err := store.CreateUser("Alice", "alice@example.com", nil)
+	user, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Alice",
+		Email:       "alice@example.com",
+	})
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
@@ -122,7 +192,10 @@ func TestChannelStreamLifecycle(t *testing.T) {
 
 func TestChatEndpointsLimit(t *testing.T) {
 	handler, store := newTestHandler(t)
-	user, err := store.CreateUser("Alice", "alice@example.com", nil)
+	user, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Alice",
+		Email:       "alice@example.com",
+	})
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
@@ -162,11 +235,18 @@ func TestChatEndpointsLimit(t *testing.T) {
 
 func TestProfileEndpoints(t *testing.T) {
 	handler, store := newTestHandler(t)
-	owner, err := store.CreateUser("Streamer", "streamer@example.com", []string{"creator"})
+	owner, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Streamer",
+		Email:       "streamer@example.com",
+		Roles:       []string{"creator"},
+	})
 	if err != nil {
 		t.Fatalf("CreateUser owner: %v", err)
 	}
-	friend, err := store.CreateUser("Friend", "friend@example.com", nil)
+	friend, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Friend",
+		Email:       "friend@example.com",
+	})
 	if err != nil {
 		t.Fatalf("CreateUser friend: %v", err)
 	}

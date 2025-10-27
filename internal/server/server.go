@@ -20,6 +20,9 @@ type Server struct {
 func New(handler *api.Handler, addr string) (*Server, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handler.Health)
+	mux.HandleFunc("/api/auth/signup", handler.Signup)
+	mux.HandleFunc("/api/auth/login", handler.Login)
+	mux.HandleFunc("/api/auth/session", handler.Session)
 	mux.HandleFunc("/api/users", handler.Users)
 	mux.HandleFunc("/api/users/", handler.UserByID)
 	mux.HandleFunc("/api/channels", handler.Channels)
