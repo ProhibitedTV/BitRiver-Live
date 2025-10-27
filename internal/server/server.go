@@ -44,7 +44,7 @@ func New(handler *api.Handler, addr string) (*Server, error) {
 
 	httpServer := &http.Server{
 		Addr:              addr,
-		Handler:           loggingMiddleware(mux),
+		Handler:           loggingMiddleware(authMiddleware(handler, mux)),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
@@ -85,6 +85,23 @@ func loggingMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(recorder, r)
 		duration := time.Since(start)
 		fmt.Printf("%s %s %d %s\n", r.Method, r.URL.Path, recorder.status, duration)
+	})
+}
+
+func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if path == "/healthz" || strings.HasPrefix(path, "/api/auth/") || !strings.HasPrefix(path, "/api/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		user, err := handler.AuthenticateRequest(r)
+		if err != nil {
+			api.WriteError(w, http.StatusUnauthorized, err)
+			return
+		}
+		ctx := api.ContextWithUser(r.Context(), user)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
