@@ -1,10 +1,14 @@
 package storage
 
 import (
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 
 	"bitriver-live/internal/models"
@@ -60,6 +64,39 @@ func TestAuthenticateUser(t *testing.T) {
 	if !user.SelfSignup {
 		t.Fatalf("expected self signup flag to be set")
 	}
+	if user.PasswordHash == "" {
+		t.Fatal("expected password hash to be stored")
+	}
+	if user.PasswordHash == password {
+		t.Fatal("expected password hash to differ from password")
+	}
+	parts := strings.Split(user.PasswordHash, "$")
+	if len(parts) != 5 {
+		t.Fatalf("unexpected hash format: %s", user.PasswordHash)
+	}
+	if parts[0] != "pbkdf2" || parts[1] != "sha256" {
+		t.Fatalf("unexpected hash identifiers: %v", parts[:2])
+	}
+	if parts[2] != strconv.Itoa(passwordHashIterations) {
+		t.Fatalf("expected iteration count %d, got %s", passwordHashIterations, parts[2])
+	}
+	salt, err := base64.RawStdEncoding.DecodeString(parts[3])
+	if err != nil {
+		t.Fatalf("decode salt: %v", err)
+	}
+	if len(salt) != passwordHashSaltLength {
+		t.Fatalf("expected salt length %d, got %d", passwordHashSaltLength, len(salt))
+	}
+	derived, err := base64.RawStdEncoding.DecodeString(parts[4])
+	if err != nil {
+		t.Fatalf("decode derived key: %v", err)
+	}
+	if len(derived) != passwordHashKeyLength {
+		t.Fatalf("expected key length %d, got %d", passwordHashKeyLength, len(derived))
+	}
+	if verifyErr := verifyPassword(user.PasswordHash, password); verifyErr != nil {
+		t.Fatalf("verifyPassword failed: %v", verifyErr)
+	}
 
 	authenticated, err := store.AuthenticateUser("viewer@example.com", password)
 	if err != nil {
@@ -69,11 +106,26 @@ func TestAuthenticateUser(t *testing.T) {
 		t.Fatalf("expected authenticated user %s, got %s", user.ID, authenticated.ID)
 	}
 
-	if _, err := store.AuthenticateUser("viewer@example.com", "wrong"); err == nil {
-		t.Fatal("expected invalid password to return error")
+	if _, err := store.AuthenticateUser("viewer@example.com", "wrong"); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("expected invalid password error, got %v", err)
 	}
-	if _, err := store.AuthenticateUser("unknown@example.com", password); err == nil {
-		t.Fatal("expected unknown email to fail authentication")
+	if _, err := store.AuthenticateUser("unknown@example.com", password); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("expected unknown email to return ErrInvalidCredentials, got %v", err)
+	}
+
+	reloaded, err := NewStorage(store.filePath)
+	if err != nil {
+		t.Fatalf("reload storage: %v", err)
+	}
+	persisted, ok := reloaded.FindUserByEmail("viewer@example.com")
+	if !ok {
+		t.Fatal("expected persisted user to be found after reload")
+	}
+	if persisted.PasswordHash != user.PasswordHash {
+		t.Fatalf("expected password hash to persist across reloads")
+	}
+	if _, err := reloaded.AuthenticateUser("viewer@example.com", password); err != nil {
+		t.Fatalf("AuthenticateUser on reloaded store returned error: %v", err)
 	}
 }
 

@@ -13,11 +13,19 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"bitriver-live/internal/models"
+	"crypto/pbkdf2"
+)
+
+const (
+	passwordHashSaltLength = 16
+	passwordHashKeyLength  = 32
+	passwordHashIterations = 120000
 )
 
 type dataset struct {
@@ -305,52 +313,57 @@ func (s *Storage) AuthenticateUser(email, password string) (models.User, error) 
 	if user.PasswordHash == "" {
 		return models.User{}, ErrPasswordLoginUnsupported
 	}
-	if !verifyPassword(user.PasswordHash, password) {
-		return models.User{}, ErrInvalidCredentials
+	if err := verifyPassword(user.PasswordHash, password); err != nil {
+		if errors.Is(err, ErrInvalidCredentials) {
+			return models.User{}, ErrInvalidCredentials
+		}
+		return models.User{}, err
 	}
 	return user, nil
 }
 
 func hashPassword(password string) (string, error) {
-	salt := make([]byte, 16)
+	salt := make([]byte, passwordHashSaltLength)
 	if _, err := rand.Read(salt); err != nil {
 		return "", fmt.Errorf("generate salt: %w", err)
 	}
-	h := sha256.New()
-	if _, err := h.Write(salt); err != nil {
-		return "", fmt.Errorf("hash password: %w", err)
+	derived, err := pbkdf2.Key(sha256.New, password, salt, passwordHashIterations, passwordHashKeyLength)
+	if err != nil {
+		return "", fmt.Errorf("derive key: %w", err)
 	}
-	if _, err := h.Write([]byte(password)); err != nil {
-		return "", fmt.Errorf("hash password: %w", err)
-	}
-	digest := h.Sum(nil)
 	encodedSalt := base64.RawStdEncoding.EncodeToString(salt)
-	encodedDigest := base64.RawStdEncoding.EncodeToString(digest)
-	return encodedSalt + ":" + encodedDigest, nil
+	encodedKey := base64.RawStdEncoding.EncodeToString(derived)
+	return fmt.Sprintf("pbkdf2$sha256$%d$%s$%s", passwordHashIterations, encodedSalt, encodedKey), nil
 }
 
-func verifyPassword(encodedHash, candidate string) bool {
-	parts := strings.Split(encodedHash, ":")
-	if len(parts) != 2 {
-		return false
+func verifyPassword(encodedHash, candidate string) error {
+	parts := strings.Split(encodedHash, "$")
+	if len(parts) != 5 {
+		return fmt.Errorf("verify password: invalid hash format")
 	}
-	salt, err := base64.RawStdEncoding.DecodeString(parts[0])
+	if parts[0] != "pbkdf2" || parts[1] != "sha256" {
+		return fmt.Errorf("verify password: unsupported hash identifier")
+	}
+	iterations, err := strconv.Atoi(parts[2])
+	if err != nil || iterations <= 0 {
+		return fmt.Errorf("verify password: invalid iteration count")
+	}
+	salt, err := base64.RawStdEncoding.DecodeString(parts[3])
 	if err != nil {
-		return false
+		return fmt.Errorf("verify password: decode salt: %w", err)
 	}
-	stored, err := base64.RawStdEncoding.DecodeString(parts[1])
+	storedKey, err := base64.RawStdEncoding.DecodeString(parts[4])
 	if err != nil {
-		return false
+		return fmt.Errorf("verify password: decode hash: %w", err)
 	}
-	h := sha256.New()
-	if _, err := h.Write(salt); err != nil {
-		return false
+	derived, err := pbkdf2.Key(sha256.New, candidate, salt, iterations, len(storedKey))
+	if err != nil {
+		return fmt.Errorf("verify password: derive key: %w", err)
 	}
-	if _, err := h.Write([]byte(candidate)); err != nil {
-		return false
+	if len(derived) != len(storedKey) || subtle.ConstantTimeCompare(derived, storedKey) != 1 {
+		return ErrInvalidCredentials
 	}
-	computed := h.Sum(nil)
-	return len(computed) == len(stored) && subtle.ConstantTimeCompare(computed, stored) == 1
+	return nil
 }
 
 // UserUpdate represents the fields that can be modified for an existing user.
