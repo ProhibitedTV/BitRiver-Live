@@ -22,6 +22,7 @@
             <button data-view="sessions">Sessions</button>
             <button data-view="settings">Settings</button>
         </nav>
+        <a class="hero__link" href="/signup">Create a viewer account</a>
     </header>
     <main>
         <section id="dashboard" class="panel active">
@@ -192,8 +193,15 @@
                 <input type="text" name="serviceUser" required value="bitriver" />
             </label>
             <label>
+                Deployment mode
+                <select name="mode" required>
+                    <option value="production" selected>Production (port 80, public ready)</option>
+                    <option value="development">Development (:8080, local testing)</option>
+                </select>
+            </label>
+            <label>
                 HTTP listen address
-                <input type="text" name="addr" required value=":8080" />
+                <input type="text" name="addr" required value=":80" />
             </label>
             <label>
                 Public hostname (optional, used for TLS hints)

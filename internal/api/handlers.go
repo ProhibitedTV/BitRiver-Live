@@ -9,16 +9,28 @@ import (
 	"strings"
 	"time"
 
+	"bitriver-live/internal/auth"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/storage"
 )
 
 type Handler struct {
-	Store *storage.Storage
+	Store    *storage.Storage
+	Sessions *auth.SessionManager
 }
 
-func NewHandler(store *storage.Storage) *Handler {
-	return &Handler{Store: store}
+func NewHandler(store *storage.Storage, sessions *auth.SessionManager) *Handler {
+	if sessions == nil {
+		sessions = auth.NewSessionManager(24 * time.Hour)
+	}
+	return &Handler{Store: store, Sessions: sessions}
+}
+
+func (h *Handler) sessionManager() *auth.SessionManager {
+	if h.Sessions == nil {
+		h.Sessions = auth.NewSessionManager(24 * time.Hour)
+	}
+	return h.Sessions
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
@@ -52,12 +64,128 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+
+	var req signupRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if len(req.Password) < 8 {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("password must be at least 8 characters"))
+		return
+	}
+
+	user, err := h.Store.CreateUser(storage.CreateUserParams{
+		DisplayName: req.DisplayName,
+		Email:       req.Email,
+		Password:    req.Password,
+		SelfSignup:  true,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	token, expiresAt, err := h.sessionManager().Create(user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, newAuthResponse(user, token, expiresAt))
+}
+
+func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+
+	var req loginRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	user, err := h.Store.AuthenticateUser(req.Email, req.Password)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, fmt.Errorf("invalid credentials"))
+		return
+	}
+
+	token, expiresAt, err := h.sessionManager().Create(user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, newAuthResponse(user, token, expiresAt))
+}
+
+func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		token := extractToken(r)
+		if token == "" {
+			writeError(w, http.StatusUnauthorized, fmt.Errorf("missing session token"))
+			return
+		}
+		userID, expiresAt, ok := h.sessionManager().Validate(token)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, fmt.Errorf("invalid or expired session"))
+			return
+		}
+		user, exists := h.Store.GetUser(userID)
+		if !exists {
+			writeError(w, http.StatusUnauthorized, fmt.Errorf("account not found"))
+			return
+		}
+		writeJSON(w, http.StatusOK, newAuthResponse(user, token, expiresAt))
+	case http.MethodDelete:
+		token := extractToken(r)
+		if token == "" {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("missing session token"))
+			return
+		}
+		h.sessionManager().Revoke(token)
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		w.Header().Set("Allow", "GET, DELETE")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+	}
+}
+
+func extractToken(r *http.Request) string {
+	header := r.Header.Get("Authorization")
+	if header != "" {
+		parts := strings.SplitN(header, " ", 2)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			return strings.TrimSpace(parts[1])
+		}
+	}
+	if token := r.URL.Query().Get("token"); token != "" {
+		return token
+	}
+	if cookie, err := r.Cookie("bitriver_session"); err == nil {
+		return cookie.Value
+	}
+	return ""
+}
+
 // Users
 
 type createUserRequest struct {
 	DisplayName string   `json:"displayName"`
 	Email       string   `json:"email"`
 	Roles       []string `json:"roles"`
+	Password    string   `json:"password,omitempty"`
 }
 
 type updateUserRequest struct {
@@ -66,11 +194,30 @@ type updateUserRequest struct {
 	Roles       *[]string `json:"roles"`
 }
 
+type signupRequest struct {
+	DisplayName string `json:"displayName"`
+	Email       string `json:"email"`
+	Password    string `json:"password"`
+}
+
+type loginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type authResponse struct {
+	Token     string       `json:"token"`
+	ExpiresAt string       `json:"expiresAt"`
+	User      userResponse `json:"user"`
+}
+
 type userResponse struct {
 	ID          string   `json:"id"`
 	DisplayName string   `json:"displayName"`
 	Email       string   `json:"email"`
 	Roles       []string `json:"roles"`
+	SelfSignup  bool     `json:"selfSignup"`
+	HasPassword bool     `json:"hasPassword"`
 	CreatedAt   string   `json:"createdAt"`
 }
 
@@ -80,7 +227,17 @@ func newUserResponse(user models.User) userResponse {
 		DisplayName: user.DisplayName,
 		Email:       user.Email,
 		Roles:       append([]string{}, user.Roles...),
+		SelfSignup:  user.SelfSignup,
+		HasPassword: user.PasswordHash != "",
 		CreatedAt:   user.CreatedAt.Format(time.RFC3339Nano),
+	}
+}
+
+func newAuthResponse(user models.User, token string, expires time.Time) authResponse {
+	return authResponse{
+		Token:     token,
+		ExpiresAt: expires.UTC().Format(time.RFC3339Nano),
+		User:      newUserResponse(user),
 	}
 }
 
@@ -99,7 +256,12 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		user, err := h.Store.CreateUser(req.DisplayName, req.Email, req.Roles)
+		user, err := h.Store.CreateUser(storage.CreateUserParams{
+			DisplayName: req.DisplayName,
+			Email:       req.Email,
+			Roles:       req.Roles,
+			Password:    req.Password,
+		})
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return

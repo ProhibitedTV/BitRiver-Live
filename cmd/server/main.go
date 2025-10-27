@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"bitriver-live/internal/api"
+	"bitriver-live/internal/auth"
 	"bitriver-live/internal/server"
 	"bitriver-live/internal/storage"
 )
@@ -19,12 +21,26 @@ import (
 func main() {
 	addr := flag.String("addr", "", "HTTP listen address")
 	dataPath := flag.String("data", "", "path to JSON datastore")
+	mode := flag.String("mode", "", "server runtime mode (development or production)")
 	flag.Parse()
 
 	listenAddr := *addr
 	if listenAddr == "" {
 		listenAddr = os.Getenv("BITRIVER_LIVE_ADDR")
-		if listenAddr == "" {
+	}
+
+	serverMode := strings.ToLower(strings.TrimSpace(*mode))
+	if serverMode == "" {
+		serverMode = strings.ToLower(strings.TrimSpace(os.Getenv("BITRIVER_LIVE_MODE")))
+	}
+	if serverMode == "" {
+		serverMode = "development"
+	}
+
+	if listenAddr == "" {
+		if serverMode == "production" {
+			listenAddr = ":80"
+		} else {
 			listenAddr = ":8080"
 		}
 	}
@@ -42,7 +58,8 @@ func main() {
 		log.Fatalf("failed to open datastore: %v", err)
 	}
 
-	handler := api.NewHandler(store)
+	sessions := auth.NewSessionManager(24 * time.Hour)
+	handler := api.NewHandler(store, sessions)
 	srv, err := server.New(handler, listenAddr)
 	if err != nil {
 		log.Fatalf("failed to initialise server: %v", err)
@@ -50,7 +67,7 @@ func main() {
 
 	errs := make(chan error, 1)
 	go func() {
-		log.Printf("BitRiver Live API listening on %s", listenAddr)
+		log.Printf("BitRiver Live API listening on %s (%s mode)", listenAddr, serverMode)
 		if err := srv.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errs <- err
 		}

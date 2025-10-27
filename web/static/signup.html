@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Join BitRiver Live</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body class="auth-page">
+    <main class="auth-container">
+        <section class="auth-card">
+            <h1>Create your BitRiver Live account</h1>
+            <p>Claim your channel name, connect with friends, and start broadcasting without waiting on an administrator.</p>
+            <form id="signup-form" class="auth-form">
+                <label>
+                    Display name
+                    <input type="text" name="displayName" required autocomplete="nickname" />
+                </label>
+                <label>
+                    Email
+                    <input type="email" name="email" required autocomplete="email" />
+                </label>
+                <label>
+                    Password
+                    <input type="password" name="password" required minlength="8" autocomplete="new-password" />
+                </label>
+                <button type="submit" class="primary">Create account</button>
+            </form>
+            <p class="auth-hint">We will provision a viewer account instantly. Upgrade to creator status later from the control center.</p>
+        </section>
+        <section class="auth-card">
+            <h2>Already streaming?</h2>
+            <p>Sign in to retrieve your stream keys, manage channels, and keep chat buzzing.</p>
+            <form id="login-form" class="auth-form">
+                <label>
+                    Email
+                    <input type="email" name="email" required autocomplete="email" />
+                </label>
+                <label>
+                    Password
+                    <input type="password" name="password" required minlength="8" autocomplete="current-password" />
+                </label>
+                <button type="submit" class="secondary">Sign in</button>
+            </form>
+        </section>
+        <div id="auth-feedback" class="auth-feedback" hidden></div>
+    </main>
+    <script type="module" src="/static/signup.js"></script>
+</body>
+</html>

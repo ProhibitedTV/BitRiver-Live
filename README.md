@@ -15,7 +15,7 @@ The repository now includes a self-contained Go API that covers the foundational
 ### Run the API server
 
 ```bash
-go run ./cmd/server --addr :8080 --data data/store.json
+go run ./cmd/server --mode development --addr :8080 --data data/store.json
 ```
 
 When the server is running, visit [http://localhost:8080](http://localhost:8080) to open the **BitRiver Live Control Center**. The built-in web interface lets you:
@@ -26,15 +26,25 @@ When the server is running, visit [http://localhost:8080](http://localhost:8080)
 - Seed chat conversations, moderate or remove messages across every channel in one view
 - Curate streamer profiles with featured channels, top friends, and crypto donation links through a guided form
 - Generate a turn-key installer script that provisions BitRiver Live as a systemd service on a home server, complete with optional log directories
+- Offer a self-service `/signup` experience so viewers can create password-protected accounts on their own
 
 The UI talks directly to the same REST API documented below, so you can always fall back to curl or an API client when you need to automate advanced workflows.
 
-The server also respects the `BITRIVER_LIVE_ADDR` and `BITRIVER_LIVE_DATA` environment variables if you prefer configuring runtime options without flags.
+The server also respects the `BITRIVER_LIVE_ADDR`, `BITRIVER_LIVE_MODE`, and `BITRIVER_LIVE_DATA` environment variables if you prefer configuring runtime options without flags. Switch to production-ready defaults by running:
+
+```bash
+go run ./cmd/server --mode production --data /var/lib/bitriver-live/store.json
+```
+
+In production mode BitRiver Live binds to port 80 by default, letting viewers access the control center without appending a port number to your domain.
 
 The server exposes a REST API under the `/api` prefix:
 
 | Endpoint | Method | Description |
 | --- | --- | --- |
+| `/api/auth/signup` | `POST` | Self-service viewer registration with password hashing |
+| `/api/auth/login` | `POST` | Issue a session token for password-based sign-in |
+| `/api/auth/session` | `GET`, `DELETE` | Inspect or revoke active sessions |
 | `/api/users` | `POST`, `GET` | Create new accounts and list all users |
 | `/api/users/{id}` | `GET`, `PATCH`, `DELETE` | Inspect, update, or remove a control-center account |
 | `/api/channels` | `POST`, `GET` | Provision channels for creators and filter them by owner |
@@ -86,6 +96,8 @@ curl -s --request PUT http://localhost:8080/api/profiles/STREAMER_ID \
 ```
 
 The API normalizes currency symbols (e.g., `eth` → `ETH`) and enforces a maximum of eight top friends to preserve the throwback feel. Donation links are peer-to-peer: viewers send crypto directly to streamers with zero custody by the BitRiver Live backend.
+
+For non-technical viewers, the bundled `/signup` page provides a friendly registration and sign-in flow that talks to the authentication endpoints above and persists session tokens to the browser.
 
 ### Run automated checks
 

@@ -23,7 +23,11 @@ func newTestStore(t *testing.T) *Storage {
 func TestCreateAndListUser(t *testing.T) {
 	store := newTestStore(t)
 
-	user, err := store.CreateUser("Alice", "alice@example.com", []string{"creator"})
+	user, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Alice",
+		Email:       "alice@example.com",
+		Roles:       []string{"creator"},
+	})
 	if err != nil {
 		t.Fatalf("CreateUser returned error: %v", err)
 	}
@@ -40,10 +44,46 @@ func TestCreateAndListUser(t *testing.T) {
 	}
 }
 
+func TestAuthenticateUser(t *testing.T) {
+	store := newTestStore(t)
+	password := "hunter42!"
+	user, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Viewer",
+		Email:       "viewer@example.com",
+		Password:    password,
+		SelfSignup:  true,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser self signup: %v", err)
+	}
+	if !user.SelfSignup {
+		t.Fatalf("expected self signup flag to be set")
+	}
+
+	authenticated, err := store.AuthenticateUser("viewer@example.com", password)
+	if err != nil {
+		t.Fatalf("AuthenticateUser returned error: %v", err)
+	}
+	if authenticated.ID != user.ID {
+		t.Fatalf("expected authenticated user %s, got %s", user.ID, authenticated.ID)
+	}
+
+	if _, err := store.AuthenticateUser("viewer@example.com", "wrong"); err == nil {
+		t.Fatal("expected invalid password to return error")
+	}
+	if _, err := store.AuthenticateUser("unknown@example.com", password); err == nil {
+		t.Fatal("expected unknown email to fail authentication")
+	}
+}
+
 func TestUpdateAndDeleteUser(t *testing.T) {
 	store := newTestStore(t)
 
-	user, err := store.CreateUser("Alice", "alice@example.com", []string{"creator"})
+	user, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Alice",
+		Email:       "alice@example.com",
+		Roles:       []string{"creator"},
+	})
 	if err != nil {
 		t.Fatalf("CreateUser returned error: %v", err)
 	}
@@ -75,7 +115,11 @@ func TestUpdateAndDeleteUser(t *testing.T) {
 
 func TestCreateChannelAndStartStopStream(t *testing.T) {
 	store := newTestStore(t)
-	user, err := store.CreateUser("Alice", "alice@example.com", []string{"creator"})
+	user, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Alice",
+		Email:       "alice@example.com",
+		Roles:       []string{"creator"},
+	})
 	if err != nil {
 		t.Fatalf("CreateUser returned error: %v", err)
 	}
@@ -130,7 +174,11 @@ func TestCreateChannelAndStartStopStream(t *testing.T) {
 
 func TestDeleteChannelRemovesArtifacts(t *testing.T) {
 	store := newTestStore(t)
-	owner, err := store.CreateUser("Owner", "owner@example.com", []string{"creator"})
+	owner, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Owner",
+		Email:       "owner@example.com",
+		Roles:       []string{"creator"},
+	})
 	if err != nil {
 		t.Fatalf("CreateUser owner: %v", err)
 	}
@@ -173,7 +221,10 @@ func TestStoragePersistsToDisk(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStorage: %v", err)
 	}
-	user, err := store.CreateUser("Alice", "alice@example.com", nil)
+	user, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Alice",
+		Email:       "alice@example.com",
+	})
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
@@ -195,7 +246,10 @@ func TestStoragePersistsToDisk(t *testing.T) {
 
 func TestListChatMessagesOrdering(t *testing.T) {
 	store := newTestStore(t)
-	user, err := store.CreateUser("Alice", "alice@example.com", nil)
+	user, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Alice",
+		Email:       "alice@example.com",
+	})
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
@@ -230,7 +284,10 @@ func TestListChatMessagesOrdering(t *testing.T) {
 
 func TestDeleteChatMessage(t *testing.T) {
 	store := newTestStore(t)
-	user, err := store.CreateUser("Alice", "alice@example.com", nil)
+	user, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Alice",
+		Email:       "alice@example.com",
+	})
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
@@ -254,11 +311,18 @@ func TestDeleteChatMessage(t *testing.T) {
 
 func TestUpsertProfileCreatesProfile(t *testing.T) {
 	store := newTestStore(t)
-	owner, err := store.CreateUser("Streamer", "streamer@example.com", []string{"creator"})
+	owner, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Streamer",
+		Email:       "streamer@example.com",
+		Roles:       []string{"creator"},
+	})
 	if err != nil {
 		t.Fatalf("CreateUser owner: %v", err)
 	}
-	friend, err := store.CreateUser("Friend", "friend@example.com", nil)
+	friend, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Friend",
+		Email:       "friend@example.com",
+	})
 	if err != nil {
 		t.Fatalf("CreateUser friend: %v", err)
 	}
@@ -338,14 +402,20 @@ func TestUpsertProfileCreatesProfile(t *testing.T) {
 
 func TestUpsertProfileTopFriendsLimit(t *testing.T) {
 	store := newTestStore(t)
-	owner, err := store.CreateUser("Owner", "owner@example.com", nil)
+	owner, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Owner",
+		Email:       "owner@example.com",
+	})
 	if err != nil {
 		t.Fatalf("CreateUser owner: %v", err)
 	}
 
 	friendIDs := make([]string, 0, 9)
 	for i := 0; i < 9; i++ {
-		friend, err := store.CreateUser("Friend", fmt.Sprintf("friend%d@example.com", i), nil)
+		friend, err := store.CreateUser(CreateUserParams{
+			DisplayName: "Friend",
+			Email:       fmt.Sprintf("friend%d@example.com", i),
+		})
 		if err != nil {
 			t.Fatalf("CreateUser friend %d: %v", i, err)
 		}
