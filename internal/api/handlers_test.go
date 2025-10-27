@@ -269,6 +269,85 @@ func TestChannelStreamLifecycle(t *testing.T) {
 	}
 }
 
+func TestChannelsListPermissions(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	creator, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Creator",
+		Email:       "creator@example.com",
+		Roles:       []string{"creator"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser creator: %v", err)
+	}
+
+	admin, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Admin",
+		Email:       "admin@example.com",
+		Roles:       []string{"admin"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser admin: %v", err)
+	}
+
+	viewer, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Viewer",
+		Email:       "viewer@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
+
+	channel, err := store.CreateChannel(creator.ID, "Creator Channel", "gaming", []string{"retro"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/channels", nil)
+	req = withUser(req, creator)
+	rec := httptest.NewRecorder()
+	handler.Channels(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected creator list status 200, got %d", rec.Code)
+	}
+	var creatorResponse []channelResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &creatorResponse); err != nil {
+		t.Fatalf("decode creator response: %v", err)
+	}
+	if len(creatorResponse) != 1 {
+		t.Fatalf("expected one channel for creator, got %d", len(creatorResponse))
+	}
+	if creatorResponse[0].StreamKey == "" {
+		t.Fatal("expected stream key for creator-owned channel")
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/channels?ownerId="+creator.ID, nil)
+	req = withUser(req, viewer)
+	rec = httptest.NewRecorder()
+	handler.Channels(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected viewer status 403, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/channels?ownerId="+creator.ID, nil)
+	req = withUser(req, admin)
+	rec = httptest.NewRecorder()
+	handler.Channels(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected admin list status 200, got %d", rec.Code)
+	}
+	var adminResponse []channelResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &adminResponse); err != nil {
+		t.Fatalf("decode admin response: %v", err)
+	}
+	if len(adminResponse) != 1 {
+		t.Fatalf("expected one channel for admin, got %d", len(adminResponse))
+	}
+	if adminResponse[0].StreamKey != channel.StreamKey {
+		t.Fatalf("expected admin to receive stream key %s, got %s", channel.StreamKey, adminResponse[0].StreamKey)
+	}
+}
+
 func TestChatEndpointsLimit(t *testing.T) {
 	handler, store := newTestHandler(t)
 	user, err := store.CreateUser(storage.CreateUserParams{

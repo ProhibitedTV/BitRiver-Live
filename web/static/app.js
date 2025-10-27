@@ -580,27 +580,44 @@ function renderChannels() {
         channelMeta.appendChild(stateIndicator);
         card.appendChild(channelMeta);
 
-        const details = document.createElement("details");
-        const summary = createElement("summary", { textContent: "Stream key & ingest tips" });
-        details.appendChild(summary);
-        const streamKey = createElement("div", { className: "stream-key" });
-        streamKey.append(
-            createElement("code", { textContent: channel.streamKey }),
-            createElement("button", {
+        if (channel.streamKey) {
+            const details = document.createElement("details");
+            const summary = createElement("summary", { textContent: "Stream key & ingest tips" });
+            details.appendChild(summary);
+            const streamKey = createElement("div", { className: "stream-key" });
+            const copyButton = createElement("button", {
                 className: "secondary",
                 textContent: "Copy",
-                dataset: { action: "copy-stream-key", key: channel.streamKey },
-            }),
-        );
-        details.appendChild(streamKey);
-        const ingest = createElement("p", { className: "card__meta" });
-        ingest.append(
-            "Use ",
-            createElement("code", { textContent: "rtmp://YOUR_INGEST_SERVER/live" }),
-            " with the key above.",
-        );
-        details.appendChild(ingest);
-        card.appendChild(details);
+            });
+            copyButton.addEventListener("click", async () => {
+                try {
+                    await navigator.clipboard.writeText(channel.streamKey);
+                    showToast("Stream key copied");
+                } catch (error) {
+                    showToast("Clipboard not available", "error");
+                }
+            });
+            streamKey.append(
+                createElement("code", { textContent: channel.streamKey }),
+                copyButton,
+            );
+            details.appendChild(streamKey);
+            const ingest = createElement("p", { className: "card__meta" });
+            ingest.append(
+                "Use ",
+                createElement("code", { textContent: "rtmp://YOUR_INGEST_SERVER/live" }),
+                " with the key above.",
+            );
+            details.appendChild(ingest);
+            card.appendChild(details);
+        } else {
+            card.appendChild(
+                createElement("p", {
+                    className: "card__meta",
+                    textContent: "Stream key unavailable for this channel.",
+                }),
+            );
+        }
 
         const actions = createElement("div", { className: "card__actions" });
         actions.append(
@@ -620,16 +637,6 @@ function renderChannels() {
         list.appendChild(card);
     }
 
-    list.querySelectorAll("[data-action=copy-stream-key]").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-            try {
-                await navigator.clipboard.writeText(btn.dataset.key);
-                showToast("Stream key copied");
-            } catch (error) {
-                showToast("Clipboard not available", "error");
-            }
-        });
-    });
     list.querySelectorAll("[data-action=edit-channel]").forEach((btn) => {
         btn.addEventListener("click", () => handleEditChannel(btn.dataset.channel));
     });
@@ -1346,7 +1353,7 @@ function renderStreamControls() {
         const title = createElement("h3", { textContent: channel.title });
         const key = createElement("span", {
             className: "card__meta",
-            textContent: channel.streamKey,
+            textContent: channel.streamKey || "Stream key unavailable",
         });
         header.append(title, key);
         card.appendChild(header);
