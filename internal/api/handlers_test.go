@@ -156,15 +156,29 @@ func TestSignupAndLoginFlow(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &signed); err != nil {
 		t.Fatalf("decode signup response: %v", err)
 	}
-	if signed.Token == "" {
-		t.Fatal("expected signup response to include token")
+	if signed.ExpiresAt == "" {
+		t.Fatal("expected signup response to include expiry")
 	}
 	if !signed.User.SelfSignup {
 		t.Fatal("expected user to be marked as self-signup")
 	}
 
+	signupCookie := findCookie(t, rec.Result().Cookies(), "bitriver_session")
+	if signupCookie.Value == "" {
+		t.Fatal("expected signup to set session cookie")
+	}
+	if !signupCookie.HttpOnly {
+		t.Fatal("expected session cookie to be HttpOnly")
+	}
+	if !signupCookie.Secure {
+		t.Fatal("expected session cookie to be Secure")
+	}
+	if signupCookie.SameSite != http.SameSiteStrictMode {
+		t.Fatalf("expected SameSite=Strict, got %v", signupCookie.SameSite)
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
-	req.Header.Set("Authorization", "Bearer "+signed.Token)
+	req.AddCookie(signupCookie)
 	rec = httptest.NewRecorder()
 	handler.Session(rec, req)
 	if rec.Code != http.StatusOK {
@@ -187,17 +201,56 @@ func TestSignupAndLoginFlow(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &loggedIn); err != nil {
 		t.Fatalf("decode login response: %v", err)
 	}
-	if loggedIn.Token == signed.Token {
+	if loggedIn.ExpiresAt == "" {
+		t.Fatal("expected login response to include expiry")
+	}
+
+	loginCookie := findCookie(t, rec.Result().Cookies(), "bitriver_session")
+	if loginCookie.Value == "" {
+		t.Fatal("expected login to refresh session cookie")
+	}
+	if loginCookie.Value == signupCookie.Value {
 		t.Fatal("expected login to issue a new session token")
 	}
 
 	req = httptest.NewRequest(http.MethodDelete, "/api/auth/session", nil)
-	req.Header.Set("Authorization", "Bearer "+signed.Token)
+	req.AddCookie(loginCookie)
 	rec = httptest.NewRecorder()
 	handler.Session(rec, req)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("expected delete session status 204, got %d", rec.Code)
 	}
+
+	clearedCookie := findCookie(t, rec.Result().Cookies(), "bitriver_session")
+	if clearedCookie.Value != "" {
+		t.Fatal("expected logout cookie to be cleared")
+	}
+	if clearedCookie.MaxAge != -1 {
+		t.Fatalf("expected cleared cookie to have MaxAge=-1, got %d", clearedCookie.MaxAge)
+	}
+
+	if _, _, ok := handler.sessionManager().Validate(loginCookie.Value); ok {
+		t.Fatal("expected logout to revoke session token")
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
+	req.AddCookie(loginCookie)
+	rec = httptest.NewRecorder()
+	handler.Session(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected session to be revoked, got status %d", rec.Code)
+	}
+}
+
+func findCookie(t *testing.T, cookies []*http.Cookie, name string) *http.Cookie {
+	t.Helper()
+	for _, cookie := range cookies {
+		if cookie.Name == name {
+			return cookie
+		}
+	}
+	t.Fatalf("cookie %q not found", name)
+	return nil
 }
 
 func TestChannelStreamLifecycle(t *testing.T) {

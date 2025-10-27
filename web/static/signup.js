@@ -1,5 +1,3 @@
-const SESSION_KEY = "bitriver-live:session";
-
 const signupForm = document.getElementById("signup-form");
 const loginForm = document.getElementById("login-form");
 const feedback = document.getElementById("auth-feedback");
@@ -26,6 +24,7 @@ async function requestAuth(path, payload) {
     const response = await fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(payload),
     });
     if (!response.ok) {
@@ -35,14 +34,6 @@ async function requestAuth(path, payload) {
     return response.json();
 }
 
-function storeSessionToken(token) {
-    try {
-        localStorage.setItem(SESSION_KEY, token);
-    } catch (error) {
-        console.warn("Unable to persist session token", error);
-    }
-}
-
 if (signupForm) {
     signupForm.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -50,8 +41,7 @@ if (signupForm) {
         const form = event.currentTarget;
         const data = Object.fromEntries(new FormData(form).entries());
         try {
-            const result = await requestAuth("/api/auth/signup", data);
-            storeSessionToken(result.token);
+            await requestAuth("/api/auth/signup", data);
             form.reset();
             showFeedback(
                 "Account created! Launch the control center to claim a channel or request creator access.",
@@ -69,8 +59,7 @@ if (loginForm) {
         const form = event.currentTarget;
         const data = Object.fromEntries(new FormData(form).entries());
         try {
-            const result = await requestAuth("/api/auth/login", data);
-            storeSessionToken(result.token);
+            await requestAuth("/api/auth/login", data);
             showFeedback("Signed in. Open the control center to manage your stream.");
         } catch (error) {
             showFeedback(error.message, "error");
