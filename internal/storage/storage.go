@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -31,6 +32,34 @@ type Storage struct {
 	mu       sync.RWMutex
 	filePath string
 	data     dataset
+}
+
+func newDataset() dataset {
+	return dataset{
+		Users:          make(map[string]models.User),
+		Channels:       make(map[string]models.Channel),
+		StreamSessions: make(map[string]models.StreamSession),
+		ChatMessages:   make(map[string]models.ChatMessage),
+		Profiles:       make(map[string]models.Profile),
+	}
+}
+
+func (s *Storage) ensureDatasetInitializedLocked() {
+	if s.data.Users == nil {
+		s.data.Users = make(map[string]models.User)
+	}
+	if s.data.Channels == nil {
+		s.data.Channels = make(map[string]models.Channel)
+	}
+	if s.data.StreamSessions == nil {
+		s.data.StreamSessions = make(map[string]models.StreamSession)
+	}
+	if s.data.ChatMessages == nil {
+		s.data.ChatMessages = make(map[string]models.ChatMessage)
+	}
+	if s.data.Profiles == nil {
+		s.data.Profiles = make(map[string]models.Profile)
+	}
 }
 
 var (
@@ -90,13 +119,7 @@ func (s *Storage) load() error {
 
 	file, err := os.Open(s.filePath)
 	if errors.Is(err, os.ErrNotExist) {
-		s.data = dataset{
-			Users:          make(map[string]models.User),
-			Channels:       make(map[string]models.Channel),
-			StreamSessions: make(map[string]models.StreamSession),
-			ChatMessages:   make(map[string]models.ChatMessage),
-			Profiles:       make(map[string]models.Profile),
-		}
+		s.data = newDataset()
 		return nil
 	} else if err != nil {
 		return fmt.Errorf("open store file: %w", err)
@@ -105,44 +128,53 @@ func (s *Storage) load() error {
 
 	decoder := json.NewDecoder(file)
 	if err := decoder.Decode(&s.data); err != nil {
+		if errors.Is(err, io.EOF) {
+			s.data = newDataset()
+			return nil
+		}
 		return fmt.Errorf("decode store file: %w", err)
 	}
 
-	if s.data.Users == nil {
-		s.data.Users = make(map[string]models.User)
-	}
-	if s.data.Channels == nil {
-		s.data.Channels = make(map[string]models.Channel)
-	}
-	if s.data.StreamSessions == nil {
-		s.data.StreamSessions = make(map[string]models.StreamSession)
-	}
-	if s.data.ChatMessages == nil {
-		s.data.ChatMessages = make(map[string]models.ChatMessage)
-	}
-	if s.data.Profiles == nil {
-		s.data.Profiles = make(map[string]models.Profile)
-	}
+	s.ensureDatasetInitializedLocked()
 
 	return nil
 }
 
 func (s *Storage) persist() error {
-	if err := os.MkdirAll(filepath.Dir(s.filePath), 0o755); err != nil {
+	dir := filepath.Dir(s.filePath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create data dir: %w", err)
 	}
 
-	file, err := os.Create(s.filePath)
+	tmpFile, err := os.CreateTemp(dir, "store-*.json")
 	if err != nil {
-		return fmt.Errorf("create store file: %w", err)
+		return fmt.Errorf("create temp store file: %w", err)
 	}
-	defer file.Close()
+	tmpPath := tmpFile.Name()
+	success := false
+	defer func() {
+		if !success {
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpPath)
+		}
+	}()
 
-	encoder := json.NewEncoder(file)
+	encoder := json.NewEncoder(tmpFile)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(s.data); err != nil {
 		return fmt.Errorf("encode store file: %w", err)
 	}
+	if err := tmpFile.Sync(); err != nil {
+		return fmt.Errorf("flush store file: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("close temp store file: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, s.filePath); err != nil {
+		return fmt.Errorf("replace store file: %w", err)
+	}
+	success = true
 	return nil
 }
 
