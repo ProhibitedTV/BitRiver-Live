@@ -28,5 +28,12 @@ legitimate strings are still rendered correctly.
    `River Rapid Adventures`) and confirm that the updated content appears in the
    Users and Profiles views.
 
+5. Create a channel titled `<img src=x onerror=alert(1)>` and navigate to the
+   **Go Live** view.
+
+   *Expected:* the channel card shows the literal characters of the title in
+   the header with no image load or alert dialog, and the Start/Stop buttons
+   remain usable.
+
 These steps demonstrate that unsafe markup is rendered inert while normal
 content flows through unchanged.
