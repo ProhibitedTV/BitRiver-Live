@@ -373,6 +373,18 @@ type channelResponse struct {
 	UpdatedAt        string   `json:"updatedAt"`
 }
 
+type channelPublicResponse struct {
+	ID               string   `json:"id"`
+	OwnerID          string   `json:"ownerId"`
+	Title            string   `json:"title"`
+	Category         string   `json:"category,omitempty"`
+	Tags             []string `json:"tags"`
+	LiveState        string   `json:"liveState"`
+	CurrentSessionID *string  `json:"currentSessionId,omitempty"`
+	CreatedAt        string   `json:"createdAt"`
+	UpdatedAt        string   `json:"updatedAt"`
+}
+
 func newChannelResponse(channel models.Channel) channelResponse {
 	resp := channelResponse{
 		ID:        channel.ID,
@@ -392,17 +404,54 @@ func newChannelResponse(channel models.Channel) channelResponse {
 	return resp
 }
 
+func newChannelPublicResponse(channel models.Channel) channelPublicResponse {
+	resp := channelPublicResponse{
+		ID:        channel.ID,
+		OwnerID:   channel.OwnerID,
+		Title:     channel.Title,
+		Category:  channel.Category,
+		Tags:      append([]string{}, channel.Tags...),
+		LiveState: channel.LiveState,
+		CreatedAt: channel.CreatedAt.Format(time.RFC3339Nano),
+		UpdatedAt: channel.UpdatedAt.Format(time.RFC3339Nano),
+	}
+	if channel.CurrentSessionID != nil {
+		sessionID := *channel.CurrentSessionID
+		resp.CurrentSessionID = &sessionID
+	}
+	return resp
+}
+
 func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		if _, ok := h.requireAuthenticatedUser(w, r); !ok {
+		actor, ok := h.requireAuthenticatedUser(w, r)
+		if !ok {
 			return
 		}
-		ownerID := r.URL.Query().Get("ownerId")
+		ownerID := strings.TrimSpace(r.URL.Query().Get("ownerId"))
+		if ownerID == "" {
+			if !userHasRole(actor, roleAdmin) {
+				ownerID = actor.ID
+			}
+		} else if ownerID != actor.ID && !userHasRole(actor, roleAdmin) {
+			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+			return
+		}
+
 		channels := h.Store.ListChannels(ownerID)
-		response := make([]channelResponse, 0, len(channels))
+		if ownerID == actor.ID || userHasRole(actor, roleAdmin) {
+			response := make([]channelResponse, 0, len(channels))
+			for _, channel := range channels {
+				response = append(response, newChannelResponse(channel))
+			}
+			writeJSON(w, http.StatusOK, response)
+			return
+		}
+
+		response := make([]channelPublicResponse, 0, len(channels))
 		for _, channel := range channels {
-			response = append(response, newChannelResponse(channel))
+			response = append(response, newChannelPublicResponse(channel))
 		}
 		writeJSON(w, http.StatusOK, response)
 	case http.MethodPost:
@@ -446,7 +495,8 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 1 {
 		switch r.Method {
 		case http.MethodGet:
-			if _, ok := h.requireAuthenticatedUser(w, r); !ok {
+			actor, ok := h.requireAuthenticatedUser(w, r)
+			if !ok {
 				return
 			}
 			channel, ok := h.Store.GetChannel(channelID)
@@ -454,7 +504,11 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
 			}
-			writeJSON(w, http.StatusOK, newChannelResponse(channel))
+			if channel.OwnerID == actor.ID || userHasRole(actor, roleAdmin) {
+				writeJSON(w, http.StatusOK, newChannelResponse(channel))
+				return
+			}
+			writeJSON(w, http.StatusOK, newChannelPublicResponse(channel))
 		case http.MethodPatch:
 			channel, ok := h.Store.GetChannel(channelID)
 			if !ok {
@@ -691,8 +745,8 @@ type profileViewResponse struct {
 	FeaturedChannelID *string                 `json:"featuredChannelId,omitempty"`
 	TopFriends        []friendSummaryResponse `json:"topFriends"`
 	DonationAddresses []cryptoAddressResponse `json:"donationAddresses"`
-	Channels          []channelResponse       `json:"channels"`
-	LiveChannels      []channelResponse       `json:"liveChannels"`
+	Channels          []channelPublicResponse `json:"channels"`
+	LiveChannels      []channelPublicResponse `json:"liveChannels"`
 	CreatedAt         string                  `json:"createdAt"`
 	UpdatedAt         string                  `json:"updatedAt"`
 }
@@ -897,10 +951,10 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 
 func (h *Handler) buildProfileViewResponse(user models.User, profile models.Profile) profileViewResponse {
 	channels := h.Store.ListChannels(user.ID)
-	channelResponses := make([]channelResponse, 0, len(channels))
-	liveResponses := make([]channelResponse, 0)
+	channelResponses := make([]channelPublicResponse, 0, len(channels))
+	liveResponses := make([]channelPublicResponse, 0)
 	for _, channel := range channels {
-		resp := newChannelResponse(channel)
+		resp := newChannelPublicResponse(channel)
 		channelResponses = append(channelResponses, resp)
 		if channel.LiveState == "live" {
 			liveResponses = append(liveResponses, resp)
