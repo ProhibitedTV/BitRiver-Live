@@ -51,6 +51,47 @@ const state = {
     currentUser: null,
 };
 
+function escapeHTML(value) {
+    const div = document.createElement("div");
+    div.textContent = value ?? "";
+    return div.innerHTML;
+}
+
+function createElement(tag, options = {}) {
+    const element = document.createElement(tag);
+    const { className, textContent, dataset, attributes } = options;
+    if (className) {
+        element.className = className;
+    }
+    if (textContent !== undefined) {
+        element.textContent = textContent;
+    }
+    if (dataset) {
+        for (const [key, value] of Object.entries(dataset)) {
+            if (value !== undefined) {
+                element.dataset[key] = value;
+            }
+        }
+    }
+    if (attributes) {
+        for (const [name, value] of Object.entries(attributes)) {
+            if (value !== undefined) {
+                element.setAttribute(name, value);
+            }
+        }
+    }
+    return element;
+}
+
+function clearElement(element) {
+    if (!element) {
+        return;
+    }
+    while (element.firstChild) {
+        element.removeChild(element.firstChild);
+    }
+}
+
 const modal = document.getElementById("modal");
 const modalTitle = document.getElementById("modal-title");
 const modalBody = document.getElementById("modal-body");
@@ -325,31 +366,57 @@ async function loadUsers() {
 function renderUsers() {
     const list = document.getElementById("users-list");
     const empty = document.getElementById("users-empty");
-    list.innerHTML = "";
+    clearElement(list);
     if (!state.users.length) {
         empty.style.display = "block";
         return;
     }
     empty.style.display = "none";
     for (const user of state.users) {
-        const card = document.createElement("article");
-        card.className = "card";
-        const roles = user.roles.length
-            ? user.roles.map((role) => `<span class="pill">${role}</span>`).join(" ")
-            : '<span class="card__meta">viewer</span>';
-        card.innerHTML = `
-            <div class="card__header">
-                <h3>${user.displayName}</h3>
-                <span class="card__meta">Joined ${formatRelativeTime(user.createdAt)}</span>
-            </div>
-            <div class="card__meta">${user.email}</div>
-            <div class="pill-group">${roles}</div>
-            <div class="card__actions">
-                <button class="secondary" data-action="edit-user" data-user="${user.id}">Edit</button>
-                <button class="secondary" data-action="profile-user" data-user="${user.id}">Profile</button>
-                <button class="danger" data-action="delete-user" data-user="${user.id}">Remove</button>
-            </div>
-        `;
+        const card = createElement("article", { className: "card" });
+
+        const header = createElement("div", { className: "card__header" });
+        header.append(
+            createElement("h3", { textContent: user.displayName }),
+            createElement("span", {
+                className: "card__meta",
+                textContent: `Joined ${formatRelativeTime(user.createdAt)}`,
+            }),
+        );
+        card.appendChild(header);
+
+        card.appendChild(createElement("div", { className: "card__meta", textContent: user.email }));
+
+        const pillGroup = createElement("div", { className: "pill-group" });
+        if (user.roles.length) {
+            for (const role of user.roles) {
+                pillGroup.appendChild(createElement("span", { className: "pill", textContent: role }));
+            }
+        } else {
+            pillGroup.appendChild(createElement("span", { className: "card__meta", textContent: "viewer" }));
+        }
+        card.appendChild(pillGroup);
+
+        const actions = createElement("div", { className: "card__actions" });
+        actions.append(
+            createElement("button", {
+                className: "secondary",
+                textContent: "Edit",
+                dataset: { action: "edit-user", user: user.id },
+            }),
+            createElement("button", {
+                className: "secondary",
+                textContent: "Profile",
+                dataset: { action: "profile-user", user: user.id },
+            }),
+            createElement("button", {
+                className: "danger",
+                textContent: "Remove",
+                dataset: { action: "delete-user", user: user.id },
+            }),
+        );
+        card.appendChild(actions);
+
         list.appendChild(card);
     }
 
@@ -459,7 +526,7 @@ async function loadChannels(options = {}) {
 function renderChannels() {
     const list = document.getElementById("channels-list");
     const empty = document.getElementById("channels-empty");
-    list.innerHTML = "";
+    clearElement(list);
     if (!state.channels.length) {
         empty.style.display = "block";
         return;
@@ -467,37 +534,89 @@ function renderChannels() {
     empty.style.display = "none";
     for (const channel of state.channels) {
         const owner = state.users.find((user) => user.id === channel.ownerId);
-        const tags = channel.tags.length
-            ? channel.tags.map((tag) => `<span class="pill">${tag}</span>`).join(" ")
-            : '<span class="card__meta">No tags</span>';
         const updated = formatRelativeTime(channel.updatedAt);
         const liveClass = channel.liveState === "live" ? "status-live" : "status-offline";
-        const card = document.createElement("article");
-        card.className = "card";
-        card.innerHTML = `
-            <div class="card__header">
-                <h3>${channel.title}</h3>
-                <span class="card__meta">${channel.category || "General"}</span>
-            </div>
-            <div class="card__meta">Owner: ${owner ? owner.displayName : channel.ownerId}</div>
-            <div class="pill-group">${tags}</div>
-            <div class="channel-meta">
-                <span class="card__meta">Updated ${updated}</span>
-                <span class="card__meta">State: <span class="${liveClass}">${channel.liveState}</span></span>
-            </div>
-            <details>
-                <summary>Stream key & ingest tips</summary>
-                <div class="stream-key">
-                    <code>${channel.streamKey}</code>
-                    <button class="secondary" data-action="copy-stream-key" data-key="${channel.streamKey}">Copy</button>
-                </div>
-                <p class="card__meta">Use <code>rtmp://YOUR_INGEST_SERVER/live</code> with the key above.</p>
-            </details>
-            <div class="card__actions">
-                <button class="secondary" data-action="edit-channel" data-channel="${channel.id}">Edit</button>
-                <button class="danger" data-action="delete-channel" data-channel="${channel.id}">Delete</button>
-            </div>
-        `;
+        const card = createElement("article", { className: "card" });
+
+        const header = createElement("div", { className: "card__header" });
+        header.append(
+            createElement("h3", { textContent: channel.title }),
+            createElement("span", {
+                className: "card__meta",
+                textContent: channel.category || "General",
+            }),
+        );
+        card.appendChild(header);
+
+        card.appendChild(
+            createElement("div", {
+                className: "card__meta",
+                textContent: `Owner: ${owner ? owner.displayName : channel.ownerId}`,
+            }),
+        );
+
+        const tagContainer = createElement("div", { className: "pill-group" });
+        if (channel.tags.length) {
+            for (const tag of channel.tags) {
+                tagContainer.appendChild(createElement("span", { className: "pill", textContent: tag }));
+            }
+        } else {
+            tagContainer.appendChild(createElement("span", { className: "card__meta", textContent: "No tags" }));
+        }
+        card.appendChild(tagContainer);
+
+        const channelMeta = createElement("div", { className: "channel-meta" });
+        channelMeta.appendChild(
+            createElement("span", {
+                className: "card__meta",
+                textContent: `Updated ${updated}`,
+            }),
+        );
+        const stateIndicator = createElement("span", { className: "card__meta" });
+        stateIndicator.append(
+            "State: ",
+            createElement("span", { className: liveClass, textContent: channel.liveState }),
+        );
+        channelMeta.appendChild(stateIndicator);
+        card.appendChild(channelMeta);
+
+        const details = document.createElement("details");
+        const summary = createElement("summary", { textContent: "Stream key & ingest tips" });
+        details.appendChild(summary);
+        const streamKey = createElement("div", { className: "stream-key" });
+        streamKey.append(
+            createElement("code", { textContent: channel.streamKey }),
+            createElement("button", {
+                className: "secondary",
+                textContent: "Copy",
+                dataset: { action: "copy-stream-key", key: channel.streamKey },
+            }),
+        );
+        details.appendChild(streamKey);
+        const ingest = createElement("p", { className: "card__meta" });
+        ingest.append(
+            "Use ",
+            createElement("code", { textContent: "rtmp://YOUR_INGEST_SERVER/live" }),
+            " with the key above.",
+        );
+        details.appendChild(ingest);
+        card.appendChild(details);
+
+        const actions = createElement("div", { className: "card__actions" });
+        actions.append(
+            createElement("button", {
+                className: "secondary",
+                textContent: "Edit",
+                dataset: { action: "edit-channel", channel: channel.id },
+            }),
+            createElement("button", {
+                className: "danger",
+                textContent: "Delete",
+                dataset: { action: "delete-channel", channel: channel.id },
+            }),
+        );
+        card.appendChild(actions);
+
         list.appendChild(card);
     }
 
@@ -520,12 +639,17 @@ function renderChannels() {
 }
 
 function populateOwnerSelect(select, selected) {
-    select.innerHTML = state.users
-        .map((user) => {
-            const isSelected = selected === user.id ? "selected" : "";
-            return `<option value="${user.id}" ${isSelected}>${user.displayName}</option>`;
-        })
-        .join("");
+    clearElement(select);
+    for (const user of state.users) {
+        const option = createElement("option", {
+            textContent: user.displayName,
+            attributes: { value: user.id },
+        });
+        if (selected === user.id) {
+            option.selected = true;
+        }
+        select.appendChild(option);
+    }
 }
 
 async function handleCreateChannel() {
@@ -634,28 +758,52 @@ function computeSessionDuration(session) {
 
 function renderSessions() {
     const container = document.getElementById("sessions-list");
-    container.innerHTML = "";
+    clearElement(container);
     const sessions = Object.values(state.sessions).flat();
     if (!sessions.length) {
-        container.innerHTML = '<div class="empty">No stream sessions yet.</div>';
+        container.appendChild(
+            createElement("div", {
+                className: "empty",
+                textContent: "No stream sessions yet.",
+            }),
+        );
         return;
     }
     const sorted = sessions.sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt));
     for (const session of sorted) {
         const channel = state.channels.find((item) => item.id === session.channelId);
         const duration = formatDuration(computeSessionDuration(session));
-        const card = document.createElement("article");
-        card.className = "card";
-        card.innerHTML = `
-            <div class="card__header">
-                <h3>${channel ? channel.title : session.channelId}</h3>
-                <span class="card__meta">Started ${formatDate(session.startedAt)}</span>
-            </div>
-            <div class="card__meta">Ended: ${session.endedAt ? formatDate(session.endedAt) : "Live"}</div>
-            <div class="card__meta">Duration: ${duration}</div>
-            <div class="card__meta">Peak concurrent viewers: ${session.peakConcurrent}</div>
-            <div class="card__meta">Renditions: ${session.renditions.length ? session.renditions.join(", ") : "Source"}</div>
-        `;
+        const card = createElement("article", { className: "card" });
+        const header = createElement("div", { className: "card__header" });
+        header.append(
+            createElement("h3", { textContent: channel ? channel.title : session.channelId }),
+            createElement("span", {
+                className: "card__meta",
+                textContent: `Started ${formatDate(session.startedAt)}`,
+            }),
+        );
+        card.appendChild(header);
+        card.appendChild(
+            createElement("div", {
+                className: "card__meta",
+                textContent: `Ended: ${session.endedAt ? formatDate(session.endedAt) : "Live"}`,
+            }),
+        );
+        card.appendChild(
+            createElement("div", { className: "card__meta", textContent: `Duration: ${duration}` }),
+        );
+        card.appendChild(
+            createElement("div", {
+                className: "card__meta",
+                textContent: `Peak concurrent viewers: ${session.peakConcurrent}`,
+            }),
+        );
+        card.appendChild(
+            createElement("div", {
+                className: "card__meta",
+                textContent: `Renditions: ${session.renditions.length ? session.renditions.join(", ") : "Source"}`,
+            }),
+        );
         container.appendChild(card);
     }
 }
@@ -669,59 +817,127 @@ async function loadChatHistory(channelId, limit = 50) {
 
 function renderChat() {
     const container = document.getElementById("chat-controls");
-    container.innerHTML = "";
+    clearElement(container);
     if (!state.channels.length) {
-        container.innerHTML = '<div class="empty">Add a channel to unlock chat controls.</div>';
+        container.appendChild(
+            createElement("div", {
+                className: "empty",
+                textContent: "Add a channel to unlock chat controls.",
+            }),
+        );
         return;
     }
 
     for (const channel of state.channels) {
         const messages = state.chat[channel.id] || [];
-        const card = document.createElement("article");
-        card.className = "card";
-        const messageMarkup = messages
-            .map(
-                (message) => `
-                    <div class="chat-message">
-                        <div class="chat-header">
-                            <strong>${message.userId}</strong>
-                            <span class="card__meta">${formatRelativeTime(message.createdAt)}</span>
-                        </div>
-                        <div>${message.content}</div>
-                        <div class="chat-actions">
-                            <button class="danger" data-action="delete-message" data-channel="${channel.id}" data-message="${message.id}">Remove</button>
-                        </div>
-                    </div>
-                `,
-            )
-            .join("");
-        const userOptions = state.users
-            .map((user) => `<option value="${user.id}">${user.displayName}</option>`)
-            .join("");
-        card.innerHTML = `
-            <div class="card__header">
-                <h3>${channel.title}</h3>
-                <div class="card__meta">${messages.length} message${messages.length === 1 ? "" : "s"}</div>
-            </div>
-            <div class="chat-toolbar">
-                <button class="secondary" data-action="refresh-chat" data-channel="${channel.id}">Refresh</button>
-            </div>
-            <div class="chat-log">${messageMarkup || '<div class="card__meta">No chat messages yet.</div>'}</div>
-            <form class="chat-form" data-channel="${channel.id}">
-                <label>
-                    User
-                    <select name="userId" required>
-                        <option value="" disabled ${state.users.length ? "" : "selected"}>Select user</option>
-                        ${userOptions}
-                    </select>
-                </label>
-                <label>
-                    Message
-                    <input type="text" name="content" required placeholder="Say hello" />
-                </label>
-                <button type="submit" class="primary">Send message</button>
-            </form>
-        `;
+        const card = createElement("article", { className: "card" });
+
+        const header = createElement("div", { className: "card__header" });
+        header.append(
+            createElement("h3", { textContent: channel.title }),
+            createElement("div", {
+                className: "card__meta",
+                textContent: `${messages.length} message${messages.length === 1 ? "" : "s"}`,
+            }),
+        );
+        card.appendChild(header);
+
+        const toolbar = createElement("div", { className: "chat-toolbar" });
+        toolbar.appendChild(
+            createElement("button", {
+                className: "secondary",
+                textContent: "Refresh",
+                dataset: { action: "refresh-chat", channel: channel.id },
+            }),
+        );
+        card.appendChild(toolbar);
+
+        const log = createElement("div", { className: "chat-log" });
+        if (messages.length) {
+            for (const message of messages) {
+                const messageContainer = createElement("div", { className: "chat-message" });
+                const messageHeader = createElement("div", { className: "chat-header" });
+                messageHeader.append(
+                    createElement("strong", { textContent: message.userId }),
+                    createElement("span", {
+                        className: "card__meta",
+                        textContent: formatRelativeTime(message.createdAt),
+                    }),
+                );
+                messageContainer.appendChild(messageHeader);
+
+                messageContainer.appendChild(
+                    createElement("div", { textContent: message.content }),
+                );
+
+                const messageActions = createElement("div", { className: "chat-actions" });
+                messageActions.appendChild(
+                    createElement("button", {
+                        className: "danger",
+                        textContent: "Remove",
+                        dataset: {
+                            action: "delete-message",
+                            channel: channel.id,
+                            message: message.id,
+                        },
+                    }),
+                );
+                messageContainer.appendChild(messageActions);
+
+                log.appendChild(messageContainer);
+            }
+        } else {
+            log.appendChild(
+                createElement("div", {
+                    className: "card__meta",
+                    textContent: "No chat messages yet.",
+                }),
+            );
+        }
+        card.appendChild(log);
+
+        const form = createElement("form", { className: "chat-form", dataset: { channel: channel.id } });
+        form.setAttribute("data-channel", channel.id);
+        form.setAttribute("novalidate", "");
+
+        const userLabel = document.createElement("label");
+        userLabel.append("User");
+        const userSelect = document.createElement("select");
+        userSelect.name = "userId";
+        userSelect.required = true;
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.disabled = true;
+        placeholder.textContent = "Select user";
+        if (!state.users.length) {
+            placeholder.selected = true;
+        }
+        userSelect.appendChild(placeholder);
+        for (const user of state.users) {
+            const option = createElement("option", {
+                textContent: user.displayName,
+                attributes: { value: user.id },
+            });
+            userSelect.appendChild(option);
+        }
+        userLabel.appendChild(userSelect);
+        form.appendChild(userLabel);
+
+        const messageLabel = document.createElement("label");
+        messageLabel.append("Message");
+        const messageInput = document.createElement("input");
+        messageInput.type = "text";
+        messageInput.name = "content";
+        messageInput.required = true;
+        messageInput.placeholder = "Say hello";
+        messageLabel.appendChild(messageInput);
+        form.appendChild(messageLabel);
+
+        form.appendChild(
+            createElement("button", { className: "primary", textContent: "Send message", attributes: { type: "submit" } }),
+        );
+
+        card.appendChild(form);
         container.appendChild(card);
     }
 
@@ -784,9 +1000,14 @@ async function loadProfiles() {
 
 function renderProfiles() {
     const list = document.getElementById("profiles-list");
-    list.innerHTML = "";
+    clearElement(list);
     if (!state.profiles.length) {
-        list.innerHTML = '<div class="empty">Profiles will appear once you create them.</div>';
+        list.appendChild(
+            createElement("div", {
+                className: "empty",
+                textContent: "Profiles will appear once you create them.",
+            }),
+        );
         return;
     }
     const sorted = [...state.profiles].sort((a, b) => a.displayName.localeCompare(b.displayName));
@@ -795,21 +1016,53 @@ function renderProfiles() {
         const friends = profile.topFriends.length
             ? profile.topFriends.map((friend) => friend.displayName).join(", ")
             : "No top friends yet";
-        const card = document.createElement("article");
-        card.className = "card";
-        card.innerHTML = `
-            <div class="card__header">
-                <h3>${profile.displayName}</h3>
-                <span class="card__meta">${profile.channels.length} channel${profile.channels.length === 1 ? "" : "s"}</span>
-            </div>
-            <p>${profile.bio || "No bio yet."}</p>
-            <div class="card__meta">Live now: ${liveCount}</div>
-            <div class="card__meta">Top friends: ${friends}</div>
-            <div class="card__actions">
-                <button class="secondary" data-action="view-profile" data-user="${profile.userId}">View</button>
-                <button class="primary" data-action="edit-profile" data-user="${profile.userId}">Edit</button>
-            </div>
-        `;
+        const card = createElement("article", { className: "card" });
+
+        const header = createElement("div", { className: "card__header" });
+        header.append(
+            createElement("h3", { textContent: profile.displayName }),
+            createElement("span", {
+                className: "card__meta",
+                textContent: `${profile.channels.length} channel${
+                    profile.channels.length === 1 ? "" : "s"
+                }`,
+            }),
+        );
+        card.appendChild(header);
+
+        card.appendChild(
+            createElement("p", {
+                textContent: profile.bio || "No bio yet.",
+            }),
+        );
+        card.appendChild(
+            createElement("div", {
+                className: "card__meta",
+                textContent: `Live now: ${liveCount}`,
+            }),
+        );
+        card.appendChild(
+            createElement("div", {
+                className: "card__meta",
+                textContent: `Top friends: ${friends}`,
+            }),
+        );
+
+        const actions = createElement("div", { className: "card__actions" });
+        actions.append(
+            createElement("button", {
+                className: "secondary",
+                textContent: "View",
+                dataset: { action: "view-profile", user: profile.userId },
+            }),
+            createElement("button", {
+                className: "primary",
+                textContent: "Edit",
+                dataset: { action: "edit-profile", user: profile.userId },
+            }),
+        );
+        card.appendChild(actions);
+
         list.appendChild(card);
     }
 
@@ -828,53 +1081,108 @@ function renderProfileDetail(userId) {
     if (!profileDetail) {
         return;
     }
+    clearElement(profileDetail);
     if (!userId) {
-        profileDetail.innerHTML = `
-            <div class="card__header">
-                <h3>Profile details</h3>
-                <span class="card__meta">Select a creator to inspect or edit.</span>
-            </div>
-            <p class="card__meta">No profile selected.</p>
-        `;
+        const header = createElement("div", { className: "card__header" });
+        header.append(
+            createElement("h3", { textContent: "Profile details" }),
+            createElement("span", {
+                className: "card__meta",
+                textContent: "Select a creator to inspect or edit.",
+            }),
+        );
+        profileDetail.append(
+            header,
+            createElement("p", { className: "card__meta", textContent: "No profile selected." }),
+        );
         return;
     }
     const profile = state.profileIndex.get(userId);
     if (!profile) {
-        profileDetail.innerHTML = `
-            <div class="card__header">
-                <h3>Profile details</h3>
-            </div>
-            <p class="card__meta">Profile not found.</p>
-        `;
+        const header = createElement("div", { className: "card__header" });
+        header.append(createElement("h3", { textContent: "Profile details" }));
+        profileDetail.append(
+            header,
+            createElement("p", { className: "card__meta", textContent: "Profile not found." }),
+        );
         return;
     }
-    const donations = profile.donationAddresses.length
-        ? profile.donationAddresses
-              .map((addr) => `<li><span class="pill">${addr.currency}</span> ${addr.address}${addr.note ? ` — ${addr.note}` : ""}</li>`)
-              .join("")
-        : "<li class=\"card__meta\">No donation links configured.</li>";
-    const channels = profile.channels
-        .map((channel) => `<li>${channel.title} — <span class="card__meta">${channel.category || "General"}</span></li>`)
-        .join("");
-    profileDetail.innerHTML = `
-        <div class="card__header">
-            <h3>${profile.displayName}</h3>
-            <button class="secondary" data-action="edit-profile" data-user="${profile.userId}">Edit</button>
-        </div>
-        <p>${profile.bio || "No bio yet."}</p>
-        <div class="profile-section">
-            <h4>Top friends</h4>
-            <p class="card__meta">${profile.topFriends.length ? profile.topFriends.map((friend) => friend.displayName).join(", ") : "None"}</p>
-        </div>
-        <div class="profile-section">
-            <h4>Channels</h4>
-            <ul>${channels || '<li class="card__meta">No channels yet.</li>'}</ul>
-        </div>
-        <div class="profile-section">
-            <h4>Donation addresses</h4>
-            <ul>${donations}</ul>
-        </div>
-    `;
+
+    const header = createElement("div", { className: "card__header" });
+    header.append(
+        createElement("h3", { textContent: profile.displayName }),
+        createElement("button", {
+            className: "secondary",
+            textContent: "Edit",
+            dataset: { action: "edit-profile", user: profile.userId },
+        }),
+    );
+    profileDetail.appendChild(header);
+
+    profileDetail.appendChild(
+        createElement("p", { textContent: profile.bio || "No bio yet." }),
+    );
+
+    const friendsSection = createElement("div", { className: "profile-section" });
+    friendsSection.append(
+        createElement("h4", { textContent: "Top friends" }),
+        createElement("p", {
+            className: "card__meta",
+            textContent: profile.topFriends.length
+                ? profile.topFriends.map((friend) => friend.displayName).join(", ")
+                : "None",
+        }),
+    );
+    profileDetail.appendChild(friendsSection);
+
+    const channelsSection = createElement("div", { className: "profile-section" });
+    channelsSection.append(createElement("h4", { textContent: "Channels" }));
+    const channelList = document.createElement("ul");
+    if (profile.channels.length) {
+        for (const channel of profile.channels) {
+            const item = document.createElement("li");
+            item.append(
+                channel.title,
+                " — ",
+                createElement("span", {
+                    className: "card__meta",
+                    textContent: channel.category || "General",
+                }),
+            );
+            channelList.appendChild(item);
+        }
+    } else {
+        channelList.appendChild(
+            createElement("li", { className: "card__meta", textContent: "No channels yet." }),
+        );
+    }
+    channelsSection.appendChild(channelList);
+    profileDetail.appendChild(channelsSection);
+
+    const donationSection = createElement("div", { className: "profile-section" });
+    donationSection.append(createElement("h4", { textContent: "Donation addresses" }));
+    const donationList = document.createElement("ul");
+    if (profile.donationAddresses.length) {
+        for (const addr of profile.donationAddresses) {
+            const item = document.createElement("li");
+            item.appendChild(createElement("span", { className: "pill", textContent: addr.currency }));
+            item.append(" ", addr.address);
+            if (addr.note) {
+                item.append(` — ${addr.note}`);
+            }
+            donationList.appendChild(item);
+        }
+    } else {
+        donationList.appendChild(
+            createElement("li", {
+                className: "card__meta",
+                textContent: "No donation links configured.",
+            }),
+        );
+    }
+    donationSection.appendChild(donationList);
+    profileDetail.appendChild(donationSection);
+
     profileDetail.querySelectorAll("[data-action=edit-profile]").forEach((btn) => {
         btn.addEventListener("click", () => openProfileEditor(btn.dataset.user));
     });
@@ -892,23 +1200,33 @@ async function openProfileEditor(userId) {
             modal.querySelector('[name="donationAddresses"]').value = donationLinesFromProfile(profile);
 
             const featuredSelect = modal.querySelector('[name="featuredChannelId"]');
-            const options = ['<option value="">None</option>'];
+            clearElement(featuredSelect);
+            featuredSelect.appendChild(
+                createElement("option", { textContent: "None", attributes: { value: "" } }),
+            );
             for (const channel of profile.channels) {
-                const selected = profile.featuredChannelId === channel.id ? "selected" : "";
-                options.push(`<option value="${channel.id}" ${selected}>${channel.title}</option>`);
+                const option = createElement("option", {
+                    textContent: channel.title,
+                    attributes: { value: channel.id },
+                });
+                if (profile.featuredChannelId === channel.id) {
+                    option.selected = true;
+                }
+                featuredSelect.appendChild(option);
             }
-            featuredSelect.innerHTML = options.join("");
 
             const friendsSelect = modal.querySelector('[name="topFriends"]');
-            friendsSelect.innerHTML = state.users
-                .filter((candidate) => candidate.id !== userId)
-                .map((candidate) => {
-                    const selected = profile.topFriends.some((friend) => friend.userId === candidate.id)
-                        ? "selected"
-                        : "";
-                    return `<option value="${candidate.id}" ${selected}>${candidate.displayName}</option>`;
-                })
-                .join("");
+            clearElement(friendsSelect);
+            for (const candidate of state.users.filter((candidate) => candidate.id !== userId)) {
+                const option = createElement("option", {
+                    textContent: candidate.displayName,
+                    attributes: { value: candidate.id },
+                });
+                if (profile.topFriends.some((friend) => friend.userId === candidate.id)) {
+                    option.selected = true;
+                }
+                friendsSelect.appendChild(option);
+            }
         },
         onSubmit: async (values, form) => {
             const topFriends = collectSelectedValues(form.querySelector('[name="topFriends"]'));
