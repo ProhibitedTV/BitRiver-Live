@@ -1303,53 +1303,110 @@ function renderDashboard() {
         },
     ];
 
-    overviewCards.innerHTML = "";
+    clearElement(overviewCards);
     for (const cardData of cards) {
-        const card = document.createElement("article");
-        card.className = "card";
-        card.innerHTML = `
-            <div class="card__header">
-                <h3>${cardData.title}</h3>
-            </div>
-            <div class="card__value">${cardData.value}</div>
-            <div class="card__meta">${cardData.detail}</div>
-        `;
+        const card = createElement("article", { className: "card" });
+
+        const header = createElement("div", { className: "card__header" });
+        const title = createElement("h3", { textContent: cardData.title });
+        header.appendChild(title);
+        card.appendChild(header);
+
+        const value = createElement("div", {
+            className: "card__value",
+            textContent: String(cardData.value),
+        });
+        card.appendChild(value);
+
+        const detail = createElement("div", {
+            className: "card__meta",
+            textContent: String(cardData.detail),
+        });
+        card.appendChild(detail);
+
         overviewCards.appendChild(card);
     }
 }
 
 function renderStreamControls() {
     const container = document.getElementById("stream-controls");
-    container.innerHTML = "";
+    clearElement(container);
     if (!state.channels.length) {
-        container.innerHTML = '<div class="empty">Create a channel first to control your live stream.</div>';
+        const emptyState = createElement("div", {
+            className: "empty",
+            textContent: "Create a channel first to control your live stream.",
+        });
+        container.appendChild(emptyState);
         return;
     }
     for (const channel of state.channels) {
-        const form = document.createElement("article");
-        form.className = "card";
-        form.innerHTML = `
-            <div class="card__header">
-                <h3>${channel.title}</h3>
-                <span class="card__meta">${channel.streamKey}</span>
-            </div>
-            <div class="card__meta">State: <strong class="${channel.liveState === "live" ? "status-live" : "status-offline"}">${channel.liveState}</strong></div>
-            <form class="stream-form" data-channel="${channel.id}">
-                <label>
-                    Renditions (comma separated)
-                    <input type="text" name="renditions" placeholder="1080p60,720p30" />
-                </label>
-                <label>
-                    Peak concurrent viewers (on stop)
-                    <input type="number" name="peakConcurrent" min="0" value="0" />
-                </label>
-                <div class="card__actions">
-                    <button type="submit" data-action="start" class="primary">Start stream</button>
-                    <button type="button" data-action="stop" class="secondary">Stop stream</button>
-                </div>
-            </form>
-        `;
-        container.appendChild(form);
+        const card = createElement("article", { className: "card" });
+
+        const header = createElement("div", { className: "card__header" });
+        const title = createElement("h3", { textContent: channel.title });
+        const key = createElement("span", {
+            className: "card__meta",
+            textContent: channel.streamKey,
+        });
+        header.append(title, key);
+        card.appendChild(header);
+
+        const status = createElement("div", { className: "card__meta" });
+        const statusLabel = createElement("strong", {
+            className: channel.liveState === "live" ? "status-live" : "status-offline",
+            textContent: channel.liveState,
+        });
+        status.append("State: ", statusLabel);
+        card.appendChild(status);
+
+        const form = createElement("form", {
+            className: "stream-form",
+            dataset: { channel: channel.id },
+        });
+
+        const renditionsLabel = createElement("label");
+        renditionsLabel.append("Renditions (comma separated)");
+        const renditionsInput = createElement("input", {
+            attributes: {
+                type: "text",
+                name: "renditions",
+                placeholder: "1080p60,720p30",
+            },
+        });
+        renditionsLabel.appendChild(renditionsInput);
+        form.appendChild(renditionsLabel);
+
+        const peakLabel = createElement("label");
+        peakLabel.append("Peak concurrent viewers (on stop)");
+        const peakInput = createElement("input", {
+            attributes: {
+                type: "number",
+                name: "peakConcurrent",
+                min: "0",
+                value: "0",
+            },
+        });
+        peakLabel.appendChild(peakInput);
+        form.appendChild(peakLabel);
+
+        const actions = createElement("div", { className: "card__actions" });
+        const startButton = createElement("button", {
+            className: "primary",
+            textContent: "Start stream",
+            attributes: { type: "submit" },
+            dataset: { action: "start" },
+        });
+        const stopButton = createElement("button", {
+            className: "secondary",
+            textContent: "Stop stream",
+            attributes: { type: "button" },
+            dataset: { action: "stop" },
+        });
+        actions.append(startButton, stopButton);
+        form.appendChild(actions);
+
+        card.appendChild(form);
+        container.appendChild(card);
     }
 
     container.querySelectorAll(".stream-form").forEach((form) => {
