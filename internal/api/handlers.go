@@ -51,6 +51,39 @@ func WriteError(w http.ResponseWriter, status int, err error) {
 	writeError(w, status, err)
 }
 
+func setSessionCookie(w http.ResponseWriter, token string, expires time.Time) {
+	if token == "" {
+		return
+	}
+	maxAge := int(time.Until(expires).Seconds())
+	if maxAge < 0 {
+		maxAge = 0
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "bitriver_session",
+		Value:    token,
+		Path:     "/",
+		Expires:  expires.UTC(),
+		MaxAge:   maxAge,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+	})
+}
+
+func clearSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "bitriver_session",
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0).UTC(),
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+	})
+}
+
 func decodeJSON(r *http.Request, dest interface{}) error {
 	if r.Body == nil {
 		return errors.New("request body is required")
@@ -103,7 +136,8 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, newAuthResponse(user, token, expiresAt))
+	setSessionCookie(w, token, expiresAt)
+	writeJSON(w, http.StatusCreated, newAuthResponse(user, expiresAt))
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -131,7 +165,8 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, newAuthResponse(user, token, expiresAt))
+	setSessionCookie(w, token, expiresAt)
+	writeJSON(w, http.StatusOK, newAuthResponse(user, expiresAt))
 }
 
 func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
@@ -152,7 +187,7 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, fmt.Errorf("account not found"))
 			return
 		}
-		writeJSON(w, http.StatusOK, newAuthResponse(user, token, expiresAt))
+		writeJSON(w, http.StatusOK, newAuthResponse(user, expiresAt))
 	case http.MethodDelete:
 		token := ExtractToken(r)
 		if token == "" {
@@ -160,6 +195,7 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.sessionManager().Revoke(token)
+		clearSessionCookie(w)
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.Header().Set("Allow", "GET, DELETE")
@@ -208,7 +244,6 @@ type loginRequest struct {
 }
 
 type authResponse struct {
-	Token     string       `json:"token"`
 	ExpiresAt string       `json:"expiresAt"`
 	User      userResponse `json:"user"`
 }
@@ -235,9 +270,8 @@ func newUserResponse(user models.User) userResponse {
 	}
 }
 
-func newAuthResponse(user models.User, token string, expires time.Time) authResponse {
+func newAuthResponse(user models.User, expires time.Time) authResponse {
 	return authResponse{
-		Token:     token,
 		ExpiresAt: expires.UTC().Format(time.RFC3339Nano),
 		User:      newUserResponse(user),
 	}

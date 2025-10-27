@@ -1,43 +1,8 @@
-const SESSION_STORAGE_KEY = "bitriver-live:session";
-
 class UnauthorizedError extends Error {
     constructor(message) {
         super(message);
         this.name = "UnauthorizedError";
     }
-}
-
-let cachedSessionToken = null;
-
-function readStoredToken() {
-    if (cachedSessionToken !== null) {
-        return cachedSessionToken;
-    }
-    try {
-        const stored = localStorage.getItem(SESSION_STORAGE_KEY);
-        cachedSessionToken = stored || null;
-    } catch (error) {
-        console.warn("Unable to read session token", error);
-        cachedSessionToken = null;
-    }
-    return cachedSessionToken;
-}
-
-function storeSessionToken(token) {
-    cachedSessionToken = token || null;
-    try {
-        if (cachedSessionToken) {
-            localStorage.setItem(SESSION_STORAGE_KEY, cachedSessionToken);
-        } else {
-            localStorage.removeItem(SESSION_STORAGE_KEY);
-        }
-    } catch (error) {
-        console.warn("Unable to persist session token", error);
-    }
-}
-
-function clearSessionToken() {
-    storeSessionToken(null);
 }
 
 const state = {
@@ -111,22 +76,15 @@ document.querySelectorAll(".hero__nav button").forEach((btn) => {
     btn.addEventListener("click", () => switchView(btn.dataset.view));
 });
 
-function getSessionToken() {
-    return readStoredToken();
-}
-
 async function apiRequest(path, options = {}) {
     const headers = new Headers(options.headers || {});
     if (!headers.has("Content-Type")) {
         headers.set("Content-Type", "application/json");
     }
-    const token = getSessionToken();
-    if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
-    }
     const response = await fetch(path, {
         ...options,
         headers,
+        credentials: "include",
     });
     if (response.status === 204) {
         return null;
@@ -136,7 +94,6 @@ async function apiRequest(path, options = {}) {
     const payload = isJSON ? await response.json().catch(() => ({})) : null;
     if (!response.ok) {
         if (response.status === 401) {
-            clearSessionToken();
             throw new UnauthorizedError(payload?.error || response.statusText);
         }
         throw new Error(payload?.error || response.statusText);
@@ -149,16 +106,8 @@ function redirectToAuth() {
 }
 
 async function requireSession() {
-    const token = getSessionToken();
-    if (!token) {
-        redirectToAuth();
-        throw new UnauthorizedError("missing session token");
-    }
     try {
         const session = await apiRequest("/api/auth/session");
-        if (session?.token && session.token !== token) {
-            storeSessionToken(session.token);
-        }
         return session;
     } catch (error) {
         if (error instanceof UnauthorizedError) {
@@ -192,7 +141,6 @@ async function handleSignOut() {
         console.warn("Failed to revoke session", error);
     } finally {
         state.currentUser = null;
-        clearSessionToken();
         renderAccountStatus();
         redirectToAuth();
     }
