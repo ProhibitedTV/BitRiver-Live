@@ -242,6 +242,32 @@ func TestSignupAndLoginFlow(t *testing.T) {
 	}
 }
 
+func TestHealthReportsIngestStatus(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Health(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode health payload: %v", err)
+	}
+	if payload["status"] != "ok" {
+		t.Fatalf("expected overall status ok, got %v", payload["status"])
+	}
+	services, ok := payload["services"].([]interface{})
+	if !ok {
+		t.Fatalf("expected services array in response")
+	}
+	if len(services) == 0 {
+		t.Fatalf("expected at least one health service entry")
+	}
+}
+
 func findCookie(t *testing.T, cookies []*http.Cookie, name string) *http.Cookie {
 	t.Helper()
 	for _, cookie := range cookies {

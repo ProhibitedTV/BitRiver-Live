@@ -26,12 +26,23 @@ type Channel struct {
 }
 
 type StreamSession struct {
-	ID             string     `json:"id"`
-	ChannelID      string     `json:"channelId"`
-	StartedAt      time.Time  `json:"startedAt"`
-	EndedAt        *time.Time `json:"endedAt,omitempty"`
-	Renditions     []string   `json:"renditions"`
-	PeakConcurrent int        `json:"peakConcurrent"`
+	ID                 string              `json:"id"`
+	ChannelID          string              `json:"channelId"`
+	StartedAt          time.Time           `json:"startedAt"`
+	EndedAt            *time.Time          `json:"endedAt,omitempty"`
+	Renditions         []string            `json:"renditions"`
+	PeakConcurrent     int                 `json:"peakConcurrent"`
+	OriginURL          string              `json:"originUrl,omitempty"`
+	PlaybackURL        string              `json:"playbackUrl,omitempty"`
+	IngestEndpoints    []string            `json:"ingestEndpoints,omitempty"`
+	IngestJobIDs       []string            `json:"ingestJobIds,omitempty"`
+	RenditionManifests []RenditionManifest `json:"renditionManifests,omitempty"`
+}
+
+type RenditionManifest struct {
+	Name        string `json:"name"`
+	ManifestURL string `json:"manifestUrl"`
+	Bitrate     int    `json:"bitrate,omitempty"`
 }
 
 type ChatMessage struct {
