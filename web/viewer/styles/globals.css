@@ -1,0 +1,239 @@
+:root {
+  color-scheme: dark light;
+  --background: #0b0c10;
+  --surface: #101218;
+  --surface-alt: #161925;
+  --border: rgba(255, 255, 255, 0.1);
+  --accent: #4fd1c5;
+  --text: #f7fafc;
+  --text-muted: rgba(247, 250, 252, 0.7);
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background: linear-gradient(180deg, #05060a 0%, #0b0c10 100%);
+  color: var(--text);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--accent);
+}
+
+main {
+  width: 100%;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.container {
+  margin: 0 auto;
+  max-width: 1200px;
+  padding: 1.5rem;
+}
+
+.grid {
+  display: grid;
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .grid-columns-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.card {
+  background: var(--surface);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  border-color: var(--accent);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  background: rgba(79, 209, 197, 0.12);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.hero {
+  display: grid;
+  gap: 2rem;
+  padding: 2rem 0;
+}
+
+@media (min-width: 900px) {
+  .hero {
+    grid-template-columns: 2fr 1fr;
+    align-items: start;
+  }
+}
+
+.surface {
+  background: var(--surface-alt);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+input,
+textarea {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: rgba(15, 17, 23, 0.9);
+  color: var(--text);
+}
+
+input:focus,
+textarea:focus,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  padding: 0.6rem 1.5rem;
+  background: linear-gradient(135deg, #4fd1c5, #00b5d8);
+  color: #0b0c10;
+  border: none;
+  font-weight: 600;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.primary-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(79, 209, 197, 0.25);
+}
+
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  padding: 0.55rem 1.35rem;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  transition: border-color 0.2s ease;
+}
+
+.secondary-button:hover {
+  border-color: var(--accent);
+}
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(5, 6, 10, 0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+
+.navbar-inner {
+  margin: 0 auto;
+  max-width: 1200px;
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tag {
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.video-container {
+  position: relative;
+  width: 100%;
+  padding-top: 56.25%;
+  background: #000;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.video-container video,
+.video-container .webrtc-player {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.footer {
+  margin-top: 3rem;
+  padding: 2rem 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}

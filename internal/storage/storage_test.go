@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"reflect"
 
@@ -474,6 +475,10 @@ func TestDeleteChannelRemovesArtifacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser owner: %v", err)
 	}
+	viewer, err := store.CreateUser(CreateUserParams{DisplayName: "Viewer", Email: "viewer@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
 
 	channel, err := store.CreateChannel(owner.ID, "Main", "gaming", []string{"retro"})
 	if err != nil {
@@ -490,6 +495,9 @@ func TestDeleteChannelRemovesArtifacts(t *testing.T) {
 	if _, err := store.CreateChatMessage(channel.ID, owner.ID, "hello"); err != nil {
 		t.Fatalf("CreateChatMessage: %v", err)
 	}
+	if err := store.FollowChannel(viewer.ID, channel.ID); err != nil {
+		t.Fatalf("FollowChannel: %v", err)
+	}
 
 	if err := store.DeleteChannel(channel.ID); err != nil {
 		t.Fatalf("DeleteChannel: %v", err)
@@ -502,6 +510,12 @@ func TestDeleteChannelRemovesArtifacts(t *testing.T) {
 	}
 	if _, ok := store.data.StreamSessions[session.ID]; ok {
 		t.Fatalf("expected session %s to be removed", session.ID)
+	}
+	if followers := store.CountFollowers(channel.ID); followers != 0 {
+		t.Fatalf("expected follower count reset, got %d", followers)
+	}
+	if following := store.ListFollowedChannelIDs(viewer.ID); len(following) != 0 {
+		t.Fatalf("expected viewer follow list to be cleared, got %v", following)
 	}
 }
 
@@ -958,6 +972,97 @@ func TestUpsertProfileTopFriendsLimit(t *testing.T) {
 
 	if _, err := store.UpsertProfile(owner.ID, ProfileUpdate{TopFriends: &friendIDs}); err == nil {
 		t.Fatalf("expected error for more than eight top friends")
+	}
+}
+
+func TestFollowChannelLifecycle(t *testing.T) {
+	store := newTestStore(t)
+
+	owner, err := store.CreateUser(CreateUserParams{DisplayName: "Creator", Email: "creator@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+	viewer, err := store.CreateUser(CreateUserParams{DisplayName: "Viewer", Email: "viewer@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Workshop", "maker", []string{"cnc"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	if count := store.CountFollowers(channel.ID); count != 0 {
+		t.Fatalf("expected zero followers, got %d", count)
+	}
+	if store.IsFollowingChannel(viewer.ID, channel.ID) {
+		t.Fatal("expected viewer to not follow channel")
+	}
+	if followed := store.ListFollowedChannelIDs(viewer.ID); followed != nil {
+		t.Fatalf("expected no followed channels, got %v", followed)
+	}
+
+	if err := store.FollowChannel(viewer.ID, channel.ID); err != nil {
+		t.Fatalf("FollowChannel: %v", err)
+	}
+	if err := store.FollowChannel(viewer.ID, channel.ID); err != nil {
+		t.Fatalf("FollowChannel idempotency: %v", err)
+	}
+	if count := store.CountFollowers(channel.ID); count != 1 {
+		t.Fatalf("expected one follower, got %d", count)
+	}
+	if !store.IsFollowingChannel(viewer.ID, channel.ID) {
+		t.Fatal("expected viewer to follow channel")
+	}
+	followed := store.ListFollowedChannelIDs(viewer.ID)
+	if len(followed) != 1 || followed[0] != channel.ID {
+		t.Fatalf("unexpected followed list: %v", followed)
+	}
+
+	if err := store.UnfollowChannel(viewer.ID, channel.ID); err != nil {
+		t.Fatalf("UnfollowChannel: %v", err)
+	}
+	if err := store.UnfollowChannel(viewer.ID, channel.ID); err != nil {
+		t.Fatalf("UnfollowChannel idempotency: %v", err)
+	}
+	if count := store.CountFollowers(channel.ID); count != 0 {
+		t.Fatalf("expected zero followers after unfollow, got %d", count)
+	}
+	if store.IsFollowingChannel(viewer.ID, channel.ID) {
+		t.Fatal("expected viewer to not follow channel after unfollow")
+	}
+}
+
+func TestListFollowedChannelIDsOrdersByRecency(t *testing.T) {
+	store := newTestStore(t)
+
+	owner, err := store.CreateUser(CreateUserParams{DisplayName: "Creator", Email: "creator@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+	viewer, err := store.CreateUser(CreateUserParams{DisplayName: "Viewer", Email: "viewer@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
+	first, err := store.CreateChannel(owner.ID, "Alpha", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel alpha: %v", err)
+	}
+	second, err := store.CreateChannel(owner.ID, "Beta", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel beta: %v", err)
+	}
+
+	if err := store.FollowChannel(viewer.ID, first.ID); err != nil {
+		t.Fatalf("FollowChannel alpha: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	if err := store.FollowChannel(viewer.ID, second.ID); err != nil {
+		t.Fatalf("FollowChannel beta: %v", err)
+	}
+
+	followed := store.ListFollowedChannelIDs(viewer.ID)
+	if len(followed) != 2 || followed[0] != second.ID || followed[1] != first.ID {
+		t.Fatalf("expected channels ordered by recency, got %v", followed)
 	}
 }
 
