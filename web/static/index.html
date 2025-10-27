@@ -22,7 +22,13 @@
             <button data-view="sessions">Sessions</button>
             <button data-view="settings">Settings</button>
         </nav>
-        <a class="hero__link" href="/signup">Create a viewer account</a>
+        <div class="hero__actions">
+            <a class="hero__link" href="/signup">Create a viewer account</a>
+            <div class="hero__account" id="account-actions" hidden>
+                <span id="current-user-name" class="hero__account-name"></span>
+                <button id="sign-out-button" class="secondary">Sign out</button>
+            </div>
+        </div>
     </header>
     <main>
         <section id="dashboard" class="panel active">

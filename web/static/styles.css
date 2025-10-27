@@ -150,6 +150,25 @@ body.auth-page {
     color: var(--accent-strong);
 }
 
+.hero__actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
+}
+
+.hero__account {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.hero__account-name {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
 main {
     flex: 1;
     display: grid;
