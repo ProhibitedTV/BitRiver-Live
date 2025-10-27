@@ -36,6 +36,7 @@ type dataset struct {
 	StreamSessions map[string]models.StreamSession `json:"streamSessions"`
 	ChatMessages   map[string]models.ChatMessage   `json:"chatMessages"`
 	Profiles       map[string]models.Profile       `json:"profiles"`
+	Follows        map[string]map[string]time.Time `json:"follows"`
 }
 
 type Storage struct {
@@ -79,6 +80,7 @@ func newDataset() dataset {
 		StreamSessions: make(map[string]models.StreamSession),
 		ChatMessages:   make(map[string]models.ChatMessage),
 		Profiles:       make(map[string]models.Profile),
+		Follows:        make(map[string]map[string]time.Time),
 	}
 }
 
@@ -97,6 +99,9 @@ func (s *Storage) ensureDatasetInitializedLocked() {
 	}
 	if s.data.Profiles == nil {
 		s.data.Profiles = make(map[string]models.Profile)
+	}
+	if s.data.Follows == nil {
+		s.data.Follows = make(map[string]map[string]time.Time)
 	}
 }
 
@@ -301,6 +306,21 @@ func cloneDataset(src dataset) dataset {
 				cloned.FeaturedChannelID = &featured
 			}
 			clone.Profiles[id] = cloned
+		}
+	}
+
+	if src.Follows != nil {
+		clone.Follows = make(map[string]map[string]time.Time, len(src.Follows))
+		for userID, channels := range src.Follows {
+			if channels == nil {
+				clone.Follows[userID] = nil
+				continue
+			}
+			followed := make(map[string]time.Time, len(channels))
+			for channelID, followedAt := range channels {
+				followed[channelID] = followedAt
+			}
+			clone.Follows[userID] = followed
 		}
 	}
 
@@ -557,6 +577,7 @@ func (s *Storage) DeleteUser(id string) error {
 
 	delete(updatedData.Users, id)
 	delete(updatedData.Profiles, id)
+	delete(updatedData.Follows, id)
 
 	now := time.Now().UTC()
 	for profileID, profile := range updatedData.Profiles {
@@ -889,6 +910,136 @@ func (s *Storage) ListChannels(ownerID string) []models.Channel {
 	return channels
 }
 
+// FollowChannel records that a viewer is following the channel. The operation is idempotent.
+func (s *Storage) FollowChannel(userID, channelID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	updatedData := cloneDataset(s.data)
+
+	if _, ok := updatedData.Users[userID]; !ok {
+		return fmt.Errorf("user %s not found", userID)
+	}
+	if _, ok := updatedData.Channels[channelID]; !ok {
+		return fmt.Errorf("channel %s not found", channelID)
+	}
+
+	if updatedData.Follows == nil {
+		updatedData.Follows = make(map[string]map[string]time.Time)
+	}
+	follows := updatedData.Follows[userID]
+	if follows == nil {
+		follows = make(map[string]time.Time)
+	}
+	if _, exists := follows[channelID]; !exists {
+		follows[channelID] = time.Now().UTC()
+	}
+	updatedData.Follows[userID] = follows
+
+	if err := s.persistDataset(updatedData); err != nil {
+		return err
+	}
+
+	s.data = updatedData
+
+	return nil
+}
+
+// UnfollowChannel removes the follow association if present. The operation is idempotent.
+func (s *Storage) UnfollowChannel(userID, channelID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	updatedData := cloneDataset(s.data)
+
+	if _, ok := updatedData.Users[userID]; !ok {
+		return fmt.Errorf("user %s not found", userID)
+	}
+	if _, ok := updatedData.Channels[channelID]; !ok {
+		return fmt.Errorf("channel %s not found", channelID)
+	}
+
+	if follows, ok := updatedData.Follows[userID]; ok {
+		if _, exists := follows[channelID]; exists {
+			delete(follows, channelID)
+			if len(follows) == 0 {
+				delete(updatedData.Follows, userID)
+			} else {
+				updatedData.Follows[userID] = follows
+			}
+		}
+	}
+
+	if err := s.persistDataset(updatedData); err != nil {
+		return err
+	}
+
+	s.data = updatedData
+
+	return nil
+}
+
+// IsFollowingChannel reports whether the given user follows the channel.
+func (s *Storage) IsFollowingChannel(userID, channelID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	follows, ok := s.data.Follows[userID]
+	if !ok {
+		return false
+	}
+	_, exists := follows[channelID]
+	return exists
+}
+
+// CountFollowers returns the number of viewers following the channel.
+func (s *Storage) CountFollowers(channelID string) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	count := 0
+	for _, follows := range s.data.Follows {
+		if follows == nil {
+			continue
+		}
+		if _, ok := follows[channelID]; ok {
+			count++
+		}
+	}
+	return count
+}
+
+// ListFollowedChannelIDs returns the identifiers of channels the user follows ordered by recency.
+func (s *Storage) ListFollowedChannelIDs(userID string) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	follows, ok := s.data.Follows[userID]
+	if !ok || len(follows) == 0 {
+		return nil
+	}
+
+	type pair struct {
+		id   string
+		when time.Time
+	}
+
+	pairs := make([]pair, 0, len(follows))
+	for channelID, followedAt := range follows {
+		pairs = append(pairs, pair{id: channelID, when: followedAt})
+	}
+
+	sort.Slice(pairs, func(i, j int) bool {
+		return pairs[i].when.After(pairs[j].when)
+	})
+
+	ids := make([]string, 0, len(pairs))
+	for _, p := range pairs {
+		ids = append(ids, p.id)
+	}
+	return ids
+}
+
 // DeleteChannel removes a channel and its associated sessions and chat transcripts.
 func (s *Storage) DeleteChannel(id string) error {
 	s.mu.Lock()
@@ -914,6 +1065,19 @@ func (s *Storage) DeleteChannel(id string) error {
 	for messageID, message := range updatedData.ChatMessages {
 		if message.ChannelID == id {
 			delete(updatedData.ChatMessages, messageID)
+		}
+	}
+	for userID, follows := range updatedData.Follows {
+		if follows == nil {
+			continue
+		}
+		if _, exists := follows[id]; exists {
+			delete(follows, id)
+			if len(follows) == 0 {
+				delete(updatedData.Follows, userID)
+			} else {
+				updatedData.Follows[userID] = follows
+			}
 		}
 	}
 
@@ -1121,6 +1285,22 @@ func (s *Storage) ListStreamSessions(channelID string) ([]models.StreamSession, 
 		return sessions[i].StartedAt.After(sessions[j].StartedAt)
 	})
 	return sessions, nil
+}
+
+// CurrentStreamSession returns the active stream session for the channel if present.
+func (s *Storage) CurrentStreamSession(channelID string) (models.StreamSession, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	channel, ok := s.data.Channels[channelID]
+	if !ok || channel.CurrentSessionID == nil {
+		return models.StreamSession{}, false
+	}
+	session, exists := s.data.StreamSessions[*channel.CurrentSessionID]
+	if !exists {
+		return models.StreamSession{}, false
+	}
+	return session, true
 }
 
 // IngestHealth reports the status of configured ingest dependencies.

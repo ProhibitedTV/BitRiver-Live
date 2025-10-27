@@ -437,6 +437,88 @@ type channelPublicResponse struct {
 	UpdatedAt        string   `json:"updatedAt"`
 }
 
+type channelOwnerResponse struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"displayName"`
+	AvatarURL   string `json:"avatarUrl,omitempty"`
+}
+
+type profileSummaryResponse struct {
+	Bio       string `json:"bio,omitempty"`
+	AvatarURL string `json:"avatarUrl,omitempty"`
+	BannerURL string `json:"bannerUrl,omitempty"`
+}
+
+type directoryChannelResponse struct {
+	Channel       channelPublicResponse  `json:"channel"`
+	Owner         channelOwnerResponse   `json:"owner"`
+	Profile       profileSummaryResponse `json:"profile"`
+	Live          bool                   `json:"live"`
+	FollowerCount int                    `json:"followerCount"`
+}
+
+type directoryResponse struct {
+	Channels    []directoryChannelResponse `json:"channels"`
+	GeneratedAt string                     `json:"generatedAt"`
+}
+
+type followStateResponse struct {
+	Followers int  `json:"followers"`
+	Following bool `json:"following"`
+}
+
+type playbackStreamResponse struct {
+	SessionID   string                      `json:"sessionId"`
+	StartedAt   string                      `json:"startedAt"`
+	PlaybackURL string                      `json:"playbackUrl,omitempty"`
+	OriginURL   string                      `json:"originUrl,omitempty"`
+	Protocol    string                      `json:"protocol,omitempty"`
+	PlayerHint  string                      `json:"playerHint,omitempty"`
+	LatencyMode string                      `json:"latencyMode,omitempty"`
+	Renditions  []renditionManifestResponse `json:"renditions,omitempty"`
+}
+
+type channelPlaybackResponse struct {
+	Channel  channelPublicResponse   `json:"channel"`
+	Owner    channelOwnerResponse    `json:"owner"`
+	Profile  profileSummaryResponse  `json:"profile"`
+	Live     bool                    `json:"live"`
+	Follow   followStateResponse     `json:"follow"`
+	Playback *playbackStreamResponse `json:"playback,omitempty"`
+}
+
+func (h *Handler) Directory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+
+	channels := h.Store.ListChannels("")
+	response := make([]directoryChannelResponse, 0, len(channels))
+	for _, channel := range channels {
+		owner, exists := h.Store.GetUser(channel.OwnerID)
+		if !exists {
+			continue
+		}
+		profile, _ := h.Store.GetProfile(owner.ID)
+		followerCount := h.Store.CountFollowers(channel.ID)
+		response = append(response, directoryChannelResponse{
+			Channel:       newChannelPublicResponse(channel),
+			Owner:         newOwnerResponse(owner, profile),
+			Profile:       newProfileSummaryResponse(profile),
+			Live:          channel.LiveState == "live" || channel.LiveState == "starting",
+			FollowerCount: followerCount,
+		})
+	}
+
+	payload := directoryResponse{
+		Channels:    response,
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
 func newChannelResponse(channel models.Channel) channelResponse {
 	resp := channelResponse{
 		ID:        channel.ID,
@@ -472,6 +554,28 @@ func newChannelPublicResponse(channel models.Channel) channelPublicResponse {
 		resp.CurrentSessionID = &sessionID
 	}
 	return resp
+}
+
+func newOwnerResponse(user models.User, profile models.Profile) channelOwnerResponse {
+	owner := channelOwnerResponse{ID: user.ID, DisplayName: user.DisplayName}
+	if profile.AvatarURL != "" {
+		owner.AvatarURL = profile.AvatarURL
+	}
+	return owner
+}
+
+func newProfileSummaryResponse(profile models.Profile) profileSummaryResponse {
+	summary := profileSummaryResponse{}
+	if profile.Bio != "" {
+		summary.Bio = profile.Bio
+	}
+	if profile.AvatarURL != "" {
+		summary.AvatarURL = profile.AvatarURL
+	}
+	if profile.BannerURL != "" {
+		summary.BannerURL = profile.BannerURL
+	}
+	return summary
 }
 
 func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
@@ -547,16 +651,12 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 1 {
 		switch r.Method {
 		case http.MethodGet:
-			actor, ok := h.requireAuthenticatedUser(w, r)
-			if !ok {
-				return
-			}
 			channel, ok := h.Store.GetChannel(channelID)
 			if !ok {
 				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
 			}
-			if channel.OwnerID == actor.ID || userHasRole(actor, roleAdmin) {
+			if actor, ok := UserFromContext(r.Context()); ok && (channel.OwnerID == actor.ID || userHasRole(actor, roleAdmin)) {
 				writeJSON(w, http.StatusOK, newChannelResponse(channel))
 				return
 			}
@@ -615,6 +715,72 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 
 	if len(parts) >= 2 {
 		switch parts[1] {
+		case "playback":
+			channel, ok := h.Store.GetChannel(channelID)
+			if !ok {
+				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				return
+			}
+			if r.Method != http.MethodGet {
+				w.Header().Set("Allow", "GET")
+				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				return
+			}
+			owner, exists := h.Store.GetUser(channel.OwnerID)
+			if !exists {
+				writeError(w, http.StatusInternalServerError, fmt.Errorf("channel owner %s not found", channel.OwnerID))
+				return
+			}
+			profile, _ := h.Store.GetProfile(owner.ID)
+			follow := followStateResponse{Followers: h.Store.CountFollowers(channel.ID)}
+			if actor, ok := UserFromContext(r.Context()); ok {
+				follow.Following = h.Store.IsFollowingChannel(actor.ID, channel.ID)
+			}
+			response := channelPlaybackResponse{
+				Channel: newChannelPublicResponse(channel),
+				Owner:   newOwnerResponse(owner, profile),
+				Profile: newProfileSummaryResponse(profile),
+				Live:    channel.LiveState == "live" || channel.LiveState == "starting",
+				Follow:  follow,
+			}
+			if session, live := h.Store.CurrentStreamSession(channel.ID); live {
+				playback := playbackStreamResponse{
+					SessionID: session.ID,
+					StartedAt: session.StartedAt.Format(time.RFC3339Nano),
+				}
+				if session.PlaybackURL != "" {
+					playback.PlaybackURL = session.PlaybackURL
+				}
+				if session.OriginURL != "" {
+					playback.OriginURL = session.OriginURL
+				}
+				if len(session.RenditionManifests) > 0 {
+					manifests := make([]renditionManifestResponse, 0, len(session.RenditionManifests))
+					for _, manifest := range session.RenditionManifests {
+						manifests = append(manifests, renditionManifestResponse{
+							Name:        manifest.Name,
+							ManifestURL: manifest.ManifestURL,
+							Bitrate:     manifest.Bitrate,
+						})
+					}
+					playback.Renditions = manifests
+				}
+				protocol := "ll-hls"
+				player := "hls.js"
+				latency := "low-latency"
+				url := strings.ToLower(playback.PlaybackURL)
+				if strings.HasPrefix(url, "webrtc") || strings.HasPrefix(url, "wss") {
+					protocol = "webrtc"
+					player = "ovenplayer"
+					latency = "ultra-low"
+				}
+				playback.Protocol = protocol
+				playback.PlayerHint = player
+				playback.LatencyMode = latency
+				response.Playback = &playback
+			}
+			writeJSON(w, http.StatusOK, response)
+			return
 		case "stream":
 			channel, ok := h.Store.GetChannel(channelID)
 			if !ok {
@@ -647,6 +813,41 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				response = append(response, newSessionResponse(session))
 			}
 			writeJSON(w, http.StatusOK, response)
+			return
+		case "follow":
+			if len(parts) > 2 {
+				writeError(w, http.StatusNotFound, fmt.Errorf("unknown channel path"))
+				return
+			}
+			if _, ok := h.Store.GetChannel(channelID); !ok {
+				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				return
+			}
+			actor, ok := h.requireAuthenticatedUser(w, r)
+			if !ok {
+				return
+			}
+			switch r.Method {
+			case http.MethodPost:
+				if err := h.Store.FollowChannel(actor.ID, channelID); err != nil {
+					writeError(w, http.StatusBadRequest, err)
+					return
+				}
+			case http.MethodDelete:
+				if err := h.Store.UnfollowChannel(actor.ID, channelID); err != nil {
+					writeError(w, http.StatusBadRequest, err)
+					return
+				}
+			default:
+				w.Header().Set("Allow", "POST, DELETE")
+				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				return
+			}
+			state := followStateResponse{
+				Followers: h.Store.CountFollowers(channelID),
+				Following: h.Store.IsFollowingChannel(actor.ID, channelID),
+			}
+			writeJSON(w, http.StatusOK, state)
 			return
 		case "chat":
 			h.handleChatRoutes(channelID, parts[2:], w, r)

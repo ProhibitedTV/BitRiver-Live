@@ -25,6 +25,7 @@ func New(handler *api.Handler, addr string) (*Server, error) {
 	mux.HandleFunc("/api/auth/session", handler.Session)
 	mux.HandleFunc("/api/users", handler.Users)
 	mux.HandleFunc("/api/users/", handler.UserByID)
+	mux.HandleFunc("/api/directory", handler.Directory)
 	mux.HandleFunc("/api/channels", handler.Channels)
 	mux.HandleFunc("/api/channels/", handler.ChannelByID)
 	mux.HandleFunc("/api/profiles", handler.Profiles)
@@ -93,6 +94,16 @@ func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 		path := r.URL.Path
 		if path == "/healthz" || strings.HasPrefix(path, "/api/auth/") || !strings.HasPrefix(path, "/api/") {
 			next.ServeHTTP(w, r)
+			return
+		}
+		optionalAuth := r.Method == http.MethodGet && (path == "/api/directory" || strings.HasPrefix(path, "/api/channels/"))
+		token := api.ExtractToken(r)
+		if token == "" {
+			if optionalAuth {
+				next.ServeHTTP(w, r)
+				return
+			}
+			api.WriteError(w, http.StatusUnauthorized, fmt.Errorf("missing session token"))
 			return
 		}
 		user, err := handler.AuthenticateRequest(r)
