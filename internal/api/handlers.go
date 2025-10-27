@@ -46,6 +46,11 @@ func writeError(w http.ResponseWriter, status int, err error) {
 	writeJSON(w, status, map[string]string{"error": err.Error()})
 }
 
+// WriteError is an exported helper for returning JSON API errors.
+func WriteError(w http.ResponseWriter, status int, err error) {
+	writeError(w, status, err)
+}
+
 func decodeJSON(r *http.Request, dest interface{}) error {
 	if r.Body == nil {
 		return errors.New("request body is required")
@@ -132,7 +137,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		token := extractToken(r)
+		token := ExtractToken(r)
 		if token == "" {
 			writeError(w, http.StatusUnauthorized, fmt.Errorf("missing session token"))
 			return
@@ -149,7 +154,7 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, newAuthResponse(user, token, expiresAt))
 	case http.MethodDelete:
-		token := extractToken(r)
+		token := ExtractToken(r)
 		if token == "" {
 			writeError(w, http.StatusBadRequest, fmt.Errorf("missing session token"))
 			return
@@ -162,7 +167,7 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func extractToken(r *http.Request) string {
+func ExtractToken(r *http.Request) string {
 	header := r.Header.Get("Authorization")
 	if header != "" {
 		parts := strings.SplitN(header, " ", 2)
@@ -244,6 +249,9 @@ func newAuthResponse(user models.User, token string, expires time.Time) authResp
 func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		if _, ok := h.requireRole(w, r, roleAdmin); !ok {
+			return
+		}
 		users := h.Store.ListUsers()
 		response := make([]userResponse, 0, len(users))
 		for _, user := range users {
@@ -251,6 +259,9 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, response)
 	case http.MethodPost:
+		if _, ok := h.requireRole(w, r, roleAdmin); !ok {
+			return
+		}
 		var req createUserRequest
 		if err := decodeJSON(r, &req); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -282,6 +293,14 @@ func (h *Handler) UserByID(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		requester, ok := h.requireAuthenticatedUser(w, r)
+		if !ok {
+			return
+		}
+		if requester.ID != id && !userHasRole(requester, roleAdmin) {
+			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+			return
+		}
 		user, ok := h.Store.GetUser(id)
 		if !ok {
 			writeError(w, http.StatusNotFound, fmt.Errorf("user %s not found", id))
@@ -289,6 +308,9 @@ func (h *Handler) UserByID(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, newUserResponse(user))
 	case http.MethodPatch:
+		if _, ok := h.requireRole(w, r, roleAdmin); !ok {
+			return
+		}
 		var req updateUserRequest
 		if err := decodeJSON(r, &req); err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -312,6 +334,9 @@ func (h *Handler) UserByID(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, newUserResponse(user))
 	case http.MethodDelete:
+		if _, ok := h.requireRole(w, r, roleAdmin); !ok {
+			return
+		}
 		if err := h.Store.DeleteUser(id); err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
@@ -373,6 +398,9 @@ func newChannelResponse(channel models.Channel) channelResponse {
 func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		if _, ok := h.requireAuthenticatedUser(w, r); !ok {
+			return
+		}
 		ownerID := r.URL.Query().Get("ownerId")
 		channels := h.Store.ListChannels(ownerID)
 		response := make([]channelResponse, 0, len(channels))
@@ -381,9 +409,20 @@ func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, response)
 	case http.MethodPost:
+		actor, ok := h.requireRole(w, r, roleAdmin, roleCreator)
+		if !ok {
+			return
+		}
 		var req createChannelRequest
 		if err := decodeJSON(r, &req); err != nil {
 			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		if req.OwnerID == "" {
+			req.OwnerID = actor.ID
+		}
+		if req.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
 		channel, err := h.Store.CreateChannel(req.OwnerID, req.Title, req.Category, req.Tags)
@@ -410,6 +449,9 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 1 {
 		switch r.Method {
 		case http.MethodGet:
+			if _, ok := h.requireAuthenticatedUser(w, r); !ok {
+				return
+			}
 			channel, ok := h.Store.GetChannel(channelID)
 			if !ok {
 				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
@@ -417,6 +459,14 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			}
 			writeJSON(w, http.StatusOK, newChannelResponse(channel))
 		case http.MethodPatch:
+			channel, ok := h.Store.GetChannel(channelID)
+			if !ok {
+				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				return
+			}
+			if _, ok := h.ensureChannelAccess(w, r, channel); !ok {
+				return
+			}
 			var req updateChannelRequest
 			if err := decodeJSON(r, &req); err != nil {
 				writeError(w, http.StatusBadRequest, err)
@@ -440,6 +490,14 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			}
 			writeJSON(w, http.StatusOK, newChannelResponse(channel))
 		case http.MethodDelete:
+			channel, ok := h.Store.GetChannel(channelID)
+			if !ok {
+				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				return
+			}
+			if _, ok := h.ensureChannelAccess(w, r, channel); !ok {
+				return
+			}
 			if err := h.Store.DeleteChannel(channelID); err != nil {
 				writeError(w, http.StatusBadRequest, err)
 				return
@@ -455,9 +513,22 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 	if len(parts) >= 2 {
 		switch parts[1] {
 		case "stream":
-			h.handleStreamRoutes(channelID, parts[2:], w, r)
+			channel, ok := h.Store.GetChannel(channelID)
+			if !ok {
+				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				return
+			}
+			h.handleStreamRoutes(channel, parts[2:], w, r)
 			return
 		case "sessions":
+			channel, ok := h.Store.GetChannel(channelID)
+			if !ok {
+				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				return
+			}
+			if _, ok := h.ensureChannelAccess(w, r, channel); !ok {
+				return
+			}
 			if r.Method != http.MethodGet {
 				w.Header().Set("Allow", "GET")
 				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
@@ -515,9 +586,12 @@ func newSessionResponse(session models.StreamSession) sessionResponse {
 	return resp
 }
 
-func (h *Handler) handleStreamRoutes(channelID string, remaining []string, w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	if len(remaining) == 0 {
 		writeError(w, http.StatusNotFound, fmt.Errorf("stream action missing"))
+		return
+	}
+	if _, ok := h.ensureChannelAccess(w, r, channel); !ok {
 		return
 	}
 	action := remaining[0]
@@ -533,7 +607,7 @@ func (h *Handler) handleStreamRoutes(channelID string, remaining []string, w htt
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		session, err := h.Store.StartStream(channelID, req.Renditions)
+		session, err := h.Store.StartStream(channel.ID, req.Renditions)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
@@ -550,7 +624,7 @@ func (h *Handler) handleStreamRoutes(channelID string, remaining []string, w htt
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		session, err := h.Store.StopStream(channelID, req.PeakConcurrent)
+		session, err := h.Store.StopStream(channel.ID, req.PeakConcurrent)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
@@ -627,6 +701,15 @@ type profileViewResponse struct {
 }
 
 func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.requireAuthenticatedUser(w, r)
+	if !ok {
+		return
+	}
+	channel, exists := h.Store.GetChannel(channelID)
+	if !exists {
+		writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+		return
+	}
 	if len(remaining) > 0 && remaining[0] != "" {
 		messageID := remaining[0]
 		if len(remaining) > 1 {
@@ -636,6 +719,10 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 		if r.Method != http.MethodDelete {
 			w.Header().Set("Allow", "DELETE")
 			writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+			return
+		}
+		if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
 		if err := h.Store.DeleteChatMessage(channelID, messageID); err != nil {
@@ -674,6 +761,10 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
+		if req.UserID != actor.ID && !userHasRole(actor, roleAdmin) {
+			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+			return
+		}
 		message, err := h.Store.CreateChatMessage(channelID, req.UserID, req.Content)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -691,6 +782,9 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 func (h *Handler) Profiles(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		if _, ok := h.requireAuthenticatedUser(w, r); !ok {
+			return
+		}
 		profiles := h.Store.ListProfiles()
 		response := make([]profileViewResponse, 0, len(profiles))
 		for _, profile := range profiles {
@@ -718,8 +812,24 @@ func (h *Handler) ProfileByID(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		if _, ok := h.requireAuthenticatedUser(w, r); !ok {
+			return
+		}
 		h.handleGetProfile(userID, w, r)
 	case http.MethodPut:
+		actor, ok := h.requireAuthenticatedUser(w, r)
+		if !ok {
+			return
+		}
+		if actor.ID != userID {
+			if !userHasRole(actor, roleAdmin) {
+				WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+				return
+			}
+		} else if !userHasAnyRole(actor, roleAdmin, roleCreator) {
+			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+			return
+		}
 		h.handleUpsertProfile(userID, w, r)
 	default:
 		w.Header().Set("Allow", "GET, PUT")

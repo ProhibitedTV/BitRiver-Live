@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/auth"
+	"bitriver-live/internal/models"
 	"bitriver-live/internal/storage"
 )
 
@@ -25,8 +26,21 @@ func newTestHandler(t *testing.T) (*Handler, *storage.Storage) {
 	return NewHandler(store, sessions), store
 }
 
+func withUser(req *http.Request, user models.User) *http.Request {
+	return req.WithContext(ContextWithUser(req.Context(), user))
+}
+
 func TestUsersEndpointCreatesAndListsUsers(t *testing.T) {
-	handler, _ := newTestHandler(t)
+	handler, store := newTestHandler(t)
+
+	admin, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Admin",
+		Email:       "admin@example.com",
+		Roles:       []string{"admin"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser admin: %v", err)
+	}
 
 	payload := map[string]interface{}{
 		"displayName": "Alice",
@@ -35,6 +49,7 @@ func TestUsersEndpointCreatesAndListsUsers(t *testing.T) {
 	}
 	body, _ := json.Marshal(payload)
 	req := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
+	req = withUser(req, admin)
 	rec := httptest.NewRecorder()
 
 	handler.Users(rec, req)
@@ -43,6 +58,7 @@ func TestUsersEndpointCreatesAndListsUsers(t *testing.T) {
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	req = withUser(req, admin)
 	rec = httptest.NewRecorder()
 	handler.Users(rec, req)
 	if rec.Code != http.StatusOK {
@@ -53,11 +69,70 @@ func TestUsersEndpointCreatesAndListsUsers(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if len(response) != 1 {
-		t.Fatalf("expected 1 user, got %d", len(response))
+	if len(response) < 2 {
+		t.Fatalf("expected at least 2 users, got %d", len(response))
 	}
-	if response[0].Email != "alice@example.com" {
-		t.Fatalf("expected email alice@example.com, got %s", response[0].Email)
+	found := false
+	for _, u := range response {
+		if u.Email == "alice@example.com" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected to find alice@example.com in response")
+	}
+}
+
+func TestAuthorizationEnforced(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	payload := map[string]interface{}{
+		"displayName": "Bob",
+		"email":       "bob@example.com",
+		"roles":       []string{"creator"},
+	}
+	body, _ := json.Marshal(payload)
+
+	// Anonymous request should be rejected with 401.
+	req := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.Users(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401 for anonymous request, got %d", rec.Code)
+	}
+
+	viewer, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Viewer",
+		Email:       "viewer@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
+	req = withUser(req, viewer)
+	rec = httptest.NewRecorder()
+	handler.Users(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403 for viewer, got %d", rec.Code)
+	}
+
+	admin, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Admin",
+		Email:       "admin@example.com",
+		Roles:       []string{"admin"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser admin: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
+	req = withUser(req, admin)
+	rec = httptest.NewRecorder()
+	handler.Users(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201 for admin, got %d", rec.Code)
 	}
 }
 
@@ -130,6 +205,7 @@ func TestChannelStreamLifecycle(t *testing.T) {
 	user, err := store.CreateUser(storage.CreateUserParams{
 		DisplayName: "Alice",
 		Email:       "alice@example.com",
+		Roles:       []string{"creator"},
 	})
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
@@ -143,6 +219,7 @@ func TestChannelStreamLifecycle(t *testing.T) {
 	}
 	body, _ := json.Marshal(payload)
 	req := httptest.NewRequest(http.MethodPost, "/api/channels", bytes.NewReader(body))
+	req = withUser(req, user)
 	rec := httptest.NewRecorder()
 	handler.Channels(rec, req)
 	if rec.Code != http.StatusCreated {
@@ -160,6 +237,7 @@ func TestChannelStreamLifecycle(t *testing.T) {
 	startPayload := map[string]interface{}{"renditions": []string{"1080p"}}
 	body, _ = json.Marshal(startPayload)
 	req = httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/stream/start", bytes.NewReader(body))
+	req = withUser(req, user)
 	rec = httptest.NewRecorder()
 	handler.ChannelByID(rec, req)
 	if rec.Code != http.StatusCreated {
@@ -177,6 +255,7 @@ func TestChannelStreamLifecycle(t *testing.T) {
 	stopPayload := map[string]interface{}{"peakConcurrent": 10}
 	body, _ = json.Marshal(stopPayload)
 	req = httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/stream/stop", bytes.NewReader(body))
+	req = withUser(req, user)
 	rec = httptest.NewRecorder()
 	handler.ChannelByID(rec, req)
 	if rec.Code != http.StatusOK {
@@ -211,6 +290,7 @@ func TestChatEndpointsLimit(t *testing.T) {
 		}
 		body, _ := json.Marshal(payload)
 		req := httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/chat", bytes.NewReader(body))
+		req = withUser(req, user)
 		rec := httptest.NewRecorder()
 		handler.ChannelByID(rec, req)
 		if rec.Code != http.StatusCreated {
@@ -219,6 +299,7 @@ func TestChatEndpointsLimit(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID+"/chat?limit=2", nil)
+	req = withUser(req, user)
 	rec := httptest.NewRecorder()
 	handler.ChannelByID(rec, req)
 	if rec.Code != http.StatusOK {
@@ -268,6 +349,7 @@ func TestProfileEndpoints(t *testing.T) {
 	}
 	body, _ := json.Marshal(payload)
 	req := httptest.NewRequest(http.MethodPut, "/api/profiles/"+owner.ID, bytes.NewReader(body))
+	req = withUser(req, owner)
 	rec := httptest.NewRecorder()
 	handler.ProfileByID(rec, req)
 	if rec.Code != http.StatusOK {
@@ -298,6 +380,7 @@ func TestProfileEndpoints(t *testing.T) {
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/profiles/"+owner.ID, nil)
+	req = withUser(req, owner)
 	rec = httptest.NewRecorder()
 	handler.ProfileByID(rec, req)
 	if rec.Code != http.StatusOK {
@@ -311,6 +394,7 @@ func TestProfileEndpoints(t *testing.T) {
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/profiles/missing", nil)
+	req = withUser(req, owner)
 	rec = httptest.NewRecorder()
 	handler.ProfileByID(rec, req)
 	if rec.Code != http.StatusNotFound {
