@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"

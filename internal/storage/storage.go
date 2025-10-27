@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/models"
-	"crypto/pbkdf2"
+	"golang.org/x/crypto/pbkdf2"
 )
 
 const (
@@ -411,10 +411,7 @@ func hashPassword(password string) (string, error) {
 	if _, err := rand.Read(salt); err != nil {
 		return "", fmt.Errorf("generate salt: %w", err)
 	}
-	derived, err := pbkdf2.Key(sha256.New, password, salt, passwordHashIterations, passwordHashKeyLength)
-	if err != nil {
-		return "", fmt.Errorf("derive key: %w", err)
-	}
+	derived := pbkdf2.Key([]byte(password), salt, passwordHashIterations, passwordHashKeyLength, sha256.New)
 	encodedSalt := base64.RawStdEncoding.EncodeToString(salt)
 	encodedKey := base64.RawStdEncoding.EncodeToString(derived)
 	return fmt.Sprintf("pbkdf2$sha256$%d$%s$%s", passwordHashIterations, encodedSalt, encodedKey), nil
@@ -440,10 +437,7 @@ func verifyPassword(encodedHash, candidate string) error {
 	if err != nil {
 		return fmt.Errorf("verify password: decode hash: %w", err)
 	}
-	derived, err := pbkdf2.Key(sha256.New, candidate, salt, iterations, len(storedKey))
-	if err != nil {
-		return fmt.Errorf("verify password: derive key: %w", err)
-	}
+	derived := pbkdf2.Key([]byte(candidate), salt, iterations, len(storedKey), sha256.New)
 	if len(derived) != len(storedKey) || subtle.ConstantTimeCompare(derived, storedKey) != 1 {
 		return ErrInvalidCredentials
 	}
