@@ -32,6 +32,8 @@ type Storage struct {
 	mu       sync.RWMutex
 	filePath string
 	data     dataset
+	// persistOverride allows tests to intercept persist operations.
+	persistOverride func(dataset) error
 }
 
 func newDataset() dataset {
@@ -141,6 +143,16 @@ func (s *Storage) load() error {
 }
 
 func (s *Storage) persist() error {
+	return s.persistDataset(s.data)
+}
+
+func (s *Storage) persistDataset(data dataset) error {
+	if s.persistOverride != nil {
+		if err := s.persistOverride(data); err != nil {
+			return err
+		}
+	}
+
 	dir := filepath.Dir(s.filePath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create data dir: %w", err)
@@ -161,7 +173,7 @@ func (s *Storage) persist() error {
 
 	encoder := json.NewEncoder(tmpFile)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(s.data); err != nil {
+	if err := encoder.Encode(data); err != nil {
 		return fmt.Errorf("encode store file: %w", err)
 	}
 	if err := tmpFile.Sync(); err != nil {
@@ -176,6 +188,78 @@ func (s *Storage) persist() error {
 	}
 	success = true
 	return nil
+}
+
+func cloneDataset(src dataset) dataset {
+	clone := dataset{}
+
+	if src.Users != nil {
+		clone.Users = make(map[string]models.User, len(src.Users))
+		for id, user := range src.Users {
+			cloned := user
+			if user.Roles != nil {
+				cloned.Roles = append([]string(nil), user.Roles...)
+			}
+			clone.Users[id] = cloned
+		}
+	}
+
+	if src.Channels != nil {
+		clone.Channels = make(map[string]models.Channel, len(src.Channels))
+		for id, channel := range src.Channels {
+			cloned := channel
+			if channel.Tags != nil {
+				cloned.Tags = append([]string(nil), channel.Tags...)
+			}
+			if channel.CurrentSessionID != nil {
+				current := *channel.CurrentSessionID
+				cloned.CurrentSessionID = &current
+			}
+			clone.Channels[id] = cloned
+		}
+	}
+
+	if src.StreamSessions != nil {
+		clone.StreamSessions = make(map[string]models.StreamSession, len(src.StreamSessions))
+		for id, session := range src.StreamSessions {
+			cloned := session
+			if session.Renditions != nil {
+				cloned.Renditions = append([]string(nil), session.Renditions...)
+			}
+			if session.EndedAt != nil {
+				ended := *session.EndedAt
+				cloned.EndedAt = &ended
+			}
+			clone.StreamSessions[id] = cloned
+		}
+	}
+
+	if src.ChatMessages != nil {
+		clone.ChatMessages = make(map[string]models.ChatMessage, len(src.ChatMessages))
+		for id, message := range src.ChatMessages {
+			clone.ChatMessages[id] = message
+		}
+	}
+
+	if src.Profiles != nil {
+		clone.Profiles = make(map[string]models.Profile, len(src.Profiles))
+		for id, profile := range src.Profiles {
+			cloned := profile
+			if profile.TopFriends != nil {
+				cloned.TopFriends = append([]string(nil), profile.TopFriends...)
+			}
+			if profile.DonationAddresses != nil {
+				cloned.DonationAddresses = append([]models.CryptoAddress(nil), profile.DonationAddresses...)
+			}
+			if profile.FeaturedChannelID != nil {
+				featured := *profile.FeaturedChannelID
+				cloned.FeaturedChannelID = &featured
+			}
+			clone.Profiles[id] = cloned
+		}
+	}
+
+	return clone
 }
 
 func (s *Storage) generateID() (string, error) {
@@ -365,7 +449,9 @@ func (s *Storage) UpdateUser(id string, update UserUpdate) (models.User, error) 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	user, ok := s.data.Users[id]
+	updatedData := cloneDataset(s.data)
+
+	user, ok := updatedData.Users[id]
 	if !ok {
 		return models.User{}, fmt.Errorf("user %s not found", id)
 	}
@@ -383,7 +469,7 @@ func (s *Storage) UpdateUser(id string, update UserUpdate) (models.User, error) 
 		if email == "" {
 			return models.User{}, errors.New("email cannot be empty")
 		}
-		for existingID, existing := range s.data.Users {
+		for existingID, existing := range updatedData.Users {
 			if existingID == user.ID {
 				continue
 			}
@@ -398,10 +484,12 @@ func (s *Storage) UpdateUser(id string, update UserUpdate) (models.User, error) 
 		user.Roles = normalizeRoles(*update.Roles)
 	}
 
-	s.data.Users[id] = user
-	if err := s.persist(); err != nil {
+	updatedData.Users[id] = user
+	if err := s.persistDataset(updatedData); err != nil {
 		return models.User{}, err
 	}
+
+	s.data = updatedData
 
 	return user, nil
 }
@@ -411,21 +499,23 @@ func (s *Storage) DeleteUser(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.data.Users[id]; !ok {
+	updatedData := cloneDataset(s.data)
+
+	if _, ok := updatedData.Users[id]; !ok {
 		return fmt.Errorf("user %s not found", id)
 	}
 
-	for _, channel := range s.data.Channels {
+	for _, channel := range updatedData.Channels {
 		if channel.OwnerID == id {
 			return fmt.Errorf("user %s owns channel %s; transfer or delete the channel first", id, channel.ID)
 		}
 	}
 
-	delete(s.data.Users, id)
-	delete(s.data.Profiles, id)
+	delete(updatedData.Users, id)
+	delete(updatedData.Profiles, id)
 
 	now := time.Now().UTC()
-	for profileID, profile := range s.data.Profiles {
+	for profileID, profile := range updatedData.Profiles {
 		filtered := make([]string, 0, len(profile.TopFriends))
 		for _, friend := range profile.TopFriends {
 			if friend == id {
@@ -436,19 +526,21 @@ func (s *Storage) DeleteUser(id string) error {
 		if len(filtered) != len(profile.TopFriends) {
 			profile.TopFriends = filtered
 			profile.UpdatedAt = now
-			s.data.Profiles[profileID] = profile
+			updatedData.Profiles[profileID] = profile
 		}
 	}
 
-	for messageID, message := range s.data.ChatMessages {
+	for messageID, message := range updatedData.ChatMessages {
 		if message.UserID == id {
-			delete(s.data.ChatMessages, messageID)
+			delete(updatedData.ChatMessages, messageID)
 		}
 	}
 
-	if err := s.persist(); err != nil {
+	if err := s.persistDataset(updatedData); err != nil {
 		return err
 	}
+
+	s.data = updatedData
 
 	return nil
 }
@@ -468,11 +560,13 @@ func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Pro
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.data.Users[userID]; !ok {
+	updatedData := cloneDataset(s.data)
+
+	if _, ok := updatedData.Users[userID]; !ok {
 		return models.Profile{}, fmt.Errorf("user %s not found", userID)
 	}
 
-	profile, exists := s.data.Profiles[userID]
+	profile, exists := updatedData.Profiles[userID]
 	now := time.Now().UTC()
 	if !exists {
 		profile = models.Profile{
@@ -497,7 +591,7 @@ func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Pro
 		if trimmed == "" {
 			profile.FeaturedChannelID = nil
 		} else {
-			channel, ok := s.data.Channels[trimmed]
+			channel, ok := updatedData.Channels[trimmed]
 			if !ok {
 				return models.Profile{}, fmt.Errorf("featured channel %s not found", trimmed)
 			}
@@ -522,7 +616,7 @@ func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Pro
 			if trimmed == userID {
 				return models.Profile{}, errors.New("cannot add profile owner as a top friend")
 			}
-			if _, friendExists := s.data.Users[trimmed]; !friendExists {
+			if _, friendExists := updatedData.Users[trimmed]; !friendExists {
 				return models.Profile{}, fmt.Errorf("top friend %s not found", trimmed)
 			}
 			if _, duplicate := seen[trimmed]; duplicate {
@@ -555,10 +649,12 @@ func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Pro
 		profile.CreatedAt = now
 	}
 
-	s.data.Profiles[userID] = profile
-	if err := s.persist(); err != nil {
+	updatedData.Profiles[userID] = profile
+	if err := s.persistDataset(updatedData); err != nil {
 		return models.Profile{}, err
 	}
+
+	s.data = updatedData
 
 	return profile, nil
 }
@@ -683,7 +779,9 @@ func (s *Storage) UpdateChannel(id string, update ChannelUpdate) (models.Channel
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	channel, ok := s.data.Channels[id]
+	updatedData := cloneDataset(s.data)
+
+	channel, ok := updatedData.Channels[id]
 	if !ok {
 		return models.Channel{}, fmt.Errorf("channel %s not found", id)
 	}
@@ -710,10 +808,12 @@ func (s *Storage) UpdateChannel(id string, update ChannelUpdate) (models.Channel
 	}
 
 	channel.UpdatedAt = time.Now().UTC()
-	s.data.Channels[id] = channel
-	if err := s.persist(); err != nil {
+	updatedData.Channels[id] = channel
+	if err := s.persistDataset(updatedData); err != nil {
 		return models.Channel{}, err
 	}
+
+	s.data = updatedData
 
 	return channel, nil
 }
@@ -750,7 +850,9 @@ func (s *Storage) DeleteChannel(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	channel, ok := s.data.Channels[id]
+	updatedData := cloneDataset(s.data)
+
+	channel, ok := updatedData.Channels[id]
 	if !ok {
 		return fmt.Errorf("channel %s not found", id)
 	}
@@ -758,29 +860,31 @@ func (s *Storage) DeleteChannel(id string) error {
 		return errors.New("cannot delete a channel with an active stream")
 	}
 
-	delete(s.data.Channels, id)
+	delete(updatedData.Channels, id)
 
-	for sessionID, session := range s.data.StreamSessions {
+	for sessionID, session := range updatedData.StreamSessions {
 		if session.ChannelID == id {
-			delete(s.data.StreamSessions, sessionID)
+			delete(updatedData.StreamSessions, sessionID)
 		}
 	}
-	for messageID, message := range s.data.ChatMessages {
+	for messageID, message := range updatedData.ChatMessages {
 		if message.ChannelID == id {
-			delete(s.data.ChatMessages, messageID)
+			delete(updatedData.ChatMessages, messageID)
 		}
 	}
 
-	for profileID, profile := range s.data.Profiles {
+	for profileID, profile := range updatedData.Profiles {
 		if profile.FeaturedChannelID != nil && *profile.FeaturedChannelID == id {
 			profile.FeaturedChannelID = nil
-			s.data.Profiles[profileID] = profile
+			updatedData.Profiles[profileID] = profile
 		}
 	}
 
-	if err := s.persist(); err != nil {
+	if err := s.persistDataset(updatedData); err != nil {
 		return err
 	}
+
+	s.data = updatedData
 
 	return nil
 }
