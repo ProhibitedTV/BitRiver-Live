@@ -1,3 +1,45 @@
+const SESSION_STORAGE_KEY = "bitriver-live:session";
+
+class UnauthorizedError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "UnauthorizedError";
+    }
+}
+
+let cachedSessionToken = null;
+
+function readStoredToken() {
+    if (cachedSessionToken !== null) {
+        return cachedSessionToken;
+    }
+    try {
+        const stored = localStorage.getItem(SESSION_STORAGE_KEY);
+        cachedSessionToken = stored || null;
+    } catch (error) {
+        console.warn("Unable to read session token", error);
+        cachedSessionToken = null;
+    }
+    return cachedSessionToken;
+}
+
+function storeSessionToken(token) {
+    cachedSessionToken = token || null;
+    try {
+        if (cachedSessionToken) {
+            localStorage.setItem(SESSION_STORAGE_KEY, cachedSessionToken);
+        } else {
+            localStorage.removeItem(SESSION_STORAGE_KEY);
+        }
+    } catch (error) {
+        console.warn("Unable to persist session token", error);
+    }
+}
+
+function clearSessionToken() {
+    storeSessionToken(null);
+}
+
 const state = {
     users: [],
     channels: [],
@@ -6,6 +48,7 @@ const state = {
     profiles: [],
     profileIndex: new Map(),
     selectedProfileId: null,
+    currentUser: null,
 };
 
 const modal = document.getElementById("modal");
@@ -13,6 +56,9 @@ const modalTitle = document.getElementById("modal-title");
 const modalBody = document.getElementById("modal-body");
 const overviewCards = document.getElementById("overview-cards");
 const profileDetail = document.getElementById("profile-detail");
+const accountActions = document.getElementById("account-actions");
+const accountName = document.getElementById("current-user-name");
+const signOutButton = document.getElementById("sign-out-button");
 
 function switchView(id) {
     for (const panel of document.querySelectorAll(".panel")) {
@@ -24,19 +70,91 @@ document.querySelectorAll(".hero__nav button").forEach((btn) => {
     btn.addEventListener("click", () => switchView(btn.dataset.view));
 });
 
+function getSessionToken() {
+    return readStoredToken();
+}
+
 async function apiRequest(path, options = {}) {
-    const response = await fetch(path, {
-        headers: { "Content-Type": "application/json" },
-        ...options,
-    });
-    if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || response.statusText);
+    const headers = new Headers(options.headers || {});
+    if (!headers.has("Content-Type")) {
+        headers.set("Content-Type", "application/json");
     }
+    const token = getSessionToken();
+    if (token) {
+        headers.set("Authorization", `Bearer ${token}`);
+    }
+    const response = await fetch(path, {
+        ...options,
+        headers,
+    });
     if (response.status === 204) {
         return null;
     }
-    return response.json();
+    const contentType = response.headers.get("content-type") || "";
+    const isJSON = contentType.includes("application/json");
+    const payload = isJSON ? await response.json().catch(() => ({})) : null;
+    if (!response.ok) {
+        if (response.status === 401) {
+            clearSessionToken();
+            throw new UnauthorizedError(payload?.error || response.statusText);
+        }
+        throw new Error(payload?.error || response.statusText);
+    }
+    return payload;
+}
+
+function redirectToAuth() {
+    window.location.replace("/signup");
+}
+
+async function requireSession() {
+    const token = getSessionToken();
+    if (!token) {
+        redirectToAuth();
+        throw new UnauthorizedError("missing session token");
+    }
+    try {
+        const session = await apiRequest("/api/auth/session");
+        if (session?.token && session.token !== token) {
+            storeSessionToken(session.token);
+        }
+        return session;
+    } catch (error) {
+        if (error instanceof UnauthorizedError) {
+            redirectToAuth();
+        }
+        throw error;
+    }
+}
+
+function renderAccountStatus() {
+    if (!accountActions) {
+        return;
+    }
+    if (state.currentUser) {
+        accountActions.hidden = false;
+        if (accountName) {
+            accountName.textContent = `Signed in as ${state.currentUser.displayName}`;
+        }
+    } else {
+        accountActions.hidden = true;
+        if (accountName) {
+            accountName.textContent = "";
+        }
+    }
+}
+
+async function handleSignOut() {
+    try {
+        await apiRequest("/api/auth/session", { method: "DELETE" });
+    } catch (error) {
+        console.warn("Failed to revoke session", error);
+    } finally {
+        state.currentUser = null;
+        clearSessionToken();
+        renderAccountStatus();
+        redirectToAuth();
+    }
 }
 
 function showToast(message, variant = "info") {
@@ -1073,9 +1191,15 @@ function attachActions() {
     document.getElementById("refresh-channels").addEventListener("click", () => loadChannels({ hydrate: true }));
     document.getElementById("refresh-data").addEventListener("click", () => refreshAll());
     document.getElementById("download-snapshot").addEventListener("click", exportSnapshot);
+    if (signOutButton) {
+        signOutButton.addEventListener("click", handleSignOut);
+    }
 }
 
 async function initialize() {
+    const session = await requireSession();
+    state.currentUser = session.user;
+    renderAccountStatus();
     attachActions();
     setupInstaller();
     await refreshAll();
@@ -1083,5 +1207,8 @@ async function initialize() {
 
 initialize().catch((error) => {
     console.error(error);
+    if (error instanceof UnauthorizedError) {
+        return;
+    }
     showToast(`Failed to initialize: ${error.message}`, "error");
 });
