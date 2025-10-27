@@ -184,6 +184,121 @@ func (s *Storage) GetUser(id string) (models.User, bool) {
 	return user, ok
 }
 
+// UserUpdate represents the fields that can be modified for an existing user.
+type UserUpdate struct {
+	DisplayName *string
+	Email       *string
+	Roles       *[]string
+}
+
+// UpdateUser mutates user metadata while enforcing uniqueness constraints.
+func (s *Storage) UpdateUser(id string, update UserUpdate) (models.User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	user, ok := s.data.Users[id]
+	if !ok {
+		return models.User{}, fmt.Errorf("user %s not found", id)
+	}
+
+	if update.DisplayName != nil {
+		name := strings.TrimSpace(*update.DisplayName)
+		if name == "" {
+			return models.User{}, errors.New("displayName cannot be empty")
+		}
+		user.DisplayName = name
+	}
+
+	if update.Email != nil {
+		email := strings.TrimSpace(strings.ToLower(*update.Email))
+		if email == "" {
+			return models.User{}, errors.New("email cannot be empty")
+		}
+		for existingID, existing := range s.data.Users {
+			if existingID == user.ID {
+				continue
+			}
+			if existing.Email == email {
+				return models.User{}, fmt.Errorf("email %s already in use", email)
+			}
+		}
+		user.Email = email
+	}
+
+	if update.Roles != nil {
+		roles := make([]string, 0, len(*update.Roles))
+		seen := make(map[string]struct{})
+		for _, role := range *update.Roles {
+			trimmed := strings.TrimSpace(role)
+			if trimmed == "" {
+				continue
+			}
+			normalized := strings.ToLower(trimmed)
+			if _, exists := seen[normalized]; exists {
+				continue
+			}
+			seen[normalized] = struct{}{}
+			roles = append(roles, normalized)
+		}
+		sort.Strings(roles)
+		user.Roles = roles
+	}
+
+	s.data.Users[id] = user
+	if err := s.persist(); err != nil {
+		return models.User{}, err
+	}
+
+	return user, nil
+}
+
+// DeleteUser removes the user, related profile, and chat history.
+func (s *Storage) DeleteUser(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.data.Users[id]; !ok {
+		return fmt.Errorf("user %s not found", id)
+	}
+
+	for _, channel := range s.data.Channels {
+		if channel.OwnerID == id {
+			return fmt.Errorf("user %s owns channel %s; transfer or delete the channel first", id, channel.ID)
+		}
+	}
+
+	delete(s.data.Users, id)
+	delete(s.data.Profiles, id)
+
+	now := time.Now().UTC()
+	for profileID, profile := range s.data.Profiles {
+		filtered := make([]string, 0, len(profile.TopFriends))
+		for _, friend := range profile.TopFriends {
+			if friend == id {
+				continue
+			}
+			filtered = append(filtered, friend)
+		}
+		if len(filtered) != len(profile.TopFriends) {
+			profile.TopFriends = filtered
+			profile.UpdatedAt = now
+			s.data.Profiles[profileID] = profile
+		}
+	}
+
+	for messageID, message := range s.data.ChatMessages {
+		if message.UserID == id {
+			delete(s.data.ChatMessages, messageID)
+		}
+	}
+
+	if err := s.persist(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Profile operations
 
 type ProfileUpdate struct {
@@ -324,6 +439,20 @@ func (s *Storage) GetProfile(userID string) (models.Profile, bool) {
 	return profile, true
 }
 
+func (s *Storage) ListProfiles() []models.Profile {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	profiles := make([]models.Profile, 0, len(s.data.Profiles))
+	for _, profile := range s.data.Profiles {
+		profiles = append(profiles, profile)
+	}
+	sort.Slice(profiles, func(i, j int) bool {
+		return profiles[i].CreatedAt.Before(profiles[j].CreatedAt)
+	})
+	return profiles
+}
+
 // Channel operations
 
 type ChannelUpdate struct {
@@ -460,6 +589,46 @@ func (s *Storage) ListChannels(ownerID string) []models.Channel {
 		return channels[i].LiveState == "live"
 	})
 	return channels
+}
+
+// DeleteChannel removes a channel and its associated sessions and chat transcripts.
+func (s *Storage) DeleteChannel(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	channel, ok := s.data.Channels[id]
+	if !ok {
+		return fmt.Errorf("channel %s not found", id)
+	}
+	if channel.CurrentSessionID != nil {
+		return errors.New("cannot delete a channel with an active stream")
+	}
+
+	delete(s.data.Channels, id)
+
+	for sessionID, session := range s.data.StreamSessions {
+		if session.ChannelID == id {
+			delete(s.data.StreamSessions, sessionID)
+		}
+	}
+	for messageID, message := range s.data.ChatMessages {
+		if message.ChannelID == id {
+			delete(s.data.ChatMessages, messageID)
+		}
+	}
+
+	for profileID, profile := range s.data.Profiles {
+		if profile.FeaturedChannelID != nil && *profile.FeaturedChannelID == id {
+			profile.FeaturedChannelID = nil
+			s.data.Profiles[profileID] = profile
+		}
+	}
+
+	if err := s.persist(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Streaming operations
@@ -630,4 +799,25 @@ func (s *Storage) ListChatMessages(channelID string, limit int) ([]models.ChatMe
 		messages = messages[:limit]
 	}
 	return messages, nil
+}
+
+// DeleteChatMessage removes a single chat message from the transcript.
+func (s *Storage) DeleteChatMessage(channelID, messageID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.data.Channels[channelID]; !ok {
+		return fmt.Errorf("channel %s not found", channelID)
+	}
+
+	message, ok := s.data.ChatMessages[messageID]
+	if !ok || message.ChannelID != channelID {
+		return fmt.Errorf("message %s not found for channel %s", messageID, channelID)
+	}
+
+	delete(s.data.ChatMessages, messageID)
+	if err := s.persist(); err != nil {
+		return err
+	}
+	return nil
 }

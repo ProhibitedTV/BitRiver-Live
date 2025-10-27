@@ -17,21 +17,40 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", ":8080", "HTTP listen address")
-	dataPath := flag.String("data", "data/store.json", "path to JSON datastore")
+	addr := flag.String("addr", "", "HTTP listen address")
+	dataPath := flag.String("data", "", "path to JSON datastore")
 	flag.Parse()
 
-	store, err := storage.NewStorage(*dataPath)
+	listenAddr := *addr
+	if listenAddr == "" {
+		listenAddr = os.Getenv("BITRIVER_LIVE_ADDR")
+		if listenAddr == "" {
+			listenAddr = ":8080"
+		}
+	}
+
+	path := *dataPath
+	if path == "" {
+		path = os.Getenv("BITRIVER_LIVE_DATA")
+		if path == "" {
+			path = "data/store.json"
+		}
+	}
+
+	store, err := storage.NewStorage(path)
 	if err != nil {
 		log.Fatalf("failed to open datastore: %v", err)
 	}
 
 	handler := api.NewHandler(store)
-	srv := server.New(handler, *addr)
+	srv, err := server.New(handler, listenAddr)
+	if err != nil {
+		log.Fatalf("failed to initialise server: %v", err)
+	}
 
 	errs := make(chan error, 1)
 	go func() {
-		log.Printf("BitRiver Live API listening on %s", *addr)
+		log.Printf("BitRiver Live API listening on %s", listenAddr)
 		if err := srv.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errs <- err
 		}
