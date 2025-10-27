@@ -120,6 +120,33 @@ go test ./...
 
 The suite exercises the JSON storage layer, REST handlers, and stream/chat flows end-to-end without requiring any external services or libraries beyond the Go standard library.
 
+### Configure ingest orchestration
+
+BitRiver Live can orchestrate end-to-end ingest and transcode jobs by talking to an SRS edge, an OvenMediaEngine application, and an FFmpeg job controller. Provide connection details via environment variables when starting the server:
+
+| Variable | Description |
+| --- | --- |
+| `BITRIVER_SRS_API` | Base URL (including port, e.g. `http://srs:1985`) for the SRS management API. |
+| `BITRIVER_SRS_TOKEN` | Bearer token used when creating/deleting SRS channels. |
+| `BITRIVER_OME_API` | Base URL for the OvenMediaEngine REST API (defaults to port `8081`). |
+| `BITRIVER_OME_USERNAME` / `BITRIVER_OME_PASSWORD` | Basic-auth credentials for OvenMediaEngine. |
+| `BITRIVER_TRANSCODER_API` | Base URL for the FFmpeg job runner (e.g. a lightweight controller on port `9000`). |
+| `BITRIVER_TRANSCODER_TOKEN` | Bearer token for FFmpeg job APIs. |
+| `BITRIVER_TRANSCODE_LADDER` | Optional ladder definition (`1080p:6000,720p:4000,480p:2500`). |
+| `BITRIVER_INGEST_MAX_BOOT_ATTEMPTS` | Number of times to retry encoder boot before giving up. |
+| `BITRIVER_INGEST_RETRY_INTERVAL` | Delay between retry attempts (e.g. `500ms`). |
+| `BITRIVER_INGEST_HEALTH` | Path that exposes dependency health (default `/healthz`). |
+
+When these variables are set the API will:
+
+1. POST to `SRS /v1/channels` to allocate RTMP/SRT ingest keys for the channel.
+2. POST to `OvenMediaEngine /v1/applications` to configure the playback application.
+3. POST to the FFmpeg controller `/v1/jobs` endpoint to launch the adaptive bitrate ladder.
+
+Stopping a stream reverses the process with DELETE calls to `/v1/jobs/{id}`, `/v1/applications/{channelId}`, and `/v1/channels/{channelId}`.
+
+The `/healthz` endpoint now returns JSON that includes the status of these external services so dashboards and probes can surface degraded dependencies early.
+
 ---
 
 ## Name Ideas

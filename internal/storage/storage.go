@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -18,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -41,7 +43,33 @@ type Storage struct {
 	filePath string
 	data     dataset
 	// persistOverride allows tests to intercept persist operations.
-	persistOverride func(dataset) error
+	persistOverride     func(dataset) error
+	ingestController    ingest.Controller
+	ingestMaxAttempts   int
+	ingestRetryInterval time.Duration
+}
+
+// Option mutates storage configuration.
+type Option func(*Storage)
+
+// WithIngestController installs a controller to orchestrate ingest pipelines.
+func WithIngestController(controller ingest.Controller) Option {
+	return func(s *Storage) {
+		s.ingestController = controller
+	}
+}
+
+// WithIngestRetries configures how many times the ingest boot process should
+// be retried.
+func WithIngestRetries(maxAttempts int, interval time.Duration) Option {
+	return func(s *Storage) {
+		if maxAttempts > 0 {
+			s.ingestMaxAttempts = maxAttempts
+		}
+		if interval >= 0 {
+			s.ingestRetryInterval = interval
+		}
+	}
 }
 
 func newDataset() dataset {
@@ -111,8 +139,17 @@ func normalizeRoles(input []string) []string {
 	return roles
 }
 
-func NewStorage(path string) (*Storage, error) {
-	store := &Storage{filePath: path}
+func NewStorage(path string, opts ...Option) (*Storage, error) {
+	store := &Storage{filePath: path, ingestController: ingest.NoopController{}, ingestMaxAttempts: 1}
+	for _, opt := range opts {
+		opt(store)
+	}
+	if store.ingestController == nil {
+		store.ingestController = ingest.NoopController{}
+	}
+	if store.ingestMaxAttempts <= 0 {
+		store.ingestMaxAttempts = 1
+	}
 	if err := store.load(); err != nil {
 		return nil, err
 	}
@@ -900,19 +937,57 @@ func (s *Storage) DeleteChannel(id string) error {
 
 func (s *Storage) StartStream(channelID string, renditions []string) (models.StreamSession, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	channel, ok := s.data.Channels[channelID]
 	if !ok {
+		s.mu.Unlock()
 		return models.StreamSession{}, fmt.Errorf("channel %s not found", channelID)
 	}
 	if channel.CurrentSessionID != nil {
+		s.mu.Unlock()
 		return models.StreamSession{}, errors.New("channel already live")
 	}
 
 	sessionID, err := s.generateID()
 	if err != nil {
+		s.mu.Unlock()
 		return models.StreamSession{}, err
+	}
+
+	channel.CurrentSessionID = &sessionID
+	channel.LiveState = "starting"
+	s.data.Channels[channelID] = channel
+	s.mu.Unlock()
+
+	attempts := s.ingestMaxAttempts
+	if attempts <= 0 {
+		attempts = 1
+	}
+	ctx := context.Background()
+	var boot ingest.BootResult
+	var bootErr error
+	for attempt := 0; attempt < attempts; attempt++ {
+		boot, bootErr = s.ingestController.BootStream(ctx, ingest.BootParams{
+			ChannelID:  channelID,
+			SessionID:  sessionID,
+			StreamKey:  channel.StreamKey,
+			Renditions: append([]string{}, renditions...),
+		})
+		if bootErr == nil {
+			break
+		}
+		if attempt < attempts-1 && s.ingestRetryInterval > 0 {
+			time.Sleep(s.ingestRetryInterval)
+		}
+	}
+	if bootErr != nil {
+		s.mu.Lock()
+		if updated, exists := s.data.Channels[channelID]; exists {
+			updated.CurrentSessionID = nil
+			updated.LiveState = "offline"
+			s.data.Channels[channelID] = updated
+		}
+		s.mu.Unlock()
+		return models.StreamSession{}, fmt.Errorf("boot ingest: %w", bootErr)
 	}
 
 	now := time.Now().UTC()
@@ -922,9 +997,35 @@ func (s *Storage) StartStream(channelID string, renditions []string) (models.Str
 		StartedAt:      now,
 		Renditions:     append([]string{}, renditions...),
 		PeakConcurrent: 0,
+		OriginURL:      boot.OriginURL,
+		PlaybackURL:    boot.PlaybackURL,
+		IngestJobIDs:   append([]string{}, boot.JobIDs...),
+	}
+	ingestEndpoints := make([]string, 0, 2)
+	if boot.PrimaryIngest != "" {
+		ingestEndpoints = append(ingestEndpoints, boot.PrimaryIngest)
+	}
+	if boot.BackupIngest != "" {
+		ingestEndpoints = append(ingestEndpoints, boot.BackupIngest)
+	}
+	if len(ingestEndpoints) > 0 {
+		session.IngestEndpoints = ingestEndpoints
+	}
+	if len(boot.Renditions) > 0 {
+		manifests := make([]models.RenditionManifest, 0, len(boot.Renditions))
+		for _, rendition := range boot.Renditions {
+			manifests = append(manifests, models.RenditionManifest{
+				Name:        rendition.Name,
+				ManifestURL: rendition.ManifestURL,
+				Bitrate:     rendition.Bitrate,
+			})
+		}
+		session.RenditionManifests = manifests
 	}
 
+	s.mu.Lock()
 	s.data.StreamSessions[sessionID] = session
+	channel = s.data.Channels[channelID]
 	channel.CurrentSessionID = &sessionID
 	channel.LiveState = "live"
 	channel.UpdatedAt = now
@@ -935,28 +1036,42 @@ func (s *Storage) StartStream(channelID string, renditions []string) (models.Str
 		channel.CurrentSessionID = nil
 		channel.LiveState = "offline"
 		s.data.Channels[channelID] = channel
+		jobIDs := append([]string{}, session.IngestJobIDs...)
+		s.mu.Unlock()
+		_ = s.ingestController.ShutdownStream(context.Background(), channelID, sessionID, jobIDs)
 		return models.StreamSession{}, err
 	}
+	s.mu.Unlock()
 
 	return session, nil
 }
 
 func (s *Storage) StopStream(channelID string, peakConcurrent int) (models.StreamSession, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	channel, ok := s.data.Channels[channelID]
 	if !ok {
+		s.mu.Unlock()
 		return models.StreamSession{}, fmt.Errorf("channel %s not found", channelID)
 	}
 	if channel.CurrentSessionID == nil {
+		s.mu.Unlock()
 		return models.StreamSession{}, errors.New("channel is not live")
 	}
 
 	sessionID := *channel.CurrentSessionID
 	session, ok := s.data.StreamSessions[sessionID]
 	if !ok {
+		s.mu.Unlock()
 		return models.StreamSession{}, fmt.Errorf("session %s missing", sessionID)
+	}
+
+	originalChannel := channel
+	originalSession := session
+	jobIDs := append([]string{}, session.IngestJobIDs...)
+	s.mu.Unlock()
+
+	if err := s.ingestController.ShutdownStream(context.Background(), channelID, sessionID, jobIDs); err != nil {
+		return models.StreamSession{}, fmt.Errorf("shutdown ingest: %w", err)
 	}
 
 	now := time.Now().UTC()
@@ -964,16 +1079,26 @@ func (s *Storage) StopStream(channelID string, peakConcurrent int) (models.Strea
 	if peakConcurrent > session.PeakConcurrent {
 		session.PeakConcurrent = peakConcurrent
 	}
-	s.data.StreamSessions[sessionID] = session
 
+	s.mu.Lock()
+	channel, ok = s.data.Channels[channelID]
+	if !ok {
+		s.mu.Unlock()
+		return models.StreamSession{}, fmt.Errorf("channel %s not found", channelID)
+	}
+	s.data.StreamSessions[sessionID] = session
 	channel.CurrentSessionID = nil
 	channel.LiveState = "offline"
 	channel.UpdatedAt = now
 	s.data.Channels[channelID] = channel
 
 	if err := s.persist(); err != nil {
+		s.data.StreamSessions[sessionID] = originalSession
+		s.data.Channels[channelID] = originalChannel
+		s.mu.Unlock()
 		return models.StreamSession{}, err
 	}
+	s.mu.Unlock()
 
 	return session, nil
 }
@@ -996,6 +1121,15 @@ func (s *Storage) ListStreamSessions(channelID string) ([]models.StreamSession, 
 		return sessions[i].StartedAt.After(sessions[j].StartedAt)
 	})
 	return sessions, nil
+}
+
+// IngestHealth reports the status of configured ingest dependencies.
+func (s *Storage) IngestHealth(ctx context.Context) []ingest.HealthStatus {
+	controller := s.ingestController
+	if controller == nil {
+		return []ingest.HealthStatus{{Component: "ingest", Status: "disabled"}}
+	}
+	return controller.HealthChecks(ctx)
 }
 
 // Chat operations

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/auth"
+	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/storage"
 )
@@ -99,7 +100,24 @@ func decodeJSON(r *http.Request, dest interface{}) error {
 }
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	var checks []ingest.HealthStatus
+	if h.Store != nil {
+		checks = h.Store.IngestHealth(r.Context())
+	}
+	status := "ok"
+	for _, check := range checks {
+		switch strings.ToLower(check.Status) {
+		case "ok", "disabled":
+			continue
+		default:
+			status = "degraded"
+		}
+	}
+	payload := map[string]interface{}{
+		"status":   status,
+		"services": checks,
+	}
+	writeJSON(w, http.StatusOK, payload)
 }
 
 func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
@@ -648,12 +666,17 @@ type stopStreamRequest struct {
 }
 
 type sessionResponse struct {
-	ID             string   `json:"id"`
-	ChannelID      string   `json:"channelId"`
-	StartedAt      string   `json:"startedAt"`
-	EndedAt        *string  `json:"endedAt,omitempty"`
-	Renditions     []string `json:"renditions"`
-	PeakConcurrent int      `json:"peakConcurrent"`
+	ID                 string                      `json:"id"`
+	ChannelID          string                      `json:"channelId"`
+	StartedAt          string                      `json:"startedAt"`
+	EndedAt            *string                     `json:"endedAt,omitempty"`
+	Renditions         []string                    `json:"renditions"`
+	PeakConcurrent     int                         `json:"peakConcurrent"`
+	OriginURL          string                      `json:"originUrl,omitempty"`
+	PlaybackURL        string                      `json:"playbackUrl,omitempty"`
+	IngestEndpoints    []string                    `json:"ingestEndpoints,omitempty"`
+	IngestJobIDs       []string                    `json:"ingestJobIds,omitempty"`
+	RenditionManifests []renditionManifestResponse `json:"renditionManifests,omitempty"`
 }
 
 func newSessionResponse(session models.StreamSession) sessionResponse {
@@ -668,7 +691,36 @@ func newSessionResponse(session models.StreamSession) sessionResponse {
 		ended := session.EndedAt.Format(time.RFC3339Nano)
 		resp.EndedAt = &ended
 	}
+	if session.OriginURL != "" {
+		resp.OriginURL = session.OriginURL
+	}
+	if session.PlaybackURL != "" {
+		resp.PlaybackURL = session.PlaybackURL
+	}
+	if len(session.IngestEndpoints) > 0 {
+		resp.IngestEndpoints = append([]string{}, session.IngestEndpoints...)
+	}
+	if len(session.IngestJobIDs) > 0 {
+		resp.IngestJobIDs = append([]string{}, session.IngestJobIDs...)
+	}
+	if len(session.RenditionManifests) > 0 {
+		manifests := make([]renditionManifestResponse, 0, len(session.RenditionManifests))
+		for _, manifest := range session.RenditionManifests {
+			manifests = append(manifests, renditionManifestResponse{
+				Name:        manifest.Name,
+				ManifestURL: manifest.ManifestURL,
+				Bitrate:     manifest.Bitrate,
+			})
+		}
+		resp.RenditionManifests = manifests
+	}
 	return resp
+}
+
+type renditionManifestResponse struct {
+	Name        string `json:"name"`
+	ManifestURL string `json:"manifestUrl"`
+	Bitrate     int    `json:"bitrate,omitempty"`
 }
 
 func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {

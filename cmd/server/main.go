@@ -14,6 +14,7 @@ import (
 
 	"bitriver-live/internal/api"
 	"bitriver-live/internal/auth"
+	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/server"
 	"bitriver-live/internal/storage"
 )
@@ -53,7 +54,24 @@ func main() {
 		}
 	}
 
-	store, err := storage.NewStorage(path)
+	ingestConfig, err := ingest.LoadConfigFromEnv()
+	if err != nil {
+		log.Fatalf("failed to load ingest configuration: %v", err)
+	}
+
+	var options []storage.Option
+	if ingestConfig.RetryInterval > 0 || ingestConfig.MaxBootAttempts > 0 {
+		options = append(options, storage.WithIngestRetries(ingestConfig.MaxBootAttempts, ingestConfig.RetryInterval))
+	}
+	if ingestConfig.Enabled() {
+		controller, err := ingestConfig.NewHTTPController()
+		if err != nil {
+			log.Fatalf("failed to initialise ingest controller: %v", err)
+		}
+		options = append(options, storage.WithIngestController(controller))
+	}
+
+	store, err := storage.NewStorage(path, options...)
 	if err != nil {
 		log.Fatalf("failed to open datastore: %v", err)
 	}

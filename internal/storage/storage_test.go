@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -11,18 +12,79 @@ import (
 	"strings"
 	"testing"
 
+	"reflect"
+
+	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
 )
 
 func newTestStore(t *testing.T) *Storage {
+	return newTestStoreWithController(t, ingest.NoopController{})
+}
+
+func newTestStoreWithController(t *testing.T, controller ingest.Controller, extra ...Option) *Storage {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "store.json")
-	store, err := NewStorage(path)
+	if controller == nil {
+		controller = ingest.NoopController{}
+	}
+	opts := []Option{WithIngestController(controller), WithIngestRetries(1, 0)}
+	opts = append(opts, extra...)
+	store, err := NewStorage(path, opts...)
 	if err != nil {
 		t.Fatalf("NewStorage error: %v", err)
 	}
 	return store
+}
+
+type bootResponse struct {
+	result ingest.BootResult
+	err    error
+}
+
+type shutdownCall struct {
+	channelID string
+	sessionID string
+	jobIDs    []string
+}
+
+type fakeIngestController struct {
+	bootResponses []bootResponse
+	bootDefault   ingest.BootResult
+	bootErr       error
+	bootCalls     int
+	shutdownErr   error
+	shutdownCalls []shutdownCall
+}
+
+func (f *fakeIngestController) BootStream(ctx context.Context, params ingest.BootParams) (ingest.BootResult, error) {
+	idx := f.bootCalls
+	f.bootCalls++
+	if idx < len(f.bootResponses) {
+		resp := f.bootResponses[idx]
+		if resp.err != nil {
+			return ingest.BootResult{}, resp.err
+		}
+		return resp.result, nil
+	}
+	if f.bootErr != nil {
+		return ingest.BootResult{}, f.bootErr
+	}
+	return f.bootDefault, nil
+}
+
+func (f *fakeIngestController) ShutdownStream(ctx context.Context, channelID, sessionID string, jobIDs []string) error {
+	call := shutdownCall{channelID: channelID, sessionID: sessionID, jobIDs: append([]string{}, jobIDs...)}
+	f.shutdownCalls = append(f.shutdownCalls, call)
+	if f.shutdownErr != nil {
+		return f.shutdownErr
+	}
+	return nil
+}
+
+func (f *fakeIngestController) HealthChecks(ctx context.Context) []ingest.HealthStatus {
+	return []ingest.HealthStatus{{Component: "fake", Status: "ok"}}
 }
 
 func TestCreateAndListUser(t *testing.T) {
@@ -254,6 +316,151 @@ func TestCreateChannelAndStartStopStream(t *testing.T) {
 	}
 	if updated.CurrentSessionID != nil {
 		t.Fatal("expected current session to be cleared")
+	}
+}
+
+func TestStartStreamPersistsIngestMetadata(t *testing.T) {
+	fake := &fakeIngestController{bootResponses: []bootResponse{{result: ingest.BootResult{
+		PrimaryIngest: "rtmp://primary/live",
+		BackupIngest:  "rtmp://backup/live",
+		OriginURL:     "http://origin/hls",
+		PlaybackURL:   "https://cdn/master.m3u8",
+		JobIDs:        []string{"job-1", "job-2"},
+		Renditions: []ingest.Rendition{
+			{Name: "1080p", ManifestURL: "https://cdn/1080p.m3u8", Bitrate: 6000},
+			{Name: "720p", ManifestURL: "https://cdn/720p.m3u8", Bitrate: 4000},
+		},
+	}}}}
+	store := newTestStoreWithController(t, fake)
+
+	user, err := store.CreateUser(CreateUserParams{DisplayName: "Creator", Email: "creator@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(user.ID, "Tech", "science", []string{"hardware"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	session, err := store.StartStream(channel.ID, []string{"1080p", "720p"})
+	if err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+	if fake.bootCalls != 1 {
+		t.Fatalf("expected BootStream to be called once, got %d", fake.bootCalls)
+	}
+	expectedEndpoints := []string{"rtmp://primary/live", "rtmp://backup/live"}
+	if !reflect.DeepEqual(session.IngestEndpoints, expectedEndpoints) {
+		t.Fatalf("unexpected ingest endpoints: %v", session.IngestEndpoints)
+	}
+	if session.OriginURL != "http://origin/hls" {
+		t.Fatalf("expected origin URL to persist, got %q", session.OriginURL)
+	}
+	if session.PlaybackURL != "https://cdn/master.m3u8" {
+		t.Fatalf("expected playback URL to persist, got %q", session.PlaybackURL)
+	}
+	if !reflect.DeepEqual(session.IngestJobIDs, []string{"job-1", "job-2"}) {
+		t.Fatalf("unexpected job IDs: %v", session.IngestJobIDs)
+	}
+	if len(session.RenditionManifests) != 2 {
+		t.Fatalf("expected 2 rendition manifests, got %d", len(session.RenditionManifests))
+	}
+	stored := store.data.StreamSessions[session.ID]
+	if stored.PlaybackURL != session.PlaybackURL {
+		t.Fatalf("expected stored session to retain playback URL")
+	}
+}
+
+func TestStartStreamRetriesBootFailures(t *testing.T) {
+	fake := &fakeIngestController{bootResponses: []bootResponse{
+		{err: errors.New("transcoder offline")},
+		{result: ingest.BootResult{OriginURL: "http://origin/hls"}},
+	}}
+	store := newTestStoreWithController(t, fake, WithIngestRetries(2, 0))
+
+	user, err := store.CreateUser(CreateUserParams{DisplayName: "Creator", Email: "creator@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(user.ID, "Tech", "science", []string{"hardware"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	if _, err := store.StartStream(channel.ID, []string{"1080p"}); err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+	if fake.bootCalls != 2 {
+		t.Fatalf("expected two boot attempts, got %d", fake.bootCalls)
+	}
+}
+
+func TestStartStreamFailureRollsBackState(t *testing.T) {
+	fake := &fakeIngestController{bootResponses: []bootResponse{
+		{err: errors.New("network error")},
+		{err: errors.New("still failing")},
+	}}
+	store := newTestStoreWithController(t, fake, WithIngestRetries(2, 0))
+
+	user, err := store.CreateUser(CreateUserParams{DisplayName: "Creator", Email: "creator@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(user.ID, "Tech", "science", []string{"hardware"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	if _, err := store.StartStream(channel.ID, []string{"1080p"}); err == nil {
+		t.Fatal("expected StartStream to fail after retries")
+	}
+	updated, ok := store.GetChannel(channel.ID)
+	if !ok {
+		t.Fatalf("channel %s not found", channel.ID)
+	}
+	if updated.LiveState != "offline" {
+		t.Fatalf("expected channel to remain offline, got %s", updated.LiveState)
+	}
+	if updated.CurrentSessionID != nil {
+		t.Fatalf("expected current session to remain nil")
+	}
+}
+
+func TestStopStreamInvokesShutdown(t *testing.T) {
+	fake := &fakeIngestController{bootResponses: []bootResponse{{result: ingest.BootResult{
+		JobIDs: []string{"job-123"},
+	}}}}
+	store := newTestStoreWithController(t, fake)
+
+	user, err := store.CreateUser(CreateUserParams{DisplayName: "Creator", Email: "creator@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(user.ID, "Tech", "science", []string{"hardware"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	session, err := store.StartStream(channel.ID, []string{"1080p"})
+	if err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+	stopped, err := store.StopStream(channel.ID, 25)
+	if err != nil {
+		t.Fatalf("StopStream: %v", err)
+	}
+	if stopped.EndedAt == nil {
+		t.Fatal("expected stop to set endedAt")
+	}
+	if len(fake.shutdownCalls) != 1 {
+		t.Fatalf("expected shutdown to be invoked once, got %d", len(fake.shutdownCalls))
+	}
+	call := fake.shutdownCalls[0]
+	if call.channelID != channel.ID || call.sessionID != session.ID {
+		t.Fatalf("unexpected shutdown call payload: %+v", call)
+	}
+	if !reflect.DeepEqual(call.jobIDs, []string{"job-123"}) {
+		t.Fatalf("expected job IDs to propagate, got %v", call.jobIDs)
 	}
 }
 
