@@ -40,6 +40,39 @@ func TestCreateAndListUser(t *testing.T) {
 	}
 }
 
+func TestUpdateAndDeleteUser(t *testing.T) {
+	store := newTestStore(t)
+
+	user, err := store.CreateUser("Alice", "alice@example.com", []string{"creator"})
+	if err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+
+	newDisplay := "Alice Cooper"
+	newEmail := "alice.cooper@example.com"
+	newRoles := []string{"Admin", "moderator", "admin"}
+	updated, err := store.UpdateUser(user.ID, UserUpdate{DisplayName: &newDisplay, Email: &newEmail, Roles: &newRoles})
+	if err != nil {
+		t.Fatalf("UpdateUser returned error: %v", err)
+	}
+	if updated.DisplayName != newDisplay {
+		t.Fatalf("expected display name %q, got %q", newDisplay, updated.DisplayName)
+	}
+	if updated.Email != "alice.cooper@example.com" {
+		t.Fatalf("expected email normalized, got %s", updated.Email)
+	}
+	if len(updated.Roles) != 2 {
+		t.Fatalf("expected deduplicated roles, got %v", updated.Roles)
+	}
+
+	if err := store.DeleteUser(user.ID); err != nil {
+		t.Fatalf("DeleteUser returned error: %v", err)
+	}
+	if _, ok := store.GetUser(user.ID); ok {
+		t.Fatalf("expected user to be removed")
+	}
+}
+
 func TestCreateChannelAndStartStopStream(t *testing.T) {
 	store := newTestStore(t)
 	user, err := store.CreateUser("Alice", "alice@example.com", []string{"creator"})
@@ -92,6 +125,43 @@ func TestCreateChannelAndStartStopStream(t *testing.T) {
 	}
 	if updated.CurrentSessionID != nil {
 		t.Fatal("expected current session to be cleared")
+	}
+}
+
+func TestDeleteChannelRemovesArtifacts(t *testing.T) {
+	store := newTestStore(t)
+	owner, err := store.CreateUser("Owner", "owner@example.com", []string{"creator"})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+
+	channel, err := store.CreateChannel(owner.ID, "Main", "gaming", []string{"retro"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	session, err := store.StartStream(channel.ID, []string{"1080p"})
+	if err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+	if _, err := store.StopStream(channel.ID, 10); err != nil {
+		t.Fatalf("StopStream: %v", err)
+	}
+	if _, err := store.CreateChatMessage(channel.ID, owner.ID, "hello"); err != nil {
+		t.Fatalf("CreateChatMessage: %v", err)
+	}
+
+	if err := store.DeleteChannel(channel.ID); err != nil {
+		t.Fatalf("DeleteChannel: %v", err)
+	}
+	if _, ok := store.GetChannel(channel.ID); ok {
+		t.Fatalf("expected channel to be removed")
+	}
+	if _, err := store.ListStreamSessions(channel.ID); err == nil {
+		t.Fatalf("expected ListStreamSessions to error for deleted channel")
+	}
+	if _, ok := store.data.StreamSessions[session.ID]; ok {
+		t.Fatalf("expected session %s to be removed", session.ID)
 	}
 }
 
@@ -155,6 +225,30 @@ func TestListChatMessagesOrdering(t *testing.T) {
 	}
 	if msgs[1].ID != msg1.ID {
 		t.Fatalf("expected oldest message last, got %s", msgs[1].ID)
+	}
+}
+
+func TestDeleteChatMessage(t *testing.T) {
+	store := newTestStore(t)
+	user, err := store.CreateUser("Alice", "alice@example.com", nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(user.ID, "My Channel", "", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	msg, err := store.CreateChatMessage(channel.ID, user.ID, "hello")
+	if err != nil {
+		t.Fatalf("CreateChatMessage: %v", err)
+	}
+
+	if err := store.DeleteChatMessage(channel.ID, msg.ID); err != nil {
+		t.Fatalf("DeleteChatMessage: %v", err)
+	}
+	if err := store.DeleteChatMessage(channel.ID, msg.ID); err == nil {
+		t.Fatalf("expected error when deleting already removed message")
 	}
 }
 

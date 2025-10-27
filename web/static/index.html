@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BitRiver Live Control Center</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+    <header class="hero">
+        <div class="hero__text">
+            <h1>BitRiver Live</h1>
+            <p>Self-hosted live streaming hub with everything you need to go live at home.</p>
+        </div>
+        <nav class="hero__nav">
+            <button data-view="dashboard">Dashboard</button>
+            <button data-view="users">Users</button>
+            <button data-view="channels">Channels</button>
+            <button data-view="stream">Go Live</button>
+            <button data-view="chat">Chat</button>
+            <button data-view="profiles">Profiles</button>
+            <button data-view="sessions">Sessions</button>
+            <button data-view="settings">Settings</button>
+        </nav>
+    </header>
+    <main>
+        <section id="dashboard" class="panel active">
+            <h2>Overview</h2>
+            <div class="toolbar">
+                <button id="refresh-data" class="secondary">Refresh data</button>
+                <button id="download-snapshot" class="secondary">Download JSON snapshot</button>
+            </div>
+            <div class="grid" id="overview-cards"></div>
+        </section>
+
+        <section id="users" class="panel">
+            <header class="panel__header">
+                <div>
+                    <h2>User Management</h2>
+                    <p>Invite team members, moderators, and channel owners.</p>
+                </div>
+                <div class="panel__actions">
+                    <button id="create-user-button" class="primary">Create user</button>
+                    <button id="refresh-users" class="secondary">Reload</button>
+                </div>
+            </header>
+            <div id="users-empty" class="empty">No users yet. Use the button above to create the first account.</div>
+            <div id="users-list" class="table"></div>
+        </section>
+
+        <section id="channels" class="panel">
+            <header class="panel__header">
+                <div>
+                    <h2>Channels</h2>
+                    <p>Create branded spaces for your streams.</p>
+                </div>
+                <div class="panel__actions">
+                    <button id="create-channel-button" class="primary">Create channel</button>
+                    <button id="refresh-channels" class="secondary">Reload</button>
+                </div>
+            </header>
+            <div id="channels-empty" class="empty">Create a channel to start streaming.</div>
+            <div id="channels-list" class="table"></div>
+        </section>
+
+        <section id="stream" class="panel">
+            <h2>Go Live</h2>
+            <p>Select a channel to control the live state without touching a terminal.</p>
+            <div id="stream-controls"></div>
+        </section>
+
+        <section id="chat" class="panel">
+            <h2>Channel Chat</h2>
+            <div id="chat-controls"></div>
+        </section>
+
+        <section id="profiles" class="panel">
+            <h2>Profile Hub</h2>
+            <p>Curate streamer profiles with featured channels, donation links, and friends.</p>
+            <div class="profiles-layout">
+                <div id="profiles-list" class="table"></div>
+                <aside id="profile-detail" class="card profile-detail">
+                    <div class="card__header">
+                        <h3>Profile details</h3>
+                        <span class="card__meta">Select a creator to inspect or edit.</span>
+                    </div>
+                    <p class="card__meta">No profile selected.</p>
+                </aside>
+            </div>
+        </section>
+
+        <section id="sessions" class="panel">
+            <h2>Streaming History</h2>
+            <div id="sessions-list" class="table"></div>
+        </section>
+
+        <section id="settings" class="panel">
+            <h2>Home Server Installer</h2>
+            <p>The guided installer provisions directories and launches BitRiver Live as a system service.</p>
+            <div id="installer"></div>
+        </section>
+    </main>
+
+    <dialog id="modal">
+        <form method="dialog">
+            <header>
+                <h3 id="modal-title"></h3>
+            </header>
+            <div id="modal-body"></div>
+            <menu>
+                <button value="cancel">Cancel</button>
+                <button value="confirm" class="primary">Save</button>
+            </menu>
+        </form>
+    </dialog>
+
+    <template id="user-form">
+        <label>
+            Display name
+            <input type="text" name="displayName" required />
+        </label>
+        <label>
+            Email
+            <input type="email" name="email" required />
+        </label>
+        <label>
+            Roles (comma separated)
+            <input type="text" name="roles" placeholder="admin,moderator" />
+        </label>
+    </template>
+
+    <template id="channel-form">
+        <label>
+            Owner
+            <select name="ownerId" required></select>
+        </label>
+        <label>
+            Title
+            <input type="text" name="title" required />
+        </label>
+        <label>
+            Category
+            <input type="text" name="category" />
+        </label>
+        <label>
+            Tags (comma separated)
+            <input type="text" name="tags" placeholder="retro,gaming" />
+        </label>
+    </template>
+
+    <template id="profile-form">
+        <p class="form-helper">Every field is optional—fill in what represents your channel brand. Donation lines follow the format <code>CURRENCY|ADDRESS|NOTE</code> (one per line).</p>
+        <label>
+            Bio
+            <textarea name="bio" placeholder="Tell viewers what to expect"></textarea>
+        </label>
+        <label>
+            Avatar URL
+            <input type="url" name="avatarUrl" placeholder="https://cdn.example.com/avatar.png" />
+        </label>
+        <label>
+            Banner URL
+            <input type="url" name="bannerUrl" placeholder="https://cdn.example.com/banner.png" />
+        </label>
+        <label>
+            Featured channel
+            <select name="featuredChannelId"></select>
+        </label>
+        <label>
+            Top friends (select up to 8)
+            <select name="topFriends" multiple size="6"></select>
+        </label>
+        <label>
+            Donation addresses
+            <textarea name="donationAddresses" placeholder="ETH|0xabc123|Main wallet"></textarea>
+        </label>
+    </template>
+
+    <template id="installer-template">
+        <p>Generate a self-contained bundle and systemd service configuration without touching the shell.</p>
+        <form id="installer-form">
+            <label>
+                Install directory
+                <input type="text" name="installDir" required value="/opt/bitriver-live" />
+            </label>
+            <label>
+                Data directory
+                <input type="text" name="dataDir" required value="/var/lib/bitriver-live" />
+            </label>
+            <label>
+                Service user
+                <input type="text" name="serviceUser" required value="bitriver" />
+            </label>
+            <label>
+                HTTP listen address
+                <input type="text" name="addr" required value=":8080" />
+            </label>
+            <label>
+                Public hostname (optional, used for TLS hints)
+                <input type="text" name="hostname" placeholder="stream.example.com" />
+            </label>
+            <label class="checkbox">
+                <input type="checkbox" name="enableLogs" checked />
+                <span>Provision log directory and journald override</span>
+            </label>
+            <button type="submit" class="primary">Generate installer script</button>
+        </form>
+        <textarea id="installer-output" readonly rows="12" placeholder="Installer script will appear here"></textarea>
+        <p class="form-helper">Copy the script, run it on your target server, and the service will build BitRiver Live, create directories, and register a <code>systemd</code> unit with sensible defaults.</p>
+    </template>
+
+    <script src="/static/app.js" type="module"></script>
+</body>
+</html>

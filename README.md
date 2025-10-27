@@ -18,17 +18,32 @@ The repository now includes a self-contained Go API that covers the foundational
 go run ./cmd/server --addr :8080 --data data/store.json
 ```
 
+When the server is running, visit [http://localhost:8080](http://localhost:8080) to open the **BitRiver Live Control Center**. The built-in web interface lets you:
+
+- Create users, channels, and streamer profiles without touching the command line
+- Edit or retire accounts, rotate channel metadata, and keep stream keys handy with one-click copy actions
+- Start or stop live sessions, review rolling analytics, and export a JSON snapshot of the state
+- Seed chat conversations, moderate or remove messages across every channel in one view
+- Curate streamer profiles with featured channels, top friends, and crypto donation links through a guided form
+- Generate a turn-key installer script that provisions BitRiver Live as a systemd service on a home server, complete with optional log directories
+
+The UI talks directly to the same REST API documented below, so you can always fall back to curl or an API client when you need to automate advanced workflows.
+
+The server also respects the `BITRIVER_LIVE_ADDR` and `BITRIVER_LIVE_DATA` environment variables if you prefer configuring runtime options without flags.
+
 The server exposes a REST API under the `/api` prefix:
 
 | Endpoint | Method | Description |
 | --- | --- | --- |
 | `/api/users` | `POST`, `GET` | Create new accounts and list all users |
+| `/api/users/{id}` | `GET`, `PATCH`, `DELETE` | Inspect, update, or remove a control-center account |
 | `/api/channels` | `POST`, `GET` | Provision channels for creators and filter them by owner |
-| `/api/channels/{id}` | `GET`, `PATCH` | Fetch or update channel metadata |
+| `/api/channels/{id}` | `GET`, `PATCH`, `DELETE` | Fetch, update, or delete channel metadata |
 | `/api/channels/{id}/stream/start` | `POST` | Mark a channel live and begin a stream session |
 | `/api/channels/{id}/stream/stop` | `POST` | End the active session and capture peak concurrents |
 | `/api/channels/{id}/sessions` | `GET` | Retrieve the session history for a channel |
 | `/api/channels/{id}/chat` | `POST`, `GET` | Persist chat messages and fetch recent history |
+| `/api/channels/{id}/chat/{messageId}` | `DELETE` | Remove a single chat message for moderation |
 | `/api/profiles/{userId}` | `PUT`, `GET` | Configure streamer bios, top friends, and crypto-only donation links |
 
 Example: create a user, launch a channel, and start a stream session.

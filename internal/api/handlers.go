@@ -60,6 +60,12 @@ type createUserRequest struct {
 	Roles       []string `json:"roles"`
 }
 
+type updateUserRequest struct {
+	DisplayName *string   `json:"displayName"`
+	Email       *string   `json:"email"`
+	Roles       *[]string `json:"roles"`
+}
+
 type userResponse struct {
 	ID          string   `json:"id"`
 	DisplayName string   `json:"displayName"`
@@ -101,6 +107,56 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, newUserResponse(user))
 	default:
 		w.Header().Set("Allow", "GET, POST")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+	}
+}
+
+func (h *Handler) UserByID(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/users/")
+	if id == "" {
+		writeError(w, http.StatusNotFound, fmt.Errorf("user id missing"))
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		user, ok := h.Store.GetUser(id)
+		if !ok {
+			writeError(w, http.StatusNotFound, fmt.Errorf("user %s not found", id))
+			return
+		}
+		writeJSON(w, http.StatusOK, newUserResponse(user))
+	case http.MethodPatch:
+		var req updateUserRequest
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		update := storage.UserUpdate{}
+		if req.DisplayName != nil {
+			update.DisplayName = req.DisplayName
+		}
+		if req.Email != nil {
+			update.Email = req.Email
+		}
+		if req.Roles != nil {
+			rolesCopy := append([]string{}, (*req.Roles)...)
+			update.Roles = &rolesCopy
+		}
+		user, err := h.Store.UpdateUser(id, update)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, newUserResponse(user))
+	case http.MethodDelete:
+		if err := h.Store.DeleteUser(id); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		w.Header().Set("Allow", "GET, PATCH, DELETE")
 		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 	}
 }
@@ -221,8 +277,14 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			writeJSON(w, http.StatusOK, newChannelResponse(channel))
+		case http.MethodDelete:
+			if err := h.Store.DeleteChannel(channelID); err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
 		default:
-			w.Header().Set("Allow", "GET, PATCH")
+			w.Header().Set("Allow", "GET, PATCH, DELETE")
 			writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		}
 		return
@@ -404,7 +466,21 @@ type profileViewResponse struct {
 
 func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.ResponseWriter, r *http.Request) {
 	if len(remaining) > 0 && remaining[0] != "" {
-		writeError(w, http.StatusNotFound, fmt.Errorf("unknown chat path"))
+		messageID := remaining[0]
+		if len(remaining) > 1 {
+			writeError(w, http.StatusNotFound, fmt.Errorf("unknown chat path"))
+			return
+		}
+		if r.Method != http.MethodDelete {
+			w.Header().Set("Allow", "DELETE")
+			writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+			return
+		}
+		if err := h.Store.DeleteChatMessage(channelID, messageID); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
@@ -453,7 +529,16 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 func (h *Handler) Profiles(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		writeError(w, http.StatusBadRequest, fmt.Errorf("userId path parameter required"))
+		profiles := h.Store.ListProfiles()
+		response := make([]profileViewResponse, 0, len(profiles))
+		for _, profile := range profiles {
+			user, ok := h.Store.GetUser(profile.UserID)
+			if !ok {
+				continue
+			}
+			response = append(response, h.buildProfileViewResponse(user, profile))
+		}
+		writeJSON(w, http.StatusOK, response)
 	default:
 		w.Header().Set("Allow", "GET")
 		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
