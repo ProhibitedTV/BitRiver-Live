@@ -1,0 +1,597 @@
+package api
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"bitriver-live/internal/models"
+	"bitriver-live/internal/storage"
+)
+
+type Handler struct {
+	Store *storage.Storage
+}
+
+func NewHandler(store *storage.Storage) *Handler {
+	return &Handler{Store: store}
+}
+
+func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if payload == nil {
+		return
+	}
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func writeError(w http.ResponseWriter, status int, err error) {
+	writeJSON(w, status, map[string]string{"error": err.Error()})
+}
+
+func decodeJSON(r *http.Request, dest interface{}) error {
+	if r.Body == nil {
+		return errors.New("request body is required")
+	}
+	defer r.Body.Close()
+
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(dest); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// Users
+
+type createUserRequest struct {
+	DisplayName string   `json:"displayName"`
+	Email       string   `json:"email"`
+	Roles       []string `json:"roles"`
+}
+
+type userResponse struct {
+	ID          string   `json:"id"`
+	DisplayName string   `json:"displayName"`
+	Email       string   `json:"email"`
+	Roles       []string `json:"roles"`
+	CreatedAt   string   `json:"createdAt"`
+}
+
+func newUserResponse(user models.User) userResponse {
+	return userResponse{
+		ID:          user.ID,
+		DisplayName: user.DisplayName,
+		Email:       user.Email,
+		Roles:       append([]string{}, user.Roles...),
+		CreatedAt:   user.CreatedAt.Format(time.RFC3339Nano),
+	}
+}
+
+func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		users := h.Store.ListUsers()
+		response := make([]userResponse, 0, len(users))
+		for _, user := range users {
+			response = append(response, newUserResponse(user))
+		}
+		writeJSON(w, http.StatusOK, response)
+	case http.MethodPost:
+		var req createUserRequest
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		user, err := h.Store.CreateUser(req.DisplayName, req.Email, req.Roles)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, newUserResponse(user))
+	default:
+		w.Header().Set("Allow", "GET, POST")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+	}
+}
+
+// Channels
+
+type createChannelRequest struct {
+	OwnerID  string   `json:"ownerId"`
+	Title    string   `json:"title"`
+	Category string   `json:"category"`
+	Tags     []string `json:"tags"`
+}
+
+type updateChannelRequest struct {
+	Title    *string   `json:"title"`
+	Category *string   `json:"category"`
+	Tags     *[]string `json:"tags"`
+}
+
+type channelResponse struct {
+	ID               string   `json:"id"`
+	OwnerID          string   `json:"ownerId"`
+	StreamKey        string   `json:"streamKey"`
+	Title            string   `json:"title"`
+	Category         string   `json:"category,omitempty"`
+	Tags             []string `json:"tags"`
+	LiveState        string   `json:"liveState"`
+	CurrentSessionID *string  `json:"currentSessionId,omitempty"`
+	CreatedAt        string   `json:"createdAt"`
+	UpdatedAt        string   `json:"updatedAt"`
+}
+
+func newChannelResponse(channel models.Channel) channelResponse {
+	resp := channelResponse{
+		ID:        channel.ID,
+		OwnerID:   channel.OwnerID,
+		StreamKey: channel.StreamKey,
+		Title:     channel.Title,
+		Category:  channel.Category,
+		Tags:      append([]string{}, channel.Tags...),
+		LiveState: channel.LiveState,
+		CreatedAt: channel.CreatedAt.Format(time.RFC3339Nano),
+		UpdatedAt: channel.UpdatedAt.Format(time.RFC3339Nano),
+	}
+	if channel.CurrentSessionID != nil {
+		sessionID := *channel.CurrentSessionID
+		resp.CurrentSessionID = &sessionID
+	}
+	return resp
+}
+
+func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		ownerID := r.URL.Query().Get("ownerId")
+		channels := h.Store.ListChannels(ownerID)
+		response := make([]channelResponse, 0, len(channels))
+		for _, channel := range channels {
+			response = append(response, newChannelResponse(channel))
+		}
+		writeJSON(w, http.StatusOK, response)
+	case http.MethodPost:
+		var req createChannelRequest
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		channel, err := h.Store.CreateChannel(req.OwnerID, req.Title, req.Category, req.Tags)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, newChannelResponse(channel))
+	default:
+		w.Header().Set("Allow", "GET, POST")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+	}
+}
+
+func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/channels/")
+	parts := strings.Split(path, "/")
+	if len(parts) == 0 || parts[0] == "" {
+		writeError(w, http.StatusNotFound, fmt.Errorf("channel id missing"))
+		return
+	}
+	channelID := parts[0]
+
+	if len(parts) == 1 {
+		switch r.Method {
+		case http.MethodGet:
+			channel, ok := h.Store.GetChannel(channelID)
+			if !ok {
+				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				return
+			}
+			writeJSON(w, http.StatusOK, newChannelResponse(channel))
+		case http.MethodPatch:
+			var req updateChannelRequest
+			if err := decodeJSON(r, &req); err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			update := storage.ChannelUpdate{}
+			if req.Title != nil {
+				update.Title = req.Title
+			}
+			if req.Category != nil {
+				update.Category = req.Category
+			}
+			if req.Tags != nil {
+				tagsCopy := append([]string{}, (*req.Tags)...)
+				update.Tags = &tagsCopy
+			}
+			channel, err := h.Store.UpdateChannel(channelID, update)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, newChannelResponse(channel))
+		default:
+			w.Header().Set("Allow", "GET, PATCH")
+			writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		}
+		return
+	}
+
+	if len(parts) >= 2 {
+		switch parts[1] {
+		case "stream":
+			h.handleStreamRoutes(channelID, parts[2:], w, r)
+			return
+		case "sessions":
+			if r.Method != http.MethodGet {
+				w.Header().Set("Allow", "GET")
+				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				return
+			}
+			sessions, err := h.Store.ListStreamSessions(channelID)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			response := make([]sessionResponse, 0, len(sessions))
+			for _, session := range sessions {
+				response = append(response, newSessionResponse(session))
+			}
+			writeJSON(w, http.StatusOK, response)
+			return
+		case "chat":
+			h.handleChatRoutes(channelID, parts[2:], w, r)
+			return
+		}
+	}
+
+	writeError(w, http.StatusNotFound, fmt.Errorf("unknown channel path"))
+}
+
+type startStreamRequest struct {
+	Renditions []string `json:"renditions"`
+}
+
+type stopStreamRequest struct {
+	PeakConcurrent int `json:"peakConcurrent"`
+}
+
+type sessionResponse struct {
+	ID             string   `json:"id"`
+	ChannelID      string   `json:"channelId"`
+	StartedAt      string   `json:"startedAt"`
+	EndedAt        *string  `json:"endedAt,omitempty"`
+	Renditions     []string `json:"renditions"`
+	PeakConcurrent int      `json:"peakConcurrent"`
+}
+
+func newSessionResponse(session models.StreamSession) sessionResponse {
+	resp := sessionResponse{
+		ID:             session.ID,
+		ChannelID:      session.ChannelID,
+		StartedAt:      session.StartedAt.Format(time.RFC3339Nano),
+		Renditions:     append([]string{}, session.Renditions...),
+		PeakConcurrent: session.PeakConcurrent,
+	}
+	if session.EndedAt != nil {
+		ended := session.EndedAt.Format(time.RFC3339Nano)
+		resp.EndedAt = &ended
+	}
+	return resp
+}
+
+func (h *Handler) handleStreamRoutes(channelID string, remaining []string, w http.ResponseWriter, r *http.Request) {
+	if len(remaining) == 0 {
+		writeError(w, http.StatusNotFound, fmt.Errorf("stream action missing"))
+		return
+	}
+	action := remaining[0]
+	switch action {
+	case "start":
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+			return
+		}
+		var req startStreamRequest
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		session, err := h.Store.StartStream(channelID, req.Renditions)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, newSessionResponse(session))
+	case "stop":
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+			return
+		}
+		var req stopStreamRequest
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		session, err := h.Store.StopStream(channelID, req.PeakConcurrent)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, newSessionResponse(session))
+	default:
+		writeError(w, http.StatusNotFound, fmt.Errorf("unknown stream action %s", action))
+	}
+}
+
+type createChatRequest struct {
+	UserID  string `json:"userId"`
+	Content string `json:"content"`
+}
+
+type chatMessageResponse struct {
+	ID        string `json:"id"`
+	ChannelID string `json:"channelId"`
+	UserID    string `json:"userId"`
+	Content   string `json:"content"`
+	CreatedAt string `json:"createdAt"`
+}
+
+func newChatMessageResponse(message models.ChatMessage) chatMessageResponse {
+	return chatMessageResponse{
+		ID:        message.ID,
+		ChannelID: message.ChannelID,
+		UserID:    message.UserID,
+		Content:   message.Content,
+		CreatedAt: message.CreatedAt.Format(time.RFC3339Nano),
+	}
+}
+
+type cryptoAddressPayload struct {
+	Currency string `json:"currency"`
+	Address  string `json:"address"`
+	Note     string `json:"note,omitempty"`
+}
+
+type upsertProfileRequest struct {
+	Bio               *string                 `json:"bio"`
+	AvatarURL         *string                 `json:"avatarUrl"`
+	BannerURL         *string                 `json:"bannerUrl"`
+	FeaturedChannelID *string                 `json:"featuredChannelId"`
+	TopFriends        *[]string               `json:"topFriends"`
+	DonationAddresses *[]cryptoAddressPayload `json:"donationAddresses"`
+}
+
+type cryptoAddressResponse struct {
+	Currency string `json:"currency"`
+	Address  string `json:"address"`
+	Note     string `json:"note,omitempty"`
+}
+
+type friendSummaryResponse struct {
+	UserID      string `json:"userId"`
+	DisplayName string `json:"displayName"`
+	AvatarURL   string `json:"avatarUrl,omitempty"`
+}
+
+type profileViewResponse struct {
+	UserID            string                  `json:"userId"`
+	DisplayName       string                  `json:"displayName"`
+	Bio               string                  `json:"bio"`
+	AvatarURL         string                  `json:"avatarUrl"`
+	BannerURL         string                  `json:"bannerUrl"`
+	FeaturedChannelID *string                 `json:"featuredChannelId,omitempty"`
+	TopFriends        []friendSummaryResponse `json:"topFriends"`
+	DonationAddresses []cryptoAddressResponse `json:"donationAddresses"`
+	Channels          []channelResponse       `json:"channels"`
+	LiveChannels      []channelResponse       `json:"liveChannels"`
+	CreatedAt         string                  `json:"createdAt"`
+	UpdatedAt         string                  `json:"updatedAt"`
+}
+
+func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.ResponseWriter, r *http.Request) {
+	if len(remaining) > 0 && remaining[0] != "" {
+		writeError(w, http.StatusNotFound, fmt.Errorf("unknown chat path"))
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		limitStr := r.URL.Query().Get("limit")
+		limit := 0
+		if limitStr != "" {
+			parsed, err := strconv.Atoi(limitStr)
+			if err != nil || parsed < 0 {
+				writeError(w, http.StatusBadRequest, fmt.Errorf("invalid limit value"))
+				return
+			}
+			limit = parsed
+		}
+		messages, err := h.Store.ListChatMessages(channelID, limit)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		response := make([]chatMessageResponse, 0, len(messages))
+		for _, message := range messages {
+			response = append(response, newChatMessageResponse(message))
+		}
+		writeJSON(w, http.StatusOK, response)
+	case http.MethodPost:
+		var req createChatRequest
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		message, err := h.Store.CreateChatMessage(channelID, req.UserID, req.Content)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, newChatMessageResponse(message))
+	default:
+		w.Header().Set("Allow", "GET, POST")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+	}
+}
+
+// Profiles
+
+func (h *Handler) Profiles(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeError(w, http.StatusBadRequest, fmt.Errorf("userId path parameter required"))
+	default:
+		w.Header().Set("Allow", "GET")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+	}
+}
+
+func (h *Handler) ProfileByID(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/profiles/")
+	parts := strings.Split(path, "/")
+	if len(parts) == 0 || parts[0] == "" {
+		writeError(w, http.StatusNotFound, fmt.Errorf("profile id missing"))
+		return
+	}
+	userID := parts[0]
+
+	switch r.Method {
+	case http.MethodGet:
+		h.handleGetProfile(userID, w, r)
+	case http.MethodPut:
+		h.handleUpsertProfile(userID, w, r)
+	default:
+		w.Header().Set("Allow", "GET, PUT")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+	}
+}
+
+func (h *Handler) handleGetProfile(userID string, w http.ResponseWriter, r *http.Request) {
+	user, ok := h.Store.GetUser(userID)
+	if !ok {
+		writeError(w, http.StatusNotFound, fmt.Errorf("user %s not found", userID))
+		return
+	}
+	profile, _ := h.Store.GetProfile(userID)
+	writeJSON(w, http.StatusOK, h.buildProfileViewResponse(user, profile))
+}
+
+func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *http.Request) {
+	var req upsertProfileRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	user, ok := h.Store.GetUser(userID)
+	if !ok {
+		writeError(w, http.StatusNotFound, fmt.Errorf("user %s not found", userID))
+		return
+	}
+
+	update := storage.ProfileUpdate{}
+	if req.Bio != nil {
+		update.Bio = req.Bio
+	}
+	if req.AvatarURL != nil {
+		update.AvatarURL = req.AvatarURL
+	}
+	if req.BannerURL != nil {
+		update.BannerURL = req.BannerURL
+	}
+	if req.FeaturedChannelID != nil {
+		update.FeaturedChannelID = req.FeaturedChannelID
+	}
+	if req.TopFriends != nil {
+		friendsCopy := append([]string{}, (*req.TopFriends)...)
+		update.TopFriends = &friendsCopy
+	}
+	if req.DonationAddresses != nil {
+		addresses := make([]models.CryptoAddress, 0, len(*req.DonationAddresses))
+		for _, addr := range *req.DonationAddresses {
+			addresses = append(addresses, models.CryptoAddress{
+				Currency: addr.Currency,
+				Address:  addr.Address,
+				Note:     addr.Note,
+			})
+		}
+		update.DonationAddresses = &addresses
+	}
+
+	profile, err := h.Store.UpsertProfile(userID, update)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, h.buildProfileViewResponse(user, profile))
+}
+
+func (h *Handler) buildProfileViewResponse(user models.User, profile models.Profile) profileViewResponse {
+	channels := h.Store.ListChannels(user.ID)
+	channelResponses := make([]channelResponse, 0, len(channels))
+	liveResponses := make([]channelResponse, 0)
+	for _, channel := range channels {
+		resp := newChannelResponse(channel)
+		channelResponses = append(channelResponses, resp)
+		if channel.LiveState == "live" {
+			liveResponses = append(liveResponses, resp)
+		}
+	}
+
+	friends := make([]friendSummaryResponse, 0, len(profile.TopFriends))
+	for _, friendID := range profile.TopFriends {
+		friendUser, ok := h.Store.GetUser(friendID)
+		if !ok {
+			continue
+		}
+		friendProfile, _ := h.Store.GetProfile(friendID)
+		friends = append(friends, friendSummaryResponse{
+			UserID:      friendUser.ID,
+			DisplayName: friendUser.DisplayName,
+			AvatarURL:   friendProfile.AvatarURL,
+		})
+	}
+
+	donations := make([]cryptoAddressResponse, 0, len(profile.DonationAddresses))
+	for _, addr := range profile.DonationAddresses {
+		donations = append(donations, cryptoAddressResponse{
+			Currency: addr.Currency,
+			Address:  addr.Address,
+			Note:     addr.Note,
+		})
+	}
+
+	response := profileViewResponse{
+		UserID:            user.ID,
+		DisplayName:       user.DisplayName,
+		Bio:               profile.Bio,
+		AvatarURL:         profile.AvatarURL,
+		BannerURL:         profile.BannerURL,
+		TopFriends:        friends,
+		DonationAddresses: donations,
+		Channels:          channelResponses,
+		LiveChannels:      liveResponses,
+		CreatedAt:         profile.CreatedAt.Format(time.RFC3339Nano),
+		UpdatedAt:         profile.UpdatedAt.Format(time.RFC3339Nano),
+	}
+	if profile.FeaturedChannelID != nil {
+		id := *profile.FeaturedChannelID
+		response.FeaturedChannelID = &id
+	}
+	return response
+}

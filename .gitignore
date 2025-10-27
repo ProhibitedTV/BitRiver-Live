@@ -1,0 +1,21 @@
+# Node artifacts
+node_modules/
+package-lock.json
+npm-debug.log*
+
+# Go build
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Editors
+.idea/
+.vscode/
+.DS_Store
+
+# App data
+/data/
+.env
