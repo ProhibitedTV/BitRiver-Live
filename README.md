@@ -63,7 +63,7 @@ psql "postgres://bitriver:bitriver@localhost:5432/bitriver?sslmode=disable" \
   --file deploy/migrations/0001_initial.sql
 ```
 
-Once a driver such as `pgxpool` is available, start the API with the Postgres storage driver:
+With the migrations applied and a Postgres driver such as `pgxpool` available, start the API with the Postgres storage driver:
 
 ```bash
 go run ./cmd/server \
@@ -87,7 +87,7 @@ The same configuration can be supplied via environment variables:
 | `BITRIVER_LIVE_POSTGRES_HEALTH_INTERVAL` | Frequency of pool health probes. |
 | `BITRIVER_LIVE_POSTGRES_APP_NAME` | Optional `application_name` reported to Postgres. |
 
-`deploy/docker-compose.yml` now provisions a local Postgres container and wires these environment variables automatically. After running the migrations the API can ingest JSON exports into Postgres without rewriting IDs. The `storage.NewPostgresRepository` constructor currently returns `storage.ErrPostgresUnavailable` until the driver dependency can be vendored, but the configuration pipeline, migrations, and integration test harness are ready for a drop-in implementation.
+`deploy/docker-compose.yml` now provisions a local Postgres container and wires these environment variables automatically. After running the migrations the API can ingest JSON exports into Postgres without rewriting IDs. The Postgres repository implementation lives in `internal/storage/postgres_repository.go`; make sure the migrations in `deploy/migrations/` have been applied so the schema matches the Go structs before enabling the driver.
 
 ### Public viewer
 
