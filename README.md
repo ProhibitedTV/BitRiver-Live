@@ -22,7 +22,7 @@ When the server is running, visit [http://localhost:8080](http://localhost:8080)
 
 - Create users, channels, and streamer profiles without touching the command line
 - Edit or retire accounts, rotate channel metadata, and keep stream keys handy with one-click copy actions
-- Start or stop live sessions, review rolling analytics, and export a JSON snapshot of the state
+- Start or stop live sessions and export a JSON snapshot of the state (the analytics panel is planned once `/api/analytics/overview` is implemented)
 - Seed chat conversations, moderate or remove messages across every channel in one view
 - Capture recorded broadcasts automatically when a stream ends, manage retention windows, and surface VOD manifests to viewers
 - Curate streamer profiles with featured channels, top friends, and crypto donation links through a guided form
