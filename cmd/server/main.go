@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -35,6 +37,7 @@ func main() {
 	redisAddr := flag.String("rate-redis-addr", "", "Redis address for distributed login throttling")
 	redisPassword := flag.String("rate-redis-password", "", "Redis password for distributed login throttling")
 	redisTimeout := flag.Duration("rate-redis-timeout", 0, "timeout for Redis operations")
+	viewerOrigin := flag.String("viewer-origin", "", "URL of the Next.js viewer runtime to proxy (e.g. http://127.0.0.1:3000)")
 	flag.Parse()
 
 	logger := logging.New(logging.Config{Level: firstNonEmpty(*logLevel, os.Getenv("BITRIVER_LIVE_LOG_LEVEL"))})
@@ -48,6 +51,12 @@ func main() {
 	tlsKeyPath := firstNonEmpty(*tlsKey, os.Getenv("BITRIVER_LIVE_TLS_KEY"))
 
 	dataFile := resolveDataPath(*dataPath)
+
+	viewerURL, err := resolveViewerOrigin(*viewerOrigin, os.Getenv("BITRIVER_VIEWER_ORIGIN"))
+	if err != nil {
+		logger.Error("invalid viewer origin", "error", err)
+		os.Exit(1)
+	}
 
 	ingestConfig, err := ingest.LoadConfigFromEnv()
 	if err != nil {
@@ -93,12 +102,13 @@ func main() {
 	}
 
 	srv, err := server.New(handler, server.Config{
-		Addr:        listenAddr,
-		TLS:         tlsCfg,
-		RateLimit:   rateCfg,
-		Logger:      logger,
-		AuditLogger: auditLogger,
-		Metrics:     recorder,
+		Addr:         listenAddr,
+		TLS:          tlsCfg,
+		RateLimit:    rateCfg,
+		Logger:       logger,
+		AuditLogger:  auditLogger,
+		Metrics:      recorder,
+		ViewerOrigin: viewerURL,
 	})
 	if err != nil {
 		logger.Error("failed to initialise server", "error", err)
@@ -174,6 +184,24 @@ func resolveDataPath(flagValue string) string {
 		return env
 	}
 	return "data/store.json"
+}
+
+func resolveViewerOrigin(flagValue, envValue string) (*url.URL, error) {
+	raw := strings.TrimSpace(flagValue)
+	if raw == "" {
+		raw = strings.TrimSpace(envValue)
+	}
+	if raw == "" {
+		return nil, nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse viewer origin: %w", err)
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return nil, fmt.Errorf("viewer origin must include scheme and host")
+	}
+	return parsed, nil
 }
 
 func firstNonEmpty(values ...string) string {

@@ -1,0 +1,14 @@
+[Unit]
+Description=BitRiver Live Viewer
+After=network.target bitriver-live.service
+Requires=bitriver-live.service
+
+[Service]
+Type=simple
+EnvironmentFile=/opt/bitriver-viewer/.env
+WorkingDirectory=/opt/bitriver-viewer
+ExecStart=/usr/bin/env node server.js
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
