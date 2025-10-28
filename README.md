@@ -24,6 +24,7 @@ When the server is running, visit [http://localhost:8080](http://localhost:8080)
 - Edit or retire accounts, rotate channel metadata, and keep stream keys handy with one-click copy actions
 - Start or stop live sessions, review rolling analytics, and export a JSON snapshot of the state
 - Seed chat conversations, moderate or remove messages across every channel in one view
+- Capture recorded broadcasts automatically when a stream ends, manage retention windows, and surface VOD manifests to viewers
 - Curate streamer profiles with featured channels, top friends, and crypto donation links through a guided form
 - Generate a turn-key installer script that provisions BitRiver Live as a systemd service on a home server, complete with optional log directories
 - Offer a self-service `/signup` experience so viewers can create password-protected accounts on their own
@@ -53,6 +54,41 @@ The same values can be supplied through environment variables (`BITRIVER_LIVE_TL
 
 Prefer containers? Check out `deploy/docker-compose.yml` for a pre-wired stack that mounts persistent storage, exposes metrics, and optionally links Redis for shared rate-limiting state. You can also point chat at a Redis Streams transport by setting `--chat-queue-driver redis` (or `BITRIVER_LIVE_CHAT_QUEUE_DRIVER=redis`) along with `--chat-queue-redis-addr`/`BITRIVER_LIVE_CHAT_REDIS_ADDR`; the queue constructor will automatically create the configured stream and consumer group when it connects.
 
+### Postgres backend
+
+The repository now ships with SQL migrations under `deploy/migrations/` that mirror the JSON datastore schema. Apply them with your preferred migration tool or straight through `psql`:
+
+```bash
+psql "postgres://bitriver:bitriver@localhost:5432/bitriver?sslmode=disable" \
+  --file deploy/migrations/0001_initial.sql
+```
+
+Once a driver such as `pgxpool` is available, start the API with the Postgres storage driver:
+
+```bash
+go run ./cmd/server \
+  --storage-driver postgres \
+  --postgres-dsn "postgres://bitriver:bitriver@localhost:5432/bitriver?sslmode=disable" \
+  --postgres-max-conns 20 \
+  --postgres-min-conns 5 \
+  --postgres-acquire-timeout 5s
+```
+
+The same configuration can be supplied via environment variables:
+
+| Variable | Description |
+| --- | --- |
+| `BITRIVER_LIVE_STORAGE_DRIVER` | Set to `postgres` to enable the relational repository. |
+| `BITRIVER_LIVE_POSTGRES_DSN` | Connection string passed to the Postgres driver. |
+| `BITRIVER_LIVE_POSTGRES_MAX_CONNS` / `BITRIVER_LIVE_POSTGRES_MIN_CONNS` | Pool limits for concurrent and idle connections. |
+| `BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT` | How long to wait when borrowing a connection from the pool. |
+| `BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME` | Maximum lifetime before a pooled connection is recycled. |
+| `BITRIVER_LIVE_POSTGRES_MAX_CONN_IDLE` | Maximum idle time before a connection is closed. |
+| `BITRIVER_LIVE_POSTGRES_HEALTH_INTERVAL` | Frequency of pool health probes. |
+| `BITRIVER_LIVE_POSTGRES_APP_NAME` | Optional `application_name` reported to Postgres. |
+
+`deploy/docker-compose.yml` now provisions a local Postgres container and wires these environment variables automatically. After running the migrations the API can ingest JSON exports into Postgres without rewriting IDs. The `storage.NewPostgresRepository` constructor currently returns `storage.ErrPostgresUnavailable` until the driver dependency can be vendored, but the configuration pipeline, migrations, and integration test harness are ready for a drop-in implementation.
+
 ### Public viewer
 
 BitRiver Live now ships with a dedicated viewer experience powered by Next.js. Build it from `web/viewer`:
@@ -64,6 +100,8 @@ NEXT_VIEWER_BASE_PATH=/viewer npm run build
 ```
 
 Deploy the generated standalone output with `node server.js`. The Go API proxies `/viewer` requests to that runtime when `BITRIVER_VIEWER_ORIGIN` points at the viewer host (for example, `http://127.0.0.1:3000`). The client bundle reads `NEXT_PUBLIC_API_BASE_URL` at build time—leave it empty to call the same origin or set it to an absolute URL if the API lives elsewhere.
+
+The viewer now bundles real-time chat, searchable channel discovery, subscriber tooling, and VOD rails. Every channel page exposes a responsive player, a live moderation-aware chat panel, and a replay gallery that pulls straight from the API. The header ships with a theme toggle that mirrors the control-center palette so dark rooms and bright studios both look great.
 
 Docker users can `docker compose up` from `deploy/` to launch both the API and viewer; the compose file wires environment variables and networking automatically. Systemd operators can use the manifests in `deploy/systemd/` to run `bitriver-viewer.service` alongside the API service.
 
@@ -83,17 +121,30 @@ The server exposes a REST API under the `/api` prefix:
 | `/api/channels/{id}/sessions` | `GET` | Retrieve the session history for a channel |
 | `/api/channels/{id}/chat` | `POST`, `GET` | Persist chat messages and fetch recent history |
 | `/api/channels/{id}/chat/{messageId}` | `DELETE` | Remove a single chat message for moderation |
-| `/api/channels/{id}/chat/moderation/restrictions` | `GET` | List active bans and timeouts for a channel |
-| `/api/channels/{id}/chat/moderation/reports` | `POST`, `GET` | Submit viewer reports and review moderation queue |
-| `/api/channels/{id}/chat/moderation/reports/{reportId}/resolve` | `POST` | Resolve or annotate a chat report |
-| `/api/channels/{id}/monetization/tips` | `POST`, `GET` | Accept supporter tips and review recent transactions |
-| `/api/channels/{id}/monetization/subscriptions` | `POST`, `GET` | Manage recurring channel subscriptions |
-| `/api/channels/{id}/monetization/subscriptions/{subscriptionId}` | `DELETE` | Cancel a subscription (viewer or admin) |
+| `/api/recordings?channelId={id}` | `GET` | List published recordings (creators can view drafts when authenticated) |
+| `/api/recordings/{id}` | `GET`, `DELETE` | Fetch a recording manifest or remove it from storage |
+| `/api/recordings/{id}/publish` | `POST` | Mark a recording as publicly accessible and extend its retention window |
+| `/api/recordings/{id}/clips` | `GET`, `POST` | List exported highlights or queue a new clip for processing |
 | `/api/profiles/{userId}` | `PUT`, `GET` | Configure streamer bios, top friends, and crypto-only donation links |
 
-Moderation endpoints emit structured events into the chat persistence queue so bans, timeouts, and viewer reports stay in sync across WebSocket clients and long-term storage. When you wire Redis Streams into the server, the chat worker and gateway scale horizontally while still delivering the new moderation actions. Use the restrictions endpoint to audit active sanctions and the reports workflow to resolve escalations with an audit trail.
+### Recording retention and object storage
 
-Monetization flows now cover one-off tips and recurring subscriptions. Tips capture provider metadata (including crypto wallet addresses) and surface them via both the API and the `/metrics` endpoint. Subscriptions support configurable tiers, durations, and cancellation auditing, giving you the primitives required to build dashboards or automate payouts.
+Stopping a stream now generates a recording entry that captures the session metadata, playback manifests, and retention window. Creators can publish the VOD when it is ready, delete it entirely, or export smaller highlight clips via the REST API or the control centre. Configure how long recordings should be kept—both before and after publication—and where the underlying artefacts live using the flags and environment variables below:
+
+| Variable | Description |
+| --- | --- |
+| `BITRIVER_LIVE_OBJECT_ENDPOINT` | URL for the MinIO/S3-compatible endpoint that stores VOD manifests and thumbnails. |
+| `BITRIVER_LIVE_OBJECT_REGION` | Optional region hint for the object storage provider. |
+| `BITRIVER_LIVE_OBJECT_ACCESS_KEY` / `BITRIVER_LIVE_OBJECT_SECRET_KEY` | Credentials used when uploading manifests or thumbnails. |
+| `BITRIVER_LIVE_OBJECT_BUCKET` | Bucket where recordings, manifests, and thumbnails should be written. |
+| `BITRIVER_LIVE_OBJECT_PREFIX` | Prefix applied to each uploaded object (useful for multitenancy). |
+| `BITRIVER_LIVE_OBJECT_PUBLIC_ENDPOINT` | Base URL exposed to clients when referencing manifests or thumbnails. |
+| `BITRIVER_LIVE_OBJECT_USE_SSL` | Set to `true` when the object storage endpoint expects HTTPS. |
+| `BITRIVER_LIVE_OBJECT_LIFECYCLE_DAYS` | Optional lifecycle policy for the bucket; the API shares this with workers that prune stale artefacts. |
+| `BITRIVER_LIVE_RECORDING_RETENTION_PUBLISHED` | Duration (e.g. `720h`) that published VODs should be retained before being purged. Use `0` to keep them indefinitely. |
+| `BITRIVER_LIVE_RECORDING_RETENTION_UNPUBLISHED` | Duration that drafts stay on disk; `0` disables automatic removal before publication. |
+
+Flags with the same names (see `--object-endpoint`, `--object-bucket`, `--recording-retention-published`, etc.) override the environment variables when provided. The server keeps recordings in the JSON datastore until the retention window elapses and mirrors the policy into object storage lifecycle configuration.
 
 Example: create a user, launch a channel, and start a stream session.
 
@@ -155,9 +206,14 @@ For non-technical viewers, the bundled `/signup` page provides a friendly regist
 
 ```bash
 go test ./...
+
+cd web/viewer
+npm install
+npm run lint
+npm run test:integration
 ```
 
-The suite exercises the JSON storage layer, REST handlers, and stream/chat flows end-to-end without requiring any external services or libraries beyond the Go standard library.
+The Go suite exercises the JSON storage layer, REST handlers, and stream/chat flows end-to-end without requiring any external services or libraries beyond the Go standard library. The viewer integration suite combines Jest component coverage with Playwright accessibility checks—installing dependencies once with `npm install` prepares both harnesses. Playwright downloads its browsers on first run; if you need a CI-friendly install, run `npx playwright install --with-deps` ahead of the test command.
 
 ### Configure ingest orchestration
 
@@ -174,6 +230,8 @@ BitRiver Live can orchestrate end-to-end ingest and transcode jobs by talking to
 | `BITRIVER_TRANSCODE_LADDER` | Optional ladder definition (`1080p:6000,720p:4000,480p:2500`). |
 | `BITRIVER_INGEST_MAX_BOOT_ATTEMPTS` | Number of times to retry encoder boot before giving up. |
 | `BITRIVER_INGEST_RETRY_INTERVAL` | Delay between retry attempts (e.g. `500ms`). |
+| `BITRIVER_INGEST_HTTP_MAX_ATTEMPTS` | Retries for individual HTTP calls to SRS/OME/transcoder (default `3`). |
+| `BITRIVER_INGEST_HTTP_RETRY_INTERVAL` | Backoff between HTTP retries (default `500ms`). |
 | `BITRIVER_INGEST_HEALTH` | Path that exposes dependency health (default `/healthz`). |
 
 To keep bootstrapping predictable the server now fails fast if any of the required endpoints or credentials above are missing. A complete setup requires:
@@ -193,6 +251,21 @@ When these variables are set the API will:
 Stopping a stream reverses the process with DELETE calls to `/v1/jobs/{id}`, `/v1/applications/{channelId}`, and `/v1/channels/{channelId}`.
 
 The `/healthz` endpoint now returns JSON that includes the status of these external services so dashboards and probes can surface degraded dependencies early.
+
+### Operations runbook
+
+Operators can use the manifests under `deploy/` as a reference architecture for production or staging clusters.
+
+1. **Provision ingest dependencies first.** Bring up SRS, OvenMediaEngine (OME), and the FFmpeg job controller before starting the BitRiver Live API. The compose file at `deploy/docker-compose.yml` defines the services as `srs`, `ome`, and `transcoder` respectively. Each service exposes an HTTP health probe on `/healthz` (with fallbacks to vendor-specific paths) so you can validate readiness with `docker compose ps` or an external probe before the API starts.
+2. **Configure secrets securely.**
+   - Generate an SRS management token and set it via `BITRIVER_SRS_TOKEN`.
+   - Create an administrator account in OME (matching the credentials in `deploy/ome/Server.xml` or your customized configuration) and surface the username/password as `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`.
+   - Issue a bearer token for the FFmpeg job controller and inject it with `BITRIVER_TRANSCODER_TOKEN`.
+   Store these values in a secrets manager or `.env` file rather than committing them to version control. The sample compose file ships with placeholder values for local development—override them in production.
+3. **Boot the API last.** Once the ingest dependencies report healthy you can start the `bitriver-live` service. The server persists the ingest endpoints, playback URLs, and job IDs returned during boot so the current session can be recovered after a restart or audited later via `/api/channels/{id}/sessions`.
+4. **Monitor health continuously.** Poll `/healthz` on the API to capture the aggregated ingest status, or query the upstream services directly using the health endpoints listed above. A failing dependency will surface as an `error` status with human-readable detail to aid in incident response.
+
+For Kubernetes deployments replicate the boot order and secret wiring with native primitives (e.g. StatefulSets for ingest services, Secrets for credentials, and readiness probes targeting `/healthz`).
 
 ### Rate limiting and audit logging
 

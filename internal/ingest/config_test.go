@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"testing"
+	"time"
 )
 
 func TestConfigDisabledWhenEmpty(t *testing.T) {
@@ -55,5 +56,34 @@ func TestConfigEnabledWithCompleteSettings(t *testing.T) {
 	}
 	if len(cfg.LadderProfiles) != 2 {
 		t.Fatalf("expected ladder profiles to parse, got %d", len(cfg.LadderProfiles))
+	}
+	if cfg.HTTPMaxAttempts != 3 {
+		t.Fatalf("expected default HTTP retries, got %d", cfg.HTTPMaxAttempts)
+	}
+	if cfg.HTTPRetryInterval != 500*time.Millisecond {
+		t.Fatalf("expected default HTTP retry interval, got %s", cfg.HTTPRetryInterval)
+	}
+}
+
+func TestConfigHTTPRetryOverrides(t *testing.T) {
+	t.Setenv("BITRIVER_SRS_API", "http://srs:1985")
+	t.Setenv("BITRIVER_SRS_TOKEN", "secret")
+	t.Setenv("BITRIVER_OME_API", "http://ome:8081")
+	t.Setenv("BITRIVER_OME_USERNAME", "admin")
+	t.Setenv("BITRIVER_OME_PASSWORD", "password")
+	t.Setenv("BITRIVER_TRANSCODER_API", "http://transcoder:9000")
+	t.Setenv("BITRIVER_TRANSCODER_TOKEN", "job-secret")
+	t.Setenv("BITRIVER_INGEST_HTTP_MAX_ATTEMPTS", "5")
+	t.Setenv("BITRIVER_INGEST_HTTP_RETRY_INTERVAL", "1s")
+
+	cfg, err := LoadConfigFromEnv()
+	if err != nil {
+		t.Fatalf("LoadConfigFromEnv: %v", err)
+	}
+	if cfg.HTTPMaxAttempts != 5 {
+		t.Fatalf("expected HTTP max attempts override, got %d", cfg.HTTPMaxAttempts)
+	}
+	if cfg.HTTPRetryInterval != time.Second {
+		t.Fatalf("expected HTTP retry interval override, got %s", cfg.HTTPRetryInterval)
 	}
 }

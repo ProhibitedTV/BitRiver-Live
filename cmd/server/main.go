@@ -30,6 +30,13 @@ func main() {
 	dataPath := flag.String("data", "", "path to JSON datastore")
 	storageDriver := flag.String("storage-driver", "", "datastore driver (json or postgres)")
 	postgresDSN := flag.String("postgres-dsn", "", "Postgres connection string")
+	postgresMaxConns := flag.Int("postgres-max-conns", 0, "maximum connections in the Postgres pool")
+	postgresMinConns := flag.Int("postgres-min-conns", 0, "minimum idle connections maintained by the Postgres pool")
+	postgresMaxConnLifetime := flag.Duration("postgres-max-conn-lifetime", 0, "maximum lifetime for a pooled Postgres connection")
+	postgresMaxConnIdle := flag.Duration("postgres-max-conn-idle", 0, "maximum idle time for a pooled Postgres connection")
+	postgresHealthInterval := flag.Duration("postgres-health-interval", 0, "interval between Postgres health checks")
+	postgresAcquireTimeout := flag.Duration("postgres-acquire-timeout", 0, "timeout when acquiring a Postgres connection from the pool")
+	postgresAppName := flag.String("postgres-app-name", "", "application_name reported to Postgres")
 	mode := flag.String("mode", "", "server runtime mode (development or production)")
 	tlsCert := flag.String("tls-cert", "", "path to TLS certificate file")
 	tlsKey := flag.String("tls-key", "", "path to TLS private key file")
@@ -47,6 +54,17 @@ func main() {
 	chatRedisStream := flag.String("chat-queue-redis-stream", "", "Redis stream key for chat queue events")
 	chatRedisGroup := flag.String("chat-queue-redis-group", "", "Redis consumer group for chat queue")
 	viewerOrigin := flag.String("viewer-origin", "", "URL of the Next.js viewer runtime to proxy (e.g. http://127.0.0.1:3000)")
+	objectEndpoint := flag.String("object-endpoint", "", "object storage endpoint (e.g. http://127.0.0.1:9000)")
+	objectRegion := flag.String("object-region", "", "object storage region")
+	objectAccessKey := flag.String("object-access-key", "", "object storage access key")
+	objectSecretKey := flag.String("object-secret-key", "", "object storage secret key")
+	objectBucket := flag.String("object-bucket", "", "object storage bucket name")
+	objectUseSSL := flag.Bool("object-use-ssl", false, "enable TLS for object storage requests")
+	objectPrefix := flag.String("object-prefix", "", "object storage key prefix for recordings")
+	objectPublicEndpoint := flag.String("object-public-endpoint", "", "public endpoint used for playback URLs")
+	objectLifecycleDays := flag.Int("object-lifecycle-days", 0, "lifecycle policy in days for archived objects")
+	recordingRetentionPublished := flag.String("recording-retention-published", "", "retention duration for published recordings (e.g. 720h, 0 disables expiry)")
+	recordingRetentionUnpublished := flag.String("recording-retention-unpublished", "", "retention duration for unpublished recordings")
 	flag.Parse()
 
 	logger := logging.New(logging.Config{Level: firstNonEmpty(*logLevel, os.Getenv("BITRIVER_LIVE_LOG_LEVEL"))})
@@ -81,7 +99,44 @@ func main() {
 			logger.Error("failed to initialise ingest controller", "error", err)
 			os.Exit(1)
 		}
+		controller.SetLogger(logging.WithComponent(logger, "ingest"))
 		options = append(options, storage.WithIngestController(controller))
+	}
+
+	publishedRetention, publishedSet, err := resolveDurationSetting(*recordingRetentionPublished, "BITRIVER_LIVE_RECORDING_RETENTION_PUBLISHED")
+	if err != nil {
+		logger.Error("invalid published retention", "error", err)
+		os.Exit(1)
+	}
+	unpublishedRetention, unpublishedSet, err := resolveDurationSetting(*recordingRetentionUnpublished, "BITRIVER_LIVE_RECORDING_RETENTION_UNPUBLISHED")
+	if err != nil {
+		logger.Error("invalid unpublished retention", "error", err)
+		os.Exit(1)
+	}
+	if publishedSet || unpublishedSet {
+		policy := storage.RecordingRetentionPolicy{Published: -1, Unpublished: -1}
+		if publishedSet {
+			policy.Published = publishedRetention
+		}
+		if unpublishedSet {
+			policy.Unpublished = unpublishedRetention
+		}
+		options = append(options, storage.WithRecordingRetention(policy))
+	}
+
+	objectCfg := storage.ObjectStorageConfig{
+		Endpoint:       firstNonEmpty(*objectEndpoint, os.Getenv("BITRIVER_LIVE_OBJECT_ENDPOINT")),
+		Region:         firstNonEmpty(*objectRegion, os.Getenv("BITRIVER_LIVE_OBJECT_REGION")),
+		AccessKey:      firstNonEmpty(*objectAccessKey, os.Getenv("BITRIVER_LIVE_OBJECT_ACCESS_KEY")),
+		SecretKey:      firstNonEmpty(*objectSecretKey, os.Getenv("BITRIVER_LIVE_OBJECT_SECRET_KEY")),
+		Bucket:         firstNonEmpty(*objectBucket, os.Getenv("BITRIVER_LIVE_OBJECT_BUCKET")),
+		UseSSL:         resolveBool(*objectUseSSL, "BITRIVER_LIVE_OBJECT_USE_SSL"),
+		Prefix:         strings.TrimSpace(firstNonEmpty(*objectPrefix, os.Getenv("BITRIVER_LIVE_OBJECT_PREFIX"))),
+		PublicEndpoint: firstNonEmpty(*objectPublicEndpoint, os.Getenv("BITRIVER_LIVE_OBJECT_PUBLIC_ENDPOINT")),
+		LifecycleDays:  resolveInt(*objectLifecycleDays, "BITRIVER_LIVE_OBJECT_LIFECYCLE_DAYS"),
+	}
+	if objectCfg.Endpoint != "" || objectCfg.Bucket != "" || objectCfg.PublicEndpoint != "" || objectCfg.Prefix != "" || objectCfg.Region != "" || objectCfg.AccessKey != "" || objectCfg.SecretKey != "" || objectCfg.LifecycleDays > 0 || objectCfg.UseSSL {
+		options = append(options, storage.WithObjectStorage(objectCfg))
 	}
 
 	driver := resolveStorageDriver(*storageDriver, os.Getenv("BITRIVER_LIVE_STORAGE_DRIVER"))
@@ -96,7 +151,27 @@ func main() {
 			logger.Error("postgres storage selected without DSN")
 			os.Exit(1)
 		}
-		store, err = storage.NewPostgresRepository(dsn, options...)
+		pgOptions := append([]storage.Option(nil), options...)
+		maxConns := resolveInt(*postgresMaxConns, "BITRIVER_LIVE_POSTGRES_MAX_CONNS")
+		minConns := resolveInt(*postgresMinConns, "BITRIVER_LIVE_POSTGRES_MIN_CONNS")
+		if maxConns > 0 || minConns > 0 {
+			pgOptions = append(pgOptions, storage.WithPostgresPoolLimits(int32(maxConns), int32(minConns)))
+		}
+		maxLifetime := resolveDuration(*postgresMaxConnLifetime, "BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME", 0)
+		maxIdle := resolveDuration(*postgresMaxConnIdle, "BITRIVER_LIVE_POSTGRES_MAX_CONN_IDLE", 0)
+		healthInterval := resolveDuration(*postgresHealthInterval, "BITRIVER_LIVE_POSTGRES_HEALTH_INTERVAL", 0)
+		if maxLifetime > 0 || maxIdle > 0 || healthInterval > 0 {
+			pgOptions = append(pgOptions, storage.WithPostgresPoolDurations(maxLifetime, maxIdle, healthInterval))
+		}
+		acquireTimeout := resolveDuration(*postgresAcquireTimeout, "BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT", 0)
+		if acquireTimeout > 0 {
+			pgOptions = append(pgOptions, storage.WithPostgresAcquireTimeout(acquireTimeout))
+		}
+		appName := firstNonEmpty(*postgresAppName, os.Getenv("BITRIVER_LIVE_POSTGRES_APP_NAME"))
+		if appName != "" {
+			pgOptions = append(pgOptions, storage.WithPostgresApplicationName(appName))
+		}
+		store, err = storage.NewPostgresRepository(dsn, pgOptions...)
 	default:
 		logger.Error("unsupported storage driver", "driver", driver)
 		os.Exit(1)
@@ -179,6 +254,16 @@ func main() {
 
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Warn("graceful shutdown failed", "error", err)
+	}
+
+	if closer, ok := store.(interface{ Close(context.Context) error }); ok {
+		if err := closer.Close(ctx); err != nil {
+			logger.Warn("failed to close datastore", "error", err)
+		}
+	} else if closer, ok := store.(interface{ Close() error }); ok {
+		if err := closer.Close(); err != nil {
+			logger.Warn("failed to close datastore", "error", err)
+		}
 	}
 
 	logger.Info("server stopped")
@@ -326,6 +411,35 @@ func resolveDuration(flagValue time.Duration, envKey string, fallback time.Durat
 		return fallback
 	}
 	return 0
+}
+
+func resolveBool(flagValue bool, envKey string) bool {
+	if flagValue {
+		return true
+	}
+	if env, ok := os.LookupEnv(envKey); ok {
+		if value, err := strconv.ParseBool(strings.TrimSpace(env)); err == nil {
+			return value
+		}
+	}
+	return false
+}
+
+func resolveDurationSetting(flagValue string, envKey string) (time.Duration, bool, error) {
+	raw := strings.TrimSpace(flagValue)
+	if raw == "" {
+		if env, ok := os.LookupEnv(envKey); ok {
+			raw = strings.TrimSpace(env)
+		}
+	}
+	if raw == "" {
+		return 0, false, nil
+	}
+	duration, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, false, err
+	}
+	return duration, true, nil
 }
 
 func parseFloat(value string) (float64, error) {

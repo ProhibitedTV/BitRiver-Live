@@ -31,22 +31,16 @@ const (
 )
 
 type dataset struct {
-	Users               map[string]models.User          `json:"users"`
-	Channels            map[string]models.Channel       `json:"channels"`
-	StreamSessions      map[string]models.StreamSession `json:"streamSessions"`
-	ChatMessages        map[string]models.ChatMessage   `json:"chatMessages"`
-	ChatBans            map[string]map[string]time.Time `json:"chatBans"`
-	ChatTimeouts        map[string]map[string]time.Time `json:"chatTimeouts"`
-	ChatBanActors       map[string]map[string]string    `json:"chatBanActors"`
-	ChatBanReasons      map[string]map[string]string    `json:"chatBanReasons"`
-	ChatTimeoutActors   map[string]map[string]string    `json:"chatTimeoutActors"`
-	ChatTimeoutReasons  map[string]map[string]string    `json:"chatTimeoutReasons"`
-	ChatTimeoutIssuedAt map[string]map[string]time.Time `json:"chatTimeoutIssuedAt"`
-	ChatReports         map[string]models.ChatReport    `json:"chatReports"`
-	Tips                map[string]models.Tip           `json:"tips"`
-	Subscriptions       map[string]models.Subscription  `json:"subscriptions"`
-	Profiles            map[string]models.Profile       `json:"profiles"`
-	Follows             map[string]map[string]time.Time `json:"follows"`
+	Users          map[string]models.User          `json:"users"`
+	Channels       map[string]models.Channel       `json:"channels"`
+	StreamSessions map[string]models.StreamSession `json:"streamSessions"`
+	ChatMessages   map[string]models.ChatMessage   `json:"chatMessages"`
+	ChatBans       map[string]map[string]time.Time `json:"chatBans"`
+	ChatTimeouts   map[string]map[string]time.Time `json:"chatTimeouts"`
+	Profiles       map[string]models.Profile       `json:"profiles"`
+	Follows        map[string]map[string]time.Time `json:"follows"`
+	Recordings     map[string]models.Recording     `json:"recordings"`
+	ClipExports    map[string]models.ClipExport    `json:"clipExports"`
 }
 
 type Storage struct {
@@ -60,49 +54,50 @@ type Storage struct {
 	ingestRetryInterval time.Duration
 	ingestHealth        []ingest.HealthStatus
 	ingestHealthUpdated time.Time
+	recordingRetention  RecordingRetentionPolicy
+	objectStorage       ObjectStorageConfig
 }
 
-// Option mutates storage configuration.
-type Option func(*Storage)
-
-// WithIngestController installs a controller to orchestrate ingest pipelines.
-func WithIngestController(controller ingest.Controller) Option {
-	return func(s *Storage) {
-		s.ingestController = controller
-	}
+// RecordingRetentionPolicy specifies how long recordings are kept before being
+// purged when unpublished or published.
+type RecordingRetentionPolicy struct {
+	Published   time.Duration
+	Unpublished time.Duration
 }
 
-// WithIngestRetries configures how many times the ingest boot process should
-// be retried.
-func WithIngestRetries(maxAttempts int, interval time.Duration) Option {
-	return func(s *Storage) {
-		if maxAttempts > 0 {
-			s.ingestMaxAttempts = maxAttempts
-		}
-		if interval >= 0 {
-			s.ingestRetryInterval = interval
-		}
-	}
+// ObjectStorageConfig describes the external storage bucket used for
+// persisting VOD artefacts.
+type ObjectStorageConfig struct {
+	Endpoint       string
+	Region         string
+	AccessKey      string
+	SecretKey      string
+	Bucket         string
+	UseSSL         bool
+	Prefix         string
+	LifecycleDays  int
+	PublicEndpoint string
+}
+
+// ClipExportParams captures the request to generate a recording clip.
+type ClipExportParams struct {
+	Title        string
+	StartSeconds int
+	EndSeconds   int
 }
 
 func newDataset() dataset {
 	return dataset{
-		Users:               make(map[string]models.User),
-		Channels:            make(map[string]models.Channel),
-		StreamSessions:      make(map[string]models.StreamSession),
-		ChatMessages:        make(map[string]models.ChatMessage),
-		ChatBans:            make(map[string]map[string]time.Time),
-		ChatTimeouts:        make(map[string]map[string]time.Time),
-		ChatBanActors:       make(map[string]map[string]string),
-		ChatBanReasons:      make(map[string]map[string]string),
-		ChatTimeoutActors:   make(map[string]map[string]string),
-		ChatTimeoutReasons:  make(map[string]map[string]string),
-		ChatTimeoutIssuedAt: make(map[string]map[string]time.Time),
-		ChatReports:         make(map[string]models.ChatReport),
-		Tips:                make(map[string]models.Tip),
-		Subscriptions:       make(map[string]models.Subscription),
-		Profiles:            make(map[string]models.Profile),
-		Follows:             make(map[string]map[string]time.Time),
+		Users:          make(map[string]models.User),
+		Channels:       make(map[string]models.Channel),
+		StreamSessions: make(map[string]models.StreamSession),
+		ChatMessages:   make(map[string]models.ChatMessage),
+		ChatBans:       make(map[string]map[string]time.Time),
+		ChatTimeouts:   make(map[string]map[string]time.Time),
+		Profiles:       make(map[string]models.Profile),
+		Follows:        make(map[string]map[string]time.Time),
+		Recordings:     make(map[string]models.Recording),
+		ClipExports:    make(map[string]models.ClipExport),
 	}
 }
 
@@ -154,6 +149,12 @@ func (s *Storage) ensureDatasetInitializedLocked() {
 	}
 	if s.data.Follows == nil {
 		s.data.Follows = make(map[string]map[string]time.Time)
+	}
+	if s.data.Recordings == nil {
+		s.data.Recordings = make(map[string]models.Recording)
+	}
+	if s.data.ClipExports == nil {
+		s.data.ClipExports = make(map[string]models.ClipExport)
 	}
 }
 
@@ -265,9 +266,15 @@ func NewStorage(path string, opts ...Option) (*Storage, error) {
 		ingestMaxAttempts:   1,
 		ingestHealth:        []ingest.HealthStatus{{Component: "ingest", Status: "disabled"}},
 		ingestHealthUpdated: time.Now().UTC(),
+		recordingRetention: RecordingRetentionPolicy{
+			Published:   90 * 24 * time.Hour,
+			Unpublished: 14 * 24 * time.Hour,
+		},
 	}
 	for _, opt := range opts {
-		opt(store)
+		if opt != nil {
+			opt.applyJSON(store)
+		}
 	}
 	if store.ingestController == nil {
 		store.ingestController = ingest.NoopController{}
@@ -441,6 +448,20 @@ func cloneDataset(src dataset) dataset {
 		}
 	}
 
+	if src.Recordings != nil {
+		clone.Recordings = make(map[string]models.Recording, len(src.Recordings))
+		for id, recording := range src.Recordings {
+			clone.Recordings[id] = cloneRecording(recording)
+		}
+	}
+
+	if src.ClipExports != nil {
+		clone.ClipExports = make(map[string]models.ClipExport, len(src.ClipExports))
+		for id, clip := range src.ClipExports {
+			clone.ClipExports[id] = cloneClipExport(clip)
+		}
+	}
+
 	if src.Profiles != nil {
 		clone.Profiles = make(map[string]models.Profile, len(src.Profiles))
 		for id, profile := range src.Profiles {
@@ -475,6 +496,115 @@ func cloneDataset(src dataset) dataset {
 	}
 
 	return clone
+}
+
+func cloneRecording(recording models.Recording) models.Recording {
+	cloned := recording
+	if recording.Renditions != nil {
+		cloned.Renditions = append([]models.RecordingRendition(nil), recording.Renditions...)
+	}
+	if recording.Thumbnails != nil {
+		cloned.Thumbnails = append([]models.RecordingThumbnail(nil), recording.Thumbnails...)
+	}
+	if recording.Metadata != nil {
+		meta := make(map[string]string, len(recording.Metadata))
+		for k, v := range recording.Metadata {
+			meta[k] = v
+		}
+		cloned.Metadata = meta
+	}
+	if recording.PublishedAt != nil {
+		published := *recording.PublishedAt
+		cloned.PublishedAt = &published
+	}
+	if recording.RetainUntil != nil {
+		retain := *recording.RetainUntil
+		cloned.RetainUntil = &retain
+	}
+	if recording.Clips != nil {
+		cloned.Clips = append([]models.ClipExportSummary(nil), recording.Clips...)
+	}
+	return cloned
+}
+
+func cloneClipExport(clip models.ClipExport) models.ClipExport {
+	cloned := clip
+	if clip.CompletedAt != nil {
+		completed := *clip.CompletedAt
+		cloned.CompletedAt = &completed
+	}
+	return cloned
+}
+
+func (s *Storage) recordingDeadline(now time.Time, published bool) *time.Time {
+	var window time.Duration
+	if published {
+		window = s.recordingRetention.Published
+	} else {
+		window = s.recordingRetention.Unpublished
+	}
+	if window <= 0 {
+		return nil
+	}
+	deadline := now.Add(window)
+	return &deadline
+}
+
+func (s *Storage) purgeExpiredRecordingsLocked(now time.Time) (bool, dataset) {
+	if len(s.data.Recordings) == 0 {
+		return false, dataset{}
+	}
+	removed := false
+	var snapshot dataset
+	for id, recording := range s.data.Recordings {
+		if recording.RetainUntil == nil {
+			continue
+		}
+		if now.After(*recording.RetainUntil) {
+			if !removed {
+				snapshot = cloneDataset(s.data)
+				removed = true
+			}
+			delete(s.data.Recordings, id)
+			for clipID, clip := range s.data.ClipExports {
+				if clip.RecordingID == id {
+					delete(s.data.ClipExports, clipID)
+				}
+			}
+		}
+	}
+	return removed, snapshot
+}
+
+func (s *Storage) recordingWithClipsLocked(recording models.Recording) models.Recording {
+	cloned := cloneRecording(recording)
+	if len(s.data.ClipExports) == 0 {
+		return cloned
+	}
+	var clips []models.ClipExportSummary
+	for _, clip := range s.data.ClipExports {
+		if clip.RecordingID != recording.ID {
+			continue
+		}
+		clips = append(clips, models.ClipExportSummary{
+			ID:           clip.ID,
+			Title:        clip.Title,
+			StartSeconds: clip.StartSeconds,
+			EndSeconds:   clip.EndSeconds,
+			Status:       clip.Status,
+		})
+	}
+	if len(clips) == 0 {
+		return cloned
+	}
+	sort.Slice(clips, func(i, j int) bool {
+		if clips[i].StartSeconds == clips[j].StartSeconds {
+			return clips[i].ID < clips[j].ID
+		}
+		return clips[i].StartSeconds < clips[j].StartSeconds
+	})
+	cloned.Clips = clips
+	return cloned
 }
 
 func (s *Storage) generateID() (string, error) {
@@ -1406,15 +1536,81 @@ func (s *Storage) StopStream(channelID string, peakConcurrent int) (models.Strea
 	channel.UpdatedAt = now
 	s.data.Channels[channelID] = channel
 
+	recording, recErr := s.createRecordingLocked(session, channel, now)
+	if recErr != nil {
+		s.data.StreamSessions[sessionID] = originalSession
+		s.data.Channels[channelID] = originalChannel
+		s.mu.Unlock()
+		return models.StreamSession{}, recErr
+	}
+	if recording.ID != "" {
+		s.data.Recordings[recording.ID] = recording
+	}
+
 	if err := s.persist(); err != nil {
 		s.data.StreamSessions[sessionID] = originalSession
 		s.data.Channels[channelID] = originalChannel
+		if recording.ID != "" {
+			delete(s.data.Recordings, recording.ID)
+		}
 		s.mu.Unlock()
 		return models.StreamSession{}, err
 	}
 	s.mu.Unlock()
 
 	return session, nil
+}
+
+func (s *Storage) createRecordingLocked(session models.StreamSession, channel models.Channel, ended time.Time) (models.Recording, error) {
+	s.ensureDatasetInitializedLocked()
+	id, err := s.generateID()
+	if err != nil {
+		return models.Recording{}, err
+	}
+	duration := int(ended.Sub(session.StartedAt).Round(time.Second).Seconds())
+	if duration < 0 {
+		duration = 0
+	}
+	title := channel.Title
+	if title == "" {
+		title = fmt.Sprintf("Recording %s", session.ID)
+	}
+	title = strings.TrimSpace(title)
+	metadata := map[string]string{
+		"channelId":  channel.ID,
+		"sessionId":  session.ID,
+		"startedAt":  session.StartedAt.UTC().Format(time.RFC3339Nano),
+		"endedAt":    ended.UTC().Format(time.RFC3339Nano),
+		"renditions": strconv.Itoa(len(session.RenditionManifests)),
+	}
+	if session.PeakConcurrent > 0 {
+		metadata["peakConcurrent"] = strconv.Itoa(session.PeakConcurrent)
+	}
+	recording := models.Recording{
+		ID:              id,
+		ChannelID:       channel.ID,
+		SessionID:       session.ID,
+		Title:           title,
+		DurationSeconds: duration,
+		PlaybackBaseURL: session.PlaybackURL,
+		Metadata:        metadata,
+		CreatedAt:       ended,
+	}
+	if deadline := s.recordingDeadline(ended, false); deadline != nil {
+		recording.RetainUntil = deadline
+	}
+	if len(session.RenditionManifests) > 0 {
+		renditions := make([]models.RecordingRendition, 0, len(session.RenditionManifests))
+		for _, manifest := range session.RenditionManifests {
+			renditions = append(renditions, models.RecordingRendition{
+				Name:        manifest.Name,
+				ManifestURL: manifest.ManifestURL,
+				Bitrate:     manifest.Bitrate,
+			})
+		}
+		recording.Renditions = renditions
+	}
+	return recording, nil
 }
 
 func (s *Storage) ListStreamSessions(channelID string) ([]models.StreamSession, error) {
@@ -1435,6 +1631,187 @@ func (s *Storage) ListStreamSessions(channelID string) ([]models.StreamSession, 
 		return sessions[i].StartedAt.After(sessions[j].StartedAt)
 	})
 	return sessions, nil
+}
+
+func (s *Storage) ListRecordings(channelID string, includeUnpublished bool) ([]models.Recording, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.data.Channels[channelID]; !ok {
+		return nil, fmt.Errorf("channel %s not found", channelID)
+	}
+
+	now := time.Now().UTC()
+	removed, snapshot := s.purgeExpiredRecordingsLocked(now)
+	if removed {
+		if err := s.persist(); err != nil {
+			s.data = snapshot
+			return nil, err
+		}
+	}
+
+	recordings := make([]models.Recording, 0)
+	for _, recording := range s.data.Recordings {
+		if recording.ChannelID != channelID {
+			continue
+		}
+		if !includeUnpublished && recording.PublishedAt == nil {
+			continue
+		}
+		recordings = append(recordings, s.recordingWithClipsLocked(recording))
+	}
+	sort.Slice(recordings, func(i, j int) bool {
+		return recordings[i].CreatedAt.After(recordings[j].CreatedAt)
+	})
+	return recordings, nil
+}
+
+func (s *Storage) GetRecording(id string) (models.Recording, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if id == "" {
+		return models.Recording{}, false
+	}
+	now := time.Now().UTC()
+	removed, snapshot := s.purgeExpiredRecordingsLocked(now)
+	if removed {
+		if err := s.persist(); err != nil {
+			s.data = snapshot
+			return models.Recording{}, false
+		}
+	}
+	recording, ok := s.data.Recordings[id]
+	if !ok {
+		return models.Recording{}, false
+	}
+	return s.recordingWithClipsLocked(recording), true
+}
+
+func (s *Storage) PublishRecording(id string) (models.Recording, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if id == "" {
+		return models.Recording{}, fmt.Errorf("recording id is required")
+	}
+
+	recording, ok := s.data.Recordings[id]
+	if !ok {
+		return models.Recording{}, fmt.Errorf("recording %s not found", id)
+	}
+	if recording.PublishedAt != nil {
+		return s.recordingWithClipsLocked(recording), nil
+	}
+
+	now := time.Now().UTC()
+	updated := cloneRecording(recording)
+	updated.PublishedAt = &now
+	if deadline := s.recordingDeadline(now, true); deadline != nil {
+		updated.RetainUntil = deadline
+	} else {
+		updated.RetainUntil = nil
+	}
+
+	snapshot := cloneDataset(s.data)
+	s.data.Recordings[id] = updated
+	if err := s.persist(); err != nil {
+		s.data = snapshot
+		return models.Recording{}, err
+	}
+	return s.recordingWithClipsLocked(updated), nil
+}
+
+func (s *Storage) DeleteRecording(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if id == "" {
+		return fmt.Errorf("recording id is required")
+	}
+	if _, ok := s.data.Recordings[id]; !ok {
+		return fmt.Errorf("recording %s not found", id)
+	}
+	snapshot := cloneDataset(s.data)
+	delete(s.data.Recordings, id)
+	for clipID, clip := range s.data.ClipExports {
+		if clip.RecordingID == id {
+			delete(s.data.ClipExports, clipID)
+		}
+	}
+	if err := s.persist(); err != nil {
+		s.data = snapshot
+		return err
+	}
+	return nil
+}
+
+func (s *Storage) CreateClipExport(recordingID string, params ClipExportParams) (models.ClipExport, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if recordingID == "" {
+		return models.ClipExport{}, fmt.Errorf("recording id is required")
+	}
+	recording, ok := s.data.Recordings[recordingID]
+	if !ok {
+		return models.ClipExport{}, fmt.Errorf("recording %s not found", recordingID)
+	}
+	if params.EndSeconds <= params.StartSeconds {
+		return models.ClipExport{}, fmt.Errorf("endSeconds must be greater than startSeconds")
+	}
+	if params.StartSeconds < 0 {
+		return models.ClipExport{}, fmt.Errorf("startSeconds must be non-negative")
+	}
+	if recording.DurationSeconds > 0 && params.EndSeconds > recording.DurationSeconds {
+		return models.ClipExport{}, fmt.Errorf("clip exceeds recording duration")
+	}
+	id, err := s.generateID()
+	if err != nil {
+		return models.ClipExport{}, err
+	}
+	now := time.Now().UTC()
+	clip := models.ClipExport{
+		ID:           id,
+		RecordingID:  recordingID,
+		ChannelID:    recording.ChannelID,
+		SessionID:    recording.SessionID,
+		Title:        strings.TrimSpace(params.Title),
+		StartSeconds: params.StartSeconds,
+		EndSeconds:   params.EndSeconds,
+		Status:       "pending",
+		CreatedAt:    now,
+	}
+	snapshot := cloneDataset(s.data)
+	s.data.ClipExports[id] = clip
+	if err := s.persist(); err != nil {
+		s.data = snapshot
+		return models.ClipExport{}, err
+	}
+	return clip, nil
+}
+
+func (s *Storage) ListClipExports(recordingID string) ([]models.ClipExport, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if recordingID == "" {
+		return nil, fmt.Errorf("recording id is required")
+	}
+	if _, ok := s.data.Recordings[recordingID]; !ok {
+		return nil, fmt.Errorf("recording %s not found", recordingID)
+	}
+	clips := make([]models.ClipExport, 0)
+	for _, clip := range s.data.ClipExports {
+		if clip.RecordingID != recordingID {
+			continue
+		}
+		clips = append(clips, cloneClipExport(clip))
+	}
+	sort.Slice(clips, func(i, j int) bool {
+		return clips[i].CreatedAt.After(clips[j].CreatedAt)
+	})
+	return clips, nil
 }
 
 // CurrentStreamSession returns the active stream session for the channel if present.
