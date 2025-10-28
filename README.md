@@ -266,7 +266,7 @@ The `/healthz` endpoint now returns JSON that includes the status of these exter
 
 ### Operations runbook
 
-Operators can use the manifests under `deploy/` as a reference architecture for production or staging clusters.
+Operators can use the manifests under `deploy/` as a reference architecture for production or staging clusters. For a step-by-step Ubuntu installation, follow the [Installing BitRiver Live on Ubuntu guide](docs/installing-on-ubuntu.md).
 
 1. **Provision ingest dependencies first.** Bring up SRS, OvenMediaEngine (OME), and the FFmpeg job controller before starting the BitRiver Live API. The compose file at `deploy/docker-compose.yml` defines the services as `srs`, `ome`, and `transcoder` respectively. Each service exposes an HTTP health probe on `/healthz` (with fallbacks to vendor-specific paths) so you can validate readiness with `docker compose ps` or an external probe before the API starts.
 2. **Configure secrets securely.**
