@@ -1,0 +1,17 @@
+[Unit]
+Description=BitRiver Live Streaming Control Center
+After=network.target
+
+[Service]
+Type=simple
+User=bitriver
+EnvironmentFile=/opt/bitriver-live/.env
+WorkingDirectory=/opt/bitriver-live
+ExecStart=/opt/bitriver-live/bitriver-live
+Restart=on-failure
+# Uncomment the following lines to redirect logs to /opt/bitriver-live/logs/server.log
+#StandardOutput=append:/opt/bitriver-live/logs/server.log
+#StandardError=append:/opt/bitriver-live/logs/server.log
+
+[Install]
+WantedBy=multi-user.target
