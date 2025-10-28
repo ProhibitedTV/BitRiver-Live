@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 
 export function Navbar() {
@@ -11,6 +11,35 @@ export function Navbar() {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [message, setMessage] = useState<string | undefined>();
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!window.matchMedia) {
+      return;
+    }
+    const query = window.matchMedia("(prefers-color-scheme: light)");
+    const setFromQuery = (matches: boolean) => setTheme(matches ? "light" : "dark");
+    setFromQuery(query.matches);
+    const handler = (event: MediaQueryListEvent) => setFromQuery(event.matches);
+    query.addEventListener("change", handler);
+    return () => {
+      query.removeEventListener("change", handler);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+    if (theme === "light") {
+      document.body.setAttribute("data-theme", "light");
+    } else {
+      document.body.removeAttribute("data-theme");
+    }
+  }, [theme]);
 
   const reset = () => {
     setEmail("");
@@ -49,6 +78,14 @@ export function Navbar() {
         </Link>
         <nav className="nav-links">
           <Link href="/">Directory</Link>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => setTheme((prev) => (prev === "light" ? "dark" : "light"))}
+            aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
+          >
+            {theme === "light" ? "🌙 Dark" : "🌞 Light"}
+          </button>
           {user ? (
             <>
               <span className="muted">Signed in as {user.displayName}</span>

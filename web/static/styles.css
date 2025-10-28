@@ -1,14 +1,29 @@
 :root {
-    color-scheme: dark;
+    color-scheme: dark light;
     font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: radial-gradient(circle at top, #1f2a3a, #070b16);
-    color: #f1f5f9;
+    --background: radial-gradient(circle at top, #1f2a3a, #070b16);
+    --background-solid: #070b16;
+    --text: #f1f5f9;
     --accent: #38bdf8;
     --accent-strong: #0ea5e9;
     --surface: rgba(15, 23, 42, 0.65);
     --surface-strong: rgba(15, 23, 42, 0.9);
     --border: rgba(148, 163, 184, 0.2);
     --text-muted: #94a3b8;
+    --danger: #f87171;
+}
+
+[data-theme="light"] {
+    --background: radial-gradient(circle at top, #e2e8f0, #cbd5f5);
+    --background-solid: #f8fafc;
+    --text: #0f172a;
+    --accent: #0284c7;
+    --accent-strong: #0369a1;
+    --surface: rgba(241, 245, 249, 0.75);
+    --surface-strong: rgba(255, 255, 255, 0.95);
+    --border: rgba(148, 163, 184, 0.3);
+    --text-muted: #475569;
+    --danger: #dc2626;
 }
 
 body {
@@ -16,6 +31,9 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    background: var(--background);
+    background-color: var(--background-solid);
+    color: var(--text);
 }
 
 body.auth-page {
@@ -47,6 +65,19 @@ body.auth-page {
 .auth-card p {
     margin-top: 0;
     color: var(--text-muted);
+}
+
+.section-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 1rem;
+}
+
+.section-subtitle {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
 }
 
 .auth-form {
@@ -102,6 +133,10 @@ body.auth-page {
     background: rgba(7, 11, 22, 0.8);
     backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--border);
+}
+
+[data-theme="light"] .hero {
+    background: rgba(226, 232, 240, 0.82);
 }
 
 .hero h1 {
@@ -186,6 +221,22 @@ main {
     display: flex;
 }
 
+.moderation-grid {
+    display: grid;
+    gap: 2rem;
+}
+
+@media (min-width: 900px) {
+    .moderation-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.card-column {
+    display: grid;
+    gap: 1rem;
+}
+
 .panel__header {
     display: flex;
     align-items: center;
@@ -238,7 +289,7 @@ main {
 
 .danger {
     background: rgba(239, 68, 68, 0.15);
-    color: #fca5a5;
+    color: var(--danger);
     border: 1px solid rgba(239, 68, 68, 0.35);
     border-radius: 0.75rem;
     padding: 0.55rem 1.1rem;
@@ -292,6 +343,10 @@ main {
 .card__meta {
     font-size: 0.875rem;
     color: var(--text-muted);
+}
+
+.card__header + .card__meta {
+    margin-top: 0.5rem;
 }
 
 .grid {
@@ -476,6 +531,79 @@ chat-log {
     accent-color: var(--accent-strong);
 }
 
+.moderation-quote {
+    margin: 0.75rem 0;
+    padding: 0.75rem 1rem;
+    border-left: 3px solid var(--accent);
+    background: rgba(56, 189, 248, 0.1);
+    border-radius: 0.75rem;
+}
+
+.metrics-grid {
+    display: grid;
+    gap: 1.5rem;
+}
+
+@media (min-width: 800px) {
+    .metrics-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+.metric-value {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0.5rem 0;
+}
+
+.analytics-breakdown {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.analytics-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border-radius: 1rem;
+    overflow: hidden;
+}
+
+.analytics-table th,
+.analytics-table td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+
+.analytics-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.analytics-table th {
+    background: rgba(56, 189, 248, 0.08);
+    color: var(--text);
+}
+
+.analytics-table tr:nth-child(even) td {
+    background: rgba(15, 23, 42, 0.25);
+}
+
+[data-theme="light"] .analytics-table tr:nth-child(even) td {
+    background: rgba(226, 232, 240, 0.6);
+}
+
+.analytics-table th:first-child,
+.analytics-table td:first-child {
+    font-weight: 600;
+}
+
+@media (max-width: 640px) {
+    .analytics-table {
+        font-size: 0.85rem;
+    }
+}
+
 @media (max-width: 768px) {
     .hero {
         flex-direction: column;
@@ -502,8 +630,8 @@ chat-log {
     right: 1.5rem;
     padding: 0.75rem 1.25rem;
     border-radius: 999px;
-    background: rgba(148, 163, 184, 0.25);
-    color: #f8fafc;
+    background: var(--surface-strong);
+    color: var(--text);
     opacity: 0;
     transform: translateY(15px);
     transition: opacity 0.3s ease, transform 0.3s ease;

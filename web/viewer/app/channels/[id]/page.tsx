@@ -2,15 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { ChannelHero } from "../../../components/ChannelHero";
+import { ChatPanel } from "../../../components/ChatPanel";
 import { Player } from "../../../components/Player";
-import type { ChannelPlaybackResponse, FollowState } from "../../../lib/viewer-api";
-import { fetchChannelPlayback } from "../../../lib/viewer-api";
+import { VodGallery } from "../../../components/VodGallery";
+import type {
+  ChannelPlaybackResponse,
+  FollowState,
+  SubscriptionState,
+  VodItem
+} from "../../../lib/viewer-api";
+import { fetchChannelPlayback, fetchChannelVods } from "../../../lib/viewer-api";
 
 export default function ChannelPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const [data, setData] = useState<ChannelPlaybackResponse | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
+  const [vods, setVods] = useState<VodItem[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,27 +56,61 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
     setData((prev) => (prev ? { ...prev, follow } : prev));
   };
 
+  const handleSubscriptionChange = (subscription: SubscriptionState) => {
+    setData((prev) => (prev ? { ...prev, subscription } : prev));
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadVods = async () => {
+      try {
+        const response = await fetchChannelVods(id);
+        if (!cancelled) {
+          setVods(response.items ?? []);
+        }
+      } catch (err) {
+        console.error("Unable to load VODs", err);
+      }
+    };
+    void loadVods();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
   return (
     <div className="container stack">
       {loading && <div className="surface">Loading channel…</div>}
       {error && <div className="surface">{error}</div>}
       {data && (
         <>
-          <ChannelHero data={data} onFollowChange={handleFollowChange} />
-          <Player playback={data.playback} />
-          {data.playback?.renditions && data.playback.renditions.length > 0 && (
-            <div className="surface stack">
-              <h3>Available renditions</h3>
-              <ul>
-                {data.playback.renditions.map((rendition) => (
-                  <li key={rendition.name}>
-                    <strong>{rendition.name}</strong> &middot; {rendition.manifestUrl}
-                    {rendition.bitrate && ` · ${Math.round(rendition.bitrate / 1000)} kbps`}
-                  </li>
-                ))}
-              </ul>
+          <ChannelHero
+            data={data}
+            onFollowChange={handleFollowChange}
+            onSubscriptionChange={handleSubscriptionChange}
+          />
+          <div className="channel-layout">
+            <div className="channel-layout__primary stack">
+              <Player playback={data.playback} />
+              {data.playback?.renditions && data.playback.renditions.length > 0 && (
+                <div className="surface stack">
+                  <h3>Available renditions</h3>
+                  <ul>
+                    {data.playback.renditions.map((rendition) => (
+                      <li key={rendition.name}>
+                        <strong>{rendition.name}</strong> &middot; {rendition.manifestUrl}
+                        {rendition.bitrate && ` · ${Math.round(rendition.bitrate / 1000)} kbps`}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <VodGallery items={vods} />
             </div>
-          )}
+            <aside className="channel-layout__sidebar">
+              <ChatPanel channelId={id} roomId={data.chat?.roomId} />
+            </aside>
+          </div>
         </>
       )}
     </div>
