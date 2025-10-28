@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/sha1"
+	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -72,7 +73,7 @@ func Accept(w http.ResponseWriter, r *http.Request) (*Conn, error) {
 }
 
 // Dial establishes a WebSocket connection to the given URL.
-func Dial(ctx context.Context, rawURL string, header http.Header) (*Conn, error) {
+func Dial(ctx context.Context, rawURL string, header http.Header, tlsConfig *tls.Config) (*Conn, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, err
@@ -93,6 +94,26 @@ func Dial(ctx context.Context, rawURL string, header http.Header) (*Conn, error)
 	conn, err := d.DialContext(ctx, "tcp", host)
 	if err != nil {
 		return nil, err
+	}
+
+	if u.Scheme == "wss" {
+		cfg := &tls.Config{}
+		if tlsConfig != nil {
+			cfg = tlsConfig.Clone()
+		}
+		if cfg.ServerName == "" {
+			cfg.ServerName = u.Hostname()
+		}
+		tlsConn := tls.Client(conn, cfg)
+		if deadline, ok := ctx.Deadline(); ok {
+			_ = tlsConn.SetDeadline(deadline)
+			defer tlsConn.SetDeadline(time.Time{})
+		}
+		if err := tlsConn.HandshakeContext(ctx); err != nil {
+			conn.Close()
+			return nil, err
+		}
+		conn = tlsConn
 	}
 
 	key := generateKey()
