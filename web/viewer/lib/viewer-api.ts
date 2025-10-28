@@ -57,13 +57,58 @@ export type FollowState = {
   following: boolean;
 };
 
+export type SubscriptionState = {
+  subscribers: number;
+  subscribed: boolean;
+  tier?: string;
+  renewsAt?: string;
+};
+
+export type ChatUser = {
+  id: string;
+  displayName: string;
+  role?: string;
+  avatarUrl?: string;
+};
+
+export type ChatMessage = {
+  id: string;
+  message: string;
+  sentAt: string;
+  user: ChatUser;
+};
+
+export type ChatTranscript = {
+  roomId: string;
+  messages: ChatMessage[];
+  participants: number;
+};
+
+export type VodItem = {
+  id: string;
+  title: string;
+  durationSeconds: number;
+  publishedAt: string;
+  thumbnailUrl?: string;
+  playbackUrl?: string;
+};
+
+export type VodCollection = {
+  channelId: string;
+  items: VodItem[];
+};
+
 export type ChannelPlaybackResponse = {
   channel: ChannelPublic;
   owner: ChannelOwner;
   profile: ProfileSummary;
   live: boolean;
   follow: FollowState;
+  subscription?: SubscriptionState;
   playback?: Playback;
+  chat?: {
+    roomId: string;
+  };
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
@@ -96,6 +141,15 @@ export function fetchChannelPlayback(channelId: string): Promise<ChannelPlayback
   return viewerRequest<ChannelPlaybackResponse>(`/api/channels/${channelId}/playback`);
 }
 
+export function searchDirectory(query: string): Promise<DirectoryResponse> {
+  const params = new URLSearchParams();
+  if (query.trim().length > 0) {
+    params.set("q", query.trim());
+  }
+  const suffix = params.toString();
+  return viewerRequest<DirectoryResponse>(`/api/directory${suffix ? `?${suffix}` : ""}`);
+}
+
 export function followChannel(channelId: string): Promise<FollowState> {
   return viewerRequest<FollowState>(`/api/channels/${channelId}/follow`, {
     method: "POST"
@@ -106,4 +160,32 @@ export function unfollowChannel(channelId: string): Promise<FollowState> {
   return viewerRequest<FollowState>(`/api/channels/${channelId}/follow`, {
     method: "DELETE"
   });
+}
+
+export function subscribeChannel(channelId: string): Promise<SubscriptionState> {
+  return viewerRequest<SubscriptionState>(`/api/channels/${channelId}/subscribe`, {
+    method: "POST"
+  });
+}
+
+export function unsubscribeChannel(channelId: string): Promise<SubscriptionState> {
+  return viewerRequest<SubscriptionState>(`/api/channels/${channelId}/subscribe`, {
+    method: "DELETE"
+  });
+}
+
+export function fetchChannelChat(channelId: string, limit = 50): Promise<ChatTranscript> {
+  const params = new URLSearchParams({ limit: `${limit}` });
+  return viewerRequest<ChatTranscript>(`/api/channels/${channelId}/chat?${params.toString()}`);
+}
+
+export function sendChatMessage(channelId: string, message: string): Promise<ChatMessage> {
+  return viewerRequest<ChatMessage>(`/api/channels/${channelId}/chat`, {
+    method: "POST",
+    body: JSON.stringify({ message })
+  });
+}
+
+export function fetchChannelVods(channelId: string): Promise<VodCollection> {
+  return viewerRequest<VodCollection>(`/api/channels/${channelId}/vods`);
 }

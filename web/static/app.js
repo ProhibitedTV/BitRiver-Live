@@ -17,7 +17,12 @@ const state = {
     selectedProfileId: null,
     currentUser: null,
     chatClient: null,
+    moderation: { queue: [], actions: [] },
+    analytics: { summary: null, perChannel: [] },
 };
+
+let moderationLoaded = false;
+let analyticsLoaded = false;
 
 function escapeHTML(value) {
     const div = document.createElement("div");
@@ -183,7 +188,15 @@ function switchView(id) {
 }
 
 document.querySelectorAll(".hero__nav button").forEach((btn) => {
-    btn.addEventListener("click", () => switchView(btn.dataset.view));
+    btn.addEventListener("click", () => {
+        const view = btn.dataset.view;
+        switchView(view);
+        if (view === "moderation") {
+            void loadModeration();
+        } else if (view === "analytics") {
+            void loadAnalytics();
+        }
+    });
 });
 
 async function apiRequest(path, options = {}) {
@@ -345,6 +358,12 @@ function formatDuration(ms) {
         return `${hours}h ${minutes}m`;
     }
     return `${minutes}m`;
+}
+
+const numberFormatter = new Intl.NumberFormat();
+
+function formatNumber(value) {
+    return numberFormatter.format(Number.isFinite(value) ? value : 0);
 }
 
 function collectSelectedValues(select) {
@@ -1737,11 +1756,267 @@ function setupInstaller() {
     });
 }
 
+async function loadModeration(force = false) {
+    if (moderationLoaded && !force) {
+        renderModeration();
+        return;
+    }
+    try {
+        const payload = await apiRequest("/api/moderation/queue");
+        state.moderation.queue = Array.isArray(payload?.queue) ? payload.queue : [];
+        state.moderation.actions = Array.isArray(payload?.actions) ? payload.actions : [];
+        moderationLoaded = true;
+        renderModeration();
+    } catch (error) {
+        showToast(error.message, "error");
+    }
+}
+
+async function resolveModerationFlag(flagId, resolution) {
+    if (!flagId) {
+        return;
+    }
+    await apiRequest(`/api/moderation/queue/${flagId}`, {
+        method: "POST",
+        body: JSON.stringify({ resolution }),
+    });
+    showToast(resolution === "ban" ? "Viewer banned" : "Flag dismissed");
+    moderationLoaded = false;
+    await loadModeration(true);
+}
+
+function renderModeration() {
+    const queueContainer = document.getElementById("moderation-queue");
+    const historyContainer = document.getElementById("moderation-history");
+    if (!queueContainer || !historyContainer) {
+        return;
+    }
+    clearElement(queueContainer);
+    clearElement(historyContainer);
+
+    const queue = state.moderation.queue;
+    if (!queue.length) {
+        queueContainer.appendChild(
+            createElement("div", {
+                className: "empty",
+                textContent: "No flagged chat messages. Your community is in good shape.",
+            }),
+        );
+    } else {
+        for (const flag of queue) {
+            const card = createElement("article", { className: "card" });
+            const header = createElement("div", { className: "card__header" });
+            header.append(
+                createElement("h3", { textContent: flag.channelTitle || flag.channelId }),
+                createElement("span", {
+                    className: "card__meta",
+                    textContent: `Flagged ${formatRelativeTime(flag.flaggedAt || flag.createdAt)}`,
+                }),
+            );
+            card.appendChild(header);
+
+            card.appendChild(
+                createElement("p", {
+                    className: "card__meta",
+                    textContent: `Reporter: ${flag.reporter?.displayName || "Auto mod"}`,
+                }),
+            );
+
+            if (flag.message) {
+                card.appendChild(
+                    createElement("blockquote", {
+                        className: "moderation-quote",
+                        textContent: flag.message,
+                    }),
+                );
+            }
+
+            card.appendChild(
+                createElement("div", {
+                    className: "card__meta",
+                    textContent: `Reason: ${flag.reason || "Manual review"}`,
+                }),
+            );
+
+            const actions = createElement("div", { className: "card__actions" });
+            actions.append(
+                createElement("button", {
+                    className: "secondary",
+                    textContent: "Dismiss",
+                    dataset: { action: "resolve-flag", id: flag.id, resolution: "dismiss" },
+                }),
+                createElement("button", {
+                    className: "danger",
+                    textContent: "Ban & purge",
+                    dataset: { action: "resolve-flag", id: flag.id, resolution: "ban" },
+                }),
+            );
+            card.appendChild(actions);
+
+            queueContainer.appendChild(card);
+        }
+
+        queueContainer.querySelectorAll("[data-action=resolve-flag]").forEach((button) => {
+            button.addEventListener("click", async () => {
+                const { id, resolution } = button.dataset;
+                try {
+                    await resolveModerationFlag(id, resolution);
+                } catch (error) {
+                    showToast(error.message, "error");
+                }
+            });
+        });
+    }
+
+    const actions = state.moderation.actions;
+    if (!actions.length) {
+        historyContainer.appendChild(
+            createElement("div", {
+                className: "empty",
+                textContent: "No recent moderation actions.",
+            }),
+        );
+        return;
+    }
+
+    for (const entry of actions) {
+        const card = createElement("article", { className: "card" });
+        card.appendChild(
+            createElement("div", {
+                className: "card__header",
+                textContent: `${entry.moderator?.displayName || "System"} → ${entry.action?.replace(/_/g, " ")}`,
+            }),
+        );
+        card.appendChild(
+            createElement("div", {
+                className: "card__meta",
+                textContent: `Target: ${entry.targetId || "unknown"}`,
+            }),
+        );
+        card.appendChild(
+            createElement("div", {
+                className: "card__meta",
+                textContent: formatDate(entry.createdAt),
+            }),
+        );
+        historyContainer.appendChild(card);
+    }
+}
+
+async function loadAnalytics(force = false) {
+    if (analyticsLoaded && !force) {
+        renderAnalytics();
+        return;
+    }
+    try {
+        const payload = await apiRequest("/api/analytics/overview");
+        state.analytics.summary = payload?.summary || null;
+        state.analytics.perChannel = Array.isArray(payload?.perChannel) ? payload.perChannel : [];
+        analyticsLoaded = true;
+        renderAnalytics();
+    } catch (error) {
+        showToast(error.message, "error");
+    }
+}
+
+function renderAnalytics() {
+    const overview = document.getElementById("analytics-overview");
+    const breakdown = document.getElementById("analytics-breakdown");
+    if (!overview || !breakdown) {
+        return;
+    }
+    clearElement(overview);
+    clearElement(breakdown);
+
+    const summary = state.analytics.summary;
+    if (summary) {
+        const metrics = [
+            {
+                label: "Live viewers",
+                value: formatNumber(summary.liveViewers ?? 0),
+                detail: "Across all active channels",
+            },
+            {
+                label: "Streams live",
+                value: formatNumber(summary.streamsLive ?? 0),
+                detail: "Currently broadcasting",
+            },
+            {
+                label: "Daily watch time",
+                value: `${formatNumber(Math.round(summary.watchTimeMinutes ?? 0))} min`,
+                detail: "Rolling 24 hours",
+            },
+            {
+                label: "Chat messages",
+                value: formatNumber(summary.chatMessages ?? 0),
+                detail: "Today",
+            },
+        ];
+        for (const metric of metrics) {
+            const card = createElement("article", { className: "card" });
+            card.appendChild(createElement("h3", { textContent: metric.label }));
+            card.appendChild(createElement("div", { className: "metric-value", textContent: metric.value }));
+            card.appendChild(createElement("div", { className: "card__meta", textContent: metric.detail }));
+            overview.appendChild(card);
+        }
+    } else {
+        overview.appendChild(
+            createElement("div", {
+                className: "empty",
+                textContent: "Analytics will appear after your first stream.",
+            }),
+        );
+    }
+
+    const rows = state.analytics.perChannel || [];
+    if (!rows.length) {
+        breakdown.appendChild(
+            createElement("div", {
+                className: "empty",
+                textContent: "No channel analytics available yet.",
+            }),
+        );
+        return;
+    }
+
+    const table = document.createElement("table");
+    table.className = "analytics-table";
+    const head = document.createElement("thead");
+    head.innerHTML = `
+        <tr>
+            <th scope="col">Channel</th>
+            <th scope="col">Live viewers</th>
+            <th scope="col">Followers</th>
+            <th scope="col">Avg. watch</th>
+            <th scope="col">Chat msgs</th>
+        </tr>
+    `;
+    table.appendChild(head);
+
+    const body = document.createElement("tbody");
+    for (const entry of rows) {
+        const row = document.createElement("tr");
+        const avgWatch = entry.avgWatchMinutes ?? 0;
+        row.innerHTML = `
+            <th scope="row">${escapeHTML(entry.title || entry.channelId)}</th>
+            <td>${formatNumber(entry.liveViewers ?? 0)}</td>
+            <td>${formatNumber(entry.followers ?? 0)}</td>
+            <td>${formatNumber(Math.round(avgWatch))} min</td>
+            <td>${formatNumber(entry.chatMessages ?? 0)}</td>
+        `;
+        body.appendChild(row);
+    }
+    table.appendChild(body);
+    breakdown.appendChild(table);
+}
+
 async function refreshAll() {
     await Promise.all([
         loadUsers(),
         loadChannels({ hydrate: true }),
         loadProfiles(),
+        loadModeration(true),
+        loadAnalytics(true),
     ]);
 }
 
@@ -1751,6 +2026,14 @@ function attachActions() {
     document.getElementById("refresh-users").addEventListener("click", () => loadUsers());
     document.getElementById("refresh-channels").addEventListener("click", () => loadChannels({ hydrate: true }));
     document.getElementById("refresh-data").addEventListener("click", () => refreshAll());
+    const moderationButton = document.getElementById("refresh-moderation");
+    if (moderationButton) {
+        moderationButton.addEventListener("click", () => loadModeration(true));
+    }
+    const analyticsButton = document.getElementById("refresh-analytics");
+    if (analyticsButton) {
+        analyticsButton.addEventListener("click", () => loadAnalytics(true));
+    }
     document.getElementById("download-snapshot").addEventListener("click", exportSnapshot);
     if (signOutButton) {
         signOutButton.addEventListener("click", handleSignOut);

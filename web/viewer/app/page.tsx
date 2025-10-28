@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { DirectoryGrid } from "../components/DirectoryGrid";
+import { SearchBar } from "../components/SearchBar";
 import type { DirectoryChannel } from "../lib/viewer-api";
-import { fetchDirectory } from "../lib/viewer-api";
+import { fetchDirectory, searchDirectory } from "../lib/viewer-api";
 
 export default function DirectoryPage() {
   const [channels, setChannels] = useState<DirectoryChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -16,7 +18,7 @@ export default function DirectoryPage() {
       try {
         setLoading(true);
         setError(undefined);
-        const data = await fetchDirectory();
+        const data = query.trim().length > 0 ? await searchDirectory(query) : await fetchDirectory();
         if (!cancelled) {
           setChannels(data.channels);
         }
@@ -34,7 +36,11 @@ export default function DirectoryPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [query]);
+
+  const handleSearch = (value: string) => {
+    setQuery(value);
+  };
 
   return (
     <div className="container stack">
@@ -43,6 +49,7 @@ export default function DirectoryPage() {
         <p className="muted">
           Explore the latest community broadcasts, follow your favourite creators, and jump into ultra-low-latency playback powered by BitRiver Live.
         </p>
+        <SearchBar onSearch={handleSearch} defaultValue={query} />
       </header>
       {loading && <div className="surface">Loading channels…</div>}
       {error && <div className="surface">{error}</div>}

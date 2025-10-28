@@ -18,8 +18,10 @@
             <button data-view="channels">Channels</button>
             <button data-view="stream">Go Live</button>
             <button data-view="chat">Chat</button>
+            <button data-view="moderation">Moderation</button>
             <button data-view="profiles">Profiles</button>
             <button data-view="sessions">Sessions</button>
+            <button data-view="analytics">Analytics</button>
             <button data-view="settings">Settings</button>
         </nav>
         <div class="hero__actions">
@@ -81,6 +83,34 @@
             <div id="chat-controls"></div>
         </section>
 
+        <section id="moderation" class="panel">
+            <header class="panel__header">
+                <div>
+                    <h2>Moderation queue</h2>
+                    <p>Review flagged chat content, triage appeals, and keep the community safe.</p>
+                </div>
+                <div class="panel__actions">
+                    <button id="refresh-moderation" class="secondary">Refresh</button>
+                </div>
+            </header>
+            <div class="moderation-grid">
+                <section aria-labelledby="moderation-flags-heading">
+                    <div class="section-header">
+                        <h3 id="moderation-flags-heading">Flagged messages</h3>
+                        <p class="section-subtitle">AI and moderators feed this queue in real time.</p>
+                    </div>
+                    <div id="moderation-queue" class="card-column"></div>
+                </section>
+                <section aria-labelledby="moderation-history-heading">
+                    <div class="section-header">
+                        <h3 id="moderation-history-heading">Recent actions</h3>
+                        <p class="section-subtitle">Audit log of moderator and automation outcomes.</p>
+                    </div>
+                    <div id="moderation-history" class="card-column"></div>
+                </section>
+            </div>
+        </section>
+
         <section id="profiles" class="panel">
             <h2>Profile Hub</h2>
             <p>Curate streamer profiles with featured channels, donation links, and friends.</p>
@@ -99,6 +129,24 @@
         <section id="sessions" class="panel">
             <h2>Streaming History</h2>
             <div id="sessions-list" class="table"></div>
+        </section>
+
+        <section id="analytics" class="panel">
+            <header class="panel__header">
+                <div>
+                    <h2>Analytics</h2>
+                    <p>Track channel momentum, identify rising creators, and share wins with your team.</p>
+                </div>
+                <div class="panel__actions">
+                    <button id="refresh-analytics" class="secondary">Refresh</button>
+                </div>
+            </header>
+            <div id="analytics-overview" class="metrics-grid"></div>
+            <div class="analytics-breakdown">
+                <h3>Channel performance</h3>
+                <p class="section-subtitle">Live viewers, watch time, and engagement for every creator.</p>
+                <div id="analytics-breakdown"></div>
+            </div>
         </section>
 
         <section id="settings" class="panel">

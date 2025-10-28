@@ -66,6 +66,8 @@ NEXT_VIEWER_BASE_PATH=/viewer npm run build
 
 Deploy the generated standalone output with `node server.js`. The Go API proxies `/viewer` requests to that runtime when `BITRIVER_VIEWER_ORIGIN` points at the viewer host (for example, `http://127.0.0.1:3000`). The client bundle reads `NEXT_PUBLIC_API_BASE_URL` at build time—leave it empty to call the same origin or set it to an absolute URL if the API lives elsewhere.
 
+The viewer now bundles real-time chat, searchable channel discovery, subscriber tooling, and VOD rails. Every channel page exposes a responsive player, a live moderation-aware chat panel, and a replay gallery that pulls straight from the API. The header ships with a theme toggle that mirrors the control-center palette so dark rooms and bright studios both look great.
+
 Docker users can `docker compose up` from `deploy/` to launch both the API and viewer; the compose file wires environment variables and networking automatically. Systemd operators can use the manifests in `deploy/systemd/` to run `bitriver-viewer.service` alongside the API service.
 
 The server exposes a REST API under the `/api` prefix:
@@ -169,9 +171,14 @@ For non-technical viewers, the bundled `/signup` page provides a friendly regist
 
 ```bash
 go test ./...
+
+cd web/viewer
+npm install
+npm run lint
+npm run test:integration
 ```
 
-The suite exercises the JSON storage layer, REST handlers, and stream/chat flows end-to-end without requiring any external services or libraries beyond the Go standard library.
+The Go suite exercises the JSON storage layer, REST handlers, and stream/chat flows end-to-end without requiring any external services or libraries beyond the Go standard library. The viewer integration suite combines Jest component coverage with Playwright accessibility checks—installing dependencies once with `npm install` prepares both harnesses. Playwright downloads its browsers on first run; if you need a CI-friendly install, run `npx playwright install --with-deps` ahead of the test command.
 
 ### Configure ingest orchestration
 
