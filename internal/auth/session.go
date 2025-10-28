@@ -4,83 +4,124 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"sync"
 	"time"
 )
 
+// SessionStore defines the persistence contract for session tokens.
+type SessionStore interface {
+	Save(token, userID string, expiresAt time.Time) error
+	Get(token string) (SessionRecord, bool, error)
+	Delete(token string) error
+	PurgeExpired(now time.Time) error
+}
+
+// SessionRecord captures a session row retrieved from the backing store.
+type SessionRecord struct {
+	Token     string
+	UserID    string
+	ExpiresAt time.Time
+}
+
+// SessionOption configures a SessionManager instance.
+type SessionOption func(*SessionManager)
+
+// WithStore injects a custom SessionStore implementation.
+func WithStore(store SessionStore) SessionOption {
+	return func(m *SessionManager) {
+		m.store = store
+	}
+}
+
+// WithTokenLength sets the token length used for newly created sessions.
+func WithTokenLength(length int) SessionOption {
+	return func(m *SessionManager) {
+		if length > 0 {
+			m.tokenLength = length
+		}
+	}
+}
+
+// SessionManager coordinates session creation and validation against a backing store.
 type SessionManager struct {
-	mu       sync.RWMutex
-	sessions map[string]session
-	ttl      time.Duration
+	store        SessionStore
+	ttl          time.Duration
+	tokenLength  int
+	tokenFactory func(int) (string, error)
 }
 
-type session struct {
-	userID    string
-	expiresAt time.Time
-}
-
-func NewSessionManager(ttl time.Duration) *SessionManager {
+// NewSessionManager constructs a SessionManager with the provided TTL and options.
+// The manager defaults to an in-memory store for local development when no store is supplied.
+func NewSessionManager(ttl time.Duration, opts ...SessionOption) *SessionManager {
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}
-	return &SessionManager{
-		sessions: make(map[string]session),
-		ttl:      ttl,
+	manager := &SessionManager{
+		ttl:          ttl,
+		tokenLength:  32,
+		tokenFactory: generateToken,
 	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(manager)
+		}
+	}
+	if manager.store == nil {
+		manager.store = NewMemorySessionStore()
+	}
+	return manager
 }
 
+// NewSessionManagerWithStore constructs a SessionManager backed by the provided store.
+func NewSessionManagerWithStore(ttl time.Duration, store SessionStore) *SessionManager {
+	return NewSessionManager(ttl, WithStore(store))
+}
+
+// Create issues a new session token for the provided user identifier.
 func (m *SessionManager) Create(userID string) (string, time.Time, error) {
 	if userID == "" {
 		return "", time.Time{}, ErrInvalidUserID
 	}
-	token, err := generateToken(32)
+	token, err := m.tokenFactory(m.tokenLength)
 	if err != nil {
 		return "", time.Time{}, err
 	}
 	expiresAt := time.Now().Add(m.ttl)
-	m.mu.Lock()
-	m.sessions[token] = session{userID: userID, expiresAt: expiresAt}
-	m.mu.Unlock()
+	if err := m.store.Save(token, userID, expiresAt.UTC()); err != nil {
+		return "", time.Time{}, err
+	}
 	return token, expiresAt, nil
 }
 
-func (m *SessionManager) Validate(token string) (string, time.Time, bool) {
+// Validate checks the backing store for the provided token and returns the associated user when valid.
+func (m *SessionManager) Validate(token string) (string, time.Time, bool, error) {
 	if token == "" {
-		return "", time.Time{}, false
+		return "", time.Time{}, false, nil
 	}
-	m.mu.RLock()
-	s, ok := m.sessions[token]
-	m.mu.RUnlock()
+	record, ok, err := m.store.Get(token)
+	if err != nil {
+		return "", time.Time{}, false, err
+	}
 	if !ok {
-		return "", time.Time{}, false
+		return "", time.Time{}, false, nil
 	}
-	if time.Now().After(s.expiresAt) {
-		m.mu.Lock()
-		delete(m.sessions, token)
-		m.mu.Unlock()
-		return "", time.Time{}, false
+	if time.Now().After(record.ExpiresAt) {
+		_ = m.store.Delete(token)
+		return "", time.Time{}, false, nil
 	}
-	return s.userID, s.expiresAt, true
+	return record.UserID, record.ExpiresAt, true, nil
 }
 
-func (m *SessionManager) Revoke(token string) {
+// Revoke deletes the session token from the backing store.
+func (m *SessionManager) Revoke(token string) error {
 	if token == "" {
-		return
+		return nil
 	}
-	m.mu.Lock()
-	delete(m.sessions, token)
-	m.mu.Unlock()
+	return m.store.Delete(token)
 }
 
-func (m *SessionManager) PurgeExpired() {
-	now := time.Now()
-	m.mu.Lock()
-	for token, s := range m.sessions {
-		if now.After(s.expiresAt) {
-			delete(m.sessions, token)
-		}
-	}
-	m.mu.Unlock()
+// PurgeExpired removes any expired sessions from the backing store.
+func (m *SessionManager) PurgeExpired() error {
+	return m.store.PurgeExpired(time.Now())
 }
 
 func generateToken(length int) (string, error) {
@@ -91,4 +132,5 @@ func generateToken(length int) (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
+// ErrInvalidUserID is returned when attempting to create a session without a user identifier.
 var ErrInvalidUserID = errors.New("userID is required")
