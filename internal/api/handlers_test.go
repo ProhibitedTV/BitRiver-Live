@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/auth"
+	"bitriver-live/internal/chat"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/storage"
 )
@@ -723,5 +725,176 @@ func TestProfileEndpoints(t *testing.T) {
 	handler.ProfileByID(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected missing profile status 404, got %d", rec.Code)
+	}
+}
+
+func TestChatReportsAPI(t *testing.T) {
+	handler, store := newTestHandler(t)
+	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	reporter, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Reporter", Email: "reporter@example.com"})
+	if err != nil {
+		t.Fatalf("create reporter: %v", err)
+	}
+	target, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Target", Email: "target@example.com"})
+	if err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Arena", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+
+	queue := chat.NewMemoryQueue(8)
+	handler.ChatGateway = chat.NewGateway(chat.GatewayConfig{Queue: queue, Store: store})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go storage.NewChatWorker(store, queue, nil).Run(ctx)
+
+	// Apply a ban to populate restrictions endpoint.
+	if err := store.ApplyChatEvent(chat.Event{Type: chat.EventTypeModeration, Moderation: &chat.ModerationEvent{Action: chat.ModerationActionBan, ChannelID: channel.ID, ActorID: owner.ID, TargetID: target.ID, Reason: "spam"}, OccurredAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("apply ban: %v", err)
+	}
+
+	payload := chatReportRequest{TargetID: target.ID, Reason: "abuse"}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/chat/moderation/reports", bytes.NewReader(body))
+	req = withUser(req, reporter)
+	rec := httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected report submit 202, got %d", rec.Code)
+	}
+	var reportResp chatReportResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &reportResp); err != nil {
+		t.Fatalf("decode report response: %v", err)
+	}
+
+	// Wait for worker to persist report.
+	deadline := time.After(2 * time.Second)
+	for {
+		reports, err := store.ListChatReports(channel.ID, true)
+		if err == nil && len(reports) > 0 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timeout waiting for report persistence")
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+
+	resolveBody, _ := json.Marshal(resolveChatReportRequest{Resolution: "handled"})
+	req = httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/chat/moderation/reports/"+reportResp.ID+"/resolve", bytes.NewReader(resolveBody))
+	req = withUser(req, owner)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected resolve status 200, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID+"/chat/moderation/restrictions", nil)
+	req = withUser(req, owner)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected restrictions status 200, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID+"/chat/moderation/reports?status=all", nil)
+	req = withUser(req, owner)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected list reports status 200, got %d", rec.Code)
+	}
+	var reports []chatReportResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &reports); err != nil {
+		t.Fatalf("decode reports response: %v", err)
+	}
+	if len(reports) != 1 || reports[0].Status != "resolved" {
+		t.Fatalf("expected resolved report, got %+v", reports)
+	}
+}
+
+func TestMonetizationEndpoints(t *testing.T) {
+	handler, store := newTestHandler(t)
+	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	supporter, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Supporter", Email: "supporter@example.com"})
+	if err != nil {
+		t.Fatalf("create supporter: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Arena", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+
+	tipReq := createTipRequest{Amount: 10, Currency: "USD", Provider: "stripe", Message: "gg"}
+	body, _ := json.Marshal(tipReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/monetization/tips", bytes.NewReader(body))
+	req = withUser(req, supporter)
+	rec := httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected tip status 201, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID+"/monetization/tips", nil)
+	req = withUser(req, owner)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected tip list status 200, got %d", rec.Code)
+	}
+
+	subReq := createSubscriptionRequest{Tier: "gold", Provider: "stripe", Amount: 9.99, Currency: "usd", DurationDays: 30, AutoRenew: true}
+	body, _ = json.Marshal(subReq)
+	req = httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/monetization/subscriptions", bytes.NewReader(body))
+	req = withUser(req, supporter)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected subscription status 201, got %d", rec.Code)
+	}
+	var subResp subscriptionResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &subResp); err != nil {
+		t.Fatalf("decode subscription: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID+"/monetization/subscriptions", nil)
+	req = withUser(req, owner)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected subscription list status 200, got %d", rec.Code)
+	}
+
+	cancelURL := "/api/channels/" + channel.ID + "/monetization/subscriptions/" + subResp.ID
+	req = httptest.NewRequest(http.MethodDelete, cancelURL, nil)
+	req = withUser(req, supporter)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected cancel status 200, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID+"/monetization/subscriptions?status=all", nil)
+	req = withUser(req, owner)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected subscription history status 200, got %d", rec.Code)
+	}
+	var subs []subscriptionResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &subs); err != nil {
+		t.Fatalf("decode subscriptions response: %v", err)
+	}
+	if len(subs) != 1 || subs[0].Status != "cancelled" {
+		t.Fatalf("expected cancelled subscription, got %+v", subs)
 	}
 }

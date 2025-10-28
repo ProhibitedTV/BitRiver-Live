@@ -25,6 +25,9 @@ type Recorder struct {
 	ingestHealthValue map[string]float64
 	ingestHealthState map[string]string
 	activeStreams     atomic.Int64
+	chatEvents        map[string]uint64
+	monetizationCount map[string]uint64
+	monetizationTotal map[string]float64
 }
 
 var defaultRecorder = New()
@@ -36,6 +39,9 @@ func New() *Recorder {
 		streamEvents:      make(map[string]uint64),
 		ingestHealthValue: make(map[string]float64),
 		ingestHealthState: make(map[string]string),
+		chatEvents:        make(map[string]uint64),
+		monetizationCount: make(map[string]uint64),
+		monetizationTotal: make(map[string]float64),
 	}
 }
 
@@ -80,6 +86,29 @@ func (r *Recorder) incrementStreamEvent(event string) {
 	}
 	r.mu.Lock()
 	r.streamEvents[normalized]++
+	r.mu.Unlock()
+}
+
+// ObserveChatEvent records a chat event type for throughput monitoring.
+func (r *Recorder) ObserveChatEvent(event string) {
+	normalized := strings.ToLower(strings.TrimSpace(event))
+	if normalized == "" {
+		normalized = "unknown"
+	}
+	r.mu.Lock()
+	r.chatEvents[normalized]++
+	r.mu.Unlock()
+}
+
+// ObserveMonetization tracks monetization events, capturing counts and total amounts.
+func (r *Recorder) ObserveMonetization(event string, amount float64) {
+	normalized := strings.ToLower(strings.TrimSpace(event))
+	if normalized == "" {
+		normalized = "unknown"
+	}
+	r.mu.Lock()
+	r.monetizationCount[normalized]++
+	r.monetizationTotal[normalized] += amount
 	r.mu.Unlock()
 }
 
@@ -158,6 +187,27 @@ func (r *Recorder) Write(w io.Writer) {
 		status := r.ingestHealthState[service]
 		fmt.Fprintf(w, "bitriver_ingest_health{service=\"%s\",status=\"%s\"} %f\n", service, status, value)
 	}
+
+	fmt.Fprintln(w, "# HELP bitriver_chat_events_total Chat events by type")
+	fmt.Fprintln(w, "# TYPE bitriver_chat_events_total counter")
+	for _, event := range r.sortedChatEvents() {
+		count := r.chatEvents[event]
+		fmt.Fprintf(w, "bitriver_chat_events_total{event=\"%s\"} %d\n", event, count)
+	}
+
+	fmt.Fprintln(w, "# HELP bitriver_monetization_events_total Monetization events by type")
+	fmt.Fprintln(w, "# TYPE bitriver_monetization_events_total counter")
+	for _, event := range r.sortedMonetizationEvents() {
+		count := r.monetizationCount[event]
+		fmt.Fprintf(w, "bitriver_monetization_events_total{event=\"%s\"} %d\n", event, count)
+	}
+
+	fmt.Fprintln(w, "# HELP bitriver_monetization_amount_sum Total monetization amount by event type")
+	fmt.Fprintln(w, "# TYPE bitriver_monetization_amount_sum counter")
+	for _, event := range r.sortedMonetizationEvents() {
+		total := r.monetizationTotal[event]
+		fmt.Fprintf(w, "bitriver_monetization_amount_sum{event=\"%s\"} %f\n", event, total)
+	}
 }
 
 func (r *Recorder) sortedRequestLabels() []requestLabel {
@@ -193,6 +243,24 @@ func (r *Recorder) sortedIngestServices() []string {
 	}
 	sort.Strings(services)
 	return services
+}
+
+func (r *Recorder) sortedChatEvents() []string {
+	events := make([]string, 0, len(r.chatEvents))
+	for event := range r.chatEvents {
+		events = append(events, event)
+	}
+	sort.Strings(events)
+	return events
+}
+
+func (r *Recorder) sortedMonetizationEvents() []string {
+	events := make([]string, 0, len(r.monetizationCount))
+	for event := range r.monetizationCount {
+		events = append(events, event)
+	}
+	sort.Strings(events)
+	return events
 }
 
 func normalizePath(path string) string {

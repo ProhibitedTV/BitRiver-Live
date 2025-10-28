@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/models"
+	"bitriver-live/internal/observability/metrics"
 )
 
 // Store exposes the read-only operations the gateway requires from the backing
@@ -119,6 +120,7 @@ func (g *Gateway) CreateMessage(ctx context.Context, author models.User, channel
 	event := Event{Type: EventTypeMessage, Message: &message, OccurredAt: time.Now().UTC()}
 	g.broadcast(event)
 	g.publish(ctx, event)
+	metrics.Default().ObserveChatEvent("message")
 	return message, nil
 }
 
@@ -138,7 +140,51 @@ func (g *Gateway) ApplyModeration(ctx context.Context, actor models.User, event 
 	g.applyModeration(event)
 	g.broadcast(evt)
 	g.publish(ctx, evt)
+	metrics.Default().ObserveChatEvent("moderation:" + string(event.Action))
 	return nil
+}
+
+// SubmitReport emits a viewer report into the chat stream and persistence layer.
+func (g *Gateway) SubmitReport(ctx context.Context, reporter models.User, channelID, targetID, reason, messageID, evidenceURL string) (ReportEvent, error) {
+	if err := g.ensureChannelAccessible(channelID, reporter.ID); err != nil {
+		return ReportEvent{}, err
+	}
+	if strings.TrimSpace(targetID) == "" {
+		return ReportEvent{}, fmt.Errorf("target is required")
+	}
+	if g.store != nil {
+		if _, ok := g.store.GetChannel(channelID); !ok {
+			return ReportEvent{}, fmt.Errorf("channel %s not found", channelID)
+		}
+		if _, ok := g.store.GetUser(targetID); !ok {
+			return ReportEvent{}, fmt.Errorf("user %s not found", targetID)
+		}
+	}
+	trimmedReason := strings.TrimSpace(reason)
+	if trimmedReason == "" {
+		return ReportEvent{}, fmt.Errorf("reason is required")
+	}
+	id, err := generateID()
+	if err != nil {
+		return ReportEvent{}, err
+	}
+	now := time.Now().UTC()
+	report := ReportEvent{
+		ID:          id,
+		ChannelID:   channelID,
+		ReporterID:  reporter.ID,
+		TargetID:    targetID,
+		Reason:      trimmedReason,
+		MessageID:   strings.TrimSpace(messageID),
+		EvidenceURL: strings.TrimSpace(evidenceURL),
+		Status:      "open",
+		CreatedAt:   now,
+	}
+	evt := Event{Type: EventTypeReport, Report: &report, OccurredAt: now}
+	g.broadcast(evt)
+	g.publish(ctx, evt)
+	metrics.Default().ObserveChatEvent("report")
+	return report, nil
 }
 
 func (g *Gateway) publish(ctx context.Context, event Event) {
@@ -213,6 +259,8 @@ func (g *Gateway) broadcast(event Event) {
 		channelID = event.Message.ChannelID
 	} else if event.Moderation != nil {
 		channelID = event.Moderation.ChannelID
+	} else if event.Report != nil {
+		channelID = event.Report.ChannelID
 	}
 	if channelID == "" {
 		return
@@ -331,6 +379,8 @@ type inboundMessage struct {
 	TargetID   string `json:"targetId"`
 	DurationMs int    `json:"durationMs"`
 	Reason     string `json:"reason"`
+	MessageID  string `json:"messageId"`
+	Evidence   string `json:"evidenceUrl"`
 }
 
 type outboundMessage struct {
@@ -384,6 +434,8 @@ func (c *client) readLoop(ctx context.Context) {
 			c.handleModeration(msg, ModerationActionBan)
 		case "unban":
 			c.handleModeration(msg, ModerationActionUnban)
+		case "report":
+			c.handleReport(msg)
 		default:
 			c.sendError("unknown command")
 		}
@@ -470,6 +522,25 @@ func (c *client) handleModeration(msg inboundMessage, action ModerationAction) {
 		c.sendError(err.Error())
 		return
 	}
+}
+
+func (c *client) handleReport(msg inboundMessage) {
+	if msg.ChannelID == "" || msg.TargetID == "" {
+		c.sendError("channel and target required")
+		return
+	}
+	if _, joined := c.rooms[msg.ChannelID]; !joined {
+		c.sendError("join channel first")
+		return
+	}
+	report, err := c.gateway.SubmitReport(context.Background(), c.user, msg.ChannelID, msg.TargetID, msg.Reason, msg.MessageID, msg.Evidence)
+	if err != nil {
+		c.sendError(err.Error())
+		return
+	}
+	evt := Event{Type: EventTypeReport, Report: &report, OccurredAt: report.CreatedAt}
+	payload, _ := json.Marshal(outboundMessage{Type: "ack", Event: &evt})
+	c.send <- outboundMessage{Raw: payload}
 }
 
 func (c *client) sendError(message string) {

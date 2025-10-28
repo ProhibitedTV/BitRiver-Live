@@ -58,6 +58,19 @@ type Repository interface {
 	IsChatBanned(channelID, userID string) bool
 	ChatTimeout(channelID, userID string) (time.Time, bool)
 	ApplyChatEvent(evt chat.Event) error
+
+	ListChatRestrictions(channelID string) []models.ChatRestriction
+	CreateChatReport(channelID, reporterID, targetID, reason, messageID, evidenceURL string) (models.ChatReport, error)
+	ListChatReports(channelID string, includeResolved bool) ([]models.ChatReport, error)
+	ResolveChatReport(reportID, resolverID, resolution string) (models.ChatReport, error)
+
+	CreateTip(params CreateTipParams) (models.Tip, error)
+	ListTips(channelID string, limit int) ([]models.Tip, error)
+
+	CreateSubscription(params CreateSubscriptionParams) (models.Subscription, error)
+	ListSubscriptions(channelID string, includeInactive bool) ([]models.Subscription, error)
+	GetSubscription(id string) (models.Subscription, bool)
+	CancelSubscription(id, cancelledBy, reason string) (models.Subscription, error)
 }
 
 var _ Repository = (*Storage)(nil)

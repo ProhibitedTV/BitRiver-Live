@@ -66,66 +66,79 @@ func TestChatRestrictionsReflectModeration(t *testing.T) {
 	}
 
 	expiry := time.Now().Add(time.Minute)
-	events := []chat.Event{
-		{
-			Type: chat.EventTypeModeration,
-			Moderation: &chat.ModerationEvent{
-				Action:    chat.ModerationActionBan,
-				ChannelID: channel.ID,
-				ActorID:   owner.ID,
-				TargetID:  target.ID,
-			},
-			OccurredAt: time.Now().UTC(),
-		},
-		{
-			Type: chat.EventTypeModeration,
-			Moderation: &chat.ModerationEvent{
-				Action:    chat.ModerationActionTimeout,
-				ChannelID: channel.ID,
-				ActorID:   owner.ID,
-				TargetID:  target.ID,
-				ExpiresAt: &expiry,
-			},
-			OccurredAt: time.Now().UTC(),
-		},
-	}
+        events := []chat.Event{
+                {
+                        Type: chat.EventTypeModeration,
+                        Moderation: &chat.ModerationEvent{
+                                Action:    chat.ModerationActionBan,
+                                ChannelID: channel.ID,
+                                ActorID:   owner.ID,
+                                TargetID:  target.ID,
+                                Reason:    "spam",
+                        },
+                        OccurredAt: time.Now().UTC(),
+                },
+                {
+                        Type: chat.EventTypeModeration,
+                        Moderation: &chat.ModerationEvent{
+                                Action:    chat.ModerationActionTimeout,
+                                ChannelID: channel.ID,
+                                ActorID:   owner.ID,
+                                TargetID:  target.ID,
+                                ExpiresAt: &expiry,
+                                Reason:    "caps",
+                        },
+                        OccurredAt: time.Now().UTC(),
+                },
+        }
 	for _, evt := range events {
 		if err := store.ApplyChatEvent(evt); err != nil {
 			t.Fatalf("ApplyChatEvent(%s): %v", evt.Type, err)
 		}
 	}
 
-	snapshot := store.ChatRestrictions()
-	if _, banned := snapshot.Bans[channel.ID][target.ID]; !banned {
-		t.Fatalf("expected target to be banned")
-	}
-	timeoutExpiry, ok := snapshot.Timeouts[channel.ID][target.ID]
-	if !ok || timeoutExpiry.Before(expiry.Add(-time.Second)) {
-		t.Fatalf("expected timeout to be recorded")
-	}
+        snapshot := store.ChatRestrictions()
+        if _, banned := snapshot.Bans[channel.ID][target.ID]; !banned {
+                t.Fatalf("expected target to be banned")
+        }
+        if reason := snapshot.BanReasons[channel.ID][target.ID]; reason != "spam" {
+                t.Fatalf("expected ban reason to persist, got %q", reason)
+        }
+        timeoutExpiry, ok := snapshot.Timeouts[channel.ID][target.ID]
+        if !ok || timeoutExpiry.Before(expiry.Add(-time.Second)) {
+                t.Fatalf("expected timeout to be recorded")
+        }
+        if reason := snapshot.TimeoutReasons[channel.ID][target.ID]; reason != "caps" {
+                t.Fatalf("expected timeout reason to persist, got %q", reason)
+        }
+        if issued := snapshot.TimeoutIssuedAt[channel.ID][target.ID]; issued.IsZero() {
+                t.Fatalf("expected timeout issued timestamp to be set")
+        }
 
 	clearEvents := []chat.Event{
-		{
-			Type: chat.EventTypeModeration,
-			Moderation: &chat.ModerationEvent{
-				Action:    chat.ModerationActionRemoveTimeout,
-				ChannelID: channel.ID,
-				ActorID:   owner.ID,
-				TargetID:  target.ID,
-			},
-			OccurredAt: time.Now().UTC(),
-		},
-		{
-			Type: chat.EventTypeModeration,
-			Moderation: &chat.ModerationEvent{
-				Action:    chat.ModerationActionUnban,
-				ChannelID: channel.ID,
-				ActorID:   owner.ID,
-				TargetID:  target.ID,
-			},
-			OccurredAt: time.Now().UTC(),
-		},
-	}
+                {
+                        Type: chat.EventTypeModeration,
+                        Moderation: &chat.ModerationEvent{
+                                Action:    chat.ModerationActionRemoveTimeout,
+                                ChannelID: channel.ID,
+                                ActorID:   owner.ID,
+                                TargetID:  target.ID,
+                                Reason:    "resolved",
+                        },
+                        OccurredAt: time.Now().UTC(),
+                },
+                {
+                        Type: chat.EventTypeModeration,
+                        Moderation: &chat.ModerationEvent{
+                                Action:    chat.ModerationActionUnban,
+                                ChannelID: channel.ID,
+                                ActorID:   owner.ID,
+                                TargetID:  target.ID,
+                                Reason:    "appeal",
+                        },
+                        OccurredAt: time.Now().UTC(),
+                },
+        }
 	for _, evt := range clearEvents {
 		if err := store.ApplyChatEvent(evt); err != nil {
 			t.Fatalf("ApplyChatEvent(%s): %v", evt.Type, err)

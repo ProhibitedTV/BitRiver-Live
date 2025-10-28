@@ -52,7 +52,7 @@ go run ./cmd/server \
 
 The same values can be supplied through environment variables (`BITRIVER_LIVE_TLS_CERT` and `BITRIVER_LIVE_TLS_KEY`). Pair this with a lightweight cron job or Certbot renewal hook to keep certificates fresh, or terminate TLS at a reverse proxy if you prefer automatic ACME handling upstream.
 
-Prefer containers? Check out `deploy/docker-compose.yml` for a pre-wired stack that mounts persistent storage, exposes metrics, and optionally links Redis for shared rate-limiting state.
+Prefer containers? Check out `deploy/docker-compose.yml` for a pre-wired stack that mounts persistent storage, exposes metrics, and optionally links Redis for shared rate-limiting state. You can also point chat at a Redis Streams transport by setting `--chat-queue-driver redis` (or `BITRIVER_LIVE_CHAT_QUEUE_DRIVER=redis`) along with `--chat-queue-redis-addr`/`BITRIVER_LIVE_CHAT_REDIS_ADDR`; the queue constructor will automatically create the configured stream and consumer group when it connects.
 
 ### Postgres backend
 
