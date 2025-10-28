@@ -10,5 +10,7 @@ var ErrPostgresUnavailable = fmt.Errorf("postgres repository unavailable")
 // provided. The signature exists so dependency injection can be configured
 // ahead of time.
 func NewPostgresRepository(dsn string, opts ...Option) (Repository, error) {
+	cfg := newPostgresConfig(dsn, opts...)
+	_ = cfg
 	return nil, ErrPostgresUnavailable
 }

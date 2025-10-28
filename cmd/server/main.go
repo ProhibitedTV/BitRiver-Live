@@ -29,6 +29,13 @@ func main() {
 	dataPath := flag.String("data", "", "path to JSON datastore")
 	storageDriver := flag.String("storage-driver", "", "datastore driver (json or postgres)")
 	postgresDSN := flag.String("postgres-dsn", "", "Postgres connection string")
+	postgresMaxConns := flag.Int("postgres-max-conns", 0, "maximum connections in the Postgres pool")
+	postgresMinConns := flag.Int("postgres-min-conns", 0, "minimum idle connections maintained by the Postgres pool")
+	postgresMaxConnLifetime := flag.Duration("postgres-max-conn-lifetime", 0, "maximum lifetime for a pooled Postgres connection")
+	postgresMaxConnIdle := flag.Duration("postgres-max-conn-idle", 0, "maximum idle time for a pooled Postgres connection")
+	postgresHealthInterval := flag.Duration("postgres-health-interval", 0, "interval between Postgres health checks")
+	postgresAcquireTimeout := flag.Duration("postgres-acquire-timeout", 0, "timeout when acquiring a Postgres connection from the pool")
+	postgresAppName := flag.String("postgres-app-name", "", "application_name reported to Postgres")
 	mode := flag.String("mode", "", "server runtime mode (development or production)")
 	tlsCert := flag.String("tls-cert", "", "path to TLS certificate file")
 	tlsKey := flag.String("tls-key", "", "path to TLS private key file")
@@ -138,7 +145,27 @@ func main() {
 			logger.Error("postgres storage selected without DSN")
 			os.Exit(1)
 		}
-		store, err = storage.NewPostgresRepository(dsn, options...)
+		pgOptions := append([]storage.Option(nil), options...)
+		maxConns := resolveInt(*postgresMaxConns, "BITRIVER_LIVE_POSTGRES_MAX_CONNS")
+		minConns := resolveInt(*postgresMinConns, "BITRIVER_LIVE_POSTGRES_MIN_CONNS")
+		if maxConns > 0 || minConns > 0 {
+			pgOptions = append(pgOptions, storage.WithPostgresPoolLimits(int32(maxConns), int32(minConns)))
+		}
+		maxLifetime := resolveDuration(*postgresMaxConnLifetime, "BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME", 0)
+		maxIdle := resolveDuration(*postgresMaxConnIdle, "BITRIVER_LIVE_POSTGRES_MAX_CONN_IDLE", 0)
+		healthInterval := resolveDuration(*postgresHealthInterval, "BITRIVER_LIVE_POSTGRES_HEALTH_INTERVAL", 0)
+		if maxLifetime > 0 || maxIdle > 0 || healthInterval > 0 {
+			pgOptions = append(pgOptions, storage.WithPostgresPoolDurations(maxLifetime, maxIdle, healthInterval))
+		}
+		acquireTimeout := resolveDuration(*postgresAcquireTimeout, "BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT", 0)
+		if acquireTimeout > 0 {
+			pgOptions = append(pgOptions, storage.WithPostgresAcquireTimeout(acquireTimeout))
+		}
+		appName := firstNonEmpty(*postgresAppName, os.Getenv("BITRIVER_LIVE_POSTGRES_APP_NAME"))
+		if appName != "" {
+			pgOptions = append(pgOptions, storage.WithPostgresApplicationName(appName))
+		}
+		store, err = storage.NewPostgresRepository(dsn, pgOptions...)
 	default:
 		logger.Error("unsupported storage driver", "driver", driver)
 		os.Exit(1)
@@ -217,6 +244,16 @@ func main() {
 
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Warn("graceful shutdown failed", "error", err)
+	}
+
+	if closer, ok := store.(interface{ Close(context.Context) error }); ok {
+		if err := closer.Close(ctx); err != nil {
+			logger.Warn("failed to close datastore", "error", err)
+		}
+	} else if closer, ok := store.(interface{ Close() error }); ok {
+		if err := closer.Close(); err != nil {
+			logger.Warn("failed to close datastore", "error", err)
+		}
 	}
 
 	logger.Info("server stopped")
