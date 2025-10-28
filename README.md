@@ -52,7 +52,19 @@ go run ./cmd/server \
 
 The same values can be supplied through environment variables (`BITRIVER_LIVE_TLS_CERT` and `BITRIVER_LIVE_TLS_KEY`). Pair this with a lightweight cron job or Certbot renewal hook to keep certificates fresh, or terminate TLS at a reverse proxy if you prefer automatic ACME handling upstream.
 
-Prefer containers? Check out `deploy/docker-compose.yml` for a pre-wired stack that mounts persistent storage, exposes metrics, and optionally links Redis for shared rate-limiting state. You can also point chat at a Redis Streams transport by setting `--chat-queue-driver redis` (or `BITRIVER_LIVE_CHAT_QUEUE_DRIVER=redis`) along with `--chat-queue-redis-addr`/`BITRIVER_LIVE_CHAT_REDIS_ADDR`; the queue constructor will automatically create the configured stream and consumer group when it connects.
+Prefer containers? Check out `deploy/docker-compose.yml` for a pre-wired stack that mounts persistent storage, exposes metrics, and optionally links Redis for shared rate-limiting state. Chat queue behaviour is configured entirely through the `--chat-queue-*` flags defined in `cmd/server/main.go`; set `--chat-queue-driver redis` to enable Redis Streams support and provide the related connection details via the accompanying flags. The queue constructor will automatically create the configured stream and consumer group when it connects.
+
+| Flag | Purpose |
+| --- | --- |
+| `--chat-queue-driver` | Selects the chat queue implementation (`memory` for the in-process queue, `redis` for Redis Streams). |
+| `--chat-queue-redis-addr` / `--chat-queue-redis-addrs` | Redis endpoint(s) used by the chat queue. |
+| `--chat-queue-redis-username` / `--chat-queue-redis-password` | Credentials for authenticating to Redis. |
+| `--chat-queue-redis-stream` / `--chat-queue-redis-group` | Names the Redis Stream and consumer group used for chat events. |
+| `--chat-queue-redis-sentinel-master` | Sentinel master name when connecting through Redis Sentinel. |
+| `--chat-queue-redis-pool-size` | Maximum number of Redis connections maintained for chat operations. |
+| `--chat-queue-redis-tls-ca` / `--chat-queue-redis-tls-cert` / `--chat-queue-redis-tls-key` | TLS certificate material for securing Redis connections. |
+| `--chat-queue-redis-tls-server-name` | Overrides the expected Redis TLS server name. |
+| `--chat-queue-redis-tls-skip-verify` | Skips Redis TLS certificate verification (use with caution). |
 
 ### Postgres backend
 
