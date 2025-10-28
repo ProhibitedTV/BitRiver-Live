@@ -55,7 +55,7 @@ func WriteError(w http.ResponseWriter, status int, err error) {
 	writeError(w, status, err)
 }
 
-func setSessionCookie(w http.ResponseWriter, token string, expires time.Time) {
+func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time) {
 	if token == "" {
 		return
 	}
@@ -70,12 +70,12 @@ func setSessionCookie(w http.ResponseWriter, token string, expires time.Time) {
 		Expires:  expires.UTC(),
 		MaxAge:   maxAge,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   isSecureRequest(r),
 		SameSite: http.SameSiteStrictMode,
 	})
 }
 
-func clearSessionCookie(w http.ResponseWriter) {
+func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "bitriver_session",
 		Value:    "",
@@ -83,9 +83,29 @@ func clearSessionCookie(w http.ResponseWriter) {
 		Expires:  time.Unix(0, 0).UTC(),
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   isSecureRequest(r),
 		SameSite: http.SameSiteStrictMode,
 	})
+}
+
+func isSecureRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if r.TLS != nil {
+		return true
+	}
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		for _, p := range strings.Split(proto, ",") {
+			if strings.EqualFold(strings.TrimSpace(p), "https") {
+				return true
+			}
+		}
+	}
+	if r.URL != nil && strings.EqualFold(r.URL.Scheme, "https") {
+		return true
+	}
+	return false
 }
 
 func decodeJSON(r *http.Request, dest interface{}) error {
@@ -160,7 +180,7 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setSessionCookie(w, token, expiresAt)
+	setSessionCookie(w, r, token, expiresAt)
 	writeJSON(w, http.StatusCreated, newAuthResponse(user, expiresAt))
 }
 
@@ -189,7 +209,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setSessionCookie(w, token, expiresAt)
+	setSessionCookie(w, r, token, expiresAt)
 	writeJSON(w, http.StatusOK, newAuthResponse(user, expiresAt))
 }
 
@@ -219,7 +239,7 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.sessionManager().Revoke(token)
-		clearSessionCookie(w)
+		clearSessionCookie(w, r)
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.Header().Set("Allow", "GET, DELETE")
