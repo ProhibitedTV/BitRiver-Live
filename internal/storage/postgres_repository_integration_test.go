@@ -107,6 +107,10 @@ func TestPostgresSubscriptionsLifecycle(t *testing.T) {
 	storage.RunRepositorySubscriptionsLifecycle(t, postgresRepositoryFactory)
 }
 
+func TestPostgresStreamKeyRotation(t *testing.T) {
+	storage.RunRepositoryStreamKeyRotation(t, postgresRepositoryFactory)
+}
+
 func TestPostgresIngestHealthSnapshots(t *testing.T) {
 	storage.RunRepositoryIngestHealthSnapshots(t, postgresRepositoryFactory)
 }

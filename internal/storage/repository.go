@@ -28,6 +28,7 @@ type Repository interface {
 
 	CreateChannel(ownerID, title, category string, tags []string) (models.Channel, error)
 	UpdateChannel(id string, update ChannelUpdate) (models.Channel, error)
+	RotateChannelStreamKey(id string) (models.Channel, error)
 	DeleteChannel(id string) error
 	GetChannel(id string) (models.Channel, bool)
 	ListChannels(ownerID string) []models.Channel

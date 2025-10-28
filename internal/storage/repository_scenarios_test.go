@@ -130,6 +130,53 @@ func RunRepositoryUserLifecycle(t *testing.T, factory RepositoryFactory) {
 	}
 }
 
+// RunRepositoryStreamKeyRotation ensures repositories generate and persist fresh stream keys.
+func RunRepositoryStreamKeyRotation(t *testing.T, factory RepositoryFactory) {
+	repo := runRepository(t, factory)
+
+	owner, err := repo.CreateUser(CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	requireAvailable(t, err, "create owner")
+
+	channel, err := repo.CreateChannel(owner.ID, "Rotate", "gaming", []string{"tech"})
+	requireAvailable(t, err, "create channel")
+	if channel.StreamKey == "" {
+		t.Fatal("expected initial stream key")
+	}
+
+	originalKey := channel.StreamKey
+	rotated, err := repo.RotateChannelStreamKey(channel.ID)
+	requireAvailable(t, err, "rotate stream key")
+	if rotated.StreamKey == "" {
+		t.Fatal("expected rotated stream key")
+	}
+	if rotated.StreamKey == originalKey {
+		t.Fatalf("expected rotated stream key to differ from original %q", originalKey)
+	}
+
+	fetched, ok := repo.GetChannel(channel.ID)
+	if !ok {
+		t.Fatalf("expected channel %s to remain after rotation", channel.ID)
+	}
+	if fetched.StreamKey != rotated.StreamKey {
+		t.Fatalf("expected fetched stream key %q, got %q", rotated.StreamKey, fetched.StreamKey)
+	}
+
+	channels := repo.ListChannels(owner.ID)
+	found := false
+	for _, item := range channels {
+		if item.ID != channel.ID {
+			continue
+		}
+		found = true
+		if item.StreamKey != rotated.StreamKey {
+			t.Fatalf("expected listed stream key %q, got %q", rotated.StreamKey, item.StreamKey)
+		}
+	}
+	if !found {
+		t.Fatalf("expected rotated channel %s to appear in list", channel.ID)
+	}
+}
+
 // RunRepositoryChatRestrictionsLifecycle replays the moderation scenario
 // exercised in chat_events_test.go against the provided repository.
 func RunRepositoryChatRestrictionsLifecycle(t *testing.T, factory RepositoryFactory) {

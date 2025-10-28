@@ -577,6 +577,92 @@ func TestCreateChannelAndStartStopStream(t *testing.T) {
 	}
 }
 
+func TestRotateChannelStreamKey(t *testing.T) {
+	store := newTestStore(t)
+
+	owner, err := store.CreateUser(CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+
+	channel, err := store.CreateChannel(owner.ID, "Control", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	originalKey := channel.StreamKey
+	if originalKey == "" {
+		t.Fatal("expected initial stream key")
+	}
+
+	persisted := false
+	store.persistOverride = func(data dataset) error {
+		persisted = true
+		updated, ok := data.Channels[channel.ID]
+		if !ok {
+			t.Fatalf("channel %s missing from persisted dataset", channel.ID)
+		}
+		if updated.StreamKey == originalKey {
+			t.Fatalf("expected persisted stream key to differ from original")
+		}
+		return nil
+	}
+
+	rotated, err := store.RotateChannelStreamKey(channel.ID)
+	store.persistOverride = nil
+	if err != nil {
+		t.Fatalf("RotateChannelStreamKey returned error: %v", err)
+	}
+	if !persisted {
+		t.Fatal("expected rotation to persist dataset")
+	}
+	if rotated.StreamKey == "" {
+		t.Fatal("expected rotated stream key to be populated")
+	}
+	if rotated.StreamKey == originalKey {
+		t.Fatal("expected rotated stream key to differ from original")
+	}
+
+	fetched, ok := store.GetChannel(channel.ID)
+	if !ok {
+		t.Fatalf("channel %s not found after rotation", channel.ID)
+	}
+	if fetched.StreamKey != rotated.StreamKey {
+		t.Fatalf("expected fetched stream key %s, got %s", rotated.StreamKey, fetched.StreamKey)
+	}
+}
+
+func TestRotateChannelStreamKeyPersistFailure(t *testing.T) {
+	store := newTestStore(t)
+
+	owner, err := store.CreateUser(CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+
+	channel, err := store.CreateChannel(owner.ID, "Control", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	store.persistOverride = func(dataset) error {
+		return errors.New("persist failed")
+	}
+
+	if _, err := store.RotateChannelStreamKey(channel.ID); err == nil {
+		t.Fatal("expected rotation error when persist fails")
+	}
+
+	store.persistOverride = nil
+
+	fetched, ok := store.GetChannel(channel.ID)
+	if !ok {
+		t.Fatalf("channel %s not found after failed rotation", channel.ID)
+	}
+	if fetched.StreamKey != channel.StreamKey {
+		t.Fatalf("expected stream key %s to remain after failure, got %s", channel.StreamKey, fetched.StreamKey)
+	}
+}
+
 func TestStopStreamUploadsRecordingArtifacts(t *testing.T) {
 	controller := &fakeIngestController{bootResponses: []bootResponse{{result: ingest.BootResult{
 		PlaybackURL: "https://playback.example.com/stream.m3u8",
@@ -1570,6 +1656,10 @@ func TestCreateTipAndList(t *testing.T) {
 
 func TestCreateSubscriptionAndCancel(t *testing.T) {
 	RunRepositorySubscriptionsLifecycle(t, jsonRepositoryFactory)
+}
+
+func TestRepositoryStreamKeyRotation(t *testing.T) {
+	RunRepositoryStreamKeyRotation(t, jsonRepositoryFactory)
 }
 
 func TestCloneDatasetCopiesModerationMetadata(t *testing.T) {

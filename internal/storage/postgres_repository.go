@@ -459,6 +459,10 @@ func (r *postgresRepository) UpdateChannel(id string, update ChannelUpdate) (mod
 	return models.Channel{}, ErrPostgresUnavailable
 }
 
+func (r *postgresRepository) RotateChannelStreamKey(id string) (models.Channel, error) {
+	return models.Channel{}, ErrPostgresUnavailable
+}
+
 func (r *postgresRepository) DeleteChannel(id string) error {
 	return ErrPostgresUnavailable
 }
