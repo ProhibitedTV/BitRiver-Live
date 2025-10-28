@@ -242,6 +242,172 @@ func TestSignupAndLoginFlow(t *testing.T) {
 	}
 }
 
+func TestRecordingEndpointsEndToEnd(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	creator, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Creator",
+		Email:       "creator@example.com",
+		Roles:       []string{"creator"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser creator: %v", err)
+	}
+	channel, err := store.CreateChannel(creator.ID, "Playthrough", "gaming", []string{"rpg"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	session, err := store.StartStream(channel.ID, []string{"1080p"})
+	if err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+	if _, err := store.StopStream(channel.ID, 20); err != nil {
+		t.Fatalf("StopStream: %v", err)
+	}
+
+	// Anonymous listing should hide unpublished recordings.
+	req := httptest.NewRequest(http.MethodGet, "/api/recordings?channelId="+channel.ID, nil)
+	rec := httptest.NewRecorder()
+	handler.Recordings(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	var anonymousList []recordingResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &anonymousList); err != nil {
+		t.Fatalf("decode anonymous list: %v", err)
+	}
+	if len(anonymousList) != 0 {
+		t.Fatalf("expected unpublished recordings to be hidden, got %d", len(anonymousList))
+	}
+
+	// Owner should see the recording.
+	req = httptest.NewRequest(http.MethodGet, "/api/recordings?channelId="+channel.ID, nil)
+	req = withUser(req, creator)
+	rec = httptest.NewRecorder()
+	handler.Recordings(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 for owner, got %d", rec.Code)
+	}
+	var ownerList []recordingResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &ownerList); err != nil {
+		t.Fatalf("decode owner list: %v", err)
+	}
+	if len(ownerList) != 1 {
+		t.Fatalf("expected 1 recording, got %d", len(ownerList))
+	}
+	recordingID := ownerList[0].ID
+
+	// Publish the recording.
+	req = httptest.NewRequest(http.MethodPost, "/api/recordings/"+recordingID+"/publish", nil)
+	req = withUser(req, creator)
+	rec = httptest.NewRecorder()
+	handler.RecordingByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected publish status 200, got %d", rec.Code)
+	}
+	var published recordingResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &published); err != nil {
+		t.Fatalf("decode publish response: %v", err)
+	}
+	if published.PublishedAt == nil {
+		t.Fatalf("expected publish timestamp")
+	}
+
+	// Anonymous listing should now include the recording.
+	req = httptest.NewRequest(http.MethodGet, "/api/recordings?channelId="+channel.ID, nil)
+	rec = httptest.NewRecorder()
+	handler.Recordings(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 after publish, got %d", rec.Code)
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &anonymousList); err != nil {
+		t.Fatalf("decode anonymous list after publish: %v", err)
+	}
+	if len(anonymousList) != 1 {
+		t.Fatalf("expected 1 public recording, got %d", len(anonymousList))
+	}
+
+	// Create a clip export.
+	clipPayload := clipExportRequest{Title: "Intro", StartSeconds: 0, EndSeconds: 5}
+	body, _ := json.Marshal(clipPayload)
+	req = httptest.NewRequest(http.MethodPost, "/api/recordings/"+recordingID+"/clips", bytes.NewReader(body))
+	req = withUser(req, creator)
+	rec = httptest.NewRecorder()
+	handler.RecordingByID(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected clip create status 201, got %d", rec.Code)
+	}
+	var clip clipExportResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &clip); err != nil {
+		t.Fatalf("decode clip response: %v", err)
+	}
+	if clip.RecordingID != recordingID {
+		t.Fatalf("expected clip recording id %s, got %s", recordingID, clip.RecordingID)
+	}
+
+	// Fetch recording details anonymously (should include clip summary).
+	req = httptest.NewRequest(http.MethodGet, "/api/recordings/"+recordingID, nil)
+	rec = httptest.NewRecorder()
+	handler.RecordingByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected get status 200, got %d", rec.Code)
+	}
+	var fetched recordingResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &fetched); err != nil {
+		t.Fatalf("decode recording: %v", err)
+	}
+	if len(fetched.Clips) != 1 || fetched.Clips[0].ID != clip.ID {
+		t.Fatalf("expected clip summary in recording response")
+	}
+
+	// Anonymous clip listing should work for published recording.
+	req = httptest.NewRequest(http.MethodGet, "/api/recordings/"+recordingID+"/clips", nil)
+	rec = httptest.NewRecorder()
+	handler.RecordingByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected clip list status 200, got %d", rec.Code)
+	}
+	var clipList []clipExportResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &clipList); err != nil {
+		t.Fatalf("decode clip list: %v", err)
+	}
+	if len(clipList) != 1 {
+		t.Fatalf("expected 1 clip, got %d", len(clipList))
+	}
+
+	// Owner deletes the recording.
+	req = httptest.NewRequest(http.MethodDelete, "/api/recordings/"+recordingID, nil)
+	req = withUser(req, creator)
+	rec = httptest.NewRecorder()
+	handler.RecordingByID(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected delete status 204, got %d", rec.Code)
+	}
+
+	// Ensure recording is gone from API.
+	req = httptest.NewRequest(http.MethodGet, "/api/recordings?channelId="+channel.ID, nil)
+	rec = httptest.NewRecorder()
+	handler.Recordings(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 after delete, got %d", rec.Code)
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &anonymousList); err != nil {
+		t.Fatalf("decode final list: %v", err)
+	}
+	if len(anonymousList) != 0 {
+		t.Fatalf("expected no recordings after delete")
+	}
+
+	// Ensure session still intact
+	sessions, err := store.ListStreamSessions(channel.ID)
+	if err != nil {
+		t.Fatalf("ListStreamSessions: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].ID != session.ID {
+		t.Fatalf("expected original session to remain")
+	}
+}
+
 func TestHealthReportsIngestStatus(t *testing.T) {
 	handler, _ := newTestHandler(t)
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)

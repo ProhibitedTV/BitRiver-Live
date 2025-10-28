@@ -45,6 +45,60 @@ type RenditionManifest struct {
 	Bitrate     int    `json:"bitrate,omitempty"`
 }
 
+type Recording struct {
+	ID              string               `json:"id"`
+	ChannelID       string               `json:"channelId"`
+	SessionID       string               `json:"sessionId"`
+	Title           string               `json:"title"`
+	DurationSeconds int                  `json:"durationSeconds"`
+	PlaybackBaseURL string               `json:"playbackBaseUrl,omitempty"`
+	Renditions      []RecordingRendition `json:"renditions,omitempty"`
+	Thumbnails      []RecordingThumbnail `json:"thumbnails,omitempty"`
+	Metadata        map[string]string    `json:"metadata,omitempty"`
+	PublishedAt     *time.Time           `json:"publishedAt,omitempty"`
+	CreatedAt       time.Time            `json:"createdAt"`
+	RetainUntil     *time.Time           `json:"retainUntil,omitempty"`
+	Clips           []ClipExportSummary  `json:"clips,omitempty"`
+}
+
+type RecordingRendition struct {
+	Name        string `json:"name"`
+	ManifestURL string `json:"manifestUrl"`
+	Bitrate     int    `json:"bitrate,omitempty"`
+}
+
+type RecordingThumbnail struct {
+	ID          string    `json:"id"`
+	RecordingID string    `json:"recordingId"`
+	URL         string    `json:"url"`
+	Width       int       `json:"width,omitempty"`
+	Height      int       `json:"height,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+type ClipExport struct {
+	ID            string     `json:"id"`
+	RecordingID   string     `json:"recordingId"`
+	ChannelID     string     `json:"channelId"`
+	SessionID     string     `json:"sessionId"`
+	Title         string     `json:"title"`
+	StartSeconds  int        `json:"startSeconds"`
+	EndSeconds    int        `json:"endSeconds"`
+	Status        string     `json:"status"`
+	PlaybackURL   string     `json:"playbackUrl,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	CompletedAt   *time.Time `json:"completedAt,omitempty"`
+	StorageObject string     `json:"storageObject,omitempty"`
+}
+
+type ClipExportSummary struct {
+	ID           string `json:"id"`
+	Title        string `json:"title"`
+	StartSeconds int    `json:"startSeconds"`
+	EndSeconds   int    `json:"endSeconds"`
+	Status       string `json:"status"`
+}
+
 type ChatMessage struct {
 	ID        string    `json:"id"`
 	ChannelID string    `json:"channelId"`

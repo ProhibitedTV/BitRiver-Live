@@ -64,6 +64,8 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	mux.HandleFunc("/api/profiles", handler.Profiles)
 	mux.HandleFunc("/api/profiles/", handler.ProfileByID)
 	mux.HandleFunc("/api/chat/ws", handler.ChatWebsocket)
+	mux.HandleFunc("/api/recordings", handler.Recordings)
+	mux.HandleFunc("/api/recordings/", handler.RecordingByID)
 
 	staticFS, err := web.Static()
 	if err != nil {
@@ -295,7 +297,7 @@ func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		optionalAuth := r.Method == http.MethodGet && (path == "/api/directory" || strings.HasPrefix(path, "/api/channels/"))
+		optionalAuth := r.Method == http.MethodGet && (path == "/api/directory" || strings.HasPrefix(path, "/api/channels/") || strings.HasPrefix(path, "/api/recordings"))
 		token := api.ExtractToken(r)
 		if token == "" {
 			if optionalAuth {

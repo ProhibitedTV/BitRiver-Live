@@ -476,6 +476,123 @@ func TestStopStreamInvokesShutdown(t *testing.T) {
 	}
 }
 
+func TestRecordingLifecycle(t *testing.T) {
+	store := newTestStore(t)
+	owner, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Owner",
+		Email:       "owner@example.com",
+		Roles:       []string{"creator"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Show", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	session, err := store.StartStream(channel.ID, []string{"1080p"})
+	if err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+	if _, err := store.StopStream(channel.ID, 42); err != nil {
+		t.Fatalf("StopStream: %v", err)
+	}
+
+	recordings, err := store.ListRecordings(channel.ID, true)
+	if err != nil {
+		t.Fatalf("ListRecordings: %v", err)
+	}
+	if len(recordings) != 1 {
+		t.Fatalf("expected 1 recording, got %d", len(recordings))
+	}
+	recording := recordings[0]
+	if recording.SessionID != session.ID {
+		t.Fatalf("expected recording to reference session %s", session.ID)
+	}
+	if recording.PublishedAt != nil {
+		t.Fatalf("expected recording to start unpublished")
+	}
+
+	published, err := store.PublishRecording(recording.ID)
+	if err != nil {
+		t.Fatalf("PublishRecording: %v", err)
+	}
+	if published.PublishedAt == nil {
+		t.Fatalf("expected publish to set timestamp")
+	}
+
+	clip, err := store.CreateClipExport(recording.ID, ClipExportParams{Title: "Highlight", StartSeconds: 0, EndSeconds: 5})
+	if err != nil {
+		t.Fatalf("CreateClipExport: %v", err)
+	}
+	if clip.RecordingID != recording.ID {
+		t.Fatalf("expected clip to reference recording")
+	}
+
+	clips, err := store.ListClipExports(recording.ID)
+	if err != nil {
+		t.Fatalf("ListClipExports: %v", err)
+	}
+	if len(clips) != 1 || clips[0].ID != clip.ID {
+		t.Fatalf("expected to list created clip")
+	}
+
+	fetched, ok := store.GetRecording(recording.ID)
+	if !ok {
+		t.Fatalf("GetRecording should succeed")
+	}
+	if len(fetched.Clips) != 1 || fetched.Clips[0].ID != clip.ID {
+		t.Fatalf("expected recording to include clip summary")
+	}
+
+	if err := store.DeleteRecording(recording.ID); err != nil {
+		t.Fatalf("DeleteRecording: %v", err)
+	}
+	recordings, err = store.ListRecordings(channel.ID, true)
+	if err != nil {
+		t.Fatalf("ListRecordings after delete: %v", err)
+	}
+	if len(recordings) != 0 {
+		t.Fatalf("expected no recordings after delete")
+	}
+}
+
+func TestRecordingRetentionPurgesExpired(t *testing.T) {
+	policy := RecordingRetentionPolicy{Published: time.Second, Unpublished: time.Second}
+	store := newTestStoreWithController(t, ingest.NoopController{}, WithRecordingRetention(policy))
+	owner, err := store.CreateUser(CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Speedrun", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	if _, err := store.StartStream(channel.ID, []string{"720p"}); err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+	if _, err := store.StopStream(channel.ID, 10); err != nil {
+		t.Fatalf("StopStream: %v", err)
+	}
+	store.mu.Lock()
+	for id, recording := range store.data.Recordings {
+		if recording.RetainUntil != nil {
+			past := time.Now().Add(-time.Minute)
+			recording.RetainUntil = &past
+			store.data.Recordings[id] = recording
+		}
+	}
+	store.mu.Unlock()
+
+	recordings, err := store.ListRecordings(channel.ID, true)
+	if err != nil {
+		t.Fatalf("ListRecordings: %v", err)
+	}
+	if len(recordings) != 0 {
+		t.Fatalf("expected retention to purge recordings, got %d", len(recordings))
+	}
+}
+
 func TestStorageIngestHealthSnapshots(t *testing.T) {
 	responses := [][]ingest.HealthStatus{
 		{{Component: "srs", Status: "ok"}},

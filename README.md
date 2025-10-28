@@ -24,6 +24,7 @@ When the server is running, visit [http://localhost:8080](http://localhost:8080)
 - Edit or retire accounts, rotate channel metadata, and keep stream keys handy with one-click copy actions
 - Start or stop live sessions, review rolling analytics, and export a JSON snapshot of the state
 - Seed chat conversations, moderate or remove messages across every channel in one view
+- Capture recorded broadcasts automatically when a stream ends, manage retention windows, and surface VOD manifests to viewers
 - Curate streamer profiles with featured channels, top friends, and crypto donation links through a guided form
 - Generate a turn-key installer script that provisions BitRiver Live as a systemd service on a home server, complete with optional log directories
 - Offer a self-service `/signup` experience so viewers can create password-protected accounts on their own
@@ -83,7 +84,30 @@ The server exposes a REST API under the `/api` prefix:
 | `/api/channels/{id}/sessions` | `GET` | Retrieve the session history for a channel |
 | `/api/channels/{id}/chat` | `POST`, `GET` | Persist chat messages and fetch recent history |
 | `/api/channels/{id}/chat/{messageId}` | `DELETE` | Remove a single chat message for moderation |
+| `/api/recordings?channelId={id}` | `GET` | List published recordings (creators can view drafts when authenticated) |
+| `/api/recordings/{id}` | `GET`, `DELETE` | Fetch a recording manifest or remove it from storage |
+| `/api/recordings/{id}/publish` | `POST` | Mark a recording as publicly accessible and extend its retention window |
+| `/api/recordings/{id}/clips` | `GET`, `POST` | List exported highlights or queue a new clip for processing |
 | `/api/profiles/{userId}` | `PUT`, `GET` | Configure streamer bios, top friends, and crypto-only donation links |
+
+### Recording retention and object storage
+
+Stopping a stream now generates a recording entry that captures the session metadata, playback manifests, and retention window. Creators can publish the VOD when it is ready, delete it entirely, or export smaller highlight clips via the REST API or the control centre. Configure how long recordings should be kept—both before and after publication—and where the underlying artefacts live using the flags and environment variables below:
+
+| Variable | Description |
+| --- | --- |
+| `BITRIVER_LIVE_OBJECT_ENDPOINT` | URL for the MinIO/S3-compatible endpoint that stores VOD manifests and thumbnails. |
+| `BITRIVER_LIVE_OBJECT_REGION` | Optional region hint for the object storage provider. |
+| `BITRIVER_LIVE_OBJECT_ACCESS_KEY` / `BITRIVER_LIVE_OBJECT_SECRET_KEY` | Credentials used when uploading manifests or thumbnails. |
+| `BITRIVER_LIVE_OBJECT_BUCKET` | Bucket where recordings, manifests, and thumbnails should be written. |
+| `BITRIVER_LIVE_OBJECT_PREFIX` | Prefix applied to each uploaded object (useful for multitenancy). |
+| `BITRIVER_LIVE_OBJECT_PUBLIC_ENDPOINT` | Base URL exposed to clients when referencing manifests or thumbnails. |
+| `BITRIVER_LIVE_OBJECT_USE_SSL` | Set to `true` when the object storage endpoint expects HTTPS. |
+| `BITRIVER_LIVE_OBJECT_LIFECYCLE_DAYS` | Optional lifecycle policy for the bucket; the API shares this with workers that prune stale artefacts. |
+| `BITRIVER_LIVE_RECORDING_RETENTION_PUBLISHED` | Duration (e.g. `720h`) that published VODs should be retained before being purged. Use `0` to keep them indefinitely. |
+| `BITRIVER_LIVE_RECORDING_RETENTION_UNPUBLISHED` | Duration that drafts stay on disk; `0` disables automatic removal before publication. |
+
+Flags with the same names (see `--object-endpoint`, `--object-bucket`, `--recording-retention-published`, etc.) override the environment variables when provided. The server keeps recordings in the JSON datastore until the retention window elapses and mirrors the policy into object storage lifecycle configuration.
 
 Example: create a user, launch a channel, and start a stream session.
 
