@@ -1200,10 +1200,10 @@ func TestFollowChannelLifecycle(t *testing.T) {
 }
 
 func TestListFollowedChannelIDsOrdersByRecency(t *testing.T) {
-        store := newTestStore(t)
+	store := newTestStore(t)
 
-        owner, err := store.CreateUser(CreateUserParams{DisplayName: "Creator", Email: "creator@example.com"})
-        if err != nil {
+	owner, err := store.CreateUser(CreateUserParams{DisplayName: "Creator", Email: "creator@example.com"})
+	if err != nil {
 		t.Fatalf("CreateUser owner: %v", err)
 	}
 	viewer, err := store.CreateUser(CreateUserParams{DisplayName: "Viewer", Email: "viewer@example.com"})
@@ -1229,176 +1229,238 @@ func TestListFollowedChannelIDsOrdersByRecency(t *testing.T) {
 
 	followed := store.ListFollowedChannelIDs(viewer.ID)
 	if len(followed) != 2 || followed[0] != second.ID || followed[1] != first.ID {
-                t.Fatalf("expected channels ordered by recency, got %v", followed)
-        }
+		t.Fatalf("expected channels ordered by recency, got %v", followed)
+	}
 }
 
 func TestChatReportsLifecycle(t *testing.T) {
-        store := newTestStore(t)
-        owner, err := store.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
-        if err != nil {
-                t.Fatalf("create owner: %v", err)
-        }
-        reporter, err := store.CreateUser(CreateUserParams{DisplayName: "reporter", Email: "reporter@example.com"})
-        if err != nil {
-                t.Fatalf("create reporter: %v", err)
-        }
-        target, err := store.CreateUser(CreateUserParams{DisplayName: "target", Email: "target@example.com"})
-        if err != nil {
-                t.Fatalf("create target: %v", err)
-        }
-        channel, err := store.CreateChannel(owner.ID, "Lobby", "gaming", nil)
-        if err != nil {
-                t.Fatalf("create channel: %v", err)
-        }
+	store := newTestStore(t)
+	owner, err := store.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	reporter, err := store.CreateUser(CreateUserParams{DisplayName: "reporter", Email: "reporter@example.com"})
+	if err != nil {
+		t.Fatalf("create reporter: %v", err)
+	}
+	target, err := store.CreateUser(CreateUserParams{DisplayName: "target", Email: "target@example.com"})
+	if err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Lobby", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
 
-        report, err := store.CreateChatReport(channel.ID, reporter.ID, target.ID, "spam", "msg-1", "")
-        if err != nil {
-                t.Fatalf("CreateChatReport: %v", err)
-        }
-        if report.Status != "open" {
-                t.Fatalf("expected new report to be open")
-        }
+	report, err := store.CreateChatReport(channel.ID, reporter.ID, target.ID, "spam", "msg-1", "")
+	if err != nil {
+		t.Fatalf("CreateChatReport: %v", err)
+	}
+	if report.Status != "open" {
+		t.Fatalf("expected new report to be open")
+	}
 
-        pending, err := store.ListChatReports(channel.ID, false)
-        if err != nil {
-                t.Fatalf("ListChatReports: %v", err)
-        }
-        if len(pending) != 1 {
-                t.Fatalf("expected 1 pending report, got %d", len(pending))
-        }
+	pending, err := store.ListChatReports(channel.ID, false)
+	if err != nil {
+		t.Fatalf("ListChatReports: %v", err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("expected 1 pending report, got %d", len(pending))
+	}
 
-        resolved, err := store.ResolveChatReport(report.ID, owner.ID, "handled")
-        if err != nil {
-                t.Fatalf("ResolveChatReport: %v", err)
-        }
-        if resolved.Status != "resolved" || resolved.Resolution != "handled" {
-                t.Fatalf("expected resolved report, got %+v", resolved)
-        }
+	resolved, err := store.ResolveChatReport(report.ID, owner.ID, "handled")
+	if err != nil {
+		t.Fatalf("ResolveChatReport: %v", err)
+	}
+	if resolved.Status != "resolved" || resolved.Resolution != "handled" {
+		t.Fatalf("expected resolved report, got %+v", resolved)
+	}
 
-        pending, err = store.ListChatReports(channel.ID, false)
-        if err != nil {
-                t.Fatalf("ListChatReports pending: %v", err)
-        }
-        if len(pending) != 0 {
-                t.Fatalf("expected no pending reports, got %d", len(pending))
-        }
+	pending, err = store.ListChatReports(channel.ID, false)
+	if err != nil {
+		t.Fatalf("ListChatReports pending: %v", err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("expected no pending reports, got %d", len(pending))
+	}
 
-        all, err := store.ListChatReports(channel.ID, true)
-        if err != nil {
-                t.Fatalf("ListChatReports(includeResolved): %v", err)
-        }
-        if len(all) != 1 {
-                t.Fatalf("expected resolved report to be listed, got %d", len(all))
-        }
+	all, err := store.ListChatReports(channel.ID, true)
+	if err != nil {
+		t.Fatalf("ListChatReports(includeResolved): %v", err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("expected resolved report to be listed, got %d", len(all))
+	}
 }
 
 func TestCreateTipAndList(t *testing.T) {
-        store := newTestStore(t)
-        owner, err := store.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
-        if err != nil {
-                t.Fatalf("create owner: %v", err)
-        }
-        supporter, err := store.CreateUser(CreateUserParams{DisplayName: "fan", Email: "fan@example.com"})
-        if err != nil {
-                t.Fatalf("create supporter: %v", err)
-        }
-        channel, err := store.CreateChannel(owner.ID, "Lobby", "gaming", nil)
-        if err != nil {
-                t.Fatalf("create channel: %v", err)
-        }
+	store := newTestStore(t)
+	owner, err := store.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	supporter, err := store.CreateUser(CreateUserParams{DisplayName: "fan", Email: "fan@example.com"})
+	if err != nil {
+		t.Fatalf("create supporter: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Lobby", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
 
-        tip, err := store.CreateTip(CreateTipParams{
-                ChannelID:  channel.ID,
-                FromUserID: supporter.ID,
-                Amount:     5.5,
-                Currency:   "usd",
-                Provider:   "stripe",
-                Reference:  "ref-1",
-                Message:    "keep it up",
-        })
-        if err != nil {
-                t.Fatalf("CreateTip: %v", err)
-        }
-        if tip.ID == "" {
-                t.Fatalf("expected tip id to be set")
-        }
+	tip, err := store.CreateTip(CreateTipParams{
+		ChannelID:  channel.ID,
+		FromUserID: supporter.ID,
+		Amount:     5.5,
+		Currency:   "usd",
+		Provider:   "stripe",
+		Reference:  "ref-1",
+		Message:    "keep it up",
+	})
+	if err != nil {
+		t.Fatalf("CreateTip: %v", err)
+	}
+	if tip.ID == "" {
+		t.Fatalf("expected tip id to be set")
+	}
 
-        tips, err := store.ListTips(channel.ID, 10)
-        if err != nil {
-                t.Fatalf("ListTips: %v", err)
-        }
-        if len(tips) != 1 || tips[0].ID != tip.ID {
-                t.Fatalf("expected persisted tip, got %+v", tips)
-        }
+	tips, err := store.ListTips(channel.ID, 10)
+	if err != nil {
+		t.Fatalf("ListTips: %v", err)
+	}
+	if len(tips) != 1 || tips[0].ID != tip.ID {
+		t.Fatalf("expected persisted tip, got %+v", tips)
+	}
 }
 
 func TestCreateSubscriptionAndCancel(t *testing.T) {
-        store := newTestStore(t)
-        owner, err := store.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
-        if err != nil {
-                t.Fatalf("create owner: %v", err)
-        }
-        viewer, err := store.CreateUser(CreateUserParams{DisplayName: "viewer", Email: "viewer@example.com"})
-        if err != nil {
-                t.Fatalf("create viewer: %v", err)
-        }
-        channel, err := store.CreateChannel(owner.ID, "Lobby", "gaming", nil)
-        if err != nil {
-                t.Fatalf("create channel: %v", err)
-        }
+	store := newTestStore(t)
+	owner, err := store.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	viewer, err := store.CreateUser(CreateUserParams{DisplayName: "viewer", Email: "viewer@example.com"})
+	if err != nil {
+		t.Fatalf("create viewer: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Lobby", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
 
-        subscription, err := store.CreateSubscription(CreateSubscriptionParams{
-                ChannelID: channel.ID,
-                UserID:    viewer.ID,
-                Tier:      "gold",
-                Provider:  "stripe",
-                Amount:    9.99,
-                Currency:  "usd",
-                Duration:  30 * 24 * time.Hour,
-                AutoRenew: true,
-        })
-        if err != nil {
-                t.Fatalf("CreateSubscription: %v", err)
-        }
-        if subscription.Status != "active" {
-                t.Fatalf("expected active subscription")
-        }
+	subscription, err := store.CreateSubscription(CreateSubscriptionParams{
+		ChannelID: channel.ID,
+		UserID:    viewer.ID,
+		Tier:      "gold",
+		Provider:  "stripe",
+		Amount:    9.99,
+		Currency:  "usd",
+		Duration:  30 * 24 * time.Hour,
+		AutoRenew: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateSubscription: %v", err)
+	}
+	if subscription.Status != "active" {
+		t.Fatalf("expected active subscription")
+	}
 
-        subs, err := store.ListSubscriptions(channel.ID, false)
-        if err != nil {
-                t.Fatalf("ListSubscriptions: %v", err)
-        }
-        if len(subs) != 1 {
-                t.Fatalf("expected one active subscription, got %d", len(subs))
-        }
+	subs, err := store.ListSubscriptions(channel.ID, false)
+	if err != nil {
+		t.Fatalf("ListSubscriptions: %v", err)
+	}
+	if len(subs) != 1 {
+		t.Fatalf("expected one active subscription, got %d", len(subs))
+	}
 
-        cancelled, err := store.CancelSubscription(subscription.ID, viewer.ID, "")
-        if err != nil {
-                t.Fatalf("CancelSubscription: %v", err)
-        }
-        if cancelled.Status != "cancelled" || cancelled.CancelledBy != viewer.ID {
-                t.Fatalf("expected subscription to be cancelled by viewer, got %+v", cancelled)
-        }
+	cancelled, err := store.CancelSubscription(subscription.ID, viewer.ID, "")
+	if err != nil {
+		t.Fatalf("CancelSubscription: %v", err)
+	}
+	if cancelled.Status != "cancelled" || cancelled.CancelledBy != viewer.ID {
+		t.Fatalf("expected subscription to be cancelled by viewer, got %+v", cancelled)
+	}
 
-        subs, err = store.ListSubscriptions(channel.ID, false)
-        if err != nil {
-                t.Fatalf("ListSubscriptions after cancel: %v", err)
-        }
-        if len(subs) != 0 {
-                t.Fatalf("expected no active subscriptions after cancellation")
-        }
-        subs, err = store.ListSubscriptions(channel.ID, true)
-        if err != nil {
-                t.Fatalf("ListSubscriptions include inactive: %v", err)
-        }
-        if len(subs) != 1 {
-                t.Fatalf("expected cancelled subscription to be listed, got %d", len(subs))
-        }
+	subs, err = store.ListSubscriptions(channel.ID, false)
+	if err != nil {
+		t.Fatalf("ListSubscriptions after cancel: %v", err)
+	}
+	if len(subs) != 0 {
+		t.Fatalf("expected no active subscriptions after cancellation")
+	}
+	subs, err = store.ListSubscriptions(channel.ID, true)
+	if err != nil {
+		t.Fatalf("ListSubscriptions include inactive: %v", err)
+	}
+	if len(subs) != 1 {
+		t.Fatalf("expected cancelled subscription to be listed, got %d", len(subs))
+	}
+}
+
+func TestCloneDatasetCopiesModerationMetadata(t *testing.T) {
+	now := time.Now().UTC()
+	resolvedAt := now
+	cancelledAt := now
+
+	src := dataset{
+		ChatBanActors: map[string]map[string]string{
+			"chan": {"user": "actor"},
+		},
+		ChatBanReasons: map[string]map[string]string{
+			"chan": {"user": "spam"},
+		},
+		ChatTimeoutActors: map[string]map[string]string{
+			"chan": {"user": "actor"},
+		},
+		ChatTimeoutReasons: map[string]map[string]string{
+			"chan": {"user": "caps"},
+		},
+		ChatTimeoutIssuedAt: map[string]map[string]time.Time{
+			"chan": {"user": now},
+		},
+		ChatReports: map[string]models.ChatReport{
+			"rep": {ID: "rep", ResolvedAt: &resolvedAt},
+		},
+		Tips: map[string]models.Tip{
+			"tip": {ID: "tip", ChannelID: "chan", FromUserID: "supporter", CreatedAt: now},
+		},
+		Subscriptions: map[string]models.Subscription{
+			"sub": {ID: "sub", ChannelID: "chan", UserID: "viewer", StartedAt: now, ExpiresAt: now.Add(time.Hour), Status: "active", CancelledAt: &cancelledAt},
+		},
+	}
+
+	clone := cloneDataset(src)
+
+	clone.ChatBanActors["chan"]["user"] = "other"
+	if src.ChatBanActors["chan"]["user"] != "actor" {
+		t.Fatalf("expected ban actors to be deep copied")
+	}
+
+	clone.ChatTimeoutReasons["chan"]["user"] = "other"
+	if src.ChatTimeoutReasons["chan"]["user"] != "caps" {
+		t.Fatalf("expected timeout reasons to be deep copied")
+	}
+
+	clone.ChatTimeoutIssuedAt["chan"]["user"] = now.Add(time.Minute)
+	if !src.ChatTimeoutIssuedAt["chan"]["user"].Equal(now) {
+		t.Fatalf("expected timeout issued timestamps to be deep copied")
+	}
+
+	newResolved := clone.ChatReports["rep"]
+	*newResolved.ResolvedAt = newResolved.ResolvedAt.Add(time.Hour)
+	if !src.ChatReports["rep"].ResolvedAt.Equal(resolvedAt) {
+		t.Fatalf("expected report resolvedAt pointer to be cloned")
+	}
+
+	newSub := clone.Subscriptions["sub"]
+	*newSub.CancelledAt = newSub.CancelledAt.Add(time.Hour)
+	if !src.Subscriptions["sub"].CancelledAt.Equal(cancelledAt) {
+		t.Fatalf("expected subscription cancelledAt pointer to be cloned")
+	}
 }
 
 func TestMain(m *testing.M) {
-        // ensure tests do not leave temp files behind by relying on testing package cleanup
-        code := m.Run()
-        os.Exit(code)
+	// ensure tests do not leave temp files behind by relying on testing package cleanup
+	code := m.Run()
+	os.Exit(code)
 }

@@ -31,16 +31,24 @@ const (
 )
 
 type dataset struct {
-	Users          map[string]models.User          `json:"users"`
-	Channels       map[string]models.Channel       `json:"channels"`
-	StreamSessions map[string]models.StreamSession `json:"streamSessions"`
-	ChatMessages   map[string]models.ChatMessage   `json:"chatMessages"`
-	ChatBans       map[string]map[string]time.Time `json:"chatBans"`
-	ChatTimeouts   map[string]map[string]time.Time `json:"chatTimeouts"`
-	Profiles       map[string]models.Profile       `json:"profiles"`
-	Follows        map[string]map[string]time.Time `json:"follows"`
-	Recordings     map[string]models.Recording     `json:"recordings"`
-	ClipExports    map[string]models.ClipExport    `json:"clipExports"`
+	Users               map[string]models.User          `json:"users"`
+	Channels            map[string]models.Channel       `json:"channels"`
+	StreamSessions      map[string]models.StreamSession `json:"streamSessions"`
+	ChatMessages        map[string]models.ChatMessage   `json:"chatMessages"`
+	ChatBans            map[string]map[string]time.Time `json:"chatBans"`
+	ChatTimeouts        map[string]map[string]time.Time `json:"chatTimeouts"`
+	ChatBanActors       map[string]map[string]string    `json:"chatBanActors"`
+	ChatBanReasons      map[string]map[string]string    `json:"chatBanReasons"`
+	ChatTimeoutActors   map[string]map[string]string    `json:"chatTimeoutActors"`
+	ChatTimeoutReasons  map[string]map[string]string    `json:"chatTimeoutReasons"`
+	ChatTimeoutIssuedAt map[string]map[string]time.Time `json:"chatTimeoutIssuedAt"`
+	ChatReports         map[string]models.ChatReport    `json:"chatReports"`
+	Tips                map[string]models.Tip           `json:"tips"`
+	Subscriptions       map[string]models.Subscription  `json:"subscriptions"`
+	Profiles            map[string]models.Profile       `json:"profiles"`
+	Follows             map[string]map[string]time.Time `json:"follows"`
+	Recordings          map[string]models.Recording     `json:"recordings"`
+	ClipExports         map[string]models.ClipExport    `json:"clipExports"`
 }
 
 type Storage struct {
@@ -88,16 +96,24 @@ type ClipExportParams struct {
 
 func newDataset() dataset {
 	return dataset{
-		Users:          make(map[string]models.User),
-		Channels:       make(map[string]models.Channel),
-		StreamSessions: make(map[string]models.StreamSession),
-		ChatMessages:   make(map[string]models.ChatMessage),
-		ChatBans:       make(map[string]map[string]time.Time),
-		ChatTimeouts:   make(map[string]map[string]time.Time),
-		Profiles:       make(map[string]models.Profile),
-		Follows:        make(map[string]map[string]time.Time),
-		Recordings:     make(map[string]models.Recording),
-		ClipExports:    make(map[string]models.ClipExport),
+		Users:               make(map[string]models.User),
+		Channels:            make(map[string]models.Channel),
+		StreamSessions:      make(map[string]models.StreamSession),
+		ChatMessages:        make(map[string]models.ChatMessage),
+		ChatBans:            make(map[string]map[string]time.Time),
+		ChatTimeouts:        make(map[string]map[string]time.Time),
+		ChatBanActors:       make(map[string]map[string]string),
+		ChatBanReasons:      make(map[string]map[string]string),
+		ChatTimeoutActors:   make(map[string]map[string]string),
+		ChatTimeoutReasons:  make(map[string]map[string]string),
+		ChatTimeoutIssuedAt: make(map[string]map[string]time.Time),
+		ChatReports:         make(map[string]models.ChatReport),
+		Tips:                make(map[string]models.Tip),
+		Subscriptions:       make(map[string]models.Subscription),
+		Profiles:            make(map[string]models.Profile),
+		Follows:             make(map[string]map[string]time.Time),
+		Recordings:          make(map[string]models.Recording),
+		ClipExports:         make(map[string]models.ClipExport),
 	}
 }
 
@@ -445,6 +461,112 @@ func cloneDataset(src dataset) dataset {
 				cloned[userID] = expiry
 			}
 			clone.ChatTimeouts[channelID] = cloned
+		}
+	}
+
+	if src.ChatBanActors != nil {
+		clone.ChatBanActors = make(map[string]map[string]string, len(src.ChatBanActors))
+		for channelID, actors := range src.ChatBanActors {
+			if actors == nil {
+				clone.ChatBanActors[channelID] = nil
+				continue
+			}
+			cloned := make(map[string]string, len(actors))
+			for userID, actorID := range actors {
+				cloned[userID] = actorID
+			}
+			clone.ChatBanActors[channelID] = cloned
+		}
+	}
+
+	if src.ChatBanReasons != nil {
+		clone.ChatBanReasons = make(map[string]map[string]string, len(src.ChatBanReasons))
+		for channelID, reasons := range src.ChatBanReasons {
+			if reasons == nil {
+				clone.ChatBanReasons[channelID] = nil
+				continue
+			}
+			cloned := make(map[string]string, len(reasons))
+			for userID, reason := range reasons {
+				cloned[userID] = reason
+			}
+			clone.ChatBanReasons[channelID] = cloned
+		}
+	}
+
+	if src.ChatTimeoutActors != nil {
+		clone.ChatTimeoutActors = make(map[string]map[string]string, len(src.ChatTimeoutActors))
+		for channelID, actors := range src.ChatTimeoutActors {
+			if actors == nil {
+				clone.ChatTimeoutActors[channelID] = nil
+				continue
+			}
+			cloned := make(map[string]string, len(actors))
+			for userID, actorID := range actors {
+				cloned[userID] = actorID
+			}
+			clone.ChatTimeoutActors[channelID] = cloned
+		}
+	}
+
+	if src.ChatTimeoutReasons != nil {
+		clone.ChatTimeoutReasons = make(map[string]map[string]string, len(src.ChatTimeoutReasons))
+		for channelID, reasons := range src.ChatTimeoutReasons {
+			if reasons == nil {
+				clone.ChatTimeoutReasons[channelID] = nil
+				continue
+			}
+			cloned := make(map[string]string, len(reasons))
+			for userID, reason := range reasons {
+				cloned[userID] = reason
+			}
+			clone.ChatTimeoutReasons[channelID] = cloned
+		}
+	}
+
+	if src.ChatTimeoutIssuedAt != nil {
+		clone.ChatTimeoutIssuedAt = make(map[string]map[string]time.Time, len(src.ChatTimeoutIssuedAt))
+		for channelID, issued := range src.ChatTimeoutIssuedAt {
+			if issued == nil {
+				clone.ChatTimeoutIssuedAt[channelID] = nil
+				continue
+			}
+			cloned := make(map[string]time.Time, len(issued))
+			for userID, ts := range issued {
+				cloned[userID] = ts
+			}
+			clone.ChatTimeoutIssuedAt[channelID] = cloned
+		}
+	}
+
+	if src.ChatReports != nil {
+		clone.ChatReports = make(map[string]models.ChatReport, len(src.ChatReports))
+		for id, report := range src.ChatReports {
+			cloned := report
+			if report.ResolvedAt != nil {
+				resolved := *report.ResolvedAt
+				cloned.ResolvedAt = &resolved
+			}
+			clone.ChatReports[id] = cloned
+		}
+	}
+
+	if src.Tips != nil {
+		clone.Tips = make(map[string]models.Tip, len(src.Tips))
+		for id, tip := range src.Tips {
+			clone.Tips[id] = tip
+		}
+	}
+
+	if src.Subscriptions != nil {
+		clone.Subscriptions = make(map[string]models.Subscription, len(src.Subscriptions))
+		for id, subscription := range src.Subscriptions {
+			cloned := subscription
+			if subscription.CancelledAt != nil {
+				cancelled := *subscription.CancelledAt
+				cloned.CancelledAt = &cancelled
+			}
+			clone.Subscriptions[id] = cloned
 		}
 	}
 
