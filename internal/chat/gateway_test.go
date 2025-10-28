@@ -152,7 +152,7 @@ func mustCreateChannel(t *testing.T, store *storage.Storage, ownerID, title stri
 
 func mustDial(t *testing.T, url string) *chat.Conn {
 	t.Helper()
-	conn, err := chat.Dial(context.Background(), url, http.Header{})
+	conn, err := chat.Dial(context.Background(), url, http.Header{}, nil)
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
