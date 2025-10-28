@@ -9,5 +9,4 @@ require (
 )
 
 replace golang.org/x/crypto => ./third_party/golang.org/x/crypto
-replace github.com/jackc/pgx/v5 => ./third_party/github.com/jackc/pgx/v5
 replace github.com/redis/go-redis/v9 => ./third_party/github.com/redis/go-redis/v9
