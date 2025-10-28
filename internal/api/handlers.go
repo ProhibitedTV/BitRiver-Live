@@ -24,17 +24,17 @@ type Handler struct {
 }
 
 func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handler {
-	if sessions == nil {
-		sessions = auth.NewSessionManager(24 * time.Hour)
-	}
-	return &Handler{Store: store, Sessions: sessions}
+        if sessions == nil {
+                sessions = auth.NewSessionManager(24 * time.Hour)
+        }
+        return &Handler{Store: store, Sessions: sessions}
 }
 
 func (h *Handler) sessionManager() *auth.SessionManager {
-	if h.Sessions == nil {
-		h.Sessions = auth.NewSessionManager(24 * time.Hour)
-	}
-	return h.Sessions
+        if h.Sessions == nil {
+                h.Sessions = auth.NewSessionManager(24 * time.Hour)
+        }
+        return h.Sessions
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
@@ -174,11 +174,11 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, expiresAt, err := h.sessionManager().Create(user.ID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
+        token, expiresAt, err := h.sessionManager().Create(user.ID)
+        if err != nil {
+                writeError(w, http.StatusInternalServerError, err)
+                return
+        }
 
 	setSessionCookie(w, r, token, expiresAt)
 	writeJSON(w, http.StatusCreated, newAuthResponse(user, expiresAt))
@@ -221,12 +221,16 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, fmt.Errorf("missing session token"))
 			return
 		}
-		userID, expiresAt, ok := h.sessionManager().Validate(token)
-		if !ok {
-			writeError(w, http.StatusUnauthorized, fmt.Errorf("invalid or expired session"))
-			return
-		}
-		user, exists := h.Store.GetUser(userID)
+                userID, expiresAt, ok, err := h.sessionManager().Validate(token)
+                if err != nil {
+                        writeError(w, http.StatusInternalServerError, err)
+                        return
+                }
+                if !ok {
+                        writeError(w, http.StatusUnauthorized, fmt.Errorf("invalid or expired session"))
+                        return
+                }
+                user, exists := h.Store.GetUser(userID)
 		if !exists {
 			writeError(w, http.StatusUnauthorized, fmt.Errorf("account not found"))
 			return
@@ -238,9 +242,12 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, fmt.Errorf("missing session token"))
 			return
 		}
-		h.sessionManager().Revoke(token)
-		clearSessionCookie(w, r)
-		w.WriteHeader(http.StatusNoContent)
+                if err := h.sessionManager().Revoke(token); err != nil {
+                        writeError(w, http.StatusInternalServerError, err)
+                        return
+                }
+                clearSessionCookie(w, r)
+                w.WriteHeader(http.StatusNoContent)
 	default:
 		w.Header().Set("Allow", "GET, DELETE")
 		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))

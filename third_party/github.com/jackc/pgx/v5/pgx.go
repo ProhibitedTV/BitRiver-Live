@@ -3,34 +3,32 @@ package pgx
 import (
 	"context"
 	"errors"
+
+	"github.com/jackc/pgx/v5/pgconn"
+)
+
+var (
+	ErrNoRows   = errors.New("pgx stub: no rows")
+	ErrTxClosed = errors.New("pgx stub: transaction closed")
 )
 
 type TxOptions struct{}
 
-type Tx interface {
-	Rollback(ctx context.Context) error
-	Commit(ctx context.Context) error
-	Exec(ctx context.Context, sql string, args ...interface{}) (CommandTag, error)
-	Query(ctx context.Context, sql string, args ...interface{}) (Rows, error)
-	QueryRow(ctx context.Context, sql string, args ...interface{}) Row
-}
-
 type Row interface {
-	Scan(dest ...interface{}) error
+	Scan(dest ...any) error
 }
 
 type Rows interface {
 	Close()
 	Next() bool
-	Scan(dest ...interface{}) error
+	Scan(dest ...any) error
 	Err() error
 }
 
-type CommandTag struct{}
-
-func (CommandTag) RowsAffected() int64 { return 0 }
-
-var (
-	ErrNoRows   = errors.New("pgx: no rows in result set")
-	ErrTxClosed = errors.New("pgx: tx closed")
-)
+type Tx interface {
+	Commit(context.Context) error
+	Rollback(context.Context) error
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	QueryRow(context.Context, string, ...any) Row
+	Query(context.Context, string, ...any) (Rows, error)
+}

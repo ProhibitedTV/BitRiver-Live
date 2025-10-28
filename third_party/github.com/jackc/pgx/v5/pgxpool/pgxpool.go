@@ -2,9 +2,11 @@ package pgxpool
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type Config struct {
@@ -21,7 +23,53 @@ type ConnConfig struct {
 	RuntimeParams  map[string]string
 }
 
+var ErrClosedPool = errors.New("pgxpool stub: pool closed")
+
 type Pool struct{}
+
+type Row struct{}
+
+func (r *Row) Scan(dest ...any) error {
+	return errors.New("pgxpool stub: no rows")
+}
+
+type Rows struct{}
+
+func (r *Rows) Close() {}
+
+func (r *Rows) Next() bool {
+	return false
+}
+
+func (r *Rows) Scan(dest ...any) error {
+	return errors.New("pgxpool stub: no rows")
+}
+
+func (r *Rows) Err() error {
+	return nil
+}
+
+type Tx struct{}
+
+func (tx *Tx) Commit(context.Context) error {
+	return nil
+}
+
+func (tx *Tx) Rollback(context.Context) error {
+	return nil
+}
+
+func (tx *Tx) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+
+func (tx *Tx) QueryRow(context.Context, string, ...any) pgx.Row {
+	return &Row{}
+}
+
+func (tx *Tx) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	return &Rows{}, nil
+}
 
 func ParseConfig(string) (*Config, error) {
 	return &Config{ConnConfig: &ConnConfig{RuntimeParams: make(map[string]string)}}, nil
@@ -37,46 +85,14 @@ func (p *Pool) Exec(context.Context, string, ...any) (pgx.CommandTag, error) {
 	return pgx.CommandTag{}, nil
 }
 
-func (p *Pool) BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error) {
-	return &noopTx{}, nil
-}
-
 func (p *Pool) QueryRow(context.Context, string, ...any) pgx.Row {
-	return noopRow{}
+	return &Row{}
 }
 
 func (p *Pool) Query(context.Context, string, ...any) (pgx.Rows, error) {
-	return &noopRows{}, nil
+	return &Rows{}, nil
 }
 
-type noopTx struct{}
-
-func (n *noopTx) Rollback(context.Context) error { return nil }
-
-func (n *noopTx) Commit(context.Context) error { return nil }
-
-func (n *noopTx) Exec(context.Context, string, ...any) (pgx.CommandTag, error) {
-	return pgx.CommandTag{}, nil
+func (p *Pool) BeginTx(context.Context, pgx.TxOptions) (*Tx, error) {
+	return &Tx{}, nil
 }
-
-func (n *noopTx) Query(context.Context, string, ...any) (pgx.Rows, error) {
-	return &noopRows{}, nil
-}
-
-func (n *noopTx) QueryRow(context.Context, string, ...any) pgx.Row {
-	return noopRow{}
-}
-
-type noopRow struct{}
-
-func (noopRow) Scan(dest ...interface{}) error { return pgx.ErrNoRows }
-
-type noopRows struct{}
-
-func (r *noopRows) Close() {}
-
-func (r *noopRows) Next() bool { return false }
-
-func (r *noopRows) Scan(dest ...interface{}) error { return pgx.ErrNoRows }
-
-func (r *noopRows) Err() error { return nil }

@@ -35,10 +35,13 @@ func (h *Handler) AuthenticateRequest(r *http.Request) (models.User, error) {
 	if token == "" {
 		return models.User{}, fmt.Errorf("missing session token")
 	}
-	userID, _, ok := h.sessionManager().Validate(token)
-	if !ok {
-		return models.User{}, fmt.Errorf("invalid or expired session")
-	}
+        userID, _, ok, err := h.sessionManager().Validate(token)
+        if err != nil {
+                return models.User{}, fmt.Errorf("session validation failed: %w", err)
+        }
+        if !ok {
+                return models.User{}, fmt.Errorf("invalid or expired session")
+        }
 	user, exists := h.Store.GetUser(userID)
 	if !exists {
 		return models.User{}, fmt.Errorf("account not found")
