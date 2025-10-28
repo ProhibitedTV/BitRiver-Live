@@ -1651,6 +1651,68 @@ func TestCreateSubscriptionAndCancel(t *testing.T) {
 	}
 }
 
+func TestCloneDatasetCopiesModerationMetadata(t *testing.T) {
+	now := time.Now().UTC()
+	resolvedAt := now
+	cancelledAt := now
+
+	src := dataset{
+		ChatBanActors: map[string]map[string]string{
+			"chan": {"user": "actor"},
+		},
+		ChatBanReasons: map[string]map[string]string{
+			"chan": {"user": "spam"},
+		},
+		ChatTimeoutActors: map[string]map[string]string{
+			"chan": {"user": "actor"},
+		},
+		ChatTimeoutReasons: map[string]map[string]string{
+			"chan": {"user": "caps"},
+		},
+		ChatTimeoutIssuedAt: map[string]map[string]time.Time{
+			"chan": {"user": now},
+		},
+		ChatReports: map[string]models.ChatReport{
+			"rep": {ID: "rep", ResolvedAt: &resolvedAt},
+		},
+		Tips: map[string]models.Tip{
+			"tip": {ID: "tip", ChannelID: "chan", FromUserID: "supporter", CreatedAt: now},
+		},
+		Subscriptions: map[string]models.Subscription{
+			"sub": {ID: "sub", ChannelID: "chan", UserID: "viewer", StartedAt: now, ExpiresAt: now.Add(time.Hour), Status: "active", CancelledAt: &cancelledAt},
+		},
+	}
+
+	clone := cloneDataset(src)
+
+	clone.ChatBanActors["chan"]["user"] = "other"
+	if src.ChatBanActors["chan"]["user"] != "actor" {
+		t.Fatalf("expected ban actors to be deep copied")
+	}
+
+	clone.ChatTimeoutReasons["chan"]["user"] = "other"
+	if src.ChatTimeoutReasons["chan"]["user"] != "caps" {
+		t.Fatalf("expected timeout reasons to be deep copied")
+	}
+
+	clone.ChatTimeoutIssuedAt["chan"]["user"] = now.Add(time.Minute)
+	if !src.ChatTimeoutIssuedAt["chan"]["user"].Equal(now) {
+		t.Fatalf("expected timeout issued timestamps to be deep copied")
+	}
+
+	newResolved := clone.ChatReports["rep"]
+	*newResolved.ResolvedAt = newResolved.ResolvedAt.Add(time.Hour)
+	if !src.ChatReports["rep"].ResolvedAt.Equal(resolvedAt) {
+		t.Fatalf("expected report resolvedAt pointer to be cloned")
+	}
+
+	newSub := clone.Subscriptions["sub"]
+	*newSub.CancelledAt = newSub.CancelledAt.Add(time.Hour)
+	if !src.Subscriptions["sub"].CancelledAt.Equal(cancelledAt) {
+		t.Fatalf("expected subscription cancelledAt pointer to be cloned")
+	}
+}
+
 func TestMain(m *testing.M) {
 	// ensure tests do not leave temp files behind by relying on testing package cleanup
 	code := m.Run()

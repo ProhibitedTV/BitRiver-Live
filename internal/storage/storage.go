@@ -585,6 +585,112 @@ func cloneDataset(src dataset) dataset {
 		}
 	}
 
+	if src.ChatBanActors != nil {
+		clone.ChatBanActors = make(map[string]map[string]string, len(src.ChatBanActors))
+		for channelID, actors := range src.ChatBanActors {
+			if actors == nil {
+				clone.ChatBanActors[channelID] = nil
+				continue
+			}
+			cloned := make(map[string]string, len(actors))
+			for userID, actorID := range actors {
+				cloned[userID] = actorID
+			}
+			clone.ChatBanActors[channelID] = cloned
+		}
+	}
+
+	if src.ChatBanReasons != nil {
+		clone.ChatBanReasons = make(map[string]map[string]string, len(src.ChatBanReasons))
+		for channelID, reasons := range src.ChatBanReasons {
+			if reasons == nil {
+				clone.ChatBanReasons[channelID] = nil
+				continue
+			}
+			cloned := make(map[string]string, len(reasons))
+			for userID, reason := range reasons {
+				cloned[userID] = reason
+			}
+			clone.ChatBanReasons[channelID] = cloned
+		}
+	}
+
+	if src.ChatTimeoutActors != nil {
+		clone.ChatTimeoutActors = make(map[string]map[string]string, len(src.ChatTimeoutActors))
+		for channelID, actors := range src.ChatTimeoutActors {
+			if actors == nil {
+				clone.ChatTimeoutActors[channelID] = nil
+				continue
+			}
+			cloned := make(map[string]string, len(actors))
+			for userID, actorID := range actors {
+				cloned[userID] = actorID
+			}
+			clone.ChatTimeoutActors[channelID] = cloned
+		}
+	}
+
+	if src.ChatTimeoutReasons != nil {
+		clone.ChatTimeoutReasons = make(map[string]map[string]string, len(src.ChatTimeoutReasons))
+		for channelID, reasons := range src.ChatTimeoutReasons {
+			if reasons == nil {
+				clone.ChatTimeoutReasons[channelID] = nil
+				continue
+			}
+			cloned := make(map[string]string, len(reasons))
+			for userID, reason := range reasons {
+				cloned[userID] = reason
+			}
+			clone.ChatTimeoutReasons[channelID] = cloned
+		}
+	}
+
+	if src.ChatTimeoutIssuedAt != nil {
+		clone.ChatTimeoutIssuedAt = make(map[string]map[string]time.Time, len(src.ChatTimeoutIssuedAt))
+		for channelID, issued := range src.ChatTimeoutIssuedAt {
+			if issued == nil {
+				clone.ChatTimeoutIssuedAt[channelID] = nil
+				continue
+			}
+			cloned := make(map[string]time.Time, len(issued))
+			for userID, ts := range issued {
+				cloned[userID] = ts
+			}
+			clone.ChatTimeoutIssuedAt[channelID] = cloned
+		}
+	}
+
+	if src.ChatReports != nil {
+		clone.ChatReports = make(map[string]models.ChatReport, len(src.ChatReports))
+		for id, report := range src.ChatReports {
+			cloned := report
+			if report.ResolvedAt != nil {
+				resolved := *report.ResolvedAt
+				cloned.ResolvedAt = &resolved
+			}
+			clone.ChatReports[id] = cloned
+		}
+	}
+
+	if src.Tips != nil {
+		clone.Tips = make(map[string]models.Tip, len(src.Tips))
+		for id, tip := range src.Tips {
+			clone.Tips[id] = tip
+		}
+	}
+
+	if src.Subscriptions != nil {
+		clone.Subscriptions = make(map[string]models.Subscription, len(src.Subscriptions))
+		for id, subscription := range src.Subscriptions {
+			cloned := subscription
+			if subscription.CancelledAt != nil {
+				cancelled := *subscription.CancelledAt
+				cloned.CancelledAt = &cancelled
+			}
+			clone.Subscriptions[id] = cloned
+		}
+	}
+
 	if src.Recordings != nil {
 		clone.Recordings = make(map[string]models.Recording, len(src.Recordings))
 		for id, recording := range src.Recordings {
