@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -235,12 +236,12 @@ func TestSignupAndLoginFlow(t *testing.T) {
 		t.Fatal("expected HTTP logout to issue non-secure cookie")
 	}
 
-        if _, _, ok, err := handler.sessionManager().Validate(loginCookie.Value); err != nil || ok {
-                if err != nil {
-                        t.Fatalf("Validate returned error: %v", err)
-                }
-                t.Fatal("expected logout to revoke session token")
-        }
+	if _, _, ok, err := handler.sessionManager().Validate(loginCookie.Value); err != nil || ok {
+		if err != nil {
+			t.Fatalf("Validate returned error: %v", err)
+		}
+		t.Fatal("expected logout to revoke session token")
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
 	req.AddCookie(loginCookie)
@@ -927,5 +928,223 @@ func TestMonetizationEndpoints(t *testing.T) {
 	}
 	if len(subs) != 1 || subs[0].Status != "cancelled" {
 		t.Fatalf("expected cancelled subscription, got %+v", subs)
+	}
+}
+
+func TestChannelSubscribeEndpointTogglesState(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	owner, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Owner",
+		Email:       "owner@example.com",
+		Roles:       []string{"creator"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Chill", "music", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	viewer, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Viewer",
+		Email:       "viewer@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
+
+	path := fmt.Sprintf("/api/channels/%s/subscribe", channel.ID)
+
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	rec := httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected GET status 200, got %d", rec.Code)
+	}
+	var initial subscriptionStateResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &initial); err != nil {
+		t.Fatalf("decode initial subscription state: %v", err)
+	}
+	if initial.Subscribers != 0 || initial.Subscribed {
+		t.Fatalf("expected zero subscribers and unsubscribed state, got %+v", initial)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, path, nil)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected POST without auth to return 401, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, path, nil)
+	req = withUser(req, viewer)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected POST status 200, got %d", rec.Code)
+	}
+	var subscribed subscriptionStateResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &subscribed); err != nil {
+		t.Fatalf("decode subscribed state: %v", err)
+	}
+	if !subscribed.Subscribed || subscribed.Subscribers != 1 {
+		t.Fatalf("expected subscribed state with one subscriber, got %+v", subscribed)
+	}
+	if subscribed.RenewsAt == nil || *subscribed.RenewsAt == "" {
+		t.Fatalf("expected renewsAt timestamp, got %+v", subscribed)
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, path, nil)
+	req = withUser(req, viewer)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected DELETE status 200, got %d", rec.Code)
+	}
+	var unsubscribed subscriptionStateResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &unsubscribed); err != nil {
+		t.Fatalf("decode unsubscribed state: %v", err)
+	}
+	if unsubscribed.Subscribed || unsubscribed.Subscribers != 0 {
+		t.Fatalf("expected unsubscribed state with zero subscribers, got %+v", unsubscribed)
+	}
+}
+
+func TestChannelPlaybackIncludesSubscriptionState(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	owner, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Owner",
+		Email:       "owner@example.com",
+		Roles:       []string{"creator"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Ambient", "music", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	viewer, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Viewer",
+		Email:       "viewer@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
+
+	_, err = store.CreateSubscription(storage.CreateSubscriptionParams{
+		ChannelID: channel.ID,
+		UserID:    viewer.ID,
+		Tier:      "VIP",
+		Provider:  "internal",
+		Amount:    5.0,
+		Currency:  "USD",
+		Duration:  30 * 24 * time.Hour,
+		AutoRenew: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateSubscription: %v", err)
+	}
+
+	path := fmt.Sprintf("/api/channels/%s/playback", channel.ID)
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req = withUser(req, viewer)
+	rec := httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected playback status 200, got %d", rec.Code)
+	}
+
+	var payload channelPlaybackResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode playback response: %v", err)
+	}
+	if payload.Subscription == nil {
+		t.Fatal("expected playback to include subscription block")
+	}
+	if !payload.Subscription.Subscribed {
+		t.Fatalf("expected subscribed state, got %+v", payload.Subscription)
+	}
+	if payload.Subscription.Subscribers != 1 {
+		t.Fatalf("expected subscriber count of 1, got %+v", payload.Subscription)
+	}
+	if payload.Subscription.Tier != "VIP" {
+		t.Fatalf("expected tier VIP, got %+v", payload.Subscription)
+	}
+	if payload.Subscription.RenewsAt == nil || *payload.Subscription.RenewsAt == "" {
+		t.Fatalf("expected renewsAt timestamp, got %+v", payload.Subscription)
+	}
+}
+
+func TestChannelVodsReturnPublishedRecordings(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	owner, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Owner",
+		Email:       "owner@example.com",
+		Roles:       []string{"creator"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Archive", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	if _, err := store.StartStream(channel.ID, []string{"1080p"}); err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+	if _, err := store.StopStream(channel.ID, 42); err != nil {
+		t.Fatalf("StopStream: %v", err)
+	}
+	recordings, err := store.ListRecordings(channel.ID, true)
+	if err != nil {
+		t.Fatalf("ListRecordings: %v", err)
+	}
+	if len(recordings) == 0 {
+		t.Fatal("expected at least one recording")
+	}
+	published, err := store.PublishRecording(recordings[0].ID)
+	if err != nil {
+		t.Fatalf("PublishRecording: %v", err)
+	}
+
+	if _, err := store.StartStream(channel.ID, []string{"720p"}); err != nil {
+		t.Fatalf("StartStream second: %v", err)
+	}
+	if _, err := store.StopStream(channel.ID, 24); err != nil {
+		t.Fatalf("StopStream second: %v", err)
+	}
+
+	path := fmt.Sprintf("/api/channels/%s/vods", channel.ID)
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	rec := httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected VOD status 200, got %d", rec.Code)
+	}
+
+	var payload vodCollectionResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode VOD payload: %v", err)
+	}
+	if payload.ChannelID != channel.ID {
+		t.Fatalf("expected channelId %s, got %s", channel.ID, payload.ChannelID)
+	}
+	if len(payload.Items) != 1 {
+		t.Fatalf("expected exactly one published VOD, got %d", len(payload.Items))
+	}
+	item := payload.Items[0]
+	if item.ID != published.ID {
+		t.Fatalf("expected VOD %s, got %s", published.ID, item.ID)
+	}
+	if item.PublishedAt == "" {
+		t.Fatal("expected publishedAt to be populated")
+	}
+	if item.DurationSeconds != published.DurationSeconds {
+		t.Fatalf("expected duration %d, got %d", published.DurationSeconds, item.DurationSeconds)
 	}
 }

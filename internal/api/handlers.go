@@ -24,17 +24,17 @@ type Handler struct {
 }
 
 func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handler {
-        if sessions == nil {
-                sessions = auth.NewSessionManager(24 * time.Hour)
-        }
-        return &Handler{Store: store, Sessions: sessions}
+	if sessions == nil {
+		sessions = auth.NewSessionManager(24 * time.Hour)
+	}
+	return &Handler{Store: store, Sessions: sessions}
 }
 
 func (h *Handler) sessionManager() *auth.SessionManager {
-        if h.Sessions == nil {
-                h.Sessions = auth.NewSessionManager(24 * time.Hour)
-        }
-        return h.Sessions
+	if h.Sessions == nil {
+		h.Sessions = auth.NewSessionManager(24 * time.Hour)
+	}
+	return h.Sessions
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
@@ -174,11 +174,11 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-        token, expiresAt, err := h.sessionManager().Create(user.ID)
-        if err != nil {
-                writeError(w, http.StatusInternalServerError, err)
-                return
-        }
+	token, expiresAt, err := h.sessionManager().Create(user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
 
 	setSessionCookie(w, r, token, expiresAt)
 	writeJSON(w, http.StatusCreated, newAuthResponse(user, expiresAt))
@@ -221,16 +221,16 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, fmt.Errorf("missing session token"))
 			return
 		}
-                userID, expiresAt, ok, err := h.sessionManager().Validate(token)
-                if err != nil {
-                        writeError(w, http.StatusInternalServerError, err)
-                        return
-                }
-                if !ok {
-                        writeError(w, http.StatusUnauthorized, fmt.Errorf("invalid or expired session"))
-                        return
-                }
-                user, exists := h.Store.GetUser(userID)
+		userID, expiresAt, ok, err := h.sessionManager().Validate(token)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if !ok {
+			writeError(w, http.StatusUnauthorized, fmt.Errorf("invalid or expired session"))
+			return
+		}
+		user, exists := h.Store.GetUser(userID)
 		if !exists {
 			writeError(w, http.StatusUnauthorized, fmt.Errorf("account not found"))
 			return
@@ -242,12 +242,12 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, fmt.Errorf("missing session token"))
 			return
 		}
-                if err := h.sessionManager().Revoke(token); err != nil {
-                        writeError(w, http.StatusInternalServerError, err)
-                        return
-                }
-                clearSessionCookie(w, r)
-                w.WriteHeader(http.StatusNoContent)
+		if err := h.sessionManager().Revoke(token); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		clearSessionCookie(w, r)
+		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.Header().Set("Allow", "GET, DELETE")
 		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
@@ -500,6 +500,13 @@ type followStateResponse struct {
 	Following bool `json:"following"`
 }
 
+type subscriptionStateResponse struct {
+	Subscribers int     `json:"subscribers"`
+	Subscribed  bool    `json:"subscribed"`
+	Tier        string  `json:"tier,omitempty"`
+	RenewsAt    *string `json:"renewsAt,omitempty"`
+}
+
 type playbackStreamResponse struct {
 	SessionID   string                      `json:"sessionId"`
 	StartedAt   string                      `json:"startedAt"`
@@ -512,12 +519,27 @@ type playbackStreamResponse struct {
 }
 
 type channelPlaybackResponse struct {
-	Channel  channelPublicResponse   `json:"channel"`
-	Owner    channelOwnerResponse    `json:"owner"`
-	Profile  profileSummaryResponse  `json:"profile"`
-	Live     bool                    `json:"live"`
-	Follow   followStateResponse     `json:"follow"`
-	Playback *playbackStreamResponse `json:"playback,omitempty"`
+	Channel      channelPublicResponse      `json:"channel"`
+	Owner        channelOwnerResponse       `json:"owner"`
+	Profile      profileSummaryResponse     `json:"profile"`
+	Live         bool                       `json:"live"`
+	Follow       followStateResponse        `json:"follow"`
+	Subscription *subscriptionStateResponse `json:"subscription,omitempty"`
+	Playback     *playbackStreamResponse    `json:"playback,omitempty"`
+}
+
+type vodItemResponse struct {
+	ID              string `json:"id"`
+	Title           string `json:"title"`
+	DurationSeconds int    `json:"durationSeconds"`
+	PublishedAt     string `json:"publishedAt"`
+	ThumbnailURL    string `json:"thumbnailUrl,omitempty"`
+	PlaybackURL     string `json:"playbackUrl,omitempty"`
+}
+
+type vodCollectionResponse struct {
+	ChannelID string            `json:"channelId"`
+	Items     []vodItemResponse `json:"items"`
 }
 
 func (h *Handler) Directory(w http.ResponseWriter, r *http.Request) {
@@ -609,6 +631,58 @@ func newProfileSummaryResponse(profile models.Profile) profileSummaryResponse {
 		summary.BannerURL = profile.BannerURL
 	}
 	return summary
+}
+
+func (h *Handler) subscriptionState(channelID string, actor *models.User) (subscriptionStateResponse, error) {
+	subs, err := h.Store.ListSubscriptions(channelID, false)
+	if err != nil {
+		return subscriptionStateResponse{}, err
+	}
+	state := subscriptionStateResponse{Subscribers: len(subs)}
+	if actor == nil {
+		return state, nil
+	}
+	for _, sub := range subs {
+		if sub.UserID != actor.ID {
+			continue
+		}
+		state.Subscribed = true
+		tier := strings.TrimSpace(sub.Tier)
+		if tier != "" {
+			state.Tier = tier
+		}
+		renews := sub.ExpiresAt.Format(time.RFC3339Nano)
+		state.RenewsAt = &renews
+		break
+	}
+	return state, nil
+}
+
+func newVodItemResponse(recording models.Recording) vodItemResponse {
+	item := vodItemResponse{
+		ID:              recording.ID,
+		Title:           recording.Title,
+		DurationSeconds: recording.DurationSeconds,
+	}
+	if recording.PublishedAt != nil {
+		item.PublishedAt = recording.PublishedAt.Format(time.RFC3339Nano)
+	}
+	if len(recording.Thumbnails) > 0 {
+		thumb := recording.Thumbnails[0]
+		if thumb.URL != "" {
+			item.ThumbnailURL = thumb.URL
+		}
+	}
+	if len(recording.Renditions) > 0 {
+		rendition := recording.Renditions[0]
+		if rendition.ManifestURL != "" {
+			item.PlaybackURL = rendition.ManifestURL
+		}
+	}
+	if item.PlaybackURL == "" && recording.PlaybackBaseURL != "" {
+		item.PlaybackURL = recording.PlaybackBaseURL
+	}
+	return item
 }
 
 func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
@@ -766,8 +840,10 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			}
 			profile, _ := h.Store.GetProfile(owner.ID)
 			follow := followStateResponse{Followers: h.Store.CountFollowers(channel.ID)}
+			var viewer *models.User
 			if actor, ok := UserFromContext(r.Context()); ok {
 				follow.Following = h.Store.IsFollowingChannel(actor.ID, channel.ID)
+				viewer = &actor
 			}
 			response := channelPlaybackResponse{
 				Channel: newChannelPublicResponse(channel),
@@ -775,6 +851,12 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				Profile: newProfileSummaryResponse(profile),
 				Live:    channel.LiveState == "live" || channel.LiveState == "starting",
 				Follow:  follow,
+			}
+			if state, err := h.subscriptionState(channel.ID, viewer); err == nil {
+				response.Subscription = &state
+			} else {
+				writeError(w, http.StatusInternalServerError, err)
+				return
 			}
 			if session, live := h.Store.CurrentStreamSession(channel.ID); live {
 				playback := playbackStreamResponse{
@@ -881,6 +963,137 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				Following: h.Store.IsFollowingChannel(actor.ID, channelID),
 			}
 			writeJSON(w, http.StatusOK, state)
+			return
+		case "subscribe":
+			if len(parts) > 2 {
+				writeError(w, http.StatusNotFound, fmt.Errorf("unknown channel path"))
+				return
+			}
+			channel, ok := h.Store.GetChannel(channelID)
+			if !ok {
+				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				return
+			}
+			switch r.Method {
+			case http.MethodGet:
+				var viewer *models.User
+				if actor, ok := UserFromContext(r.Context()); ok {
+					viewer = &actor
+				}
+				state, err := h.subscriptionState(channel.ID, viewer)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, state)
+			case http.MethodPost:
+				actor, ok := h.requireAuthenticatedUser(w, r)
+				if !ok {
+					return
+				}
+				subs, err := h.Store.ListSubscriptions(channel.ID, false)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err)
+					return
+				}
+				alreadySubscribed := false
+				for _, sub := range subs {
+					if sub.UserID == actor.ID {
+						alreadySubscribed = true
+						break
+					}
+				}
+				if !alreadySubscribed {
+					params := storage.CreateSubscriptionParams{
+						ChannelID: channel.ID,
+						UserID:    actor.ID,
+						Tier:      "supporter",
+						Provider:  "internal",
+						Amount:    0,
+						Currency:  "USD",
+						Duration:  30 * 24 * time.Hour,
+						AutoRenew: true,
+					}
+					sub, err := h.Store.CreateSubscription(params)
+					if err != nil {
+						writeError(w, http.StatusBadRequest, err)
+						return
+					}
+					metrics.Default().ObserveMonetization("subscription", sub.Amount)
+				}
+				state, err := h.subscriptionState(channel.ID, &actor)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, state)
+			case http.MethodDelete:
+				actor, ok := h.requireAuthenticatedUser(w, r)
+				if !ok {
+					return
+				}
+				subs, err := h.Store.ListSubscriptions(channel.ID, false)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err)
+					return
+				}
+				subscriptionID := ""
+				for _, sub := range subs {
+					if sub.UserID == actor.ID {
+						subscriptionID = sub.ID
+						break
+					}
+				}
+				if subscriptionID != "" {
+					if _, err := h.Store.CancelSubscription(subscriptionID, actor.ID, ""); err != nil {
+						writeError(w, http.StatusBadRequest, err)
+						return
+					}
+				}
+				state, err := h.subscriptionState(channel.ID, &actor)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, state)
+			default:
+				w.Header().Set("Allow", "GET, POST, DELETE")
+				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+			}
+			return
+		case "vods":
+			if len(parts) > 2 {
+				writeError(w, http.StatusNotFound, fmt.Errorf("unknown channel path"))
+				return
+			}
+			channel, ok := h.Store.GetChannel(channelID)
+			if !ok {
+				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				return
+			}
+			if r.Method != http.MethodGet {
+				w.Header().Set("Allow", "GET")
+				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				return
+			}
+			recordings, err := h.Store.ListRecordings(channel.ID, false)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			items := make([]vodItemResponse, 0, len(recordings))
+			for _, recording := range recordings {
+				if recording.PublishedAt == nil {
+					continue
+				}
+				item := newVodItemResponse(recording)
+				if item.PublishedAt == "" {
+					continue
+				}
+				items = append(items, item)
+			}
+			payload := vodCollectionResponse{ChannelID: channel.ID, Items: items}
+			writeJSON(w, http.StatusOK, payload)
 			return
 		case "chat":
 			h.handleChatRoutes(channelID, parts[2:], w, r)
