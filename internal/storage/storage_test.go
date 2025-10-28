@@ -39,6 +39,19 @@ func newTestStoreWithController(t *testing.T, controller ingest.Controller, extr
 	return store
 }
 
+func jsonRepositoryFactory(t *testing.T, opts ...Option) (Repository, func(), error) {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "store.json")
+	defaults := []Option{WithIngestController(ingest.NoopController{}), WithIngestRetries(1, 0)}
+	opts = append(defaults, opts...)
+	store, err := NewStorage(path, opts...)
+	if err != nil {
+		return nil, nil, err
+	}
+	return store, func() {}, nil
+}
+
 type bootResponse struct {
 	result ingest.BootResult
 	err    error
@@ -107,10 +120,10 @@ type fakeObjectStorage struct {
 }
 
 type fakeUpload struct {
-        Key         string
-        ContentType string
-        Body        []byte
-        URL         string
+	Key         string
+	ContentType string
+	Body        []byte
+	URL         string
 }
 
 func (f *fakeObjectStorage) Enabled() bool { return true }
@@ -127,19 +140,19 @@ func (f *fakeObjectStorage) Upload(ctx context.Context, key, contentType string,
 		}
 	}
 	copyBody := append([]byte(nil), body...)
-        upload := fakeUpload{Key: finalKey, ContentType: contentType, Body: copyBody}
-        url := ""
-        if f.baseURL != "" {
-                base := strings.TrimRight(f.baseURL, "/")
-                if finalKey != "" {
-                        url = base + "/" + finalKey
-                } else {
-                        url = base
-                }
-        }
-        upload.URL = url
-        f.uploads = append(f.uploads, upload)
-        return objectReference{Key: finalKey, URL: url}, nil
+	upload := fakeUpload{Key: finalKey, ContentType: contentType, Body: copyBody}
+	url := ""
+	if f.baseURL != "" {
+		base := strings.TrimRight(f.baseURL, "/")
+		if finalKey != "" {
+			url = base + "/" + finalKey
+		} else {
+			url = base
+		}
+	}
+	upload.URL = url
+	f.uploads = append(f.uploads, upload)
+	return objectReference{Key: finalKey, URL: url}, nil
 }
 
 func (f *fakeObjectStorage) Delete(ctx context.Context, key string) error {
@@ -763,127 +776,11 @@ func TestDeleteRecordingRemovesStorageArtifacts(t *testing.T) {
 }
 
 func TestRecordingRetentionPurgesExpired(t *testing.T) {
-	policy := RecordingRetentionPolicy{Published: time.Second, Unpublished: time.Second}
-	controller := &fakeIngestController{bootResponses: []bootResponse{{result: ingest.BootResult{
-		Renditions: []ingest.Rendition{{Name: "720p", ManifestURL: "https://origin/720p.m3u8"}},
-	}}}}
-	objectCfg := WithObjectStorage(ObjectStorageConfig{
-		Bucket:         "vod",
-		Prefix:         "vod/assets",
-		PublicEndpoint: "https://cdn.example.com/content",
-	})
-	store := newTestStoreWithController(t, controller, WithRecordingRetention(policy), objectCfg)
-	fakeStorage := &fakeObjectStorage{prefix: store.objectStorage.Prefix, baseURL: store.objectStorage.PublicEndpoint}
-	store.objectClient = fakeStorage
-
-	owner, err := store.CreateUser(CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
-	if err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-	channel, err := store.CreateChannel(owner.ID, "Speedrun", "gaming", nil)
-	if err != nil {
-		t.Fatalf("CreateChannel: %v", err)
-	}
-	if _, err := store.StartStream(channel.ID, []string{"720p"}); err != nil {
-		t.Fatalf("StartStream: %v", err)
-	}
-	if _, err := store.StopStream(channel.ID, 10); err != nil {
-		t.Fatalf("StopStream: %v", err)
-	}
-	recordingID := firstRecordingID(store)
-	clip, err := store.CreateClipExport(recordingID, ClipExportParams{Title: "Intro", StartSeconds: 0, EndSeconds: 5})
-	if err != nil {
-		t.Fatalf("CreateClipExport: %v", err)
-	}
-
-	store.mu.Lock()
-	var manifestObjects []string
-	var thumbnailObjects []string
-	recording := store.data.Recordings[recordingID]
-	for metaKey, objectKey := range recording.Metadata {
-		switch {
-		case strings.HasPrefix(metaKey, metadataManifestPrefix):
-			manifestObjects = append(manifestObjects, objectKey)
-		case strings.HasPrefix(metaKey, metadataThumbnailPrefix):
-			thumbnailObjects = append(thumbnailObjects, objectKey)
-		}
-	}
-	past := time.Now().Add(-time.Minute)
-	recording.RetainUntil = &past
-	store.data.Recordings[recordingID] = recording
-	clipStored := store.data.ClipExports[clip.ID]
-	clipStored.StorageObject = buildObjectKey("clips", clip.ID+".mp4")
-	store.data.ClipExports[clip.ID] = clipStored
-	store.mu.Unlock()
-
-	fakeStorage.deletes = nil
-	recordings, err := store.ListRecordings(channel.ID, true)
-	if err != nil {
-		t.Fatalf("ListRecordings: %v", err)
-	}
-	if len(recordings) != 0 {
-		t.Fatalf("expected retention to purge recordings, got %d", len(recordings))
-	}
-
-	expectedDeletes := make(map[string]struct{})
-	for _, key := range manifestObjects {
-		if key != "" {
-			expectedDeletes[key] = struct{}{}
-		}
-	}
-	for _, key := range thumbnailObjects {
-		if key != "" {
-			expectedDeletes[key] = struct{}{}
-		}
-	}
-	if clipStored.StorageObject != "" {
-		expectedDeletes[clipStored.StorageObject] = struct{}{}
-	}
-	for _, deleted := range fakeStorage.deletes {
-		delete(expectedDeletes, deleted)
-	}
-	if len(expectedDeletes) != 0 {
-		t.Fatalf("expected storage deletes for manifests, thumbnails, and clips; missing %v", expectedDeletes)
-	}
+	RunRepositoryRecordingRetention(t, jsonRepositoryFactory)
 }
 
 func TestStorageIngestHealthSnapshots(t *testing.T) {
-	responses := [][]ingest.HealthStatus{
-		{{Component: "srs", Status: "ok"}},
-		{{Component: "transcoder", Status: "error", Detail: "timeout"}},
-	}
-	fake := &fakeIngestController{healthResponses: responses}
-	store := newTestStoreWithController(t, fake)
-
-	first := store.IngestHealth(context.Background())
-	if fake.healthCalls != 1 {
-		t.Fatalf("expected health to be queried once, got %d", fake.healthCalls)
-	}
-	if !reflect.DeepEqual(first, responses[0]) {
-		t.Fatalf("unexpected health payload: %+v", first)
-	}
-	recorded, ts1 := store.LastIngestHealth()
-	if !reflect.DeepEqual(recorded, first) {
-		t.Fatalf("expected last health to match recorded snapshot")
-	}
-	if ts1.IsZero() {
-		t.Fatal("expected health timestamp to be set")
-	}
-
-	second := store.IngestHealth(context.Background())
-	if fake.healthCalls != 2 {
-		t.Fatalf("expected second health call to increment counter, got %d", fake.healthCalls)
-	}
-	if !reflect.DeepEqual(second, responses[1]) {
-		t.Fatalf("unexpected second health payload: %+v", second)
-	}
-	recorded, ts2 := store.LastIngestHealth()
-	if !reflect.DeepEqual(recorded, second) {
-		t.Fatalf("expected snapshot to update on subsequent call")
-	}
-	if ts2.Before(ts1) {
-		t.Fatal("expected subsequent health timestamp to be >= initial timestamp")
-	}
+	RunRepositoryIngestHealthSnapshots(t, jsonRepositoryFactory)
 }
 
 func TestDeleteChannelRemovesArtifacts(t *testing.T) {
@@ -1488,167 +1385,15 @@ func TestListFollowedChannelIDsOrdersByRecency(t *testing.T) {
 }
 
 func TestChatReportsLifecycle(t *testing.T) {
-	store := newTestStore(t)
-	owner, err := store.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
-	if err != nil {
-		t.Fatalf("create owner: %v", err)
-	}
-	reporter, err := store.CreateUser(CreateUserParams{DisplayName: "reporter", Email: "reporter@example.com"})
-	if err != nil {
-		t.Fatalf("create reporter: %v", err)
-	}
-	target, err := store.CreateUser(CreateUserParams{DisplayName: "target", Email: "target@example.com"})
-	if err != nil {
-		t.Fatalf("create target: %v", err)
-	}
-	channel, err := store.CreateChannel(owner.ID, "Lobby", "gaming", nil)
-	if err != nil {
-		t.Fatalf("create channel: %v", err)
-	}
-
-	report, err := store.CreateChatReport(channel.ID, reporter.ID, target.ID, "spam", "msg-1", "")
-	if err != nil {
-		t.Fatalf("CreateChatReport: %v", err)
-	}
-	if report.Status != "open" {
-		t.Fatalf("expected new report to be open")
-	}
-
-	pending, err := store.ListChatReports(channel.ID, false)
-	if err != nil {
-		t.Fatalf("ListChatReports: %v", err)
-	}
-	if len(pending) != 1 {
-		t.Fatalf("expected 1 pending report, got %d", len(pending))
-	}
-
-	resolved, err := store.ResolveChatReport(report.ID, owner.ID, "handled")
-	if err != nil {
-		t.Fatalf("ResolveChatReport: %v", err)
-	}
-	if resolved.Status != "resolved" || resolved.Resolution != "handled" {
-		t.Fatalf("expected resolved report, got %+v", resolved)
-	}
-
-	pending, err = store.ListChatReports(channel.ID, false)
-	if err != nil {
-		t.Fatalf("ListChatReports pending: %v", err)
-	}
-	if len(pending) != 0 {
-		t.Fatalf("expected no pending reports, got %d", len(pending))
-	}
-
-	all, err := store.ListChatReports(channel.ID, true)
-	if err != nil {
-		t.Fatalf("ListChatReports(includeResolved): %v", err)
-	}
-	if len(all) != 1 {
-		t.Fatalf("expected resolved report to be listed, got %d", len(all))
-	}
+	RunRepositoryChatReportsLifecycle(t, jsonRepositoryFactory)
 }
 
 func TestCreateTipAndList(t *testing.T) {
-	store := newTestStore(t)
-	owner, err := store.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
-	if err != nil {
-		t.Fatalf("create owner: %v", err)
-	}
-	supporter, err := store.CreateUser(CreateUserParams{DisplayName: "fan", Email: "fan@example.com"})
-	if err != nil {
-		t.Fatalf("create supporter: %v", err)
-	}
-	channel, err := store.CreateChannel(owner.ID, "Lobby", "gaming", nil)
-	if err != nil {
-		t.Fatalf("create channel: %v", err)
-	}
-
-	tip, err := store.CreateTip(CreateTipParams{
-		ChannelID:  channel.ID,
-		FromUserID: supporter.ID,
-		Amount:     5.5,
-		Currency:   "usd",
-		Provider:   "stripe",
-		Reference:  "ref-1",
-		Message:    "keep it up",
-	})
-	if err != nil {
-		t.Fatalf("CreateTip: %v", err)
-	}
-	if tip.ID == "" {
-		t.Fatalf("expected tip id to be set")
-	}
-
-	tips, err := store.ListTips(channel.ID, 10)
-	if err != nil {
-		t.Fatalf("ListTips: %v", err)
-	}
-	if len(tips) != 1 || tips[0].ID != tip.ID {
-		t.Fatalf("expected persisted tip, got %+v", tips)
-	}
+	RunRepositoryTipsLifecycle(t, jsonRepositoryFactory)
 }
 
 func TestCreateSubscriptionAndCancel(t *testing.T) {
-	store := newTestStore(t)
-	owner, err := store.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
-	if err != nil {
-		t.Fatalf("create owner: %v", err)
-	}
-	viewer, err := store.CreateUser(CreateUserParams{DisplayName: "viewer", Email: "viewer@example.com"})
-	if err != nil {
-		t.Fatalf("create viewer: %v", err)
-	}
-	channel, err := store.CreateChannel(owner.ID, "Lobby", "gaming", nil)
-	if err != nil {
-		t.Fatalf("create channel: %v", err)
-	}
-
-	subscription, err := store.CreateSubscription(CreateSubscriptionParams{
-		ChannelID: channel.ID,
-		UserID:    viewer.ID,
-		Tier:      "gold",
-		Provider:  "stripe",
-		Amount:    9.99,
-		Currency:  "usd",
-		Duration:  30 * 24 * time.Hour,
-		AutoRenew: true,
-	})
-	if err != nil {
-		t.Fatalf("CreateSubscription: %v", err)
-	}
-	if subscription.Status != "active" {
-		t.Fatalf("expected active subscription")
-	}
-
-	subs, err := store.ListSubscriptions(channel.ID, false)
-	if err != nil {
-		t.Fatalf("ListSubscriptions: %v", err)
-	}
-	if len(subs) != 1 {
-		t.Fatalf("expected one active subscription, got %d", len(subs))
-	}
-
-	cancelled, err := store.CancelSubscription(subscription.ID, viewer.ID, "")
-	if err != nil {
-		t.Fatalf("CancelSubscription: %v", err)
-	}
-	if cancelled.Status != "cancelled" || cancelled.CancelledBy != viewer.ID {
-		t.Fatalf("expected subscription to be cancelled by viewer, got %+v", cancelled)
-	}
-
-	subs, err = store.ListSubscriptions(channel.ID, false)
-	if err != nil {
-		t.Fatalf("ListSubscriptions after cancel: %v", err)
-	}
-	if len(subs) != 0 {
-		t.Fatalf("expected no active subscriptions after cancellation")
-	}
-	subs, err = store.ListSubscriptions(channel.ID, true)
-	if err != nil {
-		t.Fatalf("ListSubscriptions include inactive: %v", err)
-	}
-	if len(subs) != 1 {
-		t.Fatalf("expected cancelled subscription to be listed, got %d", len(subs))
-	}
+	RunRepositorySubscriptionsLifecycle(t, jsonRepositoryFactory)
 }
 
 func TestCloneDatasetCopiesModerationMetadata(t *testing.T) {
