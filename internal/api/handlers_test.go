@@ -235,9 +235,12 @@ func TestSignupAndLoginFlow(t *testing.T) {
 		t.Fatal("expected HTTP logout to issue non-secure cookie")
 	}
 
-	if _, _, ok := handler.sessionManager().Validate(loginCookie.Value); ok {
-		t.Fatal("expected logout to revoke session token")
-	}
+        if _, _, ok, err := handler.sessionManager().Validate(loginCookie.Value); err != nil || ok {
+                if err != nil {
+                        t.Fatalf("Validate returned error: %v", err)
+                }
+                t.Fatal("expected logout to revoke session token")
+        }
 
 	req = httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
 	req.AddCookie(loginCookie)

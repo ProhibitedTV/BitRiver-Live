@@ -37,6 +37,8 @@ func main() {
 	postgresHealthInterval := flag.Duration("postgres-health-interval", 0, "interval between Postgres health checks")
 	postgresAcquireTimeout := flag.Duration("postgres-acquire-timeout", 0, "timeout when acquiring a Postgres connection from the pool")
 	postgresAppName := flag.String("postgres-app-name", "", "application_name reported to Postgres")
+	sessionStoreDriver := flag.String("session-store", "", "session store driver (memory or postgres)")
+	sessionPostgresDSN := flag.String("session-postgres-dsn", "", "Postgres DSN for the session store")
 	mode := flag.String("mode", "", "server runtime mode (development or production)")
 	tlsCert := flag.String("tls-cert", "", "path to TLS certificate file")
 	tlsKey := flag.String("tls-key", "", "path to TLS private key file")
@@ -140,14 +142,17 @@ func main() {
 	}
 
 	driver := resolveStorageDriver(*storageDriver, os.Getenv("BITRIVER_LIVE_STORAGE_DRIVER"))
-	var store storage.Repository
+	var (
+		store              storage.Repository
+		storagePostgresDSN string
+	)
 	switch driver {
 	case "json":
 		dataFile := resolveDataPath(*dataPath)
 		store, err = storage.NewJSONRepository(dataFile, options...)
 	case "postgres":
-		dsn := firstNonEmpty(*postgresDSN, os.Getenv("BITRIVER_LIVE_POSTGRES_DSN"))
-		if strings.TrimSpace(dsn) == "" {
+		storagePostgresDSN = firstNonEmpty(*postgresDSN, os.Getenv("BITRIVER_LIVE_POSTGRES_DSN"))
+		if strings.TrimSpace(storagePostgresDSN) == "" {
 			logger.Error("postgres storage selected without DSN")
 			os.Exit(1)
 		}
@@ -171,7 +176,7 @@ func main() {
 		if appName != "" {
 			pgOptions = append(pgOptions, storage.WithPostgresApplicationName(appName))
 		}
-		store, err = storage.NewPostgresRepository(dsn, pgOptions...)
+		store, err = storage.NewPostgresRepository(storagePostgresDSN, pgOptions...)
 	default:
 		logger.Error("unsupported storage driver", "driver", driver)
 		os.Exit(1)
@@ -181,7 +186,41 @@ func main() {
 		os.Exit(1)
 	}
 
-	sessions := auth.NewSessionManager(24 * time.Hour)
+	sessionDriver := strings.ToLower(strings.TrimSpace(firstNonEmpty(*sessionStoreDriver, os.Getenv("BITRIVER_LIVE_SESSION_STORE"))))
+	if sessionDriver == "" {
+		sessionDriver = "memory"
+	}
+
+	var (
+		sessionStore  auth.SessionStore
+		sessionCloser func(context.Context) error
+	)
+
+	switch sessionDriver {
+	case "memory":
+		sessionStore = auth.NewMemorySessionStore()
+	case "postgres":
+		sessionDSN := firstNonEmpty(*sessionPostgresDSN, os.Getenv("BITRIVER_LIVE_SESSION_POSTGRES_DSN"))
+		if sessionDSN == "" {
+			sessionDSN = storagePostgresDSN
+		}
+		if strings.TrimSpace(sessionDSN) == "" {
+			logger.Error("postgres session store selected without DSN")
+			os.Exit(1)
+		}
+		pgStore, err := auth.NewPostgresSessionStore(sessionDSN)
+		if err != nil {
+			logger.Error("failed to open session store", "error", err)
+			os.Exit(1)
+		}
+		sessionStore = pgStore
+		sessionCloser = func(ctx context.Context) error { return pgStore.Close(ctx) }
+	default:
+		logger.Error("unsupported session store driver", "driver", sessionDriver)
+		os.Exit(1)
+	}
+
+	sessions := auth.NewSessionManager(24*time.Hour, auth.WithStore(sessionStore))
 	queue, err := configureChatQueue(chatQueueDriver, chatRedisAddr, chatRedisPassword, chatRedisStream, chatRedisGroup, logger)
 	if err != nil {
 		logger.Error("failed to configure chat queue", "error", err)
@@ -263,6 +302,20 @@ func main() {
 	} else if closer, ok := store.(interface{ Close() error }); ok {
 		if err := closer.Close(); err != nil {
 			logger.Warn("failed to close datastore", "error", err)
+		}
+	}
+
+	if sessionCloser != nil {
+		if err := sessionCloser(ctx); err != nil {
+			logger.Warn("failed to close session store", "error", err)
+		}
+	} else if closer, ok := sessionStore.(interface{ Close(context.Context) error }); ok {
+		if err := closer.Close(ctx); err != nil {
+			logger.Warn("failed to close session store", "error", err)
+		}
+	} else if closer, ok := sessionStore.(interface{ Close() error }); ok {
+		if err := closer.Close(); err != nil {
+			logger.Warn("failed to close session store", "error", err)
 		}
 	}
 
