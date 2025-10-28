@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/auth"
+	"bitriver-live/internal/chat"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/observability/metrics"
@@ -17,8 +18,9 @@ import (
 )
 
 type Handler struct {
-	Store    *storage.Storage
-	Sessions *auth.SessionManager
+	Store       *storage.Storage
+	Sessions    *auth.SessionManager
+	ChatGateway *chat.Gateway
 }
 
 func NewHandler(store *storage.Storage, sessions *auth.SessionManager) *Handler {
@@ -984,6 +986,20 @@ type createChatRequest struct {
 	Content string `json:"content"`
 }
 
+type chatModerationRequest struct {
+	Action     string `json:"action"`
+	TargetID   string `json:"targetId"`
+	DurationMs int    `json:"durationMs"`
+	Reason     string `json:"reason,omitempty"`
+}
+
+type chatModerationResponse struct {
+	Action    string  `json:"action"`
+	ChannelID string  `json:"channelId"`
+	TargetID  string  `json:"targetId"`
+	ExpiresAt *string `json:"expiresAt,omitempty"`
+}
+
 type chatMessageResponse struct {
 	ID        string `json:"id"`
 	ChannelID string `json:"channelId"`
@@ -1000,6 +1016,18 @@ func newChatMessageResponse(message models.ChatMessage) chatMessageResponse {
 		Content:   message.Content,
 		CreatedAt: message.CreatedAt.Format(time.RFC3339Nano),
 	}
+}
+
+func (h *Handler) ChatWebsocket(w http.ResponseWriter, r *http.Request) {
+	if h.ChatGateway == nil {
+		http.Error(w, "chat gateway unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	user, ok := h.requireAuthenticatedUser(w, r)
+	if !ok {
+		return
+	}
+	h.ChatGateway.HandleConnection(w, r, user)
 }
 
 type cryptoAddressPayload struct {
@@ -1055,26 +1083,32 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 		return
 	}
 	if len(remaining) > 0 && remaining[0] != "" {
-		messageID := remaining[0]
-		if len(remaining) > 1 {
-			writeError(w, http.StatusNotFound, fmt.Errorf("unknown chat path"))
+		switch remaining[0] {
+		case "moderation":
+			h.handleChatModeration(actor, channel, remaining[1:], w, r)
+			return
+		default:
+			messageID := remaining[0]
+			if len(remaining) > 1 {
+				writeError(w, http.StatusNotFound, fmt.Errorf("unknown chat path"))
+				return
+			}
+			if r.Method != http.MethodDelete {
+				w.Header().Set("Allow", "DELETE")
+				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				return
+			}
+			if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+				WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+				return
+			}
+			if err := h.Store.DeleteChatMessage(channelID, messageID); err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		if r.Method != http.MethodDelete {
-			w.Header().Set("Allow", "DELETE")
-			writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
-			return
-		}
-		if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
-			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
-			return
-		}
-		if err := h.Store.DeleteChatMessage(channelID, messageID); err != nil {
-			writeError(w, http.StatusBadRequest, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-		return
 	}
 
 	switch r.Method {
@@ -1109,6 +1143,27 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
+		if h.ChatGateway != nil {
+			author, ok := h.Store.GetUser(req.UserID)
+			if !ok {
+				writeError(w, http.StatusBadRequest, fmt.Errorf("user %s not found", req.UserID))
+				return
+			}
+			messageEvt, err := h.ChatGateway.CreateMessage(r.Context(), author, channelID, req.Content)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			chatMessage := models.ChatMessage{
+				ID:        messageEvt.ID,
+				ChannelID: messageEvt.ChannelID,
+				UserID:    messageEvt.UserID,
+				Content:   messageEvt.Content,
+				CreatedAt: messageEvt.CreatedAt,
+			}
+			writeJSON(w, http.StatusCreated, newChatMessageResponse(chatMessage))
+			return
+		}
 		message, err := h.Store.CreateChatMessage(channelID, req.UserID, req.Content)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
@@ -1119,6 +1174,77 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 		w.Header().Set("Allow", "GET, POST")
 		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 	}
+}
+
+func (h *Handler) handleChatModeration(actor models.User, channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
+	if h.ChatGateway == nil {
+		http.Error(w, "chat gateway unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if len(remaining) > 0 {
+		writeError(w, http.StatusNotFound, fmt.Errorf("unknown chat moderation path"))
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+	var req chatModerationRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if strings.TrimSpace(req.TargetID) == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("targetId is required"))
+		return
+	}
+	if _, ok := h.Store.GetUser(req.TargetID); !ok {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("user %s not found", req.TargetID))
+		return
+	}
+	var evt chat.ModerationEvent
+	evt.ChannelID = channel.ID
+	evt.ActorID = actor.ID
+	evt.TargetID = req.TargetID
+	evt.Reason = strings.TrimSpace(req.Reason)
+
+	switch strings.ToLower(strings.TrimSpace(req.Action)) {
+	case "timeout":
+		duration := time.Duration(req.DurationMs) * time.Millisecond
+		if duration <= 0 {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("durationMs must be positive"))
+			return
+		}
+		expires := time.Now().Add(duration).UTC()
+		evt.Action = chat.ModerationActionTimeout
+		evt.ExpiresAt = &expires
+	case "remove_timeout", "untimeout":
+		evt.Action = chat.ModerationActionRemoveTimeout
+	case "ban":
+		evt.Action = chat.ModerationActionBan
+	case "unban":
+		evt.Action = chat.ModerationActionUnban
+	default:
+		writeError(w, http.StatusBadRequest, fmt.Errorf("unknown moderation action"))
+		return
+	}
+
+	if err := h.ChatGateway.ApplyModeration(r.Context(), actor, evt); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	var expires *string
+	if evt.ExpiresAt != nil {
+		formatted := evt.ExpiresAt.Format(time.RFC3339Nano)
+		expires = &formatted
+	}
+	writeJSON(w, http.StatusAccepted, chatModerationResponse{
+		Action:    string(evt.Action),
+		ChannelID: evt.ChannelID,
+		TargetID:  evt.TargetID,
+		ExpiresAt: expires,
+	})
 }
 
 // Profiles

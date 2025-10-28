@@ -35,6 +35,8 @@ type dataset struct {
 	Channels       map[string]models.Channel       `json:"channels"`
 	StreamSessions map[string]models.StreamSession `json:"streamSessions"`
 	ChatMessages   map[string]models.ChatMessage   `json:"chatMessages"`
+	ChatBans       map[string]map[string]time.Time `json:"chatBans"`
+	ChatTimeouts   map[string]map[string]time.Time `json:"chatTimeouts"`
 	Profiles       map[string]models.Profile       `json:"profiles"`
 	Follows        map[string]map[string]time.Time `json:"follows"`
 }
@@ -79,6 +81,8 @@ func newDataset() dataset {
 		Channels:       make(map[string]models.Channel),
 		StreamSessions: make(map[string]models.StreamSession),
 		ChatMessages:   make(map[string]models.ChatMessage),
+		ChatBans:       make(map[string]map[string]time.Time),
+		ChatTimeouts:   make(map[string]map[string]time.Time),
 		Profiles:       make(map[string]models.Profile),
 		Follows:        make(map[string]map[string]time.Time),
 	}
@@ -96,6 +100,12 @@ func (s *Storage) ensureDatasetInitializedLocked() {
 	}
 	if s.data.ChatMessages == nil {
 		s.data.ChatMessages = make(map[string]models.ChatMessage)
+	}
+	if s.data.ChatBans == nil {
+		s.data.ChatBans = make(map[string]map[string]time.Time)
+	}
+	if s.data.ChatTimeouts == nil {
+		s.data.ChatTimeouts = make(map[string]map[string]time.Time)
 	}
 	if s.data.Profiles == nil {
 		s.data.Profiles = make(map[string]models.Profile)
@@ -288,6 +298,36 @@ func cloneDataset(src dataset) dataset {
 		clone.ChatMessages = make(map[string]models.ChatMessage, len(src.ChatMessages))
 		for id, message := range src.ChatMessages {
 			clone.ChatMessages[id] = message
+		}
+	}
+
+	if src.ChatBans != nil {
+		clone.ChatBans = make(map[string]map[string]time.Time, len(src.ChatBans))
+		for channelID, bans := range src.ChatBans {
+			if bans == nil {
+				clone.ChatBans[channelID] = nil
+				continue
+			}
+			cloned := make(map[string]time.Time, len(bans))
+			for userID, issuedAt := range bans {
+				cloned[userID] = issuedAt
+			}
+			clone.ChatBans[channelID] = cloned
+		}
+	}
+
+	if src.ChatTimeouts != nil {
+		clone.ChatTimeouts = make(map[string]map[string]time.Time, len(src.ChatTimeouts))
+		for channelID, timeouts := range src.ChatTimeouts {
+			if timeouts == nil {
+				clone.ChatTimeouts[channelID] = nil
+				continue
+			}
+			cloned := make(map[string]time.Time, len(timeouts))
+			for userID, expiry := range timeouts {
+				cloned[userID] = expiry
+			}
+			clone.ChatTimeouts[channelID] = cloned
 		}
 	}
 
@@ -1325,6 +1365,10 @@ func (s *Storage) CreateChatMessage(channelID, userID, content string) (models.C
 		return models.ChatMessage{}, fmt.Errorf("user %s not found", userID)
 	}
 
+	if err := s.ensureChatAccessLocked(channelID, userID); err != nil {
+		return models.ChatMessage{}, err
+	}
+
 	trimmed := strings.TrimSpace(content)
 	if trimmed == "" {
 		return models.ChatMessage{}, errors.New("message content cannot be empty")
@@ -1353,6 +1397,38 @@ func (s *Storage) CreateChatMessage(channelID, userID, content string) (models.C
 	}
 
 	return message, nil
+}
+
+func (s *Storage) ensureChatAccessLocked(channelID, userID string) error {
+	if s.isChatBannedLocked(channelID, userID) {
+		return fmt.Errorf("user is banned")
+	}
+	if expiry, ok := s.chatTimeoutLocked(channelID, userID); ok {
+		if time.Now().UTC().Before(expiry) {
+			return fmt.Errorf("user is timed out")
+		}
+		delete(s.data.ChatTimeouts[channelID], userID)
+	}
+	return nil
+}
+
+func (s *Storage) isChatBannedLocked(channelID, userID string) bool {
+	if bans := s.data.ChatBans[channelID]; bans != nil {
+		if _, exists := bans[userID]; exists {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Storage) chatTimeoutLocked(channelID, userID string) (time.Time, bool) {
+	if timeouts := s.data.ChatTimeouts[channelID]; timeouts != nil {
+		expiry, ok := timeouts[userID]
+		if ok {
+			return expiry, true
+		}
+	}
+	return time.Time{}, false
 }
 
 func (s *Storage) ListChatMessages(channelID string, limit int) ([]models.ChatMessage, error) {

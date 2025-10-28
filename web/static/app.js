@@ -1,3 +1,5 @@
+import { ChatClient } from "./chat-client.js";
+
 class UnauthorizedError extends Error {
     constructor(message) {
         super(message);
@@ -14,6 +16,7 @@ const state = {
     profileIndex: new Map(),
     selectedProfileId: null,
     currentUser: null,
+    chatClient: null,
 };
 
 function escapeHTML(value) {
@@ -55,6 +58,113 @@ function clearElement(element) {
     while (element.firstChild) {
         element.removeChild(element.firstChild);
     }
+}
+
+function initChatClient() {
+    if (state.chatClient) {
+        return state.chatClient;
+    }
+    state.chatClient = new ChatClient({
+        onEvent: handleChatEvent,
+        onError: (error) => {
+            const message = error instanceof Error ? error.message : "chat connection lost";
+            showToast(`Chat error: ${message}`, "error");
+        },
+        onOpen: () => {
+            syncChatSubscriptions();
+        },
+    });
+    return state.chatClient;
+}
+
+function syncChatSubscriptions() {
+    const client = state.chatClient;
+    if (!client) {
+        return;
+    }
+    const desired = new Set(state.channels.map((channel) => channel.id));
+    if (client.joined) {
+        for (const channelId of client.joined) {
+            if (!desired.has(channelId)) {
+                client.leave(channelId);
+            }
+        }
+    }
+    for (const channelId of desired) {
+        client.join(channelId);
+    }
+}
+
+function handleChatEvent(event) {
+    if (!event) {
+        return;
+    }
+    if (event.type === "message" && event.message) {
+        const channelId = event.message.channelId;
+        if (!state.chat[channelId]) {
+            state.chat[channelId] = [];
+        }
+        const exists = state.chat[channelId].some((item) => item.id === event.message.id);
+        if (!exists) {
+            state.chat[channelId].unshift({
+                id: event.message.id,
+                channelId,
+                userId: event.message.userId,
+                content: event.message.content,
+                createdAt: event.message.createdAt,
+            });
+            renderChat();
+            renderDashboard();
+        }
+        return;
+    }
+    if (event.type === "moderation" && event.moderation) {
+        const action = event.moderation.action.replace(/_/g, " ");
+        const target = event.moderation.targetId;
+        showToast(`Moderation ${action} for ${target}`, "info");
+    }
+}
+
+async function sendChatMessage(channelId, userId, content) {
+    const client = initChatClient();
+    if (client && state.currentUser && state.currentUser.id === userId) {
+        client.join(channelId);
+        client.message(channelId, content);
+        return;
+    }
+    await apiRequest(`/api/channels/${channelId}/chat`, {
+        method: "POST",
+        body: JSON.stringify({ userId, content }),
+    });
+    await loadChatHistory(channelId, 50);
+    renderChat();
+}
+
+async function sendModerationAction(channelId, action, targetId, durationMs = 0) {
+    const client = initChatClient();
+    if (client) {
+        client.join(channelId);
+        switch (action) {
+            case "timeout":
+                client.timeout(channelId, targetId, durationMs);
+                return;
+            case "remove_timeout":
+                client.clearTimeout(channelId, targetId);
+                return;
+            case "ban":
+                client.ban(channelId, targetId);
+                return;
+            case "unban":
+                client.unban(channelId, targetId);
+                return;
+            default:
+                throw new Error(`Unknown moderation action: ${action}`);
+        }
+    }
+    await apiRequest(`/api/channels/${channelId}/chat/moderation`, {
+        method: "POST",
+        body: JSON.stringify({ action, targetId, durationMs }),
+    });
 }
 
 const modal = document.getElementById("modal");
@@ -469,6 +579,8 @@ async function loadChannels(options = {}) {
     renderDashboard();
     renderSessions();
     renderChat();
+    initChatClient();
+    syncChatSubscriptions();
 }
 
 function renderChannels() {
@@ -893,6 +1005,51 @@ function renderChat() {
         );
 
         card.appendChild(form);
+
+        const moderation = createElement("div", { className: "chat-moderation" });
+        const moderationLabel = document.createElement("label");
+        moderationLabel.append("Moderate user");
+        const moderationSelect = document.createElement("select");
+        moderationSelect.name = "moderationTarget";
+        const moderationPlaceholder = document.createElement("option");
+        moderationPlaceholder.value = "";
+        moderationPlaceholder.disabled = true;
+        moderationPlaceholder.selected = true;
+        moderationPlaceholder.textContent = "Select user";
+        moderationSelect.appendChild(moderationPlaceholder);
+        for (const user of state.users) {
+            const option = createElement("option", {
+                textContent: user.displayName,
+                attributes: { value: user.id },
+            });
+            moderationSelect.appendChild(option);
+        }
+        moderationLabel.appendChild(moderationSelect);
+        moderation.appendChild(moderationLabel);
+
+        const durationLabel = document.createElement("label");
+        durationLabel.append("Timeout (seconds)");
+        const durationInput = document.createElement("input");
+        durationInput.type = "number";
+        durationInput.name = "timeoutSeconds";
+        durationInput.min = "5";
+        durationInput.value = "60";
+        durationLabel.appendChild(durationInput);
+        moderation.appendChild(durationLabel);
+
+        const moderationActions = createElement("div", { className: "chat-moderation-actions" });
+        const timeoutBtn = createElement("button", { className: "secondary", textContent: "Timeout" });
+        timeoutBtn.type = "button";
+        const clearTimeoutBtn = createElement("button", { className: "secondary", textContent: "Clear timeout" });
+        clearTimeoutBtn.type = "button";
+        const banBtn = createElement("button", { className: "danger", textContent: "Ban" });
+        banBtn.type = "button";
+        const unbanBtn = createElement("button", { className: "secondary", textContent: "Unban" });
+        unbanBtn.type = "button";
+        moderationActions.append(timeoutBtn, clearTimeoutBtn, banBtn, unbanBtn);
+        moderation.appendChild(moderationActions);
+        card.appendChild(moderation);
+
         container.appendChild(card);
     }
 
@@ -906,16 +1063,66 @@ function renderChat() {
                 return;
             }
             try {
-                await apiRequest(`/api/channels/${channelId}/chat`, {
-                    method: "POST",
-                    body: JSON.stringify({ userId, content }),
-                });
+                await sendChatMessage(channelId, userId, content);
                 form.reset();
-                await loadChatHistory(channelId);
-                renderChat();
             } catch (error) {
                 showToast(error.message, "error");
             }
+        });
+    });
+
+    container.querySelectorAll(".chat-moderation").forEach((section) => {
+        const card = section.closest("article");
+        const channelId = card?.querySelector(".chat-form")?.dataset.channel;
+        if (!channelId) {
+            return;
+        }
+        const select = section.querySelector("select[name=moderationTarget]");
+        const durationInput = section.querySelector("input[name=timeoutSeconds]");
+        const buttons = section.querySelectorAll("button");
+
+        const resolveTarget = () => select?.value;
+
+        const handleModeration = async (action) => {
+            const targetId = resolveTarget();
+            if (!targetId) {
+                showToast("Select a user to moderate", "error");
+                return;
+            }
+            try {
+                if (action === "timeout") {
+                    const seconds = parseInt(durationInput?.value || "60", 10);
+                    const durationMs = Number.isFinite(seconds) ? Math.max(seconds, 5) * 1000 : 60000;
+                    await sendModerationAction(channelId, "timeout", targetId, durationMs);
+                } else if (action === "remove_timeout") {
+                    await sendModerationAction(channelId, "remove_timeout", targetId, 0);
+                } else {
+                    await sendModerationAction(channelId, action, targetId, 0);
+                }
+            } catch (error) {
+                showToast(error.message, "error");
+            }
+        };
+
+        buttons.forEach((button) => {
+            button.addEventListener("click", () => {
+                switch (button.textContent) {
+                    case "Timeout":
+                        handleModeration("timeout");
+                        break;
+                    case "Clear timeout":
+                        handleModeration("remove_timeout");
+                        break;
+                    case "Ban":
+                        handleModeration("ban");
+                        break;
+                    case "Unban":
+                        handleModeration("unban");
+                        break;
+                    default:
+                        break;
+                }
+            });
         });
     });
 
@@ -1553,6 +1760,7 @@ function attachActions() {
 async function initialize() {
     const session = await requireSession();
     state.currentUser = session.user;
+    initChatClient();
     renderAccountStatus();
     attachActions();
     setupInstaller();
