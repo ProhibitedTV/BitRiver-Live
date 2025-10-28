@@ -87,6 +87,10 @@ func TestPostgresRepositoryConnection(t *testing.T) {
 	}
 }
 
+func TestPostgresUserLifecycle(t *testing.T) {
+	storage.RunRepositoryUserLifecycle(t, postgresRepositoryFactory)
+}
+
 func TestPostgresChatRestrictionsLifecycle(t *testing.T) {
 	storage.RunRepositoryChatRestrictionsLifecycle(t, postgresRepositoryFactory)
 }
