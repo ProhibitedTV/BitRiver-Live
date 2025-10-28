@@ -12,6 +12,14 @@ services:
       BITRIVER_LIVE_ADDR: :8080
       BITRIVER_LIVE_DATA: /var/lib/bitriver-live/store.json
       BITRIVER_VIEWER_ORIGIN: http://viewer:3000
+      BITRIVER_SRS_API: http://srs:1985
+      BITRIVER_SRS_TOKEN: local-dev-token
+      BITRIVER_OME_API: http://ome:8081
+      BITRIVER_OME_USERNAME: admin
+      BITRIVER_OME_PASSWORD: local-dev-password
+      BITRIVER_TRANSCODER_API: http://transcoder:9000
+      BITRIVER_TRANSCODER_TOKEN: local-dev-token
+      BITRIVER_INGEST_HEALTH: /healthz
       # Enable HTTPS by mounting certs and uncommenting the lines below.
       # BITRIVER_LIVE_TLS_CERT: /certs/fullchain.pem
       # BITRIVER_LIVE_TLS_KEY: /certs/privkey.pem
@@ -22,15 +30,6 @@ services:
       # BITRIVER_LIVE_RATE_LOGIN_WINDOW: 2m
       # BITRIVER_LIVE_RATE_REDIS_ADDR: redis:6379
       # BITRIVER_LIVE_RATE_REDIS_PASSWORD: supersecret
-      # Configure ingest orchestration (requires reachable SRS/OME/transcoder APIs).
-      # BITRIVER_SRS_API: http://srs:1985
-      # BITRIVER_SRS_TOKEN: changeme
-      # BITRIVER_OME_API: http://ome:8081
-      # BITRIVER_OME_USERNAME: admin
-      # BITRIVER_OME_PASSWORD: supersecret
-      # BITRIVER_TRANSCODER_API: http://transcoder:9000
-      # BITRIVER_TRANSCODER_TOKEN: changeme
-      # BITRIVER_INGEST_HEALTH: /healthz
     volumes:
       - ./data:/var/lib/bitriver-live
       # - ./certs:/certs
@@ -41,6 +40,10 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    depends_on:
+      - srs
+      - ome
+      - transcoder
 
   viewer:
     build:
@@ -65,6 +68,50 @@ services:
       - redis-data:/data
     ports:
       - "6379:6379"
+
+  srs:
+    image: ossrs/srs:5
+    container_name: bitriver-srs
+    ports:
+      - "1935:1935"
+      - "1985:1985"
+    volumes:
+      - ./srs/conf:/usr/local/srs/conf
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:1985/healthz || curl -fsS http://localhost:1985/api/v1/versions"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  ome:
+    image: airensoft/ovenmediaengine:0.15.10
+    container_name: bitriver-ome
+    ports:
+      - "8081:8081"
+      - "9000:9000"
+    volumes:
+      - ./ome/Server.xml:/opt/ovenmediaengine/bin/origin_conf/Server.xml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/healthz || curl -fsS http://localhost:8081/v1/system/monitoring"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  transcoder:
+    image: ghcr.io/bitriver-live/ffmpeg-job-controller:latest
+    container_name: bitriver-transcoder
+    ports:
+      - "9001:9000"
+    environment:
+      JOB_CONTROLLER_BIND: :9000
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   redis-data:
