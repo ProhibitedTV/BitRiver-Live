@@ -126,15 +126,81 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 CREATE TABLE IF NOT EXISTS chat_bans (
     channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    banned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    actor_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (channel_id, user_id)
 );
+
+CREATE INDEX IF NOT EXISTS chat_bans_channel_idx ON chat_bans (channel_id);
 
 CREATE TABLE IF NOT EXISTS chat_timeouts (
     channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    actor_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     expires_at TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (channel_id, user_id)
 );
+
+CREATE INDEX IF NOT EXISTS chat_timeouts_channel_idx ON chat_timeouts (channel_id, expires_at);
+
+CREATE TABLE IF NOT EXISTS chat_reports (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    reporter_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    target_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reason TEXT NOT NULL,
+    message_id TEXT REFERENCES chat_messages(id) ON DELETE SET NULL,
+    evidence_url TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    resolution TEXT,
+    resolver_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS chat_reports_channel_status_idx ON chat_reports (channel_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS chat_reports_target_idx ON chat_reports (target_id);
+
+CREATE TABLE IF NOT EXISTS tips (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    from_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    amount NUMERIC(20, 8) NOT NULL,
+    currency TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    reference TEXT NOT NULL,
+    wallet_address TEXT,
+    message TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS tips_reference_unique ON tips (provider, reference);
+CREATE INDEX IF NOT EXISTS tips_channel_created_idx ON tips (channel_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    tier TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    reference TEXT NOT NULL,
+    amount NUMERIC(20, 8) NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    auto_renew BOOLEAN NOT NULL DEFAULT FALSE,
+    status TEXT NOT NULL DEFAULT 'active',
+    cancelled_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    cancelled_reason TEXT,
+    cancelled_at TIMESTAMPTZ,
+    external_reference TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_reference_unique ON subscriptions (provider, reference);
+CREATE INDEX IF NOT EXISTS subscriptions_channel_status_idx ON subscriptions (channel_id, status, started_at DESC);
+CREATE INDEX IF NOT EXISTS subscriptions_user_channel_idx ON subscriptions (user_id, channel_id);
 
 COMMIT;
