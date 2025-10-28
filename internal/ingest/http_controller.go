@@ -1,9 +1,7 @@
 package ingest
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,40 +11,25 @@ import (
 
 // HTTPController orchestrates ingest operations via REST endpoints.
 type HTTPController struct {
-	config Config
+	config       Config
+	channels     channelAdapter
+	applications applicationAdapter
+	transcoder   transcoderAdapter
 }
 
-type srsChannelRequest struct {
-	ChannelID string `json:"channelId"`
-	StreamKey string `json:"streamKey"`
-}
-
-type srsChannelResponse struct {
-	PrimaryIngest string `json:"primaryIngest"`
-	BackupIngest  string `json:"backupIngest"`
-}
-
-type omeApplicationRequest struct {
-	ChannelID  string   `json:"channelId"`
-	Renditions []string `json:"renditions"`
-}
-
-type omeApplicationResponse struct {
-	OriginURL   string `json:"originUrl"`
-	PlaybackURL string `json:"playbackUrl"`
-}
-
-type ffmpegJobRequest struct {
-	ChannelID  string      `json:"channelId"`
-	SessionID  string      `json:"sessionId"`
-	OriginURL  string      `json:"originUrl"`
-	Renditions []Rendition `json:"renditions"`
-}
-
-type ffmpegJobResponse struct {
-	JobID      string      `json:"jobId"`
-	JobIDs     []string    `json:"jobIds"`
-	Renditions []Rendition `json:"renditions"`
+func (c *HTTPController) ensureAdapters() {
+	if c.config.HTTPClient == nil {
+		c.config.HTTPClient = &http.Client{Timeout: 10 * time.Second}
+	}
+	if c.channels == nil {
+		c.channels = newHTTPChannelAdapter(c.config.SRSBaseURL, c.config.SRSToken, c.config.HTTPClient)
+	}
+	if c.applications == nil {
+		c.applications = newHTTPApplicationAdapter(c.config.OMEBaseURL, c.config.OMEUsername, c.config.OMEPassword, c.config.HTTPClient)
+	}
+	if c.transcoder == nil {
+		c.transcoder = newHTTPTranscoderAdapter(c.config.JobBaseURL, c.config.JobToken, c.config.HTTPClient)
+	}
 }
 
 func (c *HTTPController) BootStream(ctx context.Context, params BootParams) (BootResult, error) {
@@ -54,26 +37,23 @@ func (c *HTTPController) BootStream(ctx context.Context, params BootParams) (Boo
 		return BootResult{}, fmt.Errorf("channelID and streamKey are required")
 	}
 
-	httpClient := c.config.HTTPClient
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 10 * time.Second}
-	}
+	c.ensureAdapters()
 
-	primary, backup, err := c.provisionSRS(ctx, httpClient, params)
+	primary, backup, err := c.channels.CreateChannel(ctx, params.ChannelID, params.StreamKey)
 	if err != nil {
 		return BootResult{}, err
 	}
 
-	origin, playback, err := c.provisionOME(ctx, httpClient, params)
+	origin, playback, err := c.applications.CreateApplication(ctx, params.ChannelID, params.Renditions)
 	if err != nil {
-		c.rollbackSRS(ctx, httpClient, params.ChannelID)
+		_ = c.channels.DeleteChannel(ctx, params.ChannelID)
 		return BootResult{}, err
 	}
 
-	jobIDs, renditions, err := c.startFFmpeg(ctx, httpClient, params, origin)
+	jobIDs, renditions, err := c.transcoder.StartJobs(ctx, params.ChannelID, params.SessionID, origin, c.config.LadderProfiles)
 	if err != nil {
-		c.rollbackOME(ctx, httpClient, params.ChannelID)
-		c.rollbackSRS(ctx, httpClient, params.ChannelID)
+		_ = c.applications.DeleteApplication(ctx, params.ChannelID)
+		_ = c.channels.DeleteChannel(ctx, params.ChannelID)
 		return BootResult{}, err
 	}
 
@@ -88,21 +68,18 @@ func (c *HTTPController) BootStream(ctx context.Context, params BootParams) (Boo
 }
 
 func (c *HTTPController) ShutdownStream(ctx context.Context, channelID, sessionID string, jobIDs []string) error {
-	httpClient := c.config.HTTPClient
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 10 * time.Second}
-	}
+	c.ensureAdapters()
 
 	var errs []string
 	for _, jobID := range jobIDs {
-		if err := c.delete(ctx, httpClient, fmt.Sprintf("%s/v1/jobs/%s", strings.TrimRight(c.config.JobBaseURL, "/"), jobID), c.config.JobToken); err != nil {
+		if err := c.transcoder.StopJob(ctx, jobID); err != nil {
 			errs = append(errs, fmt.Sprintf("stop job %s: %v", jobID, err))
 		}
 	}
-	if err := c.delete(ctx, httpClient, fmt.Sprintf("%s/v1/applications/%s", strings.TrimRight(c.config.OMEBaseURL, "/"), channelID), basicAuth(c.config.OMEUsername, c.config.OMEPassword)); err != nil {
+	if err := c.applications.DeleteApplication(ctx, channelID); err != nil {
 		errs = append(errs, fmt.Sprintf("delete OME app: %v", err))
 	}
-	if err := c.delete(ctx, httpClient, fmt.Sprintf("%s/v1/channels/%s", strings.TrimRight(c.config.SRSBaseURL, "/"), channelID), bearer(c.config.SRSToken)); err != nil {
+	if err := c.channels.DeleteChannel(ctx, channelID); err != nil {
 		errs = append(errs, fmt.Sprintf("delete SRS channel: %v", err))
 	}
 	if len(errs) > 0 {
@@ -112,31 +89,42 @@ func (c *HTTPController) ShutdownStream(ctx context.Context, channelID, sessionI
 }
 
 func (c *HTTPController) HealthChecks(ctx context.Context) []HealthStatus {
-	httpClient := c.config.HTTPClient
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 10 * time.Second}
+	c.ensureAdapters()
+
+	type service struct {
+		name string
+		base string
+		auth func(*http.Request)
 	}
 
-	services := []struct {
-		name   string
-		base   string
-		header string
-	}{
-		{name: "srs", base: c.config.SRSBaseURL, header: bearer(c.config.SRSToken)},
-		{name: "ovenmediaengine", base: c.config.OMEBaseURL, header: basicAuth(c.config.OMEUsername, c.config.OMEPassword)},
-		{name: "transcoder", base: c.config.JobBaseURL, header: bearer(c.config.JobToken)},
+	services := []service{
+		{
+			name: "srs",
+			base: c.config.SRSBaseURL,
+			auth: bearerAuth(c.config.SRSToken),
+		},
+		{
+			name: "ovenmediaengine",
+			base: c.config.OMEBaseURL,
+			auth: basicAuth(c.config.OMEUsername, c.config.OMEPassword),
+		},
+		{
+			name: "transcoder",
+			base: c.config.JobBaseURL,
+			auth: bearerAuth(c.config.JobToken),
+		},
 	}
 
 	statuses := make([]HealthStatus, 0, len(services))
-	for _, service := range services {
-		status := HealthStatus{Component: service.name}
-		if service.base == "" {
+	for _, svc := range services {
+		status := HealthStatus{Component: svc.name}
+		if strings.TrimSpace(svc.base) == "" {
 			status.Status = "unknown"
 			status.Detail = "base URL not configured"
 			statuses = append(statuses, status)
 			continue
 		}
-		url := fmt.Sprintf("%s%s", strings.TrimRight(service.base, "/"), c.config.HealthEndpoint)
+		url := fmt.Sprintf("%s%s", strings.TrimRight(svc.base, "/"), c.config.HealthEndpoint)
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
 			status.Status = "error"
@@ -144,15 +132,10 @@ func (c *HTTPController) HealthChecks(ctx context.Context) []HealthStatus {
 			statuses = append(statuses, status)
 			continue
 		}
-		if service.header != "" {
-			parts := strings.SplitN(service.header, " ", 2)
-			if len(parts) == 2 && strings.ToLower(parts[0]) == "basic" {
-				req.SetBasicAuth(c.config.OMEUsername, c.config.OMEPassword)
-			} else {
-				req.Header.Set("Authorization", service.header)
-			}
+		if svc.auth != nil {
+			svc.auth(req)
 		}
-		resp, err := httpClient.Do(req)
+		resp, err := c.config.HTTPClient.Do(req)
 		if err != nil {
 			status.Status = "error"
 			status.Detail = err.Error()
@@ -171,111 +154,23 @@ func (c *HTTPController) HealthChecks(ctx context.Context) []HealthStatus {
 	return statuses
 }
 
-func (c *HTTPController) provisionSRS(ctx context.Context, client *http.Client, params BootParams) (string, string, error) {
-	payload := srsChannelRequest{ChannelID: params.ChannelID, StreamKey: params.StreamKey}
-	var response srsChannelResponse
-	if err := c.post(ctx, client, fmt.Sprintf("%s/v1/channels", strings.TrimRight(c.config.SRSBaseURL, "/")), payload, &response, bearer(c.config.SRSToken)); err != nil {
-		return "", "", err
-	}
-	return response.PrimaryIngest, response.BackupIngest, nil
-}
-
-func (c *HTTPController) provisionOME(ctx context.Context, client *http.Client, params BootParams) (string, string, error) {
-	payload := omeApplicationRequest{ChannelID: params.ChannelID, Renditions: params.Renditions}
-	var response omeApplicationResponse
-	if err := c.post(ctx, client, fmt.Sprintf("%s/v1/applications", strings.TrimRight(c.config.OMEBaseURL, "/")), payload, &response, basicAuth(c.config.OMEUsername, c.config.OMEPassword)); err != nil {
-		return "", "", err
-	}
-	return response.OriginURL, response.PlaybackURL, nil
-}
-
-func (c *HTTPController) startFFmpeg(ctx context.Context, client *http.Client, params BootParams, origin string) ([]string, []Rendition, error) {
-	payload := ffmpegJobRequest{ChannelID: params.ChannelID, SessionID: params.SessionID, OriginURL: origin, Renditions: c.config.LadderProfiles}
-	var response ffmpegJobResponse
-	if err := c.post(ctx, client, fmt.Sprintf("%s/v1/jobs", strings.TrimRight(c.config.JobBaseURL, "/")), payload, &response, bearer(c.config.JobToken)); err != nil {
-		return nil, nil, err
-	}
-	jobIDs := append([]string{}, response.JobIDs...)
-	if response.JobID != "" {
-		jobIDs = append(jobIDs, response.JobID)
-	}
-	return jobIDs, response.Renditions, nil
-}
-
-func (c *HTTPController) rollbackSRS(ctx context.Context, client *http.Client, channelID string) {
-	_ = c.delete(ctx, client, fmt.Sprintf("%s/v1/channels/%s", strings.TrimRight(c.config.SRSBaseURL, "/"), channelID), bearer(c.config.SRSToken))
-}
-
-func (c *HTTPController) rollbackOME(ctx context.Context, client *http.Client, channelID string) {
-	_ = c.delete(ctx, client, fmt.Sprintf("%s/v1/applications/%s", strings.TrimRight(c.config.OMEBaseURL, "/"), channelID), basicAuth(c.config.OMEUsername, c.config.OMEPassword))
-}
-
-func (c *HTTPController) post(ctx context.Context, client *http.Client, url string, payload interface{}, dest interface{}, authHeader string) error {
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal request: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if authHeader != "" {
-		if strings.HasPrefix(strings.ToLower(authHeader), "basic ") {
-			req.SetBasicAuth(c.config.OMEUsername, c.config.OMEPassword)
-		} else {
-			req.Header.Set("Authorization", authHeader)
-		}
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		data, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("%s: %s", resp.Status, strings.TrimSpace(string(data)))
-	}
-	if dest == nil {
-		return nil
-	}
-	return json.NewDecoder(resp.Body).Decode(dest)
-}
-
-func (c *HTTPController) delete(ctx context.Context, client *http.Client, url string, authHeader string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
-	if err != nil {
-		return err
-	}
-	if authHeader != "" {
-		if strings.HasPrefix(strings.ToLower(authHeader), "basic ") {
-			req.SetBasicAuth(c.config.OMEUsername, c.config.OMEPassword)
-		} else {
-			req.Header.Set("Authorization", authHeader)
-		}
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return nil
-	}
-	data, _ := io.ReadAll(resp.Body)
-	return fmt.Errorf("%s: %s", resp.Status, strings.TrimSpace(string(data)))
-}
-
-func bearer(token string) string {
+func bearerAuth(token string) func(*http.Request) {
+	token = strings.TrimSpace(token)
 	if token == "" {
-		return ""
+		return nil
 	}
-	return "Bearer " + token
+	return func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 }
 
-func basicAuth(username, password string) string {
+func basicAuth(username, password string) func(*http.Request) {
+	username = strings.TrimSpace(username)
+	password = strings.TrimSpace(password)
 	if username == "" && password == "" {
-		return ""
+		return nil
 	}
-	return "Basic "
+	return func(req *http.Request) {
+		req.SetBasicAuth(username, password)
+	}
 }

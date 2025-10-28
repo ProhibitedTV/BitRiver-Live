@@ -41,10 +41,6 @@ func LoadConfigFromEnv() (Config, error) {
 		RetryInterval:   500 * time.Millisecond,
 	}
 
-	if cfg.HealthEndpoint == "" {
-		cfg.HealthEndpoint = "/healthz"
-	}
-
 	if attempts := strings.TrimSpace(os.Getenv("BITRIVER_INGEST_MAX_BOOT_ATTEMPTS")); attempts != "" {
 		parsed, err := strconv.Atoi(attempts)
 		if err != nil {
@@ -79,6 +75,14 @@ func LoadConfigFromEnv() (Config, error) {
 		}
 	}
 
+	if cfg.HealthEndpoint == "" {
+		cfg.HealthEndpoint = "/healthz"
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return Config{}, err
+	}
+
 	return cfg, nil
 }
 
@@ -109,21 +113,65 @@ func parseLadder(spec string) ([]Rendition, error) {
 // Enabled reports whether enough configuration has been provided to talk to
 // external ingest services.
 func (c Config) Enabled() bool {
-	return c.SRSBaseURL != "" && c.OMEBaseURL != "" && c.JobBaseURL != ""
+	if !c.hasAnyConfig() {
+		return false
+	}
+	if len(c.missingRequiredFields()) > 0 {
+		return false
+	}
+	return len(c.LadderProfiles) > 0
 }
 
 // Validate ensures the configuration is usable.
 func (c Config) Validate() error {
-	if !c.Enabled() {
-		return errors.New("ingest configuration incomplete")
+	if !c.hasAnyConfig() {
+		return nil
 	}
-	if c.HTTPClient == nil {
-		c.HTTPClient = &http.Client{Timeout: 5 * time.Second}
+	if missing := c.missingRequiredFields(); len(missing) > 0 {
+		return fmt.Errorf("missing ingest configuration: %s", strings.Join(missing, ", "))
 	}
 	if len(c.LadderProfiles) == 0 {
 		return errors.New("no rendition profiles configured")
 	}
+	if c.MaxBootAttempts <= 0 {
+		return errors.New("max boot attempts must be positive")
+	}
+	if c.RetryInterval < 0 {
+		return errors.New("retry interval cannot be negative")
+	}
 	return nil
+}
+
+func (c Config) hasAnyConfig() bool {
+	return c.SRSBaseURL != "" || c.SRSToken != "" ||
+		c.OMEBaseURL != "" || c.OMEUsername != "" || c.OMEPassword != "" ||
+		c.JobBaseURL != "" || c.JobToken != ""
+}
+
+func (c Config) missingRequiredFields() []string {
+	missing := make([]string, 0, 6)
+	if c.SRSBaseURL == "" {
+		missing = append(missing, "BITRIVER_SRS_API")
+	}
+	if c.SRSToken == "" {
+		missing = append(missing, "BITRIVER_SRS_TOKEN")
+	}
+	if c.OMEBaseURL == "" {
+		missing = append(missing, "BITRIVER_OME_API")
+	}
+	if c.OMEUsername == "" {
+		missing = append(missing, "BITRIVER_OME_USERNAME")
+	}
+	if c.OMEPassword == "" {
+		missing = append(missing, "BITRIVER_OME_PASSWORD")
+	}
+	if c.JobBaseURL == "" {
+		missing = append(missing, "BITRIVER_TRANSCODER_API")
+	}
+	if c.JobToken == "" {
+		missing = append(missing, "BITRIVER_TRANSCODER_TOKEN")
+	}
+	return missing
 }
 
 // NewHTTPController constructs a Controller backed by HTTP APIs.
