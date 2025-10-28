@@ -7,13 +7,18 @@ import (
 )
 
 type RateLimitConfig struct {
-	GlobalRPS     float64
-	GlobalBurst   int
-	LoginLimit    int
-	LoginWindow   time.Duration
-	RedisAddr     string
-	RedisPassword string
-	RedisTimeout  time.Duration
+	GlobalRPS       float64
+	GlobalBurst     int
+	LoginLimit      int
+	LoginWindow     time.Duration
+	RedisAddr       string
+	RedisAddrs      []string
+	RedisUsername   string
+	RedisPassword   string
+	RedisMasterName string
+	RedisTimeout    time.Duration
+	RedisPoolSize   int
+	RedisTLS        RedisTLSConfig
 }
 
 type rateLimiter struct {
@@ -34,7 +39,7 @@ type tokenStore interface {
 	Allow(key string, limit int, window time.Duration) (bool, time.Duration, error)
 }
 
-func newRateLimiter(cfg RateLimitConfig) *rateLimiter {
+func newRateLimiter(cfg RateLimitConfig) (*rateLimiter, error) {
 	rl := &rateLimiter{
 		loginLimit:   cfg.LoginLimit,
 		loginWindow:  cfg.LoginWindow,
@@ -56,14 +61,24 @@ func newRateLimiter(cfg RateLimitConfig) *rateLimiter {
 	if rl.loginWindow <= 0 {
 		rl.loginWindow = time.Minute
 	}
-	if cfg.RedisAddr != "" && rl.loginLimit > 0 {
-		timeout := cfg.RedisTimeout
-		if timeout <= 0 {
-			timeout = 2 * time.Second
+	if rl.loginLimit > 0 && (cfg.RedisAddr != "" || len(cfg.RedisAddrs) > 0) {
+		storeCfg := redisStoreConfig{
+			Addr:       cfg.RedisAddr,
+			Addrs:      cfg.RedisAddrs,
+			Username:   cfg.RedisUsername,
+			Password:   cfg.RedisPassword,
+			MasterName: cfg.RedisMasterName,
+			Timeout:    cfg.RedisTimeout,
+			PoolSize:   cfg.RedisPoolSize,
+			TLS:        cfg.RedisTLS,
 		}
-		rl.store = newRedisStore(cfg.RedisAddr, cfg.RedisPassword, timeout)
+		store, err := newRedisStore(storeCfg)
+		if err != nil {
+			return nil, err
+		}
+		rl.store = store
 	}
-	return rl
+	return rl, nil
 }
 
 func (r *rateLimiter) AllowRequest() bool {

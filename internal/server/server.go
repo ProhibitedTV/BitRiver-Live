@@ -95,7 +95,10 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 
 	mux.HandleFunc("/", spaHandler(staticFS, index, fileServer))
 
-	rl := newRateLimiter(cfg.RateLimit)
+	rl, err := newRateLimiter(cfg.RateLimit)
+	if err != nil {
+		return nil, fmt.Errorf("configure rate limiter: %w", err)
+	}
 	handlerChain := http.Handler(mux)
 	handlerChain = authMiddleware(handler, handlerChain)
 	handlerChain = rateLimitMiddleware(rl, cfg.Logger, handlerChain)

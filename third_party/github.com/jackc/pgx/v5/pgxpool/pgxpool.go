@@ -81,8 +81,8 @@ func NewWithConfig(context.Context, *Config) (*Pool, error) {
 
 func (p *Pool) Close() {}
 
-func (p *Pool) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
-	return pgconn.CommandTag{}, nil
+func (p *Pool) Exec(context.Context, string, ...any) (pgx.CommandTag, error) {
+	return pgx.CommandTag{}, nil
 }
 
 func (p *Pool) QueryRow(context.Context, string, ...any) pgx.Row {

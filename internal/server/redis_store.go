@@ -1,53 +1,91 @@
 package server
 
 import (
-	"bufio"
+	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
-	"io"
-	"net"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	redis "github.com/redis/go-redis/v9"
 )
 
-type redisStore struct {
-	addr     string
-	password string
-	timeout  time.Duration
+type RedisTLSConfig struct {
+	CAFile             string
+	CertFile           string
+	KeyFile            string
+	ServerName         string
+	InsecureSkipVerify bool
 }
 
-func newRedisStore(addr, password string, timeout time.Duration) *redisStore {
-	return &redisStore{addr: addr, password: password, timeout: timeout}
+type redisStoreConfig struct {
+	Addr       string
+	Addrs      []string
+	Username   string
+	Password   string
+	MasterName string
+	Timeout    time.Duration
+	PoolSize   int
+	TLS        RedisTLSConfig
+}
+
+type redisStore struct {
+	client  redis.UniversalClient
+	timeout time.Duration
+}
+
+func newRedisStore(cfg redisStoreConfig) (*redisStore, error) {
+	addrs := make([]string, 0, len(cfg.Addrs)+1)
+	for _, addr := range cfg.Addrs {
+		if trimmed := strings.TrimSpace(addr); trimmed != "" {
+			addrs = append(addrs, trimmed)
+		}
+	}
+	if addr := strings.TrimSpace(cfg.Addr); addr != "" {
+		addrs = append(addrs, addr)
+	}
+	if len(addrs) == 0 {
+		return nil, errors.New("redis addr required")
+	}
+	tlsConfig, err := buildRedisTLSConfig(cfg.TLS)
+	if err != nil {
+		return nil, err
+	}
+	client, err := redis.NewUniversalClient(&redis.UniversalOptions{
+		Addrs:        addrs,
+		MasterName:   strings.TrimSpace(cfg.MasterName),
+		Username:     strings.TrimSpace(cfg.Username),
+		Password:     cfg.Password,
+		TLSConfig:    tlsConfig,
+		PoolSize:     cfg.PoolSize,
+		DialTimeout:  cfg.Timeout,
+		ReadTimeout:  cfg.Timeout,
+		WriteTimeout: cfg.Timeout,
+		MaxRetries:   2,
+	})
+	if err != nil {
+		return nil, err
+	}
+	timeout := cfg.Timeout
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
+	return &redisStore{client: client, timeout: timeout}, nil
 }
 
 func (s *redisStore) Allow(key string, limit int, window time.Duration) (bool, time.Duration, error) {
-	conn, err := net.DialTimeout("tcp", s.addr, s.timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
+	defer cancel()
+	countReply, err := s.client.Do(ctx, "INCR", key)
 	if err != nil {
 		return false, 0, err
 	}
-	defer conn.Close()
-
-	reader := bufio.NewReader(conn)
-	writer := bufio.NewWriter(conn)
-
-	if s.password != "" {
-		if err := writeCommand(writer, "AUTH", s.password); err != nil {
-			return false, 0, err
-		}
-		if _, err := readReply(reader); err != nil {
-			return false, 0, err
-		}
-	}
-
-	if err := writeCommand(writer, "INCR", key); err != nil {
-		return false, 0, err
-	}
-	countReply, err := readReply(reader)
-	if err != nil {
-		return false, 0, err
-	}
-	count, err := asInt(countReply)
+	count, err := toInt(countReply)
 	if err != nil {
 		return false, 0, err
 	}
@@ -56,24 +94,18 @@ func (s *redisStore) Allow(key string, limit int, window time.Duration) (bool, t
 		if seconds <= 0 {
 			seconds = 1
 		}
-		if err := writeCommand(writer, "EXPIRE", key, strconv.FormatInt(seconds, 10)); err != nil {
-			return false, 0, err
-		}
-		if _, err := readReply(reader); err != nil {
+		if _, err := s.client.Do(ctx, "EXPIRE", key, seconds); err != nil {
 			return false, 0, err
 		}
 	}
 	if count <= int64(limit) {
 		return true, 0, nil
 	}
-	if err := writeCommand(writer, "TTL", key); err != nil {
-		return false, 0, err
-	}
-	ttlReply, err := readReply(reader)
+	ttlReply, err := s.client.Do(ctx, "TTL", key)
 	if err != nil {
 		return false, 0, err
 	}
-	ttl, err := asInt(ttlReply)
+	ttl, err := toInt(ttlReply)
 	if err != nil {
 		return false, 0, err
 	}
@@ -83,84 +115,54 @@ func (s *redisStore) Allow(key string, limit int, window time.Duration) (bool, t
 	return false, time.Duration(ttl) * time.Second, nil
 }
 
-func writeCommand(w *bufio.Writer, args ...string) error {
-	if len(args) == 0 {
-		return errors.New("redis command requires arguments")
+func (s *redisStore) Close(context.Context) error {
+	if s == nil || s.client == nil {
+		return nil
 	}
-	if _, err := fmt.Fprintf(w, "*%d\r\n", len(args)); err != nil {
-		return err
-	}
-	for _, arg := range args {
-		if _, err := fmt.Fprintf(w, "$%d\r\n%s\r\n", len(arg), arg); err != nil {
-			return err
-		}
-	}
-	return w.Flush()
+	return s.client.Close()
 }
 
-func readReply(r *bufio.Reader) (interface{}, error) {
-	prefix, err := r.ReadByte()
-	if err != nil {
-		return nil, err
-	}
-	switch prefix {
-	case '+':
-		line, err := readLine(r)
-		if err != nil {
-			return nil, err
-		}
-		return line, nil
-	case '-':
-		line, err := readLine(r)
-		if err != nil {
-			return nil, err
-		}
-		return nil, errors.New(line)
-	case ':':
-		line, err := readLine(r)
-		if err != nil {
-			return nil, err
-		}
-		return strconv.ParseInt(line, 10, 64)
-	case '$':
-		line, err := readLine(r)
-		if err != nil {
-			return nil, err
-		}
-		length, err := strconv.Atoi(line)
-		if err != nil {
-			return nil, err
-		}
-		if length < 0 {
-			return nil, nil
-		}
-		buf := make([]byte, length+2)
-		if _, err := io.ReadFull(r, buf); err != nil {
-			return nil, err
-		}
-		return string(buf[:length]), nil
-	default:
-		return nil, fmt.Errorf("unexpected redis reply prefix %q", prefix)
-	}
-}
-
-func readLine(r *bufio.Reader) (string, error) {
-	line, err := r.ReadString('\n')
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r"), nil
-}
-
-func asInt(v interface{}) (int64, error) {
+func toInt(v interface{}) (int64, error) {
 	switch val := v.(type) {
 	case int64:
 		return val, nil
 	case string:
 		return strconv.ParseInt(val, 10, 64)
-	case nil:
-		return 0, errors.New("nil reply")
+	case []byte:
+		return strconv.ParseInt(string(val), 10, 64)
 	default:
 		return 0, fmt.Errorf("unexpected redis reply type %T", v)
 	}
+}
+
+func buildRedisTLSConfig(cfg RedisTLSConfig) (*tls.Config, error) {
+	if cfg.CAFile == "" && cfg.CertFile == "" && cfg.KeyFile == "" && !cfg.InsecureSkipVerify {
+		return nil, nil
+	}
+	tlsCfg := &tls.Config{InsecureSkipVerify: cfg.InsecureSkipVerify}
+	if cfg.ServerName != "" {
+		tlsCfg.ServerName = cfg.ServerName
+	}
+	if cfg.CAFile != "" {
+		path := filepath.Clean(cfg.CAFile)
+		pemData, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("read redis tls ca: %w", err)
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(pemData) {
+			return nil, fmt.Errorf("redis tls ca is invalid")
+		}
+		tlsCfg.RootCAs = pool
+	}
+	if cfg.CertFile != "" || cfg.KeyFile != "" {
+		certPath := filepath.Clean(cfg.CertFile)
+		keyPath := filepath.Clean(cfg.KeyFile)
+		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+		if err != nil {
+			return nil, fmt.Errorf("load redis tls certificate: %w", err)
+		}
+		tlsCfg.Certificates = []tls.Certificate{cert}
+	}
+	return tlsCfg, nil
 }

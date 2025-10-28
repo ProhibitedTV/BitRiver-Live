@@ -1,26 +1,40 @@
 package chat
 
 import (
-	"bufio"
 	"context"
 	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"math"
-	"net"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	redis "github.com/redis/go-redis/v9"
 )
+
+// RedisTLSConfig controls TLS behaviour for Redis connections.
+type RedisTLSConfig struct {
+	CAFile             string
+	CertFile           string
+	KeyFile            string
+	ServerName         string
+	InsecureSkipVerify bool
+}
 
 // RedisQueueConfig configures the Redis-backed chat queue implementation.
 type RedisQueueConfig struct {
 	Addr         string
+	Addrs        []string
+	Username     string
 	Password     string
 	Stream       string
 	Group        string
@@ -30,13 +44,24 @@ type RedisQueueConfig struct {
 	WriteTimeout time.Duration
 	BlockTimeout time.Duration
 	Buffer       int
+	PoolSize     int
+	MasterName   string
+	TLS          RedisTLSConfig
 }
 
 // NewRedisQueue initialises a queue backed by Redis Streams. The caller is
 // responsible for ensuring the Redis instance is reachable.
 func NewRedisQueue(cfg RedisQueueConfig) (Queue, error) {
-	addr := strings.TrimSpace(cfg.Addr)
-	if addr == "" {
+	addrs := make([]string, 0, len(cfg.Addrs)+1)
+	for _, addr := range cfg.Addrs {
+		if trimmed := strings.TrimSpace(addr); trimmed != "" {
+			addrs = append(addrs, trimmed)
+		}
+	}
+	if addr := strings.TrimSpace(cfg.Addr); addr != "" {
+		addrs = append(addrs, addr)
+	}
+	if len(addrs) == 0 {
 		return nil, fmt.Errorf("redis addr is required")
 	}
 	stream := strings.TrimSpace(cfg.Stream)
@@ -50,14 +75,29 @@ func NewRedisQueue(cfg RedisQueueConfig) (Queue, error) {
 	if cfg.Buffer <= 0 {
 		cfg.Buffer = 128
 	}
+	tlsConfig, err := buildTLSConfig(cfg.TLS)
+	if err != nil {
+		return nil, err
+	}
+	client, err := redis.NewUniversalClient(&redis.UniversalOptions{
+		Addrs:        addrs,
+		MasterName:   strings.TrimSpace(cfg.MasterName),
+		Username:     strings.TrimSpace(cfg.Username),
+		Password:     cfg.Password,
+		TLSConfig:    tlsConfig,
+		DialTimeout:  cfg.DialTimeout,
+		ReadTimeout:  cfg.ReadTimeout,
+		WriteTimeout: cfg.WriteTimeout,
+		PoolSize:     cfg.PoolSize,
+		MaxRetries:   2,
+	})
+	if err != nil {
+		return nil, err
+	}
 	queue := &redisQueue{
-		addr:         addr,
-		password:     cfg.Password,
+		client:       client,
 		stream:       stream,
 		group:        group,
-		dialTimeout:  cfg.DialTimeout,
-		readTimeout:  cfg.ReadTimeout,
-		writeTimeout: cfg.WriteTimeout,
 		blockTimeout: cfg.BlockTimeout,
 		logger:       cfg.Logger,
 		buffer:       cfg.Buffer,
@@ -65,38 +105,24 @@ func NewRedisQueue(cfg RedisQueueConfig) (Queue, error) {
 	if queue.logger == nil {
 		queue.logger = slog.Default()
 	}
-	if queue.dialTimeout <= 0 {
-		queue.dialTimeout = 5 * time.Second
-	}
-	if queue.readTimeout <= 0 {
-		queue.readTimeout = 10 * time.Second
-	}
-	if queue.writeTimeout <= 0 {
-		queue.writeTimeout = 5 * time.Second
-	}
 	if queue.blockTimeout <= 0 {
 		queue.blockTimeout = 2 * time.Second
 	}
-	queue.publisher = newRedisConn(queue)
 	if err := queue.ensureGroup(context.Background()); err != nil {
+		client.Close()
 		return nil, err
 	}
 	return queue, nil
 }
 
 type redisQueue struct {
-	addr         string
-	password     string
+	client       redis.UniversalClient
 	stream       string
 	group        string
-	dialTimeout  time.Duration
-	readTimeout  time.Duration
-	writeTimeout time.Duration
 	blockTimeout time.Duration
 	logger       *slog.Logger
 	buffer       int
 
-	publisher *redisConn
 	groupOnce sync.Once
 	groupErr  error
 }
@@ -112,8 +138,7 @@ func (q *redisQueue) Publish(ctx context.Context, event Event) error {
 	if err := q.ensureGroup(ctx); err != nil {
 		return err
 	}
-	args := []string{"XADD", q.stream, "*", "payload", string(payload)}
-	_, err = q.publisher.Do(ctx, args...)
+	_, err = q.client.Do(ctx, "XADD", q.stream, "*", "payload", string(payload))
 	return err
 }
 
@@ -125,11 +150,9 @@ func (q *redisQueue) Subscribe() Subscription {
 		}
 	}
 	consumer := randomConsumerID()
-	conn := newRedisConn(q)
 	sub := &redisSubscription{
 		queue:    q,
 		consumer: consumer,
-		conn:     conn,
 		cancel:   cancel,
 		ch:       make(chan Event, q.buffer),
 	}
@@ -139,13 +162,8 @@ func (q *redisQueue) Subscribe() Subscription {
 
 func (q *redisQueue) ensureGroup(ctx context.Context) error {
 	q.groupOnce.Do(func() {
-		conn := q.publisher
-		if conn == nil {
-			conn = newRedisConn(q)
-			q.publisher = conn
-		}
-		args := []string{"XGROUP", "CREATE", q.stream, q.group, "$", "MKSTREAM"}
-		if _, err := conn.Do(ctx, args...); err != nil {
+		_, err := q.client.Do(ctx, "XGROUP", "CREATE", q.stream, q.group, "$", "MKSTREAM")
+		if err != nil {
 			if !isBusyGroup(err) {
 				q.groupErr = err
 			}
@@ -157,7 +175,6 @@ func (q *redisQueue) ensureGroup(ctx context.Context) error {
 type redisSubscription struct {
 	queue    *redisQueue
 	consumer string
-	conn     *redisConn
 	cancel   context.CancelFunc
 
 	once sync.Once
@@ -172,9 +189,6 @@ func (s *redisSubscription) Close() {
 	s.once.Do(func() {
 		if s.cancel != nil {
 			s.cancel()
-		}
-		if s.conn != nil {
-			s.conn.Close()
 		}
 		close(s.ch)
 	})
@@ -225,8 +239,7 @@ func (s *redisSubscription) ack(ctx context.Context, id string) {
 	if id == "" {
 		return
 	}
-	_, err := s.conn.Do(ctx, "XACK", s.queue.stream, s.queue.group, id)
-	if err != nil && s.queue.logger != nil {
+	if _, err := s.queue.client.Do(ctx, "XACK", s.queue.stream, s.queue.group, id); err != nil && s.queue.logger != nil {
 		s.queue.logger.Warn("redis ack failed", "id", id, "error", err)
 	}
 }
@@ -238,7 +251,20 @@ type redisStreamEntry struct {
 
 func (s *redisSubscription) read(ctx context.Context) ([]redisStreamEntry, error) {
 	blockMs := int(math.Max(float64(s.queue.blockTimeout.Milliseconds()), 1))
-	reply, err := s.conn.Do(ctx, "XREADGROUP", "GROUP", s.queue.group, s.consumer, "COUNT", "32", "BLOCK", strconv.Itoa(blockMs), "STREAMS", s.queue.stream, ">")
+	reply, err := s.queue.client.Do(
+		ctx,
+		"XREADGROUP",
+		"GROUP",
+		s.queue.group,
+		s.consumer,
+		"COUNT",
+		"32",
+		"BLOCK",
+		strconv.Itoa(blockMs),
+		"STREAMS",
+		s.queue.stream,
+		">",
+	)
 	if err != nil {
 		if isNilReply(err) {
 			return nil, nil
@@ -277,11 +303,24 @@ func extractPayload(fields []interface{}) []byte {
 	for i := 0; i < len(fields); i += 2 {
 		key, _ := asString(fields[i])
 		if strings.EqualFold(key, "payload") && i+1 < len(fields) {
-			value, _ := fields[i+1].(string)
-			return []byte(value)
+			value, _ := asString(fields[i+1])
+			if value != "" {
+				return []byte(value)
+			}
 		}
 	}
 	return nil
+}
+
+func asString(v interface{}) (string, bool) {
+	switch val := v.(type) {
+	case string:
+		return val, true
+	case []byte:
+		return string(val), true
+	default:
+		return "", false
+	}
 }
 
 func isBusyGroup(err error) bool {
@@ -295,7 +334,8 @@ func isNilReply(err error) bool {
 	if err == nil {
 		return false
 	}
-	return strings.Contains(strings.ToLower(err.Error()), "nil reply")
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "nil reply") || strings.Contains(msg, "timeout")
 }
 
 func randomConsumerID() string {
@@ -306,216 +346,34 @@ func randomConsumerID() string {
 	return fmt.Sprintf("consumer-%s", hex.EncodeToString(buf))
 }
 
-type redisConn struct {
-	queue *redisQueue
-
-	mu     sync.Mutex
-	conn   net.Conn
-	reader *bufio.Reader
-}
-
-func newRedisConn(q *redisQueue) *redisConn {
-	return &redisConn{queue: q}
-}
-
-func (c *redisConn) Close() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.conn != nil {
-		_ = c.conn.Close()
+func buildTLSConfig(cfg RedisTLSConfig) (*tls.Config, error) {
+	if cfg.CAFile == "" && cfg.CertFile == "" && cfg.KeyFile == "" && !cfg.InsecureSkipVerify {
+		return nil, nil
 	}
-	c.conn = nil
-	c.reader = nil
-}
-
-func (c *redisConn) Do(ctx context.Context, args ...string) (interface{}, error) {
-	if len(args) == 0 {
-		return nil, fmt.Errorf("redis command missing")
+	tlsCfg := &tls.Config{InsecureSkipVerify: cfg.InsecureSkipVerify}
+	if cfg.ServerName != "" {
+		tlsCfg.ServerName = cfg.ServerName
 	}
-	if err := c.ensureConnection(ctx); err != nil {
-		return nil, err
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.conn == nil {
-		return nil, fmt.Errorf("redis connection unavailable")
-	}
-	deadline := time.Now().Add(c.queue.writeTimeout)
-	if ctx != nil {
-		if dl, ok := ctx.Deadline(); ok {
-			deadline = dl
-		}
-	}
-	_ = c.conn.SetWriteDeadline(deadline)
-	if err := writeCommand(c.conn, args); err != nil {
-		c.resetLocked()
-		return nil, err
-	}
-	_ = c.conn.SetReadDeadline(time.Now().Add(c.queue.readTimeout))
-	reply, err := parseRESP(c.reader)
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			c.resetLocked()
-		}
-		return nil, err
-	}
-	return reply, nil
-}
-
-func (c *redisConn) ensureConnection(ctx context.Context) error {
-	c.mu.Lock()
-	if c.conn != nil {
-		c.mu.Unlock()
-		return nil
-	}
-	c.mu.Unlock()
-
-	dialer := net.Dialer{Timeout: c.queue.dialTimeout}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	conn, err := dialer.DialContext(ctx, "tcp", c.queue.addr)
-	if err != nil {
-		return err
-	}
-	reader := bufio.NewReader(conn)
-
-	c.mu.Lock()
-	c.conn = conn
-	c.reader = reader
-	c.mu.Unlock()
-
-	if strings.TrimSpace(c.queue.password) != "" {
-		if _, err := c.Do(ctx, "AUTH", c.queue.password); err != nil {
-			conn.Close()
-			c.mu.Lock()
-			c.conn = nil
-			c.reader = nil
-			c.mu.Unlock()
-			return fmt.Errorf("redis auth failed: %w", err)
-		}
-	}
-	return nil
-}
-
-func (c *redisConn) resetLocked() {
-	if c.conn != nil {
-		_ = c.conn.Close()
-	}
-	c.conn = nil
-	c.reader = nil
-}
-
-func writeCommand(w io.Writer, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("redis command missing")
-	}
-	if _, err := fmt.Fprintf(w, "*%d\r\n", len(args)); err != nil {
-		return err
-	}
-	for _, arg := range args {
-		if arg == "" {
-			if _, err := io.WriteString(w, "$-1\r\n"); err != nil {
-				return err
-			}
-			continue
-		}
-		if _, err := fmt.Fprintf(w, "$%d\r\n%s\r\n", len(arg), arg); err != nil {
-			return err
-		}
-	}
-	if flusher, ok := w.(interface{ Flush() error }); ok {
-		return flusher.Flush()
-	}
-	return nil
-}
-
-func parseRESP(r *bufio.Reader) (interface{}, error) {
-	prefix, err := r.ReadByte()
-	if err != nil {
-		return nil, err
-	}
-	switch prefix {
-	case '+':
-		line, err := readLine(r)
+	if cfg.CAFile != "" {
+		caPath := filepath.Clean(cfg.CAFile)
+		pemData, err := os.ReadFile(caPath)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("read redis tls ca: %w", err)
 		}
-		return line, nil
-	case '-':
-		line, err := readLine(r)
-		if err != nil {
-			return nil, err
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(pemData) {
+			return nil, fmt.Errorf("redis tls ca is invalid")
 		}
-		return nil, errors.New(line)
-	case ':':
-		line, err := readLine(r)
-		if err != nil {
-			return nil, err
-		}
-		value, convErr := strconv.ParseInt(line, 10, 64)
-		if convErr != nil {
-			return nil, convErr
-		}
-		return value, nil
-	case '$':
-		lengthStr, err := readLine(r)
-		if err != nil {
-			return nil, err
-		}
-		length, convErr := strconv.Atoi(lengthStr)
-		if convErr != nil {
-			return nil, convErr
-		}
-		if length == -1 {
-			return nil, nil
-		}
-		buf := make([]byte, length+2)
-		if _, err := io.ReadFull(r, buf); err != nil {
-			return nil, err
-		}
-		return string(buf[:length]), nil
-	case '*':
-		lengthStr, err := readLine(r)
-		if err != nil {
-			return nil, err
-		}
-		length, convErr := strconv.Atoi(lengthStr)
-		if convErr != nil {
-			return nil, convErr
-		}
-		if length == -1 {
-			return nil, nil
-		}
-		items := make([]interface{}, 0, length)
-		for i := 0; i < length; i++ {
-			item, err := parseRESP(r)
-			if err != nil {
-				return nil, err
-			}
-			items = append(items, item)
-		}
-		return items, nil
-	default:
-		return nil, fmt.Errorf("unexpected redis prefix %q", prefix)
+		tlsCfg.RootCAs = pool
 	}
-}
-
-func readLine(r *bufio.Reader) (string, error) {
-	line, err := r.ReadString('\n')
-	if err != nil {
-		return "", err
+	if cfg.CertFile != "" || cfg.KeyFile != "" {
+		certPath := filepath.Clean(cfg.CertFile)
+		keyPath := filepath.Clean(cfg.KeyFile)
+		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+		if err != nil {
+			return nil, fmt.Errorf("load redis tls certificate: %w", err)
+		}
+		tlsCfg.Certificates = []tls.Certificate{cert}
 	}
-	return strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r"), nil
-}
-
-func asString(v interface{}) (string, bool) {
-	switch value := v.(type) {
-	case string:
-		return value, true
-	case []byte:
-		return string(value), true
-	default:
-		return "", false
-	}
+	return tlsCfg, nil
 }
