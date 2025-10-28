@@ -1651,6 +1651,35 @@ func (s *Storage) UpdateChannel(id string, update ChannelUpdate) (models.Channel
 	return channel, nil
 }
 
+func (s *Storage) RotateChannelStreamKey(id string) (models.Channel, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	updatedData := cloneDataset(s.data)
+
+	channel, ok := updatedData.Channels[id]
+	if !ok {
+		return models.Channel{}, fmt.Errorf("channel %s not found", id)
+	}
+
+	streamKey, err := s.generateStreamKey()
+	if err != nil {
+		return models.Channel{}, err
+	}
+
+	channel.StreamKey = streamKey
+	channel.UpdatedAt = time.Now().UTC()
+	updatedData.Channels[id] = channel
+
+	if err := s.persistDataset(updatedData); err != nil {
+		return models.Channel{}, err
+	}
+
+	s.data = updatedData
+
+	return channel, nil
+}
+
 func (s *Storage) GetChannel(id string) (models.Channel, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

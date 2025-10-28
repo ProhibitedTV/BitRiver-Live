@@ -1371,6 +1371,18 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 		}
 		metrics.StreamStopped()
 		writeJSON(w, http.StatusOK, newSessionResponse(session))
+	case "rotate":
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+			return
+		}
+		updated, err := h.Store.RotateChannelStreamKey(channel.ID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, newChannelResponse(updated))
 	default:
 		writeError(w, http.StatusNotFound, fmt.Errorf("unknown stream action %s", action))
 	}

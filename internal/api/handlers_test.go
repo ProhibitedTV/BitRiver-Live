@@ -548,6 +548,101 @@ func TestChannelStreamLifecycle(t *testing.T) {
 	}
 }
 
+func TestRotateStreamKeyEndpoint(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	owner, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Owner",
+		Email:       "owner@example.com",
+		Roles:       []string{"creator"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+
+	admin, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Admin",
+		Email:       "admin@example.com",
+		Roles:       []string{"admin"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser admin: %v", err)
+	}
+
+	viewer, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Viewer",
+		Email:       "viewer@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
+
+	channel, err := store.CreateChannel(owner.ID, "Studio", "gaming", []string{"retro"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	originalKey := channel.StreamKey
+
+	// Owner rotates key successfully.
+	req := httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/stream/rotate", nil)
+	req = withUser(req, owner)
+	rec := httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected owner rotation status 200, got %d", rec.Code)
+	}
+	var resp channelResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode rotate response: %v", err)
+	}
+	if resp.StreamKey == "" {
+		t.Fatal("expected rotated stream key in response")
+	}
+	if resp.StreamKey == originalKey {
+		t.Fatalf("expected rotated stream key to differ from original %s", originalKey)
+	}
+
+	updated, ok := store.GetChannel(channel.ID)
+	if !ok {
+		t.Fatalf("channel %s missing after rotation", channel.ID)
+	}
+	if updated.StreamKey != resp.StreamKey {
+		t.Fatalf("expected store stream key %s, got %s", resp.StreamKey, updated.StreamKey)
+	}
+
+	// Viewer without access is forbidden.
+	req = httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/stream/rotate", nil)
+	req = withUser(req, viewer)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected viewer rotation status 403, got %d", rec.Code)
+	}
+
+	// Admin can rotate even when not owner.
+	req = httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/stream/rotate", nil)
+	req = withUser(req, admin)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected admin rotation status 200, got %d", rec.Code)
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode admin rotate response: %v", err)
+	}
+	if resp.StreamKey == updated.StreamKey {
+		t.Fatalf("expected admin rotation to change stream key from %s", updated.StreamKey)
+	}
+
+	latest, ok := store.GetChannel(channel.ID)
+	if !ok {
+		t.Fatalf("channel %s missing after admin rotation", channel.ID)
+	}
+	if latest.StreamKey != resp.StreamKey {
+		t.Fatalf("expected final stream key %s, got %s", resp.StreamKey, latest.StreamKey)
+	}
+}
+
 func TestChannelsListPermissions(t *testing.T) {
 	handler, store := newTestHandler(t)
 

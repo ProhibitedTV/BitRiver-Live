@@ -706,6 +706,11 @@ function renderChannels() {
                 dataset: { action: "edit-channel", channel: channel.id },
             }),
             createElement("button", {
+                className: "secondary",
+                textContent: "Rotate key",
+                dataset: { action: "rotate-stream-key", channel: channel.id },
+            }),
+            createElement("button", {
                 className: "danger",
                 textContent: "Delete",
                 dataset: { action: "delete-channel", channel: channel.id },
@@ -721,6 +726,11 @@ function renderChannels() {
     });
     list.querySelectorAll("[data-action=delete-channel]").forEach((btn) => {
         btn.addEventListener("click", () => handleDeleteChannel(btn.dataset.channel));
+    });
+    list.querySelectorAll("[data-action=rotate-stream-key]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            void rotateStreamKey(btn.dataset.channel);
+        });
     });
 }
 
@@ -828,6 +838,33 @@ async function handleDeleteChannel(channelId) {
     showToast("Channel deleted");
     await loadChannels({ hydrate: true });
     await loadProfiles();
+}
+
+async function rotateStreamKey(channelId) {
+    const channel = state.channels.find((item) => item.id === channelId);
+    if (!channel) {
+        showToast("Channel not found", "error");
+        return;
+    }
+    const confirmed = confirmAction(`Rotate the stream key for ${channel.title}? Existing encoders will need the new key.`);
+    if (!confirmed) {
+        return;
+    }
+    try {
+        const updated = await apiRequest(`/api/channels/${channelId}/stream/rotate`, { method: "POST" });
+        showToast("Stream key rotated");
+        if (updated) {
+            const index = state.channels.findIndex((item) => item.id === channelId);
+            if (index !== -1) {
+                state.channels[index] = { ...state.channels[index], ...updated };
+            }
+        }
+        renderChannels();
+        renderStreamControls();
+        renderDashboard();
+    } catch (error) {
+        showToast(error.message, "error");
+    }
 }
 
 async function loadSessionsForChannel(channelId) {
@@ -1583,7 +1620,13 @@ function renderStreamControls() {
             attributes: { type: "button" },
             dataset: { action: "stop" },
         });
-        actions.append(startButton, stopButton);
+        const rotateButton = createElement("button", {
+            className: "secondary",
+            textContent: "Rotate key",
+            attributes: { type: "button" },
+            dataset: { action: "rotate" },
+        });
+        actions.append(startButton, stopButton, rotateButton);
         form.appendChild(actions);
 
         card.appendChild(form);
@@ -1593,6 +1636,7 @@ function renderStreamControls() {
     container.querySelectorAll(".stream-form").forEach((form) => {
         const channelId = form.dataset.channel;
         const stopBtn = form.querySelector('[data-action="stop"]');
+        const rotateBtn = form.querySelector('[data-action="rotate"]');
         form.addEventListener("submit", async (event) => {
             event.preventDefault();
             const renditions = form.elements.renditions.value
@@ -1622,6 +1666,9 @@ function renderStreamControls() {
             } catch (error) {
                 showToast(error.message, "error");
             }
+        });
+        rotateBtn.addEventListener("click", () => {
+            void rotateStreamKey(channelId);
         });
     });
 }
