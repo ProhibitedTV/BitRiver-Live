@@ -28,6 +28,9 @@ const (
 	passwordHashSaltLength = 16
 	passwordHashKeyLength  = 32
 	passwordHashIterations = 120000
+
+	metadataManifestPrefix  = "object:manifest:"
+	metadataThumbnailPrefix = "object:thumbnail:"
 )
 
 type dataset struct {
@@ -64,6 +67,7 @@ type Storage struct {
 	ingestHealthUpdated time.Time
 	recordingRetention  RecordingRetentionPolicy
 	objectStorage       ObjectStorageConfig
+	objectClient        objectStorageClient
 }
 
 // RecordingRetentionPolicy specifies how long recordings are kept before being
@@ -85,6 +89,76 @@ type ObjectStorageConfig struct {
 	Prefix         string
 	LifecycleDays  int
 	PublicEndpoint string
+}
+
+type objectStorageClient interface {
+	Enabled() bool
+	Upload(ctx context.Context, key, contentType string, body []byte) (objectReference, error)
+	Delete(ctx context.Context, key string) error
+}
+
+type objectReference struct {
+	Key string
+	URL string
+}
+
+type noopObjectStorageClient struct{}
+
+func (noopObjectStorageClient) Enabled() bool { return false }
+
+func (noopObjectStorageClient) Upload(ctx context.Context, key, contentType string, body []byte) (objectReference, error) {
+	return objectReference{}, nil
+}
+
+func (noopObjectStorageClient) Delete(ctx context.Context, key string) error {
+	return nil
+}
+
+type prefixedObjectStorageClient struct {
+	cfg ObjectStorageConfig
+}
+
+func (c *prefixedObjectStorageClient) Enabled() bool { return true }
+
+func (c *prefixedObjectStorageClient) Upload(ctx context.Context, key, contentType string, body []byte) (objectReference, error) {
+	finalKey := c.withPrefix(key)
+	return objectReference{Key: finalKey, URL: c.publicURL(finalKey)}, nil
+}
+
+func (c *prefixedObjectStorageClient) Delete(ctx context.Context, key string) error {
+	return nil
+}
+
+func (c *prefixedObjectStorageClient) withPrefix(key string) string {
+	trimmed := strings.TrimLeft(key, "/")
+	prefix := strings.Trim(c.cfg.Prefix, "/")
+	if prefix == "" {
+		return trimmed
+	}
+	if trimmed == "" {
+		return prefix
+	}
+	return prefix + "/" + trimmed
+}
+
+func (c *prefixedObjectStorageClient) publicURL(key string) string {
+	base := strings.TrimSpace(c.cfg.PublicEndpoint)
+	if base == "" {
+		return ""
+	}
+	trimmedBase := strings.TrimRight(base, "/")
+	trimmedKey := strings.TrimLeft(key, "/")
+	if trimmedKey == "" {
+		return trimmedBase
+	}
+	return trimmedBase + "/" + trimmedKey
+}
+
+func newObjectStorageClient(cfg ObjectStorageConfig) objectStorageClient {
+	if strings.TrimSpace(cfg.Bucket) == "" && strings.TrimSpace(cfg.PublicEndpoint) == "" {
+		return noopObjectStorageClient{}
+	}
+	return &prefixedObjectStorageClient{cfg: cfg}
 }
 
 // ClipExportParams captures the request to generate a recording clip.
@@ -172,6 +246,51 @@ func (s *Storage) ensureDatasetInitializedLocked() {
 	if s.data.ClipExports == nil {
 		s.data.ClipExports = make(map[string]models.ClipExport)
 	}
+}
+
+func buildObjectKey(parts ...string) string {
+	normalized := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.Trim(part, "/")
+		if trimmed == "" {
+			continue
+		}
+		normalized = append(normalized, trimmed)
+	}
+	return strings.Join(normalized, "/")
+}
+
+func normalizeObjectComponent(input string) string {
+	lowered := strings.ToLower(strings.TrimSpace(input))
+	if lowered == "" {
+		return "item"
+	}
+	var builder strings.Builder
+	lastDash := false
+	for _, r := range lowered {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			builder.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash && builder.Len() > 0 {
+			builder.WriteByte('-')
+			lastDash = true
+		}
+	}
+	normalized := strings.Trim(builder.String(), "-")
+	if normalized == "" {
+		return "item"
+	}
+	return normalized
+}
+
+func manifestMetadataKey(name string) string {
+	return metadataManifestPrefix + normalizeObjectComponent(name)
+}
+
+func thumbnailMetadataKey(id string) string {
+	return metadataThumbnailPrefix + id
 }
 
 func (s *Storage) ensureBanMetadata(channelID string) {
@@ -286,6 +405,7 @@ func NewStorage(path string, opts ...Option) (*Storage, error) {
 			Published:   90 * 24 * time.Hour,
 			Unpublished: 14 * 24 * time.Hour,
 		},
+		objectClient: noopObjectStorageClient{},
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -301,6 +421,7 @@ func NewStorage(path string, opts ...Option) (*Storage, error) {
 	if err := store.load(); err != nil {
 		return nil, err
 	}
+	store.objectClient = newObjectStorageClient(store.objectStorage)
 	return store, nil
 }
 
@@ -672,30 +793,46 @@ func (s *Storage) recordingDeadline(now time.Time, published bool) *time.Time {
 	return &deadline
 }
 
-func (s *Storage) purgeExpiredRecordingsLocked(now time.Time) (bool, dataset) {
+func (s *Storage) purgeExpiredRecordingsLocked(now time.Time) (bool, dataset, error) {
 	if len(s.data.Recordings) == 0 {
-		return false, dataset{}
+		return false, dataset{}, nil
 	}
 	removed := false
+	snapshotTaken := false
 	var snapshot dataset
 	for id, recording := range s.data.Recordings {
-		if recording.RetainUntil == nil {
+		if recording.RetainUntil == nil || now.Before(*recording.RetainUntil) {
 			continue
 		}
-		if now.After(*recording.RetainUntil) {
-			if !removed {
-				snapshot = cloneDataset(s.data)
-				removed = true
-			}
-			delete(s.data.Recordings, id)
-			for clipID, clip := range s.data.ClipExports {
-				if clip.RecordingID == id {
-					delete(s.data.ClipExports, clipID)
-				}
-			}
+		if !snapshotTaken {
+			snapshot = cloneDataset(s.data)
+			snapshotTaken = true
 		}
+		if err := s.deleteRecordingArtifactsLocked(recording); err != nil {
+			if snapshotTaken {
+				s.data = snapshot
+			}
+			return false, dataset{}, err
+		}
+		for clipID, clip := range s.data.ClipExports {
+			if clip.RecordingID != id {
+				continue
+			}
+			if err := s.deleteClipArtifactsLocked(clip); err != nil {
+				if snapshotTaken {
+					s.data = snapshot
+				}
+				return false, dataset{}, err
+			}
+			delete(s.data.ClipExports, clipID)
+		}
+		delete(s.data.Recordings, id)
+		removed = true
 	}
-	return removed, snapshot
+	if !removed {
+		return false, dataset{}, nil
+	}
+	return true, snapshot, nil
 }
 
 func (s *Storage) recordingWithClipsLocked(recording models.Recording) models.Recording {
@@ -1732,7 +1869,122 @@ func (s *Storage) createRecordingLocked(session models.StreamSession, channel mo
 		}
 		recording.Renditions = renditions
 	}
+	if err := s.populateRecordingArtifactsLocked(&recording, session); err != nil {
+		return models.Recording{}, err
+	}
 	return recording, nil
+}
+
+func (s *Storage) populateRecordingArtifactsLocked(recording *models.Recording, session models.StreamSession) error {
+	client := s.objectClient
+	if client == nil || !client.Enabled() {
+		return nil
+	}
+	if recording.Metadata == nil {
+		recording.Metadata = make(map[string]string)
+	}
+
+	ctx := context.Background()
+	createdAt := recording.CreatedAt.UTC().Format(time.RFC3339Nano)
+	if len(session.RenditionManifests) > 0 {
+		for idx, manifest := range session.RenditionManifests {
+			key := buildObjectKey("recordings", recording.ID, "manifests", normalizeObjectComponent(manifest.Name)+".json")
+			payload := map[string]any{
+				"recordingId": recording.ID,
+				"sessionId":   recording.SessionID,
+				"name":        manifest.Name,
+				"source":      manifest.ManifestURL,
+				"createdAt":   createdAt,
+			}
+			if manifest.Bitrate > 0 {
+				payload["bitrate"] = manifest.Bitrate
+			}
+			data, err := json.Marshal(payload)
+			if err != nil {
+				return fmt.Errorf("encode manifest payload: %w", err)
+			}
+			ref, err := client.Upload(ctx, key, "application/json", data)
+			if err != nil {
+				return fmt.Errorf("upload manifest %s: %w", manifest.Name, err)
+			}
+			if ref.Key != "" {
+				recording.Metadata[manifestMetadataKey(manifest.Name)] = ref.Key
+			}
+			if ref.URL != "" && idx < len(recording.Renditions) {
+				recording.Renditions[idx].ManifestURL = ref.URL
+			}
+		}
+	}
+
+	thumbID, err := s.generateID()
+	if err != nil {
+		return fmt.Errorf("generate thumbnail id: %w", err)
+	}
+	thumbKey := buildObjectKey("recordings", recording.ID, "thumbnails", thumbID+".json")
+	thumbPayload := map[string]any{
+		"recordingId": recording.ID,
+		"sessionId":   recording.SessionID,
+		"createdAt":   createdAt,
+	}
+	thumbData, err := json.Marshal(thumbPayload)
+	if err != nil {
+		return fmt.Errorf("encode thumbnail payload: %w", err)
+	}
+	ref, err := client.Upload(ctx, thumbKey, "application/json", thumbData)
+	if err != nil {
+		return fmt.Errorf("upload thumbnail: %w", err)
+	}
+	if ref.Key != "" {
+		recording.Metadata[thumbnailMetadataKey(thumbID)] = ref.Key
+	}
+	thumbnail := models.RecordingThumbnail{
+		ID:          thumbID,
+		RecordingID: recording.ID,
+		URL:         ref.URL,
+		CreatedAt:   recording.CreatedAt,
+	}
+	recording.Thumbnails = append(recording.Thumbnails, thumbnail)
+	return nil
+}
+
+func (s *Storage) deleteRecordingArtifactsLocked(recording models.Recording) error {
+	client := s.objectClient
+	if client == nil || !client.Enabled() {
+		return nil
+	}
+	if len(recording.Metadata) == 0 {
+		return nil
+	}
+	ctx := context.Background()
+	deleted := make(map[string]struct{})
+	for key, objectKey := range recording.Metadata {
+		if !strings.HasPrefix(key, metadataManifestPrefix) && !strings.HasPrefix(key, metadataThumbnailPrefix) {
+			continue
+		}
+		trimmed := strings.TrimSpace(objectKey)
+		if trimmed == "" {
+			continue
+		}
+		if _, exists := deleted[trimmed]; exists {
+			continue
+		}
+		if err := client.Delete(ctx, trimmed); err != nil {
+			return fmt.Errorf("delete object %s: %w", trimmed, err)
+		}
+		deleted[trimmed] = struct{}{}
+	}
+	return nil
+}
+
+func (s *Storage) deleteClipArtifactsLocked(clip models.ClipExport) error {
+	client := s.objectClient
+	if client == nil || !client.Enabled() || strings.TrimSpace(clip.StorageObject) == "" {
+		return nil
+	}
+	if err := client.Delete(context.Background(), clip.StorageObject); err != nil {
+		return fmt.Errorf("delete clip object %s: %w", clip.StorageObject, err)
+	}
+	return nil
 }
 
 func (s *Storage) ListStreamSessions(channelID string) ([]models.StreamSession, error) {
@@ -1764,7 +2016,10 @@ func (s *Storage) ListRecordings(channelID string, includeUnpublished bool) ([]m
 	}
 
 	now := time.Now().UTC()
-	removed, snapshot := s.purgeExpiredRecordingsLocked(now)
+	removed, snapshot, err := s.purgeExpiredRecordingsLocked(now)
+	if err != nil {
+		return nil, err
+	}
 	if removed {
 		if err := s.persist(); err != nil {
 			s.data = snapshot
@@ -1796,7 +2051,10 @@ func (s *Storage) GetRecording(id string) (models.Recording, bool) {
 		return models.Recording{}, false
 	}
 	now := time.Now().UTC()
-	removed, snapshot := s.purgeExpiredRecordingsLocked(now)
+	removed, snapshot, err := s.purgeExpiredRecordingsLocked(now)
+	if err != nil {
+		return models.Recording{}, false
+	}
 	if removed {
 		if err := s.persist(); err != nil {
 			s.data = snapshot
@@ -1851,16 +2109,25 @@ func (s *Storage) DeleteRecording(id string) error {
 	if id == "" {
 		return fmt.Errorf("recording id is required")
 	}
-	if _, ok := s.data.Recordings[id]; !ok {
+	recording, ok := s.data.Recordings[id]
+	if !ok {
 		return fmt.Errorf("recording %s not found", id)
 	}
-	snapshot := cloneDataset(s.data)
-	delete(s.data.Recordings, id)
-	for clipID, clip := range s.data.ClipExports {
-		if clip.RecordingID == id {
-			delete(s.data.ClipExports, clipID)
-		}
+	if err := s.deleteRecordingArtifactsLocked(recording); err != nil {
+		return err
 	}
+	snapshot := cloneDataset(s.data)
+	for clipID, clip := range s.data.ClipExports {
+		if clip.RecordingID != id {
+			continue
+		}
+		if err := s.deleteClipArtifactsLocked(clip); err != nil {
+			s.data = snapshot
+			return err
+		}
+		delete(s.data.ClipExports, clipID)
+	}
+	delete(s.data.Recordings, id)
 	if err := s.persist(); err != nil {
 		s.data = snapshot
 		return err
