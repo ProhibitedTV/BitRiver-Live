@@ -51,12 +51,14 @@ type shutdownCall struct {
 }
 
 type fakeIngestController struct {
-	bootResponses []bootResponse
-	bootDefault   ingest.BootResult
-	bootErr       error
-	bootCalls     int
-	shutdownErr   error
-	shutdownCalls []shutdownCall
+	bootResponses   []bootResponse
+	bootDefault     ingest.BootResult
+	bootErr         error
+	bootCalls       int
+	shutdownErr     error
+	shutdownCalls   []shutdownCall
+	healthResponses [][]ingest.HealthStatus
+	healthCalls     int
 }
 
 func (f *fakeIngestController) BootStream(ctx context.Context, params ingest.BootParams) (ingest.BootResult, error) {
@@ -85,7 +87,16 @@ func (f *fakeIngestController) ShutdownStream(ctx context.Context, channelID, se
 }
 
 func (f *fakeIngestController) HealthChecks(ctx context.Context) []ingest.HealthStatus {
-	return []ingest.HealthStatus{{Component: "fake", Status: "ok"}}
+	if len(f.healthResponses) == 0 {
+		return []ingest.HealthStatus{{Component: "fake", Status: "ok"}}
+	}
+	idx := f.healthCalls
+	if idx >= len(f.healthResponses) {
+		idx = len(f.healthResponses) - 1
+	}
+	f.healthCalls++
+	snapshot := append([]ingest.HealthStatus(nil), f.healthResponses[idx]...)
+	return snapshot
 }
 
 func TestCreateAndListUser(t *testing.T) {
@@ -462,6 +473,45 @@ func TestStopStreamInvokesShutdown(t *testing.T) {
 	}
 	if !reflect.DeepEqual(call.jobIDs, []string{"job-123"}) {
 		t.Fatalf("expected job IDs to propagate, got %v", call.jobIDs)
+	}
+}
+
+func TestStorageIngestHealthSnapshots(t *testing.T) {
+	responses := [][]ingest.HealthStatus{
+		{{Component: "srs", Status: "ok"}},
+		{{Component: "transcoder", Status: "error", Detail: "timeout"}},
+	}
+	fake := &fakeIngestController{healthResponses: responses}
+	store := newTestStoreWithController(t, fake)
+
+	first := store.IngestHealth(context.Background())
+	if fake.healthCalls != 1 {
+		t.Fatalf("expected health to be queried once, got %d", fake.healthCalls)
+	}
+	if !reflect.DeepEqual(first, responses[0]) {
+		t.Fatalf("unexpected health payload: %+v", first)
+	}
+	recorded, ts1 := store.LastIngestHealth()
+	if !reflect.DeepEqual(recorded, first) {
+		t.Fatalf("expected last health to match recorded snapshot")
+	}
+	if ts1.IsZero() {
+		t.Fatal("expected health timestamp to be set")
+	}
+
+	second := store.IngestHealth(context.Background())
+	if fake.healthCalls != 2 {
+		t.Fatalf("expected second health call to increment counter, got %d", fake.healthCalls)
+	}
+	if !reflect.DeepEqual(second, responses[1]) {
+		t.Fatalf("unexpected second health payload: %+v", second)
+	}
+	recorded, ts2 := store.LastIngestHealth()
+	if !reflect.DeepEqual(recorded, second) {
+		t.Fatalf("expected snapshot to update on subsequent call")
+	}
+	if ts2.Before(ts1) {
+		t.Fatal("expected subsequent health timestamp to be >= initial timestamp")
 	}
 }
 

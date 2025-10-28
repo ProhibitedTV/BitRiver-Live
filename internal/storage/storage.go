@@ -48,6 +48,8 @@ type Storage struct {
 	ingestController    ingest.Controller
 	ingestMaxAttempts   int
 	ingestRetryInterval time.Duration
+	ingestHealth        []ingest.HealthStatus
+	ingestHealthUpdated time.Time
 }
 
 // Option mutates storage configuration.
@@ -145,7 +147,13 @@ func normalizeRoles(input []string) []string {
 }
 
 func NewStorage(path string, opts ...Option) (*Storage, error) {
-	store := &Storage{filePath: path, ingestController: ingest.NoopController{}, ingestMaxAttempts: 1}
+	store := &Storage{
+		filePath:            path,
+		ingestController:    ingest.NoopController{},
+		ingestMaxAttempts:   1,
+		ingestHealth:        []ingest.HealthStatus{{Component: "ingest", Status: "disabled"}},
+		ingestHealthUpdated: time.Now().UTC(),
+	}
 	for _, opt := range opts {
 		opt(store)
 	}
@@ -1307,9 +1315,35 @@ func (s *Storage) CurrentStreamSession(channelID string) (models.StreamSession, 
 func (s *Storage) IngestHealth(ctx context.Context) []ingest.HealthStatus {
 	controller := s.ingestController
 	if controller == nil {
-		return []ingest.HealthStatus{{Component: "ingest", Status: "disabled"}}
+		status := []ingest.HealthStatus{{Component: "ingest", Status: "disabled"}}
+		s.recordIngestHealth(status)
+		return status
 	}
-	return controller.HealthChecks(ctx)
+	checks := controller.HealthChecks(ctx)
+	if len(checks) == 0 {
+		checks = []ingest.HealthStatus{{Component: "ingest", Status: "unknown"}}
+	}
+	s.recordIngestHealth(checks)
+	return checks
+}
+
+func (s *Storage) recordIngestHealth(statuses []ingest.HealthStatus) {
+	snapshot := append([]ingest.HealthStatus(nil), statuses...)
+	s.mu.Lock()
+	s.ingestHealth = snapshot
+	s.ingestHealthUpdated = time.Now().UTC()
+	s.mu.Unlock()
+}
+
+// LastIngestHealth returns the most recently recorded ingest health snapshot.
+func (s *Storage) LastIngestHealth() ([]ingest.HealthStatus, time.Time) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if len(s.ingestHealth) == 0 {
+		return nil, time.Time{}
+	}
+	snapshot := append([]ingest.HealthStatus(nil), s.ingestHealth...)
+	return snapshot, s.ingestHealthUpdated
 }
 
 // Chat operations
