@@ -1405,8 +1405,34 @@ function computeInstallerScript(data) {
     const addr = data.addr || (mode === "production" ? ":80" : ":8080");
     const logDir = data.enableLogs ? `${data.dataDir}/logs` : "";
     const hostnameHint = data.hostname
-        ? `# Reverse proxy hint: point ${data.hostname} to this service for HTTPS.`
+        ? `# Reverse proxy hint: point ${data.hostname} to this service and expose TLS traffic on 443.`
         : `# Configure your reverse proxy or tailnet to expose the service. ${mode === "production" ? "Port 80 is used by default." : "Development mode keeps the control center on :8080."}`;
+    const envLines = [
+        `BITRIVER_LIVE_ADDR=${addr}`,
+        `BITRIVER_LIVE_MODE=${mode}`,
+        `BITRIVER_LIVE_DATA=$DATA_FILE`,
+    ];
+    if (data.tlsCert) {
+        envLines.push(`BITRIVER_LIVE_TLS_CERT=${data.tlsCert}`);
+    }
+    if (data.tlsKey) {
+        envLines.push(`BITRIVER_LIVE_TLS_KEY=${data.tlsKey}`);
+    }
+    if (data.rateGlobalRps) {
+        envLines.push(`BITRIVER_LIVE_RATE_GLOBAL_RPS=${data.rateGlobalRps}`);
+    }
+    if (data.rateLoginLimit) {
+        envLines.push(`BITRIVER_LIVE_RATE_LOGIN_LIMIT=${data.rateLoginLimit}`);
+    }
+    if (data.rateLoginWindow) {
+        envLines.push(`BITRIVER_LIVE_RATE_LOGIN_WINDOW=${data.rateLoginWindow}`);
+    }
+    if (data.redisAddr) {
+        envLines.push(`BITRIVER_LIVE_RATE_REDIS_ADDR=${data.redisAddr}`);
+    }
+    if (data.redisPassword) {
+        envLines.push(`BITRIVER_LIVE_RATE_REDIS_PASSWORD=${data.redisPassword}`);
+    }
     return `#!/usr/bin/env bash
 set -euo pipefail
 
@@ -1435,9 +1461,7 @@ sudo install -m 0755 bitriver-live "$INSTALL_DIR/bitriver-live"
 rm -f bitriver-live
 
 cat <<'ENV' | sudo tee "$INSTALL_DIR/.env" >/dev/null
-BITRIVER_LIVE_ADDR=${addr}
-BITRIVER_LIVE_MODE=${mode}
-BITRIVER_LIVE_DATA=$DATA_FILE
+${envLines.join("\n")}
 ENV
 
 sudo chown -R "$SERVICE_USER":"$SERVICE_USER" "$INSTALL_DIR" "$DATA_DIR"
@@ -1464,7 +1488,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now bitriver-live.service
 
 ${hostnameHint}
-echo "Service is running on $ADDR (${mode} mode)"
+echo "Service is running on $ADDR (${mode} mode). TLS settings and metrics are configured via $INSTALL_DIR/.env"
 `;
 }
 

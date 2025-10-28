@@ -12,6 +12,7 @@ import (
 	"bitriver-live/internal/auth"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
+	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/storage"
 )
 
@@ -116,6 +117,9 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	payload := map[string]interface{}{
 		"status":   status,
 		"services": checks,
+	}
+	for _, check := range checks {
+		metrics.SetIngestHealth(check.Component, check.Status)
 	}
 	writeJSON(w, http.StatusOK, payload)
 }
@@ -950,6 +954,7 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
+		metrics.StreamStarted()
 		writeJSON(w, http.StatusCreated, newSessionResponse(session))
 	case "stop":
 		if r.Method != http.MethodPost {
@@ -967,6 +972,7 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
+		metrics.StreamStopped()
 		writeJSON(w, http.StatusOK, newSessionResponse(session))
 	default:
 		writeError(w, http.StatusNotFound, fmt.Errorf("unknown stream action %s", action))

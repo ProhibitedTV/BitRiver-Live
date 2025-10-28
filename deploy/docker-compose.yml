@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  bitriver-live:
+    build: ..
+    image: bitriver-live:latest
+    container_name: bitriver-live
+    ports:
+      - "8080:8080"
+    environment:
+      BITRIVER_LIVE_MODE: production
+      BITRIVER_LIVE_ADDR: :8080
+      BITRIVER_LIVE_DATA: /var/lib/bitriver-live/store.json
+      # Enable HTTPS by mounting certs and uncommenting the lines below.
+      # BITRIVER_LIVE_TLS_CERT: /certs/fullchain.pem
+      # BITRIVER_LIVE_TLS_KEY: /certs/privkey.pem
+      # Tune rate limiting and shared state.
+      # BITRIVER_LIVE_RATE_GLOBAL_RPS: "50"
+      # BITRIVER_LIVE_RATE_GLOBAL_BURST: "100"
+      # BITRIVER_LIVE_RATE_LOGIN_LIMIT: "5"
+      # BITRIVER_LIVE_RATE_LOGIN_WINDOW: 2m
+      # BITRIVER_LIVE_RATE_REDIS_ADDR: redis:6379
+      # BITRIVER_LIVE_RATE_REDIS_PASSWORD: supersecret
+    volumes:
+      - ./data:/var/lib/bitriver-live
+      # - ./certs:/certs
+    command: ["/app/bitriver-live"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+
+volumes:
+  redis-data:
+  data:
