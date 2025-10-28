@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -172,8 +173,8 @@ func TestSignupAndLoginFlow(t *testing.T) {
 	if !signupCookie.HttpOnly {
 		t.Fatal("expected session cookie to be HttpOnly")
 	}
-	if !signupCookie.Secure {
-		t.Fatal("expected session cookie to be Secure")
+	if signupCookie.Secure {
+		t.Fatal("expected HTTP signup to issue non-secure cookie")
 	}
 	if signupCookie.SameSite != http.SameSiteStrictMode {
 		t.Fatalf("expected SameSite=Strict, got %v", signupCookie.SameSite)
@@ -230,6 +231,9 @@ func TestSignupAndLoginFlow(t *testing.T) {
 	if clearedCookie.MaxAge != -1 {
 		t.Fatalf("expected cleared cookie to have MaxAge=-1, got %d", clearedCookie.MaxAge)
 	}
+	if clearedCookie.Secure {
+		t.Fatal("expected HTTP logout to issue non-secure cookie")
+	}
 
 	if _, _, ok := handler.sessionManager().Validate(loginCookie.Value); ok {
 		t.Fatal("expected logout to revoke session token")
@@ -241,6 +245,30 @@ func TestSignupAndLoginFlow(t *testing.T) {
 	handler.Session(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected session to be revoked, got status %d", rec.Code)
+	}
+}
+
+func TestSignupIssuesSecureCookieForTLSRequests(t *testing.T) {
+	handler, _ := newTestHandler(t)
+
+	signupPayload := map[string]string{
+		"displayName": "Viewer",
+		"email":       "secure@example.com",
+		"password":    "supersecret",
+	}
+	body, _ := json.Marshal(signupPayload)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/signup", bytes.NewReader(body))
+	req.TLS = &tls.ConnectionState{}
+	rec := httptest.NewRecorder()
+
+	handler.Signup(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected signup status 201, got %d", rec.Code)
+	}
+
+	cookie := findCookie(t, rec.Result().Cookies(), "bitriver_session")
+	if !cookie.Secure {
+		t.Fatal("expected TLS signup to issue secure cookie")
 	}
 }
 
