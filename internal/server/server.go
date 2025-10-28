@@ -60,6 +60,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	mux.HandleFunc("/api/channels/", handler.ChannelByID)
 	mux.HandleFunc("/api/profiles", handler.Profiles)
 	mux.HandleFunc("/api/profiles/", handler.ProfileByID)
+	mux.HandleFunc("/api/chat/ws", handler.ChatWebsocket)
 
 	staticFS, err := web.Static()
 	if err != nil {

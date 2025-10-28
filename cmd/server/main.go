@@ -14,6 +14,7 @@ import (
 
 	"bitriver-live/internal/api"
 	"bitriver-live/internal/auth"
+	"bitriver-live/internal/chat"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/observability/logging"
 	"bitriver-live/internal/observability/metrics"
@@ -75,7 +76,17 @@ func main() {
 	}
 
 	sessions := auth.NewSessionManager(24 * time.Hour)
+	queue := chat.NewMemoryQueue(128)
+	gateway := chat.NewGateway(chat.GatewayConfig{
+		Queue:  queue,
+		Store:  store,
+		Logger: logging.WithComponent(logger, "chat"),
+	})
 	handler := api.NewHandler(store, sessions)
+	handler.ChatGateway = gateway
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	defer workerCancel()
+	go storage.NewChatWorker(store, queue, logging.WithComponent(logger, "chat-worker")).Run(workerCtx)
 
 	rateCfg := server.RateLimitConfig{
 		GlobalRPS:     resolveFloat(*globalRPS, "BITRIVER_LIVE_RATE_GLOBAL_RPS"),
