@@ -43,6 +43,14 @@ type Repository interface {
 	CurrentStreamSession(channelID string) (models.StreamSession, bool)
 	ListStreamSessions(channelID string) ([]models.StreamSession, error)
 
+	ListRecordings(channelID string, includeUnpublished bool) ([]models.Recording, error)
+	GetRecording(id string) (models.Recording, bool)
+	PublishRecording(id string) (models.Recording, error)
+	DeleteRecording(id string) error
+
+	CreateClipExport(recordingID string, params ClipExportParams) (models.ClipExport, error)
+	ListClipExports(recordingID string) ([]models.ClipExport, error)
+
 	CreateChatMessage(channelID, userID, content string) (models.ChatMessage, error)
 	DeleteChatMessage(channelID, messageID string) error
 	ListChatMessages(channelID string, limit int) ([]models.ChatMessage, error)

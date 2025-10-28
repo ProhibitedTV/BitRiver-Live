@@ -41,6 +41,17 @@ func main() {
 	redisPassword := flag.String("rate-redis-password", "", "Redis password for distributed login throttling")
 	redisTimeout := flag.Duration("rate-redis-timeout", 0, "timeout for Redis operations")
 	viewerOrigin := flag.String("viewer-origin", "", "URL of the Next.js viewer runtime to proxy (e.g. http://127.0.0.1:3000)")
+	objectEndpoint := flag.String("object-endpoint", "", "object storage endpoint (e.g. http://127.0.0.1:9000)")
+	objectRegion := flag.String("object-region", "", "object storage region")
+	objectAccessKey := flag.String("object-access-key", "", "object storage access key")
+	objectSecretKey := flag.String("object-secret-key", "", "object storage secret key")
+	objectBucket := flag.String("object-bucket", "", "object storage bucket name")
+	objectUseSSL := flag.Bool("object-use-ssl", false, "enable TLS for object storage requests")
+	objectPrefix := flag.String("object-prefix", "", "object storage key prefix for recordings")
+	objectPublicEndpoint := flag.String("object-public-endpoint", "", "public endpoint used for playback URLs")
+	objectLifecycleDays := flag.Int("object-lifecycle-days", 0, "lifecycle policy in days for archived objects")
+	recordingRetentionPublished := flag.String("recording-retention-published", "", "retention duration for published recordings (e.g. 720h, 0 disables expiry)")
+	recordingRetentionUnpublished := flag.String("recording-retention-unpublished", "", "retention duration for unpublished recordings")
 	flag.Parse()
 
 	logger := logging.New(logging.Config{Level: firstNonEmpty(*logLevel, os.Getenv("BITRIVER_LIVE_LOG_LEVEL"))})
@@ -77,6 +88,42 @@ func main() {
 		}
 		controller.SetLogger(logging.WithComponent(logger, "ingest"))
 		options = append(options, storage.WithIngestController(controller))
+	}
+
+	publishedRetention, publishedSet, err := resolveDurationSetting(*recordingRetentionPublished, "BITRIVER_LIVE_RECORDING_RETENTION_PUBLISHED")
+	if err != nil {
+		logger.Error("invalid published retention", "error", err)
+		os.Exit(1)
+	}
+	unpublishedRetention, unpublishedSet, err := resolveDurationSetting(*recordingRetentionUnpublished, "BITRIVER_LIVE_RECORDING_RETENTION_UNPUBLISHED")
+	if err != nil {
+		logger.Error("invalid unpublished retention", "error", err)
+		os.Exit(1)
+	}
+	if publishedSet || unpublishedSet {
+		policy := storage.RecordingRetentionPolicy{Published: -1, Unpublished: -1}
+		if publishedSet {
+			policy.Published = publishedRetention
+		}
+		if unpublishedSet {
+			policy.Unpublished = unpublishedRetention
+		}
+		options = append(options, storage.WithRecordingRetention(policy))
+	}
+
+	objectCfg := storage.ObjectStorageConfig{
+		Endpoint:       firstNonEmpty(*objectEndpoint, os.Getenv("BITRIVER_LIVE_OBJECT_ENDPOINT")),
+		Region:         firstNonEmpty(*objectRegion, os.Getenv("BITRIVER_LIVE_OBJECT_REGION")),
+		AccessKey:      firstNonEmpty(*objectAccessKey, os.Getenv("BITRIVER_LIVE_OBJECT_ACCESS_KEY")),
+		SecretKey:      firstNonEmpty(*objectSecretKey, os.Getenv("BITRIVER_LIVE_OBJECT_SECRET_KEY")),
+		Bucket:         firstNonEmpty(*objectBucket, os.Getenv("BITRIVER_LIVE_OBJECT_BUCKET")),
+		UseSSL:         resolveBool(*objectUseSSL, "BITRIVER_LIVE_OBJECT_USE_SSL"),
+		Prefix:         strings.TrimSpace(firstNonEmpty(*objectPrefix, os.Getenv("BITRIVER_LIVE_OBJECT_PREFIX"))),
+		PublicEndpoint: firstNonEmpty(*objectPublicEndpoint, os.Getenv("BITRIVER_LIVE_OBJECT_PUBLIC_ENDPOINT")),
+		LifecycleDays:  resolveInt(*objectLifecycleDays, "BITRIVER_LIVE_OBJECT_LIFECYCLE_DAYS"),
+	}
+	if objectCfg.Endpoint != "" || objectCfg.Bucket != "" || objectCfg.PublicEndpoint != "" || objectCfg.Prefix != "" || objectCfg.Region != "" || objectCfg.AccessKey != "" || objectCfg.SecretKey != "" || objectCfg.LifecycleDays > 0 || objectCfg.UseSSL {
+		options = append(options, storage.WithObjectStorage(objectCfg))
 	}
 
 	driver := resolveStorageDriver(*storageDriver, os.Getenv("BITRIVER_LIVE_STORAGE_DRIVER"))
@@ -290,6 +337,35 @@ func resolveDuration(flagValue time.Duration, envKey string, fallback time.Durat
 		return fallback
 	}
 	return 0
+}
+
+func resolveBool(flagValue bool, envKey string) bool {
+	if flagValue {
+		return true
+	}
+	if env, ok := os.LookupEnv(envKey); ok {
+		if value, err := strconv.ParseBool(strings.TrimSpace(env)); err == nil {
+			return value
+		}
+	}
+	return false
+}
+
+func resolveDurationSetting(flagValue string, envKey string) (time.Duration, bool, error) {
+	raw := strings.TrimSpace(flagValue)
+	if raw == "" {
+		if env, ok := os.LookupEnv(envKey); ok {
+			raw = strings.TrimSpace(env)
+		}
+	}
+	if raw == "" {
+		return 0, false, nil
+	}
+	duration, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, false, err
+	}
+	return duration, true, nil
 }
 
 func parseFloat(value string) (float64, error) {
