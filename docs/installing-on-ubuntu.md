@@ -130,7 +130,47 @@ sudo systemctl status srs.service
 journalctl -u srs.service -f
 ```
 
-## 5. Build and register the API service
+## 5. Deploy the API service
+
+### Option A: Automated installer (recommended)
+
+The UI-generated installer script now wraps the tracked helper at [`deploy/install/ubuntu.sh`](../deploy/install/ubuntu.sh). You can run it directly after cloning the repository, or download the latest version from GitHub:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/BitRiver-Live/BitRiver-Live/main/deploy/install/ubuntu.sh -o ubuntu.sh
+chmod +x ubuntu.sh
+```
+
+Provide the required inputs (install directory, data directory, and service user) via flags or matching environment variables:
+
+```bash
+./ubuntu.sh \
+  --install-dir /opt/bitriver-live \
+  --data-dir /var/lib/bitriver-live \
+  --service-user bitriver \
+  --mode production \
+  --addr :80 \
+  --enable-logs \
+  --hostname stream.example.com
+```
+
+Run the helper from the repository root—the script validates the presence of `go.mod` before building the binary.
+
+The script builds the API binary, writes `$INSTALL_DIR/.env`, configures optional TLS and rate-limiting variables, and registers a `bitriver-live.service` systemd unit. Review the generated `.env` file to ensure secrets, database DSNs, and Redis credentials are present before starting traffic.
+
+Environment variable equivalents:
+
+* `INSTALL_DIR`, `DATA_DIR`, `SERVICE_USER`
+* `BITRIVER_LIVE_ADDR`, `BITRIVER_LIVE_MODE`
+* `BITRIVER_LIVE_TLS_CERT`, `BITRIVER_LIVE_TLS_KEY`
+* `BITRIVER_LIVE_RATE_GLOBAL_RPS`, `BITRIVER_LIVE_RATE_LOGIN_LIMIT`, `BITRIVER_LIVE_RATE_LOGIN_WINDOW`
+* `BITRIVER_LIVE_RATE_REDIS_ADDR`, `BITRIVER_LIVE_RATE_REDIS_PASSWORD`
+* `BITRIVER_LIVE_ENABLE_LOGS`, `BITRIVER_LIVE_LOG_DIR`
+* `BITRIVER_LIVE_HOSTNAME_HINT`
+
+### Option B: Manual install
+
+If you prefer hand-crafted units, follow the manual process below.
 
 1. Fetch dependencies and build the binary.
 

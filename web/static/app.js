@@ -1677,35 +1677,52 @@ function computeInstallerScript(data) {
     const mode = data.mode || "production";
     const addr = data.addr || (mode === "production" ? ":80" : ":8080");
     const logDir = data.enableLogs ? `${data.dataDir}/logs` : "";
+    // Keep this URL in sync with docs/installing-on-ubuntu.md and deploy/install/ubuntu.sh.
+    const scriptURL = "https://raw.githubusercontent.com/BitRiver-Live/BitRiver-Live/main/deploy/install/ubuntu.sh";
     const hostnameHint = data.hostname
         ? `# Reverse proxy hint: point ${data.hostname} to this service and expose TLS traffic on 443.`
         : `# Configure your reverse proxy or tailnet to expose the service. ${mode === "production" ? "Port 80 is used by default." : "Development mode keeps the control center on :8080."}`;
-    const envLines = [
-        `BITRIVER_LIVE_ADDR=${addr}`,
-        `BITRIVER_LIVE_MODE=${mode}`,
-        `BITRIVER_LIVE_DATA=$DATA_FILE`,
+    const flags = [
+        "--install-dir \"$INSTALL_DIR\"",
+        "--data-dir \"$DATA_DIR\"",
+        "--service-user \"$SERVICE_USER\"",
+        "--mode \"$MODE\"",
+        "--addr \"$ADDR\"",
     ];
+    if (logDir) {
+        flags.push("--enable-logs");
+        flags.push("--log-dir \"$LOG_DIR\"");
+    }
     if (data.tlsCert) {
-        envLines.push(`BITRIVER_LIVE_TLS_CERT=${data.tlsCert}`);
+        flags.push("--tls-cert \"$TLS_CERT\"");
     }
     if (data.tlsKey) {
-        envLines.push(`BITRIVER_LIVE_TLS_KEY=${data.tlsKey}`);
+        flags.push("--tls-key \"$TLS_KEY\"");
     }
     if (data.rateGlobalRps) {
-        envLines.push(`BITRIVER_LIVE_RATE_GLOBAL_RPS=${data.rateGlobalRps}`);
+        flags.push("--rate-global-rps \"$RATE_GLOBAL_RPS\"");
     }
     if (data.rateLoginLimit) {
-        envLines.push(`BITRIVER_LIVE_RATE_LOGIN_LIMIT=${data.rateLoginLimit}`);
+        flags.push("--rate-login-limit \"$RATE_LOGIN_LIMIT\"");
     }
     if (data.rateLoginWindow) {
-        envLines.push(`BITRIVER_LIVE_RATE_LOGIN_WINDOW=${data.rateLoginWindow}`);
+        flags.push("--rate-login-window \"$RATE_LOGIN_WINDOW\"");
     }
     if (data.redisAddr) {
-        envLines.push(`BITRIVER_LIVE_RATE_REDIS_ADDR=${data.redisAddr}`);
+        flags.push("--redis-addr \"$REDIS_ADDR\"");
     }
     if (data.redisPassword) {
-        envLines.push(`BITRIVER_LIVE_RATE_REDIS_PASSWORD=${data.redisPassword}`);
+        flags.push("--redis-password \"$REDIS_PASSWORD\"");
     }
+    if (data.hostname) {
+        flags.push("--hostname \"$HOSTNAME\"");
+    }
+    const flagBlock = flags
+        .map((flag, index) => {
+            const suffix = index === flags.length - 1 ? '' : ' \\';
+            return `  ${flag}${suffix}`;
+        })
+        .join("\n");
     return `#!/usr/bin/env bash
 set -euo pipefail
 
@@ -1714,54 +1731,26 @@ DATA_DIR="${data.dataDir}"
 SERVICE_USER="${data.serviceUser}"
 MODE="${mode}"
 ADDR="${addr}"
-DATA_FILE="$DATA_DIR/store.json"
-${logDir ? `LOG_DIR="${logDir}"` : ""}
+LOG_DIR="${logDir}"
+TLS_CERT="${data.tlsCert || ""}"
+TLS_KEY="${data.tlsKey || ""}"
+RATE_GLOBAL_RPS="${data.rateGlobalRps || ""}"
+RATE_LOGIN_LIMIT="${data.rateLoginLimit || ""}"
+RATE_LOGIN_WINDOW="${data.rateLoginWindow || ""}"
+REDIS_ADDR="${data.redisAddr || ""}"
+REDIS_PASSWORD="${data.redisPassword || ""}"
+HOSTNAME="${data.hostname || ""}"
+SCRIPT_URL="${scriptURL}"
+SCRIPT_PATH="$(mktemp)"
 
-if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
-    sudo useradd --system --create-home --shell /usr/sbin/nologin "$SERVICE_USER"
-fi
+trap 'rm -f "$SCRIPT_PATH"' EXIT
 
-sudo install -d -o "$SERVICE_USER" -g "$SERVICE_USER" "$INSTALL_DIR" "$DATA_DIR"
-${logDir ? 'sudo install -d -o "$SERVICE_USER" -g "$SERVICE_USER" "$LOG_DIR"' : ""}
-
-if ! command -v go >/dev/null 2>&1; then
-    echo "Go 1.21+ is required to build BitRiver Live" >&2
-    exit 1
-fi
-
-GOFLAGS="-trimpath" go build -o bitriver-live ./cmd/server
-sudo install -m 0755 bitriver-live "$INSTALL_DIR/bitriver-live"
-rm -f bitriver-live
-
-cat <<'ENV' | sudo tee "$INSTALL_DIR/.env" >/dev/null
-${envLines.join("\n")}
-ENV
-
-sudo chown -R "$SERVICE_USER":"$SERVICE_USER" "$INSTALL_DIR" "$DATA_DIR"
-
-cat <<'SERVICE' | sudo tee /etc/systemd/system/bitriver-live.service >/dev/null
-[Unit]
-Description=BitRiver Live Streaming Control Center
-After=network.target
-
-[Service]
-Type=simple
-User=$SERVICE_USER
-EnvironmentFile=$INSTALL_DIR/.env
-WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/bitriver-live
-Restart=on-failure
-${logDir ? 'StandardOutput=append:$LOG_DIR/server.log\nStandardError=append:$LOG_DIR/server.log' : ''}
-
-[Install]
-WantedBy=multi-user.target
-SERVICE
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now bitriver-live.service
+curl -fsSL "$SCRIPT_URL" -o "$SCRIPT_PATH"
+chmod +x "$SCRIPT_PATH"
+"$SCRIPT_PATH" \
+${flagBlock}
 
 ${hostnameHint}
-echo "Service is running on $ADDR (${mode} mode). TLS settings and metrics are configured via $INSTALL_DIR/.env"
 `;
 }
 
