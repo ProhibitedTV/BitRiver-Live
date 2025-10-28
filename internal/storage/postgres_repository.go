@@ -113,7 +113,24 @@ func NewPostgresRepository(dsn string, opts ...Option) (Repository, error) {
 }
 
 func (r *postgresRepository) IngestHealth(ctx context.Context) []ingest.HealthStatus {
-	return []ingest.HealthStatus{{Component: "postgres", Status: "unknown"}}
+	controller := r.ingestController
+	var statuses []ingest.HealthStatus
+	if controller == nil {
+		statuses = []ingest.HealthStatus{{Component: "ingest", Status: "disabled"}}
+	} else {
+		statuses = controller.HealthChecks(ctx)
+		if len(statuses) == 0 {
+			statuses = []ingest.HealthStatus{{Component: "ingest", Status: "unknown"}}
+		}
+	}
+
+	snapshot := append([]ingest.HealthStatus(nil), statuses...)
+	r.ingestHealthMu.Lock()
+	r.ingestHealth = snapshot
+	r.ingestHealthUpdated = time.Now().UTC()
+	r.ingestHealthMu.Unlock()
+
+	return snapshot
 }
 
 func (r *postgresRepository) LastIngestHealth() ([]ingest.HealthStatus, time.Time) {
