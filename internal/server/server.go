@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"strings"
 	"time"
 
@@ -23,12 +25,13 @@ type TLSConfig struct {
 }
 
 type Config struct {
-	Addr        string
-	TLS         TLSConfig
-	RateLimit   RateLimitConfig
-	Logger      *slog.Logger
-	AuditLogger *slog.Logger
-	Metrics     *metrics.Recorder
+	Addr         string
+	TLS          TLSConfig
+	RateLimit    RateLimitConfig
+	Logger       *slog.Logger
+	AuditLogger  *slog.Logger
+	Metrics      *metrics.Recorder
+	ViewerOrigin *url.URL
 }
 
 type Server struct {
@@ -71,6 +74,22 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	}
 	fileServer := http.FileServer(http.FS(staticFS))
 	mux.Handle("/static/", http.StripPrefix("/static/", fileServer))
+
+	if cfg.ViewerOrigin != nil {
+		viewerProxy := httputil.NewSingleHostReverseProxy(cfg.ViewerOrigin)
+		viewerProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+			if cfg.Logger != nil {
+				cfg.Logger.Error("viewer proxy error", "error", err, "path", r.URL.Path)
+			}
+			http.Error(w, "viewer temporarily unavailable", http.StatusBadGateway)
+		}
+		viewerHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			viewerProxy.ServeHTTP(w, r)
+		})
+		mux.Handle("/viewer", viewerHandler)
+		mux.Handle("/viewer/", viewerHandler)
+	}
+
 	mux.HandleFunc("/", spaHandler(staticFS, index, fileServer))
 
 	rl := newRateLimiter(cfg.RateLimit)

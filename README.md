@@ -53,6 +53,20 @@ The same values can be supplied through environment variables (`BITRIVER_LIVE_TL
 
 Prefer containers? Check out `deploy/docker-compose.yml` for a pre-wired stack that mounts persistent storage, exposes metrics, and optionally links Redis for shared rate-limiting state.
 
+### Public viewer
+
+BitRiver Live now ships with a dedicated viewer experience powered by Next.js. Build it from `web/viewer`:
+
+```bash
+cd web/viewer
+npm ci
+NEXT_VIEWER_BASE_PATH=/viewer npm run build
+```
+
+Deploy the generated standalone output with `node server.js`. The Go API proxies `/viewer` requests to that runtime when `BITRIVER_VIEWER_ORIGIN` points at the viewer host (for example, `http://127.0.0.1:3000`). The client bundle reads `NEXT_PUBLIC_API_BASE_URL` at build time—leave it empty to call the same origin or set it to an absolute URL if the API lives elsewhere.
+
+Docker users can `docker compose up` from `deploy/` to launch both the API and viewer; the compose file wires environment variables and networking automatically. Systemd operators can use the manifests in `deploy/systemd/` to run `bitriver-viewer.service` alongside the API service.
+
 The server exposes a REST API under the `/api` prefix:
 
 | Endpoint | Method | Description |

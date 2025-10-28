@@ -11,6 +11,7 @@ services:
       BITRIVER_LIVE_MODE: production
       BITRIVER_LIVE_ADDR: :8080
       BITRIVER_LIVE_DATA: /var/lib/bitriver-live/store.json
+      BITRIVER_VIEWER_ORIGIN: http://viewer:3000
       # Enable HTTPS by mounting certs and uncommenting the lines below.
       # BITRIVER_LIVE_TLS_CERT: /certs/fullchain.pem
       # BITRIVER_LIVE_TLS_KEY: /certs/privkey.pem
@@ -31,6 +32,22 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  viewer:
+    build:
+      context: ../web/viewer
+    image: bitriver-viewer:latest
+    container_name: bitriver-viewer
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_BASE_URL: ""
+      NEXT_VIEWER_BASE_PATH: /viewer
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    expose:
+      - "3000"
+    depends_on:
+      - bitriver-live
 
   redis:
     image: redis:7-alpine
