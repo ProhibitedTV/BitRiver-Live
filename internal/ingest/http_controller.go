@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -11,25 +12,52 @@ import (
 
 // HTTPController orchestrates ingest operations via REST endpoints.
 type HTTPController struct {
-	config       Config
-	channels     channelAdapter
-	applications applicationAdapter
-	transcoder   transcoderAdapter
+	config        Config
+	channels      channelAdapter
+	applications  applicationAdapter
+	transcoder    transcoderAdapter
+	logger        *slog.Logger
+	retryAttempts int
+	retryInterval time.Duration
 }
 
 func (c *HTTPController) ensureAdapters() {
 	if c.config.HTTPClient == nil {
 		c.config.HTTPClient = &http.Client{Timeout: 10 * time.Second}
 	}
+	c.ensureLogger()
 	if c.channels == nil {
-		c.channels = newHTTPChannelAdapter(c.config.SRSBaseURL, c.config.SRSToken, c.config.HTTPClient)
+		c.channels = newHTTPChannelAdapter(c.config.SRSBaseURL, c.config.SRSToken, c.config.HTTPClient, c.logger, c.retryAttempts, c.retryInterval)
 	}
 	if c.applications == nil {
-		c.applications = newHTTPApplicationAdapter(c.config.OMEBaseURL, c.config.OMEUsername, c.config.OMEPassword, c.config.HTTPClient)
+		c.applications = newHTTPApplicationAdapter(c.config.OMEBaseURL, c.config.OMEUsername, c.config.OMEPassword, c.config.HTTPClient, c.logger, c.retryAttempts, c.retryInterval)
 	}
 	if c.transcoder == nil {
-		c.transcoder = newHTTPTranscoderAdapter(c.config.JobBaseURL, c.config.JobToken, c.config.HTTPClient)
+		c.transcoder = newHTTPTranscoderAdapter(c.config.JobBaseURL, c.config.JobToken, c.config.HTTPClient, c.logger, c.retryAttempts, c.retryInterval)
 	}
+}
+
+func (c *HTTPController) ensureLogger() {
+	if c.logger == nil {
+		c.logger = slog.Default()
+	}
+	if c.retryAttempts <= 0 {
+		c.retryAttempts = c.config.HTTPMaxAttempts
+		if c.retryAttempts <= 0 {
+			c.retryAttempts = 1
+		}
+	}
+	if c.retryInterval == 0 {
+		c.retryInterval = c.config.HTTPRetryInterval
+	}
+}
+
+// SetLogger installs a structured logger for ingest orchestration.
+func (c *HTTPController) SetLogger(logger *slog.Logger) {
+	if logger == nil {
+		return
+	}
+	c.logger = logger
 }
 
 func (c *HTTPController) BootStream(ctx context.Context, params BootParams) (BootResult, error) {
@@ -39,23 +67,30 @@ func (c *HTTPController) BootStream(ctx context.Context, params BootParams) (Boo
 
 	c.ensureAdapters()
 
+	c.logger.Info("booting ingest pipeline", "channel_id", params.ChannelID, "session_id", params.SessionID)
+
 	primary, backup, err := c.channels.CreateChannel(ctx, params.ChannelID, params.StreamKey)
 	if err != nil {
+		c.logger.Error("failed to create SRS channel", "channel_id", params.ChannelID, "error", err)
 		return BootResult{}, err
 	}
 
 	origin, playback, err := c.applications.CreateApplication(ctx, params.ChannelID, params.Renditions)
 	if err != nil {
+		c.logger.Error("failed to create OME application", "channel_id", params.ChannelID, "error", err)
 		_ = c.channels.DeleteChannel(ctx, params.ChannelID)
 		return BootResult{}, err
 	}
 
 	jobIDs, renditions, err := c.transcoder.StartJobs(ctx, params.ChannelID, params.SessionID, origin, c.config.LadderProfiles)
 	if err != nil {
+		c.logger.Error("failed to start transcoder jobs", "channel_id", params.ChannelID, "session_id", params.SessionID, "error", err)
 		_ = c.applications.DeleteApplication(ctx, params.ChannelID)
 		_ = c.channels.DeleteChannel(ctx, params.ChannelID)
 		return BootResult{}, err
 	}
+
+	c.logger.Info("ingest pipeline ready", "channel_id", params.ChannelID, "session_id", params.SessionID, "jobs", len(jobIDs))
 
 	return BootResult{
 		PrimaryIngest: primary,
@@ -70,21 +105,26 @@ func (c *HTTPController) BootStream(ctx context.Context, params BootParams) (Boo
 func (c *HTTPController) ShutdownStream(ctx context.Context, channelID, sessionID string, jobIDs []string) error {
 	c.ensureAdapters()
 
+	c.logger.Info("tearing down ingest pipeline", "channel_id", channelID, "session_id", sessionID, "jobs", len(jobIDs))
 	var errs []string
 	for _, jobID := range jobIDs {
 		if err := c.transcoder.StopJob(ctx, jobID); err != nil {
+			c.logger.Error("failed to stop transcoder job", "job_id", jobID, "error", err)
 			errs = append(errs, fmt.Sprintf("stop job %s: %v", jobID, err))
 		}
 	}
 	if err := c.applications.DeleteApplication(ctx, channelID); err != nil {
+		c.logger.Error("failed to delete OME application", "channel_id", channelID, "error", err)
 		errs = append(errs, fmt.Sprintf("delete OME app: %v", err))
 	}
 	if err := c.channels.DeleteChannel(ctx, channelID); err != nil {
+		c.logger.Error("failed to delete SRS channel", "channel_id", channelID, "error", err)
 		errs = append(errs, fmt.Sprintf("delete SRS channel: %v", err))
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf(strings.Join(errs, "; "))
 	}
+	c.logger.Info("ingest pipeline removed", "channel_id", channelID, "session_id", sessionID)
 	return nil
 }
 

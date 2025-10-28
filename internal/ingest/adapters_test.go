@@ -40,7 +40,7 @@ func TestHTTPChannelAdapterCreateAndDelete(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := newHTTPChannelAdapter(server.URL, "token", server.Client())
+	adapter := newHTTPChannelAdapter(server.URL, "token", server.Client(), nil, 3, 0)
 
 	primary, backup, err := adapter.CreateChannel(context.Background(), "channel-123", "stream-key")
 	if err != nil {
@@ -58,6 +58,35 @@ func TestHTTPChannelAdapterCreateAndDelete(t *testing.T) {
 	}
 	if !deleted {
 		t.Fatal("expected delete endpoint to be invoked")
+	}
+}
+
+func TestHTTPChannelAdapterRetries(t *testing.T) {
+	t.Helper()
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/channels" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		if attempts == 1 {
+			http.Error(w, "temporary", http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(srsChannelResponse{PrimaryIngest: "rtmp://primary"})
+	}))
+	defer server.Close()
+
+	adapter := newHTTPChannelAdapter(server.URL, "token", server.Client(), nil, 2, 0)
+	primary, backup, err := adapter.CreateChannel(context.Background(), "channel-123", "stream-key")
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	if primary != "rtmp://primary" || backup != "" {
+		t.Fatalf("unexpected ingest endpoints: %q, %q", primary, backup)
+	}
+	if attempts != 2 {
+		t.Fatalf("expected 2 attempts, got %d", attempts)
 	}
 }
 
@@ -95,7 +124,7 @@ func TestHTTPApplicationAdapterLifecycle(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := newHTTPApplicationAdapter(server.URL, "admin", "password", server.Client())
+	adapter := newHTTPApplicationAdapter(server.URL, "admin", "password", server.Client(), nil, 3, 0)
 	origin, playback, err := adapter.CreateApplication(context.Background(), "channel-123", []string{"1080p"})
 	if err != nil {
 		t.Fatalf("CreateApplication: %v", err)
@@ -150,7 +179,7 @@ func TestHTTPTranscoderAdapterStartStop(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := newHTTPTranscoderAdapter(server.URL, "job-token", server.Client())
+	adapter := newHTTPTranscoderAdapter(server.URL, "job-token", server.Client(), nil, 3, 0)
 	ladder := []Rendition{{Name: "1080p", Bitrate: 6000}}
 	jobIDs, renditions, err := adapter.StartJobs(context.Background(), "channel-123", "session-abc", "http://origin", ladder)
 	if err != nil {

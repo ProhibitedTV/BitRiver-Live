@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Server version="0.15.10">
+    <Name>BitRiver OME</Name>
+    <Description>Sample configuration for local ingest testing</Description>
+
+    <Bind>
+        <Address>0.0.0.0</Address>
+    </Bind>
+
+    <Modules>
+        <Control>
+            <Server>
+                <Bind>
+                    <Address>0.0.0.0</Address>
+                    <Port>8081</Port>
+                </Bind>
+            </Server>
+            <Authentication>
+                <User>
+                    <ID>admin</ID>
+                    <!-- Replace with a secure password for production deployments. -->
+                    <Password>local-dev-password</Password>
+                </User>
+            </Authentication>
+        </Control>
+
+        <Host>
+            <VirtualHosts>
+                <VirtualHost>
+                    <Name>default</Name>
+                    <App>
+                        <Name>live</Name>
+                    </App>
+                </VirtualHost>
+            </VirtualHosts>
+        </Host>
+    </Modules>
+</Server>
