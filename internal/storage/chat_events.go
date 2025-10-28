@@ -136,12 +136,12 @@ func (s *Storage) ChatTimeout(channelID, userID string) (time.Time, bool) {
 // ChatWorker consumes queue events and applies them to storage.
 type ChatWorker struct {
 	queue  chat.Queue
-	store  *Storage
+	store  Repository
 	logger *slog.Logger
 }
 
 // NewChatWorker prepares a worker that will persist chat events delivered via the queue.
-func NewChatWorker(store *Storage, queue chat.Queue, logger *slog.Logger) *ChatWorker {
+func NewChatWorker(store Repository, queue chat.Queue, logger *slog.Logger) *ChatWorker {
 	if logger == nil {
 		logger = slog.Default()
 	}

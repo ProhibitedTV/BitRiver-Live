@@ -27,6 +27,8 @@ import (
 func main() {
 	addr := flag.String("addr", "", "HTTP listen address")
 	dataPath := flag.String("data", "", "path to JSON datastore")
+	storageDriver := flag.String("storage-driver", "", "datastore driver (json or postgres)")
+	postgresDSN := flag.String("postgres-dsn", "", "Postgres connection string")
 	mode := flag.String("mode", "", "server runtime mode (development or production)")
 	tlsCert := flag.String("tls-cert", "", "path to TLS certificate file")
 	tlsKey := flag.String("tls-key", "", "path to TLS private key file")
@@ -50,8 +52,6 @@ func main() {
 
 	tlsCertPath := firstNonEmpty(*tlsCert, os.Getenv("BITRIVER_LIVE_TLS_CERT"))
 	tlsKeyPath := firstNonEmpty(*tlsKey, os.Getenv("BITRIVER_LIVE_TLS_KEY"))
-
-	dataFile := resolveDataPath(*dataPath)
 
 	viewerURL, err := resolveViewerOrigin(*viewerOrigin, os.Getenv("BITRIVER_VIEWER_ORIGIN"))
 	if err != nil {
@@ -78,7 +78,23 @@ func main() {
 		options = append(options, storage.WithIngestController(controller))
 	}
 
-	store, err := storage.NewStorage(dataFile, options...)
+	driver := resolveStorageDriver(*storageDriver, os.Getenv("BITRIVER_LIVE_STORAGE_DRIVER"))
+	var store storage.Repository
+	switch driver {
+	case "json":
+		dataFile := resolveDataPath(*dataPath)
+		store, err = storage.NewJSONRepository(dataFile, options...)
+	case "postgres":
+		dsn := firstNonEmpty(*postgresDSN, os.Getenv("BITRIVER_LIVE_POSTGRES_DSN"))
+		if strings.TrimSpace(dsn) == "" {
+			logger.Error("postgres storage selected without DSN")
+			os.Exit(1)
+		}
+		store, err = storage.NewPostgresRepository(dsn, options...)
+	default:
+		logger.Error("unsupported storage driver", "driver", driver)
+		os.Exit(1)
+	}
 	if err != nil {
 		logger.Error("failed to open datastore", "error", err)
 		os.Exit(1)
@@ -185,6 +201,17 @@ func defaultListenForMode(mode string) string {
 		return ":80"
 	}
 	return ":8080"
+}
+
+func resolveStorageDriver(flagValue, envValue string) string {
+	driver := strings.ToLower(strings.TrimSpace(flagValue))
+	if driver == "" {
+		driver = strings.ToLower(strings.TrimSpace(envValue))
+	}
+	if driver == "" {
+		driver = "json"
+	}
+	return driver
 }
 
 func resolveDataPath(flagValue string) string {

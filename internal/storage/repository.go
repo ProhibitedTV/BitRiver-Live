@@ -1,0 +1,55 @@
+package storage
+
+import (
+	"context"
+	"time"
+
+	"bitriver-live/internal/chat"
+	"bitriver-live/internal/ingest"
+	"bitriver-live/internal/models"
+)
+
+// Repository exposes the datastore operations required by API handlers,
+// chat infrastructure, and ingest orchestration.
+type Repository interface {
+	IngestHealth(ctx context.Context) []ingest.HealthStatus
+	LastIngestHealth() ([]ingest.HealthStatus, time.Time)
+
+	CreateUser(params CreateUserParams) (models.User, error)
+	AuthenticateUser(email, password string) (models.User, error)
+	ListUsers() []models.User
+	GetUser(id string) (models.User, bool)
+	UpdateUser(id string, update UserUpdate) (models.User, error)
+	DeleteUser(id string) error
+
+	UpsertProfile(userID string, update ProfileUpdate) (models.Profile, error)
+	GetProfile(userID string) (models.Profile, bool)
+	ListProfiles() []models.Profile
+
+	CreateChannel(ownerID, title, category string, tags []string) (models.Channel, error)
+	UpdateChannel(id string, update ChannelUpdate) (models.Channel, error)
+	DeleteChannel(id string) error
+	GetChannel(id string) (models.Channel, bool)
+	ListChannels(ownerID string) []models.Channel
+
+	FollowChannel(userID, channelID string) error
+	UnfollowChannel(userID, channelID string) error
+	IsFollowingChannel(userID, channelID string) bool
+	CountFollowers(channelID string) int
+	ListFollowedChannelIDs(userID string) []string
+
+	StartStream(channelID string, renditions []string) (models.StreamSession, error)
+	StopStream(channelID string, peakConcurrent int) (models.StreamSession, error)
+	CurrentStreamSession(channelID string) (models.StreamSession, bool)
+	ListStreamSessions(channelID string) ([]models.StreamSession, error)
+
+	CreateChatMessage(channelID, userID, content string) (models.ChatMessage, error)
+	DeleteChatMessage(channelID, messageID string) error
+	ListChatMessages(channelID string, limit int) ([]models.ChatMessage, error)
+	ChatRestrictions() chat.RestrictionsSnapshot
+	IsChatBanned(channelID, userID string) bool
+	ChatTimeout(channelID, userID string) (time.Time, bool)
+	ApplyChatEvent(evt chat.Event) error
+}
+
+var _ Repository = (*Storage)(nil)

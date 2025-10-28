@@ -18,12 +18,12 @@ import (
 )
 
 type Handler struct {
-	Store       *storage.Storage
+	Store       storage.Repository
 	Sessions    *auth.SessionManager
 	ChatGateway *chat.Gateway
 }
 
-func NewHandler(store *storage.Storage, sessions *auth.SessionManager) *Handler {
+func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handler {
 	if sessions == nil {
 		sessions = auth.NewSessionManager(24 * time.Hour)
 	}
