@@ -46,13 +46,31 @@ func main() {
 	loginLimit := flag.Int("rate-login-limit", 0, "maximum login attempts per window for a single IP")
 	loginWindow := flag.Duration("rate-login-window", 0, "window for counting login attempts")
 	redisAddr := flag.String("rate-redis-addr", "", "Redis address for distributed login throttling")
+	redisAddrs := flag.String("rate-redis-addrs", "", "comma separated Redis addresses for distributed login throttling")
+	redisUsername := flag.String("rate-redis-username", "", "Redis username for distributed login throttling")
 	redisPassword := flag.String("rate-redis-password", "", "Redis password for distributed login throttling")
+	redisMasterName := flag.String("rate-redis-master-name", "", "Redis sentinel master name for distributed login throttling")
+	redisPoolSize := flag.Int("rate-redis-pool-size", 0, "maximum Redis connections for distributed login throttling")
+	redisTLSCA := flag.String("rate-redis-tls-ca", "", "path to Redis TLS CA certificate for distributed login throttling")
+	redisTLSCert := flag.String("rate-redis-tls-cert", "", "path to Redis TLS client certificate for distributed login throttling")
+	redisTLSKey := flag.String("rate-redis-tls-key", "", "path to Redis TLS client key for distributed login throttling")
+	redisTLSServerName := flag.String("rate-redis-tls-server-name", "", "override Redis TLS server name for distributed login throttling")
+	redisTLSSkipVerify := flag.Bool("rate-redis-tls-skip-verify", false, "skip Redis TLS verification for distributed login throttling")
 	redisTimeout := flag.Duration("rate-redis-timeout", 0, "timeout for Redis operations")
 	chatQueueDriver := flag.String("chat-queue-driver", "", "chat queue driver (memory or redis)")
 	chatRedisAddr := flag.String("chat-queue-redis-addr", "", "Redis address for chat queue transport")
+	chatRedisAddrs := flag.String("chat-queue-redis-addrs", "", "comma separated Redis addresses for chat queue transport")
+	chatRedisUsername := flag.String("chat-queue-redis-username", "", "Redis username for chat queue")
 	chatRedisPassword := flag.String("chat-queue-redis-password", "", "Redis password for chat queue")
 	chatRedisStream := flag.String("chat-queue-redis-stream", "", "Redis stream key for chat queue events")
 	chatRedisGroup := flag.String("chat-queue-redis-group", "", "Redis consumer group for chat queue")
+	chatRedisMasterName := flag.String("chat-queue-redis-sentinel-master", "", "Redis sentinel master name for chat queue")
+	chatRedisPoolSize := flag.Int("chat-queue-redis-pool-size", 0, "maximum Redis connections for chat queue")
+	chatRedisTLSCA := flag.String("chat-queue-redis-tls-ca", "", "path to Redis TLS CA certificate for chat queue")
+	chatRedisTLSCert := flag.String("chat-queue-redis-tls-cert", "", "path to Redis TLS client certificate for chat queue")
+	chatRedisTLSKey := flag.String("chat-queue-redis-tls-key", "", "path to Redis TLS client key for chat queue")
+	chatRedisTLSServerName := flag.String("chat-queue-redis-tls-server-name", "", "override Redis TLS server name for chat queue")
+	chatRedisTLSSkipVerify := flag.Bool("chat-queue-redis-tls-skip-verify", false, "skip Redis TLS verification for chat queue")
 	viewerOrigin := flag.String("viewer-origin", "", "URL of the Next.js viewer runtime to proxy (e.g. http://127.0.0.1:3000)")
 	objectEndpoint := flag.String("object-endpoint", "", "object storage endpoint (e.g. http://127.0.0.1:9000)")
 	objectRegion := flag.String("object-region", "", "object storage region")
@@ -182,7 +200,25 @@ func main() {
 	}
 
 	sessions := auth.NewSessionManager(24 * time.Hour)
-	queue, err := configureChatQueue(chatQueueDriver, chatRedisAddr, chatRedisPassword, chatRedisStream, chatRedisGroup, logger)
+	queueDriver := firstNonEmpty(*chatQueueDriver, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_DRIVER"))
+	chatRedisCfg := chat.RedisQueueConfig{
+		Addr:       firstNonEmpty(*chatRedisAddr, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_ADDR")),
+		Addrs:      splitAndTrim(firstNonEmpty(*chatRedisAddrs, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_ADDRS"))),
+		Username:   firstNonEmpty(*chatRedisUsername, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_USERNAME")),
+		Password:   firstNonEmpty(*chatRedisPassword, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_PASSWORD")),
+		Stream:     firstNonEmpty(*chatRedisStream, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_STREAM")),
+		Group:      firstNonEmpty(*chatRedisGroup, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_GROUP")),
+		MasterName: firstNonEmpty(*chatRedisMasterName, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_SENTINEL_MASTER")),
+		PoolSize:   resolveInt(*chatRedisPoolSize, "BITRIVER_LIVE_CHAT_REDIS_POOL_SIZE"),
+		TLS: chat.RedisTLSConfig{
+			CAFile:             firstNonEmpty(*chatRedisTLSCA, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_TLS_CA")),
+			CertFile:           firstNonEmpty(*chatRedisTLSCert, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_TLS_CERT")),
+			KeyFile:            firstNonEmpty(*chatRedisTLSKey, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_TLS_KEY")),
+			ServerName:         firstNonEmpty(*chatRedisTLSServerName, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_TLS_SERVER_NAME")),
+			InsecureSkipVerify: resolveBool(*chatRedisTLSSkipVerify, "BITRIVER_LIVE_CHAT_REDIS_TLS_SKIP_VERIFY"),
+		},
+	}
+	queue, err := configureChatQueue(queueDriver, chatRedisCfg, logger)
 	if err != nil {
 		logger.Error("failed to configure chat queue", "error", err)
 		os.Exit(1)
@@ -199,13 +235,24 @@ func main() {
 	go storage.NewChatWorker(store, queue, logging.WithComponent(logger, "chat-worker")).Run(workerCtx)
 
 	rateCfg := server.RateLimitConfig{
-		GlobalRPS:     resolveFloat(*globalRPS, "BITRIVER_LIVE_RATE_GLOBAL_RPS"),
-		GlobalBurst:   resolveInt(*globalBurst, "BITRIVER_LIVE_RATE_GLOBAL_BURST"),
-		LoginLimit:    resolveInt(*loginLimit, "BITRIVER_LIVE_RATE_LOGIN_LIMIT"),
-		LoginWindow:   resolveDuration(*loginWindow, "BITRIVER_LIVE_RATE_LOGIN_WINDOW", time.Minute),
-		RedisAddr:     firstNonEmpty(*redisAddr, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDR")),
-		RedisPassword: firstNonEmpty(*redisPassword, os.Getenv("BITRIVER_LIVE_RATE_REDIS_PASSWORD")),
-		RedisTimeout:  resolveDuration(*redisTimeout, "BITRIVER_LIVE_RATE_REDIS_TIMEOUT", 2*time.Second),
+		GlobalRPS:       resolveFloat(*globalRPS, "BITRIVER_LIVE_RATE_GLOBAL_RPS"),
+		GlobalBurst:     resolveInt(*globalBurst, "BITRIVER_LIVE_RATE_GLOBAL_BURST"),
+		LoginLimit:      resolveInt(*loginLimit, "BITRIVER_LIVE_RATE_LOGIN_LIMIT"),
+		LoginWindow:     resolveDuration(*loginWindow, "BITRIVER_LIVE_RATE_LOGIN_WINDOW", time.Minute),
+		RedisAddr:       firstNonEmpty(*redisAddr, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDR")),
+		RedisAddrs:      splitAndTrim(firstNonEmpty(*redisAddrs, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDRS"))),
+		RedisUsername:   firstNonEmpty(*redisUsername, os.Getenv("BITRIVER_LIVE_RATE_REDIS_USERNAME")),
+		RedisPassword:   firstNonEmpty(*redisPassword, os.Getenv("BITRIVER_LIVE_RATE_REDIS_PASSWORD")),
+		RedisMasterName: firstNonEmpty(*redisMasterName, os.Getenv("BITRIVER_LIVE_RATE_REDIS_MASTER_NAME")),
+		RedisTimeout:    resolveDuration(*redisTimeout, "BITRIVER_LIVE_RATE_REDIS_TIMEOUT", 2*time.Second),
+		RedisPoolSize:   resolveInt(*redisPoolSize, "BITRIVER_LIVE_RATE_REDIS_POOL_SIZE"),
+		RedisTLS: server.RedisTLSConfig{
+			CAFile:             firstNonEmpty(*redisTLSCA, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_CA")),
+			CertFile:           firstNonEmpty(*redisTLSCert, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_CERT")),
+			KeyFile:            firstNonEmpty(*redisTLSKey, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_KEY")),
+			ServerName:         firstNonEmpty(*redisTLSServerName, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_SERVER_NAME")),
+			InsecureSkipVerify: resolveBool(*redisTLSSkipVerify, "BITRIVER_LIVE_RATE_REDIS_TLS_SKIP_VERIFY"),
+		},
 	}
 
 	tlsCfg := server.TLSConfig{
@@ -269,21 +316,14 @@ func main() {
 	logger.Info("server stopped")
 }
 
-func configureChatQueue(chatQueueDriver, chatRedisAddr, chatRedisPassword, chatRedisStream, chatRedisGroup *string, logger *slog.Logger) (chat.Queue, error) {
-	driver := strings.ToLower(strings.TrimSpace(firstNonEmpty(*chatQueueDriver, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_DRIVER"))))
+func configureChatQueue(driver string, cfg chat.RedisQueueConfig, logger *slog.Logger) (chat.Queue, error) {
+	driver = strings.ToLower(strings.TrimSpace(driver))
 	switch driver {
 	case "redis":
-		addr := firstNonEmpty(*chatRedisAddr, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_ADDR"))
-		if strings.TrimSpace(addr) == "" {
+		if len(cfg.Addrs) == 0 && strings.TrimSpace(cfg.Addr) == "" {
 			return nil, fmt.Errorf("redis addr is required for chat queue")
 		}
-		cfg := chat.RedisQueueConfig{
-			Addr:     addr,
-			Password: firstNonEmpty(*chatRedisPassword, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_PASSWORD")),
-			Stream:   firstNonEmpty(*chatRedisStream, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_STREAM")),
-			Group:    firstNonEmpty(*chatRedisGroup, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_GROUP")),
-			Logger:   logging.WithComponent(logger, "chat-queue"),
-		}
+		cfg.Logger = logging.WithComponent(logger, "chat-queue")
 		queue, err := chat.NewRedisQueue(cfg)
 		if err != nil {
 			return nil, err
@@ -372,6 +412,25 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func splitAndTrim(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func resolveFloat(flagValue float64, envKey string) float64 {
