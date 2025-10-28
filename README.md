@@ -38,6 +38,21 @@ go run ./cmd/server --mode production --data /var/lib/bitriver-live/store.json
 
 In production mode BitRiver Live binds to port 80 by default, letting viewers access the control center without appending a port number to your domain.
 
+To serve HTTPS directly from the Go process provide a certificate/key pair generated via [Let's Encrypt](https://letsencrypt.org/), your reverse proxy, or another certificate authority:
+
+```bash
+go run ./cmd/server \
+  --mode production \
+  --addr :443 \
+  --data /var/lib/bitriver-live/store.json \
+  --tls-cert /etc/letsencrypt/live/stream.example.com/fullchain.pem \
+  --tls-key /etc/letsencrypt/live/stream.example.com/privkey.pem
+```
+
+The same values can be supplied through environment variables (`BITRIVER_LIVE_TLS_CERT` and `BITRIVER_LIVE_TLS_KEY`). Pair this with a lightweight cron job or Certbot renewal hook to keep certificates fresh, or terminate TLS at a reverse proxy if you prefer automatic ACME handling upstream.
+
+Prefer containers? Check out `deploy/docker-compose.yml` for a pre-wired stack that mounts persistent storage, exposes metrics, and optionally links Redis for shared rate-limiting state.
+
 The server exposes a REST API under the `/api` prefix:
 
 | Endpoint | Method | Description |
@@ -146,6 +161,31 @@ When these variables are set the API will:
 Stopping a stream reverses the process with DELETE calls to `/v1/jobs/{id}`, `/v1/applications/{channelId}`, and `/v1/channels/{channelId}`.
 
 The `/healthz` endpoint now returns JSON that includes the status of these external services so dashboards and probes can surface degraded dependencies early.
+
+### Rate limiting and audit logging
+
+The HTTP server now enforces an optional global rate limit along with per-IP throttling for login attempts. Configure the guards to taste (and optionally back them with Redis for multi-node deployments):
+
+| Variable | Description |
+| --- | --- |
+| `BITRIVER_LIVE_RATE_GLOBAL_RPS` | Maximum requests-per-second allowed across the process. |
+| `BITRIVER_LIVE_RATE_GLOBAL_BURST` | Optional burst size for the global limiter. |
+| `BITRIVER_LIVE_RATE_LOGIN_LIMIT` | Maximum login attempts per IP within the configured window. |
+| `BITRIVER_LIVE_RATE_LOGIN_WINDOW` | Rolling window (e.g. `2m`) for counting login attempts. |
+| `BITRIVER_LIVE_RATE_REDIS_ADDR` | Redis address used to coordinate login throttling across replicas. |
+| `BITRIVER_LIVE_RATE_REDIS_PASSWORD` | Password for the Redis instance if required. |
+| `BITRIVER_LIVE_RATE_REDIS_TIMEOUT` | Timeout for Redis operations (`2s` by default). |
+
+All state-changing API calls emit structured audit logs containing the authenticated user (when available), path, status code, and remote IP so you can feed them into `journalctl` or your preferred log pipeline.
+
+### Observability endpoints
+
+BitRiver Live exports Prometheus-compatible metrics and improved health reporting out-of-the-box:
+
+- `GET /healthz` summarises dependency health and ingest orchestration.
+- `GET /metrics` emits request counters/latency, stream lifecycle events, ingest gauges, and the current number of active streams.
+
+Point Prometheus, Grafana Agent, or another scraper at `/metrics` to track latency and ingest health. The installer script and deployment assets configure the same endpoints automatically so home operators can wire them into dashboards with minimal effort.
 
 ---
 

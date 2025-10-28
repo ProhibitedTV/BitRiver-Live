@@ -213,6 +213,40 @@
                 Public hostname (optional, used for TLS hints)
                 <input type="text" name="hostname" placeholder="stream.example.com" />
             </label>
+            <details class="accordion">
+                <summary>TLS configuration</summary>
+                <label>
+                    TLS certificate path
+                    <input type="text" name="tlsCert" placeholder="/etc/letsencrypt/live/stream.example.com/fullchain.pem" />
+                </label>
+                <label>
+                    TLS key path
+                    <input type="text" name="tlsKey" placeholder="/etc/letsencrypt/live/stream.example.com/privkey.pem" />
+                </label>
+            </details>
+            <details class="accordion">
+                <summary>Rate limiting &amp; Redis</summary>
+                <label>
+                    Global RPS cap
+                    <input type="number" name="rateGlobalRps" min="0" step="1" placeholder="50" />
+                </label>
+                <label>
+                    Login attempts per window
+                    <input type="number" name="rateLoginLimit" min="0" step="1" placeholder="5" />
+                </label>
+                <label>
+                    Login window
+                    <input type="text" name="rateLoginWindow" placeholder="2m" />
+                </label>
+                <label>
+                    Redis address (optional)
+                    <input type="text" name="redisAddr" placeholder="redis:6379" />
+                </label>
+                <label>
+                    Redis password
+                    <input type="password" name="redisPassword" autocomplete="new-password" />
+                </label>
+            </details>
             <label class="checkbox">
                 <input type="checkbox" name="enableLogs" checked />
                 <span>Provision log directory and journald override</span>
