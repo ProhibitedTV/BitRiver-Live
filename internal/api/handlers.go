@@ -858,6 +858,14 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 		case "chat":
 			h.handleChatRoutes(channelID, parts[2:], w, r)
 			return
+		case "monetization":
+			channel, ok := h.Store.GetChannel(channelID)
+			if !ok {
+				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				return
+			}
+			h.handleMonetizationRoutes(channel, parts[2:], w, r)
+			return
 		}
 	}
 
@@ -1000,12 +1008,104 @@ type chatModerationResponse struct {
 	ExpiresAt *string `json:"expiresAt,omitempty"`
 }
 
+type chatRestrictionResponse struct {
+	ID        string  `json:"id"`
+	Type      string  `json:"type"`
+	TargetID  string  `json:"targetId"`
+	ActorID   string  `json:"actorId,omitempty"`
+	Reason    string  `json:"reason,omitempty"`
+	IssuedAt  string  `json:"issuedAt"`
+	ExpiresAt *string `json:"expiresAt,omitempty"`
+}
+
+type chatReportRequest struct {
+	TargetID    string `json:"targetId"`
+	Reason      string `json:"reason"`
+	MessageID   string `json:"messageId,omitempty"`
+	EvidenceURL string `json:"evidenceUrl,omitempty"`
+}
+
+type chatReportResponse struct {
+	ID          string  `json:"id"`
+	ChannelID   string  `json:"channelId"`
+	ReporterID  string  `json:"reporterId"`
+	TargetID    string  `json:"targetId"`
+	Reason      string  `json:"reason"`
+	Status      string  `json:"status"`
+	Resolution  string  `json:"resolution,omitempty"`
+	MessageID   string  `json:"messageId,omitempty"`
+	EvidenceURL string  `json:"evidenceUrl,omitempty"`
+	CreatedAt   string  `json:"createdAt"`
+	ResolvedAt  *string `json:"resolvedAt,omitempty"`
+	ResolverID  string  `json:"resolverId,omitempty"`
+}
+
+type resolveChatReportRequest struct {
+	Resolution string `json:"resolution"`
+}
+
 type chatMessageResponse struct {
 	ID        string `json:"id"`
 	ChannelID string `json:"channelId"`
 	UserID    string `json:"userId"`
 	Content   string `json:"content"`
 	CreatedAt string `json:"createdAt"`
+}
+
+type createTipRequest struct {
+	Amount        float64 `json:"amount"`
+	Currency      string  `json:"currency"`
+	Provider      string  `json:"provider"`
+	Reference     string  `json:"reference,omitempty"`
+	WalletAddress string  `json:"walletAddress,omitempty"`
+	Message       string  `json:"message,omitempty"`
+}
+
+type tipResponse struct {
+	ID            string  `json:"id"`
+	ChannelID     string  `json:"channelId"`
+	FromUserID    string  `json:"fromUserId"`
+	Amount        float64 `json:"amount"`
+	Currency      string  `json:"currency"`
+	Provider      string  `json:"provider"`
+	Reference     string  `json:"reference"`
+	WalletAddress string  `json:"walletAddress,omitempty"`
+	Message       string  `json:"message,omitempty"`
+	CreatedAt     string  `json:"createdAt"`
+}
+
+type createSubscriptionRequest struct {
+	Tier              string  `json:"tier"`
+	Provider          string  `json:"provider"`
+	Reference         string  `json:"reference,omitempty"`
+	ExternalReference string  `json:"externalReference,omitempty"`
+	Amount            float64 `json:"amount"`
+	Currency          string  `json:"currency"`
+	DurationDays      int     `json:"durationDays"`
+	AutoRenew         bool    `json:"autoRenew"`
+}
+
+type subscriptionResponse struct {
+	ID                string  `json:"id"`
+	ChannelID         string  `json:"channelId"`
+	UserID            string  `json:"userId"`
+	Tier              string  `json:"tier"`
+	Provider          string  `json:"provider"`
+	Reference         string  `json:"reference"`
+	ExternalReference string  `json:"externalReference,omitempty"`
+	Amount            float64 `json:"amount"`
+	Currency          string  `json:"currency"`
+	StartedAt         string  `json:"startedAt"`
+	ExpiresAt         string  `json:"expiresAt"`
+	AutoRenew         bool    `json:"autoRenew"`
+	Status            string  `json:"status"`
+	CancelledBy       string  `json:"cancelledBy,omitempty"`
+	CancelledReason   string  `json:"cancelledReason,omitempty"`
+	CancelledAt       *string `json:"cancelledAt,omitempty"`
+}
+
+type cancelSubscriptionRequest struct {
+	Reason string `json:"reason"`
 }
 
 func newChatMessageResponse(message models.ChatMessage) chatMessageResponse {
@@ -1016,6 +1116,86 @@ func newChatMessageResponse(message models.ChatMessage) chatMessageResponse {
 		Content:   message.Content,
 		CreatedAt: message.CreatedAt.Format(time.RFC3339Nano),
 	}
+}
+
+func newChatRestrictionResponse(r models.ChatRestriction) chatRestrictionResponse {
+	resp := chatRestrictionResponse{
+		ID:       r.ID,
+		Type:     r.Type,
+		TargetID: r.TargetID,
+		ActorID:  r.ActorID,
+		Reason:   r.Reason,
+		IssuedAt: r.IssuedAt.Format(time.RFC3339Nano),
+	}
+	if r.ExpiresAt != nil {
+		expires := r.ExpiresAt.Format(time.RFC3339Nano)
+		resp.ExpiresAt = &expires
+	}
+	if resp.ActorID == "" {
+		resp.ActorID = r.ActorID
+	}
+	return resp
+}
+
+func newChatReportResponse(report models.ChatReport) chatReportResponse {
+	resp := chatReportResponse{
+		ID:          report.ID,
+		ChannelID:   report.ChannelID,
+		ReporterID:  report.ReporterID,
+		TargetID:    report.TargetID,
+		Reason:      report.Reason,
+		Status:      report.Status,
+		Resolution:  report.Resolution,
+		MessageID:   report.MessageID,
+		EvidenceURL: report.EvidenceURL,
+		CreatedAt:   report.CreatedAt.Format(time.RFC3339Nano),
+		ResolverID:  report.ResolverID,
+	}
+	if report.ResolvedAt != nil {
+		resolved := report.ResolvedAt.Format(time.RFC3339Nano)
+		resp.ResolvedAt = &resolved
+	}
+	return resp
+}
+
+func newTipResponse(tip models.Tip) tipResponse {
+	return tipResponse{
+		ID:            tip.ID,
+		ChannelID:     tip.ChannelID,
+		FromUserID:    tip.FromUserID,
+		Amount:        tip.Amount,
+		Currency:      tip.Currency,
+		Provider:      tip.Provider,
+		Reference:     tip.Reference,
+		WalletAddress: tip.WalletAddress,
+		Message:       tip.Message,
+		CreatedAt:     tip.CreatedAt.Format(time.RFC3339Nano),
+	}
+}
+
+func newSubscriptionResponse(sub models.Subscription) subscriptionResponse {
+	resp := subscriptionResponse{
+		ID:                sub.ID,
+		ChannelID:         sub.ChannelID,
+		UserID:            sub.UserID,
+		Tier:              sub.Tier,
+		Provider:          sub.Provider,
+		Reference:         sub.Reference,
+		ExternalReference: sub.ExternalReference,
+		Amount:            sub.Amount,
+		Currency:          sub.Currency,
+		StartedAt:         sub.StartedAt.Format(time.RFC3339Nano),
+		ExpiresAt:         sub.ExpiresAt.Format(time.RFC3339Nano),
+		AutoRenew:         sub.AutoRenew,
+		Status:            sub.Status,
+		CancelledBy:       sub.CancelledBy,
+		CancelledReason:   sub.CancelledReason,
+	}
+	if sub.CancelledAt != nil {
+		cancelled := sub.CancelledAt.Format(time.RFC3339Nano)
+		resp.CancelledAt = &cancelled
+	}
+	return resp
 }
 
 func (h *Handler) ChatWebsocket(w http.ResponseWriter, r *http.Request) {
@@ -1182,6 +1362,30 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 		return
 	}
 	if len(remaining) > 0 {
+		switch remaining[0] {
+		case "restrictions":
+			if r.Method != http.MethodGet {
+				w.Header().Set("Allow", "GET")
+				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				return
+			}
+			if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+				WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+				return
+			}
+			restrictions := h.Store.ListChatRestrictions(channel.ID)
+			response := make([]chatRestrictionResponse, 0, len(restrictions))
+			for _, restriction := range restrictions {
+				response = append(response, newChatRestrictionResponse(restriction))
+			}
+			writeJSON(w, http.StatusOK, response)
+			return
+		case "reports":
+			h.handleChatReports(actor, channel, remaining[1:], w, r)
+			return
+		}
+	}
+	if len(remaining) > 0 {
 		writeError(w, http.StatusNotFound, fmt.Errorf("unknown chat moderation path"))
 		return
 	}
@@ -1245,6 +1449,283 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 		TargetID:  evt.TargetID,
 		ExpiresAt: expires,
 	})
+}
+
+func (h *Handler) handleChatReports(actor models.User, channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
+	if len(remaining) > 0 && strings.TrimSpace(remaining[0]) != "" {
+		reportID := remaining[0]
+		if len(remaining) == 2 && remaining[1] == "resolve" {
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				return
+			}
+			if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+				WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+				return
+			}
+			var req resolveChatReportRequest
+			if err := decodeJSON(r, &req); err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			report, err := h.Store.ResolveChatReport(reportID, actor.ID, req.Resolution)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, newChatReportResponse(report))
+			return
+		}
+		writeError(w, http.StatusNotFound, fmt.Errorf("unknown chat report path"))
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+			return
+		}
+		includeResolved := false
+		status := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status")))
+		if status == "all" || status == "resolved" {
+			includeResolved = true
+		}
+		reports, err := h.Store.ListChatReports(channel.ID, includeResolved)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		response := make([]chatReportResponse, 0, len(reports))
+		for _, report := range reports {
+			response = append(response, newChatReportResponse(report))
+		}
+		writeJSON(w, http.StatusOK, response)
+	case http.MethodPost:
+		var req chatReportRequest
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		targetID := strings.TrimSpace(req.TargetID)
+		if targetID == "" {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("targetId is required"))
+			return
+		}
+		if _, ok := h.Store.GetUser(targetID); !ok {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("user %s not found", targetID))
+			return
+		}
+		reason := strings.TrimSpace(req.Reason)
+		if reason == "" {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("reason is required"))
+			return
+		}
+		messageID := strings.TrimSpace(req.MessageID)
+		evidence := strings.TrimSpace(req.EvidenceURL)
+		if h.ChatGateway != nil {
+			reporter, ok := h.Store.GetUser(actor.ID)
+			if !ok {
+				writeError(w, http.StatusInternalServerError, fmt.Errorf("reporter %s not found", actor.ID))
+				return
+			}
+			evt, err := h.ChatGateway.SubmitReport(r.Context(), reporter, channel.ID, targetID, reason, messageID, evidence)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			report := models.ChatReport{
+				ID:          evt.ID,
+				ChannelID:   evt.ChannelID,
+				ReporterID:  evt.ReporterID,
+				TargetID:    evt.TargetID,
+				Reason:      evt.Reason,
+				MessageID:   evt.MessageID,
+				EvidenceURL: evt.EvidenceURL,
+				Status:      evt.Status,
+				CreatedAt:   evt.CreatedAt,
+			}
+			writeJSON(w, http.StatusAccepted, newChatReportResponse(report))
+			return
+		}
+		report, err := h.Store.CreateChatReport(channel.ID, actor.ID, targetID, reason, messageID, evidence)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, newChatReportResponse(report))
+	default:
+		w.Header().Set("Allow", "GET, POST")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+	}
+}
+
+func (h *Handler) handleMonetizationRoutes(channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
+	if len(remaining) == 0 {
+		writeError(w, http.StatusNotFound, fmt.Errorf("unknown monetization path"))
+		return
+	}
+	switch remaining[0] {
+	case "tips":
+		h.handleTipsRoutes(channel, remaining[1:], w, r)
+	case "subscriptions":
+		h.handleSubscriptionsRoutes(channel, remaining[1:], w, r)
+	default:
+		writeError(w, http.StatusNotFound, fmt.Errorf("unknown monetization path"))
+	}
+}
+
+func (h *Handler) handleTipsRoutes(channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.requireAuthenticatedUser(w, r)
+	if !ok {
+		return
+	}
+	if len(remaining) > 0 && strings.TrimSpace(remaining[0]) != "" {
+		writeError(w, http.StatusNotFound, fmt.Errorf("unknown tips path"))
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+			return
+		}
+		limit := 0
+		if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+			if value, err := strconv.Atoi(raw); err == nil && value > 0 {
+				limit = value
+			}
+		}
+		tips, err := h.Store.ListTips(channel.ID, limit)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		response := make([]tipResponse, 0, len(tips))
+		for _, tip := range tips {
+			response = append(response, newTipResponse(tip))
+		}
+		writeJSON(w, http.StatusOK, response)
+	case http.MethodPost:
+		var req createTipRequest
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		params := storage.CreateTipParams{
+			ChannelID:     channel.ID,
+			FromUserID:    actor.ID,
+			Amount:        req.Amount,
+			Currency:      req.Currency,
+			Provider:      req.Provider,
+			Reference:     req.Reference,
+			WalletAddress: req.WalletAddress,
+			Message:       req.Message,
+		}
+		tip, err := h.Store.CreateTip(params)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		metrics.Default().ObserveMonetization("tip", tip.Amount)
+		writeJSON(w, http.StatusCreated, newTipResponse(tip))
+	default:
+		w.Header().Set("Allow", "GET, POST")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+	}
+}
+
+func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.requireAuthenticatedUser(w, r)
+	if !ok {
+		return
+	}
+	if len(remaining) > 0 && strings.TrimSpace(remaining[0]) != "" {
+		subscriptionID := remaining[0]
+		if len(remaining) == 1 {
+			if r.Method != http.MethodDelete {
+				w.Header().Set("Allow", "DELETE")
+				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				return
+			}
+			sub, ok := h.Store.GetSubscription(subscriptionID)
+			if !ok {
+				writeError(w, http.StatusNotFound, fmt.Errorf("subscription %s not found", subscriptionID))
+				return
+			}
+			if sub.UserID != actor.ID && channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+				WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+				return
+			}
+			reason := strings.TrimSpace(r.URL.Query().Get("reason"))
+			updated, err := h.Store.CancelSubscription(subscriptionID, actor.ID, reason)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, newSubscriptionResponse(updated))
+			return
+		}
+		writeError(w, http.StatusNotFound, fmt.Errorf("unknown subscription path"))
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+			return
+		}
+		includeInactive := false
+		status := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status")))
+		if status == "all" || status == "inactive" {
+			includeInactive = true
+		}
+		subs, err := h.Store.ListSubscriptions(channel.ID, includeInactive)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		response := make([]subscriptionResponse, 0, len(subs))
+		for _, sub := range subs {
+			response = append(response, newSubscriptionResponse(sub))
+		}
+		writeJSON(w, http.StatusOK, response)
+	case http.MethodPost:
+		var req createSubscriptionRequest
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		durationDays := req.DurationDays
+		if durationDays <= 0 {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("durationDays must be positive"))
+			return
+		}
+		params := storage.CreateSubscriptionParams{
+			ChannelID:         channel.ID,
+			UserID:            actor.ID,
+			Tier:              req.Tier,
+			Provider:          req.Provider,
+			Reference:         req.Reference,
+			Amount:            req.Amount,
+			Currency:          req.Currency,
+			Duration:          time.Duration(durationDays) * 24 * time.Hour,
+			AutoRenew:         req.AutoRenew,
+			ExternalReference: req.ExternalReference,
+		}
+		sub, err := h.Store.CreateSubscription(params)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		metrics.Default().ObserveMonetization("subscription", sub.Amount)
+		writeJSON(w, http.StatusCreated, newSubscriptionResponse(sub))
+	default:
+		w.Header().Set("Allow", "GET, POST, DELETE")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+	}
 }
 
 // Profiles

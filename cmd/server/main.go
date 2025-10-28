@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -40,6 +41,11 @@ func main() {
 	redisAddr := flag.String("rate-redis-addr", "", "Redis address for distributed login throttling")
 	redisPassword := flag.String("rate-redis-password", "", "Redis password for distributed login throttling")
 	redisTimeout := flag.Duration("rate-redis-timeout", 0, "timeout for Redis operations")
+	chatQueueDriver := flag.String("chat-queue-driver", "", "chat queue driver (memory or redis)")
+	chatRedisAddr := flag.String("chat-queue-redis-addr", "", "Redis address for chat queue transport")
+	chatRedisPassword := flag.String("chat-queue-redis-password", "", "Redis password for chat queue")
+	chatRedisStream := flag.String("chat-queue-redis-stream", "", "Redis stream key for chat queue events")
+	chatRedisGroup := flag.String("chat-queue-redis-group", "", "Redis consumer group for chat queue")
 	viewerOrigin := flag.String("viewer-origin", "", "URL of the Next.js viewer runtime to proxy (e.g. http://127.0.0.1:3000)")
 	flag.Parse()
 
@@ -101,7 +107,11 @@ func main() {
 	}
 
 	sessions := auth.NewSessionManager(24 * time.Hour)
-	queue := chat.NewMemoryQueue(128)
+	queue, err := configureChatQueue(chatQueueDriver, chatRedisAddr, chatRedisPassword, chatRedisStream, chatRedisGroup, logger)
+	if err != nil {
+		logger.Error("failed to configure chat queue", "error", err)
+		os.Exit(1)
+	}
 	gateway := chat.NewGateway(chat.GatewayConfig{
 		Queue:  queue,
 		Store:  store,
@@ -172,6 +182,33 @@ func main() {
 	}
 
 	logger.Info("server stopped")
+}
+
+func configureChatQueue(chatQueueDriver, chatRedisAddr, chatRedisPassword, chatRedisStream, chatRedisGroup *string, logger *slog.Logger) (chat.Queue, error) {
+	driver := strings.ToLower(strings.TrimSpace(firstNonEmpty(*chatQueueDriver, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_DRIVER"))))
+	switch driver {
+	case "redis":
+		addr := firstNonEmpty(*chatRedisAddr, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_ADDR"))
+		if strings.TrimSpace(addr) == "" {
+			return nil, fmt.Errorf("redis addr is required for chat queue")
+		}
+		cfg := chat.RedisQueueConfig{
+			Addr:     addr,
+			Password: firstNonEmpty(*chatRedisPassword, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_PASSWORD")),
+			Stream:   firstNonEmpty(*chatRedisStream, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_STREAM")),
+			Group:    firstNonEmpty(*chatRedisGroup, os.Getenv("BITRIVER_LIVE_CHAT_REDIS_GROUP")),
+			Logger:   logging.WithComponent(logger, "chat-queue"),
+		}
+		queue, err := chat.NewRedisQueue(cfg)
+		if err != nil {
+			return nil, err
+		}
+		return queue, nil
+	case "", "memory":
+		return chat.NewMemoryQueue(128), nil
+	default:
+		return nil, fmt.Errorf("unsupported chat queue driver %q", driver)
+	}
 }
 
 func resolveListenAddr(flagValue, mode, envAddr string) string {

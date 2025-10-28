@@ -51,7 +51,7 @@ go run ./cmd/server \
 
 The same values can be supplied through environment variables (`BITRIVER_LIVE_TLS_CERT` and `BITRIVER_LIVE_TLS_KEY`). Pair this with a lightweight cron job or Certbot renewal hook to keep certificates fresh, or terminate TLS at a reverse proxy if you prefer automatic ACME handling upstream.
 
-Prefer containers? Check out `deploy/docker-compose.yml` for a pre-wired stack that mounts persistent storage, exposes metrics, and optionally links Redis for shared rate-limiting state.
+Prefer containers? Check out `deploy/docker-compose.yml` for a pre-wired stack that mounts persistent storage, exposes metrics, and optionally links Redis for shared rate-limiting state. You can also point chat at a Redis Streams transport by setting `--chat-queue-driver redis` (or `BITRIVER_LIVE_CHAT_QUEUE_DRIVER=redis`) along with `--chat-queue-redis-addr`/`BITRIVER_LIVE_CHAT_REDIS_ADDR`; the queue constructor will automatically create the configured stream and consumer group when it connects.
 
 ### Public viewer
 
@@ -83,7 +83,17 @@ The server exposes a REST API under the `/api` prefix:
 | `/api/channels/{id}/sessions` | `GET` | Retrieve the session history for a channel |
 | `/api/channels/{id}/chat` | `POST`, `GET` | Persist chat messages and fetch recent history |
 | `/api/channels/{id}/chat/{messageId}` | `DELETE` | Remove a single chat message for moderation |
+| `/api/channels/{id}/chat/moderation/restrictions` | `GET` | List active bans and timeouts for a channel |
+| `/api/channels/{id}/chat/moderation/reports` | `POST`, `GET` | Submit viewer reports and review moderation queue |
+| `/api/channels/{id}/chat/moderation/reports/{reportId}/resolve` | `POST` | Resolve or annotate a chat report |
+| `/api/channels/{id}/monetization/tips` | `POST`, `GET` | Accept supporter tips and review recent transactions |
+| `/api/channels/{id}/monetization/subscriptions` | `POST`, `GET` | Manage recurring channel subscriptions |
+| `/api/channels/{id}/monetization/subscriptions/{subscriptionId}` | `DELETE` | Cancel a subscription (viewer or admin) |
 | `/api/profiles/{userId}` | `PUT`, `GET` | Configure streamer bios, top friends, and crypto-only donation links |
+
+Moderation endpoints emit structured events into the chat persistence queue so bans, timeouts, and viewer reports stay in sync across WebSocket clients and long-term storage. When you wire Redis Streams into the server, the chat worker and gateway scale horizontally while still delivering the new moderation actions. Use the restrictions endpoint to audit active sanctions and the reports workflow to resolve escalations with an audit trail.
+
+Monetization flows now cover one-off tips and recurring subscriptions. Tips capture provider metadata (including crypto wallet addresses) and surface them via both the API and the `/metrics` endpoint. Subscriptions support configurable tiers, durations, and cancellation auditing, giving you the primitives required to build dashboards or automate payouts.
 
 Example: create a user, launch a channel, and start a stream session.
 

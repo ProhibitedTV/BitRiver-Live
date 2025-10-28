@@ -53,6 +53,64 @@ type ChatMessage struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+type ChatReport struct {
+	ID          string     `json:"id"`
+	ChannelID   string     `json:"channelId"`
+	ReporterID  string     `json:"reporterId"`
+	TargetID    string     `json:"targetId"`
+	Reason      string     `json:"reason"`
+	MessageID   string     `json:"messageId,omitempty"`
+	EvidenceURL string     `json:"evidenceUrl,omitempty"`
+	Status      string     `json:"status"`
+	Resolution  string     `json:"resolution,omitempty"`
+	ResolverID  string     `json:"resolverId,omitempty"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	ResolvedAt  *time.Time `json:"resolvedAt,omitempty"`
+}
+
+type ChatRestriction struct {
+	ID        string     `json:"id"`
+	Type      string     `json:"type"`
+	ChannelID string     `json:"channelId"`
+	TargetID  string     `json:"targetId"`
+	ActorID   string     `json:"actorId,omitempty"`
+	Reason    string     `json:"reason,omitempty"`
+	IssuedAt  time.Time  `json:"issuedAt"`
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+}
+
+type Tip struct {
+	ID            string    `json:"id"`
+	ChannelID     string    `json:"channelId"`
+	FromUserID    string    `json:"fromUserId"`
+	Amount        float64   `json:"amount"`
+	Currency      string    `json:"currency"`
+	Provider      string    `json:"provider"`
+	Reference     string    `json:"reference"`
+	WalletAddress string    `json:"walletAddress,omitempty"`
+	Message       string    `json:"message,omitempty"`
+	CreatedAt     time.Time `json:"createdAt"`
+}
+
+type Subscription struct {
+	ID                string     `json:"id"`
+	ChannelID         string     `json:"channelId"`
+	UserID            string     `json:"userId"`
+	Tier              string     `json:"tier"`
+	Provider          string     `json:"provider"`
+	Reference         string     `json:"reference"`
+	Amount            float64    `json:"amount"`
+	Currency          string     `json:"currency"`
+	StartedAt         time.Time  `json:"startedAt"`
+	ExpiresAt         time.Time  `json:"expiresAt"`
+	AutoRenew         bool       `json:"autoRenew"`
+	Status            string     `json:"status"`
+	CancelledBy       string     `json:"cancelledBy,omitempty"`
+	CancelledReason   string     `json:"cancelledReason,omitempty"`
+	CancelledAt       *time.Time `json:"cancelledAt,omitempty"`
+	ExternalReference string     `json:"externalReference,omitempty"`
+}
+
 type CryptoAddress struct {
 	Currency string `json:"currency"`
 	Address  string `json:"address"`
