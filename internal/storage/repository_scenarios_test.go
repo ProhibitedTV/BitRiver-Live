@@ -47,6 +47,89 @@ func requireAvailable(t *testing.T, err error, operation string) {
 	}
 }
 
+// RunRepositoryUserLifecycle validates the basic user management workflow across
+// repository implementations.
+func RunRepositoryUserLifecycle(t *testing.T, factory RepositoryFactory) {
+	repo := runRepository(t, factory)
+
+	password := "supersafe"
+	viewer, err := repo.CreateUser(CreateUserParams{DisplayName: "Viewer", Email: "Viewer@example.com", Password: password, SelfSignup: true})
+	requireAvailable(t, err, "create viewer")
+	if viewer.Email != "viewer@example.com" {
+		t.Fatalf("expected email to normalize to lowercase, got %q", viewer.Email)
+	}
+	if !viewer.SelfSignup {
+		t.Fatalf("expected viewer to be marked as self-signup")
+	}
+	if want := []string{"viewer"}; !reflect.DeepEqual(viewer.Roles, want) {
+		t.Fatalf("expected default viewer role, got %v", viewer.Roles)
+	}
+
+	if _, err := repo.CreateUser(CreateUserParams{DisplayName: "Duplicate", Email: "viewer@example.com"}); err == nil {
+		t.Fatalf("expected duplicate email to return error")
+	}
+
+	admin, err := repo.CreateUser(CreateUserParams{DisplayName: "Admin", Email: "admin@example.com", Roles: []string{"Admin", "creator"}})
+	requireAvailable(t, err, "create admin")
+	if want := []string{"admin", "creator"}; !reflect.DeepEqual(admin.Roles, want) {
+		t.Fatalf("expected normalized roles %v, got %v", want, admin.Roles)
+	}
+
+	users := repo.ListUsers()
+	if len(users) != 2 {
+		t.Fatalf("expected 2 users, got %d", len(users))
+	}
+	if users[0].ID != viewer.ID {
+		t.Fatalf("expected users to be sorted by creation time")
+	}
+
+	fetched, ok := repo.GetUser(viewer.ID)
+	if !ok {
+		t.Fatalf("expected viewer to be retrievable")
+	}
+	if fetched.DisplayName != viewer.DisplayName {
+		t.Fatalf("expected display name %q, got %q", viewer.DisplayName, fetched.DisplayName)
+	}
+
+	authed, err := repo.AuthenticateUser("viewer@example.com", password)
+	requireAvailable(t, err, "authenticate viewer")
+	if authed.ID != viewer.ID {
+		t.Fatalf("expected authenticated user %q, got %q", viewer.ID, authed.ID)
+	}
+
+	newDisplay := "Renamed Viewer"
+	newEmail := "viewer2@example.com"
+	newRoles := []string{"Creator"}
+	updated, err := repo.UpdateUser(viewer.ID, UserUpdate{DisplayName: &newDisplay, Email: &newEmail, Roles: &newRoles})
+	requireAvailable(t, err, "update viewer")
+	if updated.DisplayName != newDisplay {
+		t.Fatalf("expected updated display name %q, got %q", newDisplay, updated.DisplayName)
+	}
+	if updated.Email != newEmail {
+		t.Fatalf("expected updated email %q, got %q", newEmail, updated.Email)
+	}
+	if want := []string{"creator"}; !reflect.DeepEqual(updated.Roles, want) {
+		t.Fatalf("expected roles %v after update, got %v", want, updated.Roles)
+	}
+
+	if _, err := repo.UpdateUser(admin.ID, UserUpdate{Email: &newEmail}); err == nil {
+		t.Fatalf("expected conflicting email update to fail")
+	}
+
+	requireAvailable(t, repo.DeleteUser(viewer.ID), "delete viewer")
+	if _, ok := repo.GetUser(viewer.ID); ok {
+		t.Fatalf("expected viewer to be removed")
+	}
+	if _, err := repo.AuthenticateUser(newEmail, password); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("expected ErrInvalidCredentials after deletion, got %v", err)
+	}
+
+	remaining := repo.ListUsers()
+	if len(remaining) != 1 || remaining[0].ID != admin.ID {
+		t.Fatalf("expected admin to remain after deletion")
+	}
+}
+
 // RunRepositoryChatRestrictionsLifecycle replays the moderation scenario
 // exercised in chat_events_test.go against the provided repository.
 func RunRepositoryChatRestrictionsLifecycle(t *testing.T, factory RepositoryFactory) {
