@@ -54,6 +54,41 @@ The same values can be supplied through environment variables (`BITRIVER_LIVE_TL
 
 Prefer containers? Check out `deploy/docker-compose.yml` for a pre-wired stack that mounts persistent storage, exposes metrics, and optionally links Redis for shared rate-limiting state.
 
+### Postgres backend
+
+The repository now ships with SQL migrations under `deploy/migrations/` that mirror the JSON datastore schema. Apply them with your preferred migration tool or straight through `psql`:
+
+```bash
+psql "postgres://bitriver:bitriver@localhost:5432/bitriver?sslmode=disable" \
+  --file deploy/migrations/0001_initial.sql
+```
+
+Once a driver such as `pgxpool` is available, start the API with the Postgres storage driver:
+
+```bash
+go run ./cmd/server \
+  --storage-driver postgres \
+  --postgres-dsn "postgres://bitriver:bitriver@localhost:5432/bitriver?sslmode=disable" \
+  --postgres-max-conns 20 \
+  --postgres-min-conns 5 \
+  --postgres-acquire-timeout 5s
+```
+
+The same configuration can be supplied via environment variables:
+
+| Variable | Description |
+| --- | --- |
+| `BITRIVER_LIVE_STORAGE_DRIVER` | Set to `postgres` to enable the relational repository. |
+| `BITRIVER_LIVE_POSTGRES_DSN` | Connection string passed to the Postgres driver. |
+| `BITRIVER_LIVE_POSTGRES_MAX_CONNS` / `BITRIVER_LIVE_POSTGRES_MIN_CONNS` | Pool limits for concurrent and idle connections. |
+| `BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT` | How long to wait when borrowing a connection from the pool. |
+| `BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME` | Maximum lifetime before a pooled connection is recycled. |
+| `BITRIVER_LIVE_POSTGRES_MAX_CONN_IDLE` | Maximum idle time before a connection is closed. |
+| `BITRIVER_LIVE_POSTGRES_HEALTH_INTERVAL` | Frequency of pool health probes. |
+| `BITRIVER_LIVE_POSTGRES_APP_NAME` | Optional `application_name` reported to Postgres. |
+
+`deploy/docker-compose.yml` now provisions a local Postgres container and wires these environment variables automatically. After running the migrations the API can ingest JSON exports into Postgres without rewriting IDs. The `storage.NewPostgresRepository` constructor currently returns `storage.ErrPostgresUnavailable` until the driver dependency can be vendored, but the configuration pipeline, migrations, and integration test harness are ready for a drop-in implementation.
+
 ### Public viewer
 
 BitRiver Live now ships with a dedicated viewer experience powered by Next.js. Build it from `web/viewer`:

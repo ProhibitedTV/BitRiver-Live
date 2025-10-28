@@ -58,16 +58,6 @@ type Storage struct {
 	objectStorage       ObjectStorageConfig
 }
 
-// Option mutates storage configuration.
-type Option func(*Storage)
-
-// WithIngestController installs a controller to orchestrate ingest pipelines.
-func WithIngestController(controller ingest.Controller) Option {
-	return func(s *Storage) {
-		s.ingestController = controller
-	}
-}
-
 // RecordingRetentionPolicy specifies how long recordings are kept before being
 // purged when unpublished or published.
 type RecordingRetentionPolicy struct {
@@ -94,41 +84,6 @@ type ClipExportParams struct {
 	Title        string
 	StartSeconds int
 	EndSeconds   int
-}
-
-// WithRecordingRetention overrides the default retention policy applied when
-// creating recordings.
-func WithRecordingRetention(policy RecordingRetentionPolicy) Option {
-	return func(s *Storage) {
-		if policy.Published >= 0 {
-			s.recordingRetention.Published = policy.Published
-		}
-		if policy.Unpublished >= 0 {
-			s.recordingRetention.Unpublished = policy.Unpublished
-		}
-	}
-}
-
-// WithObjectStorage records the object storage configuration used by the
-// instance. The JSON repository stores it so tests can assert behaviour while
-// the full implementation can mirror these settings.
-func WithObjectStorage(cfg ObjectStorageConfig) Option {
-	return func(s *Storage) {
-		s.objectStorage = cfg
-	}
-}
-
-// WithIngestRetries configures how many times the ingest boot process should
-// be retried.
-func WithIngestRetries(maxAttempts int, interval time.Duration) Option {
-	return func(s *Storage) {
-		if maxAttempts > 0 {
-			s.ingestMaxAttempts = maxAttempts
-		}
-		if interval >= 0 {
-			s.ingestRetryInterval = interval
-		}
-	}
 }
 
 func newDataset() dataset {
@@ -231,7 +186,9 @@ func NewStorage(path string, opts ...Option) (*Storage, error) {
 		},
 	}
 	for _, opt := range opts {
-		opt(store)
+		if opt != nil {
+			opt.applyJSON(store)
+		}
 	}
 	if store.ingestController == nil {
 		store.ingestController = ingest.NoopController{}
