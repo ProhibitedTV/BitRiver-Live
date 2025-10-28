@@ -86,6 +86,7 @@ func main() {
 			logger.Error("failed to initialise ingest controller", "error", err)
 			os.Exit(1)
 		}
+		controller.SetLogger(logging.WithComponent(logger, "ingest"))
 		options = append(options, storage.WithIngestController(controller))
 	}
 

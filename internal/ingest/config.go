@@ -3,6 +3,7 @@ package ingest
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -12,33 +13,37 @@ import (
 
 // Config stores connectivity information for the ingest controller.
 type Config struct {
-	SRSBaseURL      string
-	SRSToken        string
-	OMEBaseURL      string
-	OMEUsername     string
-	OMEPassword     string
-	JobBaseURL      string
-	JobToken        string
-	LadderProfiles  []Rendition
-	HTTPClient      *http.Client
-	HealthEndpoint  string
-	MaxBootAttempts int
-	RetryInterval   time.Duration
+	SRSBaseURL        string
+	SRSToken          string
+	OMEBaseURL        string
+	OMEUsername       string
+	OMEPassword       string
+	JobBaseURL        string
+	JobToken          string
+	LadderProfiles    []Rendition
+	HTTPClient        *http.Client
+	HealthEndpoint    string
+	MaxBootAttempts   int
+	RetryInterval     time.Duration
+	HTTPMaxAttempts   int
+	HTTPRetryInterval time.Duration
 }
 
 // LoadConfigFromEnv initialises a Config from environment variables.
 func LoadConfigFromEnv() (Config, error) {
 	cfg := Config{
-		SRSBaseURL:      strings.TrimSpace(os.Getenv("BITRIVER_SRS_API")),
-		SRSToken:        strings.TrimSpace(os.Getenv("BITRIVER_SRS_TOKEN")),
-		OMEBaseURL:      strings.TrimSpace(os.Getenv("BITRIVER_OME_API")),
-		OMEUsername:     strings.TrimSpace(os.Getenv("BITRIVER_OME_USERNAME")),
-		OMEPassword:     strings.TrimSpace(os.Getenv("BITRIVER_OME_PASSWORD")),
-		JobBaseURL:      strings.TrimSpace(os.Getenv("BITRIVER_TRANSCODER_API")),
-		JobToken:        strings.TrimSpace(os.Getenv("BITRIVER_TRANSCODER_TOKEN")),
-		HealthEndpoint:  strings.TrimSpace(os.Getenv("BITRIVER_INGEST_HEALTH")),
-		MaxBootAttempts: 3,
-		RetryInterval:   500 * time.Millisecond,
+		SRSBaseURL:        strings.TrimSpace(os.Getenv("BITRIVER_SRS_API")),
+		SRSToken:          strings.TrimSpace(os.Getenv("BITRIVER_SRS_TOKEN")),
+		OMEBaseURL:        strings.TrimSpace(os.Getenv("BITRIVER_OME_API")),
+		OMEUsername:       strings.TrimSpace(os.Getenv("BITRIVER_OME_USERNAME")),
+		OMEPassword:       strings.TrimSpace(os.Getenv("BITRIVER_OME_PASSWORD")),
+		JobBaseURL:        strings.TrimSpace(os.Getenv("BITRIVER_TRANSCODER_API")),
+		JobToken:          strings.TrimSpace(os.Getenv("BITRIVER_TRANSCODER_TOKEN")),
+		HealthEndpoint:    strings.TrimSpace(os.Getenv("BITRIVER_INGEST_HEALTH")),
+		MaxBootAttempts:   3,
+		RetryInterval:     500 * time.Millisecond,
+		HTTPMaxAttempts:   3,
+		HTTPRetryInterval: 500 * time.Millisecond,
 	}
 
 	if attempts := strings.TrimSpace(os.Getenv("BITRIVER_INGEST_MAX_BOOT_ATTEMPTS")); attempts != "" {
@@ -58,6 +63,26 @@ func LoadConfigFromEnv() (Config, error) {
 		}
 		if parsed > 0 {
 			cfg.RetryInterval = parsed
+		}
+	}
+
+	if attempts := strings.TrimSpace(os.Getenv("BITRIVER_INGEST_HTTP_MAX_ATTEMPTS")); attempts != "" {
+		parsed, err := strconv.Atoi(attempts)
+		if err != nil {
+			return Config{}, fmt.Errorf("parse BITRIVER_INGEST_HTTP_MAX_ATTEMPTS: %w", err)
+		}
+		if parsed > 0 {
+			cfg.HTTPMaxAttempts = parsed
+		}
+	}
+
+	if interval := strings.TrimSpace(os.Getenv("BITRIVER_INGEST_HTTP_RETRY_INTERVAL")); interval != "" {
+		parsed, err := time.ParseDuration(interval)
+		if err != nil {
+			return Config{}, fmt.Errorf("parse BITRIVER_INGEST_HTTP_RETRY_INTERVAL: %w", err)
+		}
+		if parsed >= 0 {
+			cfg.HTTPRetryInterval = parsed
 		}
 	}
 
@@ -139,6 +164,12 @@ func (c Config) Validate() error {
 	if c.RetryInterval < 0 {
 		return errors.New("retry interval cannot be negative")
 	}
+	if c.HTTPMaxAttempts <= 0 {
+		return errors.New("HTTP max attempts must be positive")
+	}
+	if c.HTTPRetryInterval < 0 {
+		return errors.New("HTTP retry interval cannot be negative")
+	}
 	return nil
 }
 
@@ -179,9 +210,10 @@ func (c Config) NewHTTPController() (*HTTPController, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
-	controller := &HTTPController{config: c}
+	controller := &HTTPController{config: c, retryAttempts: c.HTTPMaxAttempts, retryInterval: c.HTTPRetryInterval}
 	if controller.config.HTTPClient == nil {
 		controller.config.HTTPClient = &http.Client{Timeout: 10 * time.Second}
 	}
+	controller.logger = slog.Default()
 	return controller, nil
 }
