@@ -1,0 +1,26 @@
+name: Go unit tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Run unit tests
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+        run: go test ./... -count=1 -timeout=10s
