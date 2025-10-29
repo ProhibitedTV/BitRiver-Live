@@ -97,7 +97,7 @@ fi
 
 echo "running go test -tags postgres ${packages[*]}" >&2
 export GOTOOLCHAIN="${GOTOOLCHAIN:-local}"
-export GOPROXY="${GOPROXY:-off}"
-export GOSUMDB="${GOSUMDB:-off}"
+export GOPROXY="${GOPROXY:-https://proxy.golang.org,direct}"
+export GOSUMDB="${GOSUMDB:-sum.golang.org}"
 
 go test -count=1 -tags postgres "${packages[@]}"
