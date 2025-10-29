@@ -7,18 +7,20 @@ import (
 )
 
 type RateLimitConfig struct {
-	GlobalRPS       float64
-	GlobalBurst     int
-	LoginLimit      int
-	LoginWindow     time.Duration
-	RedisAddr       string
-	RedisAddrs      []string
-	RedisUsername   string
-	RedisPassword   string
-	RedisMasterName string
-	RedisTimeout    time.Duration
-	RedisPoolSize   int
-	RedisTLS        RedisTLSConfig
+	GlobalRPS             float64
+	GlobalBurst           int
+	LoginLimit            int
+	LoginWindow           time.Duration
+	TrustForwardedHeaders bool
+	TrustedProxies        []string
+	RedisAddr             string
+	RedisAddrs            []string
+	RedisUsername         string
+	RedisPassword         string
+	RedisMasterName       string
+	RedisTimeout          time.Duration
+	RedisPoolSize         int
+	RedisTLS              RedisTLSConfig
 }
 
 type rateLimiter struct {

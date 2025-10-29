@@ -117,6 +117,8 @@ func main() {
 	globalBurst := flag.Int("rate-global-burst", 0, "global rate limit burst allowance")
 	loginLimit := flag.Int("rate-login-limit", 0, "maximum login attempts per window for a single IP")
 	loginWindow := flag.Duration("rate-login-window", 0, "window for counting login attempts")
+	trustForwarded := flag.Bool("rate-trust-forwarded-headers", false, "trust proxy-provided client IP headers")
+	trustedProxies := flag.String("rate-trusted-proxies", "", "comma separated CIDR blocks or IPs of trusted proxies")
 	redisAddr := flag.String("rate-redis-addr", "", "Redis address for distributed login throttling")
 	redisAddrs := flag.String("rate-redis-addrs", "", "comma separated Redis addresses for distributed login throttling")
 	redisUsername := flag.String("rate-redis-username", "", "Redis username for distributed login throttling")
@@ -394,17 +396,19 @@ func main() {
 	go storage.NewChatWorker(store, queue, logging.WithComponent(logger, "chat-worker")).Run(workerCtx)
 
 	rateCfg := server.RateLimitConfig{
-		GlobalRPS:       resolveFloat(*globalRPS, "BITRIVER_LIVE_RATE_GLOBAL_RPS"),
-		GlobalBurst:     resolveInt(*globalBurst, "BITRIVER_LIVE_RATE_GLOBAL_BURST"),
-		LoginLimit:      resolveInt(*loginLimit, "BITRIVER_LIVE_RATE_LOGIN_LIMIT"),
-		LoginWindow:     resolveDuration(*loginWindow, "BITRIVER_LIVE_RATE_LOGIN_WINDOW", time.Minute),
-		RedisAddr:       firstNonEmpty(*redisAddr, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDR")),
-		RedisAddrs:      splitAndTrim(firstNonEmpty(*redisAddrs, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDRS"))),
-		RedisUsername:   firstNonEmpty(*redisUsername, os.Getenv("BITRIVER_LIVE_RATE_REDIS_USERNAME")),
-		RedisPassword:   firstNonEmpty(*redisPassword, os.Getenv("BITRIVER_LIVE_RATE_REDIS_PASSWORD")),
-		RedisMasterName: firstNonEmpty(*redisMasterName, os.Getenv("BITRIVER_LIVE_RATE_REDIS_MASTER_NAME")),
-		RedisTimeout:    resolveDuration(*redisTimeout, "BITRIVER_LIVE_RATE_REDIS_TIMEOUT", 2*time.Second),
-		RedisPoolSize:   resolveInt(*redisPoolSize, "BITRIVER_LIVE_RATE_REDIS_POOL_SIZE"),
+		GlobalRPS:             resolveFloat(*globalRPS, "BITRIVER_LIVE_RATE_GLOBAL_RPS"),
+		GlobalBurst:           resolveInt(*globalBurst, "BITRIVER_LIVE_RATE_GLOBAL_BURST"),
+		LoginLimit:            resolveInt(*loginLimit, "BITRIVER_LIVE_RATE_LOGIN_LIMIT"),
+		LoginWindow:           resolveDuration(*loginWindow, "BITRIVER_LIVE_RATE_LOGIN_WINDOW", time.Minute),
+		TrustForwardedHeaders: resolveBool(*trustForwarded, "BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS"),
+		TrustedProxies:        splitAndTrim(firstNonEmpty(*trustedProxies, os.Getenv("BITRIVER_LIVE_RATE_TRUSTED_PROXIES"))),
+		RedisAddr:             firstNonEmpty(*redisAddr, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDR")),
+		RedisAddrs:            splitAndTrim(firstNonEmpty(*redisAddrs, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDRS"))),
+		RedisUsername:         firstNonEmpty(*redisUsername, os.Getenv("BITRIVER_LIVE_RATE_REDIS_USERNAME")),
+		RedisPassword:         firstNonEmpty(*redisPassword, os.Getenv("BITRIVER_LIVE_RATE_REDIS_PASSWORD")),
+		RedisMasterName:       firstNonEmpty(*redisMasterName, os.Getenv("BITRIVER_LIVE_RATE_REDIS_MASTER_NAME")),
+		RedisTimeout:          resolveDuration(*redisTimeout, "BITRIVER_LIVE_RATE_REDIS_TIMEOUT", 2*time.Second),
+		RedisPoolSize:         resolveInt(*redisPoolSize, "BITRIVER_LIVE_RATE_REDIS_POOL_SIZE"),
 		RedisTLS: server.RedisTLSConfig{
 			CAFile:             firstNonEmpty(*redisTLSCA, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_CA")),
 			CertFile:           firstNonEmpty(*redisTLSCert, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_CERT")),
