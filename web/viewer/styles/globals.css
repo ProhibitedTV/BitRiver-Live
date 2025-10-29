@@ -198,6 +198,45 @@ button:focus-visible {
   transition: border-color 0.2s ease;
 }
 
+.upload-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.upload-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.upload-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1rem;
+}
+
+.upload-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.upload-card__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.error {
+  color: var(--danger);
+}
+
 .secondary-button:hover {
   border-color: var(--accent);
 }

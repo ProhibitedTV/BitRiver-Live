@@ -128,6 +128,40 @@ func (c *HTTPController) ShutdownStream(ctx context.Context, channelID, sessionI
 	return nil
 }
 
+// TranscodeUpload submits a stored media file for HLS transcoding via the
+// configured transcoder adapter.
+func (c *HTTPController) TranscodeUpload(ctx context.Context, params UploadTranscodeParams) (UploadTranscodeResult, error) {
+	if strings.TrimSpace(params.ChannelID) == "" || strings.TrimSpace(params.UploadID) == "" {
+		return UploadTranscodeResult{}, fmt.Errorf("channelID and uploadID are required")
+	}
+	source := strings.TrimSpace(params.SourceURL)
+	if source == "" {
+		return UploadTranscodeResult{}, fmt.Errorf("sourceURL is required")
+	}
+
+	c.ensureAdapters()
+
+	c.logger.Info("starting upload transcode", "channel_id", params.ChannelID, "upload_id", params.UploadID)
+	result, err := c.transcoder.StartUpload(ctx, uploadJobRequest{
+		ChannelID:  params.ChannelID,
+		UploadID:   params.UploadID,
+		SourceURL:  source,
+		Filename:   strings.TrimSpace(params.Filename),
+		Renditions: cloneRenditions(params.Renditions),
+	})
+	if err != nil {
+		c.logger.Error("failed to start upload transcode", "channel_id", params.ChannelID, "upload_id", params.UploadID, "error", err)
+		return UploadTranscodeResult{}, err
+	}
+	c.logger.Info("upload transcode submitted", "channel_id", params.ChannelID, "upload_id", params.UploadID, "job_id", result.JobID)
+
+	return UploadTranscodeResult{
+		PlaybackURL: result.PlaybackURL,
+		Renditions:  cloneRenditions(result.Renditions),
+		JobID:       result.JobID,
+	}, nil
+}
+
 func (c *HTTPController) HealthChecks(ctx context.Context) []HealthStatus {
 	c.ensureAdapters()
 

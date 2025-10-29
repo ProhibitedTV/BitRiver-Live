@@ -25,6 +25,7 @@ type applicationAdapter interface {
 type transcoderAdapter interface {
 	StartJobs(ctx context.Context, channelID, sessionID, originURL string, ladder []Rendition) ([]string, []Rendition, error)
 	StopJob(ctx context.Context, jobID string) error
+	StartUpload(ctx context.Context, req uploadJobRequest) (uploadJobResult, error)
 }
 
 type httpChannelAdapter struct {
@@ -86,6 +87,34 @@ type ffmpegJobResponse struct {
 	JobID      string      `json:"jobId"`
 	JobIDs     []string    `json:"jobIds"`
 	Renditions []Rendition `json:"renditions"`
+}
+
+type uploadJobRequest struct {
+	ChannelID  string
+	UploadID   string
+	SourceURL  string
+	Filename   string
+	Renditions []Rendition
+}
+
+type ffmpegUploadRequest struct {
+	ChannelID  string      `json:"channelId"`
+	UploadID   string      `json:"uploadId"`
+	SourceURL  string      `json:"sourceUrl"`
+	Filename   string      `json:"filename,omitempty"`
+	Renditions []Rendition `json:"renditions,omitempty"`
+}
+
+type ffmpegUploadResponse struct {
+	JobID       string      `json:"jobId"`
+	PlaybackURL string      `json:"playbackUrl"`
+	Renditions  []Rendition `json:"renditions"`
+}
+
+type uploadJobResult struct {
+	JobID       string
+	PlaybackURL string
+	Renditions  []Rendition
 }
 
 func newHTTPChannelAdapter(baseURL, token string, client *http.Client, logger *slog.Logger, attempts int, interval time.Duration) *httpChannelAdapter {
@@ -194,6 +223,27 @@ func (a *httpTranscoderAdapter) StopJob(ctx context.Context, jobID string) error
 	return deleteRequest(ctx, a.client, fmt.Sprintf("%s/v1/jobs/%s", a.baseURL, jobID), func(req *http.Request) {
 		setBearer(req, a.token)
 	}, a.logger, a.maxAttempts, a.retryInterval)
+}
+
+func (a *httpTranscoderAdapter) StartUpload(ctx context.Context, req uploadJobRequest) (uploadJobResult, error) {
+	payload := ffmpegUploadRequest{
+		ChannelID:  req.ChannelID,
+		UploadID:   req.UploadID,
+		SourceURL:  req.SourceURL,
+		Filename:   req.Filename,
+		Renditions: cloneRenditions(req.Renditions),
+	}
+	var response ffmpegUploadResponse
+	if err := postJSON(ctx, a.client, fmt.Sprintf("%s/v1/uploads", a.baseURL), payload, &response, func(httpReq *http.Request) {
+		setBearer(httpReq, a.token)
+	}, a.logger, a.maxAttempts, a.retryInterval); err != nil {
+		return uploadJobResult{}, err
+	}
+	return uploadJobResult{
+		JobID:       response.JobID,
+		PlaybackURL: response.PlaybackURL,
+		Renditions:  cloneRenditions(response.Renditions),
+	}, nil
 }
 
 func postJSON(ctx context.Context, client *http.Client, url string, payload interface{}, dest interface{}, mutate func(*http.Request), logger *slog.Logger, attempts int, interval time.Duration) error {

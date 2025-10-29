@@ -55,6 +55,7 @@ type dataset struct {
 	Profiles            map[string]models.Profile       `json:"profiles"`
 	Follows             map[string]map[string]time.Time `json:"follows"`
 	Recordings          map[string]models.Recording     `json:"recordings"`
+	Uploads             map[string]models.Upload        `json:"uploads"`
 	ClipExports         map[string]models.ClipExport    `json:"clipExports"`
 }
 
@@ -472,6 +473,9 @@ func (s *Storage) ensureDatasetInitializedLocked() {
 	if s.data.Recordings == nil {
 		s.data.Recordings = make(map[string]models.Recording)
 	}
+	if s.data.Uploads == nil {
+		s.data.Uploads = make(map[string]models.Upload)
+	}
 	if s.data.ClipExports == nil {
 		s.data.ClipExports = make(map[string]models.ClipExport)
 	}
@@ -596,6 +600,28 @@ type CreateSubscriptionParams struct {
 	Duration          time.Duration
 	AutoRenew         bool
 	ExternalReference string
+}
+
+// CreateUploadParams captures the information required to store an uploaded asset.
+type CreateUploadParams struct {
+	ChannelID   string
+	Title       string
+	Filename    string
+	SizeBytes   int64
+	Metadata    map[string]string
+	PlaybackURL string
+}
+
+// UploadUpdate describes the mutable fields of an upload entry.
+type UploadUpdate struct {
+	Title       *string
+	Status      *string
+	Progress    *int
+	RecordingID *string
+	PlaybackURL *string
+	Metadata    map[string]string
+	Error       *string
+	CompletedAt *time.Time
 }
 
 func normalizeRoles(input []string) []string {
@@ -927,6 +953,13 @@ func cloneDataset(src dataset) dataset {
 		}
 	}
 
+	if src.Uploads != nil {
+		clone.Uploads = make(map[string]models.Upload, len(src.Uploads))
+		for id, upload := range src.Uploads {
+			clone.Uploads[id] = cloneUpload(upload)
+		}
+	}
+
 	if src.ClipExports != nil {
 		clone.ClipExports = make(map[string]models.ClipExport, len(src.ClipExports))
 		for id, clip := range src.ClipExports {
@@ -995,6 +1028,26 @@ func cloneRecording(recording models.Recording) models.Recording {
 	}
 	if recording.Clips != nil {
 		cloned.Clips = append([]models.ClipExportSummary(nil), recording.Clips...)
+	}
+	return cloned
+}
+
+func cloneUpload(upload models.Upload) models.Upload {
+	cloned := upload
+	if upload.Metadata != nil {
+		meta := make(map[string]string, len(upload.Metadata))
+		for k, v := range upload.Metadata {
+			meta[k] = v
+		}
+		cloned.Metadata = meta
+	}
+	if upload.RecordingID != nil {
+		recording := *upload.RecordingID
+		cloned.RecordingID = &recording
+	}
+	if upload.CompletedAt != nil {
+		completed := *upload.CompletedAt
+		cloned.CompletedAt = &completed
 	}
 	return cloned
 }
@@ -2299,6 +2352,199 @@ func (s *Storage) ListRecordings(channelID string, includeUnpublished bool) ([]m
 		return recordings[i].CreatedAt.After(recordings[j].CreatedAt)
 	})
 	return recordings, nil
+}
+
+// Upload operations
+
+func (s *Storage) CreateUpload(params CreateUploadParams) (models.Upload, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.ensureDatasetInitializedLocked()
+
+	channelID := strings.TrimSpace(params.ChannelID)
+	channel, ok := s.data.Channels[channelID]
+	if !ok {
+		return models.Upload{}, fmt.Errorf("channel %s not found", channelID)
+	}
+
+	title := strings.TrimSpace(params.Title)
+	if title == "" {
+		if channel.Title != "" {
+			title = fmt.Sprintf("%s upload", channel.Title)
+		} else {
+			title = "Uploaded video"
+		}
+	}
+
+	filename := strings.TrimSpace(params.Filename)
+	if filename == "" {
+		filename = fmt.Sprintf("upload-%s.mp4", time.Now().UTC().Format("20060102-150405"))
+	}
+
+	id, err := s.generateID()
+	if err != nil {
+		return models.Upload{}, err
+	}
+
+	now := time.Now().UTC()
+	metadata := make(map[string]string, len(params.Metadata))
+	for k, v := range params.Metadata {
+		if strings.TrimSpace(k) == "" {
+			continue
+		}
+		metadata[k] = v
+	}
+
+	playbackURL := strings.TrimSpace(params.PlaybackURL)
+
+	upload := models.Upload{
+		ID:          id,
+		ChannelID:   channelID,
+		Title:       title,
+		Filename:    filename,
+		SizeBytes:   params.SizeBytes,
+		Status:      "pending",
+		Progress:    0,
+		Metadata:    metadata,
+		PlaybackURL: playbackURL,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	s.data.Uploads[id] = upload
+	if err := s.persist(); err != nil {
+		delete(s.data.Uploads, id)
+		return models.Upload{}, err
+	}
+
+	return upload, nil
+}
+
+func (s *Storage) ListUploads(channelID string) ([]models.Upload, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if _, ok := s.data.Channels[channelID]; !ok {
+		return nil, fmt.Errorf("channel %s not found", channelID)
+	}
+
+	uploads := make([]models.Upload, 0)
+	for _, upload := range s.data.Uploads {
+		if upload.ChannelID != channelID {
+			continue
+		}
+		uploads = append(uploads, cloneUpload(upload))
+	}
+	sort.Slice(uploads, func(i, j int) bool {
+		return uploads[i].CreatedAt.After(uploads[j].CreatedAt)
+	})
+	return uploads, nil
+}
+
+func (s *Storage) GetUpload(id string) (models.Upload, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	upload, ok := s.data.Uploads[id]
+	if !ok {
+		return models.Upload{}, false
+	}
+	return cloneUpload(upload), true
+}
+
+func (s *Storage) UpdateUpload(id string, update UploadUpdate) (models.Upload, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	upload, ok := s.data.Uploads[id]
+	if !ok {
+		return models.Upload{}, fmt.Errorf("upload %s not found", id)
+	}
+
+	original := upload
+
+	if update.Title != nil {
+		if trimmed := strings.TrimSpace(*update.Title); trimmed != "" {
+			upload.Title = trimmed
+		}
+	}
+	if update.Status != nil {
+		upload.Status = strings.TrimSpace(*update.Status)
+	}
+	if update.Progress != nil {
+		progress := *update.Progress
+		if progress < 0 {
+			progress = 0
+		}
+		if progress > 100 {
+			progress = 100
+		}
+		upload.Progress = progress
+	}
+	if update.RecordingID != nil {
+		trimmed := strings.TrimSpace(*update.RecordingID)
+		if trimmed == "" {
+			upload.RecordingID = nil
+		} else {
+			upload.RecordingID = &trimmed
+		}
+	}
+	if update.PlaybackURL != nil {
+		upload.PlaybackURL = strings.TrimSpace(*update.PlaybackURL)
+	}
+	if update.Metadata != nil {
+		if upload.Metadata == nil {
+			upload.Metadata = make(map[string]string, len(update.Metadata))
+		}
+		for k, v := range update.Metadata {
+			if strings.TrimSpace(k) == "" {
+				continue
+			}
+			if v == "" {
+				delete(upload.Metadata, k)
+				continue
+			}
+			upload.Metadata[k] = v
+		}
+	}
+	if update.Error != nil {
+		upload.Error = strings.TrimSpace(*update.Error)
+	}
+	if update.CompletedAt != nil {
+		if update.CompletedAt.IsZero() {
+			upload.CompletedAt = nil
+		} else {
+			completed := update.CompletedAt.UTC()
+			upload.CompletedAt = &completed
+		}
+	}
+
+	upload.UpdatedAt = time.Now().UTC()
+
+	s.data.Uploads[id] = upload
+	if err := s.persist(); err != nil {
+		s.data.Uploads[id] = original
+		return models.Upload{}, err
+	}
+	return cloneUpload(upload), nil
+}
+
+func (s *Storage) DeleteUpload(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	upload, ok := s.data.Uploads[id]
+	if !ok {
+		return fmt.Errorf("upload %s not found", id)
+	}
+
+	delete(s.data.Uploads, id)
+	if err := s.persist(); err != nil {
+		s.data.Uploads[id] = upload
+		return err
+	}
+	return nil
 }
 
 func (s *Storage) GetRecording(id string) (models.Recording, bool) {

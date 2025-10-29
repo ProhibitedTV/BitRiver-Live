@@ -972,6 +972,67 @@ func (r *postgresRepository) loadRecording(ctx context.Context, id string) (mode
 	return recording, true, nil
 }
 
+func (r *postgresRepository) loadUpload(ctx context.Context, id string) (models.Upload, bool, error) {
+	var (
+		channelID     string
+		title         string
+		filename      string
+		sizeBytes     int64
+		status        string
+		progress      int
+		recordingID   pgtype.Text
+		playbackURL   pgtype.Text
+		metadataBytes []byte
+		errorText     pgtype.Text
+		createdAt     time.Time
+		updatedAt     time.Time
+		completedAt   pgtype.Timestamptz
+	)
+	err := r.pool.QueryRow(ctx, "SELECT channel_id, title, filename, size_bytes, status, progress, recording_id, playback_url, metadata, error, created_at, updated_at, completed_at FROM uploads WHERE id = $1", id).
+		Scan(&channelID, &title, &filename, &sizeBytes, &status, &progress, &recordingID, &playbackURL, &metadataBytes, &errorText, &createdAt, &updatedAt, &completedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return models.Upload{}, false, nil
+	}
+	if err != nil {
+		return models.Upload{}, false, err
+	}
+	metadata := make(map[string]string)
+	if len(metadataBytes) > 0 {
+		if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
+			return models.Upload{}, false, fmt.Errorf("decode upload metadata: %w", err)
+		}
+	}
+	upload := models.Upload{
+		ID:        id,
+		ChannelID: channelID,
+		Title:     title,
+		Filename:  filename,
+		SizeBytes: sizeBytes,
+		Status:    status,
+		Progress:  progress,
+		Metadata:  metadata,
+		CreatedAt: createdAt.UTC(),
+		UpdatedAt: updatedAt.UTC(),
+	}
+	if recordingID.Valid {
+		value := strings.TrimSpace(recordingID.String)
+		if value != "" {
+			upload.RecordingID = &value
+		}
+	}
+	if playbackURL.Valid {
+		upload.PlaybackURL = playbackURL.String
+	}
+	if errorText.Valid {
+		upload.Error = errorText.String
+	}
+	if completedAt.Valid {
+		ts := completedAt.Time.UTC()
+		upload.CompletedAt = &ts
+	}
+	return upload, true, nil
+}
+
 func rollbackTx(ctx context.Context, tx pgx.Tx) {
 	if tx == nil {
 		return
@@ -2251,6 +2312,255 @@ func (r *postgresRepository) ListRecordings(channelID string, includeUnpublished
 		return nil, err
 	}
 	return recordings, nil
+}
+
+func (r *postgresRepository) CreateUpload(params CreateUploadParams) (models.Upload, error) {
+	if r == nil || r.pool == nil {
+		return models.Upload{}, ErrPostgresUnavailable
+	}
+	channelID := strings.TrimSpace(params.ChannelID)
+	if channelID == "" {
+		return models.Upload{}, fmt.Errorf("channelId is required")
+	}
+	ctx := context.Background()
+	var exists bool
+	if err := r.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM channels WHERE id = $1)", channelID).Scan(&exists); err != nil {
+		return models.Upload{}, fmt.Errorf("check channel %s: %w", channelID, err)
+	}
+	if !exists {
+		return models.Upload{}, fmt.Errorf("channel %s not found", channelID)
+	}
+
+	id, err := r.generateID()
+	if err != nil {
+		return models.Upload{}, err
+	}
+
+	title := strings.TrimSpace(params.Title)
+	if title == "" {
+		title = "Uploaded video"
+	}
+	filename := strings.TrimSpace(params.Filename)
+	if filename == "" {
+		filename = "upload.mp4"
+	}
+	metadata := make(map[string]string, len(params.Metadata))
+	for k, v := range params.Metadata {
+		if strings.TrimSpace(k) == "" {
+			continue
+		}
+		metadata[k] = v
+	}
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return models.Upload{}, fmt.Errorf("encode metadata: %w", err)
+	}
+	playbackURL := strings.TrimSpace(params.PlaybackURL)
+	now := time.Now().UTC()
+	_, err = r.pool.Exec(ctx, "INSERT INTO uploads (id, channel_id, title, filename, size_bytes, status, progress, playback_url, metadata, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, 'pending', 0, $6, $7, $8, $9)",
+		id,
+		channelID,
+		title,
+		filename,
+		params.SizeBytes,
+		playbackURL,
+		metadataJSON,
+		now,
+		now,
+	)
+	if err != nil {
+		return models.Upload{}, fmt.Errorf("insert upload: %w", err)
+	}
+	upload := models.Upload{
+		ID:          id,
+		ChannelID:   channelID,
+		Title:       title,
+		Filename:    filename,
+		SizeBytes:   params.SizeBytes,
+		Status:      "pending",
+		Progress:    0,
+		Metadata:    metadata,
+		PlaybackURL: playbackURL,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	return upload, nil
+}
+
+func (r *postgresRepository) ListUploads(channelID string) ([]models.Upload, error) {
+	if r == nil || r.pool == nil {
+		return nil, ErrPostgresUnavailable
+	}
+	ctx := context.Background()
+	var exists bool
+	if err := r.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM channels WHERE id = $1)", channelID).Scan(&exists); err != nil {
+		return nil, fmt.Errorf("check channel %s: %w", channelID, err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("channel %s not found", channelID)
+	}
+	rows, err := r.pool.Query(ctx, "SELECT id FROM uploads WHERE channel_id = $1 ORDER BY created_at DESC", channelID)
+	if err != nil {
+		return nil, fmt.Errorf("list uploads: %w", err)
+	}
+	defer rows.Close()
+
+	uploads := make([]models.Upload, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan upload id: %w", err)
+		}
+		upload, ok, loadErr := r.loadUpload(ctx, id)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		if !ok {
+			continue
+		}
+		uploads = append(uploads, upload)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return uploads, nil
+}
+
+func (r *postgresRepository) GetUpload(id string) (models.Upload, bool) {
+	if r == nil || r.pool == nil {
+		return models.Upload{}, false
+	}
+	ctx := context.Background()
+	upload, ok, err := r.loadUpload(ctx, id)
+	if err != nil || !ok {
+		return models.Upload{}, false
+	}
+	return upload, true
+}
+
+func (r *postgresRepository) UpdateUpload(id string, update UploadUpdate) (models.Upload, error) {
+	if r == nil || r.pool == nil {
+		return models.Upload{}, ErrPostgresUnavailable
+	}
+	ctx := context.Background()
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return models.Upload{}, fmt.Errorf("begin update upload tx: %w", err)
+	}
+	defer rollbackTx(ctx, tx)
+
+	upload, ok, err := r.loadUpload(ctx, id)
+	if err != nil {
+		return models.Upload{}, fmt.Errorf("load upload %s: %w", id, err)
+	}
+	if !ok {
+		return models.Upload{}, fmt.Errorf("upload %s not found", id)
+	}
+
+	if update.Title != nil {
+		if trimmed := strings.TrimSpace(*update.Title); trimmed != "" {
+			upload.Title = trimmed
+		}
+	}
+	if update.Status != nil {
+		upload.Status = strings.TrimSpace(*update.Status)
+	}
+	if update.Progress != nil {
+		progress := *update.Progress
+		if progress < 0 {
+			progress = 0
+		}
+		if progress > 100 {
+			progress = 100
+		}
+		upload.Progress = progress
+	}
+	if update.RecordingID != nil {
+		trimmed := strings.TrimSpace(*update.RecordingID)
+		if trimmed == "" {
+			upload.RecordingID = nil
+		} else {
+			upload.RecordingID = &trimmed
+		}
+	}
+	if update.PlaybackURL != nil {
+		upload.PlaybackURL = strings.TrimSpace(*update.PlaybackURL)
+	}
+	if update.Metadata != nil {
+		if upload.Metadata == nil {
+			upload.Metadata = make(map[string]string, len(update.Metadata))
+		}
+		for k, v := range update.Metadata {
+			if strings.TrimSpace(k) == "" {
+				continue
+			}
+			if v == "" {
+				delete(upload.Metadata, k)
+				continue
+			}
+			upload.Metadata[k] = v
+		}
+	}
+	if update.Error != nil {
+		upload.Error = strings.TrimSpace(*update.Error)
+	}
+	if update.CompletedAt != nil {
+		if update.CompletedAt.IsZero() {
+			upload.CompletedAt = nil
+		} else {
+			ts := update.CompletedAt.UTC()
+			upload.CompletedAt = &ts
+		}
+	}
+
+	upload.UpdatedAt = time.Now().UTC()
+
+	metadataJSON, err := json.Marshal(upload.Metadata)
+	if err != nil {
+		return models.Upload{}, fmt.Errorf("encode metadata: %w", err)
+	}
+	var recordingID interface{}
+	if upload.RecordingID != nil {
+		recordingID = *upload.RecordingID
+	}
+	var completedAt interface{}
+	if upload.CompletedAt != nil {
+		completedAt = *upload.CompletedAt
+	}
+	_, err = tx.Exec(ctx, "UPDATE uploads SET title = $1, status = $2, progress = $3, recording_id = $4, playback_url = $5, metadata = $6, error = $7, completed_at = $8, updated_at = $9 WHERE id = $10",
+		upload.Title,
+		upload.Status,
+		upload.Progress,
+		recordingID,
+		upload.PlaybackURL,
+		metadataJSON,
+		upload.Error,
+		completedAt,
+		upload.UpdatedAt,
+		id,
+	)
+	if err != nil {
+		return models.Upload{}, fmt.Errorf("update upload %s: %w", id, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return models.Upload{}, fmt.Errorf("commit update upload: %w", err)
+	}
+	return upload, nil
+}
+
+func (r *postgresRepository) DeleteUpload(id string) error {
+	if r == nil || r.pool == nil {
+		return ErrPostgresUnavailable
+	}
+	ctx := context.Background()
+	command, err := r.pool.Exec(ctx, "DELETE FROM uploads WHERE id = $1", id)
+	if err != nil {
+		return fmt.Errorf("delete upload %s: %w", id, err)
+	}
+	if command.RowsAffected() == 0 {
+		return fmt.Errorf("upload %s not found", id)
+	}
+	return nil
 }
 
 func (r *postgresRepository) GetRecording(id string) (models.Recording, bool) {

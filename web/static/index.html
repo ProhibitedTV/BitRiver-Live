@@ -21,6 +21,7 @@
             <button data-view="moderation">Moderation</button>
             <button data-view="profiles">Profiles</button>
             <button data-view="sessions">Sessions</button>
+            <button data-view="uploads">Uploads</button>
             <button data-view="analytics">Analytics</button>
             <button data-view="settings">Settings</button>
         </nav>
@@ -131,6 +132,21 @@
             <div id="sessions-list" class="table"></div>
         </section>
 
+        <section id="uploads" class="panel">
+            <header class="panel__header">
+                <div>
+                    <h2>Uploads</h2>
+                    <p>Register on-demand videos and monitor their processing status.</p>
+                </div>
+                <div class="panel__actions">
+                    <button id="create-upload-button" class="primary">New upload</button>
+                    <button id="refresh-uploads" class="secondary">Refresh</button>
+                </div>
+            </header>
+            <div id="uploads-empty" class="empty">No uploads yet. Submit a file to prepare on-demand recordings.</div>
+            <div id="uploads-list" class="stack"></div>
+        </section>
+
         <section id="analytics" class="panel">
             <header class="panel__header">
                 <div>
@@ -228,6 +244,37 @@
         <label>
             Donation addresses
             <textarea name="donationAddresses" placeholder="ETH|0xabc123|Main wallet"></textarea>
+        </label>
+    </template>
+
+    <template id="upload-form">
+        <label>
+            Channel
+            <select name="channelId" required></select>
+        </label>
+        <label>
+            Title
+            <input type="text" name="title" placeholder="Spring livestream replay" />
+        </label>
+        <label>
+            Filename
+            <input type="text" name="filename" placeholder="replay.mp4" />
+        </label>
+        <label>
+            Playback URL
+            <input type="url" name="playbackUrl" placeholder="https://cdn.example.com/vod.m3u8" />
+        </label>
+        <label>
+            File (optional)
+            <input type="file" name="file" accept="video/*" />
+        </label>
+        <label>
+            Size (bytes)
+            <input type="number" name="sizeBytes" min="0" placeholder="0" />
+        </label>
+        <label>
+            Metadata (JSON)
+            <textarea name="metadata" rows="4" placeholder='{"source":"upload"}'></textarea>
         </label>
     </template>
 

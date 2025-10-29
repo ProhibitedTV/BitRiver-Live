@@ -19,9 +19,10 @@ import (
 )
 
 type Handler struct {
-	Store       storage.Repository
-	Sessions    *auth.SessionManager
-	ChatGateway *chat.Gateway
+	Store           storage.Repository
+	Sessions        *auth.SessionManager
+	ChatGateway     *chat.Gateway
+	UploadProcessor *UploadProcessor
 }
 
 func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handler {
@@ -535,6 +536,23 @@ type vodCollectionResponse struct {
 	Items     []vodItemResponse `json:"items"`
 }
 
+type uploadResponse struct {
+	ID          string            `json:"id"`
+	ChannelID   string            `json:"channelId"`
+	Title       string            `json:"title"`
+	Filename    string            `json:"filename"`
+	SizeBytes   int64             `json:"sizeBytes"`
+	Status      string            `json:"status"`
+	Progress    int               `json:"progress"`
+	RecordingID *string           `json:"recordingId,omitempty"`
+	PlaybackURL string            `json:"playbackUrl,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+	Error       string            `json:"error,omitempty"`
+	CreatedAt   string            `json:"createdAt"`
+	UpdatedAt   string            `json:"updatedAt"`
+	CompletedAt *string           `json:"completedAt,omitempty"`
+}
+
 func (h *Handler) Directory(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
@@ -670,6 +688,44 @@ func newVodItemResponse(recording models.Recording) vodItemResponse {
 		item.PlaybackURL = recording.PlaybackBaseURL
 	}
 	return item
+}
+
+func newUploadResponse(upload models.Upload) uploadResponse {
+	resp := uploadResponse{
+		ID:        upload.ID,
+		ChannelID: upload.ChannelID,
+		Title:     upload.Title,
+		Filename:  upload.Filename,
+		SizeBytes: upload.SizeBytes,
+		Status:    upload.Status,
+		Progress:  upload.Progress,
+		Metadata:  nil,
+		Error:     upload.Error,
+		CreatedAt: upload.CreatedAt.Format(time.RFC3339Nano),
+		UpdatedAt: upload.UpdatedAt.Format(time.RFC3339Nano),
+	}
+	if upload.Metadata != nil {
+		meta := make(map[string]string, len(upload.Metadata))
+		for k, v := range upload.Metadata {
+			meta[k] = v
+		}
+		resp.Metadata = meta
+	}
+	if upload.RecordingID != nil {
+		id := *upload.RecordingID
+		resp.RecordingID = &id
+	}
+	if upload.PlaybackURL != "" {
+		resp.PlaybackURL = upload.PlaybackURL
+	}
+	if upload.CompletedAt != nil {
+		completed := upload.CompletedAt.Format(time.RFC3339Nano)
+		resp.CompletedAt = &completed
+	}
+	if strings.TrimSpace(resp.Error) == "" {
+		resp.Error = ""
+	}
+	return resp
 }
 
 func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
@@ -1111,6 +1167,15 @@ type clipExportRequest struct {
 	Title        string `json:"title"`
 	StartSeconds int    `json:"startSeconds"`
 	EndSeconds   int    `json:"endSeconds"`
+}
+
+type createUploadRequest struct {
+	ChannelID   string            `json:"channelId"`
+	Title       string            `json:"title"`
+	Filename    string            `json:"filename"`
+	SizeBytes   int64             `json:"sizeBytes"`
+	PlaybackURL string            `json:"playbackUrl"`
+	Metadata    map[string]string `json:"metadata"`
 }
 
 type sessionResponse struct {
@@ -1661,6 +1726,150 @@ func (h *Handler) ChatWebsocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.ChatGateway.HandleConnection(w, r, user)
+}
+
+func (h *Handler) Uploads(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		actor, ok := h.requireAuthenticatedUser(w, r)
+		if !ok {
+			return
+		}
+		channelID := strings.TrimSpace(r.URL.Query().Get("channelId"))
+		if channelID == "" {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("channelId is required"))
+			return
+		}
+		channel, exists := h.Store.GetChannel(channelID)
+		if !exists {
+			writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+			return
+		}
+		if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+			return
+		}
+		uploads, err := h.Store.ListUploads(channelID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		response := make([]uploadResponse, 0, len(uploads))
+		for _, upload := range uploads {
+			response = append(response, newUploadResponse(upload))
+		}
+		writeJSON(w, http.StatusOK, response)
+	case http.MethodPost:
+		actor, ok := h.requireAuthenticatedUser(w, r)
+		if !ok {
+			return
+		}
+		var req createUploadRequest
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		channelID := strings.TrimSpace(req.ChannelID)
+		if channelID == "" {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("channelId is required"))
+			return
+		}
+		channel, exists := h.Store.GetChannel(channelID)
+		if !exists {
+			writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+			return
+		}
+		if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+			return
+		}
+		var metadata map[string]string
+		if len(req.Metadata) > 0 {
+			metadata = make(map[string]string, len(req.Metadata))
+			for k, v := range req.Metadata {
+				metadata[k] = v
+			}
+		}
+		playbackURL := strings.TrimSpace(req.PlaybackURL)
+		if playbackURL != "" {
+			if metadata == nil {
+				metadata = make(map[string]string, 1)
+			}
+			metadata["sourceUrl"] = playbackURL
+		}
+
+		params := storage.CreateUploadParams{
+			ChannelID:   channelID,
+			Title:       req.Title,
+			Filename:    req.Filename,
+			SizeBytes:   req.SizeBytes,
+			Metadata:    metadata,
+			PlaybackURL: playbackURL,
+		}
+		upload, err := h.Store.CreateUpload(params)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		if h.UploadProcessor != nil {
+			h.UploadProcessor.Enqueue(upload.ID)
+		}
+		writeJSON(w, http.StatusCreated, newUploadResponse(upload))
+	default:
+		w.Header().Set("Allow", "GET, POST")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+	}
+}
+
+func (h *Handler) UploadByID(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/uploads/")
+	if path == "" {
+		writeError(w, http.StatusNotFound, fmt.Errorf("upload id missing"))
+		return
+	}
+	parts := strings.Split(path, "/")
+	uploadID := strings.TrimSpace(parts[0])
+	upload, ok := h.Store.GetUpload(uploadID)
+	if !ok {
+		writeError(w, http.StatusNotFound, fmt.Errorf("upload %s not found", uploadID))
+		return
+	}
+	channel, exists := h.Store.GetChannel(upload.ChannelID)
+	if !exists {
+		writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", upload.ChannelID))
+		return
+	}
+	actor, hasActor := UserFromContext(r.Context())
+
+	switch r.Method {
+	case http.MethodGet:
+		if !hasActor {
+			WriteError(w, http.StatusUnauthorized, fmt.Errorf("authentication required"))
+			return
+		}
+		if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+			return
+		}
+		writeJSON(w, http.StatusOK, newUploadResponse(upload))
+	case http.MethodDelete:
+		if !hasActor {
+			WriteError(w, http.StatusUnauthorized, fmt.Errorf("authentication required"))
+			return
+		}
+		if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+			return
+		}
+		if err := h.Store.DeleteUpload(uploadID); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		w.Header().Set("Allow", "GET, DELETE")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+	}
 }
 
 func (h *Handler) Recordings(w http.ResponseWriter, r *http.Request) {

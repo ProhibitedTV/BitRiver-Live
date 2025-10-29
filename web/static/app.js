@@ -19,6 +19,7 @@ const state = {
     chatClient: null,
     moderation: { queue: [], actions: [] },
     analytics: { summary: null, perChannel: [] },
+    uploads: new Map(),
 };
 
 let moderationLoaded = false;
@@ -593,13 +594,29 @@ async function loadChannels(options = {}) {
             state.channels.map((channel) => loadChatHistory(channel.id, 50)),
         );
     }
+    if (state.channels.length) {
+        await Promise.allSettled(state.channels.map((channel) => loadUploadsForChannel(channel.id)));
+    } else {
+        state.uploads.clear();
+    }
     renderChannels();
     renderStreamControls();
     renderDashboard();
     renderSessions();
+    renderUploads();
     renderChat();
     initChatClient();
     syncChatSubscriptions();
+}
+
+async function loadAllUploads() {
+    if (!state.channels.length) {
+        state.uploads.clear();
+        renderUploads();
+        return;
+    }
+    await Promise.allSettled(state.channels.map((channel) => loadUploadsForChannel(channel.id)));
+    renderUploads();
 }
 
 function renderChannels() {
@@ -748,6 +765,20 @@ function populateOwnerSelect(select, selected) {
     }
 }
 
+function populateChannelSelect(select, selected) {
+    clearElement(select);
+    for (const channel of state.channels) {
+        const option = createElement("option", {
+            textContent: channel.title,
+            attributes: { value: channel.id },
+        });
+        if (selected === channel.id) {
+            option.selected = true;
+        }
+        select.appendChild(option);
+    }
+}
+
 async function handleCreateChannel() {
     if (!state.users.length) {
         showToast("Create a user before provisioning channels", "error");
@@ -826,6 +857,64 @@ async function handleEditChannel(channelId) {
     });
 }
 
+function parseUploadMetadata(input) {
+    if (!input) {
+        return undefined;
+    }
+    try {
+        const parsed = JSON.parse(input);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            return parsed;
+        }
+        throw new Error("Metadata must be a JSON object");
+    } catch (error) {
+        throw new Error("Metadata must be valid JSON");
+    }
+}
+
+async function handleCreateUpload() {
+    if (!state.channels.length) {
+        showToast("Create a channel before uploading", "error");
+        return;
+    }
+    openModal("Upload recording", "upload-form", {
+        confirmLabel: "Upload",
+        onOpen: (form) => {
+            const select = form.querySelector("select[name=channelId]");
+            if (select) {
+                populateChannelSelect(select);
+            }
+        },
+        onSubmit: async (values, form) => {
+            const channelId = values.channelId;
+            if (!channelId) {
+                throw new Error("Channel is required");
+            }
+            let metadata;
+            if (values.metadata) {
+                metadata = parseUploadMetadata(values.metadata);
+            }
+            const fileInput = form.querySelector('input[name="file"]');
+            const file = fileInput && fileInput.files ? fileInput.files[0] : undefined;
+            const size = file ? file.size : Number.parseInt(values.sizeBytes || "0", 10) || 0;
+            const payload = {
+                channelId,
+                title: values.title || (file ? file.name : ""),
+                filename: values.filename || (file ? file.name : ""),
+                sizeBytes: size,
+                playbackUrl: values.playbackUrl || "",
+                metadata: metadata || undefined,
+            };
+            await apiRequest("/api/uploads", {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+            showToast("Upload registered");
+            await loadUploadsForChannel(channelId);
+        },
+    });
+}
+
 async function handleDeleteChannel(channelId) {
     const channel = state.channels.find((item) => item.id === channelId);
     if (!channel) {
@@ -838,6 +927,19 @@ async function handleDeleteChannel(channelId) {
     showToast("Channel deleted");
     await loadChannels({ hydrate: true });
     await loadProfiles();
+}
+
+async function handleDeleteUpload(uploadId, channelId) {
+    if (!confirmAction("Delete this upload? This cannot be undone.")) {
+        return;
+    }
+    try {
+        await apiRequest(`/api/uploads/${uploadId}`, { method: "DELETE" });
+        showToast("Upload removed");
+        await loadUploadsForChannel(channelId);
+    } catch (error) {
+        showToast(error.message, "error");
+    }
 }
 
 async function rotateStreamKey(channelId) {
@@ -871,6 +973,12 @@ async function loadSessionsForChannel(channelId) {
     const sessions = await apiRequest(`/api/channels/${channelId}/sessions`);
     state.sessions[channelId] = sessions;
     return sessions;
+}
+
+async function loadUploadsForChannel(channelId) {
+    const uploads = await apiRequest(`/api/uploads?channelId=${encodeURIComponent(channelId)}`);
+    state.uploads.set(channelId, uploads);
+    return uploads;
 }
 
 function computeSessionDuration(session) {
@@ -929,6 +1037,66 @@ function renderSessions() {
         );
         container.appendChild(card);
     }
+}
+
+function renderUploads() {
+    const container = document.getElementById("uploads-list");
+    const empty = document.getElementById("uploads-empty");
+    if (!container || !empty) {
+        return;
+    }
+    clearElement(container);
+    let total = 0;
+    for (const channel of state.channels) {
+        const uploads = state.uploads.get(channel.id) ?? [];
+        if (!uploads.length) {
+            continue;
+        }
+        total += uploads.length;
+        const section = createElement("section", { className: "card" });
+        const header = createElement("div", { className: "card__header" });
+        header.append(
+            createElement("h3", { textContent: channel.title }),
+            createElement("span", {
+                className: "card__meta",
+                textContent: `${uploads.length} upload${uploads.length === 1 ? "" : "s"}`,
+            }),
+        );
+        section.appendChild(header);
+
+        const table = createElement("div", { className: "table" });
+        for (const upload of uploads) {
+            const row = createElement("div", { className: "table__row" });
+            row.append(
+                createElement("div", { className: "table__cell", textContent: upload.title || upload.filename }),
+                createElement("div", {
+                    className: "table__cell",
+                    textContent: upload.status.replace(/_/g, " "),
+                }),
+                createElement("div", {
+                    className: "table__cell",
+                    textContent: `${upload.progress}%`,
+                }),
+                createElement("div", {
+                    className: "table__cell",
+                    textContent: formatDate(upload.createdAt),
+                }),
+            );
+            const actions = createElement("div", { className: "table__cell" });
+            const deleteBtn = createElement("button", {
+                className: "danger",
+                textContent: "Delete",
+                dataset: { uploadId: upload.id, channelId: channel.id },
+            });
+            deleteBtn.addEventListener("click", () => handleDeleteUpload(upload.id, channel.id));
+            actions.appendChild(deleteBtn);
+            row.appendChild(actions);
+            table.appendChild(row);
+        }
+        section.appendChild(table);
+        container.appendChild(section);
+    }
+    empty.hidden = total > 0;
 }
 
 async function loadChatHistory(channelId, limit = 50) {
@@ -2059,8 +2227,16 @@ async function refreshAll() {
 function attachActions() {
     document.getElementById("create-user-button").addEventListener("click", handleCreateUser);
     document.getElementById("create-channel-button").addEventListener("click", handleCreateChannel);
+    const createUploadButton = document.getElementById("create-upload-button");
+    if (createUploadButton) {
+        createUploadButton.addEventListener("click", handleCreateUpload);
+    }
     document.getElementById("refresh-users").addEventListener("click", () => loadUsers());
     document.getElementById("refresh-channels").addEventListener("click", () => loadChannels({ hydrate: true }));
+    const refreshUploadsButton = document.getElementById("refresh-uploads");
+    if (refreshUploadsButton) {
+        refreshUploadsButton.addEventListener("click", () => loadAllUploads());
+    }
     document.getElementById("refresh-data").addEventListener("click", () => refreshAll());
     const moderationButton = document.getElementById("refresh-moderation");
     if (moderationButton) {

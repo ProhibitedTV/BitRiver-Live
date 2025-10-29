@@ -206,3 +206,54 @@ func TestHTTPTranscoderAdapterStartStop(t *testing.T) {
 		t.Fatal("expected stop endpoint to be invoked")
 	}
 }
+
+func TestHTTPTranscoderAdapterStartUpload(t *testing.T) {
+	t.Helper()
+	var started bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/uploads" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		started = true
+		if got := r.Header.Get("Authorization"); got != "Bearer job-token" {
+			t.Fatalf("expected bearer token, got %q", got)
+		}
+		var payload ffmpegUploadRequest
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if payload.ChannelID != "channel-123" || payload.UploadID != "upload-abc" || payload.SourceURL != "https://cdn/source.mp4" {
+			t.Fatalf("unexpected payload: %+v", payload)
+		}
+		json.NewEncoder(w).Encode(ffmpegUploadResponse{
+			JobID:       "job-upload",
+			PlaybackURL: "https://cdn/hls/index.m3u8",
+			Renditions:  []Rendition{{Name: "720p", ManifestURL: "https://cdn/hls/720p.m3u8", Bitrate: 3000}},
+		})
+	}))
+	defer server.Close()
+
+	adapter := newHTTPTranscoderAdapter(server.URL, "job-token", server.Client(), nil, 3, 0)
+	result, err := adapter.StartUpload(context.Background(), uploadJobRequest{
+		ChannelID: "channel-123",
+		UploadID:  "upload-abc",
+		SourceURL: "https://cdn/source.mp4",
+		Filename:  "source.mp4",
+		Renditions: []Rendition{{
+			Name:    "720p",
+			Bitrate: 3000,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("StartUpload: %v", err)
+	}
+	if !started {
+		t.Fatal("expected upload endpoint to be invoked")
+	}
+	if result.JobID != "job-upload" || result.PlaybackURL != "https://cdn/hls/index.m3u8" {
+		t.Fatalf("unexpected upload result: %+v", result)
+	}
+	if len(result.Renditions) != 1 || result.Renditions[0].ManifestURL != "https://cdn/hls/720p.m3u8" {
+		t.Fatalf("unexpected renditions: %+v", result.Renditions)
+	}
+}
