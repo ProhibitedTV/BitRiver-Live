@@ -446,19 +446,6 @@ type updateChannelRequest struct {
 	Tags     *[]string `json:"tags"`
 }
 
-type channelResponse struct {
-	ID               string   `json:"id"`
-	OwnerID          string   `json:"ownerId"`
-	StreamKey        string   `json:"streamKey"`
-	Title            string   `json:"title"`
-	Category         string   `json:"category,omitempty"`
-	Tags             []string `json:"tags"`
-	LiveState        string   `json:"liveState"`
-	CurrentSessionID *string  `json:"currentSessionId,omitempty"`
-	CreatedAt        string   `json:"createdAt"`
-	UpdatedAt        string   `json:"updatedAt"`
-}
-
 type channelPublicResponse struct {
 	ID               string   `json:"id"`
 	OwnerID          string   `json:"ownerId"`
@@ -469,6 +456,11 @@ type channelPublicResponse struct {
 	CurrentSessionID *string  `json:"currentSessionId,omitempty"`
 	CreatedAt        string   `json:"createdAt"`
 	UpdatedAt        string   `json:"updatedAt"`
+}
+
+type channelResponse struct {
+	channelPublicResponse
+	StreamKey string `json:"streamKey"`
 }
 
 type channelOwnerResponse struct {
@@ -575,41 +567,35 @@ func (h *Handler) Directory(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, payload)
 }
 
-func newChannelResponse(channel models.Channel) channelResponse {
+func buildChannelResponse(channel models.Channel, includeStreamKey bool) channelResponse {
 	resp := channelResponse{
-		ID:        channel.ID,
-		OwnerID:   channel.OwnerID,
-		StreamKey: channel.StreamKey,
-		Title:     channel.Title,
-		Category:  channel.Category,
-		Tags:      append([]string{}, channel.Tags...),
-		LiveState: channel.LiveState,
-		CreatedAt: channel.CreatedAt.Format(time.RFC3339Nano),
-		UpdatedAt: channel.UpdatedAt.Format(time.RFC3339Nano),
+		channelPublicResponse: channelPublicResponse{
+			ID:        channel.ID,
+			OwnerID:   channel.OwnerID,
+			Title:     channel.Title,
+			Category:  channel.Category,
+			Tags:      append([]string{}, channel.Tags...),
+			LiveState: channel.LiveState,
+			CreatedAt: channel.CreatedAt.Format(time.RFC3339Nano),
+			UpdatedAt: channel.UpdatedAt.Format(time.RFC3339Nano),
+		},
 	}
 	if channel.CurrentSessionID != nil {
 		sessionID := *channel.CurrentSessionID
 		resp.CurrentSessionID = &sessionID
+	}
+	if includeStreamKey {
+		resp.StreamKey = channel.StreamKey
 	}
 	return resp
 }
 
+func newChannelResponse(channel models.Channel) channelResponse {
+	return buildChannelResponse(channel, true)
+}
+
 func newChannelPublicResponse(channel models.Channel) channelPublicResponse {
-	resp := channelPublicResponse{
-		ID:        channel.ID,
-		OwnerID:   channel.OwnerID,
-		Title:     channel.Title,
-		Category:  channel.Category,
-		Tags:      append([]string{}, channel.Tags...),
-		LiveState: channel.LiveState,
-		CreatedAt: channel.CreatedAt.Format(time.RFC3339Nano),
-		UpdatedAt: channel.UpdatedAt.Format(time.RFC3339Nano),
-	}
-	if channel.CurrentSessionID != nil {
-		sessionID := *channel.CurrentSessionID
-		resp.CurrentSessionID = &sessionID
-	}
-	return resp
+	return buildChannelResponse(channel, false).channelPublicResponse
 }
 
 func newOwnerResponse(user models.User, profile models.Profile) channelOwnerResponse {
