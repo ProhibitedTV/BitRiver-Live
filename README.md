@@ -86,6 +86,8 @@ go run ./cmd/server \
   --postgres-acquire-timeout 5s
 ```
 
+`--postgres-acquire-timeout` bounds how long the API waits to borrow a connection when the pool is exhausted; it does not affect the TCP/TLS handshake with Postgres.
+
 The same configuration can be supplied via environment variables:
 
 | Variable | Description |
