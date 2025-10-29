@@ -39,6 +39,7 @@ const (
 
 type dataset struct {
 	Users               map[string]models.User          `json:"users"`
+	OAuthAccounts       map[string]models.OAuthAccount  `json:"oauthAccounts"`
 	Channels            map[string]models.Channel       `json:"channels"`
 	StreamSessions      map[string]models.StreamSession `json:"streamSessions"`
 	ChatMessages        map[string]models.ChatMessage   `json:"chatMessages"`
@@ -400,6 +401,7 @@ type ClipExportParams struct {
 func newDataset() dataset {
 	return dataset{
 		Users:               make(map[string]models.User),
+		OAuthAccounts:       make(map[string]models.OAuthAccount),
 		Channels:            make(map[string]models.Channel),
 		StreamSessions:      make(map[string]models.StreamSession),
 		ChatMessages:        make(map[string]models.ChatMessage),
@@ -423,6 +425,9 @@ func newDataset() dataset {
 func (s *Storage) ensureDatasetInitializedLocked() {
 	if s.data.Users == nil {
 		s.data.Users = make(map[string]models.User)
+	}
+	if s.data.OAuthAccounts == nil {
+		s.data.OAuthAccounts = make(map[string]models.OAuthAccount)
 	}
 	if s.data.Channels == nil {
 		s.data.Channels = make(map[string]models.Channel)
@@ -572,6 +577,15 @@ type CreateUserParams struct {
 	SelfSignup  bool
 }
 
+// OAuthLoginParams represents the identity information returned by an OAuth
+// provider used to authenticate or provision a user account.
+type OAuthLoginParams struct {
+	Provider    string
+	Subject     string
+	Email       string
+	DisplayName string
+}
+
 // CreateTipParams captures the information required to record a tip.
 type CreateTipParams struct {
 	ChannelID     string
@@ -621,6 +635,74 @@ func normalizeRoles(input []string) []string {
 	}
 	sort.Strings(roles)
 	return roles
+}
+
+func oauthAccountKey(provider, subject string) string {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	subject = strings.TrimSpace(subject)
+	return provider + "|" + subject
+}
+
+func fallbackOAuthEmail(provider, subject string) string {
+	domain := strings.ToLower(strings.TrimSpace(provider))
+	if domain == "" {
+		domain = "provider"
+	}
+	domain = sanitizeOAuthComponent(domain)
+	hash := sha256.Sum256([]byte(provider + ":" + subject))
+	local := hex.EncodeToString(hash[:8])
+	return fmt.Sprintf("%s@%s.oauth", local, domain)
+}
+
+func defaultOAuthDisplayName(provider, email, subject string) string {
+	trimmedEmail := strings.TrimSpace(email)
+	if trimmedEmail != "" {
+		local := strings.SplitN(trimmedEmail, "@", 2)[0]
+		local = strings.ReplaceAll(local, ".", " ")
+		local = strings.TrimSpace(local)
+		if local != "" {
+			return capitalizeWord(local)
+		}
+	}
+	sanitized := sanitizeOAuthComponent(subject)
+	if sanitized != "" {
+		return sanitized
+	}
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		return "Viewer"
+	}
+	return capitalizeWord(provider) + " user"
+}
+
+func sanitizeOAuthComponent(input string) string {
+	lower := strings.ToLower(strings.TrimSpace(input))
+	if lower == "" {
+		return ""
+	}
+	var builder strings.Builder
+	for _, r := range lower {
+		switch {
+		case r >= 'a' && r <= 'z':
+			builder.WriteRune(r)
+		case r >= '0' && r <= '9':
+			builder.WriteRune(r)
+		case r == ' ':
+			builder.WriteRune(' ')
+		default:
+			builder.WriteRune('-')
+		}
+	}
+	return strings.TrimSpace(builder.String())
+}
+
+func capitalizeWord(input string) string {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return ""
+	}
+	lower := strings.ToLower(trimmed)
+	return strings.ToUpper(lower[:1]) + lower[1:]
 }
 
 func NewStorage(path string, opts ...Option) (*Storage, error) {
@@ -744,6 +826,13 @@ func cloneDataset(src dataset) dataset {
 				cloned.Roles = append([]string(nil), user.Roles...)
 			}
 			clone.Users[id] = cloned
+		}
+	}
+
+	if src.OAuthAccounts != nil {
+		clone.OAuthAccounts = make(map[string]models.OAuthAccount, len(src.OAuthAccounts))
+		for key, account := range src.OAuthAccounts {
+			clone.OAuthAccounts[key] = account
 		}
 	}
 
@@ -1228,6 +1317,97 @@ func (s *Storage) AuthenticateUser(email, password string) (models.User, error) 
 		}
 		return models.User{}, err
 	}
+	return user, nil
+}
+
+func (s *Storage) AuthenticateOAuth(params OAuthLoginParams) (models.User, error) {
+	provider := strings.ToLower(strings.TrimSpace(params.Provider))
+	subject := strings.TrimSpace(params.Subject)
+	if provider == "" {
+		return models.User{}, errors.New("provider is required")
+	}
+	if subject == "" {
+		return models.User{}, errors.New("subject is required")
+	}
+
+	normalizedEmail := strings.TrimSpace(strings.ToLower(params.Email))
+	if normalizedEmail == "" {
+		normalizedEmail = fallbackOAuthEmail(provider, subject)
+	}
+
+	displayName := strings.TrimSpace(params.DisplayName)
+	if displayName == "" {
+		displayName = defaultOAuthDisplayName(provider, normalizedEmail, subject)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ensureDatasetInitializedLocked()
+
+	if s.data.OAuthAccounts == nil {
+		s.data.OAuthAccounts = make(map[string]models.OAuthAccount)
+	}
+
+	key := oauthAccountKey(provider, subject)
+	if account, ok := s.data.OAuthAccounts[key]; ok {
+		if user, ok := s.data.Users[account.UserID]; ok {
+			return user, nil
+		}
+		delete(s.data.OAuthAccounts, key)
+	}
+
+	var (
+		user   models.User
+		exists bool
+	)
+	for _, existing := range s.data.Users {
+		if existing.Email == normalizedEmail {
+			user = existing
+			exists = true
+			break
+		}
+	}
+
+	now := time.Now().UTC()
+	if !exists {
+		id, err := s.generateID()
+		if err != nil {
+			return models.User{}, err
+		}
+		user = models.User{
+			ID:          id,
+			DisplayName: displayName,
+			Email:       normalizedEmail,
+			Roles:       []string{"viewer"},
+			SelfSignup:  true,
+			CreatedAt:   now,
+		}
+	} else {
+		if strings.TrimSpace(user.DisplayName) == "" {
+			user.DisplayName = displayName
+		}
+	}
+
+	s.data.Users[user.ID] = user
+	s.data.OAuthAccounts[key] = models.OAuthAccount{
+		Provider:    provider,
+		Subject:     subject,
+		UserID:      user.ID,
+		Email:       normalizedEmail,
+		DisplayName: displayName,
+		LinkedAt:    now,
+	}
+
+	if err := s.persist(); err != nil {
+		if !exists {
+			delete(s.data.Users, user.ID)
+		} else {
+			s.data.Users[user.ID] = user
+		}
+		delete(s.data.OAuthAccounts, key)
+		return models.User{}, err
+	}
+
 	return user, nil
 }
 

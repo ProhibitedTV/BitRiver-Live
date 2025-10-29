@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/auth"
+	"bitriver-live/internal/auth/oauth"
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/storage"
@@ -32,6 +33,60 @@ func newTestHandler(t *testing.T) (*Handler, *storage.Storage) {
 
 func withUser(req *http.Request, user models.User) *http.Request {
 	return req.WithContext(ContextWithUser(req.Context(), user))
+}
+
+type oauthStub struct {
+	providers      []oauth.ProviderInfo
+	beginResult    oauth.BeginResult
+	beginError     error
+	completeResult oauth.Completion
+	completeError  error
+	cancelResult   string
+	cancelError    error
+	lastBegin      struct {
+		provider string
+		returnTo string
+	}
+	lastComplete struct {
+		provider string
+		state    string
+		code     string
+	}
+	lastCancel string
+}
+
+func (s *oauthStub) Providers() []oauth.ProviderInfo {
+	if s.providers != nil {
+		return s.providers
+	}
+	return []oauth.ProviderInfo{}
+}
+
+func (s *oauthStub) Begin(provider, returnTo string) (oauth.BeginResult, error) {
+	s.lastBegin.provider = provider
+	s.lastBegin.returnTo = returnTo
+	if s.beginError != nil {
+		return oauth.BeginResult{}, s.beginError
+	}
+	return s.beginResult, nil
+}
+
+func (s *oauthStub) Complete(provider, state, code string) (oauth.Completion, error) {
+	s.lastComplete.provider = provider
+	s.lastComplete.state = state
+	s.lastComplete.code = code
+	if s.completeError != nil {
+		return oauth.Completion{}, s.completeError
+	}
+	return s.completeResult, nil
+}
+
+func (s *oauthStub) Cancel(state string) (string, error) {
+	s.lastCancel = state
+	if s.cancelError != nil {
+		return "", s.cancelError
+	}
+	return s.cancelResult, nil
 }
 
 func TestUsersEndpointCreatesAndListsUsers(t *testing.T) {
@@ -249,6 +304,90 @@ func TestSignupAndLoginFlow(t *testing.T) {
 	handler.Session(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected session to be revoked, got status %d", rec.Code)
+	}
+}
+
+func TestOAuthProvidersEndpoint(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	stub := &oauthStub{providers: []oauth.ProviderInfo{{Name: "test", DisplayName: "Test"}}}
+	handler.OAuth = stub
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/oauth/providers", nil)
+	rec := httptest.NewRecorder()
+	handler.OAuthProviders(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	var payload struct {
+		Providers []oauth.ProviderInfo `json:"providers"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(payload.Providers) != 1 || payload.Providers[0].Name != "test" {
+		t.Fatalf("unexpected providers payload: %+v", payload.Providers)
+	}
+}
+
+func TestOAuthStartEndpoint(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	stub := &oauthStub{beginResult: oauth.BeginResult{URL: "https://auth.example.com", State: "state-123"}}
+	handler.OAuth = stub
+
+	body, _ := json.Marshal(oauthStartRequest{ReturnTo: "/control"})
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/oauth/test/start", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.OAuthByProvider(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if stub.lastBegin.provider != "test" {
+		t.Fatalf("expected provider to be forwarded to stub, got %s", stub.lastBegin.provider)
+	}
+	if stub.lastBegin.returnTo != "/control" {
+		t.Fatalf("expected return path /control, got %q", stub.lastBegin.returnTo)
+	}
+	var payload map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["url"] != "https://auth.example.com" {
+		t.Fatalf("expected auth url in response, got %q", payload["url"])
+	}
+}
+
+func TestOAuthCallbackCreatesSession(t *testing.T) {
+	handler, store := newTestHandler(t)
+	stub := &oauthStub{completeResult: oauth.Completion{
+		ReturnTo: "/dashboard",
+		Profile: oauth.UserProfile{
+			Provider:    "test",
+			Subject:     "sub-1",
+			Email:       "viewer@example.com",
+			DisplayName: "Viewer",
+		},
+	}}
+	handler.OAuth = stub
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/oauth/test/callback?state=abc&code=xyz", nil)
+	rec := httptest.NewRecorder()
+	handler.OAuthByProvider(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect status, got %d", rec.Code)
+	}
+	if location := rec.Header().Get("Location"); location != "/dashboard?oauth=success" {
+		t.Fatalf("expected success redirect, got %q", location)
+	}
+	cookie := findCookie(t, rec.Result().Cookies(), "bitriver_session")
+	if cookie.Value == "" {
+		t.Fatal("expected session cookie to be issued")
+	}
+	user, ok := store.FindUserByEmail("viewer@example.com")
+	if !ok {
+		t.Fatalf("expected user to be created via oauth")
+	}
+	if user.DisplayName != "Viewer" {
+		t.Fatalf("expected display name Viewer, got %q", user.DisplayName)
 	}
 }
 

@@ -3569,4 +3569,124 @@ func (r *postgresRepository) CancelSubscription(id, cancelledBy, reason string) 
 	return updated, nil
 }
 
+func (r *postgresRepository) AuthenticateOAuth(params OAuthLoginParams) (models.User, error) {
+	if r == nil || r.pool == nil {
+		return models.User{}, ErrPostgresUnavailable
+	}
+
+	provider := strings.ToLower(strings.TrimSpace(params.Provider))
+	subject := strings.TrimSpace(params.Subject)
+	if provider == "" {
+		return models.User{}, fmt.Errorf("provider is required")
+	}
+	if subject == "" {
+		return models.User{}, fmt.Errorf("subject is required")
+	}
+
+	normalizedEmail := strings.TrimSpace(strings.ToLower(params.Email))
+	if normalizedEmail == "" {
+		normalizedEmail = fallbackOAuthEmail(provider, subject)
+	}
+	displayName := strings.TrimSpace(params.DisplayName)
+	if displayName == "" {
+		displayName = defaultOAuthDisplayName(provider, normalizedEmail, subject)
+	}
+
+	var user models.User
+	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("begin oauth tx: %w", err)
+		}
+		defer rollbackTx(ctx, tx)
+
+		var userID string
+		lookupErr := tx.QueryRow(ctx, "SELECT user_id FROM oauth_accounts WHERE provider = $1 AND subject = $2", provider, subject).Scan(&userID)
+		if lookupErr != nil && !errors.Is(lookupErr, pgx.ErrNoRows) {
+			return fmt.Errorf("lookup oauth account: %w", lookupErr)
+		}
+		if lookupErr == nil {
+			row := tx.QueryRow(ctx, "SELECT id, display_name, email, roles, password_hash, self_signup, created_at FROM users WHERE id = $1", userID)
+			loaded, err := scanUser(row)
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					if _, execErr := tx.Exec(ctx, "DELETE FROM oauth_accounts WHERE provider = $1 AND subject = $2", provider, subject); execErr != nil {
+						return fmt.Errorf("delete stale oauth account: %w", execErr)
+					}
+				} else {
+					return fmt.Errorf("load oauth user: %w", err)
+				}
+			} else {
+				user = loaded
+				if err := tx.Commit(ctx); err != nil {
+					return fmt.Errorf("commit oauth tx: %w", err)
+				}
+				return nil
+			}
+		}
+
+		if userID == "" && normalizedEmail != "" {
+			err = tx.QueryRow(ctx, "SELECT id FROM users WHERE email = $1", normalizedEmail).Scan(&userID)
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("lookup user by email: %w", err)
+			}
+			if errors.Is(err, pgx.ErrNoRows) {
+				err = nil
+			}
+		}
+
+		now := time.Now().UTC()
+		if userID == "" {
+			userID, err = r.generateID()
+			if err != nil {
+				return err
+			}
+			roles := []string{"viewer"}
+			createdAt := now
+			err = tx.QueryRow(ctx, "INSERT INTO users (id, display_name, email, roles, self_signup) VALUES ($1, $2, $3, $4, $5) RETURNING created_at", userID, displayName, normalizedEmail, roles, true).Scan(&createdAt)
+			if err != nil {
+				return fmt.Errorf("create oauth user: %w", err)
+			}
+			user = models.User{
+				ID:          userID,
+				DisplayName: displayName,
+				Email:       normalizedEmail,
+				Roles:       roles,
+				SelfSignup:  true,
+				CreatedAt:   createdAt.UTC(),
+			}
+		} else {
+			row := tx.QueryRow(ctx, "SELECT id, display_name, email, roles, password_hash, self_signup, created_at FROM users WHERE id = $1 FOR UPDATE", userID)
+			loaded, err := scanUser(row)
+			if err != nil {
+				return fmt.Errorf("load existing user: %w", err)
+			}
+			if strings.TrimSpace(loaded.DisplayName) == "" {
+				loaded.DisplayName = displayName
+				if _, err := tx.Exec(ctx, "UPDATE users SET display_name = $1 WHERE id = $2", loaded.DisplayName, loaded.ID); err != nil {
+					return fmt.Errorf("update user display name: %w", err)
+				}
+			}
+			user = loaded
+		}
+
+		_, err = tx.Exec(ctx, `INSERT INTO oauth_accounts (provider, subject, user_id, email, display_name, linked_at)
+VALUES ($1, $2, $3, $4, $5, NOW())
+ON CONFLICT (provider, subject) DO UPDATE
+SET user_id = EXCLUDED.user_id, email = EXCLUDED.email, display_name = EXCLUDED.display_name, linked_at = NOW()`, provider, subject, user.ID, normalizedEmail, displayName)
+		if err != nil {
+			return fmt.Errorf("upsert oauth account: %w", err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit oauth tx: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return models.User{}, err
+	}
+	return user, nil
+}
+
 var _ Repository = (*postgresRepository)(nil)

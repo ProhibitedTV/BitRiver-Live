@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -17,6 +18,7 @@ import (
 
 	"bitriver-live/internal/api"
 	"bitriver-live/internal/auth"
+	"bitriver-live/internal/auth/oauth"
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/observability/logging"
@@ -24,6 +26,74 @@ import (
 	"bitriver-live/internal/server"
 	"bitriver-live/internal/storage"
 )
+
+type keyValueFlag map[string]string
+
+func (kv *keyValueFlag) String() string {
+	if kv == nil || len(*kv) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(*kv))
+	for key, value := range *kv {
+		parts = append(parts, fmt.Sprintf("%s=%s", key, value))
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
+}
+
+func (kv *keyValueFlag) Set(value string) error {
+	parts := strings.SplitN(value, "=", 2)
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid format %q, expected provider=value", value)
+	}
+	name := strings.ToLower(strings.TrimSpace(parts[0]))
+	if name == "" {
+		return fmt.Errorf("provider name is required")
+	}
+	if *kv == nil {
+		*kv = make(map[string]string)
+	}
+	(*kv)[name] = strings.TrimSpace(parts[1])
+	return nil
+}
+
+func applyOAuthEnvOverrides(configs []oauth.ProviderConfig) []oauth.ProviderConfig {
+	if len(configs) == 0 {
+		return configs
+	}
+	ids := make(map[string]string)
+	secrets := make(map[string]string)
+	redirects := make(map[string]string)
+	for _, cfg := range configs {
+		normalized := sanitizeEnvName(cfg.Name)
+		if v := strings.TrimSpace(os.Getenv(fmt.Sprintf("BITRIVER_LIVE_OAUTH_%s_CLIENT_ID", normalized))); v != "" {
+			ids[strings.ToLower(cfg.Name)] = v
+		}
+		if v := strings.TrimSpace(os.Getenv(fmt.Sprintf("BITRIVER_LIVE_OAUTH_%s_CLIENT_SECRET", normalized))); v != "" {
+			secrets[strings.ToLower(cfg.Name)] = v
+		}
+		if v := strings.TrimSpace(os.Getenv(fmt.Sprintf("BITRIVER_LIVE_OAUTH_%s_REDIRECT_URL", normalized))); v != "" {
+			redirects[strings.ToLower(cfg.Name)] = v
+		}
+	}
+	return oauth.OverrideCredentials(configs, ids, secrets, redirects)
+}
+
+func sanitizeEnvName(name string) string {
+	upper := strings.ToUpper(name)
+	var builder strings.Builder
+	for _, r := range upper {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			builder.WriteRune(r)
+		case r >= '0' && r <= '9':
+			builder.WriteRune(r)
+		default:
+			builder.WriteRune('_')
+		}
+	}
+	return builder.String()
+}
 
 func main() {
 	addr := flag.String("addr", "", "HTTP listen address")
@@ -85,11 +155,47 @@ func main() {
 	objectLifecycleDays := flag.Int("object-lifecycle-days", 0, "lifecycle policy in days for archived objects")
 	recordingRetentionPublished := flag.String("recording-retention-published", "", "retention duration for published recordings (e.g. 720h, 0 disables expiry)")
 	recordingRetentionUnpublished := flag.String("recording-retention-unpublished", "", "retention duration for unpublished recordings")
+	oauthProvidersFlag := flag.String("oauth-providers", "", "JSON array or path describing OAuth providers")
+	var oauthClientIDs keyValueFlag
+	var oauthClientSecrets keyValueFlag
+	var oauthRedirects keyValueFlag
+	flag.Var(&oauthClientIDs, "oauth-client-id", "override OAuth client ID (provider=value)")
+	flag.Var(&oauthClientSecrets, "oauth-client-secret", "override OAuth client secret (provider=value)")
+	flag.Var(&oauthRedirects, "oauth-redirect-url", "override OAuth redirect URL (provider=value)")
 	flag.Parse()
 
 	logger := logging.New(logging.Config{Level: firstNonEmpty(*logLevel, os.Getenv("BITRIVER_LIVE_LOG_LEVEL"))})
 	auditLogger := logging.WithComponent(logger, "audit")
 	recorder := metrics.Default()
+
+	var oauthManager oauth.Service
+	var oauthSources []string
+	if source := strings.TrimSpace(*oauthProvidersFlag); source != "" {
+		oauthSources = append(oauthSources, source)
+	}
+	if envSource := strings.TrimSpace(os.Getenv("BITRIVER_LIVE_OAUTH_CONFIG")); envSource != "" {
+		oauthSources = append(oauthSources, envSource)
+	}
+	if envSource := strings.TrimSpace(os.Getenv("BITRIVER_LIVE_OAUTH_PROVIDERS")); envSource != "" {
+		oauthSources = append(oauthSources, envSource)
+	}
+	providers, err := oauth.ResolveConfigSources(oauthSources...)
+	if err != nil {
+		logger.Error("failed to load oauth providers", "error", err)
+		os.Exit(1)
+	}
+	if len(providers) > 0 {
+		providers = oauth.OverrideCredentials(providers, oauthClientIDs, oauthClientSecrets, oauthRedirects)
+		providers = applyOAuthEnvOverrides(providers)
+		if len(providers) > 0 {
+			manager, err := oauth.NewManager(providers)
+			if err != nil {
+				logger.Error("failed to configure oauth", "error", err)
+				os.Exit(1)
+			}
+			oauthManager = manager
+		}
+	}
 
 	serverMode := modeValue(*mode, os.Getenv("BITRIVER_LIVE_MODE"))
 	listenAddr := resolveListenAddr(*addr, serverMode, os.Getenv("BITRIVER_LIVE_ADDR"))
@@ -306,6 +412,7 @@ func main() {
 		AuditLogger:  auditLogger,
 		Metrics:      recorder,
 		ViewerOrigin: viewerURL,
+		OAuth:        oauthManager,
 	})
 	if err != nil {
 		logger.Error("failed to initialise server", "error", err)
