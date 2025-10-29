@@ -80,10 +80,6 @@ func NewPostgresRepository(dsn string, opts ...Option) (Repository, error) {
 	if cfg.HealthCheckInterval > 0 {
 		poolCfg.HealthCheckPeriod = cfg.HealthCheckInterval
 	}
-	if cfg.AcquireTimeout > 0 {
-		poolCfg.MaxConnLifetime = cfg.MaxConnLifetime
-		poolCfg.ConnConfig.ConnectTimeout = cfg.AcquireTimeout
-	}
 	if cfg.ApplicationName != "" {
 		if poolCfg.ConnConfig.RuntimeParams == nil {
 			poolCfg.ConnConfig.RuntimeParams = make(map[string]string)
@@ -179,30 +175,35 @@ func (r *postgresRepository) CreateUser(params CreateUserParams) (models.User, e
 		passwordHash = hashed
 	}
 
-	ctx := context.Background()
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return models.User{}, fmt.Errorf("begin create user tx: %w", err)
-	}
-	defer rollbackTx(ctx, tx)
-
-	var existingID string
-	err = tx.QueryRow(ctx, "SELECT id FROM users WHERE email = $1", normalizedEmail).Scan(&existingID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return models.User{}, fmt.Errorf("check existing email: %w", err)
-	}
-	if err == nil {
-		return models.User{}, fmt.Errorf("email %s already in use", params.Email)
-	}
-
 	var createdAt time.Time
-	err = tx.QueryRow(ctx, "INSERT INTO users (id, display_name, email, roles, password_hash, self_signup) VALUES ($1, $2, $3, $4, $5, $6) RETURNING created_at", id, displayName, normalizedEmail, roles, passwordHash, params.SelfSignup).Scan(&createdAt)
-	if err != nil {
-		return models.User{}, fmt.Errorf("insert user: %w", err)
-	}
+	createErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("begin create user tx: %w", err)
+		}
+		defer rollbackTx(ctx, tx)
 
-	if err := tx.Commit(ctx); err != nil {
-		return models.User{}, fmt.Errorf("commit create user: %w", err)
+		var existingID string
+		err = tx.QueryRow(ctx, "SELECT id FROM users WHERE email = $1", normalizedEmail).Scan(&existingID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("check existing email: %w", err)
+		}
+		if err == nil {
+			return fmt.Errorf("email %s already in use", params.Email)
+		}
+
+		err = tx.QueryRow(ctx, "INSERT INTO users (id, display_name, email, roles, password_hash, self_signup) VALUES ($1, $2, $3, $4, $5, $6) RETURNING created_at", id, displayName, normalizedEmail, roles, passwordHash, params.SelfSignup).Scan(&createdAt)
+		if err != nil {
+			return fmt.Errorf("insert user: %w", err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit create user: %w", err)
+		}
+		return nil
+	})
+	if createErr != nil {
+		return models.User{}, createErr
 	}
 
 	return models.User{
@@ -224,9 +225,17 @@ func (r *postgresRepository) AuthenticateUser(email, password string) (models.Us
 		return models.User{}, ErrPostgresUnavailable
 	}
 
-	ctx := context.Background()
-	row := r.pool.QueryRow(ctx, "SELECT id, display_name, email, roles, password_hash, self_signup, created_at FROM users WHERE email = $1", strings.TrimSpace(strings.ToLower(email)))
-	user, err := scanUser(row)
+	trimmedEmail := strings.TrimSpace(strings.ToLower(email))
+	var user models.User
+	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		row := conn.QueryRow(ctx, "SELECT id, display_name, email, roles, password_hash, self_signup, created_at FROM users WHERE email = $1", trimmedEmail)
+		scanned, scanErr := scanUser(row)
+		if scanErr != nil {
+			return scanErr
+		}
+		user = scanned
+		return nil
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return models.User{}, ErrInvalidCredentials
 	}
@@ -250,22 +259,24 @@ func (r *postgresRepository) ListUsers() []models.User {
 		return nil
 	}
 
-	ctx := context.Background()
-	rows, err := r.pool.Query(ctx, "SELECT id, display_name, email, roles, password_hash, self_signup, created_at FROM users ORDER BY created_at ASC")
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-
 	var users []models.User
-	for rows.Next() {
-		user, err := scanUser(rows)
+	listErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		rows, err := conn.Query(ctx, "SELECT id, display_name, email, roles, password_hash, self_signup, created_at FROM users ORDER BY created_at ASC")
 		if err != nil {
-			return nil
+			return err
 		}
-		users = append(users, user)
-	}
-	if err := rows.Err(); err != nil {
+		defer rows.Close()
+
+		for rows.Next() {
+			user, scanErr := scanUser(rows)
+			if scanErr != nil {
+				return scanErr
+			}
+			users = append(users, user)
+		}
+		return rows.Err()
+	})
+	if listErr != nil {
 		return nil
 	}
 	return users
@@ -276,9 +287,16 @@ func (r *postgresRepository) GetUser(id string) (models.User, bool) {
 		return models.User{}, false
 	}
 
-	ctx := context.Background()
-	row := r.pool.QueryRow(ctx, "SELECT id, display_name, email, roles, password_hash, self_signup, created_at FROM users WHERE id = $1", id)
-	user, err := scanUser(row)
+	var user models.User
+	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		row := conn.QueryRow(ctx, "SELECT id, display_name, email, roles, password_hash, self_signup, created_at FROM users WHERE id = $1", id)
+		scanned, scanErr := scanUser(row)
+		if scanErr != nil {
+			return scanErr
+		}
+		user = scanned
+		return nil
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return models.User{}, false
 	}
@@ -293,60 +311,68 @@ func (r *postgresRepository) UpdateUser(id string, update UserUpdate) (models.Us
 		return models.User{}, ErrPostgresUnavailable
 	}
 
-	ctx := context.Background()
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return models.User{}, fmt.Errorf("begin update user tx: %w", err)
-	}
-	defer rollbackTx(ctx, tx)
-
-	row := tx.QueryRow(ctx, "SELECT id, display_name, email, roles, password_hash, self_signup, created_at FROM users WHERE id = $1 FOR UPDATE", id)
-	user, err := scanUser(row)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return models.User{}, fmt.Errorf("user %s not found", id)
-	}
-	if err != nil {
-		return models.User{}, fmt.Errorf("load user %s: %w", id, err)
-	}
-
-	if update.DisplayName != nil {
-		name := strings.TrimSpace(*update.DisplayName)
-		if name == "" {
-			return models.User{}, fmt.Errorf("displayName cannot be empty")
+	var updated models.User
+	updateErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("begin update user tx: %w", err)
 		}
-		user.DisplayName = name
-	}
+		defer rollbackTx(ctx, tx)
 
-	if update.Email != nil {
-		email := strings.TrimSpace(strings.ToLower(*update.Email))
-		if email == "" {
-			return models.User{}, fmt.Errorf("email cannot be empty")
+		row := tx.QueryRow(ctx, "SELECT id, display_name, email, roles, password_hash, self_signup, created_at FROM users WHERE id = $1 FOR UPDATE", id)
+		user, err := scanUser(row)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("user %s not found", id)
 		}
-		var existingID string
-		err = tx.QueryRow(ctx, "SELECT id FROM users WHERE email = $1 AND id <> $2", email, id).Scan(&existingID)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return models.User{}, fmt.Errorf("check email uniqueness: %w", err)
+		if err != nil {
+			return fmt.Errorf("load user %s: %w", id, err)
 		}
-		if err == nil {
-			return models.User{}, fmt.Errorf("email %s already in use", email)
+
+		if update.DisplayName != nil {
+			name := strings.TrimSpace(*update.DisplayName)
+			if name == "" {
+				return fmt.Errorf("displayName cannot be empty")
+			}
+			user.DisplayName = name
 		}
-		user.Email = email
+
+		if update.Email != nil {
+			email := strings.TrimSpace(strings.ToLower(*update.Email))
+			if email == "" {
+				return fmt.Errorf("email cannot be empty")
+			}
+			var existingID string
+			err = tx.QueryRow(ctx, "SELECT id FROM users WHERE email = $1 AND id <> $2", email, id).Scan(&existingID)
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("check email uniqueness: %w", err)
+			}
+			if err == nil {
+				return fmt.Errorf("email %s already in use", email)
+			}
+			user.Email = email
+		}
+
+		if update.Roles != nil {
+			user.Roles = normalizeRoles(*update.Roles)
+		}
+
+		_, err = tx.Exec(ctx, "UPDATE users SET display_name = $1, email = $2, roles = $3 WHERE id = $4", user.DisplayName, user.Email, user.Roles, id)
+		if err != nil {
+			return fmt.Errorf("update user %s: %w", id, err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit update user: %w", err)
+		}
+
+		updated = user
+		return nil
+	})
+	if updateErr != nil {
+		return models.User{}, updateErr
 	}
 
-	if update.Roles != nil {
-		user.Roles = normalizeRoles(*update.Roles)
-	}
-
-	_, err = tx.Exec(ctx, "UPDATE users SET display_name = $1, email = $2, roles = $3 WHERE id = $4", user.DisplayName, user.Email, user.Roles, id)
-	if err != nil {
-		return models.User{}, fmt.Errorf("update user %s: %w", id, err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return models.User{}, fmt.Errorf("commit update user: %w", err)
-	}
-
-	return user, nil
+	return updated, nil
 }
 
 func (r *postgresRepository) DeleteUser(id string) error {
@@ -354,43 +380,73 @@ func (r *postgresRepository) DeleteUser(id string) error {
 		return ErrPostgresUnavailable
 	}
 
-	ctx := context.Background()
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return fmt.Errorf("begin delete user tx: %w", err)
-	}
-	defer rollbackTx(ctx, tx)
+	deleteErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("begin delete user tx: %w", err)
+		}
+		defer rollbackTx(ctx, tx)
 
-	var userExists bool
-	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1)", id).Scan(&userExists); err != nil {
-		return fmt.Errorf("check user %s existence: %w", id, err)
-	}
-	if !userExists {
-		return fmt.Errorf("user %s not found", id)
-	}
+		var userExists bool
+		if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1)", id).Scan(&userExists); err != nil {
+			return fmt.Errorf("check user %s existence: %w", id, err)
+		}
+		if !userExists {
+			return fmt.Errorf("user %s not found", id)
+		}
 
-	var ownedChannelID string
-	err = tx.QueryRow(ctx, "SELECT id FROM channels WHERE owner_id = $1 LIMIT 1", id).Scan(&ownedChannelID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("check owned channels: %w", err)
-	}
-	if err == nil {
-		return fmt.Errorf("user %s owns channel %s; transfer or delete the channel first", id, ownedChannelID)
-	}
+		var ownedChannelID string
+		err = tx.QueryRow(ctx, "SELECT id FROM channels WHERE owner_id = $1 LIMIT 1", id).Scan(&ownedChannelID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("check owned channels: %w", err)
+		}
+		if err == nil {
+			return fmt.Errorf("user %s owns channel %s; transfer or delete the channel first", id, ownedChannelID)
+		}
 
-	if _, err := tx.Exec(ctx, "UPDATE profiles SET top_friends = array_remove(top_friends, $1), updated_at = NOW() WHERE $1 = ANY(top_friends)", id); err != nil {
-		return fmt.Errorf("remove user %s from top friends: %w", id, err)
-	}
+		if _, err := tx.Exec(ctx, "UPDATE profiles SET top_friends = array_remove(top_friends, $1), updated_at = NOW() WHERE $1 = ANY(top_friends)", id); err != nil {
+			return fmt.Errorf("remove user %s from top friends: %w", id, err)
+		}
 
-	if _, err := tx.Exec(ctx, "DELETE FROM users WHERE id = $1", id); err != nil {
-		return fmt.Errorf("delete user %s: %w", id, err)
-	}
+		if _, err := tx.Exec(ctx, "DELETE FROM users WHERE id = $1", id); err != nil {
+			return fmt.Errorf("delete user %s: %w", id, err)
+		}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit delete user: %w", err)
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit delete user: %w", err)
+		}
+
+		return nil
+	})
+	if deleteErr != nil {
+		return deleteErr
 	}
 
 	return nil
+}
+
+func (r *postgresRepository) acquireContext() (context.Context, context.CancelFunc) {
+	if r == nil {
+		return context.Background(), func() {}
+	}
+	if r.cfg.AcquireTimeout > 0 {
+		return context.WithTimeout(context.Background(), r.cfg.AcquireTimeout)
+	}
+	return context.Background(), func() {}
+}
+
+func (r *postgresRepository) withConn(fn func(context.Context, *pgxpool.Conn) error) error {
+	if r == nil || r.pool == nil {
+		return ErrPostgresUnavailable
+	}
+	ctx, cancel := r.acquireContext()
+	defer cancel()
+	conn, err := r.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire postgres connection: %w", err)
+	}
+	defer conn.Release()
+	return fn(context.Background(), conn)
 }
 
 func (r *postgresRepository) generateID() (string, error) {
