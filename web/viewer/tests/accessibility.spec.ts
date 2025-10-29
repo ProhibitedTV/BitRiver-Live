@@ -1,75 +1,92 @@
-import fs from "fs";
-import path from "path";
 import { injectAxe, checkA11y } from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-const styles = fs.readFileSync(path.join(__dirname, "../styles/globals.css"), "utf8");
+const directoryResponse = {
+  channels: [
+    {
+      channel: {
+        id: "chan-1",
+        ownerId: "owner-1",
+        title: "Deep Space Beats",
+        category: "Music",
+        tags: ["lofi", "ambient"],
+        liveState: "live",
+        currentSessionId: "session-1",
+        createdAt: new Date("2023-10-20T10:00:00Z").toISOString(),
+        updatedAt: new Date("2023-10-21T11:00:00Z").toISOString()
+      },
+      owner: {
+        id: "owner-1",
+        displayName: "DJ Nova"
+      },
+      profile: {
+        bio: "Streaming vinyl sets from a solar-powered cabin.",
+        avatarUrl: undefined,
+        bannerUrl: undefined
+      },
+      live: true,
+      followerCount: 12
+    }
+  ],
+  generatedAt: new Date("2023-10-21T11:00:00Z").toISOString()
+};
 
-test("channel directory markup has no major accessibility violations", async ({ page }) => {
-  await page.setContent(`<!DOCTYPE html>
-    <html lang="en">
-      <head>
-        <meta charset="utf-8" />
-        <title>Directory Preview</title>
-        <style>${styles}</style>
-      </head>
-      <body>
-        <div id="app" class="container stack">
-          <header class="stack" role="banner">
-            <h1>Discover live channels</h1>
-            <form class="search-bar" role="search" onsubmit="event.preventDefault(); window.lastQuery = this.elements.q.value;">
-              <label for="q" class="sr-only">Search channels</label>
-              <input id="q" name="q" type="search" placeholder="Search by channel, creator, or tag" aria-label="Search channels" />
-              <button type="submit" class="secondary-button">Search</button>
-            </form>
-          </header>
-          <main class="channel-layout" aria-live="polite">
-            <section class="channel-layout__primary stack">
-              <article class="surface stack" aria-label="Stream player placeholder">
-                <h2>Stream offline</h2>
-                <p class="muted">Follow to be notified when the broadcaster goes live.</p>
-              </article>
-              <section class="surface stack" aria-labelledby="vod-heading">
-                <h2 id="vod-heading">Past broadcasts</h2>
-                <ul class="vod-grid">
-                  <li class="vod-card">
-                    <div class="vod-card__body">
-                      <h3>Retro Speedruns #5</h3>
-                      <p class="muted">45 minutes · 10/20/2023</p>
-                      <a href="#" class="secondary-button">Watch replay</a>
-                    </div>
-                  </li>
-                </ul>
-              </section>
-            </section>
-            <aside class="channel-layout__sidebar">
-              <section class="chat-panel" aria-label="Live chat">
-                <header class="chat-panel__header">
-                  <h2>Live chat</h2>
-                  <span class="muted">0 messages</span>
-                </header>
-                <div class="chat-panel__body">
-                  <p class="muted">No messages yet. Be the first to say hello!</p>
-                </div>
-                <form class="chat-panel__form" aria-label="Send a chat message" onsubmit="event.preventDefault();">
-                  <label for="chat-preview" class="sr-only">Chat message</label>
-                  <textarea id="chat-preview" rows="3" placeholder="Share your thoughts"></textarea>
-                  <button type="submit" class="primary-button">Send</button>
-                </form>
-              </section>
-            </aside>
-          </main>
-        </div>
-      </body>
-    </html>`);
+const searchResponse = {
+  channels: [
+    {
+      channel: {
+        id: "chan-2",
+        ownerId: "owner-2",
+        title: "Retro Speedruns",
+        category: "Gaming",
+        tags: ["speedrun", "retro"],
+        liveState: "live",
+        currentSessionId: "session-2",
+        createdAt: new Date("2023-10-18T18:00:00Z").toISOString(),
+        updatedAt: new Date("2023-10-21T12:30:00Z").toISOString()
+      },
+      owner: {
+        id: "owner-2",
+        displayName: "PixelPro"
+      },
+      profile: {
+        bio: "Tool-assisted runs from the golden age of consoles.",
+        avatarUrl: undefined,
+        bannerUrl: undefined
+      },
+      live: true,
+      followerCount: 8
+    }
+  ],
+  generatedAt: new Date("2023-10-21T12:30:00Z").toISOString()
+};
+
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/auth/session", async (route) => {
+    await route.fulfill({ status: 401, body: "Unauthorized" });
+  });
+
+  await page.route("**/api/directory**", async (route) => {
+    const url = new URL(route.request().url());
+    const body = url.searchParams.has("q") ? searchResponse : directoryResponse;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+});
+
+test("directory page renders accessible markup and supports search", async ({ page }) => {
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", { level: 1, name: /discover live channels/i })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 3, name: "Deep Space Beats" })).toBeVisible();
 
   await page.fill("input[type=search]", "retro");
-  await page.click("button.secondary-button");
-  const query = await page.evaluate(() => (window as any).lastQuery);
-  expect(query).toBe("retro");
+  await page.click("button:has-text('Search')");
+
+  await expect(page.getByRole("heading", { level: 3, name: "Retro Speedruns" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 3, name: "Deep Space Beats" })).toHaveCount(0);
 
   await injectAxe(page);
-  await checkA11y(page, "#app", {
+  await checkA11y(page, "main", {
     runOnly: {
       type: "tag",
       values: ["wcag2a", "wcag2aa"]
