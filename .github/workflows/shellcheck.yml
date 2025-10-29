@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - 'deploy/install/**/*.sh'
+      - 'scripts/**/*.sh'
       - '.github/workflows/shellcheck.yml'
   pull_request:
     paths:
       - 'deploy/install/**/*.sh'
+      - 'scripts/**/*.sh'
       - '.github/workflows/shellcheck.yml'
 
 jobs:
@@ -19,4 +21,4 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: Run shellcheck
-        run: shellcheck deploy/install/ubuntu.sh
+        run: shellcheck deploy/install/ubuntu.sh scripts/test-postgres.sh
