@@ -18,7 +18,9 @@ func TestPostgresRepositoryAcquireTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open postgres repository: %v", err)
 	}
-	defer cleanup()
+	if cleanup != nil {
+		defer cleanup()
+	}
 
 	pgRepo, ok := repo.(*postgresRepository)
 	if !ok {
