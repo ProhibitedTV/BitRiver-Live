@@ -68,9 +68,7 @@ Prefer containers? Check out `deploy/docker-compose.yml` for a pre-wired stack t
 
 ### Postgres backend
 
-> **Status:** The relational repository is still under active development. The API currently refuses to start with `--storage-driver postgres` and logs a clear error while work continues to reach feature parity with the JSON backend. Continue using the JSON datastore in production until a future release enables the Postgres driver.
-
-The repository now ships with SQL migrations under `deploy/migrations/` that mirror the JSON datastore schema. Apply them with your preferred migration tool or straight through `psql`:
+BitRiver Live now boots directly against Postgres once the schema is migrated. Apply the SQL files in `deploy/migrations/` with your preferred migration tool or straight through `psql`:
 
 ```bash
 psql "postgres://bitriver:bitriver@localhost:5432/bitriver?sslmode=disable" \
@@ -103,7 +101,7 @@ The same configuration can be supplied via environment variables:
 | `BITRIVER_LIVE_POSTGRES_HEALTH_INTERVAL` | Frequency of pool health probes. |
 | `BITRIVER_LIVE_POSTGRES_APP_NAME` | Optional `application_name` reported to Postgres. |
 
-`deploy/docker-compose.yml` provisions a local Postgres container and wires these environment variables automatically. Even though the driver is disabled at runtime, the schema and migrations remain available for early testing and to ease future cutovers once the backend is ready. The Postgres repository implementation lives in `internal/storage/postgres_repository.go`; ensure the migrations in `deploy/migrations/` stay in sync with the Go structs as development progresses.
+`deploy/docker-compose.yml` provisions a local Postgres container and wires these environment variables automatically. The Postgres repository implementation lives in `internal/storage/postgres_repository.go`; ensure the migrations in `deploy/migrations/` stay in sync with the Go structs as development progresses.
 
 ### Public viewer
 
