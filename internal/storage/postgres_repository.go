@@ -108,6 +108,7 @@ func NewPostgresRepository(dsn string, opts ...Option) (Repository, error) {
 		recordingRetention:  cfg.RecordingRetention,
 		objectStorage:       cfg.ObjectStorage,
 	}
+	repo.objectStorage = applyObjectStorageDefaults(repo.objectStorage)
 	repo.objectClient = newObjectStorageClient(repo.objectStorage)
 	return repo, nil
 }
@@ -642,7 +643,6 @@ func (r *postgresRepository) populateRecordingArtifacts(recording *models.Record
 		recording.Metadata = make(map[string]string)
 	}
 
-	ctx := context.Background()
 	createdAt := recording.CreatedAt.UTC().Format(time.RFC3339Nano)
 	if len(session.RenditionManifests) > 0 {
 		for idx, manifest := range session.RenditionManifests {
@@ -661,7 +661,9 @@ func (r *postgresRepository) populateRecordingArtifacts(recording *models.Record
 			if err != nil {
 				return fmt.Errorf("encode manifest payload: %w", err)
 			}
+			ctx, cancel := context.WithTimeout(context.Background(), r.objectStorage.requestTimeout())
 			ref, err := client.Upload(ctx, key, "application/json", data)
+			cancel()
 			if err != nil {
 				return fmt.Errorf("upload manifest %s: %w", manifest.Name, err)
 			}
@@ -688,7 +690,9 @@ func (r *postgresRepository) populateRecordingArtifacts(recording *models.Record
 	if err != nil {
 		return fmt.Errorf("encode thumbnail payload: %w", err)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), r.objectStorage.requestTimeout())
 	ref, err := client.Upload(ctx, thumbKey, "application/json", thumbData)
+	cancel()
 	if err != nil {
 		return fmt.Errorf("upload thumbnail: %w", err)
 	}
@@ -758,7 +762,6 @@ func (r *postgresRepository) deleteRecordingArtifacts(recording models.Recording
 	if len(recording.Metadata) == 0 {
 		return nil
 	}
-	ctx := context.Background()
 	deleted := make(map[string]struct{})
 	for key, objectKey := range recording.Metadata {
 		if !strings.HasPrefix(key, metadataManifestPrefix) && !strings.HasPrefix(key, metadataThumbnailPrefix) {
@@ -771,7 +774,10 @@ func (r *postgresRepository) deleteRecordingArtifacts(recording models.Recording
 		if _, exists := deleted[trimmed]; exists {
 			continue
 		}
-		if err := client.Delete(ctx, trimmed); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), r.objectStorage.requestTimeout())
+		err := client.Delete(ctx, trimmed)
+		cancel()
+		if err != nil {
 			return fmt.Errorf("delete object %s: %w", trimmed, err)
 		}
 		deleted[trimmed] = struct{}{}

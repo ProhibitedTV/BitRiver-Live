@@ -95,6 +95,23 @@ type ObjectStorageConfig struct {
 	Prefix         string
 	LifecycleDays  int
 	PublicEndpoint string
+	RequestTimeout time.Duration
+}
+
+const defaultObjectStorageRequestTimeout = 30 * time.Second
+
+func applyObjectStorageDefaults(cfg ObjectStorageConfig) ObjectStorageConfig {
+	if cfg.RequestTimeout <= 0 {
+		cfg.RequestTimeout = defaultObjectStorageRequestTimeout
+	}
+	return cfg
+}
+
+func (cfg ObjectStorageConfig) requestTimeout() time.Duration {
+	if cfg.RequestTimeout <= 0 {
+		return defaultObjectStorageRequestTimeout
+	}
+	return cfg.RequestTimeout
 }
 
 type objectStorageClient interface {
@@ -121,6 +138,7 @@ func (noopObjectStorageClient) Delete(ctx context.Context, key string) error {
 }
 
 func newObjectStorageClient(cfg ObjectStorageConfig) objectStorageClient {
+	cfg = applyObjectStorageDefaults(cfg)
 	trimmedBucket := strings.TrimSpace(cfg.Bucket)
 	trimmedEndpoint := strings.TrimSpace(cfg.Endpoint)
 	if trimmedBucket == "" || trimmedEndpoint == "" {
@@ -145,7 +163,7 @@ func newObjectStorageClient(cfg ObjectStorageConfig) objectStorageClient {
 	client := &s3ObjectStorageClient{
 		cfg:        sanitized,
 		endpoint:   baseURL,
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: sanitized.RequestTimeout},
 	}
 	return client
 }
@@ -758,6 +776,7 @@ func NewStorage(path string, opts ...Option) (*Storage, error) {
 	if err := store.load(); err != nil {
 		return nil, err
 	}
+	store.objectStorage = applyObjectStorageDefaults(store.objectStorage)
 	store.objectClient = newObjectStorageClient(store.objectStorage)
 	return store, nil
 }
@@ -2375,7 +2394,6 @@ func (s *Storage) populateRecordingArtifactsLocked(recording *models.Recording, 
 		recording.Metadata = make(map[string]string)
 	}
 
-	ctx := context.Background()
 	createdAt := recording.CreatedAt.UTC().Format(time.RFC3339Nano)
 	if len(session.RenditionManifests) > 0 {
 		for idx, manifest := range session.RenditionManifests {
@@ -2394,7 +2412,9 @@ func (s *Storage) populateRecordingArtifactsLocked(recording *models.Recording, 
 			if err != nil {
 				return fmt.Errorf("encode manifest payload: %w", err)
 			}
+			ctx, cancel := context.WithTimeout(context.Background(), s.objectStorage.requestTimeout())
 			ref, err := client.Upload(ctx, key, "application/json", data)
+			cancel()
 			if err != nil {
 				return fmt.Errorf("upload manifest %s: %w", manifest.Name, err)
 			}
@@ -2421,7 +2441,9 @@ func (s *Storage) populateRecordingArtifactsLocked(recording *models.Recording, 
 	if err != nil {
 		return fmt.Errorf("encode thumbnail payload: %w", err)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), s.objectStorage.requestTimeout())
 	ref, err := client.Upload(ctx, thumbKey, "application/json", thumbData)
+	cancel()
 	if err != nil {
 		return fmt.Errorf("upload thumbnail: %w", err)
 	}
@@ -2446,7 +2468,6 @@ func (s *Storage) deleteRecordingArtifactsLocked(recording models.Recording) err
 	if len(recording.Metadata) == 0 {
 		return nil
 	}
-	ctx := context.Background()
 	deleted := make(map[string]struct{})
 	for key, objectKey := range recording.Metadata {
 		if !strings.HasPrefix(key, metadataManifestPrefix) && !strings.HasPrefix(key, metadataThumbnailPrefix) {
@@ -2459,7 +2480,10 @@ func (s *Storage) deleteRecordingArtifactsLocked(recording models.Recording) err
 		if _, exists := deleted[trimmed]; exists {
 			continue
 		}
-		if err := client.Delete(ctx, trimmed); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), s.objectStorage.requestTimeout())
+		err := client.Delete(ctx, trimmed)
+		cancel()
+		if err != nil {
 			return fmt.Errorf("delete object %s: %w", trimmed, err)
 		}
 		deleted[trimmed] = struct{}{}
