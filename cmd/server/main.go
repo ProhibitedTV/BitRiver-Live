@@ -239,7 +239,24 @@ func main() {
 	}
 
 	sessions := auth.NewSessionManager(24*time.Hour, auth.WithStore(sessionStore))
-	queue, err := configureChatQueue(chatQueueDriver, chatRedisAddr, chatRedisPassword, chatRedisStream, chatRedisGroup, logger)
+	chatQueueCfg := chat.RedisQueueConfig{
+		Addr:       firstNonEmpty(*chatRedisAddr, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR")),
+		Addrs:      splitAndTrim(firstNonEmpty(*chatRedisAddrs, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDRS"))),
+		Username:   firstNonEmpty(*chatRedisUsername, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_USERNAME")),
+		Password:   firstNonEmpty(*chatRedisPassword, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD")),
+		Stream:     firstNonEmpty(*chatRedisStream, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_STREAM")),
+		Group:      firstNonEmpty(*chatRedisGroup, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_GROUP")),
+		MasterName: firstNonEmpty(*chatRedisMasterName, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_SENTINEL_MASTER")),
+		PoolSize:   resolveInt(*chatRedisPoolSize, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_POOL_SIZE"),
+		TLS: chat.RedisTLSConfig{
+			CAFile:             firstNonEmpty(*chatRedisTLSCA, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_CA")),
+			CertFile:           firstNonEmpty(*chatRedisTLSCert, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_CERT")),
+			KeyFile:            firstNonEmpty(*chatRedisTLSKey, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_KEY")),
+			ServerName:         firstNonEmpty(*chatRedisTLSServerName, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_SERVER_NAME")),
+			InsecureSkipVerify: resolveBool(*chatRedisTLSSkipVerify, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_SKIP_VERIFY"),
+		},
+	}
+	queue, err := configureChatQueue(*chatQueueDriver, chatQueueCfg, logger)
 	if err != nil {
 		logger.Error("failed to configure chat queue", "error", err)
 		os.Exit(1)
