@@ -1243,3 +1243,172 @@ func TestChannelVodsReturnPublishedRecordings(t *testing.T) {
 		t.Fatalf("expected duration %d, got %d", published.DurationSeconds, item.DurationSeconds)
 	}
 }
+
+func TestModerationQueueLifecycle(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	admin, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Admin",
+		Email:       "admin@example.com",
+		Roles:       []string{"admin"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser admin: %v", err)
+	}
+	reporter, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Reporter",
+		Email:       "reporter@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser reporter: %v", err)
+	}
+	target, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Target",
+		Email:       "target@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser target: %v", err)
+	}
+	channel, err := store.CreateChannel(admin.ID, "Studio", "", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	message, err := store.CreateChatMessage(channel.ID, target.ID, "spam message")
+	if err != nil {
+		t.Fatalf("CreateChatMessage: %v", err)
+	}
+	report, err := store.CreateChatReport(channel.ID, reporter.ID, target.ID, "spam", message.ID, "")
+	if err != nil {
+		t.Fatalf("CreateChatReport: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/moderation/queue", nil)
+	req = withUser(req, admin)
+	rec := httptest.NewRecorder()
+	handler.ModerationQueue(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected moderation queue status 200, got %d", rec.Code)
+	}
+	var initial moderationQueueResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &initial); err != nil {
+		t.Fatalf("decode moderation queue: %v", err)
+	}
+	if len(initial.Queue) != 1 {
+		t.Fatalf("expected one queued flag, got %d", len(initial.Queue))
+	}
+	flag := initial.Queue[0]
+	if flag.ID != report.ID {
+		t.Fatalf("expected flag id %s, got %s", report.ID, flag.ID)
+	}
+	if flag.Reporter == nil || flag.Reporter.DisplayName != reporter.DisplayName {
+		t.Fatalf("expected reporter display name %q", reporter.DisplayName)
+	}
+	if flag.ChannelTitle != "Studio" {
+		t.Fatalf("expected channel title Studio, got %s", flag.ChannelTitle)
+	}
+
+	body, _ := json.Marshal(map[string]string{"resolution": "dismiss"})
+	req = httptest.NewRequest(http.MethodPost, "/api/moderation/queue/"+report.ID, bytes.NewReader(body))
+	req = withUser(req, admin)
+	rec = httptest.NewRecorder()
+	handler.ModerationQueueByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected resolve status 200, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/moderation/queue", nil)
+	req = withUser(req, admin)
+	rec = httptest.NewRecorder()
+	handler.ModerationQueue(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected moderation queue status 200, got %d", rec.Code)
+	}
+	var resolved moderationQueueResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resolved); err != nil {
+		t.Fatalf("decode resolved queue: %v", err)
+	}
+	if len(resolved.Queue) != 0 {
+		t.Fatalf("expected empty queue after resolution, got %d", len(resolved.Queue))
+	}
+	if len(resolved.Actions) == 0 {
+		t.Fatal("expected recent moderation actions")
+	}
+	action := resolved.Actions[0]
+	if action.Action != "dismiss" {
+		t.Fatalf("expected action dismiss, got %s", action.Action)
+	}
+	if action.Moderator == nil || action.Moderator.ID != admin.ID {
+		t.Fatalf("expected moderator id %s", admin.ID)
+	}
+}
+
+func TestAnalyticsOverview(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	admin, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Admin",
+		Email:       "admin@example.com",
+		Roles:       []string{"admin"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser admin: %v", err)
+	}
+	creator, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Creator",
+		Email:       "creator@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser creator: %v", err)
+	}
+	viewer, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Viewer",
+		Email:       "viewer@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
+	channel, err := store.CreateChannel(creator.ID, "Main Stage", "", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	if err := store.FollowChannel(viewer.ID, channel.ID); err != nil {
+		t.Fatalf("FollowChannel: %v", err)
+	}
+	if _, err := store.CreateChatMessage(channel.ID, viewer.ID, "Hello world"); err != nil {
+		t.Fatalf("CreateChatMessage: %v", err)
+	}
+	if _, err := store.CreateChatMessage(channel.ID, viewer.ID, "Another message"); err != nil {
+		t.Fatalf("CreateChatMessage second: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/overview", nil)
+	req = withUser(req, admin)
+	rec := httptest.NewRecorder()
+	handler.AnalyticsOverview(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected analytics status 200, got %d", rec.Code)
+	}
+	var payload analyticsOverviewResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode analytics payload: %v", err)
+	}
+	if payload.Summary == nil {
+		t.Fatal("expected analytics summary")
+	}
+	if payload.Summary.ChatMessages < 2 {
+		t.Fatalf("expected chat messages >= 2, got %d", payload.Summary.ChatMessages)
+	}
+	if len(payload.PerChannel) != 1 {
+		t.Fatalf("expected single channel entry, got %d", len(payload.PerChannel))
+	}
+	entry := payload.PerChannel[0]
+	if entry.ChannelID != channel.ID {
+		t.Fatalf("expected channel id %s, got %s", channel.ID, entry.ChannelID)
+	}
+	if entry.Followers != 1 {
+		t.Fatalf("expected followers 1, got %d", entry.Followers)
+	}
+	if entry.ChatMessages < 2 {
+		t.Fatalf("expected channel chat messages >= 2, got %d", entry.ChatMessages)
+	}
+}

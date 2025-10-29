@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1407,6 +1408,61 @@ type chatModerationResponse struct {
 	ExpiresAt *string `json:"expiresAt,omitempty"`
 }
 
+type moderationUserResponse struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"displayName,omitempty"`
+}
+
+type moderationFlagResponse struct {
+	ID           string                  `json:"id"`
+	ChannelID    string                  `json:"channelId"`
+	ChannelTitle string                  `json:"channelTitle,omitempty"`
+	Reporter     *moderationUserResponse `json:"reporter,omitempty"`
+	Target       *moderationUserResponse `json:"target,omitempty"`
+	Reason       string                  `json:"reason,omitempty"`
+	Message      string                  `json:"message,omitempty"`
+	MessageID    string                  `json:"messageId,omitempty"`
+	EvidenceURL  string                  `json:"evidenceUrl,omitempty"`
+	CreatedAt    string                  `json:"createdAt,omitempty"`
+	FlaggedAt    string                  `json:"flaggedAt,omitempty"`
+}
+
+type moderationActionResponse struct {
+	ID           string                  `json:"id"`
+	ChannelID    string                  `json:"channelId"`
+	ChannelTitle string                  `json:"channelTitle,omitempty"`
+	Action       string                  `json:"action,omitempty"`
+	TargetID     string                  `json:"targetId,omitempty"`
+	Moderator    *moderationUserResponse `json:"moderator,omitempty"`
+	CreatedAt    string                  `json:"createdAt,omitempty"`
+}
+
+type moderationQueueResponse struct {
+	Queue   []moderationFlagResponse   `json:"queue"`
+	Actions []moderationActionResponse `json:"actions"`
+}
+
+type analyticsSummaryResponse struct {
+	LiveViewers      int     `json:"liveViewers"`
+	StreamsLive      int     `json:"streamsLive"`
+	WatchTimeMinutes float64 `json:"watchTimeMinutes"`
+	ChatMessages     int     `json:"chatMessages"`
+}
+
+type analyticsChannelResponse struct {
+	ChannelID       string  `json:"channelId"`
+	Title           string  `json:"title,omitempty"`
+	LiveViewers     int     `json:"liveViewers"`
+	Followers       int     `json:"followers"`
+	AvgWatchMinutes float64 `json:"avgWatchMinutes"`
+	ChatMessages    int     `json:"chatMessages"`
+}
+
+type analyticsOverviewResponse struct {
+	Summary    *analyticsSummaryResponse  `json:"summary,omitempty"`
+	PerChannel []analyticsChannelResponse `json:"perChannel"`
+}
+
 type chatRestrictionResponse struct {
 	ID        string  `json:"id"`
 	Type      string  `json:"type"`
@@ -1422,6 +1478,10 @@ type chatReportRequest struct {
 	Reason      string `json:"reason"`
 	MessageID   string `json:"messageId,omitempty"`
 	EvidenceURL string `json:"evidenceUrl,omitempty"`
+}
+
+type resolveModerationRequest struct {
+	Resolution string `json:"resolution"`
 }
 
 type chatReportResponse struct {
@@ -1553,6 +1613,14 @@ func newChatReportResponse(report models.ChatReport) chatReportResponse {
 	if report.ResolvedAt != nil {
 		resolved := report.ResolvedAt.Format(time.RFC3339Nano)
 		resp.ResolvedAt = &resolved
+	}
+	return resp
+}
+
+func newModerationUser(user models.User) moderationUserResponse {
+	resp := moderationUserResponse{ID: user.ID}
+	if user.DisplayName != "" {
+		resp.DisplayName = user.DisplayName
 	}
 	return resp
 }
@@ -2129,6 +2197,271 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 		w.Header().Set("Allow", "GET, POST")
 		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 	}
+}
+
+func (h *Handler) ModerationQueue(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+
+	if _, ok := h.requireRole(w, r, roleAdmin); !ok {
+		return
+	}
+
+	payload, err := h.moderationQueuePayload()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func (h *Handler) ModerationQueueByID(w http.ResponseWriter, r *http.Request) {
+	flagID := strings.TrimPrefix(r.URL.Path, "/api/moderation/queue/")
+	if flagID == "" {
+		writeError(w, http.StatusNotFound, fmt.Errorf("flag id missing"))
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+
+	actor, ok := h.requireRole(w, r, roleAdmin)
+	if !ok {
+		return
+	}
+
+	var req resolveModerationRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	resolution := strings.TrimSpace(req.Resolution)
+	if resolution == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("resolution is required"))
+		return
+	}
+
+	report, err := h.Store.ResolveChatReport(flagID, actor.ID, resolution)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, newChatReportResponse(report))
+}
+
+func (h *Handler) moderationQueuePayload() (moderationQueueResponse, error) {
+	channels := h.Store.ListChannels("")
+	type flaggedItem struct {
+		payload moderationFlagResponse
+		created time.Time
+	}
+	type actionItem struct {
+		payload moderationActionResponse
+		created time.Time
+	}
+	flags := make([]flaggedItem, 0)
+	actions := make([]actionItem, 0)
+	for _, channel := range channels {
+		reports, err := h.Store.ListChatReports(channel.ID, true)
+		if err != nil {
+			return moderationQueueResponse{}, err
+		}
+		for _, report := range reports {
+			reporter, hasReporter := h.Store.GetUser(report.ReporterID)
+			target, hasTarget := h.Store.GetUser(report.TargetID)
+			createdAt := report.CreatedAt
+			flag := moderationFlagResponse{
+				ID:           report.ID,
+				ChannelID:    report.ChannelID,
+				ChannelTitle: channel.Title,
+				Reason:       report.Reason,
+				MessageID:    report.MessageID,
+				EvidenceURL:  report.EvidenceURL,
+				CreatedAt:    createdAt.Format(time.RFC3339Nano),
+				FlaggedAt:    createdAt.Format(time.RFC3339Nano),
+			}
+			if hasReporter {
+				reporterResp := newModerationUser(reporter)
+				flag.Reporter = &reporterResp
+			}
+			if hasTarget {
+				targetResp := newModerationUser(target)
+				flag.Target = &targetResp
+			}
+			if strings.EqualFold(report.Status, "open") {
+				flags = append(flags, flaggedItem{payload: flag, created: createdAt})
+				continue
+			}
+			if strings.EqualFold(report.Status, "resolved") {
+				resolvedAt := createdAt
+				if report.ResolvedAt != nil {
+					resolvedAt = report.ResolvedAt.UTC()
+				}
+				moderatorResp := (*moderationUserResponse)(nil)
+				if resolverID := strings.TrimSpace(report.ResolverID); resolverID != "" {
+					if moderator, exists := h.Store.GetUser(resolverID); exists {
+						value := newModerationUser(moderator)
+						moderatorResp = &value
+					}
+				}
+				action := moderationActionResponse{
+					ID:           report.ID,
+					ChannelID:    report.ChannelID,
+					ChannelTitle: channel.Title,
+					Action:       strings.TrimSpace(report.Resolution),
+					TargetID:     report.TargetID,
+					Moderator:    moderatorResp,
+					CreatedAt:    resolvedAt.Format(time.RFC3339Nano),
+				}
+				actions = append(actions, actionItem{payload: action, created: resolvedAt})
+			}
+		}
+	}
+	sort.Slice(flags, func(i, j int) bool {
+		return flags[i].created.After(flags[j].created)
+	})
+	queue := make([]moderationFlagResponse, len(flags))
+	for i, item := range flags {
+		queue[i] = item.payload
+	}
+	sort.Slice(actions, func(i, j int) bool {
+		return actions[i].created.After(actions[j].created)
+	})
+	limit := len(actions)
+	if limit > 20 {
+		limit = 20
+	}
+	resolved := make([]moderationActionResponse, limit)
+	for i := 0; i < limit; i++ {
+		resolved[i] = actions[i].payload
+	}
+	return moderationQueueResponse{Queue: queue, Actions: resolved}, nil
+}
+
+func (h *Handler) AnalyticsOverview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+	if _, ok := h.requireRole(w, r, roleAdmin); !ok {
+		return
+	}
+	payload, err := h.computeAnalyticsOverview(time.Now().UTC())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func (h *Handler) computeAnalyticsOverview(now time.Time) (analyticsOverviewResponse, error) {
+	channels := h.Store.ListChannels("")
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	windowStart := now.Add(-24 * time.Hour)
+	summary := analyticsSummaryResponse{}
+	perChannel := make([]analyticsChannelResponse, 0, len(channels))
+	for _, channel := range channels {
+		entry := analyticsChannelResponse{
+			ChannelID: channel.ID,
+			Title:     channel.Title,
+			Followers: h.Store.CountFollowers(channel.ID),
+		}
+		if current, ok := h.Store.CurrentStreamSession(channel.ID); ok {
+			entry.LiveViewers = current.PeakConcurrent
+		}
+		sessions, err := h.Store.ListStreamSessions(channel.ID)
+		if err != nil {
+			return analyticsOverviewResponse{}, err
+		}
+		if len(sessions) > 0 {
+			totalMinutes := 0.0
+			for _, session := range sessions {
+				totalMinutes += sessionDurationMinutes(session, now)
+				summary.WatchTimeMinutes += streamWatchOverlapMinutes(session, windowStart, now)
+			}
+			entry.AvgWatchMinutes = totalMinutes / float64(len(sessions))
+		}
+		messages, err := h.Store.ListChatMessages(channel.ID, 0)
+		if err != nil {
+			return analyticsOverviewResponse{}, err
+		}
+		today := 0
+		for _, message := range messages {
+			if message.CreatedAt.Before(startOfDay) {
+				break
+			}
+			today++
+		}
+		entry.ChatMessages = today
+		summary.ChatMessages += today
+		summary.LiveViewers += entry.LiveViewers
+		perChannel = append(perChannel, entry)
+	}
+	streamsLive := int(metrics.Default().ActiveStreams())
+	if streamsLive <= 0 {
+		count := 0
+		for _, channel := range channels {
+			state := strings.ToLower(strings.TrimSpace(channel.LiveState))
+			if state == "live" || state == "starting" {
+				count++
+			}
+		}
+		streamsLive = count
+	}
+	summary.StreamsLive = streamsLive
+	sort.Slice(perChannel, func(i, j int) bool {
+		if perChannel[i].LiveViewers != perChannel[j].LiveViewers {
+			return perChannel[i].LiveViewers > perChannel[j].LiveViewers
+		}
+		if perChannel[i].Followers != perChannel[j].Followers {
+			return perChannel[i].Followers > perChannel[j].Followers
+		}
+		return perChannel[i].Title < perChannel[j].Title
+	})
+	resp := analyticsOverviewResponse{PerChannel: perChannel}
+	if len(perChannel) > 0 || summary.LiveViewers > 0 || summary.StreamsLive > 0 || summary.WatchTimeMinutes > 0 || summary.ChatMessages > 0 {
+		resp.Summary = &summary
+	}
+	return resp, nil
+}
+
+func sessionDurationMinutes(session models.StreamSession, now time.Time) float64 {
+	end := now
+	if session.EndedAt != nil && session.EndedAt.Before(end) {
+		end = *session.EndedAt
+	}
+	if end.Before(session.StartedAt) {
+		return 0
+	}
+	return end.Sub(session.StartedAt).Minutes()
+}
+
+func streamWatchOverlapMinutes(session models.StreamSession, windowStart, windowEnd time.Time) float64 {
+	start := session.StartedAt
+	if start.Before(windowStart) {
+		start = windowStart
+	}
+	end := windowEnd
+	if session.EndedAt != nil && session.EndedAt.Before(end) {
+		end = *session.EndedAt
+	}
+	if end.Before(windowStart) {
+		return 0
+	}
+	if end.After(windowEnd) {
+		end = windowEnd
+	}
+	if !end.After(start) {
+		return 0
+	}
+	return end.Sub(start).Minutes()
 }
 
 func (h *Handler) handleMonetizationRoutes(channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
