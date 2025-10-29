@@ -1713,7 +1713,8 @@ func (r *postgresRepository) ListChannels(ownerID string) []models.Channel {
 	if r == nil || r.pool == nil {
 		return nil
 	}
-	ctx := context.Background()
+	ctx, cancel := r.acquireContext()
+	defer cancel()
 	baseQuery := "SELECT id, owner_id, stream_key, title, category, tags, live_state, current_session_id, created_at, updated_at FROM channels"
 	var rows pgx.Rows
 	var err error
@@ -2595,7 +2596,8 @@ func (r *postgresRepository) ListChatMessages(channelID string, limit int) ([]mo
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
 	}
-	ctx := context.Background()
+	ctx, cancel := r.acquireContext()
+	defer cancel()
 
 	var exists bool
 	if err := r.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM channels WHERE id = $1)", channelID).Scan(&exists); err != nil {
@@ -2649,7 +2651,8 @@ func (r *postgresRepository) ChatRestrictions() chat.RestrictionsSnapshot {
 		return snapshot
 	}
 
-	ctx := context.Background()
+	ctx, cancel := r.acquireContext()
+	defer cancel()
 
 	banRows, err := r.pool.Query(ctx, "SELECT channel_id, user_id, actor_id, reason, issued_at FROM chat_bans")
 	if err == nil {
@@ -2729,7 +2732,8 @@ func (r *postgresRepository) IsChatBanned(channelID, userID string) bool {
 	if r == nil || r.pool == nil {
 		return false
 	}
-	ctx := context.Background()
+	ctx, cancel := r.acquireContext()
+	defer cancel()
 	var banned bool
 	if err := r.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM chat_bans WHERE channel_id = $1 AND user_id = $2)", channelID, userID).Scan(&banned); err != nil {
 		return false
@@ -2741,7 +2745,8 @@ func (r *postgresRepository) ChatTimeout(channelID, userID string) (time.Time, b
 	if r == nil || r.pool == nil {
 		return time.Time{}, false
 	}
-	ctx := context.Background()
+	ctx, cancel := r.acquireContext()
+	defer cancel()
 	var expires time.Time
 	if err := r.pool.QueryRow(ctx, "SELECT expires_at FROM chat_timeouts WHERE channel_id = $1 AND user_id = $2", channelID, userID).Scan(&expires); err != nil {
 		return time.Time{}, false

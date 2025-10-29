@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/ingest"
@@ -74,6 +76,23 @@ func postgresRepositoryFactory(t *testing.T, opts ...storage.Option) (storage.Re
 	t.Cleanup(func() { pool.Close() })
 
 	return repo, nil, nil
+}
+
+func postgresPoolFromRepository(t *testing.T, repo storage.Repository) *pgxpool.Pool {
+	t.Helper()
+	val := reflect.ValueOf(repo)
+	if val.Kind() != reflect.Pointer {
+		t.Fatalf("expected repository pointer, got %T", repo)
+	}
+	elem := val.Elem()
+	field := elem.FieldByName("pool")
+	if !field.IsValid() {
+		t.Fatal("postgres repository pool field missing")
+	}
+	if field.IsNil() {
+		t.Fatal("postgres repository pool is nil")
+	}
+	return (*pgxpool.Pool)(unsafe.Pointer(field.UnsafePointer()))
 }
 
 func openPostgresRepository(t *testing.T) storage.Repository {
@@ -198,6 +217,139 @@ func TestPostgresChatMessageHistoryPaging(t *testing.T) {
 	}
 	if len(paged) != 2 || paged[0].ID != msg3.ID || paged[1].ID != msg2.ID {
 		t.Fatalf("unexpected paged results: %v", paged)
+	}
+}
+
+func TestPostgresReadHelpersRespectAcquireTimeout(t *testing.T) {
+	repo, cleanup, err := postgresRepositoryFactory(t,
+		storage.WithPostgresPoolLimits(1, 1),
+		storage.WithPostgresAcquireTimeout(50*time.Millisecond),
+	)
+	if errors.Is(err, storage.ErrPostgresUnavailable) {
+		t.Skip("postgres repository unavailable in this build")
+	}
+	if err != nil {
+		t.Fatalf("failed to open postgres repository: %v", err)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	owner, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "owner", Email: "owner-timeout@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	target, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "target", Email: "target-timeout@example.com"})
+	if err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	channel, err := repo.CreateChannel(owner.ID, "Timeout Lobby", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	msg, err := repo.CreateChatMessage(channel.ID, owner.ID, "ping")
+	if err != nil {
+		t.Fatalf("create chat message: %v", err)
+	}
+	banEvent := chat.Event{
+		Type: chat.EventTypeModeration,
+		Moderation: &chat.ModerationEvent{
+			Action:    chat.ModerationActionBan,
+			ChannelID: channel.ID,
+			ActorID:   owner.ID,
+			TargetID:  target.ID,
+			Reason:    "timeout-check",
+		},
+		OccurredAt: time.Now().UTC(),
+	}
+	if err := repo.ApplyChatEvent(banEvent); err != nil {
+		t.Fatalf("apply ban event: %v", err)
+	}
+
+	pool := postgresPoolFromRepository(t, repo)
+	conn, err := pool.Acquire(context.Background())
+	if err != nil {
+		t.Fatalf("acquire pool connection: %v", err)
+	}
+	defer func() {
+		if conn != nil {
+			conn.Release()
+		}
+	}()
+
+	deadline := 250 * time.Millisecond
+	expectQuick := func(name string, fn func() error) {
+		t.Helper()
+		done := make(chan error, 1)
+		go func() {
+			done <- fn()
+		}()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("%s failed: %v", name, err)
+			}
+		case <-time.After(deadline):
+			t.Fatalf("%s did not respect acquire timeout", name)
+		}
+	}
+
+	expectQuick("ListChannels", func() error {
+		if channels := repo.ListChannels(""); channels != nil {
+			return fmt.Errorf("expected nil channel list while pool is exhausted, got %d", len(channels))
+		}
+		return nil
+	})
+
+	expectQuick("ListChatMessages", func() error {
+		_, err := repo.ListChatMessages(channel.ID, 0)
+		if err == nil {
+			return fmt.Errorf("expected chat message error while pool is exhausted")
+		}
+		if !errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Errorf("expected deadline exceeded, got %v", err)
+		}
+		return nil
+	})
+
+	expectQuick("ChatRestrictions", func() error {
+		snapshot := repo.ChatRestrictions()
+		if len(snapshot.Bans[channel.ID]) != 0 {
+			return fmt.Errorf("expected no bans returned while pool is exhausted")
+		}
+		return nil
+	})
+
+	expectQuick("IsChatBanned", func() error {
+		if repo.IsChatBanned(channel.ID, target.ID) {
+			return fmt.Errorf("expected ban lookup to fail while pool is exhausted")
+		}
+		return nil
+	})
+
+	conn.Release()
+	conn = nil
+
+	channels := repo.ListChannels("")
+	if len(channels) != 1 || channels[0].ID != channel.ID {
+		t.Fatalf("expected channel to be listed after releasing pool connection, got %+v", channels)
+	}
+
+	history, err := repo.ListChatMessages(channel.ID, 0)
+	if err != nil {
+		t.Fatalf("list chat messages after releasing connection: %v", err)
+	}
+	if len(history) != 1 || history[0].ID != msg.ID {
+		t.Fatalf("expected stored message after releasing connection, got %+v", history)
+	}
+
+	snapshot := repo.ChatRestrictions()
+	if _, ok := snapshot.Bans[channel.ID][target.ID]; !ok {
+		t.Fatalf("expected ban to be visible after releasing connection")
+	}
+
+	if !repo.IsChatBanned(channel.ID, target.ID) {
+		t.Fatalf("expected ban lookup to succeed after releasing connection")
 	}
 }
 
