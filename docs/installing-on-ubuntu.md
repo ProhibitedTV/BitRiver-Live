@@ -1,6 +1,6 @@
 # Installing BitRiver Live on Ubuntu
 
-This guide walks operators through bringing up BitRiver Live on an Ubuntu Server virtual machine. It covers VM preparation, package installation, data services, ingest components, application builds, and final verification. For reference architectures and service manifests, see [`deploy/docker-compose.yml`](../deploy/docker-compose.yml) and the systemd units documented in [`deploy/systemd/README.md`](../deploy/systemd/README.md). The sample SRS configuration in [`deploy/srs/conf/srs.conf`](../deploy/srs/conf/srs.conf) is referenced when enabling ingest.
+This guide walks operators through bringing up BitRiver Live on an Ubuntu Server virtual machine. It covers VM preparation, package installation, data services, ingest components, application builds, and final verification. For reference architectures and service manifests, see [`deploy/docker-compose.yml`](../deploy/docker-compose.yml), [`docs/scaling-topologies.md`](scaling-topologies.md), and the systemd units documented in [`deploy/systemd/README.md`](../deploy/systemd/README.md). The sample SRS configuration in [`deploy/srs/conf/srs.conf`](../deploy/srs/conf/srs.conf) is referenced when enabling ingest.
 
 > **Supported releases:** Ubuntu 22.04 LTS or later. Earlier releases may require updated package repositories for Node.js and Redis.
 
