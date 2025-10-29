@@ -8,8 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
+    "pretest:playwright": "next build",
     "test:playwright": "playwright test",
-    "test:integration": "npm run test && npm run test:playwright"
+    "start:test": "next start --hostname 127.0.0.1 --port 3000",
+    "test:integration": "npm run lint && npm run test && npm run test:playwright"
   },
   "dependencies": {
     "hls.js": "^1.4.12",
