@@ -225,6 +225,27 @@ npm run lint
 npm run test:integration
 ```
 
+The Postgres-backed storage tests run behind the build tag `postgres`. Provide a
+clean database that has been migrated with the contents of
+`deploy/migrations/` and point `BITRIVER_TEST_POSTGRES_DSN` at it before invoking
+`go test`:
+
+```bash
+BITRIVER_TEST_POSTGRES_DSN="postgres://bitriver:bitriver@127.0.0.1:5432/bitriver_test?sslmode=disable" \
+  go test -count=1 -tags postgres ./internal/storage/...
+```
+
+The DSN must reference an otherwise-empty database so tests can freely create
+and tear down rows. The repository ships with `scripts/test-postgres.sh`, which
+spins up an ephemeral Postgres container, applies the migrations, and runs the
+tagged suite in a single command (Docker required):
+
+```bash
+./scripts/test-postgres.sh
+```
+
+See [docs/testing.md](docs/testing.md) for the consolidated checklist used in CI.
+
 The Go suite exercises the JSON storage layer, REST handlers, and stream/chat flows end-to-end without requiring any external services or libraries beyond the Go standard library. The viewer integration suite combines Jest component coverage with Playwright accessibility checks—installing dependencies once with `npm install` prepares both harnesses. Playwright downloads its browsers on first run; if you need a CI-friendly install, run `npx playwright install --with-deps` ahead of the test command.
 
 ### Configure ingest orchestration
