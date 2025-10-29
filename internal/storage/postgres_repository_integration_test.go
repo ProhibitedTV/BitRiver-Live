@@ -175,6 +175,10 @@ func TestPostgresChatMessageLifecycle(t *testing.T) {
 	}
 }
 
+func TestPostgresOAuthLinking(t *testing.T) {
+	storage.RunRepositoryOAuthLinking(t, postgresRepositoryFactory)
+}
+
 func TestPostgresChatMessageHistoryPaging(t *testing.T) {
 	repo := openPostgresRepository(t)
 
@@ -728,6 +732,7 @@ var postgresTables = []string{
 	"follows",
 	"channels",
 	"profiles",
+	"oauth_accounts",
 	"users",
 }
 

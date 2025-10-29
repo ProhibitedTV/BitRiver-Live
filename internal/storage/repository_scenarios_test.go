@@ -130,6 +130,57 @@ func RunRepositoryUserLifecycle(t *testing.T, factory RepositoryFactory) {
 	}
 }
 
+// RunRepositoryOAuthLinking ensures repositories create and link users via
+// OAuth logins, covering new account creation, linking to an existing email,
+// and fallback metadata generation.
+func RunRepositoryOAuthLinking(t *testing.T, factory RepositoryFactory) {
+	repo := runRepository(t, factory)
+
+	created, err := repo.AuthenticateOAuth(OAuthLoginParams{
+		Provider:    "example",
+		Subject:     "subject-1",
+		Email:       "viewer@example.com",
+		DisplayName: "Viewer",
+	})
+	requireAvailable(t, err, "create oauth user")
+	if created.ID == "" {
+		t.Fatal("expected oauth login to return user with id")
+	}
+	if created.Email != "viewer@example.com" {
+		t.Fatalf("expected normalized email, got %q", created.Email)
+	}
+	if !created.SelfSignup {
+		t.Fatal("expected oauth-created user to be marked as self signup")
+	}
+	if len(created.Roles) != 1 || created.Roles[0] != "viewer" {
+		t.Fatalf("expected viewer role, got %v", created.Roles)
+	}
+
+	again, err := repo.AuthenticateOAuth(OAuthLoginParams{Provider: "example", Subject: "subject-1"})
+	requireAvailable(t, err, "reuse oauth account")
+	if again.ID != created.ID {
+		t.Fatalf("expected oauth login to reuse existing user, got %q", again.ID)
+	}
+
+	existing, err := repo.CreateUser(CreateUserParams{DisplayName: "Existing", Email: "linked@example.com", Roles: []string{"creator"}})
+	requireAvailable(t, err, "create existing user")
+
+	linked, err := repo.AuthenticateOAuth(OAuthLoginParams{Provider: "example", Subject: "subject-2", Email: "linked@example.com", DisplayName: "Viewer"})
+	requireAvailable(t, err, "link oauth account")
+	if linked.ID != existing.ID {
+		t.Fatalf("expected oauth login to link to existing user, got %q", linked.ID)
+	}
+
+	fallback, err := repo.AuthenticateOAuth(OAuthLoginParams{Provider: "acme", Subject: "unique"})
+	requireAvailable(t, err, "create fallback oauth user")
+	if !strings.HasSuffix(fallback.Email, "@acme.oauth") {
+		t.Fatalf("expected fallback email with provider domain, got %q", fallback.Email)
+	}
+	if strings.TrimSpace(fallback.DisplayName) == "" {
+		t.Fatal("expected fallback display name to be populated")
+	}
+}
+
 // RunRepositoryStreamKeyRotation ensures repositories generate and persist fresh stream keys.
 func RunRepositoryStreamKeyRotation(t *testing.T, factory RepositoryFactory) {
 	repo := runRepository(t, factory)

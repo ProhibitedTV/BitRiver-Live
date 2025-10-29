@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"bitriver-live/internal/auth"
+	"bitriver-live/internal/auth/oauth"
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
@@ -22,6 +24,7 @@ type Handler struct {
 	Store       storage.Repository
 	Sessions    *auth.SessionManager
 	ChatGateway *chat.Gateway
+	OAuth       oauth.Service
 }
 
 func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handler {
@@ -212,6 +215,176 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	setSessionCookie(w, r, token, expiresAt)
 	writeJSON(w, http.StatusOK, newAuthResponse(user, expiresAt))
+}
+
+type oauthStartRequest struct {
+	ReturnTo string `json:"returnTo"`
+}
+
+func (h *Handler) OAuthProviders(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+	providers := []oauth.ProviderInfo{}
+	if h.OAuth != nil {
+		providers = h.OAuth.Providers()
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"providers": providers})
+}
+
+func (h *Handler) OAuthByProvider(w http.ResponseWriter, r *http.Request) {
+	if h.OAuth == nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("oauth providers not configured"))
+		return
+	}
+	trimmed := strings.TrimPrefix(r.URL.Path, "/api/auth/oauth/")
+	parts := strings.Split(strings.Trim(trimmed, "/"), "/")
+	if len(parts) < 2 {
+		writeError(w, http.StatusNotFound, fmt.Errorf("invalid oauth path"))
+		return
+	}
+	provider := parts[0]
+	action := parts[1]
+	switch action {
+	case "start":
+		h.oauthStart(w, r, provider)
+	case "callback":
+		h.oauthCallback(w, r, provider)
+	default:
+		writeError(w, http.StatusNotFound, fmt.Errorf("invalid oauth action"))
+	}
+}
+
+func (h *Handler) oauthStart(w http.ResponseWriter, r *http.Request, provider string) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+	var req oauthStartRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	begin, err := h.OAuth.Begin(provider, sanitizeReturnPath(req.ReturnTo))
+	if errors.Is(err, oauth.ErrProviderNotConfigured) {
+		writeError(w, http.StatusNotFound, fmt.Errorf("oauth provider %s not configured", provider))
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"url": begin.URL})
+}
+
+func (h *Handler) oauthCallback(w http.ResponseWriter, r *http.Request, provider string) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+
+	query := r.URL.Query()
+	state := query.Get("state")
+	if errParam := query.Get("error"); errParam != "" {
+		redirectTarget := "/"
+		if dest, err := h.OAuth.Cancel(state); err == nil {
+			redirectTarget = dest
+		}
+		http.Redirect(w, r, appendQueryParam(sanitizeReturnPath(redirectTarget), "oauth", "error"), http.StatusSeeOther)
+		return
+	}
+
+	if state == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("state parameter is required"))
+		return
+	}
+	code := query.Get("code")
+	if strings.TrimSpace(code) == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("authorization code is required"))
+		return
+	}
+
+	completion, err := h.OAuth.Complete(provider, state, code)
+	returnPath := sanitizeReturnPath(completion.ReturnTo)
+	if returnPath == "" {
+		returnPath = "/"
+	}
+	if err != nil {
+		if errors.Is(err, oauth.ErrProviderNotConfigured) {
+			writeError(w, http.StatusNotFound, fmt.Errorf("oauth provider %s not configured", provider))
+			return
+		}
+		http.Redirect(w, r, appendQueryParam(returnPath, "oauth", "error"), http.StatusSeeOther)
+		return
+	}
+
+	user, err := h.Store.AuthenticateOAuth(storage.OAuthLoginParams{
+		Provider:    completion.Profile.Provider,
+		Subject:     completion.Profile.Subject,
+		Email:       completion.Profile.Email,
+		DisplayName: completion.Profile.DisplayName,
+	})
+	if err != nil {
+		http.Redirect(w, r, appendQueryParam(returnPath, "oauth", "error"), http.StatusSeeOther)
+		return
+	}
+
+	token, expiresAt, err := h.sessionManager().Create(user.ID)
+	if err != nil {
+		http.Redirect(w, r, appendQueryParam(returnPath, "oauth", "error"), http.StatusSeeOther)
+		return
+	}
+	setSessionCookie(w, r, token, expiresAt)
+	http.Redirect(w, r, appendQueryParam(returnPath, "oauth", "success"), http.StatusSeeOther)
+}
+
+func sanitizeReturnPath(input string) string {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return "/"
+	}
+	parsed, err := url.Parse(trimmed)
+	if err == nil {
+		if parsed.IsAbs() {
+			trimmed = parsed.Path
+			if parsed.RawQuery != "" {
+				trimmed = trimmed + "?" + parsed.RawQuery
+			}
+		} else {
+			trimmed = parsed.RequestURI()
+		}
+	}
+	trimmed = strings.TrimSpace(trimmed)
+	if trimmed == "" || strings.HasPrefix(trimmed, "//") {
+		return "/"
+	}
+	if !strings.HasPrefix(trimmed, "/") {
+		trimmed = "/" + trimmed
+	}
+	return trimmed
+}
+
+func appendQueryParam(path, key, value string) string {
+	parsed, err := url.Parse(path)
+	if err != nil {
+		parsed = &url.URL{Path: path}
+	}
+	if parsed.Scheme != "" && parsed.Host != "" {
+		parsed.Scheme = ""
+		parsed.Host = ""
+	}
+	query := parsed.Query()
+	query.Set(key, value)
+	parsed.RawQuery = query.Encode()
+	parsed.Fragment = ""
+	if parsed.Path == "" {
+		parsed.Path = "/"
+	}
+	return parsed.String()
 }
 
 func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {

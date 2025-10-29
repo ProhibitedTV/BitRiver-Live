@@ -449,6 +449,77 @@ func TestAuthenticateUser(t *testing.T) {
 	}
 }
 
+func TestAuthenticateOAuthCreatesUser(t *testing.T) {
+	store := newTestStore(t)
+
+	user, err := store.AuthenticateOAuth(OAuthLoginParams{
+		Provider:    "example",
+		Subject:     "subject-1",
+		Email:       "viewer@example.com",
+		DisplayName: "Viewer",
+	})
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth returned error: %v", err)
+	}
+	if user.ID == "" {
+		t.Fatal("expected user id to be assigned")
+	}
+	if user.Email != "viewer@example.com" {
+		t.Fatalf("expected normalized email, got %s", user.Email)
+	}
+	if !user.SelfSignup {
+		t.Fatal("expected OAuth-created user to be marked as self signup")
+	}
+	if len(user.Roles) != 1 || user.Roles[0] != "viewer" {
+		t.Fatalf("expected viewer role for OAuth user, got %v", user.Roles)
+	}
+
+	fetched, ok := store.FindUserByEmail("viewer@example.com")
+	if !ok || fetched.ID != user.ID {
+		t.Fatalf("expected user to be persisted, got %+v", fetched)
+	}
+
+	again, err := store.AuthenticateOAuth(OAuthLoginParams{Provider: "example", Subject: "subject-1"})
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth second call returned error: %v", err)
+	}
+	if again.ID != user.ID {
+		t.Fatalf("expected existing account to be reused, got %s", again.ID)
+	}
+}
+
+func TestAuthenticateOAuthLinksExistingUser(t *testing.T) {
+	store := newTestStore(t)
+
+	existing, err := store.CreateUser(CreateUserParams{DisplayName: "Existing", Email: "linked@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+
+	linked, err := store.AuthenticateOAuth(OAuthLoginParams{Provider: "example", Subject: "subject-2", Email: "linked@example.com", DisplayName: "Viewer"})
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth returned error: %v", err)
+	}
+	if linked.ID != existing.ID {
+		t.Fatalf("expected OAuth login to link to existing user, got %s", linked.ID)
+	}
+}
+
+func TestAuthenticateOAuthGeneratesFallbackEmail(t *testing.T) {
+	store := newTestStore(t)
+
+	user, err := store.AuthenticateOAuth(OAuthLoginParams{Provider: "acme", Subject: "unique"})
+	if err != nil {
+		t.Fatalf("AuthenticateOAuth returned error: %v", err)
+	}
+	if !strings.HasSuffix(user.Email, "@acme.oauth") {
+		t.Fatalf("expected fallback email with domain, got %s", user.Email)
+	}
+	if user.DisplayName == "" {
+		t.Fatal("expected fallback display name to be set")
+	}
+}
+
 func TestUpdateAndDeleteUser(t *testing.T) {
 	store := newTestStore(t)
 
@@ -1660,6 +1731,10 @@ func TestCreateSubscriptionAndCancel(t *testing.T) {
 
 func TestRepositoryStreamKeyRotation(t *testing.T) {
 	RunRepositoryStreamKeyRotation(t, jsonRepositoryFactory)
+}
+
+func TestRepositoryOAuthLinking(t *testing.T) {
+	RunRepositoryOAuthLinking(t, jsonRepositoryFactory)
 }
 
 func TestCloneDatasetCopiesModerationMetadata(t *testing.T) {
