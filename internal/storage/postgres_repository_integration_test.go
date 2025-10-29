@@ -392,8 +392,160 @@ func TestPostgresTipsLifecycle(t *testing.T) {
 	storage.RunRepositoryTipsLifecycle(t, postgresRepositoryFactory)
 }
 
+func TestPostgresTipReferenceUniqueness(t *testing.T) {
+	repo := openPostgresRepository(t)
+
+	owner, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	supporter, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "fan", Email: "fan@example.com"})
+	if err != nil {
+		t.Fatalf("create supporter: %v", err)
+	}
+	channel, err := repo.CreateChannel(owner.ID, "Lobby", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+
+	_, err = repo.CreateTip(storage.CreateTipParams{
+		ChannelID:  channel.ID,
+		FromUserID: supporter.ID,
+		Amount:     5,
+		Currency:   "usd",
+		Provider:   "stripe",
+		Reference:  "dup-ref",
+	})
+	if err != nil {
+		t.Fatalf("create tip: %v", err)
+	}
+
+	_, err = repo.CreateTip(storage.CreateTipParams{
+		ChannelID:  channel.ID,
+		FromUserID: supporter.ID,
+		Amount:     5,
+		Currency:   "usd",
+		Provider:   "stripe",
+		Reference:  "dup-ref",
+	})
+	if err == nil {
+		t.Fatal("expected duplicate tip reference to fail")
+	}
+}
+
 func TestPostgresSubscriptionsLifecycle(t *testing.T) {
 	storage.RunRepositorySubscriptionsLifecycle(t, postgresRepositoryFactory)
+}
+
+func TestPostgresSubscriptionReferenceUniqueness(t *testing.T) {
+	repo := openPostgresRepository(t)
+
+	owner, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	viewer, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "viewer", Email: "viewer@example.com"})
+	if err != nil {
+		t.Fatalf("create viewer: %v", err)
+	}
+	channel, err := repo.CreateChannel(owner.ID, "Lobby", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+
+	_, err = repo.CreateSubscription(storage.CreateSubscriptionParams{
+		ChannelID: channel.ID,
+		UserID:    viewer.ID,
+		Tier:      "tier1",
+		Provider:  "stripe",
+		Reference: "dup-sub",
+		Amount:    4.99,
+		Currency:  "usd",
+		Duration:  time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("create subscription: %v", err)
+	}
+
+	_, err = repo.CreateSubscription(storage.CreateSubscriptionParams{
+		ChannelID: channel.ID,
+		UserID:    viewer.ID,
+		Tier:      "tier1",
+		Provider:  "stripe",
+		Reference: "dup-sub",
+		Amount:    4.99,
+		Currency:  "usd",
+		Duration:  time.Hour,
+	})
+	if err == nil {
+		t.Fatal("expected duplicate subscription reference to fail")
+	}
+}
+
+func TestPostgresSubscriptionCancellationMetadata(t *testing.T) {
+	repo := openPostgresRepository(t)
+
+	owner, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	viewer, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "viewer", Email: "viewer@example.com"})
+	if err != nil {
+		t.Fatalf("create viewer: %v", err)
+	}
+	channel, err := repo.CreateChannel(owner.ID, "Lobby", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+
+	sub, err := repo.CreateSubscription(storage.CreateSubscriptionParams{
+		ChannelID: channel.ID,
+		UserID:    viewer.ID,
+		Tier:      "tier1",
+		Provider:  "stripe",
+		Reference: "cancel-me",
+		Amount:    4.99,
+		Currency:  "usd",
+		Duration:  time.Hour,
+		AutoRenew: true,
+	})
+	if err != nil {
+		t.Fatalf("create subscription: %v", err)
+	}
+
+	cancelled, err := repo.CancelSubscription(sub.ID, viewer.ID, "")
+	if err != nil {
+		t.Fatalf("cancel subscription: %v", err)
+	}
+	if cancelled.Status != "cancelled" {
+		t.Fatalf("expected cancelled status, got %q", cancelled.Status)
+	}
+	if cancelled.AutoRenew {
+		t.Fatalf("expected auto renew disabled after cancellation")
+	}
+	if cancelled.CancelledBy != viewer.ID {
+		t.Fatalf("expected cancelledBy %q, got %q", viewer.ID, cancelled.CancelledBy)
+	}
+	if cancelled.CancelledReason != "user_cancelled" {
+		t.Fatalf("expected default cancellation reason, got %q", cancelled.CancelledReason)
+	}
+	if cancelled.CancelledAt == nil {
+		t.Fatal("expected cancellation timestamp to be set")
+	}
+
+	stored, ok := repo.GetSubscription(sub.ID)
+	if !ok {
+		t.Fatalf("expected to load subscription %q", sub.ID)
+	}
+	if stored.Status != "cancelled" || stored.CancelledBy != viewer.ID || stored.CancelledReason != "user_cancelled" {
+		t.Fatalf("unexpected stored subscription after cancellation: %+v", stored)
+	}
+	if stored.AutoRenew {
+		t.Fatalf("expected stored subscription auto renew disabled")
+	}
+	if stored.CancelledAt == nil {
+		t.Fatal("expected stored cancellation timestamp")
+	}
 }
 
 func TestPostgresStreamKeyRotation(t *testing.T) {

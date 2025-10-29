@@ -1010,6 +1010,37 @@ func rolesFromDB(roles []string) []string {
 	return cloned
 }
 
+func scanSubscriptionRow(row pgx.Row) (models.Subscription, error) {
+	var (
+		sub               models.Subscription
+		cancelledBy       pgtype.Text
+		cancelledReason   pgtype.Text
+		cancelledAt       pgtype.Timestamptz
+		externalReference pgtype.Text
+	)
+	if err := row.Scan(&sub.ID, &sub.ChannelID, &sub.UserID, &sub.Tier, &sub.Provider, &sub.Reference, &sub.Amount, &sub.Currency, &sub.StartedAt, &sub.ExpiresAt, &sub.AutoRenew, &sub.Status, &cancelledBy, &cancelledReason, &cancelledAt, &externalReference); err != nil {
+		return models.Subscription{}, err
+	}
+	sub.StartedAt = sub.StartedAt.UTC()
+	sub.ExpiresAt = sub.ExpiresAt.UTC()
+	if cancelledBy.Valid {
+		sub.CancelledBy = cancelledBy.String
+	}
+	if cancelledReason.Valid {
+		sub.CancelledReason = cancelledReason.String
+	}
+	if cancelledAt.Valid {
+		ts := cancelledAt.Time.UTC()
+		sub.CancelledAt = &ts
+	} else {
+		sub.CancelledAt = nil
+	}
+	if externalReference.Valid {
+		sub.ExternalReference = externalReference.String
+	}
+	return sub, nil
+}
+
 func ensureUserExists(ctx context.Context, tx pgx.Tx, userID string) error {
 	var exists bool
 	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1)", userID).Scan(&exists); err != nil {
@@ -3138,27 +3169,399 @@ func (r *postgresRepository) ResolveChatReport(reportID, resolverID, resolution 
 }
 
 func (r *postgresRepository) CreateTip(params CreateTipParams) (models.Tip, error) {
-	return models.Tip{}, ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return models.Tip{}, ErrPostgresUnavailable
+	}
+
+	amount := params.Amount
+	if amount <= 0 {
+		return models.Tip{}, fmt.Errorf("amount must be positive")
+	}
+
+	currency := strings.ToUpper(strings.TrimSpace(params.Currency))
+	if currency == "" {
+		return models.Tip{}, fmt.Errorf("currency is required")
+	}
+
+	provider := strings.ToLower(strings.TrimSpace(params.Provider))
+	if provider == "" {
+		return models.Tip{}, fmt.Errorf("provider is required")
+	}
+
+	reference := strings.TrimSpace(params.Reference)
+	if reference == "" {
+		reference = fmt.Sprintf("tip-%d", time.Now().UnixNano())
+	}
+
+	wallet := strings.TrimSpace(params.WalletAddress)
+	message := strings.TrimSpace(params.Message)
+
+	id, err := r.generateID()
+	if err != nil {
+		return models.Tip{}, err
+	}
+
+	now := time.Now().UTC()
+	var tip models.Tip
+	saveErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("begin create tip tx: %w", err)
+		}
+		defer rollbackTx(ctx, tx)
+
+		if err := ensureChannelExists(ctx, tx, params.ChannelID); err != nil {
+			return err
+		}
+		if err := ensureUserExists(ctx, tx, params.FromUserID); err != nil {
+			return err
+		}
+
+		var exists bool
+		if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM tips WHERE provider = $1 AND reference = $2)", provider, reference).Scan(&exists); err != nil {
+			return fmt.Errorf("check tip reference: %w", err)
+		}
+		if exists {
+			return fmt.Errorf("tip reference %s/%s already exists", provider, reference)
+		}
+
+		var createdAt time.Time
+		if err := tx.QueryRow(ctx, "INSERT INTO tips (id, channel_id, from_user_id, amount, currency, provider, reference, wallet_address, message, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING created_at", id, params.ChannelID, params.FromUserID, amount, currency, provider, reference, wallet, message, now).Scan(&createdAt); err != nil {
+			return fmt.Errorf("insert tip: %w", err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit create tip: %w", err)
+		}
+
+		tip = models.Tip{
+			ID:            id,
+			ChannelID:     params.ChannelID,
+			FromUserID:    params.FromUserID,
+			Amount:        amount,
+			Currency:      currency,
+			Provider:      provider,
+			Reference:     reference,
+			WalletAddress: wallet,
+			Message:       message,
+			CreatedAt:     createdAt.UTC(),
+		}
+
+		return nil
+	})
+	if saveErr != nil {
+		return models.Tip{}, saveErr
+	}
+
+	return tip, nil
 }
 
 func (r *postgresRepository) ListTips(channelID string, limit int) ([]models.Tip, error) {
-	return nil, ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return nil, ErrPostgresUnavailable
+	}
+
+	tips := make([]models.Tip, 0)
+	listErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		tx, err := conn.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+		if err != nil {
+			return fmt.Errorf("begin list tips tx: %w", err)
+		}
+		defer rollbackTx(ctx, tx)
+
+		if err := ensureChannelExists(ctx, tx, channelID); err != nil {
+			return err
+		}
+
+		query := "SELECT id, channel_id, from_user_id, amount, currency, provider, reference, wallet_address, message, created_at FROM tips WHERE channel_id = $1 ORDER BY created_at DESC, id ASC"
+		args := []any{channelID}
+		if limit > 0 {
+			query += " LIMIT $2"
+			args = append(args, limit)
+		}
+
+		rows, err := tx.Query(ctx, query, args...)
+		if err != nil {
+			return fmt.Errorf("list tips: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var tip models.Tip
+			var walletAddress, message pgtype.Text
+			var createdAt time.Time
+			if err := rows.Scan(&tip.ID, &tip.ChannelID, &tip.FromUserID, &tip.Amount, &tip.Currency, &tip.Provider, &tip.Reference, &walletAddress, &message, &createdAt); err != nil {
+				return fmt.Errorf("scan tip: %w", err)
+			}
+			if walletAddress.Valid {
+				tip.WalletAddress = walletAddress.String
+			}
+			if message.Valid {
+				tip.Message = message.String
+			}
+			tip.CreatedAt = createdAt.UTC()
+			tips = append(tips, tip)
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit list tips: %w", err)
+		}
+
+		return nil
+	})
+	if listErr != nil {
+		return nil, listErr
+	}
+
+	return tips, nil
 }
 
 func (r *postgresRepository) CreateSubscription(params CreateSubscriptionParams) (models.Subscription, error) {
-	return models.Subscription{}, ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return models.Subscription{}, ErrPostgresUnavailable
+	}
+
+	if params.Duration <= 0 {
+		return models.Subscription{}, fmt.Errorf("duration must be positive")
+	}
+
+	amount := params.Amount
+	if amount < 0 {
+		return models.Subscription{}, fmt.Errorf("amount cannot be negative")
+	}
+
+	currency := strings.ToUpper(strings.TrimSpace(params.Currency))
+	if currency == "" {
+		return models.Subscription{}, fmt.Errorf("currency is required")
+	}
+
+	tier := strings.TrimSpace(params.Tier)
+	if tier == "" {
+		tier = "supporter"
+	}
+
+	provider := strings.ToLower(strings.TrimSpace(params.Provider))
+	if provider == "" {
+		return models.Subscription{}, fmt.Errorf("provider is required")
+	}
+
+	reference := strings.TrimSpace(params.Reference)
+	if reference == "" {
+		reference = fmt.Sprintf("sub-%d", time.Now().UnixNano())
+	}
+
+	externalRef := strings.TrimSpace(params.ExternalReference)
+
+	id, err := r.generateID()
+	if err != nil {
+		return models.Subscription{}, err
+	}
+
+	started := time.Now().UTC()
+	expires := started.Add(params.Duration)
+
+	var subscription models.Subscription
+	saveErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("begin create subscription tx: %w", err)
+		}
+		defer rollbackTx(ctx, tx)
+
+		if err := ensureChannelExists(ctx, tx, params.ChannelID); err != nil {
+			return err
+		}
+		if err := ensureUserExists(ctx, tx, params.UserID); err != nil {
+			return err
+		}
+
+		var exists bool
+		if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM subscriptions WHERE provider = $1 AND reference = $2)", provider, reference).Scan(&exists); err != nil {
+			return fmt.Errorf("check subscription reference: %w", err)
+		}
+		if exists {
+			return fmt.Errorf("subscription reference %s/%s already exists", provider, reference)
+		}
+
+		_, err = tx.Exec(ctx, "INSERT INTO subscriptions (id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, external_reference) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)", id, params.ChannelID, params.UserID, tier, provider, reference, amount, currency, started, expires, params.AutoRenew, "active", externalRef)
+		if err != nil {
+			return fmt.Errorf("insert subscription: %w", err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit create subscription: %w", err)
+		}
+
+		subscription = models.Subscription{
+			ID:                id,
+			ChannelID:         params.ChannelID,
+			UserID:            params.UserID,
+			Tier:              tier,
+			Provider:          provider,
+			Reference:         reference,
+			Amount:            amount,
+			Currency:          currency,
+			StartedAt:         started,
+			ExpiresAt:         expires,
+			AutoRenew:         params.AutoRenew,
+			Status:            "active",
+			ExternalReference: externalRef,
+		}
+
+		return nil
+	})
+	if saveErr != nil {
+		return models.Subscription{}, saveErr
+	}
+
+	return subscription, nil
 }
 
 func (r *postgresRepository) ListSubscriptions(channelID string, includeInactive bool) ([]models.Subscription, error) {
-	return nil, ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return nil, ErrPostgresUnavailable
+	}
+
+	subscriptions := make([]models.Subscription, 0)
+	listErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		tx, err := conn.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+		if err != nil {
+			return fmt.Errorf("begin list subscriptions tx: %w", err)
+		}
+		defer rollbackTx(ctx, tx)
+
+		if err := ensureChannelExists(ctx, tx, channelID); err != nil {
+			return err
+		}
+
+		query := "SELECT id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference FROM subscriptions WHERE channel_id = $1"
+		args := []any{channelID}
+		if !includeInactive {
+			query += " AND status = 'active'"
+		}
+		query += " ORDER BY started_at DESC, id ASC"
+
+		rows, err := tx.Query(ctx, query, args...)
+		if err != nil {
+			return fmt.Errorf("list subscriptions: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			sub, err := scanSubscriptionRow(rows)
+			if err != nil {
+				return fmt.Errorf("scan subscription: %w", err)
+			}
+			subscriptions = append(subscriptions, sub)
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit list subscriptions: %w", err)
+		}
+
+		return nil
+	})
+	if listErr != nil {
+		return nil, listErr
+	}
+
+	return subscriptions, nil
 }
 
 func (r *postgresRepository) GetSubscription(id string) (models.Subscription, bool) {
-	return models.Subscription{}, false
+	if r == nil || r.pool == nil {
+		return models.Subscription{}, false
+	}
+
+	ctx := context.Background()
+	row := r.pool.QueryRow(ctx, "SELECT id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference FROM subscriptions WHERE id = $1", id)
+
+	sub, err := scanSubscriptionRow(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.Subscription{}, false
+		}
+		return models.Subscription{}, false
+	}
+
+	return sub, true
 }
 
 func (r *postgresRepository) CancelSubscription(id, cancelledBy, reason string) (models.Subscription, error) {
-	return models.Subscription{}, ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return models.Subscription{}, ErrPostgresUnavailable
+	}
+
+	trimmedReason := strings.TrimSpace(reason)
+
+	var updated models.Subscription
+	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("begin cancel subscription tx: %w", err)
+		}
+		defer rollbackTx(ctx, tx)
+
+		row := tx.QueryRow(ctx, "SELECT id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference FROM subscriptions WHERE id = $1 FOR UPDATE", id)
+		sub, err := scanSubscriptionRow(row)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("subscription %s not found", id)
+			}
+			return fmt.Errorf("load subscription: %w", err)
+		}
+
+		if strings.EqualFold(sub.Status, "cancelled") {
+			updated = sub
+			if err := tx.Commit(ctx); err != nil {
+				return fmt.Errorf("commit cancel subscription no-op: %w", err)
+			}
+			return nil
+		}
+
+		if err := ensureUserExists(ctx, tx, cancelledBy); err != nil {
+			return err
+		}
+
+		now := time.Now().UTC()
+		finalReason := trimmedReason
+		if finalReason == "" {
+			if cancelledBy == sub.UserID {
+				finalReason = "user_cancelled"
+			} else {
+				finalReason = "cancelled_by_admin"
+			}
+		}
+
+		_, err = tx.Exec(ctx, "UPDATE subscriptions SET status = $1, auto_renew = FALSE, cancelled_by = $2, cancelled_reason = $3, cancelled_at = $4 WHERE id = $5", "cancelled", cancelledBy, finalReason, now, id)
+		if err != nil {
+			return fmt.Errorf("update subscription cancellation: %w", err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit cancel subscription: %w", err)
+		}
+
+		sub.Status = "cancelled"
+		sub.AutoRenew = false
+		sub.CancelledBy = cancelledBy
+		sub.CancelledReason = finalReason
+		sub.CancelledAt = &now
+
+		updated = sub
+		return nil
+	})
+	if err != nil {
+		return models.Subscription{}, err
+	}
+
+	return updated, nil
 }
 
 var _ Repository = (*postgresRepository)(nil)
