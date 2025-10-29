@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/api"
+	"bitriver-live/internal/auth/oauth"
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/web"
 )
@@ -32,6 +33,7 @@ type Config struct {
 	AuditLogger  *slog.Logger
 	Metrics      *metrics.Recorder
 	ViewerOrigin *url.URL
+	OAuth        oauth.Service
 }
 
 type Server struct {
@@ -49,12 +51,17 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	if recorder == nil {
 		recorder = metrics.Default()
 	}
+	if handler != nil {
+		handler.OAuth = cfg.OAuth
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handler.Health)
 	mux.Handle("/metrics", recorder.Handler())
 	mux.HandleFunc("/api/auth/signup", handler.Signup)
 	mux.HandleFunc("/api/auth/login", handler.Login)
+	mux.HandleFunc("/api/auth/oauth/providers", handler.OAuthProviders)
+	mux.HandleFunc("/api/auth/oauth/", handler.OAuthByProvider)
 	mux.HandleFunc("/api/auth/session", handler.Session)
 	mux.HandleFunc("/api/users", handler.Users)
 	mux.HandleFunc("/api/users/", handler.UserByID)

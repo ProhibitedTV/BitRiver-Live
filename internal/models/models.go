@@ -12,6 +12,15 @@ type User struct {
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
+type OAuthAccount struct {
+	Provider    string    `json:"provider"`
+	Subject     string    `json:"subject"`
+	UserID      string    `json:"userId"`
+	Email       string    `json:"email"`
+	DisplayName string    `json:"displayName"`
+	LinkedAt    time.Time `json:"linkedAt"`
+}
+
 type Channel struct {
 	ID               string    `json:"id"`
 	OwnerID          string    `json:"ownerId"`

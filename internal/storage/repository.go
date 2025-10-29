@@ -17,6 +17,7 @@ type Repository interface {
 
 	CreateUser(params CreateUserParams) (models.User, error)
 	AuthenticateUser(email, password string) (models.User, error)
+	AuthenticateOAuth(params OAuthLoginParams) (models.User, error)
 	ListUsers() []models.User
 	GetUser(id string) (models.User, bool)
 	UpdateUser(id string, update UserUpdate) (models.User, error)
