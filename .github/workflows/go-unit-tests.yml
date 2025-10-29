@@ -21,6 +21,4 @@ jobs:
       - name: Run unit tests
         env:
           GOTOOLCHAIN: local
-          GOPROXY: off
-          GOSUMDB: off
         run: go test ./... -count=1 -timeout=10s
