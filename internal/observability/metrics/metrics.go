@@ -148,30 +148,36 @@ func (r *Recorder) Write(w io.Writer) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	requestLabels := r.sortedRequestLabels()
+	streamEvents := r.sortedStreamEvents()
+	ingestServices := r.sortedIngestServices()
+	chatEvents := r.sortedChatEvents()
+	monetizationEvents := r.sortedMonetizationEvents()
+
 	fmt.Fprintln(w, "# HELP bitriver_http_requests_total Total number of HTTP requests processed by the API")
 	fmt.Fprintln(w, "# TYPE bitriver_http_requests_total counter")
-	for _, label := range r.sortedRequestLabels() {
+	for _, label := range requestLabels {
 		count := r.requestCount[label]
 		fmt.Fprintf(w, "bitriver_http_requests_total{method=\"%s\",path=\"%s\",status=\"%s\"} %d\n", label.method, label.path, label.status, count)
 	}
 
 	fmt.Fprintln(w, "# HELP bitriver_http_request_duration_seconds_sum Cumulative duration of HTTP requests in seconds")
 	fmt.Fprintln(w, "# TYPE bitriver_http_request_duration_seconds_sum counter")
-	for _, label := range r.sortedRequestLabels() {
+	for _, label := range requestLabels {
 		duration := r.requestDuration[label].Seconds()
 		fmt.Fprintf(w, "bitriver_http_request_duration_seconds_sum{method=\"%s\",path=\"%s\",status=\"%s\"} %f\n", label.method, label.path, label.status, duration)
 	}
 
 	fmt.Fprintln(w, "# HELP bitriver_http_request_duration_seconds_count Total number of observations for request durations")
 	fmt.Fprintln(w, "# TYPE bitriver_http_request_duration_seconds_count counter")
-	for _, label := range r.sortedRequestLabels() {
+	for _, label := range requestLabels {
 		count := r.requestCount[label]
 		fmt.Fprintf(w, "bitriver_http_request_duration_seconds_count{method=\"%s\",path=\"%s\",status=\"%s\"} %d\n", label.method, label.path, label.status, count)
 	}
 
 	fmt.Fprintln(w, "# HELP bitriver_stream_events_total Stream lifecycle events by type")
 	fmt.Fprintln(w, "# TYPE bitriver_stream_events_total counter")
-	for _, event := range r.sortedStreamEvents() {
+	for _, event := range streamEvents {
 		value := r.streamEvents[event]
 		fmt.Fprintf(w, "bitriver_stream_events_total{event=\"%s\"} %d\n", event, value)
 	}
@@ -182,7 +188,7 @@ func (r *Recorder) Write(w io.Writer) {
 
 	fmt.Fprintln(w, "# HELP bitriver_ingest_health Health status reported by ingest dependencies (1=ok,0=disabled,-1=degraded)")
 	fmt.Fprintln(w, "# TYPE bitriver_ingest_health gauge")
-	for _, service := range r.sortedIngestServices() {
+	for _, service := range ingestServices {
 		value := r.ingestHealthValue[service]
 		status := r.ingestHealthState[service]
 		fmt.Fprintf(w, "bitriver_ingest_health{service=\"%s\",status=\"%s\"} %f\n", service, status, value)
@@ -190,21 +196,21 @@ func (r *Recorder) Write(w io.Writer) {
 
 	fmt.Fprintln(w, "# HELP bitriver_chat_events_total Chat events by type")
 	fmt.Fprintln(w, "# TYPE bitriver_chat_events_total counter")
-	for _, event := range r.sortedChatEvents() {
+	for _, event := range chatEvents {
 		count := r.chatEvents[event]
 		fmt.Fprintf(w, "bitriver_chat_events_total{event=\"%s\"} %d\n", event, count)
 	}
 
 	fmt.Fprintln(w, "# HELP bitriver_monetization_events_total Monetization events by type")
 	fmt.Fprintln(w, "# TYPE bitriver_monetization_events_total counter")
-	for _, event := range r.sortedMonetizationEvents() {
+	for _, event := range monetizationEvents {
 		count := r.monetizationCount[event]
 		fmt.Fprintf(w, "bitriver_monetization_events_total{event=\"%s\"} %d\n", event, count)
 	}
 
 	fmt.Fprintln(w, "# HELP bitriver_monetization_amount_sum Total monetization amount by event type")
 	fmt.Fprintln(w, "# TYPE bitriver_monetization_amount_sum counter")
-	for _, event := range r.sortedMonetizationEvents() {
+	for _, event := range monetizationEvents {
 		total := r.monetizationTotal[event]
 		fmt.Fprintf(w, "bitriver_monetization_amount_sum{event=\"%s\"} %f\n", event, total)
 	}
@@ -255,8 +261,21 @@ func (r *Recorder) sortedChatEvents() []string {
 }
 
 func (r *Recorder) sortedMonetizationEvents() []string {
-	events := make([]string, 0, len(r.monetizationCount))
+	totalEvents := len(r.monetizationCount) + len(r.monetizationTotal)
+	seen := make(map[string]struct{}, totalEvents)
+	events := make([]string, 0, totalEvents)
 	for event := range r.monetizationCount {
+		if _, exists := seen[event]; exists {
+			continue
+		}
+		seen[event] = struct{}{}
+		events = append(events, event)
+	}
+	for event := range r.monetizationTotal {
+		if _, exists := seen[event]; exists {
+			continue
+		}
+		seen[event] = struct{}{}
 		events = append(events, event)
 	}
 	sort.Strings(events)
