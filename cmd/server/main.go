@@ -169,6 +169,8 @@ func main() {
 		dataFile := resolveDataPath(*dataPath)
 		store, err = storage.NewJSONRepository(dataFile, options...)
 	case "postgres":
+		logger.Error("postgres storage driver is unavailable in this build; use the JSON datastore until parity is completed")
+		os.Exit(1)
 		storagePostgresDSN = firstNonEmpty(*postgresDSN, os.Getenv("BITRIVER_LIVE_POSTGRES_DSN"))
 		if strings.TrimSpace(storagePostgresDSN) == "" {
 			logger.Error("postgres storage selected without DSN")

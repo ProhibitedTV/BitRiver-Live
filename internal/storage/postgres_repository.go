@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +17,7 @@ import (
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -457,6 +461,517 @@ func (r *postgresRepository) generateID() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
+func (r *postgresRepository) generateStreamKey() (string, error) {
+	bytes := make([]byte, 24)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("generate stream key: %w", err)
+	}
+	return strings.ToUpper(hex.EncodeToString(bytes)), nil
+}
+
+func encodeDonationAddresses(addresses []models.CryptoAddress) ([]byte, error) {
+	if addresses == nil {
+		addresses = []models.CryptoAddress{}
+	}
+	data, err := json.Marshal(addresses)
+	if err != nil {
+		return nil, fmt.Errorf("encode donation addresses: %w", err)
+	}
+	return data, nil
+}
+
+func decodeDonationAddresses(data []byte) ([]models.CryptoAddress, error) {
+	if len(data) == 0 {
+		return []models.CryptoAddress{}, nil
+	}
+	var addresses []models.CryptoAddress
+	if err := json.Unmarshal(data, &addresses); err != nil {
+		return nil, fmt.Errorf("decode donation addresses: %w", err)
+	}
+	if addresses == nil {
+		addresses = []models.CryptoAddress{}
+	}
+	return addresses, nil
+}
+
+func (r *postgresRepository) loadStreamSession(ctx context.Context, id string) (models.StreamSession, bool) {
+	if strings.TrimSpace(id) == "" {
+		return models.StreamSession{}, false
+	}
+	var (
+		channelID       string
+		startedAt       time.Time
+		endedAt         pgtype.Timestamptz
+		renditions      []string
+		peak            int
+		originURL       string
+		playbackURL     string
+		ingestEndpoints []string
+		ingestJobIDs    []string
+	)
+	err := r.pool.QueryRow(ctx, "SELECT channel_id, started_at, ended_at, renditions, peak_concurrent, origin_url, playback_url, ingest_endpoints, ingest_job_ids FROM stream_sessions WHERE id = $1", id).
+		Scan(&channelID, &startedAt, &endedAt, &renditions, &peak, &originURL, &playbackURL, &ingestEndpoints, &ingestJobIDs)
+	if err != nil {
+		return models.StreamSession{}, false
+	}
+	manifestsRows, err := r.pool.Query(ctx, "SELECT name, manifest_url, bitrate FROM stream_session_manifests WHERE session_id = $1", id)
+	if err != nil {
+		return models.StreamSession{}, false
+	}
+	defer manifestsRows.Close()
+	manifests := make([]models.RenditionManifest, 0)
+	for manifestsRows.Next() {
+		var name, url string
+		var bitrate pgtype.Int4
+		if err := manifestsRows.Scan(&name, &url, &bitrate); err != nil {
+			return models.StreamSession{}, false
+		}
+		entry := models.RenditionManifest{Name: name, ManifestURL: url}
+		if bitrate.Valid {
+			entry.Bitrate = int(bitrate.Int32)
+		}
+		manifests = append(manifests, entry)
+	}
+	if err := manifestsRows.Err(); err != nil {
+		return models.StreamSession{}, false
+	}
+	session := models.StreamSession{
+		ID:                 id,
+		ChannelID:          channelID,
+		StartedAt:          startedAt.UTC(),
+		Renditions:         append([]string{}, renditions...),
+		PeakConcurrent:     peak,
+		OriginURL:          originURL,
+		PlaybackURL:        playbackURL,
+		IngestEndpoints:    append([]string{}, ingestEndpoints...),
+		IngestJobIDs:       append([]string{}, ingestJobIDs...),
+		RenditionManifests: manifests,
+	}
+	if endedAt.Valid {
+		ts := endedAt.Time.UTC()
+		session.EndedAt = &ts
+	}
+	if session.Renditions == nil {
+		session.Renditions = []string{}
+	}
+	if session.RenditionManifests == nil {
+		session.RenditionManifests = []models.RenditionManifest{}
+	}
+	if session.IngestEndpoints == nil {
+		session.IngestEndpoints = []string{}
+	}
+	if session.IngestJobIDs == nil {
+		session.IngestJobIDs = []string{}
+	}
+	return session, true
+}
+
+func (r *postgresRepository) recordingDeadline(now time.Time, published bool) *time.Time {
+	var window time.Duration
+	if published {
+		window = r.recordingRetention.Published
+	} else {
+		window = r.recordingRetention.Unpublished
+	}
+	if window <= 0 {
+		return nil
+	}
+	deadline := now.Add(window)
+	return &deadline
+}
+
+func (r *postgresRepository) createRecording(session models.StreamSession, channel models.Channel, ended time.Time) (models.Recording, error) {
+	recordingID, err := r.generateID()
+	if err != nil {
+		return models.Recording{}, err
+	}
+	duration := int(ended.Sub(session.StartedAt).Round(time.Second).Seconds())
+	if duration < 0 {
+		duration = 0
+	}
+	title := strings.TrimSpace(channel.Title)
+	if title == "" {
+		title = fmt.Sprintf("Recording %s", session.ID)
+	}
+	metadata := map[string]string{
+		"channelId":  channel.ID,
+		"sessionId":  session.ID,
+		"startedAt":  session.StartedAt.UTC().Format(time.RFC3339Nano),
+		"endedAt":    ended.UTC().Format(time.RFC3339Nano),
+		"renditions": strconv.Itoa(len(session.RenditionManifests)),
+	}
+	if session.PeakConcurrent > 0 {
+		metadata["peakConcurrent"] = strconv.Itoa(session.PeakConcurrent)
+	}
+	recording := models.Recording{
+		ID:              recordingID,
+		ChannelID:       channel.ID,
+		SessionID:       session.ID,
+		Title:           title,
+		DurationSeconds: duration,
+		PlaybackBaseURL: session.PlaybackURL,
+		Metadata:        metadata,
+		CreatedAt:       ended,
+	}
+	if deadline := r.recordingDeadline(ended, false); deadline != nil {
+		recording.RetainUntil = deadline
+	}
+	if len(session.RenditionManifests) > 0 {
+		renditions := make([]models.RecordingRendition, 0, len(session.RenditionManifests))
+		for _, manifest := range session.RenditionManifests {
+			renditions = append(renditions, models.RecordingRendition{
+				Name:        manifest.Name,
+				ManifestURL: manifest.ManifestURL,
+				Bitrate:     manifest.Bitrate,
+			})
+		}
+		recording.Renditions = renditions
+	}
+	if err := r.populateRecordingArtifacts(&recording, session); err != nil {
+		return models.Recording{}, err
+	}
+	return recording, nil
+}
+
+func (r *postgresRepository) populateRecordingArtifacts(recording *models.Recording, session models.StreamSession) error {
+	client := r.objectClient
+	if client == nil || !client.Enabled() {
+		return nil
+	}
+	if recording.Metadata == nil {
+		recording.Metadata = make(map[string]string)
+	}
+
+	ctx := context.Background()
+	createdAt := recording.CreatedAt.UTC().Format(time.RFC3339Nano)
+	if len(session.RenditionManifests) > 0 {
+		for idx, manifest := range session.RenditionManifests {
+			key := buildObjectKey("recordings", recording.ID, "manifests", normalizeObjectComponent(manifest.Name)+".json")
+			payload := map[string]any{
+				"recordingId": recording.ID,
+				"sessionId":   recording.SessionID,
+				"name":        manifest.Name,
+				"source":      manifest.ManifestURL,
+				"createdAt":   createdAt,
+			}
+			if manifest.Bitrate > 0 {
+				payload["bitrate"] = manifest.Bitrate
+			}
+			data, err := json.Marshal(payload)
+			if err != nil {
+				return fmt.Errorf("encode manifest payload: %w", err)
+			}
+			ref, err := client.Upload(ctx, key, "application/json", data)
+			if err != nil {
+				return fmt.Errorf("upload manifest %s: %w", manifest.Name, err)
+			}
+			if ref.Key != "" {
+				recording.Metadata[manifestMetadataKey(manifest.Name)] = ref.Key
+			}
+			if ref.URL != "" && idx < len(recording.Renditions) {
+				recording.Renditions[idx].ManifestURL = ref.URL
+			}
+		}
+	}
+
+	thumbID, err := r.generateID()
+	if err != nil {
+		return fmt.Errorf("generate thumbnail id: %w", err)
+	}
+	thumbKey := buildObjectKey("recordings", recording.ID, "thumbnails", thumbID+".json")
+	thumbPayload := map[string]any{
+		"recordingId": recording.ID,
+		"sessionId":   recording.SessionID,
+		"createdAt":   createdAt,
+	}
+	thumbData, err := json.Marshal(thumbPayload)
+	if err != nil {
+		return fmt.Errorf("encode thumbnail payload: %w", err)
+	}
+	ref, err := client.Upload(ctx, thumbKey, "application/json", thumbData)
+	if err != nil {
+		return fmt.Errorf("upload thumbnail: %w", err)
+	}
+	if ref.Key != "" {
+		recording.Metadata[thumbnailMetadataKey(thumbID)] = ref.Key
+	}
+	thumbnail := models.RecordingThumbnail{
+		ID:          thumbID,
+		RecordingID: recording.ID,
+		URL:         ref.URL,
+		CreatedAt:   recording.CreatedAt,
+	}
+	recording.Thumbnails = append(recording.Thumbnails, thumbnail)
+	return nil
+}
+
+func (r *postgresRepository) insertRecording(ctx context.Context, tx pgx.Tx, recording models.Recording) error {
+	metadata := recording.Metadata
+	if metadata == nil {
+		metadata = make(map[string]string)
+	}
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("encode recording metadata: %w", err)
+	}
+	var publishedAt any
+	if recording.PublishedAt != nil {
+		publishedAt = recording.PublishedAt
+	}
+	var retainUntil any
+	if recording.RetainUntil != nil {
+		retainUntil = recording.RetainUntil
+	}
+	_, err = tx.Exec(ctx, "INSERT INTO recordings (id, channel_id, session_id, title, duration_seconds, playback_base_url, metadata, published_at, created_at, retain_until) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+		recording.ID,
+		recording.ChannelID,
+		recording.SessionID,
+		recording.Title,
+		recording.DurationSeconds,
+		recording.PlaybackBaseURL,
+		metadataJSON,
+		publishedAt,
+		recording.CreatedAt,
+		retainUntil,
+	)
+	if err != nil {
+		return fmt.Errorf("insert recording %s: %w", recording.ID, err)
+	}
+	for _, rendition := range recording.Renditions {
+		if _, err := tx.Exec(ctx, "INSERT INTO recording_renditions (recording_id, name, manifest_url, bitrate) VALUES ($1, $2, $3, $4)", recording.ID, rendition.Name, rendition.ManifestURL, rendition.Bitrate); err != nil {
+			return fmt.Errorf("insert recording rendition %s: %w", rendition.Name, err)
+		}
+	}
+	for _, thumb := range recording.Thumbnails {
+		if _, err := tx.Exec(ctx, "INSERT INTO recording_thumbnails (id, recording_id, url, width, height, created_at) VALUES ($1, $2, $3, $4, $5, $6)", thumb.ID, recording.ID, thumb.URL, thumb.Width, thumb.Height, thumb.CreatedAt); err != nil {
+			return fmt.Errorf("insert recording thumbnail %s: %w", thumb.ID, err)
+		}
+	}
+	return nil
+}
+
+func (r *postgresRepository) deleteRecordingArtifacts(recording models.Recording) error {
+	client := r.objectClient
+	if client == nil || !client.Enabled() {
+		return nil
+	}
+	if len(recording.Metadata) == 0 {
+		return nil
+	}
+	ctx := context.Background()
+	deleted := make(map[string]struct{})
+	for key, objectKey := range recording.Metadata {
+		if !strings.HasPrefix(key, metadataManifestPrefix) && !strings.HasPrefix(key, metadataThumbnailPrefix) {
+			continue
+		}
+		trimmed := strings.TrimSpace(objectKey)
+		if trimmed == "" {
+			continue
+		}
+		if _, exists := deleted[trimmed]; exists {
+			continue
+		}
+		if err := client.Delete(ctx, trimmed); err != nil {
+			return fmt.Errorf("delete object %s: %w", trimmed, err)
+		}
+		deleted[trimmed] = struct{}{}
+	}
+	return nil
+}
+
+func (r *postgresRepository) deleteClipArtifacts(clip models.ClipExport) error {
+	client := r.objectClient
+	if client == nil || !client.Enabled() {
+		return nil
+	}
+	trimmed := strings.TrimSpace(clip.StorageObject)
+	if trimmed == "" {
+		return nil
+	}
+	if err := client.Delete(context.Background(), trimmed); err != nil {
+		return fmt.Errorf("delete clip object %s: %w", trimmed, err)
+	}
+	return nil
+}
+
+func (r *postgresRepository) purgeExpiredRecordings(ctx context.Context) error {
+	if r == nil || r.pool == nil {
+		return ErrPostgresUnavailable
+	}
+	now := time.Now().UTC()
+	rows, err := r.pool.Query(ctx, "SELECT id, metadata FROM recordings WHERE retain_until IS NOT NULL AND retain_until <= $1", now)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	ids := make([]string, 0)
+	recordings := make(map[string]models.Recording)
+	for rows.Next() {
+		var id string
+		var metadataBytes []byte
+		if err := rows.Scan(&id, &metadataBytes); err != nil {
+			return err
+		}
+		meta := make(map[string]string)
+		if len(metadataBytes) > 0 {
+			if err := json.Unmarshal(metadataBytes, &meta); err != nil {
+				return fmt.Errorf("decode recording metadata: %w", err)
+			}
+		}
+		recordings[id] = models.Recording{ID: id, Metadata: meta}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, id := range ids {
+		recording := recordings[id]
+		if err := r.deleteRecordingArtifacts(recording); err != nil {
+			return err
+		}
+		clipRows, err := r.pool.Query(ctx, "SELECT id, storage_object FROM clip_exports WHERE recording_id = $1", id)
+		if err != nil {
+			return fmt.Errorf("load clip exports for recording %s: %w", id, err)
+		}
+		clips := make([]models.ClipExport, 0)
+		for clipRows.Next() {
+			var clip models.ClipExport
+			if err := clipRows.Scan(&clip.ID, &clip.StorageObject); err != nil {
+				clipRows.Close()
+				return fmt.Errorf("scan clip export: %w", err)
+			}
+			clips = append(clips, clip)
+		}
+		clipRows.Close()
+		for _, clip := range clips {
+			if err := r.deleteClipArtifacts(clip); err != nil {
+				return err
+			}
+		}
+		if _, err := r.pool.Exec(ctx, "DELETE FROM recordings WHERE id = $1", id); err != nil {
+			return fmt.Errorf("delete recording %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
+func (r *postgresRepository) loadRecording(ctx context.Context, id string) (models.Recording, bool, error) {
+	var (
+		channelID       string
+		sessionID       string
+		title           string
+		duration        int
+		playbackBaseURL string
+		metadataBytes   []byte
+		publishedAt     pgtype.Timestamptz
+		createdAt       time.Time
+		retainUntil     pgtype.Timestamptz
+	)
+	err := r.pool.QueryRow(ctx, "SELECT channel_id, session_id, title, duration_seconds, playback_base_url, metadata, published_at, created_at, retain_until FROM recordings WHERE id = $1", id).
+		Scan(&channelID, &sessionID, &title, &duration, &playbackBaseURL, &metadataBytes, &publishedAt, &createdAt, &retainUntil)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return models.Recording{}, false, nil
+	}
+	if err != nil {
+		return models.Recording{}, false, err
+	}
+	metadata := make(map[string]string)
+	if len(metadataBytes) > 0 {
+		if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
+			return models.Recording{}, false, fmt.Errorf("decode recording metadata: %w", err)
+		}
+	}
+	recording := models.Recording{
+		ID:              id,
+		ChannelID:       channelID,
+		SessionID:       sessionID,
+		Title:           title,
+		DurationSeconds: duration,
+		PlaybackBaseURL: playbackBaseURL,
+		Metadata:        metadata,
+		CreatedAt:       createdAt.UTC(),
+	}
+	if publishedAt.Valid {
+		ts := publishedAt.Time.UTC()
+		recording.PublishedAt = &ts
+	}
+	if retainUntil.Valid {
+		ts := retainUntil.Time.UTC()
+		recording.RetainUntil = &ts
+	}
+	renditionsRows, err := r.pool.Query(ctx, "SELECT name, manifest_url, bitrate FROM recording_renditions WHERE recording_id = $1", id)
+	if err != nil {
+		return models.Recording{}, false, fmt.Errorf("load recording renditions: %w", err)
+	}
+	renditions := make([]models.RecordingRendition, 0)
+	for renditionsRows.Next() {
+		var name, url string
+		var bitrate pgtype.Int4
+		if err := renditionsRows.Scan(&name, &url, &bitrate); err != nil {
+			renditionsRows.Close()
+			return models.Recording{}, false, fmt.Errorf("scan recording rendition: %w", err)
+		}
+		entry := models.RecordingRendition{Name: name, ManifestURL: url}
+		if bitrate.Valid {
+			entry.Bitrate = int(bitrate.Int32)
+		}
+		renditions = append(renditions, entry)
+	}
+	renditionsRows.Close()
+	if err := renditionsRows.Err(); err != nil {
+		return models.Recording{}, false, fmt.Errorf("read recording renditions: %w", err)
+	}
+	recording.Renditions = renditions
+
+	thumbRows, err := r.pool.Query(ctx, "SELECT id, url, width, height, created_at FROM recording_thumbnails WHERE recording_id = $1", id)
+	if err != nil {
+		return models.Recording{}, false, fmt.Errorf("load recording thumbnails: %w", err)
+	}
+	thumbnails := make([]models.RecordingThumbnail, 0)
+	for thumbRows.Next() {
+		var thumb models.RecordingThumbnail
+		thumb.RecordingID = id
+		if err := thumbRows.Scan(&thumb.ID, &thumb.URL, &thumb.Width, &thumb.Height, &thumb.CreatedAt); err != nil {
+			thumbRows.Close()
+			return models.Recording{}, false, fmt.Errorf("scan recording thumbnail: %w", err)
+		}
+		thumbnails = append(thumbnails, thumb)
+	}
+	thumbRows.Close()
+	if err := thumbRows.Err(); err != nil {
+		return models.Recording{}, false, fmt.Errorf("read recording thumbnails: %w", err)
+	}
+	recording.Thumbnails = thumbnails
+
+	clipRows, err := r.pool.Query(ctx, "SELECT id, title, start_seconds, end_seconds, status FROM clip_exports WHERE recording_id = $1", id)
+	if err != nil {
+		return models.Recording{}, false, fmt.Errorf("load clip exports: %w", err)
+	}
+	clips := make([]models.ClipExportSummary, 0)
+	for clipRows.Next() {
+		var clip models.ClipExportSummary
+		if err := clipRows.Scan(&clip.ID, &clip.Title, &clip.StartSeconds, &clip.EndSeconds, &clip.Status); err != nil {
+			clipRows.Close()
+			return models.Recording{}, false, fmt.Errorf("scan clip export: %w", err)
+		}
+		clips = append(clips, clip)
+	}
+	clipRows.Close()
+	if err := clipRows.Err(); err != nil {
+		return models.Recording{}, false, fmt.Errorf("read clip exports: %w", err)
+	}
+	if len(clips) > 0 {
+		sort.Slice(clips, func(i, j int) bool {
+			if clips[i].StartSeconds == clips[j].StartSeconds {
+				return clips[i].ID < clips[j].ID
+			}
+			return clips[i].StartSeconds < clips[j].StartSeconds
+		})
+		recording.Clips = clips
+	}
+	return recording, true, nil
+}
+
 func rollbackTx(ctx context.Context, tx pgx.Tx) {
 	if tx == nil {
 		return
@@ -495,100 +1010,1432 @@ func rolesFromDB(roles []string) []string {
 	return cloned
 }
 
+func ensureUserExists(ctx context.Context, tx pgx.Tx, userID string) error {
+	var exists bool
+	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1)", userID).Scan(&exists); err != nil {
+		return fmt.Errorf("check user %s: %w", userID, err)
+	}
+	if !exists {
+		return fmt.Errorf("user %s not found", userID)
+	}
+	return nil
+}
+
+func ensureChannelExists(ctx context.Context, tx pgx.Tx, channelID string) error {
+	var exists bool
+	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM channels WHERE id = $1)", channelID).Scan(&exists); err != nil {
+		return fmt.Errorf("check channel %s: %w", channelID, err)
+	}
+	if !exists {
+		return fmt.Errorf("channel %s not found", channelID)
+	}
+	return nil
+}
+
 func (r *postgresRepository) UpsertProfile(userID string, update ProfileUpdate) (models.Profile, error) {
-	return models.Profile{}, ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return models.Profile{}, ErrPostgresUnavailable
+	}
+	ctx := context.Background()
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return models.Profile{}, fmt.Errorf("begin upsert profile tx: %w", err)
+	}
+	defer rollbackTx(ctx, tx)
+
+	var userCreatedAt time.Time
+	if err := tx.QueryRow(ctx, "SELECT created_at FROM users WHERE id = $1", userID).Scan(&userCreatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.Profile{}, fmt.Errorf("user %s not found", userID)
+		}
+		return models.Profile{}, fmt.Errorf("load user %s: %w", userID, err)
+	}
+
+	profile := models.Profile{
+		UserID:            userID,
+		Bio:               "",
+		TopFriends:        []string{},
+		DonationAddresses: []models.CryptoAddress{},
+		CreatedAt:         userCreatedAt.UTC(),
+		UpdatedAt:         userCreatedAt.UTC(),
+	}
+	var (
+		avatar, banner           pgtype.Text
+		featured                 pgtype.Text
+		topFriends               []string
+		donationAddressesPayload []byte
+		createdAt, updatedAt     time.Time
+	)
+	row := tx.QueryRow(ctx, "SELECT bio, avatar_url, banner_url, featured_channel_id, top_friends, donation_addresses, created_at, updated_at FROM profiles WHERE user_id = $1", userID)
+	switch err := row.Scan(&profile.Bio, &avatar, &banner, &featured, &topFriends, &donationAddressesPayload, &createdAt, &updatedAt); {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Use defaults.
+	case err != nil:
+		return models.Profile{}, fmt.Errorf("load profile %s: %w", userID, err)
+	default:
+		if avatar.Valid {
+			profile.AvatarURL = avatar.String
+		}
+		if banner.Valid {
+			profile.BannerURL = banner.String
+		}
+		if featured.Valid {
+			id := featured.String
+			profile.FeaturedChannelID = &id
+		}
+		if len(topFriends) > 0 {
+			profile.TopFriends = append([]string{}, topFriends...)
+		}
+		if len(donationAddressesPayload) > 0 {
+			decoded, err := decodeDonationAddresses(donationAddressesPayload)
+			if err != nil {
+				return models.Profile{}, fmt.Errorf("decode donation addresses: %w", err)
+			}
+			profile.DonationAddresses = decoded
+		}
+		profile.CreatedAt = createdAt.UTC()
+		profile.UpdatedAt = updatedAt.UTC()
+	}
+
+	now := time.Now().UTC()
+
+	if update.Bio != nil {
+		profile.Bio = strings.TrimSpace(*update.Bio)
+	}
+	if update.AvatarURL != nil {
+		profile.AvatarURL = strings.TrimSpace(*update.AvatarURL)
+	}
+	if update.BannerURL != nil {
+		profile.BannerURL = strings.TrimSpace(*update.BannerURL)
+	}
+	if update.FeaturedChannelID != nil {
+		trimmed := strings.TrimSpace(*update.FeaturedChannelID)
+		if trimmed == "" {
+			profile.FeaturedChannelID = nil
+		} else {
+			var ownerID string
+			err := tx.QueryRow(ctx, "SELECT owner_id FROM channels WHERE id = $1", trimmed).Scan(&ownerID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return models.Profile{}, fmt.Errorf("featured channel %s not found", trimmed)
+			}
+			if err != nil {
+				return models.Profile{}, fmt.Errorf("load featured channel %s: %w", trimmed, err)
+			}
+			if ownerID != userID {
+				return models.Profile{}, errors.New("featured channel must belong to profile owner")
+			}
+			id := trimmed
+			profile.FeaturedChannelID = &id
+		}
+	}
+	if update.TopFriends != nil {
+		if len(*update.TopFriends) > 8 {
+			return models.Profile{}, errors.New("top friends cannot exceed eight entries")
+		}
+		seen := make(map[string]struct{}, len(*update.TopFriends))
+		ordered := make([]string, 0, len(*update.TopFriends))
+		for _, friendID := range *update.TopFriends {
+			trimmed := strings.TrimSpace(friendID)
+			if trimmed == "" {
+				return models.Profile{}, errors.New("top friends must reference valid users")
+			}
+			if trimmed == userID {
+				return models.Profile{}, errors.New("cannot add profile owner as a top friend")
+			}
+			if _, exists := seen[trimmed]; exists {
+				return models.Profile{}, errors.New("duplicate user in top friends list")
+			}
+			seen[trimmed] = struct{}{}
+			ordered = append(ordered, trimmed)
+		}
+		if len(ordered) > 0 {
+			rows, err := tx.Query(ctx, "SELECT id FROM users WHERE id = ANY($1)", ordered)
+			if err != nil {
+				return models.Profile{}, fmt.Errorf("validate top friends: %w", err)
+			}
+			found := make(map[string]struct{}, len(ordered))
+			for rows.Next() {
+				var id string
+				if err := rows.Scan(&id); err != nil {
+					rows.Close()
+					return models.Profile{}, fmt.Errorf("scan top friend id: %w", err)
+				}
+				found[id] = struct{}{}
+			}
+			rows.Close()
+			for _, id := range ordered {
+				if _, ok := found[id]; !ok {
+					return models.Profile{}, fmt.Errorf("top friend %s not found", id)
+				}
+			}
+		}
+		profile.TopFriends = ordered
+	}
+	if update.DonationAddresses != nil {
+		addresses := make([]models.CryptoAddress, 0, len(*update.DonationAddresses))
+		for _, addr := range *update.DonationAddresses {
+			currency := strings.ToUpper(strings.TrimSpace(addr.Currency))
+			if currency == "" {
+				return models.Profile{}, errors.New("donation currency is required")
+			}
+			address := strings.TrimSpace(addr.Address)
+			if address == "" {
+				return models.Profile{}, errors.New("donation address is required")
+			}
+			note := strings.TrimSpace(addr.Note)
+			addresses = append(addresses, models.CryptoAddress{Currency: currency, Address: address, Note: note})
+		}
+		profile.DonationAddresses = addresses
+	}
+
+	profile.UpdatedAt = now
+	if profile.CreatedAt.IsZero() {
+		profile.CreatedAt = now
+	}
+
+	donationPayload, err := encodeDonationAddresses(profile.DonationAddresses)
+	if err != nil {
+		return models.Profile{}, err
+	}
+	var featuredValue any
+	if profile.FeaturedChannelID != nil {
+		featuredValue = *profile.FeaturedChannelID
+	}
+	topFriendsValue := profile.TopFriends
+	if topFriendsValue == nil {
+		topFriendsValue = []string{}
+	}
+
+	var insertedCreatedAt, insertedUpdatedAt time.Time
+	err = tx.QueryRow(ctx, `
+INSERT INTO profiles (user_id, bio, avatar_url, banner_url, featured_channel_id, top_friends, donation_addresses, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (user_id) DO UPDATE SET
+	bio = EXCLUDED.bio,
+	avatar_url = EXCLUDED.avatar_url,
+	banner_url = EXCLUDED.banner_url,
+	featured_channel_id = EXCLUDED.featured_channel_id,
+	top_friends = EXCLUDED.top_friends,
+	donation_addresses = EXCLUDED.donation_addresses,
+	updated_at = EXCLUDED.updated_at
+RETURNING created_at, updated_at`,
+		userID,
+		profile.Bio,
+		profile.AvatarURL,
+		profile.BannerURL,
+		featuredValue,
+		topFriendsValue,
+		donationPayload,
+		profile.CreatedAt,
+		profile.UpdatedAt,
+	).Scan(&insertedCreatedAt, &insertedUpdatedAt)
+	if err != nil {
+		return models.Profile{}, fmt.Errorf("upsert profile %s: %w", userID, err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return models.Profile{}, fmt.Errorf("commit upsert profile: %w", err)
+	}
+
+	profile.CreatedAt = insertedCreatedAt.UTC()
+	profile.UpdatedAt = insertedUpdatedAt.UTC()
+	if profile.TopFriends == nil {
+		profile.TopFriends = []string{}
+	}
+	if profile.DonationAddresses == nil {
+		profile.DonationAddresses = []models.CryptoAddress{}
+	}
+	return profile, nil
 }
 
 func (r *postgresRepository) GetProfile(userID string) (models.Profile, bool) {
-	return models.Profile{}, false
+	if r == nil || r.pool == nil {
+		return models.Profile{}, false
+	}
+	ctx := context.Background()
+	var (
+		bio                      string
+		avatar, banner, featured pgtype.Text
+		topFriends               []string
+		donationPayload          []byte
+		createdAt, updatedAt     time.Time
+	)
+	err := r.pool.QueryRow(ctx, "SELECT bio, avatar_url, banner_url, featured_channel_id, top_friends, donation_addresses, created_at, updated_at FROM profiles WHERE user_id = $1", userID).
+		Scan(&bio, &avatar, &banner, &featured, &topFriends, &donationPayload, &createdAt, &updatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var userCreatedAt time.Time
+		if err := r.pool.QueryRow(ctx, "SELECT created_at FROM users WHERE id = $1", userID).Scan(&userCreatedAt); err != nil {
+			return models.Profile{}, false
+		}
+		profile := models.Profile{
+			UserID:            userID,
+			Bio:               "",
+			AvatarURL:         "",
+			BannerURL:         "",
+			TopFriends:        []string{},
+			DonationAddresses: []models.CryptoAddress{},
+			CreatedAt:         userCreatedAt.UTC(),
+			UpdatedAt:         userCreatedAt.UTC(),
+		}
+		return profile, false
+	}
+	if err != nil {
+		return models.Profile{}, false
+	}
+
+	profile := models.Profile{
+		UserID:     userID,
+		Bio:        bio,
+		CreatedAt:  createdAt.UTC(),
+		UpdatedAt:  updatedAt.UTC(),
+		TopFriends: []string{},
+	}
+	if avatar.Valid {
+		profile.AvatarURL = avatar.String
+	}
+	if banner.Valid {
+		profile.BannerURL = banner.String
+	}
+	if featured.Valid {
+		id := featured.String
+		profile.FeaturedChannelID = &id
+	}
+	if len(topFriends) > 0 {
+		profile.TopFriends = append([]string{}, topFriends...)
+	}
+	if len(donationPayload) > 0 {
+		addresses, err := decodeDonationAddresses(donationPayload)
+		if err != nil {
+			return models.Profile{}, false
+		}
+		profile.DonationAddresses = addresses
+	} else {
+		profile.DonationAddresses = []models.CryptoAddress{}
+	}
+	if profile.TopFriends == nil {
+		profile.TopFriends = []string{}
+	}
+	return profile, true
 }
 
 func (r *postgresRepository) ListProfiles() []models.Profile {
-	return nil
+	if r == nil || r.pool == nil {
+		return nil
+	}
+	ctx := context.Background()
+	rows, err := r.pool.Query(ctx, "SELECT user_id, bio, avatar_url, banner_url, featured_channel_id, top_friends, donation_addresses, created_at, updated_at FROM profiles ORDER BY created_at ASC")
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	profiles := make([]models.Profile, 0)
+	for rows.Next() {
+		var (
+			userID                   string
+			bio                      string
+			avatar, banner, featured pgtype.Text
+			topFriends               []string
+			donationPayload          []byte
+			createdAt, updatedAt     time.Time
+		)
+		if err := rows.Scan(&userID, &bio, &avatar, &banner, &featured, &topFriends, &donationPayload, &createdAt, &updatedAt); err != nil {
+			return nil
+		}
+		profile := models.Profile{
+			UserID:     userID,
+			Bio:        bio,
+			CreatedAt:  createdAt.UTC(),
+			UpdatedAt:  updatedAt.UTC(),
+			TopFriends: []string{},
+		}
+		if avatar.Valid {
+			profile.AvatarURL = avatar.String
+		}
+		if banner.Valid {
+			profile.BannerURL = banner.String
+		}
+		if featured.Valid {
+			id := featured.String
+			profile.FeaturedChannelID = &id
+		}
+		if len(topFriends) > 0 {
+			profile.TopFriends = append([]string{}, topFriends...)
+		}
+		if len(donationPayload) > 0 {
+			addresses, err := decodeDonationAddresses(donationPayload)
+			if err != nil {
+				return nil
+			}
+			profile.DonationAddresses = addresses
+		} else {
+			profile.DonationAddresses = []models.CryptoAddress{}
+		}
+		if profile.TopFriends == nil {
+			profile.TopFriends = []string{}
+		}
+		profiles = append(profiles, profile)
+	}
+	if err := rows.Err(); err != nil {
+		return nil
+	}
+	return profiles
 }
 
 func (r *postgresRepository) CreateChannel(ownerID, title, category string, tags []string) (models.Channel, error) {
-	return models.Channel{}, ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return models.Channel{}, ErrPostgresUnavailable
+	}
+	if strings.TrimSpace(ownerID) == "" {
+		return models.Channel{}, fmt.Errorf("owner %s not found", ownerID)
+	}
+	trimmedTitle := strings.TrimSpace(title)
+	if trimmedTitle == "" {
+		return models.Channel{}, errors.New("title is required")
+	}
+
+	ctx := context.Background()
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return models.Channel{}, fmt.Errorf("begin create channel tx: %w", err)
+	}
+	defer rollbackTx(ctx, tx)
+
+	var exists bool
+	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1)", ownerID).Scan(&exists); err != nil {
+		return models.Channel{}, fmt.Errorf("check owner %s: %w", ownerID, err)
+	}
+	if !exists {
+		return models.Channel{}, fmt.Errorf("owner %s not found", ownerID)
+	}
+
+	id, err := r.generateID()
+	if err != nil {
+		return models.Channel{}, err
+	}
+	streamKey, err := r.generateStreamKey()
+	if err != nil {
+		return models.Channel{}, err
+	}
+	normalizedTags := normalizeTags(tags)
+	now := time.Now().UTC()
+
+	var insertedCreatedAt, insertedUpdatedAt time.Time
+	err = tx.QueryRow(ctx, "INSERT INTO channels (id, owner_id, stream_key, title, category, tags, live_state, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, 'offline', $7, $8) RETURNING created_at, updated_at",
+		id,
+		ownerID,
+		streamKey,
+		trimmedTitle,
+		strings.TrimSpace(category),
+		normalizedTags,
+		now,
+		now,
+	).Scan(&insertedCreatedAt, &insertedUpdatedAt)
+	if err != nil {
+		return models.Channel{}, fmt.Errorf("insert channel: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return models.Channel{}, fmt.Errorf("commit create channel: %w", err)
+	}
+
+	channel := models.Channel{
+		ID:        id,
+		OwnerID:   ownerID,
+		StreamKey: streamKey,
+		Title:     trimmedTitle,
+		Category:  strings.TrimSpace(category),
+		Tags:      normalizedTags,
+		LiveState: "offline",
+		CreatedAt: insertedCreatedAt.UTC(),
+		UpdatedAt: insertedUpdatedAt.UTC(),
+	}
+	return channel, nil
 }
 
 func (r *postgresRepository) UpdateChannel(id string, update ChannelUpdate) (models.Channel, error) {
-	return models.Channel{}, ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return models.Channel{}, ErrPostgresUnavailable
+	}
+	ctx := context.Background()
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return models.Channel{}, fmt.Errorf("begin update channel tx: %w", err)
+	}
+	defer rollbackTx(ctx, tx)
+
+	var (
+		channelID, ownerID, streamKey, title string
+		category                             pgtype.Text
+		tags                                 []string
+		liveState                            string
+		currentSession                       pgtype.Text
+		createdAt, updatedAt                 time.Time
+	)
+	row := tx.QueryRow(ctx, "SELECT id, owner_id, stream_key, title, category, tags, live_state, current_session_id, created_at, updated_at FROM channels WHERE id = $1 FOR UPDATE", id)
+	if err := row.Scan(&channelID, &ownerID, &streamKey, &title, &category, &tags, &liveState, &currentSession, &createdAt, &updatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.Channel{}, fmt.Errorf("channel %s not found", id)
+		}
+		return models.Channel{}, fmt.Errorf("load channel %s: %w", id, err)
+	}
+
+	channel := models.Channel{
+		ID:        channelID,
+		OwnerID:   ownerID,
+		StreamKey: streamKey,
+		Title:     title,
+		Tags:      append([]string{}, tags...),
+		LiveState: liveState,
+		CreatedAt: createdAt.UTC(),
+		UpdatedAt: updatedAt.UTC(),
+	}
+	if category.Valid {
+		channel.Category = category.String
+	}
+	if currentSession.Valid {
+		id := currentSession.String
+		channel.CurrentSessionID = &id
+	}
+
+	if update.Title != nil {
+		trimmed := strings.TrimSpace(*update.Title)
+		if trimmed == "" {
+			return models.Channel{}, errors.New("title cannot be empty")
+		}
+		channel.Title = trimmed
+	}
+	if update.Category != nil {
+		channel.Category = strings.TrimSpace(*update.Category)
+	}
+	if update.Tags != nil {
+		channel.Tags = normalizeTags(*update.Tags)
+	}
+	if update.LiveState != nil {
+		state := strings.ToLower(strings.TrimSpace(*update.LiveState))
+		switch state {
+		case "offline", "live", "starting", "ended":
+			channel.LiveState = state
+		default:
+			return models.Channel{}, fmt.Errorf("invalid liveState %s", state)
+		}
+	}
+
+	channel.UpdatedAt = time.Now().UTC()
+	_, err = tx.Exec(ctx, "UPDATE channels SET title = $1, category = $2, tags = $3, live_state = $4, updated_at = $5 WHERE id = $6",
+		channel.Title,
+		channel.Category,
+		channel.Tags,
+		channel.LiveState,
+		channel.UpdatedAt,
+		channel.ID,
+	)
+	if err != nil {
+		return models.Channel{}, fmt.Errorf("update channel %s: %w", id, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return models.Channel{}, fmt.Errorf("commit update channel: %w", err)
+	}
+	if channel.Tags == nil {
+		channel.Tags = []string{}
+	}
+	return channel, nil
 }
 
 func (r *postgresRepository) RotateChannelStreamKey(id string) (models.Channel, error) {
-	return models.Channel{}, ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return models.Channel{}, ErrPostgresUnavailable
+	}
+	ctx := context.Background()
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return models.Channel{}, fmt.Errorf("begin rotate stream key tx: %w", err)
+	}
+	defer rollbackTx(ctx, tx)
+
+	var (
+		channelID, ownerID, streamKey, title string
+		category                             pgtype.Text
+		tags                                 []string
+		liveState                            string
+		currentSession                       pgtype.Text
+		createdAt, updatedAt                 time.Time
+	)
+	row := tx.QueryRow(ctx, "SELECT id, owner_id, stream_key, title, category, tags, live_state, current_session_id, created_at, updated_at FROM channels WHERE id = $1 FOR UPDATE", id)
+	if err := row.Scan(&channelID, &ownerID, &streamKey, &title, &category, &tags, &liveState, &currentSession, &createdAt, &updatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.Channel{}, fmt.Errorf("channel %s not found", id)
+		}
+		return models.Channel{}, fmt.Errorf("load channel %s: %w", id, err)
+	}
+
+	newKey, err := r.generateStreamKey()
+	if err != nil {
+		return models.Channel{}, err
+	}
+	now := time.Now().UTC()
+	if _, err := tx.Exec(ctx, "UPDATE channels SET stream_key = $1, updated_at = $2 WHERE id = $3", newKey, now, id); err != nil {
+		return models.Channel{}, fmt.Errorf("update stream key: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return models.Channel{}, fmt.Errorf("commit rotate stream key: %w", err)
+	}
+
+	channel := models.Channel{
+		ID:        channelID,
+		OwnerID:   ownerID,
+		StreamKey: newKey,
+		Title:     title,
+		Tags:      append([]string{}, tags...),
+		LiveState: liveState,
+		CreatedAt: createdAt.UTC(),
+		UpdatedAt: now,
+	}
+	if category.Valid {
+		channel.Category = category.String
+	}
+	if currentSession.Valid {
+		current := currentSession.String
+		channel.CurrentSessionID = &current
+	}
+	if channel.Tags == nil {
+		channel.Tags = []string{}
+	}
+	return channel, nil
 }
 
 func (r *postgresRepository) DeleteChannel(id string) error {
-	return ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return ErrPostgresUnavailable
+	}
+	ctx := context.Background()
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin delete channel tx: %w", err)
+	}
+	defer rollbackTx(ctx, tx)
+
+	var currentSession pgtype.Text
+	if err := tx.QueryRow(ctx, "SELECT current_session_id FROM channels WHERE id = $1 FOR UPDATE", id).Scan(&currentSession); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("channel %s not found", id)
+		}
+		return fmt.Errorf("load channel %s: %w", id, err)
+	}
+	if currentSession.Valid {
+		return errors.New("cannot delete a channel with an active stream")
+	}
+
+	if _, err := tx.Exec(ctx, "UPDATE profiles SET featured_channel_id = NULL WHERE featured_channel_id = $1", id); err != nil {
+		return fmt.Errorf("clear featured channel references: %w", err)
+	}
+	if _, err := tx.Exec(ctx, "DELETE FROM channels WHERE id = $1", id); err != nil {
+		return fmt.Errorf("delete channel %s: %w", id, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit delete channel: %w", err)
+	}
+	return nil
 }
 
 func (r *postgresRepository) GetChannel(id string) (models.Channel, bool) {
-	return models.Channel{}, false
+	if r == nil || r.pool == nil {
+		return models.Channel{}, false
+	}
+	ctx := context.Background()
+	var (
+		channelID, ownerID, streamKey, title string
+		category                             pgtype.Text
+		tags                                 []string
+		liveState                            string
+		currentSession                       pgtype.Text
+		createdAt, updatedAt                 time.Time
+	)
+	err := r.pool.QueryRow(ctx, "SELECT id, owner_id, stream_key, title, category, tags, live_state, current_session_id, created_at, updated_at FROM channels WHERE id = $1", id).
+		Scan(&channelID, &ownerID, &streamKey, &title, &category, &tags, &liveState, &currentSession, &createdAt, &updatedAt)
+	if errors.Is(err, pgx.ErrNoRows) || err != nil {
+		return models.Channel{}, false
+	}
+	channel := models.Channel{
+		ID:        channelID,
+		OwnerID:   ownerID,
+		StreamKey: streamKey,
+		Title:     title,
+		Tags:      append([]string{}, tags...),
+		LiveState: liveState,
+		CreatedAt: createdAt.UTC(),
+		UpdatedAt: updatedAt.UTC(),
+	}
+	if category.Valid {
+		channel.Category = category.String
+	}
+	if currentSession.Valid {
+		current := currentSession.String
+		channel.CurrentSessionID = &current
+	}
+	if channel.Tags == nil {
+		channel.Tags = []string{}
+	}
+	return channel, true
 }
 
 func (r *postgresRepository) ListChannels(ownerID string) []models.Channel {
-	return nil
+	if r == nil || r.pool == nil {
+		return nil
+	}
+	ctx := context.Background()
+	baseQuery := "SELECT id, owner_id, stream_key, title, category, tags, live_state, current_session_id, created_at, updated_at FROM channels"
+	var rows pgx.Rows
+	var err error
+	if strings.TrimSpace(ownerID) != "" {
+		rows, err = r.pool.Query(ctx, baseQuery+" WHERE owner_id = $1 ORDER BY CASE WHEN live_state = 'live' THEN 0 ELSE 1 END, created_at ASC", ownerID)
+	} else {
+		rows, err = r.pool.Query(ctx, baseQuery+" ORDER BY CASE WHEN live_state = 'live' THEN 0 ELSE 1 END, created_at ASC")
+	}
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	channels := make([]models.Channel, 0)
+	for rows.Next() {
+		var (
+			channelID, ownerIDVal, streamKey, title string
+			category                                pgtype.Text
+			tags                                    []string
+			liveState                               string
+			currentSession                          pgtype.Text
+			createdAt, updatedAt                    time.Time
+		)
+		if err := rows.Scan(&channelID, &ownerIDVal, &streamKey, &title, &category, &tags, &liveState, &currentSession, &createdAt, &updatedAt); err != nil {
+			return nil
+		}
+		channel := models.Channel{
+			ID:        channelID,
+			OwnerID:   ownerIDVal,
+			StreamKey: streamKey,
+			Title:     title,
+			Tags:      append([]string{}, tags...),
+			LiveState: liveState,
+			CreatedAt: createdAt.UTC(),
+			UpdatedAt: updatedAt.UTC(),
+		}
+		if category.Valid {
+			channel.Category = category.String
+		}
+		if currentSession.Valid {
+			current := currentSession.String
+			channel.CurrentSessionID = &current
+		}
+		if channel.Tags == nil {
+			channel.Tags = []string{}
+		}
+		channels = append(channels, channel)
+	}
+	if err := rows.Err(); err != nil {
+		return nil
+	}
+	return channels
 }
 
 func (r *postgresRepository) FollowChannel(userID, channelID string) error {
-	return ErrPostgresUnavailable
-}
+	if r == nil || r.pool == nil {
+		return ErrPostgresUnavailable
+	}
+	ctx := context.Background()
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin follow channel tx: %w", err)
+	}
+	defer rollbackTx(ctx, tx)
 
-func (r *postgresRepository) UnfollowChannel(userID, channelID string) error {
-	return ErrPostgresUnavailable
-}
+	if err := ensureUserExists(ctx, tx, userID); err != nil {
+		return err
+	}
+	if err := ensureChannelExists(ctx, tx, channelID); err != nil {
+		return err
+	}
 
-func (r *postgresRepository) IsFollowingChannel(userID, channelID string) bool {
-	return false
-}
-
-func (r *postgresRepository) CountFollowers(channelID string) int {
-	return 0
-}
-
-func (r *postgresRepository) ListFollowedChannelIDs(userID string) []string {
+	if _, err := tx.Exec(ctx, "INSERT INTO follows (user_id, channel_id, followed_at) VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING", userID, channelID); err != nil {
+		return fmt.Errorf("follow channel %s: %w", channelID, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit follow channel: %w", err)
+	}
 	return nil
 }
 
+func (r *postgresRepository) UnfollowChannel(userID, channelID string) error {
+	if r == nil || r.pool == nil {
+		return ErrPostgresUnavailable
+	}
+	ctx := context.Background()
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin unfollow channel tx: %w", err)
+	}
+	defer rollbackTx(ctx, tx)
+
+	if err := ensureUserExists(ctx, tx, userID); err != nil {
+		return err
+	}
+	if err := ensureChannelExists(ctx, tx, channelID); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(ctx, "DELETE FROM follows WHERE user_id = $1 AND channel_id = $2", userID, channelID); err != nil {
+		return fmt.Errorf("unfollow channel %s: %w", channelID, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit unfollow channel: %w", err)
+	}
+	return nil
+}
+
+func (r *postgresRepository) IsFollowingChannel(userID, channelID string) bool {
+	if r == nil || r.pool == nil {
+		return false
+	}
+	ctx := context.Background()
+	var exists bool
+	if err := r.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM follows WHERE user_id = $1 AND channel_id = $2)", userID, channelID).Scan(&exists); err != nil {
+		return false
+	}
+	return exists
+}
+
+func (r *postgresRepository) CountFollowers(channelID string) int {
+	if r == nil || r.pool == nil {
+		return 0
+	}
+	ctx := context.Background()
+	var count int
+	if err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM follows WHERE channel_id = $1", channelID).Scan(&count); err != nil {
+		return 0
+	}
+	return count
+}
+
+func (r *postgresRepository) ListFollowedChannelIDs(userID string) []string {
+	if r == nil || r.pool == nil {
+		return nil
+	}
+	ctx := context.Background()
+	rows, err := r.pool.Query(ctx, "SELECT channel_id FROM follows WHERE user_id = $1 ORDER BY followed_at DESC", userID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	ids := make([]string, 0)
+	for rows.Next() {
+		var channelID string
+		if err := rows.Scan(&channelID); err != nil {
+			return nil
+		}
+		ids = append(ids, channelID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil
+	}
+	return ids
+}
+
 func (r *postgresRepository) StartStream(channelID string, renditions []string) (models.StreamSession, error) {
-	return models.StreamSession{}, ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return models.StreamSession{}, ErrPostgresUnavailable
+	}
+	ctx := context.Background()
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return models.StreamSession{}, fmt.Errorf("begin start stream tx: %w", err)
+	}
+	defer rollbackTx(ctx, tx)
+
+	var (
+		streamKey                string
+		currentSession           pgtype.Text
+		ownerID, title, category pgtype.Text
+		tags                     []string
+	)
+	row := tx.QueryRow(ctx, "SELECT stream_key, current_session_id, owner_id, title, category, tags FROM channels WHERE id = $1 FOR UPDATE", channelID)
+	if err := row.Scan(&streamKey, &currentSession, &ownerID, &title, &category, &tags); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.StreamSession{}, fmt.Errorf("channel %s not found", channelID)
+		}
+		return models.StreamSession{}, fmt.Errorf("load channel %s: %w", channelID, err)
+	}
+	if currentSession.Valid {
+		return models.StreamSession{}, errors.New("channel already live")
+	}
+
+	sessionID, err := r.generateID()
+	if err != nil {
+		return models.StreamSession{}, err
+	}
+	now := time.Now().UTC()
+	if _, err := tx.Exec(ctx, "UPDATE channels SET current_session_id = $1, live_state = 'starting', updated_at = $2 WHERE id = $3", sessionID, now, channelID); err != nil {
+		return models.StreamSession{}, fmt.Errorf("mark channel starting: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return models.StreamSession{}, fmt.Errorf("commit mark channel starting: %w", err)
+	}
+
+	attempts := r.ingestMaxAttempts
+	if attempts <= 0 {
+		attempts = 1
+	}
+	controller := r.ingestController
+	var boot ingest.BootResult
+	var bootErr error
+	for attempt := 0; attempt < attempts; attempt++ {
+		boot, bootErr = controller.BootStream(ctx, ingest.BootParams{
+			ChannelID:  channelID,
+			SessionID:  sessionID,
+			StreamKey:  streamKey,
+			Renditions: append([]string{}, renditions...),
+		})
+		if bootErr == nil {
+			break
+		}
+		if attempt < attempts-1 && r.ingestRetryInterval > 0 {
+			time.Sleep(r.ingestRetryInterval)
+		}
+	}
+	if bootErr != nil {
+		_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
+		return models.StreamSession{}, fmt.Errorf("boot ingest: %w", bootErr)
+	}
+
+	session := models.StreamSession{
+		ID:             sessionID,
+		ChannelID:      channelID,
+		StartedAt:      now,
+		Renditions:     append([]string{}, renditions...),
+		PeakConcurrent: 0,
+		OriginURL:      boot.OriginURL,
+		PlaybackURL:    boot.PlaybackURL,
+		IngestJobIDs:   append([]string{}, boot.JobIDs...),
+	}
+	ingestEndpoints := make([]string, 0, 2)
+	if boot.PrimaryIngest != "" {
+		ingestEndpoints = append(ingestEndpoints, boot.PrimaryIngest)
+	}
+	if boot.BackupIngest != "" {
+		ingestEndpoints = append(ingestEndpoints, boot.BackupIngest)
+	}
+	if len(ingestEndpoints) > 0 {
+		session.IngestEndpoints = ingestEndpoints
+	}
+	if len(boot.Renditions) > 0 {
+		manifests := make([]models.RenditionManifest, 0, len(boot.Renditions))
+		for _, rendition := range boot.Renditions {
+			manifests = append(manifests, models.RenditionManifest{
+				Name:        rendition.Name,
+				ManifestURL: rendition.ManifestURL,
+				Bitrate:     rendition.Bitrate,
+			})
+		}
+		session.RenditionManifests = manifests
+	}
+
+	tx, err = r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		_ = r.ingestController.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+		_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
+		return models.StreamSession{}, fmt.Errorf("begin persist stream session: %w", err)
+	}
+	defer rollbackTx(ctx, tx)
+
+	_, err = tx.Exec(ctx, "INSERT INTO stream_sessions (id, channel_id, started_at, renditions, peak_concurrent, origin_url, playback_url, ingest_endpoints, ingest_job_ids) VALUES ($1, $2, $3, $4, 0, $5, $6, $7, $8)",
+		session.ID,
+		session.ChannelID,
+		session.StartedAt,
+		session.Renditions,
+		session.OriginURL,
+		session.PlaybackURL,
+		session.IngestEndpoints,
+		session.IngestJobIDs,
+	)
+	if err != nil {
+		_ = r.ingestController.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+		_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
+		return models.StreamSession{}, fmt.Errorf("insert stream session: %w", err)
+	}
+	for _, manifest := range session.RenditionManifests {
+		if _, err := tx.Exec(ctx, "INSERT INTO stream_session_manifests (session_id, name, manifest_url, bitrate) VALUES ($1, $2, $3, $4)", session.ID, manifest.Name, manifest.ManifestURL, manifest.Bitrate); err != nil {
+			_ = r.ingestController.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+			_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
+			return models.StreamSession{}, fmt.Errorf("insert rendition manifest: %w", err)
+		}
+	}
+	if _, err := tx.Exec(ctx, "UPDATE channels SET current_session_id = $1, live_state = 'live', updated_at = $2 WHERE id = $3", session.ID, session.StartedAt, channelID); err != nil {
+		_ = r.ingestController.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+		_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
+		return models.StreamSession{}, fmt.Errorf("mark channel live: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		_ = r.ingestController.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+		_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
+		return models.StreamSession{}, fmt.Errorf("commit start stream: %w", err)
+	}
+
+	return session, nil
 }
 
 func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (models.StreamSession, error) {
-	return models.StreamSession{}, ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return models.StreamSession{}, ErrPostgresUnavailable
+	}
+	ctx := context.Background()
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return models.StreamSession{}, fmt.Errorf("begin stop stream tx: %w", err)
+	}
+	defer rollbackTx(ctx, tx)
+
+	var (
+		streamKey       string
+		currentSession  pgtype.Text
+		channelTitle    string
+		channelCategory pgtype.Text
+		channelTags     []string
+	)
+	row := tx.QueryRow(ctx, "SELECT stream_key, current_session_id, title, category, tags FROM channels WHERE id = $1 FOR UPDATE", channelID)
+	if err := row.Scan(&streamKey, &currentSession, &channelTitle, &channelCategory, &channelTags); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.StreamSession{}, fmt.Errorf("channel %s not found", channelID)
+		}
+		return models.StreamSession{}, fmt.Errorf("load channel %s: %w", channelID, err)
+	}
+	if !currentSession.Valid {
+		return models.StreamSession{}, errors.New("channel is not live")
+	}
+	sessionID := currentSession.String
+
+	var session models.StreamSession
+	var renditions []string
+	var ingestEndpoints []string
+	var ingestJobIDs []string
+	var peak int
+	var startedAt time.Time
+	var endedAt pgtype.Timestamptz
+	var originURL, playbackURL string
+	sessRow := tx.QueryRow(ctx, "SELECT started_at, ended_at, renditions, peak_concurrent, origin_url, playback_url, ingest_endpoints, ingest_job_ids FROM stream_sessions WHERE id = $1 FOR UPDATE", sessionID)
+	if err := sessRow.Scan(&startedAt, &endedAt, &renditions, &peak, &originURL, &playbackURL, &ingestEndpoints, &ingestJobIDs); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.StreamSession{}, fmt.Errorf("session %s missing", sessionID)
+		}
+		return models.StreamSession{}, fmt.Errorf("load session %s: %w", sessionID, err)
+	}
+	manifestsRows, err := tx.Query(ctx, "SELECT name, manifest_url, bitrate FROM stream_session_manifests WHERE session_id = $1", sessionID)
+	if err != nil {
+		return models.StreamSession{}, fmt.Errorf("load session manifests: %w", err)
+	}
+	manifests := make([]models.RenditionManifest, 0)
+	for manifestsRows.Next() {
+		var name, url string
+		var bitrate pgtype.Int4
+		if err := manifestsRows.Scan(&name, &url, &bitrate); err != nil {
+			manifestsRows.Close()
+			return models.StreamSession{}, fmt.Errorf("scan session manifest: %w", err)
+		}
+		entry := models.RenditionManifest{Name: name, ManifestURL: url}
+		if bitrate.Valid {
+			entry.Bitrate = int(bitrate.Int32)
+		}
+		manifests = append(manifests, entry)
+	}
+	manifestsRows.Close()
+	if err := manifestsRows.Err(); err != nil {
+		return models.StreamSession{}, fmt.Errorf("read session manifests: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return models.StreamSession{}, fmt.Errorf("commit load session: %w", err)
+	}
+
+	session = models.StreamSession{
+		ID:                 sessionID,
+		ChannelID:          channelID,
+		StartedAt:          startedAt.UTC(),
+		Renditions:         append([]string{}, renditions...),
+		PeakConcurrent:     peak,
+		OriginURL:          originURL,
+		PlaybackURL:        playbackURL,
+		IngestEndpoints:    append([]string{}, ingestEndpoints...),
+		IngestJobIDs:       append([]string{}, ingestJobIDs...),
+		RenditionManifests: append([]models.RenditionManifest{}, manifests...),
+	}
+	if endedAt.Valid {
+		ts := endedAt.Time.UTC()
+		session.EndedAt = &ts
+	}
+
+	if err := r.ingestController.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, ingestJobIDs...)); err != nil {
+		return models.StreamSession{}, fmt.Errorf("shutdown ingest: %w", err)
+	}
+
+	now := time.Now().UTC()
+	session.EndedAt = &now
+	if peakConcurrent > session.PeakConcurrent {
+		session.PeakConcurrent = peakConcurrent
+	}
+
+	channel := models.Channel{ID: channelID, Title: channelTitle}
+	if channelCategory.Valid {
+		channel.Category = channelCategory.String
+	}
+	if len(channelTags) > 0 {
+		channel.Tags = append([]string{}, channelTags...)
+	}
+
+	recording, recErr := r.createRecording(session, channel, now)
+	if recErr != nil {
+		return models.StreamSession{}, recErr
+	}
+
+	tx, err = r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return models.StreamSession{}, fmt.Errorf("begin finalize stop stream tx: %w", err)
+	}
+	defer rollbackTx(ctx, tx)
+
+	_, err = tx.Exec(ctx, "UPDATE stream_sessions SET ended_at = $1, peak_concurrent = $2 WHERE id = $3", session.EndedAt, session.PeakConcurrent, session.ID)
+	if err != nil {
+		return models.StreamSession{}, fmt.Errorf("update stream session %s: %w", session.ID, err)
+	}
+	_, err = tx.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = $1 WHERE id = $2", now, channelID)
+	if err != nil {
+		return models.StreamSession{}, fmt.Errorf("update channel %s: %w", channelID, err)
+	}
+	if recording.ID != "" {
+		if err := r.insertRecording(ctx, tx, recording); err != nil {
+			return models.StreamSession{}, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return models.StreamSession{}, fmt.Errorf("commit stop stream: %w", err)
+	}
+
+	return session, nil
 }
 
 func (r *postgresRepository) CurrentStreamSession(channelID string) (models.StreamSession, bool) {
-	return models.StreamSession{}, false
+	if r == nil || r.pool == nil {
+		return models.StreamSession{}, false
+	}
+	ctx := context.Background()
+	var current pgtype.Text
+	if err := r.pool.QueryRow(ctx, "SELECT current_session_id FROM channels WHERE id = $1", channelID).Scan(&current); err != nil {
+		return models.StreamSession{}, false
+	}
+	if !current.Valid {
+		return models.StreamSession{}, false
+	}
+	session, ok := r.loadStreamSession(ctx, current.String)
+	if !ok {
+		return models.StreamSession{}, false
+	}
+	return session, true
 }
 
 func (r *postgresRepository) ListStreamSessions(channelID string) ([]models.StreamSession, error) {
-	return nil, ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return nil, ErrPostgresUnavailable
+	}
+	ctx := context.Background()
+	var exists bool
+	if err := r.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM channels WHERE id = $1)", channelID).Scan(&exists); err != nil {
+		return nil, fmt.Errorf("check channel %s: %w", channelID, err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("channel %s not found", channelID)
+	}
+	rows, err := r.pool.Query(ctx, "SELECT id FROM stream_sessions WHERE channel_id = $1 ORDER BY started_at DESC", channelID)
+	if err != nil {
+		return nil, fmt.Errorf("list sessions: %w", err)
+	}
+	defer rows.Close()
+
+	sessions := make([]models.StreamSession, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan session id: %w", err)
+		}
+		session, ok := r.loadStreamSession(ctx, id)
+		if !ok {
+			continue
+		}
+		sessions = append(sessions, session)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return sessions, nil
 }
 
 func (r *postgresRepository) ListRecordings(channelID string, includeUnpublished bool) ([]models.Recording, error) {
-	return nil, ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return nil, ErrPostgresUnavailable
+	}
+	ctx := context.Background()
+	var exists bool
+	if err := r.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM channels WHERE id = $1)", channelID).Scan(&exists); err != nil {
+		return nil, fmt.Errorf("check channel %s: %w", channelID, err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("channel %s not found", channelID)
+	}
+	if err := r.purgeExpiredRecordings(ctx); err != nil {
+		return nil, err
+	}
+	query := "SELECT id FROM recordings WHERE channel_id = $1"
+	if !includeUnpublished {
+		query += " AND published_at IS NOT NULL"
+	}
+	query += " ORDER BY created_at DESC"
+	rows, err := r.pool.Query(ctx, query, channelID)
+	if err != nil {
+		return nil, fmt.Errorf("list recordings: %w", err)
+	}
+	defer rows.Close()
+
+	recordings := make([]models.Recording, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan recording id: %w", err)
+		}
+		recording, ok, loadErr := r.loadRecording(ctx, id)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		if !ok {
+			continue
+		}
+		recordings = append(recordings, recording)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return recordings, nil
 }
 
 func (r *postgresRepository) GetRecording(id string) (models.Recording, bool) {
-	return models.Recording{}, false
+	if r == nil || r.pool == nil {
+		return models.Recording{}, false
+	}
+	ctx := context.Background()
+	if err := r.purgeExpiredRecordings(ctx); err != nil {
+		return models.Recording{}, false
+	}
+	recording, ok, err := r.loadRecording(ctx, id)
+	if err != nil || !ok {
+		return models.Recording{}, false
+	}
+	return recording, true
 }
 
 func (r *postgresRepository) PublishRecording(id string) (models.Recording, error) {
-	return models.Recording{}, ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return models.Recording{}, ErrPostgresUnavailable
+	}
+	ctx := context.Background()
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return models.Recording{}, fmt.Errorf("begin publish recording tx: %w", err)
+	}
+	defer rollbackTx(ctx, tx)
+
+	var (
+		channelID       string
+		sessionID       string
+		title           string
+		duration        int
+		playbackBaseURL string
+		metadataBytes   []byte
+		createdAt       time.Time
+		retainUntil     pgtype.Timestamptz
+		publishedAt     pgtype.Timestamptz
+	)
+	err = tx.QueryRow(ctx, "SELECT channel_id, session_id, title, duration_seconds, playback_base_url, metadata, created_at, retain_until, published_at FROM recordings WHERE id = $1 FOR UPDATE", id).
+		Scan(&channelID, &sessionID, &title, &duration, &playbackBaseURL, &metadataBytes, &createdAt, &retainUntil, &publishedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return models.Recording{}, fmt.Errorf("recording %s not found", id)
+	}
+	if err != nil {
+		return models.Recording{}, fmt.Errorf("load recording %s: %w", id, err)
+	}
+	if publishedAt.Valid {
+		recording, _, loadErr := r.loadRecording(ctx, id)
+		if loadErr != nil {
+			return models.Recording{}, loadErr
+		}
+		return recording, nil
+	}
+	now := time.Now().UTC()
+	_, err = tx.Exec(ctx, "UPDATE recordings SET published_at = $1 WHERE id = $2", now, id)
+	if err != nil {
+		return models.Recording{}, fmt.Errorf("publish recording %s: %w", id, err)
+	}
+	if deadline := r.recordingDeadline(now, true); deadline != nil {
+		if _, err := tx.Exec(ctx, "UPDATE recordings SET retain_until = $1 WHERE id = $2", deadline, id); err != nil {
+			return models.Recording{}, fmt.Errorf("update recording retention: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return models.Recording{}, fmt.Errorf("commit publish recording: %w", err)
+	}
+	recording, _, err := r.loadRecording(ctx, id)
+	if err != nil {
+		return models.Recording{}, err
+	}
+	if recording.ID == "" {
+		return models.Recording{}, fmt.Errorf("recording %s not found", id)
+	}
+	return recording, nil
 }
 
 func (r *postgresRepository) DeleteRecording(id string) error {
-	return ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return ErrPostgresUnavailable
+	}
+	ctx := context.Background()
+	recording, ok, err := r.loadRecording(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("recording %s not found", id)
+	}
+	if err := r.deleteRecordingArtifacts(recording); err != nil {
+		return err
+	}
+	clipRows, err := r.pool.Query(ctx, "SELECT id, storage_object FROM clip_exports WHERE recording_id = $1", id)
+	if err != nil {
+		return fmt.Errorf("load clip exports: %w", err)
+	}
+	clips := make([]models.ClipExport, 0)
+	for clipRows.Next() {
+		var clip models.ClipExport
+		if err := clipRows.Scan(&clip.ID, &clip.StorageObject); err != nil {
+			clipRows.Close()
+			return fmt.Errorf("scan clip export: %w", err)
+		}
+		clips = append(clips, clip)
+	}
+	clipRows.Close()
+	for _, clip := range clips {
+		if err := r.deleteClipArtifacts(clip); err != nil {
+			return err
+		}
+	}
+	if _, err := r.pool.Exec(ctx, "DELETE FROM recordings WHERE id = $1", id); err != nil {
+		return fmt.Errorf("delete recording %s: %w", id, err)
+	}
+	return nil
 }
 
 func (r *postgresRepository) CreateClipExport(recordingID string, params ClipExportParams) (models.ClipExport, error) {
-	return models.ClipExport{}, ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return models.ClipExport{}, ErrPostgresUnavailable
+	}
+	if strings.TrimSpace(recordingID) == "" {
+		return models.ClipExport{}, fmt.Errorf("recording id is required")
+	}
+	ctx := context.Background()
+	var (
+		channelID string
+		sessionID string
+		duration  int
+	)
+	err := r.pool.QueryRow(ctx, "SELECT channel_id, session_id, duration_seconds FROM recordings WHERE id = $1", recordingID).
+		Scan(&channelID, &sessionID, &duration)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return models.ClipExport{}, fmt.Errorf("recording %s not found", recordingID)
+	}
+	if err != nil {
+		return models.ClipExport{}, fmt.Errorf("load recording %s: %w", recordingID, err)
+	}
+	if params.EndSeconds <= params.StartSeconds {
+		return models.ClipExport{}, fmt.Errorf("endSeconds must be greater than startSeconds")
+	}
+	if params.StartSeconds < 0 {
+		return models.ClipExport{}, fmt.Errorf("startSeconds must be non-negative")
+	}
+	if duration > 0 && params.EndSeconds > duration {
+		return models.ClipExport{}, fmt.Errorf("clip exceeds recording duration")
+	}
+	id, err := r.generateID()
+	if err != nil {
+		return models.ClipExport{}, err
+	}
+	now := time.Now().UTC()
+	clip := models.ClipExport{
+		ID:           id,
+		RecordingID:  recordingID,
+		ChannelID:    channelID,
+		SessionID:    sessionID,
+		Title:        strings.TrimSpace(params.Title),
+		StartSeconds: params.StartSeconds,
+		EndSeconds:   params.EndSeconds,
+		Status:       "pending",
+		CreatedAt:    now,
+	}
+	_, err = r.pool.Exec(ctx, "INSERT INTO clip_exports (id, recording_id, channel_id, session_id, title, start_seconds, end_seconds, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+		clip.ID,
+		clip.RecordingID,
+		clip.ChannelID,
+		clip.SessionID,
+		clip.Title,
+		clip.StartSeconds,
+		clip.EndSeconds,
+		clip.Status,
+		clip.CreatedAt,
+	)
+	if err != nil {
+		return models.ClipExport{}, fmt.Errorf("insert clip export: %w", err)
+	}
+	return clip, nil
 }
 
 func (r *postgresRepository) ListClipExports(recordingID string) ([]models.ClipExport, error) {
-	return nil, ErrPostgresUnavailable
+	if r == nil || r.pool == nil {
+		return nil, ErrPostgresUnavailable
+	}
+	if strings.TrimSpace(recordingID) == "" {
+		return nil, fmt.Errorf("recording id is required")
+	}
+	ctx := context.Background()
+	var exists bool
+	if err := r.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM recordings WHERE id = $1)", recordingID).Scan(&exists); err != nil {
+		return nil, fmt.Errorf("check recording %s: %w", recordingID, err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("recording %s not found", recordingID)
+	}
+	rows, err := r.pool.Query(ctx, "SELECT id, recording_id, channel_id, session_id, title, start_seconds, end_seconds, status, playback_url, created_at, completed_at, storage_object FROM clip_exports WHERE recording_id = $1 ORDER BY created_at DESC", recordingID)
+	if err != nil {
+		return nil, fmt.Errorf("list clip exports: %w", err)
+	}
+	defer rows.Close()
+	clips := make([]models.ClipExport, 0)
+	for rows.Next() {
+		var clip models.ClipExport
+		var completedAt pgtype.Timestamptz
+		if err := rows.Scan(&clip.ID, &clip.RecordingID, &clip.ChannelID, &clip.SessionID, &clip.Title, &clip.StartSeconds, &clip.EndSeconds, &clip.Status, &clip.PlaybackURL, &clip.CreatedAt, &completedAt, &clip.StorageObject); err != nil {
+			return nil, fmt.Errorf("scan clip export: %w", err)
+		}
+		if completedAt.Valid {
+			ts := completedAt.Time.UTC()
+			clip.CompletedAt = &ts
+		}
+		clips = append(clips, clip)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return clips, nil
 }
 
 func (r *postgresRepository) CreateChatMessage(channelID, userID, content string) (models.ChatMessage, error) {
