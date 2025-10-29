@@ -22,12 +22,39 @@ When the server is running, visit [http://localhost:8080](http://localhost:8080)
 
 - Create users, channels, and streamer profiles without touching the command line
 - Edit or retire accounts, rotate channel metadata, and keep stream keys handy with one-click copy actions
-- Start or stop live sessions and export a JSON snapshot of the state (the analytics panel is planned once `/api/analytics/overview` is implemented)
+- Start or stop live sessions, export a JSON snapshot of the state, and review live analytics cards powered by `/api/analytics/overview`
 - Seed chat conversations, moderate or remove messages across every channel in one view
 - Capture recorded broadcasts automatically when a stream ends, manage retention windows, and surface VOD manifests to viewers
 - Curate streamer profiles with featured channels, top friends, and crypto donation links through a guided form
 - Generate a turn-key installer script that provisions BitRiver Live as a systemd service on a home server, complete with optional log directories
 - Offer a self-service `/signup` experience so viewers can create password-protected accounts on their own
+
+#### Analytics overview
+
+The Control Center surfaces the `/api/analytics/overview` endpoint through a dashboard that blends platform-wide metrics with channel-level detail. The response shape is:
+
+```json
+{
+  "summary": {
+    "liveViewers": 0,
+    "streamsLive": 0,
+    "watchTimeMinutes": 0,
+    "chatMessages": 0
+  },
+  "perChannel": [
+    {
+      "channelId": "string",
+      "title": "string",
+      "liveViewers": 0,
+      "followers": 0,
+      "avgWatchMinutes": 0,
+      "chatMessages": 0
+    }
+  ]
+}
+```
+
+`summary.watchTimeMinutes` tracks total viewer minutes over the last 24 hours, `summary.chatMessages` counts messages posted today, and `summary.streamsLive` reports active broadcasts. Each channel entry mirrors those aggregates with the current live audience, average watch time across recorded sessions, follower totals, and messages sent since midnight UTC.
 
 The UI talks directly to the same REST API documented below, so you can always fall back to curl or an API client when you need to automate advanced workflows.
 
