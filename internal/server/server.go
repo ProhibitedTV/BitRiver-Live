@@ -73,6 +73,8 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	mux.HandleFunc("/api/chat/ws", handler.ChatWebsocket)
 	mux.HandleFunc("/api/recordings", handler.Recordings)
 	mux.HandleFunc("/api/recordings/", handler.RecordingByID)
+	mux.HandleFunc("/api/uploads", handler.Uploads)
+	mux.HandleFunc("/api/uploads/", handler.UploadByID)
 	mux.HandleFunc("/api/moderation/queue", handler.ModerationQueue)
 	mux.HandleFunc("/api/moderation/queue/", handler.ModerationQueueByID)
 	mux.HandleFunc("/api/analytics/overview", handler.AnalyticsOverview)

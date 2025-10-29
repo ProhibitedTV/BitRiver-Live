@@ -98,6 +98,21 @@ export type VodCollection = {
   items: VodItem[];
 };
 
+export type UploadItem = {
+  id: string;
+  channelId: string;
+  title: string;
+  filename: string;
+  sizeBytes: number;
+  status: string;
+  progress: number;
+  createdAt: string;
+  updatedAt: string;
+  recordingId?: string;
+  playbackUrl?: string;
+  error?: string;
+};
+
 export type ChannelPlaybackResponse = {
   channel: ChannelPublic;
   owner: ChannelOwner;
@@ -188,4 +203,28 @@ export function sendChatMessage(channelId: string, message: string): Promise<Cha
 
 export function fetchChannelVods(channelId: string): Promise<VodCollection> {
   return viewerRequest<VodCollection>(`/api/channels/${channelId}/vods`);
+}
+
+export function fetchChannelUploads(channelId: string): Promise<UploadItem[]> {
+  return viewerRequest<UploadItem[]>(`/api/uploads?channelId=${channelId}`);
+}
+
+export function createUpload(payload: {
+  channelId: string;
+  title?: string;
+  filename?: string;
+  sizeBytes?: number;
+  playbackUrl?: string;
+  metadata?: Record<string, string>;
+}): Promise<UploadItem> {
+  return viewerRequest<UploadItem>("/api/uploads", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteUpload(id: string): Promise<void> {
+  return viewerRequest<void>(`/api/uploads/${id}`, {
+    method: "DELETE",
+  });
 }

@@ -215,7 +215,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	var options []storage.Option
+	var (
+		options          []storage.Option
+		ingestController ingest.Controller
+	)
 	if ingestConfig.RetryInterval > 0 || ingestConfig.MaxBootAttempts > 0 {
 		options = append(options, storage.WithIngestRetries(ingestConfig.MaxBootAttempts, ingestConfig.RetryInterval))
 	}
@@ -226,6 +229,7 @@ func main() {
 			os.Exit(1)
 		}
 		controller.SetLogger(logging.WithComponent(logger, "ingest"))
+		ingestController = controller
 		options = append(options, storage.WithIngestController(controller))
 	}
 
@@ -374,6 +378,17 @@ func main() {
 	})
 	handler := api.NewHandler(store, sessions)
 	handler.ChatGateway = gateway
+	var uploadProcessor *api.UploadProcessor
+	if ingestController != nil {
+		uploadProcessor = api.NewUploadProcessor(api.UploadProcessorConfig{
+			Store:      store,
+			Ingest:     ingestController,
+			Renditions: ingestConfig.LadderProfiles,
+			Logger:     logging.WithComponent(logger, "uploads"),
+		})
+		uploadProcessor.Start()
+		handler.UploadProcessor = uploadProcessor
+	}
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	defer workerCancel()
 	go storage.NewChatWorker(store, queue, logging.WithComponent(logger, "chat-worker")).Run(workerCtx)
@@ -446,6 +461,12 @@ func main() {
 
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Warn("graceful shutdown failed", "error", err)
+	}
+
+	if uploadProcessor != nil {
+		if err := uploadProcessor.Shutdown(ctx); err != nil {
+			logger.Warn("failed to stop upload processor", "error", err)
+		}
 	}
 
 	if closer, ok := store.(interface{ Close(context.Context) error }); ok {

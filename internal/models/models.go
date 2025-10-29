@@ -85,6 +85,23 @@ type RecordingThumbnail struct {
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
+type Upload struct {
+	ID          string            `json:"id"`
+	ChannelID   string            `json:"channelId"`
+	Title       string            `json:"title"`
+	Filename    string            `json:"filename"`
+	SizeBytes   int64             `json:"sizeBytes"`
+	Status      string            `json:"status"`
+	Progress    int               `json:"progress"`
+	RecordingID *string           `json:"recordingId,omitempty"`
+	PlaybackURL string            `json:"playbackUrl,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+	Error       string            `json:"error,omitempty"`
+	CreatedAt   time.Time         `json:"createdAt"`
+	UpdatedAt   time.Time         `json:"updatedAt"`
+	CompletedAt *time.Time        `json:"completedAt,omitempty"`
+}
+
 type ClipExport struct {
 	ID            string     `json:"id"`
 	RecordingID   string     `json:"recordingId"`

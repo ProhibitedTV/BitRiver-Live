@@ -117,6 +117,10 @@ func (f *fakeIngestController) HealthChecks(ctx context.Context) []ingest.Health
 	return snapshot
 }
 
+func (f *fakeIngestController) TranscodeUpload(ctx context.Context, params ingest.UploadTranscodeParams) (ingest.UploadTranscodeResult, error) {
+	return ingest.UploadTranscodeResult{PlaybackURL: params.SourceURL}, nil
+}
+
 type fakeObjectStorage struct {
 	uploads []fakeUpload
 	deletes []string

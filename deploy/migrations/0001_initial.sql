@@ -100,6 +100,25 @@ CREATE TABLE IF NOT EXISTS recording_thumbnails (
     created_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS uploads (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    size_bytes BIGINT NOT NULL DEFAULT 0,
+    status TEXT NOT NULL,
+    progress INTEGER NOT NULL DEFAULT 0,
+    recording_id TEXT,
+    playback_url TEXT,
+    metadata JSONB NOT NULL DEFAULT '{}'::JSONB,
+    error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS uploads_channel_idx ON uploads (channel_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS clip_exports (
     id TEXT PRIMARY KEY,
     recording_id TEXT NOT NULL REFERENCES recordings(id) ON DELETE CASCADE,

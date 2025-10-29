@@ -50,6 +50,12 @@ type Repository interface {
 	PublishRecording(id string) (models.Recording, error)
 	DeleteRecording(id string) error
 
+	CreateUpload(params CreateUploadParams) (models.Upload, error)
+	ListUploads(channelID string) ([]models.Upload, error)
+	GetUpload(id string) (models.Upload, bool)
+	UpdateUpload(id string, update UploadUpdate) (models.Upload, error)
+	DeleteUpload(id string) error
+
 	CreateClipExport(recordingID string, params ClipExportParams) (models.ClipExport, error)
 	ListClipExports(recordingID string) ([]models.ClipExport, error)
 

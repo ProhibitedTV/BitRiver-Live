@@ -5,6 +5,7 @@ import { ChannelHero } from "../../../components/ChannelHero";
 import { ChatPanel } from "../../../components/ChatPanel";
 import { Player } from "../../../components/Player";
 import { VodGallery } from "../../../components/VodGallery";
+import { UploadManager } from "../../../components/UploadManager";
 import type {
   ChannelPlaybackResponse,
   FollowState,
@@ -106,6 +107,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
                 </div>
               )}
               <VodGallery items={vods} />
+              <UploadManager channelId={id} />
             </div>
             <aside className="channel-layout__sidebar">
               <ChatPanel channelId={id} roomId={data.chat?.roomId} />
