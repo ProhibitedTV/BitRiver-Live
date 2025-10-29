@@ -42,6 +42,7 @@ type Server struct {
 	auditLogger *slog.Logger
 	metrics     *metrics.Recorder
 	rateLimiter *rateLimiter
+	ipResolver  *clientIPResolver
 	tlsCertFile string
 	tlsKeyFile  string
 }
@@ -111,12 +112,16 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("configure rate limiter: %w", err)
 	}
+	ipResolver, err := newClientIPResolver(cfg.RateLimit)
+	if err != nil {
+		return nil, fmt.Errorf("configure client ip resolver: %w", err)
+	}
 	handlerChain := http.Handler(mux)
 	handlerChain = authMiddleware(handler, handlerChain)
-	handlerChain = rateLimitMiddleware(rl, cfg.Logger, handlerChain)
+	handlerChain = rateLimitMiddleware(rl, ipResolver, cfg.Logger, handlerChain)
 	handlerChain = metricsMiddleware(recorder, handlerChain)
-	handlerChain = auditMiddleware(cfg.AuditLogger, handlerChain)
-	handlerChain = loggingMiddleware(cfg.Logger, handlerChain)
+	handlerChain = auditMiddleware(cfg.AuditLogger, ipResolver, handlerChain)
+	handlerChain = loggingMiddleware(cfg.Logger, ipResolver, handlerChain)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Addr,
@@ -133,6 +138,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 		auditLogger: cfg.AuditLogger,
 		metrics:     recorder,
 		rateLimiter: rl,
+		ipResolver:  ipResolver,
 		tlsCertFile: strings.TrimSpace(cfg.TLS.CertFile),
 		tlsKeyFile:  strings.TrimSpace(cfg.TLS.KeyFile),
 	}
@@ -177,7 +183,7 @@ func (sr *statusRecorder) WriteHeader(status int) {
 	sr.ResponseWriter.WriteHeader(status)
 }
 
-func loggingMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
+func loggingMiddleware(logger *slog.Logger, resolver *clientIPResolver, next http.Handler) http.Handler {
 	if logger == nil {
 		return next
 	}
@@ -186,12 +192,14 @@ func loggingMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(recorder, r)
 		duration := time.Since(start)
+		ip, source := resolveClientIP(r, resolver)
 		logger.Info("request completed",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", recorder.status,
 			"duration_ms", duration.Milliseconds(),
-			"remote_ip", extractClientIP(r))
+			"remote_ip", ip,
+			"ip_source", source)
 	})
 }
 
@@ -207,7 +215,7 @@ func metricsMiddleware(recorder *metrics.Recorder, next http.Handler) http.Handl
 	})
 }
 
-func rateLimitMiddleware(rl *rateLimiter, logger *slog.Logger, next http.Handler) http.Handler {
+func rateLimitMiddleware(rl *rateLimiter, resolver *clientIPResolver, logger *slog.Logger, next http.Handler) http.Handler {
 	if rl == nil {
 		return next
 	}
@@ -217,16 +225,19 @@ func rateLimitMiddleware(rl *rateLimiter, logger *slog.Logger, next http.Handler
 			return
 		}
 		if r.Method == http.MethodPost && r.URL.Path == "/api/auth/login" {
-			ip := clientIPFromRequest(r)
+			ip, source := resolveClientIP(r, resolver)
 			allowed, retryAfter, err := rl.AllowLogin(ip)
 			if err != nil {
 				if logger != nil {
-					logger.Error("rate limiter failure", "error", err)
+					logger.Error("rate limiter failure", "error", err, "remote_ip", ip, "ip_source", source)
 				}
 				http.Error(w, "rate limit failure", http.StatusServiceUnavailable)
 				return
 			}
 			if !allowed {
+				if logger != nil {
+					logger.Warn("login rate limited", "remote_ip", ip, "ip_source", source)
+				}
 				if retryAfter > 0 {
 					w.Header().Set("Retry-After", fmt.Sprintf("%.0f", retryAfter.Seconds()))
 				}
@@ -238,7 +249,7 @@ func rateLimitMiddleware(rl *rateLimiter, logger *slog.Logger, next http.Handler
 	})
 }
 
-func auditMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
+func auditMiddleware(logger *slog.Logger, resolver *clientIPResolver, next http.Handler) http.Handler {
 	if logger == nil {
 		return next
 	}
@@ -251,12 +262,14 @@ func auditMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 		}
 		duration := time.Since(start)
 		user, ok := api.UserFromContext(r.Context())
+		ip, source := resolveClientIP(r, resolver)
 		fields := []interface{}{
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", sr.status,
 			"duration_ms", duration.Milliseconds(),
-			"remote_ip", extractClientIP(r),
+			"remote_ip", ip,
+			"ip_source", source,
 		}
 		if ok {
 			fields = append(fields, "user_id", user.ID)
@@ -277,21 +290,96 @@ func shouldAudit(r *http.Request) bool {
 	}
 }
 
-func extractClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		if len(parts) > 0 {
-			return strings.TrimSpace(parts[0])
-		}
-	}
-	if xrip := r.Header.Get("X-Real-IP"); xrip != "" {
-		return strings.TrimSpace(xrip)
-	}
-	return clientIP(r.RemoteAddr)
+const (
+	ipSourceRemoteAddr    = "remote_addr"
+	ipSourceXForwardedFor = "x_forwarded_for"
+	ipSourceXRealIP       = "x_real_ip"
+)
+
+type clientIPResolver struct {
+	trustForwarded bool
+	trustedNets    []*net.IPNet
 }
 
-func clientIPFromRequest(r *http.Request) string {
-	return extractClientIP(r)
+func newClientIPResolver(cfg RateLimitConfig) (*clientIPResolver, error) {
+	resolver := &clientIPResolver{trustForwarded: cfg.TrustForwardedHeaders}
+	for _, raw := range cfg.TrustedProxies {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			continue
+		}
+		if _, network, err := net.ParseCIDR(trimmed); err == nil {
+			resolver.trustedNets = append(resolver.trustedNets, network)
+			continue
+		}
+		ip := net.ParseIP(trimmed)
+		if ip == nil {
+			return nil, fmt.Errorf("parse trusted proxy %q: invalid address", trimmed)
+		}
+		maskSize := 128
+		if ip.To4() != nil {
+			maskSize = 32
+		}
+		resolver.trustedNets = append(resolver.trustedNets, &net.IPNet{IP: ip, Mask: net.CIDRMask(maskSize, maskSize)})
+	}
+	if !resolver.trustForwarded && len(resolver.trustedNets) == 0 {
+		return resolver, nil
+	}
+	return resolver, nil
+}
+
+func (r *clientIPResolver) ClientIPFromRequest(req *http.Request) (string, string) {
+	if req == nil {
+		return "", ipSourceRemoteAddr
+	}
+	if r != nil && r.shouldTrust(req.RemoteAddr) {
+		if xff := req.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			for _, part := range parts {
+				trimmed := strings.TrimSpace(part)
+				if trimmed != "" {
+					return trimmed, ipSourceXForwardedFor
+				}
+			}
+		}
+		if xrip := strings.TrimSpace(req.Header.Get("X-Real-IP")); xrip != "" {
+			return xrip, ipSourceXRealIP
+		}
+	}
+	return clientIP(req.RemoteAddr), ipSourceRemoteAddr
+}
+
+func (r *clientIPResolver) shouldTrust(remoteAddr string) bool {
+	if r == nil {
+		return false
+	}
+	if r.trustForwarded {
+		return true
+	}
+	if len(r.trustedNets) == 0 {
+		return false
+	}
+	host := clientIP(remoteAddr)
+	if host == "" {
+		return false
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	for _, network := range r.trustedNets {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func resolveClientIP(r *http.Request, resolver *clientIPResolver) (string, string) {
+	if resolver == nil {
+		return clientIP(r.RemoteAddr), ipSourceRemoteAddr
+	}
+	return resolver.ClientIPFromRequest(r)
 }
 
 func clientIP(remoteAddr string) string {
