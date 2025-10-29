@@ -809,6 +809,97 @@ func TestStopStreamUploadsRecordingArtifacts(t *testing.T) {
 	}
 }
 
+func TestPopulateRecordingArtifactsTimeout(t *testing.T) {
+	requests := make(chan struct{}, 4)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case requests <- struct{}{}:
+		default:
+		}
+		<-r.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+
+	timeout := 50 * time.Millisecond
+	store := newTestStoreWithController(t, ingest.NoopController{}, WithObjectStorage(ObjectStorageConfig{
+		Endpoint:       server.URL,
+		Bucket:         "vod",
+		RequestTimeout: timeout,
+	}))
+
+	recording := models.Recording{
+		ID:        "rec-timeout",
+		SessionID: "session-timeout",
+		CreatedAt: time.Now(),
+		Renditions: []models.RecordingRendition{{
+			Name: "source",
+		}},
+	}
+	session := models.StreamSession{
+		ID: "session-timeout",
+		RenditionManifests: []models.RenditionManifest{{
+			Name:        "source",
+			ManifestURL: "https://example.com/source.m3u8",
+		}},
+	}
+
+	err := store.populateRecordingArtifactsLocked(&recording, session)
+	if err == nil {
+		t.Fatalf("expected populateRecordingArtifactsLocked to fail when request blocks")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded error, got %v", err)
+	}
+
+	select {
+	case <-requests:
+	case <-time.After(time.Second):
+		t.Fatal("expected upload request to be issued")
+	}
+}
+
+func TestDeleteRecordingArtifactsTimeout(t *testing.T) {
+	methods := make(chan string, 4)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case methods <- r.Method:
+		default:
+		}
+		<-r.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+
+	timeout := 50 * time.Millisecond
+	store := newTestStoreWithController(t, ingest.NoopController{}, WithObjectStorage(ObjectStorageConfig{
+		Endpoint:       server.URL,
+		Bucket:         "vod",
+		RequestTimeout: timeout,
+	}))
+
+	recording := models.Recording{
+		Metadata: map[string]string{
+			manifestMetadataKey("source"): "recordings/rec-timeout/manifests/source.json",
+		},
+	}
+
+	err := store.deleteRecordingArtifactsLocked(recording)
+	if err == nil {
+		t.Fatalf("expected deleteRecordingArtifactsLocked to fail when request blocks")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded error, got %v", err)
+	}
+
+	select {
+	case method := <-methods:
+		if method != http.MethodDelete {
+			t.Fatalf("expected DELETE request, got %s", method)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected delete request to be issued")
+	}
+}
+
 func TestStartStreamPersistsIngestMetadata(t *testing.T) {
 	fake := &fakeIngestController{bootResponses: []bootResponse{{result: ingest.BootResult{
 		PrimaryIngest: "rtmp://primary/live",
