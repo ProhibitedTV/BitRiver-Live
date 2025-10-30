@@ -34,7 +34,9 @@ func TestDialWS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
-	t.Cleanup(conn.Close)
+	t.Cleanup(func() {
+		_ = conn.Close()
+	})
 
 	message, err := conn.ReadMessage(context.Background())
 	if err != nil {
@@ -74,7 +76,9 @@ func TestDialWSS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
-	t.Cleanup(conn.Close)
+	t.Cleanup(func() {
+		_ = conn.Close()
+	})
 
 	message, err := conn.ReadMessage(context.Background())
 	if err != nil {

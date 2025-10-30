@@ -21,10 +21,11 @@ import (
 )
 
 type Handler struct {
-	Store       storage.Repository
-	Sessions    *auth.SessionManager
-	ChatGateway *chat.Gateway
-	OAuth       oauth.Service
+	Store           storage.Repository
+	Sessions        *auth.SessionManager
+	ChatGateway     *chat.Gateway
+	OAuth           oauth.Service
+	UploadProcessor *UploadProcessor
 }
 
 func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handler {
