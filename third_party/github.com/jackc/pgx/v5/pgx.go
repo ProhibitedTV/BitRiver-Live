@@ -12,7 +12,24 @@ var (
 	ErrTxClosed = errors.New("pgx stub: transaction closed")
 )
 
-type TxOptions struct{}
+type ConnConfig struct {
+	RuntimeParams map[string]string
+}
+
+type TxIsoLevel int16
+
+type TxAccessMode int16
+
+const (
+	ReadWrite TxAccessMode = iota
+	ReadOnly
+)
+
+type TxOptions struct {
+	IsoLevel   TxIsoLevel
+	AccessMode TxAccessMode
+	Deferrable bool
+}
 
 type Row interface {
 	Scan(dest ...any) error
