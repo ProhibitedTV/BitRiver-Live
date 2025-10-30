@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { ChannelHero } from "../components/ChannelHero";
+import { ChannelHeader } from "../components/ChannelHero";
 import { useAuth } from "../hooks/useAuth";
 import {
   followChannel,
@@ -78,7 +78,7 @@ beforeEach(() => {
 });
 
 test("renders follower and subscriber totals", () => {
-  render(<ChannelHero data={baseData} />);
+  render(<ChannelHeader data={baseData} />);
 
   expect(screen.getByText("Followers")).toBeInTheDocument();
   expect(screen.getByText("10", { selector: "dd" })).toBeInTheDocument();
@@ -91,7 +91,11 @@ test("toggles follow and subscribe state", async () => {
   const onSubscriptionChange = jest.fn();
 
   render(
-    <ChannelHero data={baseData} onFollowChange={onFollowChange} onSubscriptionChange={onSubscriptionChange} />
+    <ChannelHeader
+      data={baseData}
+      onFollowChange={onFollowChange}
+      onSubscriptionChange={onSubscriptionChange}
+    />
   );
 
   const followButton = screen.getByRole("button", { name: /follow · 10 supporters/i });

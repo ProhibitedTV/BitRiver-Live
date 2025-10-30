@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChannelHero } from "../../../components/ChannelHero";
+import { ChannelAboutPanel, ChannelHeader } from "../../../components/ChannelHero";
 import { ChatPanel } from "../../../components/ChatPanel";
 import { Player } from "../../../components/Player";
 import { VodGallery } from "../../../components/VodGallery";
@@ -20,6 +20,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
   const [vods, setVods] = useState<VodItem[]>([]);
+  const [activeTab, setActiveTab] = useState<"about" | "schedule" | "videos">("about");
 
   useEffect(() => {
     let cancelled = false;
@@ -79,41 +80,85 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
     };
   }, [id]);
 
+  const tabs = [
+    { id: "about", label: "About" },
+    { id: "schedule", label: "Schedule" },
+    { id: "videos", label: "Videos" }
+  ] as const;
+
   return (
-    <div className="container stack">
+    <div className="container channel-page">
       {loading && <div className="surface">Loading channel…</div>}
       {error && <div className="surface">{error}</div>}
       {data && (
-        <>
-          <ChannelHero
-            data={data}
-            onFollowChange={handleFollowChange}
-            onSubscriptionChange={handleSubscriptionChange}
-          />
-          <div className="channel-layout">
-            <div className="channel-layout__primary stack">
+        <div className="channel-page__grid">
+          <div className="channel-page__main stack">
+            <div className="channel-player">
               <Player playback={data.playback} />
-              {data.playback?.renditions && data.playback.renditions.length > 0 && (
-                <div className="surface stack">
-                  <h3>Available renditions</h3>
-                  <ul>
-                    {data.playback.renditions.map((rendition) => (
-                      <li key={rendition.name}>
-                        <strong>{rendition.name}</strong> &middot; {rendition.manifestUrl}
-                        {rendition.bitrate && ` · ${Math.round(rendition.bitrate / 1000)} kbps`}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              <VodGallery items={vods} />
-              <UploadManager channelId={id} />
             </div>
-            <aside className="channel-layout__sidebar">
-              <ChatPanel channelId={id} roomId={data.chat?.roomId} />
-            </aside>
+            <ChannelHeader
+              data={data}
+              onFollowChange={handleFollowChange}
+              onSubscriptionChange={handleSubscriptionChange}
+            />
+            <section className="channel-tabs">
+              <div className="channel-tabs__list" role="tablist" aria-label="Stream info tabs">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    id={`channel-tab-${tab.id}-trigger`}
+                    role="tab"
+                    type="button"
+                    className="channel-tabs__trigger"
+                    aria-selected={activeTab === tab.id}
+                    aria-controls={`channel-tab-${tab.id}`}
+                    onClick={() => setActiveTab(tab.id)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <div className="channel-tabs__panels">
+                <div
+                  id="channel-tab-about"
+                  role="tabpanel"
+                  aria-labelledby="channel-tab-about-trigger"
+                  hidden={activeTab !== "about"}
+                  className="channel-tabs__panel"
+                >
+                  <ChannelAboutPanel data={data} />
+                </div>
+                <div
+                  id="channel-tab-schedule"
+                  role="tabpanel"
+                  aria-labelledby="channel-tab-schedule-trigger"
+                  hidden={activeTab !== "schedule"}
+                  className="channel-tabs__panel"
+                >
+                  <section className="surface stack">
+                    <h3>Schedule</h3>
+                    <p className="muted">The broadcaster hasn&apos;t shared an upcoming schedule yet.</p>
+                  </section>
+                </div>
+                <div
+                  id="channel-tab-videos"
+                  role="tabpanel"
+                  aria-labelledby="channel-tab-videos-trigger"
+                  hidden={activeTab !== "videos"}
+                  className="channel-tabs__panel"
+                >
+                  <VodGallery items={vods} />
+                </div>
+              </div>
+            </section>
+            <UploadManager channelId={id} />
           </div>
-        </>
+          <aside className="channel-page__chat">
+            <div className="channel-page__chat-inner">
+              <ChatPanel channelId={id} roomId={data.chat?.roomId} />
+            </div>
+          </aside>
+        </div>
       )}
     </div>
   );

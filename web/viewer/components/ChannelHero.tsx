@@ -14,15 +14,13 @@ import {
   unsubscribeChannel
 } from "../lib/viewer-api";
 
-export function ChannelHero({
-  data,
-  onFollowChange,
-  onSubscriptionChange
-}: {
+export type ChannelHeaderProps = {
   data: ChannelPlaybackResponse;
   onFollowChange?: (state: FollowState) => void;
   onSubscriptionChange?: (state: SubscriptionState) => void;
-}) {
+};
+
+export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: ChannelHeaderProps) {
   const { user } = useAuth();
   const [follow, setFollow] = useState<FollowState>(data.follow);
   const initialSubscription: SubscriptionState = data.subscription ?? {
@@ -75,69 +73,106 @@ export function ChannelHero({
   };
 
   return (
-    <section className="hero">
-      <div className="stack">
-        <header className="stack">
-          <h1>{data.channel.title}</h1>
-          <div className="tag-list">
-            {data.live && <span className="badge">Live now</span>}
-            {data.channel.category && <span className="tag">{data.channel.category}</span>}
-            {data.channel.tags.map((tag) => (
-              <span key={tag} className="tag">
-                #{tag}
-              </span>
-            ))}
-          </div>
-        </header>
-          <div className="surface stack">
-            <div className="stack" style={{ gap: "0.35rem" }}>
-              <strong>{data.owner.displayName}</strong>
-              {data.profile.bio && <p className="muted">{data.profile.bio}</p>}
-            </div>
-            <div className="nav-links" style={{ justifyContent: "flex-start" }}>
-              <button className="primary-button" onClick={handleToggleFollow} disabled={loading}>
-                {follow.following ? "Following" : "Follow"} · {follow.followers} supporter
-                {follow.followers === 1 ? "" : "s"}
-              </button>
-              <button
-                className="secondary-button"
-                onClick={handleToggleSubscription}
-                disabled={subscriptionLoading}
-                aria-pressed={subscription.subscribed}
-              >
-                {subscription.subscribed ? "Subscribed" : "Subscribe"}
-                {subscription.tier ? ` · ${subscription.tier}` : ""}
-              </button>
-              <span className="muted">
-                {data.live
-                  ? "Enjoy low-latency playback powered by the ingest pipeline."
-                  : "Offline for now – follow to be notified when the stream returns."}
-              </span>
-            </div>
-            <dl className="channel-stats" aria-label="Channel community stats">
-              <div>
-                <dt>Followers</dt>
-                <dd>{follow.followers.toLocaleString()}</dd>
-              </div>
-              <div>
-                <dt>Subscribers</dt>
-                <dd>{subscription.subscribers.toLocaleString()}</dd>
-              </div>
-            </dl>
-            {status && <span className="muted">{status}</span>}
-          </div>
-      </div>
-      <aside className="stack">
-        {data.profile.bannerUrl && (
-          <img src={data.profile.bannerUrl} alt={`${data.owner.displayName} channel art`} />
-        )}
-        <div className="surface stack">
-          <h3>Channel details</h3>
-          <p className="muted">
-            Created {new Date(data.channel.createdAt).toLocaleString()} · Updated {new Date(data.channel.updatedAt).toLocaleString()}
-          </p>
+    <section className="channel-header surface stack" aria-labelledby="channel-title">
+      <header className="channel-header__meta stack" style={{ gap: "0.5rem" }}>
+        <div className="channel-header__title stack" style={{ gap: "0.35rem" }}>
+          <p className="muted">{data.owner.displayName}</p>
+          <h1 id="channel-title">{data.channel.title}</h1>
         </div>
-      </aside>
+        <div className="tag-list">
+          {data.live && <span className="badge">Live now</span>}
+          {data.channel.category && <span className="tag">{data.channel.category}</span>}
+          {data.channel.tags.map((tag) => (
+            <span key={tag} className="tag">
+              #{tag}
+            </span>
+          ))}
+        </div>
+      </header>
+      <div className="channel-header__actions">
+        <div className="channel-header__buttons">
+          <button className="primary-button" onClick={handleToggleFollow} disabled={loading}>
+            {follow.following ? "Following" : "Follow"} · {follow.followers} supporter
+            {follow.followers === 1 ? "" : "s"}
+          </button>
+          <button
+            className="secondary-button"
+            onClick={handleToggleSubscription}
+            disabled={subscriptionLoading}
+            aria-pressed={subscription.subscribed}
+          >
+            {subscription.subscribed ? "Subscribed" : "Subscribe"}
+            {subscription.tier ? ` · ${subscription.tier}` : ""}
+          </button>
+        </div>
+        <dl className="channel-stats" aria-label="Channel community stats">
+          <div>
+            <dt>Followers</dt>
+            <dd>{follow.followers.toLocaleString()}</dd>
+          </div>
+          <div>
+            <dt>Subscribers</dt>
+            <dd>{subscription.subscribers.toLocaleString()}</dd>
+          </div>
+        </dl>
+      </div>
+      <p className="muted" role="status">
+        {status ??
+          (data.live
+            ? "Enjoy low-latency playback powered by the ingest pipeline."
+            : "Offline for now – follow to be notified when the stream returns.")}
+      </p>
+    </section>
+  );
+}
+
+export function ChannelAboutPanel({ data }: { data: ChannelPlaybackResponse }) {
+  return (
+    <section className="channel-about surface stack">
+      {data.profile.bannerUrl && (
+        <img
+          src={data.profile.bannerUrl}
+          alt={`${data.owner.displayName} channel art`}
+          className="channel-about__banner"
+        />
+      )}
+      <div className="stack" style={{ gap: "0.5rem" }}>
+        <h3>About {data.owner.displayName}</h3>
+        {data.profile.bio ? (
+          <p className="muted">{data.profile.bio}</p>
+        ) : (
+          <p className="muted">The broadcaster hasn&apos;t shared a bio yet.</p>
+        )}
+      </div>
+      <div className="channel-about__details">
+        <dl>
+          <dt>Channel created</dt>
+          <dd>{new Date(data.channel.createdAt).toLocaleString()}</dd>
+        </dl>
+        <dl>
+          <dt>Last updated</dt>
+          <dd>{new Date(data.channel.updatedAt).toLocaleString()}</dd>
+        </dl>
+        {data.channel.category && (
+          <dl>
+            <dt>Category</dt>
+            <dd>{data.channel.category}</dd>
+          </dl>
+        )}
+      </div>
+      {data.playback?.renditions && data.playback.renditions.length > 0 && (
+        <div className="channel-about__renditions stack">
+          <h4>Available renditions</h4>
+          <ul>
+            {data.playback.renditions.map((rendition) => (
+              <li key={rendition.name}>
+                <strong>{rendition.name}</strong> · {rendition.manifestUrl}
+                {rendition.bitrate && ` · ${Math.round(rendition.bitrate / 1000)} kbps`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   );
 }
