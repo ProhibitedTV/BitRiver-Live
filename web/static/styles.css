@@ -389,19 +389,26 @@ main {
 }
 
 .secondary {
-    background: rgba(148, 163, 184, 0.15);
-    color: #e2e8f0;
+    background: var(--surface);
+    color: var(--text);
     border: 1px solid var(--border);
     border-radius: 0.75rem;
     padding: 0.55rem 1.1rem;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.2s ease;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 .secondary:hover,
 .secondary:focus-visible {
-    background: rgba(148, 163, 184, 0.25);
+    background: color-mix(in srgb, var(--surface-strong) 85%, var(--surface) 15%);
+    border-color: color-mix(in srgb, var(--border) 70%, var(--accent) 30%);
+}
+
+[data-theme="light"] .secondary:hover,
+[data-theme="light"] .secondary:focus-visible {
+    background: color-mix(in srgb, var(--surface-strong) 60%, var(--background-solid) 40%);
+    border-color: color-mix(in srgb, var(--border) 60%, var(--text) 40%);
 }
 
 .danger {
