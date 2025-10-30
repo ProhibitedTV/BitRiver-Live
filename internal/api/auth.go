@@ -84,6 +84,13 @@ func userHasAnyRole(user models.User, roles ...string) bool {
 	return false
 }
 
+// userHasRole is kept for compatibility with older call sites that expect the
+// package-level helper. Prefer using models.User.HasRole directly when
+// possible.
+func userHasRole(user models.User, role string) bool {
+	return user.HasRole(role)
+}
+
 func (h *Handler) ensureChannelAccess(w http.ResponseWriter, r *http.Request, channel models.Channel) (models.User, bool) {
 	user, ok := h.requireRole(w, r, roleAdmin, roleCreator)
 	if !ok {
