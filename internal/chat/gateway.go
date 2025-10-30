@@ -225,7 +225,7 @@ func (g *Gateway) validateModeration(actor models.User, evt ModerationEvent) err
 	if !exists {
 		return fmt.Errorf("channel %s not found", evt.ChannelID)
 	}
-	if actor.ID != channel.OwnerID && !userHasRole(actor, "admin") {
+	if actor.ID != channel.OwnerID && !actor.HasRole("admin") {
 		return fmt.Errorf("forbidden")
 	}
 	if evt.Action == ModerationActionTimeout && evt.ExpiresAt == nil {
@@ -235,15 +235,6 @@ func (g *Gateway) validateModeration(actor models.User, evt ModerationEvent) err
 		return fmt.Errorf("cannot timeout yourself")
 	}
 	return nil
-}
-
-func userHasRole(user models.User, role string) bool {
-	for _, existing := range user.Roles {
-		if strings.EqualFold(existing, role) {
-			return true
-		}
-	}
-	return false
 }
 
 func (g *Gateway) broadcast(event Event) {

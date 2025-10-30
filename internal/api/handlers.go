@@ -558,7 +558,7 @@ func (h *Handler) UserByID(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if requester.ID != id && !userHasRole(requester, roleAdmin) {
+		if requester.ID != id && !requester.HasRole(roleAdmin) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
@@ -914,16 +914,16 @@ func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 		}
 		ownerID := strings.TrimSpace(r.URL.Query().Get("ownerId"))
 		if ownerID == "" {
-			if !userHasRole(actor, roleAdmin) {
+			if !actor.HasRole(roleAdmin) {
 				ownerID = actor.ID
 			}
-		} else if ownerID != actor.ID && !userHasRole(actor, roleAdmin) {
+		} else if ownerID != actor.ID && !actor.HasRole(roleAdmin) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
 
 		channels := h.Store.ListChannels(ownerID)
-		if ownerID == actor.ID || userHasRole(actor, roleAdmin) {
+		if ownerID == actor.ID || actor.HasRole(roleAdmin) {
 			response := make([]channelResponse, 0, len(channels))
 			for _, channel := range channels {
 				response = append(response, newChannelResponse(channel))
@@ -950,7 +950,7 @@ func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 		if req.OwnerID == "" {
 			req.OwnerID = actor.ID
 		}
-		if req.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+		if req.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
@@ -983,7 +983,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
 			}
-			if actor, ok := UserFromContext(r.Context()); ok && (channel.OwnerID == actor.ID || userHasRole(actor, roleAdmin)) {
+			if actor, ok := UserFromContext(r.Context()); ok && (channel.OwnerID == actor.ID || actor.HasRole(roleAdmin)) {
 				writeJSON(w, http.StatusOK, newChannelResponse(channel))
 				return
 			}
@@ -1922,7 +1922,7 @@ func (h *Handler) Uploads(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 			return
 		}
-		if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+		if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
@@ -1956,7 +1956,7 @@ func (h *Handler) Uploads(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 			return
 		}
-		if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+		if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
@@ -2024,7 +2024,7 @@ func (h *Handler) UploadByID(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusUnauthorized, fmt.Errorf("authentication required"))
 			return
 		}
-		if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+		if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
@@ -2034,7 +2034,7 @@ func (h *Handler) UploadByID(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusUnauthorized, fmt.Errorf("authentication required"))
 			return
 		}
-		if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+		if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
@@ -2065,7 +2065,7 @@ func (h *Handler) Recordings(w http.ResponseWriter, r *http.Request) {
 	includeUnpublished := false
 	if actor, ok := UserFromContext(r.Context()); ok {
 		if channel, exists := h.Store.GetChannel(channelID); exists {
-			if channel.OwnerID == actor.ID || userHasRole(actor, roleAdmin) {
+			if channel.OwnerID == actor.ID || actor.HasRole(roleAdmin) {
 				includeUnpublished = true
 			}
 		}
@@ -2122,7 +2122,7 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 				WriteError(w, http.StatusUnauthorized, fmt.Errorf("authentication required"))
 				return
 			}
-			if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+			if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 				WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 				return
 			}
@@ -2141,7 +2141,7 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 			switch r.Method {
 			case http.MethodGet:
 				if recording.PublishedAt == nil {
-					if !hasActor || (channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin)) {
+					if !hasActor || (channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin)) {
 						WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 						return
 					}
@@ -2161,7 +2161,7 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 					WriteError(w, http.StatusUnauthorized, fmt.Errorf("authentication required"))
 					return
 				}
-				if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+				if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 					WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 					return
 				}
@@ -2194,7 +2194,7 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		if recording.PublishedAt == nil {
-			if !hasActor || (channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin)) {
+			if !hasActor || (channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin)) {
 				WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 				return
 			}
@@ -2205,7 +2205,7 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusUnauthorized, fmt.Errorf("authentication required"))
 			return
 		}
-		if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+		if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
@@ -2288,7 +2288,7 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 				return
 			}
-			if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+			if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 				WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 				return
 			}
@@ -2329,7 +2329,7 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		if req.UserID != actor.ID && !userHasRole(actor, roleAdmin) {
+		if req.UserID != actor.ID && !actor.HasRole(roleAdmin) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
@@ -2379,7 +2379,7 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 				return
 			}
-			if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+			if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 				WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 				return
 			}
@@ -2470,7 +2470,7 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 				return
 			}
-			if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+			if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 				WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 				return
 			}
@@ -2493,7 +2493,7 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 
 	switch r.Method {
 	case http.MethodGet:
-		if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+		if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
@@ -2862,7 +2862,7 @@ func (h *Handler) handleTipsRoutes(channel models.Channel, remaining []string, w
 	}
 	switch r.Method {
 	case http.MethodGet:
-		if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+		if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
@@ -2929,7 +2929,7 @@ func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []
 				writeError(w, http.StatusNotFound, fmt.Errorf("subscription %s not found", subscriptionID))
 				return
 			}
-			if sub.UserID != actor.ID && channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+			if sub.UserID != actor.ID && channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 				WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 				return
 			}
@@ -2948,7 +2948,7 @@ func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []
 
 	switch r.Method {
 	case http.MethodGet:
-		if channel.OwnerID != actor.ID && !userHasRole(actor, roleAdmin) {
+		if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
@@ -3048,7 +3048,7 @@ func (h *Handler) ProfileByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if actor.ID != userID {
-			if !userHasRole(actor, roleAdmin) {
+			if !actor.HasRole(roleAdmin) {
 				WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 				return
 			}

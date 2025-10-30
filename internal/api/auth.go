@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"bitriver-live/internal/models"
 )
@@ -35,13 +34,13 @@ func (h *Handler) AuthenticateRequest(r *http.Request) (models.User, error) {
 	if token == "" {
 		return models.User{}, fmt.Errorf("missing session token")
 	}
-        userID, _, ok, err := h.sessionManager().Validate(token)
-        if err != nil {
-                return models.User{}, fmt.Errorf("session validation failed: %w", err)
-        }
-        if !ok {
-                return models.User{}, fmt.Errorf("invalid or expired session")
-        }
+	userID, _, ok, err := h.sessionManager().Validate(token)
+	if err != nil {
+		return models.User{}, fmt.Errorf("session validation failed: %w", err)
+	}
+	if !ok {
+		return models.User{}, fmt.Errorf("invalid or expired session")
+	}
 	user, exists := h.Store.GetUser(userID)
 	if !exists {
 		return models.User{}, fmt.Errorf("account not found")
@@ -78,16 +77,7 @@ func userHasAnyRole(user models.User, roles ...string) bool {
 		return true
 	}
 	for _, required := range roles {
-		if userHasRole(user, required) {
-			return true
-		}
-	}
-	return false
-}
-
-func userHasRole(user models.User, role string) bool {
-	for _, existing := range user.Roles {
-		if strings.EqualFold(existing, role) {
+		if user.HasRole(required) {
 			return true
 		}
 	}
@@ -99,7 +89,7 @@ func (h *Handler) ensureChannelAccess(w http.ResponseWriter, r *http.Request, ch
 	if !ok {
 		return models.User{}, false
 	}
-	if channel.OwnerID != user.ID && !userHasRole(user, roleAdmin) {
+	if channel.OwnerID != user.ID && !user.HasRole(roleAdmin) {
 		WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 		return models.User{}, false
 	}
