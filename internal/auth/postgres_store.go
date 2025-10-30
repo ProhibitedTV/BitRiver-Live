@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -106,8 +106,5 @@ func isNoRows(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, pgxpool.ErrClosedPool) {
-		return false
-	}
-	return strings.Contains(err.Error(), "no rows in result set")
+	return errors.Is(err, pgx.ErrNoRows)
 }
