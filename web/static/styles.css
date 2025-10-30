@@ -186,9 +186,14 @@ body.auth-page {
 .hero__nav button[aria-current="page"] {
     background: var(--accent);
     border-color: var(--accent);
-    color: #0f172a;
+    color: #f8fafc;
     box-shadow: 0 10px 24px rgba(14, 165, 233, 0.35);
     font-weight: 600;
+}
+
+[data-theme="light"] .hero__nav button.is-active,
+[data-theme="light"] .hero__nav button[aria-current="page"] {
+    color: #f1f5f9;
 }
 
 .hero__nav button.is-active:hover,
