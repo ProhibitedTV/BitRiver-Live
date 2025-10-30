@@ -159,15 +159,40 @@ The same configuration can be supplied via environment variables:
 
 ### Public viewer
 
-BitRiver Live now ships with a dedicated viewer experience powered by Next.js. Build it from `web/viewer`:
+The BitRiver Live viewer is what your audience sees: a polished channel directory, live chat beside the stream, and quick links into each creator’s back catalogue. It is optional if you only need the control center, but it makes the platform feel complete for non-technical viewers.
 
-```bash
-cd web/viewer
-npm ci
-NEXT_VIEWER_BASE_PATH=/viewer npm run build
-```
+#### Before you start
 
-Deploy the generated standalone output with `node server.js`. The Go API proxies `/viewer` requests to that runtime when `BITRIVER_VIEWER_ORIGIN` points at the viewer host (for example, `http://127.0.0.1:3000`). The client bundle reads `NEXT_PUBLIC_API_BASE_URL` at build time—leave it empty to call the same origin or set it to an absolute URL if the API lives elsewhere.
+- [Node.js 18+](https://nodejs.org/en/download/package-manager)
+- npm (ships with Node.js, or install separately if your distribution omits it)
+- A running BitRiver Live API ([quickstart](#set-up-bitriver-live-at-home))
+
+#### Quick preview
+
+1. `cd web/viewer`
+2. `npm install`
+3. Set the API endpoint the browser should call:
+   ```bash
+   NEXT_PUBLIC_API_BASE_URL="http://localhost:8080" npm run dev
+   ```
+   Omit the variable if the viewer and API share the same origin.
+
+This launches the viewer at [http://localhost:3000](http://localhost:3000) with hot reload so you can browse the public directory, open a channel page, and watch chat update in real time.
+
+#### Production build (optional)
+
+1. `cd web/viewer`
+2. `npm ci`
+3. Provide the public API URL and compile the standalone output:
+   ```bash
+   NEXT_PUBLIC_API_BASE_URL="https://api.example.com" npm run build
+   ```
+4. Start the production server:
+   ```bash
+   node server.js
+   ```
+
+Point the Go API at the viewer by setting `BITRIVER_VIEWER_ORIGIN` (for example, `http://127.0.0.1:3000`). Once that variable is in place, `/viewer` requests proxy straight to the Next.js server so the control center and public site work together.
 
 The viewer now bundles real-time chat, searchable channel discovery, subscriber tooling, and VOD rails. Every channel page exposes a responsive player, a live moderation-aware chat panel, and a replay gallery that pulls straight from the API. The header ships with a theme toggle that mirrors the control-center palette so dark rooms and bright studios both look great.
 
