@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type User struct {
 	ID           string    `json:"id"`
@@ -10,6 +13,16 @@ type User struct {
 	PasswordHash string    `json:"passwordHash,omitempty"`
 	SelfSignup   bool      `json:"selfSignup"`
 	CreatedAt    time.Time `json:"createdAt"`
+}
+
+// HasRole reports whether the user has the provided role, ignoring case.
+func (u User) HasRole(role string) bool {
+	for _, existing := range u.Roles {
+		if strings.EqualFold(existing, role) {
+			return true
+		}
+	}
+	return false
 }
 
 type OAuthAccount struct {
