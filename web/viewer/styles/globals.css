@@ -82,9 +82,19 @@ button {
   gap: 1.5rem;
 }
 
-@media (min-width: 768px) {
-  .grid-columns-3 {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+.directory-grid {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+@media (min-width: 640px) {
+  .directory-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .directory-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -101,6 +111,134 @@ button {
   border-color: var(--accent);
 }
 
+.directory-card {
+  background: var(--surface);
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.directory-card:hover,
+.directory-card:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 12px 30px rgba(79, 209, 197, 0.18);
+}
+
+.directory-card__link {
+  display: flex;
+  flex-direction: column;
+  color: inherit;
+  text-decoration: none;
+  height: 100%;
+  flex: 1 1 auto;
+  gap: 0;
+}
+
+.directory-card__preview {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.12), rgba(8, 145, 178, 0.24));
+}
+
+.directory-card__media,
+.directory-card__preview-fallback {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.35s ease;
+}
+
+.directory-card__preview-fallback {
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.2), rgba(15, 23, 42, 0.75));
+}
+
+.directory-card__preview img {
+  border-radius: 0;
+}
+
+.directory-card:hover .directory-card__media,
+.directory-card:focus-within .directory-card__media,
+.directory-card:hover .directory-card__preview-fallback,
+.directory-card:focus-within .directory-card__preview-fallback {
+  transform: scale(1.05);
+}
+
+.directory-card__content {
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.directory-card__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.directory-card__title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.directory-card__subtitle {
+  font-size: 0.9rem;
+}
+
+.directory-card__description {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.directory-card__footer {
+  padding: 0 1.25rem 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.directory-card__footer .secondary-button {
+  flex-shrink: 0;
+}
+
+.overlay {
+  position: absolute;
+  inset-inline: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+  gap: 0.5rem;
+}
+
+.overlay--top {
+  top: 0;
+  padding: 0.75rem;
+}
+
+.overlay--scrim {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0));
+}
+
+.overlay__meta {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(10, 12, 18, 0.7);
+  color: #fff;
+}
+
+.overlay__meta--muted {
+  color: var(--text-muted);
+  background: rgba(15, 17, 23, 0.65);
+}
 .badge {
   display: inline-flex;
   align-items: center;
@@ -113,6 +251,11 @@ button {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.badge--live {
+  background: rgba(248, 113, 113, 0.9);
+  color: #fff;
 }
 
 .stack {
