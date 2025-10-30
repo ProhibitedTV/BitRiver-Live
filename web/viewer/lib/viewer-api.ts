@@ -10,6 +10,10 @@ export type ChannelPublic = {
   updatedAt: string;
 };
 
+export type ManagedChannel = ChannelPublic & {
+  streamKey: string;
+};
+
 export type ChannelOwner = {
   id: string;
   displayName: string;
@@ -207,6 +211,11 @@ export function fetchChannelVods(channelId: string): Promise<VodCollection> {
 
 export function fetchChannelUploads(channelId: string): Promise<UploadItem[]> {
   return viewerRequest<UploadItem[]>(`/api/uploads?channelId=${channelId}`);
+}
+
+export function fetchManagedChannels(ownerId?: string): Promise<ManagedChannel[]> {
+  const suffix = ownerId ? `?ownerId=${ownerId}` : "";
+  return viewerRequest<ManagedChannel[]>(`/api/channels${suffix}`);
 }
 
 export function createUpload(payload: {

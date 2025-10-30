@@ -1,6 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "../hooks/useAuth";
 import {
   UploadItem,
   createUpload,
@@ -10,41 +12,64 @@ import {
 
 type UploadManagerProps = {
   channelId: string;
+  ownerId: string;
 };
 
-export function UploadManager({ channelId }: UploadManagerProps) {
+export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [items, setItems] = useState<UploadItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
   const [formError, setFormError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
 
-  const load = useMemo(
-    () =>
-      async (silent = false) => {
+  const hasCreatorRole = user?.roles?.includes("creator") ?? false;
+  const canManage = !!user && (user.id === ownerId || hasCreatorRole);
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+    if (!user || !canManage) {
+      router.replace(`/channels/${channelId}`);
+    }
+  }, [authLoading, canManage, channelId, router, user]);
+
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) {
+        setLoading(true);
+      }
+      setError(undefined);
+      try {
+        const response = await fetchChannelUploads(channelId);
+        setItems(response ?? []);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unable to load uploads";
+        setError(message);
+      } finally {
         if (!silent) {
-          setLoading(true);
-        }
-        setError(undefined);
-        try {
-          const response = await fetchChannelUploads(channelId);
-          setItems(response ?? []);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : "Unable to load uploads";
-          setError(message);
-        } finally {
           setLoading(false);
         }
-      },
+      }
+    },
     [channelId],
   );
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (canManage) {
+      void load();
+    } else {
+      setItems([]);
+    }
+  }, [canManage, load]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canManage) {
+      return;
+    }
     const form = event.currentTarget;
     const data = new FormData(form);
     const sizeRaw = data.get("sizeBytes")?.toString() ?? "";
@@ -86,6 +111,9 @@ export function UploadManager({ channelId }: UploadManagerProps) {
   };
 
   const handleDelete = async (id: string) => {
+    if (!canManage) {
+      return;
+    }
     try {
       await deleteUpload(id);
       await load(true);
@@ -94,6 +122,10 @@ export function UploadManager({ channelId }: UploadManagerProps) {
       setError(message);
     }
   };
+
+  if (authLoading || !canManage) {
+    return null;
+  }
 
   return (
     <section className="surface stack">
