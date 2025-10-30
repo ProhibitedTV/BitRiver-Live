@@ -159,66 +159,8 @@ The same configuration can be supplied via environment variables:
 
 ### Public viewer
 
-The BitRiver Live viewer is what your audience sees: a polished channel directory, live chat beside the stream, and quick links into each creator’s back catalogue. It is optional if you only need the control center, but it makes the platform feel complete for non-technical viewers.
-
-#### Before you start
-
-- [Node.js 18+](https://nodejs.org/en/download/package-manager)
-- npm (ships with Node.js, or install separately if your distribution omits it)
-- A running BitRiver Live API ([quickstart](#set-up-bitriver-live-at-home))
-
-#### Quick preview
-
-1. `cd web/viewer`
-2. `npm install`
-3. Set the API endpoint the browser should call:
-   ```bash
-   NEXT_PUBLIC_API_BASE_URL="http://localhost:8080" npm run dev
-   ```
-   Omit the variable if the viewer and API share the same origin.
-
-This launches the viewer at [http://localhost:3000](http://localhost:3000) with hot reload so you can browse the public directory, open a channel page, and watch chat update in real time.
-
-#### Production build (optional)
-
-1. `cd web/viewer`
-2. `npm ci`
-3. Provide the public API URL and compile the standalone output:
-   ```bash
-   NEXT_PUBLIC_API_BASE_URL="https://api.example.com" npm run build
-   ```
-4. Start the production server:
-   ```bash
-   node server.js
-   ```
-
-Point the Go API at the viewer by setting `BITRIVER_VIEWER_ORIGIN` (for example, `http://127.0.0.1:3000`). Once that variable is in place, `/viewer` requests proxy straight to the Next.js server so the control center and public site work together.
-
-The viewer now bundles real-time chat, searchable channel discovery, subscriber tooling, and VOD rails. Every channel page exposes a responsive player, a live moderation-aware chat panel, and a replay gallery that pulls straight from the API. The header ships with a theme toggle that mirrors the control-center palette so dark rooms and bright studios both look great.
-
-Docker users can `docker compose up` from `deploy/` to launch both the API and viewer; the compose file wires environment variables and networking automatically. Systemd operators can use the manifests in `deploy/systemd/` to run `bitriver-viewer.service` alongside the API service.
-
-The server exposes a REST API under the `/api` prefix:
-
-| Endpoint | Method | Description |
-| --- | --- | --- |
-| `/api/auth/signup` | `POST` | Self-service viewer registration with password hashing |
-| `/api/auth/login` | `POST` | Issue a session token for password-based sign-in |
-| `/api/auth/session` | `GET`, `DELETE` | Inspect or revoke active sessions |
-| `/api/users` | `POST`, `GET` | Create new accounts and list all users |
-| `/api/users/{id}` | `GET`, `PATCH`, `DELETE` | Inspect, update, or remove a control-center account |
-| `/api/channels` | `POST`, `GET` | Provision channels for creators and filter them by owner |
-| `/api/channels/{id}` | `GET`, `PATCH`, `DELETE` | Fetch, update, or delete channel metadata |
-| `/api/channels/{id}/stream/start` | `POST` | Mark a channel live and begin a stream session |
-| `/api/channels/{id}/stream/stop` | `POST` | End the active session and capture peak concurrents |
-| `/api/channels/{id}/sessions` | `GET` | Retrieve the session history for a channel |
-| `/api/channels/{id}/chat` | `POST`, `GET` | Persist chat messages and fetch recent history |
-| `/api/channels/{id}/chat/{messageId}` | `DELETE` | Remove a single chat message for moderation |
-| `/api/recordings?channelId={id}` | `GET` | List published recordings (creators can view drafts when authenticated) |
-| `/api/recordings/{id}` | `GET`, `DELETE` | Fetch a recording manifest or remove it from storage |
-| `/api/recordings/{id}/publish` | `POST` | Mark a recording as publicly accessible and extend its retention window |
-| `/api/recordings/{id}/clips` | `GET`, `POST` | List exported highlights or queue a new clip for processing |
-| `/api/profiles/{userId}` | `PUT`, `GET` | Configure streamer bios, top friends, and crypto-only donation links |
+The BitRiver Live viewer packages the audience-facing Next.js experience with channel discovery, live chat, and VOD playback.
+Full installation, development, and deployment steps live in [`web/viewer/README.md`](web/viewer/README.md).
 
 ### Recording retention and object storage
 

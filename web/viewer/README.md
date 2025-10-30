@@ -2,17 +2,41 @@
 
 This directory hosts the public-facing Next.js application that lets viewers browse channels and watch streams.
 
-## Build command
+## Prerequisites
 
-Install dependencies and produce a production build before packaging or deploying the viewer:
+- [Node.js 18+](https://nodejs.org/en/download/package-manager)
+- npm (bundled with Node.js on most platforms)
+- A running BitRiver Live API (follow the [home quickstart](../../README.md#set-up-bitriver-live-at-home))
 
-```bash
-npm ci
-npm run build
-```
+## Quick preview
 
-Setting `NEXT_VIEWER_BASE_PATH=/viewer` ensures the generated assets expect to live under `/viewer` when proxied through the Go API. The build respects `NEXT_PUBLIC_API_BASE_URL`; leave it empty to target the same origin as the admin API or set it to a fully-qualified URL during multi-origin deployments.
+1. Change into the viewer directory and install dependencies:
+   ```bash
+   cd web/viewer
+   npm install
+   ```
+2. Point the client at your API and start the development server:
+   ```bash
+   NEXT_PUBLIC_API_BASE_URL="http://localhost:8080" npm run dev
+   ```
+   Omit `NEXT_PUBLIC_API_BASE_URL` if the viewer and API share the same origin.
 
-## Development
+The viewer runs on [http://localhost:3000](http://localhost:3000) with hot reload so you can browse channels, open chat, and iterate on styling in real time.
 
-Run `npm run dev` to start the local development server on port 3000. Pair it with the Go API running on `http://localhost:8080` and export `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080` so the client uses the correct backend during development.
+## Production build
+
+1. Install exact dependency versions and compile a standalone build:
+   ```bash
+   cd web/viewer
+   npm ci
+   NEXT_PUBLIC_API_BASE_URL="https://api.example.com" NEXT_VIEWER_BASE_PATH=/viewer npm run build
+   ```
+   Adjust `NEXT_PUBLIC_API_BASE_URL` to match your public API URL. Set `NEXT_VIEWER_BASE_PATH` to `/viewer` when you plan to proxy the app through the Go API; leave it unset to serve from the root.
+2. Serve the compiled output:
+   ```bash
+   cd .next/standalone
+   node server.js
+   ```
+   The standalone output expects the static assets from `.next/static` and `public/` to be available alongside the server binary (the systemd and Docker manifests copy them into place for you).
+
+Set `BITRIVER_VIEWER_ORIGIN` on the Go API (for example, `http://127.0.0.1:3000`) so `/viewer` requests proxy to the running Next.js server.
