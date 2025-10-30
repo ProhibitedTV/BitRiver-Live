@@ -190,4 +190,24 @@ describe("ChannelPage", () => {
     expect(textarea).toBeDisabled();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   });
+
+  test("directs channel creators to the dashboard", async () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: "owner-42", displayName: "DJ Nova", email: "nova@example.com", roles: [] },
+      loading: false,
+      error: undefined,
+      login: jest.fn(),
+      signup: jest.fn(),
+      logout: jest.fn(),
+      refresh: jest.fn(),
+    });
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledWith("chan-42"));
+
+    const link = await screen.findByRole("link", { name: /open creator dashboard/i });
+    expect(link).toHaveAttribute("href", "/creator/uploads/chan-42");
+    expect(screen.getByText(/use your creator dashboard/i)).toBeInTheDocument();
+  });
 });

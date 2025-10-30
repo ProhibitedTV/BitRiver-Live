@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { ChannelAboutPanel, ChannelHeader } from "../../../components/ChannelHero";
 import { ChatPanel } from "../../../components/ChatPanel";
 import { Player } from "../../../components/Player";
 import { VodGallery } from "../../../components/VodGallery";
-import { UploadManager } from "../../../components/UploadManager";
+import { useAuth } from "../../../hooks/useAuth";
 import type {
   ChannelPlaybackResponse,
   FollowState,
@@ -21,6 +22,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
   const [error, setError] = useState<string | undefined>();
   const [vods, setVods] = useState<VodItem[]>([]);
   const [activeTab, setActiveTab] = useState<"about" | "schedule" | "videos">("about");
+  const { user } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
@@ -151,7 +153,19 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
                 </div>
               </div>
             </section>
-            <UploadManager channelId={id} />
+            {(user?.id === data.channel.ownerId || user?.roles.includes("creator")) && (
+              <section className="surface stack">
+                <header className="stack">
+                  <h3>Manage uploads</h3>
+                  <p className="muted">
+                    Use your creator dashboard to register VODs and monitor processing once streams finish.
+                  </p>
+                </header>
+                <Link href={`/creator/uploads/${data.channel.id}`} className="secondary-button" style={{ alignSelf: "flex-start" }}>
+                  Open creator dashboard
+                </Link>
+              </section>
+            )}
           </div>
           <aside className="channel-page__chat">
             <div className="channel-page__chat-inner">

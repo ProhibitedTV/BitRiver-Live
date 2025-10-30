@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
+import { fetchManagedChannels } from "../lib/viewer-api";
 
 export function Navbar() {
   const { user, login, signup, logout, error } = useAuth();
@@ -12,6 +13,7 @@ export function Navbar() {
   const [displayName, setDisplayName] = useState("");
   const [message, setMessage] = useState<string | undefined>();
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [managedChannelId, setManagedChannelId] = useState<string | undefined>();
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -40,6 +42,44 @@ export function Navbar() {
       document.body.removeAttribute("data-theme");
     }
   }, [theme]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) {
+      setManagedChannelId(undefined);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const hasManagementRole = user.roles.includes("creator") || user.roles.includes("admin");
+    if (!hasManagementRole) {
+      setManagedChannelId(undefined);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const loadChannels = async () => {
+      try {
+        const channels = await fetchManagedChannels();
+        if (!cancelled) {
+          setManagedChannelId(channels[0]?.id);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setManagedChannelId(undefined);
+          console.error("Unable to load managed channels", err);
+        }
+      }
+    };
+
+    void loadChannels();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const reset = () => {
     setEmail("");
@@ -89,6 +129,11 @@ export function Navbar() {
           {user ? (
             <>
               <span className="muted">Signed in as {user.displayName}</span>
+              {managedChannelId && (
+                <Link href={`/creator/uploads/${managedChannelId}`} className="secondary-button">
+                  Manage channel
+                </Link>
+              )}
               <button className="secondary-button" onClick={() => logout()}>
                 Sign out
               </button>
