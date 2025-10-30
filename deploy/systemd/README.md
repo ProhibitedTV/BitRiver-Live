@@ -5,7 +5,7 @@ These unit files are optional helpers for keeping BitRiver Live running on Ubunt
 ## Prerequisites
 
 - **BitRiver Live binary** – From the repository root, follow the "Set up BitRiver Live at home" quickstart and run `go build ./cmd/server` to produce the `bitriver-live` executable in your working directory. Copy that binary to the machine that will run the services.
-- **Viewer build output** – The "Public viewer" section of the README walks through `npm run build` inside `web/viewer`. After it finishes you'll have `.next/standalone`, `.next/static`, and `public/` assets ready to publish.
+- **Viewer build output** – Follow [`web/viewer/README.md`](../../web/viewer/README.md) to run `npm run build` inside `web/viewer`. After it finishes you'll have `.next/standalone`, `.next/static`, and `public/` assets ready to publish.
 - **Sudo access** – You'll run a few `sudo` commands to create directories and register the units. The first command prompts for your password if you haven't used sudo recently.
 
 ## Install the services
@@ -20,7 +20,7 @@ These unit files are optional helpers for keeping BitRiver Live running on Ubunt
    sudo install -m 0755 /path/to/bitriver-live /opt/bitriver-live/bitriver-live
    ```
    Replace `/path/to/bitriver-live` with the compiled file from the quickstart.
-3. Copy the viewer files you built in the README's "Public viewer" step into `/opt/bitriver-viewer`:
+3. Copy the viewer files you built from [`web/viewer/README.md`](../../web/viewer/README.md) into `/opt/bitriver-viewer`:
    ```bash
    sudo rsync -av --delete /path/to/.next/standalone/ /opt/bitriver-viewer/
    sudo rsync -av /path/to/.next/static /opt/bitriver-viewer/.next/
