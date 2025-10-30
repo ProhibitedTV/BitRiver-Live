@@ -182,6 +182,9 @@ const accountActions = document.getElementById("account-actions");
 const accountName = document.getElementById("current-user-name");
 const signOutButton = document.getElementById("sign-out-button");
 const heroNavButtons = Array.from(document.querySelectorAll(".hero__nav button"));
+const themeToggle = document.getElementById("theme-toggle");
+
+const THEME_STORAGE_KEY = "bitriver-theme";
 
 function setActiveHeroNav(activeView) {
     for (const button of heroNavButtons) {
@@ -191,6 +194,60 @@ function setActiveHeroNav(activeView) {
             button.setAttribute("aria-current", "page");
         } else {
             button.removeAttribute("aria-current");
+        }
+    }
+}
+
+function readStoredTheme() {
+    try {
+        return localStorage.getItem(THEME_STORAGE_KEY);
+    } catch {
+        return null;
+    }
+}
+
+function applyTheme(theme, { persist = true } = {}) {
+    const normalized = theme === "light" ? "light" : "dark";
+    document.documentElement.dataset.theme = normalized;
+    if (themeToggle) {
+        const isLight = normalized === "light";
+        themeToggle.setAttribute("aria-pressed", String(isLight));
+        themeToggle.setAttribute("aria-label", isLight ? "Switch to dark theme" : "Switch to light theme");
+    }
+    if (!persist) {
+        return;
+    }
+    try {
+        localStorage.setItem(THEME_STORAGE_KEY, normalized);
+    } catch {
+        // Ignore storage failures (e.g., Safari private mode)
+    }
+}
+
+function initializeTheme() {
+    const storedTheme = readStoredTheme();
+    const mediaQuery = typeof window.matchMedia === "function" ? window.matchMedia("(prefers-color-scheme: light)") : null;
+    const initialTheme = storedTheme || (mediaQuery?.matches ? "light" : "dark");
+    applyTheme(initialTheme, { persist: false });
+
+    if (themeToggle) {
+        themeToggle.addEventListener("click", () => {
+            const nextTheme = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+            applyTheme(nextTheme);
+        });
+    }
+
+    if (!storedTheme && mediaQuery) {
+        const syncWithSystemPreference = (event) => {
+            if (readStoredTheme()) {
+                return;
+            }
+            applyTheme(event.matches ? "light" : "dark", { persist: false });
+        };
+        if (typeof mediaQuery.addEventListener === "function") {
+            mediaQuery.addEventListener("change", syncWithSystemPreference);
+        } else if (typeof mediaQuery.addListener === "function") {
+            mediaQuery.addListener(syncWithSystemPreference);
         }
     }
 }
@@ -215,6 +272,8 @@ heroNavButtons.forEach((btn) => {
 });
 
 setActiveHeroNav("dashboard");
+
+initializeTheme();
 
 async function apiRequest(path, options = {}) {
     const headers = new Headers(options.headers || {});
