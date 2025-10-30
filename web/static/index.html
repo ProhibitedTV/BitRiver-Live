@@ -26,6 +26,16 @@
             <button data-view="settings">Settings</button>
         </nav>
         <div class="hero__actions">
+            <button
+                id="theme-toggle"
+                class="theme-toggle"
+                type="button"
+                aria-pressed="false"
+                aria-label="Switch to light theme"
+            >
+                <span class="theme-toggle__icon theme-toggle__icon--sun" aria-hidden="true">☀</span>
+                <span class="theme-toggle__icon theme-toggle__icon--moon" aria-hidden="true">🌙</span>
+            </button>
             <a class="hero__link" href="/signup">Create a viewer account</a>
             <div class="hero__account" id="account-actions" hidden>
                 <span id="current-user-name" class="hero__account-name"></span>

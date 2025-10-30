@@ -13,7 +13,24 @@
     --danger: #f87171;
 }
 
+html {
+    transition: background 0.35s ease, color 0.35s ease;
+}
+
+body,
+.hero,
+.card,
+.panel,
+button,
+a,
+input,
+select,
+textarea {
+    transition: background 0.35s ease, background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+}
+
 [data-theme="light"] {
+    color-scheme: light dark;
     --background: radial-gradient(circle at top, #e2e8f0, #cbd5f5);
     --background-solid: #f8fafc;
     --text: #0f172a;
@@ -205,7 +222,7 @@ body.auth-page {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 0.5rem;
+    gap: 0.75rem;
 }
 
 .hero__account {
@@ -218,6 +235,86 @@ body.auth-page {
     color: var(--text-muted);
     font-size: 0.9rem;
     font-weight: 500;
+}
+
+.theme-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 3rem;
+    height: 1.5rem;
+    border-radius: 999px;
+    padding: 0 0.35rem;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    gap: 0.15rem;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.2);
+}
+
+.theme-toggle::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 1.1rem;
+    height: 1.1rem;
+    border-radius: 999px;
+    background: var(--surface-strong);
+    box-shadow: 0 4px 8px rgba(15, 23, 42, 0.35);
+    transform: translateX(0);
+    transition: transform 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.theme-toggle[aria-pressed="true"]::after {
+    transform: translateX(1.4rem);
+}
+
+.theme-toggle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+
+.theme-toggle:hover {
+    border-color: var(--accent);
+}
+
+.theme-toggle__icon {
+    font-size: 0.85rem;
+    line-height: 1;
+    pointer-events: none;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.theme-toggle[aria-pressed="true"] {
+    color: var(--accent);
+}
+
+.theme-toggle[aria-pressed="true"]::after {
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+}
+
+.theme-toggle[aria-pressed="true"] .theme-toggle__icon--sun {
+    opacity: 0.4;
+    transform: scale(0.9);
+}
+
+.theme-toggle[aria-pressed="true"] .theme-toggle__icon--moon {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.theme-toggle[aria-pressed="false"] .theme-toggle__icon--sun {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.theme-toggle[aria-pressed="false"] .theme-toggle__icon--moon {
+    opacity: 0.55;
+    transform: scale(0.9);
 }
 
 main {
