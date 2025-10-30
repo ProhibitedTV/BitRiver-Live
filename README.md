@@ -4,21 +4,44 @@ BitRiver Live is a modern, full-stack solution for building your own live stream
 
 ---
 
-## Developer Quickstart
+## Set up BitRiver Live at home
 
-The repository now includes a self-contained Go API that covers the foundational entities outlined in the product plan—users, channels, stream sessions, and chat messages. It persists data to a simple JSON datastore so you can experiment without needing any external infrastructure.
+BitRiver Live ships with a self-contained Go API and control center so you can explore the product plan—users, channels, stream sessions, and chat messages—without provisioning databases or external services.
 
-### Requirements
+### Prerequisites
 
-- [Go](https://go.dev/) 1.21 or newer
+- Install [Go 1.21+](https://go.dev/doc/install) on your workstation.
+- Clone this repository and switch into it:
+  ```bash
+  git clone https://github.com/BitRiver-Live/BitRiver-Live.git
+  cd BitRiver-Live
+  ```
 
-### Run the API server
+### Run the development server
+
+Start the API in development mode from the repository root:
 
 ```bash
-go run ./cmd/server --mode development --addr :8080 --data data/store.json
+go run ./cmd/server --mode development
 ```
 
-When the server is running, visit [http://localhost:8080](http://localhost:8080) to open the **BitRiver Live Control Center**. The built-in web interface lets you:
+Leave the terminal open while the server is running. Browse to [http://localhost:8080](http://localhost:8080) to open the **BitRiver Live Control Center** and sign up your first account.
+
+### Promote your first admin
+
+Roles control which buttons light up inside the control center. The first account you create starts as a regular user, so promote it to `admin` before trying to manage channels or other accounts:
+
+1. Stop the server with `Ctrl+C`.
+2. Open `data/store.json` in a text editor.
+3. Locate your user entry and add `"admin"` to the `roles` array (for example, `"roles": ["admin"]`).
+4. Save the file and restart the server with `go run ./cmd/server --mode development`.
+5. Sign back in—channel and user management buttons now work because the account has administrator access.
+
+This one-time edit is required before the control center can issue admin-only API calls or generate access tokens.
+
+### Explore the control center
+
+With an administrator signed in, the web interface lets you:
 
 - Create users, channels, and streamer profiles without touching the command line
 - Edit or retire accounts, rotate channel metadata, and keep stream keys handy with one-click copy actions
@@ -80,6 +103,10 @@ go run ./cmd/server \
 The same values can be supplied through environment variables (`BITRIVER_LIVE_TLS_CERT` and `BITRIVER_LIVE_TLS_KEY`). Pair this with a lightweight cron job or Certbot renewal hook to keep certificates fresh, or terminate TLS at a reverse proxy if you prefer automatic ACME handling upstream.
 
 Prefer containers? Check out `deploy/docker-compose.yml` for a pre-wired stack that mounts persistent storage, exposes metrics, and optionally links Redis for shared rate-limiting state. Chat queue behaviour is configured entirely through the `--chat-queue-*` flags defined in `cmd/server/main.go`; set `--chat-queue-driver redis` to enable Redis Streams support and provide the related connection details via the accompanying flags. The queue constructor will automatically create the configured stream and consumer group when it connects. Operators planning for growth can review [`docs/scaling-topologies.md`](docs/scaling-topologies.md) for single-node, origin/edge, and CDN-assisted layouts that pair with the compose and systemd manifests.
+
+## Appendix: Advanced deployments
+
+Power users who want managed databases, object storage, or automated ingest can dip into the sections below. They are optional for home experimentation—the JSON datastore and development server are all you need to try BitRiver Live locally.
 
 | Flag | Purpose |
 | --- | --- |
@@ -187,24 +214,36 @@ Stopping a stream now generates a recording entry that captures the session meta
 
 Flags with the same names (see `--object-endpoint`, `--object-bucket`, `--recording-retention-published`, etc.) override the environment variables when provided. The server keeps recordings in the JSON datastore until the retention window elapses and mirrors the policy into object storage lifecycle configuration.
 
-Example: create a user, launch a channel, and start a stream session.
+Example: create a user, launch a channel, and start a stream session. These requests require an administrator session token—after promoting your account, log in at `/api/auth/login` and copy the `token` value from the JSON response.
 
 ```bash
+# Sign in and capture the session token (replace with your email/password)
+SESSION_TOKEN=$(curl -s --request POST http://localhost:8080/api/auth/login \
+  --header 'Content-Type: application/json' \
+  --data '{"email":"you@example.com","password":"secret"}' | jq -r '.token')
+
 # Create a user
 curl -s --request POST http://localhost:8080/api/users \
   --header 'Content-Type: application/json' \
+  --header "Authorization: Bearer ${SESSION_TOKEN}" \
   --data '{"displayName":"River","email":"river@example.com","roles":["creator"]}'
 
 # Create a channel for that user (replace OWNER_ID with the user ID from above)
 curl -s --request POST http://localhost:8080/api/channels \
   --header 'Content-Type: application/json' \
+  --header "Authorization: Bearer ${SESSION_TOKEN}" \
   --data '{"ownerId":"OWNER_ID","title":"River Rafting","tags":["outdoors","travel"]}'
 
 # Start streaming (replace CHANNEL_ID)
 curl -s --request POST http://localhost:8080/api/channels/CHANNEL_ID/stream/start \
   --header 'Content-Type: application/json' \
+  --header "Authorization: Bearer ${SESSION_TOKEN}" \
   --data '{"renditions":["1080p","720p"]}'
 ```
+
+If you do not have [`jq`](https://stedolan.github.io/jq/) installed, run the login request separately and paste the `token` value into the `SESSION_TOKEN` environment variable manually.
+
+Troubleshooting: a `403 Forbidden` response means the token is missing admin privileges or the `Authorization` header was omitted. Double-check that your user has the `admin` role in `data/store.json`, sign back in to mint a new token, and retry the request.
 
 ### Authentication tokens
 
