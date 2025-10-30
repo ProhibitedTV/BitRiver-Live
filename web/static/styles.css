@@ -321,13 +321,17 @@ main {
     flex: 1;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    padding: 2rem;
+    width: min(1100px, 100%);
+    margin: 0 auto;
+    padding: clamp(1.25rem, 2.5vw, 2.5rem) clamp(1.25rem, 4vw, 3rem);
+    gap: clamp(1.25rem, 2.75vw, 2.25rem);
+    box-sizing: border-box;
 }
 
 .panel {
     display: none;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: clamp(1.25rem, 2.25vw, 1.75rem);
 }
 
 .panel.active {
@@ -336,7 +340,7 @@ main {
 
 .moderation-grid {
     display: grid;
-    gap: 2rem;
+    gap: clamp(1.5rem, 2.5vw, 2rem);
 }
 
 @media (min-width: 900px) {
@@ -347,7 +351,7 @@ main {
 
 .card-column {
     display: grid;
-    gap: 1rem;
+    gap: clamp(0.85rem, 2vw, 1.25rem);
 }
 
 .panel__header {
@@ -725,7 +729,9 @@ chat-log {
     }
 
     main {
-        padding: 1.25rem;
+        width: 100%;
+        padding: clamp(1rem, 5vw, 1.5rem);
+        gap: 1.25rem;
     }
 
     .profiles-layout {
