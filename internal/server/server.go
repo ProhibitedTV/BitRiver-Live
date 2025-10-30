@@ -412,6 +412,11 @@ func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 		}
 		user, err := handler.AuthenticateRequest(r)
 		if err != nil {
+			if optionalAuth {
+				api.ClearSessionCookie(w, r)
+				next.ServeHTTP(w, r)
+				return
+			}
 			api.WriteError(w, http.StatusUnauthorized, err)
 			return
 		}

@@ -92,6 +92,11 @@ func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ClearSessionCookie removes the BitRiver session cookie from the response.
+func ClearSessionCookie(w http.ResponseWriter, r *http.Request) {
+	clearSessionCookie(w, r)
+}
+
 func isSecureRequest(r *http.Request) bool {
 	if r == nil {
 		return false
