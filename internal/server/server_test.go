@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -85,6 +86,77 @@ func TestAuthMiddlewareRejectsMissingSession(t *testing.T) {
 	}
 	if payload["error"] == "" {
 		t.Fatal("expected error message in response")
+	}
+}
+
+func TestAuthMiddlewareAllowsExpiredSessionOnOptionalRoutes(t *testing.T) {
+	handler, store := newTestHandler(t)
+	owner, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Owner",
+		Email:       "owner@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser error: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Lobby", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel error: %v", err)
+	}
+	token, _, err := handler.Sessions.Create(owner.ID)
+	if err != nil {
+		t.Fatalf("Create session: %v", err)
+	}
+	if err := handler.Sessions.Revoke(token); err != nil {
+		t.Fatalf("Revoke session: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/channels/%s", channel.ID), nil)
+	req.AddCookie(&http.Cookie{Name: "bitriver_session", Value: token})
+	rec := httptest.NewRecorder()
+
+	nextCalled := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nextCalled = true
+		handler.ChannelByID(w, r)
+	})
+
+	authMiddleware(handler, next).ServeHTTP(rec, req)
+
+	if !nextCalled {
+		t.Fatal("expected middleware to call next handler")
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	cleared := false
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "bitriver_session" {
+			if c.MaxAge == -1 {
+				cleared = true
+			} else {
+				t.Fatalf("expected session cookie to be cleared, got MaxAge=%d", c.MaxAge)
+			}
+		}
+	}
+	if !cleared {
+		t.Fatal("expected response to clear session cookie")
+	}
+}
+
+func TestAuthMiddlewareRejectsInvalidSession(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("unexpected call to next handler")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	req.AddCookie(&http.Cookie{Name: "bitriver_session", Value: "expired-token"})
+	rec := httptest.NewRecorder()
+
+	authMiddleware(handler, next).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rec.Code)
 	}
 }
 
