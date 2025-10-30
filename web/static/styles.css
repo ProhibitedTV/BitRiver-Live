@@ -165,6 +165,22 @@ body.auth-page {
     transition: background 0.2s ease, transform 0.2s ease;
 }
 
+.hero__nav button.is-active,
+.hero__nav button[aria-current="page"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #0f172a;
+    box-shadow: 0 10px 24px rgba(14, 165, 233, 0.35);
+    font-weight: 600;
+}
+
+.hero__nav button.is-active:hover,
+.hero__nav button[aria-current="page"]:hover,
+.hero__nav button.is-active:focus-visible,
+.hero__nav button[aria-current="page"]:focus-visible {
+    transform: none;
+}
+
 .hero__nav button:hover,
 .hero__nav button:focus-visible {
     background: var(--accent);

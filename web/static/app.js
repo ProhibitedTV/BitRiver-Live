@@ -181,14 +181,28 @@ const profileDetail = document.getElementById("profile-detail");
 const accountActions = document.getElementById("account-actions");
 const accountName = document.getElementById("current-user-name");
 const signOutButton = document.getElementById("sign-out-button");
+const heroNavButtons = Array.from(document.querySelectorAll(".hero__nav button"));
+
+function setActiveHeroNav(activeView) {
+    for (const button of heroNavButtons) {
+        const isActive = button.dataset.view === activeView;
+        button.classList.toggle("is-active", isActive);
+        if (isActive) {
+            button.setAttribute("aria-current", "page");
+        } else {
+            button.removeAttribute("aria-current");
+        }
+    }
+}
 
 function switchView(id) {
     for (const panel of document.querySelectorAll(".panel")) {
         panel.classList.toggle("active", panel.id === id);
     }
+    setActiveHeroNav(id);
 }
 
-document.querySelectorAll(".hero__nav button").forEach((btn) => {
+heroNavButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
         const view = btn.dataset.view;
         switchView(view);
@@ -199,6 +213,8 @@ document.querySelectorAll(".hero__nav button").forEach((btn) => {
         }
     });
 });
+
+setActiveHeroNav("dashboard");
 
 async function apiRequest(path, options = {}) {
     const headers = new Headers(options.headers || {});
