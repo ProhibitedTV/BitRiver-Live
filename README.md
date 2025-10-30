@@ -10,7 +10,20 @@ BitRiver Live ships with a self-contained Go API and control center so you can e
 
 ### Prerequisites
 
-- Install [Go 1.21+](https://go.dev/doc/install) on your workstation.
+- Install [Go 1.21+](https://go.dev/doc/install) on your workstation. Ubuntu users can choose one of the following workflows (ensure the resulting version is 1.21 or newer):
+  - Install from APT:
+    ```bash
+    sudo apt update
+    sudo apt install golang-go
+    ```
+  - Download and install the official tarball:
+    ```bash
+    wget https://go.dev/dl/go1.22.3.linux-amd64.tar.gz
+    sudo rm -rf /usr/local/go
+    sudo tar -C /usr/local -xzf go1.22.3.linux-amd64.tar.gz
+    export PATH=$PATH:/usr/local/go/bin
+    ```
+- Run `go version` to confirm your toolchain meets the minimum requirement.
 - Clone this repository and switch into it:
   ```bash
   git clone https://github.com/BitRiver-Live/BitRiver-Live.git
