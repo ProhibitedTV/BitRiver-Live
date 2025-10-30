@@ -14,48 +14,61 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
   }
 
   return (
-    <section className="grid grid-columns-3">
-      {channels.map((entry) => (
-        <article key={entry.channel.id} className="card stack">
-          <header className="stack">
-            <Link href={`/channels/${entry.channel.id}`} className="stack">
-              <div className="stack" style={{ gap: "0.35rem" }}>
-                <h3>{entry.channel.title}</h3>
-                <span className="muted">
-                  {entry.owner.displayName} &middot; {new Date(entry.channel.createdAt).toLocaleDateString()}
-                </span>
+    <section className="grid directory-grid">
+      {channels.map((entry) => {
+        const createdAt = new Date(entry.channel.createdAt).toLocaleDateString();
+        const previewImage = entry.profile.bannerUrl ?? entry.profile.avatarUrl;
+        const followerLabel = `${entry.followerCount.toLocaleString()} follower${entry.followerCount === 1 ? "" : "s"}`;
+
+        return (
+          <article key={entry.channel.id} className="directory-card">
+            <Link href={`/channels/${entry.channel.id}`} className="directory-card__link">
+              <div className="directory-card__preview">
+                {previewImage ? (
+                  <img
+                    src={previewImage}
+                    alt={`${entry.owner.displayName} channel artwork`}
+                    className="directory-card__media"
+                  />
+                ) : (
+                  <div className="directory-card__preview-fallback" aria-hidden="true" />
+                )}
+                <div className="overlay overlay--top overlay--scrim">
+                  {entry.live && <span className="badge badge--live">Live</span>}
+                  {entry.live ? (
+                    <span className="overlay__meta">{`${entry.followerCount.toLocaleString()} viewers`}</span>
+                  ) : (
+                    <span className="overlay__meta overlay__meta--muted">Offline</span>
+                  )}
+                </div>
               </div>
-              {entry.profile.avatarUrl && (
-                <img
-                  src={entry.profile.avatarUrl}
-                  alt={`${entry.owner.displayName} avatar`}
-                  style={{ width: "100%", maxHeight: "180px", objectFit: "cover" }}
-                />
-              )}
+              <div className="directory-card__content">
+                <div className="directory-card__header">
+                  <h3 className="directory-card__title">{entry.channel.title}</h3>
+                  <span className="directory-card__subtitle muted">
+                    {entry.owner.displayName} &middot; {createdAt}
+                  </span>
+                </div>
+                {entry.profile.bio && <p className="directory-card__description muted">{entry.profile.bio}</p>}
+                <div className="tag-list">
+                  {entry.channel.category && <span className="tag">{entry.channel.category}</span>}
+                  {entry.channel.tags.slice(0, 3).map((tag) => (
+                    <span key={tag} className="tag">
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </Link>
-          </header>
-          <div className="stack" style={{ gap: "0.5rem" }}>
-            <div className="tag-list">
-              {entry.live && <span className="badge">Live now</span>}
-              {entry.channel.category && <span className="tag">{entry.channel.category}</span>}
-              {entry.channel.tags.slice(0, 3).map((tag) => (
-                <span key={tag} className="tag">
-                  #{tag}
-                </span>
-              ))}
-            </div>
-            {entry.profile.bio && <p className="muted">{entry.profile.bio}</p>}
-            <footer className="muted" style={{ display: "flex", justifyContent: "space-between" }}>
-              <span>
-                {entry.followerCount} follower{entry.followerCount === 1 ? "" : "s"}
-              </span>
+            <footer className="directory-card__footer">
+              <span className="muted">{followerLabel}</span>
               <Link className="secondary-button" href={`/channels/${entry.channel.id}`}>
                 View channel
               </Link>
             </footer>
-          </div>
-        </article>
-      ))}
+          </article>
+        );
+      })}
     </section>
   );
 }
