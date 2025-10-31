@@ -5,26 +5,30 @@ services:
     build: ..
     image: bitriver-live:latest
     container_name: bitriver-live
+    env_file:
+      - ../.env
     ports:
-      - "8080:8080"
+      - "${BITRIVER_LIVE_PORT:-8080}:8080"
     environment:
-      BITRIVER_LIVE_STORAGE_DRIVER: postgres
-      BITRIVER_LIVE_MODE: production
-      BITRIVER_LIVE_ADDR: :8080
-      BITRIVER_LIVE_POSTGRES_DSN: postgres://bitriver:bitriver@postgres:5432/bitriver?sslmode=disable
-      BITRIVER_LIVE_POSTGRES_MAX_CONNS: "15"
-      BITRIVER_LIVE_POSTGRES_MIN_CONNS: "5"
-      BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT: 5s
-      BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME: 30m
-      BITRIVER_VIEWER_ORIGIN: http://viewer:3000
-      BITRIVER_SRS_API: http://srs:1985
-      BITRIVER_SRS_TOKEN: local-dev-token
-      BITRIVER_OME_API: http://ome:8081
-      BITRIVER_OME_USERNAME: admin
-      BITRIVER_OME_PASSWORD: local-dev-password
-      BITRIVER_TRANSCODER_API: http://transcoder:9000
-      BITRIVER_TRANSCODER_TOKEN: local-dev-token
-      BITRIVER_INGEST_HEALTH: /healthz
+      BITRIVER_LIVE_STORAGE_DRIVER: ${BITRIVER_LIVE_STORAGE_DRIVER:-postgres}
+      BITRIVER_LIVE_MODE: ${BITRIVER_LIVE_MODE:-production}
+      BITRIVER_LIVE_ADDR: ${BITRIVER_LIVE_ADDR:-:8080}
+      BITRIVER_LIVE_POSTGRES_DSN: ${BITRIVER_LIVE_POSTGRES_DSN:-postgres://bitriver:bitriver@postgres:5432/bitriver?sslmode=disable}
+      BITRIVER_LIVE_POSTGRES_MAX_CONNS: ${BITRIVER_LIVE_POSTGRES_MAX_CONNS:-15}
+      BITRIVER_LIVE_POSTGRES_MIN_CONNS: ${BITRIVER_LIVE_POSTGRES_MIN_CONNS:-5}
+      BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT: ${BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT:-5s}
+      BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME: ${BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME:-30m}
+      BITRIVER_VIEWER_ORIGIN: ${BITRIVER_VIEWER_ORIGIN:-http://viewer:3000}
+      BITRIVER_SRS_API: ${BITRIVER_SRS_API:-http://srs:1985}
+      BITRIVER_SRS_TOKEN: ${BITRIVER_SRS_TOKEN:-local-dev-token}
+      BITRIVER_OME_API: ${BITRIVER_OME_API:-http://ome:8081}
+      BITRIVER_OME_USERNAME: ${BITRIVER_OME_USERNAME:-admin}
+      BITRIVER_OME_PASSWORD: ${BITRIVER_OME_PASSWORD:-local-dev-password}
+      BITRIVER_TRANSCODER_API: ${BITRIVER_TRANSCODER_API:-http://transcoder:9000}
+      BITRIVER_TRANSCODER_TOKEN: ${BITRIVER_TRANSCODER_TOKEN:-local-dev-token}
+      BITRIVER_INGEST_HEALTH: ${BITRIVER_INGEST_HEALTH:-/healthz}
+      BITRIVER_LIVE_ADMIN_EMAIL: ${BITRIVER_LIVE_ADMIN_EMAIL:-admin@example.com}
+      BITRIVER_LIVE_ADMIN_PASSWORD: ${BITRIVER_LIVE_ADMIN_PASSWORD:-change-me-now}
       # Enable HTTPS by mounting certs and uncommenting the lines below.
       # BITRIVER_LIVE_TLS_CERT: /certs/fullchain.pem
       # BITRIVER_LIVE_TLS_KEY: /certs/privkey.pem
@@ -56,10 +60,13 @@ services:
       context: ../web/viewer
     image: bitriver-viewer:latest
     container_name: bitriver-viewer
+    env_file:
+      - ../.env
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_BASE_URL: ""
-      NEXT_VIEWER_BASE_PATH: /viewer
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-""}
+      NEXT_VIEWER_BASE_PATH: ${NEXT_VIEWER_BASE_PATH:-/viewer}
+      NEXT_PUBLIC_VIEWER_URL: ${NEXT_PUBLIC_VIEWER_URL:-http://localhost:8080/viewer}
       PORT: 3000
       HOSTNAME: 0.0.0.0
     expose:
@@ -73,7 +80,7 @@ services:
     volumes:
       - redis-data:/data
     ports:
-      - "6379:6379"
+      - "${BITRIVER_REDIS_PORT:-6379}:6379"
 
   postgres:
     image: postgres:15-alpine
@@ -83,7 +90,7 @@ services:
       POSTGRES_USER: bitriver
       POSTGRES_PASSWORD: bitriver
     ports:
-      - "5432:5432"
+      - "${BITRIVER_POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -97,8 +104,8 @@ services:
     image: ossrs/srs:5
     container_name: bitriver-srs
     ports:
-      - "1935:1935"
-      - "1985:1985"
+      - "${BITRIVER_SRS_RTMP_PORT:-1935}:1935"
+      - "${BITRIVER_SRS_API_PORT:-1985}:1985"
     volumes:
       - ./srs/conf:/usr/local/srs/conf
     healthcheck:
@@ -112,8 +119,8 @@ services:
     image: airensoft/ovenmediaengine:0.15.10
     container_name: bitriver-ome
     ports:
-      - "8081:8081"
-      - "9000:9000"
+      - "${BITRIVER_OME_HTTP_PORT:-8081}:8081"
+      - "${BITRIVER_OME_SIGNALLING_PORT:-9000}:9000"
     volumes:
       - ./ome/Server.xml:/opt/ovenmediaengine/bin/origin_conf/Server.xml:ro
     healthcheck:
@@ -127,7 +134,7 @@ services:
     image: ghcr.io/bitriver-live/ffmpeg-job-controller:latest
     container_name: bitriver-transcoder
     ports:
-      - "9001:9000"
+      - "${BITRIVER_TRANSCODER_HOST_PORT:-9001}:9000"
     environment:
       JOB_CONTROLLER_BIND: :9000
     healthcheck:
