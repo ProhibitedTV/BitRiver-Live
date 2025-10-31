@@ -21,6 +21,23 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! docker_info_output=$(docker info 2>&1); then
+  status=$?
+  echo "$docker_info_output" >&2
+  if printf '%s' "$docker_info_output" | grep -qi "permission denied"; then
+    cat <<'EOF' >&2
+
+Hint: Add your account to the docker group so you can talk to the daemon without sudo:
+
+  sudo usermod -aG docker $USER
+  newgrp docker  # or log out and back in
+
+You can rerun this script with sudo ./scripts/quickstart.sh, but that will create root-owned files like .env, so fixing the group membership first is strongly recommended.
+EOF
+  fi
+  exit "$status"
+fi
+
 echo "Docker and Docker Compose detected."
 
 declare -A env_defaults=(
