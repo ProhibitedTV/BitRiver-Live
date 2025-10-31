@@ -3,6 +3,8 @@
 The `scripts/quickstart.sh` helper script provisions the full BitRiver Live stack with Docker in a few minutes. It handles tool
 checks, creates a `.env` file with sensible defaults, and brings the compose services online.
 
+On the first run Docker builds local images for both the Go API and the bundled FFmpeg job controller (located in `cmd/transcoder/`), so you can launch the stack without signing in to any container registry.
+
 ## Run the stack
 
 From the repository root, execute:
@@ -16,7 +18,7 @@ The script will:
 1. Verify that both Docker and Docker Compose V2 are available.
 2. Generate `.env` with the same defaults baked into `deploy/docker-compose.yml` (including placeholders for the admin email,
    admin password, and the viewer URL) unless the file already exists.
-3. Launch the containers with `docker compose up -d` using the compose file in `deploy/`.
+3. Launch the containers with `docker compose up -d` using the compose file in `deploy/`. Docker automatically builds the API and transcoder images the first time.
 4. Wait for the API health check to pass, then invoke the `bootstrap-admin` helper to seed the admin account and print the credentials.
 
 Update the generated `.env` before inviting real users—swap in a valid admin email, choose a strong admin password, and set the
