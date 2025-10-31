@@ -2,7 +2,9 @@ version: "3.9"
 
 services:
   bitriver-live:
-    build: ..
+    build:
+      context: ..
+      dockerfile: Dockerfile
     image: bitriver-live:latest
     container_name: bitriver-live
     env_file:
