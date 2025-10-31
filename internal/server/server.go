@@ -434,19 +434,43 @@ func spaHandler(staticFS fs.FS, index []byte, fileServer http.Handler) http.Hand
 
 		requested := strings.TrimPrefix(r.URL.Path, "/")
 		if requested != "" {
-			file, err := staticFS.Open(requested)
-			if err == nil {
-				defer file.Close()
+			servePath := requested
+			file, err := staticFS.Open(servePath)
+			if err != nil {
+				if errors.Is(err, fs.ErrNotExist) {
+					trimmed := strings.TrimSuffix(requested, "/")
+					if trimmed != "" {
+						aliasPath := trimmed + ".html"
+						file, err = staticFS.Open(aliasPath)
+						if err == nil {
+							servePath = aliasPath
+						}
+					}
+				}
+			}
+
+			switch {
+			case err == nil:
 				info, statErr := file.Stat()
+				file.Close()
 				if statErr == nil && !info.IsDir() {
-					fileServer.ServeHTTP(w, r)
+					reqToServe := r
+					if servePath != requested {
+						cloned := r.Clone(r.Context())
+						clonedURL := *r.URL
+						clonedURL.Path = "/" + servePath
+						clonedURL.RawPath = ""
+						cloned.URL = &clonedURL
+						reqToServe = cloned
+					}
+					fileServer.ServeHTTP(w, reqToServe)
 					return
 				}
 				if statErr != nil && !errors.Is(statErr, fs.ErrNotExist) {
 					http.Error(w, statErr.Error(), http.StatusInternalServerError)
 					return
 				}
-			} else if !errors.Is(err, fs.ErrNotExist) {
+			case err != nil && !errors.Is(err, fs.ErrNotExist):
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
