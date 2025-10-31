@@ -305,6 +305,10 @@ func (f *fakeUploadStore) GetUser(id string) (models.User, bool) { panic("not im
 func (f *fakeUploadStore) UpdateUser(id string, update storage.UserUpdate) (models.User, error) {
 	panic("not implemented")
 }
+
+func (f *fakeUploadStore) SetUserPassword(id, password string) (models.User, error) {
+	panic("not implemented")
+}
 func (f *fakeUploadStore) DeleteUser(id string) error { panic("not implemented") }
 func (f *fakeUploadStore) UpsertProfile(userID string, update storage.ProfileUpdate) (models.Profile, error) {
 	panic("not implemented")

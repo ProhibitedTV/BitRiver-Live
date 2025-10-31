@@ -380,6 +380,39 @@ func (r *postgresRepository) UpdateUser(id string, update UserUpdate) (models.Us
 	return updated, nil
 }
 
+func (r *postgresRepository) SetUserPassword(id, password string) (models.User, error) {
+	if r == nil || r.pool == nil {
+		return models.User{}, ErrPostgresUnavailable
+	}
+	if len(password) < 8 {
+		return models.User{}, fmt.Errorf("password must be at least 8 characters")
+	}
+
+	hashed, err := hashPassword(password)
+	if err != nil {
+		return models.User{}, fmt.Errorf("hash password: %w", err)
+	}
+
+	var user models.User
+	var roles []string
+	updateErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		row := conn.QueryRow(ctx, "UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id, display_name, email, roles, password_hash, self_signup, created_at", hashed, id)
+		if err := row.Scan(&user.ID, &user.DisplayName, &user.Email, &roles, &user.PasswordHash, &user.SelfSignup, &user.CreatedAt); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("user %s not found", id)
+			}
+			return fmt.Errorf("update user password: %w", err)
+		}
+		return nil
+	})
+	if updateErr != nil {
+		return models.User{}, updateErr
+	}
+
+	user.Roles = roles
+	return user, nil
+}
+
 func (r *postgresRepository) DeleteUser(id string) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable

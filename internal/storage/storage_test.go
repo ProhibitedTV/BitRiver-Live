@@ -453,6 +453,66 @@ func TestAuthenticateUser(t *testing.T) {
 	}
 }
 
+func TestSetUserPassword(t *testing.T) {
+	store := newTestStore(t)
+	email := "admin@example.com"
+	originalPassword := "initialP@ss"
+	user, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Admin",
+		Email:       email,
+		Password:    originalPassword,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	if _, err := store.AuthenticateUser(email, originalPassword); err != nil {
+		t.Fatalf("AuthenticateUser with original password: %v", err)
+	}
+
+	newPassword := "Sup3rSecret!"
+	updated, err := store.SetUserPassword(user.ID, newPassword)
+	if err != nil {
+		t.Fatalf("SetUserPassword: %v", err)
+	}
+	if updated.PasswordHash == "" {
+		t.Fatalf("expected password hash to be set")
+	}
+	if verifyErr := verifyPassword(updated.PasswordHash, newPassword); verifyErr != nil {
+		t.Fatalf("verifyPassword for new password: %v", verifyErr)
+	}
+
+	if _, err := store.AuthenticateUser(email, originalPassword); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("expected invalid credentials for old password, got %v", err)
+	}
+	if _, err := store.AuthenticateUser(email, newPassword); err != nil {
+		t.Fatalf("AuthenticateUser with new password: %v", err)
+	}
+
+	persisted, ok := store.GetUser(user.ID)
+	if !ok {
+		t.Fatal("expected updated user to exist")
+	}
+	if persisted.PasswordHash != updated.PasswordHash {
+		t.Fatalf("expected password hash to persist, got %q vs %q", persisted.PasswordHash, updated.PasswordHash)
+	}
+}
+
+func TestSetUserPasswordValidatesLength(t *testing.T) {
+	store := newTestStore(t)
+	user, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Viewer",
+		Email:       "viewer@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	if _, err := store.SetUserPassword(user.ID, "short"); err == nil {
+		t.Fatal("expected error for short password")
+	}
+}
+
 func TestAuthenticateOAuthCreatesUser(t *testing.T) {
 	store := newTestStore(t)
 

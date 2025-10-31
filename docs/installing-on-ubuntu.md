@@ -132,6 +132,18 @@ journalctl -u srs.service -f
 
 ## 5. Deploy the API service
 
+### Guided setup
+
+For a prompt-driven experience, run the wizard at [`deploy/install/wizard.sh`](../deploy/install/wizard.sh) from the repository root:
+
+```bash
+./deploy/install/wizard.sh
+```
+
+The wizard walks through the common inputs—install directory (default `/opt/bitriver-live`), data directory (default `/var/lib/bitriver-live`), service user (default `bitriver`), listen address, optional hostname hint, TLS certificate/key paths, rate-limiting values, and whether to redirect systemd logs. It validates that Go 1.21+ is available and warns if a `bitriver-live.service` unit already exists before invoking the Ubuntu installer. Because the underlying helper uses `sudo` to create users, directories, and systemd units, the wizard highlights those privileged steps and asks for confirmation first.
+
+If a run fails midway, fix the highlighted issue and start the wizard again—it is safe to rerun, and you can accept the previous defaults to regenerate the service.
+
 ### Option A: Automated installer (recommended)
 
 The UI-generated installer script now wraps the tracked helper at [`deploy/install/ubuntu.sh`](../deploy/install/ubuntu.sh). You can run it directly after cloning the repository, or download the latest version from GitHub:
@@ -157,6 +169,8 @@ Provide the required inputs (install directory, data directory, and service user
 Run the helper from the repository root—the script validates the presence of `go.mod` before building the binary.
 
 The script builds the API binary, writes `$INSTALL_DIR/.env`, configures optional TLS and rate-limiting variables, and registers a `bitriver-live.service` systemd unit. Review the generated `.env` file to ensure secrets, database DSNs, and Redis credentials are present before starting traffic.
+
+Provide `--bootstrap-admin-email` and `--bootstrap-admin-password` to seed the first control-center account automatically. The installer runs the `bootstrap-admin` helper after copying the binaries so the JSON datastore or Postgres database already contains an administrator when systemd starts the service. Capture the printed credentials and rotate the password immediately after logging in.
 
 Environment variable equivalents:
 

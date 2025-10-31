@@ -135,6 +135,36 @@ func TestPostgresChatReportsLifecycle(t *testing.T) {
 	storage.RunRepositoryChatReportsLifecycle(t, postgresRepositoryFactory)
 }
 
+func TestPostgresSetUserPassword(t *testing.T) {
+	repo := openPostgresRepository(t)
+
+	email := "admin@example.com"
+	original := "initialP@ss"
+	user, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "Admin", Email: email, Password: original})
+	if err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+
+	if _, err := repo.AuthenticateUser(email, original); err != nil {
+		t.Fatalf("authenticate original password: %v", err)
+	}
+
+	updated, err := repo.SetUserPassword(user.ID, "Sup3rSecret!")
+	if err != nil {
+		t.Fatalf("set user password: %v", err)
+	}
+	if updated.PasswordHash == "" {
+		t.Fatalf("expected password hash to be set")
+	}
+
+	if _, err := repo.AuthenticateUser(email, original); !errors.Is(err, storage.ErrInvalidCredentials) {
+		t.Fatalf("expected invalid credentials for old password, got %v", err)
+	}
+	if _, err := repo.AuthenticateUser(email, "Sup3rSecret!"); err != nil {
+		t.Fatalf("authenticate with new password: %v", err)
+	}
+}
+
 func TestPostgresChatMessageLifecycle(t *testing.T) {
 	repo := openPostgresRepository(t)
 
