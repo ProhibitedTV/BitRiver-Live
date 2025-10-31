@@ -15,7 +15,7 @@ COPY deploy/migrations ./deploy/migrations
 
 RUN go build -o /out/bitriver-live ./cmd/server
 
-FROM gcr.io/distroless/base-nonroot:latest
+FROM gcr.io/distroless/base-debian12:nonroot
 WORKDIR /app
 
 COPY --from=builder /out/bitriver-live /app/bitriver-live
