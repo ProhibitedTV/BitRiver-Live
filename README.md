@@ -10,6 +10,15 @@ BitRiver Live is a modern, full-stack solution for building your own live stream
 
 To spin up the entire BitRiver Live stack (API, viewer, database, ingest pipeline, and transcoder) with sane defaults, run the quickstart helper from the repository root:
 
+> **Linux tip:** Add your account to the `docker` group so you can talk to the daemon without `sudo`:
+> 
+> ```bash
+> sudo usermod -aG docker $USER
+> newgrp docker  # or log out and back in
+> ```
+> 
+> You can also run the quickstart with `sudo ./scripts/quickstart.sh`, but that will create root-owned files like `.env`, so fixing the group membership first is strongly recommended.
+
 ```bash
 ./scripts/quickstart.sh
 ```

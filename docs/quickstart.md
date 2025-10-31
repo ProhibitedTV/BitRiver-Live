@@ -7,6 +7,15 @@ checks, creates a `.env` file with sensible defaults, and brings the compose ser
 
 From the repository root, execute:
 
+> **Linux tip:** Add yourself to the `docker` group so you can talk to the daemon without `sudo`:
+> 
+> ```bash
+> sudo usermod -aG docker $USER
+> newgrp docker  # or log out and back in
+> ```
+> 
+> You can also run the quickstart with `sudo ./scripts/quickstart.sh`, but that will create root-owned files such as `.env`, so fixing the group membership first is the better long-term solution.
+
 ```bash
 ./scripts/quickstart.sh
 ```
@@ -51,6 +60,7 @@ compose file.
   and re-run the script.
 - **`Error: Docker Compose V2 is required`** – Install the compose plugin or upgrade Docker Desktop/Engine so the `docker compose`
   sub-command is available.
+- **`permission denied while trying to connect to the Docker daemon socket`** – Add your account to the `docker` group with `sudo usermod -aG docker $USER` followed by `newgrp docker` (or log out and back in), then rerun the quickstart without `sudo`. You can run `sudo ./scripts/quickstart.sh` in a pinch, but expect root-owned files like `.env` until you fix the group membership.
 - **Port already in use** – Stop or reconfigure any services that currently bind to ports 5432, 6379, 8080, 8081, 9000, 9001,
   1935, or 1985. Alternatively edit the corresponding `*_PORT` values in `.env` (for example, `BITRIVER_LIVE_PORT=9090`) and
   rerun `docker compose up -d`.
