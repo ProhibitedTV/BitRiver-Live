@@ -11,6 +11,7 @@ RUN go mod download
 
 COPY cmd ./cmd
 COPY internal ./internal
+COPY web ./web
 COPY deploy/migrations ./deploy/migrations
 
 RUN go build -o /out/bitriver-live ./cmd/server
