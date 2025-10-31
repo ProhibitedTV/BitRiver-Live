@@ -132,8 +132,8 @@ services:
 
   transcoder:
     build:
-      context: ../cmd/transcoder
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: cmd/transcoder/Dockerfile
     image: bitriver-transcoder:latest
     container_name: bitriver-transcoder
     ports:
