@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { ChatPanel } from "../components/ChatPanel";
 import { useAuth } from "../hooks/useAuth";
 import { fetchChannelChat, sendChatMessage } from "../lib/viewer-api";
-import type { ChatTranscript } from "../lib/viewer-api";
+import type { ChatMessage } from "../lib/viewer-api";
 
 jest.mock("../hooks/useAuth");
 
@@ -37,25 +37,21 @@ afterEach(() => {
 });
 
 test("renders chat history and sorts by time", async () => {
-  const transcript: ChatTranscript = {
-    roomId: "room-1",
-    participants: 3,
-    messages: [
-      {
-        id: "m2",
-        message: "Later message",
-        sentAt: new Date("2023-10-21T10:01:00Z").toISOString(),
-        user: { id: "user-2", displayName: "Jax" }
-      },
-      {
-        id: "m1",
-        message: "Earlier message",
-        sentAt: new Date("2023-10-21T10:00:00Z").toISOString(),
-        user: { id: "user-1", displayName: "Rhea" }
-      }
-    ]
-  };
-  fetchChatMock.mockResolvedValue(transcript);
+  const chatHistory: ChatMessage[] = [
+    {
+      id: "m2",
+      message: "Later message",
+      sentAt: new Date("2023-10-21T10:01:00Z").toISOString(),
+      user: { id: "user-2", displayName: "Jax" }
+    },
+    {
+      id: "m1",
+      message: "Earlier message",
+      sentAt: new Date("2023-10-21T10:00:00Z").toISOString(),
+      user: { id: "user-1", displayName: "Rhea" }
+    }
+  ];
+  fetchChatMock.mockResolvedValue(chatHistory);
 
   render(<ChatPanel channelId="chan-1" roomId="room-1" />);
 
@@ -65,18 +61,14 @@ test("renders chat history and sorts by time", async () => {
     expect(screen.getByText("Later message")).toBeInTheDocument();
   });
 
-  const messages = screen.getAllByRole("listitem");
-  expect(messages[0]).toHaveTextContent("Rhea");
-  expect(messages[1]).toHaveTextContent("Jax");
+  const renderedMessages = screen.getAllByRole("listitem");
+  expect(renderedMessages[0]).toHaveTextContent("Rhea");
+  expect(renderedMessages[1]).toHaveTextContent("Jax");
 });
 
 test("sends a chat message when the user submits the form", async () => {
-  const transcript: ChatTranscript = {
-    roomId: "room-1",
-    participants: 1,
-    messages: []
-  };
-  fetchChatMock.mockResolvedValue(transcript);
+  const history: ChatMessage[] = [];
+  fetchChatMock.mockResolvedValue(history);
   sendChatMock.mockResolvedValue({
     id: "m3",
     message: "Hello world",
@@ -84,15 +76,16 @@ test("sends a chat message when the user submits the form", async () => {
     user: { id: "viewer-1", displayName: "Viewer" }
   });
 
+  const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
   render(<ChatPanel channelId="chan-99" roomId="room-1" />);
 
   const textarea = await screen.findByRole("textbox", { name: /chat message/i });
-  await userEvent.type(textarea, "Hello world");
+  await user.type(textarea, "Hello world");
   const sendButton = screen.getByRole("button", { name: /send/i });
-  await userEvent.click(sendButton);
+  await user.click(sendButton);
 
   await waitFor(() => {
-    expect(sendChatMock).toHaveBeenCalledWith("chan-99", "Hello world");
+    expect(sendChatMock).toHaveBeenCalledWith("chan-99", "viewer-1", "Hello world");
     expect(screen.getByText("Hello world")).toBeInTheDocument();
   });
 });

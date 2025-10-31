@@ -79,13 +79,15 @@ export type ChatMessage = {
   id: string;
   message: string;
   sentAt: string;
-  user: ChatUser;
+  user?: ChatUser;
 };
 
-export type ChatTranscript = {
-  roomId: string;
-  messages: ChatMessage[];
-  participants: number;
+export type ChatMessageResponse = {
+  id: string;
+  channelId: string;
+  userId: string;
+  content: string;
+  createdAt: string;
 };
 
 export type VodItem = {
@@ -193,16 +195,40 @@ export function unsubscribeChannel(channelId: string): Promise<SubscriptionState
   });
 }
 
-export function fetchChannelChat(channelId: string, limit = 50): Promise<ChatTranscript> {
-  const params = new URLSearchParams({ limit: `${limit}` });
-  return viewerRequest<ChatTranscript>(`/api/channels/${channelId}/chat?${params.toString()}`);
+function toChatMessage(response: ChatMessageResponse): ChatMessage {
+  const normalizedUserId = response.userId.trim();
+  const displayName = normalizedUserId.length > 0 ? normalizedUserId : response.userId || "Anonymous";
+  const user = response.userId
+    ? {
+        id: response.userId,
+        displayName,
+      }
+    : undefined;
+
+  return {
+    id: response.id,
+    message: response.content,
+    sentAt: response.createdAt,
+    user,
+  };
 }
 
-export function sendChatMessage(channelId: string, message: string): Promise<ChatMessage> {
-  return viewerRequest<ChatMessage>(`/api/channels/${channelId}/chat`, {
+export function fetchChannelChat(channelId: string, limit = 50): Promise<ChatMessage[]> {
+  const params = new URLSearchParams({ limit: `${limit}` });
+  return viewerRequest<ChatMessageResponse[]>(
+    `/api/channels/${channelId}/chat?${params.toString()}`
+  ).then((messages) => messages.map(toChatMessage));
+}
+
+export function sendChatMessage(
+  channelId: string,
+  userId: string,
+  content: string
+): Promise<ChatMessage> {
+  return viewerRequest<ChatMessageResponse>(`/api/channels/${channelId}/chat`, {
     method: "POST",
-    body: JSON.stringify({ message })
-  });
+    body: JSON.stringify({ userId, content })
+  }).then(toChatMessage);
 }
 
 export function fetchChannelVods(channelId: string): Promise<VodCollection> {

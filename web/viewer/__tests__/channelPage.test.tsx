@@ -77,29 +77,25 @@ const basePlaybackResponse = {
   }
 };
 
-const baseChatTranscript = {
-  roomId: "room-1",
-  participants: 2,
-  messages: [
-    {
-      id: "msg-1",
-      message: "Welcome to the stream!",
-      sentAt: new Date("2023-10-21T12:00:00Z").toISOString(),
-      user: {
-        id: "owner-42",
-        displayName: "DJ Nova",
-        role: "host"
-      }
+const baseChatMessages = [
+  {
+    id: "msg-1",
+    message: "Welcome to the stream!",
+    sentAt: new Date("2023-10-21T12:00:00Z").toISOString(),
+    user: {
+      id: "owner-42",
+      displayName: "DJ Nova",
+      role: "host"
     }
-  ]
-};
+  }
+];
 
 describe("ChannelPage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     fetchChannelPlaybackMock.mockResolvedValue(basePlaybackResponse as any);
     fetchChannelVodsMock.mockResolvedValue({ channelId: "chan-42", items: [] } as any);
-    fetchChannelChatMock.mockResolvedValue(baseChatTranscript as any);
+    fetchChannelChatMock.mockResolvedValue(baseChatMessages as any);
     sendChatMessageMock.mockResolvedValue({
       id: "msg-2",
       message: "Hello from viewer",
@@ -151,7 +147,9 @@ describe("ChannelPage", () => {
     await user.type(textarea, "Hello from viewer");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    await waitFor(() => expect(sendChatMessageMock).toHaveBeenCalledWith("chan-42", "Hello from viewer"));
+    await waitFor(() =>
+      expect(sendChatMessageMock).toHaveBeenCalledWith("chan-42", "viewer-1", "Hello from viewer")
+    );
     expect(await screen.findByText("Hello from viewer")).toBeInTheDocument();
   });
 
