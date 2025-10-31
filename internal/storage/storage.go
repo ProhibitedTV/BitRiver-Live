@@ -1578,6 +1578,39 @@ func (s *Storage) UpdateUser(id string, update UserUpdate) (models.User, error) 
 	return user, nil
 }
 
+// SetUserPassword replaces the stored password hash for the provided user.
+func (s *Storage) SetUserPassword(id, password string) (models.User, error) {
+	if len(password) < 8 {
+		return models.User{}, errors.New("password must be at least 8 characters")
+	}
+
+	hashed, err := hashPassword(password)
+	if err != nil {
+		return models.User{}, fmt.Errorf("hash password: %w", err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	updatedData := cloneDataset(s.data)
+
+	user, ok := updatedData.Users[id]
+	if !ok {
+		return models.User{}, fmt.Errorf("user %s not found", id)
+	}
+
+	user.PasswordHash = hashed
+	updatedData.Users[id] = user
+
+	if err := s.persistDataset(updatedData); err != nil {
+		return models.User{}, err
+	}
+
+	s.data = updatedData
+
+	return user, nil
+}
+
 // DeleteUser removes the user, related profile, and chat history.
 func (s *Storage) DeleteUser(id string) error {
 	s.mu.Lock()

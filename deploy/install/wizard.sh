@@ -67,6 +67,14 @@ prompt_optional() {
         printf '%s' "$value"
 }
 
+prompt_secret() {
+        local prompt=$1
+        local value
+        read -r -s -p "$prompt: " value
+        echo
+        printf '%s' "$value"
+}
+
 prompt_yes_no() {
         local prompt=$1
         local default=$2
@@ -131,6 +139,19 @@ if prompt_yes_no "Redirect systemd logs to a file" "n"; then
         LOG_DIR=$(prompt_default "  Log directory" "$DATA_DIR/logs")
 fi
 
+ADMIN_EMAIL=""
+ADMIN_PASSWORD=""
+if prompt_yes_no "Seed an administrator account now" "y"; then
+        ADMIN_EMAIL=$(prompt_default "  Admin email" "admin@example.com")
+        while [[ -z $ADMIN_PASSWORD ]]; do
+                ADMIN_PASSWORD=$(prompt_secret "  Temporary password (8+ characters)")
+                if [[ ${#ADMIN_PASSWORD} -lt 8 ]]; then
+                        echo "  Password must be at least 8 characters." >&2
+                        ADMIN_PASSWORD=""
+                fi
+        done
+fi
+
 args=()
 args+=("${INSTALLER[@]}")
 args+=("--install-dir" "$INSTALL_DIR")
@@ -169,6 +190,10 @@ if [[ $ENABLE_LOGS == true ]]; then
                 args+=("--log-dir" "$LOG_DIR")
         fi
 fi
+if [[ -n $ADMIN_EMAIL && -n $ADMIN_PASSWORD ]]; then
+        args+=("--bootstrap-admin-email" "$ADMIN_EMAIL")
+        args+=("--bootstrap-admin-password" "$ADMIN_PASSWORD")
+fi
 
 cat <<EOF
 
@@ -192,6 +217,9 @@ if [[ -n $RATE_GLOBAL_RPS || -n $RATE_LOGIN_LIMIT || -n $RATE_LOGIN_WINDOW || -n
 fi
 if [[ $ENABLE_LOGS == true ]]; then
         echo "  Log directory:   $LOG_DIR"
+fi
+if [[ -n $ADMIN_EMAIL ]]; then
+        echo "  Bootstrap admin: $ADMIN_EMAIL"
 fi
 
 cat <<'NOTE'
