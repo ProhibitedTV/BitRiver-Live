@@ -196,11 +196,13 @@ export function unsubscribeChannel(channelId: string): Promise<SubscriptionState
 }
 
 function toChatMessage(response: ChatMessageResponse): ChatMessage {
-  const normalizedUserId = response.userId.trim();
-  const displayName = normalizedUserId.length > 0 ? normalizedUserId : response.userId || "Anonymous";
-  const user = response.userId
+  const rawUserId = response.userId ?? "";
+  const normalizedUserId = rawUserId.trim();
+  const hasUser = normalizedUserId.length > 0;
+  const displayName = hasUser ? normalizedUserId : rawUserId || "Anonymous";
+  const user = hasUser
     ? {
-        id: response.userId,
+        id: normalizedUserId,
         displayName,
       }
     : undefined;
