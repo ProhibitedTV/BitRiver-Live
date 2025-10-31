@@ -155,7 +155,7 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
           <textarea name="metadata" rows={3} placeholder='{"source":"upload"}' />
         </label>
         {formError && <p className="error">{formError}</p>}
-        <button type="submit" className="primary" disabled={submitting}>
+        <button type="submit" className="primary-button" disabled={submitting}>
           {submitting ? "Submitting…" : "Register upload"}
         </button>
       </form>
