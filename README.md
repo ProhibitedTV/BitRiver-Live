@@ -6,9 +6,21 @@ BitRiver Live is a modern, full-stack solution for building your own live stream
 
 ## Set up BitRiver Live at home
 
+### One-command Docker quickstart
+
+To spin up the entire BitRiver Live stack (API, viewer, database, ingest pipeline, and transcoder) with sane defaults, run the quickstart helper from the repository root:
+
+```bash
+./scripts/quickstart.sh
+```
+
+The script checks for Docker/Docker Compose, writes a `.env` that matches `deploy/docker-compose.yml`, and boots the containers with `docker compose up -d`. Review and edit `.env` before inviting real viewers, then consult [`docs/quickstart.md`](docs/quickstart.md) for common follow-up commands and troubleshooting tips.
+
+### Manual Go workflow
+
 BitRiver Live ships with a self-contained Go API and control center so you can explore the product plan—users, channels, stream sessions, and chat messages—without provisioning databases or external services.
 
-### Prerequisites
+#### Prerequisites
 
 - Install [Go 1.21+](https://go.dev/doc/install) on your workstation. Ubuntu users can choose one of the following workflows (ensure the resulting version is 1.21 or newer):
   - Install from APT:
@@ -30,7 +42,7 @@ BitRiver Live ships with a self-contained Go API and control center so you can e
   cd BitRiver-Live
   ```
 
-### Run the development server
+#### Run the development server
 
 Start the API in development mode from the repository root:
 
@@ -40,7 +52,7 @@ go run ./cmd/server --mode development
 
 Leave the terminal open while the server is running. Browse to [http://localhost:8080](http://localhost:8080) to open the **BitRiver Live Control Center** and sign up your first account.
 
-### Promote your first admin
+#### Promote your first admin
 
 Roles control which buttons light up inside the control center. The first account you create starts as a regular user, so promote it to `admin` before trying to manage channels or other accounts:
 
@@ -52,7 +64,7 @@ Roles control which buttons light up inside the control center. The first accoun
 
 This one-time edit is required before the control center can issue admin-only API calls or generate access tokens.
 
-### Explore the control center
+#### Explore the control center
 
 With an administrator signed in, the web interface lets you:
 
@@ -65,7 +77,7 @@ With an administrator signed in, the web interface lets you:
 - Generate a turn-key installer script that provisions BitRiver Live as a systemd service on a home server, complete with optional log directories
 - Offer a self-service `/signup` experience so viewers can create password-protected accounts on their own
 
-#### Analytics overview
+##### Analytics overview
 
 The Control Center surfaces the `/api/analytics/overview` endpoint through a dashboard that blends platform-wide metrics with channel-level detail. The response shape is:
 
