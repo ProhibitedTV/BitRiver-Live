@@ -133,12 +133,16 @@ services:
       start_period: 20s
 
   transcoder:
-    image: ghcr.io/bitriver-live/ffmpeg-job-controller:latest
+    build:
+      context: ../cmd/transcoder
+      dockerfile: Dockerfile
+    image: bitriver-transcoder:latest
     container_name: bitriver-transcoder
     ports:
       - "${BITRIVER_TRANSCODER_HOST_PORT:-9001}:9000"
     environment:
       JOB_CONTROLLER_BIND: :9000
+      JOB_CONTROLLER_TOKEN: ${BITRIVER_TRANSCODER_TOKEN:-local-dev-token}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:9000/healthz"]
       interval: 30s
