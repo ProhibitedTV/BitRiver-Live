@@ -21,6 +21,8 @@
 #   --redis-addr           / BITRIVER_LIVE_RATE_REDIS_ADDR
 #   --redis-password       / BITRIVER_LIVE_RATE_REDIS_PASSWORD
 #   --hostname             / BITRIVER_LIVE_HOSTNAME_HINT     (used for the informational hint at the end)
+#   --bootstrap-admin-email
+#   --bootstrap-admin-password
 #
 # Example:
 #   ./deploy/install/ubuntu.sh \
@@ -59,6 +61,8 @@ Optional flags:
   --redis-addr ADDRESS
   --redis-password PASSWORD
   --hostname HOSTNAME
+  --bootstrap-admin-email EMAIL
+  --bootstrap-admin-password PASSWORD
   -h, --help
 USAGE
 }
@@ -86,6 +90,8 @@ RATE_LOGIN_WINDOW=${BITRIVER_LIVE_RATE_LOGIN_WINDOW:-}
 REDIS_ADDR=${BITRIVER_LIVE_RATE_REDIS_ADDR:-}
 REDIS_PASSWORD=${BITRIVER_LIVE_RATE_REDIS_PASSWORD:-}
 HOSTNAME_HINT=${BITRIVER_LIVE_HOSTNAME_HINT:-}
+BOOTSTRAP_ADMIN_EMAIL=${BOOTSTRAP_ADMIN_EMAIL:-}
+BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD:-}
 
 while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -163,6 +169,16 @@ while [[ $# -gt 0 ]]; do
                 HOSTNAME_HINT=$2
                 shift 2
                 ;;
+        --bootstrap-admin-email)
+                require_arg "$@"
+                BOOTSTRAP_ADMIN_EMAIL=$2
+                shift 2
+                ;;
+        --bootstrap-admin-password)
+                require_arg "$@"
+                BOOTSTRAP_ADMIN_PASSWORD=$2
+                shift 2
+                ;;
         -h|--help)
                 usage
                 exit 0
@@ -186,6 +202,13 @@ fi
 if [[ -z $SERVICE_USER ]]; then
         echo "--service-user (or SERVICE_USER) is required" >&2
         exit 1
+fi
+
+if [[ -n $BOOTSTRAP_ADMIN_EMAIL || -n $BOOTSTRAP_ADMIN_PASSWORD ]]; then
+        if [[ -z $BOOTSTRAP_ADMIN_EMAIL || -z $BOOTSTRAP_ADMIN_PASSWORD ]]; then
+                echo "--bootstrap-admin-email and --bootstrap-admin-password must be provided together" >&2
+                exit 1
+        fi
 fi
 
 if [[ -z $ADDR ]]; then
@@ -225,8 +248,10 @@ if ! command -v go >/dev/null 2>&1; then
 fi
 
 GOFLAGS="-trimpath" go build -o bitriver-live ./cmd/server
+GOFLAGS="-trimpath" go build -o bootstrap-admin ./cmd/tools/bootstrap-admin
 sudo install -m 0755 bitriver-live "$INSTALL_DIR/bitriver-live"
-rm -f bitriver-live
+sudo install -m 0755 bootstrap-admin "$INSTALL_DIR/bootstrap-admin"
+rm -f bitriver-live bootstrap-admin
 
 env_file=$(mktemp)
 service_file=$(mktemp)
@@ -262,8 +287,18 @@ trap cleanup EXIT
 } >"$env_file"
 
 sudo install -m 0644 "$env_file" "$INSTALL_DIR/.env"
+
+if [[ -n $BOOTSTRAP_ADMIN_EMAIL ]]; then
+        echo "Bootstrapping administrator account..."
+        sudo -u "$SERVICE_USER" "$INSTALL_DIR/bootstrap-admin" \
+                --json "$DATA_FILE" \
+                --email "$BOOTSTRAP_ADMIN_EMAIL" \
+                --password "$BOOTSTRAP_ADMIN_PASSWORD" \
+                --name "Administrator"
+fi
+
 sudo chown -R "$SERVICE_USER":"$SERVICE_USER" "$INSTALL_DIR" "$DATA_DIR"
-{
+{ 
         echo "[Unit]"
         echo "Description=BitRiver Live Streaming Control Center"
         echo "After=network.target"

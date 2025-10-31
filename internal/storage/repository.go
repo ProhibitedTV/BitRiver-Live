@@ -20,7 +20,8 @@ type Repository interface {
 	AuthenticateOAuth(params OAuthLoginParams) (models.User, error)
 	ListUsers() []models.User
 	GetUser(id string) (models.User, bool)
-	UpdateUser(id string, update UserUpdate) (models.User, error)
+        UpdateUser(id string, update UserUpdate) (models.User, error)
+        SetUserPassword(id, password string) (models.User, error)
 	DeleteUser(id string) error
 
 	UpsertProfile(userID string, update ProfileUpdate) (models.Profile, error)

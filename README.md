@@ -14,7 +14,7 @@ To spin up the entire BitRiver Live stack (API, viewer, database, ingest pipelin
 ./scripts/quickstart.sh
 ```
 
-The script checks for Docker/Docker Compose, writes a `.env` that matches `deploy/docker-compose.yml`, and boots the containers with `docker compose up -d`. Review and edit `.env` before inviting real viewers, then consult [`docs/quickstart.md`](docs/quickstart.md) for common follow-up commands and troubleshooting tips.
+The script checks for Docker/Docker Compose, writes a `.env` that matches `deploy/docker-compose.yml`, and boots the containers with `docker compose up -d`. After the API is reachable it runs the `bootstrap-admin` helper against the compose database, prints the seeded credentials, and reminds you to rotate the password on first login. Review and edit `.env` before inviting real viewers, then consult [`docs/quickstart.md`](docs/quickstart.md) for common follow-up commands and troubleshooting tips.
 
 ### Manual Go workflow
 
@@ -54,15 +54,21 @@ Leave the terminal open while the server is running. Browse to [http://localhost
 
 #### Promote your first admin
 
-Roles control which buttons light up inside the control center. The first account you create starts as a regular user, so promote it to `admin` before trying to manage channels or other accounts:
+Roles control which buttons light up inside the control center. The first account you create starts as a regular user, so seed an administrator before trying to manage channels or other accounts. The `bootstrap-admin` helper assigns the `admin` role and updates the password hash without hand-editing JSON:
 
-1. Stop the server with `Ctrl+C`.
-2. Open `data/store.json` in a text editor.
-3. Locate your user entry and add `"admin"` to the `roles` array (for example, `"roles": ["admin"]`).
-4. Save the file and restart the server with `go run ./cmd/server --mode development`.
-5. Sign back in—channel and user management buttons now work because the account has administrator access.
+1. Stop the server with `Ctrl+C` while using the JSON datastore.
+2. Run the helper from the repository root, substituting your preferred credentials (passwords must be at least eight characters):
+   ```bash
+   go run ./cmd/tools/bootstrap-admin \
+     --json data/store.json \
+     --email you@example.com \
+     --name "Your Display Name" \
+     --password "temporary-password"
+   ```
+3. Restart the server with `go run ./cmd/server --mode development` and sign in with the seeded email/password.
+4. Rotate the password immediately from the control center settings page once you're logged in.
 
-This one-time edit is required before the control center can issue admin-only API calls or generate access tokens.
+The helper can be rerun at any time to promote additional accounts or replace compromised credentials.
 
 #### Explore the control center
 

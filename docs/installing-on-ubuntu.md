@@ -170,6 +170,8 @@ Run the helper from the repository root—the script validates the presence of `
 
 The script builds the API binary, writes `$INSTALL_DIR/.env`, configures optional TLS and rate-limiting variables, and registers a `bitriver-live.service` systemd unit. Review the generated `.env` file to ensure secrets, database DSNs, and Redis credentials are present before starting traffic.
 
+Provide `--bootstrap-admin-email` and `--bootstrap-admin-password` to seed the first control-center account automatically. The installer runs the `bootstrap-admin` helper after copying the binaries so the JSON datastore or Postgres database already contains an administrator when systemd starts the service. Capture the printed credentials and rotate the password immediately after logging in.
+
 Environment variable equivalents:
 
 * `INSTALL_DIR`, `DATA_DIR`, `SERVICE_USER`

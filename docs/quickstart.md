@@ -17,9 +17,11 @@ The script will:
 2. Generate `.env` with the same defaults baked into `deploy/docker-compose.yml` (including placeholders for the admin email,
    admin password, and the viewer URL) unless the file already exists.
 3. Launch the containers with `docker compose up -d` using the compose file in `deploy/`.
+4. Wait for the API health check to pass, then invoke the `bootstrap-admin` helper to seed the admin account and print the credentials.
 
 Update the generated `.env` before inviting real users—swap in a valid admin email, choose a strong admin password, and set the
-public viewer URL that matches your domain or reverse proxy.
+public viewer URL that matches your domain or reverse proxy. The helper prints the seeded credentials after the stack is ready;
+log in immediately and rotate the password from the control center settings page.
 
 ## Common follow-up commands
 
