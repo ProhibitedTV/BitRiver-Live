@@ -3,15 +3,18 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"bitriver-live/internal/api"
 	"bitriver-live/internal/auth"
 	"bitriver-live/internal/storage"
+	"bitriver-live/web"
 )
 
 func newTestHandler(t *testing.T) (*api.Handler, *storage.Storage) {
@@ -219,6 +222,32 @@ func TestClientIPResolverTrustedProxyCIDR(t *testing.T) {
 	}
 	if source2 != ipSourceRemoteAddr {
 		t.Fatalf("expected source %q, got %q", ipSourceRemoteAddr, source2)
+	}
+}
+
+func TestSPAHandlerServesSignup(t *testing.T) {
+	staticFS, err := web.Static()
+	if err != nil {
+		t.Fatalf("Static error: %v", err)
+	}
+	index, err := fs.ReadFile(staticFS, "index.html")
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+
+	handler := spaHandler(staticFS, index, http.FileServer(http.FS(staticFS)))
+
+	req := httptest.NewRequest(http.MethodGet, "/signup", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `<form id="signup-form"`) {
+		t.Fatalf("expected signup form markup in response, got %q", body)
 	}
 }
 
