@@ -166,7 +166,6 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	resp := jobResponse{
-		JobID:      jobID,
 		JobIDs:     []string{jobID},
 		Renditions: normalizeRenditions(req.Renditions),
 	}
