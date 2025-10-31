@@ -1,9 +1,14 @@
 package server
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -13,6 +18,8 @@ import (
 
 	"bitriver-live/internal/api"
 	"bitriver-live/internal/auth"
+	"bitriver-live/internal/chat"
+	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/storage"
 	"bitriver-live/web"
 )
@@ -312,5 +319,109 @@ func TestRateLimitMiddlewareHonorsTrustedForwardedHeaders(t *testing.T) {
 	handler.ServeHTTP(rec2, req2)
 	if rec2.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected second request to be throttled, got %d", rec2.Code)
+	}
+}
+
+type hijackableResponseRecorder struct {
+	*httptest.ResponseRecorder
+	conn      net.Conn
+	rw        *bufio.ReadWriter
+	handshake bytes.Buffer
+	hijacked  bool
+}
+
+type discardWriter struct{}
+
+func (discardWriter) Write(p []byte) (int, error) {
+	return len(p), nil
+}
+
+func newHijackableResponseRecorder() (*hijackableResponseRecorder, net.Conn) {
+	serverConn, clientConn := net.Pipe()
+	recorder := &hijackableResponseRecorder{ResponseRecorder: httptest.NewRecorder(), conn: serverConn}
+	writer := bufio.NewWriter(io.MultiWriter(&recorder.handshake, discardWriter{}))
+	recorder.rw = bufio.NewReadWriter(bufio.NewReader(serverConn), writer)
+	return recorder, clientConn
+}
+
+func (r *hijackableResponseRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	r.hijacked = true
+	return r.conn, r.rw, nil
+}
+
+func (r *hijackableResponseRecorder) Close() error {
+	return r.conn.Close()
+}
+
+func TestChatWebsocketUpgradesThroughMiddleware(t *testing.T) {
+	handler, store := newTestHandler(t)
+	handler.ChatGateway = chat.NewGateway(chat.GatewayConfig{})
+
+	user, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Viewer", Email: "viewer@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser error: %v", err)
+	}
+	token, _, err := handler.Sessions.Create(user.ID)
+	if err != nil {
+		t.Fatalf("Create session: %v", err)
+	}
+
+	rl, err := newRateLimiter(RateLimitConfig{})
+	if err != nil {
+		t.Fatalf("newRateLimiter error: %v", err)
+	}
+	resolver, err := newClientIPResolver(RateLimitConfig{})
+	if err != nil {
+		t.Fatalf("newClientIPResolver error: %v", err)
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{AddSource: false}))
+	auditLogger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{AddSource: false}))
+	recorder := metrics.Default()
+
+	handlerChain := http.Handler(http.HandlerFunc(handler.ChatWebsocket))
+	handlerChain = authMiddleware(handler, handlerChain)
+	handlerChain = rateLimitMiddleware(rl, resolver, logger, handlerChain)
+	handlerChain = metricsMiddleware(recorder, handlerChain)
+	handlerChain = auditMiddleware(auditLogger, resolver, handlerChain)
+	handlerChain = loggingMiddleware(logger, resolver, handlerChain)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/chat/ws", nil)
+	req.AddCookie(&http.Cookie{Name: "bitriver_session", Value: token})
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	req.Header.Set("Sec-WebSocket-Version", "13")
+	req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+
+	rw, clientConn := newHijackableResponseRecorder()
+	defer rw.Close()
+	defer clientConn.Close()
+
+	handlerChain.ServeHTTP(rw, req)
+
+	if rw.Result().StatusCode == http.StatusBadRequest {
+		t.Fatalf("expected websocket upgrade, got 400: %s", rw.Body.String())
+	}
+	if !rw.hijacked {
+		t.Fatal("expected websocket handler to hijack the connection")
+	}
+
+	handshake := rw.handshake.String()
+	if !strings.Contains(handshake, "101 Switching Protocols") {
+		t.Fatalf("expected websocket upgrade, got %q", strings.TrimSpace(handshake))
+	}
+	lines := strings.Split(handshake, "\r\n")
+	foundAccept := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(trimmed), strings.ToLower("Sec-WebSocket-Accept:")) {
+			foundAccept = true
+			break
+		}
+	}
+	if !foundAccept {
+		t.Fatalf("expected Sec-WebSocket-Accept header, got %q", handshake)
 	}
 }
