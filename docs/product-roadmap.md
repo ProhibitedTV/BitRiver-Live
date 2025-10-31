@@ -1,13 +1,3 @@
-# Project Roadmap
-
-## Name Ideas
-
-Top pick: **Cascade Live** (fast, fluid, memorable)
-
-Other options: **BitRiver Live**, **Rivestream**, **FluxCast**, **Tributary**
-
----
-
 ## 1. Core Product Scope
 
 ### Creators
@@ -162,7 +152,7 @@ Plan uplinks, edges, and peering accordingly.
 
 - DMCA: designate agent, define takedown workflow and logging
 - Terms of Service & Privacy Policy covering retention, cookies, analytics
-- Payment processing (Stripe/Adyen) for tips and subscriptions
+- Payment processing for tips and subscriptions should run through P2P cryptocurrency exchange mechanism
 - Age gates for mature content and COPPA notices as required
 
 ---
