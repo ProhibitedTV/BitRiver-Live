@@ -43,9 +43,9 @@ export function ChatPanel({
           setLoading(true);
         }
         setError(undefined);
-        const transcript = await fetchChannelChat(channelId);
+        const chatMessages = await fetchChannelChat(channelId);
         if (!cancelled) {
-          setMessages(transcript.messages);
+          setMessages(chatMessages);
         }
       } catch (err) {
         if (!cancelled) {
@@ -74,9 +74,13 @@ export function ChatPanel({
     if (!content.trim()) {
       return;
     }
+    if (!user) {
+      return;
+    }
+
     try {
       setSending(true);
-      const message = await sendChatMessage(channelId, content.trim());
+      const message = await sendChatMessage(channelId, user.id, content.trim());
       setMessages((prev) => [...prev, message]);
       setContent("");
     } catch (err) {
@@ -102,7 +106,7 @@ export function ChatPanel({
             <ul>
               {sortedMessages.map((message) => (
                 <li key={message.id} className="chat-message">
-                  {message.user.avatarUrl && (
+                  {message.user?.avatarUrl && (
                     <img
                       src={message.user.avatarUrl}
                       alt=""
@@ -112,8 +116,8 @@ export function ChatPanel({
                   )}
                   <div className="chat-message__content">
                     <div className="chat-message__meta">
-                      <strong>{message.user.displayName}</strong>
-                      {message.user.role && <span className="badge">{message.user.role}</span>}
+                      <strong>{message.user?.displayName ?? message.user?.id ?? "Anonymous"}</strong>
+                      {message.user?.role && <span className="badge">{message.user.role}</span>}
                       <time dateTime={message.sentAt}>
                         {new Date(message.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </time>
