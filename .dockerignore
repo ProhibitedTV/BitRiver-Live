@@ -1,0 +1,23 @@
+# Git metadata
+.git
+.gitignore
+
+# Local environment and secrets
+.env
+.env.*
+
+# Build artifacts and caches
+*.log
+*.out
+coverage/
+tmp/
+
+# Large or dev-only directories
+web/
+data/
+node_modules/
+scripts/
+docs/
+deploy/data/
+deploy/ome/
+deploy/srs/
