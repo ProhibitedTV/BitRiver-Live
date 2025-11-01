@@ -1,3 +1,6 @@
+//go:build pgxstub
+// +build pgxstub
+
 package pgtype
 
 import "time"
