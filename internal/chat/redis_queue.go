@@ -229,6 +229,7 @@ func (s *redisSubscription) run(ctx context.Context) {
 			case s.ch <- event:
 				s.ack(ctx, entry.ID)
 			case <-ctx.Done():
+				s.requeueEntry(entry)
 				return
 			}
 		}
@@ -241,6 +242,19 @@ func (s *redisSubscription) ack(ctx context.Context, id string) {
 	}
 	if _, err := s.queue.client.Do(ctx, "XACK", s.queue.stream, s.queue.group, id); err != nil && s.queue.logger != nil {
 		s.queue.logger.Warn("redis ack failed", "id", id, "error", err)
+	}
+}
+
+func (s *redisSubscription) requeueEntry(entry redisStreamEntry) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	s.ack(ctx, entry.ID)
+	if len(entry.Payload) == 0 {
+		return
+	}
+	if _, err := s.queue.client.Do(ctx, "XADD", s.queue.stream, "*", "payload", string(entry.Payload)); err != nil && s.queue.logger != nil {
+		s.queue.logger.Warn("redis requeue failed", "id", entry.ID, "error", err)
 	}
 }
 
