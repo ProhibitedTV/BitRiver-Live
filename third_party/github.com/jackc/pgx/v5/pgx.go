@@ -1,6 +1,3 @@
-//go:build pgxstub
-// +build pgxstub
-
 package pgx
 
 import (
