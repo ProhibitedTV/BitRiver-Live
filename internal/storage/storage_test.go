@@ -883,17 +883,20 @@ func TestStopStreamUploadsRecordingArtifacts(t *testing.T) {
 }
 
 func TestPopulateRecordingArtifactsTimeout(t *testing.T) {
+	timeout := 50 * time.Millisecond
 	requests := make(chan struct{}, 4)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
 		case requests <- struct{}{}:
 		default:
 		}
-		<-r.Context().Done()
+		time.Sleep(2 * timeout)
 	}))
-	t.Cleanup(server.Close)
+	t.Cleanup(func() {
+		server.CloseClientConnections()
+		server.Close()
+	})
 
-	timeout := 50 * time.Millisecond
 	store := newTestStoreWithController(t, ingest.NoopController{}, WithObjectStorage(ObjectStorageConfig{
 		Endpoint:       server.URL,
 		Bucket:         "vod",
@@ -929,6 +932,7 @@ func TestPopulateRecordingArtifactsTimeout(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("expected upload request to be issued")
 	}
+	server.CloseClientConnections()
 }
 
 func TestDeleteRecordingArtifactsTimeout(t *testing.T) {
