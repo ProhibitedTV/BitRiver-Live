@@ -21,6 +21,10 @@
 #   --redis-addr           / BITRIVER_LIVE_RATE_REDIS_ADDR
 #   --redis-password       / BITRIVER_LIVE_RATE_REDIS_PASSWORD
 #   --hostname             / BITRIVER_LIVE_HOSTNAME_HINT     (used for the informational hint at the end)
+#   --storage-driver       / BITRIVER_LIVE_STORAGE_DRIVER
+#   --postgres-dsn         / BITRIVER_LIVE_POSTGRES_DSN
+#   --session-store        / BITRIVER_LIVE_SESSION_STORE
+#   --session-store-dsn    / BITRIVER_LIVE_SESSION_POSTGRES_DSN
 #   --bootstrap-admin-email
 #   --bootstrap-admin-password
 #
@@ -61,6 +65,10 @@ Optional flags:
   --redis-addr ADDRESS
   --redis-password PASSWORD
   --hostname HOSTNAME
+  --storage-driver DRIVER
+  --postgres-dsn DSN
+  --session-store DRIVER
+  --session-store-dsn DSN
   --bootstrap-admin-email EMAIL
   --bootstrap-admin-password PASSWORD
   -h, --help
@@ -90,6 +98,10 @@ RATE_LOGIN_WINDOW=${BITRIVER_LIVE_RATE_LOGIN_WINDOW:-}
 REDIS_ADDR=${BITRIVER_LIVE_RATE_REDIS_ADDR:-}
 REDIS_PASSWORD=${BITRIVER_LIVE_RATE_REDIS_PASSWORD:-}
 HOSTNAME_HINT=${BITRIVER_LIVE_HOSTNAME_HINT:-}
+STORAGE_DRIVER=${BITRIVER_LIVE_STORAGE_DRIVER:-}
+POSTGRES_DSN=${BITRIVER_LIVE_POSTGRES_DSN:-}
+SESSION_STORE_DRIVER=${BITRIVER_LIVE_SESSION_STORE:-}
+SESSION_STORE_DSN=${BITRIVER_LIVE_SESSION_POSTGRES_DSN:-}
 BOOTSTRAP_ADMIN_EMAIL=${BOOTSTRAP_ADMIN_EMAIL:-}
 BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD:-}
 
@@ -169,6 +181,26 @@ while [[ $# -gt 0 ]]; do
                 HOSTNAME_HINT=$2
                 shift 2
                 ;;
+        --storage-driver)
+                require_arg "$@"
+                STORAGE_DRIVER=$2
+                shift 2
+                ;;
+        --postgres-dsn)
+                require_arg "$@"
+                POSTGRES_DSN=$2
+                shift 2
+                ;;
+        --session-store)
+                require_arg "$@"
+                SESSION_STORE_DRIVER=$2
+                shift 2
+                ;;
+        --session-store-dsn)
+                require_arg "$@"
+                SESSION_STORE_DSN=$2
+                shift 2
+                ;;
         --bootstrap-admin-email)
                 require_arg "$@"
                 BOOTSTRAP_ADMIN_EMAIL=$2
@@ -208,6 +240,26 @@ if [[ -n $BOOTSTRAP_ADMIN_EMAIL || -n $BOOTSTRAP_ADMIN_PASSWORD ]]; then
         if [[ -z $BOOTSTRAP_ADMIN_EMAIL || -z $BOOTSTRAP_ADMIN_PASSWORD ]]; then
                 echo "--bootstrap-admin-email and --bootstrap-admin-password must be provided together" >&2
                 exit 1
+        fi
+fi
+
+STORAGE_DRIVER=${STORAGE_DRIVER,,}
+if [[ -z $STORAGE_DRIVER ]]; then
+        STORAGE_DRIVER="json"
+fi
+
+POSTGRES_DSN=${POSTGRES_DSN:-}
+SESSION_STORE_DRIVER=${SESSION_STORE_DRIVER,,}
+SESSION_STORE_DSN=${SESSION_STORE_DSN:-}
+
+if [[ $STORAGE_DRIVER == "postgres" && -z $POSTGRES_DSN ]]; then
+        echo "--postgres-dsn (or BITRIVER_LIVE_POSTGRES_DSN) is required when --storage-driver=postgres" >&2
+        exit 1
+fi
+
+if [[ -z $SESSION_STORE_DRIVER ]]; then
+        if [[ $STORAGE_DRIVER == "postgres" || -n $SESSION_STORE_DSN ]]; then
+                SESSION_STORE_DRIVER="postgres"
         fi
 fi
 
@@ -263,6 +315,7 @@ trap cleanup EXIT
         echo "BITRIVER_LIVE_ADDR=$ADDR"
         echo "BITRIVER_LIVE_MODE=$MODE"
         echo "BITRIVER_LIVE_DATA=$DATA_FILE"
+        echo "BITRIVER_LIVE_STORAGE_DRIVER=$STORAGE_DRIVER"
         if [[ -n $TLS_CERT ]]; then
                 echo "BITRIVER_LIVE_TLS_CERT=$TLS_CERT"
         fi
@@ -284,17 +337,34 @@ trap cleanup EXIT
         if [[ -n $REDIS_PASSWORD ]]; then
                 echo "BITRIVER_LIVE_RATE_REDIS_PASSWORD=$REDIS_PASSWORD"
         fi
+        if [[ -n $POSTGRES_DSN ]]; then
+                echo "BITRIVER_LIVE_POSTGRES_DSN=$POSTGRES_DSN"
+        fi
+        if [[ -n $SESSION_STORE_DRIVER ]]; then
+                echo "BITRIVER_LIVE_SESSION_STORE=$SESSION_STORE_DRIVER"
+        fi
+        if [[ -n $SESSION_STORE_DSN ]]; then
+                echo "BITRIVER_LIVE_SESSION_POSTGRES_DSN=$SESSION_STORE_DSN"
+        fi
 } >"$env_file"
 
 sudo install -m 0644 "$env_file" "$INSTALL_DIR/.env"
 
 if [[ -n $BOOTSTRAP_ADMIN_EMAIL ]]; then
         echo "Bootstrapping administrator account..."
-        sudo -u "$SERVICE_USER" "$INSTALL_DIR/bootstrap-admin" \
-                --json "$DATA_FILE" \
-                --email "$BOOTSTRAP_ADMIN_EMAIL" \
-                --password "$BOOTSTRAP_ADMIN_PASSWORD" \
-                --name "Administrator"
+        if [[ $STORAGE_DRIVER == "postgres" ]]; then
+                sudo -u "$SERVICE_USER" "$INSTALL_DIR/bootstrap-admin" \
+                        --postgres-dsn "$POSTGRES_DSN" \
+                        --email "$BOOTSTRAP_ADMIN_EMAIL" \
+                        --password "$BOOTSTRAP_ADMIN_PASSWORD" \
+                        --name "Administrator"
+        else
+                sudo -u "$SERVICE_USER" "$INSTALL_DIR/bootstrap-admin" \
+                        --json "$DATA_FILE" \
+                        --email "$BOOTSTRAP_ADMIN_EMAIL" \
+                        --password "$BOOTSTRAP_ADMIN_PASSWORD" \
+                        --name "Administrator"
+        fi
 fi
 
 sudo chown -R "$SERVICE_USER":"$SERVICE_USER" "$INSTALL_DIR" "$DATA_DIR"

@@ -140,7 +140,7 @@ For a prompt-driven experience, run the wizard at [`deploy/install/wizard.sh`](.
 ./deploy/install/wizard.sh
 ```
 
-The wizard walks through the common inputs—install directory (default `/opt/bitriver-live`), data directory (default `/var/lib/bitriver-live`), service user (default `bitriver`), listen address, optional hostname hint, TLS certificate/key paths, rate-limiting values, and whether to redirect systemd logs. It validates that Go 1.21+ is available and warns if a `bitriver-live.service` unit already exists before invoking the Ubuntu installer. Because the underlying helper uses `sudo` to create users, directories, and systemd units, the wizard highlights those privileged steps and asks for confirmation first.
+The wizard walks through the common inputs—install directory (default `/opt/bitriver-live`), data directory (default `/var/lib/bitriver-live`), service user (default `bitriver`), listen address, storage driver, optional hostname hint, TLS certificate/key paths, rate-limiting values, and whether to redirect systemd logs. When you choose the Postgres storage backend it prompts for the DSN (required) and optionally a Postgres session-store DSN, letting you reuse the primary connection string or point to a dedicated database. It validates that Go 1.21+ is available and warns if a `bitriver-live.service` unit already exists before invoking the Ubuntu installer. Because the underlying helper uses `sudo` to create users, directories, and systemd units, the wizard highlights those privileged steps and asks for confirmation first.
 
 If a run fails midway, fix the highlighted issue and start the wizard again—it is safe to rerun, and you can accept the previous defaults to regenerate the service.
 
@@ -153,7 +153,7 @@ curl -fsSL https://raw.githubusercontent.com/BitRiver-Live/BitRiver-Live/main/de
 chmod +x ubuntu.sh
 ```
 
-Provide the required inputs (install directory, data directory, and service user) via flags or matching environment variables:
+Provide the required inputs (install directory, data directory, and service user) via flags or matching environment variables. Add `--storage-driver postgres --postgres-dsn <DSN>` when deploying against Postgres; the installer refuses to continue without a DSN in that mode so the generated `.env` contains a working connection string. Use `--session-store postgres` and `--session-store-dsn` if you want the session manager to use a dedicated Postgres database instead of sharing the primary DSN.
 
 ```bash
 ./ubuntu.sh \
@@ -162,13 +162,14 @@ Provide the required inputs (install directory, data directory, and service user
   --service-user bitriver \
   --mode production \
   --addr :80 \
+  --storage-driver json \
   --enable-logs \
   --hostname stream.example.com
 ```
 
 Run the helper from the repository root—the script validates the presence of `go.mod` before building the binary.
 
-The script builds the API binary, writes `$INSTALL_DIR/.env`, configures optional TLS and rate-limiting variables, and registers a `bitriver-live.service` systemd unit. Review the generated `.env` file to ensure secrets, database DSNs, and Redis credentials are present before starting traffic.
+The script builds the API binary, writes `$INSTALL_DIR/.env`, configures optional TLS and rate-limiting variables, and registers a `bitriver-live.service` systemd unit. Review the generated `.env` file to ensure storage selections (JSON or Postgres), database DSNs, session-store driver settings, and Redis credentials are present before starting traffic.
 
 Provide `--bootstrap-admin-email` and `--bootstrap-admin-password` to seed the first control-center account automatically. The installer runs the `bootstrap-admin` helper after copying the binaries so the JSON datastore or Postgres database already contains an administrator when systemd starts the service. Capture the printed credentials and rotate the password immediately after logging in.
 
@@ -181,6 +182,8 @@ Environment variable equivalents:
 * `BITRIVER_LIVE_RATE_REDIS_ADDR`, `BITRIVER_LIVE_RATE_REDIS_PASSWORD`
 * `BITRIVER_LIVE_ENABLE_LOGS`, `BITRIVER_LIVE_LOG_DIR`
 * `BITRIVER_LIVE_HOSTNAME_HINT`
+* `BITRIVER_LIVE_STORAGE_DRIVER`, `BITRIVER_LIVE_POSTGRES_DSN`
+* `BITRIVER_LIVE_SESSION_STORE`, `BITRIVER_LIVE_SESSION_POSTGRES_DSN`
 
 ### Option B: Manual install
 
@@ -212,6 +215,8 @@ BITRIVER_LIVE_STORAGE_DRIVER=postgres
 BITRIVER_LIVE_POSTGRES_DSN=postgres://bitriver:changeme@localhost:5432/bitriver?sslmode=require
 BITRIVER_LIVE_RATE_REDIS_ADDR=127.0.0.1:6379
 BITRIVER_LIVE_RATE_REDIS_PASSWORD=changeme
+BITRIVER_LIVE_SESSION_STORE=postgres
+BITRIVER_LIVE_SESSION_POSTGRES_DSN=postgres://bitriver:changeme@localhost:5432/bitriver_sessions?sslmode=require
 BITRIVER_SRS_TOKEN=REPLACE_ME
 BITRIVER_OME_USERNAME=REPLACE_ME
 BITRIVER_OME_PASSWORD=REPLACE_ME

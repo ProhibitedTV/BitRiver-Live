@@ -112,6 +112,40 @@ fi
 ADDR=$(prompt_default "HTTP listen address" "$ADDR_DEFAULT")
 HOSTNAME_HINT=$(prompt_optional "Hostname viewers will use (optional)")
 
+STORAGE_DRIVER=""
+while [[ -z $STORAGE_DRIVER ]]; do
+        candidate=$(prompt_default "Storage driver (json/postgres)" "json")
+        candidate=${candidate,,}
+        case $candidate in
+        json|postgres)
+                STORAGE_DRIVER=$candidate
+                ;;
+        *)
+                echo "Please enter either 'json' or 'postgres'." >&2
+                ;;
+        esac
+done
+
+POSTGRES_DSN=""
+SESSION_STORE_DSN=""
+USE_POSTGRES_SESSION=false
+SESSION_STORE_DRIVER=""
+if [[ $STORAGE_DRIVER == "postgres" ]]; then
+        while [[ -z $POSTGRES_DSN ]]; do
+                POSTGRES_DSN=$(prompt_default "Postgres DSN" "postgres://bitriver:changeme@localhost:5432/bitriver?sslmode=require")
+                if [[ -z $POSTGRES_DSN ]]; then
+                        echo "Postgres DSN is required when selecting the postgres storage driver." >&2
+                fi
+        done
+        if prompt_yes_no "Use Postgres for session storage" "y"; then
+                USE_POSTGRES_SESSION=true
+                SESSION_STORE_DRIVER="postgres"
+                SESSION_STORE_DSN=$(prompt_optional "  Session store Postgres DSN (leave blank to reuse primary DSN)")
+        else
+                SESSION_STORE_DRIVER="memory"
+        fi
+fi
+
 TLS_CERT=""
 TLS_KEY=""
 if prompt_yes_no "Configure TLS certificate paths for the API" "n"; then
@@ -159,6 +193,7 @@ args+=("--data-dir" "$DATA_DIR")
 args+=("--service-user" "$SERVICE_USER")
 args+=("--mode" "$MODE")
 args+=("--addr" "$ADDR")
+args+=("--storage-driver" "$STORAGE_DRIVER")
 
 if [[ -n $HOSTNAME_HINT ]]; then
         args+=("--hostname" "$HOSTNAME_HINT")
@@ -190,6 +225,15 @@ if [[ $ENABLE_LOGS == true ]]; then
                 args+=("--log-dir" "$LOG_DIR")
         fi
 fi
+if [[ $STORAGE_DRIVER == "postgres" ]]; then
+        args+=("--postgres-dsn" "$POSTGRES_DSN")
+        if [[ $USE_POSTGRES_SESSION == true && -n $SESSION_STORE_DSN ]]; then
+                args+=("--session-store-dsn" "$SESSION_STORE_DSN")
+        fi
+fi
+if [[ -n $SESSION_STORE_DRIVER ]]; then
+        args+=("--session-store" "$SESSION_STORE_DRIVER")
+fi
 if [[ -n $ADMIN_EMAIL && -n $ADMIN_PASSWORD ]]; then
         args+=("--bootstrap-admin-email" "$ADMIN_EMAIL")
         args+=("--bootstrap-admin-password" "$ADMIN_PASSWORD")
@@ -203,10 +247,25 @@ The installer will run with the following options:
   Service user:      $SERVICE_USER
   Mode:              $MODE
   Listen address:    $ADDR
+  Storage driver:    $STORAGE_DRIVER
 EOF
 
 if [[ -n $HOSTNAME_HINT ]]; then
         echo "  Hostname hint:   $HOSTNAME_HINT"
+fi
+if [[ $STORAGE_DRIVER == "postgres" ]]; then
+        echo "  Postgres DSN:    $POSTGRES_DSN"
+fi
+if [[ -n $SESSION_STORE_DRIVER ]]; then
+        if [[ $SESSION_STORE_DRIVER == "postgres" ]]; then
+                if [[ -n $SESSION_STORE_DSN ]]; then
+                        echo "  Session store DSN: $SESSION_STORE_DSN"
+                else
+                        echo "  Session store:    postgres (reuse primary DSN)"
+                fi
+        else
+                echo "  Session store:    $SESSION_STORE_DRIVER"
+        fi
 fi
 if [[ -n $TLS_CERT || -n $TLS_KEY ]]; then
         echo "  TLS certificate: $TLS_CERT"
