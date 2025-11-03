@@ -2529,7 +2529,10 @@ func (s *Storage) deleteClipArtifactsLocked(clip models.ClipExport) error {
 	if client == nil || !client.Enabled() || strings.TrimSpace(clip.StorageObject) == "" {
 		return nil
 	}
-	if err := client.Delete(context.Background(), clip.StorageObject); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), s.objectStorage.requestTimeout())
+	err := client.Delete(ctx, clip.StorageObject)
+	cancel()
+	if err != nil {
 		return fmt.Errorf("delete clip object %s: %w", clip.StorageObject, err)
 	}
 	return nil
