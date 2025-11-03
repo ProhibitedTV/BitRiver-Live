@@ -128,6 +128,8 @@ type fakeObjectStorage struct {
 	baseURL string
 }
 
+type hangingDeleteObjectStorage struct{}
+
 type memoryS3Server struct {
 	mu       sync.Mutex
 	objects  map[string]map[string][]byte
@@ -338,6 +340,17 @@ func (f *fakeObjectStorage) Upload(ctx context.Context, key, contentType string,
 func (f *fakeObjectStorage) Delete(ctx context.Context, key string) error {
 	f.deletes = append(f.deletes, key)
 	return nil
+}
+
+func (h *hangingDeleteObjectStorage) Enabled() bool { return true }
+
+func (h *hangingDeleteObjectStorage) Upload(ctx context.Context, key, contentType string, body []byte) (objectReference, error) {
+	return objectReference{}, nil
+}
+
+func (h *hangingDeleteObjectStorage) Delete(ctx context.Context, key string) error {
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 func firstRecordingID(store *Storage) string {
@@ -1260,6 +1273,29 @@ func TestDeleteRecordingRemovesStorageArtifacts(t *testing.T) {
 	}
 	if len(expectedDeletes) != 0 {
 		t.Fatalf("expected storage deletes for manifests, thumbnails, and clips; missing %v", expectedDeletes)
+	}
+}
+
+func TestDeleteClipArtifactsHonorsTimeout(t *testing.T) {
+	store := newTestStore(t)
+	store.objectStorage.RequestTimeout = 10 * time.Millisecond
+	store.objectClient = &hangingDeleteObjectStorage{}
+
+	clip := models.ClipExport{ID: "clip-123", StorageObject: "clips/clip-123.mp4"}
+
+	store.mu.Lock()
+	start := time.Now()
+	err := store.deleteClipArtifactsLocked(clip)
+	store.mu.Unlock()
+
+	if err == nil {
+		t.Fatalf("expected deleteClipArtifactsLocked to return error when delete hangs")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded error, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
+		t.Fatalf("expected delete to honor timeout, took %v", elapsed)
 	}
 }
 
