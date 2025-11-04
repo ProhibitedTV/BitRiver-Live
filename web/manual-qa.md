@@ -37,3 +37,17 @@ legitimate strings are still rendered correctly.
 
 These steps demonstrate that unsafe markup is rendered inert while normal
 content flows through unchanged.
+
+## Viewer chat access
+
+1. Open a channel page in the viewer experience while signed out.
+
+   *Expected:* the chat panel loads without errors, shows "No messages yet"
+   when there is no history, and the composer is disabled with the
+   "Sign in to participate in chat" placeholder.
+
+2. Sign in with a viewer account and return to the same channel page.
+
+   *Expected:* existing chat history (if any) renders without needing to
+   refresh, and the composer placeholder changes to "Share your thoughts"
+   to indicate that posting is available.

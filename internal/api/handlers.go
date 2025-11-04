@@ -2264,16 +2264,17 @@ type profileViewResponse struct {
 }
 
 func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.ResponseWriter, r *http.Request) {
-	actor, ok := h.requireAuthenticatedUser(w, r)
-	if !ok {
-		return
-	}
 	channel, exists := h.Store.GetChannel(channelID)
 	if !exists {
 		writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 		return
 	}
+
 	if len(remaining) > 0 && remaining[0] != "" {
+		actor, ok := h.requireAuthenticatedUser(w, r)
+		if !ok {
+			return
+		}
 		switch remaining[0] {
 		case "moderation":
 			h.handleChatModeration(actor, channel, remaining[1:], w, r)
@@ -2325,6 +2326,10 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 		}
 		writeJSON(w, http.StatusOK, response)
 	case http.MethodPost:
+		actor, ok := h.requireAuthenticatedUser(w, r)
+		if !ok {
+			return
+		}
 		var req createChatRequest
 		if err := decodeJSON(r, &req); err != nil {
 			writeError(w, http.StatusBadRequest, err)

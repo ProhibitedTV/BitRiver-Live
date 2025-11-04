@@ -906,6 +906,58 @@ func TestChatEndpointsLimit(t *testing.T) {
 	}
 }
 
+func TestChatRoutesAuthorization(t *testing.T) {
+	handler, store := newTestHandler(t)
+	owner, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Owner",
+		Email:       "owner@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Test Channel", "", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	message, err := store.CreateChatMessage(channel.ID, owner.ID, "hello world")
+	if err != nil {
+		t.Fatalf("CreateChatMessage: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID+"/chat", nil)
+	rec := httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected guest chat status 200, got %d", rec.Code)
+	}
+	var messages []chatMessageResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &messages); err != nil {
+		t.Fatalf("decode guest chat response: %v", err)
+	}
+	if len(messages) == 0 {
+		t.Fatalf("expected messages in guest chat response")
+	}
+
+	payload := map[string]interface{}{
+		"userId":  owner.ID,
+		"content": "Unauthorized",
+	}
+	body, _ := json.Marshal(payload)
+	req = httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/chat", bytes.NewReader(body))
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected anonymous chat post status 401, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/channels/"+channel.ID+"/chat/"+message.ID, nil)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected anonymous chat delete status 401, got %d", rec.Code)
+	}
+}
+
 func TestProfileEndpoints(t *testing.T) {
 	handler, store := newTestHandler(t)
 	owner, err := store.CreateUser(storage.CreateUserParams{
