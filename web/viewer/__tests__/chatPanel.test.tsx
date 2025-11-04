@@ -92,6 +92,20 @@ test("sends a chat message when the user submits the form", async () => {
   });
 });
 
+test("shows offline state when no chat room is configured", () => {
+  render(<ChatPanel channelId="chan-1" />);
+
+  expect(fetchChatMock).not.toHaveBeenCalled();
+  expect(screen.getByText(/chat is disabled\/offline/i)).toBeInTheDocument();
+
+  const textarea = screen.getByRole("textbox", { name: /chat message/i });
+  expect(textarea).toBeDisabled();
+  expect(textarea).toHaveAttribute("placeholder", "Chat is disabled/offline");
+
+  const sendButton = screen.getByRole("button", { name: /send/i });
+  expect(sendButton).toBeDisabled();
+});
+
 test("treats unauthorized chat fetch as empty state for guests", async () => {
   const guestAuth = {
     user: undefined,
