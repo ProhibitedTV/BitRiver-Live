@@ -691,13 +691,14 @@ type playbackStreamResponse struct {
 }
 
 type channelPlaybackResponse struct {
-	Channel      channelPublicResponse      `json:"channel"`
-	Owner        channelOwnerResponse       `json:"owner"`
-	Profile      profileSummaryResponse     `json:"profile"`
-	Live         bool                       `json:"live"`
-	Follow       followStateResponse        `json:"follow"`
-	Subscription *subscriptionStateResponse `json:"subscription,omitempty"`
-	Playback     *playbackStreamResponse    `json:"playback,omitempty"`
+	Channel           channelPublicResponse      `json:"channel"`
+	Owner             channelOwnerResponse       `json:"owner"`
+	Profile           profileSummaryResponse     `json:"profile"`
+	DonationAddresses []cryptoAddressResponse    `json:"donationAddresses"`
+	Live              bool                       `json:"live"`
+	Follow            followStateResponse        `json:"follow"`
+	Subscription      *subscriptionStateResponse `json:"subscription,omitempty"`
+	Playback          *playbackStreamResponse    `json:"playback,omitempty"`
 }
 
 type vodItemResponse struct {
@@ -1070,12 +1071,22 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				follow.Following = h.Store.IsFollowingChannel(actor.ID, channel.ID)
 				viewer = &actor
 			}
+			donations := make([]cryptoAddressResponse, 0, len(profile.DonationAddresses))
+			for _, addr := range profile.DonationAddresses {
+				donations = append(donations, cryptoAddressResponse{
+					Currency: addr.Currency,
+					Address:  addr.Address,
+					Note:     addr.Note,
+				})
+			}
+
 			response := channelPlaybackResponse{
-				Channel: newChannelPublicResponse(channel),
-				Owner:   newOwnerResponse(owner, profile),
-				Profile: newProfileSummaryResponse(profile),
-				Live:    channel.LiveState == "live" || channel.LiveState == "starting",
-				Follow:  follow,
+				Channel:           newChannelPublicResponse(channel),
+				Owner:             newOwnerResponse(owner, profile),
+				Profile:           newProfileSummaryResponse(profile),
+				DonationAddresses: donations,
+				Live:              channel.LiveState == "live" || channel.LiveState == "starting",
+				Follow:            follow,
 			}
 			if state, err := h.subscriptionState(channel.ID, viewer); err == nil {
 				response.Subscription = &state
@@ -3048,9 +3059,6 @@ func (h *Handler) ProfileByID(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		if _, ok := h.requireAuthenticatedUser(w, r); !ok {
-			return
-		}
 		h.handleGetProfile(userID, w, r)
 	case http.MethodPut:
 		actor, ok := h.requireAuthenticatedUser(w, r)

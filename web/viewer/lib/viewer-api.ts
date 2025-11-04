@@ -26,6 +26,12 @@ export type ProfileSummary = {
   bannerUrl?: string;
 };
 
+export type CryptoAddress = {
+  currency: string;
+  address: string;
+  note?: string;
+};
+
 export type DirectoryChannel = {
   channel: ChannelPublic;
   owner: ChannelOwner;
@@ -123,6 +129,7 @@ export type ChannelPlaybackResponse = {
   channel: ChannelPublic;
   owner: ChannelOwner;
   profile: ProfileSummary;
+  donationAddresses: CryptoAddress[];
   live: boolean;
   follow: FollowState;
   subscription?: SubscriptionState;
