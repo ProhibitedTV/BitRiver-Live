@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { ChannelHeader } from "../components/ChannelHero";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { ChannelAboutPanel, ChannelHeader } from "../components/ChannelHero";
 import { useAuth } from "../hooks/useAuth";
 import {
   followChannel,
@@ -55,6 +55,10 @@ const baseData: ChannelPlaybackResponse = {
     subscribed: false,
     subscribers: 4
   },
+  donationAddresses: [
+    { currency: "eth", address: "0xabc123", note: "Main wallet" },
+    { currency: "btc", address: "bc1xyz" }
+  ],
   playback: undefined,
   chat: { roomId: "room-1" }
 };
@@ -75,6 +79,11 @@ beforeEach(() => {
   unfollowMock.mockResolvedValue({ followers: 10, following: false });
   subscribeMock.mockResolvedValue({ subscribed: true, subscribers: 5 });
   unsubscribeMock.mockResolvedValue({ subscribed: false, subscribers: 4 });
+});
+
+afterEach(() => {
+  // Clean up clipboard overrides between tests.
+  delete (navigator as unknown as Record<string, unknown>).clipboard;
 });
 
 test("renders follower and subscriber totals", () => {
@@ -117,4 +126,36 @@ test("toggles follow and subscribe state", async () => {
   });
 
   expect(screen.getByRole("button", { name: /subscribed/i })).toBeInTheDocument();
+});
+
+test("renders donation addresses and copies to clipboard", async () => {
+  const writeText = jest.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText }
+  });
+
+  render(<ChannelAboutPanel data={baseData} />);
+
+  expect(screen.getByRole("heading", { name: /support this channel/i })).toBeInTheDocument();
+  const donationItems = screen.getAllByRole("listitem");
+  expect(donationItems).toHaveLength(2);
+  const firstDonation = donationItems[0];
+  expect(within(firstDonation).getAllByText(/^ETH$/)).not.toHaveLength(0);
+  expect(within(firstDonation).getByText(/Main wallet/i)).toBeInTheDocument();
+  expect(within(firstDonation).getByText(/0xabc123/i)).toBeInTheDocument();
+  const secondDonation = donationItems[1];
+  expect(within(secondDonation).getAllByText(/^BTC$/)).not.toHaveLength(0);
+  expect(within(secondDonation).getByText(/bc1xyz/i)).toBeInTheDocument();
+
+  const copyButton = screen.getByRole("button", { name: /copy eth address/i });
+  fireEvent.click(copyButton);
+
+  await waitFor(() => {
+    expect(writeText).toHaveBeenCalledWith("0xabc123");
+  });
+
+  expect(
+    screen.getByText(/ETH address copied to clipboard\./i)
+  ).toBeInTheDocument();
 });

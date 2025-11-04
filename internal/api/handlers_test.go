@@ -768,7 +768,6 @@ func TestRotateStreamKeyEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser owner: %v", err)
 	}
-
 	admin, err := store.CreateUser(storage.CreateUserParams{
 		DisplayName: "Admin",
 		Email:       "admin@example.com",
@@ -1107,6 +1106,13 @@ func TestProfileEndpoints(t *testing.T) {
 		t.Fatalf("expected single channel on profile, got %d", len(response.Channels))
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/api/profiles/"+owner.ID, nil)
+	rec = httptest.NewRecorder()
+	handler.ProfileByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected public profile status 200, got %d", rec.Code)
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/api/profiles/missing", nil)
 	req = withUser(req, owner)
 	rec = httptest.NewRecorder()
@@ -1378,6 +1384,13 @@ func TestChannelPlaybackIncludesSubscriptionState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser owner: %v", err)
 	}
+	donation := []models.CryptoAddress{{Currency: "eth", Address: "0xabc123", Note: "Main"}}
+	if _, err := store.UpsertProfile(owner.ID, storage.ProfileUpdate{DonationAddresses: &donation}); err != nil {
+		t.Fatalf("UpsertProfile donation: %v", err)
+	}
+	if profile, ok := handler.Store.GetProfile(owner.ID); !ok || len(profile.DonationAddresses) == 0 {
+		t.Fatalf("handler store missing donation addresses for %s", owner.ID)
+	}
 	channel, err := store.CreateChannel(owner.ID, "Ambient", "music", nil)
 	if err != nil {
 		t.Fatalf("CreateChannel: %v", err)
@@ -1431,6 +1444,19 @@ func TestChannelPlaybackIncludesSubscriptionState(t *testing.T) {
 	}
 	if payload.Subscription.RenewsAt == nil || *payload.Subscription.RenewsAt == "" {
 		t.Fatalf("expected renewsAt timestamp, got %+v", payload.Subscription)
+	}
+	if len(payload.DonationAddresses) != 1 {
+		t.Fatalf("expected 1 donation address, got %d", len(payload.DonationAddresses))
+	}
+	donationResp := payload.DonationAddresses[0]
+	if donationResp.Currency != "ETH" {
+		t.Fatalf("expected donation currency ETH, got %s", donationResp.Currency)
+	}
+	if donationResp.Address != "0xabc123" {
+		t.Fatalf("expected donation address 0xabc123, got %s", donationResp.Address)
+	}
+	if donationResp.Note != "Main" {
+		t.Fatalf("expected donation note Main, got %s", donationResp.Note)
 	}
 }
 

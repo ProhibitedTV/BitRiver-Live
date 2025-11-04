@@ -127,6 +127,39 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
 }
 
 export function ChannelAboutPanel({ data }: { data: ChannelPlaybackResponse }) {
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState<
+    { type: "success" | "error"; message: string } | undefined
+  >();
+  const donations = data.donationAddresses ?? [];
+
+  const handleCopy = async (address: string, currency: string) => {
+    const currencyLabel = currency.toUpperCase();
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.clipboard ||
+      typeof navigator.clipboard.writeText !== "function"
+    ) {
+      setCopiedAddress(null);
+      setCopyStatus({
+        type: "error",
+        message: "Copy isn't supported in this browser."
+      });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopiedAddress(address);
+      setCopyStatus({ type: "success", message: `${currencyLabel} address copied to clipboard.` });
+    } catch {
+      setCopiedAddress(null);
+      setCopyStatus({
+        type: "error",
+        message: "Unable to copy the address. Try again."
+      });
+    }
+  };
+
   return (
     <section className="channel-about surface stack">
       {data.profile.bannerUrl && (
@@ -173,6 +206,66 @@ export function ChannelAboutPanel({ data }: { data: ChannelPlaybackResponse }) {
           </ul>
         </div>
       )}
+      <div className="channel-about__donations stack">
+        <h4>Support this channel</h4>
+        {donations.length > 0 ? (
+          <>
+            <p className="muted">Send tips using the crypto addresses below.</p>
+            <ul className="donation-list" role="list">
+              {donations.map((donation, index) => {
+                const currencyLabel = donation.currency
+                  ? donation.currency.toUpperCase()
+                  : "DONATION";
+                const key = `${donation.currency}-${donation.address}-${index}`;
+                const note = donation.note?.trim();
+                const isCopied = copiedAddress === donation.address;
+                return (
+                  <li
+                    key={key}
+                    className={`donation-item${isCopied ? " donation-item--copied" : ""}`}
+                  >
+                    <div className="donation-item__icon" aria-hidden="true">
+                      {currencyLabel.slice(0, 4)}
+                    </div>
+                    <div className="donation-item__meta">
+                      <div className="donation-item__heading">
+                        <strong>{currencyLabel}</strong>
+                        {note && <span className="donation-item__note muted">{note}</span>}
+                      </div>
+                      <code>{donation.address}</code>
+                    </div>
+                    <button
+                      type="button"
+                      className="donation-item__copy-button"
+                      onClick={() => handleCopy(donation.address, currencyLabel)}
+                      aria-label={`Copy ${currencyLabel} address`}
+                    >
+                      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                        <path
+                          fill="currentColor"
+                          d="M6 3h8a2 2 0 0 1 2 2v11H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm0 2v9h8V5H6Zm4-4h6v2h-6V1Z"
+                        />
+                      </svg>
+                      <span className="sr-only">Copy {currencyLabel} address</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        ) : (
+          <p className="muted">The broadcaster hasn&apos;t shared any donation addresses yet.</p>
+        )}
+        {copyStatus && (
+          <p
+            className={`donation-copy-status${copyStatus.type === "error" ? " donation-copy-status--error" : ""}`}
+            role="status"
+            aria-live="polite"
+          >
+            {copyStatus.message}
+          </p>
+        )}
+      </div>
     </section>
   );
 }
