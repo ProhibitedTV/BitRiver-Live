@@ -230,4 +230,25 @@ describe("ChannelPage", () => {
     expect(link).toHaveAttribute("href", "/creator/uploads/chan-42");
     expect(screen.getByText(/use your creator dashboard/i)).toBeInTheDocument();
   });
+
+  test("surfaces VOD loading errors", async () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
+      loading: false,
+      error: undefined,
+      login: jest.fn(),
+      signup: jest.fn(),
+      logout: jest.fn(),
+      refresh: jest.fn()
+    });
+
+    fetchChannelVodsMock.mockRejectedValueOnce(new Error("VODs temporarily offline"));
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledWith("chan-42"));
+
+    expect(await screen.findByText(/couldn\'t load past broadcasts right now/i)).toBeInTheDocument();
+    expect(screen.getByText(/VODs temporarily offline/i)).toBeInTheDocument();
+  });
 });

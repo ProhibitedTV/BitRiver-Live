@@ -2,7 +2,22 @@
 
 import type { VodItem } from "../lib/viewer-api";
 
-export function VodGallery({ items }: { items: VodItem[] }) {
+interface VodGalleryProps {
+  items: VodItem[];
+  error?: string;
+}
+
+export function VodGallery({ items, error }: VodGalleryProps) {
+  if (error) {
+    return (
+      <section className="surface stack" role="alert">
+        <h3>Past broadcasts</h3>
+        <p className="muted">We couldn&apos;t load past broadcasts right now.</p>
+        <p className="muted">{error}</p>
+      </section>
+    );
+  }
+
   if (!items || items.length === 0) {
     return (
       <section className="surface stack">
