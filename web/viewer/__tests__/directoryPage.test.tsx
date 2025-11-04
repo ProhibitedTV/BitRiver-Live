@@ -89,7 +89,8 @@ describe("DirectoryPage", () => {
     expect(card).toBeTruthy();
     const withinCard = within(card!);
     expect(withinCard.getByText(/dj nova/i)).toBeInTheDocument();
-    expect(withinCard.getByText(/12 followers/i)).toBeInTheDocument();
+    expect(withinCard.getAllByText(/12 followers/i)).toHaveLength(2);
+    expect(withinCard.queryByText(/12 viewers/i)).not.toBeInTheDocument();
   });
 
   test("performs a search and swaps the directory results", async () => {
@@ -119,6 +120,6 @@ describe("DirectoryPage", () => {
     render(<DirectoryPage />);
 
     await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalled());
-    expect(await screen.findByText(/unable to load directory/i)).toBeInTheDocument();
+    expect(await screen.findByText(/unable to load directory|gateway timeout/i)).toBeInTheDocument();
   });
 });

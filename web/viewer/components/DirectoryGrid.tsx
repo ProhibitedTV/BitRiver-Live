@@ -36,7 +36,7 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
                 <div className="overlay overlay--top overlay--scrim">
                   {entry.live && <span className="badge badge--live">Live</span>}
                   {entry.live ? (
-                    <span className="overlay__meta">{`${entry.followerCount.toLocaleString()} viewers`}</span>
+                    <span className="overlay__meta">{followerLabel}</span>
                   ) : (
                     <span className="overlay__meta overlay__meta--muted">Offline</span>
                   )}
