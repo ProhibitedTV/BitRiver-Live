@@ -14,13 +14,13 @@ var (
 )
 
 type Config[T any] struct {
-	Constructor func(context.Context) (*T, error)
-	Destructor  func(*T)
+	Constructor func(context.Context) (T, error)
+	Destructor  func(T)
 	MaxSize     int32
 }
 
 type pooledResource[T any] struct {
-	value         *T
+	value         T
 	idleSince     time.Time
 	shouldDestroy bool
 	hijacked      bool
@@ -249,18 +249,20 @@ func (p *Pool[T]) recordCanceledAcquire() {
 	p.stats.canceledAcquireCount++
 }
 
-func (p *Pool[T]) callDestructor(value *T) {
-	if value == nil {
+func (p *Pool[T]) callDestructor(value T) {
+	if p.cfg.Destructor == nil {
 		return
 	}
-	if p.cfg.Destructor != nil {
-		p.cfg.Destructor(value)
+	if isNil(value) {
+		return
 	}
+	p.cfg.Destructor(value)
 }
 
-func (r *Resource[T]) Value() *T {
+func (r *Resource[T]) Value() T {
+	var zero T
 	if r == nil || r.res == nil {
-		return nil
+		return zero
 	}
 	return r.res.value
 }
@@ -342,6 +344,10 @@ func (r *Resource[T]) IdleDuration() time.Duration {
 		return 0
 	}
 	return time.Since(r.res.idleSince)
+}
+
+func isNil[T any](v T) bool {
+	return any(v) == nil
 }
 
 type Stat struct {
