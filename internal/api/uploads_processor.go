@@ -173,7 +173,7 @@ func (p *UploadProcessor) recoverPending() {
 	if p.store == nil {
 		return
 	}
-	channels := p.store.ListChannels("")
+	channels := p.store.ListChannels("", "")
 	for _, channel := range channels {
 		select {
 		case <-p.ctx.Done():

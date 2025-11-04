@@ -1809,20 +1809,33 @@ func (r *postgresRepository) GetChannel(id string) (models.Channel, bool) {
 	return channel, true
 }
 
-func (r *postgresRepository) ListChannels(ownerID string) []models.Channel {
+func (r *postgresRepository) ListChannels(ownerID, query string) []models.Channel {
 	if r == nil || r.pool == nil {
 		return nil
 	}
 	ctx, cancel := r.acquireContext()
 	defer cancel()
-	baseQuery := "SELECT id, owner_id, stream_key, title, category, tags, live_state, current_session_id, created_at, updated_at FROM channels"
-	var rows pgx.Rows
-	var err error
-	if strings.TrimSpace(ownerID) != "" {
-		rows, err = r.pool.Query(ctx, baseQuery+" WHERE owner_id = $1 ORDER BY CASE WHEN live_state = 'live' THEN 0 ELSE 1 END, created_at ASC", ownerID)
-	} else {
-		rows, err = r.pool.Query(ctx, baseQuery+" ORDER BY CASE WHEN live_state = 'live' THEN 0 ELSE 1 END, created_at ASC")
+	baseQuery := "SELECT c.id, c.owner_id, c.stream_key, c.title, c.category, c.tags, c.live_state, c.current_session_id, c.created_at, c.updated_at FROM channels c JOIN users u ON u.id = c.owner_id"
+	trimmedOwner := strings.TrimSpace(ownerID)
+	trimmedQuery := strings.TrimSpace(query)
+	var (
+		args    []interface{}
+		clauses []string
+	)
+	if trimmedOwner != "" {
+		args = append(args, trimmedOwner)
+		clauses = append(clauses, fmt.Sprintf("c.owner_id = $%d", len(args)))
 	}
+	if trimmedQuery != "" {
+		args = append(args, "%"+trimmedQuery+"%")
+		argPos := len(args)
+		clauses = append(clauses, fmt.Sprintf("(c.title ILIKE $%[1]d OR u.display_name ILIKE $%[1]d OR EXISTS (SELECT 1 FROM unnest(c.tags) AS tag WHERE tag ILIKE $%[1]d))", argPos))
+	}
+	if len(clauses) > 0 {
+		baseQuery += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	baseQuery += " ORDER BY CASE WHEN c.live_state = 'live' THEN 0 ELSE 1 END, c.created_at ASC"
+	rows, err := r.pool.Query(ctx, baseQuery, args...)
 	if err != nil {
 		return nil
 	}

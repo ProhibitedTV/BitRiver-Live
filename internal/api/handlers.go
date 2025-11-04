@@ -738,7 +738,11 @@ func (h *Handler) Directory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	channels := h.Store.ListChannels("")
+	query := ""
+	if r.URL != nil {
+		query = strings.TrimSpace(r.URL.Query().Get("q"))
+	}
+	channels := h.Store.ListChannels("", query)
 	response := make([]directoryChannelResponse, 0, len(channels))
 	for _, channel := range channels {
 		owner, exists := h.Store.GetUser(channel.OwnerID)
@@ -923,7 +927,7 @@ func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		channels := h.Store.ListChannels(ownerID)
+		channels := h.Store.ListChannels(ownerID, "")
 		if ownerID == actor.ID || actor.HasRole(roleAdmin) {
 			response := make([]channelResponse, 0, len(channels))
 			for _, channel := range channels {
@@ -2629,7 +2633,7 @@ func (h *Handler) ModerationQueueByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) moderationQueuePayload() (moderationQueueResponse, error) {
-	channels := h.Store.ListChannels("")
+	channels := h.Store.ListChannels("", "")
 	type flaggedItem struct {
 		payload moderationFlagResponse
 		created time.Time
@@ -2735,7 +2739,7 @@ func (h *Handler) AnalyticsOverview(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) computeAnalyticsOverview(now time.Time) (analyticsOverviewResponse, error) {
-	channels := h.Store.ListChannels("")
+	channels := h.Store.ListChannels("", "")
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	windowStart := now.Add(-24 * time.Hour)
 	summary := analyticsSummaryResponse{}
@@ -3126,7 +3130,7 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 }
 
 func (h *Handler) buildProfileViewResponse(user models.User, profile models.Profile) profileViewResponse {
-	channels := h.Store.ListChannels(user.ID)
+	channels := h.Store.ListChannels(user.ID, "")
 	channelResponses := make([]channelPublicResponse, 0, len(channels))
 	liveResponses := make([]channelPublicResponse, 0)
 	for _, channel := range channels {

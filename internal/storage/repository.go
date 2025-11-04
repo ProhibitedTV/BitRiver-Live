@@ -20,8 +20,8 @@ type Repository interface {
 	AuthenticateOAuth(params OAuthLoginParams) (models.User, error)
 	ListUsers() []models.User
 	GetUser(id string) (models.User, bool)
-        UpdateUser(id string, update UserUpdate) (models.User, error)
-        SetUserPassword(id, password string) (models.User, error)
+	UpdateUser(id string, update UserUpdate) (models.User, error)
+	SetUserPassword(id, password string) (models.User, error)
 	DeleteUser(id string) error
 
 	UpsertProfile(userID string, update ProfileUpdate) (models.Profile, error)
@@ -33,7 +33,7 @@ type Repository interface {
 	RotateChannelStreamKey(id string) (models.Channel, error)
 	DeleteChannel(id string) error
 	GetChannel(id string) (models.Channel, bool)
-	ListChannels(ownerID string) []models.Channel
+	ListChannels(ownerID, query string) []models.Channel
 
 	FollowChannel(userID, channelID string) error
 	UnfollowChannel(userID, channelID string) error

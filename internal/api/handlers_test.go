@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -304,6 +305,75 @@ func TestSignupAndLoginFlow(t *testing.T) {
 	handler.Session(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected session to be revoked, got status %d", rec.Code)
+	}
+}
+
+func TestDirectoryFiltersChannelsByQuery(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	creatorOne, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Coder One", Email: "coder1@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create first creator: %v", err)
+	}
+	creatorTwo, err := store.CreateUser(storage.CreateUserParams{DisplayName: "RetroMaster", Email: "retro@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create second creator: %v", err)
+	}
+	creatorThree, err := store.CreateUser(storage.CreateUserParams{DisplayName: "DJ Night", Email: "dj@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create third creator: %v", err)
+	}
+
+	lounge, err := store.CreateChannel(creatorOne.ID, "Coding Lounge", "technology", []string{"GoLang", "Backend"})
+	if err != nil {
+		t.Fatalf("create coding lounge: %v", err)
+	}
+	arcade, err := store.CreateChannel(creatorTwo.ID, "Arcade Stars", "gaming", []string{"retro", "speedrun"})
+	if err != nil {
+		t.Fatalf("create arcade stars: %v", err)
+	}
+	beats, err := store.CreateChannel(creatorThree.ID, "Midnight Beats", "music", []string{"Live", "Music"})
+	if err != nil {
+		t.Fatalf("create midnight beats: %v", err)
+	}
+
+	cases := []struct {
+		name    string
+		query   string
+		wantIDs []string
+	}{
+		{name: "no filter", query: "", wantIDs: []string{lounge.ID, arcade.ID, beats.ID}},
+		{name: "title filter", query: "lounge", wantIDs: []string{lounge.ID}},
+		{name: "owner filter", query: "RETROMASTER", wantIDs: []string{arcade.ID}},
+		{name: "tag filter", query: "MuSiC", wantIDs: []string{beats.ID}},
+		{name: "no matches", query: "unknown", wantIDs: []string{}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := "/api/directory"
+			if strings.TrimSpace(tc.query) != "" {
+				path = fmt.Sprintf("/api/directory?q=%s", tc.query)
+			}
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			rec := httptest.NewRecorder()
+			handler.Directory(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status 200, got %d", rec.Code)
+			}
+			var resp directoryResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if len(resp.Channels) != len(tc.wantIDs) {
+				t.Fatalf("expected %d channels, got %d", len(tc.wantIDs), len(resp.Channels))
+			}
+			for i, id := range tc.wantIDs {
+				if resp.Channels[i].Channel.ID != id {
+					t.Fatalf("expected channel %s at index %d, got %s", id, i, resp.Channels[i].Channel.ID)
+				}
+			}
+		})
 	}
 }
 
