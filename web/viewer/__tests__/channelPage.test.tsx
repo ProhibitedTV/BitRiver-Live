@@ -1,5 +1,5 @@
 import userEvent from "@testing-library/user-event";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ChannelPage from "../app/channels/[id]/page";
 import { useAuth } from "../hooks/useAuth";
 import {
@@ -7,6 +7,7 @@ import {
   fetchChannelPlayback,
   fetchChannelVods,
   followChannel,
+  createTip,
   sendChatMessage,
   subscribeChannel,
   unfollowChannel,
@@ -24,7 +25,8 @@ jest.mock("../lib/viewer-api", () => ({
   followChannel: jest.fn(),
   unfollowChannel: jest.fn(),
   subscribeChannel: jest.fn(),
-  unsubscribeChannel: jest.fn()
+  unsubscribeChannel: jest.fn(),
+  createTip: jest.fn()
 }));
 
 jest.mock("../components/Player", () => ({
@@ -40,6 +42,7 @@ const followChannelMock = followChannel as jest.MockedFunction<typeof followChan
 const unfollowChannelMock = unfollowChannel as jest.MockedFunction<typeof unfollowChannel>;
 const subscribeChannelMock = subscribeChannel as jest.MockedFunction<typeof subscribeChannel>;
 const unsubscribeChannelMock = unsubscribeChannel as jest.MockedFunction<typeof unsubscribeChannel>;
+const createTipMock = createTip as jest.MockedFunction<typeof createTip>;
 
 const basePlaybackResponse = {
   channel: {
@@ -67,6 +70,10 @@ const basePlaybackResponse = {
     followers: 10,
     following: false
   },
+  donationAddresses: [
+    { currency: "eth", address: "0xabc123", note: "Main" },
+    { currency: "btc", address: "bc1xyz" }
+  ],
   subscription: {
     subscribers: 3,
     subscribed: false
@@ -110,6 +117,16 @@ describe("ChannelPage", () => {
     unfollowChannelMock.mockResolvedValue({ followers: 10, following: false } as any);
     subscribeChannelMock.mockResolvedValue({ subscribers: 4, subscribed: true, tier: "Plus" } as any);
     unsubscribeChannelMock.mockResolvedValue({ subscribers: 3, subscribed: false } as any);
+    createTipMock.mockResolvedValue({
+      id: "tip-1",
+      channelId: "chan-42",
+      fromUserId: "viewer-1",
+      amount: 5,
+      currency: "ETH",
+      provider: "viewer",
+      reference: "txn-001",
+      createdAt: new Date().toISOString()
+    } as any);
   });
 
   test("renders playback details and supports follow, subscribe, and chat interactions", async () => {
@@ -187,6 +204,11 @@ describe("ChannelPage", () => {
     const textarea = await screen.findByRole("textbox", { name: /chat message/i });
     expect(textarea).toBeDisabled();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+
+    const tipButton = screen.getByRole("button", { name: /send a tip/i });
+    fireEvent.click(tipButton);
+    expect(screen.getByText(/sign in from the header to send a tip/i)).toBeInTheDocument();
+    expect(createTipMock).not.toHaveBeenCalled();
   });
 
   test("directs channel creators to the dashboard", async () => {
