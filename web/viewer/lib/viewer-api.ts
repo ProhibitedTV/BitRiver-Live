@@ -32,6 +32,28 @@ export type CryptoAddress = {
   note?: string;
 };
 
+export type TipResponse = {
+  id: string;
+  channelId: string;
+  fromUserId: string;
+  amount: number;
+  currency: string;
+  provider: string;
+  reference: string;
+  walletAddress?: string;
+  message?: string;
+  createdAt: string;
+};
+
+export type CreateTipPayload = {
+  amount: number;
+  currency: string;
+  provider?: string;
+  reference: string;
+  walletAddress?: string;
+  message?: string;
+};
+
 export type DirectoryChannel = {
   channel: ChannelPublic;
   owner: ChannelOwner;
@@ -199,6 +221,20 @@ export function subscribeChannel(channelId: string): Promise<SubscriptionState> 
 export function unsubscribeChannel(channelId: string): Promise<SubscriptionState> {
   return viewerRequest<SubscriptionState>(`/api/channels/${channelId}/subscribe`, {
     method: "DELETE"
+  });
+}
+
+export function createTip(channelId: string, payload: CreateTipPayload): Promise<TipResponse> {
+  return viewerRequest<TipResponse>(`/api/channels/${channelId}/monetization/tips`, {
+    method: "POST",
+    body: JSON.stringify({
+      amount: payload.amount,
+      currency: payload.currency,
+      provider: payload.provider ?? "viewer",
+      reference: payload.reference,
+      walletAddress: payload.walletAddress,
+      message: payload.message
+    })
   });
 }
 

@@ -501,6 +501,118 @@ button:focus-visible {
   display: none;
 }
 
+.tip-drawer__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 6, 10, 0.75);
+  display: flex;
+  justify-content: flex-end;
+  align-items: stretch;
+  z-index: 1000;
+}
+
+.tip-drawer {
+  width: min(420px, 100%);
+  max-width: 420px;
+  height: 100%;
+  padding: 2rem 1.75rem;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 30px rgba(5, 6, 10, 0.45);
+  overflow-y: auto;
+  position: relative;
+}
+
+@media (max-width: 640px) {
+  .tip-drawer {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    border-radius: 1.25rem 1.25rem 0 0;
+  }
+}
+
+.tip-drawer__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.tip-drawer__close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: 0.25rem;
+  border-radius: 999px;
+}
+
+.tip-drawer__close:hover,
+.tip-drawer__close:focus-visible {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tip-drawer__form {
+  gap: 1rem;
+}
+
+.tip-drawer__field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.tip-drawer__field-group label {
+  font-weight: 600;
+}
+
+.tip-drawer__field-group input,
+.tip-drawer__field-group textarea,
+.tip-drawer__field-group select {
+  width: 100%;
+}
+
+.tip-drawer__address-hint {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed var(--border);
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.tip-drawer__address-hint ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.tip-drawer__address-option {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.02);
+  color: inherit;
+}
+
+.tip-drawer__address-option:hover,
+.tip-drawer__address-option:focus-visible {
+  border-color: var(--accent);
+  background: rgba(79, 209, 197, 0.12);
+}
+
+.tip-drawer__actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .channel-about {
   gap: 1.25rem;
 }

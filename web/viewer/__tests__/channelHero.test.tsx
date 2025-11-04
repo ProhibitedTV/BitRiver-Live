@@ -3,6 +3,7 @@ import { ChannelAboutPanel, ChannelHeader } from "../components/ChannelHero";
 import { useAuth } from "../hooks/useAuth";
 import {
   followChannel,
+  createTip,
   subscribeChannel,
   unfollowChannel,
   unsubscribeChannel
@@ -16,7 +17,8 @@ jest.mock("../lib/viewer-api", () => ({
   followChannel: jest.fn(),
   unfollowChannel: jest.fn(),
   subscribeChannel: jest.fn(),
-  unsubscribeChannel: jest.fn()
+  unsubscribeChannel: jest.fn(),
+  createTip: jest.fn()
 }));
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
@@ -24,6 +26,7 @@ const followMock = followChannel as jest.MockedFunction<typeof followChannel>;
 const unfollowMock = unfollowChannel as jest.MockedFunction<typeof unfollowChannel>;
 const subscribeMock = subscribeChannel as jest.MockedFunction<typeof subscribeChannel>;
 const unsubscribeMock = unsubscribeChannel as jest.MockedFunction<typeof unsubscribeChannel>;
+const createTipMock = createTip as jest.MockedFunction<typeof createTip>;
 
 const baseData: ChannelPlaybackResponse = {
   channel: {
@@ -79,6 +82,17 @@ beforeEach(() => {
   unfollowMock.mockResolvedValue({ followers: 10, following: false });
   subscribeMock.mockResolvedValue({ subscribed: true, subscribers: 5 });
   unsubscribeMock.mockResolvedValue({ subscribed: false, subscribers: 4 });
+  createTipMock.mockResolvedValue({
+    id: "tip-1",
+    channelId: "chan-1",
+    fromUserId: "viewer-1",
+    amount: 5,
+    currency: "ETH",
+    provider: "viewer",
+    reference: "txn-001",
+    walletAddress: "0xabc123",
+    createdAt: new Date().toISOString()
+  } as any);
 });
 
 afterEach(() => {
@@ -126,6 +140,87 @@ test("toggles follow and subscribe state", async () => {
   });
 
   expect(screen.getByRole("button", { name: /subscribed/i })).toBeInTheDocument();
+});
+
+test("allows viewers to send a tip and surfaces confirmation", async () => {
+  render(<ChannelHeader data={baseData} />);
+
+  fireEvent.click(screen.getByRole("button", { name: /send a tip/i }));
+
+  const dialog = await screen.findByRole("dialog", { name: /send a tip/i });
+  const amountInput = within(dialog).getByLabelText(/amount/i);
+  fireEvent.change(amountInput, { target: { value: "7.5" } });
+
+  const referenceInput = within(dialog).getByLabelText(/wallet reference/i);
+  fireEvent.change(referenceInput, { target: { value: "hash-42" } });
+
+  const messageInput = within(dialog).getByLabelText(/message/i);
+  fireEvent.change(messageInput, { target: { value: "Keep the beats flowing" } });
+
+  fireEvent.click(within(dialog).getByRole("button", { name: /send tip/i }));
+
+  await waitFor(() => {
+    expect(createTipMock).toHaveBeenCalledWith("chan-1", {
+      amount: 7.5,
+      currency: "ETH",
+      provider: "viewer",
+      reference: "hash-42",
+      walletAddress: "0xabc123",
+      message: "Keep the beats flowing"
+    });
+  });
+
+  await waitFor(() => {
+    expect(screen.getByText(/thanks for supporting deep space beats/i)).toBeInTheDocument();
+  });
+
+  await waitFor(() => {
+    expect(screen.queryByRole("dialog", { name: /send a tip/i })).not.toBeInTheDocument();
+  });
+});
+
+test("validates tip details before calling the API", async () => {
+  render(<ChannelHeader data={baseData} />);
+
+  fireEvent.click(screen.getByRole("button", { name: /send a tip/i }));
+  const dialog = await screen.findByRole("dialog", { name: /send a tip/i });
+
+  const amountInput = within(dialog).getByLabelText(/amount/i);
+  fireEvent.change(amountInput, { target: { value: "0" } });
+  const form = dialog.querySelector("form");
+  expect(form).toBeTruthy();
+  fireEvent.submit(form as HTMLFormElement);
+
+  const validationAlert = await within(dialog).findByRole("alert");
+  expect(validationAlert).toHaveTextContent(/enter a valid amount greater than zero/i);
+  expect(createTipMock).not.toHaveBeenCalled();
+
+  fireEvent.change(amountInput, { target: { value: "5" } });
+  fireEvent.submit(form as HTMLFormElement);
+
+  const referenceAlert = await within(dialog).findByRole("alert");
+  expect(referenceAlert).toHaveTextContent(/provide the wallet or transaction reference/i);
+  expect(createTipMock).not.toHaveBeenCalled();
+});
+
+test("surfaces tip submission errors", async () => {
+  createTipMock.mockRejectedValueOnce(new Error("Payment provider unavailable"));
+
+  render(<ChannelHeader data={baseData} />);
+
+  fireEvent.click(screen.getByRole("button", { name: /send a tip/i }));
+  const dialog = await screen.findByRole("dialog", { name: /send a tip/i });
+
+  fireEvent.change(within(dialog).getByLabelText(/amount/i), { target: { value: "5" } });
+  fireEvent.change(within(dialog).getByLabelText(/wallet reference/i), { target: { value: "abc" } });
+
+  fireEvent.click(within(dialog).getByRole("button", { name: /send tip/i }));
+
+  expect(
+    await within(dialog).findByText(/payment provider unavailable/i)
+  ).toBeInTheDocument();
+  expect(createTipMock).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("dialog", { name: /send a tip/i })).toBeInTheDocument();
 });
 
 test("renders donation addresses and copies to clipboard", async () => {

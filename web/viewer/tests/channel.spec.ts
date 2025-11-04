@@ -26,6 +26,10 @@ const basePlayback = {
     followers: 10,
     following: false
   },
+  donationAddresses: [
+    { currency: "eth", address: "0xabc123", note: "Main" },
+    { currency: "btc", address: "bc1xyz" }
+  ],
   subscription: {
     subscribers: 3,
     subscribed: false
@@ -122,6 +126,38 @@ test.describe("channel route", () => {
       });
     });
 
+    type TipPayload = {
+      amount: number;
+      currency: string;
+      provider: string;
+      reference: string;
+      walletAddress?: string;
+      message?: string;
+    };
+    let tipCalls = 0;
+    let lastTipPayload: TipPayload | undefined;
+    await page.route("**/api/channels/chan-42/monetization/tips", async (route) => {
+      tipCalls += 1;
+      const body = route.request().postDataJSON() as TipPayload;
+      lastTipPayload = body;
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "tip-1",
+          channelId: "chan-42",
+          fromUserId: "viewer-1",
+          amount: body?.amount ?? 0,
+          currency: body?.currency ?? "ETH",
+          provider: body?.provider ?? "viewer",
+          reference: body?.reference ?? "",
+          walletAddress: body?.walletAddress ?? null,
+          message: body?.message ?? null,
+          createdAt: new Date("2023-10-21T12:10:00Z").toISOString()
+        })
+      });
+    });
+
     await page.goto("/channels/chan-42");
 
     await expect(page.getByRole("heading", { level: 1, name: "Deep Space Beats" })).toBeVisible();
@@ -141,6 +177,19 @@ test.describe("channel route", () => {
 
     await expect.poll(() => lastPostedMessage).toBe("Hello from viewer");
     await expect(page.getByText("Hello from viewer")).toBeVisible();
+
+    await page.getByRole("button", { name: /send a tip/i }).click();
+    const tipDialog = page.getByRole("dialog", { name: /send a tip/i });
+    await tipDialog.getByLabel("Amount").fill("6.75");
+    await tipDialog.getByLabel("Currency").selectOption("BTC");
+    await tipDialog.getByLabel("Wallet reference").fill("txn-77");
+    await tipDialog.getByLabel("Message (optional)").fill("Great vibes!");
+    await tipDialog.getByRole("button", { name: /send tip/i }).click();
+
+    await expect.poll(() => tipCalls).toBeGreaterThan(0);
+    await expect.poll(() => lastTipPayload?.currency).toBe("BTC");
+    await tipDialog.waitFor({ state: "detached" });
+    await expect(page.getByText(/thanks for supporting deep space beats/i)).toBeVisible();
   });
 
   test("prompts viewers to authenticate when required", async ({ page }) => {
@@ -176,6 +225,54 @@ test.describe("channel route", () => {
     const textarea = page.getByRole("textbox", { name: /chat message/i });
     await expect(textarea).toBeDisabled();
     await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
+
+    const tipButton = page.getByRole("button", { name: /send a tip/i });
+    await tipButton.click();
+    await expect(page.getByText(/sign in from the header to send a tip/i)).toBeVisible();
+  });
+
+  test("surfaces tip errors when submission fails", async ({ page }) => {
+    await page.route("**/api/auth/session", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          user: {
+            id: "viewer-1",
+            displayName: "Viewer",
+            email: "viewer@example.com",
+            roles: ["member"]
+          }
+        })
+      });
+    });
+
+    await page.route("**/api/channels/chan-42/playback", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(basePlayback) });
+    });
+
+    await page.route("**/api/channels/chan-42/vods", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ channelId: "chan-42", items: [] }) });
+    });
+
+    await page.route("**/api/channels/chan-42/chat", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(chatTranscript) });
+    });
+
+    await page.route("**/api/channels/chan-42/monetization/tips", async (route) => {
+      await route.fulfill({ status: 422, body: "Invalid reference" });
+    });
+
+    await page.goto("/channels/chan-42");
+
+    await page.getByRole("button", { name: /send a tip/i }).click();
+    const tipDialog = page.getByRole("dialog", { name: /send a tip/i });
+    await tipDialog.getByLabel("Amount").fill("5");
+    await tipDialog.getByLabel("Wallet reference").fill("bad-ref");
+    await tipDialog.getByRole("button", { name: /send tip/i }).click();
+
+    await expect(tipDialog.getByText(/invalid reference/i)).toBeVisible();
+    await expect(tipDialog).toBeVisible();
   });
 });
 

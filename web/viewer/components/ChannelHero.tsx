@@ -13,6 +13,7 @@ import {
   unfollowChannel,
   unsubscribeChannel
 } from "../lib/viewer-api";
+import { TipDrawer } from "./TipDrawer";
 
 export type ChannelHeaderProps = {
   data: ChannelPlaybackResponse;
@@ -31,6 +32,8 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
   const [status, setStatus] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const [tipOpen, setTipOpen] = useState(false);
+  const donationAddresses = data.donationAddresses ?? [];
 
   const handleToggleFollow = async () => {
     if (!user) {
@@ -72,6 +75,20 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
     }
   };
 
+  const handleOpenTip = () => {
+    if (!user) {
+      setStatus("Sign in from the header to send a tip to this channel.");
+      return;
+    }
+    setStatus(undefined);
+    setTipOpen(true);
+  };
+
+  const handleTipSuccess = (message: string) => {
+    setStatus(message);
+    setTipOpen(false);
+  };
+
   return (
     <section className="channel-header surface stack" aria-labelledby="channel-title">
       <header className="channel-header__meta stack" style={{ gap: "0.5rem" }}>
@@ -104,6 +121,9 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
             {subscription.subscribed ? "Subscribed" : "Subscribe"}
             {subscription.tier ? ` · ${subscription.tier}` : ""}
           </button>
+          <button className="secondary-button" type="button" onClick={handleOpenTip}>
+            Send a tip
+          </button>
         </div>
         <dl className="channel-stats" aria-label="Channel community stats">
           <div>
@@ -122,6 +142,14 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
             ? "Enjoy low-latency playback powered by the ingest pipeline."
             : "Offline for now – follow to be notified when the stream returns.")}
       </p>
+      <TipDrawer
+        open={tipOpen}
+        channelId={data.channel.id}
+        channelTitle={data.channel.title}
+        donationAddresses={donationAddresses}
+        onClose={() => setTipOpen(false)}
+        onSuccess={handleTipSuccess}
+      />
     </section>
   );
 }
