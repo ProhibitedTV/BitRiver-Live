@@ -21,6 +21,7 @@ export function ChatPanel({
   const [content, setContent] = useState("");
   const [sending, setSending] = useState(false);
   const [pausedForAuth, setPausedForAuth] = useState(false);
+  const chatDisabled = !roomId;
 
   const isUnauthorizedError = (err: unknown) => {
     if (!(err instanceof Error)) {
@@ -56,7 +57,7 @@ export function ChatPanel({
   );
 
   useEffect(() => {
-    if (!roomId) {
+    if (chatDisabled) {
       setLoading(false);
       setMessages([]);
       return;
@@ -140,15 +141,18 @@ export function ChatPanel({
     }
   };
 
+  const isComposerDisabled = chatDisabled || !user || sending;
+
   return (
     <section className="chat-panel" aria-live="polite">
       <header className="chat-panel__header">
         <h3>Live chat</h3>
         <span className="muted">{messages.length} message{messages.length === 1 ? "" : "s"}</span>
       </header>
-      {loading && <div className="surface">Loading chat…</div>}
-      {error && <div className="surface" role="alert">{error}</div>}
-      {!loading && !error && (
+      {chatDisabled && <div className="surface">Chat is disabled/offline</div>}
+      {loading && !chatDisabled && <div className="surface">Loading chat…</div>}
+      {error && !chatDisabled && <div className="surface" role="alert">{error}</div>}
+      {!loading && !error && !chatDisabled && (
         <div className="chat-panel__body" role="log" aria-relevant="additions" aria-live="polite">
           {sortedMessages.length === 0 ? (
             <p className="muted">No messages yet. Be the first to say hello!</p>
@@ -180,21 +184,36 @@ export function ChatPanel({
           )}
         </div>
       )}
-      <form className="chat-panel__form" onSubmit={handleSend} aria-label="Send a chat message">
+      <form
+        className="chat-panel__form"
+        onSubmit={handleSend}
+        aria-label="Send a chat message"
+        aria-disabled={chatDisabled}
+      >
         <label htmlFor="chat-input" className="sr-only">
           Chat message
         </label>
         <textarea
           id="chat-input"
           name="message"
-          placeholder={user ? "Share your thoughts" : "Sign in to participate in chat"}
+          placeholder={
+            chatDisabled
+              ? "Chat is disabled/offline"
+              : user
+              ? "Share your thoughts"
+              : "Sign in to participate in chat"
+          }
           value={content}
           onChange={(event) => setContent(event.target.value)}
-          disabled={!user || sending}
+          disabled={isComposerDisabled}
           rows={3}
-          aria-disabled={!user}
+          aria-disabled={chatDisabled || !user}
         />
-        <button type="submit" className="primary-button" disabled={!user || sending || content.trim().length === 0}>
+        <button
+          type="submit"
+          className="primary-button"
+          disabled={isComposerDisabled || content.trim().length === 0}
+        >
           {sending ? "Sending…" : "Send"}
         </button>
       </form>
