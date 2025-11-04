@@ -208,7 +208,7 @@ func newFakeUploadStore() *fakeUploadStore {
 	return &fakeUploadStore{uploads: make(map[string]models.Upload)}
 }
 
-func (f *fakeUploadStore) ListChannels(ownerID string) []models.Channel {
+func (f *fakeUploadStore) ListChannels(ownerID, query string) []models.Channel {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := make([]models.Channel, len(f.channels))

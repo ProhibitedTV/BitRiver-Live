@@ -135,6 +135,10 @@ func TestPostgresChatReportsLifecycle(t *testing.T) {
 	storage.RunRepositoryChatReportsLifecycle(t, postgresRepositoryFactory)
 }
 
+func TestPostgresChannelSearch(t *testing.T) {
+	storage.RunRepositoryChannelSearch(t, postgresRepositoryFactory)
+}
+
 func TestPostgresSetUserPassword(t *testing.T) {
 	repo := openPostgresRepository(t)
 
@@ -329,7 +333,7 @@ func TestPostgresReadHelpersRespectAcquireTimeout(t *testing.T) {
 	}
 
 	expectQuick("ListChannels", func() error {
-		if channels := repo.ListChannels(""); channels != nil {
+		if channels := repo.ListChannels("", ""); channels != nil {
 			return fmt.Errorf("expected nil channel list while pool is exhausted, got %d", len(channels))
 		}
 		return nil
@@ -364,7 +368,7 @@ func TestPostgresReadHelpersRespectAcquireTimeout(t *testing.T) {
 	conn.Release()
 	conn = nil
 
-	channels := repo.ListChannels("")
+	channels := repo.ListChannels("", "")
 	if len(channels) != 1 || channels[0].ID != channel.ID {
 		t.Fatalf("expected channel to be listed after releasing pool connection, got %+v", channels)
 	}

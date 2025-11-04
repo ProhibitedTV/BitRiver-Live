@@ -212,7 +212,7 @@ func RunRepositoryStreamKeyRotation(t *testing.T, factory RepositoryFactory) {
 		t.Fatalf("expected fetched stream key %q, got %q", rotated.StreamKey, fetched.StreamKey)
 	}
 
-	channels := repo.ListChannels(owner.ID)
+	channels := repo.ListChannels(owner.ID, "")
 	found := false
 	for _, item := range channels {
 		if item.ID != channel.ID {
@@ -225,6 +225,57 @@ func RunRepositoryStreamKeyRotation(t *testing.T, factory RepositoryFactory) {
 	}
 	if !found {
 		t.Fatalf("expected rotated channel %s to appear in list", channel.ID)
+	}
+}
+
+// RunRepositoryChannelSearch verifies that repositories filter channels by
+// title, owner display name, and tags using case-insensitive matching.
+func RunRepositoryChannelSearch(t *testing.T, factory RepositoryFactory) {
+	repo := runRepository(t, factory)
+
+	creatorOne, err := repo.CreateUser(CreateUserParams{DisplayName: "Coder One", Email: "coder1@example.com", Roles: []string{"creator"}})
+	requireAvailable(t, err, "create first creator")
+	creatorTwo, err := repo.CreateUser(CreateUserParams{DisplayName: "RetroMaster", Email: "retro@example.com", Roles: []string{"creator"}})
+	requireAvailable(t, err, "create second creator")
+	creatorThree, err := repo.CreateUser(CreateUserParams{DisplayName: "DJ Night", Email: "dj@example.com", Roles: []string{"creator"}})
+	requireAvailable(t, err, "create third creator")
+
+	lounge, err := repo.CreateChannel(creatorOne.ID, "Coding Lounge", "technology", []string{"GoLang", "Backend"})
+	requireAvailable(t, err, "create coding lounge")
+	arcade, err := repo.CreateChannel(creatorTwo.ID, "Arcade Stars", "gaming", []string{"retro", "speedrun"})
+	requireAvailable(t, err, "create arcade stars")
+	beats, err := repo.CreateChannel(creatorThree.ID, "Midnight Beats", "music", []string{"Live", "Music"})
+	requireAvailable(t, err, "create midnight beats")
+
+	if channels := repo.ListChannels("", ""); len(channels) != 3 {
+		t.Fatalf("expected 3 channels without filter, got %d", len(channels))
+	}
+
+	cases := []struct {
+		name    string
+		ownerID string
+		query   string
+		wantIDs []string
+	}{
+		{name: "title query", query: "lounge", wantIDs: []string{lounge.ID}},
+		{name: "owner display name", query: "RETROMASTER", wantIDs: []string{arcade.ID}},
+		{name: "tag mixed case", query: "MuSiC", wantIDs: []string{beats.ID}},
+		{name: "owner scoped", ownerID: creatorTwo.ID, query: "ARCADE", wantIDs: []string{arcade.ID}},
+		{name: "no matches", query: "unknown", wantIDs: []string{}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			channels := repo.ListChannels(tc.ownerID, tc.query)
+			if len(channels) != len(tc.wantIDs) {
+				t.Fatalf("expected %d channels, got %d", len(tc.wantIDs), len(channels))
+			}
+			for i, id := range tc.wantIDs {
+				if channels[i].ID != id {
+					t.Fatalf("expected channel %s at index %d, got %s", id, i, channels[i].ID)
+				}
+			}
+		})
 	}
 }
 

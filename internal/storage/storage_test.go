@@ -1932,6 +1932,10 @@ func TestRepositoryOAuthLinking(t *testing.T) {
 	RunRepositoryOAuthLinking(t, jsonRepositoryFactory)
 }
 
+func TestRepositoryChannelSearch(t *testing.T) {
+	RunRepositoryChannelSearch(t, jsonRepositoryFactory)
+}
+
 func TestCloneDatasetCopiesModerationMetadata(t *testing.T) {
 	now := time.Now().UTC()
 	resolvedAt := now

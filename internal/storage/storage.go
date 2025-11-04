@@ -1972,14 +1972,22 @@ func (s *Storage) GetChannel(id string) (models.Channel, bool) {
 	return channel, ok
 }
 
-func (s *Storage) ListChannels(ownerID string) []models.Channel {
+func (s *Storage) ListChannels(ownerID, query string) []models.Channel {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
 	channels := make([]models.Channel, 0, len(s.data.Channels))
 	for _, channel := range s.data.Channels {
 		if ownerID != "" && channel.OwnerID != ownerID {
 			continue
+		}
+		owner := models.User{}
+		if normalizedQuery != "" {
+			owner = s.data.Users[channel.OwnerID]
+			if !channelMatchesQuery(channel, owner, normalizedQuery) {
+				continue
+			}
 		}
 		channels = append(channels, channel)
 	}
@@ -1990,6 +1998,24 @@ func (s *Storage) ListChannels(ownerID string) []models.Channel {
 		return channels[i].LiveState == "live"
 	})
 	return channels
+}
+
+func channelMatchesQuery(channel models.Channel, owner models.User, normalizedQuery string) bool {
+	if normalizedQuery == "" {
+		return true
+	}
+	if strings.Contains(strings.ToLower(channel.Title), normalizedQuery) {
+		return true
+	}
+	if owner.DisplayName != "" && strings.Contains(strings.ToLower(owner.DisplayName), normalizedQuery) {
+		return true
+	}
+	for _, tag := range channel.Tags {
+		if strings.Contains(strings.ToLower(tag), normalizedQuery) {
+			return true
+		}
+	}
+	return false
 }
 
 // FollowChannel records that a viewer is following the channel. The operation is idempotent.
