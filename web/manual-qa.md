@@ -44,7 +44,9 @@ content flows through unchanged.
 
    *Expected:* the chat panel loads without errors, shows "No messages yet"
    when there is no history, and the composer is disabled with the
-   "Sign in to participate in chat" placeholder.
+   "Sign in to participate in chat" placeholder. If the network tab shows a
+   `401` response for the chat API, the panel should still render the empty
+   state and stop polling until you sign in.
 
 2. Sign in with a viewer account and return to the same channel page.
 

@@ -121,3 +121,55 @@ test("treats unauthorized chat fetch as empty state for guests", async () => {
   expect(textarea).toBeDisabled();
   expect(textarea).toHaveAttribute("placeholder", "Sign in to participate in chat");
 });
+
+test("resumes chat polling once a guest signs in", async () => {
+  const guestAuth = {
+    user: undefined,
+    loading: false,
+    error: undefined,
+    login: jest.fn(),
+    signup: jest.fn(),
+    logout: jest.fn(),
+    refresh: jest.fn()
+  };
+  mockUseAuth.mockReturnValue(guestAuth as ReturnType<typeof useAuth>);
+  fetchChatMock.mockRejectedValueOnce(new Error("401"));
+
+  const { rerender } = render(<ChatPanel channelId="chan-auth" roomId="room-1" />);
+
+  await waitFor(() => {
+    expect(fetchChatMock).toHaveBeenCalledWith("chan-auth");
+    expect(screen.getByText(/no messages yet/i)).toBeInTheDocument();
+  });
+  expect(fetchChatMock).toHaveBeenCalledTimes(1);
+
+  const signedInAuth = {
+    user: { id: "viewer-2", displayName: "Viewer Two", email: "viewer2@example.com", roles: [] },
+    loading: false,
+    error: undefined,
+    login: jest.fn(),
+    signup: jest.fn(),
+    logout: jest.fn(),
+    refresh: jest.fn()
+  };
+  mockUseAuth.mockReturnValue(signedInAuth as ReturnType<typeof useAuth>);
+  fetchChatMock.mockResolvedValueOnce([
+    {
+      id: "m-auth-1",
+      message: "Welcome back",
+      sentAt: new Date().toISOString(),
+      user: { id: "viewer-2", displayName: "Viewer Two" }
+    }
+  ]);
+
+  rerender(<ChatPanel channelId="chan-auth" roomId="room-1" />);
+
+  await waitFor(() => {
+    expect(fetchChatMock).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("Welcome back")).toBeInTheDocument();
+  });
+
+  const textarea = screen.getByRole("textbox", { name: /chat message/i });
+  expect(textarea).not.toBeDisabled();
+  expect(textarea).toHaveAttribute("placeholder", "Share your thoughts");
+});

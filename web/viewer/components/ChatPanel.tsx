@@ -20,6 +20,7 @@ export function ChatPanel({
   const [error, setError] = useState<string | undefined>();
   const [content, setContent] = useState("");
   const [sending, setSending] = useState(false);
+  const [pausedForAuth, setPausedForAuth] = useState(false);
 
   const isUnauthorizedError = (err: unknown) => {
     if (!(err instanceof Error)) {
@@ -57,14 +58,25 @@ export function ChatPanel({
   useEffect(() => {
     if (!roomId) {
       setLoading(false);
+      setMessages([]);
+      return;
+    }
+
+    if (pausedForAuth) {
+      if (user) {
+        setPausedForAuth(false);
+      } else {
+        setLoading(false);
+      }
       return;
     }
 
     let cancelled = false;
     let shouldPoll = true;
+    let interval: ReturnType<typeof setInterval> | undefined;
 
     const load = async (showSpinner: boolean) => {
-      if (cancelled || !shouldPoll) {
+      if (cancelled || !shouldPoll || pausedForAuth) {
         return;
       }
       try {
@@ -80,6 +92,7 @@ export function ChatPanel({
         if (!cancelled) {
           if (isUnauthorizedError(err) && !user) {
             shouldPoll = false;
+            setPausedForAuth(true);
             setMessages([]);
             setError(undefined);
           } else {
@@ -94,15 +107,17 @@ export function ChatPanel({
     };
 
     void load(true);
-    const interval = setInterval(() => {
+    interval = setInterval(() => {
       void load(false);
     }, POLL_INTERVAL_MS);
 
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      if (interval) {
+        clearInterval(interval);
+      }
     };
-  }, [channelId, roomId, user?.id]);
+  }, [channelId, roomId, user?.id, pausedForAuth]);
 
   const handleSend = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
