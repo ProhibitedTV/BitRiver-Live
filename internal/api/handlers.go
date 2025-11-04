@@ -2286,12 +2286,12 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 	}
 
 	if len(remaining) > 0 && remaining[0] != "" {
-		actor, ok := h.requireAuthenticatedUser(w, r)
-		if !ok {
-			return
-		}
 		switch remaining[0] {
 		case "moderation":
+			actor, ok := h.requireAuthenticatedUser(w, r)
+			if !ok {
+				return
+			}
 			h.handleChatModeration(actor, channel, remaining[1:], w, r)
 			return
 		default:
@@ -2303,6 +2303,10 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 			if r.Method != http.MethodDelete {
 				w.Header().Set("Allow", "DELETE")
 				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				return
+			}
+			actor, ok := h.requireAuthenticatedUser(w, r)
+			if !ok {
 				return
 			}
 			if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {

@@ -1025,6 +1025,13 @@ func TestChatRoutesAuthorization(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected anonymous chat delete status 401, got %d", rec.Code)
 	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID+"/chat/"+message.ID, nil)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected chat message GET status 405, got %d", rec.Code)
+	}
 }
 
 func TestProfileEndpoints(t *testing.T) {
