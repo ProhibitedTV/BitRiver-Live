@@ -80,6 +80,8 @@ test("sends a chat message when the user submits the form", async () => {
   render(<ChatPanel channelId="chan-99" roomId="room-1" />);
 
   const textarea = await screen.findByRole("textbox", { name: /chat message/i });
+  expect(textarea).toHaveAttribute("placeholder", "Share your thoughts");
+  expect(textarea).not.toBeDisabled();
   await user.type(textarea, "Hello world");
   const sendButton = screen.getByRole("button", { name: /send/i });
   await user.click(sendButton);
@@ -88,4 +90,34 @@ test("sends a chat message when the user submits the form", async () => {
     expect(sendChatMock).toHaveBeenCalledWith("chan-99", "viewer-1", "Hello world");
     expect(screen.getByText("Hello world")).toBeInTheDocument();
   });
+});
+
+test("treats unauthorized chat fetch as empty state for guests", async () => {
+  const guestAuth = {
+    user: undefined,
+    loading: false,
+    error: undefined,
+    login: jest.fn(),
+    signup: jest.fn(),
+    logout: jest.fn(),
+    refresh: jest.fn()
+  };
+  mockUseAuth.mockReturnValue(guestAuth as ReturnType<typeof useAuth>);
+  fetchChatMock.mockRejectedValueOnce(new Error("401"));
+
+  render(<ChatPanel channelId="chan-guest" roomId="room-1" />);
+
+  await waitFor(() => {
+    expect(fetchChatMock).toHaveBeenCalledWith("chan-guest");
+    expect(screen.getByText(/no messages yet/i)).toBeInTheDocument();
+  });
+
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+  jest.advanceTimersByTime(30_000);
+  expect(fetchChatMock).toHaveBeenCalledTimes(1);
+
+  const textarea = screen.getByRole("textbox", { name: /chat message/i });
+  expect(textarea).toBeDisabled();
+  expect(textarea).toHaveAttribute("placeholder", "Sign in to participate in chat");
 });

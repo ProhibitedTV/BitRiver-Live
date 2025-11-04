@@ -21,6 +21,31 @@ export function ChatPanel({
   const [content, setContent] = useState("");
   const [sending, setSending] = useState(false);
 
+  const isUnauthorizedError = (err: unknown) => {
+    if (!(err instanceof Error)) {
+      return false;
+    }
+    const rawMessage = err.message.trim();
+    if (rawMessage === "401") {
+      return true;
+    }
+    try {
+      const parsed = JSON.parse(rawMessage);
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        "error" in parsed &&
+        typeof parsed.error === "string" &&
+        parsed.error.toLowerCase().includes("authentication required")
+      ) {
+        return true;
+      }
+    } catch {
+      // fall through to string checks
+    }
+    return rawMessage.toLowerCase().includes("authentication required");
+  };
+
   const sortedMessages = useMemo(
     () =>
       [...messages].sort((a, b) =>
@@ -36,8 +61,12 @@ export function ChatPanel({
     }
 
     let cancelled = false;
+    let shouldPoll = true;
 
     const load = async (showSpinner: boolean) => {
+      if (cancelled || !shouldPoll) {
+        return;
+      }
       try {
         if (showSpinner) {
           setLoading(true);
@@ -49,7 +78,13 @@ export function ChatPanel({
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Unable to load chat");
+          if (isUnauthorizedError(err) && !user) {
+            shouldPoll = false;
+            setMessages([]);
+            setError(undefined);
+          } else {
+            setError(err instanceof Error ? err.message : "Unable to load chat");
+          }
         }
       } finally {
         if (!cancelled) {
@@ -67,7 +102,7 @@ export function ChatPanel({
       cancelled = true;
       clearInterval(interval);
     };
-  }, [channelId, roomId]);
+  }, [channelId, roomId, user?.id]);
 
   const handleSend = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
