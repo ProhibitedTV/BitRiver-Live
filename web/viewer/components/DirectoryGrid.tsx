@@ -18,7 +18,9 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
       {channels.map((entry) => {
         const createdAt = new Date(entry.channel.createdAt).toLocaleDateString();
         const previewImage = entry.profile.bannerUrl ?? entry.profile.avatarUrl;
-        const followerLabel = `${entry.followerCount.toLocaleString()} follower${entry.followerCount === 1 ? "" : "s"}`;
+        const followerCountLabel = entry.followerCount.toLocaleString();
+        const followerLabel = `${followerCountLabel} follower${entry.followerCount === 1 ? "" : "s"}`;
+        const followerOverlayLabel = `Followers: ${followerCountLabel}`;
 
         return (
           <article key={entry.channel.id} className="directory-card">
@@ -36,7 +38,7 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
                 <div className="overlay overlay--top overlay--scrim">
                   {entry.live && <span className="badge badge--live">Live</span>}
                   {entry.live ? (
-                    <span className="overlay__meta">{followerLabel}</span>
+                    <span className="overlay__meta">{followerOverlayLabel}</span>
                   ) : (
                     <span className="overlay__meta overlay__meta--muted">Offline</span>
                   )}

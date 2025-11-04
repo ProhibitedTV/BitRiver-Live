@@ -89,7 +89,8 @@ describe("DirectoryPage", () => {
     expect(card).toBeTruthy();
     const withinCard = within(card!);
     expect(withinCard.getByText(/dj nova/i)).toBeInTheDocument();
-    expect(withinCard.getAllByText(/12 followers/i)).toHaveLength(2);
+    expect(withinCard.getByText(/followers:\s*12/i)).toBeInTheDocument();
+    expect(withinCard.getByText(/12 followers/i)).toBeInTheDocument();
     expect(withinCard.queryByText(/12 viewers/i)).not.toBeInTheDocument();
   });
 
