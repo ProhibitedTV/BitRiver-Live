@@ -21,7 +21,7 @@ export function ChatPanel({
   const [content, setContent] = useState("");
   const [sending, setSending] = useState(false);
   const [pausedForAuth, setPausedForAuth] = useState(false);
-  const chatDisabled = !roomId;
+  const chatDisabled = !roomId?.trim();
 
   const isUnauthorizedError = (err: unknown) => {
     if (!(err instanceof Error)) {
@@ -125,7 +125,7 @@ export function ChatPanel({
     if (!content.trim()) {
       return;
     }
-    if (!user) {
+    if (!user || chatDisabled) {
       return;
     }
 

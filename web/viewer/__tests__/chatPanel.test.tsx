@@ -98,9 +98,13 @@ test("shows offline state when no chat room is configured", () => {
   expect(fetchChatMock).not.toHaveBeenCalled();
   expect(screen.getByText(/chat is disabled\/offline/i)).toBeInTheDocument();
 
+  const form = screen.getByRole("form", { name: /send a chat message/i });
+  expect(form).toHaveAttribute("aria-disabled", "true");
+
   const textarea = screen.getByRole("textbox", { name: /chat message/i });
   expect(textarea).toBeDisabled();
   expect(textarea).toHaveAttribute("placeholder", "Chat is disabled/offline");
+  expect(textarea).toHaveAttribute("aria-disabled", "true");
 
   const sendButton = screen.getByRole("button", { name: /send/i });
   expect(sendButton).toBeDisabled();
