@@ -458,6 +458,44 @@ func RunRepositoryTipsLifecycle(t *testing.T, factory RepositoryFactory) {
 	if len(tips) != 1 || tips[0].ID != tip.ID {
 		t.Fatalf("expected persisted tip, got %+v", tips)
 	}
+
+	longReference := strings.Repeat("r", MaxTipReferenceLength+1)
+	if _, err := repo.CreateTip(CreateTipParams{
+		ChannelID:  channel.ID,
+		FromUserID: supporter.ID,
+		Amount:     5.5,
+		Currency:   "usd",
+		Provider:   "stripe",
+		Reference:  longReference,
+	}); err == nil {
+		t.Fatalf("expected error for overlong reference")
+	}
+
+	longWallet := strings.Repeat("w", MaxTipWalletAddressLength+1)
+	if _, err := repo.CreateTip(CreateTipParams{
+		ChannelID:     channel.ID,
+		FromUserID:    supporter.ID,
+		Amount:        5.5,
+		Currency:      "usd",
+		Provider:      "stripe",
+		Reference:     "ref-wallet",
+		WalletAddress: longWallet,
+	}); err == nil {
+		t.Fatalf("expected error for overlong wallet address")
+	}
+
+	longMessage := strings.Repeat("m", MaxTipMessageLength+1)
+	if _, err := repo.CreateTip(CreateTipParams{
+		ChannelID:  channel.ID,
+		FromUserID: supporter.ID,
+		Amount:     5.5,
+		Currency:   "usd",
+		Provider:   "stripe",
+		Reference:  "ref-message",
+		Message:    longMessage,
+	}); err == nil {
+		t.Fatalf("expected error for overlong message")
+	}
 }
 
 // RunRepositorySubscriptionsLifecycle validates the subscription lifecycle for

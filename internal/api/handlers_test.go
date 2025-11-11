@@ -1235,11 +1235,22 @@ func TestMonetizationEndpoints(t *testing.T) {
 		t.Fatalf("create channel: %v", err)
 	}
 
-	tipReq := createTipRequest{Amount: 10, Currency: "USD", Provider: "stripe", Message: "gg"}
-	body, _ := json.Marshal(tipReq)
+	longMessage := strings.Repeat("m", storage.MaxTipMessageLength+1)
+	badTipReq := createTipRequest{Amount: 10, Currency: "USD", Provider: "stripe", Message: longMessage}
+	body, _ := json.Marshal(badTipReq)
 	req := httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/monetization/tips", bytes.NewReader(body))
 	req = withUser(req, supporter)
 	rec := httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected tip status 400 for long message, got %d", rec.Code)
+	}
+
+	tipReq := createTipRequest{Amount: 10, Currency: "USD", Provider: "stripe", Message: "gg"}
+	body, _ = json.Marshal(tipReq)
+	req = httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/monetization/tips", bytes.NewReader(body))
+	req = withUser(req, supporter)
+	rec = httptest.NewRecorder()
 	handler.ChannelByID(rec, req)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected tip status 201, got %d", rec.Code)

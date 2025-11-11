@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
@@ -35,6 +36,16 @@ const (
 
 	metadataManifestPrefix  = "object:manifest:"
 	metadataThumbnailPrefix = "object:thumbnail:"
+
+	// MaxTipReferenceLength defines the maximum number of characters allowed for
+	// a tip reference identifier.
+	MaxTipReferenceLength = 256
+	// MaxTipWalletAddressLength defines the maximum number of characters allowed
+	// for a tip wallet address.
+	MaxTipWalletAddressLength = 256
+	// MaxTipMessageLength defines the maximum number of characters allowed for a
+	// tip message payload.
+	MaxTipMessageLength = 512
 )
 
 type dataset struct {
@@ -3361,6 +3372,17 @@ func (s *Storage) CreateTip(params CreateTipParams) (models.Tip, error) {
 	if reference == "" {
 		reference = fmt.Sprintf("tip-%d", time.Now().UnixNano())
 	}
+	if utf8.RuneCountInString(reference) > MaxTipReferenceLength {
+		return models.Tip{}, fmt.Errorf("reference exceeds %d characters", MaxTipReferenceLength)
+	}
+	wallet := strings.TrimSpace(params.WalletAddress)
+	if utf8.RuneCountInString(wallet) > MaxTipWalletAddressLength {
+		return models.Tip{}, fmt.Errorf("wallet address exceeds %d characters", MaxTipWalletAddressLength)
+	}
+	message := strings.TrimSpace(params.Message)
+	if utf8.RuneCountInString(message) > MaxTipMessageLength {
+		return models.Tip{}, fmt.Errorf("message exceeds %d characters", MaxTipMessageLength)
+	}
 	id, err := s.generateID()
 	if err != nil {
 		return models.Tip{}, err
@@ -3374,8 +3396,8 @@ func (s *Storage) CreateTip(params CreateTipParams) (models.Tip, error) {
 		Currency:      currency,
 		Provider:      provider,
 		Reference:     reference,
-		WalletAddress: strings.TrimSpace(params.WalletAddress),
-		Message:       strings.TrimSpace(params.Message),
+		WalletAddress: wallet,
+		Message:       message,
 		CreatedAt:     now,
 	}
 	if s.data.Tips == nil {
