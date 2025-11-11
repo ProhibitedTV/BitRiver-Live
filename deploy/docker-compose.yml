@@ -95,6 +95,7 @@ services:
       - "${BITRIVER_POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./migrations:/migrations:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U bitriver -d bitriver"]
       interval: 30s
