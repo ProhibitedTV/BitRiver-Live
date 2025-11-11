@@ -143,7 +143,7 @@ BITRIVER_LIVE_POSTGRES_DSN="postgres://bitriver:bitriver@db:5432/bitriver_live?s
 go run ./cmd/server --mode production
 ```
 
-In production mode BitRiver Live binds to port 80 by default, letting viewers access the control center without appending a port number to your domain.
+In production mode BitRiver Live binds to port 80 by default, letting viewers access the control center without appending a port number to your domain. The Ubuntu installer automatically injects `AmbientCapabilities=CAP_NET_BIND_SERVICE`/`CapabilityBoundingSet=CAP_NET_BIND_SERVICE` into the systemd unit and runs `setcap` on the binary so manual restarts keep the privilege. When you're terminating traffic at a reverse proxy, set `--addr :8080` (or another high port) and forward ports 80/443 from the proxy to avoid granting capabilities entirely.
 
 To serve HTTPS directly from the Go process provide a certificate/key pair generated via [Let's Encrypt](https://letsencrypt.org/), your reverse proxy, or another certificate authority:
 
