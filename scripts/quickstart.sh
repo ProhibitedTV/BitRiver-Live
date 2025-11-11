@@ -101,6 +101,72 @@ wait_for_api() {
   return 1
 }
 
+wait_for_postgres() {
+  local attempts=${1:-60}
+  local sleep_seconds=${2:-2}
+  echo "Waiting for Postgres to accept connections ..."
+  for ((i=1; i<=attempts; i++)); do
+    if docker compose exec -T postgres sh -c 'pg_isready -h localhost -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-postgres}" >/dev/null 2>&1' >/dev/null 2>&1; then
+      echo "Postgres is reachable."
+      return 0
+    fi
+    sleep "$sleep_seconds"
+  done
+  echo "Timed out waiting for Postgres readiness after $((attempts * sleep_seconds)) seconds." >&2
+  return 1
+}
+
+POSTGRES_USER_VALUE=""
+POSTGRES_PASSWORD_VALUE=""
+POSTGRES_DB_VALUE=""
+
+resolve_postgres_credentials() {
+  POSTGRES_USER_VALUE=$(docker compose exec -T postgres printenv POSTGRES_USER 2>/dev/null || true)
+  POSTGRES_DB_VALUE=$(docker compose exec -T postgres printenv POSTGRES_DB 2>/dev/null || true)
+  POSTGRES_PASSWORD_VALUE=$(docker compose exec -T postgres printenv POSTGRES_PASSWORD 2>/dev/null || true)
+  POSTGRES_USER_VALUE=${POSTGRES_USER_VALUE//$'\r'/}
+  POSTGRES_USER_VALUE=${POSTGRES_USER_VALUE//$'\n'/}
+  POSTGRES_DB_VALUE=${POSTGRES_DB_VALUE//$'\r'/}
+  POSTGRES_DB_VALUE=${POSTGRES_DB_VALUE//$'\n'/}
+  POSTGRES_PASSWORD_VALUE=${POSTGRES_PASSWORD_VALUE//$'\r'/}
+  POSTGRES_PASSWORD_VALUE=${POSTGRES_PASSWORD_VALUE//$'\n'/}
+  POSTGRES_USER_VALUE=${POSTGRES_USER_VALUE:-bitriver}
+  POSTGRES_DB_VALUE=${POSTGRES_DB_VALUE:-bitriver}
+  POSTGRES_PASSWORD_VALUE=${POSTGRES_PASSWORD_VALUE:-bitriver}
+}
+
+apply_migrations() {
+  local migrations_dir="$REPO_ROOT/deploy/migrations"
+  if [[ ! -d $migrations_dir ]]; then
+    echo "No migrations directory found at $migrations_dir; skipping migration step."
+    return 0
+  fi
+
+  local -a migration_files=()
+  mapfile -t migration_files < <(find "$migrations_dir" -maxdepth 1 -type f -name '*.sql' | sort)
+  if ((${#migration_files[@]} == 0)); then
+    echo "No SQL migrations found; skipping migration step."
+    return 0
+  fi
+
+  resolve_postgres_credentials
+
+  echo "Applying database migrations ..."
+  for file in "${migration_files[@]}"; do
+    local base
+    base=$(basename "$file")
+    echo "  -> $base"
+    if ! docker compose exec -T postgres env PGPASSWORD="$POSTGRES_PASSWORD_VALUE" \
+      psql -v ON_ERROR_STOP=1 -h localhost -U "$POSTGRES_USER_VALUE" -d "$POSTGRES_DB_VALUE" \
+      -f "/migrations/$base" >/dev/null; then
+      echo "Failed to apply migration $base." >&2
+      return 1
+    fi
+  done
+  echo "Database migrations applied successfully."
+  return 0
+}
+
 bootstrap_admin() {
   local storage_driver=$(read_env_value BITRIVER_LIVE_STORAGE_DRIVER)
   storage_driver=${storage_driver:-postgres}
@@ -202,7 +268,34 @@ echo "Stack is starting. Use 'docker compose logs -f' to follow service output."
 API_PORT=$(read_env_value BITRIVER_LIVE_PORT)
 API_PORT=${API_PORT:-8080}
 API_HEALTH_URL="http://localhost:${API_PORT}/healthz"
-if wait_for_api "$API_HEALTH_URL"; then
+postgres_ready=0
+if wait_for_postgres; then
+  postgres_ready=1
+else
+  echo "Postgres did not become ready; skipping migrations and admin bootstrap." >&2
+fi
+
+migrations_succeeded=0
+if ((postgres_ready)); then
+  if apply_migrations; then
+    migrations_succeeded=1
+  else
+    echo "Database migrations failed. Fix the issues above before continuing." >&2
+  fi
+fi
+
+api_ready=0
+if ((migrations_succeeded)); then
+  if wait_for_api "$API_HEALTH_URL"; then
+    api_ready=1
+  else
+    echo "API did not become ready in time; skipping admin bootstrap." >&2
+  fi
+else
+  echo "Skipping API readiness checks until migrations succeed." >&2
+fi
+
+if ((api_ready)); then
   if bootstrap_admin; then
     viewer_url=$(read_env_value NEXT_PUBLIC_VIEWER_URL)
     echo ""
@@ -217,6 +310,23 @@ if wait_for_api "$API_HEALTH_URL"; then
   else
     echo "Administrator bootstrap requires manual follow-up." >&2
   fi
+elif ((migrations_succeeded)); then
+  echo "Admin bootstrap skipped because the API is unavailable." >&2
 else
-  echo "API did not become ready in time; skipping admin bootstrap." >&2
+  echo "Admin bootstrap skipped because migrations did not complete." >&2
+fi
+
+if ! ((migrations_succeeded)); then
+  if ((postgres_ready)); then
+    echo "To retry the migrations manually once the database issues are fixed, run:" >&2
+    echo "  for file in deploy/migrations/*.sql; do" >&2
+    echo "    name=\$(basename \"\$file\")" >&2
+    echo "    docker compose exec -T postgres env PGPASSWORD=\"<database password>\" psql -v ON_ERROR_STOP=1 -h localhost -U \"${POSTGRES_USER_VALUE:-bitriver}\" -d \"${POSTGRES_DB_VALUE:-bitriver}\" -f \"/migrations/\$name\"" >&2
+    echo "  done" >&2
+    echo "Use 'docker compose exec -T postgres printenv POSTGRES_USER' (and related variables) to confirm the credentials before running the loop." >&2
+    echo "Then rerun ./scripts/quickstart.sh to verify the stack." >&2
+  else
+    echo "Postgres never became reachable. Check 'docker compose logs postgres' before retrying the quickstart." >&2
+  fi
+  exit 1
 fi

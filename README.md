@@ -23,7 +23,20 @@ To spin up the entire BitRiver Live stack (API, viewer, database, ingest pipelin
 ./scripts/quickstart.sh
 ```
 
-The script checks for Docker/Docker Compose, writes a `.env` that matches `deploy/docker-compose.yml`, and boots the containers with `docker compose up -d`. The first run also builds local images for the Go API and the bundled FFmpeg job controller, so you never need to authenticate against a private registry. After the API is reachable it runs the `bootstrap-admin` helper against the compose database, prints the seeded credentials, and reminds you to rotate the password on first login. Review and edit `.env` before inviting real viewers, then consult [`docs/quickstart.md`](docs/quickstart.md) for common follow-up commands and troubleshooting tips.
+The script checks for Docker/Docker Compose, writes a `.env` that matches `deploy/docker-compose.yml`, and boots the containers with `docker compose up -d`. Once the stack is running it waits for Postgres, applies the SQL migrations in `deploy/migrations/`, and surfaces any errors instead of immediately continuing. Fix the reported file and rerun the helper, or apply them yourself (the Postgres credentials come from `docker compose exec -T postgres printenv POSTGRES_USER`, etc.):
+
+```bash
+POSTGRES_USER=$(docker compose exec -T postgres printenv POSTGRES_USER | tr -d '\r\n')
+POSTGRES_PASSWORD=$(docker compose exec -T postgres printenv POSTGRES_PASSWORD | tr -d '\r\n')
+POSTGRES_DB=$(docker compose exec -T postgres printenv POSTGRES_DB | tr -d '\r\n')
+for file in deploy/migrations/*.sql; do
+  name=$(basename "$file")
+  docker compose exec -T postgres env PGPASSWORD="$POSTGRES_PASSWORD" \
+    psql -v ON_ERROR_STOP=1 -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "/migrations/$name"
+done
+```
+
+After the API is reachable the quickstart runs the `bootstrap-admin` helper against the compose database, prints the seeded credentials, and reminds you to rotate the password on first login. Review and edit `.env` before inviting real viewers, then consult [`docs/quickstart.md`](docs/quickstart.md) for common follow-up commands and troubleshooting tips.
 
 ### Manual Go workflow
 
