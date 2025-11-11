@@ -321,9 +321,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	sessionDriver := strings.ToLower(strings.TrimSpace(firstNonEmpty(*sessionStoreDriver, os.Getenv("BITRIVER_LIVE_SESSION_STORE"))))
-	if sessionDriver == "" {
-		sessionDriver = "memory"
+	sessionConfig, err := resolveSessionStoreConfig(
+		*sessionStoreDriver,
+		os.Getenv("BITRIVER_LIVE_SESSION_STORE"),
+		driver,
+		storagePostgresDSN,
+		*sessionPostgresDSN,
+		os.Getenv("BITRIVER_LIVE_SESSION_POSTGRES_DSN"),
+	)
+	if err != nil {
+		logger.Error("failed to resolve session store", "error", err)
+		os.Exit(1)
 	}
 
 	var (
@@ -331,19 +339,11 @@ func main() {
 		sessionCloser func(context.Context) error
 	)
 
-	switch sessionDriver {
+	switch sessionConfig.Driver {
 	case "memory":
 		sessionStore = auth.NewMemorySessionStore()
 	case "postgres":
-		sessionDSN := firstNonEmpty(*sessionPostgresDSN, os.Getenv("BITRIVER_LIVE_SESSION_POSTGRES_DSN"))
-		if sessionDSN == "" {
-			sessionDSN = storagePostgresDSN
-		}
-		if strings.TrimSpace(sessionDSN) == "" {
-			logger.Error("postgres session store selected without DSN")
-			os.Exit(1)
-		}
-		pgStore, err := auth.NewPostgresSessionStore(sessionDSN)
+		pgStore, err := auth.NewPostgresSessionStore(sessionConfig.DSN)
 		if err != nil {
 			logger.Error("failed to open session store", "error", err)
 			os.Exit(1)
@@ -351,7 +351,7 @@ func main() {
 		sessionStore = pgStore
 		sessionCloser = func(ctx context.Context) error { return pgStore.Close(ctx) }
 	default:
-		logger.Error("unsupported session store driver", "driver", sessionDriver)
+		logger.Error("unsupported session store driver", "driver", sessionConfig.Driver)
 		os.Exit(1)
 	}
 
@@ -503,6 +503,45 @@ func main() {
 	}
 
 	logger.Info("server stopped")
+}
+
+type sessionStoreConfig struct {
+	Driver string
+	DSN    string
+}
+
+func resolveSessionStoreConfig(flagDriver, envDriver, storageDriver, storageDSN, flagDSN, envDSN string) (sessionStoreConfig, error) {
+	driver := strings.ToLower(strings.TrimSpace(flagDriver))
+	if driver == "" {
+		driver = strings.ToLower(strings.TrimSpace(envDriver))
+	}
+
+	sessionDSN := strings.TrimSpace(firstNonEmpty(flagDSN, envDSN))
+	if driver == "" {
+		switch {
+		case sessionDSN != "":
+			driver = "postgres"
+		case storageDriver == "postgres":
+			driver = "postgres"
+		default:
+			driver = "memory"
+		}
+	}
+
+	switch driver {
+	case "", "memory":
+		return sessionStoreConfig{Driver: "memory"}, nil
+	case "postgres":
+		if sessionDSN == "" {
+			sessionDSN = strings.TrimSpace(storageDSN)
+		}
+		if sessionDSN == "" {
+			return sessionStoreConfig{}, fmt.Errorf("postgres session store selected without DSN")
+		}
+		return sessionStoreConfig{Driver: "postgres", DSN: sessionDSN}, nil
+	default:
+		return sessionStoreConfig{}, fmt.Errorf("unsupported session store driver %q", driver)
+	}
 }
 
 func configureChatQueue(driver string, cfg chat.RedisQueueConfig, logger *slog.Logger) (chat.Queue, error) {

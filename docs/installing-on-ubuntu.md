@@ -163,7 +163,7 @@ curl -fsSL https://raw.githubusercontent.com/BitRiver-Live/BitRiver-Live/main/de
 chmod +x ubuntu.sh
 ```
 
-Provide the required inputs (install directory, data directory, and service user) via flags or matching environment variables. Supply `--postgres-dsn <DSN>` to point the service at your database—the installer refuses to continue without a DSN so the generated `.env` contains a working connection string. Use `--session-store postgres` and `--session-store-dsn` if you want the session manager to use a dedicated Postgres database instead of sharing the primary DSN. Pass `--storage-driver json` only when you intentionally opt into the legacy JSON store for development.
+Provide the required inputs (install directory, data directory, and service user) via flags or matching environment variables. Supply `--postgres-dsn <DSN>` to point the service at your database—the installer refuses to continue without a DSN so the generated `.env` contains a working connection string. When Postgres is selected the session manager automatically reuses that DSN; pass `--session-store memory` to keep ephemeral sessions or `--session-store-dsn` to target a dedicated database. Use `--storage-driver json` only when you intentionally opt into the legacy JSON store for development.
 
 ```bash
 ./ubuntu.sh \
@@ -226,7 +226,8 @@ BITRIVER_LIVE_POSTGRES_DSN=postgres://bitriver:changeme@localhost:5432/bitriver?
 BITRIVER_LIVE_RATE_REDIS_ADDR=127.0.0.1:6379
 BITRIVER_LIVE_RATE_REDIS_PASSWORD=changeme
 BITRIVER_LIVE_SESSION_STORE=postgres
-BITRIVER_LIVE_SESSION_POSTGRES_DSN=postgres://bitriver:changeme@localhost:5432/bitriver_sessions?sslmode=require
+# Optional: override if you want a dedicated session database.
+# BITRIVER_LIVE_SESSION_POSTGRES_DSN=postgres://bitriver:changeme@localhost:5432/bitriver_sessions?sslmode=require
 BITRIVER_SRS_TOKEN=REPLACE_ME
 BITRIVER_OME_USERNAME=REPLACE_ME
 BITRIVER_OME_PASSWORD=REPLACE_ME
