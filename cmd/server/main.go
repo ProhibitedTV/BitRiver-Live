@@ -398,6 +398,8 @@ func main() {
 	}
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	defer workerCancel()
+	sessionPurgeStop := startSessionPurgeWorker(workerCtx, logging.WithComponent(logger, "session-purger"), sessions, 15*time.Minute)
+	defer sessionPurgeStop()
 	go storage.NewChatWorker(store, queue, logging.WithComponent(logger, "chat-worker")).Run(workerCtx)
 
 	rateCfg := server.RateLimitConfig{
@@ -464,6 +466,9 @@ func main() {
 	case err := <-errs:
 		logger.Error("server error", "error", err)
 	}
+
+	workerCancel()
+	sessionPurgeStop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
