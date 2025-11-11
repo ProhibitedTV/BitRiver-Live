@@ -180,7 +180,7 @@ test.describe("channel route", () => {
 
     await page.getByRole("button", { name: /send a tip/i }).click();
     const tipDialog = page.getByRole("dialog", { name: /send a tip/i });
-    await tipDialog.getByLabel("Amount").fill("6.75");
+    await tipDialog.getByLabel("Amount").fill("0.0005");
     await tipDialog.getByLabel("Currency").selectOption("BTC");
     await tipDialog.getByLabel("Wallet reference").fill("txn-77");
     await tipDialog.getByLabel("Message (optional)").fill("Great vibes!");
@@ -267,7 +267,7 @@ test.describe("channel route", () => {
 
     await page.getByRole("button", { name: /send a tip/i }).click();
     const tipDialog = page.getByRole("dialog", { name: /send a tip/i });
-    await tipDialog.getByLabel("Amount").fill("5");
+    await tipDialog.getByLabel("Amount").fill("0.0005");
     await tipDialog.getByLabel("Wallet reference").fill("bad-ref");
     await tipDialog.getByRole("button", { name: /send tip/i }).click();
 
