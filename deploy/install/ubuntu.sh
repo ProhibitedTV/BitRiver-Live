@@ -21,9 +21,9 @@
 #   --redis-addr           / BITRIVER_LIVE_RATE_REDIS_ADDR
 #   --redis-password       / BITRIVER_LIVE_RATE_REDIS_PASSWORD
 #   --hostname             / BITRIVER_LIVE_HOSTNAME_HINT     (used for the informational hint at the end)
-#   --storage-driver       / BITRIVER_LIVE_STORAGE_DRIVER
+#   --storage-driver       / BITRIVER_LIVE_STORAGE_DRIVER (default postgres)
 #   --postgres-dsn         / BITRIVER_LIVE_POSTGRES_DSN
-#   --session-store        / BITRIVER_LIVE_SESSION_STORE
+#   --session-store        / BITRIVER_LIVE_SESSION_STORE (default postgres when using Postgres storage)
 #   --session-store-dsn    / BITRIVER_LIVE_SESSION_POSTGRES_DSN
 #   --bootstrap-admin-email
 #   --bootstrap-admin-password
@@ -65,9 +65,9 @@ Optional flags:
   --redis-addr ADDRESS
   --redis-password PASSWORD
   --hostname HOSTNAME
-  --storage-driver DRIVER
+  --storage-driver DRIVER (default postgres)
   --postgres-dsn DSN
-  --session-store DRIVER
+  --session-store DRIVER (defaults to postgres when the primary storage uses Postgres)
   --session-store-dsn DSN
   --bootstrap-admin-email EMAIL
   --bootstrap-admin-password PASSWORD
@@ -245,7 +245,7 @@ fi
 
 STORAGE_DRIVER=${STORAGE_DRIVER,,}
 if [[ -z $STORAGE_DRIVER ]]; then
-        STORAGE_DRIVER="json"
+        STORAGE_DRIVER="postgres"
 fi
 
 POSTGRES_DSN=${POSTGRES_DSN:-}
@@ -253,13 +253,24 @@ SESSION_STORE_DRIVER=${SESSION_STORE_DRIVER,,}
 SESSION_STORE_DSN=${SESSION_STORE_DSN:-}
 
 if [[ $STORAGE_DRIVER == "postgres" && -z $POSTGRES_DSN ]]; then
-        echo "--postgres-dsn (or BITRIVER_LIVE_POSTGRES_DSN) is required when --storage-driver=postgres" >&2
+        echo "Postgres storage requires --postgres-dsn (BITRIVER_LIVE_POSTGRES_DSN) and a database migrated with deploy/migrations" >&2
         exit 1
 fi
 
 if [[ -z $SESSION_STORE_DRIVER ]]; then
         if [[ $STORAGE_DRIVER == "postgres" || -n $SESSION_STORE_DSN ]]; then
                 SESSION_STORE_DRIVER="postgres"
+        fi
+fi
+
+if [[ $SESSION_STORE_DRIVER == "postgres" ]]; then
+        if [[ -z $SESSION_STORE_DSN ]]; then
+                if [[ -n $POSTGRES_DSN ]]; then
+                        SESSION_STORE_DSN=$POSTGRES_DSN
+                else
+                        echo "Postgres sessions require --session-store-dsn (BITRIVER_LIVE_SESSION_POSTGRES_DSN) or --postgres-dsn" >&2
+                        exit 1
+                fi
         fi
 fi
 
