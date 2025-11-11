@@ -42,7 +42,7 @@
 set -euo pipefail
 
 usage() {
-        cat <<'USAGE'
+	cat <<'USAGE'
 Usage: ubuntu.sh [flags]
 
 Run from the repository root after cloning BitRiver Live.
@@ -54,7 +54,7 @@ Required flags (or environment variables):
 
 Optional flags:
   --mode (production|development)
-  --addr LISTEN_ADDR
+  --addr LISTEN_ADDR (defaults to :80 in production / :8080 in development; privileged ports grant CAP_NET_BIND_SERVICE)
   --enable-logs
   --log-dir LOG_DIR
   --tls-cert CERT_PATH
@@ -76,11 +76,29 @@ USAGE
 }
 
 require_arg() {
-        if [[ $# -lt 2 ]]; then
-                echo "missing value for $1" >&2
-                usage
-                exit 1
-        fi
+	if [[ $# -lt 2 ]]; then
+		echo "missing value for $1" >&2
+		usage
+		exit 1
+	fi
+}
+
+extract_listen_port() {
+	local addr=$1
+	addr=${addr#*://}
+	if [[ $addr =~ ^\[[^]]*\]:(.+)$ ]]; then
+		echo "${BASH_REMATCH[1]}"
+		return 0
+	fi
+	if [[ $addr =~ ^:([0-9]+)$ ]]; then
+		echo "${BASH_REMATCH[1]}"
+		return 0
+	fi
+	if [[ $addr =~ ^.+:([0-9]+)$ ]]; then
+		echo "${BASH_REMATCH[1]}"
+		return 0
+	fi
+	echo ""
 }
 
 INSTALL_DIR=${INSTALL_DIR:-}
@@ -275,11 +293,21 @@ if [[ $SESSION_STORE_DRIVER == "postgres" ]]; then
 fi
 
 if [[ -z $ADDR ]]; then
-        if [[ $MODE == "production" ]]; then
-                ADDR=":80"
-        else
-                ADDR=":8080"
-        fi
+	if [[ $MODE == "production" ]]; then
+		ADDR=":80"
+	else
+		ADDR=":8080"
+	fi
+fi
+
+LISTEN_PORT=$(extract_listen_port "$ADDR")
+REQUIRES_CAP_NET_BIND_SERVICE=false
+if [[ -n $LISTEN_PORT && $LISTEN_PORT =~ ^[0-9]+$ && $LISTEN_PORT -lt 1024 ]]; then
+	REQUIRES_CAP_NET_BIND_SERVICE=true
+	if ! command -v setcap >/dev/null 2>&1; then
+		echo "Binding to privileged port $LISTEN_PORT requires setcap (install libcap2-bin) or choose --addr :8080." >&2
+		exit 1
+	fi
 fi
 
 if [[ ! -f go.mod ]]; then
@@ -314,6 +342,9 @@ GOFLAGS="-trimpath" go build -o bitriver-live ./cmd/server
 GOFLAGS="-trimpath" go build -o bootstrap-admin ./cmd/tools/bootstrap-admin
 sudo install -m 0755 bitriver-live "$INSTALL_DIR/bitriver-live"
 sudo install -m 0755 bootstrap-admin "$INSTALL_DIR/bootstrap-admin"
+if [[ $REQUIRES_CAP_NET_BIND_SERVICE == true ]]; then
+	sudo setcap 'cap_net_bind_service=+ep' "$INSTALL_DIR/bitriver-live"
+fi
 rm -f bitriver-live bootstrap-admin
 
 env_file=$(mktemp)
@@ -379,7 +410,7 @@ if [[ -n $BOOTSTRAP_ADMIN_EMAIL ]]; then
 fi
 
 sudo chown -R "$SERVICE_USER":"$SERVICE_USER" "$INSTALL_DIR" "$DATA_DIR"
-{ 
+{
         echo "[Unit]"
         echo "Description=BitRiver Live Streaming Control Center"
         echo "After=network.target"
@@ -395,6 +426,11 @@ sudo chown -R "$SERVICE_USER":"$SERVICE_USER" "$INSTALL_DIR" "$DATA_DIR"
                 echo "StandardOutput=append:$LOG_DIR/server.log"
                 echo "StandardError=append:$LOG_DIR/server.log"
         fi
+        if [[ $REQUIRES_CAP_NET_BIND_SERVICE == true ]]; then
+                echo "AmbientCapabilities=CAP_NET_BIND_SERVICE"
+                echo "CapabilityBoundingSet=CAP_NET_BIND_SERVICE"
+                echo "NoNewPrivileges=yes"
+        fi
         echo ""
         echo "[Install]"
         echo "WantedBy=multi-user.target"
@@ -405,11 +441,16 @@ sudo install -m 0644 "$service_file" /etc/systemd/system/bitriver-live.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now bitriver-live.service
 
+if [[ $REQUIRES_CAP_NET_BIND_SERVICE == true ]]; then
+        echo "Granted CAP_NET_BIND_SERVICE to bitriver-live.service and $INSTALL_DIR/bitriver-live for privileged port $LISTEN_PORT."
+        echo "Use --addr :8080 (or another high port) when terminating traffic at a reverse proxy to avoid capability requirements."
+fi
+
 if [[ -n $HOSTNAME_HINT ]]; then
         echo "Reverse proxy hint: point $HOSTNAME_HINT to this service and expose TLS traffic on 443."
 else
         if [[ $MODE == "production" ]]; then
-                echo "Configure your reverse proxy or tailnet to expose the service. Port 80 is used by default."
+                echo "Configure your reverse proxy or tailnet to expose the service. The API listens on $ADDR."
         else
                 echo "Configure your reverse proxy or tailnet to expose the service. Development mode keeps the control center on :8080."
         fi

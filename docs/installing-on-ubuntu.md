@@ -39,9 +39,11 @@ sudo ufw enable
 Install OS dependencies for the API, database clients, Node.js-based viewer, and ingest tooling.
 
 ```bash
-sudo apt install -y build-essential git curl ufw pkg-config \
+sudo apt install -y build-essential git curl ufw pkg-config libcap2-bin \
   golang-go nodejs npm postgresql-client redis-tools docker.io docker-compose-plugin
 ```
+
+`libcap2-bin` provides the `setcap` utility the Ubuntu installer uses to keep privileged ports working across manual restarts. If you plan to bind to :80 or :443 directly from the Go process, keep it installed; otherwise pass `--addr :8080` (or another high port) when terminating traffic at a reverse proxy.
 
 If you prefer managed runtimes, replace the distribution Go and Node.js packages with upstream toolchains (e.g., via `snap`, `asdf`, or tarballs). Ensure `go version` reports 1.21+ and `node --version` reports 18+.
 
@@ -180,6 +182,8 @@ Provide the required inputs (install directory, data directory, and service user
 Run the helper from the repository root—the script validates the presence of `go.mod` before building the binary.
 
 The script builds the API binary, writes `$INSTALL_DIR/.env`, configures optional TLS and rate-limiting variables, and registers a `bitriver-live.service` systemd unit. Review the generated `.env` file to ensure storage selections (JSON or Postgres), database DSNs, session-store driver settings, and Redis credentials are present before starting traffic.
+
+When the listen address resolves to a privileged port (<1024) the installer injects `AmbientCapabilities=CAP_NET_BIND_SERVICE`/`CapabilityBoundingSet=CAP_NET_BIND_SERVICE` into the systemd unit and runs `sudo setcap 'cap_net_bind_service=+ep' "$INSTALL_DIR/bitriver-live"` so manual restarts keep the binding. Operators fronting the service with Nginx, Caddy, or another reverse proxy should set `--addr :8080` (or a similar high port) and forward 80/443 from the proxy to avoid capabilities altogether.
 
 Provide `--bootstrap-admin-email` and `--bootstrap-admin-password` to seed the first control-center account automatically. The installer runs the `bootstrap-admin` helper after copying the binaries so the JSON datastore or Postgres database already contains an administrator when systemd starts the service. Capture the printed credentials and rotate the password immediately after logging in.
 
