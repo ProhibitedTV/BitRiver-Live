@@ -1,6 +1,6 @@
 # Advanced deployments
 
-Power users who want managed databases, object storage, or automated ingest can dip into the sections below. They are optional for home experimentation—the JSON datastore and development server are all you need to try BitRiver Live locally.
+Power users who want managed databases, object storage, or automated ingest can dip into the sections below. Postgres is now the standard datastore for every environment; the JSON file backend remains available for quick prototypes when invoked with `--storage-driver json`.
 
 | Flag | Purpose |
 | --- | --- |
@@ -23,11 +23,10 @@ psql "postgres://bitriver:bitriver@localhost:5432/bitriver?sslmode=disable" \
   --file deploy/migrations/0001_initial.sql
 ```
 
-With the migrations applied and a Postgres driver such as `pgxpool` available, start the API with the Postgres storage driver:
+With the migrations applied and a Postgres driver such as `pgxpool` available, start the API and point it at the relational database:
 
 ```bash
 go run ./cmd/server \
-  --storage-driver postgres \
   --postgres-dsn "postgres://bitriver:bitriver@localhost:5432/bitriver?sslmode=disable" \
   --postgres-max-conns 20 \
   --postgres-min-conns 5 \
@@ -40,7 +39,6 @@ The same configuration can be supplied via environment variables:
 
 | Variable | Description |
 | --- | --- |
-| `BITRIVER_LIVE_STORAGE_DRIVER` | Set to `postgres` to enable the relational repository. |
 | `BITRIVER_LIVE_POSTGRES_DSN` | Connection string passed to the Postgres driver. |
 | `BITRIVER_LIVE_POSTGRES_MAX_CONNS` / `BITRIVER_LIVE_POSTGRES_MIN_CONNS` | Pool limits for concurrent and idle connections. |
 | `BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT` | How long to wait when borrowing a connection from the pool. |
@@ -49,7 +47,7 @@ The same configuration can be supplied via environment variables:
 | `BITRIVER_LIVE_POSTGRES_HEALTH_INTERVAL` | Frequency of pool health probes. |
 | `BITRIVER_LIVE_POSTGRES_APP_NAME` | Optional `application_name` reported to Postgres. |
 
-`deploy/docker-compose.yml` provisions a local Postgres container and wires these environment variables automatically. The Postgres repository implementation lives in `internal/storage/postgres_repository.go`; ensure the migrations in `deploy/migrations/` stay in sync with the Go structs as development progresses.
+`deploy/docker-compose.yml` provisions a local Postgres container and wires these environment variables automatically. The Postgres repository implementation lives in `internal/storage/postgres_repository.go`; ensure the migrations in `deploy/migrations/` stay in sync with the Go structs as development progresses. Existing JSON installs can be upgraded with `cmd/tools/migrate-json-to-postgres`, which copies `store.json` records into Postgres and verifies the row counts before finishing.
 
 The Postgres-backed storage tests run behind the build tag `postgres`. Provide a clean database that has been migrated with the contents of `deploy/migrations/` and point `BITRIVER_TEST_POSTGRES_DSN` at it before invoking `go test`:
 
