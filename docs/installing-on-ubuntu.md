@@ -81,6 +81,16 @@ psql "postgres://bitriver:changeme@localhost:5432/bitriver?sslmode=disable" -c '
 
 Replace `sslmode=disable` with `require` when TLS is enabled.
 
+If you are upgrading from the JSON datastore, run:
+
+```bash
+go run ./cmd/tools/migrate-json-to-postgres \
+  --json /var/lib/bitriver-live/store.json \
+  --postgres-dsn "postgres://bitriver:changeme@localhost:5432/bitriver?sslmode=disable"
+```
+
+The helper copies records into Postgres and verifies the row counts before exiting.
+
 ### Redis
 
 1. Harden Redis for networked deployments:
@@ -153,7 +163,7 @@ curl -fsSL https://raw.githubusercontent.com/BitRiver-Live/BitRiver-Live/main/de
 chmod +x ubuntu.sh
 ```
 
-Provide the required inputs (install directory, data directory, and service user) via flags or matching environment variables. Add `--storage-driver postgres --postgres-dsn <DSN>` when deploying against Postgres; the installer refuses to continue without a DSN in that mode so the generated `.env` contains a working connection string. Use `--session-store postgres` and `--session-store-dsn` if you want the session manager to use a dedicated Postgres database instead of sharing the primary DSN.
+Provide the required inputs (install directory, data directory, and service user) via flags or matching environment variables. Supply `--postgres-dsn <DSN>` to point the service at your database—the installer refuses to continue without a DSN so the generated `.env` contains a working connection string. Use `--session-store postgres` and `--session-store-dsn` if you want the session manager to use a dedicated Postgres database instead of sharing the primary DSN. Pass `--storage-driver json` only when you intentionally opt into the legacy JSON store for development.
 
 ```bash
 ./ubuntu.sh \
@@ -162,7 +172,7 @@ Provide the required inputs (install directory, data directory, and service user
   --service-user bitriver \
   --mode production \
   --addr :80 \
-  --storage-driver json \
+  --postgres-dsn "postgres://bitriver:changeme@localhost:5432/bitriver_live?sslmode=disable" \
   --enable-logs \
   --hostname stream.example.com
 ```
@@ -182,7 +192,7 @@ Environment variable equivalents:
 * `BITRIVER_LIVE_RATE_REDIS_ADDR`, `BITRIVER_LIVE_RATE_REDIS_PASSWORD`
 * `BITRIVER_LIVE_ENABLE_LOGS`, `BITRIVER_LIVE_LOG_DIR`
 * `BITRIVER_LIVE_HOSTNAME_HINT`
-* `BITRIVER_LIVE_STORAGE_DRIVER`, `BITRIVER_LIVE_POSTGRES_DSN`
+* `BITRIVER_LIVE_POSTGRES_DSN`
 * `BITRIVER_LIVE_SESSION_STORE`, `BITRIVER_LIVE_SESSION_POSTGRES_DSN`
 
 ### Option B: Manual install

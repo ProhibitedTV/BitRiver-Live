@@ -53,27 +53,29 @@ BitRiver Live ships with a self-contained Go API and control center so you can e
 
 #### Run the development server
 
-Start the API in development mode from the repository root:
+Point the server at a Postgres instance before starting it. Supply the DSN via `--postgres-dsn`, `BITRIVER_LIVE_POSTGRES_DSN`, or `DATABASE_URL`:
 
 ```bash
+export BITRIVER_LIVE_POSTGRES_DSN="postgres://bitriver:bitriver@127.0.0.1:5432/bitriver_live?sslmode=disable"
 go run ./cmd/server --mode development
 ```
 
-Leave the terminal open while the server is running. Browse to [http://localhost:8080](http://localhost:8080) to open the **BitRiver Live Control Center** and sign up your first account.
+Leave the terminal open while the server is running. Browse to [http://localhost:8080](http://localhost:8080) to open the **BitRiver Live Control Center** and sign up your first account. If you need the legacy JSON datastore for a quick demo, pass `--storage-driver json --data data/store.json` explicitly—the flag opt-in keeps production environments on Postgres by default.
 
 #### Promote your first admin
 
 Roles control which buttons light up inside the control center. The first account you create starts as a regular user, so seed an administrator before trying to manage channels or other accounts. The `bootstrap-admin` helper assigns the `admin` role and updates the password hash without hand-editing JSON:
 
-1. Stop the server with `Ctrl+C` while using the JSON datastore.
-2. Run the helper from the repository root, substituting your preferred credentials (passwords must be at least eight characters):
+1. Stop the server with `Ctrl+C`.
+2. Run the helper from the repository root, substituting your preferred credentials (passwords must be at least eight characters). Point it at the same datastore the server will use:
    ```bash
    go run ./cmd/tools/bootstrap-admin \
-     --json data/store.json \
+     --postgres-dsn "$BITRIVER_LIVE_POSTGRES_DSN" \
      --email you@example.com \
      --name "Your Display Name" \
      --password "temporary-password"
    ```
+   For a JSON datastore provide `--json data/store.json` instead.
 3. Restart the server with `go run ./cmd/server --mode development` and sign in with the seeded email/password.
 4. Rotate the password immediately from the control center settings page once you're logged in.
 
@@ -121,10 +123,11 @@ The Control Center surfaces the `/api/analytics/overview` endpoint through a das
 
 The UI talks directly to the same REST API documented below, so you can always fall back to curl or an API client when you need to automate advanced workflows.
 
-The server also respects the `BITRIVER_LIVE_ADDR`, `BITRIVER_LIVE_MODE`, and `BITRIVER_LIVE_DATA` environment variables if you prefer configuring runtime options without flags. Switch to production-ready defaults by running:
+The server also respects the `BITRIVER_LIVE_ADDR`, `BITRIVER_LIVE_MODE`, `BITRIVER_LIVE_POSTGRES_DSN`, and `DATABASE_URL` environment variables if you prefer configuring runtime options without flags. Switch to production-ready defaults by running:
 
 ```bash
-go run ./cmd/server --mode production --data /var/lib/bitriver-live/store.json
+BITRIVER_LIVE_POSTGRES_DSN="postgres://bitriver:bitriver@db:5432/bitriver_live?sslmode=disable" \
+go run ./cmd/server --mode production
 ```
 
 In production mode BitRiver Live binds to port 80 by default, letting viewers access the control center without appending a port number to your domain.
@@ -135,7 +138,7 @@ To serve HTTPS directly from the Go process provide a certificate/key pair gener
 go run ./cmd/server \
   --mode production \
   --addr :443 \
-  --data /var/lib/bitriver-live/store.json \
+  --postgres-dsn "$BITRIVER_LIVE_POSTGRES_DSN" \
   --tls-cert /etc/letsencrypt/live/stream.example.com/fullchain.pem \
   --tls-key /etc/letsencrypt/live/stream.example.com/privkey.pem
 ```

@@ -271,17 +271,22 @@ func main() {
 		options = append(options, storage.WithObjectStorage(objectCfg))
 	}
 
-	driver := resolveStorageDriver(*storageDriver, os.Getenv("BITRIVER_LIVE_STORAGE_DRIVER"))
+	postgresDefaultDSN := resolvePostgresDSN(*postgresDSN)
+	driver, _, err := resolveStorageDriver(*storageDriver, os.Getenv("BITRIVER_LIVE_STORAGE_DRIVER"), postgresDefaultDSN)
+	if err != nil {
+		logger.Error("failed to resolve storage driver", "error", err)
+		os.Exit(1)
+	}
 	var (
 		store              storage.Repository
 		storagePostgresDSN string
 	)
 	switch driver {
 	case "json":
-		dataFile := resolveDataPath(*dataPath)
+		dataFile := resolveDataPath(*dataPath, os.Getenv("BITRIVER_LIVE_DATA"))
 		store, err = storage.NewJSONRepository(dataFile, options...)
 	case "postgres":
-		storagePostgresDSN = strings.TrimSpace(firstNonEmpty(*postgresDSN, os.Getenv("BITRIVER_LIVE_POSTGRES_DSN")))
+		storagePostgresDSN = postgresDefaultDSN
 		if storagePostgresDSN == "" {
 			logger.Error("postgres storage selected without DSN")
 			os.Exit(1)
@@ -549,25 +554,31 @@ func defaultListenForMode(mode string) string {
 	return ":8080"
 }
 
-func resolveStorageDriver(flagValue, envValue string) string {
-	driver := strings.ToLower(strings.TrimSpace(flagValue))
-	if driver == "" {
-		driver = strings.ToLower(strings.TrimSpace(envValue))
+func resolveStorageDriver(flagValue, envValue, postgresDSN string) (string, bool, error) {
+	if driver := strings.ToLower(strings.TrimSpace(flagValue)); driver != "" {
+		return driver, true, nil
 	}
-	if driver == "" {
-		driver = "json"
+	if driver := strings.ToLower(strings.TrimSpace(envValue)); driver != "" {
+		return driver, true, nil
 	}
-	return driver
+	if strings.TrimSpace(postgresDSN) != "" {
+		return "postgres", false, nil
+	}
+	return "", false, fmt.Errorf("no datastore configured: provide --storage-driver json or configure Postgres via BITRIVER_LIVE_POSTGRES_DSN, DATABASE_URL, or --postgres-dsn")
 }
 
-func resolveDataPath(flagValue string) string {
+func resolveDataPath(flagValue, envValue string) string {
 	if flagValue != "" {
 		return flagValue
 	}
-	if env := strings.TrimSpace(os.Getenv("BITRIVER_LIVE_DATA")); env != "" {
+	if env := strings.TrimSpace(envValue); env != "" {
 		return env
 	}
 	return "data/store.json"
+}
+
+func resolvePostgresDSN(flagValue string) string {
+	return strings.TrimSpace(firstNonEmpty(flagValue, os.Getenv("BITRIVER_LIVE_POSTGRES_DSN"), os.Getenv("DATABASE_URL")))
 }
 
 func resolveViewerOrigin(flagValue, envValue string) (*url.URL, error) {
