@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/ingest"
@@ -3559,9 +3560,19 @@ func (r *postgresRepository) CreateTip(params CreateTipParams) (models.Tip, erro
 	if reference == "" {
 		reference = fmt.Sprintf("tip-%d", time.Now().UnixNano())
 	}
+	if utf8.RuneCountInString(reference) > MaxTipReferenceLength {
+		return models.Tip{}, fmt.Errorf("reference exceeds %d characters", MaxTipReferenceLength)
+	}
 
 	wallet := strings.TrimSpace(params.WalletAddress)
+	if utf8.RuneCountInString(wallet) > MaxTipWalletAddressLength {
+		return models.Tip{}, fmt.Errorf("wallet address exceeds %d characters", MaxTipWalletAddressLength)
+	}
+
 	message := strings.TrimSpace(params.Message)
+	if utf8.RuneCountInString(message) > MaxTipMessageLength {
+		return models.Tip{}, fmt.Errorf("message exceeds %d characters", MaxTipMessageLength)
+	}
 
 	id, err := r.generateID()
 	if err != nil {
