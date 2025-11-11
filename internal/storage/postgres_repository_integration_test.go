@@ -123,6 +123,45 @@ func TestPostgresRepositoryConnection(t *testing.T) {
 	}
 }
 
+func TestPostgresRepositoryAcquireTimeoutCoversQueries(t *testing.T) {
+	repo, cleanup, err := postgresRepositoryFactory(t,
+		storage.WithPostgresAcquireTimeout(50*time.Millisecond),
+	)
+	if errors.Is(err, storage.ErrPostgresUnavailable) {
+		t.Skip("postgres repository unavailable in this build")
+	}
+	if err != nil {
+		t.Fatalf("failed to open postgres repository: %v", err)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	type withConnInvoker interface {
+		withConn(func(context.Context, *pgxpool.Conn) error) error
+	}
+
+	invoker, ok := repo.(withConnInvoker)
+	if !ok {
+		t.Fatalf("expected postgres repository implementation, got %T", repo)
+	}
+
+	start := time.Now()
+	err = invoker.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		_, execErr := conn.Exec(ctx, "SELECT pg_sleep(0.1)")
+		return execErr
+	})
+	if err == nil {
+		t.Fatal("expected query to fail due to context deadline")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context deadline exceeded; got %v", err)
+	}
+	if time.Since(start) > time.Second {
+		t.Fatalf("query exceeded expected timeout: %v", time.Since(start))
+	}
+}
+
 func TestPostgresUserLifecycle(t *testing.T) {
 	storage.RunRepositoryUserLifecycle(t, postgresRepositoryFactory)
 }

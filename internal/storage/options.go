@@ -113,6 +113,11 @@ func WithPostgresPoolLimits(maxConns, minConns int32) Option {
 	})
 }
 
+// WithPostgresAcquireTimeout configures how long the repository waits to obtain a
+// connection from the pool. The same deadline is reused for the initial
+// statement executed with that connection, ensuring queries do not run longer
+// than the acquisition timeout. Operators should size the timeout to cover
+// both acquiring a connection and executing short setup queries.
 func WithPostgresAcquireTimeout(timeout time.Duration) Option {
 	return postgresOnlyOption(func(cfg *PostgresConfig) {
 		if timeout > 0 {

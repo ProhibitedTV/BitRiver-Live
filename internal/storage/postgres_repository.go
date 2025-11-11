@@ -485,7 +485,7 @@ func (r *postgresRepository) withConn(fn func(context.Context, *pgxpool.Conn) er
 		return fmt.Errorf("acquire postgres connection: %w", err)
 	}
 	defer conn.Release()
-	return fn(context.Background(), conn)
+	return fn(ctx, conn)
 }
 
 func (r *postgresRepository) generateID() (string, error) {
