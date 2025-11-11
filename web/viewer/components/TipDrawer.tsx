@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, MouseEvent as ReactMouseEvent } from "react";
 import type { CryptoAddress } from "../lib/viewer-api";
 import { createTip } from "../lib/viewer-api";
@@ -49,6 +49,9 @@ export function TipDrawer({
   const [error, setError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
 
+  const drawerRef = useRef<HTMLElement | null>(null);
+  const firstFieldRef = useRef<HTMLInputElement | null>(null);
+
   const currentCurrency =
     currencySelection === CUSTOM_CURRENCY_OPTION
       ? customCurrency.trim()
@@ -86,6 +89,13 @@ export function TipDrawer({
     if (!open) {
       return;
     }
+    firstFieldRef.current?.focus({ preventScroll: true });
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
     const handler = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
@@ -101,6 +111,64 @@ export function TipDrawer({
     }
     setWalletAddress(matchingAddresses[0]?.address ?? "");
   }, [matchingAddresses, open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const drawerElement = drawerRef.current;
+    if (!drawerElement) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") {
+        return;
+      }
+      const focusableSelectors =
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+      const focusable = Array.from(
+        drawerElement.querySelectorAll<HTMLElement>(focusableSelectors)
+      ).filter((element) => {
+        if (element.hasAttribute("disabled")) {
+          return false;
+        }
+        if (element.getAttribute("aria-hidden") === "true") {
+          return false;
+        }
+        if (element.tabIndex === -1) {
+          return false;
+        }
+        if (element === document.activeElement) {
+          return true;
+        }
+        return element.offsetParent !== null || element.getClientRects().length > 0;
+      });
+      if (focusable.length === 0) {
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (!active || !drawerElement.contains(active)) {
+        event.preventDefault();
+        first.focus();
+        return;
+      }
+      if (event.shiftKey) {
+        if (active === first) {
+          event.preventDefault();
+          last.focus();
+        }
+        return;
+      }
+      if (active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    drawerElement.addEventListener("keydown", handleKeyDown);
+    return () => drawerElement.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
 
   const handleBackdropClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (event.target === event.currentTarget) {
@@ -155,6 +223,7 @@ export function TipDrawer({
         role="dialog"
         aria-modal="true"
         aria-labelledby="tip-drawer-title"
+        ref={drawerRef}
       >
         <header className="tip-drawer__header">
           <div className="stack" style={{ gap: "0.35rem" }}>
@@ -178,6 +247,7 @@ export function TipDrawer({
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
               required
+              ref={firstFieldRef}
             />
           </div>
           <div className="tip-drawer__field-group">
