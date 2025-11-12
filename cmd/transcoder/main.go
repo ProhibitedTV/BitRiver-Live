@@ -115,6 +115,9 @@ type uploadResponse struct {
 func main() {
 	bind := envOrDefault("JOB_CONTROLLER_BIND", ":9000")
 	token := strings.TrimSpace(os.Getenv("JOB_CONTROLLER_TOKEN"))
+	if token == "" {
+		log.Fatal("JOB_CONTROLLER_TOKEN must be configured before starting the transcoder")
+	}
 	outputRoot := envOrDefault("JOB_CONTROLLER_OUTPUT_ROOT", "./work")
 
 	srv, err := newServer(token, outputRoot)
@@ -251,9 +254,6 @@ func (s *server) restoreActiveProcesses() {
 }
 
 func (s *server) authorize(r *http.Request) bool {
-	if s.token == "" {
-		return true
-	}
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
 	if !strings.HasPrefix(strings.ToLower(header), "bearer ") {
 		return false
