@@ -289,77 +289,191 @@
     </template>
 
     <template id="installer-template">
-        <p>Generate a self-contained bundle and systemd service configuration without touching the shell.</p>
-        <form id="installer-form">
-            <label>
-                Install directory
-                <input type="text" name="installDir" required value="/opt/bitriver-live" />
-            </label>
-            <label>
-                Data directory
-                <input type="text" name="dataDir" required value="/var/lib/bitriver-live" />
-            </label>
-            <label>
-                Service user
-                <input type="text" name="serviceUser" required value="bitriver" />
-            </label>
-            <label>
-                Deployment mode
-                <select name="mode" required>
-                    <option value="production" selected>Production (port 80, public ready)</option>
-                    <option value="development">Development (:8080, local testing)</option>
-                </select>
-            </label>
-            <label>
-                HTTP listen address
-                <input type="text" name="addr" required value=":80" />
-            </label>
-            <label>
-                Public hostname (optional, used for TLS hints)
-                <input type="text" name="hostname" placeholder="stream.example.com" />
-            </label>
-            <details class="accordion">
-                <summary>TLS configuration</summary>
-                <label>
-                    TLS certificate path
-                    <input type="text" name="tlsCert" placeholder="/etc/letsencrypt/live/stream.example.com/fullchain.pem" />
-                </label>
-                <label>
-                    TLS key path
-                    <input type="text" name="tlsKey" placeholder="/etc/letsencrypt/live/stream.example.com/privkey.pem" />
-                </label>
-            </details>
-            <details class="accordion">
-                <summary>Rate limiting &amp; Redis</summary>
-                <label>
-                    Global RPS cap
-                    <input type="number" name="rateGlobalRps" min="0" step="1" placeholder="50" />
-                </label>
-                <label>
-                    Login attempts per window
-                    <input type="number" name="rateLoginLimit" min="0" step="1" placeholder="5" />
-                </label>
-                <label>
-                    Login window
-                    <input type="text" name="rateLoginWindow" placeholder="2m" />
-                </label>
-                <label>
-                    Redis address (optional)
-                    <input type="text" name="redisAddr" placeholder="redis:6379" />
-                </label>
-                <label>
-                    Redis password
-                    <input type="password" name="redisPassword" autocomplete="new-password" />
-                </label>
-            </details>
-            <label class="checkbox">
-                <input type="checkbox" name="enableLogs" checked />
-                <span>Provision log directory and journald override</span>
-            </label>
-            <button type="submit" class="primary">Generate installer script</button>
-        </form>
-        <textarea id="installer-output" readonly rows="12" placeholder="Installer script will appear here"></textarea>
-        <p class="form-helper">Copy the script, run it on your target server, and the service will build BitRiver Live, create directories, and register a <code>systemd</code> unit with sensible defaults.</p>
+        <section class="installer">
+            <header class="installer__header">
+                <span class="installer__eyebrow">Home server ready</span>
+                <h3>Generate your guided installer</h3>
+                <p class="installer__intro">Build a self-contained bundle and systemd unit without hand-writing shell scripts.</p>
+            </header>
+            <div class="installer__layout">
+                <form id="installer-form" class="installer__form">
+                    <div class="installer__group">
+                        <h4>Core paths</h4>
+                        <label class="installer__field">
+                            <span class="installer__field-label">Install directory</span>
+                            <span class="installer__field-hint">Absolute path for the BitRiver Live binaries.</span>
+                            <input type="text" name="installDir" required value="/opt/bitriver-live" />
+                        </label>
+                        <label class="installer__field">
+                            <span class="installer__field-label">Data directory</span>
+                            <span class="installer__field-hint">Stores uploads, configuration, and persistent state.</span>
+                            <input type="text" name="dataDir" required value="/var/lib/bitriver-live" />
+                        </label>
+                        <label class="installer__field">
+                            <span class="installer__field-label">Service user</span>
+                            <span class="installer__field-hint">A non-root user for the systemd service.</span>
+                            <input type="text" name="serviceUser" required value="bitriver" />
+                        </label>
+                    </div>
+
+                    <div class="installer__group">
+                        <h4>Runtime</h4>
+                        <label class="installer__field">
+                            <span class="installer__field-label">Deployment mode</span>
+                            <span class="installer__field-hint">Production binds to :80, development keeps everything on :8080.</span>
+                            <select name="mode" required>
+                                <option value="production" selected>Production (public ready)</option>
+                                <option value="development">Development (local testing)</option>
+                            </select>
+                        </label>
+                        <label class="installer__field">
+                            <span class="installer__field-label">HTTP listen address</span>
+                            <span class="installer__field-hint">Change this if you terminate TLS elsewhere.</span>
+                            <input type="text" name="addr" required value=":80" />
+                        </label>
+                        <label class="installer__field">
+                            <span class="installer__field-label">Public hostname (optional)</span>
+                            <span class="installer__field-hint">Used for TLS hints and reverse proxy comments.</span>
+                            <input type="text" name="hostname" placeholder="stream.example.com" />
+                        </label>
+                    </div>
+
+                    <details class="installer__accordion">
+                        <summary>
+                            TLS configuration
+                            <span>Optional</span>
+                        </summary>
+                        <div class="installer__accordion-body">
+                            <label class="installer__field">
+                                <span class="installer__field-label">TLS certificate path</span>
+                                <span class="installer__field-hint">Point at your <code>fullchain.pem</code> to enable HTTPS.</span>
+                                <input type="text" name="tlsCert" placeholder="/etc/letsencrypt/live/stream.example.com/fullchain.pem" />
+                            </label>
+                            <label class="installer__field">
+                                <span class="installer__field-label">TLS key path</span>
+                                <span class="installer__field-hint">Companion private key, typically <code>privkey.pem</code>.</span>
+                                <input type="text" name="tlsKey" placeholder="/etc/letsencrypt/live/stream.example.com/privkey.pem" />
+                            </label>
+                        </div>
+                    </details>
+
+                    <details class="installer__accordion">
+                        <summary>
+                            Rate limiting &amp; Redis
+                            <span>Optional</span>
+                        </summary>
+                        <div class="installer__accordion-body">
+                            <label class="installer__field">
+                                <span class="installer__field-label">Global RPS cap</span>
+                                <span class="installer__field-hint">Throttle total requests per second (0 disables the limiter).</span>
+                                <input type="number" name="rateGlobalRps" min="0" step="1" placeholder="50" />
+                            </label>
+                            <label class="installer__field">
+                                <span class="installer__field-label">Login attempts per window</span>
+                                <span class="installer__field-hint">Rate limit repeated login attempts from the same client.</span>
+                                <input type="number" name="rateLoginLimit" min="0" step="1" placeholder="5" />
+                            </label>
+                            <label class="installer__field">
+                                <span class="installer__field-label">Login window</span>
+                                <span class="installer__field-hint">Duration for the login limiter (e.g. <code>2m</code>).</span>
+                                <input type="text" name="rateLoginWindow" placeholder="2m" />
+                            </label>
+                            <label class="installer__field">
+                                <span class="installer__field-label">Redis address</span>
+                                <span class="installer__field-hint">Optional cache/limiter backend, host:port format.</span>
+                                <input type="text" name="redisAddr" placeholder="redis:6379" />
+                            </label>
+                            <label class="installer__field">
+                                <span class="installer__field-label">Redis password</span>
+                                <span class="installer__field-hint">Stored only in the generated environment file.</span>
+                                <input type="password" name="redisPassword" autocomplete="new-password" />
+                            </label>
+                        </div>
+                    </details>
+
+                    <label class="checkbox checkbox--stacked">
+                        <input type="checkbox" name="enableLogs" checked />
+                        <div>
+                            <span class="installer__field-label">Provision log directory and journald override</span>
+                            <span class="installer__field-hint">Creates <code>logs/</code>, rotates files, and forwards structured logs.</span>
+                        </div>
+                    </label>
+
+                    <div class="installer__form-actions">
+                        <button type="submit" class="primary">Generate installer script</button>
+                        <p class="form-helper">Run with sudo privileges on the target machine to let the helper configure systemd.</p>
+                    </div>
+                </form>
+
+                <aside class="installer__preview">
+                    <div class="installer__status" id="installer-status" role="status" aria-live="polite" data-state="idle">
+                        Fill in the form to preview your installer command.
+                    </div>
+                    <p class="installer__hint">The generated script fetches the maintained helper from GitHub, passes your options, and cleans itself up after execution.</p>
+                    <textarea
+                        id="installer-output"
+                        class="installer__output"
+                        readonly
+                        rows="14"
+                        placeholder="Installer script will appear here"
+                    ></textarea>
+                    <div class="installer__actions">
+                        <button type="button" class="secondary" id="copy-installer" disabled>Copy script</button>
+                        <a
+                            class="installer__docs"
+                            href="https://github.com/BitRiver-Live/BitRiver-Live/blob/main/docs/installing-on-ubuntu.md"
+                            target="_blank"
+                            rel="noreferrer"
+                        >Ubuntu install guide ↗</a>
+                    </div>
+                    <div class="installer__summary">
+                        <h4>Selected options</h4>
+                        <dl class="installer__summary-list">
+                            <div class="installer__summary-item">
+                                <dt>Install directory</dt>
+                                <dd data-summary="installDir">/opt/bitriver-live</dd>
+                            </div>
+                            <div class="installer__summary-item">
+                                <dt>Data directory</dt>
+                                <dd data-summary="dataDir">/var/lib/bitriver-live</dd>
+                            </div>
+                            <div class="installer__summary-item">
+                                <dt>Service user</dt>
+                                <dd data-summary="serviceUser">bitriver</dd>
+                            </div>
+                            <div class="installer__summary-item">
+                                <dt>Mode</dt>
+                                <dd data-summary="mode">Production (port 80)</dd>
+                            </div>
+                            <div class="installer__summary-item">
+                                <dt>Listen address</dt>
+                                <dd data-summary="addr">:80</dd>
+                            </div>
+                            <div class="installer__summary-item">
+                                <dt>Hostname</dt>
+                                <dd data-summary="hostname">Not provided</dd>
+                            </div>
+                            <div class="installer__summary-item">
+                                <dt>Logs</dt>
+                                <dd data-summary="enableLogs">Provisioned</dd>
+                            </div>
+                            <div class="installer__summary-item">
+                                <dt>Log directory</dt>
+                                <dd data-summary="logDir">/var/lib/bitriver-live/logs</dd>
+                            </div>
+                        </dl>
+                    </div>
+                    <div class="installer__checklist">
+                        <h4>Before you run it</h4>
+                        <ul>
+                            <li>Run on Ubuntu 22.04+ with sudo access.</li>
+                            <li>Ensure Go 1.21+ is installed for local builds.</li>
+                            <li>Have your Postgres DSN ready when the helper prompts for storage.</li>
+                        </ul>
+                    </div>
+                </aside>
+            </div>
+        </section>
     </template>
 
     <script src="/static/app.js" type="module"></script>
