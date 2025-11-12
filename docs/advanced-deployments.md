@@ -134,7 +134,7 @@ BitRiver Live can orchestrate end-to-end ingest and transcode jobs by talking to
 
 | Variable | Description |
 | --- | --- |
-| `BITRIVER_SRS_API` | Base URL (including port, e.g. `http://srs:1985`) for the SRS management API. |
+| `BITRIVER_SRS_API` | Base URL (including port, e.g. `http://srs-controller:1985`) for the SRS management API proxy. |
 | `BITRIVER_SRS_TOKEN` | Bearer token used when creating/deleting SRS channels. |
 | `BITRIVER_OME_API` | Base URL for the OvenMediaEngine REST API (defaults to port `8081`). |
 | `BITRIVER_OME_USERNAME` / `BITRIVER_OME_PASSWORD` | Basic-auth credentials for OvenMediaEngine. |
@@ -147,9 +147,12 @@ BitRiver Live can orchestrate end-to-end ingest and transcode jobs by talking to
 | `BITRIVER_INGEST_HTTP_RETRY_INTERVAL` | Backoff between HTTP retries (default `500ms`). |
 | `BITRIVER_INGEST_HEALTH` | Path that exposes dependency health (default `/healthz`). |
 
+The SRS controller proxy accepts two optional environment variables of its own: `SRS_CONTROLLER_BIND` to override the listen address (default `:1985`) and `SRS_CONTROLLER_UPSTREAM` to point at the actual SRS raw API endpoint (default `http://srs:1985/api/`).
+
 To keep bootstrapping predictable the server now fails fast if any of the required endpoints or credentials above are missing. A complete setup requires:
 
-- An **SRS** management API reachable on port `1985` (or your custom management port) and a bearer token configured via `BITRIVER_SRS_TOKEN`.
+- An **SRS API proxy** (the `srs-controller` service) reachable on port `1985` (or your custom management port). The proxy validates `BITRIVER_SRS_TOKEN` on every request and forwards authenticated calls to the upstream SRS raw API.
+- An **SRS** instance the proxy can reach on port `1985` (or your custom management port) with `raw_api` enabled.
 - An **OvenMediaEngine** API listener (default `8081`) with an account that has permission to create and delete applications. Provide the username/password through `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`.
 - A **transcoder job controller** (such as an FFmpeg fleet manager) exposed over HTTP—commonly on port `9000`—secured with a bearer token supplied in `BITRIVER_TRANSCODER_TOKEN`.
 
@@ -186,7 +189,7 @@ Local and single-node installs can rely on the `transcoder-public` Nginx sidecar
 
 Operators can use the manifests under `deploy/` as a reference architecture for production or staging clusters. For a step-by-step Ubuntu installation, follow the [Installing BitRiver Live on Ubuntu guide](installing-on-ubuntu.md).
 
-1. **Provision ingest dependencies first.** Bring up SRS, OvenMediaEngine (OME), and the FFmpeg job controller before starting the BitRiver Live API. The compose file at `deploy/docker-compose.yml` defines the services as `srs`, `ome`, and `transcoder` respectively. Each service exposes an HTTP health probe on `/healthz` (with fallbacks to vendor-specific paths) so you can validate readiness with `docker compose ps` or an external probe before the API starts.
+1. **Provision ingest dependencies first.** Bring up SRS, the SRS controller proxy, OvenMediaEngine (OME), and the FFmpeg job controller before starting the BitRiver Live API. The compose file at `deploy/docker-compose.yml` defines the services as `srs`, `srs-controller`, `ome`, and `transcoder` respectively. Each service exposes an HTTP health probe on `/healthz` (with fallbacks to vendor-specific paths) so you can validate readiness with `docker compose ps` or an external probe before the API starts.
 2. **Configure secrets securely.**
    - Generate an SRS management token and set it via `BITRIVER_SRS_TOKEN`.
    - Create an administrator account in OME (matching the credentials in `deploy/ome/Server.xml` or your customized configuration) and surface the username/password as `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`.

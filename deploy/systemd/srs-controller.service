@@ -1,0 +1,30 @@
+[Unit]
+Description=BitRiver SRS API proxy
+After=network-online.target docker.service srs.service
+Requires=docker.service
+
+[Service]
+Type=simple
+Environment="SRS_CONTROLLER_DOCKER=/usr/bin/docker"
+Environment="SRS_CONTROLLER_IMAGE=ghcr.io/bitriver-live/bitriver-srs-controller:latest"
+Environment="SRS_CONTROLLER_CONTAINER_NAME=bitriver-srs-controller"
+Environment="SRS_CONTROLLER_HOST_PORT=1986"
+Environment="SRS_CONTROLLER_BIND=:1985"
+Environment="SRS_CONTROLLER_UPSTREAM=http://srs:1985/api/"
+Environment="SRS_CONTROLLER_TOKEN="
+Environment="SRS_CONTROLLER_EXTRA_ARGS="
+EnvironmentFile=/opt/bitriver-srs-controller/.env
+ExecStartPre=-${SRS_CONTROLLER_DOCKER} rm -f ${SRS_CONTROLLER_CONTAINER_NAME}
+ExecStart=/bin/sh -c '${SRS_CONTROLLER_DOCKER} run --rm --name "${SRS_CONTROLLER_CONTAINER_NAME}" \
+  -p "${SRS_CONTROLLER_HOST_PORT}:1985" \
+  -e BITRIVER_SRS_TOKEN="${SRS_CONTROLLER_TOKEN}" \
+  -e SRS_CONTROLLER_BIND="${SRS_CONTROLLER_BIND}" \
+  -e SRS_CONTROLLER_UPSTREAM="${SRS_CONTROLLER_UPSTREAM}" \
+  ${SRS_CONTROLLER_EXTRA_ARGS} \
+  "${SRS_CONTROLLER_IMAGE}"'
+ExecStop=${SRS_CONTROLLER_DOCKER} stop ${SRS_CONTROLLER_CONTAINER_NAME}
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

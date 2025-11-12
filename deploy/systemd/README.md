@@ -38,7 +38,7 @@ These unit files are optional helpers for keeping BitRiver Live running on Ubunt
 6. Prepare ingest configuration directories and environment files. The defaults below match the Docker Compose bundle and mount the packaged configuration files from the release archive:
 
    ```bash
-   sudo install -d -m 0755 /opt/bitriver-srs /opt/bitriver-ome /opt/bitriver-transcoder
+   sudo install -d -m 0755 /opt/bitriver-srs /opt/bitriver-srs-controller /opt/bitriver-ome /opt/bitriver-transcoder
 
    sudo tee /opt/bitriver-srs/.env >/dev/null <<'EOF'
 SRS_IMAGE=ossrs/srs:5
@@ -47,6 +47,16 @@ SRS_CONF_DIR=/opt/bitriver-live/deploy/srs/conf
 SRS_RTMP_PORT=1935
 SRS_API_PORT=1985
 SRS_EXTRA_ARGS=
+EOF
+
+   sudo tee /opt/bitriver-srs-controller/.env >/dev/null <<'EOF'
+SRS_CONTROLLER_IMAGE=ghcr.io/bitriver-live/bitriver-srs-controller:latest
+SRS_CONTROLLER_CONTAINER_NAME=bitriver-srs-controller
+SRS_CONTROLLER_HOST_PORT=1986
+SRS_CONTROLLER_BIND=:1985
+SRS_CONTROLLER_UPSTREAM=http://srs:1985/api/
+SRS_CONTROLLER_TOKEN=REPLACE_ME
+SRS_CONTROLLER_EXTRA_ARGS=
 EOF
 
    sudo tee /opt/bitriver-ome/.env >/dev/null <<'EOF'
@@ -78,6 +88,7 @@ EOF
    sudo install -m 0644 deploy/systemd/bitriver-live.service /etc/systemd/system/bitriver-live.service
    sudo install -m 0644 deploy/systemd/bitriver-viewer.service /etc/systemd/system/bitriver-viewer.service
    sudo install -m 0644 deploy/systemd/srs.service /etc/systemd/system/srs.service
+   sudo install -m 0644 deploy/systemd/srs-controller.service /etc/systemd/system/srs-controller.service
    sudo install -m 0644 deploy/systemd/ome.service /etc/systemd/system/ome.service
    sudo install -m 0644 deploy/systemd/bitriver-transcoder.service /etc/systemd/system/bitriver-transcoder.service
    sudo systemctl daemon-reload
@@ -85,6 +96,7 @@ EOF
 9. Enable and start the services:
    ```bash
    sudo systemctl enable --now srs.service
+   sudo systemctl enable --now srs-controller.service
    sudo systemctl enable --now ome.service
    sudo systemctl enable --now bitriver-transcoder.service
    sudo systemctl enable --now bitriver-live.service
@@ -99,6 +111,7 @@ Check that the services are running and healthy:
 
 ```bash
 systemctl status srs.service
+systemctl status srs-controller.service
 systemctl status ome.service
 systemctl status bitriver-transcoder.service
 systemctl status bitriver-live.service
