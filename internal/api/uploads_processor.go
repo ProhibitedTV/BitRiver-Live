@@ -13,6 +13,9 @@ import (
 	"bitriver-live/internal/storage"
 )
 
+// UploadProcessorConfig describes the collaborators and tunable settings used
+// to process archived uploads, including storage, ingest coordination, worker
+// concurrency, and back pressure limits.
 type UploadProcessorConfig struct {
 	Store      storage.Repository
 	Ingest     ingest.Controller
@@ -23,6 +26,9 @@ type UploadProcessorConfig struct {
 	Logger     *slog.Logger
 }
 
+// UploadProcessor runs background workers that resolve pending uploads by
+// coordinating persistence, ingest, and rendition generation while honoring
+// queue limits and cancellation.
 type UploadProcessor struct {
 	store      storage.Repository
 	ingest     ingest.Controller
@@ -48,6 +54,9 @@ const (
 	defaultUploadTimeout   = 30 * time.Minute
 )
 
+// NewUploadProcessor configures a worker pool for upload processing, applying
+// sensible defaults for worker count, queue size, timeout, and logging when
+// the configuration omits them.
 func NewUploadProcessor(cfg UploadProcessorConfig) *UploadProcessor {
 	workers := cfg.Workers
 	if workers <= 0 {
