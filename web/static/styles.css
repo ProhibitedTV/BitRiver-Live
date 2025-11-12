@@ -753,6 +753,25 @@ chat-log {
     color: var(--text-muted);
 }
 
+.installer__steps {
+    margin: 0;
+    padding-left: 1.25rem;
+    display: grid;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.installer__steps li {
+    line-height: 1.5;
+}
+
+.installer__steps strong {
+    display: block;
+    color: var(--text);
+    font-size: 0.95rem;
+}
+
 .installer__layout {
     display: grid;
     gap: clamp(1.5rem, 2.75vw, 2.25rem);
@@ -972,13 +991,17 @@ chat-log {
     word-break: break-word;
 }
 
-.installer__checklist ul {
+.installer__checklist ol {
     margin: 0;
     padding-left: 1.25rem;
     display: grid;
     gap: 0.35rem;
     font-size: 0.9rem;
     color: var(--text-muted);
+}
+
+.installer__checklist ol li {
+    line-height: 1.5;
 }
 
 @media (max-width: 640px) {

@@ -2092,7 +2092,7 @@ function setupInstaller() {
         }
         const currentState = status.dataset.state;
         if (currentState === "ready" || currentState === "copied") {
-            setStatus("dirty", "Update detected — regenerate the installer to refresh the script.");
+            setStatus("dirty", "Form updated — generate a fresh script so everything stays in sync.");
             if (copyButton) {
                 copyButton.disabled = true;
             }
@@ -2113,12 +2113,12 @@ function setupInstaller() {
         output.focus();
         output.select();
         output.scrollTop = 0;
-        setStatus("ready", "Installer script ready. Copy and run it on your home server.");
+        setStatus("ready", "Script ready. Copy it and run on your Ubuntu server.");
         if (copyButton) {
             copyButton.disabled = false;
             copyButton.focus();
         }
-        showToast("Installer script generated. Copy and run on your home server.");
+        showToast("Installer script ready. Copy it and run on your server.");
     });
     if (copyButton) {
         copyButton.addEventListener("click", async () => {
@@ -2127,11 +2127,11 @@ function setupInstaller() {
             }
             try {
                 await navigator.clipboard.writeText(output.value);
-                showToast("Installer script copied to clipboard.");
-                setStatus("copied", "Script copied. Paste it into your terminal to kick off the install.");
+                showToast("Installer script copied! Paste it into your server terminal.");
+                setStatus("copied", "Script copied. Paste it into your server terminal and press Enter.");
             } catch (error) {
-                showToast("Copy failed. Use Ctrl+C / ⌘+C instead.", "error");
-                setStatus("ready", "Installer script ready. Use your keyboard to copy if the button fails.");
+                showToast("Copy failed. Press Ctrl+C / ⌘+C to copy manually.", "error");
+                setStatus("ready", "Script ready. Copy it manually if the button does not work.");
             }
         });
     }
