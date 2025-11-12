@@ -725,6 +725,101 @@ func TestCreateChannelAndStartStopStream(t *testing.T) {
 	}
 }
 
+func TestStorageStartStreamTimesOutWhenIngestBlocks(t *testing.T) {
+	timeout := 30 * time.Millisecond
+	controller := &timeoutIngestController{bootBlock: true}
+	store := newTestStoreWithController(t, controller, WithIngestTimeout(timeout))
+
+	user, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Creator",
+		Email:       "creator@example.com",
+		Roles:       []string{"creator"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(user.ID, "Timeouts", "gaming", []string{"speedrun"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	start := time.Now()
+	if _, err := store.StartStream(channel.ID, []string{"720p"}); err == nil {
+		t.Fatal("expected StartStream to fail when ingest blocks")
+	} else if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context deadline exceeded, got %v", err)
+	}
+	if time.Since(start) > 200*time.Millisecond {
+		t.Fatalf("StartStream exceeded timeout expectation: %v", time.Since(start))
+	}
+
+	updated, ok := store.GetChannel(channel.ID)
+	if !ok {
+		t.Fatalf("expected to reload channel %s", channel.ID)
+	}
+	if updated.LiveState != "offline" {
+		t.Fatalf("expected channel to remain offline, got %s", updated.LiveState)
+	}
+	if updated.CurrentSessionID != nil {
+		t.Fatalf("expected current session to remain nil, got %v", *updated.CurrentSessionID)
+	}
+}
+
+func TestStorageStopStreamTimesOutWhenIngestBlocks(t *testing.T) {
+	timeout := 30 * time.Millisecond
+	controller := &timeoutIngestController{bootResult: ingest.BootResult{PlaybackURL: "https://playback.example"}}
+	store := newTestStoreWithController(t, controller, WithIngestTimeout(timeout))
+
+	user, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Creator",
+		Email:       "creator@example.com",
+		Roles:       []string{"creator"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(user.ID, "Timeouts", "gaming", []string{"speedrun"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	session, err := store.StartStream(channel.ID, []string{"720p"})
+	if err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+
+	controller.shutdownBlock = true
+
+	start := time.Now()
+	if _, err := store.StopStream(channel.ID, 25); err == nil {
+		t.Fatal("expected StopStream to fail when ingest shutdown blocks")
+	} else if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context deadline exceeded, got %v", err)
+	}
+	if time.Since(start) > 200*time.Millisecond {
+		t.Fatalf("StopStream exceeded timeout expectation: %v", time.Since(start))
+	}
+
+	updated, ok := store.GetChannel(channel.ID)
+	if !ok {
+		t.Fatalf("expected to reload channel %s", channel.ID)
+	}
+	if updated.LiveState != "live" {
+		t.Fatalf("expected channel to remain live, got %s", updated.LiveState)
+	}
+	if updated.CurrentSessionID == nil || *updated.CurrentSessionID != session.ID {
+		t.Fatalf("expected current session to remain %s, got %v", session.ID, updated.CurrentSessionID)
+	}
+
+	current, ok := store.CurrentStreamSession(channel.ID)
+	if !ok {
+		t.Fatalf("expected current stream session %s to persist", session.ID)
+	}
+	if current.EndedAt != nil {
+		t.Fatal("expected session to remain active after shutdown timeout")
+	}
+}
+
 func TestRotateChannelStreamKey(t *testing.T) {
 	store := newTestStore(t)
 
@@ -1938,6 +2033,10 @@ func TestRepositoryChannelSearch(t *testing.T) {
 
 func TestRepositoryStreamLifecycleWithoutIngest(t *testing.T) {
 	RunRepositoryStreamLifecycleWithoutIngest(t, jsonRepositoryFactory)
+}
+
+func TestRepositoryStreamTimeouts(t *testing.T) {
+	RunRepositoryStreamTimeouts(t, jsonRepositoryFactory)
 }
 
 func TestCloneDatasetCopiesModerationMetadata(t *testing.T) {

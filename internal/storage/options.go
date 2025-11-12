@@ -69,6 +69,21 @@ func WithIngestRetries(maxAttempts int, interval time.Duration) Option {
 	)
 }
 
+func WithIngestTimeout(timeout time.Duration) Option {
+	return composeOption(
+		func(s *Storage) {
+			if timeout > 0 {
+				s.ingestTimeout = timeout
+			}
+		},
+		func(cfg *PostgresConfig) {
+			if timeout > 0 {
+				cfg.IngestTimeout = timeout
+			}
+		},
+	)
+}
+
 func WithRecordingRetention(policy RecordingRetentionPolicy) Option {
 	return composeOption(
 		func(s *Storage) {

@@ -32,6 +32,7 @@ type postgresRepository struct {
 	ingestController    ingest.Controller
 	ingestMaxAttempts   int
 	ingestRetryInterval time.Duration
+	ingestTimeout       time.Duration
 	ingestHealthMu      sync.RWMutex
 	ingestHealth        []ingest.HealthStatus
 	ingestHealthUpdated time.Time
@@ -104,6 +105,7 @@ func NewPostgresRepository(dsn string, opts ...Option) (Repository, error) {
 		ingestController:    cfg.IngestController,
 		ingestMaxAttempts:   cfg.IngestMaxAttempts,
 		ingestRetryInterval: cfg.IngestRetryInterval,
+		ingestTimeout:       normalizeIngestTimeout(cfg.IngestTimeout),
 		ingestHealth:        []ingest.HealthStatus{{Component: "ingest", Status: "disabled"}},
 		ingestHealthUpdated: time.Now().UTC(),
 		recordingRetention:  cfg.RecordingRetention,
@@ -2079,15 +2081,18 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 		_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
 		return models.StreamSession{}, ErrIngestControllerUnavailable
 	}
+	deadline := normalizeIngestTimeout(r.ingestTimeout)
 	var boot ingest.BootResult
 	var bootErr error
 	for attempt := 0; attempt < attempts; attempt++ {
-		boot, bootErr = controller.BootStream(ctx, ingest.BootParams{
+		bootCtx, cancel := context.WithTimeout(context.Background(), deadline)
+		boot, bootErr = controller.BootStream(bootCtx, ingest.BootParams{
 			ChannelID:  channelID,
 			SessionID:  sessionID,
 			StreamKey:  streamKey,
 			Renditions: append([]string{}, renditions...),
 		})
+		cancel()
 		if bootErr == nil {
 			break
 		}
@@ -2134,7 +2139,9 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 
 	tx, err = r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		_ = controller.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), deadline)
+		_ = controller.ShutdownStream(shutdownCtx, channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+		cancel()
 		_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
 		return models.StreamSession{}, fmt.Errorf("begin persist stream session: %w", err)
 	}
@@ -2151,24 +2158,32 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 		session.IngestJobIDs,
 	)
 	if err != nil {
-		_ = controller.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), deadline)
+		_ = controller.ShutdownStream(shutdownCtx, channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+		cancel()
 		_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
 		return models.StreamSession{}, fmt.Errorf("insert stream session: %w", err)
 	}
 	for _, manifest := range session.RenditionManifests {
 		if _, err := tx.Exec(ctx, "INSERT INTO stream_session_manifests (session_id, name, manifest_url, bitrate) VALUES ($1, $2, $3, $4)", session.ID, manifest.Name, manifest.ManifestURL, manifest.Bitrate); err != nil {
-			_ = controller.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), deadline)
+			_ = controller.ShutdownStream(shutdownCtx, channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+			cancel()
 			_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
 			return models.StreamSession{}, fmt.Errorf("insert rendition manifest: %w", err)
 		}
 	}
 	if _, err := tx.Exec(ctx, "UPDATE channels SET current_session_id = $1, live_state = 'live', updated_at = $2 WHERE id = $3", session.ID, session.StartedAt, channelID); err != nil {
-		_ = controller.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), deadline)
+		_ = controller.ShutdownStream(shutdownCtx, channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+		cancel()
 		_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
 		return models.StreamSession{}, fmt.Errorf("mark channel live: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		_ = controller.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), deadline)
+		_ = controller.ShutdownStream(shutdownCtx, channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+		cancel()
 		_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
 		return models.StreamSession{}, fmt.Errorf("commit start stream: %w", err)
 	}
@@ -2264,12 +2279,15 @@ func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (m
 		session.EndedAt = &ts
 	}
 
+	deadline := normalizeIngestTimeout(r.ingestTimeout)
 	controller := r.ingestController
 	if controller == nil {
 		return models.StreamSession{}, ErrIngestControllerUnavailable
 	}
 
-	if err := controller.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, ingestJobIDs...)); err != nil {
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), deadline)
+	defer cancel()
+	if err := controller.ShutdownStream(shutdownCtx, channelID, sessionID, append([]string{}, ingestJobIDs...)); err != nil {
 		return models.StreamSession{}, fmt.Errorf("shutdown ingest: %w", err)
 	}
 

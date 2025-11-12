@@ -793,6 +793,10 @@ func TestPostgresStreamLifecycleWithoutIngest(t *testing.T) {
 	storage.RunRepositoryStreamLifecycleWithoutIngest(t, postgresRepositoryFactory)
 }
 
+func TestPostgresStreamTimeouts(t *testing.T) {
+	storage.RunRepositoryStreamTimeouts(t, postgresRepositoryFactory)
+}
+
 var postgresTables = []string{
 	"chat_messages",
 	"chat_bans",

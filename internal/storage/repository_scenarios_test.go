@@ -48,6 +48,36 @@ func requireAvailable(t *testing.T, err error, operation string) {
 	}
 }
 
+type timeoutIngestController struct {
+	bootBlock     bool
+	shutdownBlock bool
+	bootResult    ingest.BootResult
+}
+
+func (c *timeoutIngestController) BootStream(ctx context.Context, params ingest.BootParams) (ingest.BootResult, error) {
+	if c.bootBlock {
+		<-ctx.Done()
+		return ingest.BootResult{}, ctx.Err()
+	}
+	return c.bootResult, nil
+}
+
+func (c *timeoutIngestController) ShutdownStream(ctx context.Context, channelID, sessionID string, jobIDs []string) error {
+	if c.shutdownBlock {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	return nil
+}
+
+func (c *timeoutIngestController) HealthChecks(ctx context.Context) []ingest.HealthStatus {
+	return []ingest.HealthStatus{{Component: "ingest", Status: "ok"}}
+}
+
+func (c *timeoutIngestController) TranscodeUpload(ctx context.Context, params ingest.UploadTranscodeParams) (ingest.UploadTranscodeResult, error) {
+	return ingest.UploadTranscodeResult{PlaybackURL: params.SourceURL}, nil
+}
+
 // RunRepositoryUserLifecycle validates the basic user management workflow across
 // repository implementations.
 func RunRepositoryUserLifecycle(t *testing.T, factory RepositoryFactory) {
@@ -767,5 +797,86 @@ func RunRepositoryStreamLifecycleWithoutIngest(t *testing.T, factory RepositoryF
 	}
 	if stored.LiveState != "live" {
 		t.Fatalf("expected channel to remain live, got %s", stored.LiveState)
+	}
+}
+
+func RunRepositoryStreamTimeouts(t *testing.T, factory RepositoryFactory) {
+	const timeout = 30 * time.Millisecond
+
+	bootController := &timeoutIngestController{bootBlock: true}
+	repo := runRepository(t, factory, WithIngestController(bootController), WithIngestTimeout(timeout))
+
+	owner, err := repo.CreateUser(CreateUserParams{DisplayName: "Creator", Email: "creator@example.com", Roles: []string{"creator"}})
+	requireAvailable(t, err, "create owner")
+	channel, err := repo.CreateChannel(owner.ID, "Timeouts", "gaming", []string{"speedrun"})
+	requireAvailable(t, err, "create channel")
+
+	start := time.Now()
+	_, err = repo.StartStream(channel.ID, []string{"720p"})
+	if err == nil {
+		t.Fatal("expected StartStream to fail when ingest boot blocks")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected StartStream deadline exceeded, got %v", err)
+	}
+	if time.Since(start) > 200*time.Millisecond {
+		t.Fatalf("StartStream exceeded timeout expectation: %v", time.Since(start))
+	}
+
+	stored, ok := repo.GetChannel(channel.ID)
+	if !ok {
+		t.Fatalf("expected to reload channel %s", channel.ID)
+	}
+	if stored.LiveState != "offline" {
+		t.Fatalf("expected channel to remain offline, got %s", stored.LiveState)
+	}
+	if stored.CurrentSessionID != nil {
+		t.Fatalf("expected current session to remain nil, got %v", *stored.CurrentSessionID)
+	}
+	if _, active := repo.CurrentStreamSession(channel.ID); active {
+		t.Fatal("expected no active session after start timeout")
+	}
+
+	shutdownController := &timeoutIngestController{bootResult: ingest.BootResult{PlaybackURL: "https://playback.example"}}
+	stopRepo := runRepository(t, factory, WithIngestController(shutdownController), WithIngestTimeout(timeout))
+
+	owner, err = stopRepo.CreateUser(CreateUserParams{DisplayName: "Creator", Email: "streamer@example.com", Roles: []string{"creator"}})
+	requireAvailable(t, err, "create stop owner")
+	channel, err = stopRepo.CreateChannel(owner.ID, "Timeouts", "gaming", []string{"speedrun"})
+	requireAvailable(t, err, "create stop channel")
+
+	session, err := stopRepo.StartStream(channel.ID, []string{"720p"})
+	requireAvailable(t, err, "start stream before timeout")
+
+	shutdownController.shutdownBlock = true
+
+	start = time.Now()
+	_, err = stopRepo.StopStream(channel.ID, 10)
+	if err == nil {
+		t.Fatal("expected StopStream to fail when ingest shutdown blocks")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected StopStream deadline exceeded, got %v", err)
+	}
+	if time.Since(start) > 200*time.Millisecond {
+		t.Fatalf("StopStream exceeded timeout expectation: %v", time.Since(start))
+	}
+
+	stored, ok = stopRepo.GetChannel(channel.ID)
+	if !ok {
+		t.Fatalf("expected to reload channel %s after stop timeout", channel.ID)
+	}
+	if stored.LiveState != "live" {
+		t.Fatalf("expected channel to remain live, got %s", stored.LiveState)
+	}
+	if stored.CurrentSessionID == nil || *stored.CurrentSessionID != session.ID {
+		t.Fatalf("expected current session to remain %s, got %v", session.ID, stored.CurrentSessionID)
+	}
+	current, ok := stopRepo.CurrentStreamSession(channel.ID)
+	if !ok {
+		t.Fatalf("expected current session %s to persist", session.ID)
+	}
+	if current.EndedAt != nil {
+		t.Fatal("expected session to remain active after shutdown timeout")
 	}
 }
