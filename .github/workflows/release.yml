@@ -101,6 +101,8 @@ jobs:
             bin_ext=".exe"
           fi
 
+          cp -R deploy/migrations "$out_dir/migrations"
+
           for target in "${targets[@]}"; do
             bin_name="$(basename "$target")"
             output_path="$out_dir/$bin_name$bin_ext"
