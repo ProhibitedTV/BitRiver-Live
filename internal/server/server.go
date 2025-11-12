@@ -22,11 +22,21 @@ import (
 	"bitriver-live/web"
 )
 
+// TLSConfig defines certificate files that enable TLS for the HTTP listener
+// created by Server. When both CertFile and KeyFile are provided the server
+// starts with TLS; otherwise it falls back to plain HTTP on Config.Addr.
 type TLSConfig struct {
 	CertFile string
 	KeyFile  string
 }
 
+// Config aggregates the dependencies and settings required to construct a
+// Server. Addr determines the listen address for the HTTP server, TLS controls
+// whether HTTPS is enabled, RateLimit configures per-client throttling, Logger
+// and AuditLogger provide structured logging, Metrics records request metrics
+// (defaulting to metrics.Default when nil), ViewerOrigin configures reverse
+// proxying for viewer traffic, and OAuth is injected into the supplied API
+// handler.
 type Config struct {
 	Addr         string
 	TLS          TLSConfig
@@ -38,6 +48,9 @@ type Config struct {
 	OAuth        oauth.Service
 }
 
+// Server wraps the configured http.Server alongside observability, rate
+// limiting, and TLS metadata derived from Config. It exposes lifecycle methods
+// for starting and gracefully shutting down the listener created by New.
 type Server struct {
 	httpServer  *http.Server
 	logger      *slog.Logger
@@ -49,6 +62,15 @@ type Server struct {
 	tlsKeyFile  string
 }
 
+// New wires the HTTP router, middlewares, and instrumentation required for the
+// BitRiver API. It registers health, metrics, authentication, user, channel,
+// directory, profile, chat, recording, upload, moderation, and analytics
+// endpoints on a mux alongside static asset and optional viewer proxy handlers.
+// The supplied Config drives listener address selection, TLS activation,
+// logging, auditing, rate limiting, and metrics recording (falling back to
+// metrics.Default when Metrics is nil). If handler is provided its OAuth field
+// is populated from Config before being used by auth middleware, and the
+// resulting Server retains references for lifecycle management.
 func New(handler *api.Handler, cfg Config) (*Server, error) {
 	recorder := cfg.Metrics
 	if recorder == nil {
