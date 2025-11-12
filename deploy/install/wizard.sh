@@ -139,15 +139,31 @@ USE_POSTGRES_SESSION=false
 SESSION_STORE_DRIVER=""
 if [[ $STORAGE_DRIVER == "postgres" ]]; then
         while [[ -z $POSTGRES_DSN ]]; do
-                POSTGRES_DSN=$(prompt_default "Postgres DSN" "postgres://bitriver:changeme@localhost:5432/bitriver?sslmode=require")
+                POSTGRES_DSN=$(prompt_optional "Postgres DSN (required; rotate credentials before running the installer)")
                 if [[ -z $POSTGRES_DSN ]]; then
                         echo "Postgres DSN is required when selecting the postgres storage driver." >&2
+                        continue
+                fi
+                if [[ $POSTGRES_DSN == *"bitriver:changeme"* || $POSTGRES_DSN == *"bitriver:bitriver"* ]]; then
+                        echo "Replace the bitriver:changeme-style placeholder with unique credentials before continuing." >&2
+                        POSTGRES_DSN=""
                 fi
         done
         if prompt_yes_no "Use Postgres for session storage" "y"; then
                 USE_POSTGRES_SESSION=true
                 SESSION_STORE_DRIVER="postgres"
-                SESSION_STORE_DSN=$(prompt_optional "  Session store Postgres DSN (leave blank to reuse primary DSN)")
+                while true; do
+                        SESSION_STORE_DSN=$(prompt_optional "  Session store Postgres DSN (leave blank to reuse primary DSN; rotate credentials if provided)")
+                        if [[ -z $SESSION_STORE_DSN ]]; then
+                                break
+                        fi
+                        if [[ $SESSION_STORE_DSN == *"bitriver:changeme"* || $SESSION_STORE_DSN == *"bitriver:bitriver"* ]]; then
+                                echo "  Replace the bitriver:changeme-style placeholder with unique credentials before continuing." >&2
+                                SESSION_STORE_DSN=""
+                                continue
+                        fi
+                        break
+                done
         else
                 SESSION_STORE_DRIVER="memory"
         fi

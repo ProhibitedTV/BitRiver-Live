@@ -237,7 +237,7 @@ cd /opt/bitriver-live
 ./deploy/install/wizard.sh
 ```
 
-The wizard walks through the common inputs—install directory (default `/opt/bitriver-live`), data directory (default `/var/lib/bitriver-live`), service user (default `bitriver`), listen address, storage driver, optional hostname hint, TLS certificate/key paths, rate-limiting values, whether to allow public self-signup, and whether to redirect systemd logs. Viewer self-registration now defaults to disabled; opt in when prompted if you want to reopen public account creation. The wizard still defaults to the Postgres storage backend; be ready with a DSN and a database that has been migrated with the SQL files in [`deploy/migrations/`](../deploy/migrations). When you choose the Postgres storage backend it prompts for the DSN (required) and optionally a Postgres session-store DSN, letting you reuse the primary connection string or point to a dedicated database. When the wizard detects a source checkout it validates that Go 1.21+ is available; when invoked from a release tarball it skips the Go check because the binaries are already present. It still warns if a `bitriver-live.service` unit already exists before invoking the Ubuntu installer. Because the underlying helper uses `sudo` to create users, directories, and systemd units, the wizard highlights those privileged steps and asks for confirmation first.
+The wizard walks through the common inputs—install directory (default `/opt/bitriver-live`), data directory (default `/var/lib/bitriver-live`), service user (default `bitriver`), listen address, storage driver, optional hostname hint, TLS certificate/key paths, rate-limiting values, whether to allow public self-signup, and whether to redirect systemd logs. Viewer self-registration now defaults to disabled; opt in when prompted if you want to reopen public account creation. The wizard still defaults to the Postgres storage backend; be ready with a DSN and a database that has been migrated with the SQL files in [`deploy/migrations/`](../deploy/migrations). When you choose the Postgres storage backend it prompts for the DSN (required) and optionally a Postgres session-store DSN, letting you reuse the primary connection string or point to a dedicated database. The prompt rejects placeholder credentials such as `bitriver:changeme` or `bitriver:bitriver`, matching the safeguards in [`deploy/check-env.sh`](../deploy/check-env.sh); rotate a dedicated Postgres user/password before running the installer. When the wizard detects a source checkout it validates that Go 1.21+ is available; when invoked from a release tarball it skips the Go check because the binaries are already present. It still warns if a `bitriver-live.service` unit already exists before invoking the Ubuntu installer. Because the underlying helper uses `sudo` to create users, directories, and systemd units, the wizard highlights those privileged steps and asks for confirmation first.
 
 If a run fails midway, fix the highlighted issue and start the wizard again—it is safe to rerun, and you can accept the previous defaults to regenerate the service.
 
@@ -255,7 +255,7 @@ cd /opt/bitriver-live
   --service-user bitriver \
   --mode production \
   --addr :80 \
-  --postgres-dsn "postgres://bitriver:changeme@localhost:5432/bitriver_live?sslmode=disable" \
+  --postgres-dsn "postgres://stream_user:super-strong-password@localhost:5432/bitriver_live?sslmode=disable" \
   --enable-logs \
   --hostname stream.example.com
 ```
@@ -311,14 +311,14 @@ BITRIVER_LIVE_MODE=production
 BITRIVER_LIVE_TLS_CERT=/etc/letsencrypt/live/stream.example.com/fullchain.pem
 BITRIVER_LIVE_TLS_KEY=/etc/letsencrypt/live/stream.example.com/privkey.pem
 BITRIVER_LIVE_STORAGE_DRIVER=postgres
-BITRIVER_LIVE_POSTGRES_DSN=postgres://bitriver:changeme@localhost:5432/bitriver?sslmode=require
+BITRIVER_LIVE_POSTGRES_DSN=postgres://stream_user:super-strong-password@localhost:5432/bitriver?sslmode=require
 BITRIVER_LIVE_RATE_REDIS_ADDR=127.0.0.1:6379
 BITRIVER_LIVE_RATE_REDIS_PASSWORD=changeme
 BITRIVER_LIVE_SESSION_STORE=postgres
 # Uncomment to allow new viewers to register their own accounts once you are ready to accept signups.
 # BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true
 # Optional: override if you want a dedicated session database.
-# BITRIVER_LIVE_SESSION_POSTGRES_DSN=postgres://bitriver:changeme@localhost:5432/bitriver_sessions?sslmode=require
+# BITRIVER_LIVE_SESSION_POSTGRES_DSN=postgres://stream_user:super-strong-password@localhost:5432/bitriver_sessions?sslmode=require
 BITRIVER_SRS_TOKEN=REPLACE_ME
 BITRIVER_OME_USERNAME=REPLACE_ME
 BITRIVER_OME_PASSWORD=REPLACE_ME
@@ -425,7 +425,7 @@ sudo systemctl status bitriver-live.service bitriver-viewer.service srs.service 
 2. Confirm database connectivity and migrations.
 
 ```bash
-psql "postgres://bitriver:changeme@localhost:5432/bitriver?sslmode=require" \
+psql "postgres://stream_user:super-strong-password@localhost:5432/bitriver?sslmode=require" \
   --command "SELECT NOW(), current_user;"
 ```
 
