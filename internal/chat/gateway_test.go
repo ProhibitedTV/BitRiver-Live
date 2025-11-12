@@ -46,7 +46,9 @@ func TestGatewayMessageFlow(t *testing.T) {
 
 	joinPayload := map[string]string{"type": "join", "channelId": channel.ID}
 	sendJSON(t, viewerAConn, joinPayload)
+	waitForType(t, viewerAConn, "ack")
 	sendJSON(t, viewerBConn, joinPayload)
+	waitForType(t, viewerBConn, "ack")
 
 	sendJSON(t, viewerAConn, map[string]string{
 		"type":      "message",
@@ -97,7 +99,9 @@ func TestGatewayModerationFlow(t *testing.T) {
 
 	joinPayload := map[string]string{"type": "join", "channelId": channel.ID}
 	sendJSON(t, ownerConn, joinPayload)
+	waitForType(t, ownerConn, "ack")
 	sendJSON(t, viewerConn, joinPayload)
+	waitForType(t, viewerConn, "ack")
 
 	sendJSON(t, ownerConn, map[string]any{
 		"type":       "timeout",
