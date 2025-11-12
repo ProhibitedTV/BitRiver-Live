@@ -121,6 +121,58 @@ jobs:
           path: dist/bitriver-live-${{ matrix.goos }}-${{ matrix.goarch }}.*
           if-no-files-found: error
 
+  build-viewer:
+    name: Build viewer bundle
+    needs:
+      - go-tests
+      - postgres-tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/viewer
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/viewer/package-lock.json
+
+      - name: Install dependencies
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+        run: npm ci
+
+      - name: Build viewer
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+        run: npm run build
+
+      - name: Package viewer bundle
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          bundle_root="dist/bitriver-viewer"
+          rm -rf "$bundle_root"
+          mkdir -p "$bundle_root"
+          cp -R .next "$bundle_root/.next"
+          rm -rf "$bundle_root/.next/cache"
+          cp -R public "$bundle_root/public"
+          cp package.json package-lock.json next.config.js "$bundle_root/"
+          tar -C dist -czf "bitriver-viewer-${RELEASE_TAG}.tar.gz" bitriver-viewer
+          rm -rf "$bundle_root"
+
+      - name: Upload viewer bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: viewer-bundle
+          path: dist/bitriver-viewer-${{ github.ref_name }}.tar.gz
+          if-no-files-found: error
+
   publish-images:
     name: Publish container images
     needs:
@@ -191,6 +243,7 @@ jobs:
       - go-tests
       - postgres-tests
       - build
+      - build-viewer
       - publish-images
     runs-on: ubuntu-latest
     steps:
