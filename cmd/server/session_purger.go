@@ -70,7 +70,20 @@ func startSessionPurgeWorkerWithTicker(
 	return func() {
 		once.Do(func() {
 			cancel()
-			<-done
+			select {
+			case <-done:
+				return
+			default:
+			}
+			if logger != nil {
+				go func() {
+					select {
+					case <-done:
+					case <-time.After(5 * time.Second):
+						logger.Warn("session purge worker did not stop before timeout")
+					}
+				}()
+			}
 		})
 	}
 }

@@ -25,6 +25,36 @@ func (f *fakeSessionManager) PurgeExpired() error {
 	return f.err
 }
 
+type blockingSessionManager struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func newBlockingSessionManager() *blockingSessionManager {
+	return &blockingSessionManager{
+		started: make(chan struct{}, 1),
+		release: make(chan struct{}),
+	}
+}
+
+func (b *blockingSessionManager) PurgeExpired() error {
+	select {
+	case b.started <- struct{}{}:
+	default:
+	}
+	<-b.release
+	return nil
+}
+
+func (b *blockingSessionManager) Release() {
+	select {
+	case <-b.release:
+		return
+	default:
+		close(b.release)
+	}
+}
+
 type manualTicker struct {
 	c       chan time.Time
 	stopped chan struct{}
@@ -83,5 +113,48 @@ func TestStartSessionPurgeWorker(t *testing.T) {
 	case <-ticker.stopped:
 	case <-time.After(time.Second):
 		t.Fatal("expected ticker to stop after context cancellation")
+	}
+}
+
+func TestSessionPurgeWorkerStopDoesNotBlock(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ticker := newManualTicker()
+	sessions := newBlockingSessionManager()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	stop := startSessionPurgeWorkerWithTicker(ctx, logger, sessions, time.Minute, func(time.Duration) purgeTicker {
+		return ticker
+	})
+
+	ticker.Tick()
+
+	select {
+	case <-sessions.started:
+	case <-time.After(time.Second):
+		t.Fatal("expected purge to begin")
+	}
+
+	cancel()
+
+	stopped := make(chan struct{})
+	go func() {
+		stop()
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected stop to return without waiting for purge completion")
+	}
+
+	sessions.Release()
+
+	select {
+	case <-ticker.stopped:
+	case <-time.After(time.Second):
+		t.Fatal("expected ticker to stop after releasing purge")
 	}
 }
