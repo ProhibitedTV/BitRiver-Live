@@ -114,8 +114,16 @@ jobs:
           cp -a deploy/systemd "$deploy_dir/systemd"
           cp -a deploy/nginx "$deploy_dir/nginx"
 
+          declare -A bin_names=(
+            ["server"]="bitriver-live"
+          )
+
           for target in "${targets[@]}"; do
             bin_name="$(basename "$target")"
+            if [[ -n ${bin_names[$target]+x} ]]; then
+              bin_name="${bin_names[$target]}"
+            fi
+
             output_path="$out_dir/$bin_name$bin_ext"
             go build -o "$output_path" "./cmd/$target"
           done
