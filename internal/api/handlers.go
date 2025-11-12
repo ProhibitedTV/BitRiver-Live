@@ -1593,7 +1593,11 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 		}
 		session, err := h.Store.StartStream(channel.ID, req.Renditions)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			status := http.StatusBadRequest
+			if errors.Is(err, storage.ErrIngestControllerUnavailable) {
+				status = http.StatusServiceUnavailable
+			}
+			writeError(w, status, err)
 			return
 		}
 		metrics.StreamStarted()
@@ -1611,7 +1615,11 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 		}
 		session, err := h.Store.StopStream(channel.ID, req.PeakConcurrent)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			status := http.StatusBadRequest
+			if errors.Is(err, storage.ErrIngestControllerUnavailable) {
+				status = http.StatusServiceUnavailable
+			}
+			writeError(w, status, err)
 			return
 		}
 		metrics.StreamStopped()

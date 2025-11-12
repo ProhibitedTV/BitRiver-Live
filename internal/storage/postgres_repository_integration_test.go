@@ -789,6 +789,10 @@ func TestPostgresRecordingRetention(t *testing.T) {
 	storage.RunRepositoryRecordingRetention(t, postgresRepositoryFactory)
 }
 
+func TestPostgresStreamLifecycleWithoutIngest(t *testing.T) {
+	storage.RunRepositoryStreamLifecycleWithoutIngest(t, postgresRepositoryFactory)
+}
+
 var postgresTables = []string{
 	"chat_messages",
 	"chat_bans",

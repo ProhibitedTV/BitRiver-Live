@@ -2075,6 +2075,10 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 		attempts = 1
 	}
 	controller := r.ingestController
+	if controller == nil {
+		_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
+		return models.StreamSession{}, ErrIngestControllerUnavailable
+	}
 	var boot ingest.BootResult
 	var bootErr error
 	for attempt := 0; attempt < attempts; attempt++ {
@@ -2130,7 +2134,7 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 
 	tx, err = r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		_ = r.ingestController.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+		_ = controller.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
 		_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
 		return models.StreamSession{}, fmt.Errorf("begin persist stream session: %w", err)
 	}
@@ -2147,24 +2151,24 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 		session.IngestJobIDs,
 	)
 	if err != nil {
-		_ = r.ingestController.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+		_ = controller.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
 		_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
 		return models.StreamSession{}, fmt.Errorf("insert stream session: %w", err)
 	}
 	for _, manifest := range session.RenditionManifests {
 		if _, err := tx.Exec(ctx, "INSERT INTO stream_session_manifests (session_id, name, manifest_url, bitrate) VALUES ($1, $2, $3, $4)", session.ID, manifest.Name, manifest.ManifestURL, manifest.Bitrate); err != nil {
-			_ = r.ingestController.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+			_ = controller.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
 			_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
 			return models.StreamSession{}, fmt.Errorf("insert rendition manifest: %w", err)
 		}
 	}
 	if _, err := tx.Exec(ctx, "UPDATE channels SET current_session_id = $1, live_state = 'live', updated_at = $2 WHERE id = $3", session.ID, session.StartedAt, channelID); err != nil {
-		_ = r.ingestController.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+		_ = controller.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
 		_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
 		return models.StreamSession{}, fmt.Errorf("mark channel live: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		_ = r.ingestController.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
+		_ = controller.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, session.IngestJobIDs...))
 		_, _ = r.pool.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
 		return models.StreamSession{}, fmt.Errorf("commit start stream: %w", err)
 	}
@@ -2260,7 +2264,12 @@ func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (m
 		session.EndedAt = &ts
 	}
 
-	if err := r.ingestController.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, ingestJobIDs...)); err != nil {
+	controller := r.ingestController
+	if controller == nil {
+		return models.StreamSession{}, ErrIngestControllerUnavailable
+	}
+
+	if err := controller.ShutdownStream(context.Background(), channelID, sessionID, append([]string{}, ingestJobIDs...)); err != nil {
 		return models.StreamSession{}, fmt.Errorf("shutdown ingest: %w", err)
 	}
 
