@@ -1168,214 +1168,222 @@ func (r *postgresRepository) UpsertProfile(userID string, update ProfileUpdate) 
 	if r == nil || r.pool == nil {
 		return models.Profile{}, ErrPostgresUnavailable
 	}
-	ctx := context.Background()
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return models.Profile{}, fmt.Errorf("begin upsert profile tx: %w", err)
-	}
-	defer rollbackTx(ctx, tx)
+	profile := models.Profile{}
+	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("begin upsert profile tx: %w", err)
+		}
+		defer rollbackTx(ctx, tx)
 
-	var userCreatedAt time.Time
-	if err := tx.QueryRow(ctx, "SELECT created_at FROM users WHERE id = $1", userID).Scan(&userCreatedAt); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return models.Profile{}, fmt.Errorf("user %s not found", userID)
-		}
-		return models.Profile{}, fmt.Errorf("load user %s: %w", userID, err)
-	}
-
-	profile := models.Profile{
-		UserID:            userID,
-		Bio:               "",
-		TopFriends:        []string{},
-		DonationAddresses: []models.CryptoAddress{},
-		CreatedAt:         userCreatedAt.UTC(),
-		UpdatedAt:         userCreatedAt.UTC(),
-	}
-	var (
-		avatar, banner           pgtype.Text
-		featured                 pgtype.Text
-		topFriends               []string
-		donationAddressesPayload []byte
-		createdAt, updatedAt     time.Time
-	)
-	row := tx.QueryRow(ctx, "SELECT bio, avatar_url, banner_url, featured_channel_id, top_friends, donation_addresses, created_at, updated_at FROM profiles WHERE user_id = $1", userID)
-	switch err := row.Scan(&profile.Bio, &avatar, &banner, &featured, &topFriends, &donationAddressesPayload, &createdAt, &updatedAt); {
-	case errors.Is(err, pgx.ErrNoRows):
-		// Use defaults.
-	case err != nil:
-		return models.Profile{}, fmt.Errorf("load profile %s: %w", userID, err)
-	default:
-		if avatar.Valid {
-			profile.AvatarURL = avatar.String
-		}
-		if banner.Valid {
-			profile.BannerURL = banner.String
-		}
-		if featured.Valid {
-			id := featured.String
-			profile.FeaturedChannelID = &id
-		}
-		if len(topFriends) > 0 {
-			profile.TopFriends = append([]string{}, topFriends...)
-		}
-		if len(donationAddressesPayload) > 0 {
-			decoded, err := decodeDonationAddresses(donationAddressesPayload)
-			if err != nil {
-				return models.Profile{}, fmt.Errorf("decode donation addresses: %w", err)
-			}
-			profile.DonationAddresses = decoded
-		}
-		profile.CreatedAt = createdAt.UTC()
-		profile.UpdatedAt = updatedAt.UTC()
-	}
-
-	now := time.Now().UTC()
-
-	if update.Bio != nil {
-		profile.Bio = strings.TrimSpace(*update.Bio)
-	}
-	if update.AvatarURL != nil {
-		profile.AvatarURL = strings.TrimSpace(*update.AvatarURL)
-	}
-	if update.BannerURL != nil {
-		profile.BannerURL = strings.TrimSpace(*update.BannerURL)
-	}
-	if update.FeaturedChannelID != nil {
-		trimmed := strings.TrimSpace(*update.FeaturedChannelID)
-		if trimmed == "" {
-			profile.FeaturedChannelID = nil
-		} else {
-			var ownerID string
-			err := tx.QueryRow(ctx, "SELECT owner_id FROM channels WHERE id = $1", trimmed).Scan(&ownerID)
+		var userCreatedAt time.Time
+		if err := tx.QueryRow(ctx, "SELECT created_at FROM users WHERE id = $1", userID).Scan(&userCreatedAt); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return models.Profile{}, fmt.Errorf("featured channel %s not found", trimmed)
+				return fmt.Errorf("user %s not found", userID)
 			}
-			if err != nil {
-				return models.Profile{}, fmt.Errorf("load featured channel %s: %w", trimmed, err)
-			}
-			if ownerID != userID {
-				return models.Profile{}, errors.New("featured channel must belong to profile owner")
-			}
-			id := trimmed
-			profile.FeaturedChannelID = &id
+			return fmt.Errorf("load user %s: %w", userID, err)
 		}
-	}
-	if update.TopFriends != nil {
-		if len(*update.TopFriends) > 8 {
-			return models.Profile{}, errors.New("top friends cannot exceed eight entries")
+
+		profile = models.Profile{
+			UserID:            userID,
+			Bio:               "",
+			TopFriends:        []string{},
+			DonationAddresses: []models.CryptoAddress{},
+			CreatedAt:         userCreatedAt.UTC(),
+			UpdatedAt:         userCreatedAt.UTC(),
 		}
-		seen := make(map[string]struct{}, len(*update.TopFriends))
-		ordered := make([]string, 0, len(*update.TopFriends))
-		for _, friendID := range *update.TopFriends {
-			trimmed := strings.TrimSpace(friendID)
+		var (
+			avatar, banner           pgtype.Text
+			featured                 pgtype.Text
+			topFriends               []string
+			donationAddressesPayload []byte
+			createdAt, updatedAt     time.Time
+		)
+		row := tx.QueryRow(ctx, "SELECT bio, avatar_url, banner_url, featured_channel_id, top_friends, donation_addresses, created_at, updated_at FROM profiles WHERE user_id = $1", userID)
+		switch err := row.Scan(&profile.Bio, &avatar, &banner, &featured, &topFriends, &donationAddressesPayload, &createdAt, &updatedAt); {
+		case errors.Is(err, pgx.ErrNoRows):
+			// Use defaults.
+		case err != nil:
+			return fmt.Errorf("load profile %s: %w", userID, err)
+		default:
+			if avatar.Valid {
+				profile.AvatarURL = avatar.String
+			}
+			if banner.Valid {
+				profile.BannerURL = banner.String
+			}
+			if featured.Valid {
+				id := featured.String
+				profile.FeaturedChannelID = &id
+			}
+			if len(topFriends) > 0 {
+				profile.TopFriends = append([]string{}, topFriends...)
+			}
+			if len(donationAddressesPayload) > 0 {
+				decoded, err := decodeDonationAddresses(donationAddressesPayload)
+				if err != nil {
+					return fmt.Errorf("decode donation addresses: %w", err)
+				}
+				profile.DonationAddresses = decoded
+			}
+			profile.CreatedAt = createdAt.UTC()
+			profile.UpdatedAt = updatedAt.UTC()
+		}
+
+		now := time.Now().UTC()
+
+		if update.Bio != nil {
+			profile.Bio = strings.TrimSpace(*update.Bio)
+		}
+		if update.AvatarURL != nil {
+			profile.AvatarURL = strings.TrimSpace(*update.AvatarURL)
+		}
+		if update.BannerURL != nil {
+			profile.BannerURL = strings.TrimSpace(*update.BannerURL)
+		}
+		if update.FeaturedChannelID != nil {
+			trimmed := strings.TrimSpace(*update.FeaturedChannelID)
 			if trimmed == "" {
-				return models.Profile{}, errors.New("top friends must reference valid users")
-			}
-			if trimmed == userID {
-				return models.Profile{}, errors.New("cannot add profile owner as a top friend")
-			}
-			if _, exists := seen[trimmed]; exists {
-				return models.Profile{}, errors.New("duplicate user in top friends list")
-			}
-			seen[trimmed] = struct{}{}
-			ordered = append(ordered, trimmed)
-		}
-		if len(ordered) > 0 {
-			rows, err := tx.Query(ctx, "SELECT id FROM users WHERE id = ANY($1)", ordered)
-			if err != nil {
-				return models.Profile{}, fmt.Errorf("validate top friends: %w", err)
-			}
-			found := make(map[string]struct{}, len(ordered))
-			for rows.Next() {
-				var id string
-				if err := rows.Scan(&id); err != nil {
-					rows.Close()
-					return models.Profile{}, fmt.Errorf("scan top friend id: %w", err)
+				profile.FeaturedChannelID = nil
+			} else {
+				var ownerID string
+				err := tx.QueryRow(ctx, "SELECT owner_id FROM channels WHERE id = $1", trimmed).Scan(&ownerID)
+				if errors.Is(err, pgx.ErrNoRows) {
+					return fmt.Errorf("featured channel %s not found", trimmed)
 				}
-				found[id] = struct{}{}
+				if err != nil {
+					return fmt.Errorf("load featured channel %s: %w", trimmed, err)
+				}
+				if ownerID != userID {
+					return errors.New("featured channel must belong to profile owner")
+				}
+				id := trimmed
+				profile.FeaturedChannelID = &id
 			}
-			rows.Close()
-			for _, id := range ordered {
-				if _, ok := found[id]; !ok {
-					return models.Profile{}, fmt.Errorf("top friend %s not found", id)
+		}
+		if update.TopFriends != nil {
+			if len(*update.TopFriends) > 8 {
+				return errors.New("top friends cannot exceed eight entries")
+			}
+			seen := make(map[string]struct{}, len(*update.TopFriends))
+			ordered := make([]string, 0, len(*update.TopFriends))
+			for _, friendID := range *update.TopFriends {
+				trimmed := strings.TrimSpace(friendID)
+				if trimmed == "" {
+					return errors.New("top friends must reference valid users")
+				}
+				if trimmed == userID {
+					return errors.New("cannot add profile owner as a top friend")
+				}
+				if _, exists := seen[trimmed]; exists {
+					return errors.New("duplicate user in top friends list")
+				}
+				seen[trimmed] = struct{}{}
+				ordered = append(ordered, trimmed)
+			}
+			if len(ordered) > 0 {
+				rows, err := tx.Query(ctx, "SELECT id FROM users WHERE id = ANY($1)", ordered)
+				if err != nil {
+					return fmt.Errorf("validate top friends: %w", err)
+				}
+				defer rows.Close()
+				found := make(map[string]struct{}, len(ordered))
+				for rows.Next() {
+					var id string
+					if err := rows.Scan(&id); err != nil {
+						return fmt.Errorf("scan top friend id: %w", err)
+					}
+					found[id] = struct{}{}
+				}
+				if err := rows.Err(); err != nil {
+					return fmt.Errorf("iterate top friends: %w", err)
+				}
+				for _, id := range ordered {
+					if _, ok := found[id]; !ok {
+						return fmt.Errorf("top friend %s not found", id)
+					}
 				}
 			}
+			profile.TopFriends = ordered
 		}
-		profile.TopFriends = ordered
-	}
-	if update.DonationAddresses != nil {
-		addresses := make([]models.CryptoAddress, 0, len(*update.DonationAddresses))
-		for _, addr := range *update.DonationAddresses {
-			currency := strings.ToUpper(strings.TrimSpace(addr.Currency))
-			if currency == "" {
-				return models.Profile{}, errors.New("donation currency is required")
+		if update.DonationAddresses != nil {
+			addresses := make([]models.CryptoAddress, 0, len(*update.DonationAddresses))
+			for _, addr := range *update.DonationAddresses {
+				currency := strings.ToUpper(strings.TrimSpace(addr.Currency))
+				if currency == "" {
+					return errors.New("donation currency is required")
+				}
+				address := strings.TrimSpace(addr.Address)
+				if address == "" {
+					return errors.New("donation address is required")
+				}
+				note := strings.TrimSpace(addr.Note)
+				addresses = append(addresses, models.CryptoAddress{Currency: currency, Address: address, Note: note})
 			}
-			address := strings.TrimSpace(addr.Address)
-			if address == "" {
-				return models.Profile{}, errors.New("donation address is required")
-			}
-			note := strings.TrimSpace(addr.Note)
-			addresses = append(addresses, models.CryptoAddress{Currency: currency, Address: address, Note: note})
+			profile.DonationAddresses = addresses
 		}
-		profile.DonationAddresses = addresses
-	}
 
-	profile.UpdatedAt = now
-	if profile.CreatedAt.IsZero() {
-		profile.CreatedAt = now
-	}
+		profile.UpdatedAt = now
+		if profile.CreatedAt.IsZero() {
+			profile.CreatedAt = now
+		}
 
-	donationPayload, err := encodeDonationAddresses(profile.DonationAddresses)
-	if err != nil {
-		return models.Profile{}, err
-	}
-	var featuredValue any
-	if profile.FeaturedChannelID != nil {
-		featuredValue = *profile.FeaturedChannelID
-	}
-	topFriendsValue := profile.TopFriends
-	if topFriendsValue == nil {
-		topFriendsValue = []string{}
-	}
+		donationPayload, err := encodeDonationAddresses(profile.DonationAddresses)
+		if err != nil {
+			return err
+		}
+		var featuredValue any
+		if profile.FeaturedChannelID != nil {
+			featuredValue = *profile.FeaturedChannelID
+		}
+		topFriendsValue := profile.TopFriends
+		if topFriendsValue == nil {
+			topFriendsValue = []string{}
+		}
 
-	var insertedCreatedAt, insertedUpdatedAt time.Time
-	err = tx.QueryRow(ctx, `
+		var insertedCreatedAt, insertedUpdatedAt time.Time
+		err = tx.QueryRow(ctx, `
 INSERT INTO profiles (user_id, bio, avatar_url, banner_url, featured_channel_id, top_friends, donation_addresses, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (user_id) DO UPDATE SET
-	bio = EXCLUDED.bio,
-	avatar_url = EXCLUDED.avatar_url,
-	banner_url = EXCLUDED.banner_url,
-	featured_channel_id = EXCLUDED.featured_channel_id,
-	top_friends = EXCLUDED.top_friends,
-	donation_addresses = EXCLUDED.donation_addresses,
-	updated_at = EXCLUDED.updated_at
+        bio = EXCLUDED.bio,
+        avatar_url = EXCLUDED.avatar_url,
+        banner_url = EXCLUDED.banner_url,
+        featured_channel_id = EXCLUDED.featured_channel_id,
+        top_friends = EXCLUDED.top_friends,
+        donation_addresses = EXCLUDED.donation_addresses,
+        updated_at = EXCLUDED.updated_at
 RETURNING created_at, updated_at`,
-		userID,
-		profile.Bio,
-		profile.AvatarURL,
-		profile.BannerURL,
-		featuredValue,
-		topFriendsValue,
-		donationPayload,
-		profile.CreatedAt,
-		profile.UpdatedAt,
-	).Scan(&insertedCreatedAt, &insertedUpdatedAt)
+			userID,
+			profile.Bio,
+			profile.AvatarURL,
+			profile.BannerURL,
+			featuredValue,
+			topFriendsValue,
+			donationPayload,
+			profile.CreatedAt,
+			profile.UpdatedAt,
+		).Scan(&insertedCreatedAt, &insertedUpdatedAt)
+		if err != nil {
+			return fmt.Errorf("upsert profile %s: %w", userID, err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit upsert profile: %w", err)
+		}
+
+		profile.CreatedAt = insertedCreatedAt.UTC()
+		profile.UpdatedAt = insertedUpdatedAt.UTC()
+		if profile.TopFriends == nil {
+			profile.TopFriends = []string{}
+		}
+		if profile.DonationAddresses == nil {
+			profile.DonationAddresses = []models.CryptoAddress{}
+		}
+		return nil
+	})
 	if err != nil {
-		return models.Profile{}, fmt.Errorf("upsert profile %s: %w", userID, err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return models.Profile{}, fmt.Errorf("commit upsert profile: %w", err)
-	}
-
-	profile.CreatedAt = insertedCreatedAt.UTC()
-	profile.UpdatedAt = insertedUpdatedAt.UTC()
-	if profile.TopFriends == nil {
-		profile.TopFriends = []string{}
-	}
-	if profile.DonationAddresses == nil {
-		profile.DonationAddresses = []models.CryptoAddress{}
+		return models.Profile{}, err
 	}
 	return profile, nil
 }
@@ -1384,136 +1392,172 @@ func (r *postgresRepository) GetProfile(userID string) (models.Profile, bool) {
 	if r == nil || r.pool == nil {
 		return models.Profile{}, false
 	}
-	ctx := context.Background()
 	var (
-		bio                      string
-		avatar, banner, featured pgtype.Text
-		topFriends               []string
-		donationPayload          []byte
-		createdAt, updatedAt     time.Time
+		profile models.Profile
+		found   bool
+		ok      bool
+		loadErr error
 	)
-	err := r.pool.QueryRow(ctx, "SELECT bio, avatar_url, banner_url, featured_channel_id, top_friends, donation_addresses, created_at, updated_at FROM profiles WHERE user_id = $1", userID).
-		Scan(&bio, &avatar, &banner, &featured, &topFriends, &donationPayload, &createdAt, &updatedAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		var userCreatedAt time.Time
-		if err := r.pool.QueryRow(ctx, "SELECT created_at FROM users WHERE id = $1", userID).Scan(&userCreatedAt); err != nil {
-			return models.Profile{}, false
-		}
-		profile := models.Profile{
-			UserID:            userID,
-			Bio:               "",
-			AvatarURL:         "",
-			BannerURL:         "",
-			TopFriends:        []string{},
-			DonationAddresses: []models.CryptoAddress{},
-			CreatedAt:         userCreatedAt.UTC(),
-			UpdatedAt:         userCreatedAt.UTC(),
-		}
-		return profile, false
-	}
-	if err != nil {
-		return models.Profile{}, false
-	}
-
-	profile := models.Profile{
-		UserID:     userID,
-		Bio:        bio,
-		CreatedAt:  createdAt.UTC(),
-		UpdatedAt:  updatedAt.UTC(),
-		TopFriends: []string{},
-	}
-	if avatar.Valid {
-		profile.AvatarURL = avatar.String
-	}
-	if banner.Valid {
-		profile.BannerURL = banner.String
-	}
-	if featured.Valid {
-		id := featured.String
-		profile.FeaturedChannelID = &id
-	}
-	if len(topFriends) > 0 {
-		profile.TopFriends = append([]string{}, topFriends...)
-	}
-	if len(donationPayload) > 0 {
-		addresses, err := decodeDonationAddresses(donationPayload)
-		if err != nil {
-			return models.Profile{}, false
-		}
-		profile.DonationAddresses = addresses
-	} else {
-		profile.DonationAddresses = []models.CryptoAddress{}
-	}
-	if profile.TopFriends == nil {
-		profile.TopFriends = []string{}
-	}
-	return profile, true
-}
-
-func (r *postgresRepository) ListProfiles() []models.Profile {
-	if r == nil || r.pool == nil {
-		return nil
-	}
-	ctx := context.Background()
-	rows, err := r.pool.Query(ctx, "SELECT user_id, bio, avatar_url, banner_url, featured_channel_id, top_friends, donation_addresses, created_at, updated_at FROM profiles ORDER BY created_at ASC")
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-
-	profiles := make([]models.Profile, 0)
-	for rows.Next() {
+	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		var (
-			userID                   string
 			bio                      string
 			avatar, banner, featured pgtype.Text
 			topFriends               []string
 			donationPayload          []byte
 			createdAt, updatedAt     time.Time
 		)
-		if err := rows.Scan(&userID, &bio, &avatar, &banner, &featured, &topFriends, &donationPayload, &createdAt, &updatedAt); err != nil {
-			return nil
-		}
-		profile := models.Profile{
-			UserID:     userID,
-			Bio:        bio,
-			CreatedAt:  createdAt.UTC(),
-			UpdatedAt:  updatedAt.UTC(),
-			TopFriends: []string{},
-		}
-		if avatar.Valid {
-			profile.AvatarURL = avatar.String
-		}
-		if banner.Valid {
-			profile.BannerURL = banner.String
-		}
-		if featured.Valid {
-			id := featured.String
-			profile.FeaturedChannelID = &id
-		}
-		if len(topFriends) > 0 {
-			profile.TopFriends = append([]string{}, topFriends...)
-		}
-		if len(donationPayload) > 0 {
-			addresses, err := decodeDonationAddresses(donationPayload)
-			if err != nil {
+		err := conn.QueryRow(ctx, "SELECT bio, avatar_url, banner_url, featured_channel_id, top_friends, donation_addresses, created_at, updated_at FROM profiles WHERE user_id = $1", userID).
+			Scan(&bio, &avatar, &banner, &featured, &topFriends, &donationPayload, &createdAt, &updatedAt)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			var userCreatedAt time.Time
+			if err := conn.QueryRow(ctx, "SELECT created_at FROM users WHERE id = $1", userID).Scan(&userCreatedAt); err != nil {
+				loadErr = err
 				return nil
 			}
-			profile.DonationAddresses = addresses
-		} else {
-			profile.DonationAddresses = []models.CryptoAddress{}
+			profile = models.Profile{
+				UserID:            userID,
+				Bio:               "",
+				AvatarURL:         "",
+				BannerURL:         "",
+				TopFriends:        []string{},
+				DonationAddresses: []models.CryptoAddress{},
+				CreatedAt:         userCreatedAt.UTC(),
+				UpdatedAt:         userCreatedAt.UTC(),
+			}
+			found = false
+			ok = true
+			return nil
+		case err != nil:
+			loadErr = err
+			return nil
+		default:
+			profile = models.Profile{
+				UserID:     userID,
+				Bio:        bio,
+				CreatedAt:  createdAt.UTC(),
+				UpdatedAt:  updatedAt.UTC(),
+				TopFriends: []string{},
+			}
+			if avatar.Valid {
+				profile.AvatarURL = avatar.String
+			}
+			if banner.Valid {
+				profile.BannerURL = banner.String
+			}
+			if featured.Valid {
+				id := featured.String
+				profile.FeaturedChannelID = &id
+			}
+			if len(topFriends) > 0 {
+				profile.TopFriends = append([]string{}, topFriends...)
+			}
+			if len(donationPayload) > 0 {
+				addresses, err := decodeDonationAddresses(donationPayload)
+				if err != nil {
+					loadErr = err
+					return nil
+				}
+				profile.DonationAddresses = addresses
+			} else {
+				profile.DonationAddresses = []models.CryptoAddress{}
+			}
+			if profile.TopFriends == nil {
+				profile.TopFriends = []string{}
+			}
+			found = true
+			ok = true
+			return nil
 		}
-		if profile.TopFriends == nil {
-			profile.TopFriends = []string{}
-		}
-		profiles = append(profiles, profile)
+	})
+	if err != nil {
+		return models.Profile{}, false
 	}
-	if err := rows.Err(); err != nil {
+	if loadErr != nil || !ok {
+		return models.Profile{}, false
+	}
+	if profile.TopFriends == nil {
+		profile.TopFriends = []string{}
+	}
+	if profile.DonationAddresses == nil {
+		profile.DonationAddresses = []models.CryptoAddress{}
+	}
+	return profile, found
+}
+
+func (r *postgresRepository) ListProfiles() []models.Profile {
+	if r == nil || r.pool == nil {
+		return nil
+	}
+	profiles := make([]models.Profile, 0)
+	var queryErr error
+	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		rows, err := conn.Query(ctx, "SELECT user_id, bio, avatar_url, banner_url, featured_channel_id, top_friends, donation_addresses, created_at, updated_at FROM profiles ORDER BY created_at ASC")
+		if err != nil {
+			queryErr = err
+			return nil
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var (
+				userID                   string
+				bio                      string
+				avatar, banner, featured pgtype.Text
+				topFriends               []string
+				donationPayload          []byte
+				createdAt, updatedAt     time.Time
+			)
+			if err := rows.Scan(&userID, &bio, &avatar, &banner, &featured, &topFriends, &donationPayload, &createdAt, &updatedAt); err != nil {
+				queryErr = err
+				return nil
+			}
+			profile := models.Profile{
+				UserID:     userID,
+				Bio:        bio,
+				CreatedAt:  createdAt.UTC(),
+				UpdatedAt:  updatedAt.UTC(),
+				TopFriends: []string{},
+			}
+			if avatar.Valid {
+				profile.AvatarURL = avatar.String
+			}
+			if banner.Valid {
+				profile.BannerURL = banner.String
+			}
+			if featured.Valid {
+				id := featured.String
+				profile.FeaturedChannelID = &id
+			}
+			if len(topFriends) > 0 {
+				profile.TopFriends = append([]string{}, topFriends...)
+			}
+			if len(donationPayload) > 0 {
+				addresses, err := decodeDonationAddresses(donationPayload)
+				if err != nil {
+					queryErr = err
+					return nil
+				}
+				profile.DonationAddresses = addresses
+			} else {
+				profile.DonationAddresses = []models.CryptoAddress{}
+			}
+			if profile.TopFriends == nil {
+				profile.TopFriends = []string{}
+			}
+			profiles = append(profiles, profile)
+		}
+		if err := rows.Err(); err != nil {
+			queryErr = err
+			return nil
+		}
+		return nil
+	})
+	if err != nil || queryErr != nil {
 		return nil
 	}
 	return profiles
 }
-
 func (r *postgresRepository) CreateChannel(ownerID, title, category string, tags []string) (models.Channel, error) {
 	if r == nil || r.pool == nil {
 		return models.Channel{}, ErrPostgresUnavailable
@@ -3122,162 +3166,175 @@ func (r *postgresRepository) ApplyChatEvent(evt chat.Event) error {
 		return ErrPostgresUnavailable
 	}
 
-	ctx := context.Background()
-	switch evt.Type {
-	case chat.EventTypeMessage:
-		if evt.Message == nil {
-			return fmt.Errorf("message payload missing")
-		}
-		msg := evt.Message
-		if msg.ID == "" || msg.ChannelID == "" || msg.UserID == "" {
-			return fmt.Errorf("invalid message event")
-		}
-		_, err := r.pool.Exec(ctx, "INSERT INTO chat_messages (id, channel_id, user_id, content, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET channel_id = EXCLUDED.channel_id, user_id = EXCLUDED.user_id, content = EXCLUDED.content, created_at = EXCLUDED.created_at", msg.ID, msg.ChannelID, msg.UserID, msg.Content, msg.CreatedAt.UTC())
-		if err != nil {
-			return fmt.Errorf("persist chat message event: %w", err)
-		}
-		return nil
-	case chat.EventTypeModeration:
-		if evt.Moderation == nil {
-			return fmt.Errorf("moderation payload missing")
-		}
-		mod := evt.Moderation
-		issued := evt.OccurredAt.UTC()
-		if issued.IsZero() {
-			issued = time.Now().UTC()
-		}
-		actor := strings.TrimSpace(mod.ActorID)
-		var actorParam any
-		if actor != "" {
-			actorParam = actor
-		}
-		reason := strings.TrimSpace(mod.Reason)
-		switch mod.Action {
-		case chat.ModerationActionBan:
-			_, err := r.pool.Exec(ctx, "INSERT INTO chat_bans (channel_id, user_id, actor_id, reason, issued_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (channel_id, user_id) DO UPDATE SET actor_id = EXCLUDED.actor_id, reason = EXCLUDED.reason, issued_at = EXCLUDED.issued_at", mod.ChannelID, mod.TargetID, actorParam, reason, issued)
-			if err != nil {
-				return fmt.Errorf("apply ban event: %w", err)
+	return r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		switch evt.Type {
+		case chat.EventTypeMessage:
+			if evt.Message == nil {
+				return fmt.Errorf("message payload missing")
+			}
+			msg := evt.Message
+			if msg.ID == "" || msg.ChannelID == "" || msg.UserID == "" {
+				return fmt.Errorf("invalid message event")
+			}
+			if _, err := conn.Exec(ctx, "INSERT INTO chat_messages (id, channel_id, user_id, content, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET channel_id = EXCLUDED.channel_id, user_id = EXCLUDED.user_id, content = EXCLUDED.content, created_at = EXCLUDED.created_at", msg.ID, msg.ChannelID, msg.UserID, msg.Content, msg.CreatedAt.UTC()); err != nil {
+				return fmt.Errorf("persist chat message event: %w", err)
 			}
 			return nil
-		case chat.ModerationActionUnban:
-			_, err := r.pool.Exec(ctx, "DELETE FROM chat_bans WHERE channel_id = $1 AND user_id = $2", mod.ChannelID, mod.TargetID)
-			if err != nil {
-				return fmt.Errorf("apply unban event: %w", err)
+		case chat.EventTypeModeration:
+			if evt.Moderation == nil {
+				return fmt.Errorf("moderation payload missing")
 			}
-			return nil
-		case chat.ModerationActionTimeout:
-			if mod.ExpiresAt == nil {
+			mod := evt.Moderation
+			issued := evt.OccurredAt.UTC()
+			if issued.IsZero() {
+				issued = time.Now().UTC()
+			}
+			actor := strings.TrimSpace(mod.ActorID)
+			var actorParam any
+			if actor != "" {
+				actorParam = actor
+			}
+			reason := strings.TrimSpace(mod.Reason)
+			switch mod.Action {
+			case chat.ModerationActionBan:
+				if _, err := conn.Exec(ctx, "INSERT INTO chat_bans (channel_id, user_id, actor_id, reason, issued_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (channel_id, user_id) DO UPDATE SET actor_id = EXCLUDED.actor_id, reason = EXCLUDED.reason, issued_at = EXCLUDED.issued_at", mod.ChannelID, mod.TargetID, actorParam, reason, issued); err != nil {
+					return fmt.Errorf("apply ban event: %w", err)
+				}
 				return nil
+			case chat.ModerationActionUnban:
+				if _, err := conn.Exec(ctx, "DELETE FROM chat_bans WHERE channel_id = $1 AND user_id = $2", mod.ChannelID, mod.TargetID); err != nil {
+					return fmt.Errorf("apply unban event: %w", err)
+				}
+				return nil
+			case chat.ModerationActionTimeout:
+				if mod.ExpiresAt == nil {
+					return nil
+				}
+				expires := mod.ExpiresAt.UTC()
+				if _, err := conn.Exec(ctx, "INSERT INTO chat_timeouts (channel_id, user_id, actor_id, reason, issued_at, expires_at) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (channel_id, user_id) DO UPDATE SET actor_id = EXCLUDED.actor_id, reason = EXCLUDED.reason, issued_at = EXCLUDED.issued_at, expires_at = EXCLUDED.expires_at", mod.ChannelID, mod.TargetID, actorParam, reason, issued, expires); err != nil {
+					return fmt.Errorf("apply timeout event: %w", err)
+				}
+				return nil
+			case chat.ModerationActionRemoveTimeout:
+				if _, err := conn.Exec(ctx, "DELETE FROM chat_timeouts WHERE channel_id = $1 AND user_id = $2", mod.ChannelID, mod.TargetID); err != nil {
+					return fmt.Errorf("apply remove timeout event: %w", err)
+				}
+				return nil
+			default:
+				return fmt.Errorf("unsupported moderation action %q", mod.Action)
 			}
-			expires := mod.ExpiresAt.UTC()
-			_, err := r.pool.Exec(ctx, "INSERT INTO chat_timeouts (channel_id, user_id, actor_id, reason, issued_at, expires_at) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (channel_id, user_id) DO UPDATE SET actor_id = EXCLUDED.actor_id, reason = EXCLUDED.reason, issued_at = EXCLUDED.issued_at, expires_at = EXCLUDED.expires_at", mod.ChannelID, mod.TargetID, actorParam, reason, issued, expires)
-			if err != nil {
-				return fmt.Errorf("apply timeout event: %w", err)
+		case chat.EventTypeReport:
+			if evt.Report == nil {
+				return fmt.Errorf("report payload missing")
 			}
-			return nil
-		case chat.ModerationActionRemoveTimeout:
-			_, err := r.pool.Exec(ctx, "DELETE FROM chat_timeouts WHERE channel_id = $1 AND user_id = $2", mod.ChannelID, mod.TargetID)
-			if err != nil {
-				return fmt.Errorf("apply remove timeout event: %w", err)
+			rep := evt.Report
+			if strings.TrimSpace(rep.ID) == "" {
+				return fmt.Errorf("report id missing")
+			}
+			status := strings.ToLower(strings.TrimSpace(rep.Status))
+			if status == "" {
+				status = "open"
+			}
+			var messageParam any
+			if strings.TrimSpace(rep.MessageID) != "" {
+				messageParam = strings.TrimSpace(rep.MessageID)
+			}
+			var evidenceParam any
+			if strings.TrimSpace(rep.EvidenceURL) != "" {
+				evidenceParam = strings.TrimSpace(rep.EvidenceURL)
+			}
+			if _, err := conn.Exec(ctx, "INSERT INTO chat_reports (id, channel_id, reporter_id, target_id, reason, message_id, evidence_url, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (id) DO UPDATE SET channel_id = EXCLUDED.channel_id, reporter_id = EXCLUDED.reporter_id, target_id = EXCLUDED.target_id, reason = EXCLUDED.reason, message_id = EXCLUDED.message_id, evidence_url = EXCLUDED.evidence_url, status = EXCLUDED.status, created_at = EXCLUDED.created_at", rep.ID, rep.ChannelID, rep.ReporterID, rep.TargetID, rep.Reason, messageParam, evidenceParam, status, rep.CreatedAt.UTC()); err != nil {
+				return fmt.Errorf("apply report event: %w", err)
 			}
 			return nil
 		default:
-			return fmt.Errorf("unsupported moderation action %q", mod.Action)
+			return fmt.Errorf("unsupported chat event %q", evt.Type)
 		}
-	case chat.EventTypeReport:
-		if evt.Report == nil {
-			return fmt.Errorf("report payload missing")
-		}
-		rep := evt.Report
-		if strings.TrimSpace(rep.ID) == "" {
-			return fmt.Errorf("report id missing")
-		}
-		status := strings.ToLower(strings.TrimSpace(rep.Status))
-		if status == "" {
-			status = "open"
-		}
-		var messageParam any
-		if strings.TrimSpace(rep.MessageID) != "" {
-			messageParam = strings.TrimSpace(rep.MessageID)
-		}
-		var evidenceParam any
-		if strings.TrimSpace(rep.EvidenceURL) != "" {
-			evidenceParam = strings.TrimSpace(rep.EvidenceURL)
-		}
-		_, err := r.pool.Exec(ctx, "INSERT INTO chat_reports (id, channel_id, reporter_id, target_id, reason, message_id, evidence_url, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (id) DO UPDATE SET channel_id = EXCLUDED.channel_id, reporter_id = EXCLUDED.reporter_id, target_id = EXCLUDED.target_id, reason = EXCLUDED.reason, message_id = EXCLUDED.message_id, evidence_url = EXCLUDED.evidence_url, status = EXCLUDED.status, created_at = EXCLUDED.created_at", rep.ID, rep.ChannelID, rep.ReporterID, rep.TargetID, rep.Reason, messageParam, evidenceParam, status, rep.CreatedAt.UTC())
-		if err != nil {
-			return fmt.Errorf("apply report event: %w", err)
-		}
-		return nil
-	default:
-		return fmt.Errorf("unsupported chat event %q", evt.Type)
-	}
+	})
 }
 
 func (r *postgresRepository) ListChatRestrictions(channelID string) []models.ChatRestriction {
 	if r == nil || r.pool == nil {
 		return nil
 	}
-	ctx := context.Background()
-
 	restrictions := make([]models.ChatRestriction, 0)
-
-	banRows, err := r.pool.Query(ctx, "SELECT user_id, actor_id, reason, issued_at FROM chat_bans WHERE channel_id = $1", channelID)
-	if err == nil {
-		defer banRows.Close()
-		for banRows.Next() {
-			var userID string
-			var actor pgtype.Text
-			var reason string
-			var issued time.Time
-			if err := banRows.Scan(&userID, &actor, &reason, &issued); err != nil {
-				return restrictions
+	aborted := false
+	if err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		banRows, err := conn.Query(ctx, "SELECT user_id, actor_id, reason, issued_at FROM chat_bans WHERE channel_id = $1", channelID)
+		if err == nil {
+			defer banRows.Close()
+			for banRows.Next() {
+				var (
+					userID string
+					actor  pgtype.Text
+					reason string
+					issued time.Time
+				)
+				if err := banRows.Scan(&userID, &actor, &reason, &issued); err != nil {
+					aborted = true
+					return nil
+				}
+				restriction := models.ChatRestriction{
+					ID:        fmt.Sprintf("ban:%s:%s", channelID, userID),
+					Type:      "ban",
+					ChannelID: channelID,
+					TargetID:  userID,
+					Reason:    reason,
+					IssuedAt:  issued.UTC(),
+				}
+				if actor.Valid {
+					restriction.ActorID = actor.String
+				}
+				restrictions = append(restrictions, restriction)
 			}
+			if err := banRows.Err(); err != nil {
+				aborted = true
+				return nil
+			}
+		}
+
+		timeoutRows, err := conn.Query(ctx, "SELECT user_id, actor_id, reason, issued_at, expires_at FROM chat_timeouts WHERE channel_id = $1", channelID)
+		if err != nil {
+			return nil
+		}
+		defer timeoutRows.Close()
+		for timeoutRows.Next() {
+			var (
+				userID  string
+				actor   pgtype.Text
+				reason  string
+				issued  time.Time
+				expires time.Time
+			)
+			if err := timeoutRows.Scan(&userID, &actor, &reason, &issued, &expires); err != nil {
+				aborted = true
+				return nil
+			}
+			expiry := expires.UTC()
 			restriction := models.ChatRestriction{
-				ID:        fmt.Sprintf("ban:%s:%s", channelID, userID),
-				Type:      "ban",
+				ID:        fmt.Sprintf("timeout:%s:%s", channelID, userID),
+				Type:      "timeout",
 				ChannelID: channelID,
 				TargetID:  userID,
 				Reason:    reason,
 				IssuedAt:  issued.UTC(),
+				ExpiresAt: &expiry,
 			}
 			if actor.Valid {
 				restriction.ActorID = actor.String
 			}
 			restrictions = append(restrictions, restriction)
 		}
-		if err := banRows.Err(); err != nil {
-			return restrictions
+		if err := timeoutRows.Err(); err != nil {
+			aborted = true
+			return nil
 		}
+		return nil
+	}); err != nil {
+		return nil
 	}
-
-	timeoutRows, err := r.pool.Query(ctx, "SELECT user_id, actor_id, reason, issued_at, expires_at FROM chat_timeouts WHERE channel_id = $1", channelID)
-	if err != nil {
+	if aborted {
 		return restrictions
-	}
-	defer timeoutRows.Close()
-	for timeoutRows.Next() {
-		var userID string
-		var actor pgtype.Text
-		var reason string
-		var issued, expires time.Time
-		if err := timeoutRows.Scan(&userID, &actor, &reason, &issued, &expires); err != nil {
-			return restrictions
-		}
-		expiry := expires.UTC()
-		restriction := models.ChatRestriction{
-			ID:        fmt.Sprintf("timeout:%s:%s", channelID, userID),
-			Type:      "timeout",
-			ChannelID: channelID,
-			TargetID:  userID,
-			Reason:    reason,
-			IssuedAt:  issued.UTC(),
-			ExpiresAt: &expiry,
-		}
-		if actor.Valid {
-			restriction.ActorID = actor.String
-		}
-		restrictions = append(restrictions, restriction)
 	}
 	sort.Slice(restrictions, func(i, j int) bool {
 		if restrictions[i].IssuedAt.Equal(restrictions[j].IssuedAt) {
@@ -3287,7 +3344,6 @@ func (r *postgresRepository) ListChatRestrictions(channelID string) []models.Cha
 	})
 	return restrictions
 }
-
 func (r *postgresRepository) CreateChatReport(channelID, reporterID, targetID, reason, messageID, evidenceURL string) (models.ChatReport, error) {
 	if r == nil || r.pool == nil {
 		return models.ChatReport{}, ErrPostgresUnavailable
@@ -3366,70 +3422,73 @@ func (r *postgresRepository) ListChatReports(channelID string, includeResolved b
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
 	}
-	ctx := context.Background()
-
-	var exists bool
-	if err := r.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM channels WHERE id = $1)", channelID).Scan(&exists); err != nil {
-		return nil, fmt.Errorf("check channel %s: %w", channelID, err)
-	}
-	if !exists {
-		return nil, fmt.Errorf("channel %s not found", channelID)
-	}
-
-	query := "SELECT id, channel_id, reporter_id, target_id, reason, message_id, evidence_url, status, resolution, resolver_id, created_at, resolved_at FROM chat_reports WHERE channel_id = $1"
-	args := []any{channelID}
-	if !includeResolved {
-		query += " AND LOWER(status) <> 'resolved'"
-	}
-	query += " ORDER BY created_at DESC, id ASC"
-
-	rows, err := r.pool.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("list chat reports: %w", err)
-	}
-	defer rows.Close()
-
 	reports := make([]models.ChatReport, 0)
-	for rows.Next() {
-		var (
-			report      models.ChatReport
-			messageID   pgtype.Text
-			evidenceURL pgtype.Text
-			status      string
-			resolution  pgtype.Text
-			resolverID  pgtype.Text
-			createdAt   time.Time
-			resolvedAt  pgtype.Timestamptz
-		)
-		if err := rows.Scan(&report.ID, &report.ChannelID, &report.ReporterID, &report.TargetID, &report.Reason, &messageID, &evidenceURL, &status, &resolution, &resolverID, &createdAt, &resolvedAt); err != nil {
-			return nil, fmt.Errorf("scan chat report: %w", err)
+	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		var exists bool
+		if err := conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM channels WHERE id = $1)", channelID).Scan(&exists); err != nil {
+			return fmt.Errorf("check channel %s: %w", channelID, err)
 		}
-		if messageID.Valid {
-			report.MessageID = messageID.String
+		if !exists {
+			return fmt.Errorf("channel %s not found", channelID)
 		}
-		if evidenceURL.Valid {
-			report.EvidenceURL = evidenceURL.String
+
+		query := "SELECT id, channel_id, reporter_id, target_id, reason, message_id, evidence_url, status, resolution, resolver_id, created_at, resolved_at FROM chat_reports WHERE channel_id = $1"
+		args := []any{channelID}
+		if !includeResolved {
+			query += " AND LOWER(status) <> 'resolved'"
 		}
-		report.Status = strings.ToLower(status)
-		if resolution.Valid {
-			report.Resolution = resolution.String
+		query += " ORDER BY created_at DESC, id ASC"
+
+		rows, err := conn.Query(ctx, query, args...)
+		if err != nil {
+			return fmt.Errorf("list chat reports: %w", err)
 		}
-		if resolverID.Valid {
-			report.ResolverID = resolverID.String
+		defer rows.Close()
+
+		for rows.Next() {
+			var (
+				report      models.ChatReport
+				messageID   pgtype.Text
+				evidenceURL pgtype.Text
+				status      string
+				resolution  pgtype.Text
+				resolverID  pgtype.Text
+				createdAt   time.Time
+				resolvedAt  pgtype.Timestamptz
+			)
+			if err := rows.Scan(&report.ID, &report.ChannelID, &report.ReporterID, &report.TargetID, &report.Reason, &messageID, &evidenceURL, &status, &resolution, &resolverID, &createdAt, &resolvedAt); err != nil {
+				return fmt.Errorf("scan chat report: %w", err)
+			}
+			if messageID.Valid {
+				report.MessageID = messageID.String
+			}
+			if evidenceURL.Valid {
+				report.EvidenceURL = evidenceURL.String
+			}
+			report.Status = strings.ToLower(status)
+			if resolution.Valid {
+				report.Resolution = resolution.String
+			}
+			if resolverID.Valid {
+				report.ResolverID = resolverID.String
+			}
+			report.CreatedAt = createdAt.UTC()
+			if resolvedAt.Valid {
+				ts := resolvedAt.Time.UTC()
+				report.ResolvedAt = &ts
+			}
+			reports = append(reports, report)
 		}
-		report.CreatedAt = createdAt.UTC()
-		if resolvedAt.Valid {
-			ts := resolvedAt.Time.UTC()
-			report.ResolvedAt = &ts
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("iterate chat reports: %w", err)
 		}
-		reports = append(reports, report)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate chat reports: %w", err)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return reports, nil
 }
-
 func (r *postgresRepository) ResolveChatReport(reportID, resolverID, resolution string) (models.ChatReport, error) {
 	if r == nil || r.pool == nil {
 		return models.ChatReport{}, ErrPostgresUnavailable
