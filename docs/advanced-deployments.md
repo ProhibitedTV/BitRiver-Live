@@ -170,7 +170,7 @@ The `/healthz` endpoint now returns JSON that includes the status of these exter
 
 ## Surface transcoder playback artefacts
 
-The FFmpeg job controller drops HLS manifests and segments under `/work/public` by default. The compose bundle binds that path to `./transcoder-data` on the host so artefacts survive container restarts and can be mirrored elsewhere. Populate the directory once before bootstrapping production traffic:
+The FFmpeg job controller drops HLS manifests and segments under `/work/public` by default. The compose bundle binds that path to `./transcoder-data` on the host so artefacts survive container restarts and can be mirrored elsewhere. Live jobs appear as symlinks at `/work/public/live/<jobID>` that point at the active output directory and are removed when the stream ends, preventing stale session directories from piling up. Populate the directory once before bootstrapping production traffic:
 
 ```bash
 mkdir -p /opt/bitriver-live/transcoder-data/public
@@ -183,7 +183,7 @@ Two environment variables determine how playback links are minted:
 | `BITRIVER_TRANSCODER_PUBLIC_DIR` | Absolute path inside the transcoder container that should be mirrored to a CDN or web server (defaults to `/work/public`). |
 | `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` | HTTP origin advertised to viewers for the mirrored directory (defaults to `http://transcoder-public:8080`). |
 
-Local and single-node installs can rely on the `transcoder-public` Nginx sidecar defined in `deploy/docker-compose.yml`. It serves `/work/public` read-only and publishes the content on port `9080` (`docker compose` host). Override `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` when fronting the directory with an existing CDN, S3 static site, or reverse proxy. Advanced operators can also bind additional volumes (e.g. an object storage mount) to `/work` while keeping the base URL aligned with the distribution tier.
+Local and single-node installs can rely on the `transcoder-public` Nginx sidecar defined in `deploy/docker-compose.yml`. It serves `/work/public` read-only (following the live-job symlinks via `disable_symlinks off;`) and publishes the content on port `9080` (`docker compose` host). Override `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` when fronting the directory with an existing CDN, S3 static site, or reverse proxy. Advanced operators can also bind additional volumes (e.g. an object storage mount) to `/work` while keeping the base URL aligned with the distribution tier.
 
 ## Operations runbook
 

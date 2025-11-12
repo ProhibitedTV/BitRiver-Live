@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -51,6 +53,8 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	}
 	ts := httptest.NewServer(srv.routes())
 	defer ts.Close()
+	publicSrv := httptest.NewServer(http.FileServer(http.Dir(publicDir)))
+	defer publicSrv.Close()
 
 	client := ts.Client()
 	authHeader := "Bearer " + testToken
@@ -111,6 +115,46 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 		t.Fatalf("unexpected live rendition manifest: %s", jobRenditions[0].ManifestURL)
 	}
 	master := filepath.Join(tempDir, "live", jobID, "index.m3u8")
+	liveLink := filepath.Join(publicDir, "live", jobID)
+
+	waitFor(t, 30*time.Second, func() bool {
+		resp, err := http.Get(publicSrv.URL + fmt.Sprintf("/live/%s/index.m3u8", jobID))
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return false
+		}
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return false
+		}
+		return len(data) > 0
+	})
+
+	info, err := os.Lstat(liveLink)
+	if err != nil {
+		t.Fatalf("stat live symlink: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("expected live mirror to be a symlink, got %s", info.Mode())
+	}
+	target, err := os.Readlink(liveLink)
+	if err != nil {
+		t.Fatalf("read live symlink: %v", err)
+	}
+	expectedTarget, err := filepath.Abs(filepath.Join(tempDir, "live", jobID))
+	if err != nil {
+		t.Fatalf("resolve expected target: %v", err)
+	}
+	resolvedTarget, err := filepath.Abs(target)
+	if err != nil {
+		t.Fatalf("resolve live symlink target: %v", err)
+	}
+	if resolvedTarget != expectedTarget {
+		t.Fatalf("unexpected live symlink target: %s", resolvedTarget)
+	}
 
 	waitFor(t, 30*time.Second, func() bool {
 		_, err := os.Stat(master)
@@ -121,6 +165,11 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 		_, running := srv.processes[jobID]
 		srv.mu.RUnlock()
 		return !running
+	})
+
+	waitFor(t, 5*time.Second, func() bool {
+		_, err := os.Lstat(liveLink)
+		return errors.Is(err, os.ErrNotExist)
 	})
 
 	metaPath := filepath.Join(tempDir, "live", jobID, "metadata.json")
@@ -248,6 +297,7 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 		t.Fatalf("expected second job id")
 	}
 	jobID2 := jobResp2.JobIDs[0]
+	liveLink2 := filepath.Join(publicDir, "live", jobID2)
 
 	reqDel, err := http.NewRequest(http.MethodDelete, ts.URL+"/v1/jobs/"+jobID2, nil)
 	if err != nil {
@@ -268,6 +318,11 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 		_, running := srv.processes[jobID2]
 		srv.mu.RUnlock()
 		return !running
+	})
+
+	waitFor(t, 5*time.Second, func() bool {
+		_, err := os.Lstat(liveLink2)
+		return errors.Is(err, os.ErrNotExist)
 	})
 
 	metaPath2 := filepath.Join(tempDir, "live", jobID2, "metadata.json")
