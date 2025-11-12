@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -819,7 +820,15 @@ var postgresTables = []string{
 
 func applyPostgresMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	entries, err := os.ReadDir("deploy/migrations")
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("determine repository root: runtime.Caller failed")
+	}
+
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	migrationsDir := filepath.Join(repoRoot, "deploy", "migrations")
+
+	entries, err := os.ReadDir(migrationsDir)
 	if err != nil {
 		t.Fatalf("read migrations: %v", err)
 	}
@@ -828,7 +837,7 @@ func applyPostgresMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Po
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
 			continue
 		}
-		path := filepath.Join("deploy/migrations", entry.Name())
+		path := filepath.Join(migrationsDir, entry.Name())
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("read migration %s: %v", entry.Name(), err)
