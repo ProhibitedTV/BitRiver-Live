@@ -14,6 +14,16 @@ Power users who want managed databases, object storage, or automated ingest can 
 | `--chat-queue-redis-tls-server-name` | Overrides the expected Redis TLS server name. |
 | `--chat-queue-redis-tls-skip-verify` | Skips Redis TLS certificate verification (use with caution). |
 
+## Account management
+
+| Flag | Purpose |
+| --- | --- |
+| `--allow-self-signup` | Enables or disables unauthenticated account creation. |
+
+| Variable | Description |
+| --- | --- |
+| `BITRIVER_LIVE_ALLOW_SELF_SIGNUP` | Defaults to `true`; set to `false` to block viewer self-registration. |
+
 ## Postgres backend
 
 BitRiver Live now boots directly against Postgres once the schema is migrated. Apply the SQL files in `deploy/migrations/` with your preferred migration tool or straight through `psql`:

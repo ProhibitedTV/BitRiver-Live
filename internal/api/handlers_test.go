@@ -320,6 +320,39 @@ func TestSignupAndLoginFlow(t *testing.T) {
 	}
 }
 
+func TestSignupDisabled(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	handler.AllowSelfSignup = false
+
+	signupPayload := map[string]string{
+		"displayName": "Viewer",
+		"email":       "viewer@example.com",
+		"password":    "supersecret",
+	}
+	body, _ := json.Marshal(signupPayload)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/signup", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.Signup(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403 when self-signup disabled, got %d", rec.Code)
+	}
+
+	var payload map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["error"] == "" {
+		t.Fatal("expected error message in response")
+	}
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == "bitriver_session" {
+			t.Fatal("unexpected session cookie issued when signup disabled")
+		}
+	}
+}
+
 func TestDirectoryFiltersChannelsByQuery(t *testing.T) {
 	handler, store := newTestHandler(t)
 

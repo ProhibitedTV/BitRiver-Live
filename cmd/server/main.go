@@ -111,6 +111,7 @@ func main() {
 	sessionStoreDriver := flag.String("session-store", "", "session store driver (memory or postgres)")
 	sessionPostgresDSN := flag.String("session-postgres-dsn", "", "Postgres DSN for the session store")
 	mode := flag.String("mode", "", "server runtime mode (development or production)")
+	allowSelfSignup := flag.Bool("allow-self-signup", true, "allow unauthenticated viewers to register accounts")
 	tlsCert := flag.String("tls-cert", "", "path to TLS certificate file")
 	tlsKey := flag.String("tls-key", "", "path to TLS private key file")
 	logLevel := flag.String("log-level", "info", "log level (debug, info, warn, error)")
@@ -170,6 +171,15 @@ func main() {
 	logger := logging.New(logging.Config{Level: firstNonEmpty(*logLevel, os.Getenv("BITRIVER_LIVE_LOG_LEVEL"))})
 	auditLogger := logging.WithComponent(logger, "audit")
 	recorder := metrics.Default()
+
+	allowSelfSignupValue := *allowSelfSignup
+	if env, ok := os.LookupEnv("BITRIVER_LIVE_ALLOW_SELF_SIGNUP"); ok {
+		if value, err := strconv.ParseBool(strings.TrimSpace(env)); err == nil {
+			allowSelfSignupValue = value
+		} else {
+			logger.Warn("invalid BITRIVER_LIVE_ALLOW_SELF_SIGNUP", "value", env, "error", err)
+		}
+	}
 
 	var oauthManager oauth.Service
 	var oauthSources []string
@@ -387,6 +397,7 @@ func main() {
 		Logger: logging.WithComponent(logger, "chat"),
 	})
 	handler := api.NewHandler(store, sessions)
+	handler.AllowSelfSignup = allowSelfSignupValue
 	handler.ChatGateway = gateway
 	var uploadProcessor *api.UploadProcessor
 	if ingestController != nil {
@@ -434,14 +445,15 @@ func main() {
 	}
 
 	srv, err := server.New(handler, server.Config{
-		Addr:         listenAddr,
-		TLS:          tlsCfg,
-		RateLimit:    rateCfg,
-		Logger:       logger,
-		AuditLogger:  auditLogger,
-		Metrics:      recorder,
-		ViewerOrigin: viewerURL,
-		OAuth:        oauthManager,
+		Addr:            listenAddr,
+		TLS:             tlsCfg,
+		RateLimit:       rateCfg,
+		Logger:          logger,
+		AuditLogger:     auditLogger,
+		Metrics:         recorder,
+		ViewerOrigin:    viewerURL,
+		OAuth:           oauthManager,
+		AllowSelfSignup: &allowSelfSignupValue,
 	})
 	if err != nil {
 		logger.Error("failed to initialise server", "error", err)
