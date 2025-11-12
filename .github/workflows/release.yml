@@ -106,10 +106,13 @@ jobs:
           mkdir -p "$deploy_dir"
           cp -a deploy/migrations "$deploy_dir/migrations"
           cp deploy/docker-compose.yml "$deploy_dir/docker-compose.yml"
+          cp deploy/.env.example "$deploy_dir/.env.example"
+          cp deploy/check-env.sh "$deploy_dir/check-env.sh"
           cp -a deploy/install "$deploy_dir/install"
           cp -a deploy/srs "$deploy_dir/srs"
           cp -a deploy/ome "$deploy_dir/ome"
           cp -a deploy/systemd "$deploy_dir/systemd"
+          cp -a deploy/nginx "$deploy_dir/nginx"
 
           for target in "${targets[@]}"; do
             bin_name="$(basename "$target")"
