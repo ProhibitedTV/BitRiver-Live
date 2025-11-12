@@ -81,6 +81,7 @@ EOF
    ```
 
    Adjust image tags, ports, and mount paths to match your topology. Add extra Docker flags by setting `*_EXTRA_ARGS`. When you install a new release, update the image tags above before restarting the units so the validation hooks in the service files do not block the deployment.
+   The Docker Compose bundle ships the same SRS pin via `BITRIVER_SRS_IMAGE_TAG` (defaulting to `v5.0.185`), so upgrade both environments together when you validate a newer upstream build.
    The FFmpeg controller exits during startup if `TRANSCODER_PUBLIC_BASE_URL` (exported to `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`) is missing, so configure it with the HTTP origin viewers can reach before enabling the unit.
 7. (Optional) If you want to send API logs to `/opt/bitriver-live/logs/server.log`, create the directory and uncomment the `StandardOutput` and `StandardError` lines in `bitriver-live.service`.
 8. Copy the systemd unit files into place and reload systemd:
