@@ -133,6 +133,24 @@ BitRiver Live relies on SRS for ingest and OvenMediaEngine (OME) plus a transcod
 
 The compose bundle under [`deploy/docker-compose.yml`](../deploy/docker-compose.yml) wires SRS, OME, the transcoder, PostgreSQL, Redis, and the API/viewer. Adapt it for production by overriding secrets and persistent volumes.
 
+Before starting the services, create an environment file and replace the placeholder credentials. Docker Compose refuses to launch until these values are present.
+
+```bash
+cd /opt/bitriver-live
+cp deploy/.env.example .env
+${EDITOR:-nano} .env
+./deploy/check-env.sh
+```
+
+Update the entries for:
+
+- `BITRIVER_LIVE_ADMIN_EMAIL` and `BITRIVER_LIVE_ADMIN_PASSWORD`
+- `BITRIVER_SRS_TOKEN`
+- `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`
+- `BITRIVER_TRANSCODER_TOKEN`
+
+Rerun `./deploy/check-env.sh` until it reports the environment file is ready. The compose manifest also uses required-variable expansion, so `docker compose` fails with an explanatory error when any of the credentials are missing or unchanged from the defaults.
+
 ```bash
 cd /opt/bitriver-live
 sudo docker compose -f deploy/docker-compose.yml pull

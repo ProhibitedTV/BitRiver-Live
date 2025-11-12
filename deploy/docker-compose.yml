@@ -1,3 +1,12 @@
+x-required-credentials: &required_credentials
+  # Populate these credentials in ../.env before starting the stack.
+  BITRIVER_LIVE_ADMIN_EMAIL: ${BITRIVER_LIVE_ADMIN_EMAIL:?set via .env}
+  BITRIVER_LIVE_ADMIN_PASSWORD: ${BITRIVER_LIVE_ADMIN_PASSWORD:?set via .env}
+  BITRIVER_SRS_TOKEN: ${BITRIVER_SRS_TOKEN:?set via .env}
+  BITRIVER_OME_USERNAME: ${BITRIVER_OME_USERNAME:?set via .env}
+  BITRIVER_OME_PASSWORD: ${BITRIVER_OME_PASSWORD:?set via .env}
+  BITRIVER_TRANSCODER_TOKEN: ${BITRIVER_TRANSCODER_TOKEN:?set via .env}
+
 services:
   bitriver-live:
     image: ghcr.io/bitriver-live/bitriver-live:${BITRIVER_LIVE_IMAGE_TAG:-latest}
@@ -11,6 +20,7 @@ services:
     ports:
       - "${BITRIVER_LIVE_PORT:-8080}:8080"
     environment:
+      <<: *required_credentials
       BITRIVER_LIVE_STORAGE_DRIVER: ${BITRIVER_LIVE_STORAGE_DRIVER:-postgres}
       BITRIVER_LIVE_SESSION_STORE: ${BITRIVER_LIVE_SESSION_STORE:-postgres}
       BITRIVER_LIVE_MODE: ${BITRIVER_LIVE_MODE:-production}
@@ -23,15 +33,9 @@ services:
       BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME: ${BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME:-30m}
       BITRIVER_VIEWER_ORIGIN: ${BITRIVER_VIEWER_ORIGIN:-http://viewer:3000}
       BITRIVER_SRS_API: ${BITRIVER_SRS_API:-http://srs:1985}
-      BITRIVER_SRS_TOKEN: ${BITRIVER_SRS_TOKEN:-local-dev-token}
       BITRIVER_OME_API: ${BITRIVER_OME_API:-http://ome:8081}
-      BITRIVER_OME_USERNAME: ${BITRIVER_OME_USERNAME:-admin}
-      BITRIVER_OME_PASSWORD: ${BITRIVER_OME_PASSWORD:-local-dev-password}
       BITRIVER_TRANSCODER_API: ${BITRIVER_TRANSCODER_API:-http://transcoder:9000}
-      BITRIVER_TRANSCODER_TOKEN: ${BITRIVER_TRANSCODER_TOKEN:-local-dev-token}
       BITRIVER_INGEST_HEALTH: ${BITRIVER_INGEST_HEALTH:-/healthz}
-      BITRIVER_LIVE_ADMIN_EMAIL: ${BITRIVER_LIVE_ADMIN_EMAIL:-admin@example.com}
-      BITRIVER_LIVE_ADMIN_PASSWORD: ${BITRIVER_LIVE_ADMIN_PASSWORD:-change-me-now}
       # Enable HTTPS by mounting certs and uncommenting the lines below.
       # BITRIVER_LIVE_TLS_CERT: /certs/fullchain.pem
       # BITRIVER_LIVE_TLS_KEY: /certs/privkey.pem
@@ -146,7 +150,7 @@ services:
       - "${BITRIVER_TRANSCODER_HOST_PORT:-9001}:9000"
     environment:
       JOB_CONTROLLER_BIND: :9000
-      JOB_CONTROLLER_TOKEN: ${BITRIVER_TRANSCODER_TOKEN:-local-dev-token}
+      JOB_CONTROLLER_TOKEN: ${BITRIVER_TRANSCODER_TOKEN:?set via .env}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:9000/healthz"]
       interval: 30s
