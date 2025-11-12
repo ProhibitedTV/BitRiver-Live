@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -113,6 +115,72 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	}
 	if len(variants) == 0 {
 		t.Fatalf("expected variant playlists")
+	}
+
+	masterData, err := os.ReadFile(master)
+	if err != nil {
+		t.Fatalf("read master playlist: %v", err)
+	}
+	scanner := bufio.NewScanner(bytes.NewReader(masterData))
+	bandwidths := make(map[int]struct{})
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "#EXT-X-STREAM-INF:") {
+			continue
+		}
+		attrs := strings.Split(strings.TrimPrefix(line, "#EXT-X-STREAM-INF:"), ",")
+		for _, attr := range attrs {
+			trimmed := strings.TrimSpace(attr)
+			if !strings.HasPrefix(trimmed, "BANDWIDTH=") {
+				continue
+			}
+			value := strings.TrimPrefix(trimmed, "BANDWIDTH=")
+			parsed, err := strconv.Atoi(value)
+			if err != nil {
+				t.Fatalf("parse bandwidth %q: %v", value, err)
+			}
+			bandwidths[parsed] = struct{}{}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scan master playlist: %v", err)
+	}
+	if len(bandwidths) != len(renditions) {
+		t.Fatalf("expected %d unique bandwidth entries, got %d", len(renditions), len(bandwidths))
+	}
+	for bw := range bandwidths {
+		if bw <= 0 {
+			t.Fatalf("expected positive bandwidth, got %d", bw)
+		}
+	}
+
+	if len(persisted.Renditions) != len(renditions) {
+		t.Fatalf("expected %d renditions in metadata, got %d", len(renditions), len(persisted.Renditions))
+	}
+	seenBitrates := make(map[int]struct{})
+	for _, variant := range persisted.Renditions {
+		if variant.ManifestURL == "" {
+			t.Fatalf("expected manifest url for rendition %s", variant.Name)
+		}
+		if variant.Bitrate <= 0 {
+			t.Fatalf("expected positive total bitrate for rendition %s", variant.Name)
+		}
+		if variant.VideoBitrate <= 0 {
+			t.Fatalf("expected video bitrate for rendition %s", variant.Name)
+		}
+		if variant.AudioBitrate <= 0 {
+			t.Fatalf("expected audio bitrate for rendition %s", variant.Name)
+		}
+		if variant.Width <= 0 || variant.Height <= 0 {
+			t.Fatalf("expected resolution for rendition %s", variant.Name)
+		}
+		if variant.VideoProfile == "" {
+			t.Fatalf("expected video profile for rendition %s", variant.Name)
+		}
+		if _, exists := seenBitrates[variant.Bitrate]; exists {
+			t.Fatalf("expected unique bitrate per rendition, found duplicate %d", variant.Bitrate)
+		}
+		seenBitrates[variant.Bitrate] = struct{}{}
 	}
 
 	// start a second job and cancel it via DELETE

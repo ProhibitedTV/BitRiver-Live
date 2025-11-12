@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"math"
 	"math/rand"
 	"net/http"
 	"os"
@@ -16,6 +17,8 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -23,9 +26,14 @@ import (
 )
 
 type rendition struct {
-	Name        string `json:"name"`
-	ManifestURL string `json:"manifestUrl"`
-	Bitrate     int    `json:"bitrate,omitempty"`
+	Name         string `json:"name"`
+	ManifestURL  string `json:"manifestUrl"`
+	Bitrate      int    `json:"bitrate,omitempty"`
+	Width        int    `json:"width,omitempty"`
+	Height       int    `json:"height,omitempty"`
+	VideoBitrate int    `json:"videoBitrate,omitempty"`
+	AudioBitrate int    `json:"audioBitrate,omitempty"`
+	VideoProfile string `json:"videoProfile,omitempty"`
 }
 
 type job struct {
@@ -589,56 +597,134 @@ func buildTranscodePlan(input, outputDir string, ladder []rendition) (*transcode
 	updated := make([]rendition, len(ladder))
 	copy(updated, ladder)
 	if len(updated) == 0 {
-		updated = append(updated, rendition{Name: "default"})
+		updated = append(updated, rendition{Name: "720p", Bitrate: 2800})
 	}
 
+	count := len(updated)
 	master := filepath.ToSlash(filepath.Join(absDir, "index.m3u8"))
+	variantNames := make([]string, count)
+	videoBitrates := make([]int, count)
+	audioBitrates := make([]int, count)
+	widths := make([]int, count)
+	heights := make([]int, count)
+	profiles := make([]string, count)
+
+	filters := make([]string, 0, count+1)
+	splitLabels := make([]string, count)
+	if count > 1 {
+		for idx := range updated {
+			splitLabels[idx] = fmt.Sprintf("splitv%d", idx)
+		}
+		filters = append(filters, fmt.Sprintf("[0:v]split=%d[%s]", count, strings.Join(splitLabels, "][")))
+	}
+
+	used := make(map[string]int)
+	for idx := range updated {
+		base := sanitizeName(updated[idx].Name)
+		if base == "" {
+			base = fmt.Sprintf("variant-%d", idx)
+		}
+		countForBase := used[base]
+		name := base
+		if countForBase > 0 {
+			name = fmt.Sprintf("%s-%d", base, countForBase)
+		}
+		used[base] = countForBase + 1
+		if err := os.MkdirAll(filepath.Join(absDir, name), 0o755); err != nil {
+			return nil, err
+		}
+
+		width, height := resolveDimensions(updated[idx].Name)
+		widths[idx] = width
+		heights[idx] = height
+		profile := videoProfileForHeight(height)
+		profiles[idx] = profile
+
+		videoTarget := updated[idx].Bitrate
+		if videoTarget <= 0 {
+			videoTarget = defaultVideoBitrate(height)
+		}
+		audioTarget := defaultAudioBitrate(videoTarget)
+		totalBitrate := videoTarget + audioTarget
+
+		updated[idx].Width = width
+		updated[idx].Height = height
+		updated[idx].VideoBitrate = videoTarget
+		updated[idx].AudioBitrate = audioTarget
+		updated[idx].VideoProfile = profile
+		updated[idx].Bitrate = totalBitrate
+		updated[idx].ManifestURL = filepath.ToSlash(filepath.Join(absDir, name, "index.m3u8"))
+
+		inputLabel := "[0:v]"
+		if count > 1 {
+			inputLabel = fmt.Sprintf("[%s]", splitLabels[idx])
+		}
+		filters = append(filters, fmt.Sprintf("%s%s[v%d]", inputLabel, buildScaleFilter(width, height), idx))
+
+		variantNames[idx] = name
+		videoBitrates[idx] = videoTarget
+		audioBitrates[idx] = audioTarget
+	}
+
 	args := []string{
 		"-y",
 		"-i", input,
-		"-c:v", "copy",
-		"-c:a", "copy",
+	}
+	if len(filters) > 0 {
+		args = append(args, "-filter_complex", strings.Join(filters, ";"))
+	}
+
+	for idx := range updated {
+		args = append(args, "-map", fmt.Sprintf("[v%d]", idx))
+		args = append(args, "-map", "0:a:0?")
+	}
+
+	args = append(args, "-preset", "veryfast", "-pix_fmt", "yuv420p")
+
+	for idx := range updated {
+		stream := strconv.Itoa(idx)
+		videoTarget := videoBitrates[idx]
+		audioTarget := audioBitrates[idx]
+		maxRate := int(math.Round(float64(videoTarget) * 1.08))
+		if maxRate <= videoTarget {
+			maxRate = videoTarget + 1
+		}
+		args = append(args,
+			"-c:v:"+stream, "libx264",
+			"-profile:v:"+stream, profiles[idx],
+			"-b:v:"+stream, fmt.Sprintf("%dk", videoTarget),
+			"-maxrate:v:"+stream, fmt.Sprintf("%dk", maxRate),
+			"-bufsize:v:"+stream, fmt.Sprintf("%dk", videoTarget*2),
+			"-g:v:"+stream, "48",
+			"-keyint_min:v:"+stream, "48",
+			"-sc_threshold:v:"+stream, "0",
+		)
+		args = append(args,
+			"-c:a:"+stream, "aac",
+			"-b:a:"+stream, fmt.Sprintf("%dk", audioTarget),
+			"-ac:a:"+stream, "2",
+			"-ar:a:"+stream, "48000",
+		)
+	}
+
+	segmentPattern := filepath.ToSlash(filepath.Join(absDir, "%v", "segment_%06d.ts"))
+	varStreamMap := make([]string, 0, len(updated))
+	for idx := range updated {
+		bandwidth := (videoBitrates[idx] + audioBitrates[idx]) * 1000
+		entry := fmt.Sprintf("v:%d,a:%d name:%s bandwidth:%d resolution:%dx%d", idx, idx, variantNames[idx], bandwidth, widths[idx], heights[idx])
+		varStreamMap = append(varStreamMap, entry)
+	}
+
+	args = append(args,
 		"-f", "hls",
 		"-hls_time", "4",
 		"-hls_list_size", "6",
-		"-hls_flags", "delete_segments+program_date_time",
-	}
-
-	if len(updated) == 1 {
-		updated[0].ManifestURL = master
-		args = append(args, master)
-	} else {
-		used := make(map[string]int)
-		varStreamMap := make([]string, 0, len(updated))
-		segmentPattern := filepath.ToSlash(filepath.Join(absDir, "%v", "segment_%06d.ts"))
-		for idx := range updated {
-			base := sanitizeName(updated[idx].Name)
-			if base == "" {
-				base = fmt.Sprintf("variant-%d", idx)
-			}
-			count := used[base]
-			name := base
-			if count > 0 {
-				name = fmt.Sprintf("%s-%d", base, count)
-			}
-			used[base] = count + 1
-			if err := os.MkdirAll(filepath.Join(absDir, name), 0o755); err != nil {
-				return nil, err
-			}
-			entry := fmt.Sprintf("v:0,a:0 name:%s", name)
-			if updated[idx].Bitrate > 0 {
-				entry = fmt.Sprintf("%s bandwidth:%d", entry, updated[idx].Bitrate*1000)
-			}
-			varStreamMap = append(varStreamMap, entry)
-			updated[idx].ManifestURL = filepath.ToSlash(filepath.Join(absDir, name, "index.m3u8"))
-		}
-		args = append(args,
-			"-master_pl_name", "index.m3u8",
-			"-hls_segment_filename", segmentPattern,
-			"-var_stream_map", strings.Join(varStreamMap, " "),
-			filepath.ToSlash(filepath.Join(absDir, "%v", "index.m3u8")),
-		)
-	}
+		"-hls_flags", "delete_segments+program_date_time+independent_segments",
+		"-master_pl_name", "index.m3u8",
+		"-hls_segment_filename", segmentPattern,
+		"-var_stream_map", strings.Join(varStreamMap, " "),
+		filepath.ToSlash(filepath.Join(absDir, "%v", "index.m3u8")),
+	)
 
 	return &transcodePlan{
 		args:       args,
@@ -726,6 +812,103 @@ func sanitizeName(name string) string {
 		return "variant"
 	}
 	return b.String()
+}
+
+var resolutionPattern = regexp.MustCompile(`(?i)(\d{3,4})p`)
+
+func resolveDimensions(name string) (int, int) {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return 1280, 720
+	}
+	parts := strings.Split(trimmed, "x")
+	if len(parts) == 2 {
+		if w, err := strconv.Atoi(strings.TrimSpace(parts[0])); err == nil && w > 0 {
+			if h, err := strconv.Atoi(strings.TrimSpace(parts[1])); err == nil && h > 0 {
+				return ensureEven(w), ensureEven(h)
+			}
+		}
+	}
+	if match := resolutionPattern.FindStringSubmatch(trimmed); len(match) == 2 {
+		if h, err := strconv.Atoi(match[1]); err == nil && h > 0 {
+			height := ensureEven(h)
+			width := ensureEven(int(math.Round(float64(height) * 16.0 / 9.0)))
+			if width <= 0 {
+				width = 1280
+			}
+			return width, height
+		}
+	}
+	return 1280, 720
+}
+
+func buildScaleFilter(width, height int) string {
+	if width <= 0 || height <= 0 {
+		width = 1280
+		height = 720
+	}
+	width = ensureEven(width)
+	height = ensureEven(height)
+	return fmt.Sprintf("scale=w=%d:h=%d:force_original_aspect_ratio=decrease,setsar=1,pad=%d:%d:(ow-iw)/2:(oh-ih)/2", width, height, width, height)
+}
+
+func ensureEven(value int) int {
+	if value%2 != 0 {
+		return value + 1
+	}
+	if value <= 0 {
+		return 2
+	}
+	return value
+}
+
+func defaultVideoBitrate(height int) int {
+	switch {
+	case height >= 1080:
+		return 6000
+	case height >= 720:
+		return 4000
+	case height >= 540:
+		return 3000
+	case height >= 480:
+		return 2200
+	case height >= 360:
+		return 1200
+	case height >= 240:
+		return 700
+	default:
+		return 500
+	}
+}
+
+func defaultAudioBitrate(videoBitrate int) int {
+	switch {
+	case videoBitrate >= 5000:
+		return 192
+	case videoBitrate >= 3000:
+		return 160
+	case videoBitrate >= 1500:
+		return 128
+	case videoBitrate >= 800:
+		return 96
+	case videoBitrate > 0:
+		return 64
+	default:
+		return 0
+	}
+}
+
+func videoProfileForHeight(height int) string {
+	switch {
+	case height >= 1080:
+		return "high"
+	case height >= 720:
+		return "high"
+	case height >= 480:
+		return "main"
+	default:
+		return "baseline"
+	}
 }
 
 func newMetadataStore(root string) (*metadataStore, error) {
