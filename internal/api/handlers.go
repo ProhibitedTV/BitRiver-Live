@@ -20,6 +20,9 @@ import (
 	"bitriver-live/internal/storage"
 )
 
+// Handler aggregates the HTTP endpoints exposed by the BitRiver API along with
+// the shared services they depend on, such as persistence, chat, and upload
+// processing.
 type Handler struct {
 	Store           storage.Repository
 	Sessions        *auth.SessionManager
@@ -28,6 +31,9 @@ type Handler struct {
 	UploadProcessor *UploadProcessor
 }
 
+// NewHandler wires the core API dependencies together, ensuring a session
+// manager is available by creating a default 24-hour manager when none is
+// provided.
 func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handler {
 	if sessions == nil {
 		sessions = auth.NewSessionManager(24 * time.Hour)
