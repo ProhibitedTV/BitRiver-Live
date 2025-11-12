@@ -123,7 +123,7 @@ sudo chown -R $USER:$USER /opt/bitriver-live
 rm "${BITRIVER_LIVE_PACKAGE}"
 ```
 
-The archive expands into `/opt/bitriver-live` with the compiled binaries plus the `deploy/` directory (`docker-compose.yml`, `install/`, `srs/`, and `ome/`) referenced throughout this guide.
+The archive expands into `/opt/bitriver-live` with the compiled binaries plus the `deploy/` directory (`docker-compose.yml`, `install/`, `srs/`, `ome/`, and `systemd/`) referenced throughout this guide.
 
 ## 5. Deploy ingest services
 
