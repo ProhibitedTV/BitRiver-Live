@@ -108,7 +108,13 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
       </header>
       <div className="channel-header__actions">
         <div className="channel-header__buttons">
-          <button className="primary-button" onClick={handleToggleFollow} disabled={loading}>
+          <button
+            className="primary-button"
+            onClick={handleToggleFollow}
+            disabled={loading}
+            aria-pressed={follow.following}
+            type="button"
+          >
             {follow.following ? "Following" : "Follow"} · {follow.followers} supporter
             {follow.followers === 1 ? "" : "s"}
           </button>
