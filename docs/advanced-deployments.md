@@ -22,7 +22,11 @@ Power users who want managed databases, object storage, or automated ingest can 
 
 | Variable | Description |
 | --- | --- |
-| `BITRIVER_LIVE_ALLOW_SELF_SIGNUP` | Defaults to `true`; set to `false` to block viewer self-registration. |
+| `BITRIVER_LIVE_ALLOW_SELF_SIGNUP` | Defaults to `false`; set to `true` to permit viewer self-registration. |
+
+Self-service registration ships disabled so operators can control how new accounts are provisioned. Toggle the feature back on
+with `--allow-self-signup` or `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true` when you are ready to open signups. Administrators can
+continue to create accounts manually regardless of this setting.
 
 ## Postgres backend
 

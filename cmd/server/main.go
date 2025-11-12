@@ -111,7 +111,7 @@ func main() {
 	sessionStoreDriver := flag.String("session-store", "", "session store driver (memory or postgres)")
 	sessionPostgresDSN := flag.String("session-postgres-dsn", "", "Postgres DSN for the session store")
 	mode := flag.String("mode", "", "server runtime mode (development or production)")
-	allowSelfSignup := flag.Bool("allow-self-signup", true, "allow unauthenticated viewers to register accounts")
+	allowSelfSignup := flag.Bool("allow-self-signup", false, "allow unauthenticated viewers to register accounts")
 	tlsCert := flag.String("tls-cert", "", "path to TLS certificate file")
 	tlsKey := flag.String("tls-key", "", "path to TLS private key file")
 	logLevel := flag.String("log-level", "info", "log level (debug, info, warn, error)")

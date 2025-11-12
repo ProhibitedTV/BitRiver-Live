@@ -237,6 +237,8 @@ Run the helper from the release root—the script reuses the packaged `server`/`
 
 The script builds the API binary, writes `$INSTALL_DIR/.env`, configures optional TLS and rate-limiting variables, and registers a `bitriver-live.service` systemd unit. Review the generated `.env` file to ensure storage selections (JSON or Postgres), database DSNs, session-store driver settings, and Redis credentials are present before starting traffic.
 
+Viewer self-registration is disabled by default in the generated configuration so that only administrators can create accounts. Re-enable open signups later with `--allow-self-signup` or by setting `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true` in the environment file.
+
 When the listen address resolves to a privileged port (<1024) the installer injects `AmbientCapabilities=CAP_NET_BIND_SERVICE`/`CapabilityBoundingSet=CAP_NET_BIND_SERVICE` into the systemd unit and runs `sudo setcap 'cap_net_bind_service=+ep' "$INSTALL_DIR/bitriver-live"` so manual restarts keep the binding. Operators fronting the service with Nginx, Caddy, or another reverse proxy should set `--addr :8080` (or a similar high port) and forward 80/443 from the proxy to avoid capabilities altogether.
 
 Provide `--bootstrap-admin-email` and `--bootstrap-admin-password` to seed the first control-center account automatically. The installer runs the `bootstrap-admin` helper after copying the binaries so the JSON datastore or Postgres database already contains an administrator when systemd starts the service. Capture the printed credentials and rotate the password immediately after logging in.
@@ -286,6 +288,8 @@ BITRIVER_LIVE_POSTGRES_DSN=postgres://bitriver:changeme@localhost:5432/bitriver?
 BITRIVER_LIVE_RATE_REDIS_ADDR=127.0.0.1:6379
 BITRIVER_LIVE_RATE_REDIS_PASSWORD=changeme
 BITRIVER_LIVE_SESSION_STORE=postgres
+# Uncomment to allow new viewers to register their own accounts once you are ready to accept signups.
+# BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true
 # Optional: override if you want a dedicated session database.
 # BITRIVER_LIVE_SESSION_POSTGRES_DSN=postgres://bitriver:changeme@localhost:5432/bitriver_sessions?sslmode=require
 BITRIVER_SRS_TOKEN=REPLACE_ME
