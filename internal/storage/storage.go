@@ -48,6 +48,13 @@ const (
 	MaxTipMessageLength = 512
 )
 
+var (
+	// ErrIngestControllerUnavailable indicates that stream lifecycle
+	// operations cannot be performed because no ingest controller has been
+	// configured.
+	ErrIngestControllerUnavailable = errors.New("ingest controller unavailable")
+)
+
 type dataset struct {
 	Users               map[string]models.User          `json:"users"`
 	OAuthAccounts       map[string]models.OAuthAccount  `json:"oauthAccounts"`
@@ -2241,6 +2248,18 @@ func (s *Storage) StartStream(channelID string, renditions []string) (models.Str
 	s.data.Channels[channelID] = channel
 	s.mu.Unlock()
 
+	controller := s.ingestController
+	if controller == nil {
+		s.mu.Lock()
+		if updated, exists := s.data.Channels[channelID]; exists {
+			updated.CurrentSessionID = nil
+			updated.LiveState = "offline"
+			s.data.Channels[channelID] = updated
+		}
+		s.mu.Unlock()
+		return models.StreamSession{}, ErrIngestControllerUnavailable
+	}
+
 	attempts := s.ingestMaxAttempts
 	if attempts <= 0 {
 		attempts = 1
@@ -2249,7 +2268,7 @@ func (s *Storage) StartStream(channelID string, renditions []string) (models.Str
 	var boot ingest.BootResult
 	var bootErr error
 	for attempt := 0; attempt < attempts; attempt++ {
-		boot, bootErr = s.ingestController.BootStream(ctx, ingest.BootParams{
+		boot, bootErr = controller.BootStream(ctx, ingest.BootParams{
 			ChannelID:  channelID,
 			SessionID:  sessionID,
 			StreamKey:  channel.StreamKey,
@@ -2321,7 +2340,7 @@ func (s *Storage) StartStream(channelID string, renditions []string) (models.Str
 		s.data.Channels[channelID] = channel
 		jobIDs := append([]string{}, session.IngestJobIDs...)
 		s.mu.Unlock()
-		_ = s.ingestController.ShutdownStream(context.Background(), channelID, sessionID, jobIDs)
+		_ = controller.ShutdownStream(context.Background(), channelID, sessionID, jobIDs)
 		return models.StreamSession{}, err
 	}
 	s.mu.Unlock()
@@ -2353,7 +2372,12 @@ func (s *Storage) StopStream(channelID string, peakConcurrent int) (models.Strea
 	jobIDs := append([]string{}, session.IngestJobIDs...)
 	s.mu.Unlock()
 
-	if err := s.ingestController.ShutdownStream(context.Background(), channelID, sessionID, jobIDs); err != nil {
+	controller := s.ingestController
+	if controller == nil {
+		return models.StreamSession{}, ErrIngestControllerUnavailable
+	}
+
+	if err := controller.ShutdownStream(context.Background(), channelID, sessionID, jobIDs); err != nil {
 		return models.StreamSession{}, fmt.Errorf("shutdown ingest: %w", err)
 	}
 

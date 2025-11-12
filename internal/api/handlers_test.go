@@ -32,6 +32,18 @@ func newTestHandler(t *testing.T) (*Handler, *storage.Storage) {
 	return NewHandler(store, sessions), store
 }
 
+type ingestUnavailableRepo struct {
+	storage.Repository
+}
+
+func (r ingestUnavailableRepo) StartStream(channelID string, renditions []string) (models.StreamSession, error) {
+	return models.StreamSession{}, storage.ErrIngestControllerUnavailable
+}
+
+func (r ingestUnavailableRepo) StopStream(channelID string, peakConcurrent int) (models.StreamSession, error) {
+	return models.StreamSession{}, storage.ErrIngestControllerUnavailable
+}
+
 func withUser(req *http.Request, user models.User) *http.Request {
 	return req.WithContext(ContextWithUser(req.Context(), user))
 }
@@ -754,6 +766,72 @@ func TestChannelStreamLifecycle(t *testing.T) {
 	}
 	if session.PeakConcurrent != 10 {
 		t.Fatalf("expected peak concurrent 10, got %d", session.PeakConcurrent)
+	}
+}
+
+func TestChannelStreamEndpointsUnavailableWithoutIngest(t *testing.T) {
+	handler, store := newTestHandler(t)
+	handler.Store = ingestUnavailableRepo{Repository: store}
+
+	creator, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Streamer",
+		Email:       "streamer@example.com",
+		Roles:       []string{"creator"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	channel, err := store.CreateChannel(creator.ID, "No Ingest", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	startPayload := map[string]any{"renditions": []string{"720p"}}
+	body, _ := json.Marshal(startPayload)
+	req := httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/stream/start", bytes.NewReader(body))
+	req = withUser(req, creator)
+	rec := httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected start status 503, got %d", rec.Code)
+	}
+
+	stored, ok := store.GetChannel(channel.ID)
+	if !ok {
+		t.Fatalf("expected to reload channel %s", channel.ID)
+	}
+	if stored.LiveState != "offline" {
+		t.Fatalf("expected offline channel after failed start, got %s", stored.LiveState)
+	}
+	if stored.CurrentSessionID != nil {
+		t.Fatalf("expected current session to remain nil, got %v", stored.CurrentSessionID)
+	}
+
+	session, err := store.StartStream(channel.ID, []string{"720p"})
+	if err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+
+	stopPayload := map[string]any{"peakConcurrent": 15}
+	body, _ = json.Marshal(stopPayload)
+	req = httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/stream/stop", bytes.NewReader(body))
+	req = withUser(req, creator)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected stop status 503, got %d", rec.Code)
+	}
+
+	stored, ok = store.GetChannel(channel.ID)
+	if !ok {
+		t.Fatalf("expected to reload channel %s after stop", channel.ID)
+	}
+	if stored.CurrentSessionID == nil || *stored.CurrentSessionID != session.ID {
+		t.Fatalf("expected current session to remain %s, got %v", session.ID, stored.CurrentSessionID)
+	}
+	if stored.LiveState != "live" {
+		t.Fatalf("expected channel to remain live, got %s", stored.LiveState)
 	}
 }
 

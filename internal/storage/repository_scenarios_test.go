@@ -10,6 +10,7 @@ import (
 
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/ingest"
+	"bitriver-live/internal/models"
 )
 
 // RepositoryFactory constructs a repository backed by either the JSON store or
@@ -654,6 +655,7 @@ func RunRepositoryRecordingRetention(t *testing.T, factory RepositoryFactory) {
 			expectedDeletes[upload.Key] = struct{}{}
 		}
 	}
+
 	if clipObject != "" {
 		expectedDeletes[clipObject] = struct{}{}
 	}
@@ -672,5 +674,98 @@ func RunRepositoryRecordingRetention(t *testing.T, factory RepositoryFactory) {
 	}
 	if len(expectedDeletes) != 0 {
 		t.Fatalf("expected storage deletes for manifests, thumbnails, and clips; missing %v", expectedDeletes)
+	}
+}
+
+// RunRepositoryStreamLifecycleWithoutIngest verifies stream start/stop requests
+// fail gracefully when no ingest controller is configured.
+func RunRepositoryStreamLifecycleWithoutIngest(t *testing.T, factory RepositoryFactory) {
+	repo := runRepository(t, factory)
+
+	switch r := repo.(type) {
+	case *Storage:
+		r.mu.Lock()
+		r.ingestController = nil
+		r.mu.Unlock()
+	case *postgresRepository:
+		r.ingestController = nil
+	}
+
+	owner, err := repo.CreateUser(CreateUserParams{DisplayName: "Creator", Email: "creator@example.com", Roles: []string{"creator"}})
+	requireAvailable(t, err, "create owner")
+	channel, err := repo.CreateChannel(owner.ID, "Live", "gaming", nil)
+	requireAvailable(t, err, "create channel")
+
+	if _, err := repo.StartStream(channel.ID, []string{"720p"}); !errors.Is(err, ErrIngestControllerUnavailable) {
+		t.Fatalf("expected ErrIngestControllerUnavailable from StartStream, got %v", err)
+	}
+
+	stored, ok := repo.GetChannel(channel.ID)
+	if !ok {
+		t.Fatalf("expected to reload channel %s", channel.ID)
+	}
+	if stored.LiveState != "offline" {
+		t.Fatalf("expected live state to remain offline, got %s", stored.LiveState)
+	}
+	if stored.CurrentSessionID != nil {
+		t.Fatalf("expected current session to remain nil, got %v", stored.CurrentSessionID)
+	}
+
+	var sessionID string
+	switch r := repo.(type) {
+	case *Storage:
+		r.mu.Lock()
+		var genErr error
+		sessionID, genErr = r.generateID()
+		r.mu.Unlock()
+		if genErr != nil {
+			t.Fatalf("generate session id: %v", genErr)
+		}
+		now := time.Now().UTC()
+		r.mu.Lock()
+		session := models.StreamSession{ID: sessionID, ChannelID: channel.ID, StartedAt: now}
+		if r.data.StreamSessions == nil {
+			r.data.StreamSessions = make(map[string]models.StreamSession)
+		}
+		r.data.StreamSessions[sessionID] = session
+		ch := r.data.Channels[channel.ID]
+		ch.CurrentSessionID = &sessionID
+		ch.LiveState = "live"
+		ch.UpdatedAt = now
+		r.data.Channels[channel.ID] = ch
+		r.mu.Unlock()
+	case *postgresRepository:
+		var genErr error
+		sessionID, genErr = r.generateID()
+		if genErr != nil {
+			t.Fatalf("generate session id: %v", genErr)
+		}
+		ctx := context.Background()
+		now := time.Now().UTC()
+		if _, err := r.pool.Exec(ctx, "INSERT INTO stream_sessions (id, channel_id, started_at, renditions, peak_concurrent, origin_url, playback_url, ingest_endpoints, ingest_job_ids) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)", sessionID, channel.ID, now, []string{}, 0, "", "", []string{}, []string{}); err != nil {
+			t.Fatalf("seed stream session: %v", err)
+		}
+		if _, err := r.pool.Exec(ctx, "UPDATE channels SET current_session_id = $1, live_state = 'live', updated_at = $2 WHERE id = $3", sessionID, now, channel.ID); err != nil {
+			t.Fatalf("mark channel live: %v", err)
+		}
+	}
+
+	if sessionID == "" {
+		t.Fatal("expected session id to be set for stop stream test")
+	}
+
+	if _, err := repo.StopStream(channel.ID, 5); !errors.Is(err, ErrIngestControllerUnavailable) {
+		t.Fatalf("expected ErrIngestControllerUnavailable from StopStream, got %v", err)
+	}
+
+	stored, ok = repo.GetChannel(channel.ID)
+	if !ok {
+		t.Fatalf("expected to reload channel %s after stop", channel.ID)
+	}
+	if stored.CurrentSessionID == nil || *stored.CurrentSessionID != sessionID {
+		t.Fatalf("expected channel to remain live with session %s, got %v", sessionID, stored.CurrentSessionID)
+	}
+	if stored.LiveState != "live" {
+		t.Fatalf("expected channel to remain live, got %s", stored.LiveState)
 	}
 }
