@@ -173,9 +173,9 @@ if prompt_yes_no "Configure API rate limiting now" "n"; then
         REDIS_PASSWORD=$(prompt_optional "  Redis password (leave blank to skip)")
 fi
 
-ALLOW_SELF_SIGNUP=true
-if ! prompt_yes_no "Allow viewers to self-register accounts" "y"; then
-        ALLOW_SELF_SIGNUP=false
+ALLOW_SELF_SIGNUP=false
+if prompt_yes_no "Allow viewers to self-register accounts" "n"; then
+        ALLOW_SELF_SIGNUP=true
 fi
 
 ENABLE_LOGS=false
@@ -261,7 +261,7 @@ The installer will run with the following options:
   Mode:              $MODE
   Listen address:    $ADDR
   Storage driver:    $STORAGE_DRIVER
-  Self-signup:       $ALLOW_SELF_SIGNUP
+  Self-signup:       $ALLOW_SELF_SIGNUP (opt-in required to reopen public registration)
 EOF
 
 if [[ -n $HOSTNAME_HINT ]]; then
@@ -299,6 +299,9 @@ cat <<'NOTE'
 
 Note: deploy/install/ubuntu.sh uses sudo to create system users, directories, and
 systemd units. You may be prompted for your password.
+
+Public self-registration remains disabled unless you opt in here (or later with
+--allow-self-signup true).
 NOTE
 
 echo "About to execute:"
