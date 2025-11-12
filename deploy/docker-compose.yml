@@ -32,7 +32,7 @@ services:
       BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT: ${BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT:-5s}
       BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME: ${BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME:-30m}
       BITRIVER_VIEWER_ORIGIN: ${BITRIVER_VIEWER_ORIGIN:-http://viewer:3000}
-      BITRIVER_SRS_API: ${BITRIVER_SRS_API:-http://srs:1985}
+      BITRIVER_SRS_API: ${BITRIVER_SRS_API:-http://srs-controller:1985}
       BITRIVER_OME_API: ${BITRIVER_OME_API:-http://ome:8081}
       BITRIVER_TRANSCODER_API: ${BITRIVER_TRANSCODER_API:-http://transcoder:9000}
       BITRIVER_INGEST_HEALTH: ${BITRIVER_INGEST_HEALTH:-/healthz}
@@ -58,7 +58,7 @@ services:
       start_period: 10s
     depends_on:
       - postgres
-      - srs
+      - srs-controller
       - ome
       - transcoder
 
@@ -104,6 +104,26 @@ services:
       - ./migrations:/migrations:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  srs-controller:
+    image: ghcr.io/bitriver-live/bitriver-srs-controller:${BITRIVER_SRS_CONTROLLER_IMAGE_TAG:-latest}
+    container_name: bitriver-srs-controller
+    env_file:
+      - ../.env
+    environment:
+      BITRIVER_SRS_TOKEN: ${BITRIVER_SRS_TOKEN:?set via .env}
+      SRS_CONTROLLER_BIND: :1985
+      SRS_CONTROLLER_UPSTREAM: ${SRS_CONTROLLER_UPSTREAM:-http://srs:1985/api/}
+    ports:
+      - "${BITRIVER_SRS_CONTROLLER_PORT:-1986}:1985"
+    depends_on:
+      - srs
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:1985/healthz"]
       interval: 30s
       timeout: 5s
       retries: 5

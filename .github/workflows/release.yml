@@ -199,6 +199,10 @@ jobs:
             context: .
             dockerfile: Dockerfile
             image_name: bitriver-live
+          - component: srs-controller
+            context: .
+            dockerfile: cmd/srs-controller/Dockerfile
+            image_name: bitriver-srs-controller
           - component: transcoder
             context: .
             dockerfile: cmd/transcoder/Dockerfile

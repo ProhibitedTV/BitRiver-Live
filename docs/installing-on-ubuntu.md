@@ -155,12 +155,14 @@ Ensure `BITRIVER_LIVE_POSTGRES_DSN` references the same Postgres user and passwo
 
 The bundled PostgreSQL container now reuses these credentials for its health probe, so the readiness check automatically honours any changes you make to `BITRIVER_POSTGRES_USER` (and `BITRIVER_POSTGRES_DB` if you override it) in `.env`.
 
+The API talks to SRS through the dedicated proxy. Leave `BITRIVER_SRS_API` set to `http://srs-controller:1985` when you use the compose bundle, or point it at the controller host/port (`http://localhost:1986` on the default Docker Compose network). Adjust `SRS_CONTROLLER_UPSTREAM` in `.env` when the proxy needs to reach an external SRS instance instead of the bundled container.
+
 Rerun `./deploy/check-env.sh` until it reports the environment file is ready. The compose manifest also uses required-variable expansion, so `docker compose` fails with an explanatory error when any of the credentials are missing or unchanged from the defaults.
 
 ```bash
 cd /opt/bitriver-live
 sudo docker compose -f deploy/docker-compose.yml pull
-sudo docker compose -f deploy/docker-compose.yml up -d srs ome transcoder transcoder-public
+sudo docker compose -f deploy/docker-compose.yml up -d srs srs-controller ome transcoder transcoder-public
 ```
 
 The compose bundle now binds `./transcoder-data` on the host to `/work` inside the FFmpeg controller so HLS manifests survive container restarts. Create the directory structure once before starting production traffic:
@@ -180,12 +182,14 @@ Review `deploy/srs/conf/srs.conf` for the default SRS ports and authentication s
 If you run SRS, OME, and the transcoder as native services, use [`deploy/systemd/README.md`](../deploy/systemd/README.md) for installation guidance. Copy the tracked unit files into `/etc/systemd/system/`, create the matching `/opt/bitriver-*/.env` files, and enable each service:
 
 ```bash
-sudo install -d -m 0755 /opt/bitriver-srs /opt/bitriver-ome /opt/bitriver-transcoder
+sudo install -d -m 0755 /opt/bitriver-srs /opt/bitriver-srs-controller /opt/bitriver-ome /opt/bitriver-transcoder
 sudo install -m 0644 deploy/systemd/srs.service /etc/systemd/system/srs.service
+sudo install -m 0644 deploy/systemd/srs-controller.service /etc/systemd/system/srs-controller.service
 sudo install -m 0644 deploy/systemd/ome.service /etc/systemd/system/ome.service
 sudo install -m 0644 deploy/systemd/bitriver-transcoder.service /etc/systemd/system/bitriver-transcoder.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now srs.service
+sudo systemctl enable --now srs-controller.service
 sudo systemctl enable --now ome.service
 sudo systemctl enable --now bitriver-transcoder.service
 ```
@@ -195,8 +199,8 @@ Populate the `.env` files with the ports, tokens, and image tags described in [`
 Check status and logs to confirm ingest readiness.
 
 ```bash
-sudo systemctl status srs.service
-journalctl -u srs.service -f
+sudo systemctl status srs.service srs-controller.service
+journalctl -u srs.service -u srs-controller.service -f
 ```
 
 ## 6. Deploy the API service
@@ -392,7 +396,7 @@ When fronting the viewer with Nginx or another proxy, route `/viewer` requests t
 
 ```bash
 systemctl --failed
-sudo systemctl status bitriver-live.service bitriver-viewer.service srs.service ome.service bitriver-transcoder.service
+sudo systemctl status bitriver-live.service bitriver-viewer.service srs.service srs-controller.service ome.service bitriver-transcoder.service
 ```
 
 2. Confirm database connectivity and migrations.
@@ -418,7 +422,7 @@ curl -k https://stream.example.com/api/channels
 5. Inspect logs for ingest services.
 
 ```bash
-journalctl -u srs.service -u ome.service -u bitriver-transcoder.service --since "-5 minutes"
+journalctl -u srs.service -u srs-controller.service -u ome.service -u bitriver-transcoder.service --since "-5 minutes"
 ```
 
 6. Ensure TLS certificates renew automatically (`certbot renew --dry-run`) and firewall rules persist across reboots (`sudo ufw status`). Rotate secrets periodically and audit access logs.
