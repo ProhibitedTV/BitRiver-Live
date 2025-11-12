@@ -25,6 +25,7 @@
 #   --postgres-dsn         / BITRIVER_LIVE_POSTGRES_DSN
 #   --session-store        / BITRIVER_LIVE_SESSION_STORE (default postgres when using Postgres storage)
 #   --session-store-dsn    / BITRIVER_LIVE_SESSION_POSTGRES_DSN
+#   --allow-self-signup    / BITRIVER_LIVE_ALLOW_SELF_SIGNUP (default true)
 #   --bootstrap-admin-email
 #   --bootstrap-admin-password
 #
@@ -59,6 +60,7 @@ Optional flags:
   --log-dir LOG_DIR
   --tls-cert CERT_PATH
   --tls-key KEY_PATH
+  --allow-self-signup (true|false)
   --rate-global-rps VALUE
   --rate-login-limit VALUE
   --rate-login-window VALUE
@@ -120,6 +122,7 @@ STORAGE_DRIVER=${BITRIVER_LIVE_STORAGE_DRIVER:-}
 POSTGRES_DSN=${BITRIVER_LIVE_POSTGRES_DSN:-}
 SESSION_STORE_DRIVER=${BITRIVER_LIVE_SESSION_STORE:-}
 SESSION_STORE_DSN=${BITRIVER_LIVE_SESSION_POSTGRES_DSN:-}
+ALLOW_SELF_SIGNUP=${BITRIVER_LIVE_ALLOW_SELF_SIGNUP:-true}
 BOOTSTRAP_ADMIN_EMAIL=${BOOTSTRAP_ADMIN_EMAIL:-}
 BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD:-}
 
@@ -192,6 +195,11 @@ while [[ $# -gt 0 ]]; do
         --redis-password)
                 require_arg "$@"
                 REDIS_PASSWORD=$2
+                shift 2
+                ;;
+        --allow-self-signup)
+                require_arg "$@"
+                ALLOW_SELF_SIGNUP=$2
                 shift 2
                 ;;
         --hostname)
@@ -292,6 +300,12 @@ if [[ $SESSION_STORE_DRIVER == "postgres" ]]; then
         fi
 fi
 
+ALLOW_SELF_SIGNUP=${ALLOW_SELF_SIGNUP,,}
+if [[ $ALLOW_SELF_SIGNUP != "true" && $ALLOW_SELF_SIGNUP != "false" ]]; then
+        echo "--allow-self-signup (or BITRIVER_LIVE_ALLOW_SELF_SIGNUP) must be true or false" >&2
+        exit 1
+fi
+
 if [[ -z $ADDR ]]; then
 	if [[ $MODE == "production" ]]; then
 		ADDR=":80"
@@ -368,6 +382,7 @@ trap cleanup EXIT
         echo "BITRIVER_LIVE_MODE=$MODE"
         echo "BITRIVER_LIVE_DATA=$DATA_FILE"
         echo "BITRIVER_LIVE_STORAGE_DRIVER=$STORAGE_DRIVER"
+        echo "BITRIVER_LIVE_ALLOW_SELF_SIGNUP=$ALLOW_SELF_SIGNUP"
         if [[ -n $TLS_CERT ]]; then
                 echo "BITRIVER_LIVE_TLS_CERT=$TLS_CERT"
         fi

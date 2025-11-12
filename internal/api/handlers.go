@@ -29,6 +29,7 @@ type Handler struct {
 	ChatGateway     *chat.Gateway
 	OAuth           oauth.Service
 	UploadProcessor *UploadProcessor
+	AllowSelfSignup bool
 }
 
 // NewHandler wires the core API dependencies together, ensuring a session
@@ -38,7 +39,7 @@ func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handle
 	if sessions == nil {
 		sessions = auth.NewSessionManager(24 * time.Hour)
 	}
-	return &Handler{Store: store, Sessions: sessions}
+	return &Handler{Store: store, Sessions: sessions, AllowSelfSignup: true}
 }
 
 func (h *Handler) sessionManager() *auth.SessionManager {
@@ -166,6 +167,11 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
 		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+
+	if !h.AllowSelfSignup {
+		writeError(w, http.StatusForbidden, errors.New("public self-signup is disabled"))
 		return
 	}
 

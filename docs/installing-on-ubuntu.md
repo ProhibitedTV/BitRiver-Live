@@ -208,7 +208,7 @@ cd /opt/bitriver-live
 ./deploy/install/wizard.sh
 ```
 
-The wizard walks through the common inputs—install directory (default `/opt/bitriver-live`), data directory (default `/var/lib/bitriver-live`), service user (default `bitriver`), listen address, storage driver, optional hostname hint, TLS certificate/key paths, rate-limiting values, and whether to redirect systemd logs. It now defaults to the Postgres storage backend; be ready with a DSN and a database that has been migrated with the SQL files in [`deploy/migrations/`](../deploy/migrations). When you choose the Postgres storage backend it prompts for the DSN (required) and optionally a Postgres session-store DSN, letting you reuse the primary connection string or point to a dedicated database. When the wizard detects a source checkout it validates that Go 1.21+ is available; when invoked from a release tarball it skips the Go check because the binaries are already present. It still warns if a `bitriver-live.service` unit already exists before invoking the Ubuntu installer. Because the underlying helper uses `sudo` to create users, directories, and systemd units, the wizard highlights those privileged steps and asks for confirmation first.
+The wizard walks through the common inputs—install directory (default `/opt/bitriver-live`), data directory (default `/var/lib/bitriver-live`), service user (default `bitriver`), listen address, storage driver, optional hostname hint, TLS certificate/key paths, rate-limiting values, whether to allow public self-signup, and whether to redirect systemd logs. It now defaults to the Postgres storage backend; be ready with a DSN and a database that has been migrated with the SQL files in [`deploy/migrations/`](../deploy/migrations). When you choose the Postgres storage backend it prompts for the DSN (required) and optionally a Postgres session-store DSN, letting you reuse the primary connection string or point to a dedicated database. When the wizard detects a source checkout it validates that Go 1.21+ is available; when invoked from a release tarball it skips the Go check because the binaries are already present. It still warns if a `bitriver-live.service` unit already exists before invoking the Ubuntu installer. Because the underlying helper uses `sudo` to create users, directories, and systemd units, the wizard highlights those privileged steps and asks for confirmation first.
 
 If a run fails midway, fix the highlighted issue and start the wizard again—it is safe to rerun, and you can accept the previous defaults to regenerate the service.
 
@@ -248,6 +248,7 @@ Environment variable equivalents:
 * `BITRIVER_LIVE_RATE_REDIS_ADDR`, `BITRIVER_LIVE_RATE_REDIS_PASSWORD`
 * `BITRIVER_LIVE_ENABLE_LOGS`, `BITRIVER_LIVE_LOG_DIR`
 * `BITRIVER_LIVE_HOSTNAME_HINT`
+* `BITRIVER_LIVE_ALLOW_SELF_SIGNUP`
 * `BITRIVER_LIVE_POSTGRES_DSN`
 * `BITRIVER_LIVE_SESSION_STORE`, `BITRIVER_LIVE_SESSION_POSTGRES_DSN` (defaults to Postgres and reuses `BITRIVER_LIVE_POSTGRES_DSN` when left unset)
 

@@ -173,6 +173,11 @@ if prompt_yes_no "Configure API rate limiting now" "n"; then
         REDIS_PASSWORD=$(prompt_optional "  Redis password (leave blank to skip)")
 fi
 
+ALLOW_SELF_SIGNUP=true
+if ! prompt_yes_no "Allow viewers to self-register accounts" "y"; then
+        ALLOW_SELF_SIGNUP=false
+fi
+
 ENABLE_LOGS=false
 LOG_DIR=""
 if prompt_yes_no "Redirect systemd logs to a file" "n"; then
@@ -201,6 +206,7 @@ args+=("--service-user" "$SERVICE_USER")
 args+=("--mode" "$MODE")
 args+=("--addr" "$ADDR")
 args+=("--storage-driver" "$STORAGE_DRIVER")
+args+=("--allow-self-signup" "$ALLOW_SELF_SIGNUP")
 
 if [[ -n $HOSTNAME_HINT ]]; then
         args+=("--hostname" "$HOSTNAME_HINT")
@@ -255,6 +261,7 @@ The installer will run with the following options:
   Mode:              $MODE
   Listen address:    $ADDR
   Storage driver:    $STORAGE_DRIVER
+  Self-signup:       $ALLOW_SELF_SIGNUP
 EOF
 
 if [[ -n $HOSTNAME_HINT ]]; then

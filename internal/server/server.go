@@ -38,14 +38,15 @@ type TLSConfig struct {
 // proxying for viewer traffic, and OAuth is injected into the supplied API
 // handler.
 type Config struct {
-	Addr         string
-	TLS          TLSConfig
-	RateLimit    RateLimitConfig
-	Logger       *slog.Logger
-	AuditLogger  *slog.Logger
-	Metrics      *metrics.Recorder
-	ViewerOrigin *url.URL
-	OAuth        oauth.Service
+	Addr            string
+	TLS             TLSConfig
+	RateLimit       RateLimitConfig
+	Logger          *slog.Logger
+	AuditLogger     *slog.Logger
+	Metrics         *metrics.Recorder
+	ViewerOrigin    *url.URL
+	OAuth           oauth.Service
+	AllowSelfSignup *bool
 }
 
 // Server wraps the configured http.Server alongside observability, rate
@@ -78,6 +79,9 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	}
 	if handler != nil {
 		handler.OAuth = cfg.OAuth
+		if cfg.AllowSelfSignup != nil {
+			handler.AllowSelfSignup = *cfg.AllowSelfSignup
+		}
 	}
 
 	mux := http.NewServeMux()
