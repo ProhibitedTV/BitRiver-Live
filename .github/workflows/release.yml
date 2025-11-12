@@ -163,7 +163,7 @@ jobs:
           rm -rf "$bundle_root/.next/cache"
           cp -R public "$bundle_root/public"
           cp package.json package-lock.json next.config.js "$bundle_root/"
-          tar -C dist -czf "bitriver-viewer-${RELEASE_TAG}.tar.gz" bitriver-viewer
+          tar -C dist -czf "dist/bitriver-viewer-${RELEASE_TAG}.tar.gz" bitriver-viewer
           rm -rf "$bundle_root"
 
       - name: Upload viewer bundle artifact
