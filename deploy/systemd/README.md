@@ -71,6 +71,7 @@ EOF
    ```
 
    Adjust image tags, ports, and mount paths to match your topology. Add extra Docker flags by setting `*_EXTRA_ARGS`.
+   The FFmpeg controller exits during startup if `TRANSCODER_PUBLIC_BASE_URL` (exported to `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`) is missing, so configure it with the HTTP origin viewers can reach before enabling the unit.
 7. (Optional) If you want to send API logs to `/opt/bitriver-live/logs/server.log`, create the directory and uncomment the `StandardOutput` and `StandardError` lines in `bitriver-live.service`.
 8. Copy the systemd unit files into place and reload systemd:
    ```bash

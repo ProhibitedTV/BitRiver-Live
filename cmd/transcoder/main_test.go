@@ -39,6 +39,10 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 		t.Fatalf("generate sample: %v (%s)", err, out)
 	}
 
+	publicDir := filepath.Join(tempDir, "public")
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", publicDir)
+
 	srv, err := newServer("", tempDir)
 	if err != nil {
 		t.Fatalf("new server: %v", err)
@@ -76,7 +80,27 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	if len(jobResp.JobIDs) == 0 {
 		t.Fatalf("expected job id")
 	}
+	if jobResp.JobID == "" {
+		t.Fatalf("expected jobId field to be populated")
+	}
 	jobID := jobResp.JobIDs[0]
+	if jobResp.JobID != jobID {
+		t.Fatalf("expected jobId %s, got %s", jobID, jobResp.JobID)
+	}
+	if len(jobResp.Renditions) == 0 {
+		t.Fatalf("expected renditions in response")
+	}
+	var jobRenditions []rendition
+	if err := json.Unmarshal(jobResp.Renditions, &jobRenditions); err != nil {
+		t.Fatalf("decode job renditions: %v", err)
+	}
+	if len(jobRenditions) == 0 {
+		t.Fatalf("expected at least one rendition in job response")
+	}
+	livePrefix := fmt.Sprintf("https://cdn.example.com/hls/live/%s/", jobID)
+	if !strings.HasPrefix(jobRenditions[0].ManifestURL, livePrefix) {
+		t.Fatalf("unexpected live rendition manifest: %s", jobRenditions[0].ManifestURL)
+	}
 	master := filepath.Join(tempDir, "live", jobID, "index.m3u8")
 
 	waitFor(t, 30*time.Second, func() bool {
@@ -245,6 +269,18 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	}
 	if persisted2.StoppedAt == nil {
 		t.Fatalf("expected stopped timestamp for cancelled job")
+	}
+}
+
+func TestNewServerRequiresPublicBaseURL(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "")
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", "")
+
+	if _, err := newServer("", tempDir); err == nil {
+		t.Fatal("expected error when public base URL is unset")
+	} else if !strings.Contains(err.Error(), "BITRIVER_TRANSCODER_PUBLIC_BASE_URL must be configured") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
