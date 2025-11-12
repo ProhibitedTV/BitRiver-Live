@@ -87,6 +87,7 @@ type Storage struct {
 	ingestController    ingest.Controller
 	ingestMaxAttempts   int
 	ingestRetryInterval time.Duration
+	ingestTimeout       time.Duration
 	ingestHealth        []ingest.HealthStatus
 	ingestHealthUpdated time.Time
 	recordingRetention  RecordingRetentionPolicy
@@ -772,6 +773,7 @@ func NewStorage(path string, opts ...Option) (*Storage, error) {
 		filePath:            path,
 		ingestController:    ingest.NoopController{},
 		ingestMaxAttempts:   1,
+		ingestTimeout:       defaultIngestOperationTimeout,
 		ingestHealth:        []ingest.HealthStatus{{Component: "ingest", Status: "disabled"}},
 		ingestHealthUpdated: time.Now().UTC(),
 		recordingRetention: RecordingRetentionPolicy{
@@ -791,6 +793,7 @@ func NewStorage(path string, opts ...Option) (*Storage, error) {
 	if store.ingestMaxAttempts <= 0 {
 		store.ingestMaxAttempts = 1
 	}
+	store.ingestTimeout = normalizeIngestTimeout(store.ingestTimeout)
 	if err := store.load(); err != nil {
 		return nil, err
 	}
@@ -2264,16 +2267,18 @@ func (s *Storage) StartStream(channelID string, renditions []string) (models.Str
 	if attempts <= 0 {
 		attempts = 1
 	}
-	ctx := context.Background()
+	timeout := normalizeIngestTimeout(s.ingestTimeout)
 	var boot ingest.BootResult
 	var bootErr error
 	for attempt := 0; attempt < attempts; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		boot, bootErr = controller.BootStream(ctx, ingest.BootParams{
 			ChannelID:  channelID,
 			SessionID:  sessionID,
 			StreamKey:  channel.StreamKey,
 			Renditions: append([]string{}, renditions...),
 		})
+		cancel()
 		if bootErr == nil {
 			break
 		}
@@ -2340,7 +2345,9 @@ func (s *Storage) StartStream(channelID string, renditions []string) (models.Str
 		s.data.Channels[channelID] = channel
 		jobIDs := append([]string{}, session.IngestJobIDs...)
 		s.mu.Unlock()
-		_ = controller.ShutdownStream(context.Background(), channelID, sessionID, jobIDs)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		_ = controller.ShutdownStream(ctx, channelID, sessionID, jobIDs)
+		cancel()
 		return models.StreamSession{}, err
 	}
 	s.mu.Unlock()
@@ -2377,7 +2384,10 @@ func (s *Storage) StopStream(channelID string, peakConcurrent int) (models.Strea
 		return models.StreamSession{}, ErrIngestControllerUnavailable
 	}
 
-	if err := controller.ShutdownStream(context.Background(), channelID, sessionID, jobIDs); err != nil {
+	timeout := normalizeIngestTimeout(s.ingestTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := controller.ShutdownStream(ctx, channelID, sessionID, jobIDs); err != nil {
 		return models.StreamSession{}, fmt.Errorf("shutdown ingest: %w", err)
 	}
 

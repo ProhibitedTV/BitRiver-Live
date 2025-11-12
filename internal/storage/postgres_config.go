@@ -18,6 +18,7 @@ type PostgresConfig struct {
 	IngestController    ingest.Controller
 	IngestMaxAttempts   int
 	IngestRetryInterval time.Duration
+	IngestTimeout       time.Duration
 	RecordingRetention  RecordingRetentionPolicy
 	ObjectStorage       ObjectStorageConfig
 }
@@ -27,6 +28,7 @@ func newPostgresConfig(dsn string, opts ...Option) PostgresConfig {
 		DSN:               dsn,
 		IngestController:  ingest.NoopController{},
 		IngestMaxAttempts: 1,
+		IngestTimeout:     defaultIngestOperationTimeout,
 		RecordingRetention: RecordingRetentionPolicy{
 			Published:   90 * 24 * time.Hour,
 			Unpublished: 14 * 24 * time.Hour,
@@ -43,5 +45,6 @@ func newPostgresConfig(dsn string, opts ...Option) PostgresConfig {
 	if cfg.IngestMaxAttempts <= 0 {
 		cfg.IngestMaxAttempts = 1
 	}
+	cfg.IngestTimeout = normalizeIngestTimeout(cfg.IngestTimeout)
 	return cfg
 }
