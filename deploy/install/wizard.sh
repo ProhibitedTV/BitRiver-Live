@@ -121,7 +121,7 @@ HOSTNAME_HINT=$(prompt_optional "Hostname viewers will use (optional)")
 
 STORAGE_DRIVER=""
 while [[ -z $STORAGE_DRIVER ]]; do
-        candidate=$(prompt_default "Storage driver (json/postgres)" "json")
+        candidate=$(prompt_default "Storage driver (json/postgres)" "postgres")
         candidate=${candidate,,}
         case $candidate in
         json|postgres)
@@ -252,6 +252,13 @@ if [[ -n $ADMIN_EMAIL && -n $ADMIN_PASSWORD ]]; then
         args+=("--bootstrap-admin-password" "$ADMIN_PASSWORD")
 fi
 
+SUMMARY_STORAGE_DRIVER=$STORAGE_DRIVER
+if [[ $STORAGE_DRIVER == "postgres" ]]; then
+        SUMMARY_STORAGE_DRIVER+=" (default)"
+else
+        SUMMARY_STORAGE_DRIVER+=" (opt-out)"
+fi
+
 cat <<EOF
 
 The installer will run with the following options:
@@ -260,7 +267,7 @@ The installer will run with the following options:
   Service user:      $SERVICE_USER
   Mode:              $MODE
   Listen address:    $ADDR
-  Storage driver:    $STORAGE_DRIVER
+  Storage driver:    $SUMMARY_STORAGE_DRIVER
   Self-signup:       $ALLOW_SELF_SIGNUP (opt-in required to reopen public registration)
 EOF
 
