@@ -60,13 +60,14 @@ sudo systemctl enable --now redis-server
 
 ### PostgreSQL
 
-1. Switch to the `postgres` user to create the application database and credentials.
+1. Switch to the `postgres` user to create the application database and credentials. Choose a role name and password that are unique to this deployment—the automation in [`deploy/check-env.sh`](../deploy/check-env.sh) rejects the historical `bitriver`/`changeme` samples so you do not accidentally reuse them.
 
 ```bash
 sudo -u postgres psql <<'SQL'
-CREATE ROLE bitriver WITH LOGIN PASSWORD 'changeme';
-CREATE DATABASE bitriver OWNER bitriver;
-GRANT ALL PRIVILEGES ON DATABASE bitriver TO bitriver;
+-- Replace brlive_app and the sample password with your own values
+CREATE ROLE brlive_app WITH LOGIN PASSWORD 'P0stgres-Example!';
+CREATE DATABASE brlive_app OWNER brlive_app;
+GRANT ALL PRIVILEGES ON DATABASE brlive_app TO brlive_app;
 SQL
 ```
 
@@ -78,8 +79,10 @@ sudo systemctl restart postgresql
 
 3. Verify connectivity from the application host.
 
+When you test connectivity, use the same credentials you created above and ensure the DSN matches the `.env` file you will provide to the application (see [`deploy/.env.example`](../deploy/.env.example) for the canonical key names). The validation script flags mismatched values so the API and migrators do not fall back to the blocked defaults.
+
 ```bash
-psql "postgres://bitriver:changeme@localhost:5432/bitriver?sslmode=disable" -c '\l'
+psql "postgres://brlive_app:P0stgres-Example!@localhost:5432/brlive_app?sslmode=disable" -c '\l'
 ```
 
 Replace `sslmode=disable` with `require` when TLS is enabled.
@@ -89,7 +92,7 @@ If you are upgrading from the JSON datastore, run:
 ```bash
 go run ./cmd/tools/migrate-json-to-postgres \
   --json /var/lib/bitriver-live/store.json \
-  --postgres-dsn "postgres://bitriver:changeme@localhost:5432/bitriver?sslmode=disable"
+  --postgres-dsn "postgres://brlive_app:P0stgres-Example!@localhost:5432/brlive_app?sslmode=disable"
 ```
 
 The helper copies records into Postgres and verifies the row counts before exiting.
@@ -105,7 +108,7 @@ The helper copies records into Postgres and verifies the row counts before exiti
 
 ```bash
 sudo systemctl restart redis-server
-redis-cli -a 'changeme' ping
+redis-cli -a 'R3dis-Example!' ping
 ```
 
 ## 4. Download BitRiver Live release assets
@@ -150,6 +153,8 @@ Update the entries for:
 - `BITRIVER_SRS_TOKEN`
 - `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`
 - `BITRIVER_TRANSCODER_TOKEN`
+
+The `.env` guardrails shipped with the release bundle intentionally block the original `bitriver`/`changeme` samples. [`deploy/.env.example`](../deploy/.env.example) documents every variable, while [`deploy/check-env.sh`](../deploy/check-env.sh) refuses to continue until each credential changes and `BITRIVER_LIVE_POSTGRES_DSN` matches the database user/password you selected earlier. Rerun the script after every edit so Compose and the systemd units pick up consistent DSNs.
 
 Set `BITRIVER_TRANSCODER_TOKEN` to a strong bearer credential. The FFmpeg job controller refuses to start when `JOB_CONTROLLER_TOKEN` (the environment variable consumed inside the container) is empty, so populate it before launching the stack.
 
