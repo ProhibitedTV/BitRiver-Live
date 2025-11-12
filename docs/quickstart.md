@@ -27,7 +27,7 @@ The script will:
 1. Verify that both Docker and Docker Compose V2 are available.
 2. Generate `.env` with the same defaults baked into `deploy/docker-compose.yml` (including placeholders for the admin email,
    admin password, and the viewer URL) unless the file already exists.
-3. Launch the containers with `docker compose up -d` using the compose file in `deploy/`. Docker automatically builds the API and transcoder images the first time.
+3. Launch the containers with `docker compose up -d` using the compose file in `deploy/`. Docker automatically builds the API and transcoder images the first time, and the manifest now enables `restart: unless-stopped` for each long-lived service so they come back online after crashes or host reboots.
 4. Wait for Postgres to accept connections, apply the SQL migrations in `deploy/migrations/`, and stop immediately if a migration fails so you can correct the database state.
 5. Wait for the API health check to pass, then invoke the `bootstrap-admin` helper to seed the admin account and print the credentials.
 
