@@ -1,3 +1,5 @@
+//go:build !postgres
+
 package pgconn
 
 type CommandTag struct {
