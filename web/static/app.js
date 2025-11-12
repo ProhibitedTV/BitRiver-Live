@@ -2004,6 +2004,71 @@ function setupInstaller() {
     container.appendChild(template.content.cloneNode(true));
     const form = container.querySelector("#installer-form");
     const output = container.querySelector("#installer-output");
+    const copyButton = container.querySelector("#copy-installer");
+    const status = container.querySelector("#installer-status");
+    const setStatus = (state, message) => {
+        if (!status) {
+            return;
+        }
+        if (state) {
+            status.dataset.state = state;
+        }
+        if (typeof message === "string") {
+            status.textContent = message;
+        }
+    };
+    setStatus("idle");
+    if (copyButton) {
+        copyButton.disabled = true;
+    }
+    const summaryElements = {
+        installDir: container.querySelector('[data-summary="installDir"]'),
+        dataDir: container.querySelector('[data-summary="dataDir"]'),
+        serviceUser: container.querySelector('[data-summary="serviceUser"]'),
+        mode: container.querySelector('[data-summary="mode"]'),
+        addr: container.querySelector('[data-summary="addr"]'),
+        hostname: container.querySelector('[data-summary="hostname"]'),
+        enableLogs: container.querySelector('[data-summary="enableLogs"]'),
+        logDir: container.querySelector('[data-summary="logDir"]'),
+    };
+    const updateSummary = () => {
+        if (!form) {
+            return;
+        }
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        const enableLogs = Boolean(form.elements.enableLogs?.checked);
+        const mode = data.mode || "production";
+        const addr = data.addr || (mode === "production" ? ":80" : ":8080");
+        const dataDir = data.dataDir || "/var/lib/bitriver-live";
+        const normalizedDataDir = dataDir.endsWith("/") ? dataDir.slice(0, -1) : dataDir;
+        const logDir = enableLogs ? `${normalizedDataDir}/logs` : "Not provisioned";
+        if (summaryElements.installDir) {
+            summaryElements.installDir.textContent = data.installDir || "/opt/bitriver-live";
+        }
+        if (summaryElements.dataDir) {
+            summaryElements.dataDir.textContent = dataDir;
+        }
+        if (summaryElements.serviceUser) {
+            summaryElements.serviceUser.textContent = data.serviceUser || "bitriver";
+        }
+        if (summaryElements.mode) {
+            summaryElements.mode.textContent =
+                mode === "production" ? "Production (port 80)" : "Development (:8080)";
+        }
+        if (summaryElements.addr) {
+            summaryElements.addr.textContent = addr;
+        }
+        if (summaryElements.hostname) {
+            summaryElements.hostname.textContent = data.hostname || "Not provided";
+        }
+        if (summaryElements.enableLogs) {
+            summaryElements.enableLogs.textContent = enableLogs ? "Provisioned" : "Skipped";
+        }
+        if (summaryElements.logDir) {
+            summaryElements.logDir.textContent = enableLogs ? logDir : "Not provisioned";
+        }
+    };
     const modeField = form.elements.mode;
     const addrField = form.elements.addr;
     if (modeField && addrField) {
@@ -2020,6 +2085,22 @@ function setupInstaller() {
         });
         syncAddress();
     }
+    const handleDirty = () => {
+        updateSummary();
+        if (!status) {
+            return;
+        }
+        const currentState = status.dataset.state;
+        if (currentState === "ready" || currentState === "copied") {
+            setStatus("dirty", "Update detected — regenerate the installer to refresh the script.");
+            if (copyButton) {
+                copyButton.disabled = true;
+            }
+        }
+    };
+    form.addEventListener("input", handleDirty);
+    form.addEventListener("change", handleDirty);
+    updateSummary();
     form.addEventListener("submit", (event) => {
         event.preventDefault();
         const formData = new FormData(form);
@@ -2031,8 +2112,29 @@ function setupInstaller() {
         output.value = script;
         output.focus();
         output.select();
+        output.scrollTop = 0;
+        setStatus("ready", "Installer script ready. Copy and run it on your home server.");
+        if (copyButton) {
+            copyButton.disabled = false;
+            copyButton.focus();
+        }
         showToast("Installer script generated. Copy and run on your home server.");
     });
+    if (copyButton) {
+        copyButton.addEventListener("click", async () => {
+            if (!output?.value) {
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(output.value);
+                showToast("Installer script copied to clipboard.");
+                setStatus("copied", "Script copied. Paste it into your terminal to kick off the install.");
+            } catch (error) {
+                showToast("Copy failed. Use Ctrl+C / ⌘+C instead.", "error");
+                setStatus("ready", "Installer script ready. Use your keyboard to copy if the button fails.");
+            }
+        });
+    }
 }
 
 async function loadModeration(force = false) {
