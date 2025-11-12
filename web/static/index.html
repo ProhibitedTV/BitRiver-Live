@@ -291,9 +291,23 @@
     <template id="installer-template">
         <section class="installer">
             <header class="installer__header">
-                <span class="installer__eyebrow">Home server ready</span>
-                <h3>Generate your guided installer</h3>
-                <p class="installer__intro">Build a self-contained bundle and systemd unit without hand-writing shell scripts.</p>
+                <span class="installer__eyebrow">No command-line experience needed</span>
+                <h3>Set up BitRiver Live in three simple steps</h3>
+                <p class="installer__intro">Tell us where to install, generate the script, then paste it into your home server terminal.</p>
+                <ol class="installer__steps">
+                    <li>
+                        <strong>Fill in the basics.</strong>
+                        Keep the default folders unless you already use different paths.
+                    </li>
+                    <li>
+                        <strong>Generate the script.</strong>
+                        We'll bundle every choice into a single copy-and-paste command.
+                    </li>
+                    <li>
+                        <strong>Run it on your server.</strong>
+                        Paste the script into an Ubuntu shell and follow the prompts.
+                    </li>
+                </ol>
             </header>
             <div class="installer__layout">
                 <form id="installer-form" class="installer__form">
@@ -401,13 +415,13 @@
 
                     <div class="installer__form-actions">
                         <button type="submit" class="primary">Generate installer script</button>
-                        <p class="form-helper">Run with sudo privileges on the target machine to let the helper configure systemd.</p>
+                        <p class="form-helper">Run the generated command with <code>sudo</code> on your server so the helper can finish the setup.</p>
                     </div>
                 </form>
 
                 <aside class="installer__preview">
                     <div class="installer__status" id="installer-status" role="status" aria-live="polite" data-state="idle">
-                        Fill in the form to preview your installer command.
+                        Complete the quick form and we'll prepare the ready-to-run installer command.
                     </div>
                     <p class="installer__hint">The generated script fetches the maintained helper from GitHub, passes your options, and cleans itself up after execution.</p>
                     <textarea
@@ -464,12 +478,13 @@
                         </dl>
                     </div>
                     <div class="installer__checklist">
-                        <h4>Before you run it</h4>
-                        <ul>
-                            <li>Run on Ubuntu 22.04+ with sudo access.</li>
-                            <li>Ensure Go 1.21+ is installed for local builds.</li>
-                            <li>Have your Postgres DSN ready when the helper prompts for storage.</li>
-                        </ul>
+                        <h4>Run the script on your server</h4>
+                        <ol>
+                            <li>SSH into your Ubuntu 22.04+ machine with an account that can use <code>sudo</code>.</li>
+                            <li>Paste the generated script and press Enter to start the guided install.</li>
+                            <li>Follow the prompts to connect storage and create your admin account.</li>
+                            <li>Open the address printed at the end of the script to sign in to BitRiver Live.</li>
+                        </ol>
                     </div>
                 </aside>
             </div>
