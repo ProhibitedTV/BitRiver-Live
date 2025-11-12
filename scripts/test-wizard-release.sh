@@ -36,21 +36,23 @@ exit 0
 EOF
 chmod +x "$release_dir/bootstrap-admin"
 
-responses=$(cat <<'EOF'
-
-
-
-
-
-
-
-
-
-
-n
-
-EOF
-)
+responses=$(printf '%s\n' \
+        "" \
+        "" \
+        "" \
+        "" \
+        "" \
+        "" \
+        "" \
+        "postgres://wizard_user:strongpass@localhost:5432/bitriver?sslmode=require" \
+        "" \
+        "" \
+        "" \
+        "" \
+        "" \
+        "" \
+        "n" \
+        "")
 
 set +e
 output=$(cd "$release_dir" && PATH="/usr/bin:/bin" bash deploy/install/wizard.sh <<<"$responses" 2>&1)
@@ -71,5 +73,17 @@ fi
 if grep -q "Go 1.21" <<<"$output"; then
         echo "Go toolchain checks should not run when using release binaries" >&2
         echo "$output" >&2
+        exit 1
+fi
+
+if grep -qE "bitriver:(changeme|bitriver)" <<<"$output"; then
+        echo "Wizard output should not include blocked bitriver placeholder DSNs" >&2
+        echo "$output" >&2
+        exit 1
+fi
+
+if grep -qE "bitriver:(changeme|bitriver)" "$invocation_file"; then
+        echo "Installer invocation should not include blocked bitriver placeholder DSNs" >&2
+        cat "$invocation_file" >&2
         exit 1
 fi
