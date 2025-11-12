@@ -180,6 +180,8 @@ The API talks to SRS through the dedicated proxy. Leave `BITRIVER_SRS_API` set t
 
 Rerun `./deploy/check-env.sh` until it reports the environment file is ready. The compose manifest also uses required-variable expansion, so `docker compose` fails with an explanatory error when any of the credentials are missing or unchanged from the defaults.
 
+All long-running services in the compose file specify `restart: unless-stopped`, ensuring Docker automatically restarts containers after crashes or reboots. Override the policy per service if your operations model requires different behaviour.
+
 ```bash
 cd /opt/bitriver-live
 sudo docker compose -f deploy/docker-compose.yml pull

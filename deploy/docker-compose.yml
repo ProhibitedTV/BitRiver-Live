@@ -17,6 +17,7 @@ services:
     #   context: ..
     #   dockerfile: Dockerfile
     container_name: bitriver-live
+    restart: unless-stopped
     env_file:
       - ../.env
     ports:
@@ -75,6 +76,7 @@ services:
     # build:
     #   context: ../web/viewer
     container_name: bitriver-viewer
+    restart: unless-stopped
     env_file:
       - ../.env
     environment:
@@ -91,6 +93,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     command: [
       "redis-server",
       "--save", "", "--appendonly", "no",
@@ -102,6 +105,7 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: bitriver-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${BITRIVER_POSTGRES_DB:-bitriver}
       POSTGRES_USER: ${BITRIVER_POSTGRES_USER:?set via .env}
@@ -121,6 +125,7 @@ services:
   srs-controller:
     image: ghcr.io/bitriver-live/bitriver-srs-controller:${BITRIVER_SRS_CONTROLLER_IMAGE_TAG:?set via .env}
     container_name: bitriver-srs-controller
+    restart: unless-stopped
     env_file:
       - ../.env
     environment:
@@ -141,6 +146,7 @@ services:
   srs:
     image: ossrs/srs:5
     container_name: bitriver-srs
+    restart: unless-stopped
     ports:
       - "${BITRIVER_SRS_RTMP_PORT:-1935}:1935"
       - "${BITRIVER_SRS_API_PORT:-1985}:1985"
@@ -156,6 +162,7 @@ services:
   ome:
     image: airensoft/ovenmediaengine:0.15.10
     container_name: bitriver-ome
+    restart: unless-stopped
     ports:
       - "${BITRIVER_OME_HTTP_PORT:-8081}:8081"
       - "${BITRIVER_OME_SIGNALLING_PORT:-9000}:9000"
@@ -175,6 +182,7 @@ services:
     #   context: ..
     #   dockerfile: cmd/transcoder/Dockerfile
     container_name: bitriver-transcoder
+    restart: unless-stopped
     ports:
       - "${BITRIVER_TRANSCODER_HOST_PORT:-9001}:9000"
     environment:
@@ -196,6 +204,7 @@ services:
     container_name: bitriver-transcoder-public
     depends_on:
       - transcoder
+    restart: unless-stopped
     ports:
       - "${BITRIVER_TRANSCODER_PUBLIC_PORT:-9080}:8080"
     volumes:
