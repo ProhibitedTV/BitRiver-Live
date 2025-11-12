@@ -21,6 +21,7 @@ export function ChatPanel({
   const [content, setContent] = useState("");
   const [sending, setSending] = useState(false);
   const [pausedForAuth, setPausedForAuth] = useState(false);
+  const [authRequired, setAuthRequired] = useState(false);
   const chatDisabled = !roomId?.trim();
 
   const isUnauthorizedError = (err: unknown) => {
@@ -66,8 +67,10 @@ export function ChatPanel({
     if (pausedForAuth) {
       if (user) {
         setPausedForAuth(false);
+        setAuthRequired(false);
       } else {
         setLoading(false);
+        setAuthRequired(true);
       }
       return;
     }
@@ -88,12 +91,14 @@ export function ChatPanel({
         const chatMessages = await fetchChannelChat(channelId);
         if (!cancelled) {
           setMessages(chatMessages);
+          setAuthRequired(false);
         }
       } catch (err) {
         if (!cancelled) {
           if (isUnauthorizedError(err) && !user) {
             shouldPoll = false;
             setPausedForAuth(true);
+            setAuthRequired(true);
             setMessages([]);
             setError(undefined);
           } else {
@@ -154,7 +159,11 @@ export function ChatPanel({
       {error && !chatDisabled && <div className="surface" role="alert">{error}</div>}
       {!loading && !error && !chatDisabled && (
         <div className="chat-panel__body" role="log" aria-relevant="additions" aria-live="polite">
-          {sortedMessages.length === 0 ? (
+          {authRequired && !user ? (
+            <div className="surface" role="status">
+              Sign in with the controls above to view and participate in chat.
+            </div>
+          ) : sortedMessages.length === 0 ? (
             <p className="muted">No messages yet. Be the first to say hello!</p>
           ) : (
             <ul>
