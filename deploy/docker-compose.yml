@@ -6,6 +6,8 @@ x-required-credentials: &required_credentials
   BITRIVER_OME_USERNAME: ${BITRIVER_OME_USERNAME:?set via .env}
   BITRIVER_OME_PASSWORD: ${BITRIVER_OME_PASSWORD:?set via .env}
   BITRIVER_TRANSCODER_TOKEN: ${BITRIVER_TRANSCODER_TOKEN:?set via .env}
+  BITRIVER_REDIS_PASSWORD: ${BITRIVER_REDIS_PASSWORD:?set via .env}
+  BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD: ${BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD:?set via .env}
 
 services:
   bitriver-live:
@@ -36,6 +38,11 @@ services:
       BITRIVER_OME_API: ${BITRIVER_OME_API:-http://ome:8081}
       BITRIVER_TRANSCODER_API: ${BITRIVER_TRANSCODER_API:-http://transcoder:9000}
       BITRIVER_INGEST_HEALTH: ${BITRIVER_INGEST_HEALTH:-/healthz}
+      BITRIVER_LIVE_CHAT_QUEUE_DRIVER: ${BITRIVER_LIVE_CHAT_QUEUE_DRIVER:-redis}
+      BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR: ${BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR:-redis:6379}
+      BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD: ${BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD:?set via .env}
+      BITRIVER_LIVE_CHAT_QUEUE_REDIS_STREAM: ${BITRIVER_LIVE_CHAT_QUEUE_REDIS_STREAM:-bitriver-live-chat}
+      BITRIVER_LIVE_CHAT_QUEUE_REDIS_GROUP: ${BITRIVER_LIVE_CHAT_QUEUE_REDIS_GROUP:-bitriver-live-api}
       # Enable HTTPS by mounting certs and uncommenting the lines below.
       # BITRIVER_LIVE_TLS_CERT: /certs/fullchain.pem
       # BITRIVER_LIVE_TLS_KEY: /certs/privkey.pem
@@ -84,11 +91,13 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    command: [
+      "redis-server",
+      "--save", "", "--appendonly", "no",
+      "--requirepass", "${BITRIVER_REDIS_PASSWORD:?set via .env}"
+    ]
     volumes:
       - redis-data:/data
-    ports:
-      - "${BITRIVER_REDIS_PORT:-6379}:6379"
 
   postgres:
     image: postgres:15-alpine
