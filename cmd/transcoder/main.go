@@ -1,3 +1,4 @@
+// Command transcoder coordinates FFmpeg-based transcoding jobs.
 package main
 
 import (

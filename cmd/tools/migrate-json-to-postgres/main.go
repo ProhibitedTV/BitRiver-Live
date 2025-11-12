@@ -1,3 +1,4 @@
+// Command migrate-json-to-postgres migrates stored data from JSON into Postgres.
 package main
 
 import (
