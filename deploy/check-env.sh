@@ -64,6 +64,10 @@ if (( ${#blocked[@]} > 0 )); then
   done
 fi
 
+if [[ -n "${BITRIVER_LIVE_POSTGRES_DSN:-}" && "$BITRIVER_LIVE_POSTGRES_DSN" == *"bitriver:bitriver"* ]]; then
+  echo "Warning: BITRIVER_LIVE_POSTGRES_DSN still references bitriver:bitriver. Update or unset it to match the Postgres credentials." >&2
+fi
+
 if (( ${#missing[@]} > 0 || ${#blocked[@]} > 0 )); then
   exit 1
 fi
