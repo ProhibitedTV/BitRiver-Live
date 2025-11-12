@@ -278,8 +278,9 @@ func main() {
 		os.Exit(1)
 	}
 	var (
-		store              storage.Repository
-		storagePostgresDSN string
+		store                   storage.Repository
+		storagePostgresDSN      string
+		datastoreAcquireTimeout time.Duration
 	)
 	switch driver {
 	case "json":
@@ -304,6 +305,7 @@ func main() {
 			pgOptions = append(pgOptions, storage.WithPostgresPoolDurations(maxLifetime, maxIdle, healthInterval))
 		}
 		acquireTimeout := resolveDuration(*postgresAcquireTimeout, "BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT", 0)
+		datastoreAcquireTimeout = acquireTimeout
 		if acquireTimeout > 0 {
 			pgOptions = append(pgOptions, storage.WithPostgresAcquireTimeout(acquireTimeout))
 		}
@@ -343,7 +345,7 @@ func main() {
 	case "memory":
 		sessionStore = auth.NewMemorySessionStore()
 	case "postgres":
-		pgStore, err := auth.NewPostgresSessionStore(sessionConfig.DSN)
+		pgStore, err := auth.NewPostgresSessionStore(sessionConfig.DSN, auth.WithTimeout(datastoreAcquireTimeout))
 		if err != nil {
 			logger.Error("failed to open session store", "error", err)
 			os.Exit(1)

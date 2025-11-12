@@ -13,11 +13,30 @@ import (
 // PostgresSessionStore persists sessions to a Postgres table, allowing multiple
 // API replicas to share authentication state.
 type PostgresSessionStore struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	timeout time.Duration
+}
+
+type postgresSessionStoreOptions struct {
+	timeout time.Duration
+}
+
+// PostgresSessionStoreOption configures Postgres session store behaviour.
+type PostgresSessionStoreOption func(*postgresSessionStoreOptions)
+
+const defaultPostgresSessionTimeout = 5 * time.Second
+
+// WithTimeout limits how long the store waits for Postgres operations to complete.
+func WithTimeout(timeout time.Duration) PostgresSessionStoreOption {
+	return func(cfg *postgresSessionStoreOptions) {
+		if timeout > 0 {
+			cfg.timeout = timeout
+		}
+	}
 }
 
 // NewPostgresSessionStore opens a Postgres-backed session store using the provided DSN.
-func NewPostgresSessionStore(dsn string) (*PostgresSessionStore, error) {
+func NewPostgresSessionStore(dsn string, opts ...PostgresSessionStoreOption) (*PostgresSessionStore, error) {
 	if dsn == "" {
 		return nil, fmt.Errorf("postgres session dsn required")
 	}
@@ -29,7 +48,13 @@ func NewPostgresSessionStore(dsn string) (*PostgresSessionStore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open postgres session pool: %w", err)
 	}
-	return &PostgresSessionStore{pool: pool}, nil
+	options := postgresSessionStoreOptions{timeout: defaultPostgresSessionTimeout}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&options)
+		}
+	}
+	return &PostgresSessionStore{pool: pool, timeout: options.timeout}, nil
 }
 
 // Close releases the Postgres connection pool resources.
@@ -55,7 +80,9 @@ func (s *PostgresSessionStore) Save(token, userID string, expiresAt time.Time) e
 	if s.pool == nil {
 		return fmt.Errorf("postgres session pool not configured")
 	}
-	_, err := s.pool.Exec(context.Background(), `
+	ctx, cancel := s.operationContext()
+	defer cancel()
+	_, err := s.pool.Exec(ctx, `
 INSERT INTO auth_sessions (token, user_id, expires_at)
 VALUES ($1, $2, $3)
 ON CONFLICT (token) DO UPDATE SET user_id = EXCLUDED.user_id, expires_at = EXCLUDED.expires_at
@@ -68,7 +95,9 @@ func (s *PostgresSessionStore) Get(token string) (SessionRecord, bool, error) {
 	if s.pool == nil {
 		return SessionRecord{}, false, fmt.Errorf("postgres session pool not configured")
 	}
-	row := s.pool.QueryRow(context.Background(), `
+	ctx, cancel := s.operationContext()
+	defer cancel()
+	row := s.pool.QueryRow(ctx, `
 SELECT user_id, expires_at
 FROM auth_sessions
 WHERE token = $1
@@ -89,7 +118,9 @@ func (s *PostgresSessionStore) Delete(token string) error {
 	if s.pool == nil {
 		return fmt.Errorf("postgres session pool not configured")
 	}
-	_, err := s.pool.Exec(context.Background(), `DELETE FROM auth_sessions WHERE token = $1`, token)
+	ctx, cancel := s.operationContext()
+	defer cancel()
+	_, err := s.pool.Exec(ctx, `DELETE FROM auth_sessions WHERE token = $1`, token)
 	return err
 }
 
@@ -98,8 +129,17 @@ func (s *PostgresSessionStore) PurgeExpired(now time.Time) error {
 	if s.pool == nil {
 		return fmt.Errorf("postgres session pool not configured")
 	}
-	_, err := s.pool.Exec(context.Background(), `DELETE FROM auth_sessions WHERE expires_at <= $1`, now.UTC())
+	ctx, cancel := s.operationContext()
+	defer cancel()
+	_, err := s.pool.Exec(ctx, `DELETE FROM auth_sessions WHERE expires_at <= $1`, now.UTC())
 	return err
+}
+
+func (s *PostgresSessionStore) operationContext() (context.Context, context.CancelFunc) {
+	if s.timeout > 0 {
+		return context.WithTimeout(context.Background(), s.timeout)
+	}
+	return context.Background(), func() {}
 }
 
 func isNoRows(err error) bool {
