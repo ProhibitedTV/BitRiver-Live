@@ -18,6 +18,8 @@ missing=()
 blocked=()
 
 required_vars=(
+  BITRIVER_POSTGRES_USER
+  BITRIVER_POSTGRES_PASSWORD
   BITRIVER_LIVE_ADMIN_EMAIL
   BITRIVER_LIVE_ADMIN_PASSWORD
   BITRIVER_SRS_TOKEN
@@ -27,6 +29,8 @@ required_vars=(
 )
 
 declare -A forbidden_values=(
+  [BITRIVER_POSTGRES_USER]="bitriver"
+  [BITRIVER_POSTGRES_PASSWORD]="bitriver"
   [BITRIVER_LIVE_ADMIN_EMAIL]="admin@example.com"
   [BITRIVER_LIVE_ADMIN_PASSWORD]="change-me-now"
   [BITRIVER_SRS_TOKEN]="local-dev-token"
