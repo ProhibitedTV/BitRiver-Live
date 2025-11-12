@@ -45,6 +45,20 @@ The script builds the Go API and transcoder images, brings up Postgres, Redis, S
 
 Update the generated `.env` file to match your domain, change the seeded credentials, and rerun `docker compose up -d` whenever you tweak environment variables. For troubleshooting tips and common follow-up commands, see [`docs/quickstart.md`](docs/quickstart.md).
 
+### Configure Docker Compose credentials
+
+When deploying from `deploy/docker-compose.yml`, populate a dedicated environment file so the stack starts with unique secrets:
+
+1. Copy `deploy/.env.example` to `.env` at the repository root.
+2. Replace the placeholder values for:
+   - `BITRIVER_LIVE_ADMIN_EMAIL` and `BITRIVER_LIVE_ADMIN_PASSWORD`
+   - `BITRIVER_SRS_TOKEN`
+   - `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`
+   - `BITRIVER_TRANSCODER_TOKEN`
+3. Run `deploy/check-env.sh` to confirm the file no longer contains defaults. The script exits non-zero until each credential is customised. Docker Compose also fails fast thanks to the required-variable checks baked into the manifest.
+
+Keep the filled `.env` file private—it is `.gitignore`'d and should never be committed to version control.
+
 ## Manual development workflow
 
 Want to hack on the Go API without Docker? Use the JSON datastore for a fast start, then graduate to Postgres when you need persistence guarantees.
