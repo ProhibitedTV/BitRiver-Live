@@ -14,6 +14,7 @@ export function Navbar() {
   const [message, setMessage] = useState<string | undefined>();
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [managedChannelId, setManagedChannelId] = useState<string | undefined>();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -26,6 +27,28 @@ export function Navbar() {
     const setFromQuery = (matches: boolean) => setTheme(matches ? "light" : "dark");
     setFromQuery(query.matches);
     const handler = (event: MediaQueryListEvent) => setFromQuery(event.matches);
+    query.addEventListener("change", handler);
+    return () => {
+      query.removeEventListener("change", handler);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!window.matchMedia) {
+      return;
+    }
+    const query = window.matchMedia("(min-width: 640px)");
+    if (query.matches) {
+      setMenuOpen(false);
+    }
+    const handler = (event: MediaQueryListEvent) => {
+      if (event.matches) {
+        setMenuOpen(false);
+      }
+    };
     query.addEventListener("change", handler);
     return () => {
       query.removeEventListener("change", handler);
@@ -81,11 +104,19 @@ export function Navbar() {
     };
   }, [user]);
 
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [mode, user]);
+
   const reset = () => {
     setEmail("");
     setPassword("");
     setDisplayName("");
     setMessage(undefined);
+  };
+
+  const closeMenu = () => {
+    setMenuOpen(false);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -110,14 +141,28 @@ export function Navbar() {
   return (
     <header className="navbar">
       <div className="navbar-inner">
-        <Link href="/" aria-label="BitRiver Live home" className="badge">
-          <span role="img" aria-hidden>
-            📡
-          </span>
-          BitRiver Live
-        </Link>
-        <nav className="nav-links">
-          <Link href="/">Directory</Link>
+        <div className="navbar-brand">
+          <Link href="/" aria-label="BitRiver Live home" className="badge" onClick={closeMenu}>
+            <span role="img" aria-hidden>
+              📡
+            </span>
+            BitRiver Live
+          </Link>
+          <button
+            className="nav-toggle"
+            type="button"
+            aria-expanded={menuOpen}
+            aria-controls="viewer-nav-menu"
+            aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
+            onClick={() => setMenuOpen((prev) => !prev)}
+          >
+            <span aria-hidden>{menuOpen ? "✕" : "☰"}</span>
+          </button>
+        </div>
+        <nav id="viewer-nav-menu" className={`nav-links${menuOpen ? " nav-links--open" : ""}`}>
+          <Link href="/" onClick={closeMenu}>
+            Directory
+          </Link>
           <button
             className="secondary-button"
             type="button"
@@ -130,11 +175,21 @@ export function Navbar() {
             <>
               <span className="muted">Signed in as {user.displayName}</span>
               {managedChannelId && (
-                <Link href={`/creator/uploads/${managedChannelId}`} className="secondary-button">
+                <Link
+                  href={`/creator/uploads/${managedChannelId}`}
+                  className="secondary-button"
+                  onClick={closeMenu}
+                >
                   Manage channel
                 </Link>
               )}
-              <button className="secondary-button" onClick={() => logout()}>
+              <button
+                className="secondary-button"
+                onClick={() => {
+                  closeMenu();
+                  void logout();
+                }}
+              >
                 Sign out
               </button>
             </>
@@ -145,6 +200,7 @@ export function Navbar() {
                 onClick={() => {
                   reset();
                   setMode("login");
+                  closeMenu();
                 }}
               >
                 Sign in
@@ -154,6 +210,7 @@ export function Navbar() {
                 onClick={() => {
                   reset();
                   setMode("signup");
+                  closeMenu();
                 }}
               >
                 Create account
