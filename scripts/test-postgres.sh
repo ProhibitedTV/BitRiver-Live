@@ -109,13 +109,16 @@ export GOTOOLCHAIN="${GOTOOLCHAIN:-local}"
 export GOPROXY="https://proxy.golang.org,direct"
 export GOSUMDB="sum.golang.org"
 
-GO_MOD_BACKUP=$(mktemp)
-GO_SUM_BACKUP=$(mktemp)
-cp go.mod "$GO_MOD_BACKUP"
+go_mod_backup_tmp=$(mktemp)
+cp go.mod "$go_mod_backup_tmp"
+GO_MOD_BACKUP="$go_mod_backup_tmp"
+
+go_sum_backup_tmp=$(mktemp)
 if [ -f go.sum ]; then
-  cp go.sum "$GO_SUM_BACKUP"
+  cp go.sum "$go_sum_backup_tmp"
+  GO_SUM_BACKUP="$go_sum_backup_tmp"
 else
-  rm -f "$GO_SUM_BACKUP"
+  rm -f "$go_sum_backup_tmp"
   GO_SUM_BACKUP=""
 fi
 
