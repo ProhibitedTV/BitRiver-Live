@@ -9,7 +9,7 @@ The tables below consolidate the default roles and network bindings defined in [
 | Service | Role | Default ports | Notes |
 | --- | --- | --- | --- |
 | bitriver-live | Go control centre and API | 8080/TCP (HTTP), optional 443/TCP via TLS flags | Depends on PostgreSQL, Redis, SRS, OME, and the transcoder for ingest/processing. [`deploy/docker-compose.yml`](../deploy/docker-compose.yml) maps `8080:8080` and the systemd unit runs the same binary. |
-| bitriver-viewer | Next.js viewer runtime | 3000/TCP (HTTP) | Proxied behind the API when `BITRIVER_VIEWER_ORIGIN` is set. The systemd unit launches `node server.js`. |
+| bitriver-viewer | Next.js viewer runtime | 3000/TCP (HTTP) | Proxied behind the API when `BITRIVER_VIEWER_ORIGIN` is set. The systemd unit launches `node .next/standalone/server.js`. |
 | postgres | Relational store | 5432/TCP | Required for channel metadata, recordings, and accounts. |
 | redis | Rate limiting and chat queues | 6379/TCP | Optional unless Redis-backed queues or rate limits are enabled. |
 | srs | RTMP/WebRTC ingest | 1935/TCP (RTMP), 1985/TCP (HTTP API) | Health checks query `/healthz` or `/api/v1/versions`. |
