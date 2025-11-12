@@ -1,3 +1,4 @@
+// Command bootstrap-admin seeds or updates an administrator account in the datastore.
 package main
 
 import (

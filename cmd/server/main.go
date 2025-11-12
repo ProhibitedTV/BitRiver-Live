@@ -1,3 +1,4 @@
+// Command server starts the BitRiver API HTTP service.
 package main
 
 import (
