@@ -151,12 +151,27 @@ services:
     environment:
       JOB_CONTROLLER_BIND: :9000
       JOB_CONTROLLER_TOKEN: ${BITRIVER_TRANSCODER_TOKEN:?set via .env}
+      BITRIVER_TRANSCODER_PUBLIC_BASE_URL: ${BITRIVER_TRANSCODER_PUBLIC_BASE_URL:-http://transcoder-public:8080}
+      BITRIVER_TRANSCODER_PUBLIC_DIR: ${BITRIVER_TRANSCODER_PUBLIC_DIR:-/work/public}
+    volumes:
+      - ./transcoder-data:/work
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:9000/healthz"]
       interval: 30s
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  transcoder-public:
+    image: nginx:alpine
+    container_name: bitriver-transcoder-public
+    depends_on:
+      - transcoder
+    ports:
+      - "${BITRIVER_TRANSCODER_PUBLIC_PORT:-9080}:8080"
+    volumes:
+      - ./transcoder-data:/work:ro
+      - ./nginx/transcoder-public.conf:/etc/nginx/nginx.conf:ro
 
 volumes:
   redis-data:
