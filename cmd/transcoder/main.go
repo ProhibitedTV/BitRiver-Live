@@ -158,26 +158,25 @@ func newServer(token, outputRoot string) (*server, error) {
 		return nil, err
 	}
 	publicBase := strings.TrimSpace(os.Getenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL"))
-	var publicRoot string
-	if publicBase != "" {
-		mirrorRoot := strings.TrimSpace(os.Getenv("BITRIVER_TRANSCODER_PUBLIC_DIR"))
-		if mirrorRoot == "" {
-			mirrorRoot = filepath.Join(store.root, "public")
-		}
-		absMirror, err := filepath.Abs(mirrorRoot)
-		if err != nil {
-			return nil, fmt.Errorf("resolve public mirror: %w", err)
-		}
-		if err := os.MkdirAll(absMirror, 0o755); err != nil {
-			return nil, fmt.Errorf("prepare public mirror: %w", err)
-		}
-		publicRoot = absMirror
+	if publicBase == "" {
+		return nil, fmt.Errorf("BITRIVER_TRANSCODER_PUBLIC_BASE_URL must be configured before starting the transcoder")
+	}
+	mirrorRoot := strings.TrimSpace(os.Getenv("BITRIVER_TRANSCODER_PUBLIC_DIR"))
+	if mirrorRoot == "" {
+		mirrorRoot = filepath.Join(store.root, "public")
+	}
+	absMirror, err := filepath.Abs(mirrorRoot)
+	if err != nil {
+		return nil, fmt.Errorf("resolve public mirror: %w", err)
+	}
+	if err := os.MkdirAll(absMirror, 0o755); err != nil {
+		return nil, fmt.Errorf("prepare public mirror: %w", err)
 	}
 	srv := &server{
 		token:      token,
 		outputRoot: store.root,
-		publicRoot: publicRoot,
 		publicBase: publicBase,
+		publicRoot: absMirror,
 		jobs:       jobs,
 		uploads:    uploads,
 		processes:  make(map[string]*processState),
@@ -342,9 +341,19 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	publicRenditions := cloneRenditions(plan.renditions)
+	for i := range publicRenditions {
+		rel := relativeLocation(plan.outputDir, publicRenditions[i].ManifestURL)
+		if rel == "" {
+			rel = filepath.ToSlash(filepath.Base(filepath.FromSlash(publicRenditions[i].ManifestURL)))
+		}
+		publicRenditions[i].ManifestURL = s.publicLiveURL(jobID, rel)
+	}
+
 	resp := jobResponse{
+		JobID:      jobID,
 		JobIDs:     []string{jobID},
-		Renditions: encodeRenditions(meta.Renditions),
+		Renditions: encodeRenditions(publicRenditions),
 	}
 	writeJSON(w, http.StatusCreated, resp)
 }
@@ -472,14 +481,17 @@ func (s *server) handleUploads(w http.ResponseWriter, r *http.Request) {
 	publicRenditions := cloneRenditions(plan.renditions)
 	playback := meta.Playback
 	if s.publicBase != "" {
-		playback = s.publicUploadURL(jobID, "index.m3u8")
+		masterRel := relativeLocation(plan.outputDir, plan.master)
+		if masterRel == "" {
+			masterRel = "index.m3u8"
+		}
+		playback = s.publicUploadURL(jobID, masterRel)
 		for i := range publicRenditions {
-			localPath := filepath.FromSlash(publicRenditions[i].ManifestURL)
-			rel, err := filepath.Rel(plan.outputDir, localPath)
-			if err != nil {
-				rel = filepath.Base(localPath)
+			rel := relativeLocation(plan.outputDir, publicRenditions[i].ManifestURL)
+			if rel == "" {
+				rel = filepath.ToSlash(filepath.Base(filepath.FromSlash(publicRenditions[i].ManifestURL)))
 			}
-			publicRenditions[i].ManifestURL = s.publicUploadURL(jobID, filepath.ToSlash(rel))
+			publicRenditions[i].ManifestURL = s.publicUploadURL(jobID, rel)
 		}
 	}
 	resp := uploadResponse{
@@ -1074,11 +1086,35 @@ func (s *server) publishUpload(up *uploadJob) error {
 	return nil
 }
 
+func (s *server) publicLiveURL(jobID, rel string) string {
+	if s.publicBase == "" {
+		return ""
+	}
+	return joinURL(s.publicBase, "live", jobID, rel)
+}
+
 func (s *server) publicUploadURL(jobID, rel string) string {
 	if s.publicBase == "" {
 		return ""
 	}
 	return joinURL(s.publicBase, "uploads", jobID, rel)
+}
+
+func relativeLocation(baseDir, target string) string {
+	base := strings.TrimSpace(baseDir)
+	trimmed := strings.TrimSpace(target)
+	if base == "" || trimmed == "" {
+		return ""
+	}
+	converted := filepath.FromSlash(trimmed)
+	rel, err := filepath.Rel(base, converted)
+	if err != nil {
+		return filepath.ToSlash(filepath.Base(converted))
+	}
+	if rel == "." {
+		return filepath.ToSlash(filepath.Base(converted))
+	}
+	return filepath.ToSlash(rel)
 }
 
 func joinURL(base string, parts ...string) string {
