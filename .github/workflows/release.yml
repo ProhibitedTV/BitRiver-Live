@@ -94,6 +94,7 @@ jobs:
           )
 
           out_dir="dist/${GOOS}-${GOARCH}"
+          rm -rf "$out_dir"
           mkdir -p "$out_dir"
 
           bin_ext=""
@@ -101,7 +102,13 @@ jobs:
             bin_ext=".exe"
           fi
 
-          cp -R deploy/migrations "$out_dir/migrations"
+          deploy_dir="$out_dir/deploy"
+          mkdir -p "$deploy_dir"
+          cp -a deploy/migrations "$deploy_dir/migrations"
+          cp deploy/docker-compose.yml "$deploy_dir/docker-compose.yml"
+          cp -a deploy/install "$deploy_dir/install"
+          cp -a deploy/srs "$deploy_dir/srs"
+          cp -a deploy/ome "$deploy_dir/ome"
 
           for target in "${targets[@]}"; do
             bin_name="$(basename "$target")"
@@ -113,7 +120,7 @@ jobs:
           if [ "$GOOS" = "windows" ]; then
             (cd "$out_dir" && zip -r "../${archive_base}.zip" .)
           else
-            tar -C "$out_dir" -czf "dist/${archive_base}.tar.gz" .
+            tar -C "$out_dir" --owner=0 --group=0 --numeric-owner -czf "dist/${archive_base}.tar.gz" .
           fi
 
       - name: Upload release artifacts

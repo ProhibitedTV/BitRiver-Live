@@ -107,7 +107,25 @@ sudo systemctl restart redis-server
 redis-cli -a 'changeme' ping
 ```
 
-## 4. Deploy ingest services
+## 4. Download BitRiver Live release assets
+
+Always install from a tagged release so the binaries, installer scripts, and Docker Compose manifests stay in sync. Download the archive that matches your architecture from the [GitHub Releases](https://github.com/BitRiver-Live/BitRiver-Live/releases) page.
+
+```bash
+# Replace v1.2.3 with the release tag you plan to deploy
+export BITRIVER_LIVE_VERSION="v1.2.3"
+export BITRIVER_LIVE_PACKAGE="bitriver-live-linux-amd64.tar.gz"  # Use linux-arm64 on Ampere/Graviton hosts
+
+curl -LO "https://github.com/BitRiver-Live/BitRiver-Live/releases/download/${BITRIVER_LIVE_VERSION}/${BITRIVER_LIVE_PACKAGE}"
+sudo mkdir -p /opt/bitriver-live
+sudo tar -C /opt/bitriver-live -xzf "${BITRIVER_LIVE_PACKAGE}"
+sudo chown -R $USER:$USER /opt/bitriver-live
+rm "${BITRIVER_LIVE_PACKAGE}"
+```
+
+The archive expands into `/opt/bitriver-live` with the compiled binaries plus the `deploy/` directory (`docker-compose.yml`, `install/`, `srs/`, and `ome/`) referenced throughout this guide.
+
+## 5. Deploy ingest services
 
 BitRiver Live relies on SRS for ingest and OvenMediaEngine (OME) plus a transcoder for playback. Choose the approach that matches your operations model.
 
@@ -117,9 +135,8 @@ The compose bundle under [`deploy/docker-compose.yml`](../deploy/docker-compose.
 
 ```bash
 cd /opt/bitriver-live
-sudo git clone https://github.com/your-org/BitRiver-Live.git .
-sudo docker compose pull
-sudo docker compose up -d srs ome transcoder
+sudo docker compose -f deploy/docker-compose.yml pull
+sudo docker compose -f deploy/docker-compose.yml up -d srs ome transcoder
 ```
 
 Review `deploy/srs/conf/srs.conf` for the default SRS ports and authentication settings. Mount a customised version into the container when you need stricter access control or TLS certificates for RTMP/RTMPS.
@@ -142,13 +159,14 @@ sudo systemctl status srs.service
 journalctl -u srs.service -f
 ```
 
-## 5. Deploy the API service
+## 6. Deploy the API service
 
 ### Guided setup
 
-For a prompt-driven experience, run the wizard at [`deploy/install/wizard.sh`](../deploy/install/wizard.sh) from the repository root:
+For a prompt-driven experience, run the wizard at [`deploy/install/wizard.sh`](../deploy/install/wizard.sh) from the release directory you extracted earlier:
 
 ```bash
+cd /opt/bitriver-live
 ./deploy/install/wizard.sh
 ```
 
@@ -158,17 +176,13 @@ If a run fails midway, fix the highlighted issue and start the wizard again—it
 
 ### Option A: Automated installer (recommended)
 
-The UI-generated installer script now wraps the tracked helper at [`deploy/install/ubuntu.sh`](../deploy/install/ubuntu.sh). You can run it directly after cloning the repository, or download the latest version from GitHub:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/BitRiver-Live/BitRiver-Live/main/deploy/install/ubuntu.sh -o ubuntu.sh
-chmod +x ubuntu.sh
-```
+The UI-generated installer script now wraps the tracked helper at [`deploy/install/ubuntu.sh`](../deploy/install/ubuntu.sh). Run it from the extracted release so it uses the binaries and migrations from the same tag:
 
 Provide the required inputs (install directory, data directory, and service user) via flags or matching environment variables. The installer now defaults the storage backend to Postgres and refuses to continue until you provide `--postgres-dsn <DSN>` (or `BITRIVER_LIVE_POSTGRES_DSN`). Apply the SQL files in [`deploy/migrations/`](../deploy/migrations) to that database before re-running the helper so the schema is ready for the API. When Postgres is in use the session manager automatically persists to the same DSN; pass `--session-store memory` to keep ephemeral sessions or `--session-store-dsn` to point at a dedicated session database. Use `--storage-driver json` only when you intentionally opt into the legacy JSON store for development.
 
 ```bash
-./ubuntu.sh \
+cd /opt/bitriver-live
+./deploy/install/ubuntu.sh \
   --install-dir /opt/bitriver-live \
   --data-dir /var/lib/bitriver-live \
   --service-user bitriver \
@@ -179,7 +193,7 @@ Provide the required inputs (install directory, data directory, and service user
   --hostname stream.example.com
 ```
 
-Run the helper from the repository root—the script validates the presence of `go.mod` before building the binary.
+Run the helper from the release root—the script reuses the packaged `server`/`bootstrap-admin` binaries or, when a checked-out module is present, rebuilds them from source.
 
 The script builds the API binary, writes `$INSTALL_DIR/.env`, configures optional TLS and rate-limiting variables, and registers a `bitriver-live.service` systemd unit. Review the generated `.env` file to ensure storage selections (JSON or Postgres), database DSNs, session-store driver settings, and Redis credentials are present before starting traffic.
 
@@ -203,11 +217,12 @@ Environment variable equivalents:
 
 If you prefer hand-crafted units, follow the manual process below.
 
-1. Fetch dependencies and build the binary.
+1. Install the API binary from the release archive.
 
 ```bash
 cd /opt/bitriver-live
-go build -o bin/bitriver-live ./cmd/server
+install -d -m 755 bin
+install -m 755 server bin/bitriver-live
 ```
 
 2. Install a dedicated system user and directories for configuration and data.
@@ -266,7 +281,7 @@ sudo systemctl enable --now bitriver-live.service
 sudo systemctl status bitriver-live.service
 ```
 
-## 6. Build and deploy the viewer
+## 7. Build and deploy the viewer
 
 1. Install dependencies and build the standalone Next.js bundle.
 
@@ -285,7 +300,7 @@ sudo systemctl status bitriver-viewer.service
 
 When fronting the viewer with Nginx or another proxy, route `/viewer` requests to the viewer port and terminate TLS upstream. Align `BITRIVER_VIEWER_ORIGIN` in the API environment with the deployed viewer URL.
 
-## 7. Post-install checks
+## 8. Post-install checks
 
 1. Validate services are running.
 
