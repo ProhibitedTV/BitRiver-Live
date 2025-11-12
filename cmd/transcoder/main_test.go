@@ -3,11 +3,13 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -175,6 +177,130 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	}
 	if persisted2.StoppedAt == nil {
 		t.Fatalf("expected stopped timestamp for cancelled job")
+	}
+}
+
+func TestUploadPublishesHTTPPlayback(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test requires ffmpeg")
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not available")
+	}
+
+	tempDir := t.TempDir()
+	workDir := filepath.Join(tempDir, "work")
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		t.Fatalf("mkdir work: %v", err)
+	}
+	sample := filepath.Join(tempDir, "sample.mp4")
+	generate := exec.Command("ffmpeg", "-y",
+		"-f", "lavfi", "-i", "testsrc=size=160x120:rate=5",
+		"-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100",
+		"-shortest", "-t", "3",
+		"-pix_fmt", "yuv420p",
+		"-c:v", "libx264", "-preset", "ultrafast",
+		"-c:a", "aac",
+		sample,
+	)
+	if out, err := generate.CombinedOutput(); err != nil {
+		t.Fatalf("generate sample: %v (%s)", err, out)
+	}
+
+	publicDir := filepath.Join(tempDir, "public")
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", publicDir)
+
+	srv, err := newServer("", workDir)
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	ts := httptest.NewServer(srv.routes())
+	defer ts.Close()
+
+	client := ts.Client()
+
+	renditions := []map[string]any{
+		{"name": "720p", "bitrate": 2800},
+	}
+	body, err := json.Marshal(map[string]any{
+		"channelId":  "channel-1",
+		"uploadId":   "upload-1",
+		"sourceUrl":  sample,
+		"filename":   "sample.mp4",
+		"renditions": renditions,
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	resp, err := client.Post(ts.URL+"/v1/uploads", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("post upload: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	}
+	var uploadResp uploadResponse
+	if err := json.NewDecoder(resp.Body).Decode(&uploadResp); err != nil {
+		t.Fatalf("decode upload response: %v", err)
+	}
+	if uploadResp.JobID == "" {
+		t.Fatal("expected job id in upload response")
+	}
+	expectedPlayback := fmt.Sprintf("https://cdn.example.com/hls/uploads/%s/index.m3u8", uploadResp.JobID)
+	if uploadResp.PlaybackURL != expectedPlayback {
+		t.Fatalf("unexpected playback url: %s", uploadResp.PlaybackURL)
+	}
+	if len(uploadResp.Renditions) == 0 {
+		t.Fatal("expected rendition metadata in response")
+	}
+	var responseRenditions []rendition
+	if err := json.Unmarshal(uploadResp.Renditions, &responseRenditions); err != nil {
+		t.Fatalf("decode rendition response: %v", err)
+	}
+	if len(responseRenditions) == 0 {
+		t.Fatal("expected at least one rendition in response payload")
+	}
+	prefix := fmt.Sprintf("https://cdn.example.com/hls/uploads/%s/", uploadResp.JobID)
+	if !strings.HasPrefix(responseRenditions[0].ManifestURL, prefix) {
+		t.Fatalf("unexpected rendition manifest url: %s", responseRenditions[0].ManifestURL)
+	}
+
+	metadataPath := filepath.Join(workDir, "uploads", uploadResp.JobID, "metadata.json")
+	waitFor(t, 45*time.Second, func() bool {
+		_, err := os.Stat(metadataPath)
+		return err == nil
+	})
+	waitFor(t, 30*time.Second, func() bool {
+		srv.mu.RLock()
+		proc := srv.processes[uploadResp.JobID]
+		srv.mu.RUnlock()
+		return proc == nil
+	})
+
+	data, err := os.ReadFile(metadataPath)
+	if err != nil {
+		t.Fatalf("read metadata: %v", err)
+	}
+	var persisted uploadJob
+	if err := json.Unmarshal(data, &persisted); err != nil {
+		t.Fatalf("decode metadata: %v", err)
+	}
+	if persisted.CompletedAt == nil {
+		t.Fatal("expected completed timestamp for upload")
+	}
+	if persisted.Playback != expectedPlayback {
+		t.Fatalf("unexpected persisted playback url: %s", persisted.Playback)
+	}
+	for _, rendition := range persisted.Renditions {
+		if !strings.HasPrefix(rendition.ManifestURL, prefix) {
+			t.Fatalf("unexpected rendition url: %s", rendition.ManifestURL)
+		}
+	}
+	publishedMaster := filepath.Join(publicDir, "uploads", uploadResp.JobID, "index.m3u8")
+	if _, err := os.Stat(publishedMaster); err != nil {
+		t.Fatalf("expected published master playlist: %v", err)
 	}
 }
 
