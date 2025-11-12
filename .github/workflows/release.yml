@@ -1,0 +1,173 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  go-tests:
+    name: Go unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Run unit tests
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+        run: go test ./... -count=1 -timeout=10s
+
+  postgres-tests:
+    name: Postgres storage tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Run postgres-tagged storage tests
+        run: ./scripts/test-postgres.sh
+
+  build:
+    name: Build release artifacts
+    needs:
+      - go-tests
+      - postgres-tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+    env:
+      CGO_ENABLED: 0
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Build binaries
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          targets=(
+            "server"
+            "transcoder"
+            "tools/bootstrap-admin"
+            "tools/migrate-json-to-postgres"
+          )
+
+          out_dir="dist/${GOOS}-${GOARCH}"
+          mkdir -p "$out_dir"
+
+          bin_ext=""
+          if [ "$GOOS" = "windows" ]; then
+            bin_ext=".exe"
+          fi
+
+          for target in "${targets[@]}"; do
+            bin_name="$(basename "$target")"
+            output_path="$out_dir/$bin_name$bin_ext"
+            go build -o "$output_path" "./cmd/$target"
+          done
+
+          archive_base="bitriver-live-${GOOS}-${GOARCH}"
+          if [ "$GOOS" = "windows" ]; then
+            (cd "$out_dir" && zip -r "../${archive_base}.zip" .)
+          else
+            tar -C "$out_dir" -czf "dist/${archive_base}.tar.gz" .
+          fi
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/bitriver-live-${{ matrix.goos }}-${{ matrix.goarch }}.*
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub release
+    needs:
+      - go-tests
+      - postgres-tests
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+
+      - name: Collect release assets
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          find release -type f -name '*.tar.gz' -exec cp {} dist/ \;
+          find release -type f -name '*.zip' -exec cp {} dist/ \;
+
+      - name: Generate checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum * > CHECKSUMS.txt
+
+      - name: Generate release notes
+        id: notes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = context.ref.replace('refs/tags/', '');
+            const result = await github.rest.repos.generateReleaseNotes({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              target_commitish: context.sha,
+            });
+            core.setOutput('body', result.data.body);
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          body: ${{ steps.notes.outputs.body }}
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/CHECKSUMS.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
