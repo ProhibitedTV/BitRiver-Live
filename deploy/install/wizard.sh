@@ -9,37 +9,44 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 INSTALLER="$SCRIPT_DIR/ubuntu.sh"
 
-if [[ ! -f go.mod ]]; then
-        echo "This wizard must be run from the BitRiver Live repository root (go.mod not found)." >&2
-        exit 1
-fi
-
 if [[ ! -x $INSTALLER ]]; then
         INSTALLER=(bash "$INSTALLER")
 else
         INSTALLER=("$INSTALLER")
 fi
 
-if ! command -v go >/dev/null 2>&1; then
-        echo "Go 1.21 or newer is required (go command not found)." >&2
-        exit 1
-fi
-
-GO_VERSION_OUTPUT=$(go version)
-if [[ $GO_VERSION_OUTPUT =~ go([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
-        GO_MAJOR=${BASH_REMATCH[1]}
-        GO_MINOR=${BASH_REMATCH[2]}
-elif [[ $GO_VERSION_OUTPUT =~ go([0-9]+)\.([0-9]+) ]]; then
-        GO_MAJOR=${BASH_REMATCH[1]}
-        GO_MINOR=${BASH_REMATCH[2]}
+BUILD_FROM_SOURCE=false
+if [[ -f go.mod ]]; then
+        BUILD_FROM_SOURCE=true
+elif [[ -x server && -x bootstrap-admin ]]; then
+        BUILD_FROM_SOURCE=false
 else
-        echo "Unable to determine Go version from: $GO_VERSION_OUTPUT" >&2
+        echo "This wizard must be run from a BitRiver Live source checkout (go.mod) or a staged release with server/bootstrap-admin present." >&2
         exit 1
 fi
 
-if (( GO_MAJOR < 1 )) || { (( GO_MAJOR == 1 )) && (( GO_MINOR < 21 )); }; then
-        echo "Go 1.21 or newer is required (found ${GO_VERSION_OUTPUT#*go})." >&2
-        exit 1
+if [[ $BUILD_FROM_SOURCE == true ]]; then
+        if ! command -v go >/dev/null 2>&1; then
+                echo "Go 1.21 or newer is required when building from source (go command not found)." >&2
+                exit 1
+        fi
+
+        GO_VERSION_OUTPUT=$(go version)
+        if [[ $GO_VERSION_OUTPUT =~ go([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+                GO_MAJOR=${BASH_REMATCH[1]}
+                GO_MINOR=${BASH_REMATCH[2]}
+        elif [[ $GO_VERSION_OUTPUT =~ go([0-9]+)\.([0-9]+) ]]; then
+                GO_MAJOR=${BASH_REMATCH[1]}
+                GO_MINOR=${BASH_REMATCH[2]}
+        else
+                echo "Unable to determine Go version from: $GO_VERSION_OUTPUT" >&2
+                exit 1
+        fi
+
+        if (( GO_MAJOR < 1 )) || { (( GO_MAJOR == 1 )) && (( GO_MINOR < 21 )); }; then
+                echo "Go 1.21 or newer is required when building from source (found ${GO_VERSION_OUTPUT#*go})." >&2
+                exit 1
+        fi
 fi
 
 if command -v systemctl >/dev/null 2>&1; then
