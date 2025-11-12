@@ -106,20 +106,28 @@ fi
 
 echo "running go test -tags postgres ${packages[*]}" >&2
 export GOTOOLCHAIN="${GOTOOLCHAIN:-local}"
-export GOPROXY="https://proxy.golang.org,direct"
-export GOSUMDB="sum.golang.org"
 
 GO_MOD_BACKUP=$(mktemp)
 GO_SUM_BACKUP=$(mktemp)
 cp go.mod "$GO_MOD_BACKUP"
+
+use_replacements=0
 if [ -f go.sum ]; then
   cp go.sum "$GO_SUM_BACKUP"
 else
   rm -f "$GO_SUM_BACKUP"
   GO_SUM_BACKUP=""
+  use_replacements=1
 fi
 
-go mod edit -dropreplace github.com/jackc/pgx/v5 >/dev/null
-go mod edit -dropreplace github.com/jackc/puddle/v2 >/dev/null
+if [ "$use_replacements" -eq 0 ]; then
+  export GOPROXY="https://proxy.golang.org,direct"
+  export GOSUMDB="sum.golang.org"
+  go mod edit -dropreplace github.com/jackc/pgx/v5 >/dev/null
+  go mod edit -dropreplace github.com/jackc/puddle/v2 >/dev/null
+else
+  export GOPROXY="${GOPROXY:-off}"
+  export GOSUMDB="${GOSUMDB:-off}"
+fi
 
 go test -count=1 -tags postgres "${packages[@]}"
