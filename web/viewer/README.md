@@ -2,11 +2,25 @@
 
 This directory hosts the public-facing Next.js application that lets viewers browse channels and watch streams.
 
+## How it fits in
+
+```mermaid
+flowchart TB
+  subgraph Browser
+    ViewerUI[Viewer SPA]
+  end
+  ViewerUI -->|REST| API[(Go API /viewer proxy)]
+  API -->|media URLs| OME[OvenMediaEngine]
+  API -->|chat websocket| Redis
+```
+
+The viewer talks to the Go API for channel data, chat, and authentication. When you serve it through the Go binary, requests to `/viewer` are reverse-proxied to this app.
+
 ## Prerequisites
 
 - [Node.js 18+](https://nodejs.org/en/download/package-manager)
 - npm (bundled with Node.js on most platforms)
-- A running BitRiver Live API (follow the [home quickstart](../../README.md#set-up-bitriver-live-at-home))
+- A running BitRiver Live API (follow the [Docker quickstart](../../README.md#quick-start-docker-one-command) or the manual workflow in the root README)
 
 ## Quick preview
 
