@@ -6,7 +6,6 @@ Requires=docker.service
 [Service]
 Type=simple
 Environment="TRANSCODER_DOCKER=/usr/bin/docker"
-Environment="TRANSCODER_IMAGE=ghcr.io/bitriver-live/bitriver-transcoder:latest"
 Environment="TRANSCODER_CONTAINER_NAME=bitriver-transcoder"
 Environment="TRANSCODER_HOST_PORT=9001"
 Environment="TRANSCODER_BIND=:9000"
@@ -17,6 +16,8 @@ Environment="TRANSCODER_PUBLIC_BASE_URL="
 Environment="TRANSCODER_PUBLIC_DIR=/var/lib/bitriver-transcoder/public"
 Environment="TRANSCODER_EXTRA_ARGS="
 EnvironmentFile=/opt/bitriver-transcoder/.env
+# Fail fast when the container image tag is missing. Update TRANSCODER_IMAGE during upgrades.
+ExecStartPre=/bin/sh -c '[ -n "${TRANSCODER_IMAGE}" ] || { echo "TRANSCODER_IMAGE is not set. Update /opt/bitriver-transcoder/.env with the release tag."; exit 1; }'
 ExecStartPre=/bin/mkdir -p ${TRANSCODER_DATA_DIR}
 ExecStartPre=-${TRANSCODER_DOCKER} rm -f ${TRANSCODER_CONTAINER_NAME}
 ExecStart=/bin/sh -c '${TRANSCODER_DOCKER} run --rm --name "${TRANSCODER_CONTAINER_NAME}" \
