@@ -31,8 +31,9 @@ The script will:
 4. Wait for Postgres to accept connections, apply the SQL migrations in `deploy/migrations/`, and stop immediately if a migration fails so you can correct the database state.
 5. Wait for the API health check to pass, then invoke the `bootstrap-admin` helper to seed the admin account and print the credentials.
 
-Update the generated `.env` before inviting real users—swap in a valid admin email, choose a strong admin password, and set the
-public viewer URL that matches your domain or reverse proxy. The helper prints the seeded credentials after the stack is ready;
+Update the generated `.env` before inviting real users—swap in a valid admin email, choose a strong admin password, rotate the
+`BITRIVER_POSTGRES_USER`/`BITRIVER_POSTGRES_PASSWORD` pair (and update `BITRIVER_LIVE_POSTGRES_DSN` to match), and set the public
+viewer URL that matches your domain or reverse proxy. The helper prints the seeded credentials after the stack is ready;
 log in immediately and rotate the password from the control center settings page.
 
 ## Common follow-up commands

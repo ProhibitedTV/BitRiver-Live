@@ -95,8 +95,8 @@ services:
     container_name: bitriver-postgres
     environment:
       POSTGRES_DB: bitriver
-      POSTGRES_USER: bitriver
-      POSTGRES_PASSWORD: bitriver
+      POSTGRES_USER: ${BITRIVER_POSTGRES_USER:?set via .env}
+      POSTGRES_PASSWORD: ${BITRIVER_POSTGRES_PASSWORD:?set via .env}
     ports:
       - "${BITRIVER_POSTGRES_PORT:-5432}:5432"
     volumes:

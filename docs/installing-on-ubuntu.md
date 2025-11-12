@@ -145,10 +145,13 @@ ${EDITOR:-nano} .env
 
 Update the entries for:
 
+- `BITRIVER_POSTGRES_USER` and `BITRIVER_POSTGRES_PASSWORD`
 - `BITRIVER_LIVE_ADMIN_EMAIL` and `BITRIVER_LIVE_ADMIN_PASSWORD`
 - `BITRIVER_SRS_TOKEN`
 - `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`
 - `BITRIVER_TRANSCODER_TOKEN`
+
+Ensure `BITRIVER_LIVE_POSTGRES_DSN` references the same Postgres user and password you configure above before bringing the stack online.
 
 Rerun `./deploy/check-env.sh` until it reports the environment file is ready. The compose manifest also uses required-variable expansion, so `docker compose` fails with an explanatory error when any of the credentials are missing or unchanged from the defaults.
 
