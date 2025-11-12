@@ -11,6 +11,7 @@ Environment="TRANSCODER_CONTAINER_NAME=bitriver-transcoder"
 Environment="TRANSCODER_HOST_PORT=9001"
 Environment="TRANSCODER_BIND=:9000"
 Environment="TRANSCODER_DATA_DIR=/var/lib/bitriver-transcoder"
+# Required: the FFmpeg controller exits at startup when this token is empty.
 Environment="TRANSCODER_TOKEN="
 Environment="TRANSCODER_PUBLIC_BASE_URL="
 Environment="TRANSCODER_PUBLIC_DIR=/var/lib/bitriver-transcoder/public"

@@ -151,6 +151,8 @@ Update the entries for:
 - `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`
 - `BITRIVER_TRANSCODER_TOKEN`
 
+Set `BITRIVER_TRANSCODER_TOKEN` to a strong bearer credential. The FFmpeg job controller refuses to start when `JOB_CONTROLLER_TOKEN` (the environment variable consumed inside the container) is empty, so populate it before launching the stack.
+
 Ensure `BITRIVER_LIVE_POSTGRES_DSN` references the same Postgres user and password you configure above before bringing the stack online.
 
 The bundled PostgreSQL container now reuses these credentials for its health probe, so the readiness check automatically honours any changes you make to `BITRIVER_POSTGRES_USER` (and `BITRIVER_POSTGRES_DB` if you override it) in `.env`.
@@ -194,7 +196,7 @@ sudo systemctl enable --now ome.service
 sudo systemctl enable --now bitriver-transcoder.service
 ```
 
-Populate the `.env` files with the ports, tokens, and image tags described in [`deploy/systemd/README.md`](../deploy/systemd/README.md) before starting traffic.
+Populate the `.env` files with the ports, tokens, and image tags described in [`deploy/systemd/README.md`](../deploy/systemd/README.md) before starting traffic. The transcoder unit expects `TRANSCODER_TOKEN` (passed through as `JOB_CONTROLLER_TOKEN`) to be non-empty; systemd restarts will fail until you provide the credential.
 
 Check status and logs to confirm ingest readiness.
 

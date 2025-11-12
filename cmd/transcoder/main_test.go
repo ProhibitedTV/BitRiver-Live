@@ -16,6 +16,8 @@ import (
 	"time"
 )
 
+const testToken = "test-token"
+
 func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test requires ffmpeg")
@@ -43,7 +45,7 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", publicDir)
 
-	srv, err := newServer("", tempDir)
+	srv, err := newServer(testToken, tempDir)
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -51,6 +53,7 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	defer ts.Close()
 
 	client := ts.Client()
+	authHeader := "Bearer " + testToken
 
 	renditions := []map[string]any{
 		{"name": "720p", "bitrate": 2800},
@@ -65,7 +68,13 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal request: %v", err)
 	}
-	resp, err := client.Post(ts.URL+"/v1/jobs", "application/json", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/v1/jobs", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("build job request: %v", err)
+	}
+	req.Header.Set("Authorization", authHeader)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("post job: %v", err)
 	}
@@ -217,7 +226,13 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal request 2: %v", err)
 	}
-	resp2, err := client.Post(ts.URL+"/v1/jobs", "application/json", bytes.NewReader(body2))
+	req2, err := http.NewRequest(http.MethodPost, ts.URL+"/v1/jobs", bytes.NewReader(body2))
+	if err != nil {
+		t.Fatalf("build job request 2: %v", err)
+	}
+	req2.Header.Set("Authorization", authHeader)
+	req2.Header.Set("Content-Type", "application/json")
+	resp2, err := client.Do(req2)
 	if err != nil {
 		t.Fatalf("post job 2: %v", err)
 	}
@@ -234,11 +249,12 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	}
 	jobID2 := jobResp2.JobIDs[0]
 
-	req, err := http.NewRequest(http.MethodDelete, ts.URL+"/v1/jobs/"+jobID2, nil)
+	reqDel, err := http.NewRequest(http.MethodDelete, ts.URL+"/v1/jobs/"+jobID2, nil)
 	if err != nil {
 		t.Fatalf("build delete: %v", err)
 	}
-	respDel, err := client.Do(req)
+	reqDel.Header.Set("Authorization", authHeader)
+	respDel, err := client.Do(reqDel)
 	if err != nil {
 		t.Fatalf("delete job: %v", err)
 	}
@@ -277,7 +293,7 @@ func TestNewServerRequiresPublicBaseURL(t *testing.T) {
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "")
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", "")
 
-	if _, err := newServer("", tempDir); err == nil {
+	if _, err := newServer(testToken, tempDir); err == nil {
 		t.Fatal("expected error when public base URL is unset")
 	} else if !strings.Contains(err.Error(), "BITRIVER_TRANSCODER_PUBLIC_BASE_URL must be configured") {
 		t.Fatalf("unexpected error: %v", err)
@@ -315,7 +331,7 @@ func TestUploadPublishesHTTPPlayback(t *testing.T) {
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", publicDir)
 
-	srv, err := newServer("", workDir)
+	srv, err := newServer(testToken, workDir)
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -337,7 +353,14 @@ func TestUploadPublishesHTTPPlayback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal request: %v", err)
 	}
-	resp, err := client.Post(ts.URL+"/v1/uploads", "application/json", bytes.NewReader(body))
+	authHeader := "Bearer " + testToken
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/v1/uploads", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("build upload request: %v", err)
+	}
+	req.Header.Set("Authorization", authHeader)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("post upload: %v", err)
 	}
