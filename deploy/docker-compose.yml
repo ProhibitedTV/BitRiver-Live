@@ -1,9 +1,10 @@
 services:
   bitriver-live:
-    build:
-      context: ..
-      dockerfile: Dockerfile
-    image: bitriver-live:latest
+    image: ghcr.io/bitriver-live/bitriver-live:${BITRIVER_LIVE_IMAGE_TAG:-latest}
+    # Uncomment the block below to build the API image locally instead of pulling from GHCR.
+    # build:
+    #   context: ..
+    #   dockerfile: Dockerfile
     container_name: bitriver-live
     env_file:
       - ../.env
@@ -134,10 +135,11 @@ services:
       start_period: 20s
 
   transcoder:
-    build:
-      context: ..
-      dockerfile: cmd/transcoder/Dockerfile
-    image: bitriver-transcoder:latest
+    image: ghcr.io/bitriver-live/bitriver-transcoder:${BITRIVER_TRANSCODER_IMAGE_TAG:-latest}
+    # Uncomment the block below to build the transcoder image locally instead of pulling from GHCR.
+    # build:
+    #   context: ..
+    #   dockerfile: cmd/transcoder/Dockerfile
     container_name: bitriver-transcoder
     ports:
       - "${BITRIVER_TRANSCODER_HOST_PORT:-9001}:9000"
