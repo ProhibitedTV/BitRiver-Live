@@ -192,6 +192,10 @@ jobs:
             context: .
             dockerfile: cmd/transcoder/Dockerfile
             image_name: bitriver-transcoder
+          - component: viewer
+            context: web/viewer
+            dockerfile: web/viewer/Dockerfile
+            image_name: bitriver-viewer
     env:
       REGISTRY: ghcr.io
       IMAGE_NAMESPACE: ghcr.io/bitriver-live

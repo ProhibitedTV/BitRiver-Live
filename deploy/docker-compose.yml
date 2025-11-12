@@ -59,9 +59,10 @@ services:
       - transcoder
 
   viewer:
-    build:
-      context: ../web/viewer
-    image: bitriver-viewer:latest
+    image: ghcr.io/bitriver-live/bitriver-viewer:${BITRIVER_VIEWER_IMAGE_TAG:-latest}
+    # Uncomment the block below to build the viewer image locally instead of pulling from GHCR.
+    # build:
+    #   context: ../web/viewer
     container_name: bitriver-viewer
     env_file:
       - ../.env
