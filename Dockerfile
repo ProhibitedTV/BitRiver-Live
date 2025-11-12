@@ -1,9 +1,15 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.21 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.21 AS builder
 WORKDIR /src
 
-ENV CGO_ENABLED=0 GOOS=linux GOFLAGS=-buildvcs=false
+ARG TARGETOS=linux
+ARG TARGETARCH
+
+ENV CGO_ENABLED=0 GOFLAGS=-buildvcs=false
+
+ENV GOOS=$TARGETOS
+ENV GOARCH=$TARGETARCH
 
 COPY go.mod go.sum ./
 COPY third_party ./third_party
@@ -16,7 +22,7 @@ COPY deploy/migrations ./deploy/migrations
 
 RUN go build -o /out/bitriver-live ./cmd/server
 
-FROM gcr.io/distroless/base-debian12:nonroot
+FROM --platform=$TARGETPLATFORM gcr.io/distroless/base-debian12:nonroot
 WORKDIR /app
 
 COPY --from=builder /out/bitriver-live /app/bitriver-live
