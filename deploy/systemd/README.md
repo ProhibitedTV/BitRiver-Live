@@ -35,13 +35,13 @@ These unit files are optional helpers for keeping BitRiver Live running on Ubunt
    PORT=3000
    HOSTNAME=0.0.0.0
    ```
-6. Prepare ingest configuration directories and environment files. The defaults below match the Docker Compose bundle and mount the packaged configuration files from the release archive:
+6. Prepare ingest configuration directories and environment files. The defaults below match the Docker Compose bundle and mount the packaged configuration files from the release archive. Pin every image to the version that matches the BitRiver release you installed and keep these tags in sync when you upgrade:
 
    ```bash
    sudo install -d -m 0755 /opt/bitriver-srs /opt/bitriver-srs-controller /opt/bitriver-ome /opt/bitriver-transcoder
 
    sudo tee /opt/bitriver-srs/.env >/dev/null <<'EOF'
-SRS_IMAGE=ossrs/srs:5
+SRS_IMAGE=ossrs/srs:v5.0.185
 SRS_CONTAINER_NAME=bitriver-srs
 SRS_CONF_DIR=/opt/bitriver-live/deploy/srs/conf
 SRS_RTMP_PORT=1935
@@ -50,7 +50,7 @@ SRS_EXTRA_ARGS=
 EOF
 
    sudo tee /opt/bitriver-srs-controller/.env >/dev/null <<'EOF'
-SRS_CONTROLLER_IMAGE=ghcr.io/bitriver-live/bitriver-srs-controller:latest
+SRS_CONTROLLER_IMAGE=ghcr.io/bitriver-live/bitriver-srs-controller:vX.Y.Z
 SRS_CONTROLLER_CONTAINER_NAME=bitriver-srs-controller
 SRS_CONTROLLER_HOST_PORT=1986
 SRS_CONTROLLER_BIND=:1985
@@ -69,7 +69,7 @@ OME_EXTRA_ARGS=
 EOF
 
    sudo tee /opt/bitriver-transcoder/.env >/dev/null <<'EOF'
-TRANSCODER_IMAGE=ghcr.io/bitriver-live/bitriver-transcoder:latest
+TRANSCODER_IMAGE=ghcr.io/bitriver-live/bitriver-transcoder:vX.Y.Z
 TRANSCODER_CONTAINER_NAME=bitriver-transcoder
 TRANSCODER_HOST_PORT=9001
 TRANSCODER_BIND=:9000
@@ -80,7 +80,7 @@ TRANSCODER_EXTRA_ARGS=
 EOF
    ```
 
-   Adjust image tags, ports, and mount paths to match your topology. Add extra Docker flags by setting `*_EXTRA_ARGS`.
+   Adjust image tags, ports, and mount paths to match your topology. Add extra Docker flags by setting `*_EXTRA_ARGS`. When you install a new release, update the image tags above before restarting the units so the validation hooks in the service files do not block the deployment.
    The FFmpeg controller exits during startup if `TRANSCODER_PUBLIC_BASE_URL` (exported to `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`) is missing, so configure it with the HTTP origin viewers can reach before enabling the unit.
 7. (Optional) If you want to send API logs to `/opt/bitriver-live/logs/server.log`, create the directory and uncomment the `StandardOutput` and `StandardError` lines in `bitriver-live.service`.
 8. Copy the systemd unit files into place and reload systemd:

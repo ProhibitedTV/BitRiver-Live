@@ -6,13 +6,14 @@ Requires=docker.service
 [Service]
 Type=simple
 Environment="SRS_DOCKER=/usr/bin/docker"
-Environment="SRS_IMAGE=ossrs/srs:5"
 Environment="SRS_CONTAINER_NAME=bitriver-srs"
 Environment="SRS_CONF_DIR=/opt/bitriver-live/deploy/srs/conf"
 Environment="SRS_RTMP_PORT=1935"
 Environment="SRS_API_PORT=1985"
 Environment="SRS_EXTRA_ARGS="
 EnvironmentFile=/opt/bitriver-srs/.env
+# Ensure SRS_IMAGE stays aligned with the release bundle.
+ExecStartPre=/bin/sh -c '[ -n "${SRS_IMAGE}" ] || { echo "SRS_IMAGE is not set. Set it to the release tag in /opt/bitriver-srs/.env."; exit 1; }'
 ExecStartPre=/bin/mkdir -p ${SRS_CONF_DIR}
 ExecStartPre=-${SRS_DOCKER} rm -f ${SRS_CONTAINER_NAME}
 ExecStart=/bin/sh -c '${SRS_DOCKER} run --rm --name "${SRS_CONTAINER_NAME}" \
