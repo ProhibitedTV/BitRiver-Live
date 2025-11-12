@@ -28,6 +28,7 @@ sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 sudo ufw allow 1935/tcp   # RTMP ingest to SRS
 sudo ufw allow 8080/tcp   # API (adjust if reverse proxy terminates TLS)
+sudo ufw allow 9080/tcp   # HLS playback mirror (transcoder-public)
 sudo ufw allow 8088/tcp   # SRS WebRTC/HTTP-FLV (optional)
 sudo ufw enable
 ```
@@ -154,10 +155,18 @@ Rerun `./deploy/check-env.sh` until it reports the environment file is ready. Th
 ```bash
 cd /opt/bitriver-live
 sudo docker compose -f deploy/docker-compose.yml pull
-sudo docker compose -f deploy/docker-compose.yml up -d srs ome transcoder
+sudo docker compose -f deploy/docker-compose.yml up -d srs ome transcoder transcoder-public
 ```
 
-The transcoder writes HLS playlists and segments into its working directory before mirroring completed uploads to a location that viewers can reach. Mount an object storage bucket or a directory served by Nginx/Caddy and point the transcoder at it with `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` (the public HTTP origin) and `BITRIVER_TRANSCODER_PUBLIC_DIR` (the local mount or staging directory). Nginx can expose the same path with a simple location block, while S3-compatible storage works well with `s3fs`, `rclone mount`, or a periodic sync (`aws s3 sync /var/lib/bitriver-transcoder/public s3://cdn-bucket/uploads/`).
+The compose bundle now binds `./transcoder-data` on the host to `/work` inside the FFmpeg controller so HLS manifests survive container restarts. Create the directory structure once before starting production traffic:
+
+```bash
+mkdir -p /opt/bitriver-live/transcoder-data/public
+```
+
+By default the stack serves `/work/public` through the `transcoder-public` Nginx sidecar. It forwards container port `8080` to host port `9080`, which keeps playback URLs stable for both local and remote viewers. The transcoder advertises the mirror via `BITRIVER_TRANSCODER_PUBLIC_DIR=/work/public` and `BITRIVER_TRANSCODER_PUBLIC_BASE_URL=http://transcoder-public:8080`. When you operate behind a CDN or existing HTTP origin, override `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` in `.env` so the API publishes the correct URLs while keeping the durable volume mounted at `/opt/bitriver-live/transcoder-data`.
+
+If you prefer a different publication path, mount an object storage bucket or a directory served by another reverse proxy and point the transcoder at it with `BITRIVER_TRANSCODER_PUBLIC_DIR` (local staging directory) plus `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` (public HTTP origin). S3-compatible storage works well with `s3fs`, `rclone mount`, or a periodic sync (`aws s3 sync /opt/bitriver-live/transcoder-data/public s3://cdn-bucket/uploads/`).
 
 Review `deploy/srs/conf/srs.conf` for the default SRS ports and authentication settings. Mount a customised version into the container when you need stricter access control or TLS certificates for RTMP/RTMPS.
 
