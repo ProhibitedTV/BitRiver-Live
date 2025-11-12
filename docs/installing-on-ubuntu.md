@@ -104,6 +104,12 @@ The helper copies records into Postgres and verifies the row counts before exiti
    - Set a strong password in `/etc/redis/redis.conf` (`requirepass`).
    - Enable TLS if clients connect over untrusted networks (stunnel or Redis 6+ native TLS).
 
+   The Docker Compose bundle now enables `requirepass` automatically and refuses to start until
+   `BITRIVER_REDIS_PASSWORD` is populated in `.env`. The API reads the same credential via
+   `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD`, so update both entries together when you rotate the
+   password. `deploy/check-env.sh` checks for empty values and blocks the placeholder samples to
+   prevent accidental reuse.
+
 2. Restart and validate:
 
 ```bash
@@ -149,6 +155,7 @@ ${EDITOR:-nano} .env
 Update the entries for:
 
 - `BITRIVER_POSTGRES_USER` and `BITRIVER_POSTGRES_PASSWORD`
+- `BITRIVER_REDIS_PASSWORD` and `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD`
 - `BITRIVER_LIVE_ADMIN_EMAIL` and `BITRIVER_LIVE_ADMIN_PASSWORD`
 - `BITRIVER_SRS_TOKEN`
 - `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`
@@ -162,6 +169,12 @@ Set `BITRIVER_TRANSCODER_TOKEN` to a strong bearer credential. The FFmpeg job co
 Ensure `BITRIVER_LIVE_POSTGRES_DSN` references the same Postgres user and password you configure above before bringing the stack online.
 
 The bundled PostgreSQL container now reuses these credentials for its health probe, so the readiness check automatically honours any changes you make to `BITRIVER_POSTGRES_USER` (and `BITRIVER_POSTGRES_DB` if you override it) in `.env`.
+
+Redis now hosts the chat queue by default (`BITRIVER_LIVE_CHAT_QUEUE_DRIVER=redis`). The compose
+manifest points the API at the in-cluster service (`BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR=redis:6379`)
+with the password you set above, and creates the `bitriver-live-chat` stream/group pairing out of
+the box. When you connect an external Redis deployment, update the address, stream, group, and
+password fields accordingly before restarting the stack.
 
 The API talks to SRS through the dedicated proxy. Leave `BITRIVER_SRS_API` set to `http://srs-controller:1985` when you use the compose bundle, or point it at the controller host/port (`http://localhost:1986` on the default Docker Compose network). Adjust `SRS_CONTROLLER_UPSTREAM` in `.env` when the proxy needs to reach an external SRS instance instead of the bundled container.
 

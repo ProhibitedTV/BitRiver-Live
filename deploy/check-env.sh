@@ -21,24 +21,34 @@ unset_image_tags=()
 required_vars=(
   BITRIVER_POSTGRES_USER
   BITRIVER_POSTGRES_PASSWORD
+  BITRIVER_REDIS_PASSWORD
   BITRIVER_LIVE_ADMIN_EMAIL
   BITRIVER_LIVE_ADMIN_PASSWORD
   BITRIVER_SRS_TOKEN
   BITRIVER_OME_USERNAME
   BITRIVER_OME_PASSWORD
   BITRIVER_TRANSCODER_TOKEN
+  BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD
 )
 
 declare -A forbidden_values=(
   [BITRIVER_POSTGRES_USER]="bitriver"
   [BITRIVER_POSTGRES_PASSWORD]="bitriver"
+  [BITRIVER_REDIS_PASSWORD]="bitriver"
   [BITRIVER_LIVE_ADMIN_EMAIL]="admin@example.com"
   [BITRIVER_LIVE_ADMIN_PASSWORD]="change-me-now"
   [BITRIVER_SRS_TOKEN]="local-dev-token"
   [BITRIVER_OME_USERNAME]="admin"
   [BITRIVER_OME_PASSWORD]="local-dev-password"
   [BITRIVER_TRANSCODER_TOKEN]="local-dev-token"
+  [BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD]="local-dev-password"
 )
+
+if [[ -n "${BITRIVER_REDIS_PASSWORD:-}" && -n "${BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD:-}" && \
+      "$BITRIVER_REDIS_PASSWORD" != "$BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD" ]]; then
+  echo "Warning: BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD does not match BITRIVER_REDIS_PASSWORD." >&2
+  echo "Ensure the API and Redis share the same credential unless you intentionally override it." >&2
+fi
 
 for var in "${required_vars[@]}"; do
   value="${!var-}"
