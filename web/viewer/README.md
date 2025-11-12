@@ -46,10 +46,9 @@ The viewer runs on [http://localhost:3000](http://localhost:3000) with hot reloa
    NEXT_PUBLIC_API_BASE_URL="https://api.example.com" NEXT_VIEWER_BASE_PATH=/viewer npm run build
    ```
    Adjust `NEXT_PUBLIC_API_BASE_URL` to match your public API URL. Set `NEXT_VIEWER_BASE_PATH` to `/viewer` when you plan to proxy the app through the Go API; leave it unset to serve from the root.
-2. Serve the compiled output:
+2. Serve the compiled output from the project root:
    ```bash
-   cd .next/standalone
-   node server.js
+   node .next/standalone/server.js
    ```
    The standalone output expects the static assets from `.next/static` and `public/` to be available alongside the server binary (the systemd and Docker manifests copy them into place for you).
 

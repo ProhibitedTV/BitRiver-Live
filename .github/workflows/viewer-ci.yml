@@ -52,3 +52,6 @@ jobs:
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Verify standalone server entrypoint
+        run: test -f .next/standalone/server.js
