@@ -9,7 +9,7 @@ x-required-credentials: &required_credentials
 
 services:
   bitriver-live:
-    image: ghcr.io/bitriver-live/bitriver-live:${BITRIVER_LIVE_IMAGE_TAG:-latest}
+    image: ghcr.io/bitriver-live/bitriver-live:${BITRIVER_LIVE_IMAGE_TAG:?set via .env}
     # Uncomment the block below to build the API image locally instead of pulling from GHCR.
     # build:
     #   context: ..
@@ -63,7 +63,7 @@ services:
       - transcoder
 
   viewer:
-    image: ghcr.io/bitriver-live/bitriver-viewer:${BITRIVER_VIEWER_IMAGE_TAG:-latest}
+    image: ghcr.io/bitriver-live/bitriver-viewer:${BITRIVER_VIEWER_IMAGE_TAG:?set via .env}
     # Uncomment the block below to build the viewer image locally instead of pulling from GHCR.
     # build:
     #   context: ../web/viewer
@@ -110,7 +110,7 @@ services:
       start_period: 10s
 
   srs-controller:
-    image: ghcr.io/bitriver-live/bitriver-srs-controller:${BITRIVER_SRS_CONTROLLER_IMAGE_TAG:-latest}
+    image: ghcr.io/bitriver-live/bitriver-srs-controller:${BITRIVER_SRS_CONTROLLER_IMAGE_TAG:?set via .env}
     container_name: bitriver-srs-controller
     env_file:
       - ../.env
@@ -160,7 +160,7 @@ services:
       start_period: 20s
 
   transcoder:
-    image: ghcr.io/bitriver-live/bitriver-transcoder:${BITRIVER_TRANSCODER_IMAGE_TAG:-latest}
+    image: ghcr.io/bitriver-live/bitriver-transcoder:${BITRIVER_TRANSCODER_IMAGE_TAG:?set via .env}
     # Uncomment the block below to build the transcoder image locally instead of pulling from GHCR.
     # build:
     #   context: ..

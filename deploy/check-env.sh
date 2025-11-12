@@ -16,6 +16,7 @@ source "$ENV_FILE"
 
 missing=()
 blocked=()
+unset_image_tags=()
 
 required_vars=(
   BITRIVER_POSTGRES_USER
@@ -50,9 +51,29 @@ for var in "${required_vars[@]}"; do
   fi
 done
 
+image_tag_vars=(
+  BITRIVER_LIVE_IMAGE_TAG
+  BITRIVER_VIEWER_IMAGE_TAG
+  BITRIVER_SRS_CONTROLLER_IMAGE_TAG
+  BITRIVER_TRANSCODER_IMAGE_TAG
+)
+
+for var in "${image_tag_vars[@]}"; do
+  if [[ -z "${!var-}" ]]; then
+    unset_image_tags+=("$var")
+  fi
+done
+
 if (( ${#missing[@]} > 0 )); then
   echo "The following required variables are unset or empty in $ENV_FILE:" >&2
   for var in "${missing[@]}"; do
+    echo "  - $var" >&2
+  done
+fi
+
+if (( ${#unset_image_tags[@]} > 0 )); then
+  echo "Warning: populate the image tags with the release version you extracted earlier:" >&2
+  for var in "${unset_image_tags[@]}"; do
     echo "  - $var" >&2
   done
 fi

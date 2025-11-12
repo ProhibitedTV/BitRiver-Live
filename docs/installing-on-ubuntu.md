@@ -153,6 +153,7 @@ Update the entries for:
 - `BITRIVER_SRS_TOKEN`
 - `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`
 - `BITRIVER_TRANSCODER_TOKEN`
+- `BITRIVER_LIVE_IMAGE_TAG`, `BITRIVER_VIEWER_IMAGE_TAG`, `BITRIVER_SRS_CONTROLLER_IMAGE_TAG`, and `BITRIVER_TRANSCODER_IMAGE_TAG` (set all four to the release tag you extracted in [Step 4](#4-download-bitriver-live-release-assets) so every container runs the same build)
 
 The `.env` guardrails shipped with the release bundle intentionally block the original `bitriver`/`changeme` samples. [`deploy/.env.example`](../deploy/.env.example) documents every variable, while [`deploy/check-env.sh`](../deploy/check-env.sh) refuses to continue until each credential changes and `BITRIVER_LIVE_POSTGRES_DSN` matches the database user/password you selected earlier. Rerun the script after every edit so Compose and the systemd units pick up consistent DSNs.
 
