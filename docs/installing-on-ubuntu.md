@@ -139,6 +139,8 @@ sudo docker compose -f deploy/docker-compose.yml pull
 sudo docker compose -f deploy/docker-compose.yml up -d srs ome transcoder
 ```
 
+The transcoder writes HLS playlists and segments into its working directory before mirroring completed uploads to a location that viewers can reach. Mount an object storage bucket or a directory served by Nginx/Caddy and point the transcoder at it with `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` (the public HTTP origin) and `BITRIVER_TRANSCODER_PUBLIC_DIR` (the local mount or staging directory). Nginx can expose the same path with a simple location block, while S3-compatible storage works well with `s3fs`, `rclone mount`, or a periodic sync (`aws s3 sync /var/lib/bitriver-transcoder/public s3://cdn-bucket/uploads/`).
+
 Review `deploy/srs/conf/srs.conf` for the default SRS ports and authentication settings. Mount a customised version into the container when you need stricter access control or TLS certificates for RTMP/RTMPS.
 
 ### Option B: systemd services
@@ -251,6 +253,8 @@ BITRIVER_SRS_TOKEN=REPLACE_ME
 BITRIVER_OME_USERNAME=REPLACE_ME
 BITRIVER_OME_PASSWORD=REPLACE_ME
 BITRIVER_TRANSCODER_TOKEN=REPLACE_ME
+BITRIVER_TRANSCODER_PUBLIC_BASE_URL=https://cdn.example.com/hls
+BITRIVER_TRANSCODER_PUBLIC_DIR=/var/lib/bitriver-transcoder/public
 ```
 
 4. Install the systemd unit from `deploy/systemd/bitriver-live.service` or author a minimal unit:

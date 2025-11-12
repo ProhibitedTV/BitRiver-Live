@@ -6,12 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -60,6 +63,8 @@ type server struct {
 	httpServer *http.Server
 	token      string
 	outputRoot string
+	publicRoot string
+	publicBase string
 	mu         sync.RWMutex
 	jobs       map[string]*job
 	uploads    map[string]*uploadJob
@@ -143,9 +148,27 @@ func newServer(token, outputRoot string) (*server, error) {
 	if err != nil {
 		return nil, err
 	}
+	publicBase := strings.TrimSpace(os.Getenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL"))
+	var publicRoot string
+	if publicBase != "" {
+		mirrorRoot := strings.TrimSpace(os.Getenv("BITRIVER_TRANSCODER_PUBLIC_DIR"))
+		if mirrorRoot == "" {
+			mirrorRoot = filepath.Join(store.root, "public")
+		}
+		absMirror, err := filepath.Abs(mirrorRoot)
+		if err != nil {
+			return nil, fmt.Errorf("resolve public mirror: %w", err)
+		}
+		if err := os.MkdirAll(absMirror, 0o755); err != nil {
+			return nil, fmt.Errorf("prepare public mirror: %w", err)
+		}
+		publicRoot = absMirror
+	}
 	srv := &server{
 		token:      token,
 		outputRoot: store.root,
+		publicRoot: publicRoot,
+		publicBase: publicBase,
 		jobs:       jobs,
 		uploads:    uploads,
 		processes:  make(map[string]*processState),
@@ -183,7 +206,7 @@ func (s *server) restoreActiveProcesses() {
 			log.Printf("restart job %s: %v", id, err)
 			continue
 		}
-		jb.Renditions = plan.renditions
+		jb.Renditions = cloneRenditions(plan.renditions)
 		jb.OutputPath = plan.outputDir
 		jb.Playback = plan.master
 		s.processes[id] = proc
@@ -209,7 +232,7 @@ func (s *server) restoreActiveProcesses() {
 			log.Printf("restart upload %s: %v", id, err)
 			continue
 		}
-		up.Renditions = plan.renditions
+		up.Renditions = cloneRenditions(plan.renditions)
 		up.OutputPath = plan.outputDir
 		up.Playback = plan.master
 		s.processes[id] = proc
@@ -276,7 +299,7 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 		ChannelID:  req.ChannelID,
 		SessionID:  req.SessionID,
 		OriginURL:  req.OriginURL,
-		Renditions: plan.renditions,
+		Renditions: cloneRenditions(plan.renditions),
 		OutputPath: plan.outputDir,
 		Playback:   plan.master,
 		CreatedAt:  time.Now().UTC(),
@@ -403,7 +426,7 @@ func (s *server) handleUploads(w http.ResponseWriter, r *http.Request) {
 		UploadID:   req.UploadID,
 		SourceURL:  req.SourceURL,
 		Filename:   req.Filename,
-		Renditions: plan.renditions,
+		Renditions: cloneRenditions(plan.renditions),
 		OutputPath: plan.outputDir,
 		Playback:   plan.master,
 		CreatedAt:  time.Now().UTC(),
@@ -437,10 +460,23 @@ func (s *server) handleUploads(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	publicRenditions := cloneRenditions(plan.renditions)
+	playback := meta.Playback
+	if s.publicBase != "" {
+		playback = s.publicUploadURL(jobID, "index.m3u8")
+		for i := range publicRenditions {
+			localPath := filepath.FromSlash(publicRenditions[i].ManifestURL)
+			rel, err := filepath.Rel(plan.outputDir, localPath)
+			if err != nil {
+				rel = filepath.Base(localPath)
+			}
+			publicRenditions[i].ManifestURL = s.publicUploadURL(jobID, filepath.ToSlash(rel))
+		}
+	}
 	resp := uploadResponse{
 		JobID:       jobID,
-		PlaybackURL: meta.Playback,
-		Renditions:  encodeRenditions(meta.Renditions),
+		PlaybackURL: playback,
+		Renditions:  encodeRenditions(publicRenditions),
 	}
 	writeJSON(w, http.StatusAccepted, resp)
 }
@@ -471,15 +507,22 @@ func (s *server) makeUploadExitHandler(id string) func(error) {
 	return func(err error) {
 		now := time.Now().UTC()
 		var meta *uploadJob
+		var publish bool
 		s.mu.Lock()
 		if up, ok := s.uploads[id]; ok {
 			if up.CompletedAt == nil {
 				up.CompletedAt = &now
 			}
 			meta = up
+			publish = err == nil
 		}
 		delete(s.processes, id)
 		s.mu.Unlock()
+		if publish && meta != nil {
+			if err := s.publishUpload(meta); err != nil {
+				log.Printf("publish upload %s: %v", id, err)
+			}
+		}
 		if meta != nil {
 			if saveErr := s.store.SaveUpload(meta); saveErr != nil {
 				log.Printf("persist upload %s: %v", id, saveErr)
@@ -510,6 +553,15 @@ func encodeRenditions(r []rendition) json.RawMessage {
 		return json.RawMessage("[]")
 	}
 	return data
+}
+
+func cloneRenditions(src []rendition) []rendition {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]rendition, len(src))
+	copy(out, src)
+	return out
 }
 
 type transcodePlan struct {
@@ -800,6 +852,113 @@ func loadUploadMetadata(root string, dest map[string]*uploadJob) error {
 		dest[u.ID] = &u
 	}
 	return nil
+}
+
+func (s *server) publishUpload(up *uploadJob) error {
+	if s.publicBase == "" || up == nil {
+		return nil
+	}
+	if strings.HasPrefix(strings.TrimSpace(up.Playback), s.publicBase) {
+		return nil
+	}
+	src := strings.TrimSpace(up.OutputPath)
+	if src == "" {
+		return fmt.Errorf("output path missing")
+	}
+	dest := filepath.Join(s.publicRoot, "uploads", up.ID)
+	if err := os.RemoveAll(dest); err != nil {
+		return fmt.Errorf("clear publish target: %w", err)
+	}
+	if err := copyDirectory(src, dest); err != nil {
+		return fmt.Errorf("mirror upload: %w", err)
+	}
+	relMaster := "index.m3u8"
+	if local := strings.TrimSpace(up.Playback); local != "" {
+		if rel, err := filepath.Rel(src, filepath.FromSlash(local)); err == nil && rel != "." {
+			relMaster = filepath.ToSlash(rel)
+		}
+	}
+	up.Playback = s.publicUploadURL(up.ID, relMaster)
+	for i := range up.Renditions {
+		local := filepath.FromSlash(up.Renditions[i].ManifestURL)
+		rel, err := filepath.Rel(src, local)
+		if err != nil {
+			rel = filepath.Base(local)
+		}
+		up.Renditions[i].ManifestURL = s.publicUploadURL(up.ID, filepath.ToSlash(rel))
+	}
+	return nil
+}
+
+func (s *server) publicUploadURL(jobID, rel string) string {
+	if s.publicBase == "" {
+		return ""
+	}
+	return joinURL(s.publicBase, "uploads", jobID, rel)
+}
+
+func joinURL(base string, parts ...string) string {
+	trimmed := strings.TrimRight(base, "/")
+	addition := path.Join(parts...)
+	if addition == "." {
+		addition = ""
+	}
+	if addition == "" {
+		return trimmed
+	}
+	if trimmed == "" {
+		return "/" + strings.TrimLeft(addition, "/")
+	}
+	return trimmed + "/" + strings.TrimLeft(addition, "/")
+}
+
+func copyDirectory(src, dst string) error {
+	return filepath.WalkDir(src, func(current string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, current)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			mode := fs.FileMode(0o755)
+			if info, infoErr := d.Info(); infoErr == nil {
+				mode = info.Mode()
+			}
+			return os.MkdirAll(target, mode.Perm())
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("symlinks not supported: %s", current)
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		in, err := os.Open(current)
+		if err != nil {
+			return err
+		}
+		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
+		if err != nil {
+			in.Close()
+			return err
+		}
+		if _, err := io.Copy(out, in); err != nil {
+			out.Close()
+			in.Close()
+			return err
+		}
+		if err := out.Close(); err != nil {
+			in.Close()
+			return err
+		}
+		return in.Close()
+	})
 }
 
 func writeJSONFile(path string, payload any) error {

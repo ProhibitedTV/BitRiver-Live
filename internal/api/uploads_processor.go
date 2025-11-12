@@ -277,6 +277,7 @@ func (p *UploadProcessor) processUpload(id string) {
 			metadata["renditions"] = strings.Join(names, ",")
 		}
 	}
+	metadata["playbackUrl"] = playbackURL
 	if _, err := p.store.UpdateUpload(id, storage.UploadUpdate{
 		Status:      &ready,
 		Progress:    &progress,
