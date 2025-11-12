@@ -35,15 +35,57 @@ These unit files are optional helpers for keeping BitRiver Live running on Ubunt
    PORT=3000
    HOSTNAME=0.0.0.0
    ```
-6. (Optional) If you want to send API logs to `/opt/bitriver-live/logs/server.log`, create the directory and uncomment the `StandardOutput` and `StandardError` lines in `bitriver-live.service`.
-7. Copy the systemd unit files into place and reload systemd:
+6. Prepare ingest configuration directories and environment files. The defaults below match the Docker Compose bundle and mount the packaged configuration files from the release archive:
+
+   ```bash
+   sudo install -d -m 0755 /opt/bitriver-srs /opt/bitriver-ome /opt/bitriver-transcoder
+
+   sudo tee /opt/bitriver-srs/.env >/dev/null <<'EOF'
+SRS_IMAGE=ossrs/srs:5
+SRS_CONTAINER_NAME=bitriver-srs
+SRS_CONF_DIR=/opt/bitriver-live/deploy/srs/conf
+SRS_RTMP_PORT=1935
+SRS_API_PORT=1985
+SRS_EXTRA_ARGS=
+EOF
+
+   sudo tee /opt/bitriver-ome/.env >/dev/null <<'EOF'
+OME_IMAGE=airensoft/ovenmediaengine:0.15.10
+OME_CONTAINER_NAME=bitriver-ome
+OME_CONFIG=/opt/bitriver-live/deploy/ome/Server.xml
+OME_HTTP_PORT=8081
+OME_SIGNALING_PORT=9000
+OME_EXTRA_ARGS=
+EOF
+
+   sudo tee /opt/bitriver-transcoder/.env >/dev/null <<'EOF'
+TRANSCODER_IMAGE=ghcr.io/bitriver-live/bitriver-transcoder:latest
+TRANSCODER_CONTAINER_NAME=bitriver-transcoder
+TRANSCODER_HOST_PORT=9001
+TRANSCODER_BIND=:9000
+TRANSCODER_TOKEN=REPLACE_ME
+TRANSCODER_PUBLIC_BASE_URL=https://cdn.example.com/hls
+TRANSCODER_PUBLIC_DIR=/var/lib/bitriver-transcoder/public
+TRANSCODER_EXTRA_ARGS=
+EOF
+   ```
+
+   Adjust image tags, ports, and mount paths to match your topology. Add extra Docker flags by setting `*_EXTRA_ARGS`.
+7. (Optional) If you want to send API logs to `/opt/bitriver-live/logs/server.log`, create the directory and uncomment the `StandardOutput` and `StandardError` lines in `bitriver-live.service`.
+8. Copy the systemd unit files into place and reload systemd:
    ```bash
    sudo install -m 0644 deploy/systemd/bitriver-live.service /etc/systemd/system/bitriver-live.service
    sudo install -m 0644 deploy/systemd/bitriver-viewer.service /etc/systemd/system/bitriver-viewer.service
+   sudo install -m 0644 deploy/systemd/srs.service /etc/systemd/system/srs.service
+   sudo install -m 0644 deploy/systemd/ome.service /etc/systemd/system/ome.service
+   sudo install -m 0644 deploy/systemd/bitriver-transcoder.service /etc/systemd/system/bitriver-transcoder.service
    sudo systemctl daemon-reload
    ```
-8. Enable and start both services:
+9. Enable and start the services:
    ```bash
+   sudo systemctl enable --now srs.service
+   sudo systemctl enable --now ome.service
+   sudo systemctl enable --now bitriver-transcoder.service
    sudo systemctl enable --now bitriver-live.service
    sudo systemctl enable --now bitriver-viewer.service
    ```
@@ -52,11 +94,14 @@ The viewer unit depends on the control centre so that both start in the right or
 
 ## Verify the services
 
-Check that both services are running and healthy:
+Check that the services are running and healthy:
 
 ```bash
+systemctl status srs.service
+systemctl status ome.service
+systemctl status bitriver-transcoder.service
 systemctl status bitriver-live.service
 systemctl status bitriver-viewer.service
 ```
 
-A green "active (running)" status confirms systemd launched the processes. Use `journalctl -u bitriver-live.service` or `journalctl -u bitriver-viewer.service` to inspect logs if either unit reports an error.
+A green "active (running)" status confirms systemd launched the processes. Use `journalctl -u <unit>` to inspect logs if any service reports an error.

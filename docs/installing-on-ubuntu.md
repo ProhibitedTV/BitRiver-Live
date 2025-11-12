@@ -145,14 +145,20 @@ Review `deploy/srs/conf/srs.conf` for the default SRS ports and authentication s
 
 ### Option B: systemd services
 
-If you run SRS, OME, and the transcoder as native services, use [`deploy/systemd/README.md`](../deploy/systemd/README.md) for installation guidance. Copy the unit files into `/etc/systemd/system/`, update environment files with production credentials, and enable each service:
+If you run SRS, OME, and the transcoder as native services, use [`deploy/systemd/README.md`](../deploy/systemd/README.md) for installation guidance. Copy the tracked unit files into `/etc/systemd/system/`, create the matching `/opt/bitriver-*/.env` files, and enable each service:
 
 ```bash
+sudo install -d -m 0755 /opt/bitriver-srs /opt/bitriver-ome /opt/bitriver-transcoder
+sudo install -m 0644 deploy/systemd/srs.service /etc/systemd/system/srs.service
+sudo install -m 0644 deploy/systemd/ome.service /etc/systemd/system/ome.service
+sudo install -m 0644 deploy/systemd/bitriver-transcoder.service /etc/systemd/system/bitriver-transcoder.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now srs.service
 sudo systemctl enable --now ome.service
 sudo systemctl enable --now bitriver-transcoder.service
 ```
+
+Populate the `.env` files with the ports, tokens, and image tags described in [`deploy/systemd/README.md`](../deploy/systemd/README.md) before starting traffic.
 
 Check status and logs to confirm ingest readiness.
 
@@ -349,7 +355,7 @@ When fronting the viewer with Nginx or another proxy, route `/viewer` requests t
 
 ```bash
 systemctl --failed
-sudo systemctl status bitriver-live.service bitriver-viewer.service srs.service ome.service
+sudo systemctl status bitriver-live.service bitriver-viewer.service srs.service ome.service bitriver-transcoder.service
 ```
 
 2. Confirm database connectivity and migrations.
