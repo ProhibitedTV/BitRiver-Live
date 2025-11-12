@@ -283,7 +283,7 @@ cd /opt/bitriver-live
   --hostname stream.example.com
 ```
 
-Run the helper from the release root—the script reuses the packaged `server`/`bootstrap-admin` binaries or, when a checked-out module is present, rebuilds them from source.
+Run the helper from the release root—the script reuses the packaged `bitriver-live`/`bootstrap-admin` binaries or, when a checked-out module is present, rebuilds them from source.
 
 The script builds the API binary, writes `$INSTALL_DIR/.env`, configures optional TLS and rate-limiting variables, and registers a `bitriver-live.service` systemd unit. Review the generated `.env` file to ensure storage selections (JSON or Postgres), database DSNs, session-store driver settings, and Redis credentials are present before starting traffic.
 
@@ -308,14 +308,14 @@ Environment variable equivalents:
 
 ### Option B: Manual install
 
-If you prefer hand-crafted units, follow the manual process below.
+If you prefer hand-crafted units, follow the manual process below. The release archive now exposes the API binary as `bitriver-live`, so you can install it directly without renaming.
 
 1. Install the API binary from the release archive.
 
 ```bash
 cd /opt/bitriver-live
 install -d -m 755 bin
-install -m 755 server bin/bitriver-live
+install -m 755 bitriver-live bin/bitriver-live
 ```
 
 2. Install a dedicated system user and directories for configuration and data.
