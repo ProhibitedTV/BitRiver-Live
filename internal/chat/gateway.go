@@ -449,6 +449,9 @@ func (c *client) handleJoin(channelID string) {
 	c.gateway.rooms[channelID][c] = struct{}{}
 	c.gateway.mu.Unlock()
 	c.rooms[channelID] = struct{}{}
+
+	payload, _ := json.Marshal(outboundMessage{Type: "ack"})
+	c.send <- outboundMessage{Raw: payload}
 }
 
 func (c *client) handleLeave(channelID string) {
