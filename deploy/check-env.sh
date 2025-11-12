@@ -66,6 +66,7 @@ image_tag_vars=(
   BITRIVER_VIEWER_IMAGE_TAG
   BITRIVER_SRS_CONTROLLER_IMAGE_TAG
   BITRIVER_TRANSCODER_IMAGE_TAG
+  BITRIVER_SRS_IMAGE_TAG
 )
 
 for var in "${image_tag_vars[@]}"; do
@@ -86,6 +87,11 @@ if (( ${#unset_image_tags[@]} > 0 )); then
   for var in "${unset_image_tags[@]}"; do
     echo "  - $var" >&2
   done
+fi
+
+if [[ -n "${BITRIVER_SRS_IMAGE_TAG:-}" && "$BITRIVER_SRS_IMAGE_TAG" != "v5.0.185" ]]; then
+  echo "Reminder: BITRIVER_SRS_IMAGE_TAG is set to $BITRIVER_SRS_IMAGE_TAG." >&2
+  echo "Update the SRS tag in deploy/systemd/README.md and any running systemd units to match before upgrading." >&2
 fi
 
 if (( ${#blocked[@]} > 0 )); then

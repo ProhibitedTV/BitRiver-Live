@@ -144,7 +144,7 @@ services:
       start_period: 10s
 
   srs:
-    image: ossrs/srs:5
+    image: ossrs/srs:${BITRIVER_SRS_IMAGE_TAG:-v5.0.185}
     container_name: bitriver-srs
     restart: unless-stopped
     ports:

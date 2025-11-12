@@ -161,6 +161,7 @@ Update the entries for:
 - `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`
 - `BITRIVER_TRANSCODER_TOKEN`
 - `BITRIVER_LIVE_IMAGE_TAG`, `BITRIVER_VIEWER_IMAGE_TAG`, `BITRIVER_SRS_CONTROLLER_IMAGE_TAG`, and `BITRIVER_TRANSCODER_IMAGE_TAG` (set all four to the release tag you extracted in [Step 4](#4-download-bitriver-live-release-assets) so every container runs the same build)
+- `BITRIVER_SRS_IMAGE_TAG` (defaults to `v5.0.185` so Compose matches the systemd units; bump it only after testing a newer SRS release and update both deployments together)
 
 The `.env` guardrails shipped with the release bundle intentionally block the original `bitriver`/`changeme` samples. [`deploy/.env.example`](../deploy/.env.example) documents every variable, while [`deploy/check-env.sh`](../deploy/check-env.sh) refuses to continue until each credential changes and `BITRIVER_LIVE_POSTGRES_DSN` matches the database user/password you selected earlier. Rerun the script after every edit so Compose and the systemd units pick up consistent DSNs.
 
@@ -199,6 +200,28 @@ By default the stack serves `/work/public` through the `transcoder-public` Nginx
 If you prefer a different publication path, mount an object storage bucket or a directory served by another reverse proxy and point the transcoder at it with `BITRIVER_TRANSCODER_PUBLIC_DIR` (local staging directory) plus `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` (public HTTP origin). S3-compatible storage works well with `s3fs`, `rclone mount`, or a periodic sync (`aws s3 sync /opt/bitriver-live/transcoder-data/public s3://cdn-bucket/uploads/`).
 
 Review `deploy/srs/conf/srs.conf` for the default SRS ports and authentication settings. Mount a customised version into the container when you need stricter access control or TLS certificates for RTMP/RTMPS.
+
+#### Upgrading the SRS container
+
+BitRiver Live pins SRS to `ossrs/srs:v5.0.185`, matching the systemd helpers under [`deploy/systemd/README.md`](../deploy/systemd/README.md). When you validate a newer upstream release:
+
+1. Update `.env` with the new tag by editing `BITRIVER_SRS_IMAGE_TAG`.
+2. Pull and restart the Compose services so the change takes effect:
+   ```bash
+   sudo docker compose -f deploy/docker-compose.yml pull srs
+   sudo docker compose -f deploy/docker-compose.yml up -d srs srs-controller
+   ```
+3. Mirror the tag in `/opt/bitriver-srs/.env` (or the directory you keep for the systemd service) so `SRS_IMAGE` matches.
+4. Restart the native unit to pick up the new image:
+   ```bash
+   sudo systemctl restart srs.service
+   ```
+5. Verify both deployments report the same version via the health endpoint before routing traffic:
+   ```bash
+   curl -fsS http://localhost:1985/api/v1/versions | jq '.data.srs.info.version'
+   ```
+
+If you roll back, reverse the steps: restore the previous tag in `.env` and the systemd environment file, pull the known-good image, and restart both services.
 
 ### Option B: systemd services
 
