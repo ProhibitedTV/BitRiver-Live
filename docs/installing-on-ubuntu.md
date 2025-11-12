@@ -285,24 +285,63 @@ sudo systemctl enable --now bitriver-live.service
 sudo systemctl status bitriver-live.service
 ```
 
-## 7. Build and deploy the viewer
+## 7. Deploy the viewer
 
-1. Install dependencies and build the standalone Next.js bundle.
+The GitHub Release for each BitRiver Live tag publishes a production-ready viewer bundle (`bitriver-viewer-<tag>.tar.gz`) and a container image (`ghcr.io/bitriver-live/bitriver-viewer:<tag>`). Use one of the options below so the API and viewer stay on the same version. Only clone the repository and build `web/viewer` from source when you intentionally need to test local changes.
+
+### Option A: Run the standalone bundle (recommended)
+
+1. Download the viewer archive that matches the API version and extract it alongside the API release:
+
+   ```bash
+   # Replace v1.2.3 with the release you are deploying
+   export BITRIVER_LIVE_VERSION="v1.2.3"
+   curl -LO "https://github.com/BitRiver-Live/BitRiver-Live/releases/download/${BITRIVER_LIVE_VERSION}/bitriver-viewer-${BITRIVER_LIVE_VERSION}.tar.gz"
+
+   sudo mkdir -p /opt/bitriver-viewer
+   sudo tar -xzvf "bitriver-viewer-${BITRIVER_LIVE_VERSION}.tar.gz" -C /opt/bitriver-viewer --strip-components=1
+   rm "bitriver-viewer-${BITRIVER_LIVE_VERSION}.tar.gz"
+   ```
+
+   The archive expands into `/opt/bitriver-viewer` with `.next/standalone/`, `.next/static/`, and `public/` directories that mirror the output of `npm run build`.
+
+2. Create `/opt/bitriver-viewer/.env` with runtime settings for the standalone server. At minimum provide the API origin and listening address:
+
+   ```bash
+   sudo tee /opt/bitriver-viewer/.env >/dev/null <<'EOF'
+NEXT_PUBLIC_API_BASE_URL=https://stream.example.com
+NEXT_VIEWER_BASE_PATH=/viewer
+PORT=3000
+HOSTNAME=0.0.0.0
+EOF
+   ```
+
+3. Start the bundled server with Node.js 20+ (or wrap it in systemd as documented in [`deploy/systemd/README.md`](../deploy/systemd/README.md)):
+
+   ```bash
+   cd /opt/bitriver-viewer
+   node .next/standalone/server.js
+   ```
+
+   The `standalone` output includes all production dependencies so no additional `npm install` step is required. Reverse proxies such as Nginx or Caddy can front the process; make sure `BITRIVER_VIEWER_ORIGIN` in the API `.env` points at the viewer URL.
+
+For more deployment patterns—including systemd units and CDN hosting—see [`docs/viewer-deployment.md`](viewer-deployment.md).
+
+### Option B: Deploy the container image
+
+If you prefer containers, run the published image for the same release tag. Mount the environment file so configuration stays consistent with the standalone deployment:
 
 ```bash
-cd /opt/bitriver-live/web/viewer
-npm ci
-NEXT_PUBLIC_API_BASE_URL="https://stream.example.com" npm run build
+docker run -d --name bitriver-viewer \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  --env-file /opt/bitriver-viewer/.env \
+  ghcr.io/bitriver-live/bitriver-viewer:${BITRIVER_LIVE_VERSION}
 ```
 
-2. Review [`deploy/systemd/README.md`](../deploy/systemd/README.md) for the `bitriver-viewer.service` unit. Populate `/etc/bitriver-live/viewer.env` with the port, base path, and secrets (if any), then enable the service:
+When fronting the viewer with Nginx or another proxy, route `/viewer` requests to the container (or standalone server) and terminate TLS upstream.
 
-```bash
-sudo systemctl enable --now bitriver-viewer.service
-sudo systemctl status bitriver-viewer.service
-```
-
-When fronting the viewer with Nginx or another proxy, route `/viewer` requests to the viewer port and terminate TLS upstream. Align `BITRIVER_VIEWER_ORIGIN` in the API environment with the deployed viewer URL.
+> **Building from source?** Clone the repository and follow [`web/viewer/README.md`](../web/viewer/README.md) only when you intentionally want to modify the Next.js app or test development builds. Production installations should stay on the tagged release assets above.
 
 ## 8. Post-install checks
 
