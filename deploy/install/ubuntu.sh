@@ -310,8 +310,13 @@ if [[ -n $LISTEN_PORT && $LISTEN_PORT =~ ^[0-9]+$ && $LISTEN_PORT -lt 1024 ]]; t
 	fi
 fi
 
-if [[ ! -f go.mod ]]; then
-        echo "This script must be run from the BitRiver Live repository root (go.mod not found)." >&2
+BUILD_FROM_SOURCE=false
+if [[ -f go.mod ]]; then
+        BUILD_FROM_SOURCE=true
+elif [[ -x server && -x bootstrap-admin ]]; then
+        BUILD_FROM_SOURCE=false
+else
+        echo "Provide either the BitRiver Live source tree (go.mod) or the prebuilt server/bootstrap-admin binaries in the current directory." >&2
         exit 1
 fi
 
@@ -333,19 +338,24 @@ if [[ -n $LOG_DIR ]]; then
         sudo install -d -o "$SERVICE_USER" -g "$SERVICE_USER" "$LOG_DIR"
 fi
 
-if ! command -v go >/dev/null 2>&1; then
-        echo "Go 1.21+ is required to build BitRiver Live" >&2
-        exit 1
-fi
+if [[ $BUILD_FROM_SOURCE == true ]]; then
+        if ! command -v go >/dev/null 2>&1; then
+                echo "Go 1.21+ is required to build BitRiver Live" >&2
+                exit 1
+        fi
 
-GOFLAGS="-trimpath" go build -o bitriver-live ./cmd/server
-GOFLAGS="-trimpath" go build -o bootstrap-admin ./cmd/tools/bootstrap-admin
-sudo install -m 0755 bitriver-live "$INSTALL_DIR/bitriver-live"
-sudo install -m 0755 bootstrap-admin "$INSTALL_DIR/bootstrap-admin"
-if [[ $REQUIRES_CAP_NET_BIND_SERVICE == true ]]; then
-	sudo setcap 'cap_net_bind_service=+ep' "$INSTALL_DIR/bitriver-live"
+        GOFLAGS="-trimpath" go build -o bitriver-live ./cmd/server
+        GOFLAGS="-trimpath" go build -o bootstrap-admin ./cmd/tools/bootstrap-admin
+        sudo install -m 0755 bitriver-live "$INSTALL_DIR/bitriver-live"
+        sudo install -m 0755 bootstrap-admin "$INSTALL_DIR/bootstrap-admin"
+        rm -f bitriver-live bootstrap-admin
+else
+        sudo install -m 0755 server "$INSTALL_DIR/bitriver-live"
+        sudo install -m 0755 bootstrap-admin "$INSTALL_DIR/bootstrap-admin"
 fi
-rm -f bitriver-live bootstrap-admin
+if [[ $REQUIRES_CAP_NET_BIND_SERVICE == true ]]; then
+        sudo setcap 'cap_net_bind_service=+ep' "$INSTALL_DIR/bitriver-live"
+fi
 
 env_file=$(mktemp)
 service_file=$(mktemp)
