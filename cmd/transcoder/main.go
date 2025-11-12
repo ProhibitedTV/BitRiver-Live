@@ -175,6 +175,11 @@ func newServer(token, outputRoot string) (*server, error) {
 	if err := os.MkdirAll(absMirror, 0o755); err != nil {
 		return nil, fmt.Errorf("prepare public mirror: %w", err)
 	}
+	for _, sub := range []string{"live", "uploads"} {
+		if err := os.MkdirAll(filepath.Join(absMirror, sub), 0o755); err != nil {
+			return nil, fmt.Errorf("prepare public mirror: %w", err)
+		}
+	}
 	srv := &server{
 		token:      token,
 		outputRoot: store.root,
@@ -200,7 +205,13 @@ func (s *server) routes() http.Handler {
 
 func (s *server) restoreActiveProcesses() {
 	for id, jb := range s.jobs {
-		if jb == nil || jb.StoppedAt != nil {
+		if jb == nil {
+			continue
+		}
+		if jb.StoppedAt != nil {
+			if err := s.removeLiveMirror(id); err != nil {
+				log.Printf("cleanup live mirror %s: %v", id, err)
+			}
 			continue
 		}
 		outputDir := jb.OutputPath
@@ -223,6 +234,9 @@ func (s *server) restoreActiveProcesses() {
 		s.processes[id] = proc
 		if err := s.store.SaveJob(jb); err != nil {
 			log.Printf("persist job %s: %v", id, err)
+		}
+		if err := s.publishLive(jb); err != nil {
+			log.Printf("publish live job %s: %v", id, err)
 		}
 	}
 	for id, up := range s.uploads {
@@ -341,6 +355,10 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := s.publishLive(meta); err != nil {
+		log.Printf("publish live job %s: %v", jobID, err)
+	}
+
 	publicRenditions := cloneRenditions(plan.renditions)
 	for i := range publicRenditions {
 		rel := relativeLocation(plan.outputDir, publicRenditions[i].ManifestURL)
@@ -396,6 +414,9 @@ func (s *server) handleJobByID(w http.ResponseWriter, r *http.Request) {
 	meta.StoppedAt = &now
 	if err := s.store.SaveJob(meta); err != nil {
 		log.Printf("persist stopped job %s: %v", id, err)
+	}
+	if err := s.removeLiveMirror(id); err != nil {
+		log.Printf("cleanup live mirror %s: %v", id, err)
 	}
 
 	s.mu.Lock()
@@ -520,6 +541,9 @@ func (s *server) makeJobExitHandler(id string) func(error) {
 			if saveErr := s.store.SaveJob(meta); saveErr != nil {
 				log.Printf("persist job %s: %v", id, saveErr)
 			}
+		}
+		if err := s.removeLiveMirror(id); err != nil {
+			log.Printf("cleanup live mirror %s: %v", id, err)
 		}
 	}
 }
@@ -1046,6 +1070,66 @@ func loadUploadMetadata(root string, dest map[string]*uploadJob) error {
 			u.Playback = filepath.ToSlash(filepath.Join(u.OutputPath, "index.m3u8"))
 		}
 		dest[u.ID] = &u
+	}
+	return nil
+}
+
+func (s *server) publishLive(j *job) error {
+	if s.publicBase == "" || j == nil {
+		return nil
+	}
+	if strings.TrimSpace(j.ID) == "" {
+		return fmt.Errorf("job id missing")
+	}
+	src := strings.TrimSpace(j.OutputPath)
+	if src == "" {
+		return fmt.Errorf("output path missing")
+	}
+	absSrc, err := filepath.Abs(src)
+	if err != nil {
+		return fmt.Errorf("resolve live output: %w", err)
+	}
+	dest := filepath.Join(s.publicRoot, "live", j.ID)
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return fmt.Errorf("prepare live mirror: %w", err)
+	}
+	if info, err := os.Lstat(dest); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			existing, linkErr := os.Readlink(dest)
+			if linkErr == nil {
+				if absExisting, absErr := filepath.Abs(existing); absErr == nil && absExisting == absSrc {
+					return nil
+				}
+			}
+		}
+		if removeErr := os.Remove(dest); removeErr != nil {
+			if !errors.Is(removeErr, os.ErrNotExist) {
+				if removeAllErr := os.RemoveAll(dest); removeAllErr != nil {
+					return fmt.Errorf("clear existing live mirror: %w", removeAllErr)
+				}
+			}
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("stat live mirror: %w", err)
+	}
+	if err := os.Symlink(absSrc, dest); err != nil {
+		return fmt.Errorf("create live mirror: %w", err)
+	}
+	return nil
+}
+
+func (s *server) removeLiveMirror(jobID string) error {
+	if s.publicBase == "" || strings.TrimSpace(jobID) == "" {
+		return nil
+	}
+	dest := filepath.Join(s.publicRoot, "live", jobID)
+	if err := os.Remove(dest); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if removeAllErr := os.RemoveAll(dest); removeAllErr != nil {
+			return fmt.Errorf("remove live mirror: %w", removeAllErr)
+		}
 	}
 	return nil
 }
