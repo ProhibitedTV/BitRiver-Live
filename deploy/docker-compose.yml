@@ -65,10 +65,16 @@ services:
       retries: 5
       start_period: 10s
     depends_on:
-      - postgres
-      - srs-controller
-      - ome
-      - transcoder
+      postgres:
+        condition: service_healthy
+      postgres-migrations:
+        condition: service_completed_successfully
+      srs-controller:
+        condition: service_started
+      ome:
+        condition: service_started
+      transcoder:
+        condition: service_started
 
   viewer:
     image: ghcr.io/bitriver-live/bitriver-viewer:${BITRIVER_VIEWER_IMAGE_TAG:?set via .env}
@@ -121,6 +127,36 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  postgres-migrations:
+    image: postgres:15-alpine
+    restart: "no"
+    env_file:
+      - ../.env
+    environment:
+      PGPASSWORD: ${BITRIVER_POSTGRES_PASSWORD:?set via .env}
+    volumes:
+      - ./migrations:/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      set -e
+      if ls /migrations/*.sql >/dev/null 2>&1; then
+        for file in /migrations/*.sql; do
+          echo "Applying ${file}"
+          psql \
+            -h postgres \
+            -U "${BITRIVER_POSTGRES_USER:?set via .env}" \
+            -d "${BITRIVER_POSTGRES_DB:-bitriver}" \
+            -v ON_ERROR_STOP=1 \
+            -f "${file}"
+        done
+        echo "Postgres migrations completed."
+      else
+        echo "No Postgres migrations found; skipping."
+      fi
 
   srs-controller:
     image: ghcr.io/bitriver-live/bitriver-srs-controller:${BITRIVER_SRS_CONTROLLER_IMAGE_TAG:?set via .env}

@@ -30,7 +30,7 @@ continue to create accounts manually regardless of this setting.
 
 ## Postgres backend
 
-BitRiver Live now boots directly against Postgres once the schema is migrated. Apply the SQL files in `deploy/migrations/` with your preferred migration tool or straight through `psql`:
+BitRiver Live now boots directly against Postgres once the schema is migrated. The Docker Compose bundle ships with a short-lived `postgres-migrations` service that waits for the database, applies every SQL file in `deploy/migrations/`, and exits; `bitriver-live` depends on that helper and will not start until migrations succeed. For bespoke deployments, apply the SQL files with your preferred migration tool or straight through `psql`:
 
 ```bash
 psql "postgres://bitriver:bitriver@localhost:5432/bitriver?sslmode=disable" \

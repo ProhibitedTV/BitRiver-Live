@@ -183,6 +183,8 @@ Rerun `./deploy/check-env.sh` until it reports the environment file is ready. Th
 
 All long-running services in the compose file specify `restart: unless-stopped`, ensuring Docker automatically restarts containers after crashes or reboots. Override the policy per service if your operations model requires different behaviour.
 
+The manifest now includes a short-lived `postgres-migrations` helper that waits for the bundled Postgres container to pass its health check, applies every SQL file in `deploy/migrations/` with `psql`, and exits. The `bitriver-live` API depends on that service with `condition: service_completed_successfully`, so the API will only start after migrations finish cleanly. Re-running `docker compose up -d` during upgrades triggers the helper again, applying any new migrations before the refreshed containers come online.
+
 ```bash
 cd /opt/bitriver-live
 sudo docker compose -f deploy/docker-compose.yml pull
