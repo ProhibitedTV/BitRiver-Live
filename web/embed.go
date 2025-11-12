@@ -1,3 +1,4 @@
+// Package web exposes the embedded viewer assets for the API server.
 package web
 
 import (
