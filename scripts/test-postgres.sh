@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+GO_MOD_BACKUP=""
+GO_SUM_BACKUP=""
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "error: docker is required to run postgres-tagged tests" >&2
   exit 1
@@ -25,6 +28,12 @@ CONTAINER_NAME="bitr-postgres-test-$$"
 
 cleanup() {
   docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+  if [ -n "$GO_MOD_BACKUP" ] && [ -f "$GO_MOD_BACKUP" ]; then
+    mv "$GO_MOD_BACKUP" "$REPO_ROOT/go.mod"
+  fi
+  if [ -n "$GO_SUM_BACKUP" ] && [ -f "$GO_SUM_BACKUP" ]; then
+    mv "$GO_SUM_BACKUP" "$REPO_ROOT/go.sum"
+  fi
 }
 trap cleanup EXIT INT TERM
 
@@ -99,5 +108,18 @@ echo "running go test -tags postgres ${packages[*]}" >&2
 export GOTOOLCHAIN="${GOTOOLCHAIN:-local}"
 export GOPROXY="https://proxy.golang.org,direct"
 export GOSUMDB="sum.golang.org"
+
+GO_MOD_BACKUP=$(mktemp)
+GO_SUM_BACKUP=$(mktemp)
+cp go.mod "$GO_MOD_BACKUP"
+if [ -f go.sum ]; then
+  cp go.sum "$GO_SUM_BACKUP"
+else
+  rm -f "$GO_SUM_BACKUP"
+  GO_SUM_BACKUP=""
+fi
+
+go mod edit -dropreplace github.com/jackc/pgx/v5 >/dev/null
+go mod edit -dropreplace github.com/jackc/puddle/v2 >/dev/null
 
 go test -count=1 -tags postgres "${packages[@]}"
