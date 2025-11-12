@@ -1,0 +1,22 @@
+name: Wizard release regression
+
+on:
+  push:
+    paths:
+      - 'deploy/install/wizard.sh'
+      - 'scripts/test-wizard-release.sh'
+      - '.github/workflows/wizard-release.yml'
+  pull_request:
+    paths:
+      - 'deploy/install/wizard.sh'
+      - 'scripts/test-wizard-release.sh'
+      - '.github/workflows/wizard-release.yml'
+
+jobs:
+  wizard-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Run staged release wizard test
+        run: bash scripts/test-wizard-release.sh
