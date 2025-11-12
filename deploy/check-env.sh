@@ -17,6 +17,7 @@ source "$ENV_FILE"
 missing=()
 blocked=()
 unset_image_tags=()
+errors=()
 
 required_vars=(
   BITRIVER_POSTGRES_USER
@@ -29,6 +30,7 @@ required_vars=(
   BITRIVER_OME_PASSWORD
   BITRIVER_TRANSCODER_TOKEN
   BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD
+  BITRIVER_TRANSCODER_PUBLIC_BASE_URL
 )
 
 declare -A forbidden_values=(
@@ -105,7 +107,19 @@ if [[ -n "${BITRIVER_LIVE_POSTGRES_DSN:-}" && "$BITRIVER_LIVE_POSTGRES_DSN" == *
   echo "Warning: BITRIVER_LIVE_POSTGRES_DSN still references bitriver:bitriver. Update or unset it to match the Postgres credentials." >&2
 fi
 
-if (( ${#missing[@]} > 0 || ${#blocked[@]} > 0 )); then
+if [[ -n "${BITRIVER_TRANSCODER_PUBLIC_BASE_URL:-}" ]]; then
+  if [[ "$BITRIVER_TRANSCODER_PUBLIC_BASE_URL" =~ ^https?://(localhost|127\.[0-9.]*|0\.0\.0\.0|::1|\[::1\])([:/]|$) ]]; then
+    errors+=("BITRIVER_TRANSCODER_PUBLIC_BASE_URL points at loopback ($BITRIVER_TRANSCODER_PUBLIC_BASE_URL). Configure a CDN, reverse proxy, or other routable origin instead.")
+  fi
+fi
+
+if (( ${#errors[@]} > 0 )); then
+  for msg in "${errors[@]}"; do
+    echo "$msg" >&2
+  done
+fi
+
+if (( ${#missing[@]} > 0 || ${#blocked[@]} > 0 || ${#errors[@]} > 0 )); then
   exit 1
 fi
 
