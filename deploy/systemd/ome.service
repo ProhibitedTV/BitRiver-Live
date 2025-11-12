@@ -1,0 +1,28 @@
+[Unit]
+Description=OvenMediaEngine Origin
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+Environment="OME_DOCKER=/usr/bin/docker"
+Environment="OME_IMAGE=airensoft/ovenmediaengine:0.15.10"
+Environment="OME_CONTAINER_NAME=bitriver-ome"
+Environment="OME_CONFIG=/opt/bitriver-live/deploy/ome/Server.xml"
+Environment="OME_HTTP_PORT=8081"
+Environment="OME_SIGNALING_PORT=9000"
+Environment="OME_EXTRA_ARGS="
+EnvironmentFile=/opt/bitriver-ome/.env
+ExecStartPre=-${OME_DOCKER} rm -f ${OME_CONTAINER_NAME}
+ExecStart=/bin/sh -c '${OME_DOCKER} run --rm --name "${OME_CONTAINER_NAME}" \
+  -p "${OME_HTTP_PORT}:8081" \
+  -p "${OME_SIGNALING_PORT}:9000" \
+  -v "${OME_CONFIG}:/opt/ovenmediaengine/bin/origin_conf/Server.xml:ro" \
+  ${OME_EXTRA_ARGS} \
+  "${OME_IMAGE}"'
+ExecStop=${OME_DOCKER} stop ${OME_CONTAINER_NAME}
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

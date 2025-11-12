@@ -1,0 +1,29 @@
+[Unit]
+Description=Simple Realtime Server (SRS)
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+Environment="SRS_DOCKER=/usr/bin/docker"
+Environment="SRS_IMAGE=ossrs/srs:5"
+Environment="SRS_CONTAINER_NAME=bitriver-srs"
+Environment="SRS_CONF_DIR=/opt/bitriver-live/deploy/srs/conf"
+Environment="SRS_RTMP_PORT=1935"
+Environment="SRS_API_PORT=1985"
+Environment="SRS_EXTRA_ARGS="
+EnvironmentFile=/opt/bitriver-srs/.env
+ExecStartPre=/bin/mkdir -p ${SRS_CONF_DIR}
+ExecStartPre=-${SRS_DOCKER} rm -f ${SRS_CONTAINER_NAME}
+ExecStart=/bin/sh -c '${SRS_DOCKER} run --rm --name "${SRS_CONTAINER_NAME}" \
+  -p "${SRS_RTMP_PORT}:1935" \
+  -p "${SRS_API_PORT}:1985" \
+  -v "${SRS_CONF_DIR}:/usr/local/srs/conf:ro" \
+  ${SRS_EXTRA_ARGS} \
+  "${SRS_IMAGE}"'
+ExecStop=${SRS_DOCKER} stop ${SRS_CONTAINER_NAME}
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

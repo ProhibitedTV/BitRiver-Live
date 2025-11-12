@@ -1,0 +1,36 @@
+[Unit]
+Description=BitRiver FFmpeg Job Controller
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+Environment="TRANSCODER_DOCKER=/usr/bin/docker"
+Environment="TRANSCODER_IMAGE=ghcr.io/bitriver-live/bitriver-transcoder:latest"
+Environment="TRANSCODER_CONTAINER_NAME=bitriver-transcoder"
+Environment="TRANSCODER_HOST_PORT=9001"
+Environment="TRANSCODER_BIND=:9000"
+Environment="TRANSCODER_DATA_DIR=/var/lib/bitriver-transcoder"
+Environment="TRANSCODER_TOKEN="
+Environment="TRANSCODER_PUBLIC_BASE_URL="
+Environment="TRANSCODER_PUBLIC_DIR=/var/lib/bitriver-transcoder/public"
+Environment="TRANSCODER_EXTRA_ARGS="
+EnvironmentFile=/opt/bitriver-transcoder/.env
+ExecStartPre=/bin/mkdir -p ${TRANSCODER_DATA_DIR}
+ExecStartPre=-${TRANSCODER_DOCKER} rm -f ${TRANSCODER_CONTAINER_NAME}
+ExecStart=/bin/sh -c '${TRANSCODER_DOCKER} run --rm --name "${TRANSCODER_CONTAINER_NAME}" \
+  -p "${TRANSCODER_HOST_PORT}:9000" \
+  -v "${TRANSCODER_DATA_DIR}:/var/lib/bitriver-transcoder" \
+  -e JOB_CONTROLLER_BIND="${TRANSCODER_BIND}" \
+  -e JOB_CONTROLLER_TOKEN="${TRANSCODER_TOKEN}" \
+  -e JOB_CONTROLLER_OUTPUT_ROOT="/var/lib/bitriver-transcoder" \
+  -e BITRIVER_TRANSCODER_PUBLIC_BASE_URL="${TRANSCODER_PUBLIC_BASE_URL}" \
+  -e BITRIVER_TRANSCODER_PUBLIC_DIR="${TRANSCODER_PUBLIC_DIR}" \
+  ${TRANSCODER_EXTRA_ARGS} \
+  "${TRANSCODER_IMAGE}"'
+ExecStop=${TRANSCODER_DOCKER} stop ${TRANSCODER_CONTAINER_NAME}
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
