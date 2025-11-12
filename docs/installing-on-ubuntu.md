@@ -153,6 +153,8 @@ Update the entries for:
 
 Ensure `BITRIVER_LIVE_POSTGRES_DSN` references the same Postgres user and password you configure above before bringing the stack online.
 
+The bundled PostgreSQL container now reuses these credentials for its health probe, so the readiness check automatically honours any changes you make to `BITRIVER_POSTGRES_USER` (and `BITRIVER_POSTGRES_DB` if you override it) in `.env`.
+
 Rerun `./deploy/check-env.sh` until it reports the environment file is ready. The compose manifest also uses required-variable expansion, so `docker compose` fails with an explanatory error when any of the credentials are missing or unchanged from the defaults.
 
 ```bash
