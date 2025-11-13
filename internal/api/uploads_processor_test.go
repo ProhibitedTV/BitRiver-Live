@@ -198,14 +198,76 @@ func TestUploadProcessorTimeout(t *testing.T) {
 	})
 }
 
+func TestUploadProcessorRetryUpdateFailures(t *testing.T) {
+	store := newFakeUploadStore()
+	store.channels = []models.Channel{{ID: "channel-1"}}
+	store.uploads = map[string]models.Upload{
+		"upload-retry": {
+			ID:        "upload-retry",
+			ChannelID: "channel-1",
+			Status:    "pending",
+			Metadata:  map[string]string{"sourceUrl": "https://example.com/retry.mp4"},
+		},
+	}
+	store.failFirstUpdateFor("upload-retry", errors.New("transient store failure"))
+
+	ingestFake := newFakeIngest()
+	ingestFake.setResult("upload-retry", ingest.UploadTranscodeResult{PlaybackURL: "https://vod.example.com/retry.m3u8"}, nil)
+
+	processor := NewUploadProcessor(UploadProcessorConfig{
+		Store:   store,
+		Ingest:  ingestFake,
+		Workers: 1,
+		Timeout: time.Second,
+		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+
+	processor.Start()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := processor.Shutdown(ctx); err != nil {
+			t.Fatalf("shutdown error: %v", err)
+		}
+	})
+
+	processor.Enqueue("upload-retry")
+
+	waitFor(t, time.Second, func() bool {
+		return store.updateAttemptCount("upload-retry") >= 1
+	})
+
+	waitFor(t, 3*time.Second, func() bool {
+		upload, ok := store.GetUpload("upload-retry")
+		if !ok {
+			return false
+		}
+		return upload.Status == "ready" && upload.PlaybackURL == "https://vod.example.com/retry.m3u8" && upload.Progress == 100
+	})
+
+	if count := ingestFake.callCount("upload-retry"); count != 1 {
+		t.Fatalf("expected single ingest call, got %d", count)
+	}
+
+	if attempts := store.updateAttemptCount("upload-retry"); attempts < 3 {
+		t.Fatalf("expected at least 3 update attempts, got %d", attempts)
+	}
+}
+
 type fakeUploadStore struct {
-	mu       sync.Mutex
-	channels []models.Channel
-	uploads  map[string]models.Upload
+	mu              sync.Mutex
+	channels        []models.Channel
+	uploads         map[string]models.Upload
+	failFirstUpdate map[string]error
+	updateAttempts  map[string]int
 }
 
 func newFakeUploadStore() *fakeUploadStore {
-	return &fakeUploadStore{uploads: make(map[string]models.Upload)}
+	return &fakeUploadStore{
+		uploads:         make(map[string]models.Upload),
+		failFirstUpdate: make(map[string]error),
+		updateAttempts:  make(map[string]int),
+	}
 }
 
 func (f *fakeUploadStore) ListChannels(ownerID, query string) []models.Channel {
@@ -245,6 +307,12 @@ func (f *fakeUploadStore) UpdateUpload(id string, update storage.UploadUpdate) (
 	if !ok {
 		return models.Upload{}, errors.New("upload not found")
 	}
+	attempt := f.updateAttempts[id]
+	f.updateAttempts[id] = attempt + 1
+	if err, shouldFail := f.failFirstUpdate[id]; shouldFail && attempt == 0 {
+		delete(f.failFirstUpdate, id)
+		return models.Upload{}, err
+	}
 	if update.Status != nil {
 		upload.Status = *update.Status
 	}
@@ -265,6 +333,22 @@ func (f *fakeUploadStore) UpdateUpload(id string, update storage.UploadUpdate) (
 	}
 	f.uploads[id] = upload
 	return cloneUpload(upload), nil
+}
+
+func (f *fakeUploadStore) failFirstUpdateFor(id string, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err == nil {
+		err = errors.New("forced update failure")
+	}
+	f.failFirstUpdate[id] = err
+	f.updateAttempts[id] = 0
+}
+
+func (f *fakeUploadStore) updateAttemptCount(id string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.updateAttempts[id]
 }
 
 func cloneMetadata(src map[string]string) map[string]string {
