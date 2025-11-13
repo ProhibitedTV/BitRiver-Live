@@ -52,6 +52,7 @@ const (
 	defaultUploadWorkers   = 2
 	defaultUploadQueueSize = 64
 	defaultUploadTimeout   = 30 * time.Minute
+	retryDelay             = 50 * time.Millisecond
 )
 
 // NewUploadProcessor configures a worker pool for upload processing, applying
@@ -237,6 +238,7 @@ func (p *UploadProcessor) processUpload(id string) {
 		Error:    stringPtr(""),
 	}); err != nil {
 		p.logger.Error("failed to mark upload processing", "upload_id", id, "error", err)
+		p.scheduleRetry(id)
 		return
 	}
 
@@ -296,9 +298,31 @@ func (p *UploadProcessor) processUpload(id string) {
 		Error:       stringPtr(""),
 	}); err != nil {
 		p.logger.Error("failed to mark upload ready", "upload_id", id, "error", err)
+		p.scheduleRetry(id)
 		return
 	}
 	p.logger.Info("upload transcoded", "upload_id", id, "channel_id", upload.ChannelID, "playback_url", playbackURL)
+}
+
+func (p *UploadProcessor) scheduleRetry(id string) {
+	if p == nil || strings.TrimSpace(id) == "" {
+		return
+	}
+	select {
+	case <-p.ctx.Done():
+		return
+	default:
+	}
+	timer := time.NewTimer(retryDelay)
+	go func() {
+		defer timer.Stop()
+		select {
+		case <-p.ctx.Done():
+			return
+		case <-timer.C:
+		}
+		p.Enqueue(id)
+	}()
 }
 
 func (p *UploadProcessor) failUpload(id, source string, err error) {
