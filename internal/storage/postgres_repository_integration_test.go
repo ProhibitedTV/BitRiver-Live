@@ -378,6 +378,84 @@ func TestPostgresStartStreamPersistsEmptyIngestEndpoints(t *testing.T) {
 	}
 }
 
+func TestPostgresPendingClipExportsHandleNullFields(t *testing.T) {
+	repo, cleanup, err := postgresRepositoryFactory(t)
+	if errors.Is(err, storage.ErrPostgresUnavailable) {
+		t.Skip("postgres repository unavailable in this build")
+	}
+	if err != nil {
+		t.Fatalf("failed to open postgres repository: %v", err)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	pool := postgresPoolFromRepository(t, repo)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	ownerID := "user-null-fields"
+	channelID := "channel-null-fields"
+	sessionID := "session-null-fields"
+	recordingID := "recording-null-fields"
+	clipID := "clip-null-fields"
+
+	if _, err := pool.Exec(ctx, "INSERT INTO users (id, display_name, email, roles, created_at) VALUES ($1, $2, $3, $4, $5)", ownerID, "Owner", ownerID+"@example.com", []string{"creator"}, now); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO channels (id, owner_id, stream_key, title, live_state) VALUES ($1, $2, $3, $4, $5)", channelID, ownerID, "stream-key", "Channel", "offline"); err != nil {
+		t.Fatalf("insert channel: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO stream_sessions (id, channel_id, started_at, renditions, peak_concurrent, ingest_endpoints, ingest_job_ids) VALUES ($1, $2, $3, $4, $5, $6, $7)", sessionID, channelID, now.Add(-time.Hour), []string{}, 0, []string{}, []string{}); err != nil {
+		t.Fatalf("insert stream session: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO recordings (id, channel_id, session_id, title, duration_seconds, created_at, retain_until) VALUES ($1, $2, $3, $4, $5, $6, $7)", recordingID, channelID, sessionID, "Recording", 120, now.Add(-2*time.Hour), now.Add(-time.Minute)); err != nil {
+		t.Fatalf("insert recording: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO clip_exports (id, recording_id, channel_id, session_id, title, start_seconds, end_seconds, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)", clipID, recordingID, channelID, sessionID, "Clip", 0, 30, "pending", now.Add(-time.Minute)); err != nil {
+		t.Fatalf("insert clip export: %v", err)
+	}
+
+	clips, err := repo.ListClipExports(recordingID)
+	if err != nil {
+		t.Fatalf("ListClipExports: %v", err)
+	}
+	if len(clips) != 1 {
+		t.Fatalf("expected 1 clip export, got %d", len(clips))
+	}
+	clip := clips[0]
+	if clip.PlaybackURL != "" {
+		t.Fatalf("expected empty playback url, got %q", clip.PlaybackURL)
+	}
+	if clip.StorageObject != "" {
+		t.Fatalf("expected empty storage object, got %q", clip.StorageObject)
+	}
+
+	recordings, err := repo.ListRecordings(channelID, true)
+	if err != nil {
+		t.Fatalf("ListRecordings: %v", err)
+	}
+	if len(recordings) != 0 {
+		t.Fatalf("expected recording to be purged, got %d entries", len(recordings))
+	}
+
+	var remainingRecordings int
+	if err := pool.QueryRow(ctx, "SELECT COUNT(*) FROM recordings").Scan(&remainingRecordings); err != nil {
+		t.Fatalf("count recordings: %v", err)
+	}
+	if remainingRecordings != 0 {
+		t.Fatalf("expected no recordings after retention purge, found %d", remainingRecordings)
+	}
+
+	var remainingClips int
+	if err := pool.QueryRow(ctx, "SELECT COUNT(*) FROM clip_exports").Scan(&remainingClips); err != nil {
+		t.Fatalf("count clip exports: %v", err)
+	}
+	if remainingClips != 0 {
+		t.Fatalf("expected no clip exports after retention purge, found %d", remainingClips)
+	}
+}
+
 func TestPostgresStopStreamResetsChannelOnRecordingFailure(t *testing.T) {
 	repo, cleanup, err := postgresRepositoryFactory(t,
 		storage.WithObjectStorage(storage.ObjectStorageConfig{
