@@ -327,10 +327,10 @@ fi
 BUILD_FROM_SOURCE=false
 if [[ -f go.mod ]]; then
         BUILD_FROM_SOURCE=true
-elif [[ -x server && -x bootstrap-admin ]]; then
+elif [[ -x bitriver-live && -x bootstrap-admin ]]; then
         BUILD_FROM_SOURCE=false
 else
-        echo "Provide either the BitRiver Live source tree (go.mod) or the prebuilt server/bootstrap-admin binaries in the current directory." >&2
+        echo "Provide either the BitRiver Live source tree (go.mod) or the prebuilt bitriver-live/bootstrap-admin binaries in the current directory." >&2
         exit 1
 fi
 
@@ -364,7 +364,7 @@ if [[ $BUILD_FROM_SOURCE == true ]]; then
         sudo install -m 0755 bootstrap-admin "$INSTALL_DIR/bootstrap-admin"
         rm -f bitriver-live bootstrap-admin
 else
-        sudo install -m 0755 server "$INSTALL_DIR/bitriver-live"
+        sudo install -m 0755 bitriver-live "$INSTALL_DIR/bitriver-live"
         sudo install -m 0755 bootstrap-admin "$INSTALL_DIR/bootstrap-admin"
 fi
 if [[ $REQUIRES_CAP_NET_BIND_SERVICE == true ]]; then

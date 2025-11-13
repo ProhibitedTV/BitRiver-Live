@@ -18,10 +18,10 @@ fi
 BUILD_FROM_SOURCE=false
 if [[ -f go.mod ]]; then
         BUILD_FROM_SOURCE=true
-elif [[ -x server && -x bootstrap-admin ]]; then
+elif [[ -x bitriver-live && -x bootstrap-admin ]]; then
         BUILD_FROM_SOURCE=false
 else
-        echo "This wizard must be run from a BitRiver Live source checkout (go.mod) or a staged release with server/bootstrap-admin present." >&2
+        echo "This wizard must be run from a BitRiver Live source checkout (go.mod) or a staged release with bitriver-live/bootstrap-admin present." >&2
         exit 1
 fi
 
