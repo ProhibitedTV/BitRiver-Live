@@ -70,6 +70,16 @@ type oauthStub struct {
 	lastCancel string
 }
 
+type profileRepositoryWithOrphan struct {
+	storage.Repository
+	orphan models.Profile
+}
+
+func (r profileRepositoryWithOrphan) ListProfiles() []models.Profile {
+	profiles := r.Repository.ListProfiles()
+	return append(profiles, r.orphan)
+}
+
 func (s *oauthStub) Providers() []oauth.ProviderInfo {
 	if s.providers != nil {
 		return s.providers
@@ -102,6 +112,112 @@ func (s *oauthStub) Cancel(state string) (string, error) {
 		return "", s.cancelError
 	}
 	return s.cancelResult, nil
+}
+
+func TestProfilesList(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	viewer, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Viewer", Email: "viewer@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
+
+	creatorOne, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Creator One", Email: "creator1@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser creatorOne: %v", err)
+	}
+	creatorTwo, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Creator Two", Email: "creator2@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser creatorTwo: %v", err)
+	}
+
+	channel, err := store.CreateChannel(creatorOne.ID, "Channel One", "Gaming", []string{"play"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	featured := channel.ID
+	topFriends := []string{creatorTwo.ID}
+	bioOne := "Streaming adventures"
+	avatarOne := "https://example.com/avatar.png"
+	bannerOne := "https://example.com/banner.png"
+	if _, err := store.UpsertProfile(creatorOne.ID, storage.ProfileUpdate{
+		Bio:               &bioOne,
+		AvatarURL:         &avatarOne,
+		BannerURL:         &bannerOne,
+		FeaturedChannelID: &featured,
+		TopFriends:        &topFriends,
+	}); err != nil {
+		t.Fatalf("UpsertProfile creatorOne: %v", err)
+	}
+
+	bioTwo := "Chill streams"
+	if _, err := store.UpsertProfile(creatorTwo.ID, storage.ProfileUpdate{Bio: &bioTwo}); err != nil {
+		t.Fatalf("UpsertProfile creatorTwo: %v", err)
+	}
+
+	orphan := models.Profile{
+		UserID:    "missing-user",
+		Bio:       "ghost profile",
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	handler.Store = profileRepositoryWithOrphan{Repository: handler.Store, orphan: orphan}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/profiles", nil)
+	req = withUser(req, viewer)
+	rec := httptest.NewRecorder()
+	handler.Profiles(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var payload []profileViewResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(payload) != 2 {
+		t.Fatalf("expected 2 profiles because orphaned entries should be omitted, got %d", len(payload))
+	}
+
+	profilesByUser := make(map[string]profileViewResponse)
+	for _, p := range payload {
+		profilesByUser[p.UserID] = p
+	}
+
+	profileOne, ok := profilesByUser[creatorOne.ID]
+	if !ok {
+		t.Fatalf("missing profile for %s", creatorOne.ID)
+	}
+	if profileOne.DisplayName != creatorOne.DisplayName {
+		t.Fatalf("expected display name %q, got %q", creatorOne.DisplayName, profileOne.DisplayName)
+	}
+	if profileOne.FeaturedChannelID == nil || *profileOne.FeaturedChannelID != channel.ID {
+		t.Fatalf("expected featured channel %s, got %v", channel.ID, profileOne.FeaturedChannelID)
+	}
+	if len(profileOne.TopFriends) != 1 || profileOne.TopFriends[0].UserID != creatorTwo.ID {
+		t.Fatalf("expected top friend %s, got %+v", creatorTwo.ID, profileOne.TopFriends)
+	}
+	if len(profileOne.Channels) != 1 || profileOne.Channels[0].ID != channel.ID {
+		t.Fatalf("expected channel %s, got %+v", channel.ID, profileOne.Channels)
+	}
+
+	profileTwo, ok := profilesByUser[creatorTwo.ID]
+	if !ok {
+		t.Fatalf("missing profile for %s", creatorTwo.ID)
+	}
+	if profileTwo.FeaturedChannelID != nil {
+		t.Fatalf("expected no featured channel for %s", creatorTwo.ID)
+	}
+
+	unauthReq := httptest.NewRequest(http.MethodGet, "/api/profiles", nil)
+	unauthRec := httptest.NewRecorder()
+	handler.Profiles(unauthRec, unauthReq)
+	if unauthRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401 for unauthenticated request, got %d", unauthRec.Code)
+	}
 }
 
 func TestUsersEndpointCreatesAndListsUsers(t *testing.T) {
