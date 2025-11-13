@@ -47,7 +47,7 @@ go run ./cmd/server \
   --postgres-acquire-timeout 5s
 ```
 
-`--postgres-acquire-timeout` bounds how long the API waits to borrow a connection when the pool is exhausted; it does not affect the TCP/TLS handshake with Postgres.
+`--postgres-acquire-timeout` bounds how long the API waits to borrow a connection when the pool is exhausted and caps the runtime of the initial transaction or query executed with that connection. It does not affect the TCP/TLS handshake with Postgres.
 
 The same configuration can be supplied via environment variables:
 
@@ -55,7 +55,7 @@ The same configuration can be supplied via environment variables:
 | --- | --- |
 | `BITRIVER_LIVE_POSTGRES_DSN` | Connection string passed to the Postgres driver. |
 | `BITRIVER_LIVE_POSTGRES_MAX_CONNS` / `BITRIVER_LIVE_POSTGRES_MIN_CONNS` | Pool limits for concurrent and idle connections. |
-| `BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT` | How long to wait when borrowing a connection from the pool. |
+| `BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT` | How long to wait when borrowing a connection from the pool and executing the associated statement. |
 | `BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME` | Maximum lifetime before a pooled connection is recycled. |
 | `BITRIVER_LIVE_POSTGRES_MAX_CONN_IDLE` | Maximum idle time before a connection is closed. |
 | `BITRIVER_LIVE_POSTGRES_HEALTH_INTERVAL` | Frequency of pool health probes. |
