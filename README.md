@@ -169,6 +169,7 @@ For storage-specific tests backed by Postgres, use the helper:
 - Head to [`docs/advanced-deployments.md`](docs/advanced-deployments.md) for TLS, object storage, and scaling recipes.
 - Explore [`docs/testing.md`](docs/testing.md) when you need integration tests or linting details.
 - Plan launches with the [production release runbook](docs/production-release.md).
+- Review the [v1.0.0 release notes](docs/releases/v1.0.0.md) before upgrading.
 - Learn about the long-term roadmap in [`docs/product-roadmap.md`](docs/product-roadmap.md).
 
 Questions or improvements? Open an issue or dive into `internal/api/handlers.go` to start extending the platform.
