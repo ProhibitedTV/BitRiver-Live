@@ -279,7 +279,7 @@ export function fetchChannelVods(channelId: string): Promise<VodCollection> {
 }
 
 export function fetchChannelUploads(channelId: string): Promise<UploadItem[]> {
-  return viewerRequest<UploadItem[]>(`/api/uploads?channelId=${channelId}`);
+  return viewerRequest<UploadItem[]>(`/api/uploads?channelId=${encodeURIComponent(channelId)}`);
 }
 
 export function fetchManagedChannels(ownerId?: string): Promise<ManagedChannel[]> {
