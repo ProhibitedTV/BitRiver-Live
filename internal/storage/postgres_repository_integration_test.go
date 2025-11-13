@@ -668,6 +668,10 @@ func TestPostgresSubscriptionsLifecycle(t *testing.T) {
 	storage.RunRepositorySubscriptionsLifecycle(t, postgresRepositoryFactory)
 }
 
+func TestPostgresMonetizationPrecision(t *testing.T) {
+	storage.RunRepositoryMonetizationPrecision(t, postgresRepositoryFactory)
+}
+
 func TestPostgresSubscriptionReferenceUniqueness(t *testing.T) {
 	repo := openPostgresRepository(t)
 

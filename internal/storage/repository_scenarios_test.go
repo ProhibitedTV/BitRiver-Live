@@ -470,10 +470,11 @@ func RunRepositoryTipsLifecycle(t *testing.T, factory RepositoryFactory) {
 	channel, err := repo.CreateChannel(owner.ID, "Lobby", "gaming", nil)
 	requireAvailable(t, err, "create channel")
 
+	expectedTipAmount := models.MustParseMoney("5.5")
 	tip, err := repo.CreateTip(CreateTipParams{
 		ChannelID:  channel.ID,
 		FromUserID: supporter.ID,
-		Amount:     models.MustParseMoney("5.5"),
+		Amount:     expectedTipAmount,
 		Currency:   "usd",
 		Provider:   "stripe",
 		Reference:  "ref-1",
@@ -484,10 +485,17 @@ func RunRepositoryTipsLifecycle(t *testing.T, factory RepositoryFactory) {
 		t.Fatalf("expected tip id to be set")
 	}
 
+	if tip.Amount.MinorUnits() != expectedTipAmount.MinorUnits() {
+		t.Fatalf("expected persisted tip amount %d, got %d", expectedTipAmount.MinorUnits(), tip.Amount.MinorUnits())
+	}
+
 	tips, err := repo.ListTips(channel.ID, 10)
 	requireAvailable(t, err, "list tips")
 	if len(tips) != 1 || tips[0].ID != tip.ID {
 		t.Fatalf("expected persisted tip, got %+v", tips)
+	}
+	if tips[0].Amount.MinorUnits() != expectedTipAmount.MinorUnits() {
+		t.Fatalf("expected listed tip amount %d, got %d", expectedTipAmount.MinorUnits(), tips[0].Amount.MinorUnits())
 	}
 
 	longReference := strings.Repeat("r", MaxTipReferenceLength+1)
@@ -541,13 +549,14 @@ func RunRepositorySubscriptionsLifecycle(t *testing.T, factory RepositoryFactory
 	channel, err := repo.CreateChannel(owner.ID, "Lobby", "gaming", nil)
 	requireAvailable(t, err, "create channel")
 
+	expectedSubAmount := models.MustParseMoney("4.99")
 	sub, err := repo.CreateSubscription(CreateSubscriptionParams{
 		ChannelID: channel.ID,
 		UserID:    viewer.ID,
 		Tier:      "tier1",
 		Provider:  "stripe",
 		Reference: "sub-1",
-		Amount:    models.MustParseMoney("4.99"),
+		Amount:    expectedSubAmount,
 		Currency:  "usd",
 		Duration:  time.Hour,
 		AutoRenew: true,
@@ -557,10 +566,17 @@ func RunRepositorySubscriptionsLifecycle(t *testing.T, factory RepositoryFactory
 		t.Fatalf("expected subscription id to be set")
 	}
 
+	if sub.Amount.MinorUnits() != expectedSubAmount.MinorUnits() {
+		t.Fatalf("expected subscription amount %d, got %d", expectedSubAmount.MinorUnits(), sub.Amount.MinorUnits())
+	}
+
 	subs, err := repo.ListSubscriptions(channel.ID, false)
 	requireAvailable(t, err, "list subscriptions")
 	if len(subs) != 1 || subs[0].ID != sub.ID {
 		t.Fatalf("expected subscription listing to include created subscription, got %+v", subs)
+	}
+	if subs[0].Amount.MinorUnits() != expectedSubAmount.MinorUnits() {
+		t.Fatalf("expected listed subscription amount %d, got %d", expectedSubAmount.MinorUnits(), subs[0].Amount.MinorUnits())
 	}
 
 	stored, ok := repo.GetSubscription(sub.ID)
@@ -569,6 +585,9 @@ func RunRepositorySubscriptionsLifecycle(t *testing.T, factory RepositoryFactory
 	}
 	if stored.ID != sub.ID || stored.Status != "active" {
 		t.Fatalf("unexpected stored subscription: %+v", stored)
+	}
+	if stored.Amount.MinorUnits() != expectedSubAmount.MinorUnits() {
+		t.Fatalf("expected fetched subscription amount %d, got %d", expectedSubAmount.MinorUnits(), stored.Amount.MinorUnits())
 	}
 
 	cancelled, err := repo.CancelSubscription(sub.ID, owner.ID, "fraud")
@@ -581,6 +600,87 @@ func RunRepositorySubscriptionsLifecycle(t *testing.T, factory RepositoryFactory
 	requireAvailable(t, err, "list all subscriptions")
 	if len(all) != 1 || all[0].Status != "cancelled" {
 		t.Fatalf("expected cancelled subscription to be returned, got %+v", all)
+	}
+}
+
+// RunRepositoryMonetizationPrecision verifies repositories preserve fixed-precision
+// minor units for tips and subscriptions.
+func RunRepositoryMonetizationPrecision(t *testing.T, factory RepositoryFactory) {
+	repo := runRepository(t, factory)
+
+	owner, err := repo.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	requireAvailable(t, err, "create owner")
+	viewer, err := repo.CreateUser(CreateUserParams{DisplayName: "viewer", Email: "viewer@example.com"})
+	requireAvailable(t, err, "create viewer")
+	channel, err := repo.CreateChannel(owner.ID, "Lobby", "gaming", nil)
+	requireAvailable(t, err, "create channel")
+
+	preciseTip := models.MustParseMoney("0.00000025")
+	tip, err := repo.CreateTip(CreateTipParams{
+		ChannelID:  channel.ID,
+		FromUserID: viewer.ID,
+		Amount:     preciseTip,
+		Currency:   "usd",
+		Provider:   "internal",
+		Reference:  "precision-tip",
+	})
+	requireAvailable(t, err, "create precise tip")
+	if tip.Amount.MinorUnits() != preciseTip.MinorUnits() {
+		t.Fatalf("expected precise tip units %d, got %d", preciseTip.MinorUnits(), tip.Amount.MinorUnits())
+	}
+	tips, err := repo.ListTips(channel.ID, 10)
+	requireAvailable(t, err, "list precise tips")
+	found := false
+	for _, listed := range tips {
+		if listed.ID == tip.ID {
+			found = true
+			if listed.Amount.MinorUnits() != preciseTip.MinorUnits() {
+				t.Fatalf("expected listed tip units %d, got %d", preciseTip.MinorUnits(), listed.Amount.MinorUnits())
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected precision tip %q in listing", tip.ID)
+	}
+
+	preciseSub := models.MustParseMoney("1234.56789012")
+	subscription, err := repo.CreateSubscription(CreateSubscriptionParams{
+		ChannelID: channel.ID,
+		UserID:    viewer.ID,
+		Tier:      "precision",
+		Provider:  "internal",
+		Reference: "precision-sub",
+		Amount:    preciseSub,
+		Currency:  "usd",
+		Duration:  time.Hour,
+	})
+	requireAvailable(t, err, "create precise subscription")
+	if subscription.Amount.MinorUnits() != preciseSub.MinorUnits() {
+		t.Fatalf("expected precise subscription units %d, got %d", preciseSub.MinorUnits(), subscription.Amount.MinorUnits())
+	}
+	subs, err := repo.ListSubscriptions(channel.ID, true)
+	requireAvailable(t, err, "list precise subscriptions")
+	located := false
+	for _, listed := range subs {
+		if listed.ID == subscription.ID {
+			located = true
+			if listed.Amount.MinorUnits() != preciseSub.MinorUnits() {
+				t.Fatalf("expected listed subscription units %d, got %d", preciseSub.MinorUnits(), listed.Amount.MinorUnits())
+			}
+			break
+		}
+	}
+	if !located {
+		t.Fatalf("expected subscription %q in listing", subscription.ID)
+	}
+
+	stored, ok := repo.GetSubscription(subscription.ID)
+	if !ok {
+		t.Fatalf("expected subscription %q to be retrievable", subscription.ID)
+	}
+	if stored.Amount.MinorUnits() != preciseSub.MinorUnits() {
+		t.Fatalf("expected stored subscription units %d, got %d", preciseSub.MinorUnits(), stored.Amount.MinorUnits())
 	}
 }
 
