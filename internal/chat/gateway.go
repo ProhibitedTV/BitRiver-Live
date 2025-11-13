@@ -31,6 +31,9 @@ type GatewayConfig struct {
 	Queue  Queue
 	Store  Store
 	Logger *slog.Logger
+	// HeartbeatInterval controls how often the gateway sends WebSocket ping
+	// frames to connected clients. A zero value disables heartbeats.
+	HeartbeatInterval time.Duration
 }
 
 // Gateway coordinates live chat fan-out, managing WebSocket clients and
@@ -39,6 +42,8 @@ type Gateway struct {
 	queue  Queue
 	store  Store
 	logger *slog.Logger
+
+	heartbeatInterval time.Duration
 
 	mu       sync.RWMutex
 	rooms    map[string]map[*client]struct{}
@@ -57,12 +62,13 @@ func NewGateway(cfg GatewayConfig) *Gateway {
 		snapshot = cfg.Store.ChatRestrictions().Copy()
 	}
 	return &Gateway{
-		queue:    cfg.Queue,
-		store:    cfg.Store,
-		logger:   logger,
-		rooms:    make(map[string]map[*client]struct{}),
-		bans:     snapshot.Bans,
-		timeouts: snapshot.Timeouts,
+		queue:             cfg.Queue,
+		store:             cfg.Store,
+		logger:            logger,
+		heartbeatInterval: cfg.HeartbeatInterval,
+		rooms:             make(map[string]map[*client]struct{}),
+		bans:              snapshot.Bans,
+		timeouts:          snapshot.Timeouts,
 	}
 }
 
@@ -91,6 +97,9 @@ func (g *Gateway) HandleConnection(w http.ResponseWriter, r *http.Request, user 
 	}
 
 	go c.writeLoop()
+	if g.heartbeatInterval > 0 {
+		go c.heartbeatLoop(ctx, g.heartbeatInterval)
+	}
 	go c.readLoop(ctx)
 }
 
@@ -394,6 +403,22 @@ func (c *client) writeLoop() {
 		}
 		if err := c.conn.WriteText(payload); err != nil {
 			return
+		}
+	}
+}
+
+func (c *client) heartbeatLoop(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := c.conn.Ping(nil); err != nil {
+				c.close()
+				return
+			}
 		}
 	}
 }
