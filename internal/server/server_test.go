@@ -153,6 +153,55 @@ func TestAuthMiddlewareAllowsExpiredSessionOnOptionalRoutes(t *testing.T) {
 	}
 }
 
+func TestAuthMiddlewareAllowsUnauthenticatedProfileGet(t *testing.T) {
+	handler, store := newTestHandler(t)
+	user, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Viewer",
+		Email:       "viewer@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser error: %v", err)
+	}
+
+	profilePath := fmt.Sprintf("/api/profiles/%s", user.ID)
+
+	getNextCalled := false
+	getNext := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		getNextCalled = true
+		handler.ProfileByID(w, r)
+	})
+
+	getReq := httptest.NewRequest(http.MethodGet, profilePath, nil)
+	getRec := httptest.NewRecorder()
+
+	authMiddleware(handler, getNext).ServeHTTP(getRec, getReq)
+
+	if !getNextCalled {
+		t.Fatal("expected middleware to call next handler for profile GET")
+	}
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", getRec.Code)
+	}
+
+	putNextCalled := false
+	putNext := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		putNextCalled = true
+		handler.ProfileByID(w, r)
+	})
+
+	putReq := httptest.NewRequest(http.MethodPut, profilePath, strings.NewReader(`{}`))
+	putRec := httptest.NewRecorder()
+
+	authMiddleware(handler, putNext).ServeHTTP(putRec, putReq)
+
+	if putNextCalled {
+		t.Fatal("expected middleware not to call next handler for profile PUT without auth")
+	}
+	if putRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", putRec.Code)
+	}
+}
+
 func TestAuthMiddlewareRejectsInvalidSession(t *testing.T) {
 	handler, _ := newTestHandler(t)
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
