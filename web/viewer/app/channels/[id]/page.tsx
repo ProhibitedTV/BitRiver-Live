@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChannelAboutPanel, ChannelHeader } from "../../../components/ChannelHero";
 import { ChatPanel } from "../../../components/ChatPanel";
@@ -24,9 +24,17 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
   const [vodError, setVodError] = useState<string | undefined>();
   const [activeTab, setActiveTab] = useState<"about" | "schedule" | "videos">("about");
   const { user } = useAuth();
+  const previousUserIdRef = useRef<string | undefined>();
+  const previousChannelIdRef = useRef<string | undefined>();
 
   useEffect(() => {
     let cancelled = false;
+    const previousUserId = previousUserIdRef.current;
+    const previousChannelId = previousChannelIdRef.current;
+    previousUserIdRef.current = user?.id;
+    previousChannelIdRef.current = id;
+    const shouldShowSpinner =
+      previousChannelId !== id || previousUserId === undefined;
     const load = async (showSpinner: boolean) => {
       try {
         if (showSpinner) {
@@ -47,7 +55,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
         }
       }
     };
-    void load(true);
+    void load(shouldShowSpinner);
     const interval = setInterval(() => {
       void load(false);
     }, 30_000);
@@ -55,7 +63,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [id]);
+  }, [id, user?.id]);
 
   const handleFollowChange = (follow: FollowState) => {
     setData((prev) => (prev ? { ...prev, follow } : prev));

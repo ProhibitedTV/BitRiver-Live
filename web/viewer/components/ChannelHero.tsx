@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import type {
   ChannelPlaybackResponse,
@@ -34,6 +34,18 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
   const donationAddresses = data.donationAddresses ?? [];
+
+  useEffect(() => {
+    setFollow(data.follow);
+  }, [data.follow.followers, data.follow.following]);
+
+  useEffect(() => {
+    const nextSubscription: SubscriptionState = data.subscription ?? {
+      subscribed: false,
+      subscribers: 0
+    };
+    setSubscription(nextSubscription);
+  }, [data.subscription?.subscribed, data.subscription?.subscribers, data.subscription?.tier]);
 
   const handleToggleFollow = async () => {
     if (!user) {
