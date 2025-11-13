@@ -1162,6 +1162,13 @@ func TestProfileEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser friend: %v", err)
 	}
+	viewer, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Viewer",
+		Email:       "viewer@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
 	channel, err := store.CreateChannel(owner.ID, "Main Stage", "music", []string{"live"})
 	if err != nil {
 		t.Fatalf("CreateChannel: %v", err)
@@ -1237,6 +1244,18 @@ func TestProfileEndpoints(t *testing.T) {
 	handler.ProfileByID(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected missing profile status 404, got %d", rec.Code)
+	}
+
+	viewerPayload := map[string]interface{}{
+		"bio": "Just a viewer",
+	}
+	viewerBody, _ := json.Marshal(viewerPayload)
+	req = httptest.NewRequest(http.MethodPut, "/api/profiles/"+viewer.ID, bytes.NewReader(viewerBody))
+	req = withUser(req, viewer)
+	rec = httptest.NewRecorder()
+	handler.ProfileByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected viewer profile update status 200, got %d", rec.Code)
 	}
 }
 
