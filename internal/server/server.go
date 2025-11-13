@@ -462,7 +462,21 @@ func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		optionalAuth := r.Method == http.MethodGet && (path == "/api/directory" || strings.HasPrefix(path, "/api/channels/") || strings.HasPrefix(path, "/api/recordings"))
+		optionalAuth := false
+		if r.Method == http.MethodGet {
+			switch {
+			case path == "/api/directory":
+				optionalAuth = true
+			case strings.HasPrefix(path, "/api/channels/"):
+				optionalAuth = true
+			case strings.HasPrefix(path, "/api/recordings"):
+				optionalAuth = true
+			case path == "/api/profiles":
+				optionalAuth = true
+			case strings.HasPrefix(path, "/api/profiles/"):
+				optionalAuth = true
+			}
+		}
 		token := api.ExtractToken(r)
 		if token == "" {
 			if optionalAuth {
