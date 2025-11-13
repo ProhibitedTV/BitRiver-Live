@@ -868,9 +868,13 @@ func (r *postgresRepository) purgeExpiredRecordings(ctx context.Context) error {
 		clips := make([]models.ClipExport, 0)
 		for clipRows.Next() {
 			var clip models.ClipExport
-			if err := clipRows.Scan(&clip.ID, &clip.StorageObject); err != nil {
+			var storageObject pgtype.Text
+			if err := clipRows.Scan(&clip.ID, &storageObject); err != nil {
 				clipRows.Close()
 				return fmt.Errorf("scan clip export: %w", err)
+			}
+			if storageObject.Valid {
+				clip.StorageObject = storageObject.String
 			}
 			clips = append(clips, clip)
 		}
@@ -2923,9 +2927,13 @@ func (r *postgresRepository) DeleteRecording(id string) error {
 	clips := make([]models.ClipExport, 0)
 	for clipRows.Next() {
 		var clip models.ClipExport
-		if err := clipRows.Scan(&clip.ID, &clip.StorageObject); err != nil {
+		var storageObject pgtype.Text
+		if err := clipRows.Scan(&clip.ID, &storageObject); err != nil {
 			clipRows.Close()
 			return fmt.Errorf("scan clip export: %w", err)
+		}
+		if storageObject.Valid {
+			clip.StorageObject = storageObject.String
 		}
 		clips = append(clips, clip)
 	}
@@ -3036,12 +3044,20 @@ func (r *postgresRepository) ListClipExports(recordingID string) ([]models.ClipE
 		for rows.Next() {
 			var clip models.ClipExport
 			var completedAt pgtype.Timestamptz
-			if err := rows.Scan(&clip.ID, &clip.RecordingID, &clip.ChannelID, &clip.SessionID, &clip.Title, &clip.StartSeconds, &clip.EndSeconds, &clip.Status, &clip.PlaybackURL, &clip.CreatedAt, &completedAt, &clip.StorageObject); err != nil {
+			var playbackURL pgtype.Text
+			var storageObject pgtype.Text
+			if err := rows.Scan(&clip.ID, &clip.RecordingID, &clip.ChannelID, &clip.SessionID, &clip.Title, &clip.StartSeconds, &clip.EndSeconds, &clip.Status, &playbackURL, &clip.CreatedAt, &completedAt, &storageObject); err != nil {
 				return fmt.Errorf("scan clip export: %w", err)
 			}
 			if completedAt.Valid {
 				ts := completedAt.Time.UTC()
 				clip.CompletedAt = &ts
+			}
+			if playbackURL.Valid {
+				clip.PlaybackURL = playbackURL.String
+			}
+			if storageObject.Valid {
+				clip.StorageObject = storageObject.String
 			}
 			clips = append(clips, clip)
 		}
