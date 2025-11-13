@@ -80,7 +80,28 @@ See [docs/testing.md](testing.md) for the consolidated checklist used in CI.
 
 ### Monetization amounts
 
-Tips and subscriptions now store their amounts as fixed-precision minor units (1e-8 of the major currency) to avoid floating point drift in both the JSON store and Postgres. Operators should continue to send human-readable decimal numbers such as `4.99` or `0.00000025` in API requests—values with more than eight fractional digits are rejected. When seeding data or editing snapshots manually, preserve the decimal string form to keep the minor-unit representation consistent.
+Tips and subscriptions now store their amounts as fixed-precision minor units (1e-8 of the major currency) to avoid floating point drift in both the JSON store and Postgres. Operators should continue to send human-readable decimal numbers such as `4.99` or `0.00000025` in API requests—values with more than eight fractional digits are rejected. When seeding data or editing snapshots manually, preserve the decimal string form to keep the minor-unit representation consistent. The API keeps the decimal format on the wire; for example, a tip can be recorded with:
+
+```json
+{
+  "amount": 4.99,
+  "currency": "USD",
+  "provider": "stripe",
+  "reference": "campaign-42"
+}
+```
+
+Subscriptions follow the same rule and accept decimal amounts up to eight fractional digits:
+
+```json
+{
+  "tier": "supporter",
+  "provider": "stripe",
+  "amount": 12.34000001,
+  "currency": "USD",
+  "durationDays": 30
+}
+```
 
 ## Recording retention and object storage
 

@@ -1121,15 +1121,11 @@ func scanSubscriptionRow(row pgx.Row) (models.Subscription, error) {
 		cancelledAt       pgtype.Timestamptz
 		externalReference pgtype.Text
 	)
-	var amountText string
-	if err := row.Scan(&sub.ID, &sub.ChannelID, &sub.UserID, &sub.Tier, &sub.Provider, &sub.Reference, &amountText, &sub.Currency, &sub.StartedAt, &sub.ExpiresAt, &sub.AutoRenew, &sub.Status, &cancelledBy, &cancelledReason, &cancelledAt, &externalReference); err != nil {
+	var amountMinor int64
+	if err := row.Scan(&sub.ID, &sub.ChannelID, &sub.UserID, &sub.Tier, &sub.Provider, &sub.Reference, &amountMinor, &sub.Currency, &sub.StartedAt, &sub.ExpiresAt, &sub.AutoRenew, &sub.Status, &cancelledBy, &cancelledReason, &cancelledAt, &externalReference); err != nil {
 		return models.Subscription{}, err
 	}
-	amount, err := models.ParseMoney(amountText)
-	if err != nil {
-		return models.Subscription{}, fmt.Errorf("parse subscription amount: %w", err)
-	}
-	sub.Amount = amount
+	sub.Amount = models.NewMoneyFromMinorUnits(amountMinor)
 	sub.StartedAt = sub.StartedAt.UTC()
 	sub.ExpiresAt = sub.ExpiresAt.UTC()
 	if cancelledBy.Valid {
@@ -3696,8 +3692,7 @@ func (r *postgresRepository) CreateTip(params CreateTipParams) (models.Tip, erro
 		}
 
 		var createdAt time.Time
-		amountText := amount.DecimalString()
-		if err := tx.QueryRow(ctx, "INSERT INTO tips (id, channel_id, from_user_id, amount, currency, provider, reference, wallet_address, message, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING created_at", id, params.ChannelID, params.FromUserID, amountText, currency, provider, reference, wallet, message, now).Scan(&createdAt); err != nil {
+		if err := tx.QueryRow(ctx, "INSERT INTO tips (id, channel_id, from_user_id, amount, currency, provider, reference, wallet_address, message, created_at) VALUES ($1, $2, $3, $4::numeric / 100000000::numeric, $5, $6, $7, $8, $9, $10) RETURNING created_at", id, params.ChannelID, params.FromUserID, amount.MinorUnits(), currency, provider, reference, wallet, message, now).Scan(&createdAt); err != nil {
 			return fmt.Errorf("insert tip: %w", err)
 		}
 
@@ -3744,7 +3739,7 @@ func (r *postgresRepository) ListTips(channelID string, limit int) ([]models.Tip
 			return err
 		}
 
-		query := "SELECT id, channel_id, from_user_id, amount, currency, provider, reference, wallet_address, message, created_at FROM tips WHERE channel_id = $1 ORDER BY created_at DESC, id ASC"
+		query := "SELECT id, channel_id, from_user_id, (amount * 100000000)::bigint AS amount_minor, currency, provider, reference, wallet_address, message, created_at FROM tips WHERE channel_id = $1 ORDER BY created_at DESC, id ASC"
 		args := []any{channelID}
 		if limit > 0 {
 			query += " LIMIT $2"
@@ -3761,15 +3756,11 @@ func (r *postgresRepository) ListTips(channelID string, limit int) ([]models.Tip
 			var tip models.Tip
 			var walletAddress, message pgtype.Text
 			var createdAt time.Time
-			var amountText string
-			if err := rows.Scan(&tip.ID, &tip.ChannelID, &tip.FromUserID, &amountText, &tip.Currency, &tip.Provider, &tip.Reference, &walletAddress, &message, &createdAt); err != nil {
+			var amountMinor int64
+			if err := rows.Scan(&tip.ID, &tip.ChannelID, &tip.FromUserID, &amountMinor, &tip.Currency, &tip.Provider, &tip.Reference, &walletAddress, &message, &createdAt); err != nil {
 				return fmt.Errorf("scan tip: %w", err)
 			}
-			parsedAmount, err := models.ParseMoney(amountText)
-			if err != nil {
-				return fmt.Errorf("parse tip amount: %w", err)
-			}
-			tip.Amount = parsedAmount
+			tip.Amount = models.NewMoneyFromMinorUnits(amountMinor)
 			if walletAddress.Valid {
 				tip.WalletAddress = walletAddress.String
 			}
@@ -3863,8 +3854,7 @@ func (r *postgresRepository) CreateSubscription(params CreateSubscriptionParams)
 			return fmt.Errorf("subscription reference %s/%s already exists", provider, reference)
 		}
 
-		amountText := amount.DecimalString()
-		_, err = tx.Exec(ctx, "INSERT INTO subscriptions (id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, external_reference) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)", id, params.ChannelID, params.UserID, tier, provider, reference, amountText, currency, started, expires, params.AutoRenew, "active", externalRef)
+		_, err = tx.Exec(ctx, "INSERT INTO subscriptions (id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, external_reference) VALUES ($1, $2, $3, $4, $5, $6, $7::numeric / 100000000::numeric, $8, $9, $10, $11, $12, $13)", id, params.ChannelID, params.UserID, tier, provider, reference, amount.MinorUnits(), currency, started, expires, params.AutoRenew, "active", externalRef)
 		if err != nil {
 			return fmt.Errorf("insert subscription: %w", err)
 		}
@@ -3915,7 +3905,7 @@ func (r *postgresRepository) ListSubscriptions(channelID string, includeInactive
 			return err
 		}
 
-		query := "SELECT id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference FROM subscriptions WHERE channel_id = $1"
+		query := "SELECT id, channel_id, user_id, tier, provider, reference, (amount * 100000000)::bigint AS amount_minor, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference FROM subscriptions WHERE channel_id = $1"
 		args := []any{channelID}
 		if !includeInactive {
 			query += " AND status = 'active'"
@@ -3958,7 +3948,7 @@ func (r *postgresRepository) GetSubscription(id string) (models.Subscription, bo
 	}
 
 	ctx := context.Background()
-	row := r.pool.QueryRow(ctx, "SELECT id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference FROM subscriptions WHERE id = $1", id)
+	row := r.pool.QueryRow(ctx, "SELECT id, channel_id, user_id, tier, provider, reference, (amount * 100000000)::bigint AS amount_minor, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference FROM subscriptions WHERE id = $1", id)
 
 	sub, err := scanSubscriptionRow(row)
 	if err != nil {
@@ -3986,7 +3976,7 @@ func (r *postgresRepository) CancelSubscription(id, cancelledBy, reason string) 
 		}
 		defer rollbackTx(ctx, tx)
 
-		row := tx.QueryRow(ctx, "SELECT id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference FROM subscriptions WHERE id = $1 FOR UPDATE", id)
+		row := tx.QueryRow(ctx, "SELECT id, channel_id, user_id, tier, provider, reference, (amount * 100000000)::bigint AS amount_minor, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference FROM subscriptions WHERE id = $1 FOR UPDATE", id)
 		sub, err := scanSubscriptionRow(row)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {

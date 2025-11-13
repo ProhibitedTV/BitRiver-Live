@@ -2019,6 +2019,10 @@ func TestCreateSubscriptionAndCancel(t *testing.T) {
 	RunRepositorySubscriptionsLifecycle(t, jsonRepositoryFactory)
 }
 
+func TestRepositoryMonetizationPrecision(t *testing.T) {
+	RunRepositoryMonetizationPrecision(t, jsonRepositoryFactory)
+}
+
 func TestRepositoryStreamKeyRotation(t *testing.T) {
 	RunRepositoryStreamKeyRotation(t, jsonRepositoryFactory)
 }
