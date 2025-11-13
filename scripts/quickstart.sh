@@ -50,7 +50,7 @@ declare -A env_defaults=(
   [BITRIVER_LIVE_POSTGRES_MIN_CONNS]='5'
   [BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT]='5s'
   [BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME]='30m'
-  [BITRIVER_POSTGRES_PORT]='5432'
+  [BITRIVER_POSTGRES_HOST_PORT]='5432'
   [BITRIVER_VIEWER_ORIGIN]='http://viewer:3000'
   [BITRIVER_REDIS_PORT]='6379'
   [BITRIVER_SRS_API]='http://srs-controller:1985'
@@ -184,7 +184,7 @@ bootstrap_admin() {
 
   if [[ ${storage_driver,,} == "postgres" ]]; then
     local container_dsn="postgres://bitriver:bitriver@postgres:5432/bitriver?sslmode=disable"
-    local host_port=$(read_env_value BITRIVER_POSTGRES_PORT)
+    local host_port=$(read_env_value BITRIVER_POSTGRES_HOST_PORT)
     host_port=${host_port:-5432}
     local host_dsn="postgres://bitriver:bitriver@localhost:${host_port}/bitriver?sslmode=disable"
     if docker compose exec -T bitriver-live /app/bootstrap-admin --postgres-dsn "$container_dsn" --email "$email" --password "$password" "${name_flag[@]}" >/dev/null; then
@@ -241,7 +241,7 @@ BITRIVER_OME_HTTP_PORT=8081
 BITRIVER_OME_PASSWORD=local-dev-password
 BITRIVER_OME_SIGNALLING_PORT=9000
 BITRIVER_OME_USERNAME=admin
-BITRIVER_POSTGRES_PORT=5432
+BITRIVER_POSTGRES_HOST_PORT=5432
 BITRIVER_REDIS_PORT=6379
 BITRIVER_SRS_API=http://srs:1985
 BITRIVER_SRS_API_PORT=1985
