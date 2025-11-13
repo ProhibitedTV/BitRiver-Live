@@ -3089,12 +3089,7 @@ func (h *Handler) ProfileByID(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if actor.ID != userID {
-			if !actor.HasRole(roleAdmin) {
-				WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
-				return
-			}
-		} else if !userHasAnyRole(actor, roleAdmin, roleCreator) {
+		if actor.ID != userID && !actor.HasRole(roleAdmin) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
