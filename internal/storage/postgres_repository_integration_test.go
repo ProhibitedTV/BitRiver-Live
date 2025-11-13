@@ -18,6 +18,7 @@ import (
 
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/ingest"
+	"bitriver-live/internal/models"
 	"bitriver-live/internal/storage"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -641,7 +642,7 @@ func TestPostgresTipReferenceUniqueness(t *testing.T) {
 	_, err = repo.CreateTip(storage.CreateTipParams{
 		ChannelID:  channel.ID,
 		FromUserID: supporter.ID,
-		Amount:     5,
+		Amount:     models.MustParseMoney("5"),
 		Currency:   "usd",
 		Provider:   "stripe",
 		Reference:  "dup-ref",
@@ -653,7 +654,7 @@ func TestPostgresTipReferenceUniqueness(t *testing.T) {
 	_, err = repo.CreateTip(storage.CreateTipParams{
 		ChannelID:  channel.ID,
 		FromUserID: supporter.ID,
-		Amount:     5,
+		Amount:     models.MustParseMoney("5"),
 		Currency:   "usd",
 		Provider:   "stripe",
 		Reference:  "dup-ref",
@@ -689,7 +690,7 @@ func TestPostgresSubscriptionReferenceUniqueness(t *testing.T) {
 		Tier:      "tier1",
 		Provider:  "stripe",
 		Reference: "dup-sub",
-		Amount:    4.99,
+		Amount:    models.MustParseMoney("4.99"),
 		Currency:  "usd",
 		Duration:  time.Hour,
 	})
@@ -703,7 +704,7 @@ func TestPostgresSubscriptionReferenceUniqueness(t *testing.T) {
 		Tier:      "tier1",
 		Provider:  "stripe",
 		Reference: "dup-sub",
-		Amount:    4.99,
+		Amount:    models.MustParseMoney("4.99"),
 		Currency:  "usd",
 		Duration:  time.Hour,
 	})
@@ -734,7 +735,7 @@ func TestPostgresSubscriptionCancellationMetadata(t *testing.T) {
 		Tier:      "tier1",
 		Provider:  "stripe",
 		Reference: "cancel-me",
-		Amount:    4.99,
+		Amount:    models.MustParseMoney("4.99"),
 		Currency:  "usd",
 		Duration:  time.Hour,
 		AutoRenew: true,

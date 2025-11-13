@@ -509,7 +509,7 @@ func (r *postgresRepository) importSnapshotTips(ctx context.Context, tx pgx.Tx, 
 		if strings.TrimSpace(tip.Message) != "" {
 			message = strings.TrimSpace(tip.Message)
 		}
-		_, err := tx.Exec(ctx, "INSERT INTO tips (id, channel_id, from_user_id, amount, currency, provider, reference, wallet_address, message, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING", id, strings.TrimSpace(tip.ChannelID), strings.TrimSpace(tip.FromUserID), tip.Amount, strings.TrimSpace(tip.Currency), strings.TrimSpace(tip.Provider), strings.TrimSpace(tip.Reference), wallet, message, created)
+		_, err := tx.Exec(ctx, "INSERT INTO tips (id, channel_id, from_user_id, amount, currency, provider, reference, wallet_address, message, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING", id, strings.TrimSpace(tip.ChannelID), strings.TrimSpace(tip.FromUserID), tip.Amount.DecimalString(), strings.TrimSpace(tip.Currency), strings.TrimSpace(tip.Provider), strings.TrimSpace(tip.Reference), wallet, message, created)
 		if err != nil {
 			return fmt.Errorf("insert tip %s: %w", id, err)
 		}
@@ -556,7 +556,7 @@ func (r *postgresRepository) importSnapshotSubscriptions(ctx context.Context, tx
 		if strings.TrimSpace(sub.ExternalReference) != "" {
 			externalRef = strings.TrimSpace(sub.ExternalReference)
 		}
-		_, err := tx.Exec(ctx, "INSERT INTO subscriptions (id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) ON CONFLICT (id) DO NOTHING", id, strings.TrimSpace(sub.ChannelID), strings.TrimSpace(sub.UserID), strings.TrimSpace(sub.Tier), strings.TrimSpace(sub.Provider), strings.TrimSpace(sub.Reference), sub.Amount, strings.TrimSpace(sub.Currency), started, expires, sub.AutoRenew, strings.TrimSpace(sub.Status), cancelledBy, cancelledReason, cancelledAt, externalRef)
+		_, err := tx.Exec(ctx, "INSERT INTO subscriptions (id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) ON CONFLICT (id) DO NOTHING", id, strings.TrimSpace(sub.ChannelID), strings.TrimSpace(sub.UserID), strings.TrimSpace(sub.Tier), strings.TrimSpace(sub.Provider), strings.TrimSpace(sub.Reference), sub.Amount.DecimalString(), strings.TrimSpace(sub.Currency), started, expires, sub.AutoRenew, strings.TrimSpace(sub.Status), cancelledBy, cancelledReason, cancelledAt, externalRef)
 		if err != nil {
 			return fmt.Errorf("insert subscription %s: %w", id, err)
 		}

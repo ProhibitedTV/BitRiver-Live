@@ -1,9 +1,143 @@
 package models
 
 import (
+	"encoding/json"
+	"fmt"
+	"math/big"
 	"strings"
 	"time"
 )
+
+const (
+	moneyFractionDigits = 8
+	moneyScale          = int64(100000000)
+)
+
+// Money represents a currency amount stored in minor units (1e-8 of the major
+// currency) to avoid floating point rounding issues. JSON encoding and string
+// formatting expose the canonical decimal representation while all internal
+// operations use the fixed-precision integer value.
+type Money struct {
+	minorUnits int64
+}
+
+// NewMoneyFromMinorUnits constructs a Money value from its minor-unit
+// representation.
+func NewMoneyFromMinorUnits(units int64) Money {
+	return Money{minorUnits: units}
+}
+
+// MinorUnits exposes the internal integer representation scaled by 1e-8.
+func (m Money) MinorUnits() int64 {
+	return m.minorUnits
+}
+
+// Add returns the sum of two Money values.
+func (m Money) Add(other Money) Money {
+	return Money{minorUnits: m.minorUnits + other.minorUnits}
+}
+
+// IsZero reports whether the amount is exactly zero.
+func (m Money) IsZero() bool {
+	return m.minorUnits == 0
+}
+
+// DecimalString returns the canonical decimal representation with up to eight
+// fractional digits.
+func (m Money) DecimalString() string {
+	return formatMinorUnits(m.minorUnits)
+}
+
+// String implements fmt.Stringer.
+func (m Money) String() string {
+	return m.DecimalString()
+}
+
+// MarshalJSON encodes the fixed-precision amount as a JSON number.
+func (m Money) MarshalJSON() ([]byte, error) {
+	return []byte(m.DecimalString()), nil
+}
+
+// UnmarshalJSON decodes a JSON number or string into the fixed-precision minor
+// unit representation. A JSON null resets the value to zero.
+func (m *Money) UnmarshalJSON(data []byte) error {
+	if m == nil {
+		return fmt.Errorf("models: cannot decode into nil Money pointer")
+	}
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		*m = Money{}
+		return nil
+	}
+	var raw string
+	if data[0] == '"' {
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return fmt.Errorf("decode money string: %w", err)
+		}
+	} else {
+		raw = trimmed
+	}
+	money, err := ParseMoney(raw)
+	if err != nil {
+		return err
+	}
+	*m = money
+	return nil
+}
+
+// ParseMoney parses a human-readable decimal string into a Money value with up
+// to eight fractional digits.
+func ParseMoney(value string) (Money, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return Money{}, fmt.Errorf("invalid money amount")
+	}
+	rat, ok := new(big.Rat).SetString(trimmed)
+	if !ok {
+		return Money{}, fmt.Errorf("invalid money amount")
+	}
+	rat.Mul(rat, big.NewRat(moneyScale, 1))
+	if !rat.IsInt() {
+		return Money{}, fmt.Errorf("amount supports up to %d decimal places", moneyFractionDigits)
+	}
+	numerator := rat.Num()
+	if !numerator.IsInt64() {
+		return Money{}, fmt.Errorf("money amount out of range")
+	}
+	return Money{minorUnits: numerator.Int64()}, nil
+}
+
+// MustParseMoney panics if the value cannot be parsed. It is intended for
+// tests and static initialisation.
+func MustParseMoney(value string) Money {
+	money, err := ParseMoney(value)
+	if err != nil {
+		panic(err)
+	}
+	return money
+}
+
+func formatMinorUnits(units int64) string {
+	negative := units < 0
+	if negative {
+		units = -units
+	}
+	major := units / moneyScale
+	minor := units % moneyScale
+	var builder strings.Builder
+	if negative {
+		builder.WriteByte('-')
+	}
+	builder.WriteString(fmt.Sprintf("%d", major))
+	if minor == 0 {
+		return builder.String()
+	}
+	builder.WriteByte('.')
+	fraction := fmt.Sprintf("%0*d", moneyFractionDigits, minor)
+	fraction = strings.TrimRight(fraction, "0")
+	builder.WriteString(fraction)
+	return builder.String()
+}
 
 type User struct {
 	ID           string    `json:"id"`
@@ -172,11 +306,14 @@ type ChatRestriction struct {
 	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
 }
 
+// Tip describes a viewer tip recorded for a channel. Amount uses the fixed
+// precision Money type (1e-8 minor units) while the public JSON API continues to
+// expose human-readable decimal values.
 type Tip struct {
 	ID            string    `json:"id"`
 	ChannelID     string    `json:"channelId"`
 	FromUserID    string    `json:"fromUserId"`
-	Amount        float64   `json:"amount"`
+	Amount        Money     `json:"amount"`
 	Currency      string    `json:"currency"`
 	Provider      string    `json:"provider"`
 	Reference     string    `json:"reference"`
@@ -185,6 +322,9 @@ type Tip struct {
 	CreatedAt     time.Time `json:"createdAt"`
 }
 
+// Subscription represents a recurring or fixed-term monetization commitment.
+// Amount uses the Money type to preserve precision; clients continue to see
+// decimal values over JSON.
 type Subscription struct {
 	ID                string     `json:"id"`
 	ChannelID         string     `json:"channelId"`
@@ -192,7 +332,7 @@ type Subscription struct {
 	Tier              string     `json:"tier"`
 	Provider          string     `json:"provider"`
 	Reference         string     `json:"reference"`
-	Amount            float64    `json:"amount"`
+	Amount            Money      `json:"amount"`
 	Currency          string     `json:"currency"`
 	StartedAt         time.Time  `json:"startedAt"`
 	ExpiresAt         time.Time  `json:"expiresAt"`

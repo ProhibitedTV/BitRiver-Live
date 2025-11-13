@@ -132,6 +132,7 @@ func decodeJSON(r *http.Request, dest interface{}) error {
 	defer r.Body.Close()
 
 	decoder := json.NewDecoder(r.Body)
+	decoder.UseNumber()
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(dest); err != nil {
 		return err
@@ -1257,7 +1258,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 						UserID:    actor.ID,
 						Tier:      "supporter",
 						Provider:  "internal",
-						Amount:    0,
+						Amount:    models.NewMoneyFromMinorUnits(0),
 						Currency:  "USD",
 						Duration:  30 * 24 * time.Hour,
 						AutoRenew: true,
@@ -1775,56 +1776,68 @@ type chatMessageResponse struct {
 	CreatedAt string `json:"createdAt"`
 }
 
+func parseMoneyNumber(number json.Number, field string) (models.Money, error) {
+	raw := strings.TrimSpace(number.String())
+	if raw == "" {
+		return models.Money{}, fmt.Errorf("%s is required", field)
+	}
+	money, err := models.ParseMoney(raw)
+	if err != nil {
+		return models.Money{}, fmt.Errorf("invalid %s: %w", field, err)
+	}
+	return money, nil
+}
+
 type createTipRequest struct {
-	Amount        float64 `json:"amount"`
-	Currency      string  `json:"currency"`
-	Provider      string  `json:"provider"`
-	Reference     string  `json:"reference,omitempty"`
-	WalletAddress string  `json:"walletAddress,omitempty"`
-	Message       string  `json:"message,omitempty"`
+	Amount        json.Number `json:"amount"`
+	Currency      string      `json:"currency"`
+	Provider      string      `json:"provider"`
+	Reference     string      `json:"reference,omitempty"`
+	WalletAddress string      `json:"walletAddress,omitempty"`
+	Message       string      `json:"message,omitempty"`
 }
 
 type tipResponse struct {
-	ID            string  `json:"id"`
-	ChannelID     string  `json:"channelId"`
-	FromUserID    string  `json:"fromUserId"`
-	Amount        float64 `json:"amount"`
-	Currency      string  `json:"currency"`
-	Provider      string  `json:"provider"`
-	Reference     string  `json:"reference"`
-	WalletAddress string  `json:"walletAddress,omitempty"`
-	Message       string  `json:"message,omitempty"`
-	CreatedAt     string  `json:"createdAt"`
+	ID            string       `json:"id"`
+	ChannelID     string       `json:"channelId"`
+	FromUserID    string       `json:"fromUserId"`
+	Amount        models.Money `json:"amount"`
+	Currency      string       `json:"currency"`
+	Provider      string       `json:"provider"`
+	Reference     string       `json:"reference"`
+	WalletAddress string       `json:"walletAddress,omitempty"`
+	Message       string       `json:"message,omitempty"`
+	CreatedAt     string       `json:"createdAt"`
 }
 
 type createSubscriptionRequest struct {
-	Tier              string  `json:"tier"`
-	Provider          string  `json:"provider"`
-	Reference         string  `json:"reference,omitempty"`
-	ExternalReference string  `json:"externalReference,omitempty"`
-	Amount            float64 `json:"amount"`
-	Currency          string  `json:"currency"`
-	DurationDays      int     `json:"durationDays"`
-	AutoRenew         bool    `json:"autoRenew"`
+	Tier              string      `json:"tier"`
+	Provider          string      `json:"provider"`
+	Reference         string      `json:"reference,omitempty"`
+	ExternalReference string      `json:"externalReference,omitempty"`
+	Amount            json.Number `json:"amount"`
+	Currency          string      `json:"currency"`
+	DurationDays      int         `json:"durationDays"`
+	AutoRenew         bool        `json:"autoRenew"`
 }
 
 type subscriptionResponse struct {
-	ID                string  `json:"id"`
-	ChannelID         string  `json:"channelId"`
-	UserID            string  `json:"userId"`
-	Tier              string  `json:"tier"`
-	Provider          string  `json:"provider"`
-	Reference         string  `json:"reference"`
-	ExternalReference string  `json:"externalReference,omitempty"`
-	Amount            float64 `json:"amount"`
-	Currency          string  `json:"currency"`
-	StartedAt         string  `json:"startedAt"`
-	ExpiresAt         string  `json:"expiresAt"`
-	AutoRenew         bool    `json:"autoRenew"`
-	Status            string  `json:"status"`
-	CancelledBy       string  `json:"cancelledBy,omitempty"`
-	CancelledReason   string  `json:"cancelledReason,omitempty"`
-	CancelledAt       *string `json:"cancelledAt,omitempty"`
+	ID                string       `json:"id"`
+	ChannelID         string       `json:"channelId"`
+	UserID            string       `json:"userId"`
+	Tier              string       `json:"tier"`
+	Provider          string       `json:"provider"`
+	Reference         string       `json:"reference"`
+	ExternalReference string       `json:"externalReference,omitempty"`
+	Amount            models.Money `json:"amount"`
+	Currency          string       `json:"currency"`
+	StartedAt         string       `json:"startedAt"`
+	ExpiresAt         string       `json:"expiresAt"`
+	AutoRenew         bool         `json:"autoRenew"`
+	Status            string       `json:"status"`
+	CancelledBy       string       `json:"cancelledBy,omitempty"`
+	CancelledReason   string       `json:"cancelledReason,omitempty"`
+	CancelledAt       *string      `json:"cancelledAt,omitempty"`
 }
 
 type cancelSubscriptionRequest struct {
@@ -2933,10 +2946,15 @@ func (h *Handler) handleTipsRoutes(channel models.Channel, remaining []string, w
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
+		amount, err := parseMoneyNumber(req.Amount, "amount")
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
 		params := storage.CreateTipParams{
 			ChannelID:     channel.ID,
 			FromUserID:    actor.ID,
-			Amount:        req.Amount,
+			Amount:        amount,
 			Currency:      req.Currency,
 			Provider:      req.Provider,
 			Reference:     req.Reference,
@@ -3023,13 +3041,18 @@ func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []
 			writeError(w, http.StatusBadRequest, fmt.Errorf("durationDays must be positive"))
 			return
 		}
+		amount, err := parseMoneyNumber(req.Amount, "amount")
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
 		params := storage.CreateSubscriptionParams{
 			ChannelID:         channel.ID,
 			UserID:            actor.ID,
 			Tier:              req.Tier,
 			Provider:          req.Provider,
 			Reference:         req.Reference,
-			Amount:            req.Amount,
+			Amount:            amount,
 			Currency:          req.Currency,
 			Duration:          time.Duration(durationDays) * 24 * time.Hour,
 			AutoRenew:         req.AutoRenew,

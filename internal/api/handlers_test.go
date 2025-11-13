@@ -1805,7 +1805,7 @@ func TestMonetizationEndpoints(t *testing.T) {
 	}
 
 	longMessage := strings.Repeat("m", storage.MaxTipMessageLength+1)
-	badTipReq := createTipRequest{Amount: 10, Currency: "USD", Provider: "stripe", Message: longMessage}
+	badTipReq := createTipRequest{Amount: json.Number("10"), Currency: "USD", Provider: "stripe", Message: longMessage}
 	body, _ := json.Marshal(badTipReq)
 	req := httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/monetization/tips", bytes.NewReader(body))
 	req = withUser(req, supporter)
@@ -1815,7 +1815,7 @@ func TestMonetizationEndpoints(t *testing.T) {
 		t.Fatalf("expected tip status 400 for long message, got %d", rec.Code)
 	}
 
-	tipReq := createTipRequest{Amount: 10, Currency: "USD", Provider: "stripe", Message: "gg"}
+	tipReq := createTipRequest{Amount: json.Number("10"), Currency: "USD", Provider: "stripe", Message: "gg"}
 	body, _ = json.Marshal(tipReq)
 	req = httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/monetization/tips", bytes.NewReader(body))
 	req = withUser(req, supporter)
@@ -1833,7 +1833,7 @@ func TestMonetizationEndpoints(t *testing.T) {
 		t.Fatalf("expected tip list status 200, got %d", rec.Code)
 	}
 
-	subReq := createSubscriptionRequest{Tier: "gold", Provider: "stripe", Amount: 9.99, Currency: "usd", DurationDays: 30, AutoRenew: true}
+	subReq := createSubscriptionRequest{Tier: "gold", Provider: "stripe", Amount: json.Number("9.99"), Currency: "usd", DurationDays: 30, AutoRenew: true}
 	body, _ = json.Marshal(subReq)
 	req = httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/monetization/subscriptions", bytes.NewReader(body))
 	req = withUser(req, supporter)
@@ -1995,7 +1995,7 @@ func TestChannelPlaybackIncludesSubscriptionState(t *testing.T) {
 		UserID:    viewer.ID,
 		Tier:      "VIP",
 		Provider:  "internal",
-		Amount:    5.0,
+		Amount:    models.MustParseMoney("5"),
 		Currency:  "USD",
 		Duration:  30 * 24 * time.Hour,
 		AutoRenew: true,

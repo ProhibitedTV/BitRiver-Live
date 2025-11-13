@@ -631,7 +631,7 @@ type OAuthLoginParams struct {
 type CreateTipParams struct {
 	ChannelID     string
 	FromUserID    string
-	Amount        float64
+	Amount        models.Money
 	Currency      string
 	Provider      string
 	Reference     string
@@ -646,7 +646,7 @@ type CreateSubscriptionParams struct {
 	Tier              string
 	Provider          string
 	Reference         string
-	Amount            float64
+	Amount            models.Money
 	Currency          string
 	Duration          time.Duration
 	AutoRenew         bool
@@ -3391,7 +3391,7 @@ func (s *Storage) CreateTip(params CreateTipParams) (models.Tip, error) {
 		return models.Tip{}, fmt.Errorf("user %s not found", params.FromUserID)
 	}
 	amount := params.Amount
-	if amount <= 0 {
+	if amount.MinorUnits() <= 0 {
 		return models.Tip{}, fmt.Errorf("amount must be positive")
 	}
 	currency := strings.ToUpper(strings.TrimSpace(params.Currency))
@@ -3483,7 +3483,7 @@ func (s *Storage) CreateSubscription(params CreateSubscriptionParams) (models.Su
 		return models.Subscription{}, fmt.Errorf("duration must be positive")
 	}
 	amount := params.Amount
-	if amount < 0 {
+	if amount.MinorUnits() < 0 {
 		return models.Subscription{}, fmt.Errorf("amount cannot be negative")
 	}
 	currency := strings.ToUpper(strings.TrimSpace(params.Currency))

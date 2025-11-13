@@ -1121,9 +1121,15 @@ func scanSubscriptionRow(row pgx.Row) (models.Subscription, error) {
 		cancelledAt       pgtype.Timestamptz
 		externalReference pgtype.Text
 	)
-	if err := row.Scan(&sub.ID, &sub.ChannelID, &sub.UserID, &sub.Tier, &sub.Provider, &sub.Reference, &sub.Amount, &sub.Currency, &sub.StartedAt, &sub.ExpiresAt, &sub.AutoRenew, &sub.Status, &cancelledBy, &cancelledReason, &cancelledAt, &externalReference); err != nil {
+	var amountText string
+	if err := row.Scan(&sub.ID, &sub.ChannelID, &sub.UserID, &sub.Tier, &sub.Provider, &sub.Reference, &amountText, &sub.Currency, &sub.StartedAt, &sub.ExpiresAt, &sub.AutoRenew, &sub.Status, &cancelledBy, &cancelledReason, &cancelledAt, &externalReference); err != nil {
 		return models.Subscription{}, err
 	}
+	amount, err := models.ParseMoney(amountText)
+	if err != nil {
+		return models.Subscription{}, fmt.Errorf("parse subscription amount: %w", err)
+	}
+	sub.Amount = amount
 	sub.StartedAt = sub.StartedAt.UTC()
 	sub.ExpiresAt = sub.ExpiresAt.UTC()
 	if cancelledBy.Valid {
@@ -3628,7 +3634,7 @@ func (r *postgresRepository) CreateTip(params CreateTipParams) (models.Tip, erro
 	}
 
 	amount := params.Amount
-	if amount <= 0 {
+	if amount.MinorUnits() <= 0 {
 		return models.Tip{}, fmt.Errorf("amount must be positive")
 	}
 
@@ -3690,7 +3696,8 @@ func (r *postgresRepository) CreateTip(params CreateTipParams) (models.Tip, erro
 		}
 
 		var createdAt time.Time
-		if err := tx.QueryRow(ctx, "INSERT INTO tips (id, channel_id, from_user_id, amount, currency, provider, reference, wallet_address, message, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING created_at", id, params.ChannelID, params.FromUserID, amount, currency, provider, reference, wallet, message, now).Scan(&createdAt); err != nil {
+		amountText := amount.DecimalString()
+		if err := tx.QueryRow(ctx, "INSERT INTO tips (id, channel_id, from_user_id, amount, currency, provider, reference, wallet_address, message, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING created_at", id, params.ChannelID, params.FromUserID, amountText, currency, provider, reference, wallet, message, now).Scan(&createdAt); err != nil {
 			return fmt.Errorf("insert tip: %w", err)
 		}
 
@@ -3754,9 +3761,15 @@ func (r *postgresRepository) ListTips(channelID string, limit int) ([]models.Tip
 			var tip models.Tip
 			var walletAddress, message pgtype.Text
 			var createdAt time.Time
-			if err := rows.Scan(&tip.ID, &tip.ChannelID, &tip.FromUserID, &tip.Amount, &tip.Currency, &tip.Provider, &tip.Reference, &walletAddress, &message, &createdAt); err != nil {
+			var amountText string
+			if err := rows.Scan(&tip.ID, &tip.ChannelID, &tip.FromUserID, &amountText, &tip.Currency, &tip.Provider, &tip.Reference, &walletAddress, &message, &createdAt); err != nil {
 				return fmt.Errorf("scan tip: %w", err)
 			}
+			parsedAmount, err := models.ParseMoney(amountText)
+			if err != nil {
+				return fmt.Errorf("parse tip amount: %w", err)
+			}
+			tip.Amount = parsedAmount
 			if walletAddress.Valid {
 				tip.WalletAddress = walletAddress.String
 			}
@@ -3793,7 +3806,7 @@ func (r *postgresRepository) CreateSubscription(params CreateSubscriptionParams)
 	}
 
 	amount := params.Amount
-	if amount < 0 {
+	if amount.MinorUnits() < 0 {
 		return models.Subscription{}, fmt.Errorf("amount cannot be negative")
 	}
 
@@ -3850,7 +3863,8 @@ func (r *postgresRepository) CreateSubscription(params CreateSubscriptionParams)
 			return fmt.Errorf("subscription reference %s/%s already exists", provider, reference)
 		}
 
-		_, err = tx.Exec(ctx, "INSERT INTO subscriptions (id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, external_reference) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)", id, params.ChannelID, params.UserID, tier, provider, reference, amount, currency, started, expires, params.AutoRenew, "active", externalRef)
+		amountText := amount.DecimalString()
+		_, err = tx.Exec(ctx, "INSERT INTO subscriptions (id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, external_reference) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)", id, params.ChannelID, params.UserID, tier, provider, reference, amountText, currency, started, expires, params.AutoRenew, "active", externalRef)
 		if err != nil {
 			return fmt.Errorf("insert subscription: %w", err)
 		}

@@ -9,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"bitriver-live/internal/models"
 )
 
 type requestLabel struct {
@@ -31,7 +33,7 @@ type Recorder struct {
 	activeStreams     atomic.Int64
 	chatEvents        map[string]uint64
 	monetizationCount map[string]uint64
-	monetizationTotal map[string]float64
+	monetizationTotal map[string]models.Money
 }
 
 var defaultRecorder = New()
@@ -47,7 +49,7 @@ func New() *Recorder {
 		ingestHealthState: make(map[string]string),
 		chatEvents:        make(map[string]uint64),
 		monetizationCount: make(map[string]uint64),
-		monetizationTotal: make(map[string]float64),
+		monetizationTotal: make(map[string]models.Money),
 	}
 }
 
@@ -116,14 +118,15 @@ func (r *Recorder) ObserveChatEvent(event string) {
 }
 
 // ObserveMonetization tracks monetization events, capturing counts and total amounts.
-func (r *Recorder) ObserveMonetization(event string, amount float64) {
+func (r *Recorder) ObserveMonetization(event string, amount models.Money) {
 	normalized := strings.ToLower(strings.TrimSpace(event))
 	if normalized == "" {
 		normalized = "unknown"
 	}
 	r.mu.Lock()
 	r.monetizationCount[normalized]++
-	r.monetizationTotal[normalized] += amount
+	total := r.monetizationTotal[normalized]
+	r.monetizationTotal[normalized] = total.Add(amount)
 	r.mu.Unlock()
 }
 
@@ -234,7 +237,7 @@ func (r *Recorder) Write(w io.Writer) {
 	fmt.Fprintln(w, "# TYPE bitriver_monetization_amount_sum counter")
 	for _, event := range monetizationEvents {
 		total := r.monetizationTotal[event]
-		fmt.Fprintf(w, "bitriver_monetization_amount_sum{event=\"%s\"} %f\n", event, total)
+		fmt.Fprintf(w, "bitriver_monetization_amount_sum{event=\"%s\"} %s\n", event, total.DecimalString())
 	}
 }
 
