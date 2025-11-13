@@ -299,6 +299,55 @@ func TestPostgresChatMessageHistoryPaging(t *testing.T) {
 	}
 }
 
+func TestPostgresStartStreamPersistsEmptyIngestEndpoints(t *testing.T) {
+	repo, cleanup, err := postgresRepositoryFactory(t)
+	if errors.Is(err, storage.ErrPostgresUnavailable) {
+		t.Skip("postgres repository unavailable in this build")
+	}
+	if err != nil {
+		t.Fatalf("failed to open postgres repository: %v", err)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	owner, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	channel, err := repo.CreateChannel(owner.ID, "Lobby", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+
+	session, err := repo.StartStream(channel.ID, []string{"720p"})
+	if err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+	if session.IngestEndpoints == nil {
+		t.Fatal("expected ingest endpoints slice to be initialized")
+	}
+	if len(session.IngestEndpoints) != 0 {
+		t.Fatalf("expected no ingest endpoints from noop controller, got %v", session.IngestEndpoints)
+	}
+
+	pool := postgresPoolFromRepository(t, repo)
+	var stored []string
+	if err := pool.QueryRow(context.Background(), "SELECT ingest_endpoints FROM stream_sessions WHERE id = $1", session.ID).Scan(&stored); err != nil {
+		t.Fatalf("load persisted session: %v", err)
+	}
+	if stored == nil {
+		t.Fatal("expected persisted ingest endpoints slice to be initialized")
+	}
+	if len(stored) != 0 {
+		t.Fatalf("expected persisted ingest endpoints to be empty, got %v", stored)
+	}
+
+	if _, err := repo.StopStream(channel.ID, 0); err != nil {
+		t.Fatalf("StopStream: %v", err)
+	}
+}
+
 func TestPostgresReadHelpersRespectAcquireTimeout(t *testing.T) {
 	repo, cleanup, err := postgresRepositoryFactory(t,
 		storage.WithPostgresPoolLimits(1, 1),
