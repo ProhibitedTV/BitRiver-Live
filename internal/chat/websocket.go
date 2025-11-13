@@ -18,8 +18,7 @@ import (
 )
 
 const (
-	wsGUID      = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-	defaultRead = 15 * time.Second
+	wsGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 )
 
 // Conn represents a minimal WebSocket connection supporting text frames.
@@ -194,7 +193,7 @@ func (c *Conn) ReadMessage(ctx context.Context) ([]byte, error) {
 	if ok {
 		_ = c.conn.SetReadDeadline(deadline)
 	} else {
-		_ = c.conn.SetReadDeadline(time.Now().Add(defaultRead))
+		_ = c.conn.SetReadDeadline(time.Time{})
 	}
 	for {
 		frame, err := readFrame(c.reader)
@@ -223,6 +222,14 @@ func (c *Conn) WriteText(payload []byte) error {
 		return io.ErrClosedPipe
 	}
 	return c.writeFrame(opcodeText, payload)
+}
+
+// Ping sends a ping control frame to the peer.
+func (c *Conn) Ping(payload []byte) error {
+	if c.closed {
+		return io.ErrClosedPipe
+	}
+	return c.writeFrame(opcodePing, payload)
 }
 
 func (c *Conn) writeFrame(opcode byte, payload []byte) error {
