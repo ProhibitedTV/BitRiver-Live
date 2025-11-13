@@ -167,6 +167,24 @@ jobs:
           NEXT_TELEMETRY_DISABLED: 1
         run: npm ci
 
+      - name: Lint
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+        run: npm run lint
+
+      - name: Test
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+        run: npm run test:integration
+
+      - name: Cache Next.js build artifacts
+        uses: actions/cache@v4
+        with:
+          path: web/viewer/.next/cache
+          key: ${{ runner.os }}-next-${{ hashFiles('web/viewer/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-next-
+
       - name: Build viewer
         env:
           NEXT_TELEMETRY_DISABLED: 1
