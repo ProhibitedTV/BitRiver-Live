@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	redis "github.com/redis/go-redis/v9"
@@ -123,8 +124,8 @@ type redisQueue struct {
 	logger       *slog.Logger
 	buffer       int
 
-	groupOnce sync.Once
-	groupErr  error
+	groupMu    sync.Mutex
+	groupReady atomic.Bool
 }
 
 func (q *redisQueue) Publish(ctx context.Context, event Event) error {
@@ -161,15 +162,24 @@ func (q *redisQueue) Subscribe() Subscription {
 }
 
 func (q *redisQueue) ensureGroup(ctx context.Context) error {
-	q.groupOnce.Do(func() {
-		_, err := q.client.Do(ctx, "XGROUP", "CREATE", q.stream, q.group, "$", "MKSTREAM")
-		if err != nil {
-			if !isBusyGroup(err) {
-				q.groupErr = err
-			}
+	if q.groupReady.Load() {
+		return nil
+	}
+	q.groupMu.Lock()
+	defer q.groupMu.Unlock()
+	if q.groupReady.Load() {
+		return nil
+	}
+	_, err := q.client.Do(ctx, "XGROUP", "CREATE", q.stream, q.group, "$", "MKSTREAM")
+	if err != nil {
+		if isBusyGroup(err) {
+			q.groupReady.Store(true)
+			return nil
 		}
-	})
-	return q.groupErr
+		return err
+	}
+	q.groupReady.Store(true)
+	return nil
 }
 
 type redisSubscription struct {
@@ -204,6 +214,16 @@ func (s *redisSubscription) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
+		}
+		if err := s.queue.ensureGroup(ctx); err != nil {
+			if errors.Is(err, context.Canceled) {
+				return
+			}
+			if s.queue.logger != nil {
+				s.queue.logger.Warn("redis queue group ensure failed", "error", err)
+			}
+			time.Sleep(200 * time.Millisecond)
+			continue
 		}
 		entries, err := s.read(ctx)
 		if err != nil {
