@@ -6,9 +6,11 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -205,6 +207,207 @@ func TestAuthorizationEnforced(t *testing.T) {
 	handler.Users(rec, req)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected status 201 for admin, got %d", rec.Code)
+	}
+}
+
+func TestUserByID(t *testing.T) {
+	updatedName := "Updated Creator"
+	updatedRoles := []string{"creator", "moderator"}
+
+	cases := []struct {
+		name       string
+		method     string
+		setup      func(t *testing.T, store *storage.Storage) (requester models.User, target models.User, body []byte)
+		wantStatus int
+		assert     func(t *testing.T, rec *httptest.ResponseRecorder, store *storage.Storage, target models.User)
+	}{
+		{
+			name:   "owner gets own record",
+			method: http.MethodGet,
+			setup: func(t *testing.T, store *storage.Storage) (models.User, models.User, []byte) {
+				owner, err := store.CreateUser(storage.CreateUserParams{
+					DisplayName: "Owner",
+					Email:       "owner@example.com",
+					Roles:       []string{"creator"},
+				})
+				if err != nil {
+					t.Fatalf("CreateUser owner: %v", err)
+				}
+				return owner, owner, nil
+			},
+			wantStatus: http.StatusOK,
+			assert: func(t *testing.T, rec *httptest.ResponseRecorder, store *storage.Storage, target models.User) {
+				var resp userResponse
+				if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+					t.Fatalf("decode response: %v", err)
+				}
+				if resp.ID != target.ID {
+					t.Fatalf("expected id %s, got %s", target.ID, resp.ID)
+				}
+				if resp.DisplayName != target.DisplayName {
+					t.Fatalf("expected display name %q, got %q", target.DisplayName, resp.DisplayName)
+				}
+				if resp.Email != target.Email {
+					t.Fatalf("expected email %q, got %q", target.Email, resp.Email)
+				}
+
+				persisted, ok := store.GetUser(target.ID)
+				if !ok {
+					t.Fatalf("expected user %s to exist", target.ID)
+				}
+				if persisted.Email != target.Email {
+					t.Fatalf("expected persisted email %q, got %q", target.Email, persisted.Email)
+				}
+			},
+		},
+		{
+			name:   "non-admin forbidden from viewing others",
+			method: http.MethodGet,
+			setup: func(t *testing.T, store *storage.Storage) (models.User, models.User, []byte) {
+				viewer, err := store.CreateUser(storage.CreateUserParams{
+					DisplayName: "Viewer",
+					Email:       "viewer@example.com",
+				})
+				if err != nil {
+					t.Fatalf("CreateUser viewer: %v", err)
+				}
+				creator, err := store.CreateUser(storage.CreateUserParams{
+					DisplayName: "Creator",
+					Email:       "creator@example.com",
+					Roles:       []string{"creator"},
+				})
+				if err != nil {
+					t.Fatalf("CreateUser creator: %v", err)
+				}
+				return viewer, creator, nil
+			},
+			wantStatus: http.StatusForbidden,
+			assert: func(t *testing.T, rec *httptest.ResponseRecorder, store *storage.Storage, target models.User) {
+				var resp map[string]string
+				if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+					t.Fatalf("decode response: %v", err)
+				}
+				if resp["error"] == "" {
+					t.Fatal("expected error message in response")
+				}
+				if _, ok := store.GetUser(target.ID); !ok {
+					t.Fatalf("expected user %s to remain in store", target.ID)
+				}
+			},
+		},
+		{
+			name:   "admin patches another user",
+			method: http.MethodPatch,
+			setup: func(t *testing.T, store *storage.Storage) (models.User, models.User, []byte) {
+				admin, err := store.CreateUser(storage.CreateUserParams{
+					DisplayName: "Admin",
+					Email:       "admin@example.com",
+					Roles:       []string{"admin"},
+				})
+				if err != nil {
+					t.Fatalf("CreateUser admin: %v", err)
+				}
+				target, err := store.CreateUser(storage.CreateUserParams{
+					DisplayName: "Original Creator",
+					Email:       "creator2@example.com",
+					Roles:       []string{"creator"},
+				})
+				if err != nil {
+					t.Fatalf("CreateUser target: %v", err)
+				}
+				payload := map[string]interface{}{
+					"displayName": updatedName,
+					"roles":       updatedRoles,
+				}
+				body, err := json.Marshal(payload)
+				if err != nil {
+					t.Fatalf("marshal payload: %v", err)
+				}
+				return admin, target, body
+			},
+			wantStatus: http.StatusOK,
+			assert: func(t *testing.T, rec *httptest.ResponseRecorder, store *storage.Storage, target models.User) {
+				var resp userResponse
+				if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+					t.Fatalf("decode response: %v", err)
+				}
+				if resp.DisplayName != updatedName {
+					t.Fatalf("expected display name %q, got %q", updatedName, resp.DisplayName)
+				}
+				if !reflect.DeepEqual(resp.Roles, updatedRoles) {
+					t.Fatalf("expected roles %v, got %v", updatedRoles, resp.Roles)
+				}
+				persisted, ok := store.GetUser(target.ID)
+				if !ok {
+					t.Fatalf("expected user %s to exist", target.ID)
+				}
+				if persisted.DisplayName != updatedName {
+					t.Fatalf("expected persisted display name %q, got %q", updatedName, persisted.DisplayName)
+				}
+				if !reflect.DeepEqual(persisted.Roles, updatedRoles) {
+					t.Fatalf("expected persisted roles %v, got %v", updatedRoles, persisted.Roles)
+				}
+			},
+		},
+		{
+			name:   "admin deletes user",
+			method: http.MethodDelete,
+			setup: func(t *testing.T, store *storage.Storage) (models.User, models.User, []byte) {
+				admin, err := store.CreateUser(storage.CreateUserParams{
+					DisplayName: "Admin",
+					Email:       "delete-admin@example.com",
+					Roles:       []string{"admin"},
+				})
+				if err != nil {
+					t.Fatalf("CreateUser admin: %v", err)
+				}
+				target, err := store.CreateUser(storage.CreateUserParams{
+					DisplayName: "Deletable",
+					Email:       "delete-me@example.com",
+				})
+				if err != nil {
+					t.Fatalf("CreateUser target: %v", err)
+				}
+				return admin, target, nil
+			},
+			wantStatus: http.StatusNoContent,
+			assert: func(t *testing.T, rec *httptest.ResponseRecorder, store *storage.Storage, target models.User) {
+				if body := strings.TrimSpace(rec.Body.String()); body != "" {
+					t.Fatalf("expected empty body, got %q", body)
+				}
+				if _, ok := store.GetUser(target.ID); ok {
+					t.Fatalf("expected user %s to be deleted", target.ID)
+				}
+				if err := store.DeleteUser(target.ID); err == nil {
+					t.Fatalf("expected deleting removed user to error")
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			handler, store := newTestHandler(t)
+			requester, target, body := tc.setup(t, store)
+
+			var reader io.Reader
+			if body != nil {
+				reader = bytes.NewReader(body)
+			}
+			req := httptest.NewRequest(tc.method, "/api/users/"+target.ID, reader)
+			if requester.ID != "" {
+				req = withUser(req, requester)
+			}
+
+			rec := httptest.NewRecorder()
+			handler.UserByID(rec, req)
+
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("expected status %d, got %d", tc.wantStatus, rec.Code)
+			}
+
+			tc.assert(t, rec, store, target)
+		})
 	}
 }
 
