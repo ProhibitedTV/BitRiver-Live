@@ -52,6 +52,17 @@ if [[ -n "${BITRIVER_REDIS_PASSWORD:-}" && -n "${BITRIVER_LIVE_CHAT_QUEUE_REDIS_
   echo "Ensure the API and Redis share the same credential unless you intentionally override it." >&2
 fi
 
+if [[ -n "${COMPOSE_PROFILES:-}" ]]; then
+  IFS=",:" read -ra __profiles <<< "$COMPOSE_PROFILES"
+  for __profile in "${__profiles[@]}"; do
+    if [[ "$__profile" == "postgres-host" ]]; then
+      echo "Warning: COMPOSE_PROFILES includes postgres-host, which publishes PostgreSQL to the host." >&2
+      echo "Confirm the host firewall and trust boundaries before enabling this profile." >&2
+      break
+    fi
+  done
+fi
+
 for var in "${required_vars[@]}"; do
   value="${!var-}"
   if [[ -z "$value" ]]; then

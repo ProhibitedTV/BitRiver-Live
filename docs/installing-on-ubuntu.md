@@ -171,6 +171,10 @@ Ensure `BITRIVER_LIVE_POSTGRES_DSN` references the same Postgres user and passwo
 
 The bundled PostgreSQL container now reuses these credentials for its health probe, so the readiness check automatically honours any changes you make to `BITRIVER_POSTGRES_USER` (and `BITRIVER_POSTGRES_DB` if you override it) in `.env`.
 
+> **New default:** The compose manifest no longer publishes PostgreSQL to the host. Containers on the internal network can still reach it at `postgres:5432`, but the port remains firewalled from the host unless you explicitly opt in.
+
+To expose Postgres for administrative access, set `COMPOSE_PROFILES=postgres-host` in `.env` (or your shell) and rerun `docker compose`. The opt-in profile starts a small sidecar that shares the database network namespace and publishes `5432` to the host. Override `BITRIVER_POSTGRES_HOST_PORT` when you need a different host port, and tighten your firewall rules before enabling the profile. `./deploy/check-env.sh` prints a reminder about the security trade-offs whenever the profile is active.
+
 Redis now hosts the chat queue by default (`BITRIVER_LIVE_CHAT_QUEUE_DRIVER=redis`). The compose
 manifest points the API at the in-cluster service (`BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR=redis:6379`)
 with the password you set above, and creates the `bitriver-live-chat` stream/group pairing out of
