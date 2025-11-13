@@ -523,6 +523,43 @@ func TestSignupAndLoginFlow(t *testing.T) {
 	}
 }
 
+func TestSignupRejectsShortPassword(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	signupPayload := map[string]string{
+		"displayName": "Viewer",
+		"email":       "viewer@example.com",
+		"password":    "shortpw",
+	}
+	body, _ := json.Marshal(signupPayload)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/signup", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.Signup(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected signup status 400, got %d", rec.Code)
+	}
+
+	var payload map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["error"] != "password must be at least 8 characters" {
+		t.Fatalf("unexpected error message: %q", payload["error"])
+	}
+
+	if _, ok := store.FindUserByEmail("viewer@example.com"); ok {
+		t.Fatal("unexpected user created for short password")
+	}
+
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == "bitriver_session" {
+			t.Fatal("unexpected session cookie issued for short password")
+		}
+	}
+}
+
 func TestSignupDisabled(t *testing.T) {
 	handler, _ := newTestHandler(t)
 	handler.AllowSelfSignup = false
