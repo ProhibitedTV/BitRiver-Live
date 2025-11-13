@@ -803,26 +803,6 @@ func TestPostgresStreamTimeouts(t *testing.T) {
 	storage.RunRepositoryStreamTimeouts(t, postgresRepositoryFactory)
 }
 
-var postgresTables = []string{
-	"chat_messages",
-	"chat_bans",
-	"chat_timeouts",
-	"chat_reports",
-	"tips",
-	"subscriptions",
-	"clip_exports",
-	"recording_thumbnails",
-	"recording_renditions",
-	"recordings",
-	"stream_session_manifests",
-	"stream_sessions",
-	"follows",
-	"channels",
-	"profiles",
-	"oauth_accounts",
-	"users",
-}
-
 func applyPostgresMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
 	_, filename, _, ok := runtime.Caller(0)
@@ -859,11 +839,16 @@ func applyPostgresMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Po
 }
 
 func truncatePostgresTables(ctx context.Context, pool *pgxpool.Pool) error {
-	if len(postgresTables) == 0 {
+	tables, err := storage.PostgresTablesForTest(ctx, pool)
+	if err != nil {
+		return err
+	}
+
+	if len(tables) == 0 {
 		return nil
 	}
-	query := fmt.Sprintf("TRUNCATE TABLE %s RESTART IDENTITY CASCADE", strings.Join(postgresTables, ", "))
-	_, err := pool.Exec(ctx, query)
+	query := fmt.Sprintf("TRUNCATE TABLE %s RESTART IDENTITY CASCADE", strings.Join(tables, ", "))
+	_, err = pool.Exec(ctx, query)
 	return err
 }
 

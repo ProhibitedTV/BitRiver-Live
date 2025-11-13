@@ -16,29 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var postgresTestTables = []string{
-	"sessions",
-	"chat_sessions",
-	"chat_message_reports",
-	"chat_messages",
-	"chat_bans",
-	"chat_timeouts",
-	"chat_reports",
-	"tips",
-	"subscriptions",
-	"clip_exports",
-	"recording_thumbnails",
-	"recording_renditions",
-	"recordings",
-	"stream_session_manifests",
-	"stream_sessions",
-	"follows",
-	"channels",
-	"profiles",
-	"oauth_accounts",
-	"users",
-}
-
 func postgresRepositoryFactory(t *testing.T, opts ...Option) (Repository, func(), error) {
 	t.Helper()
 
@@ -135,12 +112,17 @@ func applyPostgresMigrationsForTest(t *testing.T, ctx context.Context, pool *pgx
 }
 
 func truncatePostgresTablesForTest(ctx context.Context, pool *pgxpool.Pool) error {
-	if len(postgresTestTables) == 0 {
+	tables, err := PostgresTablesForTest(ctx, pool)
+	if err != nil {
+		return err
+	}
+
+	if len(tables) == 0 {
 		return nil
 	}
 
-	query := fmt.Sprintf("TRUNCATE TABLE %s RESTART IDENTITY CASCADE", strings.Join(postgresTestTables, ", "))
-	_, err := pool.Exec(ctx, query)
+	query := fmt.Sprintf("TRUNCATE TABLE %s RESTART IDENTITY CASCADE", strings.Join(tables, ", "))
+	_, err = pool.Exec(ctx, query)
 	return err
 }
 
@@ -155,4 +137,39 @@ func splitSQLStatementsForTest(script string) []string {
 		statements = append(statements, trimmed)
 	}
 	return statements
+}
+
+// PostgresTablesForTest returns the list of public tables managed by the
+// migrations so tests can truncate state between runs without duplicating the
+// schema definition.
+func PostgresTablesForTest(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
+	rows, err := pool.Query(ctx, `
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                ORDER BY table_name
+        `)
+	if err != nil {
+		return nil, fmt.Errorf("list tables: %w", err)
+	}
+	defer rows.Close()
+
+	tables := make([]string, 0)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan table name: %w", err)
+		}
+
+		if name == "schema_migrations" {
+			continue
+		}
+
+		tables = append(tables, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate tables: %w", err)
+	}
+
+	return tables, nil
 }
