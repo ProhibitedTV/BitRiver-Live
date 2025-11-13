@@ -126,6 +126,24 @@ func TestGatewayModerationFlow(t *testing.T) {
 	})
 }
 
+func TestGatewayApplyModerationWithoutStore(t *testing.T) {
+	gateway := chat.NewGateway(chat.GatewayConfig{})
+	actor := models.User{ID: "moderator", Roles: []string{"admin"}}
+	expiresAt := time.Now().Add(time.Minute)
+	err := gateway.ApplyModeration(context.Background(), actor, chat.ModerationEvent{
+		ChannelID: "missing-channel",
+		TargetID:  "user",
+		Action:    chat.ModerationActionTimeout,
+		ExpiresAt: &expiresAt,
+	})
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if err.Error() != "chat store unavailable" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func newTestStorage(t *testing.T) *storage.Storage {
 	t.Helper()
 	tempDir := t.TempDir()
