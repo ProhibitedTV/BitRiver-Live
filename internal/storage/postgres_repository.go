@@ -2170,9 +2170,7 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 	if boot.BackupIngest != "" {
 		ingestEndpoints = append(ingestEndpoints, boot.BackupIngest)
 	}
-	if len(ingestEndpoints) > 0 {
-		session.IngestEndpoints = ingestEndpoints
-	}
+	session.IngestEndpoints = ingestEndpoints
 	if len(boot.Renditions) > 0 {
 		manifests := make([]models.RenditionManifest, 0, len(boot.Renditions))
 		for _, rendition := range boot.Renditions {
