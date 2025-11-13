@@ -230,6 +230,9 @@ func (g *Gateway) validateModeration(actor models.User, evt ModerationEvent) err
 	if evt.ChannelID == "" || evt.TargetID == "" {
 		return fmt.Errorf("channel and target are required")
 	}
+	if g.store == nil {
+		return fmt.Errorf("chat store unavailable")
+	}
 	channel, exists := g.store.GetChannel(evt.ChannelID)
 	if !exists {
 		return fmt.Errorf("channel %s not found", evt.ChannelID)
