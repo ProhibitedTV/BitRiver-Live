@@ -106,6 +106,13 @@ func RunRepositoryUserLifecycle(t *testing.T, factory RepositoryFactory) {
 		t.Fatalf("expected normalized roles %v, got %v", want, admin.Roles)
 	}
 
+	noRoles, err := repo.CreateUser(CreateUserParams{DisplayName: "No Roles", Email: "noroles@example.com"})
+	requireAvailable(t, err, "create user without roles")
+	if len(noRoles.Roles) != 0 {
+		t.Fatalf("expected no roles, got %v", noRoles.Roles)
+	}
+	requireAvailable(t, repo.DeleteUser(noRoles.ID), "cleanup user without roles")
+
 	users := repo.ListUsers()
 	if len(users) != 2 {
 		t.Fatalf("expected 2 users, got %d", len(users))

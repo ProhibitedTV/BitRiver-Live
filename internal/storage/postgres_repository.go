@@ -158,6 +158,9 @@ func (r *postgresRepository) CreateUser(params CreateUserParams) (models.User, e
 	}
 
 	roles := normalizeRoles(params.Roles)
+	if roles == nil {
+		roles = []string{}
+	}
 	if params.SelfSignup {
 		if params.Password == "" {
 			return models.User{}, fmt.Errorf("password is required for self-service signup")
@@ -360,6 +363,9 @@ func (r *postgresRepository) UpdateUser(id string, update UserUpdate) (models.Us
 
 		if update.Roles != nil {
 			user.Roles = normalizeRoles(*update.Roles)
+			if user.Roles == nil {
+				user.Roles = []string{}
+			}
 		}
 
 		_, err = tx.Exec(ctx, "UPDATE users SET display_name = $1, email = $2, roles = $3 WHERE id = $4", user.DisplayName, user.Email, user.Roles, id)
