@@ -1277,22 +1277,6 @@ func (s *Storage) recordingWithClipsLocked(recording models.Recording) models.Re
 	return cloned
 }
 
-func (s *Storage) generateID() (string, error) {
-	bytes := make([]byte, 16)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", fmt.Errorf("generate id: %w", err)
-	}
-	return hex.EncodeToString(bytes), nil
-}
-
-func (s *Storage) generateStreamKey() (string, error) {
-	bytes := make([]byte, 24)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", fmt.Errorf("generate stream key: %w", err)
-	}
-	return strings.ToUpper(hex.EncodeToString(bytes)), nil
-}
-
 // User operations
 
 func (s *Storage) CreateUser(params CreateUserParams) (models.User, error) {
@@ -1324,7 +1308,7 @@ func (s *Storage) CreateUser(params CreateUserParams) (models.User, error) {
 		}
 	}
 
-	id, err := s.generateID()
+	id, err := generateID()
 	if err != nil {
 		return models.User{}, err
 	}
@@ -1463,7 +1447,7 @@ func (s *Storage) AuthenticateOAuth(params OAuthLoginParams) (models.User, error
 
 	now := time.Now().UTC()
 	if !exists {
-		id, err := s.generateID()
+		id, err := generateID()
 		if err != nil {
 			return models.User{}, err
 		}
@@ -1862,11 +1846,11 @@ func (s *Storage) CreateChannel(ownerID, title, category string, tags []string) 
 		return models.Channel{}, errors.New("title is required")
 	}
 
-	id, err := s.generateID()
+	id, err := generateID()
 	if err != nil {
 		return models.Channel{}, err
 	}
-	streamKey, err := s.generateStreamKey()
+	streamKey, err := generateStreamKey()
 	if err != nil {
 		return models.Channel{}, err
 	}
@@ -1968,7 +1952,7 @@ func (s *Storage) RotateChannelStreamKey(id string) (models.Channel, error) {
 		return models.Channel{}, fmt.Errorf("channel %s not found", id)
 	}
 
-	streamKey, err := s.generateStreamKey()
+	streamKey, err := generateStreamKey()
 	if err != nil {
 		return models.Channel{}, err
 	}
@@ -2240,7 +2224,7 @@ func (s *Storage) StartStream(channelID string, renditions []string) (models.Str
 		return models.StreamSession{}, errors.New("channel already live")
 	}
 
-	sessionID, err := s.generateID()
+	sessionID, err := generateID()
 	if err != nil {
 		s.mu.Unlock()
 		return models.StreamSession{}, err
@@ -2436,7 +2420,7 @@ func (s *Storage) StopStream(channelID string, peakConcurrent int) (models.Strea
 
 func (s *Storage) createRecordingLocked(session models.StreamSession, channel models.Channel, ended time.Time) (models.Recording, error) {
 	s.ensureDatasetInitializedLocked()
-	id, err := s.generateID()
+	id, err := generateID()
 	if err != nil {
 		return models.Recording{}, err
 	}
@@ -2531,7 +2515,7 @@ func (s *Storage) populateRecordingArtifactsLocked(recording *models.Recording, 
 		}
 	}
 
-	thumbID, err := s.generateID()
+	thumbID, err := generateID()
 	if err != nil {
 		return fmt.Errorf("generate thumbnail id: %w", err)
 	}
@@ -2693,7 +2677,7 @@ func (s *Storage) CreateUpload(params CreateUploadParams) (models.Upload, error)
 		filename = fmt.Sprintf("upload-%s.mp4", time.Now().UTC().Format("20060102-150405"))
 	}
 
-	id, err := s.generateID()
+	id, err := generateID()
 	if err != nil {
 		return models.Upload{}, err
 	}
@@ -2970,7 +2954,7 @@ func (s *Storage) CreateClipExport(recordingID string, params ClipExportParams) 
 	if recording.DurationSeconds > 0 && params.EndSeconds > recording.DurationSeconds {
 		return models.ClipExport{}, fmt.Errorf("clip exceeds recording duration")
 	}
-	id, err := s.generateID()
+	id, err := generateID()
 	if err != nil {
 		return models.ClipExport{}, err
 	}
@@ -3094,7 +3078,7 @@ func (s *Storage) CreateChatMessage(channelID, userID, content string) (models.C
 		return models.ChatMessage{}, errors.New("message content exceeds 500 characters")
 	}
 
-	id, err := s.generateID()
+	id, err := generateID()
 	if err != nil {
 		return models.ChatMessage{}, err
 	}
@@ -3294,7 +3278,7 @@ func (s *Storage) CreateChatReport(channelID, reporterID, targetID, reason, mess
 	if trimmedReason == "" {
 		return models.ChatReport{}, fmt.Errorf("reason is required")
 	}
-	id, err := s.generateID()
+	id, err := generateID()
 	if err != nil {
 		return models.ChatReport{}, err
 	}
@@ -3417,7 +3401,7 @@ func (s *Storage) CreateTip(params CreateTipParams) (models.Tip, error) {
 	if utf8.RuneCountInString(message) > MaxTipMessageLength {
 		return models.Tip{}, fmt.Errorf("message exceeds %d characters", MaxTipMessageLength)
 	}
-	id, err := s.generateID()
+	id, err := generateID()
 	if err != nil {
 		return models.Tip{}, err
 	}
@@ -3502,7 +3486,7 @@ func (s *Storage) CreateSubscription(params CreateSubscriptionParams) (models.Su
 	if reference == "" {
 		reference = fmt.Sprintf("sub-%d", time.Now().UnixNano())
 	}
-	id, err := s.generateID()
+	id, err := generateID()
 	if err != nil {
 		return models.Subscription{}, err
 	}

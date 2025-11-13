@@ -2,8 +2,6 @@ package storage
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -169,7 +167,7 @@ func (r *postgresRepository) CreateUser(params CreateUserParams) (models.User, e
 		}
 	}
 
-	id, err := r.generateID()
+	id, err := generateID()
 	if err != nil {
 		return models.User{}, err
 	}
@@ -490,22 +488,6 @@ func (r *postgresRepository) withConn(fn func(context.Context, *pgxpool.Conn) er
 	return fn(ctx, conn)
 }
 
-func (r *postgresRepository) generateID() (string, error) {
-	bytes := make([]byte, 16)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", fmt.Errorf("generate id: %w", err)
-	}
-	return hex.EncodeToString(bytes), nil
-}
-
-func (r *postgresRepository) generateStreamKey() (string, error) {
-	bytes := make([]byte, 24)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", fmt.Errorf("generate stream key: %w", err)
-	}
-	return strings.ToUpper(hex.EncodeToString(bytes)), nil
-}
-
 func encodeDonationAddresses(addresses []models.CryptoAddress) ([]byte, error) {
 	if addresses == nil {
 		addresses = []models.CryptoAddress{}
@@ -618,7 +600,7 @@ func (r *postgresRepository) recordingDeadline(now time.Time, published bool) *t
 }
 
 func (r *postgresRepository) createRecording(session models.StreamSession, channel models.Channel, ended time.Time) (models.Recording, error) {
-	recordingID, err := r.generateID()
+	recordingID, err := generateID()
 	if err != nil {
 		return models.Recording{}, err
 	}
@@ -712,7 +694,7 @@ func (r *postgresRepository) populateRecordingArtifacts(recording *models.Record
 		}
 	}
 
-	thumbID, err := r.generateID()
+	thumbID, err := generateID()
 	if err != nil {
 		return fmt.Errorf("generate thumbnail id: %w", err)
 	}
@@ -1598,11 +1580,11 @@ func (r *postgresRepository) CreateChannel(ownerID, title, category string, tags
 			return fmt.Errorf("owner %s not found", ownerID)
 		}
 
-		id, err = r.generateID()
+		id, err = generateID()
 		if err != nil {
 			return err
 		}
-		streamKey, err = r.generateStreamKey()
+		streamKey, err = generateStreamKey()
 		if err != nil {
 			return err
 		}
@@ -1769,7 +1751,7 @@ func (r *postgresRepository) RotateChannelStreamKey(id string) (models.Channel, 
 			return fmt.Errorf("load channel %s: %w", id, err)
 		}
 
-		newKey, err := r.generateStreamKey()
+		newKey, err := generateStreamKey()
 		if err != nil {
 			return err
 		}
@@ -2107,7 +2089,7 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 			return errors.New("channel already live")
 		}
 
-		sessionID, err = r.generateID()
+		sessionID, err = generateID()
 		if err != nil {
 			return err
 		}
@@ -2566,7 +2548,7 @@ func (r *postgresRepository) CreateUpload(params CreateUploadParams) (models.Upl
 			return fmt.Errorf("channel %s not found", channelID)
 		}
 
-		id, err := r.generateID()
+		id, err := generateID()
 		if err != nil {
 			return err
 		}
@@ -2959,7 +2941,7 @@ func (r *postgresRepository) CreateClipExport(recordingID string, params ClipExp
 		if duration > 0 && params.EndSeconds > duration {
 			return fmt.Errorf("clip exceeds recording duration")
 		}
-		id, err := r.generateID()
+		id, err := generateID()
 		if err != nil {
 			return err
 		}
@@ -3051,7 +3033,7 @@ func (r *postgresRepository) CreateChatMessage(channelID, userID, content string
 		return models.ChatMessage{}, errors.New("message content exceeds 500 characters")
 	}
 
-	id, err := r.generateID()
+	id, err := generateID()
 	if err != nil {
 		return models.ChatMessage{}, err
 	}
@@ -3515,7 +3497,7 @@ func (r *postgresRepository) CreateChatReport(channelID, reporterID, targetID, r
 		return models.ChatReport{}, fmt.Errorf("reason is required")
 	}
 
-	id, err := r.generateID()
+	id, err := generateID()
 	if err != nil {
 		return models.ChatReport{}, err
 	}
@@ -3794,7 +3776,7 @@ func (r *postgresRepository) CreateTip(params CreateTipParams) (models.Tip, erro
 		return models.Tip{}, fmt.Errorf("message exceeds %d characters", MaxTipMessageLength)
 	}
 
-	id, err := r.generateID()
+	id, err := generateID()
 	if err != nil {
 		return models.Tip{}, err
 	}
@@ -3955,7 +3937,7 @@ func (r *postgresRepository) CreateSubscription(params CreateSubscriptionParams)
 
 	externalRef := strings.TrimSpace(params.ExternalReference)
 
-	id, err := r.generateID()
+	id, err := generateID()
 	if err != nil {
 		return models.Subscription{}, err
 	}
@@ -4233,7 +4215,7 @@ func (r *postgresRepository) AuthenticateOAuth(params OAuthLoginParams) (models.
 
 		now := time.Now().UTC()
 		if userID == "" {
-			userID, err = r.generateID()
+			userID, err = generateID()
 			if err != nil {
 				return err
 			}
