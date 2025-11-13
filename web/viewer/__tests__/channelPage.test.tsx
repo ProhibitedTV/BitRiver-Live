@@ -219,6 +219,8 @@ describe("ChannelPage", () => {
     });
 
     await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledTimes(2));
+    expect(fetchChannelPlaybackMock).toHaveBeenNthCalledWith(2, "chan-42");
+    expect(screen.queryByText(/loading channel/i)).not.toBeInTheDocument();
 
     expect(
       await screen.findByRole("button", { name: /following · 11 supporters/i })

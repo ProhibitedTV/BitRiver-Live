@@ -31,10 +31,12 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
     let cancelled = false;
     const previousUserId = previousUserIdRef.current;
     const previousChannelId = previousChannelIdRef.current;
+    const channelChanged = previousChannelId !== id;
+    const firstLoad = previousChannelId === undefined;
+    const userChanged = previousUserId !== user?.id;
     previousUserIdRef.current = user?.id;
     previousChannelIdRef.current = id;
-    const shouldShowSpinner =
-      previousChannelId !== id || previousUserId === undefined;
+    const shouldShowSpinner = channelChanged || firstLoad;
     const load = async (showSpinner: boolean) => {
       try {
         if (showSpinner) {
@@ -55,7 +57,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
         }
       }
     };
-    void load(shouldShowSpinner);
+    void load(userChanged && !channelChanged ? false : shouldShowSpinner);
     const interval = setInterval(() => {
       void load(false);
     }, 30_000);
