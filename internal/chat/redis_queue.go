@@ -269,12 +269,28 @@ func (s *redisSubscription) requeueEntry(entry redisStreamEntry) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	s.ack(ctx, entry.ID)
 	if len(entry.Payload) == 0 {
+		s.ack(ctx, entry.ID)
 		return
 	}
-	if _, err := s.queue.client.Do(ctx, "XADD", s.queue.stream, "*", "payload", string(entry.Payload)); err != nil && s.queue.logger != nil {
-		s.queue.logger.Warn("redis requeue failed", "id", entry.ID, "error", err)
+
+	const maxAttempts = 3
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if _, err := s.queue.client.Do(ctx, "XADD", s.queue.stream, "*", "payload", string(entry.Payload)); err != nil {
+			if s.queue.logger != nil {
+				s.queue.logger.Warn("redis requeue failed", "id", entry.ID, "attempt", attempt, "error", err)
+			}
+			if ctx.Err() != nil {
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		s.ack(ctx, entry.ID)
+		return
+	}
+	if s.queue.logger != nil {
+		s.queue.logger.Error("redis requeue abandoned", "id", entry.ID)
 	}
 }
 
