@@ -2,8 +2,13 @@ package chat
 
 import (
 	"context"
+	"errors"
+	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	redis "github.com/redis/go-redis/v9"
 
 	"bitriver-live/internal/testsupport/redisstub"
 )
@@ -89,4 +94,106 @@ func TestRedisQueueRequeuesOnCancellation(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatalf("timed out waiting for requeued event")
 	}
+}
+
+func TestRedisQueueEnsureGroupRecoversAfterTransientFailure(t *testing.T) {
+	srv, err := redisstub.Start(redisstub.Options{Password: "secret"})
+	if err != nil {
+		t.Fatalf("failed to start redis stub: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = srv.Close()
+	})
+
+	delegate, err := redis.NewUniversalClient(&redis.UniversalOptions{
+		Addrs:    []string{srv.Addr()},
+		Password: "secret",
+	})
+	if err != nil {
+		t.Fatalf("create redis client: %v", err)
+	}
+	client := newFlakyGroupClient(delegate)
+
+	queue := &redisQueue{
+		client:       client,
+		stream:       "test-stream",
+		group:        "test-group",
+		blockTimeout: 50 * time.Millisecond,
+		buffer:       4,
+	}
+
+	ctx := context.Background()
+	event := Event{
+		Type: EventTypeMessage,
+		Message: &MessageEvent{
+			ID:        "evt-flaky",
+			ChannelID: "channel-1",
+			UserID:    "user-1",
+			Content:   "hello",
+			CreatedAt: time.Now().UTC().Truncate(time.Millisecond),
+		},
+		OccurredAt: time.Now().UTC(),
+	}
+
+	if err := queue.Publish(ctx, event); !errors.Is(err, errTransientGroupCreate) {
+		t.Fatalf("expected transient error on first publish, got %v", err)
+	}
+
+	if err := queue.Publish(ctx, event); err != nil {
+		t.Fatalf("publish after transient failure: %v", err)
+	}
+
+	sub := queue.Subscribe()
+	t.Cleanup(func() {
+		sub.Close()
+	})
+
+	select {
+	case got := <-sub.Events():
+		if got.Message == nil || got.Message.ID != event.Message.ID {
+			t.Fatalf("unexpected event: %+v", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for event after recovery")
+	}
+}
+
+var errTransientGroupCreate = errors.New("transient group creation failure")
+
+type flakyGroupClient struct {
+	delegate redis.UniversalClient
+	mu       sync.Mutex
+	failNext bool
+}
+
+func newFlakyGroupClient(delegate redis.UniversalClient) *flakyGroupClient {
+	return &flakyGroupClient{delegate: delegate, failNext: true}
+}
+
+func (c *flakyGroupClient) Close() error {
+	return nil
+}
+
+func (c *flakyGroupClient) Do(ctx context.Context, args ...interface{}) (interface{}, error) {
+	if c.shouldFail(args) {
+		return nil, errTransientGroupCreate
+	}
+	return c.delegate.Do(ctx, args...)
+}
+
+func (c *flakyGroupClient) shouldFail(args []interface{}) bool {
+	if len(args) == 0 {
+		return false
+	}
+	cmd, _ := args[0].(string)
+	if !strings.EqualFold(cmd, "xgroup") {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.failNext {
+		c.failNext = false
+		return true
+	}
+	return false
 }
