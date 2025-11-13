@@ -825,6 +825,46 @@ func TestPostgresChatReportResolution(t *testing.T) {
 	}
 }
 
+func TestPostgresChatReportAllowsMissingMessage(t *testing.T) {
+	repo := openPostgresRepository(t)
+
+	owner, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	reporter, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "reporter", Email: "reporter@example.com"})
+	if err != nil {
+		t.Fatalf("create reporter: %v", err)
+	}
+	target, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "target", Email: "target@example.com"})
+	if err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+
+	channel, err := repo.CreateChannel(owner.ID, "Lobby", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+
+	report, err := repo.CreateChatReport(channel.ID, reporter.ID, target.ID, "spam", "missing", "")
+	if err != nil {
+		t.Fatalf("create chat report with missing message: %v", err)
+	}
+	if report.MessageID != "" {
+		t.Fatalf("expected report to omit missing message, got %q", report.MessageID)
+	}
+	listed, err := repo.ListChatReports(channel.ID, true)
+	if err != nil {
+		t.Fatalf("list chat reports: %v", err)
+	}
+	if len(listed) != 1 {
+		t.Fatalf("expected single report, got %d", len(listed))
+	}
+	if listed[0].MessageID != "" {
+		t.Fatalf("expected listed report to omit missing message, got %q", listed[0].MessageID)
+	}
+}
+
 func TestPostgresTipsLifecycle(t *testing.T) {
 	storage.RunRepositoryTipsLifecycle(t, postgresRepositoryFactory)
 }

@@ -3575,7 +3575,13 @@ func (r *postgresRepository) CreateChatReport(channelID, reporterID, targetID, r
 
 		var messageParam any
 		if trimmedMessageID != "" {
-			messageParam = trimmedMessageID
+			var messageExists bool
+			if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM chat_messages WHERE id = $1 AND channel_id = $2)", trimmedMessageID, channelID).Scan(&messageExists); err != nil {
+				return fmt.Errorf("check chat message %s: %w", trimmedMessageID, err)
+			}
+			if messageExists {
+				messageParam = trimmedMessageID
+			}
 		}
 		var evidenceParam any
 		if trimmedEvidence != "" {
@@ -3597,10 +3603,12 @@ func (r *postgresRepository) CreateChatReport(channelID, reporterID, targetID, r
 			ReporterID:  reporterID,
 			TargetID:    targetID,
 			Reason:      trimmedReason,
-			MessageID:   trimmedMessageID,
 			EvidenceURL: trimmedEvidence,
 			Status:      status,
 			CreatedAt:   now,
+		}
+		if messageParam != nil {
+			report.MessageID = trimmedMessageID
 		}
 		return nil
 	})
