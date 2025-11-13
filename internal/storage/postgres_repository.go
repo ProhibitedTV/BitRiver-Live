@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
@@ -859,7 +860,8 @@ func (r *postgresRepository) purgeExpiredRecordings(ctx context.Context) error {
 	for _, id := range ids {
 		recording := recordings[id]
 		if err := r.deleteRecordingArtifacts(recording); err != nil {
-			return err
+			slog.Default().Warn("failed to delete recording artifacts", "recording_id", id, "error", err)
+			continue
 		}
 		clipRows, err := r.pool.Query(ctx, "SELECT id, storage_object FROM clip_exports WHERE recording_id = $1", id)
 		if err != nil {
@@ -879,10 +881,18 @@ func (r *postgresRepository) purgeExpiredRecordings(ctx context.Context) error {
 			clips = append(clips, clip)
 		}
 		clipRows.Close()
+		if err := clipRows.Err(); err != nil {
+			return fmt.Errorf("read clip exports for recording %s: %w", id, err)
+		}
+		failed := false
 		for _, clip := range clips {
 			if err := r.deleteClipArtifacts(clip); err != nil {
-				return err
+				slog.Default().Warn("failed to delete clip artifacts", "recording_id", id, "clip_id", clip.ID, "error", err)
+				failed = true
 			}
+		}
+		if failed {
+			continue
 		}
 		if _, err := r.pool.Exec(ctx, "DELETE FROM recordings WHERE id = $1", id); err != nil {
 			return fmt.Errorf("delete recording %s: %w", id, err)
@@ -2505,7 +2515,7 @@ func (r *postgresRepository) ListRecordings(channelID string, includeUnpublished
 			return fmt.Errorf("channel %s not found", channelID)
 		}
 		if err := r.purgeExpiredRecordings(ctx); err != nil {
-			return err
+			slog.Default().Warn("purge expired recordings failed", "channel_id", channelID, "error", err)
 		}
 		query := "SELECT id FROM recordings WHERE channel_id = $1"
 		if !includeUnpublished {
@@ -2822,8 +2832,7 @@ func (r *postgresRepository) GetRecording(id string) (models.Recording, bool) {
 	}
 	ctx, cancel := r.acquireContext()
 	if err := r.purgeExpiredRecordings(ctx); err != nil {
-		cancel()
-		return models.Recording{}, false
+		slog.Default().Warn("purge expired recordings failed", "recording_id", id, "error", err)
 	}
 	recording, ok, err := r.loadRecording(ctx, id)
 	cancel()
