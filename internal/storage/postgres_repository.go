@@ -818,7 +818,9 @@ func (r *postgresRepository) deleteClipArtifacts(clip models.ClipExport) error {
 	if trimmed == "" {
 		return nil
 	}
-	if err := client.Delete(context.Background(), trimmed); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), r.objectStorage.requestTimeout())
+	defer cancel()
+	if err := client.Delete(ctx, trimmed); err != nil {
 		return fmt.Errorf("delete clip object %s: %w", trimmed, err)
 	}
 	return nil
