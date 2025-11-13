@@ -34,6 +34,13 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
     const channelChanged = previousChannelId !== id;
     const firstLoad = previousChannelId === undefined;
     const userChanged = previousUserId !== user?.id;
+    if (channelChanged) {
+      setData(undefined);
+      setVods([]);
+      setVodError(undefined);
+      setActiveTab("about");
+      setLoading(true);
+    }
     previousUserIdRef.current = user?.id;
     previousChannelIdRef.current = id;
     const shouldShowSpinner = channelChanged || firstLoad;

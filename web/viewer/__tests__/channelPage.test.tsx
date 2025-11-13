@@ -269,6 +269,84 @@ describe("ChannelPage", () => {
     expect(createTipMock).not.toHaveBeenCalled();
   });
 
+  test("hides previous channel actions while loading the next channel", async () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
+      loading: false,
+      error: undefined,
+      login: jest.fn(),
+      signup: jest.fn(),
+      logout: jest.fn(),
+      refresh: jest.fn()
+    });
+
+    const firstChannelPlayback = {
+      ...basePlaybackResponse,
+      follow: { followers: 10, following: false },
+      subscription: { subscribers: 3, subscribed: false }
+    };
+
+    const secondChannelPlayback = {
+      ...basePlaybackResponse,
+      channel: {
+        ...basePlaybackResponse.channel,
+        id: "chan-84",
+        ownerId: "owner-84",
+        title: "Cosmic Coding"
+      },
+      owner: { id: "owner-84", displayName: "Coder" },
+      follow: { followers: 18, following: false },
+      subscription: { subscribers: 6, subscribed: false },
+      chat: { roomId: "room-84" }
+    };
+
+    let resolveSecondPlayback: ((value: any) => void) | undefined;
+    const secondPlaybackPromise = new Promise<any>((resolve) => {
+      resolveSecondPlayback = resolve;
+    });
+
+    fetchChannelPlaybackMock.mockImplementation((channelId: string) => {
+      if (channelId === "chan-42") {
+        return Promise.resolve(firstChannelPlayback as any);
+      }
+      if (channelId === "chan-84") {
+        return secondPlaybackPromise;
+      }
+      return Promise.reject(new Error(`Unexpected channel ${channelId}`));
+    });
+
+    fetchChannelVodsMock.mockImplementation((channelId: string) => {
+      return Promise.resolve({ channelId, items: [] } as any);
+    });
+
+    const { rerender } = render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    expect(await screen.findByRole("button", { name: /follow · 10 supporters/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /subscribe/i })).toBeInTheDocument();
+
+    await act(async () => {
+      rerender(<ChannelPage params={{ id: "chan-84" }} />);
+    });
+
+    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledWith("chan-84"));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /follow/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /subscribe/i })).not.toBeInTheDocument();
+      expect(screen.queryByTestId("player")).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/loading channel/i)).toBeInTheDocument();
+
+    await act(async () => {
+      resolveSecondPlayback?.(secondChannelPlayback as any);
+    });
+
+    expect(await screen.findByRole("button", { name: /follow · 18 supporters/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /subscribe/i })).toBeInTheDocument();
+    expect(await screen.findByTestId("player")).toBeInTheDocument();
+  });
+
   test("directs channel creators to the dashboard", async () => {
     mockUseAuth.mockReturnValue({
       user: { id: "owner-42", displayName: "DJ Nova", email: "nova@example.com", roles: [] },
