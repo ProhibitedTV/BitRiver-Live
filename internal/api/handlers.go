@@ -3053,9 +3053,6 @@ func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []
 func (h *Handler) Profiles(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		if _, ok := h.requireAuthenticatedUser(w, r); !ok {
-			return
-		}
 		profiles := h.Store.ListProfiles()
 		response := make([]profileViewResponse, 0, len(profiles))
 		for _, profile := range profiles {

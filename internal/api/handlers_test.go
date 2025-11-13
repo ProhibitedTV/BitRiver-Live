@@ -164,6 +164,49 @@ func TestProfilesList(t *testing.T) {
 	}
 	handler.Store = profileRepositoryWithOrphan{Repository: handler.Store, orphan: orphan}
 
+	assertProfilesResponse := func(body []byte) map[string]profileViewResponse {
+		var payload []profileViewResponse
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if len(payload) != 2 {
+			t.Fatalf("expected 2 profiles because orphaned entries should be omitted, got %d", len(payload))
+		}
+
+		profilesByUser := make(map[string]profileViewResponse)
+		for _, p := range payload {
+			profilesByUser[p.UserID] = p
+		}
+
+		profileOne, ok := profilesByUser[creatorOne.ID]
+		if !ok {
+			t.Fatalf("missing profile for %s", creatorOne.ID)
+		}
+		if profileOne.DisplayName != creatorOne.DisplayName {
+			t.Fatalf("expected display name %q, got %q", creatorOne.DisplayName, profileOne.DisplayName)
+		}
+		if profileOne.FeaturedChannelID == nil || *profileOne.FeaturedChannelID != channel.ID {
+			t.Fatalf("expected featured channel %s, got %v", channel.ID, profileOne.FeaturedChannelID)
+		}
+		if len(profileOne.TopFriends) != 1 || profileOne.TopFriends[0].UserID != creatorTwo.ID {
+			t.Fatalf("expected top friend %s, got %+v", creatorTwo.ID, profileOne.TopFriends)
+		}
+		if len(profileOne.Channels) != 1 || profileOne.Channels[0].ID != channel.ID {
+			t.Fatalf("expected channel %s, got %+v", channel.ID, profileOne.Channels)
+		}
+
+		profileTwo, ok := profilesByUser[creatorTwo.ID]
+		if !ok {
+			t.Fatalf("missing profile for %s", creatorTwo.ID)
+		}
+		if profileTwo.FeaturedChannelID != nil {
+			t.Fatalf("expected no featured channel for %s", creatorTwo.ID)
+		}
+
+		return profilesByUser
+	}
+
 	req := httptest.NewRequest(http.MethodGet, "/api/profiles", nil)
 	req = withUser(req, viewer)
 	rec := httptest.NewRecorder()
@@ -173,50 +216,18 @@ func TestProfilesList(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", rec.Code)
 	}
 
-	var payload []profileViewResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-
-	if len(payload) != 2 {
-		t.Fatalf("expected 2 profiles because orphaned entries should be omitted, got %d", len(payload))
-	}
-
-	profilesByUser := make(map[string]profileViewResponse)
-	for _, p := range payload {
-		profilesByUser[p.UserID] = p
-	}
-
-	profileOne, ok := profilesByUser[creatorOne.ID]
-	if !ok {
-		t.Fatalf("missing profile for %s", creatorOne.ID)
-	}
-	if profileOne.DisplayName != creatorOne.DisplayName {
-		t.Fatalf("expected display name %q, got %q", creatorOne.DisplayName, profileOne.DisplayName)
-	}
-	if profileOne.FeaturedChannelID == nil || *profileOne.FeaturedChannelID != channel.ID {
-		t.Fatalf("expected featured channel %s, got %v", channel.ID, profileOne.FeaturedChannelID)
-	}
-	if len(profileOne.TopFriends) != 1 || profileOne.TopFriends[0].UserID != creatorTwo.ID {
-		t.Fatalf("expected top friend %s, got %+v", creatorTwo.ID, profileOne.TopFriends)
-	}
-	if len(profileOne.Channels) != 1 || profileOne.Channels[0].ID != channel.ID {
-		t.Fatalf("expected channel %s, got %+v", channel.ID, profileOne.Channels)
-	}
-
-	profileTwo, ok := profilesByUser[creatorTwo.ID]
-	if !ok {
-		t.Fatalf("missing profile for %s", creatorTwo.ID)
-	}
-	if profileTwo.FeaturedChannelID != nil {
-		t.Fatalf("expected no featured channel for %s", creatorTwo.ID)
-	}
+	profilesAuthenticated := assertProfilesResponse(rec.Body.Bytes())
 
 	unauthReq := httptest.NewRequest(http.MethodGet, "/api/profiles", nil)
 	unauthRec := httptest.NewRecorder()
 	handler.Profiles(unauthRec, unauthReq)
-	if unauthRec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected status 401 for unauthenticated request, got %d", unauthRec.Code)
+	if unauthRec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 for unauthenticated request, got %d", unauthRec.Code)
+	}
+
+	profilesPublic := assertProfilesResponse(unauthRec.Body.Bytes())
+	if !reflect.DeepEqual(profilesAuthenticated, profilesPublic) {
+		t.Fatalf("expected public and authenticated profile responses to match")
 	}
 }
 
