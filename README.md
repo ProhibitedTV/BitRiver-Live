@@ -51,10 +51,13 @@ When deploying from `deploy/docker-compose.yml`, populate a dedicated environmen
 
 1. Copy `deploy/.env.example` to `.env` at the repository root.
 2. Replace the placeholder values for:
+   - `BITRIVER_POSTGRES_USER` and `BITRIVER_POSTGRES_PASSWORD`
+   - `BITRIVER_REDIS_PASSWORD` (and `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD` if you override it)
    - `BITRIVER_LIVE_ADMIN_EMAIL` and `BITRIVER_LIVE_ADMIN_PASSWORD`
    - `BITRIVER_SRS_TOKEN`
    - `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`
    - `BITRIVER_TRANSCODER_TOKEN`
+   - `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`
 3. Run `deploy/check-env.sh` to confirm the file no longer contains defaults. The script exits non-zero until each credential is customised. Docker Compose also fails fast thanks to the required-variable checks baked into the manifest.
 
 Keep the filled `.env` file private—it is `.gitignore`'d and should never be committed to version control.

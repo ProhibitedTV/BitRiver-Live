@@ -32,9 +32,11 @@ The script will:
 5. Wait for the API health check to pass, then invoke the `bootstrap-admin` helper to seed the admin account and print the credentials.
 
 Update the generated `.env` before inviting real users—swap in a valid admin email, choose a strong admin password, rotate the
-`BITRIVER_POSTGRES_USER`/`BITRIVER_POSTGRES_PASSWORD` pair (and update `BITRIVER_LIVE_POSTGRES_DSN` to match), and set the public
-viewer URL that matches your domain or reverse proxy. The helper prints the seeded credentials after the stack is ready;
-log in immediately and rotate the password from the control center settings page.
+`BITRIVER_POSTGRES_USER`/`BITRIVER_POSTGRES_PASSWORD` pair (and update `BITRIVER_LIVE_POSTGRES_DSN` to match), change the Redis
+credentials (`BITRIVER_REDIS_PASSWORD` and `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD`), and point
+`BITRIVER_TRANSCODER_PUBLIC_BASE_URL` at the HTTP origin your viewers can actually reach instead of the default
+`http://localhost:9080`. Update the public viewer URL to match your domain or reverse proxy as well. The helper prints the
+seeded credentials after the stack is ready; log in immediately and rotate the password from the control center settings page.
 
 ## Common follow-up commands
 
