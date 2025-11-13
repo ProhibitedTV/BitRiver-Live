@@ -473,7 +473,7 @@ func RunRepositoryTipsLifecycle(t *testing.T, factory RepositoryFactory) {
 	tip, err := repo.CreateTip(CreateTipParams{
 		ChannelID:  channel.ID,
 		FromUserID: supporter.ID,
-		Amount:     5.5,
+		Amount:     models.MustParseMoney("5.5"),
 		Currency:   "usd",
 		Provider:   "stripe",
 		Reference:  "ref-1",
@@ -494,7 +494,7 @@ func RunRepositoryTipsLifecycle(t *testing.T, factory RepositoryFactory) {
 	if _, err := repo.CreateTip(CreateTipParams{
 		ChannelID:  channel.ID,
 		FromUserID: supporter.ID,
-		Amount:     5.5,
+		Amount:     models.MustParseMoney("5.5"),
 		Currency:   "usd",
 		Provider:   "stripe",
 		Reference:  longReference,
@@ -506,7 +506,7 @@ func RunRepositoryTipsLifecycle(t *testing.T, factory RepositoryFactory) {
 	if _, err := repo.CreateTip(CreateTipParams{
 		ChannelID:     channel.ID,
 		FromUserID:    supporter.ID,
-		Amount:        5.5,
+		Amount:        models.MustParseMoney("5.5"),
 		Currency:      "usd",
 		Provider:      "stripe",
 		Reference:     "ref-wallet",
@@ -519,7 +519,7 @@ func RunRepositoryTipsLifecycle(t *testing.T, factory RepositoryFactory) {
 	if _, err := repo.CreateTip(CreateTipParams{
 		ChannelID:  channel.ID,
 		FromUserID: supporter.ID,
-		Amount:     5.5,
+		Amount:     models.MustParseMoney("5.5"),
 		Currency:   "usd",
 		Provider:   "stripe",
 		Reference:  "ref-message",
@@ -547,7 +547,7 @@ func RunRepositorySubscriptionsLifecycle(t *testing.T, factory RepositoryFactory
 		Tier:      "tier1",
 		Provider:  "stripe",
 		Reference: "sub-1",
-		Amount:    4.99,
+		Amount:    models.MustParseMoney("4.99"),
 		Currency:  "usd",
 		Duration:  time.Hour,
 		AutoRenew: true,
