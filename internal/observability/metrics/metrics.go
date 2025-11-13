@@ -17,6 +17,10 @@ type requestLabel struct {
 	status string
 }
 
+// Recorder aggregates in-memory metrics counters and gauges for HTTP requests,
+// stream lifecycle events, ingest health, chat activity, and monetization
+// signals. It coordinates concurrent writers via a RWMutex while exposing a
+// thread-safe gauge for active stream tracking.
 type Recorder struct {
 	mu                sync.RWMutex
 	requestCount      map[requestLabel]uint64
@@ -32,6 +36,8 @@ type Recorder struct {
 
 var defaultRecorder = New()
 
+// New constructs an empty Recorder with initialized backing maps so callers can
+// immediately record metrics without additional setup.
 func New() *Recorder {
 	return &Recorder{
 		requestCount:      make(map[requestLabel]uint64),
@@ -45,10 +51,15 @@ func New() *Recorder {
 	}
 }
 
+// Default returns the singleton Recorder instance shared across helper
+// functions for packages that do not require custom instrumentation pipelines.
 func Default() *Recorder {
 	return defaultRecorder
 }
 
+// ObserveRequest normalizes the request label set and accumulates totals for
+// request count and cumulative duration by HTTP method, normalized path, and
+// status code.
 func (r *Recorder) ObserveRequest(method, path string, status int, duration time.Duration) {
 	label := requestLabel{
 		method: strings.ToUpper(method),
@@ -61,11 +72,15 @@ func (r *Recorder) ObserveRequest(method, path string, status int, duration time
 	r.mu.Unlock()
 }
 
+// StreamStarted records a start lifecycle event and increments the active
+// stream gauge atomically so concurrent sessions remain consistent.
 func (r *Recorder) StreamStarted() {
 	r.incrementStreamEvent("start")
 	r.activeStreams.Add(1)
 }
 
+// StreamStopped records a stop lifecycle event and decrements the active
+// stream gauge, guarding against negative counts when concurrent updates race.
 func (r *Recorder) StreamStopped() {
 	r.incrementStreamEvent("stop")
 	for {
@@ -112,10 +127,13 @@ func (r *Recorder) ObserveMonetization(event string, amount float64) {
 	r.mu.Unlock()
 }
 
+// ActiveStreams exposes the current gauge of concurrently active streams.
 func (r *Recorder) ActiveStreams() int64 {
 	return r.activeStreams.Load()
 }
 
+// SetIngestHealth normalizes ingest service identifiers, maps status strings to
+// numeric health values, and stores both representations for export.
 func (r *Recorder) SetIngestHealth(service, status string) {
 	normalizedService := strings.ToLower(strings.TrimSpace(service))
 	if normalizedService == "" {
@@ -137,6 +155,8 @@ func (r *Recorder) SetIngestHealth(service, status string) {
 	r.mu.Unlock()
 }
 
+// Handler exposes the Recorder as an http.Handler that writes Prometheus text
+// exposition data with the appropriate content type.
 func (r *Recorder) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
@@ -144,6 +164,8 @@ func (r *Recorder) Handler() http.Handler {
 	})
 }
 
+// Write renders the Recorder's metrics in Prometheus text format, sorting label
+// sets to provide stable output for scrapes and tests.
 func (r *Recorder) Write(w io.Writer) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
