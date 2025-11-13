@@ -4080,7 +4080,7 @@ func (r *postgresRepository) GetSubscription(id string) (models.Subscription, bo
 	}
 
 	ctx, cancel := r.acquireContext()
-	row := r.pool.QueryRow(ctx, "SELECT id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference FROM subscriptions WHERE id = $1", id)
+	row := r.pool.QueryRow(ctx, "SELECT id, channel_id, user_id, tier, provider, reference, (amount * 100000000)::bigint AS amount_minor, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference FROM subscriptions WHERE id = $1", id)
 	cancel()
 
 	sub, err := scanSubscriptionRow(row)
