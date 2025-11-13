@@ -250,6 +250,9 @@ func TestUserByID(t *testing.T) {
 				if resp.Email != target.Email {
 					t.Fatalf("expected email %q, got %q", target.Email, resp.Email)
 				}
+				if !reflect.DeepEqual(resp.Roles, target.Roles) {
+					t.Fatalf("expected roles %v, got %v", target.Roles, resp.Roles)
+				}
 
 				persisted, ok := store.GetUser(target.ID)
 				if !ok {
@@ -257,6 +260,9 @@ func TestUserByID(t *testing.T) {
 				}
 				if persisted.Email != target.Email {
 					t.Fatalf("expected persisted email %q, got %q", target.Email, persisted.Email)
+				}
+				if !reflect.DeepEqual(persisted.Roles, target.Roles) {
+					t.Fatalf("expected persisted roles %v, got %v", target.Roles, persisted.Roles)
 				}
 			},
 		},
@@ -330,6 +336,9 @@ func TestUserByID(t *testing.T) {
 				var resp userResponse
 				if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 					t.Fatalf("decode response: %v", err)
+				}
+				if resp.ID != target.ID {
+					t.Fatalf("expected id %s, got %s", target.ID, resp.ID)
 				}
 				if resp.DisplayName != updatedName {
 					t.Fatalf("expected display name %q, got %q", updatedName, resp.DisplayName)
