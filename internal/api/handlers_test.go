@@ -299,7 +299,6 @@ func TestAuthorizationEnforced(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser viewer: %v", err)
 	}
-
 	req = httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
 	req = withUser(req, viewer)
 	rec = httptest.NewRecorder()
@@ -1534,6 +1533,14 @@ func TestProfileEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser viewer: %v", err)
 	}
+	admin, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Admin",
+		Email:       "admin@example.com",
+		Roles:       []string{"admin"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser admin: %v", err)
+	}
 	channel, err := store.CreateChannel(owner.ID, "Main Stage", "music", []string{"live"})
 	if err != nil {
 		t.Fatalf("CreateChannel: %v", err)
@@ -1611,10 +1618,66 @@ func TestProfileEndpoints(t *testing.T) {
 		t.Fatalf("expected missing profile status 404, got %d", rec.Code)
 	}
 
+	storedProfile, ok := store.GetProfile(owner.ID)
+	if !ok {
+		t.Fatalf("expected persisted profile for %s", owner.ID)
+	}
+
 	viewerPayload := map[string]interface{}{
-		"bio": "Just a viewer",
+		"bio": "viewer cannot edit others",
 	}
 	viewerBody, _ := json.Marshal(viewerPayload)
+	req = httptest.NewRequest(http.MethodPut, "/api/profiles/"+owner.ID, bytes.NewReader(viewerBody))
+	req = withUser(req, viewer)
+	rec = httptest.NewRecorder()
+	handler.ProfileByID(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected viewer forbidden status 403, got %d", rec.Code)
+	}
+	afterForbidden, ok := store.GetProfile(owner.ID)
+	if !ok {
+		t.Fatalf("expected profile to remain after forbidden update")
+	}
+	if !reflect.DeepEqual(storedProfile, afterForbidden) {
+		t.Fatalf("expected profile to remain unchanged after forbidden update")
+	}
+
+	adminPayload := map[string]interface{}{
+		"bio":       "Updated by admin",
+		"avatarUrl": "https://cdn.example.com/admin-updated.png",
+	}
+	adminBody, _ := json.Marshal(adminPayload)
+	req = httptest.NewRequest(http.MethodPut, "/api/profiles/"+owner.ID, bytes.NewReader(adminBody))
+	req = withUser(req, admin)
+	rec = httptest.NewRecorder()
+	handler.ProfileByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected admin profile update status 200, got %d", rec.Code)
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode admin profile response: %v", err)
+	}
+	if response.Bio != "Updated by admin" {
+		t.Fatalf("expected bio updated by admin, got %s", response.Bio)
+	}
+	if response.AvatarURL != "https://cdn.example.com/admin-updated.png" {
+		t.Fatalf("expected avatar updated by admin, got %s", response.AvatarURL)
+	}
+	adminUpdated, ok := store.GetProfile(owner.ID)
+	if !ok {
+		t.Fatalf("expected stored profile after admin update")
+	}
+	if adminUpdated.Bio != "Updated by admin" {
+		t.Fatalf("expected stored profile bio updated by admin")
+	}
+	if adminUpdated.AvatarURL != "https://cdn.example.com/admin-updated.png" {
+		t.Fatalf("expected stored profile avatar updated by admin")
+	}
+
+	viewerPayload = map[string]interface{}{
+		"bio": "Just a viewer",
+	}
+	viewerBody, _ = json.Marshal(viewerPayload)
 	req = httptest.NewRequest(http.MethodPut, "/api/profiles/"+viewer.ID, bytes.NewReader(viewerBody))
 	req = withUser(req, viewer)
 	rec = httptest.NewRecorder()
