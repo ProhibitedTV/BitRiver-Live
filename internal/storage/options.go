@@ -7,6 +7,9 @@ import (
 	"bitriver-live/internal/ingest"
 )
 
+// Option configures how the storage repository behaves when constructing
+// in-memory configuration or Postgres-backed storage. Each option can apply to
+// JSON-derived configuration, the Postgres connection settings, or both.
 type Option interface {
 	applyJSON(*Storage)
 	applyPostgres(*PostgresConfig)
@@ -37,6 +40,8 @@ func postgresOnlyOption(pg func(*PostgresConfig)) Option {
 	return optionAdapter{pg: pg}
 }
 
+// WithIngestController wires a custom ingest controller into the repository so
+// callers can override how ingest operations are performed and monitored.
 func WithIngestController(controller ingest.Controller) Option {
 	return composeOption(
 		func(s *Storage) {
@@ -48,6 +53,8 @@ func WithIngestController(controller ingest.Controller) Option {
 	)
 }
 
+// WithIngestRetries adjusts the maximum number of ingest attempts and delay
+// between retries used when ingesting recordings fails transiently.
 func WithIngestRetries(maxAttempts int, interval time.Duration) Option {
 	return composeOption(
 		func(s *Storage) {
@@ -69,6 +76,8 @@ func WithIngestRetries(maxAttempts int, interval time.Duration) Option {
 	)
 }
 
+// WithIngestTimeout changes the deadline allowed for a single ingest operation
+// before it is aborted.
 func WithIngestTimeout(timeout time.Duration) Option {
 	return composeOption(
 		func(s *Storage) {
@@ -84,6 +93,8 @@ func WithIngestTimeout(timeout time.Duration) Option {
 	)
 }
 
+// WithRecordingRetention customises how long published and unpublished
+// recordings are retained before cleanup.
 func WithRecordingRetention(policy RecordingRetentionPolicy) Option {
 	return composeOption(
 		func(s *Storage) {
@@ -105,6 +116,8 @@ func WithRecordingRetention(policy RecordingRetentionPolicy) Option {
 	)
 }
 
+// WithObjectStorage overrides the object storage configuration used to archive
+// or retrieve recording assets.
 func WithObjectStorage(cfg ObjectStorageConfig) Option {
 	stored := cfg
 	return composeOption(
@@ -117,6 +130,8 @@ func WithObjectStorage(cfg ObjectStorageConfig) Option {
 	)
 }
 
+// WithPostgresPoolLimits caps the number of open connections in the Postgres
+// pool and optionally sets a floor for idle connections kept ready.
 func WithPostgresPoolLimits(maxConns, minConns int32) Option {
 	return postgresOnlyOption(func(cfg *PostgresConfig) {
 		if maxConns > 0 {
@@ -141,6 +156,8 @@ func WithPostgresAcquireTimeout(timeout time.Duration) Option {
 	})
 }
 
+// WithPostgresPoolDurations adjusts how long connections live, how long they
+// may remain idle, and how frequently health checks run against the pool.
 func WithPostgresPoolDurations(maxLifetime, maxIdle, healthInterval time.Duration) Option {
 	return postgresOnlyOption(func(cfg *PostgresConfig) {
 		if maxLifetime > 0 {
@@ -155,6 +172,9 @@ func WithPostgresPoolDurations(maxLifetime, maxIdle, healthInterval time.Duratio
 	})
 }
 
+// WithPostgresApplicationName sets the application name reported to Postgres
+// for new connections, helping operators identify this service in monitoring
+// tools.
 func WithPostgresApplicationName(name string) Option {
 	return postgresOnlyOption(func(cfg *PostgresConfig) {
 		if trimmed := strings.TrimSpace(name); trimmed != "" {

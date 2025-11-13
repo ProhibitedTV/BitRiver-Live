@@ -6,6 +6,9 @@ import (
 	"bitriver-live/internal/ingest"
 )
 
+// PostgresConfig describes how the repository initialises its Postgres
+// connection pool, orchestrates ingest behaviour, and integrates with object
+// storage backends when persisting recording metadata.
 type PostgresConfig struct {
 	DSN                 string
 	MaxConnections      int32
