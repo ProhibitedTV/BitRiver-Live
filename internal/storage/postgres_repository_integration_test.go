@@ -4,6 +4,7 @@ package storage_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -453,6 +454,85 @@ func TestPostgresPendingClipExportsHandleNullFields(t *testing.T) {
 	}
 	if remainingClips != 0 {
 		t.Fatalf("expected no clip exports after retention purge, found %d", remainingClips)
+	}
+}
+
+func TestPostgresListRecordingsSkipsObjectStorageFailures(t *testing.T) {
+	repo, cleanup, err := postgresRepositoryFactory(t,
+		storage.WithObjectStorage(storage.ObjectStorageConfig{
+			Endpoint:       "127.0.0.1:1",
+			Bucket:         "purge-failure",
+			RequestTimeout: 50 * time.Millisecond,
+		}),
+	)
+	if errors.Is(err, storage.ErrPostgresUnavailable) {
+		t.Skip("postgres repository unavailable in this build")
+	}
+	if err != nil {
+		t.Fatalf("failed to open postgres repository: %v", err)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	pool := postgresPoolFromRepository(t, repo)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	ownerID := "purge-owner"
+	channelID := "purge-channel"
+	sessionID := "purge-session"
+	expiredRecordingID := "recording-expired"
+	activeRecordingID := "recording-active"
+	clipID := "clip-expired"
+
+	if _, err := pool.Exec(ctx, "INSERT INTO users (id, display_name, email, roles, created_at) VALUES ($1, $2, $3, $4, $5)", ownerID, "Owner", ownerID+"@example.com", []string{"creator"}, now); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO channels (id, owner_id, stream_key, title, live_state) VALUES ($1, $2, $3, $4, $5)", channelID, ownerID, "purge-stream-key", "Retention", "offline"); err != nil {
+		t.Fatalf("insert channel: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO stream_sessions (id, channel_id, started_at, renditions, peak_concurrent, ingest_endpoints, ingest_job_ids) VALUES ($1, $2, $3, $4, $5, $6, $7)", sessionID, channelID, now.Add(-2*time.Hour), []string{}, 0, []string{}, []string{}); err != nil {
+		t.Fatalf("insert stream session: %v", err)
+	}
+
+	metadata := map[string]string{"object:manifest:expired": "expired/playlist.m3u8"}
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO recordings (id, channel_id, session_id, title, duration_seconds, playback_base_url, metadata, created_at, retain_until) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)", expiredRecordingID, channelID, sessionID, "Expired", 120, "https://vod.example.com/expired", metadataJSON, now.Add(-time.Hour), now.Add(-time.Minute)); err != nil {
+		t.Fatalf("insert expired recording: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO recordings (id, channel_id, session_id, title, duration_seconds, playback_base_url, metadata, created_at) VALUES ($1, $2, $3, $4, $5, $6, '{}'::JSONB, $7)", activeRecordingID, channelID, sessionID, "Active", 60, "https://vod.example.com/active", now); err != nil {
+		t.Fatalf("insert active recording: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO clip_exports (id, recording_id, channel_id, session_id, title, start_seconds, end_seconds, status, playback_url, created_at, storage_object) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)", clipID, expiredRecordingID, channelID, sessionID, "Expired Clip", 0, 30, "complete", "https://vod.example.com/clip.mp4", now.Add(-30*time.Minute), "expired/clip.mp4"); err != nil {
+		t.Fatalf("insert clip export: %v", err)
+	}
+
+	recordings, err := repo.ListRecordings(channelID, true)
+	if err != nil {
+		t.Fatalf("ListRecordings: %v", err)
+	}
+
+	foundActive := false
+	for _, rec := range recordings {
+		if rec.ID == activeRecordingID {
+			foundActive = true
+			break
+		}
+	}
+	if !foundActive {
+		t.Fatalf("expected to find active recording %s in results", activeRecordingID)
+	}
+
+	var remaining int
+	if err := pool.QueryRow(ctx, "SELECT COUNT(*) FROM recordings WHERE id = $1", expiredRecordingID).Scan(&remaining); err != nil {
+		t.Fatalf("reload expired recording: %v", err)
+	}
+	if remaining != 1 {
+		t.Fatalf("expected expired recording to remain after purge failure, found %d rows", remaining)
 	}
 }
 
