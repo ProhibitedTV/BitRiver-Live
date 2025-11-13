@@ -128,3 +128,120 @@ func TestPostgresRepositoryAcquireTimeoutUpsertProfile(t *testing.T) {
 		t.Fatalf("expected context deadline exceeded; got %v", err)
 	}
 }
+
+func TestPostgresRepositoryAcquireTimeoutCreateChannel(t *testing.T) {
+	repo, cleanup, err := postgresRepositoryFactory(t,
+		WithPostgresPoolLimits(1, 1),
+		WithPostgresAcquireTimeout(50*time.Millisecond),
+	)
+	if err != nil {
+		t.Fatalf("failed to open postgres repository: %v", err)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	pgRepo, ok := repo.(*postgresRepository)
+	if !ok {
+		t.Fatalf("expected postgres repository instance")
+	}
+
+	email := fmt.Sprintf("channel-timeout-%d@example.com", time.Now().UnixNano())
+	user, err := repo.CreateUser(CreateUserParams{
+		Email:       email,
+		DisplayName: "Acquire Timeout Channel",
+		Password:    "changeme",
+		SelfSignup:  true,
+	})
+	if err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	conn, err := pgRepo.pool.Acquire(context.Background())
+	if err != nil {
+		t.Fatalf("failed to saturate pool: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := repo.CreateChannel(user.ID, "timeout", "testing", nil)
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected acquire timeout error")
+		}
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("expected context deadline exceeded; got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for acquire to fail")
+	}
+
+	conn.Release()
+}
+
+func TestPostgresRepositoryAcquireTimeoutCreateUpload(t *testing.T) {
+	repo, cleanup, err := postgresRepositoryFactory(t,
+		WithPostgresPoolLimits(1, 1),
+		WithPostgresAcquireTimeout(50*time.Millisecond),
+	)
+	if err != nil {
+		t.Fatalf("failed to open postgres repository: %v", err)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	pgRepo, ok := repo.(*postgresRepository)
+	if !ok {
+		t.Fatalf("expected postgres repository instance")
+	}
+
+	email := fmt.Sprintf("upload-timeout-%d@example.com", time.Now().UnixNano())
+	user, err := repo.CreateUser(CreateUserParams{
+		Email:       email,
+		DisplayName: "Acquire Timeout Upload",
+		Password:    "changeme",
+		SelfSignup:  true,
+	})
+	if err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+	channel, err := repo.CreateChannel(user.ID, "Uploads", "testing", nil)
+	if err != nil {
+		t.Fatalf("failed to create channel: %v", err)
+	}
+
+	conn, err := pgRepo.pool.Acquire(context.Background())
+	if err != nil {
+		t.Fatalf("failed to saturate pool: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := repo.CreateUpload(CreateUploadParams{
+			ChannelID: channel.ID,
+			Title:     "Timeout Upload",
+			Filename:  "timeout.mp4",
+			SizeBytes: 1024,
+		})
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected acquire timeout error")
+		}
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("expected context deadline exceeded; got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for acquire to fail")
+	}
+
+	conn.Release()
+}
