@@ -1076,23 +1076,27 @@ func rollbackTx(ctx context.Context, tx pgx.Tx) {
 
 func scanUser(row pgx.Row) (models.User, error) {
 	var (
-		id, displayName, email, passwordHash string
-		roles                                []string
-		selfSignup                           bool
-		createdAt                            time.Time
+		id, displayName, email string
+		roles                  []string
+		passwordHash           pgtype.Text
+		selfSignup             bool
+		createdAt              time.Time
 	)
 	if err := row.Scan(&id, &displayName, &email, &roles, &passwordHash, &selfSignup, &createdAt); err != nil {
 		return models.User{}, err
 	}
-	return models.User{
-		ID:           id,
-		DisplayName:  displayName,
-		Email:        email,
-		Roles:        rolesFromDB(roles),
-		PasswordHash: passwordHash,
-		SelfSignup:   selfSignup,
-		CreatedAt:    createdAt.UTC(),
-	}, nil
+	user := models.User{
+		ID:          id,
+		DisplayName: displayName,
+		Email:       email,
+		Roles:       rolesFromDB(roles),
+		SelfSignup:  selfSignup,
+		CreatedAt:   createdAt.UTC(),
+	}
+	if passwordHash.Valid {
+		user.PasswordHash = passwordHash.String
+	}
+	return user, nil
 }
 
 func rolesFromDB(roles []string) []string {

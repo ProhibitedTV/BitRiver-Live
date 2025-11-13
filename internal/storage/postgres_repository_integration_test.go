@@ -252,6 +252,35 @@ func TestPostgresChatMessageLifecycle(t *testing.T) {
 
 func TestPostgresOAuthLinking(t *testing.T) {
 	storage.RunRepositoryOAuthLinking(t, postgresRepositoryFactory)
+
+	repo := openPostgresRepository(t)
+
+	provider := "example"
+	subject := "null-password"
+
+	created, err := repo.AuthenticateOAuth(storage.OAuthLoginParams{
+		Provider:    provider,
+		Subject:     subject,
+		Email:       "null-password@example.com",
+		DisplayName: "Null Password",
+	})
+	if err != nil {
+		t.Fatalf("create oauth user without password: %v", err)
+	}
+	if created.PasswordHash != "" {
+		t.Fatalf("expected new oauth user to have empty password hash, got %q", created.PasswordHash)
+	}
+
+	loaded, err := repo.AuthenticateOAuth(storage.OAuthLoginParams{Provider: provider, Subject: subject})
+	if err != nil {
+		t.Fatalf("reload oauth user without password: %v", err)
+	}
+	if loaded.ID != created.ID {
+		t.Fatalf("expected oauth login to return existing user %q, got %q", created.ID, loaded.ID)
+	}
+	if loaded.PasswordHash != "" {
+		t.Fatalf("expected oauth-loaded user to have empty password hash, got %q", loaded.PasswordHash)
+	}
 }
 
 func TestPostgresChatMessageHistoryPaging(t *testing.T) {
