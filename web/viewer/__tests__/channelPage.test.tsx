@@ -170,6 +170,62 @@ describe("ChannelPage", () => {
     expect(await screen.findByText("Hello from viewer")).toBeInTheDocument();
   });
 
+  test("refreshes follow and subscription state immediately after logging in", async () => {
+    const authState = {
+      user: undefined as
+        | { id: string; displayName: string; email: string; roles: string[] }
+        | undefined,
+      loading: false,
+      error: undefined,
+      login: jest.fn(),
+      signup: jest.fn(),
+      logout: jest.fn(),
+      refresh: jest.fn()
+    };
+
+    const initialResponse = {
+      ...basePlaybackResponse,
+      follow: { followers: 10, following: false },
+      subscription: { subscribers: 3, subscribed: false }
+    };
+
+    const loggedInResponse = {
+      ...basePlaybackResponse,
+      follow: { followers: 11, following: true },
+      subscription: { subscribers: 4, subscribed: true, tier: "Plus" }
+    };
+
+    fetchChannelPlaybackMock.mockResolvedValueOnce(initialResponse as any);
+    fetchChannelPlaybackMock.mockResolvedValueOnce(loggedInResponse as any);
+    fetchChannelPlaybackMock.mockResolvedValue(loggedInResponse as any);
+
+    mockUseAuth.mockImplementation(() => authState);
+
+    const { rerender } = render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledTimes(1));
+
+    expect(await screen.findByRole("button", { name: /follow · 10 supporters/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /subscribe/i })).toBeInTheDocument();
+
+    await act(async () => {
+      authState.user = {
+        id: "viewer-1",
+        displayName: "Viewer",
+        email: "viewer@example.com",
+        roles: []
+      };
+      rerender(<ChannelPage params={{ id: "chan-42" }} />);
+    });
+
+    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledTimes(2));
+
+    expect(
+      await screen.findByRole("button", { name: /following · 11 supporters/i })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /subscribed · plus/i })).toBeInTheDocument();
+  });
+
   test("prompts authentication when the viewer is signed out", async () => {
     mockUseAuth.mockReturnValue({
       user: undefined,
