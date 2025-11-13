@@ -11,6 +11,9 @@ import (
 	"bitriver-live/internal/models"
 )
 
+// Snapshot captures a complete JSON-serialisable view of the in-memory
+// datastore, grouping each model collection by its primary identifier so it can
+// be persisted and later replayed into another backing store.
 type Snapshot struct {
 	Users               map[string]models.User          `json:"users"`
 	OAuthAccounts       map[string]models.OAuthAccount  `json:"oauthAccounts"`
@@ -34,6 +37,8 @@ type Snapshot struct {
 	ClipExports         map[string]models.ClipExport    `json:"clipExports"`
 }
 
+// SnapshotCounts summarises the size of each collection stored in a Snapshot to
+// help operators understand how much data will be serialised and imported.
 type SnapshotCounts struct {
 	Users                  int
 	OAuthAccounts          int
@@ -55,6 +60,9 @@ type SnapshotCounts struct {
 	ClipExports            int
 }
 
+// LoadSnapshotFromJSON reads a previously exported Snapshot from disk,
+// rehydrating the datastore state serialised in JSON so it can be imported or
+// inspected.
 func LoadSnapshotFromJSON(path string) (*Snapshot, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -138,6 +146,8 @@ func (s *Snapshot) ensureInitialized() {
 	}
 }
 
+// Counts walks a Snapshot and returns the SnapshotCounts summary reflecting
+// how many entities of each type will be serialised for import.
 func (s *Snapshot) Counts() SnapshotCounts {
 	if s == nil {
 		return SnapshotCounts{}
@@ -175,6 +185,8 @@ func (s *Snapshot) Counts() SnapshotCounts {
 	return counts
 }
 
+// ImportSnapshotToPostgres hands a Snapshot to the postgresRepository so the
+// serialised datastore state can be bulk-loaded into Postgres.
 func ImportSnapshotToPostgres(ctx context.Context, repo Repository, snapshot *Snapshot) error {
 	if snapshot == nil {
 		return fmt.Errorf("snapshot is required")
