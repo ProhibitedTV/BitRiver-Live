@@ -846,7 +846,7 @@ func RunRepositoryStreamLifecycleWithoutIngest(t *testing.T, factory RepositoryF
 	case *Storage:
 		r.mu.Lock()
 		var genErr error
-		sessionID, genErr = r.generateID()
+		sessionID, genErr = generateID()
 		r.mu.Unlock()
 		if genErr != nil {
 			t.Fatalf("generate session id: %v", genErr)
@@ -866,7 +866,7 @@ func RunRepositoryStreamLifecycleWithoutIngest(t *testing.T, factory RepositoryF
 		r.mu.Unlock()
 	case *postgresRepository:
 		var genErr error
-		sessionID, genErr = r.generateID()
+		sessionID, genErr = generateID()
 		if genErr != nil {
 			t.Fatalf("generate session id: %v", genErr)
 		}
