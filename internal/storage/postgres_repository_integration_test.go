@@ -20,6 +20,7 @@ import (
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/storage"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -374,6 +375,55 @@ func TestPostgresStartStreamPersistsEmptyIngestEndpoints(t *testing.T) {
 
 	if _, err := repo.StopStream(channel.ID, 0); err != nil {
 		t.Fatalf("StopStream: %v", err)
+	}
+}
+
+func TestPostgresStopStreamResetsChannelOnRecordingFailure(t *testing.T) {
+	repo, cleanup, err := postgresRepositoryFactory(t,
+		storage.WithObjectStorage(storage.ObjectStorageConfig{
+			Endpoint:       "localhost:1",
+			Bucket:         "recording-failures",
+			RequestTimeout: 50 * time.Millisecond,
+		}),
+	)
+	if errors.Is(err, storage.ErrPostgresUnavailable) {
+		t.Skip("postgres repository unavailable in this build")
+	}
+	if err != nil {
+		t.Fatalf("failed to open postgres repository: %v", err)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	owner, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "owner", Email: "recording-owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	channel, err := repo.CreateChannel(owner.ID, "Recording Failure", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+
+	if _, err := repo.StartStream(channel.ID, []string{"720p"}); err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+
+	if _, err := repo.StopStream(channel.ID, 0); err == nil {
+		t.Fatal("expected StopStream to fail when recording persistence fails")
+	}
+
+	pool := postgresPoolFromRepository(t, repo)
+	var current pgtype.Text
+	var liveState string
+	if err := pool.QueryRow(context.Background(), "SELECT current_session_id, live_state FROM channels WHERE id = $1", channel.ID).Scan(&current, &liveState); err != nil {
+		t.Fatalf("reload channel: %v", err)
+	}
+	if current.Valid {
+		t.Fatalf("expected channel %s current session to be cleared", channel.ID)
+	}
+	if liveState != "offline" {
+		t.Fatalf("expected channel %s to be offline after failure, got %q", channel.ID, liveState)
 	}
 }
 
