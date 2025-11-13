@@ -2240,18 +2240,39 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 	return session, nil
 }
 
-func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (models.StreamSession, error) {
+func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (session models.StreamSession, err error) {
 	if r == nil || r.pool == nil {
 		return models.StreamSession{}, ErrPostgresUnavailable
 	}
 
 	var (
-		session         models.StreamSession
-		channelTitle    string
-		channelCategory pgtype.Text
-		channelTags     []string
+		channelTitle         string
+		channelCategory      pgtype.Text
+		channelTags          []string
+		channelWasLive       bool
+		cleanupAfterShutdown bool
+		stopTimestamp        time.Time
 	)
-	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+	defer func() {
+		if err == nil || !channelWasLive || !cleanupAfterShutdown {
+			return
+		}
+		timestamp := stopTimestamp
+		if timestamp.IsZero() {
+			timestamp = time.Now().UTC()
+		}
+		cleanupErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+			if _, execErr := conn.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = $1 WHERE id = $2", timestamp, channelID); execErr != nil {
+				return fmt.Errorf("update channel %s: %w", channelID, execErr)
+			}
+			return nil
+		})
+		if cleanupErr != nil {
+			err = fmt.Errorf("%w; cleanup stop stream: %v", err, cleanupErr)
+		}
+	}()
+
+	err = r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
 			return fmt.Errorf("begin stop stream tx: %w", err)
@@ -2280,6 +2301,7 @@ func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (m
 		if !currentSession.Valid {
 			return errors.New("channel is not live")
 		}
+		channelWasLive = true
 		sessionID := currentSession.String
 
 		sessRow := tx.QueryRow(ctx, "SELECT started_at, ended_at, renditions, peak_concurrent, origin_url, playback_url, ingest_endpoints, ingest_job_ids FROM stream_sessions WHERE id = $1 FOR UPDATE", sessionID)
@@ -2348,9 +2370,10 @@ func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (m
 	if err := controller.ShutdownStream(shutdownCtx, channelID, session.ID, append([]string{}, session.IngestJobIDs...)); err != nil {
 		return models.StreamSession{}, fmt.Errorf("shutdown ingest: %w", err)
 	}
+	cleanupAfterShutdown = true
 
-	now := time.Now().UTC()
-	session.EndedAt = &now
+	stopTimestamp = time.Now().UTC()
+	session.EndedAt = &stopTimestamp
 	if peakConcurrent > session.PeakConcurrent {
 		session.PeakConcurrent = peakConcurrent
 	}
@@ -2363,7 +2386,7 @@ func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (m
 		channel.Tags = append([]string{}, channelTags...)
 	}
 
-	recording, recErr := r.createRecording(session, channel, now)
+	recording, recErr := r.createRecording(session, channel, stopTimestamp)
 	if recErr != nil {
 		return models.StreamSession{}, recErr
 	}
@@ -2378,7 +2401,7 @@ func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (m
 		if _, err := tx.Exec(ctx, "UPDATE stream_sessions SET ended_at = $1, peak_concurrent = $2 WHERE id = $3", session.EndedAt, session.PeakConcurrent, session.ID); err != nil {
 			return fmt.Errorf("update stream session %s: %w", session.ID, err)
 		}
-		if _, err := tx.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = $1 WHERE id = $2", now, channelID); err != nil {
+		if _, err := tx.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = $1 WHERE id = $2", stopTimestamp, channelID); err != nil {
 			return fmt.Errorf("update channel %s: %w", channelID, err)
 		}
 		if recording.ID != "" {
