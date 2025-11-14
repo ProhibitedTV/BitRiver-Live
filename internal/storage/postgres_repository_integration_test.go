@@ -850,6 +850,76 @@ func TestPostgresChatBanTimeoutLifecycle(t *testing.T) {
 	}
 }
 
+func TestPostgresListChatRestrictionsSkipsExpiredTimeouts(t *testing.T) {
+	repo := openPostgresRepository(t)
+
+	owner, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	channel, err := repo.CreateChannel(owner.ID, "Lobby", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	active, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "active", Email: "active@example.com"})
+	if err != nil {
+		t.Fatalf("create active user: %v", err)
+	}
+	expired, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "expired", Email: "expired@example.com"})
+	if err != nil {
+		t.Fatalf("create expired user: %v", err)
+	}
+
+	now := time.Now().UTC()
+	activeExpiry := now.Add(15 * time.Minute)
+	expiredExpiry := now.Add(-2 * time.Minute)
+
+	if err := repo.ApplyChatEvent(chat.Event{
+		Type: chat.EventTypeModeration,
+		Moderation: &chat.ModerationEvent{
+			Action:    chat.ModerationActionTimeout,
+			ChannelID: channel.ID,
+			ActorID:   owner.ID,
+			TargetID:  active.ID,
+			Reason:    "active",
+			ExpiresAt: &activeExpiry,
+		},
+		OccurredAt: now.Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("apply active timeout: %v", err)
+	}
+
+	if err := repo.ApplyChatEvent(chat.Event{
+		Type: chat.EventTypeModeration,
+		Moderation: &chat.ModerationEvent{
+			Action:    chat.ModerationActionTimeout,
+			ChannelID: channel.ID,
+			ActorID:   owner.ID,
+			TargetID:  expired.ID,
+			Reason:    "expired",
+			ExpiresAt: &expiredExpiry,
+		},
+		OccurredAt: now.Add(-2 * time.Minute),
+	}); err != nil {
+		t.Fatalf("apply expired timeout: %v", err)
+	}
+
+	restrictions := repo.ListChatRestrictions(channel.ID)
+	if len(restrictions) != 1 {
+		t.Fatalf("expected 1 restriction, got %v", restrictions)
+	}
+	if restrictions[0].TargetID != active.ID {
+		t.Fatalf("expected restriction for active user, got %+v", restrictions[0])
+	}
+	if restrictions[0].ExpiresAt == nil || restrictions[0].ExpiresAt.Before(activeExpiry.Add(-time.Minute)) {
+		t.Fatalf("expected active timeout expiry to be retained, got %+v", restrictions[0].ExpiresAt)
+	}
+
+	if _, ok := repo.ChatTimeout(channel.ID, expired.ID); ok {
+		t.Fatalf("expected expired timeout to be pruned from storage")
+	}
+}
+
 func TestPostgresChatReportResolution(t *testing.T) {
 	repo := openPostgresRepository(t)
 

@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -3173,11 +3174,55 @@ func (s *Storage) DeleteChatMessage(channelID, messageID string) error {
 	return nil
 }
 
+func (s *Storage) pruneExpiredTimeoutsLocked(channelID string, now time.Time) bool {
+	timeouts := s.data.ChatTimeouts[channelID]
+	if len(timeouts) == 0 {
+		return false
+	}
+
+	pruned := false
+	for userID, expiry := range timeouts {
+		if expiry.After(now) {
+			continue
+		}
+		delete(timeouts, userID)
+		pruned = true
+
+		if issued := s.data.ChatTimeoutIssuedAt[channelID]; issued != nil {
+			delete(issued, userID)
+			if len(issued) == 0 {
+				delete(s.data.ChatTimeoutIssuedAt, channelID)
+			}
+		}
+		if actors := s.data.ChatTimeoutActors[channelID]; actors != nil {
+			delete(actors, userID)
+			if len(actors) == 0 {
+				delete(s.data.ChatTimeoutActors, channelID)
+			}
+		}
+		if reasons := s.data.ChatTimeoutReasons[channelID]; reasons != nil {
+			delete(reasons, userID)
+			if len(reasons) == 0 {
+				delete(s.data.ChatTimeoutReasons, channelID)
+			}
+		}
+	}
+
+	if len(timeouts) == 0 {
+		delete(s.data.ChatTimeouts, channelID)
+	}
+
+	return pruned
+}
+
 // ListChatRestrictions returns the current bans and timeouts for a channel.
 func (s *Storage) ListChatRestrictions(channelID string) []models.ChatRestriction {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	now := time.Now().UTC()
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	pruned := s.pruneExpiredTimeoutsLocked(channelID, now)
 	restrictions := make([]models.ChatRestriction, 0)
 	if bans := s.data.ChatBans[channelID]; bans != nil {
 		for userID, issued := range bans {
@@ -3195,14 +3240,19 @@ func (s *Storage) ListChatRestrictions(channelID string) []models.ChatRestrictio
 	}
 	if timeouts := s.data.ChatTimeouts[channelID]; timeouts != nil {
 		for userID, expiry := range timeouts {
-			issued := s.lookupTimeoutIssuedAt(channelID, userID, expiry)
+			if !expiry.After(now) {
+				continue
+			}
+			expiryUTC := expiry.UTC()
+			issued := s.lookupTimeoutIssuedAt(channelID, userID, expiryUTC)
+			expCopy := expiryUTC
 			restriction := models.ChatRestriction{
 				ID:        fmt.Sprintf("timeout:%s:%s", channelID, userID),
 				Type:      "timeout",
 				ChannelID: channelID,
 				TargetID:  userID,
 				IssuedAt:  issued,
-				ExpiresAt: &expiry,
+				ExpiresAt: &expCopy,
 				ActorID:   s.lookupTimeoutActor(channelID, userID),
 				Reason:    s.lookupTimeoutReason(channelID, userID),
 			}
@@ -3215,6 +3265,11 @@ func (s *Storage) ListChatRestrictions(channelID string) []models.ChatRestrictio
 		}
 		return restrictions[i].IssuedAt.After(restrictions[j].IssuedAt)
 	})
+	if pruned {
+		if err := s.persist(); err != nil {
+			slog.Error("persist pruned chat timeouts", "err", err)
+		}
+	}
 	return restrictions
 }
 
