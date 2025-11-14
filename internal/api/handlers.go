@@ -2472,6 +2472,10 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
+	if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
+		WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+		return
+	}
 	var req chatModerationRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
