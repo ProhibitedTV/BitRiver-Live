@@ -3455,6 +3455,7 @@ func (r *postgresRepository) ListChatRestrictions(channelID string) []models.Cha
 	}
 	restrictions := make([]models.ChatRestriction, 0)
 	aborted := false
+	now := time.Now().UTC()
 	if err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		banRows, err := conn.Query(ctx, "SELECT user_id, actor_id, reason, issued_at FROM chat_bans WHERE channel_id = $1", channelID)
 		if err == nil {
@@ -3489,7 +3490,11 @@ func (r *postgresRepository) ListChatRestrictions(channelID string) []models.Cha
 			}
 		}
 
-		timeoutRows, err := conn.Query(ctx, "SELECT user_id, actor_id, reason, issued_at, expires_at FROM chat_timeouts WHERE channel_id = $1", channelID)
+		if _, err := conn.Exec(ctx, "DELETE FROM chat_timeouts WHERE channel_id = $1 AND expires_at <= $2", channelID, now); err != nil {
+			return nil
+		}
+
+		timeoutRows, err := conn.Query(ctx, "SELECT user_id, actor_id, reason, issued_at, expires_at FROM chat_timeouts WHERE channel_id = $1 AND expires_at > $2", channelID, now)
 		if err != nil {
 			return nil
 		}

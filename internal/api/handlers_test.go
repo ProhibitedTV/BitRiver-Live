@@ -1961,6 +1961,90 @@ func TestChatModerationPostRequiresOwnerOrAdmin(t *testing.T) {
 	}
 }
 
+func TestChatModerationRestrictionsOmitExpiredTimeouts(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Arena", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	queue := chat.NewMemoryQueue(4)
+	handler.ChatGateway = chat.NewGateway(chat.GatewayConfig{Queue: queue, Store: store})
+	active, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Active", Email: "active@example.com"})
+	if err != nil {
+		t.Fatalf("create active user: %v", err)
+	}
+	expired, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Expired", Email: "expired@example.com"})
+	if err != nil {
+		t.Fatalf("create expired user: %v", err)
+	}
+
+	now := time.Now().UTC()
+	activeExpiry := now.Add(20 * time.Minute)
+	expiredExpiry := now.Add(-5 * time.Minute)
+
+	if err := store.ApplyChatEvent(chat.Event{
+		Type: chat.EventTypeModeration,
+		Moderation: &chat.ModerationEvent{
+			Action:    chat.ModerationActionTimeout,
+			ChannelID: channel.ID,
+			ActorID:   owner.ID,
+			TargetID:  active.ID,
+			Reason:    "active",
+			ExpiresAt: &activeExpiry,
+		},
+		OccurredAt: now.Add(-2 * time.Minute),
+	}); err != nil {
+		t.Fatalf("apply active timeout: %v", err)
+	}
+
+	if err := store.ApplyChatEvent(chat.Event{
+		Type: chat.EventTypeModeration,
+		Moderation: &chat.ModerationEvent{
+			Action:    chat.ModerationActionTimeout,
+			ChannelID: channel.ID,
+			ActorID:   owner.ID,
+			TargetID:  expired.ID,
+			Reason:    "expired",
+			ExpiresAt: &expiredExpiry,
+		},
+		OccurredAt: now.Add(-10 * time.Minute),
+	}); err != nil {
+		t.Fatalf("apply expired timeout: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID+"/chat/moderation/restrictions", nil)
+	req = withUser(req, owner)
+	rec := httptest.NewRecorder()
+
+	handler.ChannelByID(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected restrictions status 200, got %d", rec.Code)
+	}
+
+	var resp []chatRestrictionResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode restrictions response: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("expected 1 restriction, got %+v", resp)
+	}
+	if resp[0].TargetID != active.ID {
+		t.Fatalf("expected restriction for active user, got %+v", resp[0])
+	}
+	if resp[0].ExpiresAt == nil {
+		t.Fatalf("expected expiry timestamp for active timeout")
+	}
+	if _, err := time.Parse(time.RFC3339Nano, *resp[0].ExpiresAt); err != nil {
+		t.Fatalf("expected RFC3339 expiry, got %q", *resp[0].ExpiresAt)
+	}
+}
+
 func TestMonetizationEndpoints(t *testing.T) {
 	handler, store := newTestHandler(t)
 	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})

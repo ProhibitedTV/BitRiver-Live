@@ -1798,6 +1798,80 @@ func TestDeleteChatMessage(t *testing.T) {
 	}
 }
 
+func TestListChatRestrictionsSkipsExpiredTimeouts(t *testing.T) {
+	store := newTestStore(t)
+
+	owner, err := store.CreateUser(CreateUserParams{DisplayName: "Owner", Email: "owner@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Main", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	active, err := store.CreateUser(CreateUserParams{DisplayName: "Active", Email: "active@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser active: %v", err)
+	}
+	expired, err := store.CreateUser(CreateUserParams{DisplayName: "Expired", Email: "expired@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser expired: %v", err)
+	}
+
+	now := time.Now().UTC()
+	store.mu.Lock()
+	store.ensureDatasetInitializedLocked()
+	if store.data.ChatTimeouts == nil {
+		store.data.ChatTimeouts = make(map[string]map[string]time.Time)
+	}
+	store.data.ChatTimeouts[channel.ID] = map[string]time.Time{
+		active.ID:  now.Add(10 * time.Minute),
+		expired.ID: now.Add(-5 * time.Minute),
+	}
+	store.ensureTimeoutMetadata(channel.ID)
+	store.data.ChatTimeoutIssuedAt[channel.ID][active.ID] = now.Add(-time.Minute)
+	store.data.ChatTimeoutIssuedAt[channel.ID][expired.ID] = now.Add(-2 * time.Minute)
+	store.data.ChatTimeoutActors[channel.ID][active.ID] = owner.ID
+	store.data.ChatTimeoutActors[channel.ID][expired.ID] = owner.ID
+	store.data.ChatTimeoutReasons[channel.ID][active.ID] = "active"
+	store.data.ChatTimeoutReasons[channel.ID][expired.ID] = "expired"
+	store.mu.Unlock()
+
+	restrictions := store.ListChatRestrictions(channel.ID)
+	if len(restrictions) != 1 {
+		t.Fatalf("expected 1 restriction, got %d", len(restrictions))
+	}
+	if restrictions[0].TargetID != active.ID {
+		t.Fatalf("expected restriction for %q, got %+v", active.ID, restrictions[0])
+	}
+	if restrictions[0].ExpiresAt == nil || restrictions[0].ExpiresAt.Before(now.Add(5*time.Minute)) {
+		t.Fatalf("expected active timeout expiry to be retained, got %+v", restrictions[0].ExpiresAt)
+	}
+
+	store.mu.RLock()
+	if timeouts := store.data.ChatTimeouts[channel.ID]; timeouts != nil {
+		if _, ok := timeouts[expired.ID]; ok {
+			t.Fatalf("expected expired timeout to be pruned")
+		}
+	}
+	if actors := store.data.ChatTimeoutActors[channel.ID]; actors != nil {
+		if _, ok := actors[expired.ID]; ok {
+			t.Fatalf("expected expired timeout actor metadata to be pruned")
+		}
+	}
+	if reasons := store.data.ChatTimeoutReasons[channel.ID]; reasons != nil {
+		if _, ok := reasons[expired.ID]; ok {
+			t.Fatalf("expected expired timeout reason metadata to be pruned")
+		}
+	}
+	if issued := store.data.ChatTimeoutIssuedAt[channel.ID]; issued != nil {
+		if _, ok := issued[expired.ID]; ok {
+			t.Fatalf("expected expired timeout issued metadata to be pruned")
+		}
+	}
+	store.mu.RUnlock()
+}
+
 func TestUpsertProfileCreatesProfile(t *testing.T) {
 	store := newTestStore(t)
 	owner, err := store.CreateUser(CreateUserParams{
