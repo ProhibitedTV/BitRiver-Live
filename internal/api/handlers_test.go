@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -36,6 +37,21 @@ func newTestHandler(t *testing.T) (*Handler, *storage.Storage) {
 
 type ingestUnavailableRepo struct {
 	storage.Repository
+}
+
+type pingFunc func(context.Context) error
+
+func (f pingFunc) Ping(ctx context.Context) error {
+	return f(ctx)
+}
+
+type failingRepository struct {
+	storage.Repository
+	err error
+}
+
+func (r failingRepository) Ping(context.Context) error {
+	return r.err
 }
 
 func (r ingestUnavailableRepo) StartStream(channelID string, renditions []string) (models.StreamSession, error) {
@@ -1095,6 +1111,160 @@ func TestHealthReportsIngestStatus(t *testing.T) {
 	if len(services) == 0 {
 		t.Fatalf("expected at least one health service entry")
 	}
+
+	components, ok := payload["components"].([]interface{})
+	if !ok {
+		t.Fatalf("expected components array in response")
+	}
+	if len(components) == 0 {
+		t.Fatalf("expected component health entries")
+	}
+}
+
+func TestHealthIncludesDependencyStatuses(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	handler.RateLimiter = pingFunc(func(context.Context) error { return nil })
+	handler.ChatQueue = pingFunc(func(context.Context) error { return nil })
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Health(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode health payload: %v", err)
+	}
+
+	components, ok := payload["components"].([]interface{})
+	if !ok {
+		t.Fatalf("expected components array in response")
+	}
+	if len(components) != 4 {
+		t.Fatalf("expected 4 components, got %d", len(components))
+	}
+
+	statuses := make(map[string]map[string]interface{})
+	for _, raw := range components {
+		entry, ok := raw.(map[string]interface{})
+		if !ok {
+			t.Fatalf("unexpected component entry type %T", raw)
+		}
+		name, _ := entry["component"].(string)
+		statuses[name] = entry
+	}
+
+	expected := []string{"datastore", "sessions", "rate_limiter", "chat_queue"}
+	for _, name := range expected {
+		entry, ok := statuses[name]
+		if !ok {
+			t.Fatalf("missing component %s", name)
+		}
+		if status, _ := entry["status"].(string); status != "ok" {
+			t.Fatalf("expected component %s to be ok, got %s", name, status)
+		}
+		if errVal, hasErr := entry["error"]; hasErr && errVal != "" {
+			t.Fatalf("expected no error for component %s, got %v", name, errVal)
+		}
+	}
+}
+
+func TestHealthDegradedWhenRepositoryPingFails(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	failing := failingRepository{Repository: handler.Store, err: errors.New("datastore unreachable")}
+	handler.Store = failing
+	handler.RateLimiter = pingFunc(func(context.Context) error { return nil })
+	handler.ChatQueue = pingFunc(func(context.Context) error { return nil })
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	handler.Health(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode health payload: %v", err)
+	}
+	if payload["status"] != "degraded" {
+		t.Fatalf("expected overall degraded status, got %v", payload["status"])
+	}
+
+	components, ok := payload["components"].([]interface{})
+	if !ok {
+		t.Fatalf("expected components array in response")
+	}
+
+	foundDatastore := false
+	for _, raw := range components {
+		entry, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if entry["component"] == "datastore" {
+			foundDatastore = true
+			if entry["status"] != "degraded" {
+				t.Fatalf("expected datastore status degraded, got %v", entry["status"])
+			}
+			if !strings.Contains(fmt.Sprint(entry["error"]), "datastore unreachable") {
+				t.Fatalf("expected datastore error message, got %v", entry["error"])
+			}
+		}
+	}
+	if !foundDatastore {
+		t.Fatalf("expected datastore component entry")
+	}
+}
+
+func TestHealthDegradedWhenRedisDependencyFails(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	redisErr := errors.New("redis offline")
+	handler.RateLimiter = pingFunc(func(context.Context) error { return redisErr })
+	handler.ChatQueue = pingFunc(func(context.Context) error { return nil })
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	handler.Health(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode health payload: %v", err)
+	}
+	if payload["status"] != "degraded" {
+		t.Fatalf("expected overall degraded status, got %v", payload["status"])
+	}
+
+	components, ok := payload["components"].([]interface{})
+	if !ok {
+		t.Fatalf("expected components array in response")
+	}
+
+	for _, raw := range components {
+		entry, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if entry["component"] == "rate_limiter" {
+			if entry["status"] != "degraded" {
+				t.Fatalf("expected rate limiter degraded, got %v", entry["status"])
+			}
+			if !strings.Contains(fmt.Sprint(entry["error"]), redisErr.Error()) {
+				t.Fatalf("expected redis error message, got %v", entry["error"])
+			}
+			return
+		}
+	}
+	t.Fatalf("expected rate limiter component entry")
 }
 
 func findCookie(t *testing.T, cookies []*http.Cookie, name string) *http.Cookie {

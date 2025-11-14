@@ -57,6 +57,22 @@ func (r *postgresRepository) Close(ctx context.Context) error {
 	}
 }
 
+func (r *postgresRepository) Ping(ctx context.Context) error {
+	if r == nil || r.pool == nil {
+		return ErrPostgresUnavailable
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	conn, err := r.pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	_, execErr := conn.Exec(ctx, "SELECT 1")
+	return execErr
+}
+
 // NewPostgresRepository opens a Postgres-backed repository. The caller must
 // ensure database migrations have been applied prior to invoking this
 // constructor.

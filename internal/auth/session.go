@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -122,6 +123,23 @@ func (m *SessionManager) Revoke(token string) error {
 // PurgeExpired removes any expired sessions from the backing store.
 func (m *SessionManager) PurgeExpired() error {
 	return m.store.PurgeExpired(time.Now())
+}
+
+// Ping verifies the underlying session store is reachable when it exposes a ping method.
+func (m *SessionManager) Ping(ctx context.Context) error {
+	if m == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if m.store == nil {
+		return nil
+	}
+	if pinger, ok := m.store.(interface{ Ping(context.Context) error }); ok {
+		return pinger.Ping(ctx)
+	}
+	return nil
 }
 
 func generateToken(length int) (string, error) {

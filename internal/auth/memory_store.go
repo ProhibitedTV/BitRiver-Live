@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -50,5 +51,10 @@ func (s *MemorySessionStore) PurgeExpired(now time.Time) error {
 		}
 	}
 	s.mu.Unlock()
+	return nil
+}
+
+// Ping always reports success for the in-memory session store.
+func (s *MemorySessionStore) Ping(context.Context) error {
 	return nil
 }

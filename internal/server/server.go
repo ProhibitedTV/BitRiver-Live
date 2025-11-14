@@ -140,6 +140,9 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("configure rate limiter: %w", err)
 	}
+	if handler != nil {
+		handler.RateLimiter = rl
+	}
 	ipResolver, err := newClientIPResolver(cfg.RateLimit)
 	if err != nil {
 		return nil, fmt.Errorf("configure client ip resolver: %w", err)

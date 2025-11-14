@@ -406,6 +406,9 @@ func main() {
 	handler := api.NewHandler(store, sessions)
 	handler.AllowSelfSignup = allowSelfSignupValue
 	handler.ChatGateway = gateway
+	if pingable, ok := queue.(interface{ Ping(context.Context) error }); ok {
+		handler.ChatQueue = pingable
+	}
 	var uploadProcessor *api.UploadProcessor
 	if ingestController != nil {
 		uploadProcessor = api.NewUploadProcessor(api.UploadProcessorConfig{
