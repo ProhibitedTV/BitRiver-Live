@@ -173,6 +173,9 @@ services:
 
   srs-controller:
     image: ghcr.io/bitriver-live/bitriver-srs-controller:${BITRIVER_SRS_CONTROLLER_IMAGE_TAG:?set via .env}
+    build:
+      context: ..
+      dockerfile: cmd/srs-controller/Dockerfile
     container_name: bitriver-srs-controller
     restart: unless-stopped
     env_file:
