@@ -4,8 +4,11 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"bitriver-live/internal/chat"
+	"bitriver-live/internal/ingest"
+	"bitriver-live/internal/server"
 )
 
 func TestConfigureChatQueueMemory(t *testing.T) {
@@ -174,4 +177,142 @@ func TestResolveSessionStoreConfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStartupSummaryPostgresRedis(t *testing.T) {
+	summary := newStartupSummary(startupSummaryInput{
+		StorageDriver: "postgres",
+		StorageDSN:    "postgres://user:secret@localhost/db?sslmode=disable",
+		SessionConfig: sessionStoreConfig{Driver: "postgres", DSN: "postgres://session:secret@localhost/sessions"},
+		RateLimit: server.RateLimitConfig{
+			RedisAddr:       "127.0.0.1:6379",
+			RedisMasterName: "mymaster",
+		},
+		ChatDriver: "redis",
+		ChatConfig: chat.RedisQueueConfig{
+			Addr:   "redis://chat:6379",
+			Stream: "chat-stream",
+			Group:  "chat-group",
+		},
+		IngestConfig: ingest.Config{
+			SRSBaseURL:        "http://srs",
+			OMEBaseURL:        "http://ome",
+			JobBaseURL:        "http://job",
+			HealthEndpoint:    "/healthz",
+			MaxBootAttempts:   5,
+			RetryInterval:     750 * time.Millisecond,
+			HTTPMaxAttempts:   4,
+			HTTPRetryInterval: 2 * time.Second,
+		},
+		IngestControllerActive: true,
+	})
+	args := summary.LogArgs()
+	mapped := summaryArgsToMap(t, args)
+	datastore := mappedValueAsMap(t, mapped, "datastore")
+	if got := datastore["driver"]; got != "postgres" {
+		t.Fatalf("expected datastore driver postgres, got %v", got)
+	}
+	if raw, ok := datastore["dsn"].(string); !ok || (strings.Contains(raw, "secret")) || (!strings.Contains(raw, "*****") && !strings.Contains(raw, "%2A")) {
+		t.Fatalf("expected datastore DSN to be redacted, got %q", datastore["dsn"])
+	}
+	session := mappedValueAsMap(t, mapped, "session_store")
+	if got := session["driver"]; got != "postgres" {
+		t.Fatalf("expected session driver postgres, got %v", got)
+	}
+	if raw, ok := session["dsn"].(string); !ok || (strings.Contains(raw, "secret")) || (!strings.Contains(raw, "*****") && !strings.Contains(raw, "%2A")) {
+		t.Fatalf("expected session DSN to be redacted, got %q", session["dsn"])
+	}
+	login := mappedValueAsMap(t, mapped, "login_throttle")
+	if got := login["driver"]; got != "redis" {
+		t.Fatalf("expected login throttle driver redis, got %v", got)
+	}
+	if _, ok := login["addr"]; !ok {
+		t.Fatalf("expected login throttle addr to be present")
+	}
+	if _, ok := login["master_name"]; !ok {
+		t.Fatalf("expected login throttle master_name to be present")
+	}
+	chatSummary := mappedValueAsMap(t, mapped, "chat_queue")
+	if got := chatSummary["driver"]; got != "redis" {
+		t.Fatalf("expected chat queue driver redis, got %v", got)
+	}
+	if chatSummary["stream"] != "chat-stream" {
+		t.Fatalf("expected chat stream to be recorded, got %v", chatSummary["stream"])
+	}
+	ingestSummary := mappedValueAsMap(t, mapped, "ingest")
+	if got := ingestSummary["enabled"]; got != true {
+		t.Fatalf("expected ingest to be enabled, got %v", got)
+	}
+	for _, key := range []string{"srs_api", "ome_api", "transcoder_api", "health_endpoint", "max_boot_attempts", "retry_interval", "http_max_attempts", "http_retry_interval"} {
+		if _, ok := ingestSummary[key]; !ok {
+			t.Fatalf("expected ingest summary to include %s", key)
+		}
+	}
+}
+
+func TestStartupSummaryMemoryDefaults(t *testing.T) {
+	summary := newStartupSummary(startupSummaryInput{
+		StorageDriver: "json",
+		StoragePath:   "/tmp/data.json",
+		SessionConfig: sessionStoreConfig{Driver: "memory"},
+		ChatDriver:    "memory",
+		RateLimit:     server.RateLimitConfig{},
+	})
+	args := summary.LogArgs()
+	mapped := summaryArgsToMap(t, args)
+	datastore := mappedValueAsMap(t, mapped, "datastore")
+	if datastore["driver"] != "json" {
+		t.Fatalf("expected datastore driver json, got %v", datastore["driver"])
+	}
+	if datastore["path"] != "/tmp/data.json" {
+		t.Fatalf("expected datastore path to be recorded, got %v", datastore["path"])
+	}
+	session := mappedValueAsMap(t, mapped, "session_store")
+	if session["driver"] != "memory" {
+		t.Fatalf("expected session driver memory, got %v", session["driver"])
+	}
+	if _, ok := session["dsn"]; ok {
+		t.Fatalf("did not expect session DSN for memory driver")
+	}
+	login := mappedValueAsMap(t, mapped, "login_throttle")
+	if login["driver"] != "memory" {
+		t.Fatalf("expected login throttle driver memory, got %v", login["driver"])
+	}
+	chatSummary := mappedValueAsMap(t, mapped, "chat_queue")
+	if chatSummary["driver"] != "memory" {
+		t.Fatalf("expected chat queue driver memory, got %v", chatSummary["driver"])
+	}
+	ingestSummary := mappedValueAsMap(t, mapped, "ingest")
+	if ingestSummary["enabled"] != false {
+		t.Fatalf("expected ingest to be disabled, got %v", ingestSummary["enabled"])
+	}
+}
+
+func summaryArgsToMap(t *testing.T, args []any) map[string]any {
+	t.Helper()
+	if len(args)%2 != 0 {
+		t.Fatalf("summary args must be key/value pairs, got %d values", len(args))
+	}
+	mapped := make(map[string]any, len(args)/2)
+	for i := 0; i < len(args); i += 2 {
+		key, ok := args[i].(string)
+		if !ok {
+			t.Fatalf("summary key at position %d was not a string", i)
+		}
+		mapped[key] = args[i+1]
+	}
+	return mapped
+}
+
+func mappedValueAsMap(t *testing.T, mapped map[string]any, key string) map[string]any {
+	t.Helper()
+	value, ok := mapped[key]
+	if !ok {
+		t.Fatalf("missing key %q", key)
+	}
+	inner, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("value for %q was not a map, got %T", key, value)
+	}
+	return inner
 }
