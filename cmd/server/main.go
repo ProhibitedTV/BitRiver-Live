@@ -347,6 +347,7 @@ func main() {
 		storagePostgresDSN,
 		*sessionPostgresDSN,
 		os.Getenv("BITRIVER_LIVE_SESSION_POSTGRES_DSN"),
+		serverMode == "production",
 	)
 	if err != nil {
 		logger.Error("failed to resolve session store", "error", err)
@@ -536,7 +537,7 @@ type sessionStoreConfig struct {
 	DSN    string
 }
 
-func resolveSessionStoreConfig(flagDriver, envDriver, storageDriver, storageDSN, flagDSN, envDSN string) (sessionStoreConfig, error) {
+func resolveSessionStoreConfig(flagDriver, envDriver, storageDriver, storageDSN, flagDSN, envDSN string, requirePostgres bool) (sessionStoreConfig, error) {
 	driver := strings.ToLower(strings.TrimSpace(flagDriver))
 	if driver == "" {
 		driver = strings.ToLower(strings.TrimSpace(envDriver))
@@ -552,6 +553,13 @@ func resolveSessionStoreConfig(flagDriver, envDriver, storageDriver, storageDSN,
 		default:
 			driver = "memory"
 		}
+	}
+
+	if requirePostgres && driver != "postgres" {
+		if driver == "" {
+			return sessionStoreConfig{}, fmt.Errorf("production mode requires the postgres session store driver")
+		}
+		return sessionStoreConfig{}, fmt.Errorf("production mode requires the postgres session store driver, got %q", driver)
 	}
 
 	switch driver {
