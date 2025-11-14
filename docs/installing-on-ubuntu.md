@@ -297,7 +297,7 @@ Viewer self-registration is disabled by default in the generated configuration s
 
 When the listen address resolves to a privileged port (<1024) the installer injects `AmbientCapabilities=CAP_NET_BIND_SERVICE`/`CapabilityBoundingSet=CAP_NET_BIND_SERVICE` into the systemd unit and runs `sudo setcap 'cap_net_bind_service=+ep' "$INSTALL_DIR/bitriver-live"` so manual restarts keep the binding. Operators fronting the service with Nginx, Caddy, or another reverse proxy should set `--addr :8080` (or a similar high port) and forward 80/443 from the proxy to avoid capabilities altogether.
 
-Provide `--bootstrap-admin-email` and `--bootstrap-admin-password` to seed the first control-center account automatically. The installer runs the `bootstrap-admin` helper after copying the binaries so the JSON datastore or Postgres database already contains an administrator when systemd starts the service. Capture the printed credentials and rotate the password immediately after logging in.
+Provide `--bootstrap-admin-email` (optionally pairing it with `--bootstrap-admin-password`) to seed the first control-center account automatically. When you skip the password flag the installer now generates a strong random secret, records it in `$INSTALL_DIR/.env`, and prints it exactly once so you can capture it before leaving the terminal. The installer runs the `bootstrap-admin` helper after copying the binaries so the JSON datastore or Postgres database already contains an administrator when systemd starts the service. Rotate the password from the control center after your first login.
 
 Environment variable equivalents:
 
