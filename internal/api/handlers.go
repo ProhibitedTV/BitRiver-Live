@@ -3173,11 +3173,16 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 	if req.DonationAddresses != nil {
 		addresses := make([]models.CryptoAddress, 0, len(*req.DonationAddresses))
 		for _, addr := range *req.DonationAddresses {
-			addresses = append(addresses, models.CryptoAddress{
+			normalized, err := storage.NormalizeDonationAddress(models.CryptoAddress{
 				Currency: addr.Currency,
 				Address:  addr.Address,
 				Note:     addr.Note,
 			})
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			addresses = append(addresses, normalized)
 		}
 		update.DonationAddresses = &addresses
 	}

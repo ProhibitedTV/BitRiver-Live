@@ -1740,6 +1740,87 @@ func TestProfileEndpoints(t *testing.T) {
 	}
 }
 
+func TestHandleUpsertProfileDonationValidation(t *testing.T) {
+	setup := func(t *testing.T) (*Handler, *storage.Storage, models.User) {
+		t.Helper()
+		handler, store := newTestHandler(t)
+		owner, err := store.CreateUser(storage.CreateUserParams{
+			DisplayName: "Owner",
+			Email:       "owner@example.com",
+			Roles:       []string{"creator"},
+		})
+		if err != nil {
+			t.Fatalf("CreateUser owner: %v", err)
+		}
+		return handler, store, owner
+	}
+
+	t.Run("valid donation payload", func(t *testing.T) {
+		handler, _, owner := setup(t)
+		payload := map[string]interface{}{
+			"donationAddresses": []map[string]string{{
+				"currency": "eth",
+				"address":  "0xabc123",
+				"note":     "primary wallet",
+			}},
+		}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest(http.MethodPut, "/api/profiles/"+owner.ID, bytes.NewReader(body))
+		req = withUser(req, owner)
+		rec := httptest.NewRecorder()
+		handler.ProfileByID(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", rec.Code)
+		}
+		var resp profileViewResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if len(resp.DonationAddresses) != 1 {
+			t.Fatalf("expected 1 donation address, got %d", len(resp.DonationAddresses))
+		}
+		if resp.DonationAddresses[0].Currency != "ETH" {
+			t.Fatalf("expected currency to normalize to ETH, got %s", resp.DonationAddresses[0].Currency)
+		}
+	})
+
+	t.Run("invalid donation currency", func(t *testing.T) {
+		handler, _, owner := setup(t)
+		payload := map[string]interface{}{
+			"donationAddresses": []map[string]string{{
+				"currency": "et1",
+				"address":  "0xabc123",
+			}},
+		}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest(http.MethodPut, "/api/profiles/"+owner.ID, bytes.NewReader(body))
+		req = withUser(req, owner)
+		rec := httptest.NewRecorder()
+		handler.ProfileByID(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected status 400, got %d", rec.Code)
+		}
+	})
+
+	t.Run("invalid donation address", func(t *testing.T) {
+		handler, _, owner := setup(t)
+		payload := map[string]interface{}{
+			"donationAddresses": []map[string]string{{
+				"currency": "eth",
+				"address":  "bad address",
+			}},
+		}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest(http.MethodPut, "/api/profiles/"+owner.ID, bytes.NewReader(body))
+		req = withUser(req, owner)
+		rec := httptest.NewRecorder()
+		handler.ProfileByID(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected status 400, got %d", rec.Code)
+		}
+	})
+}
+
 func TestChatReportsAPI(t *testing.T) {
 	handler, store := newTestHandler(t)
 	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
