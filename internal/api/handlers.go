@@ -988,6 +988,9 @@ func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/channels/")
 	parts := strings.Split(path, "/")
+	for len(parts) > 1 && parts[len(parts)-1] == "" {
+		parts = parts[:len(parts)-1]
+	}
 	if len(parts) == 0 || parts[0] == "" {
 		writeError(w, http.StatusNotFound, fmt.Errorf("channel id missing"))
 		return
