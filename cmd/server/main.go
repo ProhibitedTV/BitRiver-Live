@@ -298,10 +298,11 @@ func main() {
 		store                   storage.Repository
 		storagePostgresDSN      string
 		datastoreAcquireTimeout time.Duration
+		dataFile                string
 	)
 	switch driver {
 	case "json":
-		dataFile := resolveDataPath(*dataPath, os.Getenv("BITRIVER_LIVE_DATA"))
+		dataFile = resolveDataPath(*dataPath, os.Getenv("BITRIVER_LIVE_DATA"))
 		store, err = storage.NewJSONRepository(dataFile, options...)
 	case "postgres":
 		storagePostgresDSN = postgresDefaultDSN
@@ -393,7 +394,8 @@ func main() {
 			InsecureSkipVerify: resolveBool(*chatRedisTLSSkipVerify, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_SKIP_VERIFY"),
 		},
 	}
-	queue, err := configureChatQueue(*chatQueueDriver, chatQueueCfg, logger)
+	chatDriver := resolveChatQueueDriver(*chatQueueDriver)
+	queue, err := configureChatQueue(chatDriver, chatQueueCfg, logger)
 	if err != nil {
 		logger.Error("failed to configure chat queue", "error", err)
 		os.Exit(1)
@@ -469,6 +471,18 @@ func main() {
 		logger.Error("failed to initialise server", "error", err)
 		os.Exit(1)
 	}
+	summary := newStartupSummary(startupSummaryInput{
+		StorageDriver:          driver,
+		StorageDSN:             storagePostgresDSN,
+		StoragePath:            dataFile,
+		SessionConfig:          sessionConfig,
+		RateLimit:              rateCfg,
+		ChatDriver:             chatDriver,
+		ChatConfig:             chatQueueCfg,
+		IngestConfig:           ingestConfig,
+		IngestControllerActive: ingestController != nil,
+	})
+	logger.Info("startup summary", summary.LogArgs()...)
 
 	errs := make(chan error, 1)
 	go func() {
@@ -540,6 +554,133 @@ type sessionStoreConfig struct {
 	DSN    string
 }
 
+type startupSummaryInput struct {
+	StorageDriver          string
+	StorageDSN             string
+	StoragePath            string
+	SessionConfig          sessionStoreConfig
+	RateLimit              server.RateLimitConfig
+	ChatDriver             string
+	ChatConfig             chat.RedisQueueConfig
+	IngestConfig           ingest.Config
+	IngestControllerActive bool
+}
+
+type startupSummary struct {
+	Datastore     map[string]any
+	SessionStore  map[string]any
+	LoginThrottle map[string]any
+	ChatQueue     map[string]any
+	Ingest        map[string]any
+}
+
+func newStartupSummary(in startupSummaryInput) startupSummary {
+	datastore := map[string]any{
+		"driver": in.StorageDriver,
+	}
+	switch in.StorageDriver {
+	case "postgres":
+		if in.StorageDSN != "" {
+			datastore["dsn"] = redactDSN(in.StorageDSN)
+		}
+	case "json":
+		if in.StoragePath != "" {
+			datastore["path"] = in.StoragePath
+		}
+	}
+
+	session := map[string]any{
+		"driver": in.SessionConfig.Driver,
+	}
+	if in.SessionConfig.Driver == "postgres" && in.SessionConfig.DSN != "" {
+		session["dsn"] = redactDSN(in.SessionConfig.DSN)
+	}
+
+	loginThrottle := map[string]any{}
+	loginDriver := determineRateLimiterDriver(in.RateLimit)
+	loginThrottle["driver"] = loginDriver
+	if loginDriver == "redis" {
+		if in.RateLimit.RedisAddr != "" {
+			loginThrottle["addr"] = in.RateLimit.RedisAddr
+		}
+		if len(in.RateLimit.RedisAddrs) > 0 {
+			loginThrottle["addrs"] = in.RateLimit.RedisAddrs
+		}
+		if in.RateLimit.RedisMasterName != "" {
+			loginThrottle["master_name"] = in.RateLimit.RedisMasterName
+		}
+	}
+
+	chatQueue := map[string]any{
+		"driver": in.ChatDriver,
+	}
+	if in.ChatDriver == "redis" {
+		if in.ChatConfig.Addr != "" {
+			chatQueue["addr"] = in.ChatConfig.Addr
+		}
+		if len(in.ChatConfig.Addrs) > 0 {
+			chatQueue["addrs"] = in.ChatConfig.Addrs
+		}
+		if in.ChatConfig.MasterName != "" {
+			chatQueue["master_name"] = in.ChatConfig.MasterName
+		}
+		if in.ChatConfig.Stream != "" {
+			chatQueue["stream"] = in.ChatConfig.Stream
+		}
+		if in.ChatConfig.Group != "" {
+			chatQueue["group"] = in.ChatConfig.Group
+		}
+	}
+
+	ingestSummary := map[string]any{
+		"enabled": in.IngestControllerActive,
+	}
+	if in.IngestControllerActive {
+		if in.IngestConfig.SRSBaseURL != "" {
+			ingestSummary["srs_api"] = in.IngestConfig.SRSBaseURL
+		}
+		if in.IngestConfig.OMEBaseURL != "" {
+			ingestSummary["ome_api"] = in.IngestConfig.OMEBaseURL
+		}
+		if in.IngestConfig.JobBaseURL != "" {
+			ingestSummary["transcoder_api"] = in.IngestConfig.JobBaseURL
+		}
+		if in.IngestConfig.HealthEndpoint != "" {
+			ingestSummary["health_endpoint"] = in.IngestConfig.HealthEndpoint
+		}
+		if in.IngestConfig.MaxBootAttempts > 0 {
+			ingestSummary["max_boot_attempts"] = in.IngestConfig.MaxBootAttempts
+		}
+		if in.IngestConfig.RetryInterval > 0 {
+			ingestSummary["retry_interval"] = in.IngestConfig.RetryInterval.String()
+		}
+		if in.IngestConfig.HTTPMaxAttempts > 0 {
+			ingestSummary["http_max_attempts"] = in.IngestConfig.HTTPMaxAttempts
+		}
+		if in.IngestConfig.HTTPRetryInterval > 0 {
+			ingestSummary["http_retry_interval"] = in.IngestConfig.HTTPRetryInterval.String()
+		}
+	}
+
+	return startupSummary{
+		Datastore:     datastore,
+		SessionStore:  session,
+		LoginThrottle: loginThrottle,
+		ChatQueue:     chatQueue,
+		Ingest:        ingestSummary,
+	}
+}
+
+func (s startupSummary) LogArgs() []any {
+	return []any{
+		"datastore", s.Datastore,
+		"session_store", s.SessionStore,
+		"login_throttle", s.LoginThrottle,
+		"chat_queue", s.ChatQueue,
+		"ingest", s.Ingest,
+	}
+}
+
 func resolveSessionStoreConfig(flagDriver, envDriver, storageDriver, storageDSN, flagDSN, envDSN string, requirePostgres bool) (sessionStoreConfig, error) {
 	driver := strings.ToLower(strings.TrimSpace(flagDriver))
 	if driver == "" {
@@ -599,6 +740,65 @@ func configureChatQueue(driver string, cfg chat.RedisQueueConfig, logger *slog.L
 	default:
 		return nil, fmt.Errorf("unsupported chat queue driver %q", driver)
 	}
+}
+
+func resolveChatQueueDriver(raw string) string {
+	driver := strings.ToLower(strings.TrimSpace(raw))
+	if driver == "" {
+		return "memory"
+	}
+	return driver
+}
+
+func determineRateLimiterDriver(cfg server.RateLimitConfig) string {
+	if strings.TrimSpace(cfg.RedisAddr) != "" {
+		return "redis"
+	}
+	if len(cfg.RedisAddrs) > 0 {
+		return "redis"
+	}
+	if strings.TrimSpace(cfg.RedisMasterName) != "" {
+		return "redis"
+	}
+	return "memory"
+}
+
+func redactDSN(dsn string) string {
+	dsn = strings.TrimSpace(dsn)
+	if dsn == "" {
+		return ""
+	}
+	if parsed, err := url.Parse(dsn); err == nil && parsed.Scheme != "" {
+		if parsed.User != nil {
+			username := parsed.User.Username()
+			if _, hasPassword := parsed.User.Password(); hasPassword {
+				parsed.User = url.UserPassword(username, "*****")
+			} else {
+				parsed.User = url.User(username)
+			}
+		}
+		if parsed.RawQuery != "" {
+			query := parsed.Query()
+			if _, ok := query["password"]; ok {
+				query.Set("password", "*****")
+				parsed.RawQuery = query.Encode()
+			}
+		}
+		return parsed.String()
+	}
+	parts := strings.Fields(dsn)
+	for i, part := range parts {
+		lower := strings.ToLower(part)
+		if strings.HasPrefix(lower, "password=") {
+			segments := strings.SplitN(part, "=", 2)
+			if len(segments) == 2 {
+				parts[i] = segments[0] + "=*****"
+			} else {
+				parts[i] = "password=*****"
+			}
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 func resolveListenAddr(flagValue, mode, envAddr string) string {
