@@ -14,6 +14,7 @@ import {
   unsubscribeChannel
 } from "../lib/viewer-api";
 import { TipDrawer } from "./TipDrawer";
+import { DonationQRCode } from "./DonationQRCode";
 
 export type ChannelHeaderProps = {
   data: ChannelPlaybackResponse;
@@ -279,6 +280,12 @@ export function ChannelAboutPanel({ data }: { data: ChannelPlaybackResponse }) {
                         {note && <span className="donation-item__note muted">{note}</span>}
                       </div>
                       <code>{donation.address}</code>
+                    </div>
+                    <div className="donation-item__qr">
+                      <DonationQRCode
+                        value={donation.address}
+                        label={`${currencyLabel} address QR code`}
+                      />
                     </div>
                     <button
                       type="button"

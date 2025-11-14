@@ -109,6 +109,15 @@ test("renders follower and subscriber totals", () => {
   expect(screen.getByText("4", { selector: "dd" })).toBeInTheDocument();
 });
 
+test("renders QR codes for each donation address", () => {
+  render(<ChannelAboutPanel data={baseData} />);
+
+  const qrCodes = screen.getAllByRole("img", { name: /address qr code/i });
+  expect(qrCodes).toHaveLength(baseData.donationAddresses?.length ?? 0);
+  expect(screen.getByRole("img", { name: /eth address qr code/i })).toBeInTheDocument();
+  expect(screen.getByRole("img", { name: /btc address qr code/i })).toBeInTheDocument();
+});
+
 test("toggles follow and subscribe state", async () => {
   const onFollowChange = jest.fn();
   const onSubscriptionChange = jest.fn();
