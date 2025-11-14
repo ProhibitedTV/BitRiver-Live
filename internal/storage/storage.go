@@ -1753,16 +1753,11 @@ func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Pro
 	if update.DonationAddresses != nil {
 		addresses := make([]models.CryptoAddress, 0, len(*update.DonationAddresses))
 		for _, addr := range *update.DonationAddresses {
-			currency := strings.ToUpper(strings.TrimSpace(addr.Currency))
-			if currency == "" {
-				return models.Profile{}, errors.New("donation currency is required")
+			normalized, err := NormalizeDonationAddress(addr)
+			if err != nil {
+				return models.Profile{}, err
 			}
-			address := strings.TrimSpace(addr.Address)
-			if address == "" {
-				return models.Profile{}, errors.New("donation address is required")
-			}
-			note := strings.TrimSpace(addr.Note)
-			addresses = append(addresses, models.CryptoAddress{Currency: currency, Address: address, Note: note})
+			addresses = append(addresses, normalized)
 		}
 		profile.DonationAddresses = addresses
 	}

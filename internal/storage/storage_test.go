@@ -1889,6 +1889,50 @@ func TestUpsertProfileCreatesProfile(t *testing.T) {
 	}
 }
 
+func TestUpsertProfileDonationValidation(t *testing.T) {
+	store := newTestStore(t)
+	owner, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Creator",
+		Email:       "creator@example.com",
+		Roles:       []string{"creator"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+
+	valid := []models.CryptoAddress{{Currency: "eth", Address: "0xabc123"}}
+	if _, err := store.UpsertProfile(owner.ID, ProfileUpdate{DonationAddresses: &valid}); err != nil {
+		t.Fatalf("expected valid donation addresses to succeed: %v", err)
+	}
+
+	testCases := []struct {
+		name     string
+		donation []models.CryptoAddress
+	}{
+		{
+			name:     "invalid currency",
+			donation: []models.CryptoAddress{{Currency: "et1", Address: "0xabc123"}},
+		},
+		{
+			name:     "too short",
+			donation: []models.CryptoAddress{{Currency: "ETH", Address: "abc"}},
+		},
+		{
+			name:     "invalid characters",
+			donation: []models.CryptoAddress{{Currency: "ETH", Address: "bad address"}},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := store.UpsertProfile(owner.ID, ProfileUpdate{DonationAddresses: &tc.donation})
+			if err == nil {
+				t.Fatalf("expected error for %s", tc.name)
+			}
+		})
+	}
+}
+
 func TestUpsertProfileTopFriendsLimit(t *testing.T) {
 	store := newTestStore(t)
 	owner, err := store.CreateUser(CreateUserParams{
