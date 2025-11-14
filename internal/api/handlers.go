@@ -2330,6 +2330,13 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 			}
 			h.handleChatModeration(actor, channel, remaining[1:], w, r)
 			return
+		case "reports":
+			actor, ok := h.requireAuthenticatedUser(w, r)
+			if !ok {
+				return
+			}
+			h.handleChatReports(actor, channel, remaining[1:], w, r)
+			return
 		default:
 			messageID := remaining[0]
 			if len(remaining) > 1 {

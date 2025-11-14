@@ -1772,7 +1772,7 @@ func TestChatReportsAPI(t *testing.T) {
 
 	payload := chatReportRequest{TargetID: target.ID, Reason: "abuse"}
 	body, _ := json.Marshal(payload)
-	req := httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/chat/moderation/reports", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/chat/reports", bytes.NewReader(body))
 	req = withUser(req, reporter)
 	rec := httptest.NewRecorder()
 	handler.ChannelByID(rec, req)
@@ -1797,6 +1797,20 @@ func TestChatReportsAPI(t *testing.T) {
 		case <-time.After(20 * time.Millisecond):
 		}
 	}
+	req = httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID+"/chat/reports", nil)
+	req = withUser(req, owner)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected open reports status 200, got %d", rec.Code)
+	}
+	var openReports []chatReportResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &openReports); err != nil {
+		t.Fatalf("decode open reports response: %v", err)
+	}
+	if len(openReports) != 1 || openReports[0].Status != "open" {
+		t.Fatalf("expected open report, got %+v", openReports)
+	}
 
 	resolveBody, _ := json.Marshal(resolveChatReportRequest{Resolution: "handled"})
 	req = httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/chat/moderation/reports/"+reportResp.ID+"/resolve", bytes.NewReader(resolveBody))
@@ -1815,7 +1829,7 @@ func TestChatReportsAPI(t *testing.T) {
 		t.Fatalf("expected restrictions status 200, got %d", rec.Code)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID+"/chat/moderation/reports?status=all", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID+"/chat/reports?status=all", nil)
 	req = withUser(req, owner)
 	rec = httptest.NewRecorder()
 	handler.ChannelByID(rec, req)
