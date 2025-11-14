@@ -89,15 +89,16 @@ func TestResolveSessionStoreConfig(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name          string
-		flagDriver    string
-		envDriver     string
-		storageDriver string
-		storageDSN    string
-		flagDSN       string
-		envDSN        string
-		want          sessionStoreConfig
-		wantErr       bool
+		name            string
+		flagDriver      string
+		envDriver       string
+		storageDriver   string
+		storageDSN      string
+		flagDSN         string
+		envDSN          string
+		requirePostgres bool
+		want            sessionStoreConfig
+		wantErr         bool
 	}{
 		{
 			name:          "DefaultsToPostgresWhenStorageIsPostgres",
@@ -129,12 +130,33 @@ func TestResolveSessionStoreConfig(t *testing.T) {
 			storageDriver: "json",
 			wantErr:       true,
 		},
+		{
+			name:            "ProductionUsesPostgresWithSharedDSN",
+			storageDriver:   "postgres",
+			storageDSN:      "postgres://main",
+			requirePostgres: true,
+			want:            sessionStoreConfig{Driver: "postgres", DSN: "postgres://main"},
+		},
+		{
+			name:            "ProductionRejectsExplicitMemory",
+			flagDriver:      "memory",
+			storageDriver:   "postgres",
+			storageDSN:      "postgres://main",
+			requirePostgres: true,
+			wantErr:         true,
+		},
+		{
+			name:            "ProductionRejectsImplicitMemory",
+			storageDriver:   "json",
+			requirePostgres: true,
+			wantErr:         true,
+		},
 	}
 
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			cfg, err := resolveSessionStoreConfig(tc.flagDriver, tc.envDriver, tc.storageDriver, tc.storageDSN, tc.flagDSN, tc.envDSN)
+			cfg, err := resolveSessionStoreConfig(tc.flagDriver, tc.envDriver, tc.storageDriver, tc.storageDSN, tc.flagDSN, tc.envDSN, tc.requirePostgres)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil")
