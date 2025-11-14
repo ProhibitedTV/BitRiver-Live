@@ -11,6 +11,55 @@ permissions:
   packages: write
 
 jobs:
+  verify-env:
+    name: Verify production environment configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Create production env file
+        env:
+          BITRIVER_POSTGRES_USER: ${{ secrets.BITRIVER_POSTGRES_USER }}
+          BITRIVER_POSTGRES_PASSWORD: ${{ secrets.BITRIVER_POSTGRES_PASSWORD }}
+          BITRIVER_REDIS_PASSWORD: ${{ secrets.BITRIVER_REDIS_PASSWORD }}
+          BITRIVER_LIVE_ADMIN_EMAIL: ${{ secrets.BITRIVER_LIVE_ADMIN_EMAIL }}
+          BITRIVER_LIVE_ADMIN_PASSWORD: ${{ secrets.BITRIVER_LIVE_ADMIN_PASSWORD }}
+          BITRIVER_SRS_TOKEN: ${{ secrets.BITRIVER_SRS_TOKEN }}
+          BITRIVER_OME_USERNAME: ${{ secrets.BITRIVER_OME_USERNAME }}
+          BITRIVER_OME_PASSWORD: ${{ secrets.BITRIVER_OME_PASSWORD }}
+          BITRIVER_TRANSCODER_TOKEN: ${{ secrets.BITRIVER_TRANSCODER_TOKEN }}
+          BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD: ${{ secrets.BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD }}
+          BITRIVER_TRANSCODER_PUBLIC_BASE_URL: ${{ secrets.BITRIVER_TRANSCODER_PUBLIC_BASE_URL }}
+        run: |
+          set -euo pipefail
+          env_file=".env"
+          : >"$env_file"
+          vars=(
+            BITRIVER_POSTGRES_USER
+            BITRIVER_POSTGRES_PASSWORD
+            BITRIVER_REDIS_PASSWORD
+            BITRIVER_LIVE_ADMIN_EMAIL
+            BITRIVER_LIVE_ADMIN_PASSWORD
+            BITRIVER_SRS_TOKEN
+            BITRIVER_OME_USERNAME
+            BITRIVER_OME_PASSWORD
+            BITRIVER_TRANSCODER_TOKEN
+            BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD
+            BITRIVER_TRANSCODER_PUBLIC_BASE_URL
+          )
+          for var in "${vars[@]}"; do
+            value="${!var-}"
+            if [[ -z "$value" ]]; then
+              echo "Secret $var is not configured or empty." >&2
+              exit 1
+            fi
+            printf '%s=%q\n' "$var" "$value" >>"$env_file"
+          done
+
+      - name: Validate production environment configuration
+        run: ./deploy/check-env.sh .env
+
   go-tests:
     name: Go unit tests
     runs-on: ubuntu-latest
@@ -52,6 +101,7 @@ jobs:
     needs:
       - go-tests
       - postgres-tests
+      - verify-env
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -147,6 +197,7 @@ jobs:
     needs:
       - go-tests
       - postgres-tests
+      - verify-env
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -217,6 +268,7 @@ jobs:
     needs:
       - go-tests
       - postgres-tests
+      - verify-env
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -289,6 +341,7 @@ jobs:
     needs:
       - go-tests
       - postgres-tests
+      - verify-env
       - build
       - build-viewer
       - publish-images
