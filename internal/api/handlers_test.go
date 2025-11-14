@@ -1926,6 +1926,41 @@ func TestChatReportsAPI(t *testing.T) {
 	}
 }
 
+func TestChatModerationPostRequiresOwnerOrAdmin(t *testing.T) {
+	handler, store := newTestHandler(t)
+	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	moderator, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Mod", Email: "mod@example.com"})
+	if err != nil {
+		t.Fatalf("create moderator: %v", err)
+	}
+	target, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Target", Email: "target@example.com"})
+	if err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Arena", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+
+	queue := chat.NewMemoryQueue(4)
+	handler.ChatGateway = chat.NewGateway(chat.GatewayConfig{Queue: queue, Store: store})
+
+	payload := chatModerationRequest{Action: "ban", TargetID: target.ID}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/chat/moderation", bytes.NewReader(body))
+	req = withUser(req, moderator)
+	rec := httptest.NewRecorder()
+
+	handler.ChannelByID(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected moderation post status 403, got %d", rec.Code)
+	}
+}
+
 func TestMonetizationEndpoints(t *testing.T) {
 	handler, store := newTestHandler(t)
 	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
