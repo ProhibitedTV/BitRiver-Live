@@ -116,6 +116,44 @@ declare -A env_defaults=(
   [BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD]='bitriver'
 )
 
+required_env_keys=(
+  BITRIVER_TRANSCODER_IMAGE_TAG
+  BITRIVER_VIEWER_IMAGE_TAG
+  BITRIVER_SRS_CONTROLLER_IMAGE_TAG
+)
+
+reconcile_env_file() {
+  if [[ ! -f "$ENV_FILE" ]]; then
+    return 0
+  fi
+
+  local -a appended_keys=()
+  local last_char=$'\n'
+  if [[ -s "$ENV_FILE" ]]; then
+    last_char=$(tail -c1 "$ENV_FILE" 2>/dev/null || printf '\n')
+  fi
+
+  for key in "${required_env_keys[@]}"; do
+    if ! grep -qE "^${key}=" "$ENV_FILE"; then
+      local default_value="${env_defaults[$key]:-}"
+      if [[ -z $default_value ]]; then
+        echo "Warning: $key missing from $ENV_FILE and no default value available." >&2
+        continue
+      fi
+      if [[ $last_char != $'\n' ]]; then
+        printf '\n' >>"$ENV_FILE"
+      fi
+      printf '%s=%s\n' "$key" "$default_value" >>"$ENV_FILE"
+      last_char=$'\n'
+      appended_keys+=("$key")
+    fi
+  done
+
+  if ((${#appended_keys[@]} > 0)); then
+    printf 'Appended missing keys to %s: %s\n' "$ENV_FILE" "${appended_keys[*]}"
+  fi
+}
+
 read_env_value() {
   local key=$1
   local value=""
@@ -315,6 +353,8 @@ EOF
   } > "$ENV_FILE"
   echo "Wrote default environment configuration to $ENV_FILE with a freshly generated administrator password."
 fi
+
+reconcile_env_file
 
 cd "$REPO_ROOT"
 export COMPOSE_FILE="$COMPOSE_FILE"
