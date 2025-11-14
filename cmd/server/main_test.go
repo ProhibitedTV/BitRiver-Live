@@ -2,6 +2,7 @@ package main
 
 import (
 	"log/slog"
+	"strings"
 	"testing"
 
 	"bitriver-live/internal/chat"
@@ -41,6 +42,28 @@ func TestResolveStorageDriverDefaultsToPostgres(t *testing.T) {
 func TestResolveStorageDriverMissingConfigFails(t *testing.T) {
 	if _, _, err := resolveStorageDriver("", "", ""); err == nil {
 		t.Fatal("resolveStorageDriver expected error when no configuration provided")
+	}
+}
+
+func TestValidateProductionDatastoreRejectsNonPostgres(t *testing.T) {
+	if err := validateProductionDatastore("json", "postgres://example", "postgres://env"); err == nil {
+		t.Fatal("expected error when production mode uses non-postgres driver")
+	}
+}
+
+func TestValidateProductionDatastoreRequiresEnvDSN(t *testing.T) {
+	err := validateProductionDatastore("postgres", "postgres://resolved", "")
+	if err == nil {
+		t.Fatal("expected error when BITRIVER_LIVE_POSTGRES_DSN is missing")
+	}
+	if !strings.Contains(err.Error(), "BITRIVER_LIVE_POSTGRES_DSN") {
+		t.Fatalf("expected error to mention BITRIVER_LIVE_POSTGRES_DSN, got %q", err)
+	}
+}
+
+func TestValidateProductionDatastoreRequiresResolvedDSN(t *testing.T) {
+	if err := validateProductionDatastore("postgres", "", "postgres://env"); err == nil {
+		t.Fatal("expected error when resolved Postgres DSN is empty")
 	}
 }
 

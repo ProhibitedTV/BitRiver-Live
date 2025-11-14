@@ -288,6 +288,12 @@ func main() {
 		logger.Error("failed to resolve storage driver", "error", err)
 		os.Exit(1)
 	}
+	if serverMode == "production" {
+		if err := validateProductionDatastore(driver, postgresDefaultDSN, os.Getenv("BITRIVER_LIVE_POSTGRES_DSN")); err != nil {
+			logger.Error("production datastore validation failed", "error", err)
+			os.Exit(1)
+		}
+	}
 	var (
 		store                   storage.Repository
 		storagePostgresDSN      string
@@ -624,6 +630,22 @@ func resolveStorageDriver(flagValue, envValue, postgresDSN string) (string, bool
 		return "postgres", false, nil
 	}
 	return "", false, fmt.Errorf("no datastore configured: provide --storage-driver json or configure Postgres via BITRIVER_LIVE_POSTGRES_DSN, DATABASE_URL, or --postgres-dsn")
+}
+
+func validateProductionDatastore(driver, resolvedPostgresDSN, envPostgresDSN string) error {
+	if driver != "postgres" {
+		if driver == "" {
+			return fmt.Errorf("production mode requires the postgres datastore driver")
+		}
+		return fmt.Errorf("production mode requires the postgres datastore driver, got %q", driver)
+	}
+	if strings.TrimSpace(envPostgresDSN) == "" {
+		return fmt.Errorf("production mode requires BITRIVER_LIVE_POSTGRES_DSN to be set")
+	}
+	if strings.TrimSpace(resolvedPostgresDSN) == "" {
+		return fmt.Errorf("postgres storage selected without DSN")
+	}
+	return nil
 }
 
 func resolveDataPath(flagValue, envValue string) string {
