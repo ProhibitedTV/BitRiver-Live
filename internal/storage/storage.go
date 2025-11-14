@@ -96,6 +96,11 @@ type Storage struct {
 	objectClient        objectStorageClient
 }
 
+// Ping always reports success for the JSON-backed repository.
+func (s *Storage) Ping(context.Context) error {
+	return nil
+}
+
 // RecordingRetentionPolicy specifies how long recordings are kept before being
 // purged when unpublished or published.
 type RecordingRetentionPolicy struct {

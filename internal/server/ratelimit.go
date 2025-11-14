@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -131,6 +132,16 @@ func (r *rateLimiter) cleanupLocked() {
 			delete(r.loginBuckets, key)
 		}
 	}
+}
+
+func (r *rateLimiter) Ping(ctx context.Context) error {
+	if r == nil || r.store == nil {
+		return nil
+	}
+	if pinger, ok := r.store.(interface{ Ping(context.Context) error }); ok {
+		return pinger.Ping(ctx)
+	}
+	return nil
 }
 
 type tokenBucket struct {

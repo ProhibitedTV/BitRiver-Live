@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,6 +31,12 @@ type Handler struct {
 	OAuth           oauth.Service
 	UploadProcessor *UploadProcessor
 	AllowSelfSignup bool
+	RateLimiter     healthPinger
+	ChatQueue       healthPinger
+}
+
+type healthPinger interface {
+	Ping(context.Context) error
 }
 
 // NewHandler wires the core API dependencies together, ensuring a session
@@ -140,23 +147,59 @@ func decodeJSON(r *http.Request, dest interface{}) error {
 	return nil
 }
 
+type componentStatus struct {
+	Component string `json:"component"`
+	Status    string `json:"status"`
+	Error     string `json:"error,omitempty"`
+}
+
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	var checks []ingest.HealthStatus
 	if h.Store != nil {
-		checks = h.Store.IngestHealth(r.Context())
+		checks = h.Store.IngestHealth(ctx)
 	}
-	status := "ok"
+
+	overallStatus := "ok"
+	recordComponent := func(component string, err error) componentStatus {
+		status := "ok"
+		message := ""
+		if err != nil {
+			status = "degraded"
+			message = err.Error()
+			overallStatus = "degraded"
+		}
+		return componentStatus{Component: component, Status: status, Error: message}
+	}
+
+	components := make([]componentStatus, 0, 4)
+	if h.Store != nil {
+		components = append(components, recordComponent("datastore", h.Store.Ping(ctx)))
+	}
+
+	components = append(components, recordComponent("sessions", h.sessionManager().Ping(ctx)))
+
+	if h.RateLimiter != nil {
+		components = append(components, recordComponent("rate_limiter", h.RateLimiter.Ping(ctx)))
+	}
+
+	if h.ChatQueue != nil {
+		components = append(components, recordComponent("chat_queue", h.ChatQueue.Ping(ctx)))
+	}
+
 	for _, check := range checks {
 		switch strings.ToLower(check.Status) {
 		case "ok", "disabled":
-			continue
+			// no-op
 		default:
-			status = "degraded"
+			overallStatus = "degraded"
 		}
 	}
+
 	payload := map[string]interface{}{
-		"status":   status,
-		"services": checks,
+		"status":     overallStatus,
+		"services":   checks,
+		"components": components,
 	}
 	for _, check := range checks {
 		metrics.SetIngestHealth(check.Component, check.Status)

@@ -75,6 +75,28 @@ func (s *PostgresSessionStore) Close(ctx context.Context) error {
 	}
 }
 
+// Ping checks connectivity to the backing Postgres instance.
+func (s *PostgresSessionStore) Ping(ctx context.Context) error {
+	if s == nil || s.pool == nil {
+		return fmt.Errorf("postgres session pool not configured")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if s.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.timeout)
+		defer cancel()
+	}
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	_, execErr := conn.Exec(ctx, "SELECT 1")
+	return execErr
+}
+
 // Save stores or updates the session token.
 func (s *PostgresSessionStore) Save(token, userID string, expiresAt time.Time) error {
 	if s.pool == nil {

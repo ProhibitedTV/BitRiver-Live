@@ -12,6 +12,7 @@ import (
 // Repository exposes the datastore operations required by API handlers,
 // chat infrastructure, and ingest orchestration.
 type Repository interface {
+	Ping(ctx context.Context) error
 	IngestHealth(ctx context.Context) []ingest.HealthStatus
 	LastIngestHealth() ([]ingest.HealthStatus, time.Time)
 

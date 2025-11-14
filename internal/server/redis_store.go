@@ -122,6 +122,23 @@ func (s *redisStore) Close(context.Context) error {
 	return s.client.Close()
 }
 
+func (s *redisStore) Ping(ctx context.Context) error {
+	if s == nil || s.client == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	timeout := s.timeout
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	_, err := s.client.Do(ctx, "PING")
+	return err
+}
+
 func toInt(v interface{}) (int64, error) {
 	switch val := v.(type) {
 	case int64:

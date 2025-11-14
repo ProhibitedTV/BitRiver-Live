@@ -270,6 +270,8 @@ func newFakeUploadStore() *fakeUploadStore {
 	}
 }
 
+func (f *fakeUploadStore) Ping(context.Context) error { return nil }
+
 func (f *fakeUploadStore) ListChannels(ownerID, query string) []models.Channel {
 	f.mu.Lock()
 	defer f.mu.Unlock()

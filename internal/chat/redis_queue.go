@@ -182,6 +182,23 @@ func (q *redisQueue) ensureGroup(ctx context.Context) error {
 	return nil
 }
 
+func (q *redisQueue) Ping(ctx context.Context) error {
+	if q == nil || q.client == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	timeout := q.blockTimeout
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	_, err := q.client.Do(ctx, "PING")
+	return err
+}
+
 type redisSubscription struct {
 	queue    *redisQueue
 	consumer string
