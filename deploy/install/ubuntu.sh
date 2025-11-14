@@ -27,7 +27,7 @@
 #   --session-store-dsn    / BITRIVER_LIVE_SESSION_POSTGRES_DSN
 #   --allow-self-signup    / BITRIVER_LIVE_ALLOW_SELF_SIGNUP (default false)
 #   --bootstrap-admin-email
-#   --bootstrap-admin-password
+#   --bootstrap-admin-password       (generated automatically when omitted)
 #
 # Example:
 #   ./deploy/install/ubuntu.sh \
@@ -72,17 +72,61 @@ Optional flags:
   --session-store DRIVER (defaults to postgres when the primary storage uses Postgres)
   --session-store-dsn DSN
   --bootstrap-admin-email EMAIL
-  --bootstrap-admin-password PASSWORD
+  --bootstrap-admin-password PASSWORD (generated automatically when omitted)
   -h, --help
 USAGE
 }
 
 require_arg() {
-	if [[ $# -lt 2 ]]; then
-		echo "missing value for $1" >&2
-		usage
-		exit 1
-	fi
+        if [[ $# -lt 2 ]]; then
+                echo "missing value for $1" >&2
+                usage
+                exit 1
+        fi
+}
+
+generate_strong_password() {
+        local password=""
+        if command -v python3 >/dev/null 2>&1; then
+                password=$(python3 - <<'PY'
+import secrets
+import string
+
+alphabet = string.ascii_letters + string.digits
+while True:
+    candidate = ''.join(secrets.choice(alphabet) for _ in range(48))
+    if any(c.islower() for c in candidate) and any(c.isupper() for c in candidate) and any(c.isdigit() for c in candidate):
+        print(candidate, end='')
+        break
+PY
+                )
+        elif command -v openssl >/dev/null 2>&1; then
+                while true; do
+                        password=$(openssl rand -base64 48 | tr -d '/+=\n' | head -c 48)
+                        if [[ ${#password} -ge 16 && $password =~ [A-Z] && $password =~ [a-z] && $password =~ [0-9] ]]; then
+                                break
+                        fi
+                done
+        else
+                while true; do
+                        password=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 48)
+                        if [[ ${#password} -ge 16 && $password =~ [A-Z] && $password =~ [a-z] && $password =~ [0-9] ]]; then
+                                break
+                        fi
+                done
+        fi
+        printf '%s' "$password"
+}
+
+validate_password_strength() {
+        local password=$1
+        if [[ ${#password} -lt 16 ]]; then
+                return 1
+        fi
+        if [[ ! $password =~ [A-Z] || ! $password =~ [a-z] || ! $password =~ [0-9] ]]; then
+                return 1
+        fi
+        return 0
 }
 
 extract_listen_port() {
@@ -262,9 +306,23 @@ if [[ -z $SERVICE_USER ]]; then
         exit 1
 fi
 
-if [[ -n $BOOTSTRAP_ADMIN_EMAIL || -n $BOOTSTRAP_ADMIN_PASSWORD ]]; then
-        if [[ -z $BOOTSTRAP_ADMIN_EMAIL || -z $BOOTSTRAP_ADMIN_PASSWORD ]]; then
-                echo "--bootstrap-admin-email and --bootstrap-admin-password must be provided together" >&2
+GENERATED_BOOTSTRAP_PASSWORD=""
+
+if [[ -n $BOOTSTRAP_ADMIN_PASSWORD && -z $BOOTSTRAP_ADMIN_EMAIL ]]; then
+        echo "--bootstrap-admin-password requires --bootstrap-admin-email" >&2
+        exit 1
+fi
+
+if [[ -n $BOOTSTRAP_ADMIN_EMAIL ]]; then
+        if [[ -z $BOOTSTRAP_ADMIN_PASSWORD ]]; then
+                BOOTSTRAP_ADMIN_PASSWORD=$(generate_strong_password)
+                if [[ -z $BOOTSTRAP_ADMIN_PASSWORD ]]; then
+                        echo "Failed to generate an administrator password automatically." >&2
+                        exit 1
+                fi
+                GENERATED_BOOTSTRAP_PASSWORD=$BOOTSTRAP_ADMIN_PASSWORD
+        elif ! validate_password_strength "$BOOTSTRAP_ADMIN_PASSWORD"; then
+                echo "--bootstrap-admin-password must be at least 16 characters and include uppercase, lowercase, and numeric characters." >&2
                 exit 1
         fi
 fi
@@ -413,6 +471,10 @@ trap cleanup EXIT
         if [[ -n $SESSION_STORE_DSN ]]; then
                 echo "BITRIVER_LIVE_SESSION_POSTGRES_DSN=$SESSION_STORE_DSN"
         fi
+        if [[ -n $BOOTSTRAP_ADMIN_EMAIL ]]; then
+                echo "BITRIVER_LIVE_ADMIN_EMAIL=$BOOTSTRAP_ADMIN_EMAIL"
+                echo "BITRIVER_LIVE_ADMIN_PASSWORD=$BOOTSTRAP_ADMIN_PASSWORD"
+        fi
 } >"$env_file"
 
 sudo install -m 0644 "$env_file" "$INSTALL_DIR/.env"
@@ -431,6 +493,16 @@ if [[ -n $BOOTSTRAP_ADMIN_EMAIL ]]; then
                         --email "$BOOTSTRAP_ADMIN_EMAIL" \
                         --password "$BOOTSTRAP_ADMIN_PASSWORD" \
                         --name "Administrator"
+        fi
+        echo ""
+        echo "Administrator credentials:"
+        echo "  Email:    $BOOTSTRAP_ADMIN_EMAIL"
+        echo "  Password: $BOOTSTRAP_ADMIN_PASSWORD"
+        echo ""
+        if [[ -n $GENERATED_BOOTSTRAP_PASSWORD ]]; then
+                echo "The password above was generated automatically and saved to $INSTALL_DIR/.env. Record it now; the installer will not display it again."
+        else
+                echo "Store this password securely and update $INSTALL_DIR/.env if you rotate it later."
         fi
 fi
 
