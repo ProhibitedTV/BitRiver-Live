@@ -1416,6 +1416,48 @@ func TestChannelsListPermissions(t *testing.T) {
 	}
 }
 
+func TestChannelByIDTrailingSlashMatchesBaseRoute(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	owner, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Owner",
+		Email:       "owner@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+
+	channel, err := store.CreateChannel(owner.ID, "Studio", "gaming", []string{"retro"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	baseReq := httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID, nil)
+	baseRec := httptest.NewRecorder()
+	handler.ChannelByID(baseRec, baseReq)
+	if baseRec.Code != http.StatusOK {
+		t.Fatalf("expected base route status 200, got %d", baseRec.Code)
+	}
+
+	slashReq := httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID+"/", nil)
+	slashRec := httptest.NewRecorder()
+	handler.ChannelByID(slashRec, slashReq)
+	if slashRec.Code != http.StatusOK {
+		t.Fatalf("expected trailing slash status 200, got %d", slashRec.Code)
+	}
+
+	var basePayload, slashPayload channelPublicResponse
+	if err := json.Unmarshal(baseRec.Body.Bytes(), &basePayload); err != nil {
+		t.Fatalf("decode base response: %v", err)
+	}
+	if err := json.Unmarshal(slashRec.Body.Bytes(), &slashPayload); err != nil {
+		t.Fatalf("decode trailing slash response: %v", err)
+	}
+	if !reflect.DeepEqual(basePayload, slashPayload) {
+		t.Fatalf("expected trailing slash response to match base route\nbase: %#v\nslash: %#v", basePayload, slashPayload)
+	}
+}
+
 func TestChatEndpointsLimit(t *testing.T) {
 	handler, store := newTestHandler(t)
 	user, err := store.CreateUser(storage.CreateUserParams{
