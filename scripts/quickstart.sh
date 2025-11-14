@@ -361,7 +361,7 @@ cd "$REPO_ROOT"
 export COMPOSE_FILE="$COMPOSE_FILE"
 
 echo "Starting BitRiver Live stack..."
-docker compose up -d
+docker compose up --build -d
 
 echo "Stack is starting. Use 'docker compose logs -f' to follow service output."
 
