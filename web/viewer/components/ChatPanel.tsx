@@ -148,6 +148,8 @@ export function ChatPanel({
 
   const isComposerDisabled = chatDisabled || !user || sending;
 
+  const shouldShowSignInPrompt = authRequired && !user;
+
   return (
     <section className="chat-panel" aria-live="polite">
       <header className="chat-panel__header">
@@ -159,11 +161,12 @@ export function ChatPanel({
       {error && !chatDisabled && <div className="surface" role="alert">{error}</div>}
       {!loading && !error && !chatDisabled && (
         <div className="chat-panel__body" role="log" aria-relevant="additions" aria-live="polite">
-          {authRequired && !user ? (
+          {shouldShowSignInPrompt && (
             <div className="surface" role="status">
               Sign in with the controls above to view and participate in chat.
             </div>
-          ) : sortedMessages.length === 0 ? (
+          )}
+          {sortedMessages.length === 0 ? (
             <p className="muted">No messages yet. Be the first to say hello!</p>
           ) : (
             <ul>
