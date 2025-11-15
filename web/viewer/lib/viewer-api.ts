@@ -147,6 +147,20 @@ export type UploadItem = {
   error?: string;
 };
 
+export type CreateUploadPayload = {
+  channelId: string;
+  title?: string;
+  filename?: string;
+  sizeBytes?: number;
+  playbackUrl?: string;
+  metadata?: Record<string, string>;
+};
+
+type MultipartOptions = {
+  file?: File | Blob;
+  onProgress?: (percent: number) => void;
+};
+
 export type ChannelPlaybackResponse = {
   channel: ChannelPublic;
   owner: ChannelOwner;
@@ -164,13 +178,14 @@ export type ChannelPlaybackResponse = {
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 async function viewerRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers ?? {});
+  if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {})
-    },
+    headers,
     cache: "no-store"
   });
   if (!response.ok) {
@@ -181,6 +196,38 @@ async function viewerRequest<T>(path: string, init?: RequestInit): Promise<T> {
     return undefined as T;
   }
   return (await response.json()) as T;
+}
+
+function multipartRequest<T>(path: string, form: FormData, onProgress?: (percent: number) => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE}${path}`);
+    xhr.withCredentials = true;
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as T);
+        } catch (err) {
+          reject(new Error("invalid server response"));
+        }
+        return;
+      }
+      reject(new Error(xhr.responseText || `${xhr.status}`));
+    };
+    xhr.onerror = () => {
+      reject(new Error("upload failed"));
+    };
+    if (onProgress) {
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) {
+          return;
+        }
+        const percent = Math.round((event.loaded / event.total) * 100);
+        onProgress(percent);
+      };
+    }
+    xhr.send(form);
+  });
 }
 
 export function fetchDirectory(): Promise<DirectoryResponse> {
@@ -299,14 +346,35 @@ export function fetchManagedChannels(ownerId?: string): Promise<ManagedChannel[]
   return viewerRequest<ManagedChannel[]>(`/api/channels${suffix}`);
 }
 
-export function createUpload(payload: {
-  channelId: string;
-  title?: string;
-  filename?: string;
-  sizeBytes?: number;
-  playbackUrl?: string;
-  metadata?: Record<string, string>;
-}): Promise<UploadItem> {
+export function createUpload(payload: CreateUploadPayload, options?: MultipartOptions): Promise<UploadItem> {
+  if (options?.file) {
+    const form = new FormData();
+    form.append("channelId", payload.channelId);
+    if (payload.title) {
+      form.append("title", payload.title);
+    }
+    if (payload.filename) {
+      form.append("filename", payload.filename);
+    }
+    if (payload.playbackUrl) {
+      form.append("playbackUrl", payload.playbackUrl);
+    }
+    if (typeof payload.sizeBytes === "number" && !Number.isNaN(payload.sizeBytes)) {
+      form.append("sizeBytes", `${payload.sizeBytes}`);
+    }
+    if (payload.metadata) {
+      for (const [key, value] of Object.entries(payload.metadata)) {
+        if (!key) {
+          continue;
+        }
+        form.append(`metadata[${key}]`, value ?? "");
+      }
+    }
+    const file = options.file;
+    const filename = file instanceof File ? file.name : payload.filename ?? "upload.bin";
+    form.append("file", file, filename);
+    return multipartRequest<UploadItem>("/api/uploads", form, options.onProgress);
+  }
   return viewerRequest<UploadItem>("/api/uploads", {
     method: "POST",
     body: JSON.stringify(payload),
