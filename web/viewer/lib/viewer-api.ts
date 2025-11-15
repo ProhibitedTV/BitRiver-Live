@@ -187,6 +187,18 @@ export function fetchDirectory(): Promise<DirectoryResponse> {
   return viewerRequest<DirectoryResponse>("/api/directory");
 }
 
+export function fetchFeaturedChannels(): Promise<DirectoryResponse> {
+  return viewerRequest<DirectoryResponse>("/api/directory/featured");
+}
+
+export function fetchFollowingChannels(): Promise<DirectoryResponse> {
+  return viewerRequest<DirectoryResponse>("/api/directory/following");
+}
+
+export function fetchLiveNowChannels(): Promise<DirectoryResponse> {
+  return viewerRequest<DirectoryResponse>("/api/directory/live");
+}
+
 export function fetchChannelPlayback(channelId: string): Promise<ChannelPlaybackResponse> {
   return viewerRequest<ChannelPlaybackResponse>(`/api/channels/${channelId}/playback`);
 }
