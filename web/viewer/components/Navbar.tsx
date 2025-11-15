@@ -7,6 +7,7 @@ import { fetchManagedChannels } from "../lib/viewer-api";
 
 export function Navbar() {
   const { user, login, signup, logout, error } = useAuth();
+  const isAdmin = Boolean(user?.roles?.includes("admin"));
   const [mode, setMode] = useState<"login" | "signup" | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -75,7 +76,7 @@ export function Navbar() {
       };
     }
 
-    const hasManagementRole = user.roles.includes("creator") || user.roles.includes("admin");
+    const hasManagementRole = user.roles.includes("creator") || isAdmin;
     if (!hasManagementRole) {
       setManagedChannelId(undefined);
       return () => {
@@ -174,6 +175,11 @@ export function Navbar() {
           {user ? (
             <>
               <span className="muted">Signed in as {user.displayName}</span>
+              {isAdmin && (
+                <Link href="/" className="secondary-button" onClick={closeMenu}>
+                  Dashboard
+                </Link>
+              )}
               {managedChannelId && (
                 <Link
                   href={`/creator/uploads/${managedChannelId}`}
