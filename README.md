@@ -30,20 +30,33 @@ The Go server also proxies `/viewer` to the Next.js runtime when you run the vie
 
 ## Quick start (Docker, one command)
 
-1. Install [Docker Engine](https://docs.docker.com/engine/install/) and ensure the Compose v2 plugin is available (`docker compose version`).
-2. Clone the repository and switch into it:
-   ```bash
-   git clone https://github.com/BitRiver-Live/BitRiver-Live.git
-   cd BitRiver-Live
-   ```
-3. Launch the stack with the helper script:
-   ```bash
-   ./scripts/quickstart.sh
-   ```
+If you just want to try the platform, you can go from zero to a working stack in a couple of minutes. The quickstart script handles images, configuration, database migrations, writable data directories, and admin seeding so you only type a handful of commands.
 
-The script builds the Go API and transcoder images, brings up Postgres, Redis, SRS, OvenMediaEngine, the viewer, and the API itself, then applies migrations and seeds an admin account. It prints the admin credentials at the end—sign in immediately and change the password from **Settings → Security**.
+| Step | Command / Action |
+| --- | --- |
+| Install prerequisites | [Docker Engine](https://docs.docker.com/engine/install/) + Compose v2 (`docker compose version`) |
+| Clone the repo | ```bash
+git clone https://github.com/BitRiver-Live/BitRiver-Live.git
+cd BitRiver-Live
+``` |
+| Launch everything | ```bash
+./scripts/quickstart.sh
+``` |
 
-Update the generated `.env` file to match your domain, change the seeded credentials, and rerun `docker compose up -d` whenever you tweak environment variables. For troubleshooting tips and common follow-up commands, see [`docs/quickstart.md`](docs/quickstart.md).
+What the script does for you:
+
+- Builds the Go API, transcoder, and viewer images with sane defaults.
+- Creates a `.env` file, writable transcoder data volume (`deploy/transcoder-data`), and any missing directories.
+- Starts Postgres, Redis, SRS, OvenMediaEngine, the FFmpeg transcoder, the Go API, and the viewer via Docker Compose.
+- Applies database migrations and seeds an initial admin user, printing the email/password at the end.
+
+Next steps after the script finishes:
+
+1. Visit the health endpoint to make sure every service came up: `curl http://localhost:8080/healthz` (or substitute your host/IP). All components should report `"status": "ok"`.
+2. Sign in at [http://localhost:8080/signup](http://localhost:8080/signup) with the generated admin credentials, then change the password under **Settings → Security**.
+3. Open [http://localhost:8080/viewer](http://localhost:8080/viewer) in another tab to see the public experience that proxies through the API.
+
+Need to tweak environment variables or domain names? Edit the generated `.env`, then rerun `docker compose up -d` (or the quickstart script again) to apply the changes. Check [`docs/quickstart.md`](docs/quickstart.md) for common follow-up commands, TLS tips, and troubleshooting steps.
 
 ### Configure Docker Compose credentials
 
