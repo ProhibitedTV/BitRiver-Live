@@ -20,12 +20,14 @@ COPY internal ./internal
 COPY web ./web
 COPY deploy/migrations ./deploy/migrations
 
-RUN go build -o /out/bitriver-live ./cmd/server
+RUN go build -o /out/bitriver-live ./cmd/server \
+    && go build -o /out/bootstrap-admin ./cmd/tools/bootstrap-admin
 
 FROM --platform=$TARGETPLATFORM gcr.io/distroless/base-debian12:nonroot
 WORKDIR /app
 
 COPY --from=builder /out/bitriver-live /app/bitriver-live
+COPY --from=builder /out/bootstrap-admin /app/bootstrap-admin
 COPY --from=builder /src/deploy/migrations /app/deploy/migrations
 
 EXPOSE 8080
