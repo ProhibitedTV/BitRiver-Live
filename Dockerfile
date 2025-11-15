@@ -20,8 +20,8 @@ COPY internal ./internal
 COPY web ./web
 COPY deploy/migrations ./deploy/migrations
 
-RUN go build -o /out/bitriver-live ./cmd/server \
-    && go build -o /out/bootstrap-admin ./cmd/tools/bootstrap-admin
+RUN go build -o /out/bitriver-live ./cmd/server
+RUN go build -o /out/bootstrap-admin ./cmd/tools/bootstrap-admin
 
 FROM --platform=$TARGETPLATFORM gcr.io/distroless/base-debian12:nonroot
 WORKDIR /app
