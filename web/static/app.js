@@ -300,8 +300,24 @@ async function apiRequest(path, options = {}) {
     return payload;
 }
 
+function resolveDestinationPath() {
+    const { pathname, search, hash } = window.location;
+    const currentPath = `${pathname}${search}${hash}`;
+    if (!currentPath || currentPath.startsWith("/signup")) {
+        return "/viewer";
+    }
+    return currentPath;
+}
+
 function redirectToAuth() {
-    window.location.replace("/signup");
+    const next = resolveDestinationPath();
+    const params = new URLSearchParams();
+    if (next) {
+        params.set("next", next);
+    }
+    const query = params.toString();
+    const destination = query ? `/signup?${query}` : "/signup";
+    window.location.replace(destination);
 }
 
 async function requireSession() {
