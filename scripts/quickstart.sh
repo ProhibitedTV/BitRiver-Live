@@ -357,6 +357,13 @@ fi
 
 reconcile_env_file
 
+TRANSCODER_DATA_DIR="$REPO_ROOT/deploy/transcoder-data"
+TRANSCODER_PUBLIC_DIR="$TRANSCODER_DATA_DIR/public"
+echo "Ensuring transcoder data directories are present and writable ..."
+mkdir -p "$TRANSCODER_PUBLIC_DIR"
+chmod 0777 "$TRANSCODER_DATA_DIR" "$TRANSCODER_PUBLIC_DIR"
+echo "If you provision these directories manually, keep them writable (see docs/installing-on-ubuntu.md)."
+
 cd "$REPO_ROOT"
 export COMPOSE_FILE="$COMPOSE_FILE"
 
