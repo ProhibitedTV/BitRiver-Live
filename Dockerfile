@@ -13,7 +13,9 @@ ENV GOARCH=$TARGETARCH
 
 COPY go.mod go.sum ./
 COPY third_party ./third_party
-RUN go mod download
+RUN go mod edit -dropreplace github.com/jackc/pgx/v5 \
+    && go mod edit -dropreplace github.com/jackc/puddle/v2 \
+    && go mod download
 
 COPY cmd ./cmd
 COPY internal ./internal
