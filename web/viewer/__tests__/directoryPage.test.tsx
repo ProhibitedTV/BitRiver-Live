@@ -1,16 +1,28 @@
 import userEvent from "@testing-library/user-event";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import DirectoryPage from "../app/page";
-import { fetchDirectory, searchDirectory } from "../lib/viewer-api";
+import {
+  fetchDirectory,
+  fetchFeaturedChannels,
+  fetchFollowingChannels,
+  fetchLiveNowChannels,
+  searchDirectory,
+} from "../lib/viewer-api";
 
 jest.mock("../lib/viewer-api", () => ({
   ...jest.requireActual("../lib/viewer-api"),
   fetchDirectory: jest.fn(),
-  searchDirectory: jest.fn()
+  searchDirectory: jest.fn(),
+  fetchFeaturedChannels: jest.fn(),
+  fetchFollowingChannels: jest.fn(),
+  fetchLiveNowChannels: jest.fn(),
 }));
 
 const fetchDirectoryMock = fetchDirectory as jest.MockedFunction<typeof fetchDirectory>;
 const searchDirectoryMock = searchDirectory as jest.MockedFunction<typeof searchDirectory>;
+const fetchFeaturedChannelsMock = fetchFeaturedChannels as jest.MockedFunction<typeof fetchFeaturedChannels>;
+const fetchFollowingChannelsMock = fetchFollowingChannels as jest.MockedFunction<typeof fetchFollowingChannels>;
+const fetchLiveNowChannelsMock = fetchLiveNowChannels as jest.MockedFunction<typeof fetchLiveNowChannels>;
 
 const baseDirectoryResponse = {
   channels: [
@@ -75,6 +87,13 @@ const searchDirectoryResponse = {
 describe("DirectoryPage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    const sliceResponse = {
+      channels: [],
+      generatedAt: new Date("2023-10-21T11:00:00Z").toISOString(),
+    } as any;
+    fetchFeaturedChannelsMock.mockResolvedValue(sliceResponse);
+    fetchFollowingChannelsMock.mockResolvedValue(sliceResponse);
+    fetchLiveNowChannelsMock.mockResolvedValue(sliceResponse);
   });
 
   test("loads directory entries and renders channel cards", async () => {
