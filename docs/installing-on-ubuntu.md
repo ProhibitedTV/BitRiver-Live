@@ -90,7 +90,7 @@ Replace `sslmode=disable` with `require` when TLS is enabled.
 If you are upgrading from the JSON datastore, run:
 
 ```bash
-go run ./cmd/tools/migrate-json-to-postgres \
+go run -tags postgres ./cmd/tools/migrate-json-to-postgres \
   --json /var/lib/bitriver-live/store.json \
   --postgres-dsn "postgres://brlive_app:P0stgres-Example!@localhost:5432/brlive_app?sslmode=disable"
 ```

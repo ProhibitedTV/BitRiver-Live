@@ -64,7 +64,7 @@ Keep the filled `.env` file private—it is `.gitignore`'d and should never be c
 
 ## Manual development workflow
 
-Want to hack on the Go API without Docker? Use the JSON datastore for a fast start, then graduate to Postgres when you need persistence guarantees.
+Want to hack on the Go API without Docker? Use the JSON datastore for a fast start, then graduate to Postgres when you need persistence guarantees. Whenever you build or run the Go binaries from source, include the `postgres` build tag so the real database drivers are linked instead of the lightweight stubs the JSON-only path relies on.
 
 ### Option A – JSON datastore (no external services)
 
@@ -72,7 +72,7 @@ Want to hack on the Go API without Docker? Use the JSON datastore for a fast sta
 # From the repository root
 mkdir -p data
 BITRIVER_LIVE_MODE=development \
-  go run ./cmd/server \
+  go run -tags postgres ./cmd/server \
     --storage-driver json \
     --data data/store.json
 ```
@@ -80,7 +80,7 @@ BITRIVER_LIVE_MODE=development \
 1. Keep the server running and open [http://localhost:8080](http://localhost:8080).
 2. Sign up your first user, then promote it to admin:
    ```bash
-   go run ./cmd/tools/bootstrap-admin \
+   go run -tags postgres ./cmd/tools/bootstrap-admin \
      --json data/store.json \
      --email you@example.com \
      --name "Your Name" \
@@ -112,14 +112,14 @@ BITRIVER_LIVE_MODE=development \
    BITRIVER_LIVE_POSTGRES_DSN="postgres://bitriver:bitriver@127.0.0.1:5432/bitriver_live?sslmode=disable" \
    BITRIVER_LIVE_SESSION_STORE=postgres \
    BITRIVER_LIVE_SESSION_POSTGRES_DSN="postgres://bitriver:bitriver@127.0.0.1:5432/bitriver_live?sslmode=disable" \
-   go run ./cmd/server \
+  go run -tags postgres ./cmd/server \
      --mode development \
      --chat-queue-driver redis \
      --chat-queue-redis-addr 127.0.0.1:6379
    ```
 4. Seed an admin with the Postgres helper:
    ```bash
-   go run ./cmd/tools/bootstrap-admin \
+   go run -tags postgres ./cmd/tools/bootstrap-admin \
      --postgres-dsn "postgres://bitriver:bitriver@127.0.0.1:5432/bitriver_live?sslmode=disable" \
      --email you@example.com \
      --name "Your Name" \
