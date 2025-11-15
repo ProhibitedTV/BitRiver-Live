@@ -2089,6 +2089,11 @@ func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Reque
 	req := createUploadRequest{}
 	metadata := make(map[string]string)
 	var media *uploadedMedia
+	defer func() {
+		if media != nil && media.tempPath != "" {
+			_ = os.Remove(media.tempPath)
+		}
+	}()
 	for {
 		part, err := reader.NextPart()
 		if errors.Is(err, io.EOF) {
