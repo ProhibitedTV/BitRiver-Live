@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { fetchManagedChannels } from "../lib/viewer-api";
@@ -8,6 +9,8 @@ import { fetchManagedChannels } from "../lib/viewer-api";
 export function Navbar() {
   const { user, login, signup, logout, error } = useAuth();
   const isAdmin = Boolean(user?.roles?.includes("admin"));
+  const isCreator = Boolean(user?.roles?.includes("creator"));
+  const canAccessCreatorTools = isAdmin || isCreator;
   const [mode, setMode] = useState<"login" | "signup" | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,6 +19,31 @@ export function Navbar() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [managedChannelId, setManagedChannelId] = useState<string | undefined>();
   const [menuOpen, setMenuOpen] = useState(false);
+  const pathname = usePathname();
+  const normalizedPathname = (() => {
+    const current = pathname ?? "/";
+    if (current === "/") {
+      return "/";
+    }
+    if (current.startsWith("/viewer")) {
+      const trimmed = current.replace(/^\/viewer/, "");
+      return trimmed.length === 0 ? "/" : trimmed;
+    }
+    return current;
+  })();
+  const canonicalPath = normalizedPathname.startsWith("/") ? normalizedPathname : `/${normalizedPathname}`;
+  const navItems = [
+    { label: "Home", href: "/" },
+    { label: "Following", href: "/following" },
+    { label: "Browse", href: "/browse" },
+    ...(canAccessCreatorTools ? [{ label: "Creator", href: "/creator" }] : []),
+  ];
+  const isRouteActive = (href: string) => {
+    if (href === "/") {
+      return canonicalPath === "/";
+    }
+    return canonicalPath === href || canonicalPath.startsWith(`${href}/`);
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -161,9 +189,22 @@ export function Navbar() {
           </button>
         </div>
         <nav id="viewer-nav-menu" className={`nav-links${menuOpen ? " nav-links--open" : ""}`}>
-          <Link href="/" onClick={closeMenu}>
-            Directory
-          </Link>
+          <div className="nav-tabs" role="group" aria-label="Viewer navigation">
+            {navItems.map((item) => {
+              const active = isRouteActive(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`nav-tab${active ? " nav-tab--active" : ""}`}
+                  aria-current={active ? "page" : undefined}
+                  onClick={closeMenu}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
           <button
             className="secondary-button"
             type="button"
