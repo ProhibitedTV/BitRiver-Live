@@ -7,7 +7,7 @@ legitimate strings are still rendered correctly.
 1. Start the API server locally:
 
    ```bash
-   go run ./cmd/server --mode development --addr :8080 --data /tmp/bitriver-live.json
+   go run -tags postgres ./cmd/server --mode development --addr :8080 --data /tmp/bitriver-live.json
    ```
 
 2. Sign in to the control center and create a user with the display name

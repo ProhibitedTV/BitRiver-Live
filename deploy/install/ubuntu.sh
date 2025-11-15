@@ -416,8 +416,8 @@ if [[ $BUILD_FROM_SOURCE == true ]]; then
                 exit 1
         fi
 
-        GOFLAGS="-trimpath" go build -o bitriver-live ./cmd/server
-        GOFLAGS="-trimpath" go build -o bootstrap-admin ./cmd/tools/bootstrap-admin
+        GOFLAGS="-trimpath" go build -tags postgres -o bitriver-live ./cmd/server
+        GOFLAGS="-trimpath" go build -tags postgres -o bootstrap-admin ./cmd/tools/bootstrap-admin
         sudo install -m 0755 bitriver-live "$INSTALL_DIR/bitriver-live"
         sudo install -m 0755 bootstrap-admin "$INSTALL_DIR/bootstrap-admin"
         rm -f bitriver-live bootstrap-admin

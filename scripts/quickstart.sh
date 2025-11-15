@@ -271,7 +271,7 @@ bootstrap_admin() {
       return 0
     fi
     if command -v go >/dev/null 2>&1; then
-      if go run ./cmd/tools/bootstrap-admin --postgres-dsn "$host_dsn" --email "$email" --password "$password" "${name_flag[@]}" >/dev/null; then
+      if go run -tags postgres ./cmd/tools/bootstrap-admin --postgres-dsn "$host_dsn" --email "$email" --password "$password" "${name_flag[@]}" >/dev/null; then
         return 0
       fi
     fi
@@ -289,7 +289,7 @@ bootstrap_admin() {
     return 0
   fi
   if command -v go >/dev/null 2>&1; then
-    if go run ./cmd/tools/bootstrap-admin --json "$data_path" --email "$email" --password "$password" "${name_flag[@]}" >/dev/null; then
+    if go run -tags postgres ./cmd/tools/bootstrap-admin --json "$data_path" --email "$email" --password "$password" "${name_flag[@]}" >/dev/null; then
       return 0
     fi
   fi

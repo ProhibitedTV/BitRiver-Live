@@ -37,10 +37,10 @@ psql "postgres://bitriver:bitriver@localhost:5432/bitriver?sslmode=disable" \
   --file deploy/migrations/0001_initial.sql
 ```
 
-With the migrations applied and a Postgres driver such as `pgxpool` available, start the API and point it at the relational database:
+With the migrations applied and a Postgres driver such as `pgxpool` available, start the API and point it at the relational database. When compiling from source, always pass the `postgres` build tag so the real driver is linked instead of the lightweight stubs used for JSON-only development:
 
 ```bash
-go run ./cmd/server \
+go run -tags postgres ./cmd/server \
   --postgres-dsn "postgres://bitriver:bitriver@localhost:5432/bitriver?sslmode=disable" \
   --postgres-max-conns 20 \
   --postgres-min-conns 5 \
