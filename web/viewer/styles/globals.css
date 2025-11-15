@@ -417,6 +417,42 @@ button:focus-visible {
   gap: 1rem;
 }
 
+.nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.nav-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 1rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  flex: 1 1 calc(50% - 0.5rem);
+  text-align: center;
+}
+
+.nav-tab:hover,
+.nav-tab:focus-visible {
+  color: var(--text);
+}
+
+.nav-tab--active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--accent), 0 10px 25px rgba(8, 145, 178, 0.25);
+}
+
 .nav-toggle {
   display: none;
   align-items: center;
@@ -457,6 +493,10 @@ button:focus-visible {
     padding-top: 0.5rem;
   }
 
+  .nav-tabs {
+    width: 100%;
+  }
+
   .nav-links.nav-links--open {
     display: flex;
   }
@@ -471,6 +511,17 @@ button:focus-visible {
 
   .nav-links .muted {
     display: block;
+  }
+}
+
+@media (min-width: 640px) {
+  .nav-tabs {
+    flex-wrap: nowrap;
+    width: auto;
+  }
+
+  .nav-tab {
+    flex: 0 0 auto;
   }
 }
 
