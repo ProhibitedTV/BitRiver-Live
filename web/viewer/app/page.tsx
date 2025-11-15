@@ -110,7 +110,7 @@ export default function DirectoryPage() {
 
       <FollowingRail channels={following} loading={homeLoading} />
 
-      <section className="stack">
+      <section id="live-now" className="stack">
         <div className="section-heading">
           <div>
             <h2>Live now</h2>
@@ -121,7 +121,7 @@ export default function DirectoryPage() {
         <LiveNowGrid channels={liveNow} loading={homeLoading} />
       </section>
 
-      <section className="stack">
+      <section id="browse" className="stack">
         <div className="section-heading">
           <div>
             <h2>Browse the directory</h2>

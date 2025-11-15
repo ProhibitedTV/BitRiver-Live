@@ -8,7 +8,7 @@ interface FollowingRailProps {
 
 export function FollowingRail({ channels, loading = false }: FollowingRailProps) {
   return (
-    <section className="following-rail surface">
+    <section className="following-rail surface" id="following">
       <header className="following-rail__header">
         <div className="stack">
           <span className="following-rail__eyebrow muted">Following</span>
