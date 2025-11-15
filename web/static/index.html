@@ -36,7 +36,14 @@
                 <span class="theme-toggle__icon theme-toggle__icon--sun" aria-hidden="true">☀</span>
                 <span class="theme-toggle__icon theme-toggle__icon--moon" aria-hidden="true">🌙</span>
             </button>
-            <a class="hero__link" href="/signup">Create a viewer account</a>
+            <div class="hero__shortcuts" aria-label="Viewer quick actions">
+                <p class="hero__shortcuts-label" id="hero-shortcuts-label">Viewer quick actions</p>
+                <div class="hero__shortcut-group" aria-describedby="hero-shortcuts-label">
+                    <a class="hero__shortcut" href="/viewer">Launch viewer experience</a>
+                    <a class="hero__shortcut hero__shortcut--secondary" href="/signup">Manage or create account</a>
+                </div>
+                <p class="hero__shortcuts-helper">Keep viewer tabs and account access within reach.</p>
+            </div>
             <div class="hero__account" id="account-actions" hidden>
                 <span id="current-user-name" class="hero__account-name"></span>
                 <button id="sign-out-button" class="secondary">Sign out</button>
