@@ -34,15 +34,17 @@ export function Navbar() {
   const canonicalPath = normalizedPathname.startsWith("/") ? normalizedPathname : `/${normalizedPathname}`;
   const navItems = [
     { label: "Home", href: "/" },
-    { label: "Following", href: "/following" },
-    { label: "Browse", href: "/browse" },
+    { label: "Following", href: "/#following" },
+    { label: "Browse", href: "/#browse" },
     ...(canAccessCreatorTools ? [{ label: "Creator", href: "/creator" }] : []),
   ];
   const isRouteActive = (href: string) => {
-    if (href === "/") {
+    const [pathOnly] = href.split("#");
+    const normalizedHref = pathOnly?.length ? pathOnly : "/";
+    if (normalizedHref === "/") {
       return canonicalPath === "/";
     }
-    return canonicalPath === href || canonicalPath.startsWith(`${href}/`);
+    return canonicalPath === normalizedHref || canonicalPath.startsWith(`${normalizedHref}/`);
   };
 
   useEffect(() => {
