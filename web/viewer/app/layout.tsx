@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ReactNode } from "react";
 import "../styles/globals.css";
+import "../styles/home.css";
 import { Providers } from "../components/Providers";
 import { Navbar } from "../components/Navbar";
 
