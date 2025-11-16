@@ -519,11 +519,27 @@
 
 .content-rail__scroller,
 .chip-rail {
-  display: flex;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(90vw, 1fr);
   gap: 1rem;
   overflow-x: auto;
   padding: 0.35rem 0 0.5rem;
   scroll-snap-type: x mandatory;
+}
+
+@media (min-width: 640px) {
+  .content-rail__scroller,
+  .chip-rail {
+    grid-auto-columns: minmax(260px, 1fr);
+  }
+}
+
+@media (min-width: 960px) {
+  .content-rail__scroller,
+  .chip-rail {
+    grid-auto-columns: minmax(320px, 1fr);
+  }
 }
 
 .content-rail__scroller::-webkit-scrollbar,
@@ -541,7 +557,8 @@
   background: var(--surface);
   border-radius: 1rem;
   border: 1px solid var(--border);
-  min-width: min(420px, 85vw);
+  width: 100%;
+  min-width: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -550,7 +567,7 @@
 }
 
 .rail-card--compact {
-  min-width: min(320px, 75vw);
+  max-width: 300px;
 }
 
 .rail-card:hover {
