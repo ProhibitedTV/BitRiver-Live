@@ -71,6 +71,10 @@ compose file.
 - **Port already in use** – Stop or reconfigure any services that currently bind to ports 5432, 6379, 8080, 8081, 9000, 9001,
   1935, or 1985. Alternatively edit the corresponding `*_PORT` values in `.env` (for example, `BITRIVER_LIVE_PORT=9090`) and
   rerun `docker compose up -d`.
+- **OME health check fails** – Confirm that `deploy/ome/Server.xml` declares the OME role with `<Type>origin</Type>` inside the
+  root `<Server>` block. OME rejects the monitoring endpoint when the server type is missing. When running in Docker, that file
+  is mounted to `/opt/ovenmediaengine/bin/origin_conf/Server.xml` inside the `bitriver-ome` container, which is the location
+  OvenMediaEngine expects for an origin node.
 - **Environment tweaks** – Edit `.env` and rerun `docker compose up -d` to apply changes. The compose stack automatically loads
   the file so you never need to touch `deploy/docker-compose.yml` directly.
 

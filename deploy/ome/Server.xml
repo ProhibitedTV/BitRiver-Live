@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Server version="0.15.10">
     <Name>BitRiver OME</Name>
+    <!-- Required for health endpoint and origin-mode APIs; Compose mounts this file at /opt/ovenmediaengine/bin/origin_conf/Server.xml -->
+    <Type>origin</Type>
     <Bind>
         <Address>0.0.0.0</Address>
     </Bind>
