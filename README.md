@@ -48,7 +48,7 @@ docker compose version
 ### Step 1 – Download BitRiver Live
 
 ```bash
-git clone https://github.com/BitRiver-Live/BitRiver-Live.git
+git clone https://github.com/ProhibitedTV/BitRiver-Live.git
 cd BitRiver-Live
 ```
 
