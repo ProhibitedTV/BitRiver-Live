@@ -20,7 +20,9 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
         const previewImage = entry.profile.bannerUrl ?? entry.profile.avatarUrl;
         const followerCountLabel = entry.followerCount.toLocaleString();
         const followerLabel = `${followerCountLabel} follower${entry.followerCount === 1 ? "" : "s"}`;
-        const followerOverlayLabel = `Followers: ${followerCountLabel}`;
+        const viewerCount = entry.viewerCount ?? 0;
+        const viewerOverlayLabel = `${viewerCount.toLocaleString()} viewer${viewerCount === 1 ? "" : "s"}`;
+        const isLive = entry.live;
 
         return (
           <article key={entry.channel.id} className="directory-card">
@@ -35,31 +37,46 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
                 ) : (
                   <div className="directory-card__preview-fallback" aria-hidden="true" />
                 )}
-                <div className="overlay overlay--top overlay--scrim">
-                  {entry.live && <span className="badge badge--live">Live</span>}
-                  {entry.live ? (
-                    <span className="overlay__meta">{followerOverlayLabel}</span>
-                  ) : (
-                    <span className="overlay__meta overlay__meta--muted">Offline</span>
-                  )}
+                <div className="overlay overlay--top overlay--scrim overlay--glow">
+                  <div className="overlay__status">
+                    {isLive ? (
+                      <span className="badge badge--live">Live</span>
+                    ) : (
+                      <span className="badge badge--muted">Offline</span>
+                    )}
+                    <span className="overlay__meta">{isLive ? viewerOverlayLabel : followerLabel}</span>
+                  </div>
+                  {entry.channel.category && <span className="pill pill--frost">{entry.channel.category}</span>}
+                </div>
+                <div className="overlay overlay--bottom overlay--scrim overlay--frost">
+                  <div className="overlay__identity">
+                    <div className="overlay__avatar" aria-hidden="true">
+                      {entry.owner.avatarUrl ? (
+                        <img src={entry.owner.avatarUrl} alt="" />
+                      ) : (
+                        <span>{entry.owner.displayName.charAt(0).toUpperCase()}</span>
+                      )}
+                    </div>
+                    <div className="overlay__byline">
+                      <span className="overlay__name">{entry.owner.displayName}</span>
+                      <span className="overlay__meta overlay__meta--muted">{createdAt}</span>
+                    </div>
+                  </div>
+                  <div className="overlay__tags">
+                    {entry.channel.tags.slice(0, 2).map((tag) => (
+                      <span key={tag} className="pill pill--tag">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
               <div className="directory-card__content">
                 <div className="directory-card__header">
                   <h3 className="directory-card__title">{entry.channel.title}</h3>
-                  <span className="directory-card__subtitle muted">
-                    {entry.owner.displayName} &middot; {createdAt}
-                  </span>
+                  <span className="directory-card__subtitle muted">{entry.channel.category ?? "Streaming"}</span>
                 </div>
                 {entry.profile.bio && <p className="directory-card__description muted">{entry.profile.bio}</p>}
-                <div className="tag-list">
-                  {entry.channel.category && <span className="tag">{entry.channel.category}</span>}
-                  {entry.channel.tags.slice(0, 3).map((tag) => (
-                    <span key={tag} className="tag">
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
               </div>
             </Link>
             <footer className="directory-card__footer">

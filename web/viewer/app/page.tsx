@@ -111,36 +111,42 @@ export default function DirectoryPage() {
   };
 
   return (
-    <div className="container stack home-page">
+    <div className="home-page">
       <section className="home-hero">
-        <div className="home-hero__intro stack">
-          <h1>Discover live channels</h1>
-          <p className="muted">
-            Explore community broadcasts, follow your favourite creators, and jump into ultra-low-latency playback powered by
-            BitRiver Live.
-          </p>
-          <SearchBar onSearch={handleSearch} defaultValue={query} />
+        <div className="home-hero__background" aria-hidden="true">
+          <span className="home-hero__layer home-hero__layer--aurora" />
+          <span className="home-hero__layer home-hero__layer--grid" />
+          <span className="home-hero__layer home-hero__layer--orb" />
         </div>
-        <FeaturedChannel channel={featured[0]} loading={homeLoading} />
-      </section>
-
-      {homeError && (
-        <div className="surface" role="alert">
-          {homeError}
-        </div>
-      )}
-
-      <FollowingRail channels={following} loading={homeLoading} />
-
-      <section className="stack">
-        <div className="section-heading">
-          <div>
-            <h2>Live now</h2>
-            <p className="muted">Creators currently on air</p>
+        <div className="home-hero__inner container">
+          <div className="home-hero__content stack">
+            <div className="home-hero__chips">
+              <span className="badge">Seasonal spotlight</span>
+              <span className="badge badge--live">Happening now</span>
+            </div>
+            <h1>Discover live channels</h1>
+            <p className="muted">
+              Explore community broadcasts, follow your favourite creators, and jump into ultra-low-latency playback powered
+              by BitRiver Live.
+            </p>
+            <div className="home-hero__actions">
+              <a className="primary-button" href="#live-now">
+                Start watching
+              </a>
+              <a className="secondary-button" href="#directory">
+                Browse directory
+              </a>
+            </div>
+            <div className="home-hero__search">
+              <SearchBar onSearch={handleSearch} defaultValue={query} />
+              <p className="muted">Surface creators by category, title, or tag.</p>
+            </div>
           </div>
-          {!homeLoading && liveNow.length > 0 && <span className="muted">{liveNow.length} streams</span>}
+
+          <div className="home-hero__media">
+            <FeaturedChannel channel={featured[0]} loading={homeLoading} />
+          </div>
         </div>
-        <LiveNowGrid channels={liveNow} loading={homeLoading} />
       </section>
 
       <ChannelRail
@@ -180,12 +186,43 @@ export default function DirectoryPage() {
         </div>
         {loading && <div className="surface">Loading channels…</div>}
         {error && (
+      <div className="container stack home-page__content">
+        {homeError && (
           <div className="surface" role="alert">
-            {error}
+            {homeError}
           </div>
         )}
-        {!loading && !error && <DirectoryGrid channels={channels} />}
-      </section>
+
+        <FollowingRail channels={following} loading={homeLoading} />
+
+        <section className="stack" id="live-now">
+          <div className="section-heading">
+            <div>
+              <h2>Live now</h2>
+              <p className="muted">Creators currently on air</p>
+            </div>
+            {!homeLoading && liveNow.length > 0 && <span className="muted">{liveNow.length} streams</span>}
+          </div>
+          <LiveNowGrid channels={liveNow} loading={homeLoading} />
+        </section>
+
+        <section className="stack" id="directory">
+          <div className="section-heading">
+            <div>
+              <h2>Browse the directory</h2>
+              <p className="muted">Filter every channel or search by creator.</p>
+            </div>
+            {query && <span className="muted">Results for “{query}”</span>}
+          </div>
+          {loading && <div className="surface">Loading channels…</div>}
+          {error && (
+            <div className="surface" role="alert">
+              {error}
+            </div>
+          )}
+          {!loading && !error && <DirectoryGrid channels={channels} />}
+        </section>
+      </div>
     </div>
   );
 }
