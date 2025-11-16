@@ -61,6 +61,25 @@ seeded credentials after the stack is ready; log in immediately and rotate the p
 All commands assume you are still in the repository root (where `.env` lives) so Docker Compose can locate the project name and
 compose file.
 
+## Updating your stack
+
+- Pull upstream changes before restarting your containers so you pick up fixes and migrations:
+  ```bash
+  git pull --ff-only
+  ```
+- Re-run the quickstart to rebuild images when Dockerfiles or dependencies change and to ensure services restart with the latest code and environment values:
+  ```bash
+  ./scripts/quickstart.sh
+  ```
+  The script reuses your existing `.env` and Docker volumes, so configuration, database data, and media files persist across updates.
+- Codex CLI users: install or invoke the CLI from the repository root while Docker continues to manage the running services, and point it at this project for AI-guided edits. For example:
+  ```bash
+  # from the repository root
+  pip install --user codex-cli  # install if needed
+  codex edit .                 # target this project directory
+  ```
+  Rerun `docker compose up -d` after changing `.env` or editing code so the containers reload the latest configuration and binaries.
+
 ## Troubleshooting
 
 - **`Error: Docker is required`** – Install Docker Engine from [docs.docker.com/engine/install](https://docs.docker.com/engine/install/)
