@@ -3643,6 +3643,11 @@ func (s *Storage) CreateSubscription(params CreateSubscriptionParams) (models.Su
 	if reference == "" {
 		reference = fmt.Sprintf("sub-%d", time.Now().UnixNano())
 	}
+	for _, existing := range s.data.Subscriptions {
+		if existing.Provider == provider && existing.Reference == reference {
+			return models.Subscription{}, fmt.Errorf("subscription reference %s/%s already exists", provider, reference)
+		}
+	}
 	id, err := generateID()
 	if err != nil {
 		return models.Subscription{}, err
