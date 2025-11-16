@@ -1872,6 +1872,71 @@ func TestListChatRestrictionsSkipsExpiredTimeouts(t *testing.T) {
 	store.mu.RUnlock()
 }
 
+func TestExpiredTimeoutsClearedAndPersisted(t *testing.T) {
+	store := newTestStore(t)
+
+	owner, err := store.CreateUser(CreateUserParams{DisplayName: "Owner", Email: "owner@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+	viewer, err := store.CreateUser(CreateUserParams{DisplayName: "Viewer", Email: "viewer@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Main", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	now := time.Now().UTC()
+	store.mu.Lock()
+	store.ensureDatasetInitializedLocked()
+	if store.data.ChatTimeouts[channel.ID] == nil {
+		store.data.ChatTimeouts[channel.ID] = make(map[string]time.Time)
+	}
+	store.data.ChatTimeouts[channel.ID][viewer.ID] = now.Add(-time.Minute)
+	store.ensureTimeoutMetadata(channel.ID)
+	store.data.ChatTimeoutIssuedAt[channel.ID][viewer.ID] = now.Add(-2 * time.Minute)
+	store.data.ChatTimeoutActors[channel.ID][viewer.ID] = owner.ID
+	store.data.ChatTimeoutReasons[channel.ID][viewer.ID] = "expired"
+	store.mu.Unlock()
+
+	if _, err := store.CreateChatMessage(channel.ID, viewer.ID, "hello"); err != nil {
+		t.Fatalf("CreateChatMessage: %v", err)
+	}
+
+	reloaded, err := NewStorage(store.filePath, WithIngestController(ingest.NoopController{}), WithIngestRetries(1, 0))
+	if err != nil {
+		t.Fatalf("NewStorage reload: %v", err)
+	}
+	if _, ok := reloaded.ChatTimeout(channel.ID, viewer.ID); ok {
+		t.Fatalf("expected timeout to remain cleared after reload")
+	}
+
+	reloaded.mu.RLock()
+	defer reloaded.mu.RUnlock()
+	if timeouts := reloaded.data.ChatTimeouts[channel.ID]; timeouts != nil {
+		if _, exists := timeouts[viewer.ID]; exists {
+			t.Fatalf("timeout entry persisted unexpectedly")
+		}
+	}
+	if issued := reloaded.data.ChatTimeoutIssuedAt[channel.ID]; issued != nil {
+		if _, exists := issued[viewer.ID]; exists {
+			t.Fatalf("timeout issued-at metadata persisted unexpectedly")
+		}
+	}
+	if actors := reloaded.data.ChatTimeoutActors[channel.ID]; actors != nil {
+		if _, exists := actors[viewer.ID]; exists {
+			t.Fatalf("timeout actor metadata persisted unexpectedly")
+		}
+	}
+	if reasons := reloaded.data.ChatTimeoutReasons[channel.ID]; reasons != nil {
+		if _, exists := reasons[viewer.ID]; exists {
+			t.Fatalf("timeout reason metadata persisted unexpectedly")
+		}
+	}
+}
+
 func TestUpsertProfileCreatesProfile(t *testing.T) {
 	store := newTestStore(t)
 	owner, err := store.CreateUser(CreateUserParams{
