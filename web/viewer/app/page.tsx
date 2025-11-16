@@ -144,7 +144,7 @@ export default function DirectoryPage() {
           </div>
 
           <div className="home-hero__media">
-            <FeaturedChannel channel={featured[0]} loading={homeLoading} />
+            <FeaturedChannel channels={featured} loading={homeLoading} />
           </div>
         </div>
       </section>
