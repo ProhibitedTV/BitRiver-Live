@@ -22,7 +22,6 @@ export function ChatPanel({
   const [sending, setSending] = useState(false);
   const [pausedForAuth, setPausedForAuth] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
-  const chatDisabled = !roomId?.trim();
 
   const isUnauthorizedError = (err: unknown) => {
     if (!(err instanceof Error)) {
@@ -58,12 +57,6 @@ export function ChatPanel({
   );
 
   useEffect(() => {
-    if (chatDisabled) {
-      setLoading(false);
-      setMessages([]);
-      return;
-    }
-
     if (pausedForAuth) {
       if (user) {
         setPausedForAuth(false);
@@ -130,7 +123,7 @@ export function ChatPanel({
     if (!content.trim()) {
       return;
     }
-    if (!user || chatDisabled) {
+    if (!user) {
       return;
     }
 
@@ -146,7 +139,7 @@ export function ChatPanel({
     }
   };
 
-  const isComposerDisabled = chatDisabled || !user || sending;
+  const isComposerDisabled = !user || sending;
 
   const shouldShowSignInPrompt = authRequired && !user;
 
@@ -156,10 +149,9 @@ export function ChatPanel({
         <h3>Live chat</h3>
         <span className="muted">{messages.length} message{messages.length === 1 ? "" : "s"}</span>
       </header>
-      {chatDisabled && <div className="surface">Chat is disabled/offline</div>}
-      {loading && !chatDisabled && <div className="surface">Loading chat…</div>}
-      {error && !chatDisabled && <div className="surface" role="alert">{error}</div>}
-      {!loading && !error && !chatDisabled && (
+      {loading && <div className="surface">Loading chat…</div>}
+      {error && <div className="surface" role="alert">{error}</div>}
+      {!loading && !error && (
         <div className="chat-panel__body" role="log" aria-relevant="additions" aria-live="polite">
           {shouldShowSignInPrompt && (
             <div className="surface" role="status">
@@ -200,7 +192,7 @@ export function ChatPanel({
         className="chat-panel__form"
         onSubmit={handleSend}
         aria-label="Send a chat message"
-        aria-disabled={chatDisabled}
+        aria-disabled={false}
       >
         <label htmlFor="chat-input" className="sr-only">
           Chat message
@@ -208,18 +200,12 @@ export function ChatPanel({
         <textarea
           id="chat-input"
           name="message"
-          placeholder={
-            chatDisabled
-              ? "Chat is disabled/offline"
-              : user
-              ? "Share your thoughts"
-              : "Sign in to participate in chat"
-          }
+          placeholder={user ? "Share your thoughts" : "Sign in to participate in chat"}
           value={content}
           onChange={(event) => setContent(event.target.value)}
           disabled={isComposerDisabled}
           rows={3}
-          aria-disabled={chatDisabled || !user}
+          aria-disabled={!user}
         />
         <button
           type="submit"
