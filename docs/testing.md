@@ -6,10 +6,14 @@ run the same suites locally before opening a pull request.
 ## Go API
 
 Run the fast unit suite (JSON datastore, REST handlers, chat flows) from the
-repository root:
+repository root with the same environment guardrails CI enforces. Setting
+`GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off` ensures the local Go toolchain is
+used without reaching out to the network, which keeps results reproducible and
+matches the locked-down CI runners. The `-count=1 -timeout=10s` flags prevent
+test caching and match CI's deadline for each package:
 
 ```bash
-go test ./...
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=10s
 ```
 
 ## Postgres storage layer
