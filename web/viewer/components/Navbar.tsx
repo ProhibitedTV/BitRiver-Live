@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { fetchManagedChannels } from "../lib/viewer-api";
+import { AuthDialog } from "./auth/AuthDialog";
 
 export function Navbar() {
   const { user, login, signup, logout, error } = useAuth();
@@ -13,14 +14,11 @@ export function Navbar() {
   const isCreator = Boolean(user?.roles?.includes("creator"));
   const canAccessCreatorTools = isAdmin || isCreator;
   const [mode, setMode] = useState<"login" | "signup" | null>(null);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [message, setMessage] = useState<string | undefined>();
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [managedChannelId, setManagedChannelId] = useState<string | undefined>();
   const [searchQuery, setSearchQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const pathname = usePathname();
   const normalizedPathname = (() => {
     const current = pathname ?? "/";
@@ -137,14 +135,8 @@ export function Navbar() {
 
   useEffect(() => {
     setMenuOpen(false);
+    setUserMenuOpen(false);
   }, [mode, user]);
-
-  const reset = () => {
-    setEmail("");
-    setPassword("");
-    setDisplayName("");
-    setMessage(undefined);
-  };
 
   const closeMenu = () => {
     setMenuOpen(false);
@@ -157,48 +149,31 @@ export function Navbar() {
     closeMenu();
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (mode === "login") {
-      const ok = await login(email, password);
-      setMessage(ok ? undefined : "Unable to sign in. Check your credentials.");
-      if (ok) {
-        setMode(null);
-        reset();
-      }
-    } else if (mode === "signup") {
-      const ok = await signup(displayName, email, password);
-      setMessage(ok ? undefined : "Unable to create account.");
-      if (ok) {
-        setMode(null);
-        reset();
-      }
+  const handleAuthClose = () => setMode(null);
+
+  const handleLogin = async (email: string, password: string) => login(email, password);
+
+  const handleSignup = async (displayName: string, email: string, password: string) =>
+    signup(displayName, email, password);
+
+  const avatarGlyph = useMemo(() => {
+    if (!user?.displayName) {
+      return "👤";
     }
-  };
+    return user.displayName.trim().charAt(0).toUpperCase();
+  }, [user?.displayName]);
 
   return (
     <header className="navbar">
       <div className="navbar-inner">
-        <div className="navbar-brand">
-          <Link href="/" aria-label="BitRiver Live home" className="badge" onClick={closeMenu}>
-            <span role="img" aria-hidden>
+        <div className="navbar-left">
+          <Link href="/" aria-label="BitRiver Live home" className="navbar-logo" onClick={closeMenu}>
+            <span className="navbar-logo__icon" aria-hidden>
               📡
             </span>
-            BitRiver Live
+            <span className="navbar-logo__text">BitRiver Live</span>
           </Link>
-          <button
-            className="nav-toggle"
-            type="button"
-            aria-expanded={menuOpen}
-            aria-controls="viewer-nav-menu"
-            aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
-            onClick={() => setMenuOpen((prev) => !prev)}
-          >
-            <span aria-hidden>{menuOpen ? "✕" : "☰"}</span>
-          </button>
-        </div>
-        <nav id="viewer-nav-menu" className={`nav-links${menuOpen ? " nav-links--open" : ""}`}>
-          <div className="nav-tabs" role="group" aria-label="Viewer navigation">
+          <nav className="nav-tabs" role="group" aria-label="Viewer navigation">
             {navItems.map((item) => {
               const active = isRouteActive(item.href);
               return (
@@ -213,74 +188,173 @@ export function Navbar() {
                 </Link>
               );
             })}
-          </div>
-          <div className="nav-actions">
-            <form className="nav-search" role="search" onSubmit={handleSearch}>
-              <label className="sr-only" htmlFor="navbar-search">
-                Search for channels or categories
-              </label>
-              <input
-                id="navbar-search"
-                className="nav-search__input"
-                type="search"
-                placeholder="Search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-              />
-              <button type="submit" className="secondary-button nav-search__button">
-                Go
-              </button>
-            </form>
-            <div className="nav-quick-links" role="group" aria-label="Quick links">
-              <Link href="/browse" className="nav-pill" onClick={closeMenu}>
-                Categories
-              </Link>
-              <Link href="/following" className="nav-pill" onClick={closeMenu}>
-                Following
-              </Link>
-            </div>
-          </div>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => setTheme((prev) => (prev === "light" ? "dark" : "light"))}
-            aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
-          >
-            {theme === "light" ? "🌙 Dark" : "🌞 Light"}
-          </button>
-          {user ? (
-            <>
-              <span className="muted">Signed in as {user.displayName}</span>
-              {isAdmin && (
-                <Link href="/" className="secondary-button" onClick={closeMenu}>
-                  Dashboard
-                </Link>
-              )}
-              {managedChannelId && (
-                <Link
-                  href={`/creator/uploads/${managedChannelId}`}
-                  className="secondary-button"
-                  onClick={closeMenu}
+          </nav>
+        </div>
+        <button
+          className="nav-toggle"
+          type="button"
+          aria-expanded={menuOpen}
+          aria-controls="viewer-nav-menu"
+          aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
+          onClick={() => setMenuOpen((prev) => !prev)}
+        >
+          <span aria-hidden>{menuOpen ? "✕" : "☰"}</span>
+        </button>
+        <div className="navbar-center">
+          <form className="nav-search nav-search--inline" role="search" onSubmit={handleSearch}>
+            <label className="sr-only" htmlFor="navbar-search">
+              Search for channels or categories
+            </label>
+            <input
+              id="navbar-search"
+              className="nav-search__input"
+              type="search"
+              placeholder="Search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+            />
+            <button type="submit" className="icon-button" aria-label="Search">
+              🔍
+            </button>
+          </form>
+        </div>
+        <div className="navbar-right">
+          {canAccessCreatorTools && managedChannelId && (
+            <Link href={`/creator/uploads/${managedChannelId}`} className="nav-cta" onClick={closeMenu}>
+              Go live
+            </Link>
+          )}
+          <div className="nav-icon-group" role="group" aria-label="Viewer quick actions">
+            <button className="icon-button" type="button" aria-label="View notifications">
+              🔔
+            </button>
+            <button
+              className="icon-button"
+              type="button"
+              onClick={() => setTheme((prev) => (prev === "light" ? "dark" : "light"))}
+              aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
+            >
+              {theme === "light" ? "🌙" : "🌞"}
+            </button>
+            {user ? (
+              <div className="avatar-menu" aria-label="Account menu">
+                <button
+                  type="button"
+                  className="avatar-button"
+                  aria-label="Open account menu"
+                  aria-expanded={userMenuOpen}
+                  onClick={() => setUserMenuOpen((prev) => !prev)}
                 >
-                  Manage channel
-                </Link>
-              )}
-              <button
-                className="secondary-button"
-                onClick={() => {
-                  closeMenu();
-                  void logout();
-                }}
+                  {avatarGlyph}
+                </button>
+                <div className={`avatar-menu__items${userMenuOpen ? " avatar-menu__items--open" : ""}`}>
+                  <div className="avatar-menu__header">
+                    <span className="muted">Signed in as</span>
+                    <span className="avatar-menu__name">{user.displayName}</span>
+                  </div>
+                  <Link href="/profile" className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
+                    Profile
+                  </Link>
+                  {canAccessCreatorTools && (
+                    <Link
+                      href={managedChannelId ? `/creator/uploads/${managedChannelId}` : "/creator"}
+                      className="avatar-menu__link"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      Creator dashboard
+                    </Link>
+                  )}
+                  <button
+                    type="button"
+                    className="avatar-menu__link"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      void logout();
+                    }}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="auth-buttons">
+                <button
+                  className="ghost-button"
+                  onClick={() => {
+                    setMode("login");
+                    closeMenu();
+                  }}
+                >
+                  Sign in
+                </button>
+                <button
+                  className="accent-button"
+                  onClick={() => {
+                    setMode("signup");
+                    closeMenu();
+                  }}
+                >
+                  Sign up
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      <div id="viewer-nav-menu" className={`nav-drawer${menuOpen ? " nav-drawer--open" : ""}`}>
+        <div className="nav-drawer__section" role="group" aria-label="Viewer navigation mobile">
+          {navItems.map((item) => {
+            const active = isRouteActive(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`nav-drawer__link${active ? " nav-drawer__link--active" : ""}`}
+                aria-current={active ? "page" : undefined}
+                onClick={closeMenu}
               >
-                Sign out
-              </button>
-            </>
-          ) : (
-            <>
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+        <form className="nav-search nav-search--drawer" role="search" onSubmit={handleSearch}>
+          <label className="sr-only" htmlFor="navbar-search-mobile">
+            Search for channels or categories
+          </label>
+          <input
+            id="navbar-search-mobile"
+            className="nav-search__input"
+            type="search"
+            placeholder="Search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+          <button type="submit" className="icon-button" aria-label="Search">
+            🔍
+          </button>
+        </form>
+        <div className="nav-drawer__section" role="group" aria-label="Quick links">
+          <Link href="/browse" className="nav-drawer__link" onClick={closeMenu}>
+            Categories
+          </Link>
+          <Link href="/following" className="nav-drawer__link" onClick={closeMenu}>
+            Following
+          </Link>
+          {canAccessCreatorTools && managedChannelId && (
+            <Link
+              href={`/creator/uploads/${managedChannelId}`}
+              className="nav-drawer__link"
+              onClick={closeMenu}
+            >
+              Creator tools
+            </Link>
+          )}
+          {!user && (
+            <div className="nav-drawer__cta">
               <button
-                className="secondary-button"
+                className="ghost-button"
                 onClick={() => {
-                  reset();
                   setMode("login");
                   closeMenu();
                 }}
@@ -288,81 +362,25 @@ export function Navbar() {
                 Sign in
               </button>
               <button
-                className="primary-button"
+                className="accent-button"
                 onClick={() => {
-                  reset();
                   setMode("signup");
                   closeMenu();
                 }}
               >
-                Create account
-              </button>
-            </>
-          )}
-        </nav>
-      </div>
-      {mode && (
-        <div className="container" style={{ paddingTop: "0", paddingBottom: "2rem" }}>
-          <form className="surface stack" onSubmit={handleSubmit}>
-            <header className="stack">
-              <h2>{mode === "login" ? "Welcome back" : "Join BitRiver Live"}</h2>
-              <p className="muted">
-                {mode === "login"
-                  ? "Sign in to follow your favourite channels, sync subscriptions, and take part in chat."
-                  : "Create a viewer account to follow creators, receive live notifications, and access subscriber features."}
-              </p>
-            </header>
-            {mode === "signup" && (
-              <label className="stack">
-                <span className="muted">Display name</span>
-                <input
-                  type="text"
-                  required
-                  placeholder="Stream enthusiast"
-                  value={displayName}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                />
-              </label>
-            )}
-            <label className="stack">
-              <span className="muted">Email</span>
-              <input
-                type="email"
-                required
-                placeholder="you@example.com"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </label>
-            <label className="stack">
-              <span className="muted">Password</span>
-              <input
-                type="password"
-                required
-                minLength={8}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </label>
-            {(message || error) && <span className="muted">{message ?? error}</span>}
-            <div className="nav-links" style={{ justifyContent: "flex-end" }}>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => {
-                  setMode(null);
-                  reset();
-                }}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="primary-button">
-                {mode === "login" ? "Sign in" : "Create account"}
+                Sign up
               </button>
             </div>
-          </form>
+          )}
         </div>
-      )}
+      </div>
+      <AuthDialog
+        mode={mode}
+        onClose={handleAuthClose}
+        onLogin={handleLogin}
+        onSignup={handleSignup}
+        authError={error}
+      />
     </header>
   );
 }
