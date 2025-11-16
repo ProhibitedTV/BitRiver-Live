@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { fetchManagedChannels } from "../lib/viewer-api";
 
 export function Navbar() {
   const { user, login, signup, logout, error } = useAuth();
+  const router = useRouter();
   const isAdmin = Boolean(user?.roles?.includes("admin"));
   const isCreator = Boolean(user?.roles?.includes("creator"));
   const canAccessCreatorTools = isAdmin || isCreator;
@@ -18,6 +19,7 @@ export function Navbar() {
   const [message, setMessage] = useState<string | undefined>();
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [managedChannelId, setManagedChannelId] = useState<string | undefined>();
+  const [searchQuery, setSearchQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
   const normalizedPathname = (() => {
@@ -148,6 +150,13 @@ export function Navbar() {
     setMenuOpen(false);
   };
 
+  const handleSearch = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmed = searchQuery.trim();
+    await router.push(trimmed ? `/browse?q=${encodeURIComponent(trimmed)}` : "/browse");
+    closeMenu();
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (mode === "login") {
@@ -204,6 +213,32 @@ export function Navbar() {
                 </Link>
               );
             })}
+          </div>
+          <div className="nav-actions">
+            <form className="nav-search" role="search" onSubmit={handleSearch}>
+              <label className="sr-only" htmlFor="navbar-search">
+                Search for channels or categories
+              </label>
+              <input
+                id="navbar-search"
+                className="nav-search__input"
+                type="search"
+                placeholder="Search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
+              <button type="submit" className="secondary-button nav-search__button">
+                Go
+              </button>
+            </form>
+            <div className="nav-quick-links" role="group" aria-label="Quick links">
+              <Link href="/browse" className="nav-pill" onClick={closeMenu}>
+                Categories
+              </Link>
+              <Link href="/following" className="nav-pill" onClick={closeMenu}>
+                Following
+              </Link>
+            </div>
           </div>
           <button
             className="secondary-button"
