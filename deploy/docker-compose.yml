@@ -111,9 +111,7 @@ services:
     volumes:
       - redis-data:/data
     healthcheck:
-      test:
-        - CMD-SHELL
-        - redis-cli -a '"'"'${BITRIVER_REDIS_PASSWORD:?set via .env}'"'"' ping | grep PONG
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${BITRIVER_REDIS_PASSWORD:?set via .env}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
