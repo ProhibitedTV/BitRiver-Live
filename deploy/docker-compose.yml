@@ -68,6 +68,8 @@ services:
         condition: service_healthy
       postgres-migrations:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
       srs-controller:
         condition: service_started
       ome:
@@ -105,6 +107,15 @@ services:
     ]
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: [
+        "CMD-SHELL",
+        "redis-cli -a '"'"'${BITRIVER_REDIS_PASSWORD:?set via .env}'"'"' ping | grep PONG"
+      ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
   postgres:
     image: postgres:15-alpine
