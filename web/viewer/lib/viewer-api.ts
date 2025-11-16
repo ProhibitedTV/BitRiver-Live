@@ -67,6 +67,19 @@ export type DirectoryResponse = {
   generatedAt: string;
 };
 
+export type CategorySummary = {
+  name: string;
+  channelCount: number;
+  viewerCount?: number;
+  thumbnailUrl?: string;
+  tags?: string[];
+};
+
+export type CategoryDirectoryResponse = {
+  categories: CategorySummary[];
+  generatedAt: string;
+};
+
 export type Rendition = {
   name: string;
   manifestUrl: string;
@@ -238,12 +251,24 @@ export function fetchFeaturedChannels(): Promise<DirectoryResponse> {
   return viewerRequest<DirectoryResponse>("/api/directory/featured");
 }
 
+export function fetchRecommendedChannels(): Promise<DirectoryResponse> {
+  return viewerRequest<DirectoryResponse>("/api/directory/recommended");
+}
+
 export function fetchFollowingChannels(): Promise<DirectoryResponse> {
   return viewerRequest<DirectoryResponse>("/api/directory/following");
 }
 
 export function fetchLiveNowChannels(): Promise<DirectoryResponse> {
   return viewerRequest<DirectoryResponse>("/api/directory/live");
+}
+
+export function fetchTrendingChannels(): Promise<DirectoryResponse> {
+  return viewerRequest<DirectoryResponse>("/api/directory/trending");
+}
+
+export function fetchTopCategories(): Promise<CategoryDirectoryResponse> {
+  return viewerRequest<CategoryDirectoryResponse>("/api/directory/categories");
 }
 
 export function fetchChannelPlayback(channelId: string): Promise<ChannelPlaybackResponse> {

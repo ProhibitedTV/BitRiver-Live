@@ -6,20 +6,29 @@ import { FeaturedChannel } from "../components/FeaturedChannel";
 import { FollowingRail } from "../components/FollowingRail";
 import { LiveNowGrid } from "../components/LiveNowGrid";
 import { SearchBar } from "../components/SearchBar";
+import { CategoryRail } from "../components/CategoryRail";
+import { ChannelRail } from "../components/ChannelRail";
 import type { DirectoryChannel } from "../lib/viewer-api";
 import {
   fetchDirectory,
   fetchFeaturedChannels,
   fetchFollowingChannels,
   fetchLiveNowChannels,
+  fetchRecommendedChannels,
+  fetchTopCategories,
+  fetchTrendingChannels,
   searchDirectory,
 } from "../lib/viewer-api";
+import type { CategorySummary } from "../lib/viewer-api";
 
 export default function DirectoryPage() {
   const [channels, setChannels] = useState<DirectoryChannel[]>([]);
   const [featured, setFeatured] = useState<DirectoryChannel[]>([]);
+  const [recommended, setRecommended] = useState<DirectoryChannel[]>([]);
   const [following, setFollowing] = useState<DirectoryChannel[]>([]);
   const [liveNow, setLiveNow] = useState<DirectoryChannel[]>([]);
+  const [trending, setTrending] = useState<DirectoryChannel[]>([]);
+  const [categories, setCategories] = useState<CategorySummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [homeLoading, setHomeLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
@@ -58,15 +67,28 @@ export default function DirectoryPage() {
       try {
         setHomeLoading(true);
         setHomeError(undefined);
-        const [featuredResponse, followingResponse, liveResponse] = await Promise.all([
+        const [
+          featuredResponse,
+          followingResponse,
+          liveResponse,
+          recommendedResponse,
+          trendingResponse,
+          topCategoriesResponse,
+        ] = await Promise.all([
           fetchFeaturedChannels(),
           fetchFollowingChannels(),
           fetchLiveNowChannels(),
+          fetchRecommendedChannels(),
+          fetchTrendingChannels(),
+          fetchTopCategories(),
         ]);
         if (!cancelled) {
           setFeatured(featuredResponse.channels);
+          setRecommended(recommendedResponse.channels);
           setFollowing(followingResponse.channels);
           setLiveNow(liveResponse.channels);
+          setTrending(trendingResponse.channels);
+          setCategories(topCategoriesResponse.categories ?? []);
         }
       } catch (err) {
         if (!cancelled) {
@@ -120,6 +142,33 @@ export default function DirectoryPage() {
         </div>
         <LiveNowGrid channels={liveNow} loading={homeLoading} />
       </section>
+
+      <ChannelRail
+        eyebrow="For you"
+        title="Channels We Think You’ll Like"
+        subtitle="A mix of broadcasters similar to what you follow."
+        channels={recommended}
+        loading={homeLoading}
+      />
+
+      <ChannelRail
+        eyebrow="Editor’s picks"
+        title="Featured Streams"
+        subtitle="Hand-picked creators and spotlight broadcasts."
+        channels={featured.slice(1)}
+        loading={homeLoading}
+      />
+
+      <ChannelRail
+        eyebrow="On the rise"
+        title="Trending"
+        subtitle="Streams picking up momentum right now."
+        channels={trending}
+        loading={homeLoading}
+        density="compact"
+      />
+
+      <CategoryRail categories={categories} loading={homeLoading} />
 
       <section className="stack">
         <div className="section-heading">
