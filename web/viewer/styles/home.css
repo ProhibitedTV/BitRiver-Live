@@ -142,12 +142,6 @@
   animation: fadeIn 0.8s ease 0.1s both;
 }
 
-@media (max-width: 959px) {
-  .home-hero__media {
-    order: -1;
-  }
-}
-
 .home-hero__media .featured-channel {
   box-shadow: var(--accent-glow);
   border: 1px solid var(--border-strong);
