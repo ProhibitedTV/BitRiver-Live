@@ -17,7 +17,7 @@ RUN go mod download
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/srs-controller ./cmd/srs-controller
 
 FROM --platform=$TARGETPLATFORM alpine:3.19 AS runtime
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates curl
 
 WORKDIR /app
 COPY --from=build /out/srs-controller /usr/local/bin/srs-controller

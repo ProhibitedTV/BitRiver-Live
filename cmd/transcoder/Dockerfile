@@ -20,7 +20,7 @@ FROM alpine:3.19 AS ffmpeg
 RUN apk add --no-cache ffmpeg
 
 FROM --platform=$TARGETPLATFORM alpine:3.19 AS runtime
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates curl
 
 WORKDIR /app
 COPY --from=build /out/transcoder /usr/local/bin/transcoder
