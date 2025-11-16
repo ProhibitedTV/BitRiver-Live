@@ -118,7 +118,7 @@ export default function DirectoryPage() {
           <span className="home-hero__layer home-hero__layer--grid" />
           <span className="home-hero__layer home-hero__layer--orb" />
         </div>
-        <div className="home-hero__inner container">
+        <div className="home-hero__inner container container--wide">
           <div className="home-hero__content stack">
             <div className="home-hero__chips">
               <span className="badge">Seasonal spotlight</span>
@@ -176,16 +176,6 @@ export default function DirectoryPage() {
 
       <CategoryRail categories={categories} loading={homeLoading} />
 
-      <section className="stack">
-        <div className="section-heading">
-          <div>
-            <h2>Browse the directory</h2>
-            <p className="muted">Filter every channel or search by creator.</p>
-          </div>
-          {query && <span className="muted">Results for “{query}”</span>}
-        </div>
-        {loading && <div className="surface">Loading channels…</div>}
-        {error && (
       <div className="container stack home-page__content">
         {homeError && (
           <div className="surface" role="alert">
