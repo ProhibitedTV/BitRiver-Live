@@ -92,22 +92,22 @@ test("sends a chat message when the user submits the form", async () => {
   });
 });
 
-test("shows offline state when no chat room is configured", () => {
+test("uses channel chat even when no room id is provided", async () => {
+  fetchChatMock.mockResolvedValue([]);
+
   render(<ChatPanel channelId="chan-1" />);
 
-  expect(fetchChatMock).not.toHaveBeenCalled();
-  expect(screen.getByText(/chat is disabled\/offline/i)).toBeInTheDocument();
-
-  const form = screen.getByRole("form", { name: /send a chat message/i });
-  expect(form).toHaveAttribute("aria-disabled", "true");
+  await waitFor(() => {
+    expect(fetchChatMock).toHaveBeenCalledWith("chan-1");
+    expect(screen.getByText(/no messages yet/i)).toBeInTheDocument();
+  });
 
   const textarea = screen.getByRole("textbox", { name: /chat message/i });
-  expect(textarea).toBeDisabled();
-  expect(textarea).toHaveAttribute("placeholder", "Chat is disabled/offline");
-  expect(textarea).toHaveAttribute("aria-disabled", "true");
+  expect(textarea).not.toBeDisabled();
+  expect(textarea).toHaveAttribute("placeholder", "Share your thoughts");
 
-  const sendButton = screen.getByRole("button", { name: /send/i });
-  expect(sendButton).toBeDisabled();
+  const form = screen.getByRole("form", { name: /send a chat message/i });
+  expect(form).toHaveAttribute("aria-disabled", "false");
 });
 
 test("treats unauthorized chat fetch as empty state for guests", async () => {
