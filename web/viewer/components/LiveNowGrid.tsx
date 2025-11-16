@@ -24,6 +24,7 @@ export function LiveNowGrid({ channels, loading = false }: LiveNowGridProps) {
     <div className="grid live-now-grid">
       {channels.map((entry) => {
         const previewImage = entry.profile.bannerUrl ?? entry.profile.avatarUrl;
+        const viewerCount = entry.viewerCount ?? 0;
         return (
           <Link key={entry.channel.id} className="live-card" href={`/channels/${entry.channel.id}`}>
             <div className="live-card__media">
@@ -32,9 +33,28 @@ export function LiveNowGrid({ channels, loading = false }: LiveNowGridProps) {
               ) : (
                 <div className="live-card__media-fallback" aria-hidden="true" />
               )}
-              <div className="overlay overlay--top overlay--scrim">
-                <span className="badge badge--live">Live</span>
-                <span className="overlay__meta">{entry.channel.category ?? "Streaming"}</span>
+              <div className="overlay overlay--top overlay--scrim overlay--glow">
+                <div className="overlay__status">
+                  <span className="badge badge--live">Live</span>
+                  <span className="overlay__meta">{`${viewerCount.toLocaleString()} viewers`}</span>
+                </div>
+                {entry.channel.category && <span className="pill pill--frost">{entry.channel.category}</span>}
+              </div>
+              <div className="overlay overlay--bottom overlay--scrim overlay--frost">
+                <div className="overlay__identity">
+                  <div className="overlay__avatar" aria-hidden="true">
+                    {entry.owner.avatarUrl ? (
+                      <img src={entry.owner.avatarUrl} alt="" />
+                    ) : (
+                      <span>{entry.owner.displayName.charAt(0).toUpperCase()}</span>
+                    )}
+                  </div>
+                  <div className="overlay__byline">
+                    <span className="overlay__name">{entry.owner.displayName}</span>
+                    <span className="overlay__meta overlay__meta--muted">{entry.channel.tags[0] ? `#${entry.channel.tags[0]}` : "Live"}</span>
+                  </div>
+                </div>
+                {entry.channel.tags[1] && <span className="pill pill--tag">#{entry.channel.tags[1]}</span>}
               </div>
             </div>
             <div className="live-card__body">
