@@ -47,6 +47,8 @@ const (
 	// MaxTipMessageLength defines the maximum number of characters allowed for a
 	// tip message payload.
 	MaxTipMessageLength = 512
+
+	duplicateTipReferenceError = "pq: duplicate key value violates unique constraint \"tips_reference_unique\""
 )
 
 var (
@@ -3456,6 +3458,9 @@ func (s *Storage) CreateTip(params CreateTipParams) (models.Tip, error) {
 	if utf8.RuneCountInString(message) > MaxTipMessageLength {
 		return models.Tip{}, fmt.Errorf("message exceeds %d characters", MaxTipMessageLength)
 	}
+	if s.tipExists(provider, reference) {
+		return models.Tip{}, errors.New(duplicateTipReferenceError)
+	}
 	id, err := generateID()
 	if err != nil {
 		return models.Tip{}, err
@@ -3482,6 +3487,20 @@ func (s *Storage) CreateTip(params CreateTipParams) (models.Tip, error) {
 		return models.Tip{}, err
 	}
 	return tip, nil
+}
+
+// tipExists reports whether a tip with the given provider/reference pair is
+// already persisted. Callers must hold s.mu.
+func (s *Storage) tipExists(provider, reference string) bool {
+	if len(s.data.Tips) == 0 {
+		return false
+	}
+	for _, tip := range s.data.Tips {
+		if tip.Provider == provider && tip.Reference == reference {
+			return true
+		}
+	}
+	return false
 }
 
 // ListTips returns recent tips for a channel.

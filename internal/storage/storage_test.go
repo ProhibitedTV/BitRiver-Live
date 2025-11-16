@@ -2133,6 +2133,39 @@ func TestCreateTipAndList(t *testing.T) {
 	RunRepositoryTipsLifecycle(t, jsonRepositoryFactory)
 }
 
+func TestStorageTipReferenceUniqueness(t *testing.T) {
+	store := newTestStore(t)
+
+	owner, err := store.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	supporter, err := store.CreateUser(CreateUserParams{DisplayName: "supporter", Email: "supporter@example.com"})
+	if err != nil {
+		t.Fatalf("create supporter: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Lobby", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	params := CreateTipParams{
+		ChannelID:  channel.ID,
+		FromUserID: supporter.ID,
+		Amount:     models.MustParseMoney("5"),
+		Currency:   "usd",
+		Provider:   "stripe",
+		Reference:  "dup-ref",
+	}
+	if _, err := store.CreateTip(params); err != nil {
+		t.Fatalf("create tip: %v", err)
+	}
+	if _, err := store.CreateTip(params); err == nil {
+		t.Fatal("expected duplicate tip creation to fail")
+	} else if err.Error() != duplicateTipReferenceError {
+		t.Fatalf("unexpected duplicate error: %v", err)
+	}
+}
+
 func TestCreateSubscriptionAndCancel(t *testing.T) {
 	RunRepositorySubscriptionsLifecycle(t, jsonRepositoryFactory)
 }
