@@ -3109,8 +3109,110 @@ func (s *Storage) ensureChatAccessLocked(channelID, userID string) error {
 		if time.Now().UTC().Before(expiry) {
 			return fmt.Errorf("user is timed out")
 		}
-		delete(s.data.ChatTimeouts[channelID], userID)
+		if err := s.removeChatTimeoutLocked(channelID, userID); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+func (s *Storage) removeChatTimeoutLocked(channelID, userID string) error {
+	var (
+		previousExpiry time.Time
+		hadExpiry      bool
+		previousIssued time.Time
+		hadIssued      bool
+		previousActor  string
+		hadActor       bool
+		previousReason string
+		hadReason      bool
+	)
+
+	if timeouts := s.data.ChatTimeouts[channelID]; timeouts != nil {
+		if expiry, ok := timeouts[userID]; ok {
+			previousExpiry = expiry
+			hadExpiry = true
+			delete(timeouts, userID)
+			if len(timeouts) == 0 {
+				delete(s.data.ChatTimeouts, channelID)
+			}
+		}
+	}
+	if issued := s.data.ChatTimeoutIssuedAt[channelID]; issued != nil {
+		if ts, ok := issued[userID]; ok {
+			previousIssued = ts
+			hadIssued = true
+			delete(issued, userID)
+			if len(issued) == 0 {
+				delete(s.data.ChatTimeoutIssuedAt, channelID)
+			}
+		}
+	}
+	if actors := s.data.ChatTimeoutActors[channelID]; actors != nil {
+		if actor, ok := actors[userID]; ok {
+			previousActor = actor
+			hadActor = true
+			delete(actors, userID)
+			if len(actors) == 0 {
+				delete(s.data.ChatTimeoutActors, channelID)
+			}
+		}
+	}
+	if reasons := s.data.ChatTimeoutReasons[channelID]; reasons != nil {
+		if reason, ok := reasons[userID]; ok {
+			previousReason = reason
+			hadReason = true
+			delete(reasons, userID)
+			if len(reasons) == 0 {
+				delete(s.data.ChatTimeoutReasons, channelID)
+			}
+		}
+	}
+
+	if !(hadExpiry || hadIssued || hadActor || hadReason) {
+		return nil
+	}
+
+	if err := s.persist(); err != nil {
+		if hadExpiry {
+			if s.data.ChatTimeouts == nil {
+				s.data.ChatTimeouts = make(map[string]map[string]time.Time)
+			}
+			if s.data.ChatTimeouts[channelID] == nil {
+				s.data.ChatTimeouts[channelID] = make(map[string]time.Time)
+			}
+			s.data.ChatTimeouts[channelID][userID] = previousExpiry
+		}
+		if hadIssued {
+			if s.data.ChatTimeoutIssuedAt == nil {
+				s.data.ChatTimeoutIssuedAt = make(map[string]map[string]time.Time)
+			}
+			if s.data.ChatTimeoutIssuedAt[channelID] == nil {
+				s.data.ChatTimeoutIssuedAt[channelID] = make(map[string]time.Time)
+			}
+			s.data.ChatTimeoutIssuedAt[channelID][userID] = previousIssued
+		}
+		if hadActor {
+			if s.data.ChatTimeoutActors == nil {
+				s.data.ChatTimeoutActors = make(map[string]map[string]string)
+			}
+			if s.data.ChatTimeoutActors[channelID] == nil {
+				s.data.ChatTimeoutActors[channelID] = make(map[string]string)
+			}
+			s.data.ChatTimeoutActors[channelID][userID] = previousActor
+		}
+		if hadReason {
+			if s.data.ChatTimeoutReasons == nil {
+				s.data.ChatTimeoutReasons = make(map[string]map[string]string)
+			}
+			if s.data.ChatTimeoutReasons[channelID] == nil {
+				s.data.ChatTimeoutReasons[channelID] = make(map[string]string)
+			}
+			s.data.ChatTimeoutReasons[channelID][userID] = previousReason
+		}
+		return err
+	}
+
 	return nil
 }
 
