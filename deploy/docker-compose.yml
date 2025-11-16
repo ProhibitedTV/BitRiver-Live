@@ -100,18 +100,20 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: [
-      "redis-server",
-      "--save", "", "--appendonly", "no",
-      "--requirepass", "${BITRIVER_REDIS_PASSWORD:?set via .env}"
-    ]
+    command:
+      - "redis-server"
+      - "--save"
+      - ""
+      - "--appendonly"
+      - "no"
+      - "--requirepass"
+      - "${BITRIVER_REDIS_PASSWORD:?set via .env}"
     volumes:
       - redis-data:/data
     healthcheck:
-      test: [
-        "CMD-SHELL",
-        "redis-cli -a '"'"'${BITRIVER_REDIS_PASSWORD:?set via .env}'"'"' ping | grep PONG"
-      ]
+      test:
+        - CMD-SHELL
+        - redis-cli -a '"'"'${BITRIVER_REDIS_PASSWORD:?set via .env}'"'"' ping | grep PONG
       interval: 10s
       timeout: 5s
       retries: 5
