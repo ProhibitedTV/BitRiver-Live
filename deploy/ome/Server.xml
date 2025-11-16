@@ -3,6 +3,8 @@
     <Name>BitRiver OME</Name>
     <!-- Required for health endpoint and origin-mode APIs; Compose mounts this file at /opt/ovenmediaengine/bin/origin_conf/Server.xml -->
     <Type>origin</Type>
+    <!-- Explicitly declare the server IP to satisfy the current OvenMediaEngine schema. -->
+    <IP>0.0.0.0</IP>
     <Bind>
         <Address>0.0.0.0</Address>
     </Bind>
