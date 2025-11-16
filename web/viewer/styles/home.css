@@ -1,4 +1,6 @@
 .home-page {
+  gap: 2.25rem;
+  padding-block: 2.25rem 4.25rem;
   display: flex;
   flex-direction: column;
   gap: 2.5rem;
@@ -84,6 +86,19 @@
   }
 }
 
+@media (min-width: 1024px) {
+  .home-page {
+    gap: 2.75rem;
+    padding-block: 2.75rem 4.75rem;
+  }
+
+  .home-hero {
+    gap: 2rem;
+  }
+}
+
+.home-hero__intro {
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.12), rgba(8, 145, 178, 0.35));
 .home-hero__content {
   padding: 1.25rem 1.25rem 1.5rem 0;
   gap: 1rem;
@@ -306,7 +321,8 @@
 }
 
 .live-now-grid {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.75rem;
 }
 
 .live-card {
@@ -316,7 +332,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
 }
 
 @keyframes float {
@@ -355,13 +371,15 @@
 
 .live-card:hover {
   border-color: var(--accent);
-  transform: translateY(-2px);
+  transform: translateY(-5px);
+  box-shadow: 0 16px 40px rgba(79, 209, 197, 0.15);
 }
 
 .live-card__media {
   position: relative;
   aspect-ratio: 16 / 9;
-  background: linear-gradient(135deg, rgba(79, 209, 197, 0.12), rgba(8, 145, 178, 0.24));
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.2), rgba(8, 145, 178, 0.28));
+  overflow: hidden;
 }
 
 .live-card__media img,
@@ -370,10 +388,18 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 0.35s ease;
 }
 
 .live-card__media-fallback {
   background: rgba(255, 255, 255, 0.05);
+}
+
+.live-card:hover .live-card__media img,
+.live-card:focus-within .live-card__media img,
+.live-card:hover .live-card__media-fallback,
+.live-card:focus-within .live-card__media-fallback {
+  transform: scale(1.06);
 }
 
 .live-card__body {

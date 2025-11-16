@@ -60,6 +60,7 @@ export type DirectoryChannel = {
   profile: ProfileSummary;
   live: boolean;
   followerCount: number;
+  viewerCount?: number;
 };
 
 export type DirectoryResponse = {
