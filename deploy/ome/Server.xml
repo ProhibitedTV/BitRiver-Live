@@ -3,8 +3,13 @@
     <Name>OvenMediaEngine</Name>
     <!-- Required for health endpoint and origin-mode APIs; Compose mounts this file at /opt/ovenmediaengine/bin/origin_conf/Server.xml -->
     <Type>origin</Type>
-    <!-- Explicitly declare the server IP to satisfy the current OvenMediaEngine schema. -->
-    <IP>*</IP>
+    <!-- Explicitly declare the server IP to satisfy the current OvenMediaEngine schema and keep the config portable across hosts. -->
+    <IP>0.0.0.0</IP>
+    <Bind>
+        <!-- Bind the primary server socket so the runtime schema requirement is satisfied even before module listeners start. -->
+        <Address>0.0.0.0</Address>
+        <Port>9000</Port>
+    </Bind>
     <PrivacyProtection>false</PrivacyProtection>
     <StunServer>stun.l.google.com:19302</StunServer>
 
