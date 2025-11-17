@@ -12,5 +12,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Verify quickstart defaults match CI seed
+        run: python3 scripts/test-quickstart-env.py
+
       - name: Validate quickstart compose config
         run: ./scripts/test-quickstart.sh

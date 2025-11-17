@@ -121,7 +121,7 @@ declare -A env_defaults=(
   [NEXT_VIEWER_BASE_PATH]='/viewer'
   [NEXT_PUBLIC_VIEWER_URL]='http://localhost:8080/viewer'
   [BITRIVER_LIVE_ADMIN_EMAIL]='admin@example.com'
-  [BITRIVER_LIVE_ADMIN_PASSWORD]=''
+  [BITRIVER_LIVE_ADMIN_PASSWORD]='local-dev-password'
   [BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD]='bitriver'
 )
 
