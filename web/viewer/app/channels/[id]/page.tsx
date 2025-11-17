@@ -117,14 +117,16 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
       {data && (
         <div className="channel-page__grid">
           <div className="channel-page__main stack">
-            <div className="channel-player">
-              <Player playback={data.playback} />
+            <div className="channel-page__hero-grid">
+              <div className="channel-player">
+                <Player playback={data.playback} />
+              </div>
+              <ChannelHeader
+                data={data}
+                onFollowChange={handleFollowChange}
+                onSubscriptionChange={handleSubscriptionChange}
+              />
             </div>
-            <ChannelHeader
-              data={data}
-              onFollowChange={handleFollowChange}
-              onSubscriptionChange={handleSubscriptionChange}
-            />
             <section className="channel-tabs">
               <div className="channel-tabs__list" role="tablist" aria-label="Stream info tabs">
                 {tabs.map((tab) => (
@@ -191,7 +193,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
           </div>
           <aside className="channel-page__chat">
             <div className="channel-page__chat-inner">
-              <ChatPanel channelId={id} roomId={data.chat?.roomId} />
+              <ChatPanel channelId={id} roomId={data.chat?.roomId} viewerCount={data.viewerCount} />
             </div>
           </aside>
         </div>
