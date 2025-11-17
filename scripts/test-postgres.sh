@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-GO_MOD_BACKUP=""
-GO_SUM_BACKUP=""
-
 if ! command -v docker >/dev/null 2>&1; then
   echo "error: docker is required to run postgres-tagged tests" >&2
   exit 1
@@ -28,12 +25,6 @@ CONTAINER_NAME="bitr-postgres-test-$$"
 
 cleanup() {
   docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
-  if [ -n "$GO_MOD_BACKUP" ] && [ -f "$GO_MOD_BACKUP" ]; then
-    mv "$GO_MOD_BACKUP" "$REPO_ROOT/go.mod"
-  fi
-  if [ -n "$GO_SUM_BACKUP" ] && [ -f "$GO_SUM_BACKUP" ]; then
-    mv "$GO_SUM_BACKUP" "$REPO_ROOT/go.sum"
-  fi
 }
 trap cleanup EXIT INT TERM
 
@@ -107,27 +98,15 @@ fi
 echo "running go test -tags postgres ${packages[*]}" >&2
 export GOTOOLCHAIN="${GOTOOLCHAIN:-local}"
 
-GO_MOD_BACKUP=$(mktemp)
-GO_SUM_BACKUP=$(mktemp)
-cp go.mod "$GO_MOD_BACKUP"
-
-use_replacements=0
-if [ -f go.sum ]; then
-  cp go.sum "$GO_SUM_BACKUP"
+# The postgres suite must run without contacting module proxies so vendored
+# replacements remain intact; keep module files read-only and disable the
+# network.
+export GOPROXY="${GOPROXY:-off}"
+export GOSUMDB="${GOSUMDB:-off}"
+if [ -n "${GOFLAGS:-}" ]; then
+  export GOFLAGS="$GOFLAGS -mod=readonly"
 else
-  rm -f "$GO_SUM_BACKUP"
-  GO_SUM_BACKUP=""
-  use_replacements=1
-fi
-
-if [ "$use_replacements" -eq 0 ]; then
-  export GOPROXY="https://proxy.golang.org,direct"
-  export GOSUMDB="sum.golang.org"
-  go mod edit -dropreplace github.com/jackc/pgx/v5 >/dev/null
-  go mod edit -dropreplace github.com/jackc/puddle/v2 >/dev/null
-else
-  export GOPROXY="${GOPROXY:-off}"
-  export GOSUMDB="${GOSUMDB:-off}"
+  export GOFLAGS="-mod=readonly"
 fi
 
 go test -count=1 -tags postgres "${packages[@]}"

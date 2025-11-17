@@ -219,4 +219,8 @@ Need Postgres-backed tests? Use the helper:
 ./scripts/test-postgres.sh ./internal/storage/...
 ```
 
+The script keeps module access offline (`GOPROXY=off GOSUMDB=off` with
+`-mod=readonly`) to preserve vendored replacements and avoid touching
+`go.mod`/`go.sum`.
+
 Questions or improvements? Open an issue or explore `internal/api/handlers.go` to start extending the platform.
