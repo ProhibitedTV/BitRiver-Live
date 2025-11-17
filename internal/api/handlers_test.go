@@ -1267,8 +1267,8 @@ func TestHealthDegradedWhenRepositoryPingFails(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.Health(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status 503, got %d", rec.Code)
 	}
 
 	var payload map[string]interface{}
@@ -1315,8 +1315,8 @@ func TestHealthDegradedWhenRedisDependencyFails(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.Health(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status 503, got %d", rec.Code)
 	}
 
 	var payload map[string]interface{}

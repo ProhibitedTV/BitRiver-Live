@@ -75,6 +75,7 @@ stack or refresh credentials.
    ```bash
    curl http://localhost:8080/healthz
    ```
+   A 200 response means all dependencies are up; a 503 indicates one or more components are degraded and needs attention.
 2. Open [http://localhost:8080/signup](http://localhost:8080/signup) in your browser and sign in with the admin credentials
    printed by the script, then change the password under **Settings → Security**.
 3. Visit [http://localhost:8080/viewer](http://localhost:8080/viewer) in another tab to see the public viewer that proxies
