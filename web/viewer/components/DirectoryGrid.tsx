@@ -72,15 +72,31 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
                 </div>
               </div>
               <div className="directory-card__content">
+                <div className="directory-card__meta-row">
+                  {isLive ? <span className="badge badge--live">Live</span> : <span className="badge badge--muted">Offline</span>}
+                  <span className="meta-chip">{isLive ? viewerOverlayLabel : followerLabel}</span>
+                  <span className="meta-chip meta-chip--pill">{entry.channel.category ?? "Streaming"}</span>
+                </div>
+
                 <div className="directory-card__header">
                   <h3 className="directory-card__title">{entry.channel.title}</h3>
-                  <span className="directory-card__subtitle muted">{entry.channel.category ?? "Streaming"}</span>
+                  <span className="directory-card__subtitle muted">{entry.owner.displayName}</span>
                 </div>
+
                 {entry.profile.bio && <p className="directory-card__description muted">{entry.profile.bio}</p>}
+
+                <div className="directory-card__tags-row">
+                  {entry.channel.tags.slice(0, 3).map((tag) => (
+                    <span key={tag} className="pill pill--tag">
+                      #{tag}
+                    </span>
+                  ))}
+                  {entry.channel.tags.length === 0 && <span className="muted">No tags yet</span>}
+                </div>
               </div>
             </Link>
             <footer className="directory-card__footer">
-              <span className="muted">{followerLabel}</span>
+              <span className="muted">Created {createdAt}</span>
               <Link className="secondary-button" href={`/channels/${entry.channel.id}`}>
                 View channel
               </Link>
