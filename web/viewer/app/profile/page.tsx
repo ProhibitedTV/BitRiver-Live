@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
@@ -123,10 +124,14 @@ export default function ProfilePage() {
   const avatarGlyph = useMemo(() => {
     if (formState.avatarUrl.trim()) {
       return (
-        <img
+        <Image
           src={formState.avatarUrl}
           alt="Profile avatar"
+          width={64}
+          height={64}
+          sizes="64px"
           style={{ width: "4rem", height: "4rem", borderRadius: "999px", objectFit: "cover" }}
+          priority
         />
       );
     }

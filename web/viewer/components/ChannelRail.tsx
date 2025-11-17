@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { DirectoryChannel } from "../lib/viewer-api";
 
@@ -18,7 +19,14 @@ function RailCard({ entry, density = "default" }: { entry: DirectoryChannel; den
     <Link href={`/channels/${entry.channel.id}`} className={`rail-card rail-card--${density}`}>
       <div className="rail-card__media">
         {previewImage ? (
-          <img src={previewImage} alt={`${entry.owner.displayName} channel artwork`} />
+          <Image
+            src={previewImage}
+            alt={`${entry.owner.displayName} channel artwork`}
+            fill
+            sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 100vw"
+            className="rail-card__media-image"
+            priority={density === "compact"}
+          />
         ) : (
           <div className="rail-card__media-fallback" aria-hidden="true" />
         )}

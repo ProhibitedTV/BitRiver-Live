@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import type { ChatMessage } from "../lib/viewer-api";
@@ -242,7 +243,14 @@ export function ChatPanel({
               {groupedMessages.map((group) => (
                 <li key={group.id} className="chat-message chat-message--group">
                   {group.avatar ? (
-                    <img src={group.avatar} alt="" className="chat-message__avatar" loading="lazy" />
+                    <Image
+                      src={group.avatar}
+                      alt=""
+                      width={44}
+                      height={44}
+                      sizes="44px"
+                      className="chat-message__avatar"
+                    />
                   ) : (
                     <div className="chat-message__avatar chat-message__avatar--placeholder" aria-hidden>
                       {group.userLabel.slice(0, 1).toUpperCase()}
@@ -277,7 +285,6 @@ export function ChatPanel({
         className="chat-panel__form"
         onSubmit={handleSend}
         aria-label="Send a chat message"
-        aria-disabled={!user}
       >
         <label htmlFor="chat-input" className="sr-only">
           Chat message

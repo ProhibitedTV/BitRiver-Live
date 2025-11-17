@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { DirectoryChannel } from "../lib/viewer-api";
 
@@ -29,10 +30,13 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
             <Link href={`/channels/${entry.channel.id}`} className="directory-card__link">
               <div className="directory-card__preview">
                 {previewImage ? (
-                  <img
+                  <Image
                     src={previewImage}
                     alt={`${entry.owner.displayName} channel artwork`}
                     className="directory-card__media"
+                    fill
+                    sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 100vw"
+                    priority
                   />
                 ) : (
                   <div className="directory-card__preview-fallback" aria-hidden="true" />
@@ -52,7 +56,14 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
                   <div className="overlay__identity">
                     <div className="overlay__avatar" aria-hidden="true">
                       {entry.owner.avatarUrl ? (
-                        <img src={entry.owner.avatarUrl} alt="" />
+                        <Image
+                          src={entry.owner.avatarUrl}
+                          alt=""
+                          width={44}
+                          height={44}
+                          sizes="44px"
+                          className="overlay__avatar-image"
+                        />
                       ) : (
                         <span>{entry.owner.displayName.charAt(0).toUpperCase()}</span>
                       )}

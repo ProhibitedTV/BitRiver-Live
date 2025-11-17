@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { DirectoryChannel } from "../lib/viewer-api";
 
@@ -29,7 +30,14 @@ export function LiveNowGrid({ channels, loading = false }: LiveNowGridProps) {
           <Link key={entry.channel.id} className="live-card" href={`/channels/${entry.channel.id}`}>
             <div className="live-card__media">
               {previewImage ? (
-                <img src={previewImage} alt={`${entry.owner.displayName} channel artwork`} />
+                <Image
+                  src={previewImage}
+                  alt={`${entry.owner.displayName} channel artwork`}
+                  fill
+                  sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 100vw"
+                  className="live-card__media-image"
+                  priority
+                />
               ) : (
                 <div className="live-card__media-fallback" aria-hidden="true" />
               )}
@@ -44,7 +52,14 @@ export function LiveNowGrid({ channels, loading = false }: LiveNowGridProps) {
                 <div className="overlay__identity">
                   <div className="overlay__avatar" aria-hidden="true">
                     {entry.owner.avatarUrl ? (
-                      <img src={entry.owner.avatarUrl} alt="" />
+                      <Image
+                        src={entry.owner.avatarUrl}
+                        alt=""
+                        width={44}
+                        height={44}
+                        sizes="44px"
+                        className="overlay__avatar-image"
+                      />
                     ) : (
                       <span>{entry.owner.displayName.charAt(0).toUpperCase()}</span>
                     )}
