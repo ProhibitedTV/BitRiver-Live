@@ -26,7 +26,9 @@ The script will:
 
 1. Verify that both Docker and Docker Compose V2 are available.
 2. Generate `.env` with the same defaults baked into `deploy/docker-compose.yml` (including placeholders for the admin email
-   and viewer URL) and rotate the administrator password to a strong random value unless the file already exists.
+   and viewer URL) and rotate the administrator password to a strong random value unless the file already exists. When a
+   pre-existing `.env` is missing required credentials, the helper backfills them (including the OME API username/password)
+   so Compose can start without manual edits.
 3. Launch the containers with `docker compose up --build -d` using the compose file in `deploy/`. Docker automatically builds the API, viewer, SRS controller, and transcoder images the first time, so no registry login is required, and the manifest enables `restart: unless-stopped` for each long-lived service so they come back online after crashes or host reboots.
 4. Wait for Postgres to accept connections. The compose bundle now launches a short-lived `postgres-migrations` service that walks the SQL files in `deploy/migrations/`, applies them with `psql`, and exits. If a migration fails the service stops and the API never starts, giving you a chance to correct the database state before retrying `docker compose up -d`.
 5. Wait for the API health check to pass, then invoke the `bootstrap-admin` helper to seed the admin account and print the credentials.
