@@ -132,7 +132,7 @@ export function Navbar() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, isAdmin]);
 
   useEffect(() => {
     setMenuOpen(false);
