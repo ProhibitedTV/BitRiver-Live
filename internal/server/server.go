@@ -95,6 +95,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	mux.HandleFunc("/api/users", handler.Users)
 	mux.HandleFunc("/api/users/", handler.UserByID)
 	mux.HandleFunc("/api/directory", handler.Directory)
+	mux.HandleFunc("/api/directory/following", handler.DirectoryFollowing)
 	mux.HandleFunc("/api/channels", handler.Channels)
 	mux.HandleFunc("/api/channels/", handler.ChannelByID)
 	mux.HandleFunc("/api/profiles", handler.Profiles)

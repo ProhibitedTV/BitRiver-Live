@@ -811,6 +811,38 @@ func (h *Handler) Directory(w http.ResponseWriter, r *http.Request) {
 		query = strings.TrimSpace(r.URL.Query().Get("q"))
 	}
 	channels := h.Store.ListChannels("", query)
+	h.writeDirectoryResponse(w, channels)
+}
+
+func (h *Handler) DirectoryFollowing(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+
+	viewer, ok := h.requireAuthenticatedUser(w, r)
+	if !ok {
+		return
+	}
+
+	channelIDs := h.Store.ListFollowedChannelIDs(viewer.ID)
+	channels := make([]models.Channel, 0, len(channelIDs))
+	for _, id := range channelIDs {
+		channel, exists := h.Store.GetChannel(id)
+		if !exists {
+			continue
+		}
+		if channel.LiveState != "live" && channel.LiveState != "starting" {
+			continue
+		}
+		channels = append(channels, channel)
+	}
+
+	h.writeDirectoryResponse(w, channels)
+}
+
+func (h *Handler) writeDirectoryResponse(w http.ResponseWriter, channels []models.Channel) {
 	response := make([]directoryChannelResponse, 0, len(channels))
 	for _, channel := range channels {
 		owner, exists := h.Store.GetUser(channel.OwnerID)

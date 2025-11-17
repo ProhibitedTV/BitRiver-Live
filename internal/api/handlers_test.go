@@ -813,6 +813,89 @@ func TestDirectoryFiltersChannelsByQuery(t *testing.T) {
 	}
 }
 
+func TestDirectoryFollowingRequiresAuthentication(t *testing.T) {
+	handler, _ := newTestHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/directory/following", nil)
+	rec := httptest.NewRecorder()
+
+	handler.DirectoryFollowing(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401 for anonymous request, got %d", rec.Code)
+	}
+}
+
+func TestDirectoryFollowingListsLiveFollowedChannels(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	viewer, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Viewer", Email: "viewer@example.com"})
+	if err != nil {
+		t.Fatalf("create viewer: %v", err)
+	}
+	creator, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Creator", Email: "creator@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create creator: %v", err)
+	}
+
+	liveChannel, err := store.CreateChannel(creator.ID, "Live Now", "gaming", []string{"speedrun"})
+	if err != nil {
+		t.Fatalf("create live channel: %v", err)
+	}
+	startingChannel, err := store.CreateChannel(creator.ID, "Starting Soon", "music", []string{"dj"})
+	if err != nil {
+		t.Fatalf("create starting channel: %v", err)
+	}
+	offlineChannel, err := store.CreateChannel(creator.ID, "Offline Show", "tech", []string{"coding"})
+	if err != nil {
+		t.Fatalf("create offline channel: %v", err)
+	}
+
+	liveState := "live"
+	if _, err := store.UpdateChannel(liveChannel.ID, storage.ChannelUpdate{LiveState: &liveState}); err != nil {
+		t.Fatalf("set live state: %v", err)
+	}
+	startingState := "starting"
+	if _, err := store.UpdateChannel(startingChannel.ID, storage.ChannelUpdate{LiveState: &startingState}); err != nil {
+		t.Fatalf("set starting state: %v", err)
+	}
+
+	if err := store.FollowChannel(viewer.ID, offlineChannel.ID); err != nil {
+		t.Fatalf("follow offline channel: %v", err)
+	}
+	if err := store.FollowChannel(viewer.ID, liveChannel.ID); err != nil {
+		t.Fatalf("follow live channel: %v", err)
+	}
+	if err := store.FollowChannel(viewer.ID, startingChannel.ID); err != nil {
+		t.Fatalf("follow starting channel: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/directory/following", nil)
+	req = withUser(req, viewer)
+	rec := httptest.NewRecorder()
+
+	handler.DirectoryFollowing(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var resp directoryResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	wantIDs := []string{startingChannel.ID, liveChannel.ID}
+	if len(resp.Channels) != len(wantIDs) {
+		t.Fatalf("expected %d channels, got %d", len(wantIDs), len(resp.Channels))
+	}
+	for i, id := range wantIDs {
+		if resp.Channels[i].Channel.ID != id {
+			t.Fatalf("expected channel %s at index %d, got %s", id, i, resp.Channels[i].Channel.ID)
+		}
+	}
+}
+
 func TestOAuthProvidersEndpoint(t *testing.T) {
 	handler, _ := newTestHandler(t)
 	stub := &oauthStub{providers: []oauth.ProviderInfo{{Name: "test", DisplayName: "Test"}}}
