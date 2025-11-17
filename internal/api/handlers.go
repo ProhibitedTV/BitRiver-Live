@@ -2698,6 +2698,8 @@ type cryptoAddressPayload struct {
 }
 
 type upsertProfileRequest struct {
+	DisplayName       *string                 `json:"displayName"`
+	Email             *string                 `json:"email"`
 	Bio               *string                 `json:"bio"`
 	AvatarURL         *string                 `json:"avatarUrl"`
 	BannerURL         *string                 `json:"bannerUrl"`
@@ -3574,6 +3576,22 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 	if !ok {
 		writeError(w, http.StatusNotFound, fmt.Errorf("user %s not found", userID))
 		return
+	}
+
+	userUpdate := storage.UserUpdate{}
+	if req.DisplayName != nil {
+		userUpdate.DisplayName = req.DisplayName
+	}
+	if req.Email != nil {
+		userUpdate.Email = req.Email
+	}
+	if userUpdate.DisplayName != nil || userUpdate.Email != nil {
+		updatedUser, err := h.Store.UpdateUser(userID, userUpdate)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		user = updatedUser
 	}
 
 	update := storage.ProfileUpdate{}

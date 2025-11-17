@@ -7,19 +7,23 @@ import type { ProfileView } from "../../lib/viewer-api";
 import { fetchProfile, updateProfile } from "../../lib/viewer-api";
 
 type FormState = {
+  displayName: string;
+  email: string;
   bio: string;
   avatarUrl: string;
   bannerUrl: string;
 };
 
 const defaultFormState: FormState = {
+  displayName: "",
+  email: "",
   bio: "",
   avatarUrl: "",
   bannerUrl: "",
 };
 
 export default function ProfilePage() {
-  const { user, loading: authLoading, error: authError } = useAuth();
+  const { user, loading: authLoading, error: authError, refresh } = useAuth();
   const [profile, setProfile] = useState<ProfileView | undefined>();
   const [formState, setFormState] = useState<FormState>(defaultFormState);
   const [loadingProfile, setLoadingProfile] = useState(false);
@@ -40,6 +44,8 @@ export default function ProfilePage() {
       const data = await fetchProfile(user.id);
       setProfile(data);
       setFormState({
+        displayName: data.displayName ?? user.displayName ?? "",
+        email: user.email ?? "",
         bio: data.bio ?? "",
         avatarUrl: data.avatarUrl ?? "",
         bannerUrl: data.bannerUrl ?? "",
@@ -66,12 +72,15 @@ export default function ProfilePage() {
       setSaveError(undefined);
       setSuccessMessage(undefined);
       const updated = await updateProfile(user.id, {
+        displayName: formState.displayName,
+        email: formState.email,
         bio: formState.bio,
         avatarUrl: formState.avatarUrl,
         bannerUrl: formState.bannerUrl,
       });
       setProfile(updated);
       setSuccessMessage("Profile saved");
+      await refresh();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Unable to save profile");
     } finally {
@@ -81,10 +90,16 @@ export default function ProfilePage() {
 
   const handleReset = () => {
     if (!profile) {
-      setFormState(defaultFormState);
+      setFormState({
+        ...defaultFormState,
+        displayName: user.displayName,
+        email: user.email ?? "",
+      });
       return;
     }
     setFormState({
+      displayName: profile.displayName ?? user.displayName ?? "",
+      email: user.email ?? "",
       bio: profile.bio ?? "",
       avatarUrl: profile.avatarUrl ?? "",
       bannerUrl: profile.bannerUrl ?? "",
@@ -205,43 +220,89 @@ export default function ProfilePage() {
               </section>
 
               <form className="surface stack" onSubmit={handleSubmit}>
-                <div className="stack" style={{ gap: "1rem" }}>
-                  <div className="stack" style={{ gap: "0.25rem" }}>
-                    <label htmlFor="avatarUrl">Avatar URL</label>
-                    <input
-                      id="avatarUrl"
-                      name="avatarUrl"
-                      type="url"
-                      placeholder="https://example.com/avatar.png"
-                      value={formState.avatarUrl}
-                      onChange={(event) => setFormState((prev) => ({ ...prev, avatarUrl: event.target.value }))}
-                    />
-                    <p className="muted">Use a square image for best results.</p>
+                <div className="stack" style={{ gap: "1.5rem" }}>
+                  <div className="stack" style={{ gap: "0.75rem" }}>
+                    <div>
+                      <h2 style={{ margin: 0 }}>Account</h2>
+                      <p className="muted" style={{ margin: 0 }}>
+                        Keep your display name and contact email up to date so viewers and notifications reach you.
+                      </p>
+                    </div>
+
+                    <div className="stack" style={{ gap: "0.25rem" }}>
+                      <label htmlFor="displayName">Display name</label>
+                      <input
+                        id="displayName"
+                        name="displayName"
+                        type="text"
+                        required
+                        placeholder="How viewers see you"
+                        value={formState.displayName}
+                        onChange={(event) => setFormState((prev) => ({ ...prev, displayName: event.target.value }))}
+                      />
+                      <p className="muted">Shown on your channel cards, chat messages, and profile.</p>
+                    </div>
+
+                    <div className="stack" style={{ gap: "0.25rem" }}>
+                      <label htmlFor="email">Email</label>
+                      <input
+                        id="email"
+                        name="email"
+                        type="email"
+                        required
+                        placeholder="you@example.com"
+                        value={formState.email}
+                        onChange={(event) => setFormState((prev) => ({ ...prev, email: event.target.value }))}
+                      />
+                      <p className="muted">We&apos;ll use this for updates, notifications, and account recovery.</p>
+                    </div>
                   </div>
 
-                  <div className="stack" style={{ gap: "0.25rem" }}>
-                    <label htmlFor="bannerUrl">Banner URL</label>
-                    <input
-                      id="bannerUrl"
-                      name="bannerUrl"
-                      type="url"
-                      placeholder="https://example.com/banner.jpg"
-                      value={formState.bannerUrl}
-                      onChange={(event) => setFormState((prev) => ({ ...prev, bannerUrl: event.target.value }))}
-                    />
-                    <p className="muted">Wide images shine here. Leave blank for a neutral background.</p>
-                  </div>
+                  <div className="stack" style={{ gap: "0.75rem" }}>
+                    <div>
+                      <h2 style={{ margin: 0 }}>Profile visuals</h2>
+                      <p className="muted" style={{ margin: 0 }}>
+                        Personalize your channel preview with images and a short bio.
+                      </p>
+                    </div>
 
-                  <div className="stack" style={{ gap: "0.25rem" }}>
-                    <label htmlFor="bio">Bio</label>
-                    <textarea
-                      id="bio"
-                      name="bio"
-                      rows={4}
-                      placeholder="Tell viewers about your streams, schedule, or community."
-                      value={formState.bio}
-                      onChange={(event) => setFormState((prev) => ({ ...prev, bio: event.target.value }))}
-                    />
+                    <div className="stack" style={{ gap: "0.25rem" }}>
+                      <label htmlFor="avatarUrl">Avatar URL</label>
+                      <input
+                        id="avatarUrl"
+                        name="avatarUrl"
+                        type="url"
+                        placeholder="https://example.com/avatar.png"
+                        value={formState.avatarUrl}
+                        onChange={(event) => setFormState((prev) => ({ ...prev, avatarUrl: event.target.value }))}
+                      />
+                      <p className="muted">Use a square image for best results.</p>
+                    </div>
+
+                    <div className="stack" style={{ gap: "0.25rem" }}>
+                      <label htmlFor="bannerUrl">Banner URL</label>
+                      <input
+                        id="bannerUrl"
+                        name="bannerUrl"
+                        type="url"
+                        placeholder="https://example.com/banner.jpg"
+                        value={formState.bannerUrl}
+                        onChange={(event) => setFormState((prev) => ({ ...prev, bannerUrl: event.target.value }))}
+                      />
+                      <p className="muted">Wide images shine here. Leave blank for a neutral background.</p>
+                    </div>
+
+                    <div className="stack" style={{ gap: "0.25rem" }}>
+                      <label htmlFor="bio">Bio</label>
+                      <textarea
+                        id="bio"
+                        name="bio"
+                        rows={4}
+                        placeholder="Tell viewers about your streams, schedule, or community."
+                        value={formState.bio}
+                        onChange={(event) => setFormState((prev) => ({ ...prev, bio: event.target.value }))}
+                      />
+                    </div>
                   </div>
                 </div>
 

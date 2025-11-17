@@ -1856,6 +1856,8 @@ func TestProfileEndpoints(t *testing.T) {
 	}
 
 	payload := map[string]interface{}{
+		"displayName":       "Streamer Deluxe",
+		"email":             "streamer+updates@example.com",
 		"bio":               "Welcome to the cascade",
 		"avatarUrl":         "https://cdn.example.com/avatar.png",
 		"bannerUrl":         "https://cdn.example.com/banner.png",
@@ -1879,8 +1881,8 @@ func TestProfileEndpoints(t *testing.T) {
 	if response.UserID != owner.ID {
 		t.Fatalf("expected user id %s, got %s", owner.ID, response.UserID)
 	}
-	if response.DisplayName != owner.DisplayName {
-		t.Fatalf("expected display name %s, got %s", owner.DisplayName, response.DisplayName)
+	if response.DisplayName != payload["displayName"] {
+		t.Fatalf("expected display name %s, got %s", payload["displayName"], response.DisplayName)
 	}
 	if response.FeaturedChannelID == nil || *response.FeaturedChannelID != channel.ID {
 		t.Fatalf("expected featured channel %s", channel.ID)
@@ -1927,6 +1929,16 @@ func TestProfileEndpoints(t *testing.T) {
 	storedProfile, ok := store.GetProfile(owner.ID)
 	if !ok {
 		t.Fatalf("expected persisted profile for %s", owner.ID)
+	}
+	updatedOwner, ok := store.GetUser(owner.ID)
+	if !ok {
+		t.Fatalf("expected stored user for %s", owner.ID)
+	}
+	if updatedOwner.DisplayName != payload["displayName"] {
+		t.Fatalf("expected user display name updated to %s", payload["displayName"])
+	}
+	if updatedOwner.Email != payload["email"] {
+		t.Fatalf("expected user email updated to %s", payload["email"])
 	}
 
 	viewerPayload := map[string]interface{}{

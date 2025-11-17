@@ -73,6 +73,8 @@ describe("ProfilePage", () => {
 
     await waitFor(() => expect(fetchProfileMock).toHaveBeenCalledWith("viewer-1"));
 
+    expect(screen.getByDisplayValue("Viewer One")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("viewer@example.com")).toBeInTheDocument();
     expect(screen.getByDisplayValue(profileFixture.avatarUrl)).toBeInTheDocument();
     expect(screen.getByDisplayValue(profileFixture.bannerUrl)).toBeInTheDocument();
     expect(screen.getByDisplayValue(/sci-fi strategy games/i)).toBeInTheDocument();
@@ -90,6 +92,10 @@ describe("ProfilePage", () => {
 
     await screen.findByDisplayValue(profileFixture.avatarUrl);
 
+    await user.clear(screen.getByLabelText("Display name"));
+    await user.type(screen.getByLabelText("Display name"), "New Viewer Name");
+    await user.clear(screen.getByLabelText("Email"));
+    await user.type(screen.getByLabelText("Email"), "viewer+alerts@example.com");
     await user.clear(screen.getByLabelText("Bio"));
     await user.type(screen.getByLabelText("Bio"), "New bio for my streams");
     await user.clear(screen.getByLabelText("Avatar URL"));
@@ -98,10 +104,14 @@ describe("ProfilePage", () => {
 
     await waitFor(() => expect(updateProfileMock).toHaveBeenCalledTimes(1));
     expect(updateProfileMock).toHaveBeenCalledWith("viewer-1", {
+      displayName: "New Viewer Name",
+      email: "viewer+alerts@example.com",
       bio: "New bio for my streams",
       avatarUrl: "https://new.example.com/me.png",
       bannerUrl: profileFixture.bannerUrl,
     });
+
+    expect(mockUseAuth().refresh).toHaveBeenCalled();
 
     expect(await screen.findByText(/profile saved/i)).toBeInTheDocument();
   });

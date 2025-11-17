@@ -338,6 +338,8 @@ export function fetchProfile(userId: string): Promise<ProfileView> {
 }
 
 export type UpdateProfilePayload = {
+  displayName?: string;
+  email?: string;
   bio?: string;
   avatarUrl?: string;
   bannerUrl?: string;
