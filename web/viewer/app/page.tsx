@@ -113,17 +113,8 @@ export default function DirectoryPage() {
   return (
     <div className="home-page">
       <section className="home-hero">
-        <div className="home-hero__background" aria-hidden="true">
-          <span className="home-hero__layer home-hero__layer--aurora" />
-          <span className="home-hero__layer home-hero__layer--grid" />
-          <span className="home-hero__layer home-hero__layer--orb" />
-        </div>
         <div className="home-hero__inner container container--wide">
           <div className="home-hero__content stack">
-            <div className="home-hero__chips">
-              <span className="badge">Seasonal spotlight</span>
-              <span className="badge badge--live">Happening now</span>
-            </div>
             <h1>Discover live channels</h1>
             <p className="muted">
               Explore community broadcasts, follow your favourite creators, and jump into ultra-low-latency playback powered
@@ -133,13 +124,9 @@ export default function DirectoryPage() {
               <a className="primary-button" href="#live-now">
                 Start watching
               </a>
-              <a className="secondary-button" href="#directory">
-                Browse directory
-              </a>
             </div>
             <div className="home-hero__search">
               <SearchBar onSearch={handleSearch} defaultValue={query} />
-              <p className="muted">Surface creators by category, title, or tag.</p>
             </div>
           </div>
 
