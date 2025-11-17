@@ -89,12 +89,20 @@ export default function ProfilePage() {
   };
 
   const handleReset = () => {
+    if (!user) {
+      setFormState(defaultFormState);
+      setSaveError(undefined);
+      setSuccessMessage(undefined);
+      return;
+    }
     if (!profile) {
       setFormState({
         ...defaultFormState,
-        displayName: user.displayName,
+        displayName: user.displayName ?? "",
         email: user.email ?? "",
       });
+      setSaveError(undefined);
+      setSuccessMessage(undefined);
       return;
     }
     setFormState({
