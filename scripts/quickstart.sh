@@ -456,7 +456,7 @@ export COMPOSE_FILE="$COMPOSE_FILE"
 echo "Starting BitRiver Live stack..."
 docker compose up --build -d
 
-echo "Stack is starting. Use 'docker compose logs -f' to follow service output."
+echo "Stack is starting. From the repository root, run 'COMPOSE_FILE=deploy/docker-compose.yml docker compose logs -f' to follow service output."
 
 API_PORT=$(read_env_value BITRIVER_LIVE_PORT)
 API_PORT=${API_PORT:-8080}

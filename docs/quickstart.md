@@ -43,6 +43,13 @@ seeded credentials after the stack is ready; log in immediately and rotate the p
 
 ## Common follow-up commands
 
+Compose lives in `deploy/docker-compose.yml`. Set the file path once from the repository root to avoid `no configuration file p
+rovided` errors, then use the standard Compose subcommands:
+
+```bash
+export COMPOSE_FILE=deploy/docker-compose.yml
+```
+
 - Inspect service health:
   ```bash
   docker compose ps

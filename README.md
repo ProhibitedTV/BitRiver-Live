@@ -84,9 +84,12 @@ stack or refresh credentials.
 
 ### Step 4 – Start, stop, and troubleshoot
 
-Run these commands from the repository root (where `.env` lives):
+Run these commands from the repository root (where `.env` lives). Set the compose path once so Docker finds `deploy/docker-comp
+ose.yml`, then use the usual subcommands:
 
 ```bash
+export COMPOSE_FILE=deploy/docker-compose.yml
+
 # Show container status
 docker compose ps
 
