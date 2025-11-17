@@ -23,6 +23,7 @@ required_vars=(
   BITRIVER_POSTGRES_USER
   BITRIVER_POSTGRES_PASSWORD
   BITRIVER_REDIS_PASSWORD
+  BITRIVER_OME_API
   BITRIVER_LIVE_ADMIN_EMAIL
   BITRIVER_LIVE_ADMIN_PASSWORD
   BITRIVER_SRS_TOKEN
@@ -121,6 +122,12 @@ fi
 if [[ -n "${BITRIVER_TRANSCODER_PUBLIC_BASE_URL:-}" ]]; then
   if [[ "$BITRIVER_TRANSCODER_PUBLIC_BASE_URL" =~ ^https?://(localhost|127\.[0-9.]*|0\.0\.0\.0|::1|\[::1\])([:/]|$) ]]; then
     errors+=("BITRIVER_TRANSCODER_PUBLIC_BASE_URL points at loopback ($BITRIVER_TRANSCODER_PUBLIC_BASE_URL). Configure a CDN, reverse proxy, or other routable origin instead.")
+  fi
+fi
+
+if [[ -n "${BITRIVER_OME_API:-}" ]]; then
+  if [[ "$BITRIVER_OME_API" =~ ^https?://(localhost|127\.[0-9.]*|0\.0\.0\.0|::1|\[::1\])([:/]|$) ]]; then
+    errors+=("BITRIVER_OME_API points at loopback ($BITRIVER_OME_API). Use the ome hostname from docker-compose.yml or another reachable host/IP.")
   fi
 fi
 
