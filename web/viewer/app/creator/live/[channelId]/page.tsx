@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Player } from "../../../../components/Player";
 import { useCreatorChannel } from "../../../../hooks/useCreatorChannel";
 import {
@@ -34,11 +35,13 @@ export default function CreatorLivePage() {
   const [sessionError, setSessionError] = useState<string | undefined>();
   const [sessions, setSessions] = useState<StreamSession[]>([]);
   const [managedChannel, setManagedChannel] = useState<ManagedChannel | undefined>();
+  const [managedChannels, setManagedChannels] = useState<ManagedChannel[]>([]);
   const [managedError, setManagedError] = useState<string | undefined>();
   const [titleDraft, setTitleDraft] = useState("");
   const [savingTitle, setSavingTitle] = useState(false);
   const [titleError, setTitleError] = useState<string | undefined>();
   const [titleSaved, setTitleSaved] = useState(false);
+  const router = useRouter();
 
   const codeBlockStyle = {
     fontFamily: "monospace",
@@ -67,12 +70,15 @@ export default function CreatorLivePage() {
     setManagedError(undefined);
     try {
       const channels = await fetchManagedChannels();
+      setManagedChannels(channels);
       const match = channels.find((channel) => channel.id === channelId);
       setManagedChannel(match);
       if (!match) {
-        setManagedError("Channel access unavailable");
+        setManagedError(channels.length > 0 ? "Channel access unavailable" : "No managed channels available");
       }
     } catch (err) {
+      setManagedChannels([]);
+      setManagedChannel(undefined);
       const message = err instanceof Error ? err.message : "Unable to load channel settings";
       setManagedError(message);
     }
@@ -91,6 +97,13 @@ export default function CreatorLivePage() {
     setTitleSaved(false);
     setTitleError(undefined);
   }, [playback?.channel.title]);
+
+  const handleChannelChange = (event: FormEvent<HTMLSelectElement>) => {
+    const nextChannelId = event.currentTarget.value;
+    if (nextChannelId && nextChannelId !== channelId) {
+      void router.push(`/creator/live/${nextChannelId}`);
+    }
+  };
 
   const latestSession = useMemo(() => {
     if (sessions.length === 0) {
@@ -161,6 +174,20 @@ export default function CreatorLivePage() {
           Configure your encoder with the ingest URL and stream key below, then start sending video to see a live
           preview.
         </p>
+        {managedChannels.length > 1 ? (
+          <div className="stack" style={{ gap: "0.5rem", maxWidth: "24rem" }}>
+            <label className="muted" htmlFor="channel-selector">
+              Switch channel
+            </label>
+            <select id="channel-selector" value={channelId} onChange={handleChannelChange}>
+              {managedChannels.map((channel) => (
+                <option key={channel.id} value={channel.id}>
+                  {channel.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
         <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
           <button type="button" className="secondary-button" onClick={() => { void reload(); void loadSessions(); }}>
             Refresh details
