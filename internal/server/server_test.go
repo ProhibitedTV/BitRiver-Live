@@ -36,6 +36,15 @@ func newTestHandler(t *testing.T) (*api.Handler, *storage.Storage) {
 	return api.NewHandler(store, sessions), store
 }
 
+func TestNewReturnsErrorWhenHandlerNil(t *testing.T) {
+	t.Parallel()
+
+	srv, err := New(nil, Config{})
+	if err == nil {
+		t.Fatalf("expected error when handler is nil, got server: %#v", srv)
+	}
+}
+
 func TestAuthMiddlewareAcceptsCookie(t *testing.T) {
 	handler, store := newTestHandler(t)
 	user, err := store.CreateUser(storage.CreateUserParams{

@@ -69,19 +69,21 @@ type Server struct {
 // endpoints on a mux alongside static asset and optional viewer proxy handlers.
 // The supplied Config drives listener address selection, TLS activation,
 // logging, auditing, rate limiting, and metrics recording (falling back to
-// metrics.Default when Metrics is nil). If handler is provided its OAuth field
-// is populated from Config before being used by auth middleware, and the
-// resulting Server retains references for lifecycle management.
+// metrics.Default when Metrics is nil). The handler's OAuth field is populated
+// from Config before being used by auth middleware, and the resulting Server
+// retains references for lifecycle management.
 func New(handler *api.Handler, cfg Config) (*Server, error) {
+	if handler == nil {
+		return nil, errors.New("handler is required")
+	}
+
 	recorder := cfg.Metrics
 	if recorder == nil {
 		recorder = metrics.Default()
 	}
-	if handler != nil {
-		handler.OAuth = cfg.OAuth
-		if cfg.AllowSelfSignup != nil {
-			handler.AllowSelfSignup = *cfg.AllowSelfSignup
-		}
+	handler.OAuth = cfg.OAuth
+	if cfg.AllowSelfSignup != nil {
+		handler.AllowSelfSignup = *cfg.AllowSelfSignup
 	}
 
 	mux := http.NewServeMux()
@@ -141,9 +143,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("configure rate limiter: %w", err)
 	}
-	if handler != nil {
-		handler.RateLimiter = rl
-	}
+	handler.RateLimiter = rl
 	ipResolver, err := newClientIPResolver(cfg.RateLimit)
 	if err != nil {
 		return nil, fmt.Errorf("configure client ip resolver: %w", err)
