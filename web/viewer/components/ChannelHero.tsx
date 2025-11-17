@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import type {
   ChannelPlaybackResponse,
@@ -34,11 +34,13 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
   const [loading, setLoading] = useState(false);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const donationAddresses = data.donationAddresses ?? [];
 
   useEffect(() => {
     setFollow(data.follow);
-  }, [data.follow.followers, data.follow.following]);
+  }, [data.follow]);
 
   useEffect(() => {
     const nextSubscription: SubscriptionState = data.subscription ?? {
@@ -46,7 +48,7 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
       subscribers: 0
     };
     setSubscription(nextSubscription);
-  }, [data.subscription?.subscribed, data.subscription?.subscribers, data.subscription?.tier]);
+  }, [data.subscription]);
 
   const handleToggleFollow = async () => {
     if (!user) {
@@ -102,13 +104,93 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
     setTipOpen(false);
   };
 
+  const handleShare = async () => {
+    const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    } catch {
+      setStatus("Copy isn't supported in this browser.");
+    }
+  };
+
+  const viewerCount = useMemo(() => {
+    if (data.viewerCount !== undefined) {
+      return data.viewerCount;
+    }
+    return undefined;
+  }, [data.viewerCount]);
+
   return (
-    <section className="channel-header surface stack" aria-labelledby="channel-title">
-      <header className="channel-header__meta stack" style={{ gap: "0.5rem" }}>
-        <div className="channel-header__title stack" style={{ gap: "0.35rem" }}>
-          <p className="muted">{data.owner.displayName}</p>
-          <h1 id="channel-title">{data.channel.title}</h1>
+    <section className="channel-hero surface" aria-labelledby="channel-title">
+      <header className="channel-hero__top">
+        <div className="channel-hero__identity">
+          <div className="channel-hero__eyebrow">
+            {data.live ? <span className="pill pill--live">Live</span> : <span className="pill">Offline</span>}
+            {viewerCount !== undefined && (
+              <span className="pill pill--ghost" aria-label="Current viewers">
+                <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                  <path
+                    fill="currentColor"
+                    d="M10 4.5c3.94 0 7.23 2.35 8.86 5.59C17.23 13.33 13.94 15.67 10 15.67S2.77 13.33 1.14 10.09C2.77 6.85 6.06 4.5 10 4.5Zm0 1.8c-2.8 0-5.22 1.63-6.46 3.79 1.24 2.15 3.66 3.78 6.46 3.78s5.22-1.63 6.46-3.78C15.22 7.93 12.8 6.3 10 6.3Zm0 1.45a2.25 2.25 0 1 1 0 4.5 2.25 2.25 0 0 1 0-4.5Z"
+                  />
+                </svg>
+                {viewerCount.toLocaleString()} watching
+              </span>
+            )}
+          </div>
+          <div className="channel-hero__title">
+            <p className="muted">{data.owner.displayName}</p>
+            <h1 id="channel-title">{data.channel.title}</h1>
+          </div>
         </div>
+        <div className="channel-hero__actions" aria-label="Channel actions">
+          <button
+            className="pill-action"
+            onClick={handleToggleFollow}
+            disabled={loading}
+            aria-pressed={follow.following}
+            type="button"
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+              <path
+                fill="currentColor"
+                d="M10 17.5S3 12.45 3 7.7A4.7 4.7 0 0 1 10 4a4.7 4.7 0 0 1 7 3.7c0 4.75-7 9.8-7 9.8Z"
+              />
+            </svg>
+            {follow.following ? "Following" : "Follow"}
+            <span className="pill-action__meta">{follow.followers.toLocaleString()}</span>
+          </button>
+          <button
+            className="pill-action pill-action--sub"
+            onClick={handleToggleSubscription}
+            disabled={subscriptionLoading}
+            aria-pressed={subscription.subscribed}
+            type="button"
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+              <path
+                fill="currentColor"
+                d="m10 15.5-5.1 2.67 1-5.74L1 8.73l5.77-.84L10 2.5l3.23 5.4 5.77.84-4.9 3.7 1 5.73Z"
+              />
+            </svg>
+            {subscription.subscribed ? "Subscribed" : "Subscribe"}
+            {subscription.tier && <span className="pill-action__meta">{subscription.tier}</span>}
+          </button>
+          <button className="pill-action pill-action--ghost" type="button" onClick={handleShare}>
+            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+              <path
+                fill="currentColor"
+                d="M15 13.5a2.5 2.5 0 1 1-2.13 3.75l-4.6-2.53a2.5 2.5 0 0 1 0-2.44l4.6-2.53a2.5 2.5 0 1 1 .54 1.3l-4.6 2.53c-.1.06-.16.16-.16.27 0 .11.06.21.16.27l4.6 2.53c.35-.52.94-.85 1.59-.85ZM6 4a2 2 0 1 1-1.95 2.46l4.77 2.63a2.5 2.5 0 0 1 0 2.44l-4.77 2.63a2 2 0 1 1-.54-1.1l4.76-2.63c.1-.06.17-.16.17-.27 0-.11-.06-.21-.16-.27L3.5 7.17A2 2 0 0 1 6 4Z"
+              />
+            </svg>
+            {copiedLink ? "Copied" : "Share"}
+          </button>
+        </div>
+      </header>
+      <div className="channel-hero__meta-row">
         <div className="tag-list">
           {data.live && <span className="badge">Live now</span>}
           {data.channel.category && <span className="tag">{data.channel.category}</span>}
@@ -118,49 +200,53 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
             </span>
           ))}
         </div>
-      </header>
-      <div className="channel-header__actions">
-        <div className="channel-header__buttons">
-          <button
-            className="primary-button"
-            onClick={handleToggleFollow}
-            disabled={loading}
-            aria-pressed={follow.following}
-            type="button"
-          >
-            {follow.following ? "Following" : "Follow"} · {follow.followers} supporter
-            {follow.followers === 1 ? "" : "s"}
-          </button>
-          <button
-            className="secondary-button"
-            onClick={handleToggleSubscription}
-            disabled={subscriptionLoading}
-            aria-pressed={subscription.subscribed}
-          >
-            {subscription.subscribed ? "Subscribed" : "Subscribe"}
-            {subscription.tier ? ` · ${subscription.tier}` : ""}
-          </button>
-          <button className="secondary-button" type="button" onClick={handleOpenTip}>
-            Send a tip
-          </button>
+        <div className="channel-hero__status">
+          <p className="muted" role="status">
+            {status ??
+              (data.live
+                ? "Enjoy low-latency playback powered by the ingest pipeline."
+                : "Offline for now – follow to be notified when the stream returns.")}
+          </p>
         </div>
-        <dl className="channel-stats" aria-label="Channel community stats">
-          <div>
+      </div>
+      <details
+        className="channel-hero__drawer"
+        open={drawerOpen}
+        onToggle={(event) => setDrawerOpen(event.currentTarget.open)}
+      >
+        <summary>
+          <span>Community insights</span>
+          <span className="muted">Followers, subscribers, and tipping</span>
+        </summary>
+        <div className="channel-hero__drawer-grid">
+          <dl>
             <dt>Followers</dt>
             <dd>{follow.followers.toLocaleString()}</dd>
-          </div>
-          <div>
+          </dl>
+          <dl>
             <dt>Subscribers</dt>
             <dd>{subscription.subscribers.toLocaleString()}</dd>
+          </dl>
+          <dl>
+            <dt>Status</dt>
+            <dd>{data.live ? "Live session active" : "Waiting for the next stream"}</dd>
+          </dl>
+          <div className="channel-hero__drawer-actions">
+            <button className="secondary-button" type="button" onClick={handleOpenTip}>
+              Send a tip
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={handleToggleSubscription}
+              disabled={subscriptionLoading}
+              aria-pressed={subscription.subscribed}
+            >
+              {subscription.subscribed ? "Manage subscription" : "Subscribe for perks"}
+            </button>
           </div>
-        </dl>
-      </div>
-      <p className="muted" role="status">
-        {status ??
-          (data.live
-            ? "Enjoy low-latency playback powered by the ingest pipeline."
-            : "Offline for now – follow to be notified when the stream returns.")}
-      </p>
+        </div>
+      </details>
       <TipDrawer
         open={tipOpen}
         channelId={data.channel.id}

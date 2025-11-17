@@ -184,6 +184,7 @@ export type ChannelPlaybackResponse = {
   follow: FollowState;
   subscription?: SubscriptionState;
   playback?: Playback;
+  viewerCount?: number;
   chat?: {
     roomId: string;
   };
