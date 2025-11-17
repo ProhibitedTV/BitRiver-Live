@@ -190,7 +190,7 @@ escape_sed_replacement() {
 }
 
 render_ome_server_config() {
-  local template_file="$REPO_ROOT/deploy/ome/Server.xml"
+  local template_file="${OME_TEMPLATE_PATH:-$REPO_ROOT/deploy/ome/Server.xml}"
   if [[ ! -f $template_file ]]; then
     echo "OME template not found at $template_file" >&2
     return 1
@@ -359,6 +359,10 @@ bootstrap_admin() {
   echo "Failed to run bootstrap helper automatically. Configure the admin account manually." >&2
   return 2
 }
+
+if [[ ${BITRIVER_QUICKSTART_TEST_MODE:-} == "1" ]]; then
+  return 0 2>/dev/null || exit 0
+fi
 
 generated_admin_password=""
 if [ -f "$ENV_FILE" ]; then
