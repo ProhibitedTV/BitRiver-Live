@@ -16,13 +16,6 @@ COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
 require_command docker || exit 1
 require_command curl || exit 1
 
-cleanup_temp_files() {
-  if [[ -n ${OME_SERVER_XML_PATH:-} && -f $OME_SERVER_XML_PATH ]]; then
-    rm -f "$OME_SERVER_XML_PATH"
-  fi
-}
-trap cleanup_temp_files EXIT
-
 generate_strong_password() {
   local password=""
   if command -v python3 >/dev/null 2>&1; then
@@ -227,6 +220,9 @@ render_ome_server_config() {
     return 1
   fi
 
+  local output_file="$REPO_ROOT/deploy/ome/Server.generated.xml"
+  mkdir -p "$(dirname "$output_file")"
+
   local ome_username ome_password
   ome_username=$(read_env_value BITRIVER_OME_USERNAME)
   ome_password=$(read_env_value BITRIVER_OME_PASSWORD)
@@ -236,27 +232,25 @@ render_ome_server_config() {
     return 1
   fi
 
-  local tmp_file
-  tmp_file=$(mktemp "${TMPDIR:-/tmp}/bitriver-ome-XXXXXX.xml")
-  cp "$template_file" "$tmp_file"
+  cp "$template_file" "$output_file"
 
   local escaped_username escaped_password
   escaped_username=$(escape_sed_replacement "$ome_username")
   escaped_password=$(escape_sed_replacement "$ome_password")
 
-  sed -i -E "s|<ID>[^<]*</ID>|<ID>${escaped_username}</ID>|" "$tmp_file"
-  sed -i -E "s|<Password>[^<]*</Password>|<Password>${escaped_password}</Password>|" "$tmp_file"
+  sed -i -E "s|<ID>[^<]*</ID>|<ID>${escaped_username}</ID>|" "$output_file"
+  sed -i -E "s|<Password>[^<]*</Password>|<Password>${escaped_password}</Password>|" "$output_file"
 
-  if ! grep -q "<ID>${ome_username}</ID>" "$tmp_file"; then
-    echo "Failed to render OME username into $tmp_file" >&2
+  if ! grep -q "<ID>${ome_username}</ID>" "$output_file"; then
+    echo "Failed to render OME username into $output_file" >&2
     return 1
   fi
-  if ! grep -q "<Password>${ome_password}</Password>" "$tmp_file"; then
-    echo "Failed to render OME password into $tmp_file" >&2
+  if ! grep -q "<Password>${ome_password}</Password>" "$output_file"; then
+    echo "Failed to render OME password into $output_file" >&2
     return 1
   fi
 
-  OME_SERVER_XML_PATH="$tmp_file"
+  OME_SERVER_XML_PATH="$output_file"
   export OME_SERVER_XML_PATH
   echo "Rendered OME control config to $OME_SERVER_XML_PATH"
 }

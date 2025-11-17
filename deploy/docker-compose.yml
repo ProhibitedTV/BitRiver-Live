@@ -235,7 +235,7 @@ services:
       - "${BITRIVER_OME_HTTP_PORT:-8081}:8081"
       - "${BITRIVER_OME_SIGNALLING_PORT:-9000}:9000"
     volumes:
-      - ${OME_SERVER_XML_PATH:-./ome/Server.xml}:/opt/ovenmediaengine/bin/origin_conf/Server.xml:ro
+      - ${OME_SERVER_XML_PATH:-./ome/Server.generated.xml}:/opt/ovenmediaengine/bin/origin_conf/Server.xml:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8081/healthz || curl -fsS http://localhost:8081/v1/system/monitoring"]
       interval: 30s
