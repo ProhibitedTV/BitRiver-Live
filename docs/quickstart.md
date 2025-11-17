@@ -81,7 +81,7 @@ compose file.
   ./scripts/quickstart.sh
   ```
  The script reuses your existing `.env` and Docker volumes, so configuration, database data, and media files persist across updates.
- It also refreshes the OME control credentials baked into `deploy/ome/Server.xml` so `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD` stay in sync with the mounted configuration.
+ It also refreshes the OME control credentials baked into `deploy/ome/Server.generated.xml` (rendered from the template in `deploy/ome/Server.xml`) so `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD` stay in sync with the mounted configuration across container restarts.
 - Codex CLI users: follow the [Codex CLI guide](codex-cli.md) for installation, authentication, and edit workflows tailored to this repository. Rerun `docker compose up -d` after applying Codex patches so containers reload configuration and binaries.
 
 ## Troubleshooting
@@ -94,10 +94,11 @@ compose file.
 - **Port already in use** – Stop or reconfigure any services that currently bind to ports 5432, 6379, 8080, 8081, 9000, 9001,
   1935, or 1985. Alternatively edit the corresponding `*_PORT` values in `.env` (for example, `BITRIVER_LIVE_PORT=9090`) and
   rerun `docker compose up -d`.
-- **OME health check fails** – Confirm that `deploy/ome/Server.xml` declares the OME role with `<Type>origin</Type>` and a top-
+- **OME health check fails** – Confirm that `deploy/ome/Server.xml` (the source template) declares the OME role with `<Type>origin</Type>` and a top-
   level `<Bind>` block (for example, `<Bind><Address>0.0.0.0</Address></Bind>`) inside the root `<Server>` stanza. The copy in
-  this repository is aligned to the upstream OvenMediaEngine schema for `BITRIVER_OME_IMAGE_TAG` (default `0.15.10`) and mounts
-  to `/opt/ovenmediaengine/bin/origin_conf/Server.xml` inside the `bitriver-ome` container. The compose service pins the
+  this repository is aligned to the upstream OvenMediaEngine schema for `BITRIVER_OME_IMAGE_TAG` (default `0.15.10`) and the
+  quickstart renders it to `deploy/ome/Server.generated.xml` before mounting it to `/opt/ovenmediaengine/bin/origin_conf/Server.xml`
+  inside the `bitriver-ome` container. The compose service pins the
   hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the
   container name. The quickstart script also seeds the `.env` with that value so the API always knows where to call OME
   regardless of the host system. If you deploy OME outside of Docker, update `BITRIVER_OME_API` to the reachable host/IP. If you
