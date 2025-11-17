@@ -68,7 +68,7 @@ export function Player({ playback }: { playback?: Playback }) {
     }
 
     return undefined;
-  }, [playback]);
+  }, [playback, playerId]);
 
   if (!playback) {
     return (
