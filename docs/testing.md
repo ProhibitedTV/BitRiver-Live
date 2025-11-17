@@ -16,6 +16,17 @@ test caching and match CI's deadline for each package:
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=10s
 ```
 
+OME quickstart drift is guarded by an ingest test that reads the pinned image
+in `deploy/docker-compose.yml` and compares `deploy/ome/Server.xml` to the
+expected template for that tag. It also enforces required fields such as
+`<Type>origin</Type>` and rejects top-level `<Bind>` entries. When updating the
+OME image, refresh the template map in
+`internal/ingest/ome_config_test.go` and rerun:
+
+```bash
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ingest -count=1
+```
+
 ## Postgres storage layer
 
 Storage integration tests live behind the `postgres` build tag. They expect an
