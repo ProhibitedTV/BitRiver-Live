@@ -16,6 +16,13 @@ COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
 require_command docker || exit 1
 require_command curl || exit 1
 
+cleanup_temp_files() {
+  if [[ -n ${OME_SERVER_XML_PATH:-} && -f $OME_SERVER_XML_PATH ]]; then
+    rm -f "$OME_SERVER_XML_PATH"
+  fi
+}
+trap cleanup_temp_files EXIT
+
 generate_strong_password() {
   local password=""
   if command -v python3 >/dev/null 2>&1; then
@@ -176,6 +183,51 @@ read_env_value() {
     value="${env_defaults[$key]:-}"
   fi
   printf '%s' "$value"
+}
+
+escape_sed_replacement() {
+  printf '%s' "$1" | sed -e 's/[\\/&]/\\&/g'
+}
+
+render_ome_server_config() {
+  local template_file="$REPO_ROOT/deploy/ome/Server.xml"
+  if [[ ! -f $template_file ]]; then
+    echo "OME template not found at $template_file" >&2
+    return 1
+  fi
+
+  local ome_username ome_password
+  ome_username=$(read_env_value BITRIVER_OME_USERNAME)
+  ome_password=$(read_env_value BITRIVER_OME_PASSWORD)
+
+  if [[ -z $ome_username || -z $ome_password ]]; then
+    echo "OME credentials are missing; check BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD." >&2
+    return 1
+  fi
+
+  local tmp_file
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/bitriver-ome-XXXXXX.xml")
+  cp "$template_file" "$tmp_file"
+
+  local escaped_username escaped_password
+  escaped_username=$(escape_sed_replacement "$ome_username")
+  escaped_password=$(escape_sed_replacement "$ome_password")
+
+  sed -i -E "s|<ID>[^<]*</ID>|<ID>${escaped_username}</ID>|" "$tmp_file"
+  sed -i -E "s|<Password>[^<]*</Password>|<Password>${escaped_password}</Password>|" "$tmp_file"
+
+  if ! grep -q "<ID>${ome_username}</ID>" "$tmp_file"; then
+    echo "Failed to render OME username into $tmp_file" >&2
+    return 1
+  fi
+  if ! grep -q "<Password>${ome_password}</Password>" "$tmp_file"; then
+    echo "Failed to render OME password into $tmp_file" >&2
+    return 1
+  fi
+
+  OME_SERVER_XML_PATH="$tmp_file"
+  export OME_SERVER_XML_PATH
+  echo "Rendered OME control config to $OME_SERVER_XML_PATH"
 }
 
 wait_for_api() {
@@ -395,6 +447,8 @@ echo "Ensuring transcoder data directories are present and writable ..."
 mkdir -p "$TRANSCODER_PUBLIC_DIR"
 chmod 0777 "$TRANSCODER_DATA_DIR" "$TRANSCODER_PUBLIC_DIR"
 echo "If you provision these directories manually, keep them writable (see docs/installing-on-ubuntu.md)."
+
+render_ome_server_config
 
 cd "$REPO_ROOT"
 export COMPOSE_FILE="$COMPOSE_FILE"
