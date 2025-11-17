@@ -1,0 +1,16 @@
+name: Quickstart compose smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quickstart-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate quickstart compose config
+        run: ./scripts/test-quickstart.sh
