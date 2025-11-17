@@ -122,6 +122,14 @@ required_env_keys=(
   BITRIVER_TRANSCODER_IMAGE_TAG
   BITRIVER_VIEWER_IMAGE_TAG
   BITRIVER_SRS_CONTROLLER_IMAGE_TAG
+  BITRIVER_SRS_TOKEN
+  BITRIVER_OME_USERNAME
+  BITRIVER_OME_PASSWORD
+  BITRIVER_TRANSCODER_TOKEN
+  BITRIVER_REDIS_PASSWORD
+  BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD
+  BITRIVER_LIVE_ADMIN_EMAIL
+  BITRIVER_LIVE_ADMIN_PASSWORD
 )
 
 reconcile_env_file() {
@@ -301,6 +309,16 @@ bootstrap_admin() {
 generated_admin_password=""
 if [ -f "$ENV_FILE" ]; then
   echo "Existing .env file detected at $ENV_FILE. Skipping regeneration."
+
+  if ! grep -qE "^BITRIVER_LIVE_ADMIN_PASSWORD=" "$ENV_FILE"; then
+    generated_admin_password=$(generate_strong_password)
+    if [[ -z $generated_admin_password ]]; then
+      echo "Failed to generate a random administrator password." >&2
+      exit 1
+    fi
+    env_defaults[BITRIVER_LIVE_ADMIN_PASSWORD]="$generated_admin_password"
+    echo "Missing BITRIVER_LIVE_ADMIN_PASSWORD in existing .env; generated a new one for reconciliation."
+  fi
 else
   generated_admin_password=$(generate_strong_password)
   if [[ -z $generated_admin_password ]]; then
