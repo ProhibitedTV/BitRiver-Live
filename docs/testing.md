@@ -40,7 +40,9 @@ BITRIVER_TEST_POSTGRES_DSN="postgres://bitriver:bitriver@127.0.0.1:5432/bitriver
 
 For local development, run the helper script instead of managing the database by
 hand. It starts a disposable Postgres container, applies the tracked migrations,
-and executes the storage suite in one step (Docker required):
+and executes the storage suite in one step (Docker required). The script forces
+an offline module mode (`GOPROXY=off GOSUMDB=off GOFLAGS=-mod=readonly`) so
+vendored replacements stay intact and `go.mod`/`go.sum` remain untouched:
 
 ```bash
 ./scripts/test-postgres.sh
