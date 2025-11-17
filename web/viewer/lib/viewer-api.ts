@@ -46,6 +46,27 @@ export type ProfileSummary = {
   bannerUrl?: string;
 };
 
+export type FriendSummary = {
+  userId: string;
+  displayName: string;
+  avatarUrl?: string;
+};
+
+export type ProfileView = {
+  userId: string;
+  displayName: string;
+  bio?: string;
+  avatarUrl?: string;
+  bannerUrl?: string;
+  featuredChannelId?: string;
+  topFriends: FriendSummary[];
+  donationAddresses: CryptoAddress[];
+  channels: ChannelPublic[];
+  liveChannels: ChannelPublic[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type CryptoAddress = {
   currency: string;
   address: string;
@@ -304,6 +325,23 @@ export function searchDirectory(query: string): Promise<DirectoryResponse> {
   }
   const suffix = params.toString();
   return viewerRequest<DirectoryResponse>(`/api/directory${suffix ? `?${suffix}` : ""}`);
+}
+
+export function fetchProfile(userId: string): Promise<ProfileView> {
+  return viewerRequest<ProfileView>(`/api/profiles/${userId}`);
+}
+
+export type UpdateProfilePayload = {
+  bio?: string;
+  avatarUrl?: string;
+  bannerUrl?: string;
+};
+
+export function updateProfile(userId: string, payload: UpdateProfilePayload): Promise<ProfileView> {
+  return viewerRequest<ProfileView>(`/api/profiles/${userId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function followChannel(channelId: string): Promise<FollowState> {

@@ -36,6 +36,7 @@ export function Navbar() {
     { label: "Home", href: "/" },
     { label: "Following", href: "/following" },
     { label: "Browse", href: "/browse" },
+    ...(isAdmin ? [{ label: "Dashboard", href: "/dashboard" }] : []),
     ...(canAccessCreatorTools ? [{ label: "Creator", href: "/creator" }] : []),
   ];
   const isRouteActive = (href: string) => {
@@ -166,7 +167,7 @@ export function Navbar() {
   return (
     <header className="navbar">
       <div className="navbar-inner">
-        <div className="navbar-left">
+        <div className="navbar-left" aria-hidden={menuOpen}>
           <Link href="/" aria-label="BitRiver Live home" className="navbar-logo" onClick={closeMenu}>
             <span className="navbar-logo__icon" aria-hidden>
               📡
@@ -261,7 +262,7 @@ export function Navbar() {
                       className="avatar-menu__link"
                       onClick={() => setUserMenuOpen(false)}
                     >
-                      Creator dashboard
+                      Creator tools
                     </Link>
                   )}
                   <button
@@ -301,7 +302,12 @@ export function Navbar() {
           </div>
         </div>
       </div>
-      <div id="viewer-nav-menu" className={`nav-drawer${menuOpen ? " nav-drawer--open" : ""}`}>
+      <div
+        id="viewer-nav-menu"
+        className={`nav-drawer${menuOpen ? " nav-drawer--open" : ""}`}
+        hidden={!menuOpen}
+        aria-hidden={!menuOpen}
+      >
         <div className="nav-drawer__section" role="group" aria-label="Viewer navigation mobile">
           {navItems.map((item) => {
             const active = isRouteActive(item.href);

@@ -57,10 +57,6 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
                         <span>{entry.owner.displayName.charAt(0).toUpperCase()}</span>
                       )}
                     </div>
-                    <div className="overlay__byline">
-                      <span className="overlay__name">{entry.owner.displayName}</span>
-                      <span className="overlay__meta overlay__meta--muted">{createdAt}</span>
-                    </div>
                   </div>
                   <div className="overlay__tags">
                     {entry.channel.tags.slice(0, 2).map((tag) => (
@@ -75,6 +71,7 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
                 <div className="directory-card__meta-row">
                   {isLive ? <span className="badge badge--live">Live</span> : <span className="badge badge--muted">Offline</span>}
                   <span className="meta-chip">{isLive ? viewerOverlayLabel : followerLabel}</span>
+                  <span className="meta-chip meta-chip--muted">Followers: {followerLabel}</span>
                   <span className="meta-chip meta-chip--pill">{entry.channel.category ?? "Streaming"}</span>
                 </div>
 

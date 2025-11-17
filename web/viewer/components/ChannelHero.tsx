@@ -34,7 +34,7 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
   const [loading, setLoading] = useState(false);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(true);
   const [copiedLink, setCopiedLink] = useState(false);
   const donationAddresses = data.donationAddresses ?? [];
 
@@ -152,6 +152,7 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
             onClick={handleToggleFollow}
             disabled={loading}
             aria-pressed={follow.following}
+            aria-label={`${follow.following ? "Following" : "Follow"} · ${follow.followers.toLocaleString()} supporters`}
             type="button"
           >
             <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
@@ -168,6 +169,7 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
             onClick={handleToggleSubscription}
             disabled={subscriptionLoading}
             aria-pressed={subscription.subscribed}
+            aria-label={`${subscription.subscribed ? "Subscribed" : "Subscribe"}${subscription.tier ? ` · ${subscription.tier}` : ""}`}
             type="button"
           >
             <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
@@ -218,34 +220,36 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
           <span>Community insights</span>
           <span className="muted">Followers, subscribers, and tipping</span>
         </summary>
-        <div className="channel-hero__drawer-grid">
-          <dl>
-            <dt>Followers</dt>
-            <dd>{follow.followers.toLocaleString()}</dd>
-          </dl>
-          <dl>
-            <dt>Subscribers</dt>
-            <dd>{subscription.subscribers.toLocaleString()}</dd>
-          </dl>
-          <dl>
-            <dt>Status</dt>
-            <dd>{data.live ? "Live session active" : "Waiting for the next stream"}</dd>
-          </dl>
-          <div className="channel-hero__drawer-actions">
-            <button className="secondary-button" type="button" onClick={handleOpenTip}>
-              Send a tip
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={handleToggleSubscription}
-              disabled={subscriptionLoading}
-              aria-pressed={subscription.subscribed}
-            >
-              {subscription.subscribed ? "Manage subscription" : "Subscribe for perks"}
-            </button>
+        {drawerOpen && (
+          <div className="channel-hero__drawer-grid">
+            <dl>
+              <dt>Followers</dt>
+              <dd>{follow.followers.toLocaleString()}</dd>
+            </dl>
+            <dl>
+              <dt>Subscribers</dt>
+              <dd>{subscription.subscribers.toLocaleString()}</dd>
+            </dl>
+            <dl>
+              <dt>Status</dt>
+              <dd>{data.live ? "Live session active" : "Waiting for the next stream"}</dd>
+            </dl>
+            <div className="channel-hero__drawer-actions">
+              <button className="secondary-button" type="button" onClick={handleOpenTip}>
+                Send a tip
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={handleToggleSubscription}
+                disabled={subscriptionLoading}
+                aria-pressed={subscription.subscribed}
+              >
+                {subscription.subscribed ? "Manage perks" : "View perks"}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </details>
       <TipDrawer
         open={tipOpen}
