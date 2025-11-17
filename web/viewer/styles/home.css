@@ -18,7 +18,7 @@
   left: -50vw;
   right: -50vw;
   padding: var(--space-4xl) 0 var(--space-3xl);
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.88), rgba(10, 12, 16, 0.95)), var(--promo-highlight);
+  background: var(--hero-background);
   overflow: hidden;
   isolation: isolate;
 }
