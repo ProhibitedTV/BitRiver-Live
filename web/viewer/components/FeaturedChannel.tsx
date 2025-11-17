@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import type { DirectoryChannel } from "../lib/viewer-api";
 
@@ -91,7 +92,14 @@ export function FeaturedChannel({
         <article className="featured-channel__slide" aria-label={`Slide ${activeIndex + 1} of ${slides.length}`}>
           <div className="featured-channel__media">
             {previewImage ? (
-              <img src={previewImage} alt={`${activeChannel.owner.displayName} channel artwork`} />
+              <Image
+                src={previewImage}
+                alt={`${activeChannel.owner.displayName} channel artwork`}
+                fill
+                sizes="(min-width: 1280px) 40vw, 100vw"
+                className="featured-channel__media-image"
+                priority
+              />
             ) : (
               <div className="featured-channel__media-fallback" aria-hidden="true" />
             )}

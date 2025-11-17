@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import type {
@@ -300,10 +301,13 @@ export function ChannelAboutPanel({ data }: { data: ChannelPlaybackResponse }) {
   return (
     <section className="channel-about surface stack">
       {data.profile.bannerUrl && (
-        <img
+        <Image
           src={data.profile.bannerUrl}
           alt={`${data.owner.displayName} channel art`}
           className="channel-about__banner"
+          width={1200}
+          height={200}
+          priority
         />
       )}
       <div className="stack" style={{ gap: "0.5rem" }}>

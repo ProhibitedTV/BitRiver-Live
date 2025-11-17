@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import type { VodItem } from "../lib/viewer-api";
 
 interface VodGalleryProps {
@@ -37,7 +38,14 @@ export function VodGallery({ items, error }: VodGalleryProps) {
           return (
             <li key={item.id} className="vod-card">
               {item.thumbnailUrl && (
-                <img src={item.thumbnailUrl} alt="" loading="lazy" />
+                <Image
+                  src={item.thumbnailUrl}
+                  alt=""
+                  width={640}
+                  height={360}
+                  sizes="(min-width: 1024px) 33vw, 100vw"
+                  style={{ width: "100%", height: "auto" }}
+                />
               )}
               <div className="vod-card__body">
                 <h4>{item.title}</h4>

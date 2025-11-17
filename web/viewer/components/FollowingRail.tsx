@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { DirectoryChannel } from "../lib/viewer-api";
 
@@ -31,7 +32,15 @@ export function FollowingRail({ channels, loading = false }: FollowingRailProps)
               <Link key={entry.channel.id} href={`/channels/${entry.channel.id}`} className="following-card" role="listitem">
                 <div className="following-card__avatar">
                   {avatar ? (
-                    <img src={avatar} alt={entry.owner.displayName} />
+                    <Image
+                      src={avatar}
+                      alt={entry.owner.displayName}
+                      width={56}
+                      height={56}
+                      sizes="56px"
+                      className="following-card__avatar-image"
+                      priority
+                    />
                   ) : (
                     <span aria-hidden="true">{ownerInitial}</span>
                   )}
