@@ -91,13 +91,15 @@ compose file.
   1935, or 1985. Alternatively edit the corresponding `*_PORT` values in `.env` (for example, `BITRIVER_LIVE_PORT=9090`) and
   rerun `docker compose up -d`.
 - **OME health check fails** – Confirm that `deploy/ome/Server.xml` declares the OME role with `<Type>origin</Type>` inside the
-  root `<Server>` block. OME rejects the monitoring endpoint when the server type is missing. When running in Docker, that file
-  is mounted to `/opt/ovenmediaengine/bin/origin_conf/Server.xml` inside the `bitriver-ome` container, which is the location
-  OvenMediaEngine expects for an origin node. The compose service pins the hostname to `ome` so the default
-  `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the container name. If you upgrade OME
-  and see schema errors (for example, an "Unknown item" message), refresh `deploy/ome/Server.xml` from the matching OME image
-  (e.g., `docker run --rm airensoft/ovenmediaengine:0.15.10 cat \
-  /opt/ovenmediaengine/bin/origin_conf/Server.xml > deploy/ome/Server.xml`) and then re-apply your credential overrides.
+  root `<Server>` block and binds the base socket with `<Bind><Address>0.0.0.0</Address><Port>9000</Port></Bind>`. OME rejects
+  the monitoring endpoint when the server type or bind stanza is missing. When running in Docker, that file is mounted to
+  `/opt/ovenmediaengine/bin/origin_conf/Server.xml` inside the `bitriver-ome` container, which is the location OvenMediaEngine
+  expects for an origin node. The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081`
+  resolves correctly; keep that alias if you customize the container name. The quickstart script also seeds the `.env` with
+  that value so the API always knows where to call OME regardless of the host system. If you deploy OME outside of Docker,
+  update `BITRIVER_OME_API` to the reachable host/IP. If you upgrade OME and see schema errors (for example, an "Unknown item"
+  message), refresh `deploy/ome/Server.xml` from the matching OME image (e.g., `docker run --rm airensoft/ovenmediaengine:0.15.10
+  cat /opt/ovenmediaengine/bin/origin_conf/Server.xml > deploy/ome/Server.xml`) and then re-apply your credential overrides.
 - **Environment tweaks** – Edit `.env` and rerun `docker compose up -d` to apply changes. The compose stack automatically loads
   the file so you never need to touch `deploy/docker-compose.yml` directly.
 
