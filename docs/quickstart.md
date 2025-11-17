@@ -93,8 +93,10 @@ compose file.
 - **OME health check fails** – Confirm that `deploy/ome/Server.xml` declares the OME role with `<Type>origin</Type>` inside the
   root `<Server>` block. OME rejects the monitoring endpoint when the server type is missing. When running in Docker, that file
   is mounted to `/opt/ovenmediaengine/bin/origin_conf/Server.xml` inside the `bitriver-ome` container, which is the location
-  OvenMediaEngine expects for an origin node. If you upgrade OME and see schema errors (for example, an "Unknown item" message),
-  refresh `deploy/ome/Server.xml` from the matching OME image (e.g., `docker run --rm airensoft/ovenmediaengine:0.15.10 cat \
+  OvenMediaEngine expects for an origin node. The compose service pins the hostname to `ome` so the default
+  `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the container name. If you upgrade OME
+  and see schema errors (for example, an "Unknown item" message), refresh `deploy/ome/Server.xml` from the matching OME image
+  (e.g., `docker run --rm airensoft/ovenmediaengine:0.15.10 cat \
   /opt/ovenmediaengine/bin/origin_conf/Server.xml > deploy/ome/Server.xml`) and then re-apply your credential overrides.
 - **Environment tweaks** – Edit `.env` and rerun `docker compose up -d` to apply changes. The compose stack automatically loads
   the file so you never need to touch `deploy/docker-compose.yml` directly.
