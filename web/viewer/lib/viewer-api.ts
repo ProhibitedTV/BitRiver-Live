@@ -211,6 +211,12 @@ export type CreateUploadPayload = {
   metadata?: Record<string, string>;
 };
 
+export type UpdateChannelPayload = {
+  title?: string;
+  category?: string;
+  tags?: string[];
+};
+
 type MultipartOptions = {
   file?: File | Blob;
   onProgress?: (percent: number) => void;
@@ -433,6 +439,13 @@ export function fetchChannelSessions(channelId: string): Promise<StreamSession[]
 export function fetchManagedChannels(ownerId?: string): Promise<ManagedChannel[]> {
   const suffix = ownerId ? `?ownerId=${ownerId}` : "";
   return viewerRequest<ManagedChannel[]>(`/api/channels${suffix}`);
+}
+
+export function updateChannel(channelId: string, payload: UpdateChannelPayload): Promise<ManagedChannel> {
+  return viewerRequest<ManagedChannel>(`/api/channels/${channelId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function createUpload(payload: CreateUploadPayload, options?: MultipartOptions): Promise<UploadItem> {

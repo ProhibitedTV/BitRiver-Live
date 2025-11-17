@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Player } from "../../../../components/Player";
 import { useCreatorChannel } from "../../../../hooks/useCreatorChannel";
 import {
@@ -8,6 +8,7 @@ import {
   StreamSession,
   fetchChannelSessions,
   fetchManagedChannels,
+  updateChannel,
 } from "../../../../lib/viewer-api";
 
 function formatCategory(category?: string) {
@@ -34,6 +35,10 @@ export default function CreatorLivePage() {
   const [sessions, setSessions] = useState<StreamSession[]>([]);
   const [managedChannel, setManagedChannel] = useState<ManagedChannel | undefined>();
   const [managedError, setManagedError] = useState<string | undefined>();
+  const [titleDraft, setTitleDraft] = useState("");
+  const [savingTitle, setSavingTitle] = useState(false);
+  const [titleError, setTitleError] = useState<string | undefined>();
+  const [titleSaved, setTitleSaved] = useState(false);
 
   const codeBlockStyle = {
     fontFamily: "monospace",
@@ -81,6 +86,12 @@ export default function CreatorLivePage() {
     void loadManagedChannel();
   }, [loadManagedChannel]);
 
+  useEffect(() => {
+    setTitleDraft(playback?.channel.title ?? "");
+    setTitleSaved(false);
+    setTitleError(undefined);
+  }, [playback?.channel.title]);
+
   const latestSession = useMemo(() => {
     if (sessions.length === 0) {
       return undefined;
@@ -90,6 +101,30 @@ export default function CreatorLivePage() {
     );
     return sorted.find((session) => !session.endedAt) ?? sorted[0];
   }, [sessions]);
+
+  const handleTitleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!titleDraft.trim()) {
+      setTitleError("Stream title cannot be empty");
+      setTitleSaved(false);
+      return;
+    }
+    try {
+      setSavingTitle(true);
+      setTitleError(undefined);
+      setTitleSaved(false);
+      const updated = await updateChannel(channelId, { title: titleDraft.trim() });
+      setManagedChannel((prev) => (prev ? { ...prev, ...updated } : updated));
+      await reload(true);
+      setTitleDraft(updated.title);
+      setTitleSaved(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to update stream title";
+      setTitleError(message);
+    } finally {
+      setSavingTitle(false);
+    }
+  };
 
   if (loading) {
     return <section className="surface">Loading channel…</section>;
@@ -137,15 +172,40 @@ export default function CreatorLivePage() {
 
       <div className="grid two-column">
         <section className="surface stack" aria-labelledby="live-setup-heading">
+          <h3 id="live-setup-heading">Stream setup</h3>
           <div className="stack" style={{ gap: "0.5rem" }}>
-            <div className="cluster" style={{ justifyContent: "space-between", alignItems: "flex-end" }}>
-              <div>
-                <p className="muted">Stream title</p>
-                <h3 id="live-setup-heading">{playback.channel.title}</h3>
+            <form className="stack" style={{ gap: "0.5rem" }} onSubmit={handleTitleSubmit}>
+              <div className="cluster" style={{ justifyContent: "space-between", alignItems: "flex-end", gap: "0.75rem", flexWrap: "wrap" }}>
+                <div className="stack" style={{ gap: "0.25rem", flex: "1 1 18rem" }}>
+                  <label className="muted" htmlFor="stream-title-input">
+                    Stream title
+                  </label>
+                  <input
+                    id="stream-title-input"
+                    name="streamTitle"
+                    value={titleDraft}
+                    onChange={(event) => {
+                      setTitleDraft(event.target.value);
+                      setTitleSaved(false);
+                    }}
+                    placeholder="What are you streaming today?"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={savingTitle || !titleDraft.trim() || titleDraft.trim() === playback.channel.title}
+                >
+                  {savingTitle ? "Saving…" : "Save title"}
+                </button>
               </div>
-              <div className="muted" aria-label="Stream category">
-                Category: {formatCategory(playback.channel.category)}
-              </div>
+              {titleError ? (
+                <p className="error" role="alert">{titleError}</p>
+              ) : null}
+              {titleSaved && !titleError ? <p className="success">Stream title updated</p> : null}
+            </form>
+            <div className="muted" aria-label="Stream category">
+              Category: {formatCategory(playback.channel.category)}
             </div>
             <div className="stack" style={{ gap: "0.75rem" }}>
               <div>
