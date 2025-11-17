@@ -14,6 +14,26 @@ export type ManagedChannel = ChannelPublic & {
   streamKey: string;
 };
 
+export type RenditionManifest = {
+  name: string;
+  manifestUrl: string;
+  bitrate?: number;
+};
+
+export type StreamSession = {
+  id: string;
+  channelId: string;
+  startedAt: string;
+  endedAt?: string;
+  renditions: string[];
+  peakConcurrent: number;
+  originUrl?: string;
+  playbackUrl?: string;
+  ingestEndpoints?: string[];
+  ingestJobIds?: string[];
+  renditionManifests?: RenditionManifest[];
+};
+
 export type ChannelOwner = {
   id: string;
   displayName: string;
@@ -366,6 +386,10 @@ export function fetchChannelVods(channelId: string): Promise<VodCollection> {
 
 export function fetchChannelUploads(channelId: string): Promise<UploadItem[]> {
   return viewerRequest<UploadItem[]>(`/api/uploads?channelId=${encodeURIComponent(channelId)}`);
+}
+
+export function fetchChannelSessions(channelId: string): Promise<StreamSession[]> {
+  return viewerRequest<StreamSession[]>(`/api/channels/${channelId}/sessions`);
 }
 
 export function fetchManagedChannels(ownerId?: string): Promise<ManagedChannel[]> {

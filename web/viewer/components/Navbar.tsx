@@ -220,7 +220,7 @@ export function Navbar() {
         </div>
         <div className="navbar-right">
           {canAccessCreatorTools && managedChannelId && (
-            <Link href={`/creator/uploads/${managedChannelId}`} className="nav-cta" onClick={closeMenu}>
+            <Link href={`/creator/live/${managedChannelId}`} className="nav-cta" onClick={closeMenu}>
               Go live
             </Link>
           )}
@@ -257,7 +257,7 @@ export function Navbar() {
                   </Link>
                   {canAccessCreatorTools && (
                     <Link
-                      href={managedChannelId ? `/creator/uploads/${managedChannelId}` : "/creator"}
+                      href={managedChannelId ? `/creator/live/${managedChannelId}` : "/creator"}
                       className="avatar-menu__link"
                       onClick={() => setUserMenuOpen(false)}
                     >
@@ -343,7 +343,7 @@ export function Navbar() {
           </Link>
           {canAccessCreatorTools && managedChannelId && (
             <Link
-              href={`/creator/uploads/${managedChannelId}`}
+              href={`/creator/live/${managedChannelId}`}
               className="nav-drawer__link"
               onClick={closeMenu}
             >
