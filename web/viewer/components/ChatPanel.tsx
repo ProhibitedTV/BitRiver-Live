@@ -273,7 +273,12 @@ export function ChatPanel({
           )}
         </div>
       )}
-      <form className="chat-panel__form" onSubmit={handleSend} aria-label="Send a chat message">
+      <form
+        className="chat-panel__form"
+        onSubmit={handleSend}
+        aria-label="Send a chat message"
+        aria-disabled={!user}
+      >
         <label htmlFor="chat-input" className="sr-only">
           Chat message
         </label>

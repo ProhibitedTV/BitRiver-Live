@@ -7,9 +7,24 @@ import { fetchManagedChannels } from "../lib/viewer-api";
 jest.mock("next/link", () => {
   const React = require("react");
   return React.forwardRef(function MockLink({ children, ...props }: any, ref: any) {
-    return React.createElement("a", { ...props, ref }, children);
+    return React.createElement("a", {
+      ...props,
+      ref,
+      onClick: (event: any) => {
+        event.preventDefault();
+        props.onClick?.(event);
+      },
+    }, children);
   });
 });
+
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+  }),
+  usePathname: () => "/",
+}));
 
 jest.mock("../hooks/useAuth");
 

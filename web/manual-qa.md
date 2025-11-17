@@ -53,3 +53,18 @@ content flows through unchanged.
    *Expected:* existing chat history (if any) renders without needing to
    refresh, and the composer placeholder changes to "Share your thoughts"
    to indicate that posting is available.
+
+## Viewer profile management
+
+1. Sign in as a viewer and open `/profile`.
+
+   *Expected:* the page shows your display name with any saved avatar,
+   banner, and bio values prefilled in the form fields. Empty fields should
+   show helper text so you know what to add.
+
+2. Update the Avatar URL, Banner URL, and Bio fields (try a harmless string
+   such as `River <img src=x onerror=alert(1)>`) and save the profile.
+
+   *Expected:* the preview card updates immediately without executing any
+   scripts or loading unexpected images, and a confirmation message confirms
+   the save. Refreshing the page should persist the new values.
