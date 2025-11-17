@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 type AuthMode = "login" | "signup" | null;
 
@@ -18,6 +19,7 @@ export function AuthDialog({ mode, onClose, onLogin, onSignup, authError }: Auth
   const [displayName, setDisplayName] = useState("");
   const [message, setMessage] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setEmail("");
@@ -27,7 +29,11 @@ export function AuthDialog({ mode, onClose, onLogin, onSignup, authError }: Auth
     setSubmitting(false);
   }, [mode]);
 
-  if (!mode) {
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mode || !mounted) {
     return null;
   }
 
@@ -52,7 +58,7 @@ export function AuthDialog({ mode, onClose, onLogin, onSignup, authError }: Auth
     setMessage(mode === "login" ? "Unable to sign in. Check your credentials." : "Unable to create account.");
   };
 
-  return (
+  const dialog = (
     <div className="auth-dialog__backdrop" role="presentation" onClick={onClose}>
       <div
         className="auth-dialog"
@@ -121,4 +127,6 @@ export function AuthDialog({ mode, onClose, onLogin, onSignup, authError }: Auth
       </div>
     </div>
   );
+
+  return createPortal(dialog, document.body);
 }
