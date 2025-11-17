@@ -27,6 +27,16 @@ OME image, refresh the template map in
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ingest -count=1
 ```
 
+## Quickstart/Compose smoke
+
+Run the compose smoke guard to ensure the default `.env` and `deploy/docker-compose.yml` still render and that the tracked health probes stay wired:
+
+```bash
+./scripts/test-quickstart.sh
+```
+
+When no `.env` exists in the repository root, the helper seeds one with the same local defaults baked into the quickstart script, renders `docker compose config`, and verifies that the API, transcoder, OME, SRS, Postgres, and Redis healthchecks still point at their expected endpoints. It cleans up the temporary `.env` after the run.
+
 ## Postgres storage layer
 
 Storage integration tests live behind the `postgres` build tag. They expect an
