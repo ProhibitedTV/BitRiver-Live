@@ -116,17 +116,22 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
       {error && <div className="surface">{error}</div>}
       {data && (
         <div className="channel-page__grid">
-          <div className="channel-page__main stack">
-            <div className="channel-page__hero-grid">
-              <div className="channel-player">
-                <Player playback={data.playback} />
-              </div>
-              <ChannelHeader
-                data={data}
-                onFollowChange={handleFollowChange}
-                onSubscriptionChange={handleSubscriptionChange}
-              />
+          <div className="channel-page__hero-grid">
+            <div className="channel-player">
+              <Player playback={data.playback} />
             </div>
+            <aside className="channel-page__chat">
+              <div className="channel-page__chat-inner">
+                <ChatPanel channelId={id} roomId={data.chat?.roomId} viewerCount={data.viewerCount} />
+              </div>
+            </aside>
+          </div>
+          <div className="channel-page__main stack">
+            <ChannelHeader
+              data={data}
+              onFollowChange={handleFollowChange}
+              onSubscriptionChange={handleSubscriptionChange}
+            />
             <section className="channel-tabs">
               <div className="channel-tabs__list" role="tablist" aria-label="Stream info tabs">
                 {tabs.map((tab) => (
@@ -185,17 +190,16 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
                     Use your creator dashboard to register VODs and monitor processing once streams finish.
                   </p>
                 </header>
-                <Link href={`/creator/uploads/${data.channel.id}`} className="secondary-button" style={{ alignSelf: "flex-start" }}>
+                <Link
+                  href={`/creator/uploads/${data.channel.id}`}
+                  className="secondary-button"
+                  style={{ alignSelf: "flex-start" }}
+                >
                   Open creator dashboard
                 </Link>
               </section>
             )}
           </div>
-          <aside className="channel-page__chat">
-            <div className="channel-page__chat-inner">
-              <ChatPanel channelId={id} roomId={data.chat?.roomId} viewerCount={data.viewerCount} />
-            </div>
-          </aside>
         </div>
       )}
     </div>
