@@ -12,6 +12,7 @@
         <Control>
             <Server>
                 <Bind>
+                    <Address>*</Address>
                     <Port>8081</Port>
                 </Bind>
             </Server>
