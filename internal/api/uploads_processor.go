@@ -108,6 +108,7 @@ func (p *UploadProcessor) Start() {
 		go p.worker()
 	}
 
+	p.wg.Add(1)
 	go p.recoverPending()
 }
 
@@ -180,6 +181,8 @@ func (p *UploadProcessor) finishWork(id string) {
 }
 
 func (p *UploadProcessor) recoverPending() {
+	defer p.wg.Done()
+
 	if p.store == nil {
 		return
 	}
