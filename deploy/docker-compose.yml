@@ -73,7 +73,7 @@ services:
       srs-controller:
         condition: service_started
       ome:
-        condition: service_started
+        condition: service_healthy
       transcoder:
         condition: service_started
 

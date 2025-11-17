@@ -42,8 +42,8 @@ func LoadConfigFromEnv() (Config, error) {
 		HealthEndpoint:    strings.TrimSpace(os.Getenv("BITRIVER_INGEST_HEALTH")),
 		MaxBootAttempts:   3,
 		RetryInterval:     500 * time.Millisecond,
-		HTTPMaxAttempts:   3,
-		HTTPRetryInterval: 500 * time.Millisecond,
+		HTTPMaxAttempts:   30,
+		HTTPRetryInterval: 2 * time.Second,
 	}
 
 	if attempts := strings.TrimSpace(os.Getenv("BITRIVER_INGEST_MAX_BOOT_ATTEMPTS")); attempts != "" {

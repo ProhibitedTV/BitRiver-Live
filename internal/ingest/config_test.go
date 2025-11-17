@@ -57,10 +57,10 @@ func TestConfigEnabledWithCompleteSettings(t *testing.T) {
 	if len(cfg.LadderProfiles) != 2 {
 		t.Fatalf("expected ladder profiles to parse, got %d", len(cfg.LadderProfiles))
 	}
-	if cfg.HTTPMaxAttempts != 3 {
+	if cfg.HTTPMaxAttempts != 30 {
 		t.Fatalf("expected default HTTP retries, got %d", cfg.HTTPMaxAttempts)
 	}
-	if cfg.HTTPRetryInterval != 500*time.Millisecond {
+	if cfg.HTTPRetryInterval != 2*time.Second {
 		t.Fatalf("expected default HTTP retry interval, got %s", cfg.HTTPRetryInterval)
 	}
 }
