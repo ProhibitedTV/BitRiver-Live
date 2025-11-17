@@ -114,6 +114,7 @@ the generated environment file before inviting real users.
 - **Install TLS / go beyond one host:** Follow [`docs/advanced-deployments.md`](docs/advanced-deployments.md).
 - **Understand every service:** Read [`docs/production-release.md`](docs/production-release.md) and the release notes under
   `docs/releases/` when preparing a launch.
+- **AI-assisted edits:** Use the [Codex CLI guide](docs/codex-cli.md) to install the CLI, authenticate, and point it at this repository.
 
 ## Manual development workflow (optional)
 

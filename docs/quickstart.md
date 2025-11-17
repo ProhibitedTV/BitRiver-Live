@@ -80,15 +80,9 @@ compose file.
   ```bash
   ./scripts/quickstart.sh
   ```
-  The script reuses your existing `.env` and Docker volumes, so configuration, database data, and media files persist across updates.
-  It also refreshes the OME control credentials baked into `deploy/ome/Server.xml` so `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD` stay in sync with the mounted configuration.
-- Codex CLI users: install or invoke the CLI from the repository root while Docker continues to manage the running services, and point it at this project for AI-guided edits. For example:
-  ```bash
-  # from the repository root
-  pip install --user codex-cli  # install if needed
-  codex edit .                 # target this project directory
-  ```
-  Rerun `docker compose up -d` after changing `.env` or editing code so the containers reload the latest configuration and binaries.
+ The script reuses your existing `.env` and Docker volumes, so configuration, database data, and media files persist across updates.
+ It also refreshes the OME control credentials baked into `deploy/ome/Server.xml` so `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD` stay in sync with the mounted configuration.
+- Codex CLI users: follow the [Codex CLI guide](codex-cli.md) for installation, authentication, and edit workflows tailored to this repository. Rerun `docker compose up -d` after applying Codex patches so containers reload configuration and binaries.
 
 ## Troubleshooting
 
