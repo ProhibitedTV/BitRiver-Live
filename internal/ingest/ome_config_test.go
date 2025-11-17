@@ -20,6 +20,9 @@ var expectedServerTemplates = map[string]string{
     <!-- Required for health endpoint and origin-mode APIs; Compose mounts this file at /opt/ovenmediaengine/bin/origin_conf/Server.xml -->
     <Type>origin</Type>
     <IP>0.0.0.0</IP>
+    <Bind>
+        <Address>0.0.0.0</Address>
+    </Bind>
     <PrivacyProtection>false</PrivacyProtection>
     <StunServer>stun.l.google.com:19302</StunServer>
 
@@ -97,7 +100,12 @@ func omeImageFromCompose(t *testing.T, composePath string) string {
 		t.Fatalf("failed to locate ome image in %s", composePath)
 	}
 
-	return string(matches[1])
+	return normalizeComposeImageRef(string(matches[1]))
+}
+
+func normalizeComposeImageRef(image string) string {
+	re := regexp.MustCompile(`\$\{[^:}]+:-([^}]+)\}`)
+	return re.ReplaceAllString(image, "$1")
 }
 
 func readFile(t *testing.T, path string) []byte {
@@ -159,8 +167,8 @@ func validateServerXML(t *testing.T, serverXML []byte) {
 		t.Fatalf("unexpected <Type> %q in Server.xml; expected origin", serverType)
 	}
 
-	if bindFound {
-		t.Fatalf("disallowed top-level <Bind> element found in Server.xml")
+	if !bindFound {
+		t.Fatalf("missing top-level <Bind> element in Server.xml")
 	}
 }
 
