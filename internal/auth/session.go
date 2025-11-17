@@ -72,11 +72,6 @@ func NewSessionManager(ttl time.Duration, opts ...SessionOption) *SessionManager
 	return manager
 }
 
-// NewSessionManagerWithStore constructs a SessionManager backed by the provided store.
-func NewSessionManagerWithStore(ttl time.Duration, store SessionStore) *SessionManager {
-	return NewSessionManager(ttl, WithStore(store))
-}
-
 // Create issues a new session token for the provided user identifier.
 func (m *SessionManager) Create(userID string) (string, time.Time, error) {
 	if userID == "" {
