@@ -95,17 +95,15 @@ compose file.
 - **Port already in use** – Stop or reconfigure any services that currently bind to ports 5432, 6379, 8080, 8081, 9000, 9001,
   1935, or 1985. Alternatively edit the corresponding `*_PORT` values in `.env` (for example, `BITRIVER_LIVE_PORT=9090`) and
   rerun `docker compose up -d`.
-- **OME health check fails** – Confirm that `deploy/ome/Server.xml` (the source template) declares the OME role with `<Type>origin</Type>` and a top-
-  level `<Bind>` block (for example, `<Bind><Address>0.0.0.0</Address></Bind>`) inside the root `<Server>` stanza. The copy in
-  this repository is aligned to the upstream OvenMediaEngine schema for `BITRIVER_OME_IMAGE_TAG` (default `0.15.10`) and the
-  quickstart renders it to `deploy/ome/Server.generated.xml` before mounting it to `/opt/ovenmediaengine/bin/origin_conf/Server.xml`
-  inside the `bitriver-ome` container. The compose health check calls the OME `/healthz` endpoint with HTTP basic auth using
-  `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`, so ensure those values match the credentials embedded in the generated
-  XML file. The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly;
-  keep that alias if you customize the container name. The quickstart script also seeds the `.env` with that value so the API always knows where to call OME
-  regardless of the host system. If you deploy OME outside of Docker, update `BITRIVER_OME_API` to the reachable host/IP. If you
-  upgrade OME and see schema errors (for example, an "Unknown item" message), refresh `deploy/ome/Server.xml` from the matching
-  OME image and then re-apply your credential overrides.
+- **OME health check fails** – Confirm that `deploy/ome/Server.xml` (the source template) declares the OME role with `<Type>origin</Type>` under the root `<Server>`
+  stanza. The copy in this repository is aligned to the upstream OvenMediaEngine schema for `BITRIVER_OME_IMAGE_TAG` (default `0.15.10`) and the quickstart renders it
+  to `deploy/ome/Server.generated.xml` before mounting it to `/opt/ovenmediaengine/bin/origin_conf/Server.xml` inside the `bitriver-ome` container. The compose health
+  check calls the OME `/healthz` endpoint with HTTP basic auth using `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`, so ensure those values match the credentials
+  embedded in the generated XML file. The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias
+  if you customize the container name. The quickstart script also seeds the `.env` with that value so the API always knows where to call OME regardless of the host system.
+  If you deploy OME outside of Docker, update `BITRIVER_OME_API` to the reachable host/IP. If you upgrade OME and see schema errors (for example, an "Unknown item" message),
+  refresh `deploy/ome/Server.xml` from the matching OME image and then re-apply your credential overrides. The latest schema removes the `<Bind>` stanza, so keep the template
+  in sync with upstream defaults before rerunning the stack.
 - **Quickstart re-run pulled the wrong OME version** – When reusing an existing installation, keep `BITRIVER_OME_IMAGE_TAG`
   aligned with the version that matches your `Server.xml` schema before re-running `./scripts/quickstart.sh` or `docker compose
   up -d`. The script preserves `.env` and volumes, so a stale tag can point Docker at a newer image that no longer matches the
