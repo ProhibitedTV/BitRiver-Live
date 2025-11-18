@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestQuickstartReconciliationAndRender(t *testing.T) {
+func TestQuickstartReconciliation(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -43,19 +43,6 @@ func TestQuickstartReconciliationAndRender(t *testing.T) {
 		t.Fatalf("write env: %v", err)
 	}
 
-	templateDst := filepath.Join(tempDir, "deploy", "ome")
-	if err := os.MkdirAll(templateDst, 0o755); err != nil {
-		t.Fatalf("create template dir: %v", err)
-	}
-	serverXMLBytes, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "testdata", "quickstart", "Server.xml"))
-	if err != nil {
-		t.Fatalf("read server xml fixture: %v", err)
-	}
-	serverXMLPath := filepath.Join(templateDst, "Server.xml")
-	if err := os.WriteFile(serverXMLPath, serverXMLBytes, 0o644); err != nil {
-		t.Fatalf("write server xml: %v", err)
-	}
-
 	stubBin := filepath.Join(tempDir, "bin")
 	if err := os.MkdirAll(stubBin, 0o755); err != nil {
 		t.Fatalf("create stub bin: %v", err)
@@ -75,14 +62,9 @@ BITRIVER_QUICKSTART_TEST_MODE=1
 export TMPDIR="%s"
 source scripts/quickstart.sh
 reconcile_env_file
-render_ome_server_config
 echo "__ENV_BEGIN__"
 cat "$ENV_FILE"
 echo "__ENV_END__"
-echo "__OME_PATH__${OME_SERVER_XML_PATH}"
-echo "__OME_BEGIN__"
-cat "$OME_SERVER_XML_PATH"
-echo "__OME_END__"
 `, stubBin, tempDir)
 
 	cmd := exec.Command("bash", "-c", bashScript)
@@ -90,7 +72,6 @@ echo "__OME_END__"
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stdout
-	cmd.Env = append(os.Environ(), fmt.Sprintf("OME_TEMPLATE_PATH=%s", serverXMLPath))
 
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("quickstart harness failed: %v\noutput:\n%s", err, stdout.String())
@@ -109,17 +90,6 @@ echo "__OME_END__"
 	}
 	if !strings.Contains(envContent, "BITRIVER_SRS_TOKEN=custom-token") {
 		t.Fatalf("expected existing BITRIVER_SRS_TOKEN to be preserved, got:\n%s", envContent)
-	}
-
-	omeContent := extractSection(output, "__OME_BEGIN__", "__OME_END__")
-	if omeContent == "" {
-		t.Fatalf("failed to capture OME content: output:\n%s", output)
-	}
-	if !strings.Contains(omeContent, "<ID>ome-test-user</ID>") {
-		t.Fatalf("expected OME username to be rendered, got:\n%s", omeContent)
-	}
-	if !strings.Contains(omeContent, "<Password>ome-test-pass</Password>") {
-		t.Fatalf("expected OME password to be rendered, got:\n%s", omeContent)
 	}
 }
 

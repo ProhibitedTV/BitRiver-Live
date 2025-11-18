@@ -209,52 +209,6 @@ read_env_value() {
   printf '%s' "$value"
 }
 
-escape_sed_replacement() {
-  printf '%s' "$1" | sed -e 's/[\\/&]/\\&/g'
-}
-
-render_ome_server_config() {
-  local template_file="${OME_TEMPLATE_PATH:-$REPO_ROOT/deploy/ome/Server.xml}"
-  if [[ ! -f $template_file ]]; then
-    echo "OME template not found at $template_file" >&2
-    return 1
-  fi
-
-  local output_file="$REPO_ROOT/deploy/ome/Server.generated.xml"
-  mkdir -p "$(dirname "$output_file")"
-
-  local ome_username ome_password
-  ome_username=$(read_env_value BITRIVER_OME_USERNAME)
-  ome_password=$(read_env_value BITRIVER_OME_PASSWORD)
-
-  if [[ -z $ome_username || -z $ome_password ]]; then
-    echo "OME credentials are missing; check BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD." >&2
-    return 1
-  fi
-
-  cp "$template_file" "$output_file"
-
-  local escaped_username escaped_password
-  escaped_username=$(escape_sed_replacement "$ome_username")
-  escaped_password=$(escape_sed_replacement "$ome_password")
-
-  sed -i -E "s|<ID>[^<]*</ID>|<ID>${escaped_username}</ID>|" "$output_file"
-  sed -i -E "s|<Password>[^<]*</Password>|<Password>${escaped_password}</Password>|" "$output_file"
-
-  if ! grep -q "<ID>${ome_username}</ID>" "$output_file"; then
-    echo "Failed to render OME username into $output_file" >&2
-    return 1
-  fi
-  if ! grep -q "<Password>${ome_password}</Password>" "$output_file"; then
-    echo "Failed to render OME password into $output_file" >&2
-    return 1
-  fi
-
-  OME_SERVER_XML_PATH="$output_file"
-  export OME_SERVER_XML_PATH
-  echo "Rendered OME control config to $OME_SERVER_XML_PATH"
-}
-
 wait_for_api() {
   local url=$1
   local attempts=${2:-60}
@@ -436,7 +390,8 @@ mkdir -p "$TRANSCODER_PUBLIC_DIR"
 chmod 0777 "$TRANSCODER_DATA_DIR" "$TRANSCODER_PUBLIC_DIR"
 echo "If you provision these directories manually, keep them writable (see docs/installing-on-ubuntu.md)."
 
-render_ome_server_config
+# OME ships with image-baked defaults for stateless quickstart deployments, so skip
+# template rendering and rely on the container configuration.
 
 cd "$REPO_ROOT"
 export COMPOSE_FILE="$COMPOSE_FILE"
