@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Navbar } from "../components/Navbar";
 import { useAuth } from "../hooks/useAuth";
@@ -129,5 +129,29 @@ describe("Navbar", () => {
     });
 
     expect(toggleButton).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("renders each primary link once in the mobile drawer", async () => {
+    mockUseAuth.mockReturnValue({
+      ...authBase,
+      user: null,
+    });
+
+    const user = userEvent.setup();
+
+    render(<Navbar />);
+
+    const toggleButton = screen.getByRole("button", { name: /open navigation menu/i });
+    await act(async () => {
+      await user.click(toggleButton);
+    });
+
+    const navDrawer = document.getElementById("viewer-nav-menu");
+    expect(navDrawer).toBeInTheDocument();
+
+    const drawer = within(navDrawer!);
+    ["Home", "Following", "Browse"].forEach((label) => {
+      expect(drawer.getAllByRole("link", { name: new RegExp(label, "i") })).toHaveLength(1);
+    });
   });
 });
