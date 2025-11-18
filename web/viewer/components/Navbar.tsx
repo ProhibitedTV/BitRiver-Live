@@ -39,6 +39,11 @@ export function Navbar() {
     ...(isAdmin ? [{ label: "Dashboard", href: "/dashboard" }] : []),
     ...(canAccessCreatorTools ? [{ label: "Creator", href: "/creator" }] : []),
   ];
+  const navItemHrefs = useMemo(() => new Set(navItems.map((item) => item.href)), [navItems]);
+  const quickLinks = [
+    { label: "Categories", href: "/browse" },
+    { label: "Following", href: "/following" },
+  ].filter((item) => !navItemHrefs.has(item.href));
   const isRouteActive = (href: string) => {
     if (href === "/") {
       return canonicalPath === "/";
@@ -341,12 +346,11 @@ export function Navbar() {
           </button>
         </form>
         <div className="nav-drawer__section" role="group" aria-label="Quick links">
-          <Link href="/browse" className="nav-drawer__link" onClick={closeMenu}>
-            Categories
-          </Link>
-          <Link href="/following" className="nav-drawer__link" onClick={closeMenu}>
-            Following
-          </Link>
+          {quickLinks.map((item) => (
+            <Link key={item.href} href={item.href} className="nav-drawer__link" onClick={closeMenu}>
+              {item.label}
+            </Link>
+          ))}
           {canAccessCreatorTools && managedChannelId && (
             <Link
               href={`/creator/live/${managedChannelId}`}
