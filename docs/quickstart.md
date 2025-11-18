@@ -80,8 +80,9 @@ compose file.
   ```bash
   ./scripts/quickstart.sh
   ```
- The script reuses your existing `.env` and Docker volumes, so configuration, database data, and media files persist across updates.
- It also refreshes the OME control credentials baked into `deploy/ome/Server.generated.xml` (rendered from the template in `deploy/ome/Server.xml`) so `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD` stay in sync with the mounted configuration across container restarts.
+  The script reuses your existing `.env` and Docker volumes, so configuration, database data, and media files persist across updates.
+  It also refreshes the OME control credentials baked into `deploy/ome/Server.generated.xml` (rendered from the template in `deploy/ome/Server.xml`) so `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD` stay in sync with the mounted configuration across container restarts.
+  The same credentials gate the OME HTTP health endpoint, so keep the `.env` values aligned with the rendered XML file.
 - Codex CLI users: follow the [Codex CLI guide](codex-cli.md) for installation, authentication, and edit workflows tailored to this repository. Rerun `docker compose up -d` after applying Codex patches so containers reload configuration and binaries.
 
 ## Troubleshooting
@@ -98,9 +99,10 @@ compose file.
   level `<Bind>` block (for example, `<Bind><Address>0.0.0.0</Address></Bind>`) inside the root `<Server>` stanza. The copy in
   this repository is aligned to the upstream OvenMediaEngine schema for `BITRIVER_OME_IMAGE_TAG` (default `0.15.10`) and the
   quickstart renders it to `deploy/ome/Server.generated.xml` before mounting it to `/opt/ovenmediaengine/bin/origin_conf/Server.xml`
-  inside the `bitriver-ome` container. The compose service pins the
-  hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the
-  container name. The quickstart script also seeds the `.env` with that value so the API always knows where to call OME
+  inside the `bitriver-ome` container. The compose health check calls the OME `/healthz` endpoint with HTTP basic auth using
+  `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`, so ensure those values match the credentials embedded in the generated
+  XML file. The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly;
+  keep that alias if you customize the container name. The quickstart script also seeds the `.env` with that value so the API always knows where to call OME
   regardless of the host system. If you deploy OME outside of Docker, update `BITRIVER_OME_API` to the reachable host/IP. If you
   upgrade OME and see schema errors (for example, an "Unknown item" message), refresh `deploy/ome/Server.xml` from the matching
   OME image and then re-apply your credential overrides.

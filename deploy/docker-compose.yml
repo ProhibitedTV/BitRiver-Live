@@ -227,6 +227,9 @@ services:
     container_name: bitriver-ome
     hostname: ome
     restart: unless-stopped
+    environment:
+      BITRIVER_OME_USERNAME: ${BITRIVER_OME_USERNAME:?set via .env}
+      BITRIVER_OME_PASSWORD: ${BITRIVER_OME_PASSWORD:?set via .env}
     networks:
       default:
         aliases:
@@ -237,7 +240,11 @@ services:
     volumes:
       - ${OME_SERVER_XML_PATH:-./ome/Server.generated.xml}:/opt/ovenmediaengine/bin/origin_conf/Server.xml:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/healthz || curl -fsS http://localhost:8081/v1/system/monitoring"]
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" http://localhost:8081/healthz
+          || curl -fsS -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" http://localhost:8081/v1/system/monitoring
       interval: 30s
       timeout: 5s
       retries: 5
