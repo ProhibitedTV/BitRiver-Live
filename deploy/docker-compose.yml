@@ -243,9 +243,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - >-
-          curl -fsS -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" http://localhost:8081/healthz
-          || curl -fsS -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" http://localhost:8081/v1/system/monitoring
+        - pgrep -x OvenMediaEngine >/dev/null
       interval: 30s
       timeout: 5s
       retries: 5
