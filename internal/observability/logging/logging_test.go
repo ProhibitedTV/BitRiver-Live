@@ -1,0 +1,105 @@
+package logging
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"log/slog"
+	"os"
+	"testing"
+)
+
+func TestNewUsesStdoutByDefault(t *testing.T) {
+	originalStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	os.Stdout = w
+	t.Cleanup(func() {
+		os.Stdout = originalStdout
+		_ = w.Close()
+		_ = r.Close()
+	})
+
+	logger := New(Config{})
+	logger.Info("hello")
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close writer: %v", err)
+	}
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("failed to read stdout: %v", err)
+	}
+
+	if len(data) == 0 {
+		t.Fatalf("expected output on stdout, got none")
+	}
+}
+
+func TestNewRespectsCustomWriter(t *testing.T) {
+	var buf bytes.Buffer
+
+	logger := New(Config{Writer: &buf})
+	logger.Info("custom writer")
+
+	if buf.Len() == 0 {
+		t.Fatalf("expected output in custom writer, got none")
+	}
+}
+
+func TestParseLevel(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    string
+		expected slog.Level
+	}{
+		{name: "debug", input: "debug", expected: slog.LevelDebug},
+		{name: "warning", input: "warning", expected: slog.LevelWarn},
+		{name: "warn", input: "warn", expected: slog.LevelWarn},
+		{name: "error", input: "error", expected: slog.LevelError},
+		{name: "info", input: "info", expected: slog.LevelInfo},
+		{name: "empty", input: "", expected: slog.LevelInfo},
+		{name: "mixed case", input: " DeBuG ", expected: slog.LevelDebug},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			leveler := parseLevel(tc.input)
+			if leveler == nil {
+				t.Fatalf("expected leveler, got nil")
+			}
+
+			if got := leveler.Level(); got != tc.expected {
+				t.Fatalf("expected %v, got %v", tc.expected, got)
+			}
+		})
+	}
+}
+
+func TestWithComponent(t *testing.T) {
+	t.Run("adds component attribute", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+		WithComponent(logger, "api").Info("component set")
+
+		var payload map[string]any
+		if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
+			t.Fatalf("failed to unmarshal log output: %v", err)
+		}
+
+		if payload["component"] != "api" {
+			t.Fatalf("expected component \"api\", got %v", payload["component"])
+		}
+	})
+
+	t.Run("nil logger returns nil", func(t *testing.T) {
+		if got := WithComponent(nil, "anything"); got != nil {
+			t.Fatalf("expected nil logger, got %v", got)
+		}
+	})
+}
