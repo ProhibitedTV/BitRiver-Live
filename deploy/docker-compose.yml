@@ -227,6 +227,9 @@ services:
     container_name: bitriver-ome
     hostname: ome
     restart: unless-stopped
+    # Deliberately avoid mounting origin_conf/edge_conf so each quickstart boots
+    # with the image's factory-default OME configuration. This prevents
+    # persistent broken Server.xml files from bricking repeated boots.
     environment:
       BITRIVER_OME_USERNAME: ${BITRIVER_OME_USERNAME:?set via .env}
       BITRIVER_OME_PASSWORD: ${BITRIVER_OME_PASSWORD:?set via .env}
@@ -237,8 +240,6 @@ services:
     ports:
       - "${BITRIVER_OME_HTTP_PORT:-8081}:8081"
       - "${BITRIVER_OME_SIGNALLING_PORT:-9000}:9000"
-    volumes:
-      - ${OME_SERVER_XML_PATH:-./ome/Server.generated.xml}:/opt/ovenmediaengine/bin/origin_conf/Server.xml:ro
     healthcheck:
       test:
         - CMD-SHELL
