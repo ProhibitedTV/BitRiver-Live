@@ -152,13 +152,13 @@ services:
       set -e
       if ls /migrations/*.sql >/dev/null 2>&1; then
         for file in /migrations/*.sql; do
-          echo "Applying ${file}"
+          echo "Applying $$file"
           psql \
             -h postgres \
             -U "${BITRIVER_POSTGRES_USER:?set via .env}" \
             -d "${BITRIVER_POSTGRES_DB:-bitriver}" \
             -v ON_ERROR_STOP=1 \
-            -f "${file}"
+            -f "$${file}"
         done
         echo "Postgres migrations completed."
       else
