@@ -265,6 +265,14 @@ wait_for_api() {
     sleep "$sleep_seconds"
   done
   echo "Timed out waiting for API readiness after $((attempts * sleep_seconds)) seconds." >&2
+  echo "Attempting to fetch $url for debugging ..." >&2
+  local health_output
+  health_output=$(curl -sS -w '\nHTTP status: %{http_code}\n' "$url" || true)
+  if [[ -n $health_output ]]; then
+    echo "$health_output" >&2
+  else
+    echo "No response received from $url." >&2
+  fi
   return 1
 }
 
