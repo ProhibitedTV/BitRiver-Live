@@ -4,6 +4,7 @@ import "../styles/globals.css";
 import "../styles/home.css";
 import { Providers } from "../components/Providers";
 import { Navbar } from "../components/Navbar";
+import { ViewerShell } from "../components/ViewerShell";
 
 export const metadata: Metadata = {
   title: {
@@ -33,10 +34,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <Providers>
           <Navbar />
-          <main>{children}</main>
-          <footer className="footer">
-            Crafted for self-hosted creators · Powered by BitRiver Live
-          </footer>
+          <ViewerShell>{children}</ViewerShell>
         </Providers>
       </body>
     </html>
