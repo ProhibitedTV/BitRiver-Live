@@ -11,6 +11,8 @@ interface FetchState {
   error?: string;
 }
 
+const REFRESH_INTERVAL_MS = 30_000;
+
 export function FollowingSidebar() {
   const [channels, setChannels] = useState<DirectoryChannel[]>([]);
   const [fetchState, setFetchState] = useState<FetchState>({ status: "idle" });
@@ -37,8 +39,14 @@ export function FollowingSidebar() {
   useEffect(() => {
     mountedRef.current = true;
     loadFollowing();
+
+    const intervalId = setInterval(() => {
+      void loadFollowing();
+    }, REFRESH_INTERVAL_MS);
+
     return () => {
       mountedRef.current = false;
+      clearInterval(intervalId);
     };
   }, [loadFollowing]);
 
