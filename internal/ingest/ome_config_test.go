@@ -20,6 +20,7 @@ var expectedServerTemplates = map[string]string{
     <!-- Required for health endpoint and origin-mode APIs; Compose mounts this file at /opt/ovenmediaengine/bin/origin_conf/Server.xml -->
     <Type>origin</Type>
     <IP>0.0.0.0</IP>
+    <Bind>0.0.0.0</Bind>
     <PrivacyProtection>false</PrivacyProtection>
     <StunServer>stun.l.google.com:19302</StunServer>
 

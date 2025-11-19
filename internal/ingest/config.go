@@ -23,6 +23,7 @@ type Config struct {
 	LadderProfiles    []Rendition
 	HTTPClient        *http.Client
 	HealthEndpoint    string
+	HealthTimeout     time.Duration
 	MaxBootAttempts   int
 	RetryInterval     time.Duration
 	HTTPMaxAttempts   int
@@ -40,6 +41,7 @@ func LoadConfigFromEnv() (Config, error) {
 		JobBaseURL:        strings.TrimSpace(os.Getenv("BITRIVER_TRANSCODER_API")),
 		JobToken:          strings.TrimSpace(os.Getenv("BITRIVER_TRANSCODER_TOKEN")),
 		HealthEndpoint:    strings.TrimSpace(os.Getenv("BITRIVER_INGEST_HEALTH")),
+		HealthTimeout:     2 * time.Second,
 		MaxBootAttempts:   3,
 		RetryInterval:     500 * time.Millisecond,
 		HTTPMaxAttempts:   30,
@@ -83,6 +85,16 @@ func LoadConfigFromEnv() (Config, error) {
 		}
 		if parsed >= 0 {
 			cfg.HTTPRetryInterval = parsed
+		}
+	}
+
+	if timeout := strings.TrimSpace(os.Getenv("BITRIVER_INGEST_HEALTH_TIMEOUT")); timeout != "" {
+		parsed, err := time.ParseDuration(timeout)
+		if err != nil {
+			return Config{}, fmt.Errorf("parse BITRIVER_INGEST_HEALTH_TIMEOUT: %w", err)
+		}
+		if parsed > 0 {
+			cfg.HealthTimeout = parsed
 		}
 	}
 
@@ -169,6 +181,9 @@ func (c Config) Validate() error {
 	}
 	if c.HTTPRetryInterval < 0 {
 		return errors.New("HTTP retry interval cannot be negative")
+	}
+	if c.HealthTimeout <= 0 {
+		return errors.New("health timeout must be positive")
 	}
 	return nil
 }

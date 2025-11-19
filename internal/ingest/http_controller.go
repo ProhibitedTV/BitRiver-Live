@@ -23,7 +23,10 @@ type HTTPController struct {
 
 func (c *HTTPController) ensureAdapters() {
 	if c.config.HTTPClient == nil {
-		c.config.HTTPClient = &http.Client{Timeout: 10 * time.Second}
+		c.config.HTTPClient = &http.Client{Timeout: 2 * time.Second}
+	}
+	if c.config.HealthTimeout <= 0 {
+		c.config.HealthTimeout = 2 * time.Second
 	}
 	c.ensureLogger()
 	if c.channels == nil {
@@ -199,41 +202,35 @@ func (c *HTTPController) HealthChecks(ctx context.Context) []HealthStatus {
 			continue
 		}
 		url := fmt.Sprintf("%s%s", strings.TrimRight(svc.base, "/"), c.config.HealthEndpoint)
-		var lastErr error
-		for attempt := 1; attempt <= c.retryAttempts; attempt++ {
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-			if err != nil {
-				lastErr = err
-				break
-			}
-			if svc.auth != nil {
-				svc.auth(req)
-			}
-			resp, err := c.config.HTTPClient.Do(req)
-			if err != nil {
-				lastErr = err
-				if attempt < c.retryAttempts && c.retryInterval > 0 {
-					time.Sleep(c.retryInterval)
-				}
-				continue
-			}
-			io.Copy(io.Discard, resp.Body)
-			resp.Body.Close()
-			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				status.Status = "ok"
-			} else {
-				status.Status = "error"
-				status.Detail = resp.Status
-			}
-			lastErr = nil
-			break
-		}
-		if status.Status == "" {
+		reqCtx, cancel := context.WithTimeout(ctx, c.config.HealthTimeout)
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
+		if err != nil {
 			status.Status = "error"
-			if lastErr != nil {
-				status.Detail = lastErr.Error()
-			}
+			status.Detail = err.Error()
+			statuses = append(statuses, status)
+			cancel()
+			continue
 		}
+		if svc.auth != nil {
+			svc.auth(req)
+		}
+		resp, err := c.config.HTTPClient.Do(req)
+		if err != nil {
+			status.Status = "error"
+			status.Detail = err.Error()
+			statuses = append(statuses, status)
+			cancel()
+			continue
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			status.Status = "ok"
+		} else {
+			status.Status = "error"
+			status.Detail = resp.Status
+		}
+		cancel()
 		statuses = append(statuses, status)
 	}
 	return statuses
