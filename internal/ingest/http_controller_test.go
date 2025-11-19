@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ func (f *flakyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	return f.transport.RoundTrip(req)
 }
 
-func TestHTTPControllerHealthChecksRetriesOnTransientError(t *testing.T) {
+func TestHTTPControllerHealthChecksFailFastOnTransientError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -33,20 +34,19 @@ func TestHTTPControllerHealthChecksRetriesOnTransientError(t *testing.T) {
 
 	controller := HTTPController{
 		config: Config{
-			SRSBaseURL:        server.URL,
-			SRSToken:          "token",
-			OMEBaseURL:        server.URL,
-			OMEUsername:       "user",
-			OMEPassword:       "pass",
-			JobBaseURL:        server.URL,
-			JobToken:          "token",
-			HealthEndpoint:    "/healthz",
-			HTTPClient:        client,
-			HTTPMaxAttempts:   2,
-			HTTPRetryInterval: 0,
-			LadderProfiles:    []Rendition{{Name: "720p", Bitrate: 1000}},
+			SRSBaseURL:      server.URL,
+			SRSToken:        "token",
+			OMEBaseURL:      server.URL,
+			OMEUsername:     "user",
+			OMEPassword:     "pass",
+			JobBaseURL:      server.URL,
+			JobToken:        "token",
+			HealthEndpoint:  "/healthz",
+			HealthTimeout:   500 * time.Millisecond,
+			HTTPClient:      client,
+			LadderProfiles:  []Rendition{{Name: "720p", Bitrate: 1000}},
+			HTTPMaxAttempts: 2,
 		},
-		retryAttempts: 2,
 	}
 
 	statuses := controller.HealthChecks(context.Background())
@@ -54,13 +54,30 @@ func TestHTTPControllerHealthChecksRetriesOnTransientError(t *testing.T) {
 	if len(statuses) != 3 {
 		t.Fatalf("expected 3 statuses, got %d", len(statuses))
 	}
+
+	statusMap := make(map[string]HealthStatus)
 	for _, status := range statuses {
-		if status.Status != "ok" {
-			t.Fatalf("expected status ok for %s, got %s (%s)", status.Component, status.Status, status.Detail)
-		}
+		statusMap[status.Component] = status
 	}
 
-	if !controller.config.HTTPClient.Transport.(*flakyRoundTripper).failureReturned.Load() {
-		t.Fatalf("expected at least one retry due to transient failure")
+	srsStatus, ok := statusMap["srs"]
+	if !ok {
+		t.Fatalf("missing SRS status")
+	}
+	if srsStatus.Status != "error" {
+		t.Fatalf("expected SRS status error, got %s", srsStatus.Status)
+	}
+	if !strings.Contains(srsStatus.Detail, "temporary DNS failure") {
+		t.Fatalf("expected transient failure detail, got %s", srsStatus.Detail)
+	}
+
+	for _, component := range []string{"ovenmediaengine", "transcoder"} {
+		status, ok := statusMap[component]
+		if !ok {
+			t.Fatalf("missing status for %s", component)
+		}
+		if status.Status != "ok" {
+			t.Fatalf("expected %s status ok, got %s", component, status.Status)
+		}
 	}
 }
