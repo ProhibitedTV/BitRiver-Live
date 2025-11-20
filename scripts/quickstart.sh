@@ -337,6 +337,74 @@ wait_for_postgres() {
   return 1
 }
 
+list_unhealthy_services() {
+  local ps_json
+  if ! ps_json=$(docker compose ps --format json); then
+    echo "Failed to inspect docker compose service statuses." >&2
+    return 1
+  fi
+
+  printf '%s' "$ps_json" | python3 - <<'PY'
+import json
+import sys
+
+data = json.loads(sys.stdin.read() or "[]")
+unhealthy = []
+for entry in data:
+    health = (entry.get("Health") or "").lower()
+    status = (entry.get("Status") or "").lower()
+    if "unhealthy" in health or "unhealthy" in status:
+        unhealthy.append(entry.get("Service") or entry.get("Name") or "")
+
+for service in unhealthy:
+    if service:
+        print(service)
+PY
+}
+
+ensure_compose_health() {
+  local max_attempts=${1:-3}
+  local sleep_seconds=${2:-5}
+  local -a unhealthy_services=()
+
+  for ((attempt=1; attempt<=max_attempts; attempt++)); do
+    if ! mapfile -t unhealthy_services < <(list_unhealthy_services); then
+      echo "Unable to read docker compose health status." >&2
+      return 1
+    fi
+
+    if (( ${#unhealthy_services[@]} == 0 )); then
+      echo "All docker compose services report healthy status."
+      return 0
+    fi
+
+    echo "Detected unhealthy services (attempt $attempt/$max_attempts): ${unhealthy_services[*]}" >&2
+
+    if (( attempt == max_attempts )); then
+      echo "Services remained unhealthy after ${max_attempts} attempts: ${unhealthy_services[*]}" >&2
+      return 1
+    fi
+
+    for svc in "${unhealthy_services[@]}"; do
+      echo "Recreating service $svc to recover from unhealthy state ..."
+      if ! docker compose rm -fs "$svc"; then
+        echo "Failed to remove unhealthy service $svc." >&2
+        return 1
+      fi
+      if ! docker compose up -d "$svc"; then
+        echo "Failed to start service $svc after removal." >&2
+        return 1
+      fi
+    done
+
+    echo "Waiting for services to restart before rechecking health ..."
+    sleep "$sleep_seconds"
+  done
+
+  echo "Reached maximum health verification attempts without success." >&2
+  return 1
+}
+
 POSTGRES_USER_VALUE=""
 POSTGRES_PASSWORD_VALUE=""
 POSTGRES_DB_VALUE=""
@@ -503,6 +571,15 @@ fi
 
 echo "Starting BitRiver Live stack..."
 docker compose up --build -d
+
+if ! ensure_compose_health; then
+  echo "Some services are unhealthy and could not be auto-recovered. Check the docker compose logs for the following services:" >&2
+  mapfile -t remaining_unhealthy < <(list_unhealthy_services || true)
+  if (( ${#remaining_unhealthy[@]} > 0 )); then
+    printf '  - %s\n' "${remaining_unhealthy[@]}" >&2
+  fi
+  exit 1
+fi
 
 echo "Stack is starting. From the repository root, run 'COMPOSE_FILE=deploy/docker-compose.yml docker compose logs -f' to follow service output."
 
