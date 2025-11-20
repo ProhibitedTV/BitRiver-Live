@@ -28,6 +28,18 @@ Self-service registration ships disabled so operators can control how new accoun
 with `--allow-self-signup` or `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true` when you are ready to open signups. Administrators can
 continue to create accounts manually regardless of this setting.
 
+## Viewer origins and session cookies
+
+| Flag | Purpose |
+| --- | --- |
+| `--session-cookie-cross-site` | Issues the `bitriver_session` cookie with `SameSite=None; Secure` for cross-site viewer deployments. |
+
+| Variable | Description |
+| --- | --- |
+| `BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE` | Set to `true` to opt into cross-site session cookies; defaults to `false` (Strict). |
+
+The default configuration keeps the session cookie in `SameSite=Strict` mode and only marks it as `Secure` when the incoming request arrived over HTTPS, which works for the bundled same-origin viewer. When proxying the viewer from a different domain, enable the cross-site option so the session can flow to the viewer via `SameSite=None`; doing so requires HTTPS end-to-end because browsers reject `SameSite=None` cookies without `Secure`.
+
 ## Postgres backend
 
 BitRiver Live now boots directly against Postgres once the schema is migrated. The Docker Compose bundle ships with a short-lived `postgres-migrations` service that waits for the database, applies every SQL file in `deploy/migrations/`, and exits; `bitriver-live` depends on that helper and will not start until migrations succeed. For bespoke deployments, apply the SQL files with your preferred migration tool or straight through `psql`:

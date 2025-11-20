@@ -688,6 +688,51 @@ func TestSignupAndLoginFlow(t *testing.T) {
 	}
 }
 
+func TestSessionCookiePolicyCrossSite(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	handler.SessionCookiePolicy = SessionCookiePolicy{
+		SameSite:   http.SameSiteNoneMode,
+		SecureMode: SessionCookieSecureAlways,
+	}
+
+	signupPayload := map[string]string{
+		"displayName": "Viewer",
+		"email":       "viewer@example.com",
+		"password":    "supersecret",
+	}
+	body, _ := json.Marshal(signupPayload)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/signup", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.Signup(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected signup status 201, got %d", rec.Code)
+	}
+
+	signupCookie := findCookie(t, rec.Result().Cookies(), "bitriver_session")
+	if signupCookie.SameSite != http.SameSiteNoneMode {
+		t.Fatalf("expected SameSite=None, got %v", signupCookie.SameSite)
+	}
+	if !signupCookie.Secure {
+		t.Fatal("expected cross-site policy to enforce Secure on session cookie")
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/auth/session", nil)
+	req.AddCookie(signupCookie)
+	rec = httptest.NewRecorder()
+	handler.Session(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected delete session status 204, got %d", rec.Code)
+	}
+
+	clearedCookie := findCookie(t, rec.Result().Cookies(), "bitriver_session")
+	if clearedCookie.SameSite != http.SameSiteNoneMode {
+		t.Fatalf("expected cleared cookie to retain SameSite=None, got %v", clearedCookie.SameSite)
+	}
+	if !clearedCookie.Secure {
+		t.Fatal("expected cross-site cleared cookie to enforce Secure")
+	}
+}
+
 func TestSignupRejectsShortPassword(t *testing.T) {
 	handler, store := newTestHandler(t)
 
