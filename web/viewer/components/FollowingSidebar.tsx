@@ -5,20 +5,28 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DirectoryChannel } from "../lib/viewer-api";
 import { fetchFollowingChannels } from "../lib/viewer-api";
+import { useAuth } from "../hooks/useAuth";
 
 interface FetchState {
-  status: "idle" | "loading" | "loaded" | "error";
+  status: "idle" | "loading" | "loaded" | "error" | "unauthenticated";
   error?: string;
 }
 
 const REFRESH_INTERVAL_MS = 30_000;
 
 export function FollowingSidebar() {
+  const { user, loading: authLoading } = useAuth();
   const [channels, setChannels] = useState<DirectoryChannel[]>([]);
   const [fetchState, setFetchState] = useState<FetchState>({ status: "idle" });
   const mountedRef = useRef(true);
 
   const loadFollowing = useCallback(async () => {
+    if (!user) {
+      setChannels([]);
+      setFetchState({ status: "unauthenticated" });
+      return;
+    }
+
     setFetchState({ status: "loading" });
     try {
       const response = await fetchFollowingChannels();
@@ -34,21 +42,25 @@ export function FollowingSidebar() {
       const message = error instanceof Error ? error.message : "Unable to load following";
       setFetchState({ status: "error", error: message });
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     mountedRef.current = true;
-    loadFollowing();
+    if (!authLoading) {
+      loadFollowing();
+    }
 
     const intervalId = setInterval(() => {
-      void loadFollowing();
+      if (!authLoading) {
+        void loadFollowing();
+      }
     }, REFRESH_INTERVAL_MS);
 
     return () => {
       mountedRef.current = false;
       clearInterval(intervalId);
     };
-  }, [loadFollowing]);
+  }, [authLoading, loadFollowing]);
 
   const getSummary = () => {
     if (fetchState.status === "loading") {
@@ -56,6 +68,9 @@ export function FollowingSidebar() {
     }
     if (fetchState.status === "error") {
       return fetchState.error ?? "Unable to load following";
+    }
+    if (fetchState.status === "unauthenticated") {
+      return "Sign in to follow";
     }
     return channels.length > 0 ? `${channels.length} creators` : "No channels yet";
   };
@@ -97,6 +112,10 @@ export function FollowingSidebar() {
 
       {fetchState.status === "loading" ? (
         <p className="following-sidebar__state muted">Checking which creators are live…</p>
+      ) : fetchState.status === "unauthenticated" ? (
+        <p className="following-sidebar__state following-sidebar__state--empty">
+          Sign in to see who you follow and get notified when they go live.
+        </p>
       ) : fetchState.status === "error" ? (
         <div className="following-sidebar__state following-sidebar__state--error" role="status">
           <p>We couldn&rsquo;t load your followed channels.</p>
