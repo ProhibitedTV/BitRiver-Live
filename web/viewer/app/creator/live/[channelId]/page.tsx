@@ -124,6 +124,13 @@ export default function CreatorLivePage() {
     return sorted.find((session) => !session.endedAt) ?? sorted[0];
   }, [sessions]);
 
+  const isChannelOwner = useMemo(
+    () => Boolean(managedChannel && user && managedChannel.ownerId === user.id),
+    [managedChannel, user]
+  );
+
+  const ingestEndpoints = managedChannel?.ingestEndpoints ?? [];
+
   const handleTitleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!titleDraft.trim()) {
@@ -172,12 +179,6 @@ export default function CreatorLivePage() {
       </section>
     );
   }
-
-  const ingestEndpoints = managedChannel?.ingestEndpoints ?? [];
-  const isChannelOwner = useMemo(
-    () => Boolean(managedChannel && user && managedChannel.ownerId === user.id),
-    [managedChannel, user]
-  );
 
   const handleCopyKey = async () => {
     if (!streamKeyVisible || !managedChannel?.streamKey || !isChannelOwner) {
