@@ -12,6 +12,7 @@ export type ChannelPublic = {
 
 export type ManagedChannel = ChannelPublic & {
   streamKey: string;
+  ingestEndpoints?: string[];
 };
 
 export type RenditionManifest = {
