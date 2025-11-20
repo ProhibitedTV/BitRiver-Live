@@ -1,0 +1,7 @@
+# Optional override to mount a custom OvenMediaEngine Server.xml rendered by
+# scripts/quickstart.sh when BITRIVER_OME_CUSTOM_CONFIG=1.
+services:
+  ome:
+    volumes:
+      - ./ome/Server.generated.xml:/opt/ovenmediaengine/bin/origin_conf/Server.xml:ro
+      - ./ome/Server.generated.xml:/opt/ovenmediaengine/bin/edge_conf/Server.xml:ro

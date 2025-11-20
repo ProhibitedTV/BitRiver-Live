@@ -93,6 +93,62 @@ echo "__ENV_END__"
 	}
 }
 
+func TestQuickstartOmeRenderingIsOptIn(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	quickstartPath := filepath.Join(repoRoot, "scripts", "quickstart.sh")
+	content, err := os.ReadFile(quickstartPath)
+	if err != nil {
+		t.Fatalf("read quickstart: %v", err)
+	}
+
+	lines := strings.Split(string(content), "\n")
+	guardLine := "if [[ ${BITRIVER_OME_CUSTOM_CONFIG:-} == \"1\" ]]; then"
+
+	guardActive := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		switch trimmed {
+		case guardLine:
+			guardActive = true
+			continue
+		case "fi":
+			guardActive = false
+			continue
+		case "render_ome_config":
+			if !guardActive {
+				t.Fatalf("render_ome_config invocation must be gated by BITRIVER_OME_CUSTOM_CONFIG guard")
+			}
+			return
+		}
+	}
+
+	t.Fatalf("render_ome_config invocation not found in quickstart")
+}
+
+func TestComposeDoesNotMountOmeConfigByDefault(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	composePath := filepath.Join(repoRoot, "deploy", "docker-compose.yml")
+	content, err := os.ReadFile(composePath)
+	if err != nil {
+		t.Fatalf("read compose: %v", err)
+	}
+
+	if strings.Contains(string(content), "Server.generated.xml") {
+		t.Fatalf("base compose file should not mount custom OME Server.xml by default")
+	}
+}
+
 func extractSection(output, startMarker, endMarker string) string {
 	start := strings.Index(output, startMarker)
 	end := strings.Index(output, endMarker)

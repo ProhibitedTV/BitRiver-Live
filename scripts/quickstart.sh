@@ -487,12 +487,19 @@ mkdir -p "$TRANSCODER_PUBLIC_DIR"
 chmod 0777 "$TRANSCODER_DATA_DIR" "$TRANSCODER_PUBLIC_DIR"
 echo "If you provision these directories manually, keep them writable (see docs/installing-on-ubuntu.md)."
 
-# Render the OME control credentials into the mounted Server.xml so the health
-# endpoint binds to the expected port and accepts the configured username/password.
-render_ome_config
-
 cd "$REPO_ROOT"
-export COMPOSE_FILE="$COMPOSE_FILE"
+
+compose_files=("$COMPOSE_FILE")
+
+if [[ ${BITRIVER_OME_CUSTOM_CONFIG:-} == "1" ]]; then
+  echo "BITRIVER_OME_CUSTOM_CONFIG=1 set; rendering and mounting custom OME configuration."
+  render_ome_config
+  compose_files+=("$REPO_ROOT/deploy/docker-compose.ome-custom.yml")
+fi
+
+if (( ${#compose_files[@]} > 0 )); then
+  export COMPOSE_FILE=$(IFS=:; echo "${compose_files[*]}")
+fi
 
 echo "Starting BitRiver Live stack..."
 docker compose up --build -d
