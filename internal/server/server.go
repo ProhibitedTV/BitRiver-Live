@@ -88,6 +88,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handler.Health)
+	mux.HandleFunc("/readyz", handler.Ready)
 	mux.Handle("/metrics", recorder.Handler())
 	mux.HandleFunc("/api/auth/signup", handler.Signup)
 	mux.HandleFunc("/api/auth/login", handler.Login)

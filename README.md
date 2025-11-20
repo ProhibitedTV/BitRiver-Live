@@ -71,11 +71,17 @@ stack or refresh credentials.
 
 ### Step 3 – Use the running stack
 
-1. Check that every service is healthy:
+1. Check that the API is ready:
+   ```bash
+   curl http://localhost:8080/readyz
+   ```
+   The endpoint returns HTTP 200 when core dependencies (database, sessions, rate limiting) are available.
+   To inspect ingest dependencies, call `/healthz` as well:
    ```bash
    curl http://localhost:8080/healthz
    ```
-   A 200 response means all dependencies are up; a 503 indicates one or more components are degraded and needs attention.
+   The JSON payload reports `status: "degraded"` when SRS/OME/transcoder probes fail, but the HTTP status will stay 200 unless
+   core services are unavailable.
 2. Open [http://localhost:8080/signup](http://localhost:8080/signup) in your browser and sign in with the admin credentials
    printed by the script, then change the password under **Settings → Security**.
 3. Visit [http://localhost:8080/viewer](http://localhost:8080/viewer) in another tab to see the public viewer that proxies

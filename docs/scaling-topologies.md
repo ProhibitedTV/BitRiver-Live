@@ -43,7 +43,7 @@ Viewers -> [HTTP(S) LB] -> [Viewer nodes] -> [API origin]
 
 - **Origins:** Run the Go API, PostgreSQL, Redis, SRS, OME, and the transcoder on a trusted subnet. Keep the API close to the database to avoid cross-AZ latency spikes.
 - **Edges:** Place one or more viewer nodes (Next.js runtime) behind an HTTP load balancer such as HAProxy, Envoy, or an L7 service (ALB, Cloud Run). Configure `BITRIVER_VIEWER_ORIGIN` to point to the load-balanced viewer URL so the API proxies `/viewer` correctly.
-- **Load balancing:** Terminate TLS at the edge load balancer. Forward `/api` to the API pool on port 8080 (or 443 if the API handles TLS) and `/viewer` to the viewer nodes. Health check `/healthz` on the API and `GET /` on the viewer runtime.
+- **Load balancing:** Terminate TLS at the edge load balancer. Forward `/api` to the API pool on port 8080 (or 443 if the API handles TLS) and `/viewer` to the viewer nodes. Health check `/readyz` on the API (falling back to `/healthz` for ingest visibility) and `GET /` on the viewer runtime.
 - **Sizing:** Scale viewer nodes horizontally—start with 2 vCPUs/4 GB RAM per node. Keep a separate 4–8 vCPU instance for the Go API. Reserve CPU headroom for SRS and the transcoder (dedicated 4 vCPUs each) when pushing multiple renditions.
 - **Ingest protection:** Use security groups or firewall rules to only allow RTMP (1935/TCP) from trusted encoders. Expose the SRS management API (1985/TCP) to operators only.
 
@@ -56,12 +56,12 @@ For global audiences, offload segment delivery and static assets to a CDN while 
 - **Segment flow:** Configure OME to publish HLS/DASH manifests to object storage, then front the bucket with a CDN (CloudFront, Fastly, Cloudflare). The CDN pulls from origin over HTTPS and serves viewers from the nearest PoP. Keep WebRTC paths on regional edge servers for low-latency interactivity.
 - **API and auth:** Terminate TLS at a global load balancer (Cloudflare Tunnel, AWS Global Accelerator) and forward REST/WebSocket traffic to the API origin pool. Maintain sticky sessions only if you enable WebSocket chat over the API.
 - **Viewer assets:** Build the Next.js viewer as a static export and host it behind the CDN, or continue proxying `/viewer` through the API while caching static assets (`/_next/static/*`).
-- **Load balancing:** Use CDN health checks to watch the API `/healthz` and remove unhealthy origins automatically. Pair with an internal L4 balancer for SRS/OME if you run multiple ingest regions.
+- **Load balancing:** Use CDN health checks to watch the API `/readyz` and remove unhealthy origins automatically. Pair with an internal L4 balancer for SRS/OME if you run multiple ingest regions, while `/healthz` can continue feeding ingest status dashboards.
 - **Sizing:** Keep at least two API instances (4 vCPUs/8 GB RAM each) per region for redundancy. Run SRS/OME/transcoder clusters per region; dedicate GPU-backed nodes for transcoding-heavy channels. PostgreSQL should be managed with high availability and read replicas close to API origins.
 - **Security:** Restrict origin IPs to accept only the CDN’s edge ranges on ports 80/443. Require mutual TLS or signed URLs when the CDN requests HLS segments.
 
 ## Additional recommendations
 
 - **Configuration management:** Template `.env` files for the systemd units and use secrets managers to rotate API keys. The units in [`deploy/systemd/`](../deploy/systemd/) read environment files so you can update settings without editing service definitions.
-- **Observability:** Expose API health checks at `http://<api-host>:8080/healthz` and monitor container health probes from the compose file. Mirror these endpoints into your load balancer configuration.
+- **Observability:** Expose API health checks at `http://<api-host>:8080/readyz` for readiness and `http://<api-host>:8080/healthz` for ingest visibility, and monitor container health probes from the compose file. Mirror these endpoints into your load balancer configuration.
 - **Disaster recovery:** Snapshots for PostgreSQL and object storage plus replicated Redis caches ensure quick failover. Regularly test restores on staging clusters that mirror your production topology.

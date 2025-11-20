@@ -254,8 +254,9 @@ read_env_value() {
 
 wait_for_api() {
   local url=$1
-  local attempts=${2:-60}
-  local sleep_seconds=${3:-2}
+  local debug_url=${2:-$url}
+  local attempts=${3:-60}
+  local sleep_seconds=${4:-2}
   echo "Waiting for BitRiver Live API at $url ..."
   for ((i=1; i<=attempts; i++)); do
     if curl -fsS "$url" >/dev/null 2>&1; then
@@ -265,13 +266,13 @@ wait_for_api() {
     sleep "$sleep_seconds"
   done
   echo "Timed out waiting for API readiness after $((attempts * sleep_seconds)) seconds." >&2
-  echo "Attempting to fetch $url for debugging ..." >&2
+  echo "Attempting to fetch $debug_url for debugging ..." >&2
   local health_output
-  health_output=$(curl -sS -w '\nHTTP status: %{http_code}\n' "$url" || true)
+  health_output=$(curl -sS -w '\nHTTP status: %{http_code}\n' "$debug_url" || true)
   if [[ -n $health_output ]]; then
     echo "$health_output" >&2
   else
-    echo "No response received from $url." >&2
+    echo "No response received from $debug_url." >&2
   fi
   return 1
 }
@@ -454,6 +455,7 @@ echo "Stack is starting. From the repository root, run 'COMPOSE_FILE=deploy/dock
 
 API_PORT=$(read_env_value BITRIVER_LIVE_PORT)
 API_PORT=${API_PORT:-8080}
+API_READY_URL="http://localhost:${API_PORT}/readyz"
 API_HEALTH_URL="http://localhost:${API_PORT}/healthz"
 postgres_ready=0
 if wait_for_postgres; then
@@ -473,7 +475,7 @@ fi
 
 api_ready=0
 if ((migrations_succeeded)); then
-  if wait_for_api "$API_HEALTH_URL"; then
+  if wait_for_api "$API_READY_URL" "$API_HEALTH_URL"; then
     api_ready=1
   else
     echo "API did not become ready in time; skipping admin bootstrap." >&2

@@ -164,13 +164,7 @@ type componentStatus struct {
 	Error     string `json:"error,omitempty"`
 }
 
-func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	var checks []ingest.HealthStatus
-	if h.Store != nil {
-		checks = h.Store.IngestHealth(ctx)
-	}
-
+func (h *Handler) componentHealth(ctx context.Context) ([]componentStatus, string, int) {
 	overallStatus := "ok"
 	statusCode := http.StatusOK
 	recordComponent := func(component string, err error) componentStatus {
@@ -200,13 +194,24 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		components = append(components, recordComponent("chat_queue", h.ChatQueue.Ping(ctx)))
 	}
 
+	return components, overallStatus, statusCode
+}
+
+func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	components, overallStatus, statusCode := h.componentHealth(ctx)
+	checks := []ingest.HealthStatus{}
+	if h.Store != nil {
+		checks = h.Store.IngestHealth(ctx)
+	}
+
 	for _, check := range checks {
 		switch strings.ToLower(check.Status) {
 		case "ok", "disabled":
-			// no-op
+		// no-op
 		default:
 			overallStatus = "degraded"
-			statusCode = http.StatusServiceUnavailable
 		}
 	}
 
@@ -217,6 +222,18 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, check := range checks {
 		metrics.SetIngestHealth(check.Component, check.Status)
+	}
+	writeJSON(w, statusCode, payload)
+}
+
+// Ready reports the status of core API dependencies without considering ingest
+// services so load balancers can gate traffic on database and session readiness
+// alone.
+func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
+	components, overallStatus, statusCode := h.componentHealth(r.Context())
+	payload := map[string]interface{}{
+		"status":     overallStatus,
+		"components": components,
 	}
 	writeJSON(w, statusCode, payload)
 }
