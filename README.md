@@ -185,6 +185,12 @@ go run -tags postgres ./cmd/tools/bootstrap-admin \
   --password "temporary-password"
 ```
 
+Session tokens stored via the Postgres session backend are hashed (SHA-256) on
+write so bearer tokens are not exposed to database operators. Apply the latest
+`deploy/migrations` SQL files (including
+`0004_auth_session_hashes.sql`) before booting the API to ensure the hashed
+column exists.
+
 ## Architecture at a glance
 
 ```mermaid

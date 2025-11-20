@@ -102,13 +102,17 @@ func (s *PostgresSessionStore) Save(token, userID string, expiresAt time.Time) e
 	if s.pool == nil {
 		return fmt.Errorf("postgres session pool not configured")
 	}
+	hashedToken, err := hashSessionToken(token)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := s.operationContext()
 	defer cancel()
-	_, err := s.pool.Exec(ctx, `
-INSERT INTO auth_sessions (token, user_id, expires_at)
-VALUES ($1, $2, $3)
-ON CONFLICT (token) DO UPDATE SET user_id = EXCLUDED.user_id, expires_at = EXCLUDED.expires_at
-`, token, userID, expiresAt.UTC())
+	_, err = s.pool.Exec(ctx, `
+INSERT INTO auth_sessions (token, hashed_token, user_id, expires_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (hashed_token) DO UPDATE SET user_id = EXCLUDED.user_id, expires_at = EXCLUDED.expires_at
+`, hashedToken, hashedToken, userID, expiresAt.UTC())
 	return err
 }
 
@@ -117,13 +121,17 @@ func (s *PostgresSessionStore) Get(token string) (SessionRecord, bool, error) {
 	if s.pool == nil {
 		return SessionRecord{}, false, fmt.Errorf("postgres session pool not configured")
 	}
+	hashedToken, err := hashSessionToken(token)
+	if err != nil {
+		return SessionRecord{}, false, err
+	}
 	ctx, cancel := s.operationContext()
 	defer cancel()
 	row := s.pool.QueryRow(ctx, `
 SELECT user_id, expires_at
 FROM auth_sessions
-WHERE token = $1
-`, token)
+WHERE hashed_token = $1
+`, hashedToken)
 	var record SessionRecord
 	record.Token = token
 	if err := row.Scan(&record.UserID, &record.ExpiresAt); err != nil {
@@ -140,9 +148,13 @@ func (s *PostgresSessionStore) Delete(token string) error {
 	if s.pool == nil {
 		return fmt.Errorf("postgres session pool not configured")
 	}
+	hashedToken, err := hashSessionToken(token)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := s.operationContext()
 	defer cancel()
-	_, err := s.pool.Exec(ctx, `DELETE FROM auth_sessions WHERE token = $1`, token)
+	_, err = s.pool.Exec(ctx, `DELETE FROM auth_sessions WHERE hashed_token = $1`, hashedToken)
 	return err
 }
 
