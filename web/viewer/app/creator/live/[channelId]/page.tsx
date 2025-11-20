@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Player } from "../../../../components/Player";
+import { useAuth } from "../../../../hooks/useAuth";
 import { useCreatorChannel } from "../../../../hooks/useCreatorChannel";
 import {
   ManagedChannel,
@@ -31,6 +32,7 @@ function describeEndpoint(endpoint: string, index: number) {
 
 export default function CreatorLivePage() {
   const { playback, loading, error, channelId, reload } = useCreatorChannel();
+  const { user, loading: authLoading } = useAuth();
   const [sessionError, setSessionError] = useState<string | undefined>();
   const [sessions, setSessions] = useState<StreamSession[]>([]);
   const [managedChannel, setManagedChannel] = useState<ManagedChannel | undefined>();
@@ -41,6 +43,8 @@ export default function CreatorLivePage() {
   const [savingTitle, setSavingTitle] = useState(false);
   const [titleError, setTitleError] = useState<string | undefined>();
   const [titleSaved, setTitleSaved] = useState(false);
+  const [streamKeyVisible, setStreamKeyVisible] = useState(false);
+  const [copyMessage, setCopyMessage] = useState<string | undefined>();
   const router = useRouter();
 
   const codeBlockStyle = {
@@ -97,6 +101,11 @@ export default function CreatorLivePage() {
     setTitleSaved(false);
     setTitleError(undefined);
   }, [playback?.channel.title]);
+
+  useEffect(() => {
+    setStreamKeyVisible(false);
+    setCopyMessage(undefined);
+  }, [channelId, managedChannel?.id]);
 
   const handleChannelChange = (event: FormEvent<HTMLSelectElement>) => {
     const nextChannelId = event.currentTarget.value;
@@ -165,6 +174,23 @@ export default function CreatorLivePage() {
   }
 
   const ingestEndpoints = managedChannel?.ingestEndpoints ?? [];
+  const isChannelOwner = useMemo(
+    () => Boolean(managedChannel && user && managedChannel.ownerId === user.id),
+    [managedChannel, user]
+  );
+
+  const handleCopyKey = async () => {
+    if (!streamKeyVisible || !managedChannel?.streamKey || !isChannelOwner) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(managedChannel.streamKey);
+      setCopyMessage("Copied");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to copy";
+      setCopyMessage(message);
+    }
+  };
 
   return (
     <div className="stack" style={{ gap: "1.5rem" }}>
@@ -245,9 +271,42 @@ export default function CreatorLivePage() {
             <div className="stack" style={{ gap: "0.75rem" }}>
               <div>
                 <p className="muted">Stream key</p>
-                <div style={codeBlockStyle} aria-live="polite">
-                  {managedChannel?.streamKey ?? "Unavailable"}
-                </div>
+                {authLoading || managedLoading ? (
+                  <p className="muted">Verifying channel ownership…</p>
+                ) : isChannelOwner ? (
+                  <div className="stack" style={{ gap: "0.5rem" }}>
+                    <div style={codeBlockStyle} aria-live="polite">
+                      {streamKeyVisible ? managedChannel?.streamKey : "Hidden"}
+                    </div>
+                    <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => {
+                          setStreamKeyVisible((prev) => !prev);
+                          setCopyMessage(undefined);
+                        }}
+                      >
+                        {streamKeyVisible ? "Hide" : "Show"}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => {
+                          void handleCopyKey();
+                        }}
+                        disabled={!streamKeyVisible}
+                      >
+                        Copy
+                      </button>
+                      {copyMessage ? (
+                        <span className={copyMessage === "Copied" ? "success" : "error"}>{copyMessage}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="muted">Sign in as the channel owner to view the stream key.</p>
+                )}
               </div>
 
               <div>
