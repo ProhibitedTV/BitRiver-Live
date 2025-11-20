@@ -218,6 +218,11 @@ services:
 
   srs:
     image: ossrs/srs:${BITRIVER_SRS_IMAGE_TAG:-v5.0.185}
+    build:
+      context: ..
+      dockerfile: deploy/srs/Dockerfile
+      args:
+        SRS_VERSION: ${BITRIVER_SRS_IMAGE_TAG:-v5.0.185}
     container_name: bitriver-srs
     restart: unless-stopped
     ports:
