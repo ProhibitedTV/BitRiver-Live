@@ -19,6 +19,16 @@ import (
 type Options struct {
 	Password  string
 	EnableTLS bool
+	Hooks     *Hooks
+}
+
+// Hooks allows tests to observe when certain Redis commands are processed.
+// Callbacks should return quickly; they are invoked in a separate goroutine so
+// they cannot block the server.
+type Hooks struct {
+	XAdd       func(stream string, values map[string]string)
+	XReadGroup func(stream, group string, ids []string)
+	XAck       func(stream, group string, ids []string)
 }
 
 type Server struct {
@@ -32,6 +42,8 @@ type Server struct {
 	tlsCert  tls.Certificate
 	certPEM  []byte
 	keyPEM   []byte
+
+	hooks *Hooks
 }
 
 type redisStream struct {
@@ -62,6 +74,7 @@ func Start(opts Options) (*Server, error) {
 		streams: make(map[string]*redisStream),
 		kv:      make(map[string]*kvEntry),
 		closed:  make(chan struct{}),
+		hooks:   opts.Hooks,
 	}
 	addr := "127.0.0.1:0"
 	if opts.EnableTLS {
@@ -225,6 +238,7 @@ func (s *Server) dispatch(writer *bufio.Writer, args []string) bool {
 		strm := s.ensureStream(stream)
 		strm.entries = append(strm.entries, streamEntry{id: id, values: values})
 		s.mu.Unlock()
+		s.notifyXAdd(stream, values)
 		if err := writeBulkString(writer, id); err != nil {
 			return false
 		}
@@ -268,9 +282,10 @@ func (s *Server) dispatch(writer *bufio.Writer, args []string) bool {
 		group := args[2]
 		ids := args[3:]
 		acked := s.ack(stream, group, ids)
-		if err := writeInteger(writer, int64(acked)); err != nil {
+		if err := writeInteger(writer, int64(len(acked))); err != nil {
 			return false
 		}
+		s.notifyXAck(stream, group, acked)
 		return true
 	case "INCR":
 		if len(args) != 2 {
@@ -383,11 +398,12 @@ func (s *Server) handleXReadGroup(writer *bufio.Writer, args []string) bool {
 	}
 	deadline := time.Now().Add(time.Duration(blockMs) * time.Millisecond)
 	for {
-		items := s.readGroup(stream, group, count)
+		items, ids := s.readGroup(stream, group, count)
 		if len(items) > 0 {
 			if err := writeArray(writer, []interface{}{items}); err != nil {
 				return false
 			}
+			s.notifyXReadGroup(stream, group, ids)
 			return true
 		}
 		if blockMs <= 0 || time.Now().After(deadline) {
@@ -400,9 +416,8 @@ func (s *Server) handleXReadGroup(writer *bufio.Writer, args []string) bool {
 	}
 }
 
-func (s *Server) readGroup(stream, group string, count int) []interface{} {
+func (s *Server) readGroup(stream, group string, count int) ([]interface{}, []string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	strm := s.ensureStream(stream)
 	state, ok := strm.groups[group]
 	if !ok {
@@ -411,23 +426,27 @@ func (s *Server) readGroup(stream, group string, count int) []interface{} {
 	}
 	start := state.nextIndex
 	if start >= len(strm.entries) {
-		return nil
+		s.mu.Unlock()
+		return nil, nil
 	}
 	end := start + count
 	if end > len(strm.entries) {
 		end = len(strm.entries)
 	}
 	records := make([]interface{}, 0, end-start)
+	ids := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
 		entry := strm.entries[i]
 		state.pending[entry.id] = struct{}{}
+		ids = append(ids, entry.id)
 		records = append(records, []interface{}{
 			entry.id,
 			flatten(entry.values),
 		})
 	}
 	state.nextIndex = end
-	return []interface{}{stream, records}
+	s.mu.Unlock()
+	return []interface{}{stream, records}, ids
 }
 
 func flatten(values map[string]string) []interface{} {
@@ -438,25 +457,27 @@ func flatten(values map[string]string) []interface{} {
 	return out
 }
 
-func (s *Server) ack(stream, group string, ids []string) int {
+func (s *Server) ack(stream, group string, ids []string) []string {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	strm, ok := s.streams[stream]
 	if !ok {
-		return 0
+		s.mu.Unlock()
+		return nil
 	}
 	state, ok := strm.groups[group]
 	if !ok {
-		return 0
+		s.mu.Unlock()
+		return nil
 	}
-	count := 0
+	acked := make([]string, 0, len(ids))
 	for _, id := range ids {
 		if _, exists := state.pending[id]; exists {
 			delete(state.pending, id)
-			count++
+			acked = append(acked, id)
 		}
 	}
-	return count
+	s.mu.Unlock()
+	return acked
 }
 
 func (s *Server) incr(key string) int64 {
@@ -495,6 +516,33 @@ func (s *Server) ttl(key string) int64 {
 		return -2
 	}
 	return int64(remaining / time.Second)
+}
+
+func (s *Server) notifyXAdd(stream string, values map[string]string) {
+	if s.hooks == nil || s.hooks.XAdd == nil {
+		return
+	}
+	copied := make(map[string]string, len(values))
+	for k, v := range values {
+		copied[k] = v
+	}
+	go s.hooks.XAdd(stream, copied)
+}
+
+func (s *Server) notifyXReadGroup(stream, group string, ids []string) {
+	if s.hooks == nil || s.hooks.XReadGroup == nil || len(ids) == 0 {
+		return
+	}
+	copied := append([]string(nil), ids...)
+	go s.hooks.XReadGroup(stream, group, copied)
+}
+
+func (s *Server) notifyXAck(stream, group string, ids []string) {
+	if s.hooks == nil || s.hooks.XAck == nil || len(ids) == 0 {
+		return
+	}
+	copied := append([]string(nil), ids...)
+	go s.hooks.XAck(stream, group, copied)
 }
 
 func generateSelfSignedCert() ([]byte, []byte, tls.Certificate, error) {

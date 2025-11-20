@@ -6,22 +6,109 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"bitriver-live/internal/ingest"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+func startEphemeralPostgres(t *testing.T) (string, func()) {
+	t.Helper()
+
+	if _, err := exec.LookPath("docker"); err != nil {
+		t.Skip("BITRIVER_TEST_POSTGRES_DSN not set and docker unavailable")
+	}
+
+	user := os.Getenv("BITRIVER_TEST_POSTGRES_USER")
+	if user == "" {
+		user = "bitriver"
+	}
+	password := os.Getenv("BITRIVER_TEST_POSTGRES_PASSWORD")
+	if password == "" {
+		password = "bitriver"
+	}
+	db := os.Getenv("BITRIVER_TEST_POSTGRES_DB")
+	if db == "" {
+		db = "bitriver_test"
+	}
+	port := os.Getenv("BITRIVER_TEST_POSTGRES_PORT")
+	if port == "" {
+		port = "54329"
+	}
+	image := os.Getenv("BITRIVER_TEST_POSTGRES_IMAGE")
+	if image == "" {
+		image = "postgres:15-alpine"
+	}
+
+	containerName := fmt.Sprintf("bitr-postgres-test-%d", time.Now().UnixNano())
+	args := []string{
+		"run",
+		"--rm",
+		"--detach",
+		"--name", containerName,
+		"--publish", fmt.Sprintf("%s:5432", port),
+		"--env", fmt.Sprintf("POSTGRES_USER=%s", user),
+		"--env", fmt.Sprintf("POSTGRES_PASSWORD=%s", password),
+		"--env", fmt.Sprintf("POSTGRES_DB=%s", db),
+		"--health-cmd", fmt.Sprintf("pg_isready -U %s -d %s", user, db),
+		"--health-interval", "5s",
+		"--health-timeout", "5s",
+		"--health-retries", "10",
+		image,
+	}
+
+	if output, err := exec.Command("docker", args...).CombinedOutput(); err != nil {
+		t.Skipf("start postgres container: %v: %s", err, string(output))
+	}
+
+	cleanup := func() {
+		_ = exec.Command("docker", "rm", "-f", containerName).Run()
+	}
+
+	deadline := time.Now().Add(60 * time.Second)
+	for time.Now().Before(deadline) {
+		output, err := exec.Command("docker", "inspect", "--format", "{{.State.Health.Status}}", containerName).CombinedOutput()
+		status := strings.TrimSpace(string(output))
+		if err == nil && status == "healthy" {
+			break
+		}
+		if status == "unhealthy" {
+			logs, _ := exec.Command("docker", "logs", containerName).CombinedOutput()
+			cleanup()
+			t.Fatalf("postgres container unhealthy: %s", string(logs))
+		}
+		time.Sleep(time.Second)
+	}
+
+	output, err := exec.Command("docker", "inspect", "--format", "{{.State.Health.Status}}", containerName).CombinedOutput()
+	if err != nil || strings.TrimSpace(string(output)) != "healthy" {
+		logs, _ := exec.Command("docker", "logs", containerName).CombinedOutput()
+		cleanup()
+		t.Fatalf("postgres container did not become healthy: %s", string(logs))
+	}
+
+	dsn := fmt.Sprintf("postgres://%s:%s@127.0.0.1:%s/%s?sslmode=disable", user, password, port, db)
+	return dsn, cleanup
+}
+
 func postgresRepositoryFactory(t *testing.T, opts ...Option) (Repository, func(), error) {
 	t.Helper()
 
 	dsn := os.Getenv("BITRIVER_TEST_POSTGRES_DSN")
+	var cleanupFns []func()
 	if strings.TrimSpace(dsn) == "" {
-		t.Skip("BITRIVER_TEST_POSTGRES_DSN not set")
+		var dockerCleanup func()
+		dsn, dockerCleanup = startEphemeralPostgres(t)
+		if dockerCleanup != nil {
+			cleanupFns = append(cleanupFns, dockerCleanup)
+		}
+		_ = os.Setenv("BITRIVER_TEST_POSTGRES_DSN", dsn)
 	}
 
 	ctx := context.Background()
@@ -66,6 +153,10 @@ func postgresRepositoryFactory(t *testing.T, opts ...Option) (Repository, func()
 		}
 
 		pool.Close()
+
+		for i := len(cleanupFns) - 1; i >= 0; i-- {
+			cleanupFns[i]()
+		}
 	}
 
 	return repo, cleanup, nil
