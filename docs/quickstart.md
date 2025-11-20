@@ -31,12 +31,12 @@ The script will:
    so Compose can start without manual edits.
 3. Launch the containers with `docker compose up --build -d` using the compose file in `deploy/`. Docker automatically builds the API, viewer, SRS controller, and transcoder images the first time, so no registry login is required, and the manifest enables `restart: unless-stopped` for each long-lived service so they come back online after crashes or host reboots.
 4. Wait for Postgres to accept connections. The compose bundle now launches a short-lived `postgres-migrations` service that walks the SQL files in `deploy/migrations/`, applies them with `psql`, and exits. If a migration fails the service stops and the API never starts, giving you a chance to correct the database state before retrying `docker compose up -d`.
-5. Wait for the API health check to pass, then invoke the `bootstrap-admin` helper to seed the admin account and print the credentials.
+5. Wait for the API readiness check to pass (`/readyz`), then invoke the `bootstrap-admin` helper to seed the admin account and print the credentials. The `/healthz` endpoint still reports ingest dependency status in the JSON payload and may mark the stack as `degraded` when streaming services are unavailable, but readiness will only fail when core API dependencies are down.
 
-The health check expects the ingest services to be reachable from the API container:
+The health payload still expects the ingest services to be reachable from the API container:
 
 - **SRS controller:** `BITRIVER_SRS_API` defaults to `http://srs-controller:1985` inside the Compose network. If you move SRS elsewhere, point this URL at a reachable host and keep the API token aligned with the controller's configuration.
-- **OvenMediaEngine:** `BITRIVER_OME_API` defaults to `http://ome:8081` and requires the username/password set in `.env`. When running OME outside Compose, keep this URL reachable from the API container so `/healthz` reports the correct status.
+- **OvenMediaEngine:** `BITRIVER_OME_API` defaults to `http://ome:8081` and requires the username/password set in `.env`. When running OME outside Compose, keep this URL reachable from the API container so `/healthz` reports the correct status even though the HTTP status code remains 200 during degraded states.
 - **Transcoder:** `BITRIVER_TRANSCODER_API` defaults to `http://transcoder:9000`; ensure the host and port resolve from the API container and that the token matches `BITRIVER_TRANSCODER_TOKEN`.
 
 Update the generated `.env` before inviting real users—swap in a valid admin email, capture the printed admin password (the

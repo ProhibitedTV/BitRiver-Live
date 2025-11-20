@@ -19,6 +19,7 @@ import (
 	"bitriver-live/internal/auth"
 	"bitriver-live/internal/auth/oauth"
 	"bitriver-live/internal/chat"
+	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/storage"
 )
@@ -52,6 +53,19 @@ type failingRepository struct {
 
 func (r failingRepository) Ping(context.Context) error {
 	return r.err
+}
+
+type ingestHealthRepository struct {
+	storage.Repository
+	health []ingest.HealthStatus
+}
+
+func (r ingestHealthRepository) IngestHealth(context.Context) []ingest.HealthStatus {
+	return r.health
+}
+
+func (r ingestHealthRepository) LastIngestHealth() ([]ingest.HealthStatus, time.Time) {
+	return r.health, time.Now()
 }
 
 func (r ingestUnavailableRepo) StartStream(channelID string, renditions []string) (models.StreamSession, error) {
@@ -1256,6 +1270,73 @@ func TestHealthIncludesDependencyStatuses(t *testing.T) {
 	}
 }
 
+func TestHealthReturnsOKStatusCodeWhenIngestIsDegraded(t *testing.T) {
+	handler, store := newTestHandler(t)
+	failingServices := []ingest.HealthStatus{{Component: "ovenmediaengine", Status: "error", Detail: "unreachable"}}
+	handler.Store = ingestHealthRepository{Repository: store, health: failingServices}
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Health(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode health payload: %v", err)
+	}
+
+	if payload["status"] != "degraded" {
+		t.Fatalf("expected overall degraded status, got %v", payload["status"])
+	}
+
+	services, ok := payload["services"].([]interface{})
+	if !ok {
+		t.Fatalf("expected services array in response")
+	}
+	if len(services) != 1 {
+		t.Fatalf("expected one service entry, got %d", len(services))
+	}
+	service, ok := services[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("unexpected service entry type %T", services[0])
+	}
+	if status, _ := service["status"].(string); status != "error" {
+		t.Fatalf("expected service status error, got %s", status)
+	}
+}
+
+func TestReadyIgnoresIngestHealth(t *testing.T) {
+	handler, store := newTestHandler(t)
+	failingServices := []ingest.HealthStatus{{Component: "transcoder", Status: "error", Detail: "offline"}}
+	handler.Store = ingestHealthRepository{Repository: store, health: failingServices}
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Ready(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode ready payload: %v", err)
+	}
+
+	if payload["status"] != "ok" {
+		t.Fatalf("expected overall status ok, got %v", payload["status"])
+	}
+
+	if _, exists := payload["services"]; exists {
+		t.Fatalf("expected ready payload to exclude ingest services")
+	}
+}
+
 func TestHealthDegradedWhenRepositoryPingFails(t *testing.T) {
 	handler, _ := newTestHandler(t)
 	failing := failingRepository{Repository: handler.Store, err: errors.New("datastore unreachable")}
@@ -1302,6 +1383,29 @@ func TestHealthDegradedWhenRepositoryPingFails(t *testing.T) {
 	}
 	if !foundDatastore {
 		t.Fatalf("expected datastore component entry")
+	}
+}
+
+func TestReadyDegradedWhenRepositoryPingFails(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	failing := failingRepository{Repository: handler.Store, err: errors.New("datastore unreachable")}
+	handler.Store = failing
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Ready(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status 503, got %d", rec.Code)
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode ready payload: %v", err)
+	}
+	if payload["status"] != "degraded" {
+		t.Fatalf("expected overall degraded status, got %v", payload["status"])
 	}
 }
 

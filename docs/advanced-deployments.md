@@ -191,7 +191,7 @@ When these variables are set the API will:
 
 Stopping a stream reverses the process with DELETE calls to `/v1/jobs/{id}`, `/v1/applications/{channelId}`, and `/v1/channels/{channelId}`.
 
-The `/healthz` endpoint now returns JSON that includes the status of these external services so dashboards and probes can surface degraded dependencies early.
+The `/healthz` endpoint returns JSON that includes the status of these external services so dashboards and probes can surface degraded dependencies early, while HTTP 200/503 status codes are reserved for core API dependencies.
 
 ## Surface transcoder playback artefacts
 
@@ -221,9 +221,9 @@ Operators can use the manifests under `deploy/` as a reference architecture for 
    - Issue a bearer token for the FFmpeg job controller and inject it with `BITRIVER_TRANSCODER_TOKEN`.
    Store these values in a secrets manager or `.env` file rather than committing them to version control. The sample compose file ships with placeholder values for local development—override them in production.
 3. **Boot the API last.** Once the ingest dependencies report healthy you can start the `bitriver-live` service. The server persists the ingest endpoints, playback URLs, and job IDs returned during boot so the current session can be recovered after a restart or audited later via `/api/channels/{id}/sessions`.
-4. **Monitor health continuously.** Poll `/healthz` on the API to capture the aggregated ingest status, or query the upstream services directly using the health endpoints listed above. A failing dependency will surface as an `error` status with human-readable detail to aid in incident response.
+4. **Monitor health continuously.** Poll `/healthz` on the API to capture the aggregated ingest status, or query the upstream services directly using the health endpoints listed above. A failing dependency will surface as an `error` status with human-readable detail to aid in incident response, even though the HTTP status will stay 200 when only ingest services are degraded. Point readiness probes at `/readyz` so deployments only fail over when core API dependencies are unhealthy.
 
-For Kubernetes deployments replicate the boot order and secret wiring with native primitives (e.g. StatefulSets for ingest services, Secrets for credentials, and readiness probes targeting `/healthz`).
+For Kubernetes deployments replicate the boot order and secret wiring with native primitives (e.g. StatefulSets for ingest services, Secrets for credentials, and readiness probes targeting `/readyz`).
 
 ## Rate limiting and audit logging
 
