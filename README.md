@@ -220,6 +220,10 @@ flowchart LR
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=10s
 ```
 
+See [`docs/testing.md`](docs/testing.md) for suite-specific instructions and
+[`docs/testing-status.md`](docs/testing-status.md) for the latest reliability
+notes.
+
 Need Postgres-backed tests? Use the helper:
 
 ```bash

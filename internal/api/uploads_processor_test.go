@@ -50,6 +50,13 @@ func TestUploadProcessorStartShutdown(t *testing.T) {
 	ingestFake.setResult("upload-2", ingest.UploadTranscodeResult{PlaybackURL: "https://vod.example.com/b.m3u8"}, nil)
 	ingestFake.setResult("upload-3", ingest.UploadTranscodeResult{PlaybackURL: "https://vod.example.com/c.m3u8"}, nil)
 
+	upload1Updates := store.updatesFor("upload-1")
+	upload2Updates := store.updatesFor("upload-2")
+	upload3Updates := store.updatesFor("upload-3")
+	ingest1Done := ingestFake.completion("upload-1")
+	ingest2Done := ingestFake.completion("upload-2")
+	ingest3Done := ingestFake.completion("upload-3")
+
 	processor := NewUploadProcessor(UploadProcessorConfig{
 		Store:     store,
 		Ingest:    ingestFake,
@@ -71,29 +78,17 @@ func TestUploadProcessorStartShutdown(t *testing.T) {
 	processor.Enqueue("upload-3")
 	processor.Enqueue("upload-3")
 
-	waitFor(t, time.Second*2, func() bool {
-		return ingestFake.callCount("upload-1") == 1 && ingestFake.callCount("upload-2") == 1 && ingestFake.callCount("upload-3") == 1
-	})
+	waitForCompletion(t, ingest1Done, "upload-1", 2*time.Second)
+	waitForCompletion(t, ingest2Done, "upload-2", 2*time.Second)
+	waitForCompletion(t, ingest3Done, "upload-3", 2*time.Second)
 
-	waitFor(t, time.Second, func() bool {
-		upload, ok := store.GetUpload("upload-1")
-		if !ok {
-			return false
-		}
+	waitForUploadUpdate(t, upload1Updates, time.Second, func(upload models.Upload) bool {
 		return upload.Status == "ready" && upload.PlaybackURL == "https://vod.example.com/a.m3u8" && upload.Progress == 100
 	})
-	waitFor(t, time.Second, func() bool {
-		upload, ok := store.GetUpload("upload-2")
-		if !ok {
-			return false
-		}
+	waitForUploadUpdate(t, upload2Updates, time.Second, func(upload models.Upload) bool {
 		return upload.Status == "ready" && upload.PlaybackURL == "https://vod.example.com/b.m3u8" && upload.Progress == 100
 	})
-	waitFor(t, time.Second, func() bool {
-		upload, ok := store.GetUpload("upload-3")
-		if !ok {
-			return false
-		}
+	waitForUploadUpdate(t, upload3Updates, time.Second, func(upload models.Upload) bool {
 		return upload.Status == "ready" && upload.PlaybackURL == "https://vod.example.com/c.m3u8" && upload.Progress == 100
 	})
 
@@ -118,6 +113,8 @@ func TestUploadProcessorFailUpload(t *testing.T) {
 
 	ingestFake := newFakeIngest()
 	ingestFake.setResult("upload-err", ingest.UploadTranscodeResult{}, errors.New("transcode failed"))
+	errUpdates := store.updatesFor("upload-err")
+	ingestDone := ingestFake.completion("upload-err")
 
 	processor := NewUploadProcessor(UploadProcessorConfig{
 		Store:   store,
@@ -138,12 +135,8 @@ func TestUploadProcessorFailUpload(t *testing.T) {
 
 	processor.Enqueue("upload-err")
 
-	waitFor(t, time.Second, func() bool { return ingestFake.callCount("upload-err") == 1 })
-	waitFor(t, time.Second, func() bool {
-		upload, ok := store.GetUpload("upload-err")
-		if !ok {
-			return false
-		}
+	waitForCompletion(t, ingestDone, "upload-err", time.Second)
+	waitForUploadUpdate(t, errUpdates, time.Second, func(upload models.Upload) bool {
 		return upload.Status == "failed" && upload.Progress == 0 && upload.Metadata["sourceUrl"] == "https://example.com/error.mp4" && upload.Error == "transcode failed"
 	})
 }
@@ -162,6 +155,8 @@ func TestUploadProcessorTimeout(t *testing.T) {
 
 	ingestFake := newFakeIngest()
 	ingestFake.setDelay("upload-slow", 200*time.Millisecond)
+	slowUpdates := store.updatesFor("upload-slow")
+	slowDone := ingestFake.completion("upload-slow")
 
 	processor := NewUploadProcessor(UploadProcessorConfig{
 		Store:   store,
@@ -182,12 +177,8 @@ func TestUploadProcessorTimeout(t *testing.T) {
 
 	processor.Enqueue("upload-slow")
 
-	waitFor(t, time.Second, func() bool { return ingestFake.callCount("upload-slow") == 1 })
-	waitFor(t, time.Second, func() bool {
-		upload, ok := store.GetUpload("upload-slow")
-		if !ok {
-			return false
-		}
+	waitForCompletion(t, slowDone, "upload-slow", time.Second)
+	waitForUploadUpdate(t, slowUpdates, time.Second, func(upload models.Upload) bool {
 		if upload.Status != "failed" || upload.Progress != 0 {
 			return false
 		}
@@ -213,6 +204,8 @@ func TestUploadProcessorRetryUpdateFailures(t *testing.T) {
 
 	ingestFake := newFakeIngest()
 	ingestFake.setResult("upload-retry", ingest.UploadTranscodeResult{PlaybackURL: "https://vod.example.com/retry.m3u8"}, nil)
+	retryUpdates := store.updatesFor("upload-retry")
+	retryDone := ingestFake.completion("upload-retry")
 
 	processor := NewUploadProcessor(UploadProcessorConfig{
 		Store:   store,
@@ -233,15 +226,12 @@ func TestUploadProcessorRetryUpdateFailures(t *testing.T) {
 
 	processor.Enqueue("upload-retry")
 
-	waitFor(t, time.Second, func() bool {
+	waitForUploadUpdate(t, retryUpdates, time.Second, func(models.Upload) bool {
 		return store.updateAttemptCount("upload-retry") >= 1
 	})
 
-	waitFor(t, 3*time.Second, func() bool {
-		upload, ok := store.GetUpload("upload-retry")
-		if !ok {
-			return false
-		}
+	waitForCompletion(t, retryDone, "upload-retry", 3*time.Second)
+	waitForUploadUpdate(t, retryUpdates, 3*time.Second, func(upload models.Upload) bool {
 		return upload.Status == "ready" && upload.PlaybackURL == "https://vod.example.com/retry.m3u8" && upload.Progress == 100
 	})
 
@@ -260,6 +250,7 @@ type fakeUploadStore struct {
 	uploads         map[string]models.Upload
 	failFirstUpdate map[string]error
 	updateAttempts  map[string]int
+	updateCh        map[string]chan models.Upload
 }
 
 func newFakeUploadStore() *fakeUploadStore {
@@ -267,6 +258,7 @@ func newFakeUploadStore() *fakeUploadStore {
 		uploads:         make(map[string]models.Upload),
 		failFirstUpdate: make(map[string]error),
 		updateAttempts:  make(map[string]int),
+		updateCh:        make(map[string]chan models.Upload),
 	}
 }
 
@@ -302,6 +294,17 @@ func (f *fakeUploadStore) GetUpload(id string) (models.Upload, bool) {
 	return cloneUpload(upload), true
 }
 
+func (f *fakeUploadStore) updatesFor(id string) <-chan models.Upload {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	ch, ok := f.updateCh[id]
+	if !ok {
+		ch = make(chan models.Upload, 8)
+		f.updateCh[id] = ch
+	}
+	return ch
+}
+
 func (f *fakeUploadStore) UpdateUpload(id string, update storage.UploadUpdate) (models.Upload, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -334,6 +337,12 @@ func (f *fakeUploadStore) UpdateUpload(id string, update storage.UploadUpdate) (
 		upload.CompletedAt = update.CompletedAt
 	}
 	f.uploads[id] = upload
+	if ch, ok := f.updateCh[id]; ok {
+		select {
+		case ch <- cloneUpload(upload):
+		default:
+		}
+	}
 	return cloneUpload(upload), nil
 }
 
@@ -501,6 +510,7 @@ type fakeIngest struct {
 	errors    map[string]error
 	delays    map[string]time.Duration
 	callTotal map[string]int
+	done      map[string]chan struct{}
 }
 
 func newFakeIngest() *fakeIngest {
@@ -509,6 +519,7 @@ func newFakeIngest() *fakeIngest {
 		errors:    make(map[string]error),
 		delays:    make(map[string]time.Duration),
 		callTotal: make(map[string]int),
+		done:      make(map[string]chan struct{}),
 	}
 }
 
@@ -535,6 +546,31 @@ func (f *fakeIngest) callCount(id string) int {
 	return f.callTotal[id]
 }
 
+func (f *fakeIngest) completion(id string) <-chan struct{} {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	ch, ok := f.done[id]
+	if !ok {
+		ch = make(chan struct{})
+		f.done[id] = ch
+	}
+	return ch
+}
+
+func (f *fakeIngest) signalComplete(id string) {
+	f.mu.Lock()
+	ch := f.done[id]
+	f.mu.Unlock()
+	if ch == nil {
+		return
+	}
+	select {
+	case <-ch:
+	default:
+		close(ch)
+	}
+}
+
 func (f *fakeIngest) TranscodeUpload(ctx context.Context, params ingest.UploadTranscodeParams) (ingest.UploadTranscodeResult, error) {
 	f.mu.Lock()
 	f.callTotal[params.UploadID]++
@@ -542,6 +578,8 @@ func (f *fakeIngest) TranscodeUpload(ctx context.Context, params ingest.UploadTr
 	result, hasResult := f.results[params.UploadID]
 	err := f.errors[params.UploadID]
 	f.mu.Unlock()
+
+	defer f.signalComplete(params.UploadID)
 
 	if delay > 0 {
 		timer := time.NewTimer(delay)
@@ -576,16 +614,29 @@ func (f *fakeIngest) HealthChecks(ctx context.Context) []ingest.HealthStatus {
 
 var _ ingest.Controller = (*fakeIngest)(nil)
 
-func waitFor(t *testing.T, timeout time.Duration, predicate func() bool) {
+func waitForCompletion(t *testing.T, done <-chan struct{}, id string, timeout time.Duration) {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if predicate() {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	select {
+	case <-done:
+		return
+	case <-time.After(timeout):
+		t.Fatalf("timeout waiting for ingest completion of %s", id)
 	}
-	if !predicate() {
-		t.Fatalf("condition not met within %s", timeout)
+}
+
+func waitForUploadUpdate(t *testing.T, updates <-chan models.Upload, timeout time.Duration, predicate func(models.Upload) bool) {
+	t.Helper()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	for {
+		select {
+		case upload := <-updates:
+			if predicate(upload) {
+				return
+			}
+		case <-timer.C:
+			t.Fatalf("condition not met within %s", timeout)
+		}
 	}
 }

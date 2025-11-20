@@ -1,7 +1,9 @@
 # Testing BitRiver Live
 
 This document collects the commands the project uses in CI so contributors can
-run the same suites locally before opening a pull request.
+run the same suites locally before opening a pull request. See
+`docs/testing-status.md` for a living summary of flaky suites and gaps that need
+coverage.
 
 ## Go API
 
@@ -48,11 +50,15 @@ BITRIVER_TEST_POSTGRES_DSN="postgres://bitriver:bitriver@127.0.0.1:5432/bitriver
   go test -count=1 -tags postgres ./internal/storage/...
 ```
 
-For local development, run the helper script instead of managing the database by
-hand. It starts a disposable Postgres container, applies the tracked migrations,
-and executes the storage suite in one step (Docker required). The script forces
-an offline module mode (`GOPROXY=off GOSUMDB=off GOFLAGS=-mod=readonly`) so
-vendored replacements stay intact and `go.mod`/`go.sum` remain untouched:
+When `BITRIVER_TEST_POSTGRES_DSN` is unset, the test harness now spins up a
+disposable Postgres container (using the same defaults as
+`scripts/test-postgres.sh`) and skips cleanly when Docker is unavailable so
+`go test -tags postgres ./...` stays deterministic. For local development, run
+the helper script instead of managing the database by hand. It starts a
+disposable Postgres container, applies the tracked migrations, and executes the
+storage suite in one step (Docker required). The script forces an offline
+module mode (`GOPROXY=off GOSUMDB=off GOFLAGS=-mod=readonly`) so vendored
+replacements stay intact and `go.mod`/`go.sum` remain untouched:
 
 ```bash
 ./scripts/test-postgres.sh

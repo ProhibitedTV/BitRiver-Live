@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -14,7 +15,28 @@ import (
 )
 
 func TestRedisQueueRequeuesOnCancellation(t *testing.T) {
-	srv, err := redisstub.Start(redisstub.Options{Password: "secret"})
+	requeues := make(chan Event, 3)
+	deliveries := make(chan []string, 1)
+
+	srv, err := redisstub.Start(redisstub.Options{
+		Password: "secret",
+		Hooks: &redisstub.Hooks{
+			XAdd: func(_ string, values map[string]string) {
+				payload := values["payload"]
+				if payload == "" {
+					return
+				}
+				var evt Event
+				if err := json.Unmarshal([]byte(payload), &evt); err != nil {
+					return
+				}
+				requeues <- evt
+			},
+			XReadGroup: func(_ string, _ string, ids []string) {
+				deliveries <- ids
+			},
+		},
+	})
 	if err != nil {
 		t.Fatalf("failed to start redis stub: %v", err)
 	}
@@ -35,6 +57,10 @@ func TestRedisQueueRequeuesOnCancellation(t *testing.T) {
 	}
 
 	sub := queue.Subscribe()
+	rs, ok := sub.(*redisSubscription)
+	if !ok {
+		t.Fatalf("unexpected subscription type %T", sub)
+	}
 
 	event1 := Event{
 		Type: EventTypeMessage,
@@ -66,11 +92,13 @@ func TestRedisQueueRequeuesOnCancellation(t *testing.T) {
 		t.Fatalf("publish event2: %v", err)
 	}
 
-	time.Sleep(150 * time.Millisecond)
+	waitForRead(t, deliveries, 2)
+	waitForBufferFill(t, rs, 1)
+
+	var drained []Event
 
 	sub.Close()
 
-	var drained []Event
 	for evt := range sub.Events() {
 		drained = append(drained, evt)
 	}
@@ -86,6 +114,8 @@ func TestRedisQueueRequeuesOnCancellation(t *testing.T) {
 		replacement.Close()
 	})
 
+	waitForRequeue(t, requeues, event2.Message.ID)
+
 	select {
 	case got := <-replacement.Events():
 		if got.Message == nil || got.Message.ID != event2.Message.ID {
@@ -97,7 +127,16 @@ func TestRedisQueueRequeuesOnCancellation(t *testing.T) {
 }
 
 func TestRedisQueueRequeueFailureLeavesPending(t *testing.T) {
-	srv, err := redisstub.Start(redisstub.Options{Password: "secret"})
+	deliveries := make(chan []string, 1)
+
+	srv, err := redisstub.Start(redisstub.Options{
+		Password: "secret",
+		Hooks: &redisstub.Hooks{
+			XReadGroup: func(_ string, _ string, ids []string) {
+				deliveries <- ids
+			},
+		},
+	})
 	if err != nil {
 		t.Fatalf("failed to start redis stub: %v", err)
 	}
@@ -125,6 +164,10 @@ func TestRedisQueueRequeueFailureLeavesPending(t *testing.T) {
 	rq.client = failClient
 
 	sub := queueIface.Subscribe()
+	rs, ok := sub.(*redisSubscription)
+	if !ok {
+		t.Fatalf("unexpected subscription type %T", sub)
+	}
 
 	event1 := Event{
 		Type: EventTypeMessage,
@@ -156,7 +199,8 @@ func TestRedisQueueRequeueFailureLeavesPending(t *testing.T) {
 		t.Fatalf("publish event2: %v", err)
 	}
 
-	time.Sleep(150 * time.Millisecond)
+	waitForRead(t, deliveries, 2)
+	waitForBufferFill(t, rs, 1)
 
 	sub.Close()
 
@@ -171,15 +215,89 @@ func TestRedisQueueRequeueFailureLeavesPending(t *testing.T) {
 		t.Fatalf("unexpected drained event: %+v", drained[0])
 	}
 
-	// Wait for the requeue attempts to complete before inspecting ack behaviour.
-	time.Sleep(100 * time.Millisecond)
-
-	acks := failClient.AckIDs()
-	if len(acks) != 1 {
-		t.Fatalf("expected exactly 1 acked entry, got %d", len(acks))
+	ackIDs := failClient.AckIDs()
+	if len(ackIDs) != 1 {
+		t.Fatalf("expected exactly 1 acked entry, got %d", len(ackIDs))
 	}
-	if acks[0] == "" {
+	if ackIDs[0] == "" {
 		t.Fatalf("recorded ack id should not be empty")
+	}
+}
+
+func waitForBufferFill(t *testing.T, sub *redisSubscription, expected int) {
+	t.Helper()
+
+	ticker := time.NewTicker(10 * time.Millisecond)
+	timer := time.NewTimer(5 * time.Second)
+	defer ticker.Stop()
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if len(sub.ch) >= expected {
+				return
+			}
+		case <-timer.C:
+			t.Fatalf("subscription buffer did not reach %d entries", expected)
+		}
+	}
+}
+
+func waitForRead(t *testing.T, deliveries <-chan []string, expected int) {
+	t.Helper()
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+
+	for {
+		select {
+		case ids := <-deliveries:
+			if len(ids) >= expected {
+				return
+			}
+		case <-timer.C:
+			t.Fatalf("timed out waiting for %d deliveries", expected)
+		}
+	}
+}
+
+func waitForRequeue(t *testing.T, events <-chan Event, id string) {
+	t.Helper()
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+
+	seen := 0
+	for {
+		select {
+		case evt := <-events:
+			if evt.Message != nil && evt.Message.ID == id {
+				seen++
+				if seen >= 2 {
+					return
+				}
+			}
+		case <-timer.C:
+			t.Fatalf("timed out waiting for requeue of %s (seen %d)", id, seen)
+		}
+	}
+}
+
+func waitForAck(t *testing.T, acks <-chan []string, id string) {
+	t.Helper()
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+
+	for {
+		select {
+		case batch := <-acks:
+			for _, ack := range batch {
+				if ack == id {
+					return
+				}
+			}
+		case <-timer.C:
+			t.Fatalf("timed out waiting for ack of %s", id)
+		}
 	}
 }
 
