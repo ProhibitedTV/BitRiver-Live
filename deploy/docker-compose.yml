@@ -150,20 +150,30 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command: |
       set -e
-      if ls /migrations/*.sql >/dev/null 2>&1; then
-        for file in /migrations/*.sql; do
-          echo "Applying $$file"
-          psql \
-            -h postgres \
-            -U "${BITRIVER_POSTGRES_USER:?set via .env}" \
-            -d "${BITRIVER_POSTGRES_DB:-bitriver}" \
-            -v ON_ERROR_STOP=1 \
-            -f "$${file}"
-        done
-        echo "Postgres migrations completed."
-      else
-        echo "No Postgres migrations found; skipping."
+      if ! ls /migrations/*.sql >/dev/null 2>&1; then
+        echo "No Postgres migrations found; exiting."
+        exit 1
       fi
+
+      for file in /migrations/*.sql; do
+        echo "Applying $$file"
+        psql \
+          -h postgres \
+          -U "${BITRIVER_POSTGRES_USER:?set via .env}" \
+          -d "${BITRIVER_POSTGRES_DB:-bitriver}" \
+          -v ON_ERROR_STOP=1 \
+          -f "$${file}"
+      done
+
+      echo "Running post-migration sanity check"
+      psql \
+        -h postgres \
+        -U "${BITRIVER_POSTGRES_USER:?set via .env}" \
+        -d "${BITRIVER_POSTGRES_DB:-bitriver}" \
+        -v ON_ERROR_STOP=1 \
+        -c "SELECT 1 FROM users LIMIT 1;"
+
+      echo "Postgres migrations completed."
 
   # Optional sidecar that publishes PostgreSQL to the host when COMPOSE_PROFILES
   # includes "postgres-host". Leave the profile disabled to keep the database
