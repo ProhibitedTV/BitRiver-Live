@@ -32,13 +32,16 @@ export function Navbar() {
     return current;
   })();
   const canonicalPath = normalizedPathname.startsWith("/") ? normalizedPathname : `/${normalizedPathname}`;
-  const navItems = [
-    { label: "Home", href: "/" },
-    { label: "Following", href: "/following" },
-    { label: "Browse", href: "/browse" },
-    ...(isAdmin ? [{ label: "Dashboard", href: "/dashboard" }] : []),
-    ...(canAccessCreatorTools ? [{ label: "Creator", href: "/creator" }] : []),
-  ];
+  const navItems = useMemo(
+    () => [
+      { label: "Home", href: "/" },
+      { label: "Following", href: "/following" },
+      { label: "Browse", href: "/browse" },
+      ...(isAdmin ? [{ label: "Dashboard", href: "/dashboard" }] : []),
+      ...(canAccessCreatorTools ? [{ label: "Creator", href: "/creator" }] : []),
+    ],
+    [canAccessCreatorTools, isAdmin],
+  );
   const navItemHrefs = useMemo(() => new Set(navItems.map((item) => item.href)), [navItems]);
   const quickLinks = [
     { label: "Categories", href: "/browse" },
