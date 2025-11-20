@@ -30,21 +30,6 @@ export function ViewerShell({ children }: ViewerShellProps) {
         <FollowingSidebar />
       </aside>
 
-      <div className="viewer-shell__content">
-        <button
-          type="button"
-          className="viewer-shell__mobile-toggle"
-          aria-expanded={sidebarOpen}
-          aria-controls="viewer-sidebar"
-          onClick={toggleSidebar}
-        >
-          {sidebarOpen ? "Hide following" : "Show following"}
-        </button>
-
-        <main>{children}</main>
-        <footer className="footer">Crafted for self-hosted creators · Powered by BitRiver Live</footer>
-      </div>
-
       <button
         type="button"
         aria-hidden={!sidebarOpen}
@@ -52,6 +37,25 @@ export function ViewerShell({ children }: ViewerShellProps) {
         onClick={closeSidebar}
         tabIndex={-1}
       />
+
+      <div className="viewer-shell__content">
+        <div className="viewer-shell__content-inner">
+          <div className="viewer-shell__controls">
+            <button
+              type="button"
+              className="viewer-shell__toggle"
+              aria-expanded={sidebarOpen}
+              aria-controls="viewer-sidebar"
+              onClick={toggleSidebar}
+            >
+              {sidebarOpen ? "Hide following" : "Show following"}
+            </button>
+          </div>
+
+          <main>{children}</main>
+          <footer className="footer">Crafted for self-hosted creators · Powered by BitRiver Live</footer>
+        </div>
+      </div>
     </div>
   );
 }
