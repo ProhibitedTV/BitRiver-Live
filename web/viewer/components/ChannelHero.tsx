@@ -38,6 +38,7 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [copiedLink, setCopiedLink] = useState(false);
   const donationAddresses = data.donationAddresses ?? [];
+  const isOwner = user?.id === data.owner.id;
 
   useEffect(() => {
     setFollow(data.follow);
@@ -54,6 +55,10 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
   const handleToggleFollow = async () => {
     if (!user) {
       setStatus("Sign in from the header to follow this channel.");
+      return;
+    }
+    if (isOwner) {
+      setStatus("You manage this channel, so following is disabled for owners.");
       return;
     }
     try {
@@ -151,7 +156,7 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
           <button
             className="pill-action"
             onClick={handleToggleFollow}
-            disabled={loading}
+            disabled={loading || isOwner}
             aria-pressed={follow.following}
             aria-label={`${follow.following ? "Following" : "Follow"} · ${follow.followers.toLocaleString()} supporters`}
             type="button"
@@ -206,9 +211,11 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
         <div className="channel-hero__status">
           <p className="muted" role="status">
             {status ??
-              (data.live
-                ? "Enjoy low-latency playback powered by the ingest pipeline."
-                : "Offline for now – follow to be notified when the stream returns.")}
+              (isOwner
+                ? "You manage this channel. Followers will see your updates here."
+                : data.live
+                  ? "Enjoy low-latency playback powered by the ingest pipeline."
+                  : "Offline for now – follow to be notified when the stream returns.")}
           </p>
         </div>
       </div>

@@ -151,6 +151,31 @@ test("toggles follow and subscribe state", async () => {
   expect(screen.getByRole("button", { name: /subscribed/i })).toBeInTheDocument();
 });
 
+test("disables follow actions for channel owners", () => {
+  mockUseAuth.mockReturnValue({
+    user: { id: "owner-1", displayName: "DJ Nova", email: "dj@nova.fm", roles: [] },
+    loading: false,
+    error: undefined,
+    login: jest.fn(),
+    signup: jest.fn(),
+    logout: jest.fn(),
+    refresh: jest.fn()
+  });
+
+  render(<ChannelHeader data={baseData} />);
+
+  const followButton = screen.getByRole("button", { name: /follow · 10 supporters/i });
+  expect(followButton).toBeDisabled();
+
+  fireEvent.click(followButton);
+
+  expect(followMock).not.toHaveBeenCalled();
+  expect(unfollowMock).not.toHaveBeenCalled();
+  expect(
+    screen.getByText(/you manage this channel\. followers will see your updates here\./i)
+  ).toBeInTheDocument();
+});
+
 test("allows viewers to send a tip and surfaces confirmation", async () => {
   render(<ChannelHeader data={baseData} />);
 
