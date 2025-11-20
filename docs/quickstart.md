@@ -29,14 +29,15 @@ The script will:
    and viewer URL) and rotate the administrator password to a strong random value unless the file already exists. When a
    pre-existing `.env` is missing required credentials, the helper backfills them (including the OME API username/password)
    so Compose can start without manual edits.
-3. Launch the containers with `docker compose up --build -d` using the compose file in `deploy/`. Docker automatically builds the API, viewer, SRS controller, and transcoder images the first time, so no registry login is required, and the manifest enables `restart: unless-stopped` for each long-lived service so they come back online after crashes or host reboots.
-4. Wait for Postgres to accept connections. The compose bundle now launches a short-lived `postgres-migrations` service that walks the SQL files in `deploy/migrations/`, applies them with `psql`, and exits. If a migration fails the service stops and the API never starts, giving you a chance to correct the database state before retrying `docker compose up -d`.
-5. Wait for the API readiness check to pass (`/readyz`), then invoke the `bootstrap-admin` helper to seed the admin account and print the credentials. The `/healthz` endpoint still reports ingest dependency status in the JSON payload and may mark the stack as `degraded` when streaming services are unavailable, but readiness will only fail when core API dependencies are down.
+3. Regenerate `deploy/ome/Server.generated.xml` from the template in `deploy/ome/Server.xml`, substituting `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD` so the OME control/health endpoint binds to port `8081` with the same credentials the API uses for health checks.
+4. Launch the containers with `docker compose up --build -d` using the compose file in `deploy/`. Docker automatically builds the API, viewer, SRS controller, and transcoder images the first time, so no registry login is required, and the manifest enables `restart: unless-stopped` for each long-lived service so they come back online after crashes or host reboots.
+5. Wait for Postgres to accept connections. The compose bundle now launches a short-lived `postgres-migrations` service that walks the SQL files in `deploy/migrations/`, applies them with `psql`, and exits. If a migration fails the service stops and the API never starts, giving you a chance to correct the database state before retrying `docker compose up -d`.
+6. Wait for the API readiness check to pass (`/readyz`), then invoke the `bootstrap-admin` helper to seed the admin account and print the credentials. The `/healthz` endpoint still reports ingest dependency status in the JSON payload and may mark the stack as `degraded` when streaming services are unavailable, but readiness will only fail when core API dependencies are down.
 
 The health payload still expects the ingest services to be reachable from the API container:
 
 - **SRS controller:** `BITRIVER_SRS_API` defaults to `http://srs-controller:1985` inside the Compose network. If you move SRS elsewhere, point this URL at a reachable host and keep the API token aligned with the controller's configuration.
-- **OvenMediaEngine:** `BITRIVER_OME_API` defaults to `http://ome:8081` and requires the username/password set in `.env`. When running OME outside Compose, keep this URL reachable from the API container so `/healthz` reports the correct status even though the HTTP status code remains 200 during degraded states.
+- **OvenMediaEngine:** `BITRIVER_OME_API` defaults to `http://ome:8081` and requires the username/password set in `.env`. The compose stack mounts `deploy/ome/Server.generated.xml` into the container's `origin_conf` and `edge_conf` directories so the `/healthz` endpoint binds to `8081` with matching credentials. When running OME outside Compose, keep this URL reachable from the API container so `/healthz` reports the correct status even though the HTTP status code remains 200 during degraded states.
 - **Transcoder:** `BITRIVER_TRANSCODER_API` defaults to `http://transcoder:9000`; ensure the host and port resolve from the API container and that the token matches `BITRIVER_TRANSCODER_TOKEN`.
 
 Update the generated `.env` before inviting real users—swap in a valid admin email, capture the printed admin password (the
@@ -102,8 +103,8 @@ compose file.
   1935, or 1985. Alternatively edit the corresponding `*_PORT` values in `.env` (for example, `BITRIVER_LIVE_PORT=9090`) and
   rerun `docker compose up -d`.
 - **OME health check fails** – Confirm that `deploy/ome/Server.xml` (the source template) declares the OME role with `<Type>origin</Type>` under the root `<Server>`
-  stanza. The copy in this repository is aligned to the upstream OvenMediaEngine schema for `BITRIVER_OME_IMAGE_TAG` (default `0.15.10`) and the quickstart renders it
-  to `deploy/ome/Server.generated.xml` before mounting it to `/opt/ovenmediaengine/bin/origin_conf/Server.xml` inside the `bitriver-ome` container. The compose health
+  stanza and binds the control server to port `8081`. The copy in this repository is aligned to the upstream OvenMediaEngine schema for `BITRIVER_OME_IMAGE_TAG` (default `0.15.10`) and the quickstart renders it
+  to `deploy/ome/Server.generated.xml` before mounting it to `/opt/ovenmediaengine/bin/origin_conf/Server.xml` and `/opt/ovenmediaengine/bin/edge_conf/Server.xml` inside the `bitriver-ome` container. The compose health
   check calls the OME `/healthz` endpoint with HTTP basic auth using `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`, so ensure those values match the credentials
   embedded in the generated XML file. The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias
   if you customize the container name. The quickstart script also seeds the `.env` with that value so the API always knows where to call OME regardless of the host system.

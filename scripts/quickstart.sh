@@ -15,6 +15,7 @@ COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
 
 require_command docker || exit 1
 require_command curl || exit 1
+require_command python3 || exit 1
 
 generate_strong_password() {
   local password=""
@@ -277,6 +278,50 @@ wait_for_api() {
   return 1
 }
 
+render_ome_config() {
+  local template="$REPO_ROOT/deploy/ome/Server.xml"
+  local output="$REPO_ROOT/deploy/ome/Server.generated.xml"
+
+  if [[ ! -f $template ]]; then
+    echo "Missing OME config template at $template" >&2
+    return 1
+  fi
+
+  local username password
+  username=$(read_env_value BITRIVER_OME_USERNAME)
+  password=$(read_env_value BITRIVER_OME_PASSWORD)
+
+  if [[ -z $username || -z $password ]]; then
+    echo "OME credentials are missing; set BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD in $ENV_FILE." >&2
+    return 1
+  fi
+
+  BITRIVER_OME_USERNAME_VALUE="$username" BITRIVER_OME_PASSWORD_VALUE="$password" python3 - "$template" "$output" <<'PY'
+import os
+import re
+import sys
+from pathlib import Path
+
+template_path = Path(sys.argv[1])
+output_path = Path(sys.argv[2])
+
+username = os.environ["BITRIVER_OME_USERNAME_VALUE"]
+password = os.environ["BITRIVER_OME_PASSWORD_VALUE"]
+
+text = template_path.read_text()
+
+def substitute_once(pattern: str, replacement: str, data: str) -> str:
+    return re.sub(pattern, replacement, data, count=1, flags=re.DOTALL)
+
+text = substitute_once(r"(<ID>)(.*?)(</ID>)", rf"\1{username}\3", text)
+text = substitute_once(r"(<Password>)(.*?)(</Password>)", rf"\1{password}\3", text)
+
+output_path.write_text(text)
+PY
+
+  echo "Rendered OME configuration to $output"
+}
+
 wait_for_postgres() {
   local attempts=${1:-60}
   local sleep_seconds=${2:-2}
@@ -442,8 +487,9 @@ mkdir -p "$TRANSCODER_PUBLIC_DIR"
 chmod 0777 "$TRANSCODER_DATA_DIR" "$TRANSCODER_PUBLIC_DIR"
 echo "If you provision these directories manually, keep them writable (see docs/installing-on-ubuntu.md)."
 
-# OME ships with image-baked defaults for stateless quickstart deployments, so skip
-# template rendering and rely on the container configuration.
+# Render the OME control credentials into the mounted Server.xml so the health
+# endpoint binds to the expected port and accepts the configured username/password.
+render_ome_config
 
 cd "$REPO_ROOT"
 export COMPOSE_FILE="$COMPOSE_FILE"
