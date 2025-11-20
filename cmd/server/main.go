@@ -112,6 +112,7 @@ func main() {
 	sessionPostgresDSN := flag.String("session-postgres-dsn", "", "Postgres DSN for the session store")
 	mode := flag.String("mode", "", "server runtime mode (development or production)")
 	allowSelfSignup := flag.Bool("allow-self-signup", false, "allow unauthenticated viewers to register accounts")
+	sessionCookieCrossSite := flag.Bool("session-cookie-cross-site", false, "emit SameSite=None; Secure session cookies for cross-site viewer deployments")
 	tlsCert := flag.String("tls-cert", "", "path to TLS certificate file")
 	tlsKey := flag.String("tls-key", "", "path to TLS private key file")
 	logLevel := flag.String("log-level", "info", "log level (debug, info, warn, error)")
@@ -180,6 +181,8 @@ func main() {
 			logger.Warn("invalid BITRIVER_LIVE_ALLOW_SELF_SIGNUP", "value", env, "error", err)
 		}
 	}
+
+	sessionCookieCrossSiteValue := resolveBool(*sessionCookieCrossSite, "BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE")
 
 	var oauthManager oauth.Service
 	var oauthSources []string
@@ -457,15 +460,16 @@ func main() {
 	}
 
 	srv, err := server.New(handler, server.Config{
-		Addr:            listenAddr,
-		TLS:             tlsCfg,
-		RateLimit:       rateCfg,
-		Logger:          logger,
-		AuditLogger:     auditLogger,
-		Metrics:         recorder,
-		ViewerOrigin:    viewerURL,
-		OAuth:           oauthManager,
-		AllowSelfSignup: &allowSelfSignupValue,
+		Addr:                   listenAddr,
+		TLS:                    tlsCfg,
+		RateLimit:              rateCfg,
+		Logger:                 logger,
+		AuditLogger:            auditLogger,
+		Metrics:                recorder,
+		ViewerOrigin:           viewerURL,
+		OAuth:                  oauthManager,
+		AllowSelfSignup:        &allowSelfSignupValue,
+		SessionCookieCrossSite: sessionCookieCrossSiteValue,
 	})
 	if err != nil {
 		logger.Error("failed to initialise server", "error", err)

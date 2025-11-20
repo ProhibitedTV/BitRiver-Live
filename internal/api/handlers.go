@@ -33,17 +33,18 @@ import (
 // the shared services they depend on, such as persistence, chat, and upload
 // processing.
 type Handler struct {
-	Store           storage.Repository
-	Sessions        *auth.SessionManager
-	ChatGateway     *chat.Gateway
-	OAuth           oauth.Service
-	UploadProcessor *UploadProcessor
-	AllowSelfSignup bool
-	RateLimiter     healthPinger
-	ChatQueue       healthPinger
-	UploadMediaDir  string
-	uploadDirOnce   sync.Once
-	uploadDir       string
+	Store               storage.Repository
+	Sessions            *auth.SessionManager
+	ChatGateway         *chat.Gateway
+	OAuth               oauth.Service
+	UploadProcessor     *UploadProcessor
+	AllowSelfSignup     bool
+	RateLimiter         healthPinger
+	ChatQueue           healthPinger
+	UploadMediaDir      string
+	uploadDirOnce       sync.Once
+	uploadDir           string
+	SessionCookiePolicy SessionCookiePolicy
 }
 
 type healthPinger interface {
@@ -57,7 +58,12 @@ func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handle
 	if sessions == nil {
 		sessions = auth.NewSessionManager(24 * time.Hour)
 	}
-	return &Handler{Store: store, Sessions: sessions, AllowSelfSignup: true}
+	return &Handler{
+		Store:               store,
+		Sessions:            sessions,
+		AllowSelfSignup:     true,
+		SessionCookiePolicy: DefaultSessionCookiePolicy(),
+	}
 }
 
 func (h *Handler) sessionManager() *auth.SessionManager {
@@ -85,7 +91,44 @@ func WriteError(w http.ResponseWriter, status int, err error) {
 	writeError(w, status, err)
 }
 
-func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time) {
+type SessionCookieSecureMode int
+
+const (
+	SessionCookieSecureAuto SessionCookieSecureMode = iota
+	SessionCookieSecureAlways
+)
+
+type SessionCookiePolicy struct {
+	SameSite   http.SameSite
+	SecureMode SessionCookieSecureMode
+}
+
+func DefaultSessionCookiePolicy() SessionCookiePolicy {
+	return SessionCookiePolicy{
+		SameSite:   http.SameSiteStrictMode,
+		SecureMode: SessionCookieSecureAuto,
+	}
+}
+
+func (p SessionCookiePolicy) secure(r *http.Request) bool {
+	if p.SecureMode == SessionCookieSecureAlways {
+		return true
+	}
+	return isSecureRequest(r)
+}
+
+func (h *Handler) sessionCookiePolicy() SessionCookiePolicy {
+	policy := h.SessionCookiePolicy
+	if policy.SameSite == 0 {
+		policy.SameSite = http.SameSiteStrictMode
+	}
+	if policy.SecureMode == 0 {
+		policy.SecureMode = SessionCookieSecureAuto
+	}
+	return policy
+}
+
+func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time, policy SessionCookiePolicy) {
 	if token == "" {
 		return
 	}
@@ -100,12 +143,16 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expi
 		Expires:  expires.UTC(),
 		MaxAge:   maxAge,
 		HttpOnly: true,
-		Secure:   isSecureRequest(r),
-		SameSite: http.SameSiteStrictMode,
+		Secure:   policy.secure(r),
+		SameSite: policy.SameSite,
 	})
 }
 
-func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time) {
+	setSessionCookie(w, r, token, expires, h.sessionCookiePolicy())
+}
+
+func clearSessionCookie(w http.ResponseWriter, r *http.Request, policy SessionCookiePolicy) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "bitriver_session",
 		Value:    "",
@@ -113,14 +160,19 @@ func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 		Expires:  time.Unix(0, 0).UTC(),
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   isSecureRequest(r),
-		SameSite: http.SameSiteStrictMode,
+		Secure:   policy.secure(r),
+		SameSite: policy.SameSite,
 	})
 }
 
 // ClearSessionCookie removes the BitRiver session cookie from the response.
-func ClearSessionCookie(w http.ResponseWriter, r *http.Request) {
-	clearSessionCookie(w, r)
+func ClearSessionCookie(w http.ResponseWriter, r *http.Request, policy SessionCookiePolicy) {
+	clearSessionCookie(w, r, policy)
+}
+
+// ClearSessionCookie removes the BitRiver session cookie from the response using the handler's configured policy.
+func (h *Handler) ClearSessionCookie(w http.ResponseWriter, r *http.Request) {
+	clearSessionCookie(w, r, h.sessionCookiePolicy())
 }
 
 func isSecureRequest(r *http.Request) bool {
@@ -277,7 +329,7 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setSessionCookie(w, r, token, expiresAt)
+	h.setSessionCookie(w, r, token, expiresAt)
 	writeJSON(w, http.StatusCreated, newAuthResponse(user, expiresAt))
 }
 
@@ -306,7 +358,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setSessionCookie(w, r, token, expiresAt)
+	h.setSessionCookie(w, r, token, expiresAt)
 	writeJSON(w, http.StatusOK, newAuthResponse(user, expiresAt))
 }
 
@@ -431,7 +483,7 @@ func (h *Handler) oauthCallback(w http.ResponseWriter, r *http.Request, provider
 		http.Redirect(w, r, appendQueryParam(returnPath, "oauth", "error"), http.StatusSeeOther)
 		return
 	}
-	setSessionCookie(w, r, token, expiresAt)
+	h.setSessionCookie(w, r, token, expiresAt)
 	http.Redirect(w, r, appendQueryParam(returnPath, "oauth", "success"), http.StatusSeeOther)
 }
 
@@ -513,7 +565,7 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
-		clearSessionCookie(w, r)
+		h.ClearSessionCookie(w, r)
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.Header().Set("Allow", "GET, DELETE")

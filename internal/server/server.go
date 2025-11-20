@@ -38,15 +38,16 @@ type TLSConfig struct {
 // proxying for viewer traffic, and OAuth is injected into the supplied API
 // handler.
 type Config struct {
-	Addr            string
-	TLS             TLSConfig
-	RateLimit       RateLimitConfig
-	Logger          *slog.Logger
-	AuditLogger     *slog.Logger
-	Metrics         *metrics.Recorder
-	ViewerOrigin    *url.URL
-	OAuth           oauth.Service
-	AllowSelfSignup *bool
+	Addr                   string
+	TLS                    TLSConfig
+	RateLimit              RateLimitConfig
+	Logger                 *slog.Logger
+	AuditLogger            *slog.Logger
+	Metrics                *metrics.Recorder
+	ViewerOrigin           *url.URL
+	OAuth                  oauth.Service
+	AllowSelfSignup        *bool
+	SessionCookieCrossSite bool
 }
 
 // Server wraps the configured http.Server alongside observability, rate
@@ -84,6 +85,13 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	handler.OAuth = cfg.OAuth
 	if cfg.AllowSelfSignup != nil {
 		handler.AllowSelfSignup = *cfg.AllowSelfSignup
+	}
+	handler.SessionCookiePolicy = api.DefaultSessionCookiePolicy()
+	if cfg.SessionCookieCrossSite {
+		handler.SessionCookiePolicy = api.SessionCookiePolicy{
+			SameSite:   http.SameSiteNoneMode,
+			SecureMode: api.SessionCookieSecureAlways,
+		}
 	}
 
 	mux := http.NewServeMux()
@@ -494,7 +502,7 @@ func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 		user, err := handler.AuthenticateRequest(r)
 		if err != nil {
 			if optionalAuth {
-				api.ClearSessionCookie(w, r)
+				handler.ClearSessionCookie(w, r)
 				next.ServeHTTP(w, r)
 				return
 			}
