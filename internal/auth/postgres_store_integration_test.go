@@ -63,6 +63,99 @@ func TestPostgresSessionStoreTimeout(t *testing.T) {
 	}
 }
 
+func TestPostgresSessionStoreSavesHashedTokens(t *testing.T) {
+	store, cleanup := openPostgresSessionStoreForTest(t)
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	token := "raw-session-token"
+	expiresAt := time.Now().Add(time.Hour)
+
+	if err := store.Save(token, "user-id", expiresAt); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	hashedToken, err := hashSessionToken(token)
+	if err != nil {
+		t.Fatalf("hash token: %v", err)
+	}
+
+	ctx := context.Background()
+	conn, err := store.pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("acquire connection: %v", err)
+	}
+	defer conn.Release()
+
+	var storedToken, storedHash, storedUser string
+	var storedExpires time.Time
+	if err := conn.QueryRow(ctx, `SELECT token, hashed_token, user_id, expires_at FROM auth_sessions WHERE hashed_token = $1`, hashedToken).
+		Scan(&storedToken, &storedHash, &storedUser, &storedExpires); err != nil {
+		t.Fatalf("fetch stored session: %v", err)
+	}
+
+	if storedUser != "user-id" {
+		t.Fatalf("expected user-id, got %s", storedUser)
+	}
+	if storedToken != storedHash {
+		t.Fatalf("expected stored token and hash to match")
+	}
+	if storedToken == token {
+		t.Fatalf("expected persisted token to be hashed")
+	}
+
+	record, ok, err := store.Get(token)
+	if err != nil {
+		t.Fatalf("get session: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected session to be found")
+	}
+	if record.Token != token {
+		t.Fatalf("expected record token to match input")
+	}
+	if !record.ExpiresAt.Equal(storedExpires) {
+		t.Fatalf("expected expiresAt %v, got %v", storedExpires, record.ExpiresAt)
+	}
+}
+
+func TestPostgresSessionStoreDeleteUsesHashes(t *testing.T) {
+	store, cleanup := openPostgresSessionStoreForTest(t)
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	token := "token-to-delete"
+	if err := store.Save(token, "user-id", time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	if err := store.Delete(token); err != nil {
+		t.Fatalf("delete session: %v", err)
+	}
+
+	ctx := context.Background()
+	conn, err := store.pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("acquire connection: %v", err)
+	}
+	defer conn.Release()
+
+	hashedToken, err := hashSessionToken(token)
+	if err != nil {
+		t.Fatalf("hash token: %v", err)
+	}
+
+	var count int
+	if err := conn.QueryRow(ctx, `SELECT COUNT(*) FROM auth_sessions WHERE hashed_token = $1`, hashedToken).Scan(&count); err != nil {
+		t.Fatalf("count rows: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected session to be deleted, got %d rows", count)
+	}
+}
+
 func openPostgresSessionStoreForTest(t *testing.T, opts ...PostgresSessionStoreOption) (*PostgresSessionStore, func()) {
 	t.Helper()
 
