@@ -31,11 +31,11 @@ function describeEndpoint(endpoint: string, index: number) {
 
 export default function CreatorLivePage() {
   const { playback, loading, error, channelId, reload } = useCreatorChannel();
-  const [sessionLoading, setSessionLoading] = useState(true);
   const [sessionError, setSessionError] = useState<string | undefined>();
   const [sessions, setSessions] = useState<StreamSession[]>([]);
   const [managedChannel, setManagedChannel] = useState<ManagedChannel | undefined>();
   const [managedChannels, setManagedChannels] = useState<ManagedChannel[]>([]);
+  const [managedLoading, setManagedLoading] = useState(true);
   const [managedError, setManagedError] = useState<string | undefined>();
   const [titleDraft, setTitleDraft] = useState("");
   const [savingTitle, setSavingTitle] = useState(false);
@@ -53,7 +53,6 @@ export default function CreatorLivePage() {
   };
 
   const loadSessions = useCallback(async () => {
-    setSessionLoading(true);
     setSessionError(undefined);
     try {
       const response = await fetchChannelSessions(channelId);
@@ -61,12 +60,11 @@ export default function CreatorLivePage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to load ingest details";
       setSessionError(message);
-    } finally {
-      setSessionLoading(false);
     }
   }, [channelId]);
 
   const loadManagedChannel = useCallback(async () => {
+    setManagedLoading(true);
     setManagedError(undefined);
     try {
       const channels = await fetchManagedChannels();
@@ -81,6 +79,8 @@ export default function CreatorLivePage() {
       setManagedChannel(undefined);
       const message = err instanceof Error ? err.message : "Unable to load channel settings";
       setManagedError(message);
+    } finally {
+      setManagedLoading(false);
     }
   }, [channelId]);
 
@@ -164,7 +164,7 @@ export default function CreatorLivePage() {
     );
   }
 
-  const ingestEndpoints = latestSession?.ingestEndpoints ?? [];
+  const ingestEndpoints = managedChannel?.ingestEndpoints ?? [];
 
   return (
     <div className="stack" style={{ gap: "1.5rem" }}>
@@ -189,7 +189,15 @@ export default function CreatorLivePage() {
           </div>
         ) : null}
         <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
-          <button type="button" className="secondary-button" onClick={() => { void reload(); void loadSessions(); }}>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => {
+              void reload();
+              void loadSessions();
+              void loadManagedChannel();
+            }}
+          >
             Refresh details
           </button>
           {sessionError ? <span className="error">{sessionError}</span> : null}
@@ -244,8 +252,8 @@ export default function CreatorLivePage() {
 
               <div>
                 <p className="muted">Ingest URLs</p>
-                {sessionLoading ? (
-                  <p className="muted">Loading ingest details…</p>
+                {managedLoading ? (
+                  <p className="muted">Loading ingest configuration…</p>
                 ) : ingestEndpoints.length > 0 ? (
                   <ul className="stack" style={{ gap: "0.5rem" }}>
                     {ingestEndpoints.map((endpoint, index) => (
@@ -257,7 +265,7 @@ export default function CreatorLivePage() {
                   </ul>
                 ) : (
                   <p className="muted">
-                    Start streaming from your encoder to receive ingest connection details for this session.
+                    Ingest endpoints are not configured yet. Check your deployment settings or configuration.
                   </p>
                 )}
               </div>
