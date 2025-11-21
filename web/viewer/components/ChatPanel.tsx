@@ -318,6 +318,7 @@ export function ChatPanel({
         className="chat-panel__form"
         onSubmit={handleSend}
         aria-label="Send a chat message"
+        aria-disabled={isComposerDisabled}
       >
         <label htmlFor="chat-input" className="sr-only">
           Chat message
@@ -333,24 +334,6 @@ export function ChatPanel({
           aria-disabled={!user}
         />
         <div className="chat-panel__toolbar">
-          <div className="chat-panel__toolbar-actions">
-            <button type="button" className="icon-button" aria-label="Open emotes" disabled={!user}>
-              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                <path
-                  fill="currentColor"
-                  d="M10 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16Zm0 2a6 6 0 1 0 0 12A6 6 0 0 0 10 4Zm2.5 5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm-5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM10 14c1.5 0 2.8-.8 3.5-2h-7c.7 1.2 2 2 3.5 2Z"
-                />
-              </svg>
-            </button>
-            <button type="button" className="icon-button" aria-label="Attach a file" disabled={!user}>
-              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                <path
-                  fill="currentColor"
-                  d="M14.5 3.5a2.5 2.5 0 0 1 0 3.54l-6.9 6.9a1.75 1.75 0 0 1-2.47-2.47l6.18-6.18 1.06 1.06-6.18 6.18a.25.25 0 0 0 .35.35l6.9-6.9a1 1 0 0 0-1.42-1.42L8 10.59 6.94 9.53l3.92-3.92a2.5 2.5 0 0 1 3.64 0Z"
-                />
-              </svg>
-            </button>
-          </div>
           <button
             type="submit"
             className="primary-button"

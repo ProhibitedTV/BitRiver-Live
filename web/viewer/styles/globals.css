@@ -2248,11 +2248,6 @@ button:focus-visible {
   flex-wrap: wrap;
 }
 
-.chat-panel__toolbar-actions {
-  display: flex;
-  gap: var(--space-2xs);
-}
-
 .chat-skeletons {
   list-style: none;
   padding: 0;
