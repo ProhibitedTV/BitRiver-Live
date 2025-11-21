@@ -2288,6 +2288,56 @@ button:focus-visible {
   animation: shimmer 1.4s ease-in-out infinite;
 }
 
+.chat-panel__dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 10;
+  padding: var(--space-md);
+}
+
+.chat-panel__dialog {
+  width: min(520px, 100%);
+  border-radius: 1rem;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.chat-panel__dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+}
+
+.chat-panel__dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+
+.chat-panel__settings {
+  gap: var(--space-sm);
+}
+
+.chat-panel__setting {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-xs) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-panel__setting-text {
+  display: grid;
+  gap: 0.2rem;
+}
+
 .vod-grid {
   list-style: none;
   padding: 0;
