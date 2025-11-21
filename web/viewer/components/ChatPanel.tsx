@@ -25,6 +25,10 @@ export function ChatPanel({
   const [sending, setSending] = useState(false);
   const [pausedForAuth, setPausedForAuth] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
+  const [showPopoutDialog, setShowPopoutDialog] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showAvatars, setShowAvatars] = useState(true);
+  const [showTimestamps, setShowTimestamps] = useState(true);
 
   const isUnauthorizedError = (err: unknown) => {
     if (!(err instanceof Error)) {
@@ -180,6 +184,18 @@ export function ChatPanel({
 
   const shouldShowSignInPrompt = authRequired && !user;
 
+  const handlePopout = () => {
+    setShowPopoutDialog(true);
+  };
+
+  const openPopoutWindow = () => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.open(window.location.href, "bitriver-chat-popout", "width=420,height=720,noopener,noreferrer");
+    setShowPopoutDialog(false);
+  };
+
   const renderSkeletons = () => (
     <ul className="chat-skeletons">
       {Array.from({ length: 4 }).map((_, index) => (
@@ -207,7 +223,12 @@ export function ChatPanel({
           </div>
         </div>
         <div className="chat-panel__actions" aria-label="Chat actions">
-          <button type="button" className="icon-button" aria-label="Pop out chat">
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Open pop-out chat window"
+            onClick={handlePopout}
+          >
             <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
               <path
                 fill="currentColor"
@@ -215,7 +236,13 @@ export function ChatPanel({
               />
             </svg>
           </button>
-          <button type="button" className="icon-button" aria-label="Chat settings">
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={showSettings ? "Close chat settings" : "Open chat settings"}
+            aria-pressed={showSettings}
+            onClick={() => setShowSettings((open) => !open)}
+          >
             <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
               <path
                 fill="currentColor"
@@ -242,19 +269,23 @@ export function ChatPanel({
             <ul className="chat-thread">
               {groupedMessages.map((group) => (
                 <li key={group.id} className="chat-message chat-message--group">
-                  {group.avatar ? (
-                    <Image
-                      src={group.avatar}
-                      alt=""
-                      width={44}
-                      height={44}
-                      sizes="44px"
-                      className="chat-message__avatar"
-                    />
+                  {showAvatars ? (
+                    group.avatar ? (
+                      <Image
+                        src={group.avatar}
+                        alt=""
+                        width={44}
+                        height={44}
+                        sizes="44px"
+                        className="chat-message__avatar"
+                      />
+                    ) : (
+                      <div className="chat-message__avatar chat-message__avatar--placeholder" aria-hidden>
+                        {group.userLabel.slice(0, 1).toUpperCase()}
+                      </div>
+                    )
                   ) : (
-                    <div className="chat-message__avatar chat-message__avatar--placeholder" aria-hidden>
-                      {group.userLabel.slice(0, 1).toUpperCase()}
-                    </div>
+                    <span className="sr-only">Messages from {group.userLabel}</span>
                   )}
                   <div className="chat-message__content">
                     <div className="chat-message__meta">
@@ -267,9 +298,11 @@ export function ChatPanel({
                     <div className="chat-message__bubble">
                       {group.messages.map((message) => (
                         <p key={message.id}>
-                          <time dateTime={message.sentAt} className="chat-message__time">
-                            {new Date(message.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                          </time>
+                          {showTimestamps && (
+                            <time dateTime={message.sentAt} className="chat-message__time">
+                              {new Date(message.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </time>
+                          )}
                           {message.message}
                         </p>
                       ))}
@@ -327,6 +360,112 @@ export function ChatPanel({
           </button>
         </div>
       </form>
+      {showPopoutDialog && (
+        <div
+          className="chat-panel__dialog-backdrop"
+          role="presentation"
+          onClick={() => setShowPopoutDialog(false)}
+        >
+          <section
+            className="chat-panel__dialog surface"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="chat-popout-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="chat-panel__dialog-header">
+              <h4 id="chat-popout-title">Pop out chat</h4>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setShowPopoutDialog(false)}
+                aria-label="Close pop-out chat dialog"
+              >
+                ✕
+              </button>
+            </header>
+            <p className="muted">
+              Open the chat in a separate window so you can keep up with the conversation while browsing elsewhere.
+            </p>
+            <div className="chat-panel__dialog-actions">
+              <button type="button" className="ghost-button" onClick={() => setShowPopoutDialog(false)}>
+                Cancel
+              </button>
+              <button type="button" className="accent-button" onClick={openPopoutWindow} aria-label="Open chat in new window">
+                Open window
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {showSettings && (
+        <div
+          className="chat-panel__dialog-backdrop"
+          role="presentation"
+          onClick={() => setShowSettings(false)}
+        >
+          <section
+            className="chat-panel__dialog surface"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="chat-settings-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="chat-panel__dialog-header">
+              <h4 id="chat-settings-title">Chat settings</h4>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setShowSettings(false)}
+                aria-label="Close chat settings"
+              >
+                ✕
+              </button>
+            </header>
+            <div className="chat-panel__settings stack">
+              <label className="chat-panel__setting">
+                <div className="chat-panel__setting-text">
+                  <span>Show avatars</span>
+                  <p className="muted">Display profile photos next to each chat participant.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={showAvatars}
+                  onChange={(event) => setShowAvatars(event.target.checked)}
+                  aria-label="Toggle chat avatars"
+                />
+              </label>
+              <label className="chat-panel__setting">
+                <div className="chat-panel__setting-text">
+                  <span>Show timestamps</span>
+                  <p className="muted">Keep message times visible inside the conversation bubbles.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={showTimestamps}
+                  onChange={(event) => setShowTimestamps(event.target.checked)}
+                  aria-label="Toggle chat message timestamps"
+                />
+              </label>
+            </div>
+            <div className="chat-panel__dialog-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => {
+                  setShowAvatars(true);
+                  setShowTimestamps(true);
+                }}
+              >
+                Reset
+              </button>
+              <button type="button" className="accent-button" onClick={() => setShowSettings(false)} aria-label="Save chat settings">
+                Done
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </section>
   );
 }
