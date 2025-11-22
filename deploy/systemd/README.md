@@ -49,6 +49,12 @@ SRS_API_PORT=1985
 SRS_EXTRA_ARGS=
 EOF
 
+   # The bundled SRS configuration enables HTTP hooks that call back into
+   # the BitRiver Live API for connect/publish/play lifecycle events. Keep
+   # the hook query token aligned with BITRIVER_SRS_TOKEN so the server
+   # can authenticate requests such as:
+   #   http://bitriver-live:8080/api/ingest/srs/publish?token=${BITRIVER_SRS_TOKEN}
+
    sudo tee /opt/bitriver-srs-controller/.env >/dev/null <<'EOF'
 SRS_CONTROLLER_IMAGE=ghcr.io/bitriver-live/bitriver-srs-controller:vX.Y.Z
 SRS_CONTROLLER_CONTAINER_NAME=bitriver-srs-controller
