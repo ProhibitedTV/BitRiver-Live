@@ -2045,74 +2045,6 @@ func TestSRSHookPublishAndUnpublish(t *testing.T) {
 	}
 }
 
-func TestSRSHookPlayAndStop(t *testing.T) {
-	store, err := storage.NewStorage(t.TempDir()+"/store.json", storage.WithIngestController(ingest.NoopController{}), storage.WithIngestRetries(1, 0))
-	if err != nil {
-		t.Fatalf("NewStorage: %v", err)
-	}
-	handler := NewHandler(store, auth.NewSessionManager(24*time.Hour))
-	handler.SRSHookToken = "secret"
-	handler.DefaultRenditions = []string{"720p"}
-	creator, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Streamer", Email: "hook3@example.com", Roles: []string{"creator"}})
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-	channel, err := store.CreateChannel(creator.ID, "Hooked", "gaming", nil)
-	if err != nil {
-		t.Fatalf("create channel: %v", err)
-	}
-
-	publishBody := fmt.Sprintf(`{"action":"on_publish","stream":"%s"}`, channel.StreamKey)
-	publishReq := httptest.NewRequest(http.MethodPost, "/api/ingest/srs-hook?token=secret", strings.NewReader(publishBody))
-	publishRec := httptest.NewRecorder()
-	handler.SRSHook(publishRec, publishReq)
-	if publishRec.Code != http.StatusOK {
-		t.Fatalf("expected publish status 200, got %d", publishRec.Code)
-	}
-	var publishResp srsHookResponse
-	if err := json.Unmarshal(publishRec.Body.Bytes(), &publishResp); err != nil {
-		t.Fatalf("decode publish response: %v", err)
-	}
-	if publishResp.SessionID == "" {
-		t.Fatalf("expected session id in publish response: %+v", publishResp)
-	}
-
-	playBody := fmt.Sprintf(`{"action":"on_play","stream":"%s"}`, channel.StreamKey)
-	playReq := httptest.NewRequest(http.MethodPost, "/api/ingest/srs-hook?token=secret", strings.NewReader(playBody))
-	playRec := httptest.NewRecorder()
-	handler.SRSHook(playRec, playReq)
-	if playRec.Code != http.StatusOK {
-		t.Fatalf("expected play status 200, got %d", playRec.Code)
-	}
-	var playResp srsHookResponse
-	if err := json.Unmarshal(playRec.Body.Bytes(), &playResp); err != nil {
-		t.Fatalf("decode play response: %v", err)
-	}
-	if playResp.Action != "on_play" || playResp.ChannelID != channel.ID || playResp.SessionID != publishResp.SessionID {
-		t.Fatalf("unexpected play response: %+v", playResp)
-	}
-
-	stopBody := fmt.Sprintf(`{"action":"on_stop","stream":"%s"}`, channel.StreamKey)
-	stopReq := httptest.NewRequest(http.MethodPost, "/api/ingest/srs-hook?token=secret", strings.NewReader(stopBody))
-	stopRec := httptest.NewRecorder()
-	handler.SRSHook(stopRec, stopReq)
-	if stopRec.Code != http.StatusOK {
-		t.Fatalf("expected stop status 200, got %d", stopRec.Code)
-	}
-	var stopResp srsHookResponse
-	if err := json.Unmarshal(stopRec.Body.Bytes(), &stopResp); err != nil {
-		t.Fatalf("decode stop response: %v", err)
-	}
-	if stopResp.Action != "on_stop" || stopResp.ChannelID != channel.ID || stopResp.SessionID != publishResp.SessionID {
-		t.Fatalf("unexpected stop response: %+v", stopResp)
-	}
-
-	current, ok := store.CurrentStreamSession(channel.ID)
-	if !ok || current.ID != publishResp.SessionID {
-		t.Fatalf("expected stream session to remain active, got %+v", current)
-	}
-}
-
 func TestRotateStreamKeyEndpoint(t *testing.T) {
 	handler, store := newTestHandler(t)
 
@@ -3422,5 +3354,106 @@ func TestAnalyticsOverview(t *testing.T) {
 	}
 	if entry.ChatMessages < 2 {
 		t.Fatalf("expected channel chat messages >= 2, got %d", entry.ChatMessages)
+	}
+}
+
+func TestSRSHookStopsStreamAndRecordsPeak(t *testing.T) {
+	handler, store := newTestHandler(t)
+	handler.SRSHookToken = "secret"
+
+	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Demo", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	if _, err := store.StartStream(channel.ID, []string{"720p"}); err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+
+	playPayload := srsHookRequest{Action: "on_play", Stream: channel.StreamKey}
+	playBody, _ := json.Marshal(playPayload)
+	req := httptest.NewRequest(http.MethodPost, "/api/ingest/srs-hook?token=secret", bytes.NewReader(playBody))
+	rec := httptest.NewRecorder()
+	handler.SRSHook(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected play status 200, got %d", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	handler.SRSHook(rec, httptest.NewRequest(http.MethodPost, "/api/ingest/srs-hook?token=secret", bytes.NewReader(playBody)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected second play status 200, got %d", rec.Code)
+	}
+
+	unpublishPayload := srsHookRequest{Action: "on_unpublish", Stream: channel.StreamKey}
+	unpublishBody, _ := json.Marshal(unpublishPayload)
+	rec = httptest.NewRecorder()
+	handler.SRSHook(rec, httptest.NewRequest(http.MethodPost, "/api/ingest/srs-hook?token=secret", bytes.NewReader(unpublishBody)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected unpublish status 200, got %d", rec.Code)
+	}
+
+	var session sessionResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	if session.PeakConcurrent != 2 {
+		t.Fatalf("expected peak concurrent 2, got %d", session.PeakConcurrent)
+	}
+	if session.EndedAt == nil {
+		t.Fatal("expected session endedAt to be set")
+	}
+	if _, live := handler.Store.CurrentStreamSession(channel.ID); live {
+		t.Fatal("expected stream session to be cleared")
+	}
+}
+
+func TestSRSHookRejectsInvalidToken(t *testing.T) {
+	handler, store := newTestHandler(t)
+	handler.SRSHookToken = "secret"
+
+	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Demo", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	if _, err := store.StartStream(channel.ID, []string{"720p"}); err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+
+	payload := srsHookRequest{Action: "on_unpublish", Stream: channel.StreamKey}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/ingest/srs-hook?token=wrong", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.SRSHook(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rec.Code)
+	}
+	if _, live := handler.Store.CurrentStreamSession(channel.ID); !live {
+		t.Fatal("expected stream session to remain active")
+	}
+}
+
+func TestSRSHookRejectsUnknownStream(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	handler.SRSHookToken = "secret"
+
+	payload := srsHookRequest{Action: "on_publish", Stream: "missing-key"}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/ingest/srs-hook?token=secret", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.SRSHook(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", rec.Code)
 	}
 }

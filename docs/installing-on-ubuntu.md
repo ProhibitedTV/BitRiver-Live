@@ -223,7 +223,7 @@ SRS posts JSON payloads that look like:
 }
 ```
 
-Keep the same URL for both `on_publish` and `on_unpublish`; the API validates the stream key, boots ingest when a publish arrives, and stops or marks the channel offline when SRS sends an unpublish. Optional playback hooks (`on_play` / `on_stop`) can point to the same endpoint and are treated as no-ops so SRS does not block viewers. Replace the `token` query string in the hook URLs with the same value you set for `BITRIVER_SRS_TOKEN` and point the host at wherever the API listens (for example, `localhost:8080` when running the API outside Docker).
+Keep the same URL for both `on_publish` and `on_unpublish`; the API validates the stream key, boots ingest when a publish arrives, and stops or marks the channel offline when SRS sends an unpublish. Replace the `token` query string in the hook URLs with the same value you set for `BITRIVER_SRS_TOKEN` and point the host at wherever the API listens (for example, `localhost:8080` when running the API outside Docker).
 
 #### Upgrading the SRS container
 
