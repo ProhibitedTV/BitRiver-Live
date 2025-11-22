@@ -470,6 +470,7 @@ func main() {
 		OAuth:                  oauthManager,
 		AllowSelfSignup:        &allowSelfSignupValue,
 		SessionCookieCrossSite: sessionCookieCrossSiteValue,
+		SRSHookToken:           ingestConfig.SRSToken,
 	})
 	if err != nil {
 		logger.Error("failed to initialise server", "error", err)

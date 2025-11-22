@@ -48,6 +48,7 @@ type Config struct {
 	OAuth                  oauth.Service
 	AllowSelfSignup        *bool
 	SessionCookieCrossSite bool
+	SRSHookToken           string
 }
 
 // Server wraps the configured http.Server alongside observability, rate
@@ -86,6 +87,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	if cfg.AllowSelfSignup != nil {
 		handler.AllowSelfSignup = *cfg.AllowSelfSignup
 	}
+	handler.SRSHookToken = cfg.SRSHookToken
 	handler.SessionCookiePolicy = api.DefaultSessionCookiePolicy()
 	if cfg.SessionCookieCrossSite {
 		handler.SessionCookiePolicy = api.SessionCookiePolicy{
@@ -124,6 +126,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	mux.HandleFunc("/api/moderation/queue", handler.ModerationQueue)
 	mux.HandleFunc("/api/moderation/queue/", handler.ModerationQueueByID)
 	mux.HandleFunc("/api/analytics/overview", handler.AnalyticsOverview)
+	mux.HandleFunc("/api/ingest/srs-hook", handler.SRSHook)
 
 	staticFS, err := web.Static()
 	if err != nil {
