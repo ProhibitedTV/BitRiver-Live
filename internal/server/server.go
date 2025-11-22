@@ -479,7 +479,7 @@ func clientIP(remoteAddr string) string {
 func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		if path == "/healthz" || path == "/metrics" || strings.HasPrefix(path, "/api/auth/") || !strings.HasPrefix(path, "/api/") {
+		if path == "/healthz" || path == "/metrics" || path == "/api/ingest/srs-hook" || strings.HasPrefix(path, "/api/auth/") || !strings.HasPrefix(path, "/api/") {
 			next.ServeHTTP(w, r)
 			return
 		}

@@ -108,6 +108,27 @@ func TestAuthMiddlewareRejectsMissingSession(t *testing.T) {
 	}
 }
 
+func TestAuthMiddlewareAllowsSRSHookWithoutSession(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	nextCalled := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nextCalled = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/ingest/srs-hook", nil)
+	rec := httptest.NewRecorder()
+
+	authMiddleware(handler, next).ServeHTTP(rec, req)
+
+	if !nextCalled {
+		t.Fatal("expected middleware to allow SRS hook without session")
+	}
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected status 204, got %d", rec.Code)
+	}
+}
+
 func TestAuthMiddlewareAllowsExpiredSessionOnOptionalRoutes(t *testing.T) {
 	handler, store := newTestHandler(t)
 	owner, err := store.CreateUser(storage.CreateUserParams{

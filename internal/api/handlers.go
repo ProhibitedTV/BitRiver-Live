@@ -2092,7 +2092,22 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 
 	switch action {
 	case "publish":
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		tracker.clear(channel.ID)
+		if session, exists := h.Store.CurrentStreamSession(channel.ID); exists {
+			writeJSON(w, http.StatusOK, newSessionResponse(session))
+			return
+		}
+		session, err := h.Store.StartStream(channel.ID, nil)
+		if err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, storage.ErrIngestControllerUnavailable) {
+				status = http.StatusServiceUnavailable
+			}
+			writeError(w, status, err)
+			return
+		}
+		metrics.StreamStarted()
+		writeJSON(w, http.StatusOK, newSessionResponse(session))
 	case "play":
 		counts := tracker.increment(channel.ID)
 		writeJSON(w, http.StatusOK, map[string]int{"currentViewers": counts.current})
@@ -2101,6 +2116,7 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]int{"currentViewers": counts.current})
 	case "unpublish":
 		peak := tracker.peak(channel.ID)
+		tracker.clear(channel.ID)
 		if _, exists := h.Store.CurrentStreamSession(channel.ID); exists {
 			session, err := h.Store.StopStream(channel.ID, peak)
 			if err != nil {
@@ -2111,12 +2127,10 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 				writeError(w, status, err)
 				return
 			}
-			tracker.clear(channel.ID)
 			metrics.StreamStopped()
 			writeJSON(w, http.StatusOK, newSessionResponse(session))
 			return
 		}
-		tracker.clear(channel.ID)
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	default:
 		writeError(w, http.StatusBadRequest, fmt.Errorf("unknown action %s", req.Action))
