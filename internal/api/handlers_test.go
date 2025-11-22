@@ -3275,3 +3275,104 @@ func TestAnalyticsOverview(t *testing.T) {
 		t.Fatalf("expected channel chat messages >= 2, got %d", entry.ChatMessages)
 	}
 }
+
+func TestSRSHookStopsStreamAndRecordsPeak(t *testing.T) {
+	handler, store := newTestHandler(t)
+	handler.SRSHookToken = "secret"
+
+	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Demo", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	if _, err := store.StartStream(channel.ID, []string{"720p"}); err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+
+	playPayload := srsHookRequest{Action: "on_play", Stream: channel.StreamKey}
+	playBody, _ := json.Marshal(playPayload)
+	req := httptest.NewRequest(http.MethodPost, "/api/ingest/srs-hook?token=secret", bytes.NewReader(playBody))
+	rec := httptest.NewRecorder()
+	handler.SRSHook(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected play status 200, got %d", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	handler.SRSHook(rec, httptest.NewRequest(http.MethodPost, "/api/ingest/srs-hook?token=secret", bytes.NewReader(playBody)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected second play status 200, got %d", rec.Code)
+	}
+
+	unpublishPayload := srsHookRequest{Action: "on_unpublish", Stream: channel.StreamKey}
+	unpublishBody, _ := json.Marshal(unpublishPayload)
+	rec = httptest.NewRecorder()
+	handler.SRSHook(rec, httptest.NewRequest(http.MethodPost, "/api/ingest/srs-hook?token=secret", bytes.NewReader(unpublishBody)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected unpublish status 200, got %d", rec.Code)
+	}
+
+	var session sessionResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	if session.PeakConcurrent != 2 {
+		t.Fatalf("expected peak concurrent 2, got %d", session.PeakConcurrent)
+	}
+	if session.EndedAt == nil {
+		t.Fatal("expected session endedAt to be set")
+	}
+	if _, live := handler.Store.CurrentStreamSession(channel.ID); live {
+		t.Fatal("expected stream session to be cleared")
+	}
+}
+
+func TestSRSHookRejectsInvalidToken(t *testing.T) {
+	handler, store := newTestHandler(t)
+	handler.SRSHookToken = "secret"
+
+	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Demo", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	if _, err := store.StartStream(channel.ID, []string{"720p"}); err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+
+	payload := srsHookRequest{Action: "on_unpublish", Stream: channel.StreamKey}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/ingest/srs-hook?token=wrong", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.SRSHook(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rec.Code)
+	}
+	if _, live := handler.Store.CurrentStreamSession(channel.ID); !live {
+		t.Fatal("expected stream session to remain active")
+	}
+}
+
+func TestSRSHookRejectsUnknownStream(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	handler.SRSHookToken = "secret"
+
+	payload := srsHookRequest{Action: "on_publish", Stream: "missing-key"}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/ingest/srs-hook?token=secret", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.SRSHook(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", rec.Code)
+	}
+}
