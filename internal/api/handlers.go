@@ -38,7 +38,6 @@ type Handler struct {
 	ChatGateway         *chat.Gateway
 	OAuth               oauth.Service
 	UploadProcessor     *UploadProcessor
-	DefaultRenditions   []string
 	SRSHookToken        string
 	AllowSelfSignup     bool
 	RateLimiter         healthPinger
@@ -47,6 +46,7 @@ type Handler struct {
 	uploadDirOnce       sync.Once
 	uploadDir           string
 	SessionCookiePolicy SessionCookiePolicy
+	srsViewers          *srsViewerTracker
 }
 
 type healthPinger interface {
@@ -195,6 +195,101 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expi
 
 func (h *Handler) setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time) {
 	setSessionCookie(w, r, token, expires, h.sessionCookiePolicy())
+}
+
+func (h *Handler) srsTracker() *srsViewerTracker {
+	if h.srsViewers == nil {
+		h.srsViewers = newSRSViewerTracker()
+	}
+	return h.srsViewers
+}
+
+func normalizeSRSAction(action string) string {
+	normalized := strings.ToLower(strings.TrimSpace(action))
+	normalized = strings.TrimPrefix(normalized, "on_")
+	return normalized
+}
+
+func (h *Handler) authorizeSRSHook(token string) bool {
+	expected := strings.TrimSpace(h.SRSHookToken)
+	provided := strings.TrimSpace(token)
+	if expected == "" || provided == "" {
+		return false
+	}
+	if len(expected) != len(provided) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(expected), []byte(provided)) == 1
+}
+
+func (h *Handler) channelForStream(stream string) (models.Channel, bool) {
+	trimmed := strings.TrimSpace(stream)
+	if trimmed == "" || h.Store == nil {
+		return models.Channel{}, false
+	}
+	channels := h.Store.ListChannels("", "")
+	for _, channel := range channels {
+		if channel.StreamKey == trimmed || channel.ID == trimmed {
+			return channel, true
+		}
+	}
+	return models.Channel{}, false
+}
+
+type srsHookRequest struct {
+	Action   string `json:"action"`
+	Stream   string `json:"stream"`
+	ClientID string `json:"client_id,omitempty"`
+	Param    string `json:"param,omitempty"`
+}
+
+type srsViewerTracker struct {
+	mu      sync.Mutex
+	entries map[string]viewerCount
+}
+
+type viewerCount struct {
+	current int
+	peak    int
+}
+
+func newSRSViewerTracker() *srsViewerTracker {
+	return &srsViewerTracker{entries: make(map[string]viewerCount)}
+}
+
+func (t *srsViewerTracker) increment(channelID string) viewerCount {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	counts := t.entries[channelID]
+	counts.current++
+	if counts.current > counts.peak {
+		counts.peak = counts.current
+	}
+	t.entries[channelID] = counts
+	return counts
+}
+
+func (t *srsViewerTracker) decrement(channelID string) viewerCount {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	counts := t.entries[channelID]
+	if counts.current > 0 {
+		counts.current--
+	}
+	t.entries[channelID] = counts
+	return counts
+}
+
+func (t *srsViewerTracker) peak(channelID string) int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.entries[channelID].peak
+}
+
+func (t *srsViewerTracker) clear(channelID string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.entries, channelID)
 }
 
 func clearSessionCookie(w http.ResponseWriter, r *http.Request, policy SessionCookiePolicy) {
@@ -2111,6 +2206,73 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 		writeJSON(w, http.StatusOK, newChannelResponse(updated))
 	default:
 		writeError(w, http.StatusNotFound, fmt.Errorf("unknown stream action %s", action))
+	}
+}
+
+// SRSHook processes callbacks from SRS http_hooks to validate publish/play
+// events and update stream session state accordingly.
+func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+	if !h.authorizeSRSHook(r.URL.Query().Get("token")) {
+		writeError(w, http.StatusUnauthorized, errors.New("invalid hook token"))
+		return
+	}
+
+	var req srsHookRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if req.Stream == "" {
+		req.Stream = r.URL.Query().Get("stream")
+	}
+	action := normalizeSRSAction(req.Action)
+	if action == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("action is required"))
+		return
+	}
+	channel, ok := h.channelForStream(req.Stream)
+	if !ok {
+		writeError(w, http.StatusNotFound, fmt.Errorf("stream %s not recognized", strings.TrimSpace(req.Stream)))
+		return
+	}
+
+	tracker := h.srsTracker()
+
+	switch action {
+	case "publish":
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	case "play":
+		counts := tracker.increment(channel.ID)
+		writeJSON(w, http.StatusOK, map[string]int{"currentViewers": counts.current})
+	case "stop":
+		counts := tracker.decrement(channel.ID)
+		writeJSON(w, http.StatusOK, map[string]int{"currentViewers": counts.current})
+	case "unpublish":
+		peak := tracker.peak(channel.ID)
+		if _, exists := h.Store.CurrentStreamSession(channel.ID); exists {
+			session, err := h.Store.StopStream(channel.ID, peak)
+			if err != nil {
+				status := http.StatusBadRequest
+				if errors.Is(err, storage.ErrIngestControllerUnavailable) {
+					status = http.StatusServiceUnavailable
+				}
+				writeError(w, status, err)
+				return
+			}
+			tracker.clear(channel.ID)
+			metrics.StreamStopped()
+			writeJSON(w, http.StatusOK, newSessionResponse(session))
+			return
+		}
+		tracker.clear(channel.ID)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	default:
+		writeError(w, http.StatusBadRequest, fmt.Errorf("unknown action %s", req.Action))
 	}
 }
 
