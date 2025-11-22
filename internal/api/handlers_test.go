@@ -885,6 +885,325 @@ func TestDirectoryFollowingRequiresAuthentication(t *testing.T) {
 	}
 }
 
+func TestDirectoryFeaturedReturnsFeaturedChannels(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	creatorOne, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Creator One", Email: "one@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create creator one: %v", err)
+	}
+	creatorTwo, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Creator Two", Email: "two@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create creator two: %v", err)
+	}
+	followerA, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Follower A", Email: "followera@example.com"})
+	if err != nil {
+		t.Fatalf("create follower A: %v", err)
+	}
+	followerB, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Follower B", Email: "followerb@example.com"})
+	if err != nil {
+		t.Fatalf("create follower B: %v", err)
+	}
+
+	channelOne, err := store.CreateChannel(creatorOne.ID, "First", "tech", []string{"go"})
+	if err != nil {
+		t.Fatalf("create first channel: %v", err)
+	}
+	channelTwo, err := store.CreateChannel(creatorTwo.ID, "Second", "music", []string{"dj"})
+	if err != nil {
+		t.Fatalf("create second channel: %v", err)
+	}
+	if _, err := store.UpdateChannel(channelOne.ID, storage.ChannelUpdate{LiveState: stringPtr("live")}); err != nil {
+		t.Fatalf("set channel one live: %v", err)
+	}
+	if _, err := store.UpdateChannel(channelTwo.ID, storage.ChannelUpdate{LiveState: stringPtr("live")}); err != nil {
+		t.Fatalf("set channel two live: %v", err)
+	}
+
+	if _, err := store.UpsertProfile(creatorOne.ID, storage.ProfileUpdate{FeaturedChannelID: stringPtr(channelOne.ID)}); err != nil {
+		t.Fatalf("set featured channel one: %v", err)
+	}
+	if _, err := store.UpsertProfile(creatorTwo.ID, storage.ProfileUpdate{FeaturedChannelID: stringPtr(channelTwo.ID)}); err != nil {
+		t.Fatalf("set featured channel two: %v", err)
+	}
+
+	if err := store.FollowChannel(followerA.ID, channelOne.ID); err != nil {
+		t.Fatalf("follow channel one: %v", err)
+	}
+	if err := store.FollowChannel(followerB.ID, channelOne.ID); err != nil {
+		t.Fatalf("second follow channel one: %v", err)
+	}
+	if err := store.FollowChannel(followerA.ID, channelTwo.ID); err != nil {
+		t.Fatalf("follow channel two: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/directory/featured", nil)
+	rec := httptest.NewRecorder()
+
+	handler.DirectoryFeatured(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var resp directoryResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	want := []string{channelOne.ID, channelTwo.ID}
+	if len(resp.Channels) != len(want) {
+		t.Fatalf("expected %d featured channels, got %d", len(want), len(resp.Channels))
+	}
+	for i, id := range want {
+		if resp.Channels[i].Channel.ID != id {
+			t.Fatalf("expected channel %s at position %d, got %s", id, i, resp.Channels[i].Channel.ID)
+		}
+	}
+}
+
+func TestDirectoryLiveFiltersToLiveStates(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	creator, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Creator", Email: "creator@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create creator: %v", err)
+	}
+
+	liveChannel, err := store.CreateChannel(creator.ID, "Live", "music", []string{"dj"})
+	if err != nil {
+		t.Fatalf("create live channel: %v", err)
+	}
+	startingChannel, err := store.CreateChannel(creator.ID, "Starting", "gaming", []string{"retro"})
+	if err != nil {
+		t.Fatalf("create starting channel: %v", err)
+	}
+	if _, err := store.UpdateChannel(liveChannel.ID, storage.ChannelUpdate{LiveState: stringPtr("live")}); err != nil {
+		t.Fatalf("set live state: %v", err)
+	}
+	if _, err := store.UpdateChannel(startingChannel.ID, storage.ChannelUpdate{LiveState: stringPtr("starting")}); err != nil {
+		t.Fatalf("set starting state: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/directory/live", nil)
+	rec := httptest.NewRecorder()
+
+	handler.DirectoryLive(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var resp directoryResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	want := []string{liveChannel.ID, startingChannel.ID}
+	if len(resp.Channels) != len(want) {
+		t.Fatalf("expected %d live channels, got %d", len(want), len(resp.Channels))
+	}
+	for i, id := range want {
+		if resp.Channels[i].Channel.ID != id {
+			t.Fatalf("expected channel %s at index %d, got %s", id, i, resp.Channels[i].Channel.ID)
+		}
+	}
+}
+
+func TestDirectoryTrendingOrdersByFollowers(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	creator, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Creator", Email: "creator@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create creator: %v", err)
+	}
+	viewerOne, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Viewer One", Email: "view1@example.com"})
+	if err != nil {
+		t.Fatalf("create viewer one: %v", err)
+	}
+	viewerTwo, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Viewer Two", Email: "view2@example.com"})
+	if err != nil {
+		t.Fatalf("create viewer two: %v", err)
+	}
+
+	first, err := store.CreateChannel(creator.ID, "First", "music", []string{"dj"})
+	if err != nil {
+		t.Fatalf("create first channel: %v", err)
+	}
+	second, err := store.CreateChannel(creator.ID, "Second", "tech", []string{"go"})
+	if err != nil {
+		t.Fatalf("create second channel: %v", err)
+	}
+	if _, err := store.UpdateChannel(first.ID, storage.ChannelUpdate{LiveState: stringPtr("live")}); err != nil {
+		t.Fatalf("set first live: %v", err)
+	}
+	if _, err := store.UpdateChannel(second.ID, storage.ChannelUpdate{LiveState: stringPtr("live")}); err != nil {
+		t.Fatalf("set second live: %v", err)
+	}
+
+	if err := store.FollowChannel(viewerOne.ID, second.ID); err != nil {
+		t.Fatalf("viewer one follow second: %v", err)
+	}
+	if err := store.FollowChannel(viewerTwo.ID, second.ID); err != nil {
+		t.Fatalf("viewer two follow second: %v", err)
+	}
+	if err := store.FollowChannel(viewerOne.ID, first.ID); err != nil {
+		t.Fatalf("viewer one follow first: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/directory/trending", nil)
+	rec := httptest.NewRecorder()
+
+	handler.DirectoryTrending(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var resp directoryResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	want := []string{second.ID, first.ID}
+	if len(resp.Channels) != len(want) {
+		t.Fatalf("expected %d trending channels, got %d", len(want), len(resp.Channels))
+	}
+	for i, id := range want {
+		if resp.Channels[i].Channel.ID != id {
+			t.Fatalf("expected channel %s at index %d, got %s", id, i, resp.Channels[i].Channel.ID)
+		}
+	}
+}
+
+func TestDirectoryCategoriesAggregatesLiveCategories(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	creator, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Creator", Email: "creator@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create creator: %v", err)
+	}
+
+	musicLive, err := store.CreateChannel(creator.ID, "Music Live", "music", []string{"dj"})
+	if err != nil {
+		t.Fatalf("create music channel: %v", err)
+	}
+	musicStarting, err := store.CreateChannel(creator.ID, "Music Starting", "music", []string{"rock"})
+	if err != nil {
+		t.Fatalf("create starting channel: %v", err)
+	}
+	techOffline, err := store.CreateChannel(creator.ID, "Tech Offline", "tech", []string{"go"})
+	if err != nil {
+		t.Fatalf("create tech channel: %v", err)
+	}
+
+	if _, err := store.UpdateChannel(musicLive.ID, storage.ChannelUpdate{LiveState: stringPtr("live")}); err != nil {
+		t.Fatalf("set music live: %v", err)
+	}
+	if _, err := store.UpdateChannel(musicStarting.ID, storage.ChannelUpdate{LiveState: stringPtr("starting")}); err != nil {
+		t.Fatalf("set music starting: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/directory/categories", nil)
+	rec := httptest.NewRecorder()
+
+	handler.DirectoryCategories(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var resp categoryDirectoryResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if len(resp.Categories) != 1 {
+		t.Fatalf("expected 1 category, got %d", len(resp.Categories))
+	}
+	if resp.Categories[0].Name != "music" {
+		t.Fatalf("expected music category, got %s", resp.Categories[0].Name)
+	}
+	if resp.Categories[0].ChannelCount != 2 {
+		t.Fatalf("expected channel count 2, got %d", resp.Categories[0].ChannelCount)
+	}
+	if resp.GeneratedAt == "" {
+		t.Fatal("expected generatedAt to be populated")
+	}
+
+	_ = techOffline
+}
+
+func TestDirectoryRecommendedSortsByFollowers(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	creator, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Creator", Email: "creator@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create creator: %v", err)
+	}
+	viewer, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Viewer", Email: "viewer@example.com"})
+	if err != nil {
+		t.Fatalf("create viewer: %v", err)
+	}
+	viewerTwo, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Viewer Two", Email: "viewer2@example.com"})
+	if err != nil {
+		t.Fatalf("create viewer two: %v", err)
+	}
+
+	first, err := store.CreateChannel(creator.ID, "First", "music", []string{"dj"})
+	if err != nil {
+		t.Fatalf("create first channel: %v", err)
+	}
+	second, err := store.CreateChannel(creator.ID, "Second", "tech", []string{"go"})
+	if err != nil {
+		t.Fatalf("create second channel: %v", err)
+	}
+
+	if err := store.FollowChannel(viewer.ID, second.ID); err != nil {
+		t.Fatalf("viewer follow second: %v", err)
+	}
+	if err := store.FollowChannel(viewerTwo.ID, second.ID); err != nil {
+		t.Fatalf("viewer two follow second: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/directory/recommended", nil)
+	rec := httptest.NewRecorder()
+
+	handler.DirectoryRecommended(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var resp directoryResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	want := []string{second.ID, first.ID}
+	if len(resp.Channels) != len(want) {
+		t.Fatalf("expected %d recommended channels, got %d", len(want), len(resp.Channels))
+	}
+	for i, id := range want {
+		if resp.Channels[i].Channel.ID != id {
+			t.Fatalf("expected channel %s at index %d, got %s", id, i, resp.Channels[i].Channel.ID)
+		}
+	}
+}
+
+func TestDirectoryLiveRejectsNonGet(t *testing.T) {
+	handler, _ := newTestHandler(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/directory/live", nil)
+	rec := httptest.NewRecorder()
+
+	handler.DirectoryLive(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected status 405, got %d", rec.Code)
+	}
+}
+
 func TestDirectoryFollowingListsLiveFollowedChannels(t *testing.T) {
 	handler, store := newTestHandler(t)
 

@@ -806,6 +806,16 @@ type directoryResponse struct {
 	GeneratedAt string                     `json:"generatedAt"`
 }
 
+type categorySummaryResponse struct {
+	Name         string `json:"name"`
+	ChannelCount int    `json:"channelCount"`
+}
+
+type categoryDirectoryResponse struct {
+	Categories  []categorySummaryResponse `json:"categories"`
+	GeneratedAt string                    `json:"generatedAt"`
+}
+
 type followStateResponse struct {
 	Followers int  `json:"followers"`
 	Following bool `json:"following"`
@@ -884,6 +894,133 @@ func (h *Handler) Directory(w http.ResponseWriter, r *http.Request) {
 	}
 	channels := h.Store.ListChannels("", query)
 	h.writeDirectoryResponse(w, channels)
+}
+
+func (h *Handler) DirectoryFeatured(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+
+	profiles := h.Store.ListProfiles()
+	channelIDs := make(map[string]struct{}, len(profiles))
+	for _, profile := range profiles {
+		if profile.FeaturedChannelID == nil {
+			continue
+		}
+		id := strings.TrimSpace(*profile.FeaturedChannelID)
+		if id == "" {
+			continue
+		}
+		channelIDs[id] = struct{}{}
+	}
+
+	channels := make([]models.Channel, 0, len(channelIDs))
+	for id := range channelIDs {
+		if channel, ok := h.Store.GetChannel(id); ok {
+			channels = append(channels, channel)
+		}
+	}
+
+	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, true))
+}
+
+func (h *Handler) DirectoryRecommended(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+
+	channels := h.Store.ListChannels("", "")
+	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, false))
+}
+
+func (h *Handler) DirectoryLive(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+
+	channels := h.Store.ListChannels("", "")
+	channels = filterLiveChannels(channels)
+	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, true))
+}
+
+func (h *Handler) DirectoryTrending(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+
+	channels := filterLiveChannels(h.Store.ListChannels("", ""))
+	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, true))
+}
+
+func (h *Handler) DirectoryCategories(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+
+	channels := filterLiveChannels(h.Store.ListChannels("", ""))
+	counts := make(map[string]int)
+	for _, channel := range channels {
+		category := strings.TrimSpace(channel.Category)
+		if category == "" {
+			continue
+		}
+		counts[category]++
+	}
+
+	summaries := make([]categorySummaryResponse, 0, len(counts))
+	for name, count := range counts {
+		summaries = append(summaries, categorySummaryResponse{Name: name, ChannelCount: count})
+	}
+	sort.Slice(summaries, func(i, j int) bool {
+		if summaries[i].ChannelCount == summaries[j].ChannelCount {
+			return summaries[i].Name < summaries[j].Name
+		}
+		return summaries[i].ChannelCount > summaries[j].ChannelCount
+	})
+
+	payload := categoryDirectoryResponse{Categories: summaries, GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func filterLiveChannels(channels []models.Channel) []models.Channel {
+	live := make([]models.Channel, 0, len(channels))
+	for _, channel := range channels {
+		if channel.LiveState == "live" || channel.LiveState == "starting" {
+			live = append(live, channel)
+		}
+	}
+	return live
+}
+
+func (h *Handler) sortChannelsByFollowers(channels []models.Channel, liveFirst bool) []models.Channel {
+	followers := make(map[string]int, len(channels))
+	for _, channel := range channels {
+		followers[channel.ID] = h.Store.CountFollowers(channel.ID)
+	}
+	sort.Slice(channels, func(i, j int) bool {
+		if liveFirst {
+			iLive := channels[i].LiveState == "live" || channels[i].LiveState == "starting"
+			jLive := channels[j].LiveState == "live" || channels[j].LiveState == "starting"
+			if iLive != jLive {
+				return iLive
+			}
+		}
+		if followers[channels[i].ID] == followers[channels[j].ID] {
+			return channels[i].CreatedAt.Before(channels[j].CreatedAt)
+		}
+		return followers[channels[i].ID] > followers[channels[j].ID]
+	})
+	return channels
 }
 
 func (h *Handler) DirectoryFollowing(w http.ResponseWriter, r *http.Request) {
