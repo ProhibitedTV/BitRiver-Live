@@ -2048,6 +2048,52 @@ func TestSRSHookPublishAndUnpublish(t *testing.T) {
 	}
 }
 
+func TestSRSHookSupportsQueryParamsWithoutBody(t *testing.T) {
+	handler, store := newTestHandler(t)
+	handler.SRSHookToken = "secret"
+
+	creator, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Streamer", Email: "hook3@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	channel, err := store.CreateChannel(creator.ID, "Hooked", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+
+	publishURL := fmt.Sprintf("/api/ingest/srs-hook?action=on_publish&stream=%s&token=secret", channel.StreamKey)
+	publishRec := httptest.NewRecorder()
+	handler.SRSHook(publishRec, httptest.NewRequest(http.MethodPost, publishURL, nil))
+
+	if publishRec.Code != http.StatusOK {
+		t.Fatalf("expected publish status 200, got %d", publishRec.Code)
+	}
+
+	var publishResp srsHookResponse
+	if err := json.Unmarshal(publishRec.Body.Bytes(), &publishResp); err != nil {
+		t.Fatalf("decode publish response: %v", err)
+	}
+	if publishResp.ChannelID != channel.ID || publishResp.Action != "on_publish" || publishResp.SessionID == "" {
+		t.Fatalf("unexpected publish response: %+v", publishResp)
+	}
+
+	unpublishURL := fmt.Sprintf("/api/ingest/srs-hook?action=on_unpublish&stream=%s&token=secret", channel.StreamKey)
+	unpublishRec := httptest.NewRecorder()
+	handler.SRSHook(unpublishRec, httptest.NewRequest(http.MethodPost, unpublishURL, nil))
+
+	if unpublishRec.Code != http.StatusOK {
+		t.Fatalf("expected unpublish status 200, got %d", unpublishRec.Code)
+	}
+
+	var unpublishResp sessionResponse
+	if err := json.Unmarshal(unpublishRec.Body.Bytes(), &unpublishResp); err != nil {
+		t.Fatalf("decode unpublish response: %v", err)
+	}
+	if unpublishResp.ChannelID != channel.ID || unpublishResp.ID == "" || unpublishResp.EndedAt == nil {
+		t.Fatalf("unexpected unpublish response: %+v", unpublishResp)
+	}
+}
+
 func TestRotateStreamKeyEndpoint(t *testing.T) {
 	handler, store := newTestHandler(t)
 
