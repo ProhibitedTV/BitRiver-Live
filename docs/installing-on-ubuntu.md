@@ -207,6 +207,11 @@ If you prefer a different publication path, mount an object storage bucket or a 
 
 Review `deploy/srs/conf/srs.conf` for the default SRS ports and authentication settings. Mount a customised version into the container when you need stricter access control or TLS certificates for RTMP/RTMPS.
 
+The sample config enables `http_hooks` that call the BitRiver Live ingest endpoint at `http://bitriver-live:8080/api/ingest/srs-hook`.
+The hooks fire on publish/unpublish and play/stop to let the API validate stream keys and clean up sessions. Replace the `token`
+query string in the hook URLs with the same value you set for `BITRIVER_SRS_TOKEN` and point the host at wherever the API
+listens (for example, `localhost:8080` when running the API outside Docker).
+
 #### Upgrading the SRS container
 
 BitRiver Live pins SRS to `ossrs/srs:v5.0.185`, matching the systemd helpers under [`deploy/systemd/README.md`](../deploy/systemd/README.md). When you validate a newer upstream release:
