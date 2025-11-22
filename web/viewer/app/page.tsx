@@ -93,6 +93,8 @@ export default function DirectoryPage() {
         const parseCategories = (result: typeof topCategoriesResult) =>
           result.status === "fulfilled" ? result.value.categories ?? [] : [];
 
+        const errors: string[] = [];
+
         const followingChannels = (() => {
           if (followingResult.status === "fulfilled") {
             return followingResult.value.channels;
@@ -101,8 +103,21 @@ export default function DirectoryPage() {
           if (message === "401" || message === "403") {
             return [];
           }
+          errors.push(message);
           return [];
         })();
+
+        const captureError = (result: typeof featuredResult) => {
+          if (result.status === "rejected") {
+            errors.push(result.reason instanceof Error ? result.reason.message : String(result.reason));
+          }
+        };
+
+        captureError(featuredResult);
+        captureError(liveResult);
+        captureError(recommendedResult);
+        captureError(trendingResult);
+        captureError(topCategoriesResult);
 
         setFeatured(parseChannels(featuredResult));
         setRecommended(parseChannels(recommendedResult));
@@ -110,6 +125,10 @@ export default function DirectoryPage() {
         setLiveNow(parseChannels(liveResult));
         setTrending(parseChannels(trendingResult));
         setCategories(parseCategories(topCategoriesResult));
+
+        if (errors.length > 0) {
+          setHomeError("Unable to load personalised rows");
+        }
       } catch (err) {
         if (!cancelled) {
           setHomeError(err instanceof Error ? err.message : "Unable to load personalised rows");
