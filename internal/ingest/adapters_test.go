@@ -6,8 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
+// TestHTTPChannelAdapterCreateAndDelete verifies that the channel adapter
+// correctly calls the SRS controller to create and delete channels with the
+// appropriate authorization header and payload.
 func TestHTTPChannelAdapterCreateAndDelete(t *testing.T) {
 	t.Helper()
 	var created bool
@@ -27,7 +31,12 @@ func TestHTTPChannelAdapterCreateAndDelete(t *testing.T) {
 			if payload.ChannelID != "channel-123" || payload.StreamKey != "stream-key" {
 				t.Fatalf("unexpected payload: %+v", payload)
 			}
-			json.NewEncoder(w).Encode(srsChannelResponse{PrimaryIngest: "rtmp://primary", BackupIngest: "rtmp://backup"})
+			if err := json.NewEncoder(w).Encode(srsChannelResponse{
+				PrimaryIngest: "rtmp://primary",
+				BackupIngest:  "rtmp://backup",
+			}); err != nil {
+				t.Fatalf("encode response: %v", err)
+			}
 		case r.Method == http.MethodDelete && r.URL.Path == "/v1/channels/channel-123":
 			deleted = true
 			if got := r.Header.Get("Authorization"); got != "Bearer token" {
@@ -40,7 +49,7 @@ func TestHTTPChannelAdapterCreateAndDelete(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := newHTTPChannelAdapter(server.URL, "token", server.Client(), nil, 3, 0)
+	adapter := newHTTPChannelAdapter(server.URL, "token", server.Client(), nil, 3, time.Nanosecond)
 
 	primary, backup, err := adapter.CreateChannel(context.Background(), "channel-123", "stream-key")
 	if err != nil {
@@ -61,9 +70,12 @@ func TestHTTPChannelAdapterCreateAndDelete(t *testing.T) {
 	}
 }
 
+// TestHTTPChannelAdapterRetries verifies that the channel adapter retries
+// on a 5xx error (which is treated as transient by doWithRetry).
 func TestHTTPChannelAdapterRetries(t *testing.T) {
 	t.Helper()
 	var attempts int
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attempts++
 		if r.Method != http.MethodPost || r.URL.Path != "/v1/channels" {
@@ -73,11 +85,15 @@ func TestHTTPChannelAdapterRetries(t *testing.T) {
 			http.Error(w, "temporary", http.StatusInternalServerError)
 			return
 		}
-		json.NewEncoder(w).Encode(srsChannelResponse{PrimaryIngest: "rtmp://primary"})
+		if err := json.NewEncoder(w).Encode(srsChannelResponse{
+			PrimaryIngest: "rtmp://primary",
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
-	adapter := newHTTPChannelAdapter(server.URL, "token", server.Client(), nil, 2, 0)
+	adapter := newHTTPChannelAdapter(server.URL, "token", server.Client(), nil, 2, time.Nanosecond)
 	primary, backup, err := adapter.CreateChannel(context.Background(), "channel-123", "stream-key")
 	if err != nil {
 		t.Fatalf("CreateChannel: %v", err)
@@ -90,6 +106,70 @@ func TestHTTPChannelAdapterRetries(t *testing.T) {
 	}
 }
 
+// TestHTTPChannelAdapterDoesNotRetryOn4xx verifies that 4xx responses
+// other than 429 are treated as permanent errors and are not retried.
+func TestHTTPChannelAdapterDoesNotRetryOn4xx(t *testing.T) {
+	t.Helper()
+	var attempts int
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/channels" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		http.Error(w, "bad request", http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	adapter := newHTTPChannelAdapter(server.URL, "token", server.Client(), nil, 3, time.Nanosecond)
+	_, _, err := adapter.CreateChannel(context.Background(), "channel-123", "stream-key")
+	if err == nil {
+		t.Fatal("expected error for 4xx response, got nil")
+	}
+	if attempts != 1 {
+		t.Fatalf("expected exactly 1 attempt for 4xx, got %d", attempts)
+	}
+}
+
+// TestHTTPChannelAdapterRetriesOn429 verifies that HTTP 429 (Too Many Requests)
+// is treated as retryable and retried until success.
+func TestHTTPChannelAdapterRetriesOn429(t *testing.T) {
+	t.Helper()
+	var attempts int
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/channels" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		if attempts < 3 {
+			http.Error(w, "rate limited", http.StatusTooManyRequests)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(srsChannelResponse{
+			PrimaryIngest: "rtmp://primary",
+			BackupIngest:  "rtmp://backup",
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	adapter := newHTTPChannelAdapter(server.URL, "token", server.Client(), nil, 5, time.Nanosecond)
+	primary, backup, err := adapter.CreateChannel(context.Background(), "channel-123", "stream-key")
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("expected 3 attempts (2x 429 + 1x success), got %d", attempts)
+	}
+	if primary != "rtmp://primary" || backup != "rtmp://backup" {
+		t.Fatalf("unexpected ingest endpoints: %q, %q", primary, backup)
+	}
+}
+
+// TestHTTPApplicationAdapterLifecycle verifies that the application adapter
+// correctly uses basic auth and round-trips the origin and playback URLs.
 func TestHTTPApplicationAdapterLifecycle(t *testing.T) {
 	t.Helper()
 	var created bool
@@ -110,7 +190,12 @@ func TestHTTPApplicationAdapterLifecycle(t *testing.T) {
 			if payload.ChannelID != "channel-123" {
 				t.Fatalf("unexpected channel id %q", payload.ChannelID)
 			}
-			json.NewEncoder(w).Encode(omeApplicationResponse{OriginURL: "http://origin", PlaybackURL: "https://playback"})
+			if err := json.NewEncoder(w).Encode(omeApplicationResponse{
+				OriginURL:   "http://origin",
+				PlaybackURL: "https://playback",
+			}); err != nil {
+				t.Fatalf("encode response: %v", err)
+			}
 		case r.Method == http.MethodDelete && r.URL.Path == "/v1/applications/channel-123":
 			deleted = true
 			user, pass, ok := r.BasicAuth()
@@ -124,7 +209,7 @@ func TestHTTPApplicationAdapterLifecycle(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := newHTTPApplicationAdapter(server.URL, "admin", "password", server.Client(), nil, 3, 0)
+	adapter := newHTTPApplicationAdapter(server.URL, "admin", "password", server.Client(), nil, 3, time.Nanosecond)
 	origin, playback, err := adapter.CreateApplication(context.Background(), "channel-123", []string{"1080p"})
 	if err != nil {
 		t.Fatalf("CreateApplication: %v", err)
@@ -143,6 +228,9 @@ func TestHTTPApplicationAdapterLifecycle(t *testing.T) {
 	}
 }
 
+// TestHTTPTranscoderAdapterStartStop verifies that the transcoder adapter
+// correctly starts jobs, merges JobID and JobIDs, and stops a job using
+// the expected authorization header.
 func TestHTTPTranscoderAdapterStartStop(t *testing.T) {
 	t.Helper()
 	var started bool
@@ -162,11 +250,17 @@ func TestHTTPTranscoderAdapterStartStop(t *testing.T) {
 			if payload.ChannelID != "channel-123" || payload.SessionID != "session-abc" {
 				t.Fatalf("unexpected payload: %+v", payload)
 			}
-			json.NewEncoder(w).Encode(ffmpegJobResponse{
-				JobID:      "job-primary",
-				JobIDs:     []string{"job-a", "job-b"},
-				Renditions: []Rendition{{Name: "1080p", ManifestURL: "https://cdn/1080p.m3u8", Bitrate: 6000}},
-			})
+			if err := json.NewEncoder(w).Encode(ffmpegJobResponse{
+				JobID:  "job-primary",
+				JobIDs: []string{"job-a", "job-b"},
+				Renditions: []Rendition{{
+					Name:        "1080p",
+					ManifestURL: "https://cdn/1080p.m3u8",
+					Bitrate:     6000,
+				}},
+			}); err != nil {
+				t.Fatalf("encode response: %v", err)
+			}
 		case r.Method == http.MethodDelete && r.URL.Path == "/v1/jobs/job-a":
 			stopped = true
 			if got := r.Header.Get("Authorization"); got != "Bearer job-token" {
@@ -179,7 +273,7 @@ func TestHTTPTranscoderAdapterStartStop(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := newHTTPTranscoderAdapter(server.URL, "job-token", server.Client(), nil, 3, 0)
+	adapter := newHTTPTranscoderAdapter(server.URL, "job-token", server.Client(), nil, 3, time.Nanosecond)
 	ladder := []Rendition{{Name: "1080p", Bitrate: 6000}}
 	jobIDs, renditions, err := adapter.StartJobs(context.Background(), "channel-123", "session-abc", "http://origin", ladder)
 	if err != nil {
@@ -207,9 +301,12 @@ func TestHTTPTranscoderAdapterStartStop(t *testing.T) {
 	}
 }
 
+// TestHTTPTranscoderAdapterStartUpload verifies that the transcoder adapter
+// correctly starts an upload/VOD job and returns the expected job result.
 func TestHTTPTranscoderAdapterStartUpload(t *testing.T) {
 	t.Helper()
 	var started bool
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/v1/uploads" {
 			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
@@ -225,15 +322,21 @@ func TestHTTPTranscoderAdapterStartUpload(t *testing.T) {
 		if payload.ChannelID != "channel-123" || payload.UploadID != "upload-abc" || payload.SourceURL != "https://cdn/source.mp4" {
 			t.Fatalf("unexpected payload: %+v", payload)
 		}
-		json.NewEncoder(w).Encode(ffmpegUploadResponse{
+		if err := json.NewEncoder(w).Encode(ffmpegUploadResponse{
 			JobID:       "job-upload",
 			PlaybackURL: "https://cdn/hls/index.m3u8",
-			Renditions:  []Rendition{{Name: "720p", ManifestURL: "https://cdn/hls/720p.m3u8", Bitrate: 3000}},
-		})
+			Renditions: []Rendition{{
+				Name:        "720p",
+				ManifestURL: "https://cdn/hls/720p.m3u8",
+				Bitrate:     3000,
+			}},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
-	adapter := newHTTPTranscoderAdapter(server.URL, "job-token", server.Client(), nil, 3, 0)
+	adapter := newHTTPTranscoderAdapter(server.URL, "job-token", server.Client(), nil, 3, time.Nanosecond)
 	result, err := adapter.StartUpload(context.Background(), uploadJobRequest{
 		ChannelID: "channel-123",
 		UploadID:  "upload-abc",
