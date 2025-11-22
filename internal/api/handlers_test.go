@@ -2026,12 +2026,15 @@ func TestSRSHookPublishAndUnpublish(t *testing.T) {
 	if unpublishRec.Code != http.StatusOK {
 		t.Fatalf("expected unpublish status 200, got %d", unpublishRec.Code)
 	}
-	var unpublishResp srsHookResponse
+	var unpublishResp sessionResponse
 	if err := json.Unmarshal(unpublishRec.Body.Bytes(), &unpublishResp); err != nil {
 		t.Fatalf("decode unpublish response: %v", err)
 	}
-	if unpublishResp.Action != "on_unpublish" || unpublishResp.ChannelID != channel.ID {
+	if unpublishResp.ChannelID != channel.ID || unpublishResp.PeakConcurrent != 0 {
 		t.Fatalf("unexpected unpublish response: %+v", unpublishResp)
+	}
+	if unpublishResp.EndedAt == nil {
+		t.Fatal("expected session to end after unpublish")
 	}
 	if _, ok := store.CurrentStreamSession(channel.ID); ok {
 		t.Fatal("expected stream session to end after unpublish")
@@ -3382,10 +3385,33 @@ func TestSRSHookStopsStreamAndRecordsPeak(t *testing.T) {
 		t.Fatalf("expected play status 200, got %d", rec.Code)
 	}
 
+	var playResp map[string]int
+	if err := json.Unmarshal(rec.Body.Bytes(), &playResp); err != nil {
+		t.Fatalf("decode play response: %v", err)
+	}
+	if playResp["currentViewers"] != 1 {
+		t.Fatalf("expected 1 current viewer, got %d", playResp["currentViewers"])
+	}
+
 	rec = httptest.NewRecorder()
 	handler.SRSHook(rec, httptest.NewRequest(http.MethodPost, "/api/ingest/srs-hook?token=secret", bytes.NewReader(playBody)))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected second play status 200, got %d", rec.Code)
+	}
+
+	stopPayload := srsHookRequest{Action: "stop", Stream: channel.StreamKey}
+	stopBody, _ := json.Marshal(stopPayload)
+	rec = httptest.NewRecorder()
+	handler.SRSHook(rec, httptest.NewRequest(http.MethodPost, "/api/ingest/srs-hook?token=secret", bytes.NewReader(stopBody)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected stop status 200, got %d", rec.Code)
+	}
+	var stopResp map[string]int
+	if err := json.Unmarshal(rec.Body.Bytes(), &stopResp); err != nil {
+		t.Fatalf("decode stop response: %v", err)
+	}
+	if stopResp["currentViewers"] != 1 {
+		t.Fatalf("expected 1 current viewer after stop, got %d", stopResp["currentViewers"])
 	}
 
 	unpublishPayload := srsHookRequest{Action: "on_unpublish", Stream: channel.StreamKey}
