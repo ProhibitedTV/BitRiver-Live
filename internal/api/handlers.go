@@ -38,6 +38,8 @@ type Handler struct {
 	ChatGateway         *chat.Gateway
 	OAuth               oauth.Service
 	UploadProcessor     *UploadProcessor
+	DefaultRenditions   []string
+	SRSHookToken        string
 	AllowSelfSignup     bool
 	RateLimiter         healthPinger
 	ChatQueue           healthPinger
@@ -61,6 +63,7 @@ func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handle
 	return &Handler{
 		Store:               store,
 		Sessions:            sessions,
+		DefaultRenditions:   []string{"1080p", "720p", "480p"},
 		AllowSelfSignup:     true,
 		SessionCookiePolicy: DefaultSessionCookiePolicy(),
 	}
@@ -71,6 +74,48 @@ func (h *Handler) sessionManager() *auth.SessionManager {
 		h.Sessions = auth.NewSessionManager(24 * time.Hour)
 	}
 	return h.Sessions
+}
+
+func constantTimeEqual(expected, provided string) bool {
+	if expected == "" || provided == "" {
+		return false
+	}
+	if len(expected) != len(provided) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(expected), []byte(provided)) == 1
+}
+
+func (h *Handler) srsHookAuthorized(r *http.Request) bool {
+	token := strings.TrimSpace(h.SRSHookToken)
+	if token == "" || r == nil {
+		return false
+	}
+
+	if authHeader := strings.TrimSpace(r.Header.Get("Authorization")); authHeader != "" {
+		if parts := strings.SplitN(authHeader, " ", 2); len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
+			if constantTimeEqual(token, strings.TrimSpace(parts[1])) {
+				return true
+			}
+		}
+	}
+
+	if queryToken := strings.TrimSpace(r.URL.Query().Get("token")); queryToken != "" {
+		if constantTimeEqual(token, queryToken) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (h *Handler) srsRenditions() []string {
+	if len(h.DefaultRenditions) == 0 {
+		return []string{"1080p", "720p", "480p"}
+	}
+	rends := make([]string, len(h.DefaultRenditions))
+	copy(rends, h.DefaultRenditions)
+	return rends
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
@@ -1674,6 +1719,19 @@ type stopStreamRequest struct {
 	PeakConcurrent int `json:"peakConcurrent"`
 }
 
+type srsHookRequest struct {
+	Action string `json:"action"`
+	Stream string `json:"stream"`
+	Param  string `json:"param,omitempty"`
+}
+
+type srsHookResponse struct {
+	Status    string `json:"status"`
+	Action    string `json:"action"`
+	ChannelID string `json:"channelId,omitempty"`
+	SessionID string `json:"sessionId,omitempty"`
+}
+
 type clipExportRequest struct {
 	Title        string `json:"title"`
 	StartSeconds int    `json:"startSeconds"`
@@ -1880,6 +1938,95 @@ func newClipExportResponse(clip models.ClipExport) clipExportResponse {
 		resp.CompletedAt = &completed
 	}
 	return resp
+}
+
+func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		return
+	}
+	if !h.srsHookAuthorized(r) {
+		writeError(w, http.StatusUnauthorized, fmt.Errorf("unauthorized"))
+		return
+	}
+
+	var req srsHookRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	action := strings.ToLower(strings.TrimSpace(req.Action))
+	streamKey := strings.TrimSpace(req.Stream)
+	if streamKey == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("stream is required"))
+		return
+	}
+
+	channel, ok := h.Store.GetChannelByStreamKey(streamKey)
+	if !ok {
+		writeError(w, http.StatusNotFound, fmt.Errorf("channel not found for stream key"))
+		return
+	}
+
+	switch action {
+	case "on_publish":
+		h.handleSRSPublish(channel, w, r)
+	case "on_unpublish":
+		h.handleSRSUnpublish(channel, w, r)
+	case "on_play", "on_stop":
+		resp := srsHookResponse{Status: "ok", Action: action, ChannelID: channel.ID}
+		if session, ok := h.Store.CurrentStreamSession(channel.ID); ok {
+			resp.SessionID = session.ID
+		}
+		writeJSON(w, http.StatusOK, resp)
+	default:
+		writeError(w, http.StatusBadRequest, fmt.Errorf("unsupported action %s", req.Action))
+	}
+}
+
+func (h *Handler) handleSRSPublish(channel models.Channel, w http.ResponseWriter, r *http.Request) {
+	if current, ok := h.Store.CurrentStreamSession(channel.ID); ok {
+		writeJSON(w, http.StatusOK, srsHookResponse{Status: "ok", Action: "on_publish", ChannelID: channel.ID, SessionID: current.ID})
+		return
+	}
+
+	session, err := h.Store.StartStream(channel.ID, h.srsRenditions())
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, storage.ErrIngestControllerUnavailable) {
+			status = http.StatusServiceUnavailable
+		}
+		writeError(w, status, err)
+		return
+	}
+	metrics.StreamStarted()
+	writeJSON(w, http.StatusOK, srsHookResponse{Status: "ok", Action: "on_publish", ChannelID: channel.ID, SessionID: session.ID})
+}
+
+func (h *Handler) handleSRSUnpublish(channel models.Channel, w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.Store.CurrentStreamSession(channel.ID); ok {
+		session, err := h.Store.StopStream(channel.ID, 0)
+		if err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, storage.ErrIngestControllerUnavailable) {
+				status = http.StatusServiceUnavailable
+			}
+			writeError(w, status, err)
+			return
+		}
+		metrics.StreamStopped()
+		writeJSON(w, http.StatusOK, srsHookResponse{Status: "ok", Action: "on_unpublish", ChannelID: channel.ID, SessionID: session.ID})
+		return
+	}
+
+	offline := "offline"
+	if _, err := h.Store.UpdateChannel(channel.ID, storage.ChannelUpdate{LiveState: &offline}); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, srsHookResponse{Status: "ok", Action: "on_unpublish", ChannelID: channel.ID})
 }
 
 type renditionManifestResponse struct {

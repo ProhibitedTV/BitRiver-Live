@@ -419,8 +419,11 @@ func (f *fakeUploadStore) UpdateChannel(id string, update storage.ChannelUpdate)
 func (f *fakeUploadStore) RotateChannelStreamKey(id string) (models.Channel, error) {
 	panic("not implemented")
 }
-func (f *fakeUploadStore) DeleteChannel(id string) error                    { panic("not implemented") }
-func (f *fakeUploadStore) GetChannel(id string) (models.Channel, bool)      { panic("not implemented") }
+func (f *fakeUploadStore) DeleteChannel(id string) error               { panic("not implemented") }
+func (f *fakeUploadStore) GetChannel(id string) (models.Channel, bool) { panic("not implemented") }
+func (f *fakeUploadStore) GetChannelByStreamKey(streamKey string) (models.Channel, bool) {
+	panic("not implemented")
+}
 func (f *fakeUploadStore) FollowChannel(userID, channelID string) error     { panic("not implemented") }
 func (f *fakeUploadStore) UnfollowChannel(userID, channelID string) error   { panic("not implemented") }
 func (f *fakeUploadStore) IsFollowingChannel(userID, channelID string) bool { panic("not implemented") }

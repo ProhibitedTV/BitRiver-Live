@@ -2289,6 +2289,10 @@ func TestRepositoryChannelSearch(t *testing.T) {
 	RunRepositoryChannelSearch(t, jsonRepositoryFactory)
 }
 
+func TestRepositoryChannelLookupByStreamKey(t *testing.T) {
+	RunRepositoryChannelLookupByStreamKey(t, jsonRepositoryFactory)
+}
+
 func TestRepositoryStreamLifecycleWithoutIngest(t *testing.T) {
 	RunRepositoryStreamLifecycleWithoutIngest(t, jsonRepositoryFactory)
 }
