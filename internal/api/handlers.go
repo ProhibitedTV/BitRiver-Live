@@ -931,9 +931,10 @@ type channelOwnerResponse struct {
 }
 
 type profileSummaryResponse struct {
-	Bio       string `json:"bio,omitempty"`
-	AvatarURL string `json:"avatarUrl,omitempty"`
-	BannerURL string `json:"bannerUrl,omitempty"`
+	Bio         string               `json:"bio,omitempty"`
+	AvatarURL   string               `json:"avatarUrl,omitempty"`
+	BannerURL   string               `json:"bannerUrl,omitempty"`
+	SocialLinks []socialLinkResponse `json:"socialLinks,omitempty"`
 }
 
 type directoryChannelResponse struct {
@@ -1268,6 +1269,13 @@ func newProfileSummaryResponse(profile models.Profile) profileSummaryResponse {
 	}
 	if profile.BannerURL != "" {
 		summary.BannerURL = profile.BannerURL
+	}
+	if len(profile.SocialLinks) > 0 {
+		links := make([]socialLinkResponse, 0, len(profile.SocialLinks))
+		for _, link := range profile.SocialLinks {
+			links = append(links, socialLinkResponse{Platform: link.Platform, URL: link.URL})
+		}
+		summary.SocialLinks = links
 	}
 	return summary
 }
@@ -3166,12 +3174,18 @@ type cryptoAddressPayload struct {
 	Note     string `json:"note,omitempty"`
 }
 
+type socialLinkPayload struct {
+	Platform string `json:"platform"`
+	URL      string `json:"url"`
+}
+
 type upsertProfileRequest struct {
 	DisplayName       *string                 `json:"displayName"`
 	Email             *string                 `json:"email"`
 	Bio               *string                 `json:"bio"`
 	AvatarURL         *string                 `json:"avatarUrl"`
 	BannerURL         *string                 `json:"bannerUrl"`
+	SocialLinks       *[]socialLinkPayload    `json:"socialLinks"`
 	FeaturedChannelID *string                 `json:"featuredChannelId"`
 	TopFriends        *[]string               `json:"topFriends"`
 	DonationAddresses *[]cryptoAddressPayload `json:"donationAddresses"`
@@ -3189,12 +3203,18 @@ type friendSummaryResponse struct {
 	AvatarURL   string `json:"avatarUrl,omitempty"`
 }
 
+type socialLinkResponse struct {
+	Platform string `json:"platform"`
+	URL      string `json:"url"`
+}
+
 type profileViewResponse struct {
 	UserID            string                  `json:"userId"`
 	DisplayName       string                  `json:"displayName"`
 	Bio               string                  `json:"bio"`
 	AvatarURL         string                  `json:"avatarUrl"`
 	BannerURL         string                  `json:"bannerUrl"`
+	SocialLinks       []socialLinkResponse    `json:"socialLinks"`
 	FeaturedChannelID *string                 `json:"featuredChannelId,omitempty"`
 	TopFriends        []friendSummaryResponse `json:"topFriends"`
 	DonationAddresses []cryptoAddressResponse `json:"donationAddresses"`
@@ -4073,6 +4093,16 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 	if req.BannerURL != nil {
 		update.BannerURL = req.BannerURL
 	}
+	if req.SocialLinks != nil {
+		links := make([]models.SocialLink, 0, len(*req.SocialLinks))
+		for _, link := range *req.SocialLinks {
+			links = append(links, models.SocialLink{
+				Platform: link.Platform,
+				URL:      link.URL,
+			})
+		}
+		update.SocialLinks = &links
+	}
 	if req.FeaturedChannelID != nil {
 		update.FeaturedChannelID = req.FeaturedChannelID
 	}
@@ -4141,12 +4171,18 @@ func (h *Handler) buildProfileViewResponse(user models.User, profile models.Prof
 		})
 	}
 
+	socialLinks := make([]socialLinkResponse, 0, len(profile.SocialLinks))
+	for _, link := range profile.SocialLinks {
+		socialLinks = append(socialLinks, socialLinkResponse{Platform: link.Platform, URL: link.URL})
+	}
+
 	response := profileViewResponse{
 		UserID:            user.ID,
 		DisplayName:       user.DisplayName,
 		Bio:               profile.Bio,
 		AvatarURL:         profile.AvatarURL,
 		BannerURL:         profile.BannerURL,
+		SocialLinks:       socialLinks,
 		TopFriends:        friends,
 		DonationAddresses: donations,
 		Channels:          channelResponses,

@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
-import type { ProfileView } from "../../lib/viewer-api";
+import type { ProfileView, SocialLink } from "../../lib/viewer-api";
 import { fetchProfile, updateProfile } from "../../lib/viewer-api";
 
 type FormState = {
@@ -13,6 +13,7 @@ type FormState = {
   bio: string;
   avatarUrl: string;
   bannerUrl: string;
+  socialLinks: SocialLink[];
 };
 
 const defaultFormState: FormState = {
@@ -21,6 +22,7 @@ const defaultFormState: FormState = {
   bio: "",
   avatarUrl: "",
   bannerUrl: "",
+  socialLinks: [],
 };
 
 export default function ProfilePage() {
@@ -50,6 +52,7 @@ export default function ProfilePage() {
         bio: data.bio ?? "",
         avatarUrl: data.avatarUrl ?? "",
         bannerUrl: data.bannerUrl ?? "",
+        socialLinks: data.socialLinks ?? [],
       });
     } catch (err) {
       setProfile(undefined);
@@ -78,6 +81,7 @@ export default function ProfilePage() {
         bio: formState.bio,
         avatarUrl: formState.avatarUrl,
         bannerUrl: formState.bannerUrl,
+        socialLinks: formState.socialLinks,
       });
       setProfile(updated);
       setSuccessMessage("Profile saved");
@@ -112,14 +116,39 @@ export default function ProfilePage() {
       bio: profile.bio ?? "",
       avatarUrl: profile.avatarUrl ?? "",
       bannerUrl: profile.bannerUrl ?? "",
+      socialLinks: profile.socialLinks ?? [],
     });
     setSaveError(undefined);
     setSuccessMessage(undefined);
   };
 
   const hasProfileContent = useMemo(() => {
-    return Boolean(formState.bio.trim() || formState.avatarUrl.trim() || formState.bannerUrl.trim());
-  }, [formState.bio, formState.avatarUrl, formState.bannerUrl]);
+    const hasSocialLinks = formState.socialLinks.some((link) => link.url.trim());
+    return Boolean(formState.bio.trim() || formState.avatarUrl.trim() || formState.bannerUrl.trim() || hasSocialLinks);
+  }, [formState.avatarUrl, formState.bannerUrl, formState.bio, formState.socialLinks]);
+
+  const handleSocialLinkChange = (index: number, field: keyof SocialLink, value: string) => {
+    setFormState((prev) => {
+      const updatedLinks = prev.socialLinks.map((link, linkIndex) =>
+        linkIndex === index ? { ...link, [field]: value } : link
+      );
+      return { ...prev, socialLinks: updatedLinks };
+    });
+  };
+
+  const handleAddSocialLink = () => {
+    setFormState((prev) => ({
+      ...prev,
+      socialLinks: [...prev.socialLinks, { platform: "", url: "" }]
+    }));
+  };
+
+  const handleRemoveSocialLink = (index: number) => {
+    setFormState((prev) => ({
+      ...prev,
+      socialLinks: prev.socialLinks.filter((_, linkIndex) => linkIndex !== index)
+    }));
+  };
 
   const avatarGlyph = useMemo(() => {
     if (formState.avatarUrl.trim()) {
@@ -315,6 +344,73 @@ export default function ProfilePage() {
                         value={formState.bio}
                         onChange={(event) => setFormState((prev) => ({ ...prev, bio: event.target.value }))}
                       />
+                    </div>
+                  </div>
+
+                  <div className="stack" style={{ gap: "0.75rem" }}>
+                    <div>
+                      <h2 style={{ margin: 0 }}>Social links</h2>
+                      <p className="muted" style={{ margin: 0 }}>
+                        Share where viewers can follow you outside BitRiver Live.
+                      </p>
+                    </div>
+
+                    <div className="stack" style={{ gap: "0.75rem" }}>
+                      {formState.socialLinks.length === 0 && (
+                        <p className="muted" style={{ margin: 0 }}>
+                          Add platforms and URLs to feature on your profile.
+                        </p>
+                      )}
+
+                      {formState.socialLinks.map((link, index) => (
+                        <div
+                          key={`social-${index}`}
+                          className="stack"
+                          style={{
+                            gap: "0.5rem",
+                            padding: "0.75rem",
+                            border: "1px solid var(--border)",
+                            borderRadius: "0.75rem",
+                            background: "var(--surface-2)"
+                          }}
+                        >
+                          <div className="stack" style={{ gap: "0.25rem" }}>
+                            <label htmlFor={`social-platform-${index}`}>Platform</label>
+                            <input
+                              id={`social-platform-${index}`}
+                              name={`social-platform-${index}`}
+                              type="text"
+                              placeholder="Platform or label"
+                              value={link.platform}
+                              onChange={(event) => handleSocialLinkChange(index, "platform", event.target.value)}
+                            />
+                          </div>
+                          <div className="stack" style={{ gap: "0.25rem" }}>
+                            <label htmlFor={`social-url-${index}`}>Link</label>
+                            <input
+                              id={`social-url-${index}`}
+                              name={`social-url-${index}`}
+                              type="url"
+                              placeholder="https://example.com/you"
+                              value={link.url}
+                              onChange={(event) => handleSocialLinkChange(index, "url", event.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              onClick={() => handleRemoveSocialLink(index)}
+                            >
+                              Remove link
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      <button type="button" className="secondary-button" onClick={handleAddSocialLink}>
+                        Add social link
+                      </button>
                     </div>
                   </div>
                 </div>

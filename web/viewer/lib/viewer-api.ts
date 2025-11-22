@@ -45,6 +45,7 @@ export type ProfileSummary = {
   bio?: string;
   avatarUrl?: string;
   bannerUrl?: string;
+  socialLinks?: SocialLink[];
 };
 
 export type FriendSummary = {
@@ -53,12 +54,18 @@ export type FriendSummary = {
   avatarUrl?: string;
 };
 
+export type SocialLink = {
+  platform: string;
+  url: string;
+};
+
 export type ProfileView = {
   userId: string;
   displayName: string;
   bio?: string;
   avatarUrl?: string;
   bannerUrl?: string;
+  socialLinks: SocialLink[];
   featuredChannelId?: string;
   topFriends: FriendSummary[];
   donationAddresses: CryptoAddress[];
@@ -344,6 +351,7 @@ export type UpdateProfilePayload = {
   bio?: string;
   avatarUrl?: string;
   bannerUrl?: string;
+  socialLinks?: SocialLink[];
 };
 
 export function updateProfile(userId: string, payload: UpdateProfilePayload): Promise<ProfileView> {

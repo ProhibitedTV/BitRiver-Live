@@ -350,11 +350,17 @@ type CryptoAddress struct {
 	Note     string `json:"note,omitempty"`
 }
 
+type SocialLink struct {
+	Platform string `json:"platform"`
+	URL      string `json:"url"`
+}
+
 type Profile struct {
 	UserID            string          `json:"userId"`
 	Bio               string          `json:"bio"`
 	AvatarURL         string          `json:"avatarUrl"`
 	BannerURL         string          `json:"bannerUrl"`
+	SocialLinks       []SocialLink    `json:"socialLinks"`
 	FeaturedChannelID *string         `json:"featuredChannelId,omitempty"`
 	TopFriends        []string        `json:"topFriends"`
 	DonationAddresses []CryptoAddress `json:"donationAddresses"`

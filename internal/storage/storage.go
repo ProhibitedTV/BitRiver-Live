@@ -1108,6 +1108,9 @@ func cloneDataset(src dataset) dataset {
 		clone.Profiles = make(map[string]models.Profile, len(src.Profiles))
 		for id, profile := range src.Profiles {
 			cloned := profile
+			if profile.SocialLinks != nil {
+				cloned.SocialLinks = append([]models.SocialLink(nil), profile.SocialLinks...)
+			}
 			if profile.TopFriends != nil {
 				cloned.TopFriends = append([]string(nil), profile.TopFriends...)
 			}
@@ -1682,6 +1685,7 @@ type ProfileUpdate struct {
 	Bio               *string
 	AvatarURL         *string
 	BannerURL         *string
+	SocialLinks       *[]models.SocialLink
 	FeaturedChannelID *string
 	TopFriends        *[]string
 	DonationAddresses *[]models.CryptoAddress
@@ -1702,6 +1706,7 @@ func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Pro
 	if !exists {
 		profile = models.Profile{
 			UserID:            userID,
+			SocialLinks:       []models.SocialLink{},
 			TopFriends:        []string{},
 			DonationAddresses: []models.CryptoAddress{},
 			CreatedAt:         now,
@@ -1716,6 +1721,13 @@ func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Pro
 	}
 	if update.BannerURL != nil {
 		profile.BannerURL = strings.TrimSpace(*update.BannerURL)
+	}
+	if update.SocialLinks != nil {
+		normalized, err := NormalizeSocialLinks(*update.SocialLinks)
+		if err != nil {
+			return models.Profile{}, err
+		}
+		profile.SocialLinks = normalized
 	}
 	if update.FeaturedChannelID != nil {
 		trimmed := strings.TrimSpace(*update.FeaturedChannelID)
@@ -1797,6 +1809,7 @@ func (s *Storage) GetProfile(userID string) (models.Profile, bool) {
 		}
 		profile = models.Profile{
 			UserID:            userID,
+			SocialLinks:       []models.SocialLink{},
 			TopFriends:        []string{},
 			DonationAddresses: []models.CryptoAddress{},
 			CreatedAt:         user.CreatedAt,
@@ -1805,6 +1818,9 @@ func (s *Storage) GetProfile(userID string) (models.Profile, bool) {
 		return profile, false
 	}
 
+	if profile.SocialLinks == nil {
+		profile.SocialLinks = []models.SocialLink{}
+	}
 	if profile.TopFriends == nil {
 		profile.TopFriends = []string{}
 	}
@@ -1821,6 +1837,15 @@ func (s *Storage) ListProfiles() []models.Profile {
 
 	profiles := make([]models.Profile, 0, len(s.data.Profiles))
 	for _, profile := range s.data.Profiles {
+		if profile.SocialLinks == nil {
+			profile.SocialLinks = []models.SocialLink{}
+		}
+		if profile.TopFriends == nil {
+			profile.TopFriends = []string{}
+		}
+		if profile.DonationAddresses == nil {
+			profile.DonationAddresses = []models.CryptoAddress{}
+		}
 		profiles = append(profiles, profile)
 	}
 	sort.Slice(profiles, func(i, j int) bool {
