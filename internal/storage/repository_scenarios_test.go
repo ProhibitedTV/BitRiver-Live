@@ -317,6 +317,28 @@ func RunRepositoryChannelSearch(t *testing.T, factory RepositoryFactory) {
 	}
 }
 
+// RunRepositoryChannelLookupByStreamKey ensures repositories can resolve channels from stream keys.
+func RunRepositoryChannelLookupByStreamKey(t *testing.T, factory RepositoryFactory) {
+	repo := runRepository(t, factory)
+
+	owner, err := repo.CreateUser(CreateUserParams{DisplayName: "Owner", Email: "owner@example.com"})
+	requireAvailable(t, err, "create owner")
+	channel, err := repo.CreateChannel(owner.ID, "Live", "gaming", []string{"rpg"})
+	requireAvailable(t, err, "create channel")
+
+	fetched, ok := repo.GetChannelByStreamKey(channel.StreamKey)
+	if !ok {
+		t.Fatal("expected channel to be found by stream key")
+	}
+	if fetched.ID != channel.ID {
+		t.Fatalf("expected channel %s, got %s", channel.ID, fetched.ID)
+	}
+
+	if _, ok := repo.GetChannelByStreamKey("missing-key"); ok {
+		t.Fatal("expected missing stream key to return ok=false")
+	}
+}
+
 // RunRepositoryChatRestrictionsLifecycle replays the moderation scenario
 // exercised in chat_events_test.go against the provided repository.
 func RunRepositoryChatRestrictionsLifecycle(t *testing.T, factory RepositoryFactory) {

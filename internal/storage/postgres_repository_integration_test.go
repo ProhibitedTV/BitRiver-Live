@@ -1183,6 +1183,10 @@ func TestPostgresStreamKeyRotation(t *testing.T) {
 	storage.RunRepositoryStreamKeyRotation(t, postgresRepositoryFactory)
 }
 
+func TestPostgresChannelLookupByStreamKey(t *testing.T) {
+	storage.RunRepositoryChannelLookupByStreamKey(t, postgresRepositoryFactory)
+}
+
 func TestPostgresIngestHealthSnapshots(t *testing.T) {
 	storage.RunRepositoryIngestHealthSnapshots(t, postgresRepositoryFactory)
 }

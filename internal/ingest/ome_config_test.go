@@ -34,7 +34,7 @@ var expectedServerTemplates = map[string]string{
             <Authentication>
                 <User>
                     <ID>admin</ID>
-                    <!-- Replace with a secure password for production deployments. -->
+                    <!-- Updated automatically by scripts/quickstart.sh before docker compose up. -->
                     <Password>local-dev-password</Password>
                 </User>
             </Authentication>

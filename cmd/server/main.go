@@ -411,6 +411,8 @@ func main() {
 	handler := api.NewHandler(store, sessions)
 	handler.AllowSelfSignup = allowSelfSignupValue
 	handler.ChatGateway = gateway
+	handler.DefaultRenditions = ladderProfileNames(ingestConfig.LadderProfiles)
+	handler.SRSHookToken = ingestConfig.SRSToken
 	if pingable, ok := queue.(interface{ Ping(context.Context) error }); ok {
 		handler.ChatQueue = pingable
 	}
@@ -946,6 +948,19 @@ func resolveInt(flagValue int, envKey string) int {
 		}
 	}
 	return 0
+}
+
+func ladderProfileNames(profiles []ingest.Rendition) []string {
+	names := make([]string, 0, len(profiles))
+	for _, profile := range profiles {
+		if name := strings.TrimSpace(profile.Name); name != "" {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return []string{"1080p", "720p", "480p"}
+	}
+	return names
 }
 
 func resolveDuration(flagValue time.Duration, envKey string, fallback time.Duration) time.Duration {

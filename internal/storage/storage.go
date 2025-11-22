@@ -1980,6 +1980,25 @@ func (s *Storage) GetChannel(id string) (models.Channel, bool) {
 	return channel, ok
 }
 
+// GetChannelByStreamKey looks up a channel by its stream key.
+func (s *Storage) GetChannelByStreamKey(streamKey string) (models.Channel, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	key := strings.TrimSpace(streamKey)
+	if key == "" {
+		return models.Channel{}, false
+	}
+
+	for _, channel := range s.data.Channels {
+		if channel.StreamKey == key {
+			return channel, true
+		}
+	}
+
+	return models.Channel{}, false
+}
+
 func (s *Storage) ListChannels(ownerID, query string) []models.Channel {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
