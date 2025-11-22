@@ -11,6 +11,9 @@ import (
 	"time"
 )
 
+// flakyRoundTripper simulates a transient network failure on the first request
+// and succeeds on subsequent requests. It is used to test health-check behavior
+// when only one of the probes encounters a transient error.
 type flakyRoundTripper struct {
 	failureReturned atomic.Bool
 	transport       http.RoundTripper
@@ -24,13 +27,19 @@ func (f *flakyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	return f.transport.RoundTrip(req)
 }
 
+// TestHTTPControllerHealthChecksFailFastOnTransientError verifies that a
+// transient error on one health check does not poison the other checks, and
+// that the error detail is correctly surfaced for the failing component.
 func TestHTTPControllerHealthChecksFailFastOnTransientError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(server.Close)
 
-	client := &http.Client{Transport: &flakyRoundTripper{transport: http.DefaultTransport}, Timeout: time.Second}
+	client := &http.Client{
+		Transport: &flakyRoundTripper{transport: http.DefaultTransport},
+		Timeout:   time.Second,
+	}
 
 	controller := HTTPController{
 		config: Config{
@@ -79,5 +88,350 @@ func TestHTTPControllerHealthChecksFailFastOnTransientError(t *testing.T) {
 		if status.Status != "ok" {
 			t.Fatalf("expected %s status ok, got %s", component, status.Status)
 		}
+	}
+}
+
+// ---- Fake adapters for controller tests ----
+
+type fakeChannelAdapter struct {
+	createPrimary string
+	createBackup  string
+	createErr     error
+
+	deleteErr error
+
+	lastCreateChannelID string
+	lastCreateStreamKey string
+	lastDeleteChannelID string
+}
+
+func (f *fakeChannelAdapter) CreateChannel(ctx context.Context, channelID, streamKey string) (string, string, error) {
+	f.lastCreateChannelID = channelID
+	f.lastCreateStreamKey = streamKey
+	if f.createErr != nil {
+		return "", "", f.createErr
+	}
+	return f.createPrimary, f.createBackup, nil
+}
+
+func (f *fakeChannelAdapter) DeleteChannel(ctx context.Context, channelID string) error {
+	f.lastDeleteChannelID = channelID
+	return f.deleteErr
+}
+
+type fakeApplicationAdapter struct {
+	origin   string
+	playback string
+	createErr error
+	deleteErr error
+
+	lastCreateChannelID string
+	lastCreateRenditions []string
+	lastDeleteChannelID  string
+}
+
+func (f *fakeApplicationAdapter) CreateApplication(ctx context.Context, channelID string, renditions []string) (string, string, error) {
+	f.lastCreateChannelID = channelID
+	f.lastCreateRenditions = append([]string{}, renditions...)
+	if f.createErr != nil {
+		return "", "", f.createErr
+	}
+	return f.origin, f.playback, nil
+}
+
+func (f *fakeApplicationAdapter) DeleteApplication(ctx context.Context, channelID string) error {
+	f.lastDeleteChannelID = channelID
+	return f.deleteErr
+}
+
+type fakeTranscoderAdapter struct {
+	startJobErr   error
+	stopJobErr    error
+	startUploadErr error
+
+	startJobIDs      []string
+	startJobRenditions []Rendition
+	lastStartChannelID string
+	lastStartSessionID string
+	lastStartOriginURL string
+
+	stopJobIDs []string
+
+	lastUploadReq uploadJobRequest
+	uploadResult  uploadJobResult
+}
+
+func (f *fakeTranscoderAdapter) StartJobs(ctx context.Context, channelID, sessionID, originURL string, ladder []Rendition) ([]string, []Rendition, error) {
+	f.lastStartChannelID = channelID
+	f.lastStartSessionID = sessionID
+	f.lastStartOriginURL = originURL
+	f.startJobRenditions = cloneRenditions(ladder)
+	if f.startJobErr != nil {
+		return nil, nil, f.startJobErr
+	}
+	return append([]string{}, f.startJobIDs...), cloneRenditions(f.startJobRenditions), nil
+}
+
+func (f *fakeTranscoderAdapter) StopJob(ctx context.Context, jobID string) error {
+	f.stopJobIDs = append(f.stopJobIDs, jobID)
+	return f.stopJobErr
+}
+
+func (f *fakeTranscoderAdapter) StartUpload(ctx context.Context, req uploadJobRequest) (uploadJobResult, error) {
+	f.lastUploadReq = req
+	if f.startUploadErr != nil {
+		return uploadJobResult{}, f.startUploadErr
+	}
+	return f.uploadResult, nil
+}
+
+// ---- BootStream tests ----
+
+// TestHTTPControllerBootStreamSuccess verifies the happy path for BootStream:
+// channel created, application created, jobs started, and a complete BootResult
+// is returned.
+func TestHTTPControllerBootStreamSuccess(t *testing.T) {
+	ch := &fakeChannelAdapter{
+		createPrimary: "rtmp://primary",
+		createBackup:  "rtmp://backup",
+	}
+	app := &fakeApplicationAdapter{
+		origin:   "http://origin",
+		playback: "https://playback",
+	}
+	tr := &fakeTranscoderAdapter{
+		startJobIDs: []string{"job-1", "job-2"},
+		startJobRenditions: []Rendition{
+			{Name: "720p", Bitrate: 2500},
+		},
+	}
+
+	controller := HTTPController{
+		config: Config{
+			LadderProfiles: []Rendition{{Name: "720p", Bitrate: 2500}},
+		},
+		channels:     ch,
+		applications: app,
+		transcoder:   tr,
+	}
+
+	params := BootParams{
+		ChannelID:  "channel-123",
+		StreamKey:  "stream-key",
+		SessionID:  "session-abc",
+		Renditions: []string{"1080p"},
+	}
+
+	result, err := controller.BootStream(context.Background(), params)
+	if err != nil {
+		t.Fatalf("BootStream: %v", err)
+	}
+
+	if result.PrimaryIngest != "rtmp://primary" || result.BackupIngest != "rtmp://backup" {
+		t.Fatalf("unexpected ingest endpoints: %+v", result)
+	}
+	if result.OriginURL != "http://origin" || result.PlaybackURL != "https://playback" {
+		t.Fatalf("unexpected origin/playback: %+v", result)
+	}
+	if len(result.JobIDs) != 2 {
+		t.Fatalf("expected 2 jobIDs, got %d", len(result.JobIDs))
+	}
+	if ch.lastCreateChannelID != "channel-123" || ch.lastCreateStreamKey != "stream-key" {
+		t.Fatalf("unexpected channel create args: %+v", ch)
+	}
+	if app.lastCreateChannelID != "channel-123" {
+		t.Fatalf("unexpected app create channelID: %s", app.lastCreateChannelID)
+	}
+	// Ensure StartJobs saw the LadderProfiles from config.
+	if tr.lastStartChannelID != "channel-123" || tr.lastStartSessionID != "session-abc" || tr.lastStartOriginURL != "http://origin" {
+		t.Fatalf("unexpected transcoder args: channel=%s session=%s origin=%s",
+			tr.lastStartChannelID, tr.lastStartSessionID, tr.lastStartOriginURL)
+	}
+	if len(tr.startJobRenditions) != 1 || tr.startJobRenditions[0].Name != "720p" {
+		t.Fatalf("unexpected rendition ladder: %+v", tr.startJobRenditions)
+	}
+}
+
+// TestHTTPControllerBootStreamRollsBackOnAppFailure verifies that if the
+// OME application creation fails, the previously created SRS channel is
+// deleted as part of rollback.
+func TestHTTPControllerBootStreamRollsBackOnAppFailure(t *testing.T) {
+	ch := &fakeChannelAdapter{
+		createPrimary: "rtmp://primary",
+		createBackup:  "rtmp://backup",
+	}
+	app := &fakeApplicationAdapter{
+		createErr: errors.New("OME down"),
+	}
+	tr := &fakeTranscoderAdapter{}
+
+	controller := HTTPController{
+		config:       Config{},
+		channels:     ch,
+		applications: app,
+		transcoder:   tr,
+	}
+
+	params := BootParams{
+		ChannelID: "channel-123",
+		StreamKey: "stream-key",
+	}
+
+	_, err := controller.BootStream(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected BootStream error, got nil")
+	}
+	if ch.lastDeleteChannelID != "channel-123" {
+		t.Fatalf("expected channel delete for rollback, got %q", ch.lastDeleteChannelID)
+	}
+	if app.lastDeleteChannelID != "" {
+		t.Fatalf("did not expect app delete for app failure rollback, got %q", app.lastDeleteChannelID)
+	}
+}
+
+// TestHTTPControllerBootStreamRollsBackOnTranscoderFailure verifies that if
+// transcoder job startup fails, both the OME application and SRS channel
+// are deleted as part of rollback.
+func TestHTTPControllerBootStreamRollsBackOnTranscoderFailure(t *testing.T) {
+	ch := &fakeChannelAdapter{
+		createPrimary: "rtmp://primary",
+		createBackup:  "rtmp://backup",
+	}
+	app := &fakeApplicationAdapter{
+		origin:   "http://origin",
+		playback: "https://playback",
+	}
+	tr := &fakeTranscoderAdapter{
+		startJobErr: errors.New("transcoder unreachable"),
+	}
+
+	controller := HTTPController{
+		config:       Config{},
+		channels:     ch,
+		applications: app,
+		transcoder:   tr,
+	}
+
+	params := BootParams{
+		ChannelID: "channel-123",
+		StreamKey: "stream-key",
+		SessionID: "session-abc",
+	}
+
+	_, err := controller.BootStream(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected BootStream error, got nil")
+	}
+	if app.lastDeleteChannelID != "channel-123" {
+		t.Fatalf("expected app delete for rollback, got %q", app.lastDeleteChannelID)
+	}
+	if ch.lastDeleteChannelID != "channel-123" {
+		t.Fatalf("expected channel delete for rollback, got %q", ch.lastDeleteChannelID)
+	}
+}
+
+// ---- ShutdownStream tests ----
+
+// TestHTTPControllerShutdownStreamAggregatesErrors verifies that
+// ShutdownStream aggregates errors from the underlying adapters and
+// returns a combined error string.
+func TestHTTPControllerShutdownStreamAggregatesErrors(t *testing.T) {
+	ch := &fakeChannelAdapter{deleteErr: errors.New("channel delete failed")}
+	app := &fakeApplicationAdapter{deleteErr: errors.New("app delete failed")}
+	tr := &fakeTranscoderAdapter{stopJobErr: errors.New("stop failed")}
+
+	controller := HTTPController{
+		config:       Config{},
+		channels:     ch,
+		applications: app,
+		transcoder:   tr,
+	}
+
+	err := controller.ShutdownStream(context.Background(), "channel-123", "session-abc", []string{"job-1", "job-2"})
+	if err == nil {
+		t.Fatal("expected ShutdownStream error, got nil")
+	}
+	msg := err.Error()
+	for _, substr := range []string{"stop job job-1", "stop job job-2", "delete OME app", "delete SRS channel"} {
+		if !strings.Contains(msg, substr) {
+			t.Fatalf("expected error message to contain %q, got %q", substr, msg)
+		}
+	}
+	if len(tr.stopJobIDs) != 2 {
+		t.Fatalf("expected 2 jobs stopped, got %d", len(tr.stopJobIDs))
+	}
+}
+
+// ---- TranscodeUpload tests ----
+
+// TestHTTPControllerTranscodeUploadValidatesInputs verifies that
+// TranscodeUpload rejects missing identifiers or source URL.
+func TestHTTPControllerTranscodeUploadValidatesInputs(t *testing.T) {
+	controller := HTTPController{config: Config{}}
+
+	_, err := controller.TranscodeUpload(context.Background(), UploadTranscodeParams{})
+	if err == nil || !strings.Contains(err.Error(), "channelID and uploadID are required") {
+		t.Fatalf("expected missing IDs error, got %v", err)
+	}
+
+	_, err = controller.TranscodeUpload(context.Background(), UploadTranscodeParams{
+		ChannelID: "channel-123",
+		UploadID:  "upload-abc",
+	})
+	if err == nil || !strings.Contains(err.Error(), "sourceURL is required") {
+		t.Fatalf("expected missing sourceURL error, got %v", err)
+	}
+}
+
+// TestHTTPControllerTranscodeUploadSuccess verifies the happy path for
+// TranscodeUpload and ensures the input renditions slice is not mutated.
+func TestHTTPControllerTranscodeUploadSuccess(t *testing.T) {
+	tr := &fakeTranscoderAdapter{
+		uploadResult: uploadJobResult{
+			JobID:       "job-upload",
+			PlaybackURL: "https://cdn/hls/index.m3u8",
+			Renditions: []Rendition{
+				{Name: "720p", ManifestURL: "https://cdn/hls/720p.m3u8", Bitrate: 3000},
+			},
+		},
+	}
+
+	controller := HTTPController{
+		config:     Config{},
+		transcoder: tr,
+	}
+
+	inputRenditions := []Rendition{
+		{Name: "720p", Bitrate: 3000},
+	}
+
+	result, err := controller.TranscodeUpload(context.Background(), UploadTranscodeParams{
+		ChannelID:  "channel-123",
+		UploadID:   "upload-abc",
+		SourceURL:  "https://cdn/source.mp4",
+		Filename:   "source.mp4",
+		Renditions: inputRenditions,
+	})
+	if err != nil {
+		t.Fatalf("TranscodeUpload: %v", err)
+	}
+
+	if result.JobID != "job-upload" || result.PlaybackURL != "https://cdn/hls/index.m3u8" {
+		t.Fatalf("unexpected upload result: %+v", result)
+	}
+	if len(result.Renditions) != 1 || result.Renditions[0].ManifestURL != "https://cdn/hls/720p.m3u8" {
+		t.Fatalf("unexpected renditions: %+v", result.Renditions)
+	}
+
+	// Ensure controller did not mutate the caller's renditions slice.
+	if inputRenditions[0].ManifestURL != "" {
+		t.Fatalf("expected input renditions to remain unchanged, got manifest %q", inputRenditions[0].ManifestURL)
+	}
+
+	// Ensure StartUpload saw the channel/upload/source information.
+	if tr.lastUploadReq.ChannelID != "channel-123" ||
+		tr.lastUploadReq.UploadID != "upload-abc" ||
+		tr.lastUploadReq.SourceURL != "https://cdn/source.mp4" {
+		t.Fatalf("unexpected upload request: %+v", tr.lastUploadReq)
 	}
 }
