@@ -2044,9 +2044,16 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req srsHookRequest
-	if err := decodeJSONAllowUnknown(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
+	if r.Body != nil && r.Body != http.NoBody {
+		if err := decodeJSONAllowUnknown(r, &req); err != nil {
+			if !errors.Is(err, io.EOF) {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+		}
+	}
+	if req.Action == "" {
+		req.Action = r.URL.Query().Get("action")
 	}
 	if req.Stream == "" {
 		req.Stream = r.URL.Query().Get("stream")
