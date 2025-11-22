@@ -30,11 +30,12 @@ type Repository interface {
 	ListProfiles() []models.Profile
 
 	CreateChannel(ownerID, title, category string, tags []string) (models.Channel, error)
-	UpdateChannel(id string, update ChannelUpdate) (models.Channel, error)
-	RotateChannelStreamKey(id string) (models.Channel, error)
-	DeleteChannel(id string) error
-	GetChannel(id string) (models.Channel, bool)
-	ListChannels(ownerID, query string) []models.Channel
+        UpdateChannel(id string, update ChannelUpdate) (models.Channel, error)
+        RotateChannelStreamKey(id string) (models.Channel, error)
+        DeleteChannel(id string) error
+        GetChannel(id string) (models.Channel, bool)
+        GetChannelByStreamKey(streamKey string) (models.Channel, bool)
+        ListChannels(ownerID, query string) []models.Channel
 
 	FollowChannel(userID, channelID string) error
 	UnfollowChannel(userID, channelID string) error

@@ -1910,6 +1910,51 @@ func (r *postgresRepository) GetChannel(id string) (models.Channel, bool) {
 	return channel, true
 }
 
+func (r *postgresRepository) GetChannelByStreamKey(streamKey string) (models.Channel, bool) {
+	if r == nil || r.pool == nil {
+		return models.Channel{}, false
+	}
+	key := strings.TrimSpace(streamKey)
+	if key == "" {
+		return models.Channel{}, false
+	}
+
+	var channel models.Channel
+	found := false
+	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		var (
+			category       pgtype.Text
+			tags           []string
+			currentSession pgtype.Text
+			createdAt      time.Time
+			updatedAt      time.Time
+		)
+		row := conn.QueryRow(ctx, "SELECT id, owner_id, stream_key, title, category, tags, live_state, current_session_id, created_at, updated_at FROM channels WHERE stream_key = $1", key)
+		if err := row.Scan(&channel.ID, &channel.OwnerID, &channel.StreamKey, &channel.Title, &category, &tags, &channel.LiveState, &currentSession, &createdAt, &updatedAt); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			return fmt.Errorf("load channel by stream key: %w", err)
+		}
+		channel.Tags = append([]string{}, tags...)
+		if category.Valid {
+			channel.Category = category.String
+		}
+		if currentSession.Valid {
+			id := currentSession.String
+			channel.CurrentSessionID = &id
+		}
+		channel.CreatedAt = createdAt.UTC()
+		channel.UpdatedAt = updatedAt.UTC()
+		found = true
+		return nil
+	})
+	if err != nil || !found {
+		return models.Channel{}, false
+	}
+	return channel, true
+}
+
 func (r *postgresRepository) ListChannels(ownerID, query string) []models.Channel {
 	if r == nil || r.pool == nil {
 		return nil
