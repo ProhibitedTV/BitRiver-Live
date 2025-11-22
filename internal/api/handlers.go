@@ -38,6 +38,7 @@ type Handler struct {
 	ChatGateway         *chat.Gateway
 	OAuth               oauth.Service
 	UploadProcessor     *UploadProcessor
+	DefaultRenditions   []string
 	SRSHookToken        string
 	AllowSelfSignup     bool
 	RateLimiter         healthPinger
@@ -208,18 +209,6 @@ func normalizeSRSAction(action string) string {
 	normalized := strings.ToLower(strings.TrimSpace(action))
 	normalized = strings.TrimPrefix(normalized, "on_")
 	return normalized
-}
-
-func (h *Handler) authorizeSRSHook(token string) bool {
-	expected := strings.TrimSpace(h.SRSHookToken)
-	provided := strings.TrimSpace(token)
-	if expected == "" || provided == "" {
-		return false
-	}
-	if len(expected) != len(provided) {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(expected), []byte(provided)) == 1
 }
 
 func (h *Handler) channelForStream(stream string) (models.Channel, bool) {
@@ -1828,12 +1817,6 @@ type stopStreamRequest struct {
 	PeakConcurrent int `json:"peakConcurrent"`
 }
 
-type srsHookRequest struct {
-	Action string `json:"action"`
-	Stream string `json:"stream"`
-	Param  string `json:"param,omitempty"`
-}
-
 type srsHookResponse struct {
 	Status    string `json:"status"`
 	Action    string `json:"action"`
@@ -2065,27 +2048,38 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	if req.Stream == "" {
+		req.Stream = r.URL.Query().Get("stream")
+	}
 
-	action := strings.ToLower(strings.TrimSpace(req.Action))
-	streamKey := strings.TrimSpace(req.Stream)
-	if streamKey == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("stream is required"))
+	action := normalizeSRSAction(req.Action)
+	if action == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("action is required"))
 		return
 	}
 
-	channel, ok := h.Store.GetChannelByStreamKey(streamKey)
+	channel, ok := h.channelForStream(req.Stream)
 	if !ok {
-		writeError(w, http.StatusNotFound, fmt.Errorf("channel not found for stream key"))
+		writeError(w, http.StatusNotFound, fmt.Errorf("stream %s not recognized", strings.TrimSpace(req.Stream)))
 		return
 	}
+
+	tracker := h.srsTracker()
 
 	switch action {
-	case "on_publish":
+	case "publish":
 		h.handleSRSPublish(channel, w, r)
-	case "on_unpublish":
-		h.handleSRSUnpublish(channel, w, r)
+	case "play":
+		counts := tracker.increment(channel.ID)
+		writeJSON(w, http.StatusOK, map[string]int{"currentViewers": counts.current})
+	case "stop":
+		counts := tracker.decrement(channel.ID)
+		writeJSON(w, http.StatusOK, map[string]int{"currentViewers": counts.current})
+	case "unpublish":
+		peak := tracker.peak(channel.ID)
+		h.handleSRSUnpublish(channel, peak, tracker, w)
 	default:
-		writeError(w, http.StatusBadRequest, fmt.Errorf("unsupported action %s", req.Action))
+		writeError(w, http.StatusBadRequest, fmt.Errorf("unknown action %s", req.Action))
 	}
 }
 
@@ -2108,9 +2102,9 @@ func (h *Handler) handleSRSPublish(channel models.Channel, w http.ResponseWriter
 	writeJSON(w, http.StatusOK, srsHookResponse{Status: "ok", Action: "on_publish", ChannelID: channel.ID, SessionID: session.ID})
 }
 
-func (h *Handler) handleSRSUnpublish(channel models.Channel, w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleSRSUnpublish(channel models.Channel, peak int, tracker *srsViewerTracker, w http.ResponseWriter) {
 	if _, ok := h.Store.CurrentStreamSession(channel.ID); ok {
-		session, err := h.Store.StopStream(channel.ID, 0)
+		session, err := h.Store.StopStream(channel.ID, peak)
 		if err != nil {
 			status := http.StatusBadRequest
 			if errors.Is(err, storage.ErrIngestControllerUnavailable) {
@@ -2119,9 +2113,16 @@ func (h *Handler) handleSRSUnpublish(channel models.Channel, w http.ResponseWrit
 			writeError(w, status, err)
 			return
 		}
+		if tracker != nil {
+			tracker.clear(channel.ID)
+		}
 		metrics.StreamStopped()
-		writeJSON(w, http.StatusOK, srsHookResponse{Status: "ok", Action: "on_unpublish", ChannelID: channel.ID, SessionID: session.ID})
+		writeJSON(w, http.StatusOK, newSessionResponse(session))
 		return
+	}
+
+	if tracker != nil {
+		tracker.clear(channel.ID)
 	}
 
 	offline := "offline"
@@ -2129,7 +2130,7 @@ func (h *Handler) handleSRSUnpublish(channel models.Channel, w http.ResponseWrit
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, srsHookResponse{Status: "ok", Action: "on_unpublish", ChannelID: channel.ID})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 type renditionManifestResponse struct {
@@ -2211,71 +2212,6 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 
 // SRSHook processes callbacks from SRS http_hooks to validate publish/play
 // events and update stream session state accordingly.
-func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", "POST")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
-		return
-	}
-	if !h.authorizeSRSHook(r.URL.Query().Get("token")) {
-		writeError(w, http.StatusUnauthorized, errors.New("invalid hook token"))
-		return
-	}
-
-	var req srsHookRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	if req.Stream == "" {
-		req.Stream = r.URL.Query().Get("stream")
-	}
-	action := normalizeSRSAction(req.Action)
-	if action == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("action is required"))
-		return
-	}
-	channel, ok := h.channelForStream(req.Stream)
-	if !ok {
-		writeError(w, http.StatusNotFound, fmt.Errorf("stream %s not recognized", strings.TrimSpace(req.Stream)))
-		return
-	}
-
-	tracker := h.srsTracker()
-
-	switch action {
-	case "publish":
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	case "play":
-		counts := tracker.increment(channel.ID)
-		writeJSON(w, http.StatusOK, map[string]int{"currentViewers": counts.current})
-	case "stop":
-		counts := tracker.decrement(channel.ID)
-		writeJSON(w, http.StatusOK, map[string]int{"currentViewers": counts.current})
-	case "unpublish":
-		peak := tracker.peak(channel.ID)
-		if _, exists := h.Store.CurrentStreamSession(channel.ID); exists {
-			session, err := h.Store.StopStream(channel.ID, peak)
-			if err != nil {
-				status := http.StatusBadRequest
-				if errors.Is(err, storage.ErrIngestControllerUnavailable) {
-					status = http.StatusServiceUnavailable
-				}
-				writeError(w, status, err)
-				return
-			}
-			tracker.clear(channel.ID)
-			metrics.StreamStopped()
-			writeJSON(w, http.StatusOK, newSessionResponse(session))
-			return
-		}
-		tracker.clear(channel.ID)
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	default:
-		writeError(w, http.StatusBadRequest, fmt.Errorf("unknown action %s", req.Action))
-	}
-}
-
 type createChatRequest struct {
 	UserID  string `json:"userId"`
 	Content string `json:"content"`
