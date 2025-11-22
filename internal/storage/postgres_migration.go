@@ -131,6 +131,10 @@ func (r *postgresRepository) importSnapshotProfiles(ctx context.Context, tx pgx.
 		} else {
 			updated = updated.UTC()
 		}
+		socialLinks, err := encodeSocialLinks(profile.SocialLinks)
+		if err != nil {
+			return err
+		}
 		donation, err := encodeDonationAddresses(profile.DonationAddresses)
 		if err != nil {
 			return err
@@ -143,7 +147,7 @@ func (r *postgresRepository) importSnapshotProfiles(ctx context.Context, tx pgx.
 		if profile.FeaturedChannelID != nil && strings.TrimSpace(*profile.FeaturedChannelID) != "" {
 			featured = strings.TrimSpace(*profile.FeaturedChannelID)
 		}
-		_, err = tx.Exec(ctx, "INSERT INTO profiles (user_id, bio, avatar_url, banner_url, featured_channel_id, top_friends, donation_addresses, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (user_id) DO NOTHING", userID, profile.Bio, strings.TrimSpace(profile.AvatarURL), strings.TrimSpace(profile.BannerURL), featured, topFriends, donation, created, updated)
+		_, err = tx.Exec(ctx, "INSERT INTO profiles (user_id, bio, avatar_url, banner_url, featured_channel_id, top_friends, social_links, donation_addresses, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (user_id) DO NOTHING", userID, profile.Bio, strings.TrimSpace(profile.AvatarURL), strings.TrimSpace(profile.BannerURL), featured, topFriends, socialLinks, donation, created, updated)
 		if err != nil {
 			return fmt.Errorf("insert profile %s: %w", userID, err)
 		}

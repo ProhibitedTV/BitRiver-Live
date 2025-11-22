@@ -536,6 +536,31 @@ func decodeDonationAddresses(data []byte) ([]models.CryptoAddress, error) {
 	return addresses, nil
 }
 
+func encodeSocialLinks(links []models.SocialLink) ([]byte, error) {
+	if links == nil {
+		links = []models.SocialLink{}
+	}
+	data, err := json.Marshal(links)
+	if err != nil {
+		return nil, fmt.Errorf("encode social links: %w", err)
+	}
+	return data, nil
+}
+
+func decodeSocialLinks(data []byte) ([]models.SocialLink, error) {
+	if len(data) == 0 {
+		return []models.SocialLink{}, nil
+	}
+	var links []models.SocialLink
+	if err := json.Unmarshal(data, &links); err != nil {
+		return nil, fmt.Errorf("decode social links: %w", err)
+	}
+	if links == nil {
+		links = []models.SocialLink{}
+	}
+	return links, nil
+}
+
 func (r *postgresRepository) loadStreamSession(ctx context.Context, id string) (models.StreamSession, bool) {
 	if strings.TrimSpace(id) == "" {
 		return models.StreamSession{}, false
@@ -1215,6 +1240,7 @@ func (r *postgresRepository) UpsertProfile(userID string, update ProfileUpdate) 
 		profile = models.Profile{
 			UserID:            userID,
 			Bio:               "",
+			SocialLinks:       []models.SocialLink{},
 			TopFriends:        []string{},
 			DonationAddresses: []models.CryptoAddress{},
 			CreatedAt:         userCreatedAt.UTC(),
@@ -1224,11 +1250,12 @@ func (r *postgresRepository) UpsertProfile(userID string, update ProfileUpdate) 
 			avatar, banner           pgtype.Text
 			featured                 pgtype.Text
 			topFriends               []string
+			socialLinksPayload       []byte
 			donationAddressesPayload []byte
 			createdAt, updatedAt     time.Time
 		)
-		row := tx.QueryRow(ctx, "SELECT bio, avatar_url, banner_url, featured_channel_id, top_friends, donation_addresses, created_at, updated_at FROM profiles WHERE user_id = $1", userID)
-		switch err := row.Scan(&profile.Bio, &avatar, &banner, &featured, &topFriends, &donationAddressesPayload, &createdAt, &updatedAt); {
+		row := tx.QueryRow(ctx, "SELECT bio, avatar_url, banner_url, featured_channel_id, top_friends, social_links, donation_addresses, created_at, updated_at FROM profiles WHERE user_id = $1", userID)
+		switch err := row.Scan(&profile.Bio, &avatar, &banner, &featured, &topFriends, &socialLinksPayload, &donationAddressesPayload, &createdAt, &updatedAt); {
 		case errors.Is(err, pgx.ErrNoRows):
 			// Use defaults.
 		case err != nil:
@@ -1243,6 +1270,13 @@ func (r *postgresRepository) UpsertProfile(userID string, update ProfileUpdate) 
 			if featured.Valid {
 				id := featured.String
 				profile.FeaturedChannelID = &id
+			}
+			if len(socialLinksPayload) > 0 {
+				links, err := decodeSocialLinks(socialLinksPayload)
+				if err != nil {
+					return fmt.Errorf("decode social links: %w", err)
+				}
+				profile.SocialLinks = links
 			}
 			if len(topFriends) > 0 {
 				profile.TopFriends = append([]string{}, topFriends...)
@@ -1268,6 +1302,13 @@ func (r *postgresRepository) UpsertProfile(userID string, update ProfileUpdate) 
 		}
 		if update.BannerURL != nil {
 			profile.BannerURL = strings.TrimSpace(*update.BannerURL)
+		}
+		if update.SocialLinks != nil {
+			normalized, err := NormalizeSocialLinks(*update.SocialLinks)
+			if err != nil {
+				return err
+			}
+			profile.SocialLinks = normalized
 		}
 		if update.FeaturedChannelID != nil {
 			trimmed := strings.TrimSpace(*update.FeaturedChannelID)
@@ -1351,6 +1392,10 @@ func (r *postgresRepository) UpsertProfile(userID string, update ProfileUpdate) 
 			profile.CreatedAt = now
 		}
 
+		socialLinksPayload, err = encodeSocialLinks(profile.SocialLinks)
+		if err != nil {
+			return err
+		}
 		donationPayload, err := encodeDonationAddresses(profile.DonationAddresses)
 		if err != nil {
 			return err
@@ -1366,14 +1411,15 @@ func (r *postgresRepository) UpsertProfile(userID string, update ProfileUpdate) 
 
 		var insertedCreatedAt, insertedUpdatedAt time.Time
 		err = tx.QueryRow(ctx, `
-INSERT INTO profiles (user_id, bio, avatar_url, banner_url, featured_channel_id, top_friends, donation_addresses, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO profiles (user_id, bio, avatar_url, banner_url, featured_channel_id, top_friends, social_links, donation_addresses, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 ON CONFLICT (user_id) DO UPDATE SET
         bio = EXCLUDED.bio,
         avatar_url = EXCLUDED.avatar_url,
         banner_url = EXCLUDED.banner_url,
         featured_channel_id = EXCLUDED.featured_channel_id,
         top_friends = EXCLUDED.top_friends,
+        social_links = EXCLUDED.social_links,
         donation_addresses = EXCLUDED.donation_addresses,
         updated_at = EXCLUDED.updated_at
 RETURNING created_at, updated_at`,
@@ -1383,6 +1429,7 @@ RETURNING created_at, updated_at`,
 			profile.BannerURL,
 			featuredValue,
 			topFriendsValue,
+			socialLinksPayload,
 			donationPayload,
 			profile.CreatedAt,
 			profile.UpdatedAt,
@@ -1426,11 +1473,12 @@ func (r *postgresRepository) GetProfile(userID string) (models.Profile, bool) {
 			bio                      string
 			avatar, banner, featured pgtype.Text
 			topFriends               []string
+			socialLinksPayload       []byte
 			donationPayload          []byte
 			createdAt, updatedAt     time.Time
 		)
-		err := conn.QueryRow(ctx, "SELECT bio, avatar_url, banner_url, featured_channel_id, top_friends, donation_addresses, created_at, updated_at FROM profiles WHERE user_id = $1", userID).
-			Scan(&bio, &avatar, &banner, &featured, &topFriends, &donationPayload, &createdAt, &updatedAt)
+		err := conn.QueryRow(ctx, "SELECT bio, avatar_url, banner_url, featured_channel_id, top_friends, social_links, donation_addresses, created_at, updated_at FROM profiles WHERE user_id = $1", userID).
+			Scan(&bio, &avatar, &banner, &featured, &topFriends, &socialLinksPayload, &donationPayload, &createdAt, &updatedAt)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			var userCreatedAt time.Time
@@ -1441,6 +1489,7 @@ func (r *postgresRepository) GetProfile(userID string) (models.Profile, bool) {
 			profile = models.Profile{
 				UserID:            userID,
 				Bio:               "",
+				SocialLinks:       []models.SocialLink{},
 				AvatarURL:         "",
 				BannerURL:         "",
 				TopFriends:        []string{},
@@ -1456,11 +1505,12 @@ func (r *postgresRepository) GetProfile(userID string) (models.Profile, bool) {
 			return nil
 		default:
 			profile = models.Profile{
-				UserID:     userID,
-				Bio:        bio,
-				CreatedAt:  createdAt.UTC(),
-				UpdatedAt:  updatedAt.UTC(),
-				TopFriends: []string{},
+				UserID:      userID,
+				Bio:         bio,
+				CreatedAt:   createdAt.UTC(),
+				UpdatedAt:   updatedAt.UTC(),
+				TopFriends:  []string{},
+				SocialLinks: []models.SocialLink{},
 			}
 			if avatar.Valid {
 				profile.AvatarURL = avatar.String
@@ -1471,6 +1521,14 @@ func (r *postgresRepository) GetProfile(userID string) (models.Profile, bool) {
 			if featured.Valid {
 				id := featured.String
 				profile.FeaturedChannelID = &id
+			}
+			if len(socialLinksPayload) > 0 {
+				links, err := decodeSocialLinks(socialLinksPayload)
+				if err != nil {
+					loadErr = err
+					return nil
+				}
+				profile.SocialLinks = links
 			}
 			if len(topFriends) > 0 {
 				profile.TopFriends = append([]string{}, topFriends...)
@@ -1499,6 +1557,9 @@ func (r *postgresRepository) GetProfile(userID string) (models.Profile, bool) {
 	if loadErr != nil || !ok {
 		return models.Profile{}, false
 	}
+	if profile.SocialLinks == nil {
+		profile.SocialLinks = []models.SocialLink{}
+	}
 	if profile.TopFriends == nil {
 		profile.TopFriends = []string{}
 	}
@@ -1515,7 +1576,7 @@ func (r *postgresRepository) ListProfiles() []models.Profile {
 	profiles := make([]models.Profile, 0)
 	var queryErr error
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
-		rows, err := conn.Query(ctx, "SELECT user_id, bio, avatar_url, banner_url, featured_channel_id, top_friends, donation_addresses, created_at, updated_at FROM profiles ORDER BY created_at ASC")
+		rows, err := conn.Query(ctx, "SELECT user_id, bio, avatar_url, banner_url, featured_channel_id, top_friends, social_links, donation_addresses, created_at, updated_at FROM profiles ORDER BY created_at ASC")
 		if err != nil {
 			queryErr = err
 			return nil
@@ -1528,19 +1589,21 @@ func (r *postgresRepository) ListProfiles() []models.Profile {
 				bio                      string
 				avatar, banner, featured pgtype.Text
 				topFriends               []string
+				socialLinksPayload       []byte
 				donationPayload          []byte
 				createdAt, updatedAt     time.Time
 			)
-			if err := rows.Scan(&userID, &bio, &avatar, &banner, &featured, &topFriends, &donationPayload, &createdAt, &updatedAt); err != nil {
+			if err := rows.Scan(&userID, &bio, &avatar, &banner, &featured, &topFriends, &socialLinksPayload, &donationPayload, &createdAt, &updatedAt); err != nil {
 				queryErr = err
 				return nil
 			}
 			profile := models.Profile{
-				UserID:     userID,
-				Bio:        bio,
-				CreatedAt:  createdAt.UTC(),
-				UpdatedAt:  updatedAt.UTC(),
-				TopFriends: []string{},
+				UserID:      userID,
+				Bio:         bio,
+				CreatedAt:   createdAt.UTC(),
+				UpdatedAt:   updatedAt.UTC(),
+				TopFriends:  []string{},
+				SocialLinks: []models.SocialLink{},
 			}
 			if avatar.Valid {
 				profile.AvatarURL = avatar.String
@@ -1551,6 +1614,14 @@ func (r *postgresRepository) ListProfiles() []models.Profile {
 			if featured.Valid {
 				id := featured.String
 				profile.FeaturedChannelID = &id
+			}
+			if len(socialLinksPayload) > 0 {
+				links, err := decodeSocialLinks(socialLinksPayload)
+				if err != nil {
+					queryErr = err
+					return nil
+				}
+				profile.SocialLinks = links
 			}
 			if len(topFriends) > 0 {
 				profile.TopFriends = append([]string{}, topFriends...)
@@ -1564,6 +1635,9 @@ func (r *postgresRepository) ListProfiles() []models.Profile {
 				profile.DonationAddresses = addresses
 			} else {
 				profile.DonationAddresses = []models.CryptoAddress{}
+			}
+			if profile.SocialLinks == nil {
+				profile.SocialLinks = []models.SocialLink{}
 			}
 			if profile.TopFriends == nil {
 				profile.TopFriends = []string{}

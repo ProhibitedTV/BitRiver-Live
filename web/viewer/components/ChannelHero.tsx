@@ -277,6 +277,7 @@ export function ChannelAboutPanel({ data }: { data: ChannelPlaybackResponse }) {
     { type: "success" | "error"; message: string } | undefined
   >();
   const donations = data.donationAddresses ?? [];
+  const socialLinks = data.profile.socialLinks ?? [];
 
   const handleCopy = async (address: string, currency: string) => {
     const currencyLabel = currency.toUpperCase();
@@ -339,6 +340,37 @@ export function ChannelAboutPanel({ data }: { data: ChannelPlaybackResponse }) {
             <dt>Category</dt>
             <dd>{data.channel.category}</dd>
           </dl>
+        )}
+      </div>
+      <div className="channel-about__social stack">
+        <h4>Find {data.owner.displayName} online</h4>
+        {socialLinks.length > 0 ? (
+          <ul className="social-links" role="list">
+            {socialLinks.map((link, index) => {
+              const label = link.platform?.trim() || link.url;
+              const key = `${link.platform}-${link.url}-${index}`;
+              return (
+                <li key={key} className="social-link">
+                  <a href={link.url} target="_blank" rel="noreferrer">
+                    <span className="social-link__platform">{label}</span>
+                    <span className="social-link__url muted">{link.url}</span>
+                    <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                      <path
+                        fill="currentColor"
+                        d="M11.5 4a.5.5 0 0 0 0 1h2.793l-7.146 7.146a.5.5 0 1 0 .707.708L15 5.707V8.5a.5.5 0 0 0 1 0v-4A.5.5 0 0 0 15.5 4h-4Z"
+                      />
+                      <path
+                        fill="currentColor"
+                        d="M5 6a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3a.5.5 0 0 0-1 0v3H5V7h3a.5.5 0 0 0 0-1H5Z"
+                      />
+                    </svg>
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="muted">The broadcaster hasn&apos;t shared any social links yet.</p>
         )}
       </div>
       {data.playback?.renditions && data.playback.renditions.length > 0 && (

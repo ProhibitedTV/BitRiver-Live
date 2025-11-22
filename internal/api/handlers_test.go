@@ -2456,13 +2456,14 @@ func TestProfileEndpoints(t *testing.T) {
 	payload := map[string]interface{}{
 		"displayName":       "Streamer Deluxe",
 		"email":             "streamer+updates@example.com",
-		"bio":               "Welcome to the cascade",
-		"avatarUrl":         "https://cdn.example.com/avatar.png",
-		"bannerUrl":         "https://cdn.example.com/banner.png",
-		"featuredChannelId": channel.ID,
-		"topFriends":        []string{friend.ID},
-		"donationAddresses": []map[string]string{{"currency": "eth", "address": "0xabc", "note": "Main"}},
-	}
+                "bio":               "Welcome to the cascade",
+                "avatarUrl":         "https://cdn.example.com/avatar.png",
+                "bannerUrl":         "https://cdn.example.com/banner.png",
+                "featuredChannelId": channel.ID,
+                "topFriends":        []string{friend.ID},
+                "socialLinks":       []map[string]string{{"platform": "YouTube ", "url": "https://youtube.com/streamer "}},
+                "donationAddresses": []map[string]string{{"currency": "eth", "address": "0xabc", "note": "Main"}},
+        }
 	body, _ := json.Marshal(payload)
 	req := httptest.NewRequest(http.MethodPut, "/api/profiles/"+owner.ID, bytes.NewReader(body))
 	req = withUser(req, owner)
@@ -2488,12 +2489,21 @@ func TestProfileEndpoints(t *testing.T) {
 	if len(response.TopFriends) != 1 || response.TopFriends[0].UserID != friend.ID {
 		t.Fatalf("expected top friend %s", friend.ID)
 	}
-	if len(response.DonationAddresses) != 1 || response.DonationAddresses[0].Currency != "ETH" {
-		t.Fatalf("expected donation currency ETH")
-	}
-	if len(response.LiveChannels) != 1 || response.LiveChannels[0].ID != channel.ID {
-		t.Fatalf("expected live channel %s", channel.ID)
-	}
+        if len(response.DonationAddresses) != 1 || response.DonationAddresses[0].Currency != "ETH" {
+                t.Fatalf("expected donation currency ETH")
+        }
+        if len(response.SocialLinks) != 1 {
+                t.Fatalf("expected 1 social link, got %d", len(response.SocialLinks))
+        }
+        if response.SocialLinks[0].Platform != "YouTube" {
+                t.Fatalf("expected platform to trim whitespace, got %s", response.SocialLinks[0].Platform)
+        }
+        if response.SocialLinks[0].URL != "https://youtube.com/streamer" {
+                t.Fatalf("expected social link URL to be normalized, got %s", response.SocialLinks[0].URL)
+        }
+        if len(response.LiveChannels) != 1 || response.LiveChannels[0].ID != channel.ID {
+                t.Fatalf("expected live channel %s", channel.ID)
+        }
 
 	req = httptest.NewRequest(http.MethodGet, "/api/profiles/"+owner.ID, nil)
 	req = withUser(req, owner)
