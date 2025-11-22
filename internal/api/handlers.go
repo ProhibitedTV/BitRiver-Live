@@ -255,6 +255,20 @@ func decodeJSON(r *http.Request, dest interface{}) error {
 	return nil
 }
 
+func decodeJSONAllowUnknown(r *http.Request, dest interface{}) error {
+	if r.Body == nil {
+		return errors.New("request body is required")
+	}
+	defer r.Body.Close()
+
+	decoder := json.NewDecoder(r.Body)
+	decoder.UseNumber()
+	if err := decoder.Decode(dest); err != nil {
+		return err
+	}
+	return nil
+}
+
 type componentStatus struct {
 	Component string `json:"component"`
 	Status    string `json:"status"`
@@ -1952,7 +1966,7 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req srsHookRequest
-	if err := decodeJSON(r, &req); err != nil {
+	if err := decodeJSONAllowUnknown(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
