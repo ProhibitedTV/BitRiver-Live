@@ -68,13 +68,13 @@ export default function DirectoryPage() {
         setHomeLoading(true);
         setHomeError(undefined);
         const [
-          featuredResponse,
-          followingResponse,
-          liveResponse,
-          recommendedResponse,
-          trendingResponse,
-          topCategoriesResponse,
-        ] = await Promise.all([
+          featuredResult,
+          followingResult,
+          liveResult,
+          recommendedResult,
+          trendingResult,
+          topCategoriesResult,
+        ] = await Promise.allSettled([
           fetchFeaturedChannels(),
           fetchFollowingChannels(),
           fetchLiveNowChannels(),
@@ -82,14 +82,34 @@ export default function DirectoryPage() {
           fetchTrendingChannels(),
           fetchTopCategories(),
         ]);
-        if (!cancelled) {
-          setFeatured(featuredResponse.channels);
-          setRecommended(recommendedResponse.channels);
-          setFollowing(followingResponse.channels);
-          setLiveNow(liveResponse.channels);
-          setTrending(trendingResponse.channels);
-          setCategories(topCategoriesResponse.categories ?? []);
+
+        if (cancelled) {
+          return;
         }
+
+        const parseChannels = (result: typeof featuredResult) =>
+          result.status === "fulfilled" ? result.value.channels : [];
+
+        const parseCategories = (result: typeof topCategoriesResult) =>
+          result.status === "fulfilled" ? result.value.categories ?? [] : [];
+
+        const followingChannels = (() => {
+          if (followingResult.status === "fulfilled") {
+            return followingResult.value.channels;
+          }
+          const message = followingResult.reason instanceof Error ? followingResult.reason.message : String(followingResult.reason);
+          if (message === "401" || message === "403") {
+            return [];
+          }
+          return [];
+        })();
+
+        setFeatured(parseChannels(featuredResult));
+        setRecommended(parseChannels(recommendedResult));
+        setFollowing(followingChannels);
+        setLiveNow(parseChannels(liveResult));
+        setTrending(parseChannels(trendingResult));
+        setCategories(parseCategories(topCategoriesResult));
       } catch (err) {
         if (!cancelled) {
           setHomeError(err instanceof Error ? err.message : "Unable to load personalised rows");
