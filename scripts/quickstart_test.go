@@ -88,6 +88,9 @@ echo "__ENV_END__"
 	if !strings.Contains(envContent, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD=bitriver") {
 		t.Fatalf("expected BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD to be appended, got:\n%s", envContent)
 	}
+	if !strings.Contains(envContent, "BITRIVER_OME_BIND=0.0.0.0") {
+		t.Fatalf("expected BITRIVER_OME_BIND to be appended, got:\n%s", envContent)
+	}
 	if !strings.Contains(envContent, "BITRIVER_SRS_TOKEN=custom-token") {
 		t.Fatalf("expected existing BITRIVER_SRS_TOKEN to be preserved, got:\n%s", envContent)
 	}
@@ -149,6 +152,45 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 
 	if !strings.Contains(string(content), "Server.generated.xml") {
 		t.Fatalf("base compose file should mount generated OME Server.xml by default")
+	}
+}
+
+func TestOmeConfigRenderingHandlesNumericBind(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	tempDir := t.TempDir()
+	templatePath := filepath.Join(repoRoot, "deploy", "ome", "Server.xml")
+	outputPath := filepath.Join(tempDir, "Server.generated.xml")
+	renderer := filepath.Join(repoRoot, "scripts", "render_ome_config.py")
+
+	cmd := exec.Command(
+		"python3",
+		renderer,
+		"--template", templatePath,
+		"--output", outputPath,
+		"--bind", "0.0.0.0",
+		"--username", "admin",
+		"--password", "password",
+	)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("python render failed: %v; stderr: %s", err, stderr.String())
+	}
+
+	output, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+
+	contents := string(output)
+	if !strings.Contains(contents, "<Bind>0.0.0.0</Bind>") {
+		t.Fatalf("expected rendered bind address, got:\n%s", contents)
 	}
 }
 
