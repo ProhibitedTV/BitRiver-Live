@@ -242,6 +242,9 @@ services:
     container_name: bitriver-ome
     hostname: ome
     restart: unless-stopped
+    volumes:
+      - ./ome/Server.generated.xml:/opt/ovenmediaengine/bin/origin_conf/Server.xml:ro
+      - ./ome/Server.generated.xml:/opt/ovenmediaengine/bin/edge_conf/Server.xml:ro
     environment:
       BITRIVER_OME_USERNAME: ${BITRIVER_OME_USERNAME:?set via .env}
       BITRIVER_OME_PASSWORD: ${BITRIVER_OME_PASSWORD:?set via .env}

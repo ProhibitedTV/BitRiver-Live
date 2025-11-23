@@ -555,14 +555,14 @@ mkdir -p "$TRANSCODER_PUBLIC_DIR"
 chmod 0777 "$TRANSCODER_DATA_DIR" "$TRANSCODER_PUBLIC_DIR"
 echo "If you provision these directories manually, keep them writable (see docs/installing-on-ubuntu.md)."
 
+render_ome_config
+
 cd "$REPO_ROOT"
 
 compose_files=("$COMPOSE_FILE")
 
 if [[ ${BITRIVER_OME_CUSTOM_CONFIG:-} == "1" ]]; then
-  echo "BITRIVER_OME_CUSTOM_CONFIG=1 set; rendering and mounting custom OME configuration."
-  render_ome_config
-  compose_files+=("$REPO_ROOT/deploy/docker-compose.ome-custom.yml")
+  echo "BITRIVER_OME_CUSTOM_CONFIG is deprecated; the quickstart always renders and mounts deploy/ome/Server.generated.xml."
 fi
 
 if (( ${#compose_files[@]} > 0 )); then

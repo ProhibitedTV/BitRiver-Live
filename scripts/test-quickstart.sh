@@ -102,4 +102,14 @@ grep_healthcheck "transcoder" "http://localhost:9000/healthz"
 grep_healthcheck "postgres" "pg_isready"
 grep_healthcheck "redis" "redis-cli"
 
+if ! grep -q "Server.generated.xml:/opt/ovenmediaengine/bin/origin_conf/Server.xml" "$COMPOSE_CONFIG_OUTPUT"; then
+  echo "error: expected OME to mount deploy/ome/Server.generated.xml into origin_conf" >&2
+  exit 1
+fi
+
+if ! grep -q "Server.generated.xml:/opt/ovenmediaengine/bin/edge_conf/Server.xml" "$COMPOSE_CONFIG_OUTPUT"; then
+  echo "error: expected OME to mount deploy/ome/Server.generated.xml into edge_conf" >&2
+  exit 1
+fi
+
 echo "Quickstart compose smoke checks passed."
