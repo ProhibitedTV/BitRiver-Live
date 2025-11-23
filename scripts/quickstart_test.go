@@ -155,6 +155,66 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 	}
 }
 
+func TestOmeConfigRenderingHandlesNumericBind(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	tempDir := t.TempDir()
+	templatePath := filepath.Join(repoRoot, "deploy", "ome", "Server.xml")
+	outputPath := filepath.Join(tempDir, "Server.generated.xml")
+
+	pythonScript := `import os
+import re
+import sys
+from pathlib import Path
+
+template_path = Path(sys.argv[1])
+output_path = Path(sys.argv[2])
+
+bind_address = os.environ["BITRIVER_OME_BIND_VALUE"]
+username = os.environ["BITRIVER_OME_USERNAME_VALUE"]
+password = os.environ["BITRIVER_OME_PASSWORD_VALUE"]
+
+text = template_path.read_text()
+
+def substitute_once(pattern: str, replacement, data: str) -> str:
+    return re.sub(pattern, replacement, data, count=1, flags=re.DOTALL)
+
+text = substitute_once(r"(<Bind>)(.*?)(</Bind>)", lambda m: f"{m.group(1)}{bind_address}{m.group(3)}", text)
+text = substitute_once(r"(<ID>)(.*?)(</ID>)", lambda m: f"{m.group(1)}{username}{m.group(3)}", text)
+text = substitute_once(r"(<Password>)(.*?)(</Password>)", lambda m: f"{m.group(1)}{password}{m.group(3)}", text)
+
+output_path.write_text(text)
+`
+
+	cmd := exec.Command("python3", "-", templatePath, outputPath)
+	cmd.Stdin = strings.NewReader(pythonScript)
+	cmd.Env = append(os.Environ(),
+		"BITRIVER_OME_BIND_VALUE=0.0.0.0",
+		"BITRIVER_OME_USERNAME_VALUE=admin",
+		"BITRIVER_OME_PASSWORD_VALUE=password",
+	)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("python render failed: %v; stderr: %s", err, stderr.String())
+	}
+
+	output, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+
+	contents := string(output)
+	if !strings.Contains(contents, "<Bind>0.0.0.0</Bind>") {
+		t.Fatalf("expected rendered bind address, got:\n%s", contents)
+	}
+}
+
 func extractSection(output, startMarker, endMarker string) string {
 	start := strings.Index(output, startMarker)
 	end := strings.Index(output, endMarker)
