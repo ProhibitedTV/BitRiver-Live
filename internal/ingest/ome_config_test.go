@@ -26,9 +26,10 @@ var expectedServerTemplates = map[string]string{
     <!-- Required for health endpoint and origin-mode APIs; Compose mounts this file at /opt/ovenmediaengine/bin/origin_conf/Server.xml -->
     <Type>origin</Type>
     <IP>0.0.0.0</IP>
-    <Bind>0.0.0.0</Bind>
     <PrivacyProtection>false</PrivacyProtection>
     <StunServer>stun.l.google.com:19302</StunServer>
+
+    <!-- OME 0.15.10 rejects a <Bind> element; rely on <IP> for binding. -->
 
     <Modules>
         <Control>
@@ -158,18 +159,15 @@ func readFile(t *testing.T, path string) []byte {
 
 // validateServerXML performs minimal structural validation on Server.xml.
 //
-// It ensures that:
-//   - A top-level <Type> element exists and is equal to "origin".
-//   - A top-level <Bind> element exists.
+// It ensures that a top-level <Type> element exists and is equal to "origin".
 //
-// This catches misconfigurations that would break origin-mode APIs or binding.
+// This catches misconfigurations that would break origin-mode APIs.
 func validateServerXML(t *testing.T, serverXML []byte) {
 	t.Helper()
 
 	decoder := xml.NewDecoder(bytes.NewReader(serverXML))
 	depth := 0
 	var serverType string
-	var bindFound bool
 
 	for {
 		tok, err := decoder.Token()
@@ -194,8 +192,6 @@ func validateServerXML(t *testing.T, serverXML []byte) {
 
 					serverType = strings.TrimSpace(value)
 					depth-- // DecodeElement consumes the end tag, adjust depth.
-				case "Bind":
-					bindFound = true
 				}
 			}
 		case xml.EndElement:
@@ -209,10 +205,6 @@ func validateServerXML(t *testing.T, serverXML []byte) {
 
 	if serverType != "origin" {
 		t.Fatalf("unexpected <Type> %q in Server.xml; expected origin", serverType)
-	}
-
-	if !bindFound {
-		t.Fatalf("missing top-level <Bind> element in Server.xml")
 	}
 }
 
