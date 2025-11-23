@@ -284,6 +284,7 @@ wait_for_api() {
 render_ome_config() {
   local template="$REPO_ROOT/deploy/ome/Server.xml"
   local output="$REPO_ROOT/deploy/ome/Server.generated.xml"
+  local renderer="$SCRIPT_DIR/render_ome_config.py"
 
   if [[ ! -f $template ]]; then
     echo "Missing OME config template at $template" >&2
@@ -322,8 +323,10 @@ text = substitute_once(r"(<Bind>)(.*?)(</Bind>)", rf"\1{bind_address}\3", text)
 text = substitute_once(r"(<ID>)(.*?)(</ID>)", rf"\1{username}\3", text)
 text = substitute_once(r"(<Password>)(.*?)(</Password>)", rf"\1{password}\3", text)
 
-output_path.write_text(text)
-PY
+  if ! python3 "$renderer" --template "$template" --output "$output" --bind "$bind_address" --username "$username" --password "$password"; then
+    echo "Failed to render OME configuration" >&2
+    return 1
+  fi
 
   echo "Rendered OME configuration to $output"
 }
