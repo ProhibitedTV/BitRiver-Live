@@ -318,9 +318,29 @@ def replace_tag_content(data: str, tag: str, value: str) -> str:
     open_tag = f"<{tag}>"
     close_tag = f"</{tag}>"
 
-text = substitute_once(r"(<Bind>)(.*?)(</Bind>)", rf"\1{bind_address}\3", text)
-text = substitute_once(r"(<ID>)(.*?)(</ID>)", rf"\1{username}\3", text)
-text = substitute_once(r"(<Password>)(.*?)(</Password>)", rf"\1{password}\3", text)
+    search_from = 0
+    while True:
+        start = data.find(open_tag, search_from)
+        if start == -1:
+            raise ValueError(f"Tag {open_tag} not found")
+
+        # Skip occurrences inside XML comments to avoid clobbering commented examples.
+        comment_start = data.rfind("<!--", 0, start)
+        comment_end = data.rfind("-->", 0, start)
+        if comment_start != -1 and (comment_end == -1 or comment_end < comment_start):
+            search_from = start + len(open_tag)
+            continue
+
+        end = data.find(close_tag, start)
+        if end == -1:
+            raise ValueError(f"Closing tag {close_tag} not found for {open_tag}")
+
+        end += len(close_tag)
+        return data[: start + len(open_tag)] + value + data[end:]
+
+text = replace_tag_content(text, "Bind", bind_address)
+text = replace_tag_content(text, "ID", username)
+text = replace_tag_content(text, "Password", password)
 
 output_path.write_text(text)
 PY
