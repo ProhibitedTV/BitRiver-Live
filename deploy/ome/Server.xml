@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Server version="8">
+<Server version="10">
     <Name>OvenMediaEngine</Name>
     <!-- Required for health endpoint and origin-mode APIs; Compose mounts this file at /opt/ovenmediaengine/bin/origin_conf/Server.xml -->
     <Type>origin</Type>
@@ -11,9 +11,12 @@
     <Modules>
         <Control>
             <Server>
-                <Ports>
-                    <TCP>8081</TCP>
-                </Ports>
+                <Listeners>
+                    <TCP>
+                        <IP>0.0.0.0</IP>
+                        <Port>8081</Port>
+                    </TCP>
+                </Listeners>
             </Server>
             <Authentication>
                 <User>
