@@ -167,6 +167,7 @@ func TestOmeConfigRenderingHandlesNumericBind(t *testing.T) {
 	outputPath := filepath.Join(tempDir, "Server.generated.xml")
 
 	pythonScript := `import os
+import re
 import sys
 from pathlib import Path
 
@@ -179,23 +180,12 @@ password = os.environ["BITRIVER_OME_PASSWORD_VALUE"]
 
 text = template_path.read_text()
 
-def replace_tag_content(data: str, tag: str, value: str) -> str:
-    open_tag = f"<{tag}>"
-    close_tag = f"</{tag}>"
+def substitute_once(pattern: str, replacement, data: str) -> str:
+    return re.sub(pattern, replacement, data, count=1, flags=re.DOTALL)
 
-    start = data.find(open_tag)
-    if start == -1:
-        raise SystemExit(f"missing {open_tag} in template")
-
-    end = data.find(close_tag, start)
-    if end == -1:
-        raise SystemExit(f"missing {close_tag} in template")
-
-    return data[: start + len(open_tag)] + value + data[end:]
-
-text = replace_tag_content(text, "Bind", bind_address)
-text = replace_tag_content(text, "ID", username)
-text = replace_tag_content(text, "Password", password)
+text = substitute_once(r"(<Bind>)(.*?)(</Bind>)", lambda m: f"{m.group(1)}{bind_address}{m.group(3)}", text)
+text = substitute_once(r"(<ID>)(.*?)(</ID>)", lambda m: f"{m.group(1)}{username}{m.group(3)}", text)
+text = substitute_once(r"(<Password>)(.*?)(</Password>)", lambda m: f"{m.group(1)}{password}{m.group(3)}", text)
 
 output_path.write_text(text)
 `

@@ -318,19 +318,9 @@ def replace_tag_content(data: str, tag: str, value: str) -> str:
     open_tag = f"<{tag}>"
     close_tag = f"</{tag}>"
 
-    start = data.find(open_tag)
-    if start == -1:
-        raise SystemExit(f"missing {open_tag} in template")
-
-    end = data.find(close_tag, start)
-    if end == -1:
-        raise SystemExit(f"missing {close_tag} in template")
-
-    return data[: start + len(open_tag)] + value + data[end:]
-
-text = replace_tag_content(text, "Bind", bind_address)
-text = replace_tag_content(text, "ID", username)
-text = replace_tag_content(text, "Password", password)
+text = substitute_once(r"(<Bind>)(.*?)(</Bind>)", rf"\1{bind_address}\3", text)
+text = substitute_once(r"(<ID>)(.*?)(</ID>)", rf"\1{username}\3", text)
+text = substitute_once(r"(<Password>)(.*?)(</Password>)", rf"\1{password}\3", text)
 
 output_path.write_text(text)
 PY
