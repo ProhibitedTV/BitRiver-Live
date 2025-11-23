@@ -302,7 +302,6 @@ render_ome_config() {
 
   BITRIVER_OME_BIND_VALUE="$bind_address" BITRIVER_OME_USERNAME_VALUE="$username" BITRIVER_OME_PASSWORD_VALUE="$password" python3 - "$template" "$output" <<'PY'
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -315,8 +314,9 @@ password = os.environ["BITRIVER_OME_PASSWORD_VALUE"]
 
 text = template_path.read_text()
 
-def substitute_once(pattern: str, replacement: str, data: str) -> str:
-    return re.sub(pattern, replacement, data, count=1, flags=re.DOTALL)
+def replace_tag_content(data: str, tag: str, value: str) -> str:
+    open_tag = f"<{tag}>"
+    close_tag = f"</{tag}>"
 
 text = substitute_once(r"(<Bind>)(.*?)(</Bind>)", rf"\1{bind_address}\3", text)
 text = substitute_once(r"(<ID>)(.*?)(</ID>)", rf"\1{username}\3", text)
