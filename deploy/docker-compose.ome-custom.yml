@@ -1,5 +1,7 @@
-# Optional override to mount a custom OvenMediaEngine Server.xml rendered by
-# scripts/quickstart.sh when BITRIVER_OME_CUSTOM_CONFIG=1.
+# Optional override retained for backwards compatibility; the base compose
+# file already mounts Server.generated.xml. Enable this when you want to
+# supply your own rendered Server.xml via scripts/quickstart.sh and an
+# explicit BITRIVER_OME_CUSTOM_CONFIG=1 toggle.
 services:
   ome:
     volumes:

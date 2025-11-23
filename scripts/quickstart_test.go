@@ -93,7 +93,7 @@ echo "__ENV_END__"
 	}
 }
 
-func TestQuickstartOmeRenderingIsOptIn(t *testing.T) {
+func TestQuickstartOmeRenderingRunsByDefault(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -110,6 +110,7 @@ func TestQuickstartOmeRenderingIsOptIn(t *testing.T) {
 	guardLine := "if [[ ${BITRIVER_OME_CUSTOM_CONFIG:-} == \"1\" ]]; then"
 
 	guardActive := false
+	found := false
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 
@@ -121,17 +122,19 @@ func TestQuickstartOmeRenderingIsOptIn(t *testing.T) {
 			guardActive = false
 			continue
 		case "render_ome_config":
-			if !guardActive {
-				t.Fatalf("render_ome_config invocation must be gated by BITRIVER_OME_CUSTOM_CONFIG guard")
+			if guardActive {
+				t.Fatalf("render_ome_config should run even when BITRIVER_OME_CUSTOM_CONFIG is unset")
 			}
-			return
+			found = true
 		}
 	}
 
-	t.Fatalf("render_ome_config invocation not found in quickstart")
+	if !found {
+		t.Fatalf("render_ome_config invocation not found in quickstart")
+	}
 }
 
-func TestComposeDoesNotMountOmeConfigByDefault(t *testing.T) {
+func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -144,8 +147,8 @@ func TestComposeDoesNotMountOmeConfigByDefault(t *testing.T) {
 		t.Fatalf("read compose: %v", err)
 	}
 
-	if strings.Contains(string(content), "Server.generated.xml") {
-		t.Fatalf("base compose file should not mount custom OME Server.xml by default")
+	if !strings.Contains(string(content), "Server.generated.xml") {
+		t.Fatalf("base compose file should mount generated OME Server.xml by default")
 	}
 }
 

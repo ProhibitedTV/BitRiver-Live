@@ -195,7 +195,7 @@ To keep bootstrapping predictable the server now fails fast if any of the requir
 
 Open the management ports to the BitRiver Live API host and ensure the credentials map to accounts that can create/delete the corresponding resources. Set the optional `BITRIVER_INGEST_HEALTH` path if your services expose health checks somewhere other than `/healthz`.
 
-OvenMediaEngine's control server enforces basic authentication on `/healthz`; the compose bundle forwards the same `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD` pair to the probe so a 401 will mark the container unhealthy. Keep the credentials in sync with the image's baked config or any custom `Server.xml` you supply.
+OvenMediaEngine's control server enforces basic authentication on `/healthz`; the compose bundle mounts `deploy/ome/Server.generated.xml` (rendered from `deploy/ome/Server.xml`) and forwards the same `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD` pair to the probe so a 401 will mark the container unhealthy. Keep `.env` aligned with that rendered configuration if you edit the template.
 
 When these variables are set the API will:
 
@@ -231,7 +231,7 @@ Operators can use the manifests under `deploy/` as a reference architecture for 
 1. **Provision ingest dependencies first.** Bring up SRS, the SRS controller proxy, OvenMediaEngine (OME), and the FFmpeg job controller before starting the BitRiver Live API. The compose file at `deploy/docker-compose.yml` defines the services as `srs`, `srs-controller`, `ome`, and `transcoder` respectively. Each service exposes an HTTP health probe on `/healthz` (with fallbacks to vendor-specific paths) so you can validate readiness with `docker compose ps` or an external probe before the API starts.
 2. **Configure secrets securely.**
    - Generate an SRS management token and set it via `BITRIVER_SRS_TOKEN`.
-   - Create an administrator account in OME (matching the credentials in `deploy/ome/Server.xml` or your customized configuration) and surface the username/password as `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`.
+   - Create an administrator account in OME (matching the credentials rendered from `deploy/ome/Server.xml` into `deploy/ome/Server.generated.xml`) and surface the username/password as `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`.
    - Issue a bearer token for the FFmpeg job controller and inject it with `BITRIVER_TRANSCODER_TOKEN`.
    Store these values in a secrets manager or `.env` file rather than committing them to version control. The sample compose file ships with placeholder values for local development—override them in production.
 3. **Boot the API last.** Once the ingest dependencies report healthy you can start the `bitriver-live` service. The server persists the ingest endpoints, playback URLs, and job IDs returned during boot so the current session can be recovered after a restart or audited later via `/api/channels/{id}/sessions`.

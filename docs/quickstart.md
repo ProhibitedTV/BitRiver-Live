@@ -36,7 +36,7 @@ The script will:
 The health payload still expects the ingest services to be reachable from the API container:
 
 - **SRS controller:** `BITRIVER_SRS_API` defaults to `http://srs-controller:1985` inside the Compose network. If you move SRS elsewhere, point this URL at a reachable host and keep the API token aligned with the controller's configuration.
-- **OvenMediaEngine:** `BITRIVER_OME_API` defaults to `http://ome:8081` and requires the username/password set in `.env`. The OME container's health check now reuses those credentials (via `curl -u ...`) so mismatched values will surface as `unhealthy` even if the port is open. The default Compose setup relies on the image's baked configuration; when running OME outside Compose, keep this URL reachable from the API container so `/healthz` reports the correct status even though the HTTP status code remains 200 during degraded states. To opt into a custom `Server.xml`, set `BITRIVER_OME_CUSTOM_CONFIG=1` before running the quickstart so it renders `deploy/ome/Server.generated.xml` and mounts it via `deploy/docker-compose.ome-custom.yml`.
+- **OvenMediaEngine:** `BITRIVER_OME_API` defaults to `http://ome:8081` and requires the username/password set in `.env`. The quickstart renders `deploy/ome/Server.generated.xml` from `deploy/ome/Server.xml` on every run and the compose bundle mounts it into the container, keeping the control credentials aligned with `.env` so a 401 surfaces as `unhealthy` instead of silently failing. When running OME outside Compose, keep this URL reachable from the API container so `/healthz` reports the correct status even though the HTTP status code remains 200 during degraded states, and mirror the same credentials in your OME configuration.
 - **Transcoder:** `BITRIVER_TRANSCODER_API` defaults to `http://transcoder:9000`; ensure the host and port resolve from the API container and that the token matches `BITRIVER_TRANSCODER_TOKEN`.
 
 Update the generated `.env` before inviting real users—swap in a valid admin email, capture the printed admin password (the
@@ -87,7 +87,7 @@ compose file.
   ./scripts/quickstart.sh
   ```
   The script reuses your existing `.env` and Docker volumes, so configuration, database data, and media files persist across updates.
-  If you enable `BITRIVER_OME_CUSTOM_CONFIG=1`, the helper re-renders `deploy/ome/Server.generated.xml` from `deploy/ome/Server.xml` and adds the optional compose override so OME consumes the customized file on restart.
+  The helper re-renders `deploy/ome/Server.generated.xml` from `deploy/ome/Server.xml` on each run so OME consumes the credentials from `.env` without requiring an extra compose override.
 - Codex CLI users: follow the [Codex CLI guide](codex-cli.md) for installation, authentication, and edit workflows tailored to this repository. Rerun `docker compose up -d` after applying Codex patches so containers reload configuration and binaries.
 
 ## Troubleshooting
@@ -100,7 +100,7 @@ compose file.
 - **Port already in use** – Stop or reconfigure any services that currently bind to ports 5432, 6379, 8080, 8081, 9000, 9001,
   1935, or 1985. Alternatively edit the corresponding `*_PORT` values in `.env` (for example, `BITRIVER_LIVE_PORT=9090`) and
   rerun `docker compose up -d`.
-- **OME health check fails** – The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the container name. The health probe uses the configured `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD`, so a 401 response will mark the container as unhealthy—verify that the credentials in `.env` match the baked config or any custom `Server.xml`. If you deploy OME outside of Docker, update `BITRIVER_OME_API` to the reachable host/IP and ensure the configured username/password match the container's baked credentials. When opting into a custom `Server.xml` via `BITRIVER_OME_CUSTOM_CONFIG=1`, confirm the template at `deploy/ome/Server.xml` matches the schema for your `BITRIVER_OME_IMAGE_TAG` and preserves the control server binding on port `8081` with the credentials from `.env` before bringing the stack back up.
+- **OME health check fails** – The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the container name. The health probe uses the configured `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD`, so a 401 response will mark the container as unhealthy—verify that the credentials in `.env` match the rendered `deploy/ome/Server.generated.xml` (rerun the quickstart to refresh it). If you deploy OME outside of Docker, update `BITRIVER_OME_API` to the reachable host/IP and ensure the configured username/password match the container's baked credentials and your copied `Server.xml` before bringing the stack back up.
 - **Quickstart re-run pulled the wrong OME version** – When reusing an existing installation, keep `BITRIVER_OME_IMAGE_TAG`
   aligned with the version that matches your `Server.xml` schema before re-running `./scripts/quickstart.sh` or `docker compose
   up -d`. The script preserves `.env` and volumes, so a stale tag can point Docker at a newer image that no longer matches the
