@@ -214,7 +214,7 @@ flowchart LR
 | `cmd/server` | Go HTTP API and control centre binary |
 | `cmd/transcoder` | FFmpeg job controller used by Docker and advanced deployments |
 | `cmd/tools` | Helper CLIs (for example, `bootstrap-admin`) |
-| `deploy/` | Docker Compose stack, systemd units, and SQL migrations |
+| [`deploy/`](deploy/README.md) | Docker Compose stack, systemd units, and SQL migrations |
 | `docs/` | Guides for installs, scaling, releases, and troubleshooting |
 | `internal/` | API handlers, chat, ingest orchestration, storage, auth |
 | `web/static` | Embedded admin UI assets served by the Go binary |
