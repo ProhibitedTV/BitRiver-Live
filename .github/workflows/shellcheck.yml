@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - name: Install shellcheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: Run shellcheck
-        run: shellcheck deploy/install/ubuntu.sh scripts/test-postgres.sh scripts/test-wizard-release.sh
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          args: deploy/install/ubuntu.sh scripts/test-postgres.sh scripts/test-wizard-release.sh
