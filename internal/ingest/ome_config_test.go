@@ -17,11 +17,11 @@ import (
 // OME Docker image reference used in docker-compose.
 //
 // When bumping the OME image tag in deploy/docker-compose.yml, you should:
-//   1. Update the key here to match the new image.
-//   2. Update the Server.xml template value to reflect any config changes.
+//  1. Update the key here to match the new image.
+//  2. Update the Server.xml template value to reflect any config changes.
 var expectedServerTemplates = map[string]string{
 	"airensoft/ovenmediaengine:0.15.10": strings.TrimSpace(`<?xml version="1.0" encoding="utf-8"?>
-<Server version="8">
+<Server version="10">
     <Name>OvenMediaEngine</Name>
     <!-- Required for health endpoint and origin-mode APIs; Compose mounts this file at /opt/ovenmediaengine/bin/origin_conf/Server.xml -->
     <Type>origin</Type>
@@ -33,9 +33,12 @@ var expectedServerTemplates = map[string]string{
     <Modules>
         <Control>
             <Server>
-                <Ports>
-                    <TCP>8081</TCP>
-                </Ports>
+                <Listeners>
+                    <TCP>
+                        <IP>0.0.0.0</IP>
+                        <Port>8081</Port>
+                    </TCP>
+                </Listeners>
             </Server>
             <Authentication>
                 <User>
@@ -130,9 +133,12 @@ func omeImageFromCompose(t *testing.T, composePath string) string {
 // the ${VAR:-default} syntax by replacing them with the default value.
 //
 // For example:
-//   airensoft/ovenmediaengine:${OME_TAG:-0.15.10}
+//
+//	airensoft/ovenmediaengine:${OME_TAG:-0.15.10}
+//
 // becomes:
-//   airensoft/ovenmediaengine:0.15.10
+//
+//	airensoft/ovenmediaengine:0.15.10
 func normalizeComposeImageRef(image string) string {
 	re := regexp.MustCompile(`\$\{[^:}]+:-([^}]+)\}`)
 	return re.ReplaceAllString(image, "$1")
@@ -155,6 +161,7 @@ func readFile(t *testing.T, path string) []byte {
 // It ensures that:
 //   - A top-level <Type> element exists and is equal to "origin".
 //   - A top-level <Bind> element exists.
+//
 // This catches misconfigurations that would break origin-mode APIs or binding.
 func validateServerXML(t *testing.T, serverXML []byte) {
 	t.Helper()
