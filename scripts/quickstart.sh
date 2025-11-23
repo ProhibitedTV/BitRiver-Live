@@ -318,15 +318,9 @@ text = template_path.read_text()
 def substitute_once(pattern: str, replacement: str, data: str) -> str:
     return re.sub(pattern, replacement, data, count=1, flags=re.DOTALL)
 
-text = substitute_once(
-    r"(<Bind>)(.*?)(</Bind>)", lambda m: f"{m.group(1)}{bind_address}{m.group(3)}", text
-)
-text = substitute_once(
-    r"(<ID>)(.*?)(</ID>)", lambda m: f"{m.group(1)}{username}{m.group(3)}", text
-)
-text = substitute_once(
-    r"(<Password>)(.*?)(</Password>)", lambda m: f"{m.group(1)}{password}{m.group(3)}", text
-)
+text = substitute_once(r"(<Bind>)(.*?)(</Bind>)", rf"\1{bind_address}\3", text)
+text = substitute_once(r"(<ID>)(.*?)(</ID>)", rf"\1{username}\3", text)
+text = substitute_once(r"(<Password>)(.*?)(</Password>)", rf"\1{password}\3", text)
 
 output_path.write_text(text)
 PY
