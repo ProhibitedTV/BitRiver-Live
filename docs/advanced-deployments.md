@@ -195,6 +195,8 @@ To keep bootstrapping predictable the server now fails fast if any of the requir
 
 Open the management ports to the BitRiver Live API host and ensure the credentials map to accounts that can create/delete the corresponding resources. Set the optional `BITRIVER_INGEST_HEALTH` path if your services expose health checks somewhere other than `/healthz`.
 
+OvenMediaEngine's control server enforces basic authentication on `/healthz`; the compose bundle forwards the same `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD` pair to the probe so a 401 will mark the container unhealthy. Keep the credentials in sync with the image's baked config or any custom `Server.xml` you supply.
+
 When these variables are set the API will:
 
 1. POST to `SRS /v1/channels` to allocate RTMP/SRT ingest keys for the channel.

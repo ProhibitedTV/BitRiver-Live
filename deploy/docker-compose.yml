@@ -253,7 +253,7 @@ services:
       - "${BITRIVER_OME_HTTP_PORT:-8081}:8081"
       - "${BITRIVER_OME_SIGNALLING_PORT:-9000}:9000"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8081/healthz"]
+      test: ["CMD-SHELL", "curl -fsS -u ${BITRIVER_OME_USERNAME}:${BITRIVER_OME_PASSWORD} http://localhost:8081/healthz"]
       interval: 30s
       timeout: 5s
       retries: 5
