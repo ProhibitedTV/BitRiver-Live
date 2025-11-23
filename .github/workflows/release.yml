@@ -78,6 +78,7 @@ jobs:
           GOTOOLCHAIN: local
           GOPROXY: off
           GOSUMDB: off
+          GOFLAGS: -mod=readonly
         run: go test ./... -count=1 -timeout=10s
 
   postgres-tests:
