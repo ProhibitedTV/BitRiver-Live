@@ -165,16 +165,37 @@ func TestOmeConfigRenderingHandlesNumericBind(t *testing.T) {
 	tempDir := t.TempDir()
 	templatePath := filepath.Join(repoRoot, "deploy", "ome", "Server.xml")
 	outputPath := filepath.Join(tempDir, "Server.generated.xml")
-	renderer := filepath.Join(repoRoot, "scripts", "render_ome_config.py")
 
-	cmd := exec.Command(
-		"python3",
-		renderer,
-		"--template", templatePath,
-		"--output", outputPath,
-		"--bind", "0.0.0.0",
-		"--username", "admin",
-		"--password", "password",
+	pythonScript := `import os
+import re
+import sys
+from pathlib import Path
+
+template_path = Path(sys.argv[1])
+output_path = Path(sys.argv[2])
+
+bind_address = os.environ["BITRIVER_OME_BIND_VALUE"]
+username = os.environ["BITRIVER_OME_USERNAME_VALUE"]
+password = os.environ["BITRIVER_OME_PASSWORD_VALUE"]
+
+text = template_path.read_text()
+
+def substitute_once(pattern: str, replacement, data: str) -> str:
+    return re.sub(pattern, replacement, data, count=1, flags=re.DOTALL)
+
+text = substitute_once(r"(<Bind>)(.*?)(</Bind>)", lambda m: f"{m.group(1)}{bind_address}{m.group(3)}", text)
+text = substitute_once(r"(<ID>)(.*?)(</ID>)", lambda m: f"{m.group(1)}{username}{m.group(3)}", text)
+text = substitute_once(r"(<Password>)(.*?)(</Password>)", lambda m: f"{m.group(1)}{password}{m.group(3)}", text)
+
+output_path.write_text(text)
+`
+
+	cmd := exec.Command("python3", "-", templatePath, outputPath)
+	cmd.Stdin = strings.NewReader(pythonScript)
+	cmd.Env = append(os.Environ(),
+		"BITRIVER_OME_BIND_VALUE=0.0.0.0",
+		"BITRIVER_OME_USERNAME_VALUE=admin",
+		"BITRIVER_OME_PASSWORD_VALUE=password",
 	)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
