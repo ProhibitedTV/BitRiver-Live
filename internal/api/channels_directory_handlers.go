@@ -809,20 +809,13 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
 			}
-			uploads, err := h.Store.ListUploads(channelID)
+			recordings, err := h.Store.ListRecordings(channelID, false)
 			if err != nil {
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			items := make([]vodItemResponse, 0, len(uploads))
-			for _, upload := range uploads {
-				if upload.RecordingID == nil {
-					continue
-				}
-				recording, ok := h.Store.GetRecording(*upload.RecordingID)
-				if !ok {
-					continue
-				}
+			items := make([]vodItemResponse, 0, len(recordings))
+			for _, recording := range recordings {
 				if recording.PublishedAt == nil {
 					continue
 				}
