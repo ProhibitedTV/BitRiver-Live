@@ -88,6 +88,9 @@ echo "__ENV_END__"
 	if !strings.Contains(envContent, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD=bitriver") {
 		t.Fatalf("expected BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD to be appended, got:\n%s", envContent)
 	}
+	if !strings.Contains(envContent, "BITRIVER_OME_BIND=0.0.0.0") {
+		t.Fatalf("expected BITRIVER_OME_BIND to be appended, got:\n%s", envContent)
+	}
 	if !strings.Contains(envContent, "BITRIVER_SRS_TOKEN=custom-token") {
 		t.Fatalf("expected existing BITRIVER_SRS_TOKEN to be preserved, got:\n%s", envContent)
 	}
