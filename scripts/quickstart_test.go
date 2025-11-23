@@ -88,6 +88,9 @@ echo "__ENV_END__"
 	if !strings.Contains(envContent, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD=bitriver") {
 		t.Fatalf("expected BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD to be appended, got:\n%s", envContent)
 	}
+	if !strings.Contains(envContent, "BITRIVER_OME_BIND=0.0.0.0") {
+		t.Fatalf("expected BITRIVER_OME_BIND to be appended, got:\n%s", envContent)
+	}
 	if !strings.Contains(envContent, "BITRIVER_SRS_TOKEN=custom-token") {
 		t.Fatalf("expected existing BITRIVER_SRS_TOKEN to be preserved, got:\n%s", envContent)
 	}
@@ -149,6 +152,66 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 
 	if !strings.Contains(string(content), "Server.generated.xml") {
 		t.Fatalf("base compose file should mount generated OME Server.xml by default")
+	}
+}
+
+func TestOmeConfigRenderingHandlesNumericBind(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	tempDir := t.TempDir()
+	templatePath := filepath.Join(repoRoot, "deploy", "ome", "Server.xml")
+	outputPath := filepath.Join(tempDir, "Server.generated.xml")
+
+	pythonScript := `import os
+import re
+import sys
+from pathlib import Path
+
+template_path = Path(sys.argv[1])
+output_path = Path(sys.argv[2])
+
+bind_address = os.environ["BITRIVER_OME_BIND_VALUE"]
+username = os.environ["BITRIVER_OME_USERNAME_VALUE"]
+password = os.environ["BITRIVER_OME_PASSWORD_VALUE"]
+
+text = template_path.read_text()
+
+def substitute_once(pattern: str, replacement, data: str) -> str:
+    return re.sub(pattern, replacement, data, count=1, flags=re.DOTALL)
+
+text = substitute_once(r"(<Bind>)(.*?)(</Bind>)", lambda m: f"{m.group(1)}{bind_address}{m.group(3)}", text)
+text = substitute_once(r"(<ID>)(.*?)(</ID>)", lambda m: f"{m.group(1)}{username}{m.group(3)}", text)
+text = substitute_once(r"(<Password>)(.*?)(</Password>)", lambda m: f"{m.group(1)}{password}{m.group(3)}", text)
+
+output_path.write_text(text)
+`
+
+	cmd := exec.Command("python3", "-", templatePath, outputPath)
+	cmd.Stdin = strings.NewReader(pythonScript)
+	cmd.Env = append(os.Environ(),
+		"BITRIVER_OME_BIND_VALUE=0.0.0.0",
+		"BITRIVER_OME_USERNAME_VALUE=admin",
+		"BITRIVER_OME_PASSWORD_VALUE=password",
+	)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("python render failed: %v; stderr: %s", err, stderr.String())
+	}
+
+	output, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+
+	contents := string(output)
+	if !strings.Contains(contents, "<Bind>0.0.0.0</Bind>") {
+		t.Fatalf("expected rendered bind address, got:\n%s", contents)
 	}
 }
 

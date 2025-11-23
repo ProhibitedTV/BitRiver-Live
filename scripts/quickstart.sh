@@ -101,6 +101,7 @@ declare -A env_defaults=(
   [SRS_CONTROLLER_UPSTREAM]='http://srs:1985/api/'
   [BITRIVER_OME_IMAGE_TAG]='0.15.10'
   [BITRIVER_OME_API]='http://ome:8081'
+  [BITRIVER_OME_BIND]='0.0.0.0'
   [BITRIVER_OME_USERNAME]='admin'
   [BITRIVER_OME_PASSWORD]='local-dev-password'
   [BITRIVER_OME_HTTP_PORT]='8081'
@@ -146,6 +147,7 @@ env_default_keys=(
   SRS_CONTROLLER_UPSTREAM
   BITRIVER_OME_IMAGE_TAG
   BITRIVER_OME_API
+  BITRIVER_OME_BIND
   BITRIVER_OME_USERNAME
   BITRIVER_OME_PASSWORD
   BITRIVER_OME_HTTP_PORT
@@ -191,6 +193,7 @@ required_env_keys=(
   SRS_CONTROLLER_UPSTREAM
   BITRIVER_OME_IMAGE_TAG
   BITRIVER_OME_API
+  BITRIVER_OME_BIND
   BITRIVER_OME_USERNAME
   BITRIVER_OME_PASSWORD
   BITRIVER_OME_HTTP_PORT
@@ -287,16 +290,17 @@ render_ome_config() {
     return 1
   fi
 
-  local username password
+  local bind_address username password
+  bind_address=$(read_env_value BITRIVER_OME_BIND)
   username=$(read_env_value BITRIVER_OME_USERNAME)
   password=$(read_env_value BITRIVER_OME_PASSWORD)
 
-  if [[ -z $username || -z $password ]]; then
-    echo "OME credentials are missing; set BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD in $ENV_FILE." >&2
+  if [[ -z $bind_address || -z $username || -z $password ]]; then
+    echo "OME bind or credentials are missing; set BITRIVER_OME_BIND, BITRIVER_OME_USERNAME, and BITRIVER_OME_PASSWORD in $ENV_FILE." >&2
     return 1
   fi
 
-  BITRIVER_OME_USERNAME_VALUE="$username" BITRIVER_OME_PASSWORD_VALUE="$password" python3 - "$template" "$output" <<'PY'
+  BITRIVER_OME_BIND_VALUE="$bind_address" BITRIVER_OME_USERNAME_VALUE="$username" BITRIVER_OME_PASSWORD_VALUE="$password" python3 - "$template" "$output" <<'PY'
 import os
 import re
 import sys
@@ -305,6 +309,7 @@ from pathlib import Path
 template_path = Path(sys.argv[1])
 output_path = Path(sys.argv[2])
 
+bind_address = os.environ["BITRIVER_OME_BIND_VALUE"]
 username = os.environ["BITRIVER_OME_USERNAME_VALUE"]
 password = os.environ["BITRIVER_OME_PASSWORD_VALUE"]
 
@@ -313,8 +318,15 @@ text = template_path.read_text()
 def substitute_once(pattern: str, replacement: str, data: str) -> str:
     return re.sub(pattern, replacement, data, count=1, flags=re.DOTALL)
 
-text = substitute_once(r"(<ID>)(.*?)(</ID>)", rf"\1{username}\3", text)
-text = substitute_once(r"(<Password>)(.*?)(</Password>)", rf"\1{password}\3", text)
+text = substitute_once(
+    r"(<Bind>)(.*?)(</Bind>)", lambda m: f"{m.group(1)}{bind_address}{m.group(3)}", text
+)
+text = substitute_once(
+    r"(<ID>)(.*?)(</ID>)", lambda m: f"{m.group(1)}{username}{m.group(3)}", text
+)
+text = substitute_once(
+    r"(<Password>)(.*?)(</Password>)", lambda m: f"{m.group(1)}{password}{m.group(3)}", text
+)
 
 output_path.write_text(text)
 PY
