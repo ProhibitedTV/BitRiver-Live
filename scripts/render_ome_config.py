@@ -26,6 +26,7 @@ def xml_escape(value: str) -> str:
 
 def render(template: Path, output: Path, bind: str, username: str, password: str) -> None:
     text = template.read_text()
+    text = replace_tag_content(text, "IP", xml_escape(bind))
     text = replace_tag_content(text, "Bind", xml_escape(bind))
     text = replace_tag_content(text, "ID", xml_escape(username))
     text = replace_tag_content(text, "Password", xml_escape(password))

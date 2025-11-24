@@ -156,7 +156,7 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 	}
 }
 
-func TestOmeConfigRenderingHandlesNumericBind(t *testing.T) {
+func TestOmeConfigRenderingHandlesBind(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -184,6 +184,7 @@ text = template_path.read_text()
 def substitute_once(pattern: str, replacement, data: str) -> str:
     return re.sub(pattern, replacement, data, count=1, flags=re.DOTALL)
 
+text = substitute_once(r"(<IP>)(.*?)(</IP>)", lambda m: f"{m.group(1)}{bind_address}{m.group(3)}", text)
 text = substitute_once(r"(<Bind>)(.*?)(</Bind>)", lambda m: f"{m.group(1)}{bind_address}{m.group(3)}", text)
 text = substitute_once(r"(<ID>)(.*?)(</ID>)", lambda m: f"{m.group(1)}{username}{m.group(3)}", text)
 text = substitute_once(r"(<Password>)(.*?)(</Password>)", lambda m: f"{m.group(1)}{password}{m.group(3)}", text)
@@ -211,9 +212,9 @@ output_path.write_text(text)
 	}
 
 	contents := string(output)
-	if !strings.Contains(contents, "<Bind>0.0.0.0</Bind>") {
-		t.Fatalf("expected rendered bind address, got:\n%s", contents)
-	}
+    if !strings.Contains(contents, "<Bind>0.0.0.0</Bind>") {
+            t.Fatalf("expected rendered bind address in <Bind>, got:\n%s", contents)
+    }
 }
 
 func TestOmeConfigRenderingEscapesXml(t *testing.T) {
