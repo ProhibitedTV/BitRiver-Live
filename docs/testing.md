@@ -21,7 +21,7 @@ GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=10s
 OME quickstart drift is guarded by an ingest test that reads the pinned image
 in `deploy/docker-compose.yml` and compares `deploy/ome/Server.xml` to the
 expected template for that tag. It also enforces required fields such as
-`<Type>origin</Type>` and rejects top-level `<Bind>` entries. When updating the
+`<Type>origin</Type>` and the `<Bind>`/`<IP>` listener pairs. When updating the
 OME image, refresh the template map in
 `internal/ingest/ome_config_test.go` and rerun:
 

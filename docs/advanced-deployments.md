@@ -174,7 +174,7 @@ BitRiver Live can orchestrate end-to-end ingest and transcode jobs by talking to
 | `BITRIVER_SRS_API` | Base URL (including port, e.g. `http://srs-controller:1985`) for the SRS management API proxy. |
 | `BITRIVER_SRS_TOKEN` | Bearer token used when creating/deleting SRS channels. |
 | `BITRIVER_OME_API` | Base URL for the OvenMediaEngine REST API (defaults to port `8081`). |
-| `BITRIVER_OME_BIND` | Address written to the `<IP>` field in `Server.xml` (defaults to `0.0.0.0`; OME 0.15.10 rejects `<Bind>`). |
+| `BITRIVER_OME_BIND` | Address written to the `<Bind>` and `<IP>` fields in `Server.xml` (defaults to `0.0.0.0`). |
 | `BITRIVER_OME_USERNAME` / `BITRIVER_OME_PASSWORD` | Basic-auth credentials for OvenMediaEngine. |
 | `BITRIVER_TRANSCODER_API` | Base URL for the FFmpeg job runner (e.g. a lightweight controller on port `9000`). |
 | `BITRIVER_TRANSCODER_TOKEN` | Bearer token for FFmpeg job APIs. |
@@ -197,7 +197,7 @@ To keep bootstrapping predictable the server now fails fast if any of the requir
 Open the management ports to the BitRiver Live API host and ensure the credentials map to accounts that can create/delete the corresponding resources. Set the optional `BITRIVER_INGEST_HEALTH` path if your services expose health checks somewhere other than `/healthz`.
 
 OvenMediaEngine's control server enforces basic authentication on `/healthz`; the compose bundle mounts `deploy/ome/Server.generated.xml` (rendered from `deploy/ome/Server.xml`) and forwards the same `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD` pair to the probe so a 401 will mark the container unhealthy. Keep `.env` aligned with that rendered configuration if you edit the template.
-OME 0.15.10 rejects a `<Bind>` tag at the top level, so the template only rewrites `<IP>` from `BITRIVER_OME_BIND` to avoid repeated schema errors when the container restarts.
+Current OME releases expect `<Bind>` alongside `<IP>` at the top level and in the control listener, so the template rewrites both from `BITRIVER_OME_BIND` to avoid schema drift when the container restarts.
 
 When these variables are set the API will:
 

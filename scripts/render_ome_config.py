@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 from pathlib import Path
+import re
 import sys
 from xml.sax.saxutils import escape
 
@@ -20,13 +21,25 @@ def replace_tag_content(data: str, tag: str, value: str) -> str:
     return data[: start + len(open_tag)] + value + data[end:]
 
 
+def replace_all_tag_content(data: str, tag: str, value: str) -> str:
+    pattern = re.compile(rf"(<{tag}>)([^<]*)(</{tag}>)")
+    replaced, count = pattern.subn(lambda match: f"{match.group(1)}{value}{match.group(3)}", data)
+
+    if count == 0:
+        raise SystemExit(f"missing <{tag}> in template")
+
+    return replaced
+
+
 def xml_escape(value: str) -> str:
     return escape(value, {"'": "&apos;", '"': "&quot;"})
 
 
 def render(template: Path, output: Path, bind: str, username: str, password: str) -> None:
+    escaped_bind = xml_escape(bind)
     text = template.read_text()
-    text = replace_tag_content(text, "IP", xml_escape(bind))
+    text = replace_all_tag_content(text, "Bind", escaped_bind)
+    text = replace_all_tag_content(text, "IP", escaped_bind)
     text = replace_tag_content(text, "ID", xml_escape(username))
     text = replace_tag_content(text, "Password", xml_escape(password))
     output.write_text(text)
