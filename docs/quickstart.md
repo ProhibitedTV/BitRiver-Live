@@ -28,7 +28,7 @@ The script will:
 2. Generate `.env` with the same defaults baked into `deploy/docker-compose.yml` (including placeholders for the admin email
    and viewer URL) and rotate the administrator password to a strong random value unless the file already exists. When a
    pre-existing `.env` is missing required credentials, the helper backfills them (including the OME API username/password
-   and the `BITRIVER_OME_BIND` listener address for the `<IP>` tag) so Compose can start without manual edits.
+   and the `BITRIVER_OME_BIND` listener address for the `<Bind>`/`<IP>` tags) so Compose can start without manual edits.
 3. Launch the containers with `docker compose up --build -d` using the compose file in `deploy/`. Docker automatically builds the API, viewer, SRS controller, and transcoder images the first time, so no registry login is required, and the manifest enables `restart: unless-stopped` for each long-lived service so they come back online after crashes or host reboots.
 4. Wait for Postgres to accept connections. The compose bundle now launches a short-lived `postgres-migrations` service that walks the SQL files in `deploy/migrations/`, applies them with `psql`, and exits. If a migration fails the service stops and the API never starts, giving you a chance to correct the database state before retrying `docker compose up -d`.
 5. Wait for the API readiness check to pass (`/readyz`), then invoke the `bootstrap-admin` helper to seed the admin account and print the credentials. The `/healthz` endpoint still reports ingest dependency status in the JSON payload and may mark the stack as `degraded` when streaming services are unavailable, but readiness will only fail when core API dependencies are down.
@@ -36,7 +36,7 @@ The script will:
 The health payload still expects the ingest services to be reachable from the API container:
 
 - **SRS controller:** `BITRIVER_SRS_API` defaults to `http://srs-controller:1985` inside the Compose network. If you move SRS elsewhere, point this URL at a reachable host and keep the API token aligned with the controller's configuration.
-- **OvenMediaEngine:** `BITRIVER_OME_API` defaults to `http://ome:8081` and requires the username/password set in `.env`. The quickstart renders `deploy/ome/Server.generated.xml` from `deploy/ome/Server.xml` on every run and the compose bundle mounts it into the container, keeping the control credentials aligned with `.env` so a 401 surfaces as `unhealthy` instead of silently failing. When running OME outside Compose, keep this URL reachable from the API container so `/healthz` reports the correct status even though the HTTP status code remains 200 during degraded states, and mirror the same credentials in your OME configuration. OME 0.15.10 rejects a top-level `<Bind>` element; the template instead renders `<IP>` from `BITRIVER_OME_BIND` (default `0.0.0.0`) so the control server and health endpoint still listen on all interfaces without tripping schema validation. The bundled template also mirrors the 0.15.10 control listener schema with a `<Listeners><TCP><IP>0.0.0.0</IP><Port>8081</Port></TCP></Listeners>` block—update both the template and `BITRIVER_OME_API` together if you customize the control port.
+- **OvenMediaEngine:** `BITRIVER_OME_API` defaults to `http://ome:8081` and requires the username/password set in `.env`. The quickstart renders `deploy/ome/Server.generated.xml` from `deploy/ome/Server.xml` on every run and the compose bundle mounts it into the container, keeping the control credentials aligned with `.env` so a 401 surfaces as `unhealthy` instead of silently failing. When running OME outside Compose, keep this URL reachable from the API container so `/healthz` reports the correct status even though the HTTP status code remains 200 during degraded states, and mirror the same credentials in your OME configuration. Current OME images expect `<Bind>` alongside `<IP>`, so the template rewrites both values from `BITRIVER_OME_BIND` (default `0.0.0.0`) while preserving the `<Listeners><TCP><Bind>0.0.0.0</Bind><IP>0.0.0.0</IP><Port>8081</Port></TCP></Listeners>` schema—update both the template and `BITRIVER_OME_API` together if you customize the control port.
 - **Transcoder:** `BITRIVER_TRANSCODER_API` defaults to `http://transcoder:9000`; ensure the host and port resolve from the API container and that the token matches `BITRIVER_TRANSCODER_TOKEN`.
 
 Update the generated `.env` before inviting real users—swap in a valid admin email, capture the printed admin password (the
@@ -87,7 +87,7 @@ compose file.
   ./scripts/quickstart.sh
   ```
   The script reuses your existing `.env` and Docker volumes, so configuration, database data, and media files persist across updates.
-  The helper re-renders `deploy/ome/Server.generated.xml` from `deploy/ome/Server.xml` on each run so OME consumes the credentials from `.env` and the current `BITRIVER_OME_BIND` value without requiring an extra compose override.
+The helper re-renders `deploy/ome/Server.generated.xml` from `deploy/ome/Server.xml` on each run so OME consumes the credentials from `.env` and the current `BITRIVER_OME_BIND` value in both `<Bind>` and `<IP>` without requiring an extra compose override.
 - Codex CLI users: follow the [Codex CLI guide](codex-cli.md) for installation, authentication, and edit workflows tailored to this repository. Rerun `docker compose up -d` after applying Codex patches so containers reload configuration and binaries.
 
 ## Troubleshooting
@@ -105,7 +105,7 @@ compose file.
   aligned with the version that matches your `Server.xml` schema before re-running `./scripts/quickstart.sh` or `docker compose
   up -d`. The script preserves `.env` and volumes, so a stale tag can point Docker at a newer image that no longer matches the
   persisted configuration. The default `0.15.10` tag remains compatible with the bundled configuration; if you bump the tag,
-  confirm the `<Bind>` requirements against the upstream schema and adjust `deploy/ome/Server.xml` accordingly.
+  confirm the `<Bind>`/`<IP>` requirements against the upstream schema and adjust `deploy/ome/Server.xml` accordingly.
 - **Environment tweaks** – Edit `.env` and rerun `docker compose up -d` to apply changes. The compose stack automatically loads
   the file so you never need to touch `deploy/docker-compose.yml` directly.
 

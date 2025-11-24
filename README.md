@@ -66,8 +66,8 @@ The helper script will:
 4. Launch Postgres, Redis, SRS, OvenMediaEngine, the transcoder, the API, and the viewer using `deploy/docker-compose.yml`.
 5. Run the SQL migrations and seed an admin user, then print the admin email and password in your terminal.
 
-The helper also regenerates `deploy/ome/Server.generated.xml` from the bundled template, applying `BITRIVER_OME_BIND` (default
-`0.0.0.0`) to the `<IP>` field—OME 0.15.10 rejects a `<Bind>` tag—and the OME credentials from `.env` so rerunning the quickstart keeps the control service healthy.
+ The helper also regenerates `deploy/ome/Server.generated.xml` from the bundled template, applying `BITRIVER_OME_BIND` (default
+ `0.0.0.0`) to the `<Bind>` and `<IP>` fields required by current OME images and wiring in the OME credentials from `.env` so rerunning the quickstart keeps the control service healthy.
 
 If the script exits with an error, re-run it after fixing the reported problem. You can always re-run the script to rebuild the
 stack or refresh credentials.
