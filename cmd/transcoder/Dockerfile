@@ -7,13 +7,15 @@ RUN apk add --no-cache ca-certificates
 
 ARG TARGETOS=linux
 ARG TARGETARCH
+ARG GOPROXY=direct
+ARG GOSUMDB=off
 
 COPY go.mod go.sum ./
 COPY internal ./internal
 COPY cmd ./cmd
 COPY third_party ./third_party
 
-RUN go mod download
+RUN GOPROXY=$GOPROXY GOSUMDB=$GOSUMDB go mod download
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/transcoder ./cmd/transcoder
 
 FROM alpine:3.19 AS ffmpeg

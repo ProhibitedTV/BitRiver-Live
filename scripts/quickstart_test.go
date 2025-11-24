@@ -2,6 +2,7 @@ package scripts_test
 
 import (
 	"bytes"
+	"encoding/xml"
 	"fmt"
 	"os"
 	"os/exec"
@@ -212,6 +213,61 @@ output_path.write_text(text)
 	contents := string(output)
 	if !strings.Contains(contents, "<Bind>0.0.0.0</Bind>") {
 		t.Fatalf("expected rendered bind address, got:\n%s", contents)
+	}
+}
+
+func TestOmeConfigRenderingEscapesXml(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	outputPath := filepath.Join(t.TempDir(), "Server.generated.xml")
+	templatePath := filepath.Join(repoRoot, "deploy", "ome", "Server.xml")
+	renderer := filepath.Join(repoRoot, "scripts", "render_ome_config.py")
+
+	cmd := exec.Command("python3", renderer,
+		"--template", templatePath,
+		"--output", outputPath,
+		"--bind", "0.0.0.0",
+		"--username", "admin<&",
+		"--password", `pass<&>'"`)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("ome config render failed: %v; stderr: %s", err, stderr.String())
+	}
+
+	rendered, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read rendered output: %v", err)
+	}
+
+	var parsed struct {
+		Modules struct {
+			Control struct {
+				Authentication struct {
+					User struct {
+						ID       string `xml:"ID"`
+						Password string `xml:"Password"`
+					} `xml:"User"`
+				} `xml:"Authentication"`
+			} `xml:"Control"`
+		} `xml:"Modules"`
+	}
+
+	if err := xml.Unmarshal(rendered, &parsed); err != nil {
+		t.Fatalf("parse rendered xml: %v", err)
+	}
+
+	expectedPassword := `pass<&>'"`
+	if parsed.Modules.Control.Authentication.User.ID != "admin<&" {
+		t.Fatalf("unexpected username: %s", parsed.Modules.Control.Authentication.User.ID)
+	}
+	if parsed.Modules.Control.Authentication.User.Password != expectedPassword {
+		t.Fatalf("unexpected password: %s", parsed.Modules.Control.Authentication.User.Password)
 	}
 }
 
