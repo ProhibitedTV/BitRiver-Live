@@ -2,6 +2,7 @@
 import argparse
 from pathlib import Path
 import sys
+from xml.sax.saxutils import escape
 
 
 def replace_tag_content(data: str, tag: str, value: str) -> str:
@@ -19,11 +20,15 @@ def replace_tag_content(data: str, tag: str, value: str) -> str:
     return data[: start + len(open_tag)] + value + data[end:]
 
 
+def xml_escape(value: str) -> str:
+    return escape(value, {"'": "&apos;", '"': "&quot;"})
+
+
 def render(template: Path, output: Path, bind: str, username: str, password: str) -> None:
     text = template.read_text()
-    text = replace_tag_content(text, "Bind", bind)
-    text = replace_tag_content(text, "ID", username)
-    text = replace_tag_content(text, "Password", password)
+    text = replace_tag_content(text, "Bind", xml_escape(bind))
+    text = replace_tag_content(text, "ID", xml_escape(username))
+    text = replace_tag_content(text, "Password", xml_escape(password))
     output.write_text(text)
 
 
