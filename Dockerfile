@@ -5,6 +5,8 @@ WORKDIR /src
 
 ARG TARGETOS=linux
 ARG TARGETARCH
+ARG GOPROXY=direct
+ARG GOSUMDB=off
 
 ENV CGO_ENABLED=0 GOFLAGS=-buildvcs=false
 
@@ -15,7 +17,7 @@ COPY go.mod go.sum ./
 COPY third_party ./third_party
 RUN go mod edit -dropreplace github.com/jackc/pgx/v5 \
     && go mod edit -dropreplace github.com/jackc/puddle/v2 \
-    && go mod download
+    && GOPROXY=$GOPROXY GOSUMDB=$GOSUMDB go mod download
 
 COPY cmd ./cmd
 COPY internal ./internal
