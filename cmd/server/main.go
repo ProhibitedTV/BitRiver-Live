@@ -1,4 +1,6 @@
-// Command server starts the BitRiver API HTTP service.
+// Command server starts the BitRiver API HTTP service. Flag values take
+// precedence over environment variables unless explicitly overridden by the
+// OAuth env helpers below.
 package main
 
 import (
@@ -28,6 +30,10 @@ import (
 	"bitriver-live/internal/storage"
 )
 
+// keyValueFlag captures key=value flag inputs for per-provider OAuth overrides.
+// CLI values populate the map first and are later merged with environment
+// variables, allowing env-specific secrets to replace flag values when both are
+// provided.
 type keyValueFlag map[string]string
 
 func (kv *keyValueFlag) String() string {
@@ -58,6 +64,9 @@ func (kv *keyValueFlag) Set(value string) error {
 	return nil
 }
 
+// applyOAuthEnvOverrides injects OAuth credentials from environment variables.
+// It is applied after CLI overrides so BITRIVER_LIVE_OAUTH_* variables can
+// replace flag-provided values in containerized deployments.
 func applyOAuthEnvOverrides(configs []oauth.ProviderConfig) []oauth.ProviderConfig {
 	if len(configs) == 0 {
 		return configs
@@ -80,6 +89,8 @@ func applyOAuthEnvOverrides(configs []oauth.ProviderConfig) []oauth.ProviderConf
 	return oauth.OverrideCredentials(configs, ids, secrets, redirects)
 }
 
+// sanitizeEnvName converts a provider name into an environment-friendly token
+// so OAuth env overrides can map onto the resolved flag configuration.
 func sanitizeEnvName(name string) string {
 	upper := strings.ToUpper(name)
 	var builder strings.Builder
@@ -98,6 +109,11 @@ func sanitizeEnvName(name string) string {
 
 func main() {
 	addr := flag.String("addr", "", "HTTP listen address")
+	mode := flag.String("mode", "", "server runtime mode (development or production)")
+	allowSelfSignup := flag.Bool("allow-self-signup", false, "allow unauthenticated viewers to register accounts")
+	sessionCookieCrossSite := flag.Bool("session-cookie-cross-site", false, "emit SameSite=None; Secure session cookies for cross-site viewer deployments")
+
+	// Storage flags (env: BITRIVER_LIVE_STORAGE_DRIVER, BITRIVER_LIVE_DATA, BITRIVER_LIVE_POSTGRES_DSN, DATABASE_URL, BITRIVER_LIVE_POSTGRES_*).
 	dataPath := flag.String("data", "", "path to JSON datastore")
 	storageDriver := flag.String("storage-driver", "", "datastore driver (json or postgres)")
 	postgresDSN := flag.String("postgres-dsn", "", "Postgres connection string")
@@ -108,14 +124,17 @@ func main() {
 	postgresHealthInterval := flag.Duration("postgres-health-interval", 0, "interval between Postgres health checks")
 	postgresAcquireTimeout := flag.Duration("postgres-acquire-timeout", 0, "timeout when acquiring a Postgres connection from the pool")
 	postgresAppName := flag.String("postgres-app-name", "", "application_name reported to Postgres")
+
+	// Session flags (env: BITRIVER_LIVE_SESSION_STORE, BITRIVER_LIVE_SESSION_POSTGRES_DSN, BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE, BITRIVER_LIVE_ALLOW_SELF_SIGNUP).
 	sessionStoreDriver := flag.String("session-store", "", "session store driver (memory or postgres)")
 	sessionPostgresDSN := flag.String("session-postgres-dsn", "", "Postgres DSN for the session store")
-	mode := flag.String("mode", "", "server runtime mode (development or production)")
-	allowSelfSignup := flag.Bool("allow-self-signup", false, "allow unauthenticated viewers to register accounts")
-	sessionCookieCrossSite := flag.Bool("session-cookie-cross-site", false, "emit SameSite=None; Secure session cookies for cross-site viewer deployments")
+
+	// TLS flags (env: BITRIVER_LIVE_TLS_CERT, BITRIVER_LIVE_TLS_KEY).
 	tlsCert := flag.String("tls-cert", "", "path to TLS certificate file")
 	tlsKey := flag.String("tls-key", "", "path to TLS private key file")
 	logLevel := flag.String("log-level", "info", "log level (debug, info, warn, error)")
+
+	// Rate limiting flags (env: BITRIVER_LIVE_RATE_*).
 	globalRPS := flag.Float64("rate-global-rps", 0, "global request rate limit in requests per second")
 	globalBurst := flag.Int("rate-global-burst", 0, "global rate limit burst allowance")
 	loginLimit := flag.Int("rate-login-limit", 0, "maximum login attempts per window for a single IP")
@@ -134,6 +153,7 @@ func main() {
 	redisTLSServerName := flag.String("rate-redis-tls-server-name", "", "override Redis TLS server name for distributed login throttling")
 	redisTLSSkipVerify := flag.Bool("rate-redis-tls-skip-verify", false, "skip Redis TLS verification for distributed login throttling")
 	redisTimeout := flag.Duration("rate-redis-timeout", 0, "timeout for Redis operations")
+
 	chatQueueDriver := flag.String("chat-queue-driver", "", "chat queue driver (memory or redis)")
 	chatRedisAddr := flag.String("chat-queue-redis-addr", "", "Redis address for chat queue transport")
 	chatRedisAddrs := flag.String("chat-queue-redis-addrs", "", "comma separated Redis addresses for chat queue transport")
@@ -160,6 +180,7 @@ func main() {
 	objectLifecycleDays := flag.Int("object-lifecycle-days", 0, "lifecycle policy in days for archived objects")
 	recordingRetentionPublished := flag.String("recording-retention-published", "", "retention duration for published recordings (e.g. 720h, 0 disables expiry)")
 	recordingRetentionUnpublished := flag.String("recording-retention-unpublished", "", "retention duration for unpublished recordings")
+	// OAuth flags (env: BITRIVER_LIVE_OAUTH_CONFIG, BITRIVER_LIVE_OAUTH_PROVIDERS, BITRIVER_LIVE_OAUTH_* overrides).
 	oauthProvidersFlag := flag.String("oauth-providers", "", "JSON array or path describing OAuth providers")
 	var oauthClientIDs keyValueFlag
 	var oauthClientSecrets keyValueFlag
