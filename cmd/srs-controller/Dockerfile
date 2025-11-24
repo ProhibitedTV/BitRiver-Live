@@ -3,7 +3,7 @@
 FROM --platform=$BUILDPLATFORM golang:1.21-alpine AS build
 WORKDIR /src
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates git openssh-client
 
 ARG TARGETOS=linux
 ARG TARGETARCH
