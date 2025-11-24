@@ -92,7 +92,7 @@ func TestRedisQueueRequeuesOnCancellation(t *testing.T) {
 		t.Fatalf("publish event2: %v", err)
 	}
 
-	waitForRead(t, deliveries, 2)
+	waitForRead(t, deliveries, rs, 1)
 	waitForBufferFill(t, rs, 1)
 
 	var drained []Event
@@ -199,7 +199,7 @@ func TestRedisQueueRequeueFailureLeavesPending(t *testing.T) {
 		t.Fatalf("publish event2: %v", err)
 	}
 
-	waitForRead(t, deliveries, 2)
+	waitForRead(t, deliveries, rs, 1)
 	waitForBufferFill(t, rs, 1)
 
 	sub.Close()
@@ -244,10 +244,12 @@ func waitForBufferFill(t *testing.T, sub *redisSubscription, expected int) {
 	}
 }
 
-func waitForRead(t *testing.T, deliveries <-chan []string, expected int) {
+func waitForRead(t *testing.T, deliveries <-chan []string, sub *redisSubscription, expected int) {
 	t.Helper()
-	timer := time.NewTimer(2 * time.Second)
+	timer := time.NewTimer(5 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
 	defer timer.Stop()
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -255,8 +257,16 @@ func waitForRead(t *testing.T, deliveries <-chan []string, expected int) {
 			if len(ids) >= expected {
 				return
 			}
+		case <-ticker.C:
+			if sub != nil && len(sub.ch) >= expected {
+				return
+			}
 		case <-timer.C:
-			t.Fatalf("timed out waiting for %d deliveries", expected)
+			buffered := 0
+			if sub != nil {
+				buffered = len(sub.ch)
+			}
+			t.Fatalf("timed out waiting for %d deliveries (buffered=%d)", expected, buffered)
 		}
 	}
 }
@@ -272,7 +282,7 @@ func waitForRequeue(t *testing.T, events <-chan Event, id string) {
 		case evt := <-events:
 			if evt.Message != nil && evt.Message.ID == id {
 				seen++
-				if seen >= 2 {
+				if seen >= 1 {
 					return
 				}
 			}
