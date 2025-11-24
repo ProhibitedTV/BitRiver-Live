@@ -25,9 +25,8 @@ var expectedServerTemplates = map[string]string{
     <Name>OvenMediaEngine</Name>
     <!-- Required for health endpoint and origin-mode APIs; Compose mounts this file at /opt/ovenmediaengine/bin/origin_conf/Server.xml -->
     <Type>origin</Type>
-    <!-- OME requires a Bind entry; quickstart renders this value from BITRIVER_OME_BIND. -->
+    <!-- OME 0.15.10 rejects a <Bind> element; quickstart renders this IP address from BITRIVER_OME_BIND instead. -->
     <IP>0.0.0.0</IP>
-    <Bind>0.0.0.0</Bind>
     <PrivacyProtection>false</PrivacyProtection>
     <StunServer>stun.l.google.com:19302</StunServer>
 
