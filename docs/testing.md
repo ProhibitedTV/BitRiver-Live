@@ -65,15 +65,17 @@ BITRIVER_TEST_POSTGRES_DSN="postgres://bitriver:bitriver@127.0.0.1:5432/bitriver
   go test -count=1 -tags postgres ./internal/storage/...
 ```
 
-When `BITRIVER_TEST_POSTGRES_DSN` is unset, the test harness now spins up a
+When `BITRIVER_TEST_POSTGRES_DSN` is unset, the test harness spins up a
 disposable Postgres container (using the same defaults as
-`scripts/test-postgres.sh`) and skips cleanly when Docker is unavailable so
-`go test -tags postgres ./...` stays deterministic. For local development, run
-the helper script instead of managing the database by hand. It starts a
-disposable Postgres container, applies the tracked migrations, and executes the
-storage suite in one step (Docker required). The script forces an offline
-module mode (`GOPROXY=off GOSUMDB=off GOFLAGS=-mod=readonly`) so vendored
-replacements stay intact and `go.mod`/`go.sum` remain untouched:
+`scripts/test-postgres.sh`). In CI, the suite must have either Docker available
+or `BITRIVER_TEST_POSTGRES_DSN` pointing at a prepared database; otherwise the
+postgres-tagged tests should fail rather than skip. For local development, run
+the helper script instead of managing the database by hand. It uses a provided
+`BITRIVER_TEST_POSTGRES_DSN` when set or starts a disposable Postgres
+container, applies the tracked migrations, and executes the storage suite in
+one step. The script forces an offline module mode (`GOPROXY=off GOSUMDB=off
+GOFLAGS=-mod=readonly`) so vendored replacements stay intact and
+`go.mod`/`go.sum` remain untouched:
 
 ```bash
 ./scripts/test-postgres.sh

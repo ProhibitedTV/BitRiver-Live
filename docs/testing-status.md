@@ -38,6 +38,9 @@ coverage. Keep it updated as tests are hardened or new flakes are discovered.
 
 - Prefer channel- or hook-based synchronization in asynchronous tests to avoid
   timing-based flakes.
+- CI merges must run (not skip) the Postgres-tagged storage suite; provision
+  Docker or set `BITRIVER_TEST_POSTGRES_DSN` so `go test -tags postgres ./...`
+  executes end-to-end.
 - For Postgres-tagged tests, verify Docker is available or set
   `BITRIVER_TEST_POSTGRES_DSN` to a prepared database before invoking
   `go test -tags postgres ./...`.
