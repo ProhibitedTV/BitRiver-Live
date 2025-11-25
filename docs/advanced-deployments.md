@@ -199,6 +199,20 @@ Open the management ports to the BitRiver Live API host and ensure the credentia
 OvenMediaEngine's control server enforces basic authentication on `/healthz`; the compose bundle mounts `deploy/ome/Server.generated.xml` (rendered from `deploy/ome/Server.xml`) and forwards the same `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD` pair to the probe so a 401 will mark the container unhealthy. Keep `.env` aligned with that rendered configuration if you edit the template. The template rewrites the control listener `<Bind>`/`<IP>` values from `BITRIVER_OME_BIND` to avoid schema drift when the container restarts.
 OvenMediaEngine 0.15.x rejects top-level `<Bind>`/`<IP>` entries, so keep bind configuration within the control listener block; the quickstart will abort early if those fields are added back to the template.
 
+When refreshing an existing OME node, replace any custom `origin_conf/Server.xml` with the template from this repository before restarting the container. Keep the bind/IP entries scoped to `<Modules><Control><Server><Listeners><TCP>` and re-render the credentials with the provided helper:
+
+```bash
+cd /opt/bitriver-live
+./scripts/render_ome_config.py \
+  --template deploy/ome/Server.xml \
+  --output deploy/ome/Server.generated.xml \
+  --bind "$BITRIVER_OME_BIND" \
+  --username "$BITRIVER_OME_USERNAME" \
+  --password "$BITRIVER_OME_PASSWORD"
+```
+
+Mount the generated file into the container at `/opt/ovenmediaengine/bin/origin_conf/Server.xml` (Compose already wires this path for you) and restart OME so the control listener bind/IP and credentials stay in sync with `.env`.
+
 When these variables are set the API will:
 
 1. POST to `SRS /v1/channels` to allocate RTMP/SRT ingest keys for the channel.
