@@ -243,6 +243,16 @@ services:
       retries: 5
       start_period: 20s
 
+  ome-config:
+    image: python:3.11-slim
+    working_dir: /workspace
+    command: ["bash", "-lc", "cd /workspace && ./scripts/render-ome-config.sh --check --env-file /workspace/.env"]
+    volumes:
+      - ..:/workspace
+    env_file:
+      - ../.env
+    restart: "no"
+
   ome:
     image: airensoft/ovenmediaengine:${BITRIVER_OME_IMAGE_TAG:-0.15.10}
     container_name: bitriver-ome
@@ -269,6 +279,9 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    depends_on:
+      ome-config:
+        condition: service_completed_successfully
 
   transcoder:
     image: ghcr.io/bitriver-live/bitriver-transcoder:${BITRIVER_TRANSCODER_IMAGE_TAG:?set via .env}
