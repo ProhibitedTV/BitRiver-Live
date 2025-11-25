@@ -165,6 +165,8 @@ Update the entries for:
 
 The `.env` guardrails shipped with the release bundle intentionally block the original `bitriver`/`changeme` samples. [`deploy/.env.example`](../deploy/.env.example) documents every variable, while [`deploy/check-env.sh`](../deploy/check-env.sh) refuses to continue until each credential changes and `BITRIVER_LIVE_POSTGRES_DSN` matches the database user/password you selected earlier. Rerun the script after every edit so Compose and the systemd units pick up consistent DSNs.
 
+The shipped `.env.example` now includes non-empty placeholders (`brlive_app`, `P0stgres-Example!`, `R3dis-Example!`, `admin@stream.example.com`, `https://stream.example.com`, and `https://cdn.example.com/hls`) so the release workflow and `deploy/check-env.sh` can validate the file. Replace every sample value with production-only credentials before launching. The validator fails when `BITRIVER_OME_API` or `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` point to loopback addresses, so set them to routable hostnames that match your ingress or CDN.
+
 Set `BITRIVER_TRANSCODER_TOKEN` to a strong bearer credential. The FFmpeg job controller refuses to start when `JOB_CONTROLLER_TOKEN` (the environment variable consumed inside the container) is empty, so populate it before launching the stack.
 
 Ensure `BITRIVER_LIVE_POSTGRES_DSN` references the same Postgres user and password you configure above before bringing the stack online.
