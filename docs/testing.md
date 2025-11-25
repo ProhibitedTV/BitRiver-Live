@@ -29,6 +29,15 @@ OME image, refresh the template map in
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ingest -count=1
 ```
 
+The same package run now exercises the ingest stream lifecycle with
+`internal/testsupport/ingeststub`, simulating channel provision, application
+creation, transcoder retries, and teardown without external services. To focus
+on the lifecycle path while iterating, scope the tests with `-run`:
+
+```bash
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ingest -count=1 -run HTTPControllerStreamLifecycleIntegration
+```
+
 ## Quickstart/Compose smoke
 
 Run the compose smoke guard to ensure the default `.env` and `deploy/docker-compose.yml` still render and that the tracked health probes stay wired:

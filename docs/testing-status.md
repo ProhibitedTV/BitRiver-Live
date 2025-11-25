@@ -21,8 +21,10 @@ coverage. Keep it updated as tests are hardened or new flakes are discovered.
 
 ## Coverage gaps to address
 
-- **Ingest/stream lifecycle:** End-to-end coverage for stream start/stop across
-  ingest controllers, transcoder coordination, and recording export is minimal.
+- **Ingest/stream lifecycle:** Live ingest orchestration now has deterministic
+  integration coverage for stream start/stop and retry handling via the HTTP
+  controller fakes, but export and recording flows still need end-to-end
+  attention.
 - **Authentication and session flows:** Need integration coverage for login,
   session refresh/expiry, and permission checks across admin and viewer APIs.
 - **Viewer/client interactions:** Limited automated coverage for chat and
