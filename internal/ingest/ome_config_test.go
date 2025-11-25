@@ -25,9 +25,7 @@ var expectedServerTemplates = map[string]string{
     <Name>OvenMediaEngine</Name>
     <!-- Required for health endpoint and origin-mode APIs; Compose mounts this file at /opt/ovenmediaengine/bin/origin_conf/Server.xml -->
     <Type>origin</Type>
-    <!-- Current OME images expect both <Bind> and <IP>; quickstart renders them from BITRIVER_OME_BIND. -->
-    <Bind>0.0.0.0</Bind>
-    <IP>0.0.0.0</IP>
+    <!-- Quickstart rewrites control listener bind addresses from BITRIVER_OME_BIND. -->
     <PrivacyProtection>false</PrivacyProtection>
     <StunServer>stun.l.google.com:19302</StunServer>
 
@@ -165,6 +163,10 @@ func readFile(t *testing.T, path string) []byte {
 // This catches misconfigurations that would break origin-mode APIs.
 func validateServerXML(t *testing.T, serverXML []byte) {
 	t.Helper()
+
+	if bytes.Contains(serverXML, []byte("<Server.bind>")) || bytes.Contains(serverXML, []byte("</Server.bind>")) {
+		t.Fatalf("Server.xml contains <Server.bind> tags; use <Bind> instead")
+	}
 
 	decoder := xml.NewDecoder(bytes.NewReader(serverXML))
 	depth := 0

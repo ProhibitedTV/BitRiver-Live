@@ -38,6 +38,21 @@ def xml_escape(value: str) -> str:
 def render(template: Path, output: Path, bind: str, username: str, password: str) -> None:
     escaped_bind = xml_escape(bind)
     text = template.read_text()
+
+    # Normalize legacy <Server.bind> tags to <Bind> to avoid schema errors.
+    text = re.sub(r"<\s*Server\.bind\s*>", "<Bind>", text)
+    text = re.sub(r"</\s*Server\.bind\s*>", "</Bind>", text)
+
+    # OvenMediaEngine 0.15.x rejects top-level <Bind>/<IP> elements ("Server.bind"),
+    # so fail fast if they are present before rendering credentials.
+    header_match = re.search(r"<Server[^>]*>(.*?)<Modules>", text, re.DOTALL)
+    if header_match and re.search(r"<\s*Bind\s*>|<\s*IP\s*>", header_match.group(1)):
+        raise SystemExit(
+            "Top-level <Bind>/<IP> entries were detected in the OME template. "
+            "Move bind configuration under <Modules><Control><Server><Listeners><TCP> "
+            "to avoid Server.bind schema errors."
+        )
+
     text = replace_all_tag_content(text, "Bind", escaped_bind)
     text = replace_all_tag_content(text, "IP", escaped_bind)
     text = replace_tag_content(text, "ID", xml_escape(username))
