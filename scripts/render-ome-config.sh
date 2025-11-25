@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env}"
+TEMPLATE="$REPO_ROOT/deploy/ome/Server.xml"
+OUTPUT="$REPO_ROOT/deploy/ome/Server.generated.xml"
+MODE="render"
+QUIET=0
+FORCE=0
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/render-ome-config.sh [--check] [--force] [--env-file PATH] [--quiet]
+
+Options:
+  --check       Only verify that deploy/ome/Server.generated.xml is newer than .env and the template.
+  --force       Re-render even if the generated file looks fresh.
+  --env-file    Path to the .env file to source (defaults to ./../.env).
+  --quiet       Suppress informational output.
+USAGE
+}
+
+while (($# > 0)); do
+  case "$1" in
+    --check)
+      MODE="check"
+      ;;
+    --force)
+      FORCE=1
+      ;;
+    --env-file)
+      shift
+      ENV_FILE="${1:-}"
+      if [[ -z "$ENV_FILE" ]]; then
+        echo "--env-file requires a path" >&2
+        exit 1
+      fi
+      ;;
+    --quiet)
+      QUIET=1
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "Environment file not found at $ENV_FILE." >&2
+  echo "Copy deploy/.env.example to .env and populate BITRIVER_OME_* variables before rendering." >&2
+  exit 1
+fi
+
+if [[ ! -f "$TEMPLATE" ]]; then
+  echo "OME template missing at $TEMPLATE" >&2
+  exit 1
+fi
+
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
+
+OME_BIND="${BITRIVER_OME_BIND:-0.0.0.0}"
+OME_USERNAME="${BITRIVER_OME_USERNAME:-}"
+OME_PASSWORD="${BITRIVER_OME_PASSWORD:-}"
+
+if [[ -z "$OME_USERNAME" || -z "$OME_PASSWORD" ]]; then
+  echo "BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD must be set in $ENV_FILE before rendering." >&2
+  exit 1
+fi
+
+needs_render=false
+reason=""
+
+if [[ $FORCE -eq 1 ]]; then
+  needs_render=true
+  reason="--force requested"
+elif [[ ! -f "$OUTPUT" ]]; then
+  needs_render=true
+  reason="generated file missing"
+elif [[ "$ENV_FILE" -nt "$OUTPUT" ]]; then
+  needs_render=true
+  reason=".env is newer than generated file"
+elif [[ "$TEMPLATE" -nt "$OUTPUT" ]]; then
+  needs_render=true
+  reason="template is newer than generated file"
+fi
+
+if [[ "$MODE" == "check" ]]; then
+  if [[ "$needs_render" == true ]]; then
+    echo "OME config stale: $reason. Run ./scripts/render-ome-config.sh to refresh deploy/ome/Server.generated.xml." >&2
+    exit 1
+  fi
+  if [[ $QUIET -eq 0 ]]; then
+    echo "OME config is up to date."
+  fi
+  exit 0
+fi
+
+if [[ "$needs_render" == false ]]; then
+  if [[ $QUIET -eq 0 ]]; then
+    echo "OME config already matches $ENV_FILE; use --force to rewrite."
+  fi
+  exit 0
+fi
+
+if [[ $QUIET -eq 0 ]]; then
+  echo "Rendering OME config ($reason)..."
+fi
+
+python3 "$SCRIPT_DIR/render_ome_config.py" \
+  --template "$TEMPLATE" \
+  --output "$OUTPUT" \
+  --bind "$OME_BIND" \
+  --username "$OME_USERNAME" \
+  --password "$OME_PASSWORD"
+
+if [[ $QUIET -eq 0 ]]; then
+  echo "Rendered OME configuration to $OUTPUT"
+fi
