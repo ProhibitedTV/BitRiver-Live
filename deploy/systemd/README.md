@@ -68,11 +68,20 @@ EOF
    sudo tee /opt/bitriver-ome/.env >/dev/null <<'EOF'
 OME_IMAGE=airensoft/ovenmediaengine:0.15.10
 OME_CONTAINER_NAME=bitriver-ome
-OME_CONFIG=/opt/bitriver-live/deploy/ome/Server.xml
+OME_CONFIG=/opt/bitriver-live/deploy/ome/Server.generated.xml
 OME_HTTP_PORT=8081
 OME_SIGNALING_PORT=9000
 OME_EXTRA_ARGS=
 EOF
+
+   # Render the OME template before starting the service so the control listener
+   # keeps <Bind>/<IP> under <Modules><Control><Server><Listeners><TCP>.
+   sudo /opt/bitriver-live/scripts/render_ome_config.py \
+     --template /opt/bitriver-live/deploy/ome/Server.xml \
+     --output /opt/bitriver-live/deploy/ome/Server.generated.xml \
+     --bind "$BITRIVER_OME_BIND" \
+     --username "$BITRIVER_OME_USERNAME" \
+     --password "$BITRIVER_OME_PASSWORD"
 
    sudo tee /opt/bitriver-transcoder/.env >/dev/null <<'EOF'
 TRANSCODER_IMAGE=ghcr.io/bitriver-live/bitriver-transcoder:vX.Y.Z
