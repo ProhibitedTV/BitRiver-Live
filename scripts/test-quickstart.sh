@@ -10,6 +10,10 @@ CREATED_ENV_FILE=false
 
 cleanup() {
   rm -f "$COMPOSE_CONFIG_OUTPUT"
+  if docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps >/dev/null 2>&1; then
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down -v --remove-orphans >/dev/null 2>&1 || true
+  fi
+
   if [ "$CREATED_ENV_FILE" = true ]; then
     rm -f "$ENV_FILE"
   fi
@@ -180,5 +184,70 @@ if username != env_values["BITRIVER_OME_USERNAME"] or password != env_values["BI
 
 print("OME config validation passed.")
 PY
+
+echo "Starting docker compose stack..."
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d
+
+# shellcheck disable=SC1090
+set -a
+. "$ENV_FILE"
+set +a
+
+WAIT_TIMEOUT=${WAIT_TIMEOUT:-300}
+
+wait_for_health() {
+  local service_name="$1"
+  local deadline=$((SECONDS + WAIT_TIMEOUT))
+
+  while true; do
+    container_id=$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps -q "$service_name")
+    if [ -z "$container_id" ]; then
+      echo "error: no container found for service $service_name" >&2
+      exit 1
+    fi
+
+    status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id")
+    case "$status" in
+    healthy)
+      echo "Service $service_name is healthy."
+      return 0
+      ;;
+    unhealthy)
+      echo "error: service $service_name reported unhealthy" >&2
+      docker inspect "$container_id"
+      exit 1
+      ;;
+    esac
+
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "error: timed out waiting for $service_name to become healthy (last status: $status)" >&2
+      exit 1
+    fi
+
+    sleep 5
+  done
+}
+
+SERVICES_WITH_HEALTHCHECKS=(
+  bitriver-live
+  srs-controller
+  srs
+  ome
+  transcoder
+  postgres
+  redis
+)
+
+echo "Waiting for services to report healthy..."
+for service in "${SERVICES_WITH_HEALTHCHECKS[@]}"; do
+  wait_for_health "$service"
+done
+
+API_PORT=${BITRIVER_LIVE_PORT:-8080}
+VIEWER_PATH=${NEXT_VIEWER_BASE_PATH:-/viewer}
+
+echo "CURLing API and viewer endpoints..."
+curl -fsS "http://localhost:${API_PORT}/healthz" >/dev/null
+curl -fsSL "http://localhost:${API_PORT}${VIEWER_PATH}" >/dev/null
 
 echo "Quickstart compose smoke checks passed."
