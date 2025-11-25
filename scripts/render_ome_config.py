@@ -35,6 +35,39 @@ def xml_escape(value: str) -> str:
     return escape(value, {"'": "&apos;", '"': "&quot;"})
 
 
+def _scoped_replace_control_bindings(text: str, bind: str) -> str:
+    """Replace <Bind> and <IP> tags within the control listener scope only."""
+
+    control_match = re.search(r"<Control>(.*?)</Control>", text, re.DOTALL)
+    if not control_match:
+        raise SystemExit("missing <Control> section in template")
+
+    control_start, control_end = control_match.span()
+    control_body = text[control_start:control_end]
+
+    server_match = re.search(r"<Server>(.*?)</Server>", control_body, re.DOTALL)
+    if not server_match:
+        raise SystemExit("missing <Server> section under <Control> in template")
+
+    server_start, server_end = server_match.span()
+    server_abs_start = control_start + server_start
+    server_abs_end = control_start + server_end
+
+    for tag in ("Bind", "IP"):
+        for match in re.finditer(rf"<\s*{tag}\s*>", text):
+            if match.start() < server_abs_start or match.end() > server_abs_end:
+                raise SystemExit(
+                    "Bind/IP entries must live under <Modules><Control><Server><Listeners><TCP>. "
+                    "Move or delete the out-of-scope tag before rendering."
+                )
+
+    server_body = control_body[server_start:server_end]
+    server_body = replace_all_tag_content(server_body, "Bind", bind)
+    server_body = replace_all_tag_content(server_body, "IP", bind)
+    control_body = control_body[:server_start] + server_body + control_body[server_end:]
+    return text[:control_start] + control_body + text[control_end:]
+
+
 def render(template: Path, output: Path, bind: str, username: str, password: str) -> None:
     escaped_bind = xml_escape(bind)
     text = template.read_text()
@@ -53,8 +86,7 @@ def render(template: Path, output: Path, bind: str, username: str, password: str
             "to avoid Server.bind schema errors."
         )
 
-    text = replace_all_tag_content(text, "Bind", escaped_bind)
-    text = replace_all_tag_content(text, "IP", escaped_bind)
+    text = _scoped_replace_control_bindings(text, escaped_bind)
     text = replace_tag_content(text, "ID", xml_escape(username))
     text = replace_tag_content(text, "Password", xml_escape(password))
     output.write_text(text)
