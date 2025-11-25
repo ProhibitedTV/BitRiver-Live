@@ -53,3 +53,21 @@ The viewer runs on [http://localhost:3000](http://localhost:3000) with hot reloa
    The standalone output expects the static assets from `.next/static` and `public/` to be available alongside the server binary (the systemd and Docker manifests copy them into place for you).
 
 Set `BITRIVER_VIEWER_ORIGIN` on the Go API (for example, `http://127.0.0.1:3000`) so `/viewer` requests proxy to the running Next.js server.
+
+## Testing
+
+Run the lint, unit, and Playwright suites from the viewer directory:
+
+```bash
+cd web/viewer
+npm install
+npm run lint
+npm run test
+npm run test:playwright
+```
+
+The Playwright config builds the app and starts `npm run start:test` on port
+3000 by default. Set `PLAYWRIGHT_BASE_URL` if you want to point the tests at an
+already running viewer instance. The specs stub API calls (including
+`tests/stream-playback.spec.ts`, which seeds playback metadata and chat
+transcripts) so you do not need a live backend to exercise UI flows.

@@ -94,4 +94,7 @@ npm run test:integration
 
 The Playwright-powered integration suite downloads its browsers on first run.
 Use `npx playwright install --with-deps` when you need an offline-friendly
-preinstall.
+preinstall. `npm run test:playwright` builds the app and launches `npm run
+start:test` unless you override the target host with `PLAYWRIGHT_BASE_URL`; in
+either case, the specs mock the API to stay deterministic (for example,
+`tests/stream-playback.spec.ts` stubs playback metadata and chat responses).
