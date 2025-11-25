@@ -309,6 +309,14 @@ render_ome_config() {
   echo "Rendered OME configuration to $output"
 }
 
+validate_compose_config() {
+  echo "Validating docker compose configuration before building the stack ..."
+  if ! docker compose config --quiet; then
+    echo "docker compose config failed; resolve the configuration issues above before continuing." >&2
+    exit 1
+  fi
+}
+
 wait_for_postgres() {
   local attempts=${1:-60}
   local sleep_seconds=${2:-2}
@@ -555,6 +563,8 @@ fi
 if (( ${#compose_files[@]} > 0 )); then
   export COMPOSE_FILE=$(IFS=:; echo "${compose_files[*]}")
 fi
+
+validate_compose_config
 
 echo "Starting BitRiver Live stack..."
 docker compose up --build -d

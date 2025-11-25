@@ -3,9 +3,7 @@
     <Name>OvenMediaEngine</Name>
     <!-- Required for health endpoint and origin-mode APIs; Compose mounts this file at /opt/ovenmediaengine/bin/origin_conf/Server.xml -->
     <Type>origin</Type>
-    <!-- Current OME images expect both <Bind> and <IP>; quickstart renders them from BITRIVER_OME_BIND. -->
-    <Bind>0.0.0.0</Bind>
-    <IP>0.0.0.0</IP>
+    <!-- Quickstart rewrites control listener bind addresses from BITRIVER_OME_BIND; top-level binds are rejected by OME. -->
     <PrivacyProtection>false</PrivacyProtection>
     <StunServer>stun.l.google.com:19302</StunServer>
 

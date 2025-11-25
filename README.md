@@ -66,8 +66,8 @@ The helper script will:
 4. Launch Postgres, Redis, SRS, OvenMediaEngine, the transcoder, the API, and the viewer using `deploy/docker-compose.yml`.
 5. Run the SQL migrations and seed an admin user, then print the admin email and password in your terminal.
 
- The helper also regenerates `deploy/ome/Server.generated.xml` from the bundled template, applying `BITRIVER_OME_BIND` (default
- `0.0.0.0`) to the `<Bind>` and `<IP>` fields required by current OME images and wiring in the OME credentials from `.env` so rerunning the quickstart keeps the control service healthy.
+The helper also regenerates `deploy/ome/Server.generated.xml` from the bundled template, applying `BITRIVER_OME_BIND` (default
+`0.0.0.0`) to the control listener `<Bind>` and `<IP>` fields and wiring in the OME credentials from `.env` so rerunning the quickstart keeps the control service healthy. OvenMediaEngine 0.15.x rejects top-level `<Bind>`/`<IP>` entries, so the renderer will fail fast if they appear in the template instead of propagating a hard-to-diagnose healthcheck error later.
 
 If the script exits with an error, re-run it after fixing the reported problem. You can always re-run the script to rebuild the
 stack or refresh credentials.
@@ -129,7 +129,7 @@ The quickstart script pre-populates `.env` so Docker Compose can bind each servi
 | `BITRIVER_SRS_CONTROLLER_PORT` | `1986` | Host port for the SRS controller’s HTTP API (container listens on `1985`). |
 | `BITRIVER_OME_HTTP_PORT` | `8081` | Host port for the OvenMediaEngine control plane and health checks. |
 | `BITRIVER_OME_SIGNALLING_PORT` | `9000` | Host port for OME WebRTC signalling. |
-| `BITRIVER_OME_BIND` | `0.0.0.0` | Listener address injected into the generated OME `Server.xml` `<Bind>`/`<IP>` fields. |
+| `BITRIVER_OME_BIND` | `0.0.0.0` | Listener address injected into the generated OME `Server.xml` control listener `<Bind>`/`<IP>` fields. |
 | `BITRIVER_LIVE_POSTGRES_DSN` | `postgres://bitriver:bitriver@postgres:5432/bitriver?sslmode=disable` | Connection string the API uses for its primary database. Combine with `BITRIVER_POSTGRES_HOST_PORT` (default `5432`, profile `postgres-host`) to publish Postgres to the host. |
 | `BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR` | `redis:6379` | Redis endpoint for chat fan-out; update alongside `BITRIVER_REDIS_PASSWORD` if you run Redis outside Compose. |
 
