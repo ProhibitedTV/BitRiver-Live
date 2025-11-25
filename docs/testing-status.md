@@ -21,14 +21,18 @@ coverage. Keep it updated as tests are hardened or new flakes are discovered.
 
 ## Coverage gaps to address
 
-- **Ingest/stream lifecycle:** Live ingest orchestration now has deterministic
-  integration coverage for stream start/stop and retry handling via the HTTP
-  controller fakes, but export and recording flows still need end-to-end
-  attention.
-- **Authentication and session flows:** Need integration coverage for login,
-  session refresh/expiry, and permission checks across admin and viewer APIs.
+- **Ingest/stream lifecycle:** End-to-end coverage for stream start/stop across
+  ingest controllers, transcoder coordination, and recording export is minimal.
 - **Viewer/client interactions:** Limited automated coverage for chat and
   playback from the Next.js viewer beyond unit tests.
+
+## Recent coverage additions
+
+- **Authentication/session lifecycle:** Integration-style tests under
+  `internal/api/auth_integration_test.go` exercise login, refresh, logout, and
+  admin-only enforcement using the `internal/testsupport.SessionStoreStub`.
+  They run with the standard Go test environment (offline module settings,
+  no external services required).
 
 ## Reliability checklist
 

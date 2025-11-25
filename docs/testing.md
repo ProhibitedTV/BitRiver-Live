@@ -18,6 +18,12 @@ test caching and match CI's deadline for each package:
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=10s
 ```
 
+Authentication/session lifecycle coverage lives in
+`internal/api/auth_integration_test.go`. These integration-style handlers use
+`internal/testsupport.SessionStoreStub` to validate cookie issuance, refresh,
+logout, and admin-only enforcement without external services. No additional
+environment toggles are required beyond the standard offline Go flags above.
+
 OME quickstart drift is guarded by an ingest test that reads the pinned image
 in `deploy/docker-compose.yml` and compares `deploy/ome/Server.xml` to the
 expected template for that tag. It also enforces required fields such as
