@@ -246,7 +246,7 @@ services:
   ome-config:
     image: python:3.11-slim
     working_dir: /workspace
-    command: ["bash", "-lc", "cd /workspace && ./scripts/render-ome-config.sh --check --env-file /workspace/.env"]
+    command: ["bash", "-lc", "cd /workspace && ./scripts/render-ome-config.sh --check --env-file /workspace/.env || ./scripts/render-ome-config.sh --env-file /workspace/.env"]
     volumes:
       - ..:/workspace
     env_file:

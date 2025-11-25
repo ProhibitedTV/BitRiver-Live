@@ -36,8 +36,8 @@ The script will:
 The health payload still expects the ingest services to be reachable from the API container:
 
 - **SRS controller:** `BITRIVER_SRS_API` defaults to `http://srs-controller:1985` inside the Compose network. If you move SRS elsewhere, point this URL at a reachable host and keep the API token aligned with the controller's configuration.
-- **OvenMediaEngine:** `BITRIVER_OME_API` defaults to `http://ome:8081` and requires the username/password set in `.env`. The quickstart renders `deploy/ome/Server.generated.xml` from `deploy/ome/Server.xml` on every run and the compose bundle mounts it into the container, keeping the control credentials aligned with `.env` so a 401 surfaces as `unhealthy` instead of silently failing. When running OME outside Compose, keep this URL reachable from the API container so `/healthz` reports the correct status even though the HTTP status code remains 200 during degraded states, and mirror the same credentials in your OME configuration. The template rewrites the control listener bind/IP from `BITRIVER_OME_BIND` (default `0.0.0.0`) while preserving the `<Listeners><TCP><Bind>0.0.0.0</Bind><IP>0.0.0.0</IP><Port>8081</Port></TCP></Listeners>` schema—update both the template and `BITRIVER_OME_API` together if you customize the control port. OvenMediaEngine 0.15.x rejects top-level `<Bind>`/`<IP>` entries, and the quickstart now fails fast if they are present in the template so you see a clear error before Compose starts.
-  Edit `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, or `BITRIVER_OME_BIND` in `.env`? Re-render `deploy/ome/Server.generated.xml` with `./scripts/render-ome-config.sh` (or add `--force` to rewrite even when timestamps match) so the control credentials and bind address stay aligned with the health check.
+- **OvenMediaEngine:** `BITRIVER_OME_API` defaults to `http://ome:8081` and requires the username/password set in `.env`. A short-lived `ome-config` helper in the compose file renders `deploy/ome/Server.generated.xml` from `deploy/ome/Server.xml` before OME starts, keeping the control credentials aligned with `.env` so a 401 surfaces as `unhealthy` instead of silently failing. When running OME outside Compose, keep this URL reachable from the API container so `/healthz` reports the correct status even though the HTTP status code remains 200 during degraded states, and mirror the same credentials in your OME configuration. The template rewrites the control listener bind/IP from `BITRIVER_OME_BIND` (default `0.0.0.0`) while preserving the `<Listeners><TCP><Bind>0.0.0.0</Bind><IP>0.0.0.0</IP><Port>8081</Port></TCP></Listeners>` schema—update both the template and `BITRIVER_OME_API` together if you customize the control port. OvenMediaEngine 0.15.x rejects top-level `<Bind>`/`<IP>` entries, and the quickstart now fails fast if they are present in the template so you see a clear error before Compose starts.
+  Edit `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, or `BITRIVER_OME_BIND` in `.env`? Re-render `deploy/ome/Server.generated.xml` with `./scripts/render-ome-config.sh` (or add `--force` to rewrite even when timestamps match) before running `docker compose up -d` when you operate OME outside Compose so the control credentials and bind address stay aligned with the health check.
 - **Transcoder:** `BITRIVER_TRANSCODER_API` defaults to `http://transcoder:9000`; ensure the host and port resolve from the API container and that the token matches `BITRIVER_TRANSCODER_TOKEN`.
 
 Update the generated `.env` before inviting real users—swap in a valid admin email, capture the printed admin password (the
@@ -57,7 +57,7 @@ rovided` errors, then use the standard Compose subcommands:
 export COMPOSE_FILE=deploy/docker-compose.yml
 ```
 
-- Inspect service health (Compose will fail fast if `deploy/ome/Server.generated.xml` is stale thanks to the `ome-config` preflight):
+- Inspect service health (Compose rerenders `deploy/ome/Server.generated.xml` via the `ome-config` preflight before OME starts, so stale configs block startup instead of leaving the container unhealthy):
   ```bash
   docker compose ps
   ```
@@ -88,7 +88,7 @@ compose file.
   ./scripts/quickstart.sh
   ```
   The script reuses your existing `.env` and Docker volumes, so configuration, database data, and media files persist across updates.
-The helper re-renders `deploy/ome/Server.generated.xml` from `deploy/ome/Server.xml` on each run so OME consumes the credentials from `.env` and the current `BITRIVER_OME_BIND` value in both `<Bind>` and `<IP>` without requiring an extra compose override.
+`docker compose up` (including the quickstart wrapper) reruns the `ome-config` helper so OME consumes the credentials from `.env` and the current `BITRIVER_OME_BIND` value in both `<Bind>` and `<IP>` without requiring an extra compose override.
 - Codex CLI users: follow the [Codex CLI guide](codex-cli.md) for installation, authentication, and edit workflows tailored to this repository. Rerun `docker compose up -d` after applying Codex patches so containers reload configuration and binaries.
 
 ## Troubleshooting
@@ -101,7 +101,7 @@ The helper re-renders `deploy/ome/Server.generated.xml` from `deploy/ome/Server.
 - **Port already in use** – Stop or reconfigure any services that currently bind to ports 5432, 6379, 8080, 8081, 9000, 9001,
   1935, or 1985. Alternatively edit the corresponding `*_PORT` values in `.env` (for example, `BITRIVER_LIVE_PORT=9090`) and
   rerun `docker compose up -d`.
-- **OME health check fails** – The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the container name. The health probe uses the configured `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD`, so a 401 response will mark the container as unhealthy—rerender the config with `./scripts/render-ome-config.sh` after editing `.env` and verify the credentials landed in the rendered file:
+- **OME health check fails** – The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the container name. The health probe uses the configured `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD`, so a 401 response will mark the container as unhealthy—the compose preflight reruns `./scripts/render-ome-config.sh` automatically before OME starts, mounting the regenerated `deploy/ome/Server.generated.xml` into `/opt/ovenmediaengine/bin/origin_conf/Server.xml` and `/opt/ovenmediaengine/bin/edge_conf/Server.xml`, but you can still verify the credentials landed in the rendered file:
   ```bash
   ./scripts/render-ome-config.sh --check || ./scripts/render-ome-config.sh --force
   grep -E '<(ID|Password)>' deploy/ome/Server.generated.xml
