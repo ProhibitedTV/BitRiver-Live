@@ -37,7 +37,7 @@ Run the compose smoke guard to ensure the default `.env` and `deploy/docker-comp
 ./scripts/test-quickstart.sh
 ```
 
-When no `.env` exists in the repository root, the helper seeds one with the same local defaults baked into the quickstart script, renders `docker compose config`, and verifies that the API, transcoder, OME, SRS, Postgres, and Redis healthchecks still point at their expected endpoints. It cleans up the temporary `.env` after the run.
+When no `.env` exists in the repository root, the helper seeds one with the same local defaults baked into the quickstart script, renders `docker compose config`, and verifies that the API, transcoder, OME, SRS, Postgres, and Redis healthchecks still point at their expected endpoints. It also calls `scripts/render-ome-config.sh` against the seeded `.env` and fails fast when `deploy/ome/Server.generated.xml` is stale or missing required `<Bind>`, `<IP>`, or control credential values so the tracked compose mount stays fresh. It cleans up the temporary `.env` after the run.
 
 ## Postgres storage layer
 

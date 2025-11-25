@@ -84,6 +84,16 @@ fi
 echo "Rendering docker compose config..."
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config >"$COMPOSE_CONFIG_OUTPUT"
 
+echo "Rendering OME config from template..."
+"$SCRIPT_DIR/render-ome-config.sh" --force --env-file "$ENV_FILE" --quiet
+
+OME_CONFIG="$REPO_ROOT/deploy/ome/Server.generated.xml"
+
+if [ ! -f "$OME_CONFIG" ]; then
+  echo "error: OME config missing at $OME_CONFIG after render" >&2
+  exit 1
+fi
+
 grep_healthcheck() {
   local service_label="$1"
   local expected_snippet="$2"
@@ -111,5 +121,64 @@ if ! grep -q "Server.generated.xml:/opt/ovenmediaengine/bin/edge_conf/Server.xml
   echo "error: expected OME to mount deploy/ome/Server.generated.xml into edge_conf" >&2
   exit 1
 fi
+
+python3 - "$ENV_FILE" "$OME_CONFIG" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+env_path = Path(sys.argv[1])
+config_path = Path(sys.argv[2])
+
+env_values: dict[str, str] = {}
+for line in env_path.read_text().splitlines():
+    line = line.strip()
+    if not line or line.startswith("#"):
+        continue
+    if "=" not in line:
+        continue
+    key, value = line.split("=", 1)
+    env_values[key] = value
+
+required = ["BITRIVER_OME_USERNAME", "BITRIVER_OME_PASSWORD"]
+missing = [key for key in required if not env_values.get(key)]
+if missing:
+    sys.exit(f"error: missing required OME credentials in {env_path}: {', '.join(missing)}")
+
+bind_default = "0.0.0.0"
+expected_bind = env_values.get("BITRIVER_OME_BIND", bind_default)
+
+tree = ET.parse(config_path)
+root = tree.getroot()
+
+bind = root.findtext(".//Control/Server/Listeners/TCP/Bind")
+ip = root.findtext(".//Control/Server/Listeners/TCP/IP")
+username = root.findtext(".//Control/Authentication/User/ID")
+password = root.findtext(".//Control/Authentication/User/Password")
+
+values = {
+    "Bind": bind,
+    "IP": ip,
+    "ID": username,
+    "Password": password,
+}
+
+empty = [tag for tag, value in values.items() if value is None or not value.strip()]
+if empty:
+    sys.exit(
+        "error: OME config is missing required tags: " + ", ".join(f"<{tag}>" for tag in empty)
+    )
+
+if bind != expected_bind or ip != expected_bind:
+    sys.exit(
+        "error: expected <Bind> and <IP> to match BITRIVER_OME_BIND="
+        f"{expected_bind}; got Bind='{bind}', IP='{ip}'"
+    )
+
+if username != env_values["BITRIVER_OME_USERNAME"] or password != env_values["BITRIVER_OME_PASSWORD"]:
+    sys.exit("error: rendered OME credentials do not match .env defaults")
+
+print("OME config validation passed.")
+PY
 
 echo "Quickstart compose smoke checks passed."
