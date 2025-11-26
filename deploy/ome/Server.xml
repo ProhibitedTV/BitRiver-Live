@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Server version="10">
     <Name>OvenMediaEngine</Name>
+    <IP>0.0.0.0</IP>
     <!-- Required for health endpoint and origin-mode APIs; Compose mounts this file at /opt/ovenmediaengine/bin/origin_conf/Server.xml -->
     <Type>origin</Type>
     <!-- Quickstart rewrites bind addresses and ports from BITRIVER_OME_* env vars. -->

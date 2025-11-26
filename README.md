@@ -135,6 +135,7 @@ The quickstart script pre-populates `.env` so Docker Compose can bind each servi
 | `BITRIVER_OME_SERVER_PORT` | `9000` | OME WebRTC signalling port rendered into `Server.xml`; Docker maps `BITRIVER_OME_SIGNALLING_PORT` on the host to this container port. |
 | `BITRIVER_OME_SERVER_TLS_PORT` | `9443` | OME TLS signalling port rendered into `Server.xml` and exposed on the same host/container port. |
 | `BITRIVER_OME_BIND` | `0.0.0.0` | Listener address injected into the generated OME `Server.xml` control listener `<Bind>`/`<IP>` fields and the root `<Bind><Address>` entry. |
+| `BITRIVER_OME_IP` | `0.0.0.0` | Public IP advertised in the top-level `<Server><IP>` block (defaults to `BITRIVER_OME_BIND`). |
 | `BITRIVER_LIVE_POSTGRES_DSN` | `postgres://bitriver:bitriver@postgres:5432/bitriver?sslmode=disable` | Connection string the API uses for its primary database. Combine with `BITRIVER_POSTGRES_HOST_PORT` (default `5432`, profile `postgres-host`) to publish Postgres to the host. |
 | `BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR` | `redis:6379` | Redis endpoint for chat fan-out; update alongside `BITRIVER_REDIS_PASSWORD` if you run Redis outside Compose. |
 
@@ -143,7 +144,7 @@ Common tweaks:
 - **Change host ports:** Adjust the `*_PORT` values above (for example, move the API to `BITRIVER_LIVE_PORT=9090` or RTMP ingest to `BITRIVER_SRS_RTMP_PORT=1936`) and rerun `docker compose up -d`.
 - **Enable TLS on the API/viewer:** Mount certs under `./certs` and set `BITRIVER_LIVE_TLS_CERT`/`BITRIVER_LIVE_TLS_KEY`, then restart so the API listens with HTTPS.
 - **Lock down viewer origins:** Point `BITRIVER_VIEWER_ORIGIN` and `NEXT_PUBLIC_VIEWER_URL` at your public domain or reverse proxy to align CORS and cookie scope.
-- **Keep OvenMediaEngine credentials in sync:** Whenever you edit `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, or `BITRIVER_OME_BIND` in `.env`, rerun `./scripts/render-ome-config.sh` to regenerate `deploy/ome/Server.generated.xml`. The compose bundle now runs a lightweight `ome-config` preflight before starting `ome`; it will fail fast if the generated file is missing or predates `.env`, so fix and re-render before retrying `docker compose up -d`.
+- **Keep OvenMediaEngine credentials in sync:** Whenever you edit `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, `BITRIVER_OME_BIND`, or `BITRIVER_OME_IP` in `.env`, rerun `./scripts/render-ome-config.sh` to regenerate `deploy/ome/Server.generated.xml`. The compose bundle now runs a lightweight `ome-config` preflight before starting `ome`; it will fail fast if the generated file is missing or predates `.env`, so fix and re-render before retrying `docker compose up -d`.
 
 Find deeper explanations and additional variables (rate limiting, transcoder public URLs, external Redis/Postgres) in [`docs/quickstart.md`](docs/quickstart.md).
 
