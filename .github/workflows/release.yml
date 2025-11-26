@@ -154,7 +154,7 @@ jobs:
 
       - name: Run postgres-tagged storage tests
         env:
-          BITRIVER_TEST_POSTGRES_DSN: postgres://bitriver:bitriver@postgres:5432/bitriver_test?sslmode=disable
+          BITRIVER_TEST_POSTGRES_DSN: postgres://bitriver:bitriver@127.0.0.1:54329/bitriver_test?sslmode=disable
         run: ./scripts/test-postgres.sh
 
   build:
