@@ -101,6 +101,20 @@ jobs:
   postgres-tests:
     name: Postgres storage tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: bitriver
+          POSTGRES_PASSWORD: bitriver
+          POSTGRES_DB: bitriver_test
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd="pg_isready -U bitriver -d bitriver_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -111,7 +125,36 @@ jobs:
           go-version: '1.21'
           cache: true
 
+      - name: Ensure vendored modules are available
+        run: |
+          test -d vendor
+          test -f vendor/modules.txt
+
+      - name: Wait for Postgres service
+        run: |
+          container_id="$(docker ps --filter "name=postgres" --format "{{.ID}}" | head -n1)"
+          if [ -z "$container_id" ]; then
+            echo "postgres service container not found" >&2
+            docker ps
+            exit 1
+          fi
+
+          for attempt in $(seq 1 30); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' "$container_id")
+            if [ "$status" = "healthy" ]; then
+              exit 0
+            fi
+            echo "waiting for postgres service to become healthy (attempt $attempt)..." >&2
+            sleep 2
+          done
+
+          echo "postgres service failed to become healthy" >&2
+          docker logs "$container_id"
+          exit 1
+
       - name: Run postgres-tagged storage tests
+        env:
+          BITRIVER_TEST_POSTGRES_DSN: postgres://bitriver:bitriver@postgres:5432/bitriver_test?sslmode=disable
         run: ./scripts/test-postgres.sh
 
   build:
