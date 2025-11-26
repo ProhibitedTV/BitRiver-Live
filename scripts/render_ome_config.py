@@ -47,21 +47,22 @@ def xml_escape(value: str) -> str:
 
 def _replace_root_bindings(text: str, address: str, port: str, tls_port: str) -> str:
     """
-    Replace <Bind> tags in the <Server> header.
+    Replace the <Bind> block under <Server>.
 
-    Newer templates use <Address> inside <Bind>; older ones may still have <IP>.
-    We support both so quickstart can be rerun across versions.
+    We don't care whether <Bind> appears before or after <Modules>/<VirtualHosts>;
+    we simply find the first <Bind>...</Bind> inside <Server> and treat it as
+    the server-level bind config.
     """
-    header_match = re.search(r"<Server[^>]*>(.*?)<Modules>", text, re.DOTALL)
-    if not header_match:
-        raise SystemExit("missing <Server> header before <Modules> in template")
+    server_match = re.search(r"<Server[^>]*>(.*)</Server>", text, re.DOTALL)
+    if not server_match:
+        raise SystemExit("missing <Server> root element in template")
 
-    header_start, header_end = header_match.span(1)
-    header_body = header_match.group(1)
+    server_start, server_end = server_match.span(1)
+    server_body = server_match.group(1)
 
-    bind_match = re.search(r"<Bind>(.*?)</Bind>", header_body, re.DOTALL)
+    bind_match = re.search(r"<Bind>(.*?)</Bind>", server_body, re.DOTALL)
     if not bind_match:
-        raise SystemExit("missing <Bind> section under <Server> header in template")
+        raise SystemExit("missing <Bind> section under <Server> in template")
 
     bind_start, bind_end = bind_match.span(1)
     bind_body = bind_match.group(1)
@@ -73,43 +74,47 @@ def _replace_root_bindings(text: str, address: str, port: str, tls_port: str) ->
         bind_body = replace_tag_content(bind_body, "IP", address)
 
     # Port / TLSPort are still required.
-    for tag, value in ("Port", port), ("TLSPort", tls_port):
+    for tag, value in (("Port", port), ("TLSPort", tls_port)):
         bind_body = replace_tag_content(bind_body, tag, value)
 
-    header_body = header_body[:bind_start] + bind_body + header_body[bind_end:]
-    return text[:header_start] + header_body + text[header_end:]
+    server_body = server_body[:bind_start] + bind_body + server_body[bind_end:]
+    return text[:server_start] + server_body + text[server_end:]
 
 
 def _replace_root_ip(text: str, ip: str) -> str:
     """
-    Replace the <IP> tag in the <Server> header (outside <Modules>).
+    Replace the <IP> tag directly under <Server> (outside <Bind>).
 
     Some templates may omit a root-level <IP>; in that case we simply leave
-    the header unchanged instead of failing.
+    the document unchanged instead of failing.
     """
-    header_match = re.search(r"<Server[^>]*>(.*?)<Modules>", text, re.DOTALL)
-    if not header_match:
-        raise SystemExit("missing <Server> header before <Modules> in template")
+    server_match = re.search(r"<Server[^>]*>(.*)</Server>", text, re.DOTALL)
+    if not server_match:
+        raise SystemExit("missing <Server> root element in template")
 
-    header_start, header_end = header_match.span(1)
-    header_body = header_match.group(1)
+    server_start, server_end = server_match.span(1)
+    server_body = server_match.group(1)
 
-    if "<IP>" not in header_body:
+    # Look for <IP> that appears before the first <Bind> or <VirtualHosts>,
+    # so we don't accidentally rewrite nested IPs (e.g., within <Hosts>).
+    ip_idx = server_body.find("<IP>")
+    if ip_idx == -1:
         # Nothing to replace; keep the template as-is.
         return text
 
-    header_body = replace_tag_content(header_body, "IP", ip)
-    return text[:header_start] + header_body + text[header_end:]
+    before = server_body[:ip_idx]
+    if "<Bind>" in before or "<VirtualHosts>" in before:
+        # This <IP> is not in the top header portion; leave it alone.
+        return text
+
+    server_body = replace_tag_content(server_body, "IP", ip)
+    return text[:server_start] + server_body + text[server_end:]
 
 
 def _scoped_replace_control_bindings(text: str, bind: str) -> str:
     """
     Legacy helper: rewrite <Bind>/<IP>/<Address> inside <Modules><Control><Server>
     if that section exists. If it does *not* exist (newer templates), this is a no-op.
-
-    This function is now tolerant:
-    - It does NOT enforce where Bind/IP/Address appear globally.
-    - It does NOT fail if <Control> is missing.
     """
     control_match = re.search(r"<Control>(.*?)</Control>", text, re.DOTALL)
     if not control_match:
