@@ -20,14 +20,20 @@ import (
 //  1. Update the key here to match the new image.
 //  2. Update the Server.xml template value to reflect any config changes.
 var expectedServerTemplates = map[string]string{
-	"airensoft/ovenmediaengine:0.15.10": strings.TrimSpace(`<?xml version="1.0" encoding="utf-8"?>
+        "airensoft/ovenmediaengine:0.15.10": strings.TrimSpace(`<?xml version="1.0" encoding="utf-8"?>
 <Server version="10">
     <Name>OvenMediaEngine</Name>
     <!-- Required for health endpoint and origin-mode APIs; Compose mounts this file at /opt/ovenmediaengine/bin/origin_conf/Server.xml -->
     <Type>origin</Type>
-    <!-- Quickstart rewrites control listener bind addresses from BITRIVER_OME_BIND. -->
+    <!-- Quickstart rewrites bind addresses and ports from BITRIVER_OME_* env vars. -->
     <PrivacyProtection>false</PrivacyProtection>
     <StunServer>stun.l.google.com:19302</StunServer>
+
+    <Bind>
+        <Address>0.0.0.0</Address>
+        <Port>9000</Port>
+        <TLSPort>9443</TLSPort>
+    </Bind>
 
     <Modules>
         <Control>

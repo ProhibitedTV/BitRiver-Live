@@ -102,6 +102,8 @@ declare -A env_defaults=(
   [BITRIVER_OME_IMAGE_TAG]='0.15.10'
   [BITRIVER_OME_API]='http://ome:8081'
   [BITRIVER_OME_BIND]='0.0.0.0'
+  [BITRIVER_OME_SERVER_PORT]='9000'
+  [BITRIVER_OME_SERVER_TLS_PORT]='9443'
   [BITRIVER_OME_USERNAME]='admin'
   [BITRIVER_OME_PASSWORD]='local-dev-password'
   [BITRIVER_OME_HTTP_PORT]='8081'
@@ -148,6 +150,8 @@ env_default_keys=(
   BITRIVER_OME_IMAGE_TAG
   BITRIVER_OME_API
   BITRIVER_OME_BIND
+  BITRIVER_OME_SERVER_PORT
+  BITRIVER_OME_SERVER_TLS_PORT
   BITRIVER_OME_USERNAME
   BITRIVER_OME_PASSWORD
   BITRIVER_OME_HTTP_PORT
@@ -291,17 +295,19 @@ render_ome_config() {
     return 1
   fi
 
-  local bind_address username password
+  local bind_address username password ome_port ome_tls_port
   bind_address=$(read_env_value BITRIVER_OME_BIND)
   username=$(read_env_value BITRIVER_OME_USERNAME)
   password=$(read_env_value BITRIVER_OME_PASSWORD)
+  ome_port=$(read_env_value BITRIVER_OME_SERVER_PORT)
+  ome_tls_port=$(read_env_value BITRIVER_OME_SERVER_TLS_PORT)
 
-  if [[ -z $bind_address || -z $username || -z $password ]]; then
-    echo "OME bind or credentials are missing; set BITRIVER_OME_BIND, BITRIVER_OME_USERNAME, and BITRIVER_OME_PASSWORD in $ENV_FILE." >&2
+  if [[ -z $bind_address || -z $username || -z $password || -z $ome_port || -z $ome_tls_port ]]; then
+    echo "OME bind or credentials are missing; set BITRIVER_OME_BIND, BITRIVER_OME_SERVER_PORT, BITRIVER_OME_SERVER_TLS_PORT, BITRIVER_OME_USERNAME, and BITRIVER_OME_PASSWORD in $ENV_FILE." >&2
     return 1
   fi
 
-  if ! python3 "$renderer" --template "$template" --output "$output" --bind "$bind_address" --username "$username" --password "$password"; then
+  if ! python3 "$renderer" --template "$template" --output "$output" --bind "$bind_address" --port "$ome_port" --tls-port "$ome_tls_port" --username "$username" --password "$password"; then
     echo "Failed to render OME configuration" >&2
     return 1
   fi

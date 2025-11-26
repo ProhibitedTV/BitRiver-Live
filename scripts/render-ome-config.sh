@@ -71,6 +71,8 @@ source "$ENV_FILE"
 set +a
 
 OME_BIND="${BITRIVER_OME_BIND:-0.0.0.0}"
+OME_PORT="${BITRIVER_OME_SERVER_PORT:-9000}"
+OME_TLS_PORT="${BITRIVER_OME_SERVER_TLS_PORT:-9443}"
 OME_USERNAME="${BITRIVER_OME_USERNAME:-}"
 OME_PASSWORD="${BITRIVER_OME_PASSWORD:-}"
 
@@ -122,6 +124,8 @@ python3 "$SCRIPT_DIR/render_ome_config.py" \
   --template "$TEMPLATE" \
   --output "$OUTPUT" \
   --bind "$OME_BIND" \
+  --port "$OME_PORT" \
+  --tls-port "$OME_TLS_PORT" \
   --username "$OME_USERNAME" \
   --password "$OME_PASSWORD"
 
