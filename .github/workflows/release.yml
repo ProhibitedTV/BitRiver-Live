@@ -85,12 +85,17 @@ jobs:
           go-version: '1.21'
           cache: true
 
+      - name: Ensure vendored modules are available
+        run: |
+          test -d vendor
+          test -f vendor/modules.txt
+
       - name: Run unit tests
         env:
           GOTOOLCHAIN: local
           GOPROXY: off
           GOSUMDB: off
-          GOFLAGS: -mod=readonly
+          GOFLAGS: -mod=vendor
         run: go test ./... -count=1 -timeout=10s
 
   postgres-tests:
