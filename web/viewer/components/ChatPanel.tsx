@@ -7,6 +7,7 @@ import type { ChatMessage } from "../lib/viewer-api";
 import { fetchChannelChat, sendChatMessage } from "../lib/viewer-api";
 
 const POLL_INTERVAL_MS = 10_000;
+const MAX_MESSAGES = 500;
 
 export function ChatPanel({
   channelId,
@@ -55,6 +56,17 @@ export function ChatPanel({
     return rawMessage.toLowerCase().includes("authentication required");
   };
 
+  const applyMessages = (incoming: ChatMessage[] | ChatMessage) => {
+    setMessages((prev) => {
+      const next = Array.isArray(incoming) ? incoming : [...prev, incoming];
+      if (next.length <= MAX_MESSAGES) {
+        return next;
+      }
+      // Keep only the most recent MAX_MESSAGES messages
+      return next.slice(next.length - MAX_MESSAGES);
+    });
+  };
+
   const sortedMessages = useMemo(() => {
     return [...messages].sort(
       (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
@@ -71,11 +83,14 @@ export function ChatPanel({
     }[] = [];
     const TIME_DELTA_MS = 2 * 60 * 1000;
     sortedMessages.forEach((message) => {
-      const displayName = message.user?.displayName ?? message.user?.id ?? "Anonymous";
+      const displayName =
+        message.user?.displayName ?? message.user?.id ?? "Anonymous";
       const previous = groups[groups.length - 1];
       const messageDate = new Date(message.sentAt).getTime();
       const previousDate = previous?.messages.length
-        ? new Date(previous.messages[previous.messages.length - 1].sentAt).getTime()
+        ? new Date(
+            previous.messages[previous.messages.length - 1].sentAt
+          ).getTime()
         : undefined;
       const sameUser = previous?.userLabel === displayName;
       const withinWindow = previousDate
@@ -124,7 +139,7 @@ export function ChatPanel({
         setError(undefined);
         const chatMessages = await fetchChannelChat(channelId);
         if (!cancelled) {
-          setMessages(chatMessages);
+          applyMessages(chatMessages);
           setAuthRequired(false);
         }
       } catch (err) {
@@ -136,7 +151,9 @@ export function ChatPanel({
             setMessages([]);
             setError(undefined);
           } else {
-            setError(err instanceof Error ? err.message : "Unable to load chat");
+            const message =
+              err instanceof Error ? err.message : "Unable to load chat";
+            setError((previous) => previous ?? message);
           }
         }
       } finally {
@@ -170,8 +187,12 @@ export function ChatPanel({
 
     try {
       setSending(true);
-      const message = await sendChatMessage(channelId, user.id, content.trim());
-      setMessages((prev) => [...prev, message]);
+      const message = await sendChatMessage(
+        channelId,
+        user.id,
+        content.trim()
+      );
+      applyMessages(message);
       setContent("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to send message");
@@ -192,7 +213,11 @@ export function ChatPanel({
     if (typeof window === "undefined") {
       return;
     }
-    window.open(window.location.href, "bitriver-chat-popout", "width=420,height=720,noopener,noreferrer");
+    window.open(
+      window.location.href,
+      "bitriver-chat-popout",
+      "width=420,height=720,noopener,noreferrer"
+    );
     setShowPopoutDialog(false);
   };
 
@@ -217,9 +242,13 @@ export function ChatPanel({
           <h3>Live chat</h3>
           <div className="chat-panel__counts">
             {viewerCount !== undefined && (
-              <span className="pill pill--ghost">{viewerCount.toLocaleString()} viewers</span>
+              <span className="pill pill--ghost">
+                {viewerCount.toLocaleString()} viewers
+              </span>
             )}
-            <span className="pill pill--ghost">{messages.length} messages</span>
+            <span className="pill pill--ghost">
+              {messages.length} messages
+            </span>
           </div>
         </div>
         <div className="chat-panel__actions" aria-label="Chat actions">
@@ -253,9 +282,18 @@ export function ChatPanel({
         </div>
       </header>
       {loading && renderSkeletons()}
-      {error && <div className="surface" role="alert">{error}</div>}
+      {error && (
+        <div className="surface" role="alert">
+          {error}
+        </div>
+      )}
       {!loading && !error && (
-        <div className="chat-panel__body" role="log" aria-relevant="additions" aria-live="polite">
+        <div
+          className="chat-panel__body"
+          role="log"
+          aria-relevant="additions"
+          aria-live="polite"
+        >
           {shouldShowSignInPrompt && (
             <div className="surface" role="status">
               Sign in with the controls above to view and participate in chat.
@@ -263,7 +301,9 @@ export function ChatPanel({
           )}
           {sortedMessages.length === 0 ? (
             <div className="chat-panel__empty surface">
-              <p className="muted">No messages yet. Be the first to say hello!</p>
+              <p className="muted">
+                No messages yet. Be the first to say hello!
+              </p>
             </div>
           ) : (
             <ul className="chat-thread">
@@ -280,12 +320,17 @@ export function ChatPanel({
                         className="chat-message__avatar"
                       />
                     ) : (
-                      <div className="chat-message__avatar chat-message__avatar--placeholder" aria-hidden>
+                      <div
+                        className="chat-message__avatar chat-message__avatar--placeholder"
+                        aria-hidden
+                      >
                         {group.userLabel.slice(0, 1).toUpperCase()}
                       </div>
                     )
                   ) : (
-                    <span className="sr-only">Messages from {group.userLabel}</span>
+                    <span className="sr-only">
+                      Messages from {group.userLabel}
+                    </span>
                   )}
                   <div className="chat-message__content">
                     <div className="chat-message__meta">
@@ -293,14 +338,23 @@ export function ChatPanel({
                         <strong>{group.userLabel}</strong>
                         {group.role && <span className="badge">{group.role}</span>}
                       </div>
-                      <span className="muted">{group.messages.length} message{group.messages.length === 1 ? "" : "s"}</span>
+                      <span className="muted">
+                        {group.messages.length} message
+                        {group.messages.length === 1 ? "" : "s"}
+                      </span>
                     </div>
                     <div className="chat-message__bubble">
                       {group.messages.map((message) => (
                         <p key={message.id}>
                           {showTimestamps && (
-                            <time dateTime={message.sentAt} className="chat-message__time">
-                              {new Date(message.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            <time
+                              dateTime={message.sentAt}
+                              className="chat-message__time"
+                            >
+                              {new Date(message.sentAt).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit"
+                              })}
                             </time>
                           )}
                           {message.message}
@@ -326,7 +380,9 @@ export function ChatPanel({
         <textarea
           id="chat-input"
           name="message"
-          placeholder={user ? "Share your thoughts" : "Sign in to participate in chat"}
+          placeholder={
+            user ? "Share your thoughts" : "Sign in to participate in chat"
+          }
           value={content}
           onChange={(event) => setContent(event.target.value)}
           disabled={isComposerDisabled}
@@ -368,13 +424,23 @@ export function ChatPanel({
               </button>
             </header>
             <p className="muted">
-              Open the chat in a separate window so you can keep up with the conversation while browsing elsewhere.
+              Open the chat in a separate window so you can keep up with the
+              conversation while browsing elsewhere.
             </p>
             <div className="chat-panel__dialog-actions">
-              <button type="button" className="ghost-button" onClick={() => setShowPopoutDialog(false)}>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setShowPopoutDialog(false)}
+              >
                 Cancel
               </button>
-              <button type="button" className="accent-button" onClick={openPopoutWindow} aria-label="Open chat in new window">
+              <button
+                type="button"
+                className="accent-button"
+                onClick={openPopoutWindow}
+                aria-label="Open chat in new window"
+              >
                 Open window
               </button>
             </div>
@@ -409,7 +475,9 @@ export function ChatPanel({
               <label className="chat-panel__setting">
                 <div className="chat-panel__setting-text">
                   <span>Show avatars</span>
-                  <p className="muted">Display profile photos next to each chat participant.</p>
+                  <p className="muted">
+                    Display profile photos next to each chat participant.
+                  </p>
                 </div>
                 <input
                   type="checkbox"
@@ -421,7 +489,9 @@ export function ChatPanel({
               <label className="chat-panel__setting">
                 <div className="chat-panel__setting-text">
                   <span>Show timestamps</span>
-                  <p className="muted">Keep message times visible inside the conversation bubbles.</p>
+                  <p className="muted">
+                    Keep message times visible inside the conversation bubbles.
+                  </p>
                 </div>
                 <input
                   type="checkbox"
@@ -442,7 +512,12 @@ export function ChatPanel({
               >
                 Reset
               </button>
-              <button type="button" className="accent-button" onClick={() => setShowSettings(false)} aria-label="Save chat settings">
+              <button
+                type="button"
+                className="accent-button"
+                onClick={() => setShowSettings(false)}
+                aria-label="Save chat settings"
+              >
                 Done
               </button>
             </div>
