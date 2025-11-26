@@ -11,6 +11,7 @@ on:
       - '**/*.go'
       - go.mod
       - go.sum
+      - third_party/**
       - vendor/**
       - scripts/**
       - deploy/**
@@ -20,6 +21,7 @@ on:
       - '**/*.go'
       - go.mod
       - go.sum
+      - third_party/**
       - vendor/**
       - scripts/**
       - deploy/**
