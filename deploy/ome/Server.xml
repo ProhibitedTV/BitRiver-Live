@@ -1,71 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Server version="10">
+    <Name>OvenMediaEngine</Name>
+    <!-- Required for health endpoint and origin-mode APIs; Compose mounts
+         this file at /opt/ovenmediaengine/bin/origin_conf/Server.xml -->
+    <Type>origin</Type>
+    <IP>0.0.0.0</IP>
+    <!-- Quickstart rewrites bind addresses and ports from BITRIVER_OME_* env vars. -->
+    <PrivacyProtection>false</PrivacyProtection>
+    <StunServer>stun.l.google.com:19302</StunServer>
+
     <Bind>
-        <!--
-        The next three tags are ONLY used by scripts/render_ome_config.py
-        to inject values from BITRIVER_OME_* env vars. They are intentionally
-        commented out so OvenMediaEngine ignores them.
-        -->
-        <!--
         <IP>0.0.0.0</IP>
         <Port>9000</Port>
         <TLSPort>9443</TLSPort>
-        -->
-
-        <!--
-          Actual OME bind configuration – this matches the modern schema:
-          Bind -> Providers/Publishers, no Server.bind.IP element.
-          Ports below line up with the docker-compose defaults:
-          - RTMP: 1935
-          - SRT: 9999
-          - WebRTC signalling: 9000 / 9443
-          - LLHLS HTTP: 3333 / 3334
-        -->
-        <Providers>
-            <!-- Pull/Push providers -->
-            <RTMP>
-                <Port>1935</Port>
-                <WorkerCount>1</WorkerCount>
-            </RTMP>
-            <SRT>
-                <Port>9999</Port>
-                <WorkerCount>1</WorkerCount>
-            </SRT>
-            <WebRTC>
-                <Signalling>
-                    <Port>9000</Port>
-                    <TLSPort>9443</TLSPort>
-                    <WorkerCount>1</WorkerCount>
-                </Signalling>
-                <IceCandidates>
-                    <IceCandidate>*:10000-10009/udp</IceCandidate>
-                    <TcpRelay>*:3478</TcpRelay>
-                    <TcpForce>true</TcpForce>
-                    <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
-                </IceCandidates>
-            </WebRTC>
-        </Providers>
-
-        <Publishers>
-            <OVT>
-                <Port>9000</Port>
-                <WorkerCount>1</WorkerCount>
-            </OVT>
-            <LLHLS>
-                <Port>3333</Port>
-                <TLSPort>3334</TLSPort>
-                <WorkerCount>1</WorkerCount>
-            </LLHLS>
-            <WebRTC>
-                <Signalling>
-                    <Port>9000</Port>
-                    <TLSPort>9443</TLSPort>
-                    <WorkerCount>1</WorkerCount>
-                </Signalling>
-                <IceCandidates>
-                    <IceCandidate>*:10000-10009/udp</IceCandidate>
-                    <TcpRelay>*:3478</TcpRelay>
-                    <TcpForce>true</TcpForce>
-                    <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
-                </IceCandidates>
-            </WebRTC>
-        </Publishers>
     </Bind>
+
+    <Modules>
+        <Control>
+            <Server>
+                <Listeners>
+                    <TCP>
+                        <Bind>0.0.0.0</Bind>
+                        <IP>0.0.0.0</IP>
+                        <Port>8081</Port>
+                    </TCP>
+                </Listeners>
+            </Server>
+            <Authentication>
+                <User>
+                    <ID>admin</ID>
+                    <!-- Updated automatically by scripts/quickstart.sh before docker compose up. -->
+                    <Password>local-dev-password</Password>
+                </User>
+            </Authentication>
+        </Control>
+
+        <Host>
+            <VirtualHosts>
+                <VirtualHost>
+                    <Name>default</Name>
+                    <Host>*</Host>
+                    <App>
+                        <Name>live</Name>
+                    </App>
+                </VirtualHost>
+            </VirtualHosts>
+        </Host>
+    </Modules>
+</Server>
