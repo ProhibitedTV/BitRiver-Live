@@ -1,9 +1,29 @@
 name: Quickstart compose smoke
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
+    paths:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+      - vendor/**
+      - scripts/**
+      - deploy/**
+      - .github/workflows/quickstart-smoke.yml
   pull_request:
+    paths:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+      - vendor/**
+      - scripts/**
+      - deploy/**
+      - .github/workflows/quickstart-smoke.yml
 
 jobs:
   quickstart-smoke:
