@@ -151,16 +151,24 @@ if missing:
 
 bind_default = "0.0.0.0"
 expected_bind = env_values.get("BITRIVER_OME_BIND", bind_default)
+expected_port = env_values.get("BITRIVER_OME_SERVER_PORT", "9000")
+expected_tls_port = env_values.get("BITRIVER_OME_SERVER_TLS_PORT", "9443")
 
 tree = ET.parse(config_path)
 root = tree.getroot()
 
+root_address = root.findtext("./Bind/Address")
+root_port = root.findtext("./Bind/Port")
+root_tls_port = root.findtext("./Bind/TLSPort")
 bind = root.findtext(".//Control/Server/Listeners/TCP/Bind")
 ip = root.findtext(".//Control/Server/Listeners/TCP/IP")
 username = root.findtext(".//Control/Authentication/User/ID")
 password = root.findtext(".//Control/Authentication/User/Password")
 
 values = {
+    "RootBind": root_address,
+    "RootPort": root_port,
+    "RootTLSPort": root_tls_port,
     "Bind": bind,
     "IP": ip,
     "ID": username,
@@ -177,6 +185,13 @@ if bind != expected_bind or ip != expected_bind:
     sys.exit(
         "error: expected <Bind> and <IP> to match BITRIVER_OME_BIND="
         f"{expected_bind}; got Bind='{bind}', IP='{ip}'"
+    )
+
+if root_address != expected_bind or root_port != expected_port or root_tls_port != expected_tls_port:
+    sys.exit(
+        "error: expected root <Bind> to match env values: "
+        f"address={root_address}, port={root_port}, tlsPort={root_tls_port}, "
+        f"expected address={expected_bind}, port={expected_port}, tlsPort={expected_tls_port}"
     )
 
 if username != env_values["BITRIVER_OME_USERNAME"] or password != env_values["BITRIVER_OME_PASSWORD"]:

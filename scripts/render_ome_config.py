@@ -35,8 +35,38 @@ def xml_escape(value: str) -> str:
     return escape(value, {"'": "&apos;", '"': "&quot;"})
 
 
+def _replace_root_bindings(text: str, address: str, port: str, tls_port: str) -> str:
+    """Replace <Bind> tags in the <Server> header."""
+
+    header_match = re.search(r"<Server[^>]*>(.*?)<Modules>", text, re.DOTALL)
+    if not header_match:
+        raise SystemExit("missing <Server> header before <Modules> in template")
+
+    header_start, header_end = header_match.span(1)
+    header_body = header_match.group(1)
+
+    bind_match = re.search(r"<Bind>(.*?)</Bind>", header_body, re.DOTALL)
+    if not bind_match:
+        raise SystemExit("missing <Bind> section under <Server> header in template")
+
+    bind_start, bind_end = bind_match.span(1)
+    bind_body = bind_match.group(1)
+
+    for tag, value in ("Address", address), ("Port", port), ("TLSPort", tls_port):
+        bind_body = replace_tag_content(bind_body, tag, value)
+
+    header_body = header_body[:bind_start] + bind_body + header_body[bind_end:]
+    return text[:header_start] + header_body + text[header_end:]
+
+
 def _scoped_replace_control_bindings(text: str, bind: str) -> str:
     """Replace <Bind> and <IP> tags within the control listener scope only."""
+
+    header_match = re.search(r"<Server[^>]*>(.*?)<Modules>", text, re.DOTALL)
+    if not header_match:
+        raise SystemExit("missing <Server> header before <Modules> in template")
+
+    header_start, header_end = header_match.span()
 
     control_match = re.search(r"<Control>(.*?)</Control>", text, re.DOTALL)
     if not control_match:
@@ -55,9 +85,11 @@ def _scoped_replace_control_bindings(text: str, bind: str) -> str:
 
     for tag in ("Bind", "IP"):
         for match in re.finditer(rf"<\s*{tag}\s*>", text):
-            if match.start() < server_abs_start or match.end() > server_abs_end:
+            in_header = header_start <= match.start() <= header_end
+            in_control_server = server_abs_start <= match.start() <= server_abs_end
+            if not (in_header or in_control_server):
                 raise SystemExit(
-                    "Bind/IP entries must live under <Modules><Control><Server><Listeners><TCP>. "
+                    "Bind/IP entries must live in the Server header or under <Modules><Control><Server><Listeners><TCP>. "
                     "Move or delete the out-of-scope tag before rendering."
                 )
 
@@ -68,24 +100,25 @@ def _scoped_replace_control_bindings(text: str, bind: str) -> str:
     return text[:control_start] + control_body + text[control_end:]
 
 
-def render(template: Path, output: Path, bind: str, username: str, password: str) -> None:
+def render(
+    template: Path,
+    output: Path,
+    bind: str,
+    server_port: str,
+    tls_port: str,
+    username: str,
+    password: str,
+) -> None:
     escaped_bind = xml_escape(bind)
+    escaped_port = xml_escape(server_port)
+    escaped_tls_port = xml_escape(tls_port)
     text = template.read_text()
 
     # Normalize legacy <Server.bind> tags to <Bind> to avoid schema errors.
     text = re.sub(r"<\s*Server\.bind\s*>", "<Bind>", text)
     text = re.sub(r"</\s*Server\.bind\s*>", "</Bind>", text)
 
-    # OvenMediaEngine 0.15.x rejects top-level <Bind>/<IP> elements ("Server.bind"),
-    # so fail fast if they are present before rendering credentials.
-    header_match = re.search(r"<Server[^>]*>(.*?)<Modules>", text, re.DOTALL)
-    if header_match and re.search(r"<\s*Bind\s*>|<\s*IP\s*>", header_match.group(1)):
-        raise SystemExit(
-            "Top-level <Bind>/<IP> entries were detected in the OME template. "
-            "Move bind configuration under <Modules><Control><Server><Listeners><TCP> "
-            "to avoid Server.bind schema errors."
-        )
-
+    text = _replace_root_bindings(text, escaped_bind, escaped_port, escaped_tls_port)
     text = _scoped_replace_control_bindings(text, escaped_bind)
     text = replace_tag_content(text, "ID", xml_escape(username))
     text = replace_tag_content(text, "Password", xml_escape(password))
@@ -99,9 +132,19 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--bind", required=True, help="Bind address for the OME server")
     parser.add_argument("--username", required=True, help="OME control username")
     parser.add_argument("--password", required=True, help="OME control password")
+    parser.add_argument("--port", required=True, help="OME server port")
+    parser.add_argument("--tls-port", required=True, help="OME server TLS port")
 
     args = parser.parse_args(argv)
-    render(args.template, args.output, args.bind, args.username, args.password)
+    render(
+        args.template,
+        args.output,
+        args.bind,
+        args.port,
+        args.tls_port,
+        args.username,
+        args.password,
+    )
     return 0
 
 
