@@ -74,8 +74,8 @@ the helper script instead of managing the database by hand. It uses a provided
 `BITRIVER_TEST_POSTGRES_DSN` when set or starts a disposable Postgres
 container, applies the tracked migrations, and executes the storage suite in
 one step. The script forces an offline module mode (`GOPROXY=off GOSUMDB=off
-GOFLAGS=-mod=readonly`) so vendored replacements stay intact and
-`go.mod`/`go.sum` remain untouched:
+GOFLAGS=-mod=vendor`) so vendored replacements stay intact and `go.mod`/`go.sum`
+remain untouched:
 
 ```bash
 ./scripts/test-postgres.sh

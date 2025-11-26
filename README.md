@@ -268,7 +268,7 @@ Need Postgres-backed tests? Use the helper:
 ```
 
 The script keeps module access offline (`GOPROXY=off GOSUMDB=off` with
-`-mod=readonly`) to preserve vendored replacements and avoid touching
+`-mod=vendor`) to preserve vendored replacements and avoid touching
 `go.mod`/`go.sum`.
 
 Questions or improvements? Open an issue or explore `internal/api/handlers.go` to start extending the platform.

@@ -107,14 +107,14 @@ echo "running go test -tags postgres ${packages[*]}" >&2
 export GOTOOLCHAIN="${GOTOOLCHAIN:-local}"
 
 # The postgres suite must run without contacting module proxies so vendored
-# replacements remain intact; keep module files read-only and disable the
+# replacements remain intact; use the vendored module set and disable the
 # network.
 export GOPROXY="${GOPROXY:-off}"
 export GOSUMDB="${GOSUMDB:-off}"
 if [ -n "${GOFLAGS:-}" ]; then
-  export GOFLAGS="$GOFLAGS -mod=readonly"
+  export GOFLAGS="$GOFLAGS -mod=vendor"
 else
-  export GOFLAGS="-mod=readonly"
+  export GOFLAGS="-mod=vendor"
 fi
 
 go test -count=1 -tags postgres "${packages[@]}"
