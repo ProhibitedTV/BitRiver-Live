@@ -7,6 +7,7 @@ from xml.sax.saxutils import escape
 
 
 def replace_tag_content(data: str, tag: str, value: str) -> str:
+    """Replace the *first* occurrence of <tag>...</tag> in data."""
     open_tag = f"<{tag}>"
     close_tag = f"</{tag}>"
 
@@ -21,11 +22,17 @@ def replace_tag_content(data: str, tag: str, value: str) -> str:
     return data[: start + len(open_tag)] + value + data[end:]
 
 
-def replace_all_tag_content(data: str, tag: str, value: str) -> str:
-    pattern = re.compile(rf"(<{tag}>)([^<]*)(</{tag}>)")
-    replaced, count = pattern.subn(lambda match: f"{match.group(1)}{value}{match.group(3)}", data)
+def replace_all_tag_content(data: str, tag: str, value: str, *, required: bool = True) -> str:
+    """Replace *all* <tag>...</tag> occurrences in data.
 
-    if count == 0:
+    If required=False and no tags are found, data is returned unchanged.
+    """
+    pattern = re.compile(rf"(<{tag}>)([^<]*)(</{tag}>)")
+    replaced, count = pattern.subn(
+        lambda match: f"{match.group(1)}{value}{match.group(3)}", data
+    )
+
+    if count == 0 and required:
         raise SystemExit(f"missing <{tag}> in template")
 
     return replaced
@@ -35,9 +42,12 @@ def xml_escape(value: str) -> str:
     return escape(value, {"'": "&apos;", '"': "&quot;"})
 
 
-def _replace_root_bindings(text: str, ip: str, port: str, tls_port: str) -> str:
-    """Replace <Bind> tags in the <Server> header."""
+def _replace_root_bindings(text: str, address: str, port: str, tls_port: str) -> str:
+    """Replace <Bind> tags in the <Server> header.
 
+    Newer templates use <Address> inside <Bind>; older ones may still have <IP>.
+    We support both so quickstart can be rerun across versions.
+    """
     header_match = re.search(r"<Server[^>]*>(.*?)<Modules>", text, re.DOTALL)
     if not header_match:
         raise SystemExit("missing <Server> header before <Modules> in template")
@@ -52,7 +62,14 @@ def _replace_root_bindings(text: str, ip: str, port: str, tls_port: str) -> str:
     bind_start, bind_end = bind_match.span(1)
     bind_body = bind_match.group(1)
 
-    for tag, value in ("IP", ip), ("Port", port), ("TLSPort", tls_port):
+    # Prefer <Address> if present (new schema); otherwise fall back to <IP>.
+    if "<Address>" in bind_body:
+        bind_body = replace_tag_content(bind_body, "Address", address)
+    elif "<IP>" in bind_body:
+        bind_body = replace_tag_content(bind_body, "IP", address)
+
+    # Port / TLSPort are still required.
+    for tag, value in ("Port", port), ("TLSPort", tls_port):
         bind_body = replace_tag_content(bind_body, tag, value)
 
     header_body = header_body[:bind_start] + bind_body + header_body[bind_end:]
@@ -60,8 +77,11 @@ def _replace_root_bindings(text: str, ip: str, port: str, tls_port: str) -> str:
 
 
 def _replace_root_ip(text: str, ip: str) -> str:
-    """Replace the <IP> tag in the <Server> header (outside <Modules>)."""
+    """Replace the <IP> tag in the <Server> header (outside <Modules>).
 
+    Some templates may omit a root-level <IP>; in that case we simply leave
+    the header unchanged instead of failing.
+    """
     header_match = re.search(r"<Server[^>]*>(.*?)<Modules>", text, re.DOTALL)
     if not header_match:
         raise SystemExit("missing <Server> header before <Modules> in template")
@@ -69,13 +89,16 @@ def _replace_root_ip(text: str, ip: str) -> str:
     header_start, header_end = header_match.span(1)
     header_body = header_match.group(1)
 
+    if "<IP>" not in header_body:
+        # Nothing to replace; keep the template as-is.
+        return text
+
     header_body = replace_tag_content(header_body, "IP", ip)
     return text[:header_start] + header_body + text[header_end:]
 
 
 def _scoped_replace_control_bindings(text: str, bind: str) -> str:
-    """Replace <Bind> and <IP> tags within the control listener scope only."""
-
+    """Replace <Bind> and <IP>/<Address> tags within the control listener scope only."""
     header_match = re.search(r"<Server[^>]*>(.*?)<Modules>", text, re.DOTALL)
     if not header_match:
         raise SystemExit("missing <Server> header before <Modules> in template")
@@ -97,19 +120,29 @@ def _scoped_replace_control_bindings(text: str, bind: str) -> str:
     server_abs_start = control_start + server_start
     server_abs_end = control_start + server_end
 
-    for tag in ("Bind", "IP"):
+    # Ensure Bind/IP/Address tags only appear where we expect them, but don't
+    # force IP/Address to exist.
+    for tag in ("Bind", "IP", "Address"):
         for match in re.finditer(rf"<\s*{tag}\s*>", text):
             in_header = header_start <= match.start() <= header_end
             in_control_server = server_abs_start <= match.start() <= server_abs_end
             if not (in_header or in_control_server):
                 raise SystemExit(
-                    "Bind/IP entries must live in the Server header or under <Modules><Control><Server><Listeners><TCP>. "
+                    "Bind/IP/Address entries must live in the Server header or "
+                    "under <Modules><Control><Server><Listeners><TCP>. "
                     "Move or delete the out-of-scope tag before rendering."
                 )
 
     server_body = control_body[server_start:server_end]
     server_body = replace_all_tag_content(server_body, "Bind", bind)
-    server_body = replace_all_tag_content(server_body, "IP", bind)
+
+    # Replace any control-level IP or Address tags if present, but don't error
+    # if the template doesn't have them (newer templates may not).
+    if "<IP>" in server_body:
+        server_body = replace_all_tag_content(server_body, "IP", bind, required=False)
+    if "<Address>" in server_body:
+        server_body = replace_all_tag_content(server_body, "Address", bind, required=False)
+
     control_body = control_body[:server_start] + server_body + control_body[server_end:]
     return text[:control_start] + control_body + text[control_end:]
 
@@ -128,6 +161,10 @@ def render(
     escaped_port = xml_escape(server_port)
     escaped_tls_port = xml_escape(tls_port)
     text = template.read_text()
+
+    # Normalize legacy <Server.bind> tags to <Bind> to avoid schema errors.
+    text = re.sub(r"<\s*Server\.bind\s*>", "<Bind>", text)
+    text = re.sub(r"</\s*Server\.bind\s*>", "</Bind>", text)
 
     text = _replace_root_bindings(text, escaped_bind, escaped_port, escaped_tls_port)
     text = _replace_root_ip(text, xml_escape(server_ip))
