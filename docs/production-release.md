@@ -60,6 +60,31 @@ npm run test:integration
    bundle, and publishes the artefacts to the GitHub Release. Monitor the
    workflow until every job completes successfully.
 
+### Repository secrets for the release workflow
+
+The `verify-env` job in the release workflow renders a production-ready `.env`
+file and validates it with `deploy/check-env.sh`. Configure the following
+repository secrets (mirroring [`deploy/.env.example`](../deploy/.env.example))
+so the job can populate every required variable and image tag:
+
+- `BITRIVER_POSTGRES_USER`
+- `BITRIVER_POSTGRES_PASSWORD`
+- `BITRIVER_REDIS_PASSWORD`
+- `BITRIVER_OME_API`
+- `BITRIVER_LIVE_ADMIN_EMAIL`
+- `BITRIVER_LIVE_ADMIN_PASSWORD`
+- `BITRIVER_SRS_TOKEN`
+- `BITRIVER_OME_USERNAME`
+- `BITRIVER_OME_PASSWORD`
+- `BITRIVER_TRANSCODER_TOKEN`
+- `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD`
+- `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`
+- `BITRIVER_LIVE_IMAGE_TAG`
+- `BITRIVER_VIEWER_IMAGE_TAG`
+- `BITRIVER_SRS_CONTROLLER_IMAGE_TAG`
+- `BITRIVER_TRANSCODER_IMAGE_TAG`
+- `BITRIVER_SRS_IMAGE_TAG`
+
 ## 3. Rotate credentials and validate environment files
 
 Every deployment environment must own unique secrets. Before rolling the new
