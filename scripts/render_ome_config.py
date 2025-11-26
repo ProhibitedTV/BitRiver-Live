@@ -59,6 +59,20 @@ def _replace_root_bindings(text: str, address: str, port: str, tls_port: str) ->
     return text[:header_start] + header_body + text[header_end:]
 
 
+def _replace_root_ip(text: str, ip: str) -> str:
+    """Replace the <IP> tag in the <Server> header (outside <Modules>)."""
+
+    header_match = re.search(r"<Server[^>]*>(.*?)<Modules>", text, re.DOTALL)
+    if not header_match:
+        raise SystemExit("missing <Server> header before <Modules> in template")
+
+    header_start, header_end = header_match.span(1)
+    header_body = header_match.group(1)
+
+    header_body = replace_tag_content(header_body, "IP", ip)
+    return text[:header_start] + header_body + text[header_end:]
+
+
 def _scoped_replace_control_bindings(text: str, bind: str) -> str:
     """Replace <Bind> and <IP> tags within the control listener scope only."""
 
@@ -104,6 +118,7 @@ def render(
     template: Path,
     output: Path,
     bind: str,
+    server_ip: str,
     server_port: str,
     tls_port: str,
     username: str,
@@ -119,6 +134,7 @@ def render(
     text = re.sub(r"</\s*Server\.bind\s*>", "</Bind>", text)
 
     text = _replace_root_bindings(text, escaped_bind, escaped_port, escaped_tls_port)
+    text = _replace_root_ip(text, xml_escape(server_ip))
     text = _scoped_replace_control_bindings(text, escaped_bind)
     text = replace_tag_content(text, "ID", xml_escape(username))
     text = replace_tag_content(text, "Password", xml_escape(password))
@@ -130,16 +146,19 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--template", required=True, type=Path, help="Path to the Server.xml template")
     parser.add_argument("--output", required=True, type=Path, help="Destination for the rendered Server.xml")
     parser.add_argument("--bind", required=True, help="Bind address for the OME server")
+    parser.add_argument("--server-ip", help="Public IP address advertised by OME; defaults to --bind")
     parser.add_argument("--username", required=True, help="OME control username")
     parser.add_argument("--password", required=True, help="OME control password")
     parser.add_argument("--port", required=True, help="OME server port")
     parser.add_argument("--tls-port", required=True, help="OME server TLS port")
 
     args = parser.parse_args(argv)
+    server_ip = args.server_ip if args.server_ip is not None else args.bind
     render(
         args.template,
         args.output,
         args.bind,
+        server_ip,
         args.port,
         args.tls_port,
         args.username,

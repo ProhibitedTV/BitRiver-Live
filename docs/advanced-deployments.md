@@ -175,6 +175,7 @@ BitRiver Live can orchestrate end-to-end ingest and transcode jobs by talking to
 | `BITRIVER_SRS_TOKEN` | Bearer token used when creating/deleting SRS channels. |
 | `BITRIVER_OME_API` | Base URL for the OvenMediaEngine REST API (defaults to port `8081`). |
 | `BITRIVER_OME_BIND` | Address written to the control listener `<Bind>`/`<IP>` fields in `Server.xml` (defaults to `0.0.0.0`). |
+| `BITRIVER_OME_IP` | Public IP rendered into the `<Server><IP>` block for signalling (defaults to `BITRIVER_OME_BIND`). |
 | `BITRIVER_OME_SERVER_PORT` | Port rendered into the top-level `<Bind><Port>` entry for WebRTC signalling (defaults to `9000`). |
 | `BITRIVER_OME_SERVER_TLS_PORT` | Port rendered into `<Bind><TLSPort>` for TLS signalling (defaults to `9443`). |
 | `BITRIVER_OME_USERNAME` / `BITRIVER_OME_PASSWORD` | Basic-auth credentials for OvenMediaEngine. |

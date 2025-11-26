@@ -74,15 +74,16 @@ OME_SIGNALING_PORT=9000
 OME_EXTRA_ARGS=
 EOF
 
-   # Render the OME template before starting the service so the control listener
-   # and server bind block stay aligned with the .env values.
-   sudo /opt/bitriver-live/scripts/render_ome_config.py \
-     --template /opt/bitriver-live/deploy/ome/Server.xml \
-     --output /opt/bitriver-live/deploy/ome/Server.generated.xml \
-     --bind "$BITRIVER_OME_BIND" \
-     --port "${BITRIVER_OME_SERVER_PORT:-9000}" \
-     --tls-port "${BITRIVER_OME_SERVER_TLS_PORT:-9443}" \
-     --username "$BITRIVER_OME_USERNAME" \
+    # Render the OME template before starting the service so the control listener,
+    # advertised server IP, and bind block stay aligned with the .env values.
+    sudo /opt/bitriver-live/scripts/render_ome_config.py \
+      --template /opt/bitriver-live/deploy/ome/Server.xml \
+      --output /opt/bitriver-live/deploy/ome/Server.generated.xml \
+      --bind "$BITRIVER_OME_BIND" \
+      --server-ip "${BITRIVER_OME_IP:-$BITRIVER_OME_BIND}" \
+      --port "${BITRIVER_OME_SERVER_PORT:-9000}" \
+      --tls-port "${BITRIVER_OME_SERVER_TLS_PORT:-9443}" \
+      --username "$BITRIVER_OME_USERNAME" \
      --password "$BITRIVER_OME_PASSWORD"
 
    sudo tee /opt/bitriver-transcoder/.env >/dev/null <<'EOF'
