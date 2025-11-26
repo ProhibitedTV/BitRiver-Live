@@ -1,70 +1,88 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Server version="10">
     <Name>OvenMediaEngine</Name>
+
     <!-- Host type (origin/edge) -->
     <Type>origin</Type>
 
-    <!--
-      IP addresses OvenMediaEngine will bind to.
-      "*" = all IPv4 interfaces, "::" = all IPv6 interfaces.
-      You can add a second <IP>::</IP> if you want IPv6 too.
-      See: https://docs.ovenmediaengine.com/configuration/ipv6
-    -->
+    <!-- Specify IP address to bind (* means all IPs) -->
     <IP>*</IP>
 
-    <!-- Privacy / logging behaviour -->
+    <!-- Delete client IPs from logs / APIs if true -->
     <PrivacyProtection>false</PrivacyProtection>
 
-    <!-- Used for discovering public IP for WebRTC ICE candidates -->
+    <!-- Used to discover public IP for WebRTC in some environments -->
     <StunServer>stun.l.google.com:19302</StunServer>
 
     <!--
-      Bind: defines listening ports for input (Providers) and output (Publishers).
-      This structure matches the modern OME schema – note that there is NO <IP>
-      directly inside <Bind>. That is what was causing "Server.bind.IP" errors.
-      See: https://docs.ovenmediaengine.com/configuration
+      Optional server-wide modules.
+      Modern OME supports HTTP2/LLHLS/P2P here; there is no <Control> module.
+    -->
+    <Modules>
+        <HTTP2>
+            <Enable>true</Enable>
+        </HTTP2>
+
+        <LLHLS>
+            <Enable>true</Enable>
+        </LLHLS>
+
+        <P2P>
+            <Enable>false</Enable>
+            <MaxClientPeersPerHostPeer>2</MaxClientPeersPerHostPeer>
+        </P2P>
+    </Modules>
+
+    <!--
+      Bind: managers (API), providers (ingest), and publishers (playback).
+      The quickstart script will rewrite Address/Port/TLSPort values from BITRIVER_OME_*.
     -->
     <Bind>
+        <Managers>
+            <!-- REST API for control at /v1/... -->
+            <API>
+                <Port>8081</Port>
+                <TLSPort>8082</TLSPort>
+                <WorkerCount>1</WorkerCount>
+            </API>
+        </Managers>
+
         <Providers>
-            <!-- RTMP ingest: rtmp://host:1935/app/stream -->
+            <!-- RTMP ingest: rtmp://host:1935/live/stream -->
             <RTMP>
                 <Port>1935</Port>
                 <WorkerCount>1</WorkerCount>
             </RTMP>
 
-            <!-- WebRTC ingest/signalling (optional but handy for WHIP etc.) -->
+            <!-- WebRTC ingest/signalling (optional but useful for WHIP / internal tools) -->
             <WebRTC>
                 <Signalling>
-                    <!-- WebSocket signalling for WebRTC (play + publish) -->
+                    <!-- WebSocket signalling for WebRTC (publish + play) -->
                     <Port>3333</Port>
                     <TLSPort>3334</TLSPort>
                     <WorkerCount>1</WorkerCount>
                 </Signalling>
                 <IceCandidates>
-                    <!--
-                      TURN / WebRTC-over-TCP:
-                      *:3478 = built-in TURN server on all IPs, port 3478
-                    -->
+                    <!-- TURN / WebRTC-over-TCP relay -->
                     <TcpRelay>*:3478</TcpRelay>
                     <TcpForce>false</TcpForce>
                     <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
 
-                    <!-- UDP ports used for WebRTC media -->
+                    <!-- UDP ports for WebRTC media -->
                     <IceCandidate>*:10000-10009/udp</IceCandidate>
                 </IceCandidates>
             </WebRTC>
         </Providers>
 
         <Publishers>
-            <!-- LL-HLS output (low-latency HLS) -->
+            <!-- LL-HLS (low-latency HLS) playback -->
             <LLHLS>
-                <!-- HTTP and HTTPS ports for LL-HLS playlists/segments -->
                 <Port>8080</Port>
                 <TLSPort>8443</TLSPort>
                 <WorkerCount>1</WorkerCount>
             </LLHLS>
 
-            <!-- WebRTC playback signalling (shares config with Providers/WebRTC) -->
+            <!-- WebRTC playback (reuses same signalling + ICE ports) -->
             <WebRTC>
                 <Signalling>
                     <Port>3333</Port>
@@ -82,39 +100,30 @@
     </Bind>
 
     <!--
-      Modules: leaving your original Control + Host/VirtualHost setup intact.
-      This matches what BitRiver Live expects (REST API on 8081, "live" app, etc.).
-    -->
-    <Modules>
-        <Control>
-            <Server>
-                <Listeners>
-                    <TCP>
-                        <Bind>0.0.0.0</Bind>
-                        <IP>0.0.0.0</IP>
-                        <Port>8081</Port>
-                    </TCP>
-                </Listeners>
-            </Server>
-            <Authentication>
-                <User>
-                    <ID>admin</ID>
-                    <!-- Updated automatically by scripts/quickstart.sh before docker compose up. -->
-                    <Password>local-dev-password</Password>
-                </User>
-            </Authentication>
-        </Control>
+      Virtual host + application config.
 
-        <Host>
-            <VirtualHosts>
-                <VirtualHost>
-                    <Name>default</Name>
-                    <Host>*</Host>
-                    <App>
-                        <Name>live</Name>
-                    </App>
-                </VirtualHost>
-            </VirtualHosts>
-        </Host>
-    </Modules>
+      We keep a single vhost "default" with one application "live" to match
+      BitRiver Live’s expectation of /live as the app name.
+    -->
+    <VirtualHosts>
+        <VirtualHost>
+            <Name>default</Name>
+
+            <Host>
+                <Names>
+                    <!-- * = any host -->
+                    <Name>*</Name>
+                </Names>
+            </Host>
+
+            <Applications>
+                <Application>
+                    <Name>live</Name>
+
+                    <!-- Use default Providers/Publishers from Bind -->
+                    <!-- You can add per-app settings here if needed later -->
+                </Application>
+            </Applications>
+        </VirtualHost>
+    </VirtualHosts>
 </Server>
