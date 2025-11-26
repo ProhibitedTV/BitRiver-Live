@@ -1,20 +1,90 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Server version="10">
     <Name>OvenMediaEngine</Name>
-    <!-- Required for health endpoint and origin-mode APIs; Compose mounts
-         this file at /opt/ovenmediaengine/bin/origin_conf/Server.xml -->
+    <!-- Host type (origin/edge) -->
     <Type>origin</Type>
-    <IP>0.0.0.0</IP>
-    <!-- Quickstart rewrites bind addresses and ports from BITRIVER_OME_* env vars. -->
+
+    <!--
+      IP addresses OvenMediaEngine will bind to.
+      "*" = all IPv4 interfaces, "::" = all IPv6 interfaces.
+      You can add a second <IP>::</IP> if you want IPv6 too.
+      See: https://docs.ovenmediaengine.com/configuration/ipv6
+    -->
+    <IP>*</IP>
+
+    <!-- Privacy / logging behaviour -->
     <PrivacyProtection>false</PrivacyProtection>
+
+    <!-- Used for discovering public IP for WebRTC ICE candidates -->
     <StunServer>stun.l.google.com:19302</StunServer>
 
+    <!--
+      Bind: defines listening ports for input (Providers) and output (Publishers).
+      This structure matches the modern OME schema – note that there is NO <IP>
+      directly inside <Bind>. That is what was causing "Server.bind.IP" errors.
+      See: https://docs.ovenmediaengine.com/configuration
+    -->
     <Bind>
-        <IP>0.0.0.0</IP>
-        <Port>9000</Port>
-        <TLSPort>9443</TLSPort>
+        <Providers>
+            <!-- RTMP ingest: rtmp://host:1935/app/stream -->
+            <RTMP>
+                <Port>1935</Port>
+                <WorkerCount>1</WorkerCount>
+            </RTMP>
+
+            <!-- WebRTC ingest/signalling (optional but handy for WHIP etc.) -->
+            <WebRTC>
+                <Signalling>
+                    <!-- WebSocket signalling for WebRTC (play + publish) -->
+                    <Port>3333</Port>
+                    <TLSPort>3334</TLSPort>
+                    <WorkerCount>1</WorkerCount>
+                </Signalling>
+                <IceCandidates>
+                    <!--
+                      TURN / WebRTC-over-TCP:
+                      *:3478 = built-in TURN server on all IPs, port 3478
+                    -->
+                    <TcpRelay>*:3478</TcpRelay>
+                    <TcpForce>false</TcpForce>
+                    <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
+
+                    <!-- UDP ports used for WebRTC media -->
+                    <IceCandidate>*:10000-10009/udp</IceCandidate>
+                </IceCandidates>
+            </WebRTC>
+        </Providers>
+
+        <Publishers>
+            <!-- LL-HLS output (low-latency HLS) -->
+            <LLHLS>
+                <!-- HTTP and HTTPS ports for LL-HLS playlists/segments -->
+                <Port>8080</Port>
+                <TLSPort>8443</TLSPort>
+                <WorkerCount>1</WorkerCount>
+            </LLHLS>
+
+            <!-- WebRTC playback signalling (shares config with Providers/WebRTC) -->
+            <WebRTC>
+                <Signalling>
+                    <Port>3333</Port>
+                    <TLSPort>3334</TLSPort>
+                    <WorkerCount>1</WorkerCount>
+                </Signalling>
+                <IceCandidates>
+                    <TcpRelay>*:3478</TcpRelay>
+                    <TcpForce>false</TcpForce>
+                    <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
+                    <IceCandidate>*:10000-10009/udp</IceCandidate>
+                </IceCandidates>
+            </WebRTC>
+        </Publishers>
     </Bind>
 
+    <!--
+      Modules: leaving your original Control + Host/VirtualHost setup intact.
+      This matches what BitRiver Live expects (REST API on 8081, "live" app, etc.).
+    -->
     <Modules>
         <Control>
             <Server>
