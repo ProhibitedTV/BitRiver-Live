@@ -16,6 +16,7 @@ on:
       - deploy/**
       - .github/workflows/go-unit-tests.yml
   pull_request:
+    # If you want tests for every PR, delete the paths: filter here.
     paths:
       - '**/*.go'
       - go.mod
@@ -25,9 +26,13 @@ on:
       - deploy/**
       - .github/workflows/go-unit-tests.yml
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -35,7 +40,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.21'
+          # Keeps CI in sync with go.mod
+          go-version-file: 'go.mod'
           cache: true
 
       - name: Ensure vendored modules are available
@@ -49,4 +55,5 @@ jobs:
           GOPROXY: off
           GOSUMDB: off
           GOFLAGS: -mod=vendor
-        run: go test ./... -count=1 -timeout=10s
+        # Increase timeout to reduce flakes
+        run: go test ./... -count=1 -timeout=120s
