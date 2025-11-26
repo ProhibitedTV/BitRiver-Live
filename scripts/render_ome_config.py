@@ -22,8 +22,11 @@ def replace_tag_content(data: str, tag: str, value: str) -> str:
     return data[: start + len(open_tag)] + value + data[end:]
 
 
-def replace_all_tag_content(data: str, tag: str, value: str, *, required: bool = True) -> str:
-    """Replace *all* <tag>...</tag> occurrences in data.
+def replace_all_tag_content(
+    data: str, tag: str, value: str, *, required: bool = True
+) -> str:
+    """
+    Replace *all* <tag>...</tag> occurrences in data.
 
     If required=False and no tags are found, data is returned unchanged.
     """
@@ -43,7 +46,8 @@ def xml_escape(value: str) -> str:
 
 
 def _replace_root_bindings(text: str, address: str, port: str, tls_port: str) -> str:
-    """Replace <Bind> tags in the <Server> header.
+    """
+    Replace <Bind> tags in the <Server> header.
 
     Newer templates use <Address> inside <Bind>; older ones may still have <IP>.
     We support both so quickstart can be rerun across versions.
@@ -62,7 +66,7 @@ def _replace_root_bindings(text: str, address: str, port: str, tls_port: str) ->
     bind_start, bind_end = bind_match.span(1)
     bind_body = bind_match.group(1)
 
-    # Prefer <Address> if present (new schema); otherwise fall back to <IP>.
+    # Prefer <Address> if present (new schema); otherwise fall back to <IP> (legacy).
     if "<Address>" in bind_body:
         bind_body = replace_tag_content(bind_body, "Address", address)
     elif "<IP>" in bind_body:
@@ -77,7 +81,8 @@ def _replace_root_bindings(text: str, address: str, port: str, tls_port: str) ->
 
 
 def _replace_root_ip(text: str, ip: str) -> str:
-    """Replace the <IP> tag in the <Server> header (outside <Modules>).
+    """
+    Replace the <IP> tag in the <Server> header (outside <Modules>).
 
     Some templates may omit a root-level <IP>; in that case we simply leave
     the header unchanged instead of failing.
@@ -98,51 +103,42 @@ def _replace_root_ip(text: str, ip: str) -> str:
 
 
 def _scoped_replace_control_bindings(text: str, bind: str) -> str:
-    """Replace <Bind> and <IP>/<Address> tags within the control listener scope only."""
-    header_match = re.search(r"<Server[^>]*>(.*?)<Modules>", text, re.DOTALL)
-    if not header_match:
-        raise SystemExit("missing <Server> header before <Modules> in template")
+    """
+    Legacy helper: rewrite <Bind>/<IP>/<Address> inside <Modules><Control><Server>
+    if that section exists. If it does *not* exist (newer templates), this is a no-op.
 
-    header_start, header_end = header_match.span()
-
+    This function is now tolerant:
+    - It does NOT enforce where Bind/IP/Address appear globally.
+    - It does NOT fail if <Control> is missing.
+    """
     control_match = re.search(r"<Control>(.*?)</Control>", text, re.DOTALL)
     if not control_match:
-        raise SystemExit("missing <Control> section in template")
+        # No legacy Control module; nothing to rewrite.
+        return text
 
     control_start, control_end = control_match.span()
     control_body = text[control_start:control_end]
 
     server_match = re.search(r"<Server>(.*?)</Server>", control_body, re.DOTALL)
     if not server_match:
-        raise SystemExit("missing <Server> section under <Control> in template")
+        # Unexpected legacy layout; leave as-is rather than fail.
+        return text
 
     server_start, server_end = server_match.span()
-    server_abs_start = control_start + server_start
-    server_abs_end = control_start + server_end
-
-    # Ensure Bind/IP/Address tags only appear where we expect them, but don't
-    # force IP/Address to exist.
-    for tag in ("Bind", "IP", "Address"):
-        for match in re.finditer(rf"<\s*{tag}\s*>", text):
-            in_header = header_start <= match.start() <= header_end
-            in_control_server = server_abs_start <= match.start() <= server_abs_end
-            if not (in_header or in_control_server):
-                raise SystemExit(
-                    "Bind/IP/Address entries must live in the Server header or "
-                    "under <Modules><Control><Server><Listeners><TCP>. "
-                    "Move or delete the out-of-scope tag before rendering."
-                )
-
     server_body = control_body[server_start:server_end]
-    server_body = replace_all_tag_content(server_body, "Bind", bind)
 
-    # Replace any control-level IP or Address tags if present, but don't error
-    # if the template doesn't have them (newer templates may not).
+    # Always rewrite <Bind> if present under Control.
+    if "<Bind>" in server_body:
+        server_body = replace_all_tag_content(server_body, "Bind", bind, required=False)
+
+    # If this legacy section has IP or Address tags, also rewrite them, but
+    # do not consider them required.
     if "<IP>" in server_body:
         server_body = replace_all_tag_content(server_body, "IP", bind, required=False)
     if "<Address>" in server_body:
         server_body = replace_all_tag_content(server_body, "Address", bind, required=False)
 
+    # Splice Control section back together.
     control_body = control_body[:server_start] + server_body + control_body[server_end:]
     return text[:control_start] + control_body + text[control_end:]
 
@@ -162,28 +158,53 @@ def render(
     escaped_tls_port = xml_escape(tls_port)
     text = template.read_text()
 
-    # Normalize legacy <Server.bind> tags to <Bind> to avoid schema errors.
+    # Normalize old <Server.bind> wrappers to <Bind> so very old templates don't break.
     text = re.sub(r"<\s*Server\.bind\s*>", "<Bind>", text)
     text = re.sub(r"</\s*Server\.bind\s*>", "</Bind>", text)
 
     text = _replace_root_bindings(text, escaped_bind, escaped_port, escaped_tls_port)
     text = _replace_root_ip(text, xml_escape(server_ip))
     text = _scoped_replace_control_bindings(text, escaped_bind)
+
+    # These are still expected to exist somewhere (typically under <Authentication>).
     text = replace_tag_content(text, "ID", xml_escape(username))
     text = replace_tag_content(text, "Password", xml_escape(password))
+
     output.write_text(text)
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description="Render OvenMediaEngine Server.xml from template")
-    parser.add_argument("--template", required=True, type=Path, help="Path to the Server.xml template")
-    parser.add_argument("--output", required=True, type=Path, help="Destination for the rendered Server.xml")
-    parser.add_argument("--bind", required=True, help="Bind address for the OME server")
-    parser.add_argument("--server-ip", help="Public IP address advertised by OME; defaults to --bind")
-    parser.add_argument("--username", required=True, help="OME control username")
-    parser.add_argument("--password", required=True, help="OME control password")
-    parser.add_argument("--port", required=True, help="OME server port")
-    parser.add_argument("--tls-port", required=True, help="OME server TLS port")
+    parser = argparse.ArgumentParser(
+        description="Render OvenMediaEngine Server.xml from template"
+    )
+    parser.add_argument(
+        "--template", required=True, type=Path, help="Path to the Server.xml template"
+    )
+    parser.add_argument(
+        "--output",
+        required=True,
+        type=Path,
+        help="Destination for the rendered Server.xml",
+    )
+    parser.add_argument(
+        "--bind", required=True, help="Bind address for the OME server"
+    )
+    parser.add_argument(
+        "--server-ip",
+        help="Public IP address advertised by OME; defaults to --bind",
+    )
+    parser.add_argument(
+        "--username", required=True, help="OME control username"
+    )
+    parser.add_argument(
+        "--password", required=True, help="OME control password"
+    )
+    parser.add_argument(
+        "--port", required=True, help="OME server port"
+    )
+    parser.add_argument(
+        "--tls-port", required=True, help="OME server TLS port"
+    )
 
     args = parser.parse_args(argv)
     server_ip = args.server_ip if args.server_ip is not None else args.bind
