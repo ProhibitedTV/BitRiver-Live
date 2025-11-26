@@ -35,7 +35,7 @@ def xml_escape(value: str) -> str:
     return escape(value, {"'": "&apos;", '"': "&quot;"})
 
 
-def _replace_root_bindings(text: str, address: str, port: str, tls_port: str) -> str:
+def _replace_root_bindings(text: str, ip: str, port: str, tls_port: str) -> str:
     """Replace <Bind> tags in the <Server> header."""
 
     header_match = re.search(r"<Server[^>]*>(.*?)<Modules>", text, re.DOTALL)
@@ -52,7 +52,7 @@ def _replace_root_bindings(text: str, address: str, port: str, tls_port: str) ->
     bind_start, bind_end = bind_match.span(1)
     bind_body = bind_match.group(1)
 
-    for tag, value in ("Address", address), ("Port", port), ("TLSPort", tls_port):
+    for tag, value in ("IP", ip), ("Port", port), ("TLSPort", tls_port):
         bind_body = replace_tag_content(bind_body, tag, value)
 
     header_body = header_body[:bind_start] + bind_body + header_body[bind_end:]
@@ -128,10 +128,6 @@ def render(
     escaped_port = xml_escape(server_port)
     escaped_tls_port = xml_escape(tls_port)
     text = template.read_text()
-
-    # Normalize legacy <Server.bind> tags to <Bind> to avoid schema errors.
-    text = re.sub(r"<\s*Server\.bind\s*>", "<Bind>", text)
-    text = re.sub(r"</\s*Server\.bind\s*>", "</Bind>", text)
 
     text = _replace_root_bindings(text, escaped_bind, escaped_port, escaped_tls_port)
     text = _replace_root_ip(text, xml_escape(server_ip))
