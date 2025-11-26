@@ -1,9 +1,29 @@
 name: Postgres storage tests
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
+    paths:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+      - vendor/**
+      - scripts/**
+      - deploy/**
+      - .github/workflows/postgres-tests.yml
   pull_request:
+    paths:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+      - vendor/**
+      - scripts/**
+      - deploy/**
+      - .github/workflows/postgres-tests.yml
 
 jobs:
   postgres:

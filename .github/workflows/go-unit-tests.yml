@@ -1,9 +1,29 @@
 name: Go unit tests
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
+    paths:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+      - vendor/**
+      - scripts/**
+      - deploy/**
+      - .github/workflows/go-unit-tests.yml
   pull_request:
+    paths:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+      - vendor/**
+      - scripts/**
+      - deploy/**
+      - .github/workflows/go-unit-tests.yml
 
 jobs:
   test:
