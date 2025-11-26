@@ -224,6 +224,11 @@ jobs:
           NEXT_TELEMETRY_DISABLED: 1
         run: npm run lint
 
+      - name: Install Playwright browsers
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+        run: npx playwright install --with-deps
+
       - name: Test
         env:
           NEXT_TELEMETRY_DISABLED: 1
