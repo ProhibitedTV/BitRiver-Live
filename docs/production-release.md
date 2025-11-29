@@ -84,6 +84,7 @@ so the job can populate every required variable and image tag:
 - `BITRIVER_SRS_CONTROLLER_IMAGE_TAG`
 - `BITRIVER_TRANSCODER_IMAGE_TAG`
 - `BITRIVER_SRS_IMAGE_TAG`
+- `BITRIVER_OME_IMAGE_TAG`
 
 ## 3. Rotate credentials and validate environment files
 
