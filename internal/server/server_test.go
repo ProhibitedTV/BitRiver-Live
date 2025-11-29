@@ -484,3 +484,65 @@ func TestChatWebsocketUpgradesThroughMiddleware(t *testing.T) {
 		t.Fatalf("expected Sec-WebSocket-Accept header, got %q", handshake)
 	}
 }
+
+func TestRateLimitMiddlewareAuthPaths(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name   string
+		method string
+		path   string
+	}{
+		{name: "login", method: http.MethodPost, path: "/api/auth/login"},
+		{name: "signup", method: http.MethodPost, path: "/api/auth/signup"},
+		{name: "session get", method: http.MethodGet, path: "/api/auth/session"},
+		{name: "session delete", method: http.MethodDelete, path: "/api/auth/session"},
+		{name: "oauth start", method: http.MethodPost, path: "/api/auth/oauth/provider/start"},
+		{name: "oauth callback", method: http.MethodGet, path: "/api/auth/oauth/provider/callback"},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rl, err := newRateLimiter(RateLimitConfig{LoginLimit: 1, LoginWindow: time.Minute})
+			if err != nil {
+				t.Fatalf("newRateLimiter error: %v", err)
+			}
+
+			nextCalls := 0
+			handler := rateLimitMiddleware(rl, nil, nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				nextCalls++
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req.RemoteAddr = "1.2.3.4:1234"
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected first request to succeed, got %d", rec.Code)
+			}
+			if nextCalls != 1 {
+				t.Fatalf("expected next handler to be called once, got %d", nextCalls)
+			}
+
+			retryReq := httptest.NewRequest(tc.method, tc.path, nil)
+			retryReq.RemoteAddr = req.RemoteAddr
+			retryRec := httptest.NewRecorder()
+			handler.ServeHTTP(retryRec, retryReq)
+
+			if retryRec.Code != http.StatusTooManyRequests {
+				t.Fatalf("expected second request to be rate limited, got %d", retryRec.Code)
+			}
+			if retryAfter := retryRec.Header().Get("Retry-After"); retryAfter != "1" {
+				t.Fatalf("expected Retry-After header to be set, got %q", retryAfter)
+			}
+			if nextCalls != 1 {
+				t.Fatalf("expected next handler to not be called after rate limiting, got %d", nextCalls)
+			}
+		})
+	}
+}

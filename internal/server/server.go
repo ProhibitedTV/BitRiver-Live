@@ -318,7 +318,7 @@ func rateLimitMiddleware(rl *rateLimiter, resolver *clientIPResolver, logger *sl
 			http.Error(w, "global rate limit exceeded", http.StatusTooManyRequests)
 			return
 		}
-		if r.Method == http.MethodPost && r.URL.Path == "/api/auth/login" {
+		if shouldRateLimitAuthRequest(r) {
 			ip, source := resolveClientIP(r, resolver)
 			allowed, retryAfter, err := rl.AllowLogin(ip)
 			if err != nil {
@@ -341,6 +341,34 @@ func rateLimitMiddleware(rl *rateLimiter, resolver *clientIPResolver, logger *sl
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func shouldRateLimitAuthRequest(r *http.Request) bool {
+	if r == nil || r.URL == nil {
+		return false
+	}
+	switch r.URL.Path {
+	case "/api/auth/login", "/api/auth/signup":
+		return r.Method == http.MethodPost
+	case "/api/auth/session":
+		return r.Method == http.MethodGet || r.Method == http.MethodDelete
+	}
+
+	if strings.HasPrefix(r.URL.Path, "/api/auth/oauth/") {
+		trimmed := strings.TrimPrefix(r.URL.Path, "/api/auth/oauth/")
+		parts := strings.Split(strings.Trim(trimmed, "/"), "/")
+		if len(parts) >= 2 {
+			action := parts[1]
+			switch action {
+			case "start":
+				return r.Method == http.MethodPost
+			case "callback":
+				return r.Method == http.MethodGet
+			}
+		}
+	}
+
+	return false
 }
 
 func auditMiddleware(logger *slog.Logger, resolver *clientIPResolver, next http.Handler) http.Handler {
