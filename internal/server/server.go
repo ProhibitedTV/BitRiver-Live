@@ -33,15 +33,17 @@ type TLSConfig struct {
 // Config aggregates the dependencies and settings required to construct a
 // Server. Addr determines the listen address for the HTTP server, TLS controls
 // whether HTTPS is enabled, RateLimit configures per-client throttling, CORS
-// whitelists cross-site admin and viewer origins, Logger and AuditLogger
-// provide structured logging, Metrics records request metrics (defaulting to
-// metrics.Default when nil), ViewerOrigin configures reverse proxying for
-// viewer traffic, and OAuth is injected into the supplied API handler.
+// whitelists cross-site admin and viewer origins, Security sets the HTTP
+// hardening headers, Logger and AuditLogger provide structured logging, Metrics
+// records request metrics (defaulting to metrics.Default when nil), ViewerOrigin
+// configures reverse proxying for viewer traffic, and OAuth is injected into the
+// supplied API handler.
 type Config struct {
 	Addr                   string
 	TLS                    TLSConfig
 	RateLimit              RateLimitConfig
 	CORS                   CORSConfig
+	Security               SecurityConfig
 	Logger                 *slog.Logger
 	AuditLogger            *slog.Logger
 	Metrics                *metrics.Recorder
@@ -173,6 +175,8 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	}
 	handlerChain := http.Handler(mux)
 	handlerChain = corsMiddleware(corsPolicy, cfg.Logger, handlerChain)
+	securityCfg := cfg.Security.withDefaults()
+	handlerChain = securityHeadersMiddleware(securityCfg, handlerChain)
 	handlerChain = authMiddleware(handler, handlerChain)
 	handlerChain = rateLimitMiddleware(rl, ipResolver, cfg.Logger, handlerChain)
 	handlerChain = metricsMiddleware(recorder, handlerChain)
