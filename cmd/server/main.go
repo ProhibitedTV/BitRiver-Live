@@ -114,6 +114,12 @@ func main() {
 	sessionCookieCrossSite := flag.Bool("session-cookie-cross-site", false, "emit SameSite=None; Secure session cookies for cross-site viewer deployments")
 	adminCORSOrigins := flag.String("admin-cors-origins", "", "comma separated origins allowed to access the control centre APIs")
 	viewerCORSOrigins := flag.String("viewer-cors-origins", "", "comma separated origins allowed to access viewer APIs")
+	securityCSP := flag.String("security-csp", "", "override the Content-Security-Policy header (empty uses the secure default)")
+	securityFrameAncestors := flag.String("security-frame-ancestors", "", "frame-ancestors directive used in the default Content-Security-Policy")
+	securityFrameOptions := flag.String("security-frame-options", "", "X-Frame-Options header value")
+	securityReferrerPolicy := flag.String("security-referrer-policy", "", "Referrer-Policy header value")
+	securityPermissionsPolicy := flag.String("security-permissions-policy", "", "Permissions-Policy header value")
+	securityContentTypeOptions := flag.String("security-content-type-options", "", "X-Content-Type-Options header value")
 
 	// Storage flags (env: BITRIVER_LIVE_STORAGE_DRIVER, BITRIVER_LIVE_DATA, BITRIVER_LIVE_POSTGRES_DSN, DATABASE_URL, BITRIVER_LIVE_POSTGRES_*).
 	dataPath := flag.String("data", "", "path to JSON datastore")
@@ -251,6 +257,15 @@ func main() {
 	corsConfig := server.CORSConfig{
 		AdminOrigins:  splitAndTrim(firstNonEmpty(*adminCORSOrigins, os.Getenv("BITRIVER_LIVE_ADMIN_CORS_ORIGINS"))),
 		ViewerOrigins: splitAndTrim(firstNonEmpty(*viewerCORSOrigins, os.Getenv("BITRIVER_LIVE_VIEWER_CORS_ORIGINS"))),
+	}
+
+	securityCfg := server.SecurityConfig{
+		ContentSecurityPolicy: firstNonEmpty(*securityCSP, os.Getenv("BITRIVER_LIVE_SECURITY_CSP")),
+		FrameAncestors:        firstNonEmpty(*securityFrameAncestors, os.Getenv("BITRIVER_LIVE_SECURITY_FRAME_ANCESTORS")),
+		FrameOptions:          firstNonEmpty(*securityFrameOptions, os.Getenv("BITRIVER_LIVE_SECURITY_FRAME_OPTIONS")),
+		ReferrerPolicy:        firstNonEmpty(*securityReferrerPolicy, os.Getenv("BITRIVER_LIVE_SECURITY_REFERRER_POLICY")),
+		PermissionsPolicy:     firstNonEmpty(*securityPermissionsPolicy, os.Getenv("BITRIVER_LIVE_SECURITY_PERMISSIONS_POLICY")),
+		ContentTypeOptions:    firstNonEmpty(*securityContentTypeOptions, os.Getenv("BITRIVER_LIVE_SECURITY_CONTENT_TYPE_OPTIONS")),
 	}
 
 	ingestConfig, err := ingest.LoadConfigFromEnv()
@@ -494,6 +509,7 @@ func main() {
 		TLS:                    tlsCfg,
 		RateLimit:              rateCfg,
 		CORS:                   corsConfig,
+		Security:               securityCfg,
 		Logger:                 logger,
 		AuditLogger:            auditLogger,
 		Metrics:                recorder,

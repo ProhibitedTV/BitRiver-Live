@@ -437,6 +437,7 @@ func TestChatWebsocketUpgradesThroughMiddleware(t *testing.T) {
 	recorder := metrics.Default()
 
 	handlerChain := http.Handler(http.HandlerFunc(handler.ChatWebsocket))
+	handlerChain = securityHeadersMiddleware(SecurityConfig{}, handlerChain)
 	handlerChain = authMiddleware(handler, handlerChain)
 	handlerChain = rateLimitMiddleware(rl, resolver, logger, handlerChain)
 	handlerChain = metricsMiddleware(recorder, handlerChain)

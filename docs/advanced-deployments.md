@@ -44,6 +44,36 @@ The default configuration keeps the session cookie in `SameSite=Strict` mode and
 
 When the admin panel or viewer are hosted on different origins, set the corresponding CORS allowlists so browsers can reach the API. Origins must include the scheme and host (for example, `https://admin.example.com,https://watch.example.com`); any origin not listed receives a `403` by default. The quickstart path stays unchanged because same-origin requests remain allowed when the allowlists are empty.
 
+## Security headers
+
+The API emits hardening headers by default so the control centre and embedded viewer ship with internet-safe defaults:
+
+- `Content-Security-Policy`: `default-src 'self'; connect-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
+- `X-Frame-Options`: `DENY`
+- `Referrer-Policy`: `no-referrer`
+- `Permissions-Policy`: `camera=(), microphone=(), geolocation=()`
+- `X-Content-Type-Options`: `nosniff`
+
+Override the policy when you need to embed the admin panel or viewer inside a trusted host or allow external resources. Flags and environment variables let you tune the response headers without recompiling:
+
+| Flag | Purpose |
+| --- | --- |
+| `--security-csp` | Replaces the default `Content-Security-Policy` value. |
+| `--security-frame-ancestors` | Updates the `frame-ancestors` directive used in the default CSP. |
+| `--security-frame-options` | Overrides `X-Frame-Options` (default `DENY`). |
+| `--security-referrer-policy` | Overrides `Referrer-Policy` (default `no-referrer`). |
+| `--security-permissions-policy` | Overrides `Permissions-Policy` (default `camera=(), microphone=(), geolocation=()`). |
+| `--security-content-type-options` | Overrides `X-Content-Type-Options` (default `nosniff`). |
+
+| Variable | Description |
+| --- | --- |
+| `BITRIVER_LIVE_SECURITY_CSP` | Replaces the default `Content-Security-Policy` value. |
+| `BITRIVER_LIVE_SECURITY_FRAME_ANCESTORS` | Updates the `frame-ancestors` directive used in the default CSP. |
+| `BITRIVER_LIVE_SECURITY_FRAME_OPTIONS` | Overrides `X-Frame-Options` (default `DENY`). |
+| `BITRIVER_LIVE_SECURITY_REFERRER_POLICY` | Overrides `Referrer-Policy` (default `no-referrer`). |
+| `BITRIVER_LIVE_SECURITY_PERMISSIONS_POLICY` | Overrides `Permissions-Policy` (default `camera=(), microphone=(), geolocation=()`). |
+| `BITRIVER_LIVE_SECURITY_CONTENT_TYPE_OPTIONS` | Overrides `X-Content-Type-Options` (default `nosniff`). |
+
 ## Postgres backend
 
 BitRiver Live now boots directly against Postgres once the schema is migrated. The Docker Compose bundle ships with a short-lived `postgres-migrations` service that waits for the database, applies every SQL file in `deploy/migrations/`, and exits; `bitriver-live` depends on that helper and will not start until migrations succeed. For bespoke deployments, apply the SQL files with your preferred migration tool or straight through `psql`:
