@@ -32,15 +32,16 @@ type TLSConfig struct {
 
 // Config aggregates the dependencies and settings required to construct a
 // Server. Addr determines the listen address for the HTTP server, TLS controls
-// whether HTTPS is enabled, RateLimit configures per-client throttling, Logger
-// and AuditLogger provide structured logging, Metrics records request metrics
-// (defaulting to metrics.Default when nil), ViewerOrigin configures reverse
-// proxying for viewer traffic, and OAuth is injected into the supplied API
-// handler.
+// whether HTTPS is enabled, RateLimit configures per-client throttling, CORS
+// whitelists cross-site admin and viewer origins, Logger and AuditLogger
+// provide structured logging, Metrics records request metrics (defaulting to
+// metrics.Default when nil), ViewerOrigin configures reverse proxying for
+// viewer traffic, and OAuth is injected into the supplied API handler.
 type Config struct {
 	Addr                   string
 	TLS                    TLSConfig
 	RateLimit              RateLimitConfig
+	CORS                   CORSConfig
 	Logger                 *slog.Logger
 	AuditLogger            *slog.Logger
 	Metrics                *metrics.Recorder
@@ -77,6 +78,11 @@ type Server struct {
 func New(handler *api.Handler, cfg Config) (*Server, error) {
 	if handler == nil {
 		return nil, errors.New("handler is required")
+	}
+
+	corsPolicy, err := newCORSPolicy(cfg.CORS)
+	if err != nil {
+		return nil, fmt.Errorf("configure CORS: %w", err)
 	}
 
 	recorder := cfg.Metrics
@@ -166,6 +172,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("configure client ip resolver: %w", err)
 	}
 	handlerChain := http.Handler(mux)
+	handlerChain = corsMiddleware(corsPolicy, cfg.Logger, handlerChain)
 	handlerChain = authMiddleware(handler, handlerChain)
 	handlerChain = rateLimitMiddleware(rl, ipResolver, cfg.Logger, handlerChain)
 	handlerChain = metricsMiddleware(recorder, handlerChain)
