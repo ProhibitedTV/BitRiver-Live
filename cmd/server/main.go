@@ -112,6 +112,8 @@ func main() {
 	mode := flag.String("mode", "", "server runtime mode (development or production)")
 	allowSelfSignup := flag.Bool("allow-self-signup", false, "allow unauthenticated viewers to register accounts")
 	sessionCookieCrossSite := flag.Bool("session-cookie-cross-site", false, "emit SameSite=None; Secure session cookies for cross-site viewer deployments")
+	adminCORSOrigins := flag.String("admin-cors-origins", "", "comma separated origins allowed to access the control centre APIs")
+	viewerCORSOrigins := flag.String("viewer-cors-origins", "", "comma separated origins allowed to access viewer APIs")
 
 	// Storage flags (env: BITRIVER_LIVE_STORAGE_DRIVER, BITRIVER_LIVE_DATA, BITRIVER_LIVE_POSTGRES_DSN, DATABASE_URL, BITRIVER_LIVE_POSTGRES_*).
 	dataPath := flag.String("data", "", "path to JSON datastore")
@@ -244,6 +246,11 @@ func main() {
 	if err != nil {
 		logger.Error("invalid viewer origin", "error", err)
 		os.Exit(1)
+	}
+
+	corsConfig := server.CORSConfig{
+		AdminOrigins:  splitAndTrim(firstNonEmpty(*adminCORSOrigins, os.Getenv("BITRIVER_LIVE_ADMIN_CORS_ORIGINS"))),
+		ViewerOrigins: splitAndTrim(firstNonEmpty(*viewerCORSOrigins, os.Getenv("BITRIVER_LIVE_VIEWER_CORS_ORIGINS"))),
 	}
 
 	ingestConfig, err := ingest.LoadConfigFromEnv()
@@ -486,6 +493,7 @@ func main() {
 		Addr:                   listenAddr,
 		TLS:                    tlsCfg,
 		RateLimit:              rateCfg,
+		CORS:                   corsConfig,
 		Logger:                 logger,
 		AuditLogger:            auditLogger,
 		Metrics:                recorder,

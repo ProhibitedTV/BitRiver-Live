@@ -33,12 +33,16 @@ continue to create accounts manually regardless of this setting.
 | Flag | Purpose |
 | --- | --- |
 | `--session-cookie-cross-site` | Issues the `bitriver_session` cookie with `SameSite=None; Secure` for cross-site viewer deployments. |
+| `--admin-cors-origins` / `--viewer-cors-origins` | Comma-separated list of origins allowed to access the admin and viewer APIs over CORS. |
 
 | Variable | Description |
 | --- | --- |
 | `BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE` | Set to `true` to opt into cross-site session cookies; defaults to `false` (Strict). |
+| `BITRIVER_LIVE_ADMIN_CORS_ORIGINS` / `BITRIVER_LIVE_VIEWER_CORS_ORIGINS` | Origins (including scheme and host) whitelisted for cross-site requests; defaults deny cross-site origins. |
 
 The default configuration keeps the session cookie in `SameSite=Strict` mode and only marks it as `Secure` when the incoming request arrived over HTTPS, which works for the bundled same-origin viewer. When proxying the viewer from a different domain, enable the cross-site option so the session can flow to the viewer via `SameSite=None`; doing so requires HTTPS end-to-end because browsers reject `SameSite=None` cookies without `Secure`.
+
+When the admin panel or viewer are hosted on different origins, set the corresponding CORS allowlists so browsers can reach the API. Origins must include the scheme and host (for example, `https://admin.example.com,https://watch.example.com`); any origin not listed receives a `403` by default. The quickstart path stays unchanged because same-origin requests remain allowed when the allowlists are empty.
 
 ## Postgres backend
 
