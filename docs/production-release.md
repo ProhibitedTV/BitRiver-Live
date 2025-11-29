@@ -85,6 +85,8 @@ so the job can populate every required variable and image tag:
 - `BITRIVER_TRANSCODER_IMAGE_TAG`
 - `BITRIVER_SRS_IMAGE_TAG`
 - `BITRIVER_OME_IMAGE_TAG`
+- `NEXT_PUBLIC_API_BASE_URL`
+- `NEXT_PUBLIC_VIEWER_URL`
 
 ## 3. Rotate credentials and validate environment files
 
@@ -93,7 +95,9 @@ build out:
 
 1. Copy the updated `deploy/.env.example` into the release directory or target
    host and fill in the values for Postgres, Redis, SRS, OvenMediaEngine, and
-   transcoder credentials.
+   transcoder credentials. Ensure `NEXT_PUBLIC_API_BASE_URL` and
+   `NEXT_PUBLIC_VIEWER_URL` point at the public API and viewer endpoints users
+   will reach (not localhost or example.com placeholders).
 2. Run the guard script to confirm defaults are gone and service URLs match the
    target environment:
    ```bash
