@@ -16,6 +16,7 @@ source "$ENV_FILE"
 
 missing=()
 blocked=()
+blocked_messages=()
 unset_image_tags=()
 errors=()
 
@@ -35,16 +36,14 @@ required_vars=(
 )
 
 declare -A forbidden_values=(
-  [BITRIVER_POSTGRES_USER]="bitriver"
-  [BITRIVER_POSTGRES_PASSWORD]="bitriver"
-  [BITRIVER_REDIS_PASSWORD]="bitriver"
-  [BITRIVER_LIVE_ADMIN_EMAIL]="admin@example.com"
-  [BITRIVER_LIVE_ADMIN_PASSWORD]="change-me-now"
-  [BITRIVER_SRS_TOKEN]="local-dev-token"
-  [BITRIVER_OME_USERNAME]="admin"
-  [BITRIVER_OME_PASSWORD]="local-dev-password"
-  [BITRIVER_TRANSCODER_TOKEN]="local-dev-token"
-  [BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD]="local-dev-password"
+  [BITRIVER_POSTGRES_PASSWORD]="P0stgres-Example!"
+  [BITRIVER_REDIS_PASSWORD]="R3dis-Example!"
+  [BITRIVER_LIVE_ADMIN_EMAIL]="admin@stream.example.com"
+  [BITRIVER_LIVE_ADMIN_PASSWORD]="Sup3rSecureAdmin!"
+  [BITRIVER_SRS_TOKEN]="srs-secure-token-example"
+  [BITRIVER_OME_PASSWORD]="OME-Example-Pass!"
+  [BITRIVER_TRANSCODER_TOKEN]="transcoder-secure-token-example"
+  [BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD]="R3dis-Example!"
 )
 
 if [[ -n "${BITRIVER_REDIS_PASSWORD:-}" && -n "${BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD:-}" && \
@@ -72,6 +71,7 @@ for var in "${required_vars[@]}"; do
   fi
   if [[ -n "${forbidden_values[$var]:-}" && "$value" == "${forbidden_values[$var]}" ]]; then
     blocked+=("$var")
+    blocked_messages+=("$var is still set to the deploy/.env.example placeholder (${forbidden_values[$var]}). Replace it with a unique deployment secret.")
   fi
 done
 
@@ -111,9 +111,8 @@ if [[ -n "${BITRIVER_SRS_IMAGE_TAG:-}" && "$BITRIVER_SRS_IMAGE_TAG" != "v5.0.185
 fi
 
 if (( ${#blocked[@]} > 0 )); then
-  echo "Replace the placeholder values for these credentials before continuing:" >&2
-  for var in "${blocked[@]}"; do
-    echo "  - $var" >&2
+  for msg in "${blocked_messages[@]}"; do
+    echo "$msg" >&2
   done
 fi
 
@@ -122,7 +121,9 @@ if [[ -n "${BITRIVER_LIVE_POSTGRES_DSN:-}" && "$BITRIVER_LIVE_POSTGRES_DSN" == *
 fi
 
 if [[ -n "${BITRIVER_TRANSCODER_PUBLIC_BASE_URL:-}" ]]; then
-  if [[ "$BITRIVER_TRANSCODER_PUBLIC_BASE_URL" =~ ^https?://(localhost|127\.[0-9.]*|0\.0\.0\.0|::1|\[::1\])([:/]|$) ]]; then
+  if [[ "$BITRIVER_TRANSCODER_PUBLIC_BASE_URL" == "https://cdn.example.com/hls" ]]; then
+    errors+=("BITRIVER_TRANSCODER_PUBLIC_BASE_URL still uses the sample CDN URL (https://cdn.example.com/hls) from deploy/.env.example. Point this at the public origin end users can reach instead.")
+  elif [[ "$BITRIVER_TRANSCODER_PUBLIC_BASE_URL" =~ ^https?://(localhost|127\.[0-9.]*|0\.0\.0\.0|::1|\[::1\])([:/]|$) ]]; then
     errors+=("BITRIVER_TRANSCODER_PUBLIC_BASE_URL points at loopback ($BITRIVER_TRANSCODER_PUBLIC_BASE_URL). Configure a CDN, reverse proxy, or other routable origin instead.")
   fi
 fi
