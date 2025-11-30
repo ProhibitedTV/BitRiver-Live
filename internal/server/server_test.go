@@ -546,3 +546,71 @@ func TestRateLimitMiddlewareAuthPaths(t *testing.T) {
 		})
 	}
 }
+
+func TestMetricsAccessToken(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	srv, err := New(handler, Config{MetricsAccess: MetricsAccessConfig{Token: "scrape-secret"}})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req.RemoteAddr = "198.51.100.10:1234"
+	rec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden without token, got %d", rec.Code)
+	}
+
+	authedReq := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	authedReq.RemoteAddr = req.RemoteAddr
+	authedReq.Header.Set("Authorization", "Bearer scrape-secret")
+	authedRec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(authedRec, authedReq)
+
+	if authedRec.Code != http.StatusOK {
+		t.Fatalf("expected success with token, got %d", authedRec.Code)
+	}
+	if body := authedRec.Body.String(); body == "" {
+		t.Fatal("expected metrics body to be returned")
+	}
+}
+
+func TestMetricsAccessNetworks(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	srv, err := New(handler, Config{MetricsAccess: MetricsAccessConfig{AllowedNetworks: []string{"10.0.0.0/8"}}})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	allowedReq := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	allowedReq.RemoteAddr = "10.1.2.3:9999"
+	allowedRec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(allowedRec, allowedReq)
+
+	if allowedRec.Code != http.StatusOK {
+		t.Fatalf("expected allowlisted network to succeed, got %d", allowedRec.Code)
+	}
+
+	deniedReq := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	deniedReq.RemoteAddr = "203.0.113.10:9999"
+	deniedRec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(deniedRec, deniedReq)
+
+	if deniedRec.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for non-allowlisted network, got %d", deniedRec.Code)
+	}
+
+	healthReq := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	healthRec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(healthRec, healthReq)
+
+	if healthRec.Code != http.StatusOK {
+		t.Fatalf("expected health endpoint to remain public, got %d", healthRec.Code)
+	}
+}
