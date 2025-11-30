@@ -19,7 +19,7 @@ import (
 
 	"bitriver-live/internal/api"
 	"bitriver-live/internal/auth/oauth"
-	"bitriver-live/internal/observability/metrics"
+"bitriver-live/internal/observability/metrics"
 	"bitriver-live/web"
 )
 
@@ -176,8 +176,8 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	if cfg.ViewerOrigin != nil {
 		viewerProxy := httputil.NewSingleHostReverseProxy(cfg.ViewerOrigin)
 		viewerProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-			if cfg.Logger != nil {
-				cfg.Logger.Error("viewer proxy error", "error", err, "path", r.URL.Path)
+			if requestLogger := loggerWithRequestContext(r.Context(), cfg.Logger); requestLogger != nil {
+				requestLogger.Error("viewer proxy error", "error", err, "path", r.URL.Path)
 			}
 			http.Error(w, "viewer temporarily unavailable", http.StatusBadGateway)
 		}
@@ -194,6 +194,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	handlerChain = corsMiddleware(corsPolicy, cfg.Logger, handlerChain)
 	securityCfg := cfg.Security.withDefaults()
 	handlerChain = securityHeadersMiddleware(securityCfg, handlerChain)
+	handlerChain = requestIDMiddleware(cfg.Logger, handlerChain)
 	handlerChain = authMiddleware(handler, handlerChain)
 	handlerChain = rateLimitMiddleware(rl, ipResolver, cfg.Logger, handlerChain)
 	handlerChain = metricsMiddleware(recorder, handlerChain)
@@ -295,16 +296,17 @@ func (sr *statusRecorder) ReadFrom(r io.Reader) (int64, error) {
 }
 
 func loggingMiddleware(logger *slog.Logger, resolver *clientIPResolver, next http.Handler) http.Handler {
-	if logger == nil {
-		return next
-	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		recorder := newStatusRecorder(w)
 		start := time.Now()
 		next.ServeHTTP(recorder, r)
 		duration := time.Since(start)
 		ip, source := resolveClientIP(r, resolver)
-		logger.Info("request completed",
+		requestLogger := loggerWithRequestContext(r.Context(), logger)
+		if requestLogger == nil {
+			return
+		}
+		requestLogger.Info("request completed",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", recorder.status,
@@ -352,8 +354,8 @@ func (m *metricsAccessController) handler(next http.Handler) http.Handler {
 			return
 		}
 
-		if m.logger != nil {
-			m.logger.Warn("metrics access denied", "remote_ip", ip, "ip_source", source)
+		if requestLogger := loggerWithRequestContext(r.Context(), m.logger); requestLogger != nil {
+			requestLogger.Warn("metrics access denied", "remote_ip", ip, "ip_source", source)
 		}
 		http.Error(w, "metrics access denied", http.StatusForbidden)
 	})
@@ -411,17 +413,18 @@ func rateLimitMiddleware(rl *rateLimiter, resolver *clientIPResolver, logger *sl
 		}
 		if shouldRateLimitAuthRequest(r) {
 			ip, source := resolveClientIP(r, resolver)
+			requestLogger := loggerWithRequestContext(r.Context(), logger)
 			allowed, retryAfter, err := rl.AllowLogin(ip)
 			if err != nil {
-				if logger != nil {
-					logger.Error("rate limiter failure", "error", err, "remote_ip", ip, "ip_source", source)
+				if requestLogger != nil {
+					requestLogger.Error("rate limiter failure", "error", err, "remote_ip", ip, "ip_source", source)
 				}
 				http.Error(w, "rate limit failure", http.StatusServiceUnavailable)
 				return
 			}
 			if !allowed {
-				if logger != nil {
-					logger.Warn("login rate limited", "remote_ip", ip, "ip_source", source)
+				if requestLogger != nil {
+					requestLogger.Warn("login rate limited", "remote_ip", ip, "ip_source", source)
 				}
 				if retryAfter > 0 {
 					w.Header().Set("Retry-After", fmt.Sprintf("%.0f", retryAfter.Seconds()))
@@ -463,9 +466,6 @@ func shouldRateLimitAuthRequest(r *http.Request) bool {
 }
 
 func auditMiddleware(logger *slog.Logger, resolver *clientIPResolver, next http.Handler) http.Handler {
-	if logger == nil {
-		return next
-	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sr := newStatusRecorder(w)
 		start := time.Now()
@@ -476,6 +476,10 @@ func auditMiddleware(logger *slog.Logger, resolver *clientIPResolver, next http.
 		duration := time.Since(start)
 		user, ok := api.UserFromContext(r.Context())
 		ip, source := resolveClientIP(r, resolver)
+		requestLogger := loggerWithRequestContext(r.Context(), logger)
+		if requestLogger == nil {
+			return
+		}
 		fields := []interface{}{
 			"method", r.Method,
 			"path", r.URL.Path,
@@ -487,7 +491,7 @@ func auditMiddleware(logger *slog.Logger, resolver *clientIPResolver, next http.
 		if ok {
 			fields = append(fields, "user_id", user.ID)
 		}
-		logger.Info("audit", fields...)
+		requestLogger.Info("audit", fields...)
 	})
 }
 
