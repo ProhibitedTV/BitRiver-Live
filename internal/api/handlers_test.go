@@ -770,6 +770,47 @@ func TestSignupRejectsShortPassword(t *testing.T) {
 	}
 }
 
+func TestSignupHidesDuplicateEmailDetails(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	_, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Existing",
+		Email:       "viewer@example.com",
+		Password:    "supersafe",
+		SelfSignup:  true,
+	})
+	if err != nil {
+		t.Fatalf("seed existing user: %v", err)
+	}
+
+	signupPayload := map[string]string{
+		"displayName": "Viewer",
+		"email":       "viewer@example.com",
+		"password":    "anothersecret",
+	}
+	body, _ := json.Marshal(signupPayload)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/signup", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.Signup(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected signup status 400, got %d", rec.Code)
+	}
+
+	var payload map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["error"] != "unable to create account" {
+		t.Fatalf("unexpected error message: %q", payload["error"])
+	}
+
+	if _, ok := store.FindUserByEmail("viewer@example.com"); !ok {
+		t.Fatal("existing account should remain after duplicate signup")
+	}
+}
+
 func TestSignupDisabled(t *testing.T) {
 	handler, _ := newTestHandler(t)
 	handler.AllowSelfSignup = false
