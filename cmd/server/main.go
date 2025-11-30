@@ -141,6 +141,8 @@ func main() {
 	tlsCert := flag.String("tls-cert", "", "path to TLS certificate file")
 	tlsKey := flag.String("tls-key", "", "path to TLS private key file")
 	logLevel := flag.String("log-level", "info", "log level (debug, info, warn, error)")
+	metricsToken := flag.String("metrics-token", "", "token required to scrape /metrics (Authorization bearer or X-Metrics-Token)")
+	metricsAllowNetworks := flag.String("metrics-allow-networks", "", "comma separated CIDR blocks or IPs allowed to scrape /metrics")
 
 	// Rate limiting flags (env: BITRIVER_LIVE_RATE_*).
 	globalRPS := flag.Float64("rate-global-rps", 0, "global request rate limit in requests per second")
@@ -499,6 +501,11 @@ func main() {
 		},
 	}
 
+	metricsAccessCfg := server.MetricsAccessConfig{
+		Token:           firstNonEmpty(*metricsToken, os.Getenv("BITRIVER_LIVE_METRICS_TOKEN")),
+		AllowedNetworks: splitAndTrim(firstNonEmpty(*metricsAllowNetworks, os.Getenv("BITRIVER_LIVE_METRICS_ALLOW_NETWORKS"))),
+	}
+
 	tlsCfg := server.TLSConfig{
 		CertFile: tlsCertPath,
 		KeyFile:  tlsKeyPath,
@@ -513,6 +520,7 @@ func main() {
 		Logger:                 logger,
 		AuditLogger:            auditLogger,
 		Metrics:                recorder,
+		MetricsAccess:          metricsAccessCfg,
 		ViewerOrigin:           viewerURL,
 		OAuth:                  oauthManager,
 		AllowSelfSignup:        &allowSelfSignupValue,

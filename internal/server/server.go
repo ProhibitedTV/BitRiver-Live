@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"context"
+	"crypto/subtle"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -30,14 +31,22 @@ type TLSConfig struct {
 	KeyFile  string
 }
 
+// MetricsAccessConfig defines the authentication and network allowlist used to
+// guard the Prometheus scrape endpoint.
+type MetricsAccessConfig struct {
+	Token           string
+	AllowedNetworks []string
+}
+
 // Config aggregates the dependencies and settings required to construct a
 // Server. Addr determines the listen address for the HTTP server, TLS controls
 // whether HTTPS is enabled, RateLimit configures per-client throttling, CORS
 // whitelists cross-site admin and viewer origins, Security sets the HTTP
 // hardening headers, Logger and AuditLogger provide structured logging, Metrics
-// records request metrics (defaulting to metrics.Default when nil), ViewerOrigin
-// configures reverse proxying for viewer traffic, and OAuth is injected into the
-// supplied API handler.
+// records request metrics (defaulting to metrics.Default when nil), MetricsAccess
+// restricts the Prometheus scrape endpoint, ViewerOrigin configures reverse
+// proxying for viewer traffic, and OAuth is injected into the supplied API
+// handler.
 type Config struct {
 	Addr                   string
 	TLS                    TLSConfig
@@ -47,6 +56,7 @@ type Config struct {
 	Logger                 *slog.Logger
 	AuditLogger            *slog.Logger
 	Metrics                *metrics.Recorder
+	MetricsAccess          MetricsAccessConfig
 	ViewerOrigin           *url.URL
 	OAuth                  oauth.Service
 	AllowSelfSignup        *bool
@@ -104,10 +114,26 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 		}
 	}
 
+	rl, err := newRateLimiter(cfg.RateLimit)
+	if err != nil {
+		return nil, fmt.Errorf("configure rate limiter: %w", err)
+	}
+	handler.RateLimiter = rl
+	ipResolver, err := newClientIPResolver(cfg.RateLimit)
+	if err != nil {
+		return nil, fmt.Errorf("configure client ip resolver: %w", err)
+	}
+	metricsAccess, err := newMetricsAccessController(cfg.MetricsAccess, ipResolver, cfg.Logger)
+	if err != nil {
+		return nil, fmt.Errorf("configure metrics access: %w", err)
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handler.Health)
 	mux.HandleFunc("/readyz", handler.Ready)
-	mux.Handle("/metrics", recorder.Handler())
+	metricsHandler := recorder.Handler()
+	metricsHandler = metricsAccess.handler(metricsHandler)
+	mux.Handle("/metrics", metricsHandler)
 	mux.HandleFunc("/api/auth/signup", handler.Signup)
 	mux.HandleFunc("/api/auth/login", handler.Login)
 	mux.HandleFunc("/api/auth/oauth/providers", handler.OAuthProviders)
@@ -164,15 +190,6 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 
 	mux.HandleFunc("/", spaHandler(staticFS, index, fileServer))
 
-	rl, err := newRateLimiter(cfg.RateLimit)
-	if err != nil {
-		return nil, fmt.Errorf("configure rate limiter: %w", err)
-	}
-	handler.RateLimiter = rl
-	ipResolver, err := newClientIPResolver(cfg.RateLimit)
-	if err != nil {
-		return nil, fmt.Errorf("configure client ip resolver: %w", err)
-	}
 	handlerChain := http.Handler(mux)
 	handlerChain = corsMiddleware(corsPolicy, cfg.Logger, handlerChain)
 	securityCfg := cfg.Security.withDefaults()
@@ -297,6 +314,80 @@ func loggingMiddleware(logger *slog.Logger, resolver *clientIPResolver, next htt
 	})
 }
 
+type metricsAccessController struct {
+	token    string
+	networks []*net.IPNet
+	resolver *clientIPResolver
+	logger   *slog.Logger
+}
+
+func newMetricsAccessController(cfg MetricsAccessConfig, resolver *clientIPResolver, logger *slog.Logger) (*metricsAccessController, error) {
+	networks, err := parseNetworks(cfg.AllowedNetworks, "metrics network")
+	if err != nil {
+		return nil, err
+	}
+	return &metricsAccessController{
+		token:    strings.TrimSpace(cfg.Token),
+		networks: networks,
+		resolver: resolver,
+		logger:   logger,
+	}, nil
+}
+
+func (m *metricsAccessController) handler(next http.Handler) http.Handler {
+	if m == nil || (m.token == "" && len(m.networks) == 0) {
+		return next
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip, source := resolveClientIP(r, m.resolver)
+
+		if m.token != "" && subtle.ConstantTimeCompare([]byte(m.token), []byte(metricsTokenFromRequest(r))) == 1 {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		if len(m.networks) > 0 && ipAllowed(ip, m.networks) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		if m.logger != nil {
+			m.logger.Warn("metrics access denied", "remote_ip", ip, "ip_source", source)
+		}
+		http.Error(w, "metrics access denied", http.StatusForbidden)
+	})
+}
+
+func metricsTokenFromRequest(r *http.Request) string {
+	auth := strings.TrimSpace(r.Header.Get("Authorization"))
+	if strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+		return strings.TrimSpace(auth[len("bearer "):])
+	}
+
+	if token := strings.TrimSpace(r.Header.Get("X-Metrics-Token")); token != "" {
+		return token
+	}
+
+	return ""
+}
+
+func ipAllowed(ip string, networks []*net.IPNet) bool {
+	if ip == "" {
+		return false
+	}
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	for _, network := range networks {
+		if network.Contains(parsed) {
+			return true
+		}
+	}
+	return false
+}
+
 func metricsMiddleware(recorder *metrics.Recorder, next http.Handler) http.Handler {
 	if recorder == nil {
 		recorder = metrics.Default()
@@ -418,6 +509,30 @@ const (
 	ipSourceXRealIP       = "x_real_ip"
 )
 
+func parseNetworks(raw []string, descriptor string) ([]*net.IPNet, error) {
+	var networks []*net.IPNet
+	for _, value := range raw {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, network, err := net.ParseCIDR(trimmed); err == nil {
+			networks = append(networks, network)
+			continue
+		}
+		ip := net.ParseIP(trimmed)
+		if ip == nil {
+			return nil, fmt.Errorf("parse %s %q: invalid address", descriptor, trimmed)
+		}
+		maskSize := 128
+		if ip.To4() != nil {
+			maskSize = 32
+		}
+		networks = append(networks, &net.IPNet{IP: ip, Mask: net.CIDRMask(maskSize, maskSize)})
+	}
+	return networks, nil
+}
+
 type clientIPResolver struct {
 	trustForwarded bool
 	trustedNets    []*net.IPNet
@@ -425,25 +540,11 @@ type clientIPResolver struct {
 
 func newClientIPResolver(cfg RateLimitConfig) (*clientIPResolver, error) {
 	resolver := &clientIPResolver{trustForwarded: cfg.TrustForwardedHeaders}
-	for _, raw := range cfg.TrustedProxies {
-		trimmed := strings.TrimSpace(raw)
-		if trimmed == "" {
-			continue
-		}
-		if _, network, err := net.ParseCIDR(trimmed); err == nil {
-			resolver.trustedNets = append(resolver.trustedNets, network)
-			continue
-		}
-		ip := net.ParseIP(trimmed)
-		if ip == nil {
-			return nil, fmt.Errorf("parse trusted proxy %q: invalid address", trimmed)
-		}
-		maskSize := 128
-		if ip.To4() != nil {
-			maskSize = 32
-		}
-		resolver.trustedNets = append(resolver.trustedNets, &net.IPNet{IP: ip, Mask: net.CIDRMask(maskSize, maskSize)})
+	trusted, err := parseNetworks(cfg.TrustedProxies, "trusted proxy")
+	if err != nil {
+		return nil, err
 	}
+	resolver.trustedNets = trusted
 	if !resolver.trustForwarded && len(resolver.trustedNets) == 0 {
 		return resolver, nil
 	}
