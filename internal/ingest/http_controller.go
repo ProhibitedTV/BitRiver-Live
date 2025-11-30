@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"bitriver-live/internal/observability/metrics"
 )
 
 // HTTPController orchestrates live ingest and VOD processing using
@@ -118,9 +120,9 @@ func (c *HTTPController) SetLogger(logger *slog.Logger) {
 // BootStream initializes a complete ingest pipeline for a live stream.
 //
 // The operation:
-//   1. Provisions a channel in SRS (primary/backup ingest endpoints).
-//   2. Creates an OME application (origin + playback URLs).
-//   3. Starts transcoding jobs using the configured rendition ladder.
+//  1. Provisions a channel in SRS (primary/backup ingest endpoints).
+//  2. Creates an OME application (origin + playback URLs).
+//  3. Starts transcoding jobs using the configured rendition ladder.
 //
 // On failure, BootStream attempts to roll back previously created
 // resources (e.g., deleting the OME application if transcoder startup
@@ -129,7 +131,9 @@ func (c *HTTPController) SetLogger(logger *slog.Logger) {
 // Callers should provide a context with an appropriate deadline to bound
 // the overall latency of the operation.
 func (c *HTTPController) BootStream(ctx context.Context, params BootParams) (BootResult, error) {
+	metrics.ObserveIngestAttempt("boot_stream")
 	if strings.TrimSpace(params.ChannelID) == "" || strings.TrimSpace(params.StreamKey) == "" {
+		metrics.ObserveIngestFailure("boot_stream")
 		return BootResult{}, fmt.Errorf("channelID and streamKey are required")
 	}
 
@@ -146,6 +150,7 @@ func (c *HTTPController) BootStream(ctx context.Context, params BootParams) (Boo
 			"channel_id", params.ChannelID,
 			"error", err,
 		)
+		metrics.ObserveIngestFailure("boot_stream")
 		return BootResult{}, err
 	}
 
@@ -156,6 +161,7 @@ func (c *HTTPController) BootStream(ctx context.Context, params BootParams) (Boo
 			"error", err,
 		)
 		_ = c.channels.DeleteChannel(ctx, params.ChannelID)
+		metrics.ObserveIngestFailure("boot_stream")
 		return BootResult{}, err
 	}
 
@@ -168,6 +174,7 @@ func (c *HTTPController) BootStream(ctx context.Context, params BootParams) (Boo
 		)
 		_ = c.applications.DeleteApplication(ctx, params.ChannelID)
 		_ = c.channels.DeleteChannel(ctx, params.ChannelID)
+		metrics.ObserveIngestFailure("boot_stream")
 		return BootResult{}, err
 	}
 
@@ -194,6 +201,7 @@ func (c *HTTPController) BootStream(ctx context.Context, params BootParams) (Boo
 // and deletes the SRS channel. All errors are aggregated and returned
 // as a single error if any step fails.
 func (c *HTTPController) ShutdownStream(ctx context.Context, channelID, sessionID string, jobIDs []string) error {
+	metrics.ObserveIngestAttempt("shutdown_stream")
 	c.ensureAdapters()
 
 	c.logger.Info("tearing down ingest pipeline",
@@ -231,6 +239,7 @@ func (c *HTTPController) ShutdownStream(ctx context.Context, channelID, sessionI
 	}
 
 	if len(errs) > 0 {
+		metrics.ObserveIngestFailure("shutdown_stream")
 		return fmt.Errorf(strings.Join(errs, "; "))
 	}
 
@@ -248,11 +257,14 @@ func (c *HTTPController) ShutdownStream(ctx context.Context, channelID, sessionI
 // media is already accessible at SourceURL. On success, it returns a
 // playback URL and the effective renditions used by the transcoder.
 func (c *HTTPController) TranscodeUpload(ctx context.Context, params UploadTranscodeParams) (UploadTranscodeResult, error) {
+	metrics.ObserveIngestAttempt("upload_transcode")
 	if strings.TrimSpace(params.ChannelID) == "" || strings.TrimSpace(params.UploadID) == "" {
+		metrics.ObserveIngestFailure("upload_transcode")
 		return UploadTranscodeResult{}, fmt.Errorf("channelID and uploadID are required")
 	}
 	source := strings.TrimSpace(params.SourceURL)
 	if source == "" {
+		metrics.ObserveIngestFailure("upload_transcode")
 		return UploadTranscodeResult{}, fmt.Errorf("sourceURL is required")
 	}
 
@@ -276,6 +288,7 @@ func (c *HTTPController) TranscodeUpload(ctx context.Context, params UploadTrans
 			"upload_id", params.UploadID,
 			"error", err,
 		)
+		metrics.ObserveIngestFailure("upload_transcode")
 		return UploadTranscodeResult{}, err
 	}
 
@@ -300,7 +313,8 @@ func (c *HTTPController) TranscodeUpload(ctx context.Context, params UploadTrans
 //   - Transcoder job service.
 //
 // Each service is probed at:
-//   <baseURL><HealthEndpoint>
+//
+//	<baseURL><HealthEndpoint>
 //
 // The configured HTTPClient and HealthTimeout are used for each request.
 // If a base URL is not configured, the corresponding health status is

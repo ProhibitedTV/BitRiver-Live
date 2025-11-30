@@ -16,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"bitriver-live/internal/observability/metrics"
 )
 
 const testToken = "test-token"
@@ -483,6 +485,226 @@ func TestUploadPublishesHTTPPlayback(t *testing.T) {
 	publishedMaster := filepath.Join(publicDir, "uploads", uploadResp.JobID, "index.m3u8")
 	if _, err := os.Stat(publishedMaster); err != nil {
 		t.Fatalf("expected published master playlist: %v", err)
+	}
+}
+
+func TestHandleJobsRecordsMetrics(t *testing.T) {
+	metrics.Default().Reset()
+	t.Cleanup(metrics.Default().Reset)
+
+	tempDir := t.TempDir()
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", filepath.Join(tempDir, "public"))
+
+	srv, err := newServer(testToken, tempDir)
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	srv.launchProcess = func(jobID string, plan *transcodePlan, onExit func(error)) (*processState, error) {
+		return &processState{cancel: func() {}, done: make(chan struct{})}, nil
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"channelId":  "channel-1",
+		"sessionId":  "session-1",
+		"originUrl":  "https://cdn/source.m3u8",
+		"renditions": []map[string]any{{"name": "720p", "bitrate": 2000}},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	res := httptest.NewRecorder()
+
+	srv.handleJobs(res, req)
+
+	if res.Code != http.StatusCreated {
+		t.Fatalf("unexpected status: %d", res.Code)
+	}
+
+	events, active := metrics.Default().TranscoderJobCounts()
+	if events[metrics.TranscoderJobLabel{Kind: "live", Status: "start"}] != 1 {
+		t.Fatalf("expected one live start, got %d", events[metrics.TranscoderJobLabel{Kind: "live", Status: "start"}])
+	}
+	if events[metrics.TranscoderJobLabel{Kind: "live", Status: "fail"}] != 0 {
+		t.Fatalf("expected zero live failures, got %d", events[metrics.TranscoderJobLabel{Kind: "live", Status: "fail"}])
+	}
+	if active != 1 {
+		t.Fatalf("expected active jobs gauge of 1, got %d", active)
+	}
+}
+
+func TestHandleJobsMetricsOnFailure(t *testing.T) {
+	metrics.Default().Reset()
+	t.Cleanup(metrics.Default().Reset)
+
+	tempDir := t.TempDir()
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", filepath.Join(tempDir, "public"))
+
+	srv, err := newServer(testToken, tempDir)
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	srv.launchProcess = func(jobID string, plan *transcodePlan, onExit func(error)) (*processState, error) {
+		return nil, errors.New("ffmpeg missing")
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"channelId":  "channel-1",
+		"sessionId":  "session-1",
+		"originUrl":  "https://cdn/source.m3u8",
+		"renditions": []map[string]any{{"name": "720p", "bitrate": 2000}},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	res := httptest.NewRecorder()
+
+	srv.handleJobs(res, req)
+
+	if res.Code != http.StatusInternalServerError {
+		t.Fatalf("unexpected status: %d", res.Code)
+	}
+
+	events, active := metrics.Default().TranscoderJobCounts()
+	if events[metrics.TranscoderJobLabel{Kind: "live", Status: "fail"}] != 1 {
+		t.Fatalf("expected one live failure, got %d", events[metrics.TranscoderJobLabel{Kind: "live", Status: "fail"}])
+	}
+	if active != 0 {
+		t.Fatalf("expected active jobs gauge of 0, got %d", active)
+	}
+}
+
+func TestHandleUploadsRecordsMetrics(t *testing.T) {
+	metrics.Default().Reset()
+	t.Cleanup(metrics.Default().Reset)
+
+	tempDir := t.TempDir()
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", filepath.Join(tempDir, "public"))
+
+	srv, err := newServer(testToken, tempDir)
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	srv.launchProcess = func(jobID string, plan *transcodePlan, onExit func(error)) (*processState, error) {
+		return &processState{cancel: func() {}, done: make(chan struct{})}, nil
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"channelId":  "channel-1",
+		"uploadId":   "upload-1",
+		"sourceUrl":  "https://cdn/source.mp4",
+		"filename":   "source.mp4",
+		"renditions": []map[string]any{{"name": "720p", "bitrate": 2000}},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/uploads", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	res := httptest.NewRecorder()
+
+	srv.handleUploads(res, req)
+
+	if res.Code != http.StatusAccepted {
+		t.Fatalf("unexpected status: %d", res.Code)
+	}
+
+	events, active := metrics.Default().TranscoderJobCounts()
+	if events[metrics.TranscoderJobLabel{Kind: "upload", Status: "start"}] != 1 {
+		t.Fatalf("expected one upload start, got %d", events[metrics.TranscoderJobLabel{Kind: "upload", Status: "start"}])
+	}
+	if events[metrics.TranscoderJobLabel{Kind: "upload", Status: "fail"}] != 0 {
+		t.Fatalf("expected zero upload failures, got %d", events[metrics.TranscoderJobLabel{Kind: "upload", Status: "fail"}])
+	}
+	if active != 1 {
+		t.Fatalf("expected active jobs gauge of 1, got %d", active)
+	}
+}
+
+func TestHandleUploadsMetricsOnFailure(t *testing.T) {
+	metrics.Default().Reset()
+	t.Cleanup(metrics.Default().Reset)
+
+	tempDir := t.TempDir()
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", filepath.Join(tempDir, "public"))
+
+	srv, err := newServer(testToken, tempDir)
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	srv.launchProcess = func(jobID string, plan *transcodePlan, onExit func(error)) (*processState, error) {
+		return nil, errors.New("ffmpeg missing")
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"channelId":  "channel-1",
+		"uploadId":   "upload-1",
+		"sourceUrl":  "https://cdn/source.mp4",
+		"filename":   "source.mp4",
+		"renditions": []map[string]any{{"name": "720p", "bitrate": 2000}},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/uploads", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	res := httptest.NewRecorder()
+
+	srv.handleUploads(res, req)
+
+	if res.Code != http.StatusInternalServerError {
+		t.Fatalf("unexpected status: %d", res.Code)
+	}
+
+	events, active := metrics.Default().TranscoderJobCounts()
+	if events[metrics.TranscoderJobLabel{Kind: "upload", Status: "fail"}] != 1 {
+		t.Fatalf("expected one upload failure, got %d", events[metrics.TranscoderJobLabel{Kind: "upload", Status: "fail"}])
+	}
+	if active != 0 {
+		t.Fatalf("expected active jobs gauge of 0, got %d", active)
+	}
+}
+
+func TestExitHandlersRecordMetrics(t *testing.T) {
+	metrics.Default().Reset()
+	t.Cleanup(metrics.Default().Reset)
+
+	tempDir := t.TempDir()
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", filepath.Join(tempDir, "public"))
+
+	srv, err := newServer(testToken, tempDir)
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	liveID := "job-exit"
+	uploadID := "upload-exit"
+	srv.jobs[liveID] = &job{ID: liveID}
+	srv.uploads[uploadID] = &uploadJob{ID: uploadID}
+
+	metrics.TranscoderJobStarted("live")
+	metrics.TranscoderJobStarted("upload")
+
+	srv.makeJobExitHandler(liveID)(nil)
+	srv.makeUploadExitHandler(uploadID)(errors.New("ffmpeg error"))
+
+	events, active := metrics.Default().TranscoderJobCounts()
+	if events[metrics.TranscoderJobLabel{Kind: "live", Status: "complete"}] != 1 {
+		t.Fatalf("expected one live completion, got %d", events[metrics.TranscoderJobLabel{Kind: "live", Status: "complete"}])
+	}
+	if events[metrics.TranscoderJobLabel{Kind: "upload", Status: "fail"}] != 1 {
+		t.Fatalf("expected one upload failure, got %d", events[metrics.TranscoderJobLabel{Kind: "upload", Status: "fail"}])
+	}
+	if active != 0 {
+		t.Fatalf("expected active jobs gauge of 0, got %d", active)
 	}
 }
 

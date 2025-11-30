@@ -314,6 +314,11 @@ All state-changing API calls emit structured audit logs containing the authentic
 BitRiver Live exports Prometheus-compatible metrics and improved health reporting out-of-the-box:
 
 - `GET /healthz` summarises dependency health and ingest orchestration.
-- `GET /metrics` emits request counters/latency, stream lifecycle events, ingest gauges, and the current number of active streams. Protect this endpoint with `-metrics-token`/`BITRIVER_LIVE_METRICS_TOKEN` (checked against the `Authorization: Bearer` or `X-Metrics-Token` header) or restrict it to specific CIDRs/IPs via `-metrics-allow-networks`/`BITRIVER_LIVE_METRICS_ALLOW_NETWORKS`. Health and readiness endpoints stay public.
+- `GET /metrics` emits request counters/latency, stream lifecycle events, ingest gauges, ingest attempt/failure counters, transcoder job lifecycle counters, and the current number of active streams/jobs. Protect this endpoint with `-metrics-token`/`BITRIVER_LIVE_METRICS_TOKEN` (checked against the `Authorization: Bearer` or `X-Metrics-Token` header) or restrict it to specific CIDRs/IPs via `-metrics-allow-networks`/`BITRIVER_LIVE_METRICS_ALLOW_NETWORKS`. Health and readiness endpoints stay public.
+
+The Prometheus payload includes:
+
+- `bitriver_ingest_attempts_total{operation}` and `bitriver_ingest_failures_total{operation}` to track Boot/Shutdown/Upload orchestration outcomes.
+- `bitriver_transcoder_jobs_total{kind,status}` and `bitriver_transcoder_active_jobs` for live/upload job lifecycle visibility.
 
 Point Prometheus, Grafana Agent, or another scraper at `/metrics` to track latency and ingest health. The installer script and deployment assets configure the same endpoints automatically so home operators can wire them into dashboards with minimal effort.

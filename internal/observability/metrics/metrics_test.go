@@ -168,6 +168,16 @@ func TestWriteAndHandlerOutput(t *testing.T) {
 	recorder.StreamStarted()
 	recorder.StreamStopped()
 
+	recorder.ObserveIngestAttempt("Boot_Stream")
+	recorder.ObserveIngestAttempt("upload_transcode")
+	recorder.ObserveIngestFailure("upload_transcode")
+
+	recorder.TranscoderJobStarted("live")
+	recorder.TranscoderJobCompleted("live")
+	recorder.TranscoderJobStarted("upload")
+	recorder.TranscoderJobFailed("upload")
+	recorder.TranscoderJobStarted("upload")
+
 	recorder.SetIngestHealth(" Ingest-A ", "Healthy")
 	recorder.SetIngestHealth("backup", "Degraded")
 
@@ -204,9 +214,26 @@ bitriver_active_streams 1
 # TYPE bitriver_ingest_health gauge
 bitriver_ingest_health{service="backup",status="degraded"} -1.000000
 bitriver_ingest_health{service="ingest-a",status="healthy"} 1.000000
+# HELP bitriver_ingest_attempts_total Total ingest operations attempted by action
+# TYPE bitriver_ingest_attempts_total counter
+bitriver_ingest_attempts_total{operation="boot_stream"} 1
+bitriver_ingest_attempts_total{operation="upload_transcode"} 1
+# HELP bitriver_ingest_failures_total Total ingest operation failures by action
+# TYPE bitriver_ingest_failures_total counter
+bitriver_ingest_failures_total{operation="boot_stream"} 0
+bitriver_ingest_failures_total{operation="upload_transcode"} 1
 # HELP bitriver_chat_events_total Chat events by type
 # TYPE bitriver_chat_events_total counter
 bitriver_chat_events_total{event="message"} 2
+# HELP bitriver_transcoder_jobs_total Transcoder job events by type and status
+# TYPE bitriver_transcoder_jobs_total counter
+bitriver_transcoder_jobs_total{kind="live",status="complete"} 1
+bitriver_transcoder_jobs_total{kind="live",status="start"} 1
+bitriver_transcoder_jobs_total{kind="upload",status="fail"} 1
+bitriver_transcoder_jobs_total{kind="upload",status="start"} 2
+# HELP bitriver_transcoder_active_jobs Current number of active transcoder jobs
+# TYPE bitriver_transcoder_active_jobs gauge
+bitriver_transcoder_active_jobs 1
 # HELP bitriver_monetization_events_total Monetization events by type
 # TYPE bitriver_monetization_events_total counter
 bitriver_monetization_events_total{event="subscription"} 1
