@@ -24,6 +24,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"bitriver-live/internal/observability/metrics"
 )
 
 type rendition struct {
@@ -69,16 +71,17 @@ type processState struct {
 }
 
 type server struct {
-	httpServer *http.Server
-	token      string
-	outputRoot string
-	publicRoot string
-	publicBase string
-	mu         sync.RWMutex
-	jobs       map[string]*job
-	uploads    map[string]*uploadJob
-	processes  map[string]*processState
-	store      *metadataStore
+	httpServer    *http.Server
+	token         string
+	outputRoot    string
+	publicRoot    string
+	publicBase    string
+	mu            sync.RWMutex
+	jobs          map[string]*job
+	uploads       map[string]*uploadJob
+	processes     map[string]*processState
+	store         *metadataStore
+	launchProcess func(string, *transcodePlan, func(error)) (*processState, error)
 }
 
 type metadataStore struct {
@@ -190,6 +193,7 @@ func newServer(token, outputRoot string) (*server, error) {
 		processes:  make(map[string]*processState),
 		store:      store,
 	}
+	srv.launchProcess = srv.startFFmpeg
 	srv.restoreActiveProcesses()
 	return srv, nil
 }
@@ -223,11 +227,13 @@ func (s *server) restoreActiveProcesses() {
 			log.Printf("resume job %s: %v", id, err)
 			continue
 		}
-		proc, err := s.startFFmpeg(id, plan, s.makeJobExitHandler(id))
+		proc, err := s.launchProcess(id, plan, s.makeJobExitHandler(id))
 		if err != nil {
 			log.Printf("restart job %s: %v", id, err)
+			metrics.TranscoderJobFailed("live")
 			continue
 		}
+		metrics.TranscoderJobStarted("live")
 		jb.Renditions = cloneRenditions(plan.renditions)
 		jb.OutputPath = plan.outputDir
 		jb.Playback = plan.master
@@ -252,11 +258,13 @@ func (s *server) restoreActiveProcesses() {
 			log.Printf("resume upload %s: %v", id, err)
 			continue
 		}
-		proc, err := s.startFFmpeg(id, plan, s.makeUploadExitHandler(id))
+		proc, err := s.launchProcess(id, plan, s.makeUploadExitHandler(id))
 		if err != nil {
 			log.Printf("restart upload %s: %v", id, err)
+			metrics.TranscoderJobFailed("upload")
 			continue
 		}
+		metrics.TranscoderJobStarted("upload")
 		up.Renditions = cloneRenditions(plan.renditions)
 		up.OutputPath = plan.outputDir
 		up.Playback = plan.master
@@ -297,15 +305,18 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 	var req jobRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid payload", http.StatusBadRequest)
+		metrics.TranscoderJobFailed("live")
 		return
 	}
 	if strings.TrimSpace(req.ChannelID) == "" || strings.TrimSpace(req.SessionID) == "" || strings.TrimSpace(req.OriginURL) == "" {
 		http.Error(w, "channelId, sessionId, and originUrl are required", http.StatusBadRequest)
+		metrics.TranscoderJobFailed("live")
 		return
 	}
 	renditions, err := decodeRenditions(req.Renditions)
 	if err != nil {
 		http.Error(w, "invalid renditions", http.StatusBadRequest)
+		metrics.TranscoderJobFailed("live")
 		return
 	}
 
@@ -313,6 +324,7 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 	plan, err := buildTranscodePlan(req.OriginURL, filepath.Join(s.outputRoot, "live", jobID), renditions)
 	if err != nil {
 		http.Error(w, "unable to prepare transcode", http.StatusInternalServerError)
+		metrics.TranscoderJobFailed("live")
 		return
 	}
 
@@ -331,12 +343,13 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 	s.jobs[jobID] = meta
 	s.mu.Unlock()
 
-	proc, err := s.startFFmpeg(jobID, plan, s.makeJobExitHandler(jobID))
+	proc, err := s.launchProcess(jobID, plan, s.makeJobExitHandler(jobID))
 	if err != nil {
 		s.mu.Lock()
 		delete(s.jobs, jobID)
 		s.mu.Unlock()
 		http.Error(w, "failed to start ffmpeg", http.StatusInternalServerError)
+		metrics.TranscoderJobFailed("live")
 		return
 	}
 
@@ -352,8 +365,11 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 		proc.cancel()
 		<-proc.done
 		http.Error(w, "failed to persist job", http.StatusInternalServerError)
+		metrics.TranscoderJobFailed("live")
 		return
 	}
+
+	metrics.TranscoderJobStarted("live")
 
 	if err := s.publishLive(meta); err != nil {
 		log.Printf("publish live job %s: %v", jobID, err)
@@ -440,15 +456,18 @@ func (s *server) handleUploads(w http.ResponseWriter, r *http.Request) {
 	var req uploadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid payload", http.StatusBadRequest)
+		metrics.TranscoderJobFailed("upload")
 		return
 	}
 	if strings.TrimSpace(req.ChannelID) == "" || strings.TrimSpace(req.UploadID) == "" || strings.TrimSpace(req.SourceURL) == "" {
 		http.Error(w, "channelId, uploadId, and sourceUrl are required", http.StatusBadRequest)
+		metrics.TranscoderJobFailed("upload")
 		return
 	}
 	renditions, err := decodeRenditions(req.Renditions)
 	if err != nil {
 		http.Error(w, "invalid renditions", http.StatusBadRequest)
+		metrics.TranscoderJobFailed("upload")
 		return
 	}
 
@@ -456,6 +475,7 @@ func (s *server) handleUploads(w http.ResponseWriter, r *http.Request) {
 	plan, err := buildTranscodePlan(req.SourceURL, filepath.Join(s.outputRoot, "uploads", jobID), renditions)
 	if err != nil {
 		http.Error(w, "unable to prepare transcode", http.StatusInternalServerError)
+		metrics.TranscoderJobFailed("upload")
 		return
 	}
 
@@ -475,12 +495,13 @@ func (s *server) handleUploads(w http.ResponseWriter, r *http.Request) {
 	s.uploads[jobID] = meta
 	s.mu.Unlock()
 
-	proc, err := s.startFFmpeg(jobID, plan, s.makeUploadExitHandler(jobID))
+	proc, err := s.launchProcess(jobID, plan, s.makeUploadExitHandler(jobID))
 	if err != nil {
 		s.mu.Lock()
 		delete(s.uploads, jobID)
 		s.mu.Unlock()
 		http.Error(w, "failed to start ffmpeg", http.StatusInternalServerError)
+		metrics.TranscoderJobFailed("upload")
 		return
 	}
 
@@ -496,8 +517,11 @@ func (s *server) handleUploads(w http.ResponseWriter, r *http.Request) {
 		proc.cancel()
 		<-proc.done
 		http.Error(w, "failed to persist upload", http.StatusInternalServerError)
+		metrics.TranscoderJobFailed("upload")
 		return
 	}
+
+	metrics.TranscoderJobStarted("upload")
 
 	publicRenditions := cloneRenditions(plan.renditions)
 	playback := meta.Playback
@@ -545,6 +569,11 @@ func (s *server) makeJobExitHandler(id string) func(error) {
 		if err := s.removeLiveMirror(id); err != nil {
 			log.Printf("cleanup live mirror %s: %v", id, err)
 		}
+		if err != nil {
+			metrics.TranscoderJobFailed("live")
+			return
+		}
+		metrics.TranscoderJobCompleted("live")
 	}
 }
 
@@ -573,6 +602,11 @@ func (s *server) makeUploadExitHandler(id string) func(error) {
 				log.Printf("persist upload %s: %v", id, saveErr)
 			}
 		}
+		if err != nil {
+			metrics.TranscoderJobFailed("upload")
+			return
+		}
+		metrics.TranscoderJobCompleted("upload")
 	}
 }
 

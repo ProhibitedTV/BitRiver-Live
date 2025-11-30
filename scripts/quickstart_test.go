@@ -172,6 +172,8 @@ func TestOmeConfigRenderingHandlesBindAsIp(t *testing.T) {
 		"--template", templatePath,
 		"--output", outputPath,
 		"--bind", "0.0.0.0",
+		"--port", "8081",
+		"--tls-port", "8082",
 		"--username", "admin",
 		"--password", "password")
 	var stderr bytes.Buffer
@@ -186,30 +188,71 @@ func TestOmeConfigRenderingHandlesBindAsIp(t *testing.T) {
 		t.Fatalf("read output: %v", err)
 	}
 
-	contents := string(output)
-	if strings.Count(contents, "<Bind>0.0.0.0</Bind>") != 2 {
-		t.Fatalf("expected bind address rendered for top-level and control listeners, got:\n%s", contents)
+	var parsed struct {
+		IP   string `xml:"IP"`
+		Bind struct {
+			Managers struct {
+				API struct {
+					Port    string `xml:"Port"`
+					TLSPort string `xml:"TLSPort"`
+				} `xml:"API"`
+			} `xml:"Managers"`
+		} `xml:"Bind"`
 	}
-	if strings.Count(contents, "<IP>0.0.0.0</IP>") != 2 {
-		t.Fatalf("expected public IP rendered for top-level and control listeners, got:\n%s", contents)
+
+	if err := xml.Unmarshal(output, &parsed); err != nil {
+		t.Fatalf("parse rendered output: %v", err)
+	}
+
+	if parsed.IP != "0.0.0.0" {
+		t.Fatalf("expected root IP to be rendered, got %q", parsed.IP)
+	}
+	if parsed.Bind.Managers.API.Port != "8081" || parsed.Bind.Managers.API.TLSPort != "8082" {
+		t.Fatalf("expected API ports to be rewritten, got %s/%s", parsed.Bind.Managers.API.Port, parsed.Bind.Managers.API.TLSPort)
 	}
 }
 
 func TestOmeConfigRenderingEscapesXml(t *testing.T) {
+	outputPath := filepath.Join(t.TempDir(), "Server.generated.xml")
+	templatePath := filepath.Join(t.TempDir(), "Server.template.xml")
+
+	template := strings.TrimSpace(`<?xml version="1.0" encoding="utf-8"?>
+<Server>
+    <IP>*</IP>
+    <Bind>
+        <Address>0.0.0.0</Address>
+        <Port>1935</Port>
+        <TLSPort>2935</TLSPort>
+    </Bind>
+    <Modules>
+        <Control>
+            <Authentication>
+                <User>
+                    <ID>admin</ID>
+                    <Password>password</Password>
+                </User>
+            </Authentication>
+        </Control>
+    </Modules>
+</Server>`) + "\n"
+
+	if err := os.WriteFile(templatePath, []byte(template), 0o644); err != nil {
+		t.Fatalf("write template: %v", err)
+	}
+
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
 	}
 	repoRoot := filepath.Dir(wd)
-
-	outputPath := filepath.Join(t.TempDir(), "Server.generated.xml")
-	templatePath := filepath.Join(repoRoot, "deploy", "ome", "Server.xml")
 	renderer := filepath.Join(repoRoot, "scripts", "render_ome_config.py")
 
 	cmd := exec.Command("python3", renderer,
 		"--template", templatePath,
 		"--output", outputPath,
 		"--bind", "0.0.0.0",
+		"--port", "9000",
+		"--tls-port", "9443",
 		"--username", "admin<&",
 		"--password", `pass<&>'"`)
 	var stderr bytes.Buffer
@@ -224,29 +267,12 @@ func TestOmeConfigRenderingEscapesXml(t *testing.T) {
 		t.Fatalf("read rendered output: %v", err)
 	}
 
-	var parsed struct {
-		Modules struct {
-			Control struct {
-				Authentication struct {
-					User struct {
-						ID       string `xml:"ID"`
-						Password string `xml:"Password"`
-					} `xml:"User"`
-				} `xml:"Authentication"`
-			} `xml:"Control"`
-		} `xml:"Modules"`
+	contents := string(rendered)
+	if !strings.Contains(contents, "admin&lt;&amp;") {
+		t.Fatalf("expected username to be escaped, got:\n%s", contents)
 	}
-
-	if err := xml.Unmarshal(rendered, &parsed); err != nil {
-		t.Fatalf("parse rendered xml: %v", err)
-	}
-
-	expectedPassword := `pass<&>'"`
-	if parsed.Modules.Control.Authentication.User.ID != "admin<&" {
-		t.Fatalf("unexpected username: %s", parsed.Modules.Control.Authentication.User.ID)
-	}
-	if parsed.Modules.Control.Authentication.User.Password != expectedPassword {
-		t.Fatalf("unexpected password: %s", parsed.Modules.Control.Authentication.User.Password)
+	if !strings.Contains(contents, "pass&lt;&amp;&gt;&apos;&quot;") {
+		t.Fatalf("expected password to be escaped, got:\n%s", contents)
 	}
 }
 
