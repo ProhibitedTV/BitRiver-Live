@@ -314,11 +314,29 @@ All state-changing API calls emit structured audit logs containing the authentic
 BitRiver Live exports Prometheus-compatible metrics and improved health reporting out-of-the-box:
 
 - `GET /healthz` summarises dependency health and ingest orchestration.
-- `GET /metrics` emits request counters/latency, stream lifecycle events, ingest gauges, ingest attempt/failure counters, transcoder job lifecycle counters, and the current number of active streams/jobs. Protect this endpoint with `-metrics-token`/`BITRIVER_LIVE_METRICS_TOKEN` (checked against the `Authorization: Bearer` or `X-Metrics-Token` header) or restrict it to specific CIDRs/IPs via `-metrics-allow-networks`/`BITRIVER_LIVE_METRICS_ALLOW_NETWORKS`. Health and readiness endpoints stay public.
+- `GET /metrics` exposes the metrics below. Guard this endpoint with `--metrics-token`/`BITRIVER_LIVE_METRICS_TOKEN` (validated against the `Authorization: Bearer` or `X-Metrics-Token` header) or lock it to specific CIDRs/IPs via `--metrics-allow-networks`/`BITRIVER_LIVE_METRICS_ALLOW_NETWORKS`. Health and readiness endpoints stay public.
 
-The Prometheus payload includes:
+### Metric families
 
-- `bitriver_ingest_attempts_total{operation}` and `bitriver_ingest_failures_total{operation}` to track Boot/Shutdown/Upload orchestration outcomes.
-- `bitriver_transcoder_jobs_total{kind,status}` and `bitriver_transcoder_active_jobs` for live/upload job lifecycle visibility.
+- **HTTP:** `bitriver_http_requests_total{method,path,status}` counters plus `bitriver_http_request_duration_seconds_sum`/`bitriver_http_request_duration_seconds_count` for cumulative request latency by method/path/status (paths are normalised by replacing identifiers with `:id`).
+- **Streams:** `bitriver_stream_events_total{event}` counters for start/stop activity and the `bitriver_active_streams` gauge tracking concurrent live channels.
+- **Ingest:** `bitriver_ingest_health{service,status}` gauges (`1=ok`, `0=disabled`, `-1=degraded`) alongside `bitriver_ingest_attempts_total{operation}` and `bitriver_ingest_failures_total{operation}` for boot/shutdown/upload orchestration.
+- **Chat:** `bitriver_chat_events_total{event}` counters for viewer chat activity, moderation, and reports.
+- **Monetization:** `bitriver_monetization_events_total{event}` counters and `bitriver_monetization_amount_sum{event}` tracking the aggregated decimal amount per tip/subscription type.
+- **Transcoder:** `bitriver_transcoder_jobs_total{kind,status}` counters and the `bitriver_transcoder_active_jobs` gauge for live/upload encoding work.
+
+### Prometheus scrape example
 
 Point Prometheus, Grafana Agent, or another scraper at `/metrics` to track latency and ingest health. The installer script and deployment assets configure the same endpoints automatically so home operators can wire them into dashboards with minimal effort.
+
+```yaml
+scrape_configs:
+  - job_name: bitriver-live
+    scrape_interval: 15s
+    metrics_path: /metrics
+    bearer_token: "changeme-metrics-token" # matches --metrics-token or BITRIVER_LIVE_METRICS_TOKEN
+    static_configs:
+      - targets: ["bitriver-live:8080"]
+```
+
+To further tighten access, run the API behind an ingress or firewall that only allows scrapers to hit `/metrics`, combine `--metrics-token` with `--metrics-allow-networks` to require both a token and a trusted IP/CIDR, and avoid publishing the endpoint publicly.
