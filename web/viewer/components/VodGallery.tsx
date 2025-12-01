@@ -7,9 +7,10 @@ interface VodGalleryProps {
   items: VodItem[];
   error?: string;
   loading?: boolean;
+  onRetry?: () => void;
 }
 
-export function VodGallery({ items, error, loading = false }: VodGalleryProps) {
+export function VodGallery({ items, error, loading = false, onRetry }: VodGalleryProps) {
   if (loading) {
     return (
       <section className="surface stack" aria-busy="true">
@@ -26,6 +27,11 @@ export function VodGallery({ items, error, loading = false }: VodGalleryProps) {
         <h3>Past broadcasts</h3>
         <p className="muted">We couldn&apos;t load past broadcasts right now.</p>
         <p className="muted">{error}</p>
+        {onRetry && (
+          <button className="secondary-button" type="button" onClick={onRetry}>
+            Try again
+          </button>
+        )}
       </section>
     );
   }
