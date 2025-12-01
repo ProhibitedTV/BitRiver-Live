@@ -829,6 +829,80 @@ func TestHealthTracksFFmpegFailuresAndRecovery(t *testing.T) {
 	})
 }
 
+func TestHealthDegradedWhenPublishFailsAndRecovers(t *testing.T) {
+	tempDir := t.TempDir()
+	var exitPtr atomic.Pointer[error]
+	srv, ts := startStubTranscoder(t, tempDir, &exitPtr)
+
+	brokenRoot := filepath.Join(tempDir, "public-broken")
+	if err := os.WriteFile(brokenRoot, []byte(""), 0o644); err != nil {
+		t.Fatalf("create broken publish root: %v", err)
+	}
+	srv.publicRoot = brokenRoot
+
+	submitJob(t, ts, "file:///tmp/input.mp4")
+
+	waitFor(t, 2*time.Second, func() bool {
+		status, code := fetchHealth(t, ts)
+		return status.Status == "degraded" && code == http.StatusServiceUnavailable
+	})
+
+	status, _ := fetchHealth(t, ts)
+	if comp := status.Components[componentPublishing]; comp["status"] != "error" {
+		t.Fatalf("expected publishing component error, got %v", comp["status"])
+	}
+
+	fixedRoot := filepath.Join(tempDir, "public-fixed")
+	if err := os.MkdirAll(fixedRoot, 0o755); err != nil {
+		t.Fatalf("create fixed publish root: %v", err)
+	}
+	srv.publicRoot = fixedRoot
+
+	submitJob(t, ts, "file:///tmp/input.mp4")
+
+	waitFor(t, 2*time.Second, func() bool {
+		status, code := fetchHealth(t, ts)
+		return status.Status == "ok" && code == http.StatusOK
+	})
+}
+
+func TestHealthDegradedWhenUploadPublishFails(t *testing.T) {
+	tempDir := t.TempDir()
+	var exitPtr atomic.Pointer[error]
+	srv, ts := startStubTranscoder(t, tempDir, &exitPtr)
+
+	brokenRoot := filepath.Join(tempDir, "public-broken")
+	if err := os.WriteFile(brokenRoot, []byte(""), 0o644); err != nil {
+		t.Fatalf("create broken publish root: %v", err)
+	}
+	srv.publicRoot = brokenRoot
+
+	submitUpload(t, ts, "file:///tmp/input.mp4")
+
+	waitFor(t, 2*time.Second, func() bool {
+		status, code := fetchHealth(t, ts)
+		return status.Status == "degraded" && code == http.StatusServiceUnavailable
+	})
+
+	status, _ := fetchHealth(t, ts)
+	if comp := status.Components[componentPublishing]; comp["status"] != "error" {
+		t.Fatalf("expected publishing component error, got %v", comp["status"])
+	}
+
+	fixedRoot := filepath.Join(tempDir, "public-fixed")
+	if err := os.MkdirAll(fixedRoot, 0o755); err != nil {
+		t.Fatalf("create fixed publish root: %v", err)
+	}
+	srv.publicRoot = fixedRoot
+
+	submitUpload(t, ts, "file:///tmp/input.mp4")
+
+	waitFor(t, 2*time.Second, func() bool {
+		status, code := fetchHealth(t, ts)
+		return status.Status == "ok" && code == http.StatusOK
+	})
+}
+
 func submitJob(t *testing.T, ts *httptest.Server, origin string) {
 	t.Helper()
 	renditions := []map[string]any{{"name": "720p", "bitrate": 2800}}
@@ -853,6 +927,35 @@ func submitJob(t *testing.T, ts *httptest.Server, origin string) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	}
+}
+
+func submitUpload(t *testing.T, ts *httptest.Server, source string) {
+	t.Helper()
+	renditions := []map[string]any{{"name": "720p", "bitrate": 2800}}
+	body, err := json.Marshal(map[string]any{
+		"channelId":  "channel-1",
+		"uploadId":   "upload-1",
+		"sourceUrl":  source,
+		"filename":   "input.mp4",
+		"renditions": renditions,
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/v1/uploads", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("post upload: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	}
 }

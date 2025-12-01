@@ -554,8 +554,9 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 			jobLogger.Warn("publish live job", "error", err)
 		}
 		s.updateComponent(componentPublishing, err)
+	} else {
+		s.updateComponent(componentPublishing, nil)
 	}
-	s.updateComponent(componentPublishing, nil)
 
 	publicRenditions := cloneRenditions(plan.renditions)
 	for i := range publicRenditions {
@@ -799,6 +800,8 @@ func (s *server) makeUploadExitHandler(id string) func(error) {
 					uploadLogger.Warn("publish upload", "error", err)
 				}
 				s.updateComponent(componentPublishing, err)
+			} else {
+				s.updateComponent(componentPublishing, nil)
 			}
 		}
 		if meta != nil {
