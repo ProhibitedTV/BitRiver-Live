@@ -60,7 +60,8 @@ func corsMiddleware(policy corsPolicy, logger *slog.Logger, next http.Handler) h
 			return
 		}
 
-		if !policy.allows(origin, r.Host) {
+		reqOrigin := originForRequest(r)
+		if !policy.allows(origin, reqOrigin) {
 			if logger != nil {
 				logger.Warn("blocked CORS origin", "origin", origin, "path", r.URL.Path)
 			}
@@ -94,7 +95,7 @@ func corsMiddleware(policy corsPolicy, logger *slog.Logger, next http.Handler) h
 	})
 }
 
-func (p corsPolicy) allows(origin string, host string) bool {
+func (p corsPolicy) allows(origin string, requestOrigin string) bool {
 	normalizedOrigin, err := normalizeOrigin(origin)
 	if err != nil {
 		return false
@@ -105,12 +106,24 @@ func (p corsPolicy) allows(origin string, host string) bool {
 	if _, ok := p.allowed[normalizedOrigin]; ok {
 		return true
 	}
-	parsed, err := url.Parse(origin)
-	if err != nil {
+
+	if requestOrigin == "" {
 		return false
 	}
+
+	return normalizedOrigin == requestOrigin
+}
+
+func originForRequest(r *http.Request) string {
+	host := strings.ToLower(strings.TrimSpace(r.Host))
 	if host == "" {
-		return false
+		return ""
 	}
-	return strings.EqualFold(parsed.Host, host)
+
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+
+	return fmt.Sprintf("%s://%s", scheme, host)
 }
