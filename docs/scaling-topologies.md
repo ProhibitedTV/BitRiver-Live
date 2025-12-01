@@ -60,6 +60,39 @@ For global audiences, offload segment delivery and static assets to a CDN while 
 - **Sizing:** Keep at least two API instances (4 vCPUs/8 GB RAM each) per region for redundancy. Run SRS/OME/transcoder clusters per region; dedicate GPU-backed nodes for transcoding-heavy channels. PostgreSQL should be managed with high availability and read replicas close to API origins.
 - **Security:** Restrict origin IPs to accept only the CDN’s edge ranges on ports 80/443. Require mutual TLS or signed URLs when the CDN requests HLS segments.
 
+## Component-by-component scaling playbook
+
+Start with [`deploy/.env.example`](../deploy/.env.example) as your template (`cp deploy/.env.example .env`), then tune each component as you scale beyond a single host. The health checks below double as load-balancer targets so unhealthy instances drain automatically.
+
+### API (control plane)
+
+1. **Clone the template and point at your database.** Keep the generated `.env` beside your deployment manifests so both `docker compose` and systemd units share the same values. Populate the Postgres credentials and pool limits (`BITRIVER_LIVE_POSTGRES_MAX_CONNS`, `BITRIVER_LIVE_POSTGRES_MIN_CONNS`, `BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT`) to match expected concurrency; raise pool sizes when adding API replicas so each instance has headroom.【F:deploy/.env.example†L20-L40】
+2. **Expose a stable origin for viewers.** Set `BITRIVER_VIEWER_ORIGIN` to the URL in front of your viewer nodes so the API can proxy `/viewer` and issue absolute links; update `NEXT_PUBLIC_API_BASE_URL`/`NEXT_PUBLIC_VIEWER_URL` to match the load-balanced hostname.【F:deploy/.env.example†L41-L64】
+3. **Wire up object storage early.** Configure the MinIO/S3 endpoint, credentials, bucket, and public endpoint (`BITRIVER_LIVE_OBJECT_*` or `--object-*`) before opening traffic so VOD exports and thumbnails publish to the correct origin; align lifecycle (`BITRIVER_LIVE_OBJECT_LIFECYCLE_DAYS`) with your retention policy to avoid early expiry.【F:docs/advanced-deployments.md†L225-L248】
+4. **Load balancer + health checks.** Balance `/api` across API instances on port 8080 (or 443 when TLS-terminating on the API) and point readiness probes at `/readyz` with `/healthz` as a fallback when you need ingest component detail.【F:docs/advanced-deployments.md†L27-L73】
+
+### Viewer runtime
+
+1. **Scale horizontally behind HTTP(S) L7.** Run multiple viewer nodes and terminate TLS on your load balancer, forwarding `/` and static paths to the viewer port (default 3000). Set `BITRIVER_VIEWER_ORIGIN` to the balancer URL so the API can continue to proxy viewer traffic consistently.【F:deploy/.env.example†L41-L64】
+2. **Health checks.** Use `GET /` (or a lightweight static path) as the balancer probe; Next.js will surface 200/500 responses that indicate whether the node is booted. Keep `/viewer` routing sticky only when debugging cross-origin cookie flows.
+
+### Redis chat queue (sharding/replication)
+
+1. **Pick a topology.** Start with a single Redis node and move to Sentinel or clustered Redis as chat traffic grows. Supply multiple addresses via `--chat-queue-redis-addrs` (or `BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR` with TCP load balancing in front) and name the Sentinel master with `--chat-queue-redis-sentinel-master` when applicable.【F:docs/advanced-deployments.md†L13-L23】
+2. **Secure and pool connections.** Set the password/username flags or environment variables and bump `--chat-queue-redis-pool-size` when adding API replicas so each instance keeps enough connections without overrunning the server.【F:docs/advanced-deployments.md†L13-L23】
+3. **Health checks.** Point the balancer or monitoring at the API `/readyz`; chat readiness turns `503` when Redis is unavailable, giving you a single probe to gate chat-dependent routes.【F:docs/advanced-deployments.md†L27-L45】
+
+### SRS and OvenMediaEngine (ingest + origin)
+
+1. **Separate ingest from playback.** Keep RTMP/WebRTC (SRS) on a restricted network and front OME with either a CDN or an HTTP load balancer. Populate `BITRIVER_SRS_API`, `BITRIVER_OME_API`, and bind settings in `.env` to point the controller at the correct control-plane addresses before scaling out.【F:deploy/.env.example†L41-L48】
+2. **Distribute health probes.** Reuse the ingest health path from `BITRIVER_INGEST_HEALTH` (default `/healthz`) for both SRS and OME, and have the API poll those endpoints; your external balancer can watch the same URLs to pull bad origins out of rotation.【F:deploy/.env.example†L57-L58】【F:docs/advanced-deployments.md†L27-L64】
+3. **Edge/caching guidance.** When handing off to a CDN or multi-region edges, ensure OME’s published manifests point at the same HTTP origin you expose publicly (for example via `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`) so segment URLs remain routable.【F:deploy/.env.example†L49-L56】
+
+### Transcoder
+
+1. **Scale per ladder and region.** Run at least one transcoder instance per ingest region and allocate CPU/GPU based on your ladder count. Point the API at each pool via `BITRIVER_TRANSCODER_API` and secure access with `BITRIVER_TRANSCODER_TOKEN`. Expose the transcoder output through the load-balanced/public URL in `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` so viewers always reach the published manifests.【F:deploy/.env.example†L48-L56】【F:deploy/.env.example†L69-L73】
+2. **Health checks.** Send liveness probes to `<transcoder>/healthz` (or the `BITRIVER_INGEST_HEALTH` path) and let the API’s `/healthz` mirror failures; remove unhealthy nodes from the job queue until they recover.【F:deploy/.env.example†L57-L58】【F:docs/advanced-deployments.md†L27-L73】
+
 ## Additional recommendations
 
 - **Configuration management:** Template `.env` files for the systemd units and use secrets managers to rotate API keys. The units in [`deploy/systemd/`](../deploy/systemd/) read environment files so you can update settings without editing service definitions.
