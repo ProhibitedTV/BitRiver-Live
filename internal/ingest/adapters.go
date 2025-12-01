@@ -320,7 +320,7 @@ func (a *httpTranscoderAdapter) StartJobs(ctx context.Context, channelID, sessio
 		ChannelID:  channelID,
 		SessionID:  sessionID,
 		OriginURL:  originURL,
-		Renditions: cloneRenditions(ladder),
+		Renditions: CloneRenditions(ladder),
 	}
 	var response ffmpegJobResponse
 	if err := postJSON(ctx, a.client, fmt.Sprintf("%s/v1/jobs", a.baseURL), payload, &response, func(req *http.Request) {
@@ -333,7 +333,7 @@ func (a *httpTranscoderAdapter) StartJobs(ctx context.Context, channelID, sessio
 	if response.JobID != "" {
 		jobIDs = append(jobIDs, response.JobID)
 	}
-	renditions := cloneRenditions(response.Renditions)
+	renditions := CloneRenditions(response.Renditions)
 	return jobIDs, renditions, nil
 }
 
@@ -355,7 +355,7 @@ func (a *httpTranscoderAdapter) StartUpload(ctx context.Context, req uploadJobRe
 		UploadID:   req.UploadID,
 		SourceURL:  req.SourceURL,
 		Filename:   req.Filename,
-		Renditions: cloneRenditions(req.Renditions),
+		Renditions: CloneRenditions(req.Renditions),
 	}
 	var response ffmpegUploadResponse
 	if err := postJSON(ctx, a.client, fmt.Sprintf("%s/v1/uploads", a.baseURL), payload, &response, func(httpReq *http.Request) {
@@ -366,7 +366,7 @@ func (a *httpTranscoderAdapter) StartUpload(ctx context.Context, req uploadJobRe
 	return uploadJobResult{
 		JobID:       response.JobID,
 		PlaybackURL: response.PlaybackURL,
-		Renditions:  cloneRenditions(response.Renditions),
+		Renditions:  CloneRenditions(response.Renditions),
 	}, nil
 }
 
@@ -404,12 +404,16 @@ func deleteRequest(ctx context.Context, client *http.Client, url string, mutate 
 // Behavior:
 //
 //   - Retries on:
-//     * Network errors (client.Do returns an error).
-//     * HTTP 5xx responses.
-//     * HTTP 429 (Too Many Requests).
+//
+//   - Network errors (client.Do returns an error).
+//
+//   - HTTP 5xx responses.
+//
+//   - HTTP 429 (Too Many Requests).
 //
 //   - Does NOT retry on:
-//     * HTTP 4xx responses other than 429 (treated as permanent errors).
+//
+//   - HTTP 4xx responses other than 429 (treated as permanent errors).
 //
 //   - Honors the provided context for both the HTTP request and the
 //     backoff delay between attempts.
@@ -559,12 +563,12 @@ func setBearer(req *http.Request, token string) {
 	req.Header.Set("Authorization", "Bearer "+token)
 }
 
-// cloneRenditions returns a shallow copy of the provided renditions slice.
+// CloneRenditions returns a shallow copy of the provided renditions slice.
 // If input is empty, nil is returned to avoid unnecessary allocations.
 //
 // The Rendition type is defined elsewhere in the ingest package and typically
 // contains bitrate, resolution, and other encoding parameters.
-func cloneRenditions(input []Rendition) []Rendition {
+func CloneRenditions(input []Rendition) []Rendition {
 	if len(input) == 0 {
 		return nil
 	}

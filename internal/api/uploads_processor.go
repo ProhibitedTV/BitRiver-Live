@@ -79,7 +79,7 @@ func NewUploadProcessor(cfg UploadProcessorConfig) *UploadProcessor {
 	processor := &UploadProcessor{
 		store:      cfg.Store,
 		ingest:     cfg.Ingest,
-		renditions: cloneUploadRenditions(cfg.Renditions),
+		renditions: ingest.CloneRenditions(cfg.Renditions),
 		workers:    workers,
 		timeout:    timeout,
 		logger:     logger,
@@ -257,7 +257,7 @@ func (p *UploadProcessor) processUpload(id string) {
 		UploadID:   upload.ID,
 		SourceURL:  source,
 		Filename:   upload.Filename,
-		Renditions: cloneUploadRenditions(p.renditions),
+		Renditions: ingest.CloneRenditions(p.renditions),
 	})
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
@@ -349,15 +349,6 @@ func (p *UploadProcessor) failUpload(id, source string, err error) {
 		return
 	}
 	p.logger.Error("upload transcode failed", "upload_id", id, "error", err)
-}
-
-func cloneUploadRenditions(r []ingest.Rendition) []ingest.Rendition {
-	if len(r) == 0 {
-		return nil
-	}
-	out := make([]ingest.Rendition, len(r))
-	copy(out, r)
-	return out
 }
 
 func stringPtr(s string) *string {
