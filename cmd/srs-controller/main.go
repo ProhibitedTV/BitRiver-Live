@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,6 +18,8 @@ import (
 	"syscall"
 	"time"
 
+	"bitriver-live/internal/observability/logging"
+	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/serverutil"
 )
 
@@ -30,6 +32,7 @@ type controller struct {
 	token   string
 	client  *http.Client
 	baseURL *url.URL
+	logger  *slog.Logger
 
 	mu               sync.Mutex
 	lastUpstreamErr  error
@@ -39,16 +42,20 @@ type controller struct {
 
 func main() {
 	bind := envOrDefault("SRS_CONTROLLER_BIND", defaultBind)
+	logger := logging.WithComponent(logging.Init(logging.Config{Format: string(logging.FormatJSON)}), "srs-controller")
+	registry := metrics.NewRegistry()
 	upstreamRaw := strings.TrimSpace(os.Getenv("SRS_CONTROLLER_UPSTREAM"))
 	if upstreamRaw == "" {
 		upstreamRaw = defaultUpstream
 	}
 	upstream, err := url.Parse(upstreamRaw)
 	if err != nil {
-		log.Fatalf("parse upstream URL: %v", err)
+		logger.Error("parse upstream URL", "error", err)
+		os.Exit(1)
 	}
 	if upstream.Scheme == "" || upstream.Host == "" {
-		log.Fatalf("SRS_CONTROLLER_UPSTREAM must include scheme and host")
+		logger.Error("SRS_CONTROLLER_UPSTREAM must include scheme and host")
+		os.Exit(1)
 	}
 	if !strings.HasSuffix(upstream.Path, "/") {
 		upstream.Path += "/"
@@ -56,7 +63,8 @@ func main() {
 
 	token := strings.TrimSpace(os.Getenv("BITRIVER_SRS_TOKEN"))
 	if token == "" {
-		log.Fatal("BITRIVER_SRS_TOKEN must be set")
+		logger.Error("BITRIVER_SRS_TOKEN must be set")
+		os.Exit(1)
 	}
 
 	ctrl := &controller{
@@ -65,28 +73,35 @@ func main() {
 			Timeout: 15 * time.Second,
 		},
 		baseURL: upstream,
+		logger:  logger,
 	}
 
 	mux := http.NewServeMux()
+	mux.Handle("/metrics", registry.Handler())
 	mux.HandleFunc("/healthz", ctrl.healthz)
 	proxyHandler := http.HandlerFunc(ctrl.proxyRequest)
 	mux.Handle("/v1/channels", proxyHandler)
 	mux.Handle("/v1/channels/", proxyHandler)
 
+	handler := http.Handler(mux)
+	handler = registry.Middleware(handler)
+	handler = logging.RequestLogger(logging.RequestLoggerConfig{Logger: logger})(handler)
+
 	server := &http.Server{
 		Addr:              bind,
-		Handler:           mux,
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	log.Printf("srs controller listening on %s", bind)
+	logger.Info("srs controller listening", "bind", bind)
 	if err := serverutil.Run(ctx, serverutil.Config{Server: server, ShutdownTimeout: 10 * time.Second}); err != nil {
-		log.Fatalf("server error: %v", err)
+		logger.Error("server error", "error", err)
+		os.Exit(1)
 	}
-	log.Println("srs controller stopped")
+	logger.Info("srs controller stopped")
 }
 
 func (c *controller) proxyRequest(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +110,9 @@ func (c *controller) proxyRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !c.authorized(r.Header.Get("Authorization")) {
-		log.Printf("unauthorized request rejected: path=%s remote=%s", r.URL.Path, r.RemoteAddr)
+		if c.logger != nil {
+			c.logger.Warn("unauthorized request rejected", "path", r.URL.Path, "remote_addr", r.RemoteAddr)
+		}
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -120,7 +137,9 @@ func (c *controller) proxyRequest(w http.ResponseWriter, r *http.Request) {
 	resp, err := c.client.Do(req)
 	if err != nil {
 		c.recordUpstreamError(err)
-		log.Printf("upstream request failed: target=%s err=%v", target.String(), err)
+		if c.logger != nil {
+			c.logger.Error("upstream request failed", "target", target.String(), "error", err)
+		}
 		http.Error(w, "upstream request failed", http.StatusBadGateway)
 		return
 	}
@@ -135,7 +154,9 @@ func (c *controller) proxyRequest(w http.ResponseWriter, r *http.Request) {
 	copyResponseHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	if _, err := io.Copy(w, resp.Body); err != nil {
-		log.Printf("stream upstream body: %v", err)
+		if c.logger != nil {
+			c.logger.Warn("stream upstream body", "error", err)
+		}
 	}
 }
 

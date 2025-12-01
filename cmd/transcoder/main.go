@@ -86,6 +86,7 @@ type server struct {
 	store         *metadataStore
 	launchProcess func(string, *transcodePlan, func(error)) (*processState, error)
 	logger        *slog.Logger
+	metrics       *metrics.Registry
 
 	healthMu   sync.Mutex
 	components map[string]*componentState
@@ -229,14 +230,15 @@ const (
 func main() {
 	bind := envOrDefault("JOB_CONTROLLER_BIND", ":9000")
 	token := strings.TrimSpace(os.Getenv("JOB_CONTROLLER_TOKEN"))
-	logger := logging.WithComponent(logging.New(logging.Config{}), "transcoder")
+	logger := logging.WithComponent(logging.Init(logging.Config{Format: string(logging.FormatJSON)}), "transcoder")
+	registry := metrics.NewRegistry()
 	if token == "" {
 		logger.Error("JOB_CONTROLLER_TOKEN must be configured before starting the transcoder")
 		os.Exit(1)
 	}
 	outputRoot := envOrDefault("JOB_CONTROLLER_OUTPUT_ROOT", "./work")
 
-	srv, err := newServer(token, outputRoot, logger)
+	srv, err := newServer(token, outputRoot, logger, registry)
 	if err != nil {
 		logger.Error("initialise server", "error", err)
 		os.Exit(1)
@@ -263,13 +265,16 @@ func main() {
 	logger.Info("ffmpeg job controller stopped")
 }
 
-func newServer(token, outputRoot string, logger *slog.Logger) (*server, error) {
+func newServer(token, outputRoot string, logger *slog.Logger, registry *metrics.Registry) (*server, error) {
 	store, err := newMetadataStore(outputRoot)
 	if err != nil {
 		return nil, err
 	}
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if registry == nil {
+		registry = metrics.NewRegistry()
 	}
 	jobs, uploads, err := store.Load()
 	if err != nil {
@@ -305,6 +310,7 @@ func newServer(token, outputRoot string, logger *slog.Logger) (*server, error) {
 		processes:  make(map[string]*processState),
 		store:      store,
 		logger:     logger,
+		metrics:    registry,
 		components: make(map[string]*componentState),
 	}
 	srv.launchProcess = srv.startFFmpeg
@@ -316,11 +322,20 @@ func newServer(token, outputRoot string, logger *slog.Logger) (*server, error) {
 
 func (s *server) routes() http.Handler {
 	mux := http.NewServeMux()
+	mux.Handle("/metrics", s.metrics.Handler())
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/v1/jobs", s.handleJobs)
 	mux.HandleFunc("/v1/jobs/", s.handleJobByID)
 	mux.HandleFunc("/v1/uploads", s.handleUploads)
-	return s.logRequests(mux)
+
+	handler := http.Handler(mux)
+	if s.metrics != nil {
+		handler = s.metrics.Middleware(handler)
+	} else {
+		handler = metrics.HTTPMiddleware(nil, handler)
+	}
+
+	return logging.RequestLogger(logging.RequestLoggerConfig{Logger: s.logger})(handler)
 }
 
 func (s *server) restoreActiveProcesses() {
@@ -1544,31 +1559,6 @@ func (s *server) writeJSON(w http.ResponseWriter, status int, payload any) {
 			s.logger.Error("encode response", "error", err)
 		}
 	}
-}
-
-func (s *server) logRequests(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		lrw := &loggingResponseWriter{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(lrw, r)
-		if s != nil && s.logger != nil {
-			s.logger.Info("request completed",
-				"method", r.Method,
-				"path", r.URL.Path,
-				"status", lrw.status,
-				"duration_ms", time.Since(start).Milliseconds())
-		}
-	})
-}
-
-type loggingResponseWriter struct {
-	http.ResponseWriter
-	status int
-}
-
-func (lrw *loggingResponseWriter) WriteHeader(code int) {
-	lrw.status = code
-	lrw.ResponseWriter.WriteHeader(code)
 }
 
 func newID(prefix string) string {

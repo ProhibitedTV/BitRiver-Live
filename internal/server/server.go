@@ -1,13 +1,11 @@
 package server
 
 import (
-	"bufio"
 	"context"
 	"crypto/subtle"
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"log/slog"
 	"net"
@@ -19,6 +17,7 @@ import (
 
 	"bitriver-live/internal/api"
 	"bitriver-live/internal/auth/oauth"
+	"bitriver-live/internal/observability/logging"
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/web"
 )
@@ -201,7 +200,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	handlerChain = requestIDMiddleware(cfg.Logger, handlerChain)
 	handlerChain = authMiddleware(handler, handlerChain)
 	handlerChain = rateLimitMiddleware(rl, ipResolver, cfg.Logger, handlerChain)
-	handlerChain = metricsMiddleware(recorder, handlerChain)
+	handlerChain = metrics.HTTPMiddleware(recorder, handlerChain)
 	handlerChain = auditMiddleware(cfg.AuditLogger, ipResolver, handlerChain)
 	handlerChain = loggingMiddleware(cfg.Logger, ipResolver, handlerChain)
 
@@ -251,73 +250,18 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
 }
 
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-}
-
-func newStatusRecorder(w http.ResponseWriter) *statusRecorder {
-	return &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-}
-
-func (sr *statusRecorder) WriteHeader(status int) {
-	sr.status = status
-	sr.ResponseWriter.WriteHeader(status)
-}
-
-func (sr *statusRecorder) Flush() {
-	if flusher, ok := sr.ResponseWriter.(http.Flusher); ok {
-		flusher.Flush()
-	}
-}
-
-func (sr *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	if hijacker, ok := sr.ResponseWriter.(http.Hijacker); ok {
-		return hijacker.Hijack()
-	}
-	return nil, nil, http.ErrNotSupported
-}
-
-func (sr *statusRecorder) Push(target string, opts *http.PushOptions) error {
-	if pusher, ok := sr.ResponseWriter.(http.Pusher); ok {
-		return pusher.Push(target, opts)
-	}
-	return http.ErrNotSupported
-}
-
-func (sr *statusRecorder) CloseNotify() <-chan bool {
-	if notifier, ok := sr.ResponseWriter.(http.CloseNotifier); ok {
-		return notifier.CloseNotify()
-	}
-	return nil
-}
-
-func (sr *statusRecorder) ReadFrom(r io.Reader) (int64, error) {
-	if readerFrom, ok := sr.ResponseWriter.(io.ReaderFrom); ok {
-		return readerFrom.ReadFrom(r)
-	}
-	return io.Copy(sr.ResponseWriter, r)
-}
-
 func loggingMiddleware(logger *slog.Logger, resolver *clientIPResolver, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		recorder := newStatusRecorder(w)
-		start := time.Now()
-		next.ServeHTTP(recorder, r)
-		duration := time.Since(start)
-		ip, source := resolveClientIP(r, resolver)
-		requestLogger := loggerWithRequestContext(r.Context(), logger)
-		if requestLogger == nil {
-			return
-		}
-		requestLogger.Info("request completed",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", recorder.status,
-			"duration_ms", duration.Milliseconds(),
-			"remote_ip", ip,
-			"ip_source", source)
-	})
+	return logging.RequestLogger(logging.RequestLoggerConfig{
+		Logger:            logger,
+		DisableRemoteAddr: true,
+		AdditionalFields: func(r *http.Request, _ int, _ time.Duration) []any {
+			ip, source := resolveClientIP(r, resolver)
+			if ip == "" && source == "" {
+				return nil
+			}
+			return []any{"remote_ip", ip, "ip_source", source}
+		},
+	})(next)
 }
 
 type metricsAccessController struct {
@@ -394,18 +338,6 @@ func ipAllowed(ip string, networks []*net.IPNet) bool {
 	return false
 }
 
-func metricsMiddleware(recorder *metrics.Recorder, next http.Handler) http.Handler {
-	if recorder == nil {
-		recorder = metrics.Default()
-	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sr := newStatusRecorder(w)
-		start := time.Now()
-		next.ServeHTTP(sr, r)
-		recorder.ObserveRequest(r.Method, r.URL.Path, sr.status, time.Since(start))
-	})
-}
-
 func rateLimitMiddleware(rl *rateLimiter, resolver *clientIPResolver, logger *slog.Logger, next http.Handler) http.Handler {
 	if rl == nil {
 		return next
@@ -471,7 +403,7 @@ func shouldRateLimitAuthRequest(r *http.Request) bool {
 
 func auditMiddleware(logger *slog.Logger, resolver *clientIPResolver, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sr := newStatusRecorder(w)
+		sr := metrics.NewResponseRecorder(w)
 		start := time.Now()
 		next.ServeHTTP(sr, r)
 		if !shouldAudit(r) {
@@ -487,7 +419,7 @@ func auditMiddleware(logger *slog.Logger, resolver *clientIPResolver, next http.
 		fields := []interface{}{
 			"method", r.Method,
 			"path", r.URL.Path,
-			"status", sr.status,
+			"status", sr.Status(),
 			"duration_ms", duration.Milliseconds(),
 			"remote_ip", ip,
 			"ip_source", source,

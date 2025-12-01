@@ -28,6 +28,12 @@ func newTestLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
+func newTestRegistry() *metrics.Registry {
+	registry := metrics.NewRegistry()
+	registry.Recorder.Reset()
+	return registry
+}
+
 func newBufferLogger() (*slog.Logger, *bytes.Buffer) {
 	buf := &bytes.Buffer{}
 	return slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})), buf
@@ -42,7 +48,7 @@ type healthResponse struct {
 func startStubTranscoder(t *testing.T, tempDir string, exitErr *atomic.Pointer[error]) (*server, *httptest.Server) {
 	t.Helper()
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
-	srv, err := newServer(testToken, tempDir, newTestLogger())
+	srv, err := newServer(testToken, tempDir, newTestLogger(), newTestRegistry())
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -133,7 +139,7 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", publicDir)
 
-	srv, err := newServer(testToken, tempDir, newTestLogger())
+	srv, err := newServer(testToken, tempDir, newTestLogger(), newTestRegistry())
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -434,7 +440,7 @@ func TestNewServerRequiresPublicBaseURL(t *testing.T) {
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "")
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", "")
 
-	if _, err := newServer(testToken, tempDir, newTestLogger()); err == nil {
+	if _, err := newServer(testToken, tempDir, newTestLogger(), newTestRegistry()); err == nil {
 		t.Fatal("expected error when public base URL is unset")
 	} else if !strings.Contains(err.Error(), "BITRIVER_TRANSCODER_PUBLIC_BASE_URL must be configured") {
 		t.Fatalf("unexpected error: %v", err)
@@ -472,7 +478,7 @@ func TestUploadPublishesHTTPPlayback(t *testing.T) {
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", publicDir)
 
-	srv, err := newServer(testToken, workDir, newTestLogger())
+	srv, err := newServer(testToken, workDir, newTestLogger(), newTestRegistry())
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -580,7 +586,7 @@ func TestHandleJobsRecordsMetrics(t *testing.T) {
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", filepath.Join(tempDir, "public"))
 
-	srv, err := newServer(testToken, tempDir, newTestLogger())
+	srv, err := newServer(testToken, tempDir, newTestLogger(), newTestRegistry())
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -627,7 +633,7 @@ func TestHandleJobsMetricsOnFailure(t *testing.T) {
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", filepath.Join(tempDir, "public"))
 
-	srv, err := newServer(testToken, tempDir, newTestLogger())
+	srv, err := newServer(testToken, tempDir, newTestLogger(), newTestRegistry())
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -671,7 +677,7 @@ func TestHandleUploadsRecordsMetrics(t *testing.T) {
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", filepath.Join(tempDir, "public"))
 
-	srv, err := newServer(testToken, tempDir, newTestLogger())
+	srv, err := newServer(testToken, tempDir, newTestLogger(), newTestRegistry())
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -719,7 +725,7 @@ func TestHandleUploadsMetricsOnFailure(t *testing.T) {
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", filepath.Join(tempDir, "public"))
 
-	srv, err := newServer(testToken, tempDir, newTestLogger())
+	srv, err := newServer(testToken, tempDir, newTestLogger(), newTestRegistry())
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -764,7 +770,7 @@ func TestExitHandlersRecordMetrics(t *testing.T) {
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", filepath.Join(tempDir, "public"))
 
-	srv, err := newServer(testToken, tempDir, newTestLogger())
+	srv, err := newServer(testToken, tempDir, newTestLogger(), newTestRegistry())
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}

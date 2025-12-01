@@ -19,6 +19,11 @@ type requestLabel struct {
 	status string
 }
 
+// Registry pairs a Recorder with convenience helpers for HTTP servers.
+type Registry struct {
+	Recorder *Recorder
+}
+
 // Recorder aggregates in-memory metrics counters and gauges for HTTP requests,
 // stream lifecycle events, ingest health, chat activity, and monetization
 // signals. It coordinates concurrent writers via a RWMutex while exposing a
@@ -46,6 +51,23 @@ type TranscoderJobLabel struct {
 }
 
 var defaultRecorder = New()
+
+// SetDefault swaps the package-level recorder used by helper functions and the
+// Handler fallback when a custom recorder is not supplied.
+func SetDefault(recorder *Recorder) {
+	if recorder == nil {
+		return
+	}
+	defaultRecorder = recorder
+}
+
+// NewRegistry constructs a Registry and installs its recorder as the package
+// default so call sites using helper functions share the same metrics store.
+func NewRegistry() *Registry {
+	recorder := New()
+	SetDefault(recorder)
+	return &Registry{Recorder: recorder}
+}
 
 // New constructs an empty Recorder with initialized backing maps so callers can
 // immediately record metrics without additional setup.
@@ -265,6 +287,25 @@ func (r *Recorder) Reset() {
 	r.transcoderEvents = make(map[TranscoderJobLabel]uint64)
 	r.activeStreams.Store(0)
 	r.activeTranscoder.Store(0)
+}
+
+// Handler exposes the Registry's recorder as an http.Handler.
+func (r *Registry) Handler() http.Handler {
+	recorder := r.recorderOrDefault()
+	return recorder.Handler()
+}
+
+// Middleware records HTTP request metrics using the registry recorder.
+func (r *Registry) Middleware(next http.Handler) http.Handler {
+	recorder := r.recorderOrDefault()
+	return HTTPMiddleware(recorder, next)
+}
+
+func (r *Registry) recorderOrDefault() *Recorder {
+	if r != nil && r.Recorder != nil {
+		return r.Recorder
+	}
+	return Default()
 }
 
 // Handler exposes the Recorder as an http.Handler that writes Prometheus text

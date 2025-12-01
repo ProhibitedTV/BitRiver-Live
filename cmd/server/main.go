@@ -200,9 +200,10 @@ func main() {
 	flag.Var(&oauthRedirects, "oauth-redirect-url", "override OAuth redirect URL (provider=value)")
 	flag.Parse()
 
-	logger := logging.New(logging.Config{Level: firstNonEmpty(*logLevel, os.Getenv("BITRIVER_LIVE_LOG_LEVEL"))})
+	logger := logging.Init(logging.Config{Level: firstNonEmpty(*logLevel, os.Getenv("BITRIVER_LIVE_LOG_LEVEL")), Format: string(logging.FormatJSON)})
 	auditLogger := logging.WithComponent(logger, "audit")
-	recorder := metrics.Default()
+	registry := metrics.NewRegistry()
+	recorder := registry.Recorder
 
 	allowSelfSignupValue := *allowSelfSignup
 	if env, ok := os.LookupEnv("BITRIVER_LIVE_ALLOW_SELF_SIGNUP"); ok {

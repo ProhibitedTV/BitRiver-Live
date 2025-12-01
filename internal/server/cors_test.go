@@ -1,7 +1,6 @@
 package server
 
 import (
-	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
 	"testing"
