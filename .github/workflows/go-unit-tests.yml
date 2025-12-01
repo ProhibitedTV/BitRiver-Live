@@ -49,6 +49,9 @@ jobs:
           test -d vendor
           test -f vendor/modules.txt
 
+      - name: Smoke test OME renderer
+        run: python3 scripts/render_ome_config_test.py
+
       - name: Run unit tests
         env:
           GOTOOLCHAIN: local
