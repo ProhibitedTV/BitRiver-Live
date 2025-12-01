@@ -79,9 +79,21 @@ def _replace_root_bindings(text: str, address: str, port: str, tls_port: str) ->
     elif "<IP>" in bind_body:
         bind_body = replace_tag_content(bind_body, "IP", address)
 
-    # Port / TLSPort are still required.
-    for tag, value in (("Port", port), ("TLSPort", tls_port)):
-        bind_body = replace_tag_content(bind_body, tag, value)
+    # Rewrite all <Signalling> port pairs when present; otherwise, fall back to
+    # the first <Port>/<TLSPort> in the bind body.
+    def _rewrite_signalling(match: re.Match[str]) -> str:
+        inner = match.group(1)
+        inner = replace_tag_content(inner, "Port", port)
+        inner = replace_tag_content(inner, "TLSPort", tls_port)
+        return f"<Signalling>{inner}</Signalling>"
+
+    bind_body, signalling_rewrites = re.subn(
+        r"<Signalling>(.*?)</Signalling>", _rewrite_signalling, bind_body, flags=re.DOTALL
+    )
+
+    if signalling_rewrites == 0:
+        for tag, value in (("Port", port), ("TLSPort", tls_port)):
+            bind_body = replace_tag_content(bind_body, tag, value)
 
     server_body = server_body[:bind_start] + bind_body + server_body[bind_end:]
     return text[:server_start] + server_body + text[server_end:]
@@ -101,20 +113,25 @@ def _replace_root_ip(text: str, ip: str) -> str:
     server_start, server_end = server_match.span(1)
     server_body = server_match.group(1)
 
-    # Look for <IP> that appears before the first <Bind> or <VirtualHosts>,
-    # so we don't accidentally rewrite nested IPs (e.g., within <Hosts>).
-    ip_idx = server_body.find("<IP>")
-    if ip_idx == -1:
-        # Nothing to replace; keep the template as-is.
-        return text
+    for match in re.finditer(r"<IP>(.*?)</IP>", server_body, re.DOTALL):
+        ip_start, ip_end = match.span(1)
 
-    before = server_body[:ip_idx]
-    if "<Bind>" in before or "<VirtualHosts>" in before:
-        # This <IP> is not in the top header portion; leave it alone.
-        return text
+        # Skip IPs that live inside <Bind> or <VirtualHosts> blocks.
+        bind_open = server_body.rfind("<Bind>", 0, ip_start)
+        bind_close = server_body.rfind("</Bind>", 0, ip_start)
+        if bind_open != -1 and (bind_close == -1 or bind_close < bind_open):
+            continue
 
-    server_body = replace_tag_content(server_body, "IP", ip)
-    return text[:server_start] + server_body + text[server_end:]
+        vhost_open = server_body.rfind("<VirtualHosts>", 0, ip_start)
+        vhost_close = server_body.rfind("</VirtualHosts>", 0, ip_start)
+        if vhost_open != -1 and (vhost_close == -1 or vhost_close < vhost_open):
+            continue
+
+        server_body = server_body[:ip_start] + ip + server_body[ip_end:]
+        return text[:server_start] + server_body + text[server_end:]
+
+    # No root-level IP found; leave document unchanged.
+    return text
 
 
 def _scoped_replace_control_bindings(text: str, bind: str) -> str:
@@ -154,6 +171,12 @@ def _scoped_replace_control_bindings(text: str, bind: str) -> str:
     return text[:control_start] + control_body + text[control_end:]
 
 
+def _strip_control_block(text: str) -> str:
+    """Remove any legacy <Control> module to keep new OME schemas happy."""
+
+    return re.sub(r"\s*<Control>.*?</Control>\s*", "", text, flags=re.DOTALL)
+
+
 def render(
     template: Path,
     output: Path,
@@ -176,6 +199,7 @@ def render(
     text = _replace_root_bindings(text, escaped_bind, escaped_port, escaped_tls_port)
     text = _replace_root_ip(text, xml_escape(server_ip))
     text = _scoped_replace_control_bindings(text, escaped_bind)
+    text = _strip_control_block(text)
 
     # These may not exist depending on template version; replace them when present.
     text = replace_optional_tag_content(text, "ID", xml_escape(username))

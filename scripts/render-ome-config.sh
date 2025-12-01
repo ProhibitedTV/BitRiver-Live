@@ -121,7 +121,7 @@ if [[ $QUIET -eq 0 ]]; then
   echo "Rendering OME config ($reason)..."
 fi
 
-python3 "$SCRIPT_DIR/render_ome_config.py" \
+if ! render_output=$(python3 "$SCRIPT_DIR/render_ome_config.py" \
   --template "$TEMPLATE" \
   --output "$OUTPUT" \
   --bind "$OME_BIND" \
@@ -129,7 +129,11 @@ python3 "$SCRIPT_DIR/render_ome_config.py" \
   --port "$OME_PORT" \
   --tls-port "$OME_TLS_PORT" \
   --username "$OME_USERNAME" \
-  --password "$OME_PASSWORD"
+  --password "$OME_PASSWORD" 2>&1); then
+  echo "Failed to render deploy/ome/Server.generated.xml. Check BITRIVER_OME_* values in $ENV_FILE and the template at $TEMPLATE." >&2
+  echo "$render_output" >&2
+  exit 1
+fi
 
 if [[ $QUIET -eq 0 ]]; then
   echo "Rendered OME configuration to $OUTPUT"
