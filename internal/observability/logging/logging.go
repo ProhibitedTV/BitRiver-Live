@@ -4,13 +4,33 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"strings"
+	"time"
+
+	"bitriver-live/internal/observability/metrics"
 )
 
 type Config struct {
 	Level  string
 	Writer io.Writer
+	Format string
+}
+
+type LogFormat string
+
+const (
+	FormatJSON LogFormat = "json"
+	FormatText LogFormat = "text"
+)
+
+// Init creates a slog.Logger using the provided configuration and installs it
+// as the process-wide default logger.
+func Init(cfg Config) *slog.Logger {
+	logger := New(cfg)
+	slog.SetDefault(logger)
+	return logger
 }
 
 // New creates a structured slog.Logger using the provided configuration.
@@ -19,8 +39,18 @@ func New(cfg Config) *slog.Logger {
 	if writer == nil {
 		writer = os.Stdout
 	}
-	handler := slog.NewJSONHandler(writer, &slog.HandlerOptions{Level: parseLevel(cfg.Level)})
+	handler := newHandler(cfg, writer)
 	return slog.New(handler)
+}
+
+func newHandler(cfg Config, writer io.Writer) slog.Handler {
+	options := &slog.HandlerOptions{Level: parseLevel(cfg.Level)}
+	switch LogFormat(strings.ToLower(strings.TrimSpace(cfg.Format))) {
+	case FormatText:
+		return slog.NewTextHandler(writer, options)
+	default:
+		return slog.NewJSONHandler(writer, options)
+	}
 }
 
 func parseLevel(level string) slog.Leveler {
@@ -125,4 +155,52 @@ func WithContext(ctx context.Context, logger *slog.Logger) *slog.Logger {
 		logger = logger.With("stream_id", streamID)
 	}
 	return logger
+}
+
+// RequestLoggerConfig configures the HTTP request logging middleware.
+type RequestLoggerConfig struct {
+	Logger            *slog.Logger
+	DisableRemoteAddr bool
+	AdditionalFields  func(*http.Request, int, time.Duration) []any
+}
+
+// RequestLogger returns middleware that logs HTTP requests using the provided
+// configuration. It captures method, path, status, duration, and optionally the
+// remote address alongside any additional fields supplied by the caller.
+func RequestLogger(cfg RequestLoggerConfig) func(http.Handler) http.Handler {
+	baseLogger := cfg.Logger
+	if baseLogger == nil {
+		baseLogger = slog.Default()
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			recorder := metrics.NewResponseRecorder(w)
+			start := time.Now()
+			next.ServeHTTP(recorder, r)
+
+			duration := time.Since(start)
+			requestLogger := WithContext(r.Context(), baseLogger)
+			if requestLogger == nil {
+				return
+			}
+
+			attrs := []any{
+				"method", r.Method,
+				"path", r.URL.Path,
+				"status", recorder.Status(),
+				"duration_ms", duration.Milliseconds(),
+			}
+
+			if !cfg.DisableRemoteAddr {
+				attrs = append(attrs, "remote_addr", r.RemoteAddr)
+			}
+
+			if cfg.AdditionalFields != nil {
+				attrs = append(attrs, cfg.AdditionalFields(r, recorder.Status(), duration)...)
+			}
+
+			requestLogger.Info("request completed", attrs...)
+		})
+	}
 }

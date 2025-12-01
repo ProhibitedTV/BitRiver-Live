@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -138,5 +141,48 @@ func TestWithContextAnnotatesLogger(t *testing.T) {
 	}
 	if payload["stream_id"] != "stream-1" {
 		t.Fatalf("expected stream_id to be set, got %v", payload["stream_id"])
+	}
+}
+
+func TestInitSetsDefaultLogger(t *testing.T) {
+	var buf bytes.Buffer
+	logger := Init(Config{Writer: &buf, Format: string(FormatText), Level: "debug"})
+	if logger != slog.Default() {
+		t.Fatalf("expected Init to replace the default logger")
+	}
+
+	slog.Info("hello world")
+
+	if !strings.Contains(buf.String(), "hello world") {
+		t.Fatalf("expected text output to include message, got %q", buf.String())
+	}
+}
+
+func TestRequestLogger(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	middleware := RequestLogger(RequestLoggerConfig{Logger: logger})
+
+	req := httptest.NewRequest(http.MethodPost, "/widgets/abc123", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
+	recorder := httptest.NewRecorder()
+
+	middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+	})).ServeHTTP(recorder, req)
+
+	var payload map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode log entry: %v", err)
+	}
+
+	if payload["status"] != float64(http.StatusAccepted) {
+		t.Fatalf("expected status %d, got %v", http.StatusAccepted, payload["status"])
+	}
+	if payload["remote_addr"] != "127.0.0.1:1234" {
+		t.Fatalf("expected remote_addr to be recorded, got %v", payload["remote_addr"])
+	}
+	if payload["path"] != "/widgets/abc123" {
+		t.Fatalf("expected path to be logged, got %v", payload["path"])
 	}
 }
