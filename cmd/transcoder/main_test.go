@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,6 +26,46 @@ const testToken = "test-token"
 
 func newTestLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+type healthResponse struct {
+	Status     string                    `json:"status"`
+	Components map[string]map[string]any `json:"components"`
+	Running    int                       `json:"runningJobs"`
+}
+
+func startStubTranscoder(t *testing.T, tempDir string, exitErr *atomic.Pointer[error]) (*server, *httptest.Server) {
+	t.Helper()
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
+	srv, err := newServer(testToken, tempDir, newTestLogger())
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	srv.launchProcess = func(id string, plan *transcodePlan, onExit func(error)) (*processState, error) {
+		done := make(chan struct{})
+		var once atomic.Bool
+		cancel := func() {
+			if once.CompareAndSwap(false, true) {
+				close(done)
+			}
+		}
+		go func() {
+			time.Sleep(10 * time.Millisecond)
+			if onExit != nil {
+				e := exitErr.Load()
+				if e != nil {
+					onExit(*e)
+				} else {
+					onExit(nil)
+				}
+			}
+			cancel()
+		}()
+		return &processState{cancel: cancel, done: done}, nil
+	}
+	ts := httptest.NewServer(srv.routes())
+	t.Cleanup(ts.Close)
+	return srv, ts
 }
 
 func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
@@ -725,4 +766,69 @@ func waitFor(t *testing.T, timeout time.Duration, fn func() bool) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+func TestHealthTracksFFmpegFailuresAndRecovery(t *testing.T) {
+	tempDir := t.TempDir()
+	var exitPtr atomic.Pointer[error]
+	initialErr := errors.New("ffmpeg crashed")
+	exitPtr.Store(&initialErr)
+	_, ts := startStubTranscoder(t, tempDir, &exitPtr)
+
+	submitJob(t, ts, "file:///tmp/input.mp4")
+
+	waitFor(t, 2*time.Second, func() bool {
+		status, _ := fetchHealth(t, ts)
+		return status.Status == "degraded"
+	})
+
+	exitPtr.Store(nil)
+	submitJob(t, ts, "file:///tmp/input.mp4")
+
+	waitFor(t, 2*time.Second, func() bool {
+		status, _ := fetchHealth(t, ts)
+		return status.Status == "ok"
+	})
+}
+
+func submitJob(t *testing.T, ts *httptest.Server, origin string) {
+	t.Helper()
+	renditions := []map[string]any{{"name": "720p", "bitrate": 2800}}
+	body, err := json.Marshal(map[string]any{
+		"channelId":  "channel-1",
+		"sessionId":  "session-1",
+		"originUrl":  origin,
+		"renditions": renditions,
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/v1/jobs", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("post job: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	}
+}
+
+func fetchHealth(t *testing.T, ts *httptest.Server) (healthResponse, int) {
+	t.Helper()
+	resp, err := ts.Client().Get(ts.URL + "/healthz")
+	if err != nil {
+		t.Fatalf("healthz request: %v", err)
+	}
+	defer resp.Body.Close()
+	var payload healthResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	return payload, resp.StatusCode
 }

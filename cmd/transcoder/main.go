@@ -84,6 +84,16 @@ type server struct {
 	store         *metadataStore
 	launchProcess func(string, *transcodePlan, func(error)) (*processState, error)
 	logger        *slog.Logger
+
+	healthMu   sync.Mutex
+	components map[string]*componentState
+}
+
+type componentState struct {
+	Status     string    `json:"status"`
+	Message    string    `json:"message,omitempty"`
+	LastUpdate time.Time `json:"lastUpdate"`
+	Failures   int       `json:"failures,omitempty"`
 }
 
 func (s *server) jobLogger(jobID string, meta *job) *slog.Logger {
@@ -118,6 +128,45 @@ func (s *server) uploadLogger(jobID string, meta *uploadJob) *slog.Logger {
 	return logger
 }
 
+func (s *server) updateComponent(name string, err error) {
+	if s == nil {
+		return
+	}
+	s.healthMu.Lock()
+	defer s.healthMu.Unlock()
+	if s.components == nil {
+		s.components = make(map[string]*componentState)
+	}
+	state := s.components[name]
+	if state == nil {
+		state = &componentState{}
+		s.components[name] = state
+	}
+	state.LastUpdate = time.Now().UTC()
+	if err != nil {
+		state.Status = "error"
+		state.Message = err.Error()
+		state.Failures++
+	} else {
+		state.Status = "ok"
+		state.Message = ""
+	}
+}
+
+func (s *server) componentSnapshot() map[string]*componentState {
+	s.healthMu.Lock()
+	defer s.healthMu.Unlock()
+	out := make(map[string]*componentState, len(s.components))
+	for k, v := range s.components {
+		if v == nil {
+			continue
+		}
+		clone := *v
+		out[k] = &clone
+	}
+	return out
+}
+
 type metadataStore struct {
 	root string
 }
@@ -148,6 +197,11 @@ type uploadResponse struct {
 	PlaybackURL string          `json:"playbackUrl"`
 	Renditions  json.RawMessage `json:"renditions"`
 }
+
+const (
+	componentFFmpeg     = "ffmpeg"
+	componentPublishing = "publishing"
+)
 
 func main() {
 	bind := envOrDefault("JOB_CONTROLLER_BIND", ":9000")
@@ -234,8 +288,11 @@ func newServer(token, outputRoot string, logger *slog.Logger) (*server, error) {
 		processes:  make(map[string]*processState),
 		store:      store,
 		logger:     logger,
+		components: make(map[string]*componentState),
 	}
 	srv.launchProcess = srv.startFFmpeg
+	srv.updateComponent(componentFFmpeg, nil)
+	srv.updateComponent(componentPublishing, nil)
 	srv.restoreActiveProcesses()
 	return srv, nil
 }
@@ -272,6 +329,7 @@ func (s *server) restoreActiveProcesses() {
 			if jobLogger != nil {
 				jobLogger.Error("resume job", "error", err)
 			}
+			s.updateComponent(componentFFmpeg, err)
 			continue
 		}
 		proc, err := s.launchProcess(id, plan, s.makeJobExitHandler(id))
@@ -279,9 +337,11 @@ func (s *server) restoreActiveProcesses() {
 			if jobLogger != nil {
 				jobLogger.Error("restart job", "error", err)
 			}
+			s.updateComponent(componentFFmpeg, err)
 			metrics.TranscoderJobFailed("live")
 			continue
 		}
+		s.updateComponent(componentFFmpeg, nil)
 		metrics.TranscoderJobStarted("live")
 		jb.Renditions = cloneRenditions(plan.renditions)
 		jb.OutputPath = plan.outputDir
@@ -296,6 +356,7 @@ func (s *server) restoreActiveProcesses() {
 			if jobLogger != nil {
 				jobLogger.Error("publish live job", "error", err)
 			}
+			s.updateComponent(componentPublishing, err)
 		}
 	}
 	for id, up := range s.uploads {
@@ -312,6 +373,7 @@ func (s *server) restoreActiveProcesses() {
 			if uploadLogger != nil {
 				uploadLogger.Error("resume upload", "error", err)
 			}
+			s.updateComponent(componentFFmpeg, err)
 			continue
 		}
 		proc, err := s.launchProcess(id, plan, s.makeUploadExitHandler(id))
@@ -319,9 +381,11 @@ func (s *server) restoreActiveProcesses() {
 			if uploadLogger != nil {
 				uploadLogger.Error("restart upload", "error", err)
 			}
+			s.updateComponent(componentFFmpeg, err)
 			metrics.TranscoderJobFailed("upload")
 			continue
 		}
+		s.updateComponent(componentFFmpeg, nil)
 		metrics.TranscoderJobStarted("upload")
 		up.Renditions = cloneRenditions(plan.renditions)
 		up.OutputPath = plan.outputDir
@@ -349,7 +413,25 @@ func (s *server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	s.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	components := s.componentSnapshot()
+	status := "ok"
+	code := http.StatusOK
+	for _, comp := range components {
+		if comp != nil && comp.Status != "ok" {
+			status = "degraded"
+			code = http.StatusServiceUnavailable
+			break
+		}
+	}
+	s.mu.RLock()
+	running := len(s.processes)
+	s.mu.RUnlock()
+	payload := map[string]any{
+		"status":      status,
+		"components":  components,
+		"runningJobs": running,
+	}
+	s.writeJSON(w, code, payload)
 }
 
 func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
@@ -410,6 +492,7 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 		delete(s.jobs, jobID)
 		s.mu.Unlock()
 		http.Error(w, "failed to start ffmpeg", http.StatusInternalServerError)
+		s.updateComponent(componentFFmpeg, err)
 		metrics.TranscoderJobFailed("live")
 		return
 	}
@@ -426,17 +509,21 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 		proc.cancel()
 		<-proc.done
 		http.Error(w, "failed to persist job", http.StatusInternalServerError)
+		s.updateComponent(componentPublishing, err)
 		metrics.TranscoderJobFailed("live")
 		return
 	}
 
 	metrics.TranscoderJobStarted("live")
+	s.updateComponent(componentFFmpeg, nil)
 
 	if err := s.publishLive(meta); err != nil {
 		if jobLogger != nil {
 			jobLogger.Warn("publish live job", "error", err)
 		}
+		s.updateComponent(componentPublishing, err)
 	}
+	s.updateComponent(componentPublishing, nil)
 
 	publicRenditions := cloneRenditions(plan.renditions)
 	for i := range publicRenditions {
@@ -571,6 +658,7 @@ func (s *server) handleUploads(w http.ResponseWriter, r *http.Request) {
 		delete(s.uploads, jobID)
 		s.mu.Unlock()
 		http.Error(w, "failed to start ffmpeg", http.StatusInternalServerError)
+		s.updateComponent(componentFFmpeg, err)
 		metrics.TranscoderJobFailed("upload")
 		return
 	}
@@ -587,11 +675,13 @@ func (s *server) handleUploads(w http.ResponseWriter, r *http.Request) {
 		proc.cancel()
 		<-proc.done
 		http.Error(w, "failed to persist upload", http.StatusInternalServerError)
+		s.updateComponent(componentPublishing, err)
 		metrics.TranscoderJobFailed("upload")
 		return
 	}
 
 	metrics.TranscoderJobStarted("upload")
+	s.updateComponent(componentFFmpeg, nil)
 
 	publicRenditions := cloneRenditions(plan.renditions)
 	playback := meta.Playback
@@ -643,11 +733,14 @@ func (s *server) makeJobExitHandler(id string) func(error) {
 			if jobLogger != nil {
 				jobLogger.Warn("cleanup live mirror", "error", err)
 			}
+			s.updateComponent(componentPublishing, err)
 		}
 		if err != nil {
+			s.updateComponent(componentFFmpeg, err)
 			metrics.TranscoderJobFailed("live")
 			return
 		}
+		s.updateComponent(componentFFmpeg, nil)
 		metrics.TranscoderJobCompleted("live")
 	}
 }
@@ -673,6 +766,7 @@ func (s *server) makeUploadExitHandler(id string) func(error) {
 				if uploadLogger != nil {
 					uploadLogger.Warn("publish upload", "error", err)
 				}
+				s.updateComponent(componentPublishing, err)
 			}
 		}
 		if meta != nil {
@@ -683,9 +777,11 @@ func (s *server) makeUploadExitHandler(id string) func(error) {
 			}
 		}
 		if err != nil {
+			s.updateComponent(componentFFmpeg, err)
 			metrics.TranscoderJobFailed("upload")
 			return
 		}
+		s.updateComponent(componentFFmpeg, nil)
 		metrics.TranscoderJobCompleted("upload")
 	}
 }
