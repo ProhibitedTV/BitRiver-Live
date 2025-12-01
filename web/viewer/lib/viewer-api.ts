@@ -247,6 +247,25 @@ export type ChannelPlaybackResponse = {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
+export class ViewerApiError extends Error {
+  status: number;
+  body?: unknown;
+  text?: string;
+
+  constructor(status: number, body?: unknown, text?: string, message?: string) {
+    const fallbackMessage = text?.trim() || `${status}`;
+    const bodyMessage =
+      typeof body === "object" && body !== null && "message" in body && typeof body.message === "string"
+        ? body.message
+        : undefined;
+    super(message ?? bodyMessage ?? fallbackMessage);
+    this.name = "ViewerApiError";
+    this.status = status;
+    this.body = body;
+    this.text = text;
+  }
+}
+
 async function viewerRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers ?? {});
   if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
@@ -259,8 +278,14 @@ async function viewerRequest<T>(path: string, init?: RequestInit): Promise<T> {
     cache: "no-store"
   });
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(detail || `${response.status}`);
+    const rawBody = await response.text();
+    let parsedBody: unknown;
+    try {
+      parsedBody = rawBody ? JSON.parse(rawBody) : undefined;
+    } catch {
+      parsedBody = undefined;
+    }
+    throw new ViewerApiError(response.status, parsedBody, rawBody);
   }
   if (response.status === 204) {
     return undefined as T;
