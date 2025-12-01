@@ -64,49 +64,6 @@ func (kv *keyValueFlag) Set(value string) error {
 	return nil
 }
 
-// applyOAuthEnvOverrides injects OAuth credentials from environment variables.
-// It is applied after CLI overrides so BITRIVER_LIVE_OAUTH_* variables can
-// replace flag-provided values in containerized deployments.
-func applyOAuthEnvOverrides(configs []oauth.ProviderConfig) []oauth.ProviderConfig {
-	if len(configs) == 0 {
-		return configs
-	}
-	ids := make(map[string]string)
-	secrets := make(map[string]string)
-	redirects := make(map[string]string)
-	for _, cfg := range configs {
-		normalized := sanitizeEnvName(cfg.Name)
-		if v := strings.TrimSpace(os.Getenv(fmt.Sprintf("BITRIVER_LIVE_OAUTH_%s_CLIENT_ID", normalized))); v != "" {
-			ids[strings.ToLower(cfg.Name)] = v
-		}
-		if v := strings.TrimSpace(os.Getenv(fmt.Sprintf("BITRIVER_LIVE_OAUTH_%s_CLIENT_SECRET", normalized))); v != "" {
-			secrets[strings.ToLower(cfg.Name)] = v
-		}
-		if v := strings.TrimSpace(os.Getenv(fmt.Sprintf("BITRIVER_LIVE_OAUTH_%s_REDIRECT_URL", normalized))); v != "" {
-			redirects[strings.ToLower(cfg.Name)] = v
-		}
-	}
-	return oauth.OverrideCredentials(configs, ids, secrets, redirects)
-}
-
-// sanitizeEnvName converts a provider name into an environment-friendly token
-// so OAuth env overrides can map onto the resolved flag configuration.
-func sanitizeEnvName(name string) string {
-	upper := strings.ToUpper(name)
-	var builder strings.Builder
-	for _, r := range upper {
-		switch {
-		case r >= 'A' && r <= 'Z':
-			builder.WriteRune(r)
-		case r >= '0' && r <= '9':
-			builder.WriteRune(r)
-		default:
-			builder.WriteRune('_')
-		}
-	}
-	return builder.String()
-}
-
 func main() {
 	addr := flag.String("addr", "", "HTTP listen address")
 	mode := flag.String("mode", "", "server runtime mode (development or production)")
@@ -216,33 +173,15 @@ func main() {
 
 	sessionCookieCrossSiteValue := resolveBool(*sessionCookieCrossSite, "BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE")
 
-	var oauthManager oauth.Service
-	var oauthSources []string
-	if source := strings.TrimSpace(*oauthProvidersFlag); source != "" {
-		oauthSources = append(oauthSources, source)
-	}
-	if envSource := strings.TrimSpace(os.Getenv("BITRIVER_LIVE_OAUTH_CONFIG")); envSource != "" {
-		oauthSources = append(oauthSources, envSource)
-	}
-	if envSource := strings.TrimSpace(os.Getenv("BITRIVER_LIVE_OAUTH_PROVIDERS")); envSource != "" {
-		oauthSources = append(oauthSources, envSource)
-	}
-	providers, err := oauth.ResolveConfigSources(oauthSources...)
+	_, oauthManager, err := oauth.LoadFromFlagsAndEnv(oauth.LoadInput{
+		Source:        *oauthProvidersFlag,
+		ClientIDs:     oauthClientIDs,
+		ClientSecrets: oauthClientSecrets,
+		RedirectURLs:  oauthRedirects,
+	})
 	if err != nil {
-		logger.Error("failed to load oauth providers", "error", err)
+		logger.Error("failed to configure oauth", "error", err)
 		os.Exit(1)
-	}
-	if len(providers) > 0 {
-		providers = oauth.OverrideCredentials(providers, oauthClientIDs, oauthClientSecrets, oauthRedirects)
-		providers = applyOAuthEnvOverrides(providers)
-		if len(providers) > 0 {
-			manager, err := oauth.NewManager(providers)
-			if err != nil {
-				logger.Error("failed to configure oauth", "error", err)
-				os.Exit(1)
-			}
-			oauthManager = manager
-		}
 	}
 
 	serverMode := modeValue(*mode, os.Getenv("BITRIVER_LIVE_MODE"))
