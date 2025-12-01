@@ -4,6 +4,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -126,6 +127,27 @@ func (s *server) uploadLogger(jobID string, meta *uploadJob) *slog.Logger {
 		}
 	}
 	return logger
+}
+
+func constantTimeEqual(expected, provided string) bool {
+	if expected == "" || provided == "" {
+		return false
+	}
+	if len(expected) != len(provided) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(expected), []byte(provided)) == 1
+}
+
+func logAuthFailure(logger *slog.Logger, r *http.Request, reason string) {
+	if logger == nil || r == nil {
+		return
+	}
+	logger.Warn("authorization failed",
+		"reason", reason,
+		"remote_addr", r.RemoteAddr,
+		"path", r.URL.Path,
+	)
 }
 
 func (s *server) updateComponent(name string, err error) {
@@ -401,11 +423,21 @@ func (s *server) restoreActiveProcesses() {
 
 func (s *server) authorize(r *http.Request) bool {
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
-	if !strings.HasPrefix(strings.ToLower(header), "bearer ") {
+	if header == "" {
+		logAuthFailure(s.logger, r, "missing_authorization")
 		return false
 	}
-	token := strings.TrimSpace(header[7:])
-	return token == s.token
+	parts := strings.SplitN(header, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
+		logAuthFailure(s.logger, r, "invalid_scheme")
+		return false
+	}
+	token := strings.TrimSpace(parts[1])
+	if constantTimeEqual(s.token, token) {
+		return true
+	}
+	logAuthFailure(s.logger, r, "invalid_token")
+	return false
 }
 
 func (s *server) handleHealthz(w http.ResponseWriter, r *http.Request) {
