@@ -78,10 +78,10 @@ func (h *Handler) Profiles(w http.ResponseWriter, r *http.Request) {
 			}
 			response = append(response, h.buildProfileViewResponse(user, profile))
 		}
-		writeJSON(w, http.StatusOK, response)
+		WriteJSON(w, http.StatusOK, response)
 	default:
 		w.Header().Set("Allow", "GET")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 	}
 }
 
@@ -89,7 +89,7 @@ func (h *Handler) ProfileByID(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/profiles/")
 	parts := strings.Split(path, "/")
 	if len(parts) == 0 || parts[0] == "" {
-		writeError(w, http.StatusNotFound, fmt.Errorf("profile id missing"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("profile id missing"))
 		return
 	}
 	userID := parts[0]
@@ -109,30 +109,30 @@ func (h *Handler) ProfileByID(w http.ResponseWriter, r *http.Request) {
 		h.handleUpsertProfile(userID, w, r)
 	default:
 		w.Header().Set("Allow", "GET, PUT")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 	}
 }
 
 func (h *Handler) handleGetProfile(userID string, w http.ResponseWriter, r *http.Request) {
 	user, ok := h.Store.GetUser(userID)
 	if !ok {
-		writeError(w, http.StatusNotFound, fmt.Errorf("user %s not found", userID))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("user %s not found", userID))
 		return
 	}
 	profile, _ := h.Store.GetProfile(userID)
-	writeJSON(w, http.StatusOK, h.buildProfileViewResponse(user, profile))
+	WriteJSON(w, http.StatusOK, h.buildProfileViewResponse(user, profile))
 }
 
 func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *http.Request) {
 	var req upsertProfileRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err)
+	if err := DecodeJSON(r, &req); err != nil {
+		WriteDecodeError(w, err)
 		return
 	}
 
 	user, ok := h.Store.GetUser(userID)
 	if !ok {
-		writeError(w, http.StatusNotFound, fmt.Errorf("user %s not found", userID))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("user %s not found", userID))
 		return
 	}
 
@@ -146,7 +146,7 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 	if userUpdate.DisplayName != nil || userUpdate.Email != nil {
 		updatedUser, err := h.Store.UpdateUser(userID, userUpdate)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
 		user = updatedUser
@@ -188,7 +188,7 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 				Note:     addr.Note,
 			})
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err)
+				WriteError(w, http.StatusBadRequest, err)
 				return
 			}
 			addresses = append(addresses, normalized)
@@ -198,11 +198,11 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 
 	profile, err := h.Store.UpsertProfile(userID, update)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		WriteError(w, http.StatusBadRequest, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, h.buildProfileViewResponse(user, profile))
+	WriteJSON(w, http.StatusOK, h.buildProfileViewResponse(user, profile))
 }
 
 func (h *Handler) buildProfileViewResponse(user models.User, profile models.Profile) profileViewResponse {

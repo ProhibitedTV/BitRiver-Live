@@ -129,7 +129,7 @@ type vodCollectionResponse struct {
 func (h *Handler) Directory(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 
@@ -144,7 +144,7 @@ func (h *Handler) Directory(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DirectoryFeatured(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 
@@ -174,7 +174,7 @@ func (h *Handler) DirectoryFeatured(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DirectoryRecommended(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 
@@ -185,7 +185,7 @@ func (h *Handler) DirectoryRecommended(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DirectoryLive(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 
@@ -197,7 +197,7 @@ func (h *Handler) DirectoryLive(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DirectoryTrending(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 
@@ -208,7 +208,7 @@ func (h *Handler) DirectoryTrending(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DirectoryCategories(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 
@@ -234,7 +234,7 @@ func (h *Handler) DirectoryCategories(w http.ResponseWriter, r *http.Request) {
 	})
 
 	payload := categoryDirectoryResponse{Categories: summaries, GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano)}
-	writeJSON(w, http.StatusOK, payload)
+	WriteJSON(w, http.StatusOK, payload)
 }
 
 func filterLiveChannels(channels []models.Channel) []models.Channel {
@@ -271,7 +271,7 @@ func (h *Handler) sortChannelsByFollowers(channels []models.Channel, liveFirst b
 func (h *Handler) DirectoryFollowing(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 
@@ -318,7 +318,7 @@ func (h *Handler) writeDirectoryResponse(w http.ResponseWriter, channels []model
 		Channels:    response,
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
-	writeJSON(w, http.StatusOK, payload)
+	WriteJSON(w, http.StatusOK, payload)
 }
 
 func buildChannelResponse(channel models.Channel, includeStreamKey bool) channelResponse {
@@ -428,7 +428,7 @@ func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 			for _, channel := range channels {
 				response = append(response, newChannelResponse(channel))
 			}
-			writeJSON(w, http.StatusOK, response)
+			WriteJSON(w, http.StatusOK, response)
 			return
 		}
 
@@ -436,15 +436,15 @@ func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 		for _, channel := range channels {
 			response = append(response, newChannelPublicResponse(channel))
 		}
-		writeJSON(w, http.StatusOK, response)
+		WriteJSON(w, http.StatusOK, response)
 	case http.MethodPost:
 		actor, ok := h.requireRole(w, r, roleAdmin, roleCreator)
 		if !ok {
 			return
 		}
 		var req createChannelRequest
-		if err := decodeJSON(r, &req); err != nil {
-			writeError(w, http.StatusBadRequest, err)
+		if err := DecodeJSON(r, &req); err != nil {
+			WriteDecodeError(w, err)
 			return
 		}
 		if req.OwnerID == "" {
@@ -456,13 +456,13 @@ func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 		}
 		channel, err := h.Store.CreateChannel(req.OwnerID, req.Title, req.Category, req.Tags)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeJSON(w, http.StatusCreated, newChannelResponse(channel))
+		WriteJSON(w, http.StatusCreated, newChannelResponse(channel))
 	default:
 		w.Header().Set("Allow", "GET, POST")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 	}
 }
 
@@ -473,7 +473,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 		parts = parts[:len(parts)-1]
 	}
 	if len(parts) == 0 || parts[0] == "" {
-		writeError(w, http.StatusNotFound, fmt.Errorf("channel id missing"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("channel id missing"))
 		return
 	}
 	channelID := parts[0]
@@ -483,26 +483,26 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 		case http.MethodGet:
 			channel, ok := h.Store.GetChannel(channelID)
 			if !ok {
-				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
 			}
 			if actor, ok := UserFromContext(r.Context()); ok && (channel.OwnerID == actor.ID || actor.HasRole(roleAdmin)) {
-				writeJSON(w, http.StatusOK, newChannelResponse(channel))
+				WriteJSON(w, http.StatusOK, newChannelResponse(channel))
 				return
 			}
-			writeJSON(w, http.StatusOK, newChannelPublicResponse(channel))
+			WriteJSON(w, http.StatusOK, newChannelPublicResponse(channel))
 		case http.MethodPatch:
 			channel, ok := h.Store.GetChannel(channelID)
 			if !ok {
-				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
 			}
 			if _, ok := h.ensureChannelAccess(w, r, channel); !ok {
 				return
 			}
 			var req updateChannelRequest
-			if err := decodeJSON(r, &req); err != nil {
-				writeError(w, http.StatusBadRequest, err)
+			if err := DecodeJSON(r, &req); err != nil {
+				WriteDecodeError(w, err)
 				return
 			}
 			update := storage.ChannelUpdate{}
@@ -518,27 +518,27 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			}
 			channel, err := h.Store.UpdateChannel(channelID, update)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err)
+				WriteError(w, http.StatusBadRequest, err)
 				return
 			}
-			writeJSON(w, http.StatusOK, newChannelResponse(channel))
+			WriteJSON(w, http.StatusOK, newChannelResponse(channel))
 		case http.MethodDelete:
 			channel, ok := h.Store.GetChannel(channelID)
 			if !ok {
-				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
 			}
 			if _, ok := h.ensureChannelAccess(w, r, channel); !ok {
 				return
 			}
 			if err := h.Store.DeleteChannel(channelID); err != nil {
-				writeError(w, http.StatusBadRequest, err)
+				WriteError(w, http.StatusBadRequest, err)
 				return
 			}
 			w.WriteHeader(http.StatusNoContent)
 		default:
 			w.Header().Set("Allow", "GET, PATCH, DELETE")
-			writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+			WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		}
 		return
 	}
@@ -548,17 +548,17 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 		case "playback":
 			channel, ok := h.Store.GetChannel(channelID)
 			if !ok {
-				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
 			}
 			if r.Method != http.MethodGet {
 				w.Header().Set("Allow", "GET")
-				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 				return
 			}
 			owner, exists := h.Store.GetUser(channel.OwnerID)
 			if !exists {
-				writeError(w, http.StatusInternalServerError, fmt.Errorf("channel owner %s not found", channel.OwnerID))
+				WriteError(w, http.StatusInternalServerError, fmt.Errorf("channel owner %s not found", channel.OwnerID))
 				return
 			}
 			profile, _ := h.Store.GetProfile(owner.ID)
@@ -588,7 +588,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			if state, err := h.subscriptionState(channel.ID, viewer); err == nil {
 				response.Subscription = &state
 			} else {
-				writeError(w, http.StatusInternalServerError, err)
+				WriteError(w, http.StatusInternalServerError, err)
 				return
 			}
 			if session, live := h.Store.CurrentStreamSession(channel.ID); live {
@@ -627,12 +627,12 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				playback.LatencyMode = latency
 				response.Playback = &playback
 			}
-			writeJSON(w, http.StatusOK, response)
+			WriteJSON(w, http.StatusOK, response)
 			return
 		case "stream":
 			channel, ok := h.Store.GetChannel(channelID)
 			if !ok {
-				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
 			}
 			h.handleStreamRoutes(channel, parts[2:], w, r)
@@ -640,7 +640,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 		case "sessions":
 			channel, ok := h.Store.GetChannel(channelID)
 			if !ok {
-				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
 			}
 			if _, ok := h.ensureChannelAccess(w, r, channel); !ok {
@@ -648,27 +648,27 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			}
 			if r.Method != http.MethodGet {
 				w.Header().Set("Allow", "GET")
-				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 				return
 			}
 			sessions, err := h.Store.ListStreamSessions(channelID)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err)
+				WriteError(w, http.StatusBadRequest, err)
 				return
 			}
 			response := make([]sessionResponse, 0, len(sessions))
 			for _, session := range sessions {
 				response = append(response, newSessionResponse(session))
 			}
-			writeJSON(w, http.StatusOK, response)
+			WriteJSON(w, http.StatusOK, response)
 			return
 		case "follow":
 			if len(parts) > 2 {
-				writeError(w, http.StatusNotFound, fmt.Errorf("unknown channel path"))
+				WriteError(w, http.StatusNotFound, fmt.Errorf("unknown channel path"))
 				return
 			}
 			if _, ok := h.Store.GetChannel(channelID); !ok {
-				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
 			}
 			actor, ok := h.requireAuthenticatedUser(w, r)
@@ -678,33 +678,33 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			switch r.Method {
 			case http.MethodPost:
 				if err := h.Store.FollowChannel(actor.ID, channelID); err != nil {
-					writeError(w, http.StatusBadRequest, err)
+					WriteError(w, http.StatusBadRequest, err)
 					return
 				}
 			case http.MethodDelete:
 				if err := h.Store.UnfollowChannel(actor.ID, channelID); err != nil {
-					writeError(w, http.StatusBadRequest, err)
+					WriteError(w, http.StatusBadRequest, err)
 					return
 				}
 			default:
 				w.Header().Set("Allow", "POST, DELETE")
-				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 				return
 			}
 			state := followStateResponse{
 				Followers: h.Store.CountFollowers(channelID),
 				Following: h.Store.IsFollowingChannel(actor.ID, channelID),
 			}
-			writeJSON(w, http.StatusOK, state)
+			WriteJSON(w, http.StatusOK, state)
 			return
 		case "subscribe":
 			if len(parts) > 2 {
-				writeError(w, http.StatusNotFound, fmt.Errorf("unknown channel path"))
+				WriteError(w, http.StatusNotFound, fmt.Errorf("unknown channel path"))
 				return
 			}
 			channel, ok := h.Store.GetChannel(channelID)
 			if !ok {
-				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
 			}
 			switch r.Method {
@@ -715,10 +715,10 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				}
 				state, err := h.subscriptionState(channel.ID, viewer)
 				if err != nil {
-					writeError(w, http.StatusBadRequest, err)
+					WriteError(w, http.StatusBadRequest, err)
 					return
 				}
-				writeJSON(w, http.StatusOK, state)
+				WriteJSON(w, http.StatusOK, state)
 			case http.MethodPost:
 				actor, ok := h.requireAuthenticatedUser(w, r)
 				if !ok {
@@ -726,7 +726,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				}
 				subs, err := h.Store.ListSubscriptions(channel.ID, false)
 				if err != nil {
-					writeError(w, http.StatusBadRequest, err)
+					WriteError(w, http.StatusBadRequest, err)
 					return
 				}
 				alreadySubscribed := false
@@ -749,17 +749,17 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 					}
 					sub, err := h.Store.CreateSubscription(params)
 					if err != nil {
-						writeError(w, http.StatusBadRequest, err)
+						WriteError(w, http.StatusBadRequest, err)
 						return
 					}
 					metrics.Default().ObserveMonetization("subscription", sub.Amount)
 				}
 				state, err := h.subscriptionState(channel.ID, &actor)
 				if err != nil {
-					writeError(w, http.StatusBadRequest, err)
+					WriteError(w, http.StatusBadRequest, err)
 					return
 				}
-				writeJSON(w, http.StatusOK, state)
+				WriteJSON(w, http.StatusOK, state)
 			case http.MethodDelete:
 				actor, ok := h.requireAuthenticatedUser(w, r)
 				if !ok {
@@ -767,7 +767,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				}
 				subs, err := h.Store.ListSubscriptions(channel.ID, false)
 				if err != nil {
-					writeError(w, http.StatusBadRequest, err)
+					WriteError(w, http.StatusBadRequest, err)
 					return
 				}
 				subscriptionID := ""
@@ -779,39 +779,39 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				}
 				if subscriptionID != "" {
 					if _, err := h.Store.CancelSubscription(subscriptionID, actor.ID, ""); err != nil {
-						writeError(w, http.StatusBadRequest, err)
+						WriteError(w, http.StatusBadRequest, err)
 						return
 					}
 				}
 				state, err := h.subscriptionState(channel.ID, &actor)
 				if err != nil {
-					writeError(w, http.StatusBadRequest, err)
+					WriteError(w, http.StatusBadRequest, err)
 					return
 				}
-				writeJSON(w, http.StatusOK, state)
+				WriteJSON(w, http.StatusOK, state)
 			default:
 				w.Header().Set("Allow", "GET, POST, DELETE")
-				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 			}
 			return
 		case "vods":
 			if len(parts) > 2 {
-				writeError(w, http.StatusNotFound, fmt.Errorf("unknown channel path"))
+				WriteError(w, http.StatusNotFound, fmt.Errorf("unknown channel path"))
 				return
 			}
 			if r.Method != http.MethodGet {
 				w.Header().Set("Allow", "GET")
-				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 				return
 			}
 			channel, ok := h.Store.GetChannel(channelID)
 			if !ok {
-				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
 			}
 			uploads, err := h.Store.ListUploads(channelID)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err)
+				WriteError(w, http.StatusBadRequest, err)
 				return
 			}
 			items := make([]vodItemResponse, 0, len(uploads))
@@ -833,7 +833,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				items = append(items, item)
 			}
 			payload := vodCollectionResponse{ChannelID: channel.ID, Items: items}
-			writeJSON(w, http.StatusOK, payload)
+			WriteJSON(w, http.StatusOK, payload)
 			return
 		case "chat":
 			h.handleChatRoutes(channelID, parts[2:], w, r)
@@ -841,7 +841,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 		case "monetization":
 			channel, ok := h.Store.GetChannel(channelID)
 			if !ok {
-				writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
 			}
 			h.handleMonetizationRoutes(channel, parts[2:], w, r)
@@ -849,5 +849,5 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeError(w, http.StatusNotFound, fmt.Errorf("unknown channel path"))
+	WriteError(w, http.StatusNotFound, fmt.Errorf("unknown channel path"))
 }

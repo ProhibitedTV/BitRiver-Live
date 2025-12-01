@@ -17,22 +17,22 @@ import (
 func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 
 	if !h.AllowSelfSignup {
-		writeError(w, http.StatusForbidden, errors.New("public self-signup is disabled"))
+		WriteError(w, http.StatusForbidden, errors.New("public self-signup is disabled"))
 		return
 	}
 
 	var req signupRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err)
+	if err := DecodeJSON(r, &req); err != nil {
+		WriteDecodeError(w, err)
 		return
 	}
 	if len(req.Password) < 8 {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("password must be at least 8 characters"))
+		WriteError(w, http.StatusBadRequest, fmt.Errorf("password must be at least 8 characters"))
 		return
 	}
 
@@ -44,47 +44,47 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		slog.Error("signup create user failed", "email", req.Email, "error", err)
-		writeError(w, http.StatusBadRequest, errors.New("unable to create account"))
+		WriteError(w, http.StatusBadRequest, errors.New("unable to create account"))
 		return
 	}
 
 	token, expiresAt, err := h.sessionManager().Create(user.ID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
 
 	h.setSessionCookie(w, r, token, expiresAt)
-	writeJSON(w, http.StatusCreated, newAuthResponse(user, expiresAt))
+	WriteJSON(w, http.StatusCreated, newAuthResponse(user, expiresAt))
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 
 	var req loginRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err)
+	if err := DecodeJSON(r, &req); err != nil {
+		WriteDecodeError(w, err)
 		return
 	}
 
 	user, err := h.Store.AuthenticateUser(req.Email, req.Password)
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, fmt.Errorf("invalid credentials"))
+		WriteError(w, http.StatusUnauthorized, fmt.Errorf("invalid credentials"))
 		return
 	}
 
 	token, expiresAt, err := h.sessionManager().Create(user.ID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
 
 	h.setSessionCookie(w, r, token, expiresAt)
-	writeJSON(w, http.StatusOK, newAuthResponse(user, expiresAt))
+	WriteJSON(w, http.StatusOK, newAuthResponse(user, expiresAt))
 }
 
 type oauthStartRequest struct {
@@ -94,25 +94,25 @@ type oauthStartRequest struct {
 func (h *Handler) OAuthProviders(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 	providers := []oauth.ProviderInfo{}
 	if h.OAuth != nil {
 		providers = h.OAuth.Providers()
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"providers": providers})
+	WriteJSON(w, http.StatusOK, map[string]any{"providers": providers})
 }
 
 func (h *Handler) OAuthByProvider(w http.ResponseWriter, r *http.Request) {
 	if h.OAuth == nil {
-		writeError(w, http.StatusNotFound, fmt.Errorf("oauth providers not configured"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("oauth providers not configured"))
 		return
 	}
 	trimmed := strings.TrimPrefix(r.URL.Path, "/api/auth/oauth/")
 	parts := strings.Split(strings.Trim(trimmed, "/"), "/")
 	if len(parts) < 2 {
-		writeError(w, http.StatusNotFound, fmt.Errorf("invalid oauth path"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("invalid oauth path"))
 		return
 	}
 	provider := parts[0]
@@ -123,37 +123,37 @@ func (h *Handler) OAuthByProvider(w http.ResponseWriter, r *http.Request) {
 	case "callback":
 		h.oauthCallback(w, r, provider)
 	default:
-		writeError(w, http.StatusNotFound, fmt.Errorf("invalid oauth action"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("invalid oauth action"))
 	}
 }
 
 func (h *Handler) oauthStart(w http.ResponseWriter, r *http.Request, provider string) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 	var req oauthStartRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err)
+	if err := DecodeJSON(r, &req); err != nil {
+		WriteDecodeError(w, err)
 		return
 	}
 	begin, err := h.OAuth.Begin(provider, sanitizeReturnPath(req.ReturnTo))
 	if errors.Is(err, oauth.ErrProviderNotConfigured) {
-		writeError(w, http.StatusNotFound, fmt.Errorf("oauth provider %s not configured", provider))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("oauth provider %s not configured", provider))
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"url": begin.URL})
+	WriteJSON(w, http.StatusOK, map[string]string{"url": begin.URL})
 }
 
 func (h *Handler) oauthCallback(w http.ResponseWriter, r *http.Request, provider string) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 
@@ -169,12 +169,12 @@ func (h *Handler) oauthCallback(w http.ResponseWriter, r *http.Request, provider
 	}
 
 	if state == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("state parameter is required"))
+		WriteError(w, http.StatusBadRequest, fmt.Errorf("state parameter is required"))
 		return
 	}
 	code := query.Get("code")
 	if strings.TrimSpace(code) == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("authorization code is required"))
+		WriteError(w, http.StatusBadRequest, fmt.Errorf("authorization code is required"))
 		return
 	}
 
@@ -185,7 +185,7 @@ func (h *Handler) oauthCallback(w http.ResponseWriter, r *http.Request, provider
 	}
 	if err != nil {
 		if errors.Is(err, oauth.ErrProviderNotConfigured) {
-			writeError(w, http.StatusNotFound, fmt.Errorf("oauth provider %s not configured", provider))
+			WriteError(w, http.StatusNotFound, fmt.Errorf("oauth provider %s not configured", provider))
 			return
 		}
 		http.Redirect(w, r, appendQueryParam(returnPath, "oauth", "error"), http.StatusSeeOther)
@@ -262,39 +262,39 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		token := ExtractToken(r)
 		if token == "" {
-			writeError(w, http.StatusUnauthorized, fmt.Errorf("missing session token"))
+			WriteError(w, http.StatusUnauthorized, fmt.Errorf("missing session token"))
 			return
 		}
 		userID, expiresAt, ok, err := h.sessionManager().Validate(token)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err)
+			WriteError(w, http.StatusInternalServerError, err)
 			return
 		}
 		if !ok {
-			writeError(w, http.StatusUnauthorized, fmt.Errorf("invalid or expired session"))
+			WriteError(w, http.StatusUnauthorized, fmt.Errorf("invalid or expired session"))
 			return
 		}
 		user, exists := h.Store.GetUser(userID)
 		if !exists {
-			writeError(w, http.StatusUnauthorized, fmt.Errorf("account not found"))
+			WriteError(w, http.StatusUnauthorized, fmt.Errorf("account not found"))
 			return
 		}
-		writeJSON(w, http.StatusOK, newAuthResponse(user, expiresAt))
+		WriteJSON(w, http.StatusOK, newAuthResponse(user, expiresAt))
 	case http.MethodDelete:
 		token := ExtractToken(r)
 		if token == "" {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("missing session token"))
+			WriteError(w, http.StatusBadRequest, fmt.Errorf("missing session token"))
 			return
 		}
 		if err := h.sessionManager().Revoke(token); err != nil {
-			writeError(w, http.StatusInternalServerError, err)
+			WriteError(w, http.StatusInternalServerError, err)
 			return
 		}
 		h.ClearSessionCookie(w, r)
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.Header().Set("Allow", "GET, DELETE")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 	}
 }
 
@@ -383,14 +383,14 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 		for _, user := range users {
 			response = append(response, newUserResponse(user))
 		}
-		writeJSON(w, http.StatusOK, response)
+		WriteJSON(w, http.StatusOK, response)
 	case http.MethodPost:
 		if _, ok := h.requireRole(w, r, roleAdmin); !ok {
 			return
 		}
 		var req createUserRequest
-		if err := decodeJSON(r, &req); err != nil {
-			writeError(w, http.StatusBadRequest, err)
+		if err := DecodeJSON(r, &req); err != nil {
+			WriteDecodeError(w, err)
 			return
 		}
 		user, err := h.Store.CreateUser(storage.CreateUserParams{
@@ -400,20 +400,20 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 			Password:    req.Password,
 		})
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeJSON(w, http.StatusCreated, newUserResponse(user))
+		WriteJSON(w, http.StatusCreated, newUserResponse(user))
 	default:
 		w.Header().Set("Allow", "GET, POST")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 	}
 }
 
 func (h *Handler) UserByID(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/users/")
 	if id == "" {
-		writeError(w, http.StatusNotFound, fmt.Errorf("user id missing"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("user id missing"))
 		return
 	}
 
@@ -429,17 +429,17 @@ func (h *Handler) UserByID(w http.ResponseWriter, r *http.Request) {
 		}
 		user, ok := h.Store.GetUser(id)
 		if !ok {
-			writeError(w, http.StatusNotFound, fmt.Errorf("user %s not found", id))
+			WriteError(w, http.StatusNotFound, fmt.Errorf("user %s not found", id))
 			return
 		}
-		writeJSON(w, http.StatusOK, newUserResponse(user))
+		WriteJSON(w, http.StatusOK, newUserResponse(user))
 	case http.MethodPatch:
 		if _, ok := h.requireRole(w, r, roleAdmin); !ok {
 			return
 		}
 		var req updateUserRequest
-		if err := decodeJSON(r, &req); err != nil {
-			writeError(w, http.StatusBadRequest, err)
+		if err := DecodeJSON(r, &req); err != nil {
+			WriteDecodeError(w, err)
 			return
 		}
 		update := storage.UserUpdate{}
@@ -455,21 +455,21 @@ func (h *Handler) UserByID(w http.ResponseWriter, r *http.Request) {
 		}
 		user, err := h.Store.UpdateUser(id, update)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, newUserResponse(user))
+		WriteJSON(w, http.StatusOK, newUserResponse(user))
 	case http.MethodDelete:
 		if _, ok := h.requireRole(w, r, roleAdmin); !ok {
 			return
 		}
 		if err := h.Store.DeleteUser(id); err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.Header().Set("Allow", "GET, PATCH, DELETE")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 	}
 }

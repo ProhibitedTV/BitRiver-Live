@@ -187,13 +187,13 @@ func newClipExportResponse(clip models.ClipExport) clipExportResponse {
 func (h *Handler) Recordings(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 
 	channelID := strings.TrimSpace(r.URL.Query().Get("channelId"))
 	if channelID == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("channelId is required"))
+		WriteError(w, http.StatusBadRequest, fmt.Errorf("channelId is required"))
 		return
 	}
 
@@ -208,20 +208,20 @@ func (h *Handler) Recordings(w http.ResponseWriter, r *http.Request) {
 
 	recordings, err := h.Store.ListRecordings(channelID, includeUnpublished)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		WriteError(w, http.StatusBadRequest, err)
 		return
 	}
 	response := make([]recordingResponse, 0, len(recordings))
 	for _, recording := range recordings {
 		response = append(response, newRecordingResponse(recording))
 	}
-	writeJSON(w, http.StatusOK, response)
+	WriteJSON(w, http.StatusOK, response)
 }
 
 func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/recordings/")
 	if path == "" {
-		writeError(w, http.StatusNotFound, fmt.Errorf("recording id missing"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("recording id missing"))
 		return
 	}
 	parts := strings.Split(path, "/")
@@ -230,12 +230,12 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 
 	recording, ok := h.Store.GetRecording(recordingID)
 	if !ok {
-		writeError(w, http.StatusNotFound, fmt.Errorf("recording %s not found", recordingID))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("recording %s not found", recordingID))
 		return
 	}
 	channel, channelExists := h.Store.GetChannel(recording.ChannelID)
 	if !channelExists {
-		writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", recording.ChannelID))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", recording.ChannelID))
 		return
 	}
 	actor, hasActor := UserFromContext(r.Context())
@@ -245,12 +245,12 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 		switch action {
 		case "publish":
 			if len(remaining) > 1 {
-				writeError(w, http.StatusNotFound, fmt.Errorf("unknown recording path"))
+				WriteError(w, http.StatusNotFound, fmt.Errorf("unknown recording path"))
 				return
 			}
 			if r.Method != http.MethodPost {
 				w.Header().Set("Allow", "POST")
-				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 				return
 			}
 			if !hasActor {
@@ -263,14 +263,14 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 			}
 			updated, err := h.Store.PublishRecording(recordingID)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err)
+				WriteError(w, http.StatusBadRequest, err)
 				return
 			}
-			writeJSON(w, http.StatusOK, newRecordingResponse(updated))
+			WriteJSON(w, http.StatusOK, newRecordingResponse(updated))
 			return
 		case "clips":
 			if len(remaining) > 1 {
-				writeError(w, http.StatusNotFound, fmt.Errorf("unknown recording path"))
+				WriteError(w, http.StatusNotFound, fmt.Errorf("unknown recording path"))
 				return
 			}
 			switch r.Method {
@@ -283,14 +283,14 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 				}
 				clips, err := h.Store.ListClipExports(recordingID)
 				if err != nil {
-					writeError(w, http.StatusBadRequest, err)
+					WriteError(w, http.StatusBadRequest, err)
 					return
 				}
 				response := make([]clipExportResponse, 0, len(clips))
 				for _, clip := range clips {
 					response = append(response, newClipExportResponse(clip))
 				}
-				writeJSON(w, http.StatusOK, response)
+				WriteJSON(w, http.StatusOK, response)
 			case http.MethodPost:
 				if !hasActor {
 					WriteError(w, http.StatusUnauthorized, fmt.Errorf("authentication required"))
@@ -301,8 +301,8 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				var req clipExportRequest
-				if err := decodeJSON(r, &req); err != nil {
-					writeError(w, http.StatusBadRequest, err)
+				if err := DecodeJSON(r, &req); err != nil {
+					WriteDecodeError(w, err)
 					return
 				}
 				clip, err := h.Store.CreateClipExport(recordingID, storage.ClipExportParams{
@@ -311,17 +311,17 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 					EndSeconds:   req.EndSeconds,
 				})
 				if err != nil {
-					writeError(w, http.StatusBadRequest, err)
+					WriteError(w, http.StatusBadRequest, err)
 					return
 				}
-				writeJSON(w, http.StatusCreated, newClipExportResponse(clip))
+				WriteJSON(w, http.StatusCreated, newClipExportResponse(clip))
 			default:
 				w.Header().Set("Allow", "GET, POST")
-				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 			}
 			return
 		default:
-			writeError(w, http.StatusNotFound, fmt.Errorf("unknown recording path"))
+			WriteError(w, http.StatusNotFound, fmt.Errorf("unknown recording path"))
 			return
 		}
 	}
@@ -334,7 +334,7 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		writeJSON(w, http.StatusOK, newRecordingResponse(recording))
+		WriteJSON(w, http.StatusOK, newRecordingResponse(recording))
 	case http.MethodDelete:
 		if !hasActor {
 			WriteError(w, http.StatusUnauthorized, fmt.Errorf("authentication required"))
@@ -345,12 +345,12 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := h.Store.DeleteRecording(recordingID); err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.Header().Set("Allow", "GET, DELETE")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 	}
 }

@@ -4,7 +4,7 @@
 
 ## Design notes
 - `Handler` glues `storage.Repository`, `auth.SessionManager`, queue/health probes, and feature toggles together. When adding routes, extend the handler constructor so dependencies are injected (never reach out to globals).
-- Helper functions (`writeJSON`, `decodeJSON`, `setSessionCookie`, error mappers) must stay consistent. Touching one usually means updating every handler; keep behaviour uniform.
+- Helper functions (`WriteJSON`, `DecodeJSON`, `setSessionCookie`, error mappers) must stay consistent. Touching one usually means updating every handler; keep behaviour uniform.
 - Respect middleware expectations from `internal/server` (auth → rate limiting → metrics → audit → logging). New handlers should assume headers/cookies are already validated.
 
 ## Testing

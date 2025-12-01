@@ -187,7 +187,7 @@ func (h *Handler) ChatWebsocket(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.ResponseWriter, r *http.Request) {
 	channel, exists := h.Store.GetChannel(channelID)
 	if !exists {
-		writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 		return
 	}
 
@@ -210,12 +210,12 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 		default:
 			messageID := remaining[0]
 			if len(remaining) > 1 {
-				writeError(w, http.StatusNotFound, fmt.Errorf("unknown chat path"))
+				WriteError(w, http.StatusNotFound, fmt.Errorf("unknown chat path"))
 				return
 			}
 			if r.Method != http.MethodDelete {
 				w.Header().Set("Allow", "DELETE")
-				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 				return
 			}
 			actor, ok := h.requireAuthenticatedUser(w, r)
@@ -227,7 +227,7 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 				return
 			}
 			if err := h.Store.DeleteChatMessage(channelID, messageID); err != nil {
-				writeError(w, http.StatusBadRequest, err)
+				WriteError(w, http.StatusBadRequest, err)
 				return
 			}
 			w.WriteHeader(http.StatusNoContent)
@@ -242,29 +242,29 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 		if limitStr != "" {
 			parsed, err := strconv.Atoi(limitStr)
 			if err != nil || parsed < 0 {
-				writeError(w, http.StatusBadRequest, fmt.Errorf("invalid limit value"))
+				WriteError(w, http.StatusBadRequest, fmt.Errorf("invalid limit value"))
 				return
 			}
 			limit = parsed
 		}
 		messages, err := h.Store.ListChatMessages(channelID, limit)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
 		response := make([]chatMessageResponse, 0, len(messages))
 		for _, message := range messages {
 			response = append(response, newChatMessageResponse(message))
 		}
-		writeJSON(w, http.StatusOK, response)
+		WriteJSON(w, http.StatusOK, response)
 	case http.MethodPost:
 		actor, ok := h.requireAuthenticatedUser(w, r)
 		if !ok {
 			return
 		}
 		var req createChatRequest
-		if err := decodeJSON(r, &req); err != nil {
-			writeError(w, http.StatusBadRequest, err)
+		if err := DecodeJSON(r, &req); err != nil {
+			WriteDecodeError(w, err)
 			return
 		}
 		if req.UserID != actor.ID && !actor.HasRole(roleAdmin) {
@@ -274,12 +274,12 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 		if h.ChatGateway != nil {
 			author, ok := h.Store.GetUser(req.UserID)
 			if !ok {
-				writeError(w, http.StatusBadRequest, fmt.Errorf("user %s not found", req.UserID))
+				WriteError(w, http.StatusBadRequest, fmt.Errorf("user %s not found", req.UserID))
 				return
 			}
 			messageEvt, err := h.ChatGateway.CreateMessage(r.Context(), author, channelID, req.Content)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err)
+				WriteError(w, http.StatusBadRequest, err)
 				return
 			}
 			chatMessage := models.ChatMessage{
@@ -289,18 +289,18 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 				Content:   messageEvt.Content,
 				CreatedAt: messageEvt.CreatedAt,
 			}
-			writeJSON(w, http.StatusCreated, newChatMessageResponse(chatMessage))
+			WriteJSON(w, http.StatusCreated, newChatMessageResponse(chatMessage))
 			return
 		}
 		message, err := h.Store.CreateChatMessage(channelID, req.UserID, req.Content)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeJSON(w, http.StatusCreated, newChatMessageResponse(message))
+		WriteJSON(w, http.StatusCreated, newChatMessageResponse(message))
 	default:
 		w.Header().Set("Allow", "GET, POST")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 	}
 }
 
@@ -314,7 +314,7 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 		case "restrictions":
 			if r.Method != http.MethodGet {
 				w.Header().Set("Allow", "GET")
-				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 				return
 			}
 			if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
@@ -326,7 +326,7 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 			for _, restriction := range restrictions {
 				response = append(response, newChatRestrictionResponse(restriction))
 			}
-			writeJSON(w, http.StatusOK, response)
+			WriteJSON(w, http.StatusOK, response)
 			return
 		case "reports":
 			h.handleChatReports(actor, channel, remaining[1:], w, r)
@@ -334,12 +334,12 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 		}
 	}
 	if len(remaining) > 0 {
-		writeError(w, http.StatusNotFound, fmt.Errorf("unknown chat moderation path"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("unknown chat moderation path"))
 		return
 	}
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 	if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
@@ -347,16 +347,16 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 		return
 	}
 	var req chatModerationRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err)
+	if err := DecodeJSON(r, &req); err != nil {
+		WriteDecodeError(w, err)
 		return
 	}
 	if strings.TrimSpace(req.TargetID) == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("targetId is required"))
+		WriteError(w, http.StatusBadRequest, fmt.Errorf("targetId is required"))
 		return
 	}
 	if _, ok := h.Store.GetUser(req.TargetID); !ok {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("user %s not found", req.TargetID))
+		WriteError(w, http.StatusBadRequest, fmt.Errorf("user %s not found", req.TargetID))
 		return
 	}
 	var evt chat.ModerationEvent
@@ -369,7 +369,7 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 	case "timeout":
 		duration := time.Duration(req.DurationMs) * time.Millisecond
 		if duration <= 0 {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("durationMs must be positive"))
+			WriteError(w, http.StatusBadRequest, fmt.Errorf("durationMs must be positive"))
 			return
 		}
 		expires := time.Now().Add(duration).UTC()
@@ -382,12 +382,12 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 	case "unban":
 		evt.Action = chat.ModerationActionUnban
 	default:
-		writeError(w, http.StatusBadRequest, fmt.Errorf("unknown moderation action"))
+		WriteError(w, http.StatusBadRequest, fmt.Errorf("unknown moderation action"))
 		return
 	}
 
 	if err := h.ChatGateway.ApplyModeration(r.Context(), actor, evt); err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		WriteError(w, http.StatusBadRequest, err)
 		return
 	}
 	var expires *string
@@ -395,7 +395,7 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 		formatted := evt.ExpiresAt.Format(time.RFC3339Nano)
 		expires = &formatted
 	}
-	writeJSON(w, http.StatusAccepted, chatModerationResponse{
+	WriteJSON(w, http.StatusAccepted, chatModerationResponse{
 		Action:    string(evt.Action),
 		ChannelID: evt.ChannelID,
 		TargetID:  evt.TargetID,
@@ -409,7 +409,7 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 		if len(remaining) == 2 && remaining[1] == "resolve" {
 			if r.Method != http.MethodPost {
 				w.Header().Set("Allow", "POST")
-				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 				return
 			}
 			if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
@@ -417,19 +417,19 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 				return
 			}
 			var req resolveChatReportRequest
-			if err := decodeJSON(r, &req); err != nil {
-				writeError(w, http.StatusBadRequest, err)
+			if err := DecodeJSON(r, &req); err != nil {
+				WriteDecodeError(w, err)
 				return
 			}
 			report, err := h.Store.ResolveChatReport(reportID, actor.ID, req.Resolution)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err)
+				WriteError(w, http.StatusBadRequest, err)
 				return
 			}
-			writeJSON(w, http.StatusOK, newChatReportResponse(report))
+			WriteJSON(w, http.StatusOK, newChatReportResponse(report))
 			return
 		}
-		writeError(w, http.StatusNotFound, fmt.Errorf("unknown chat report path"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("unknown chat report path"))
 		return
 	}
 
@@ -446,32 +446,32 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 		}
 		reports, err := h.Store.ListChatReports(channel.ID, includeResolved)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
 		response := make([]chatReportResponse, 0, len(reports))
 		for _, report := range reports {
 			response = append(response, newChatReportResponse(report))
 		}
-		writeJSON(w, http.StatusOK, response)
+		WriteJSON(w, http.StatusOK, response)
 	case http.MethodPost:
 		var req chatReportRequest
-		if err := decodeJSON(r, &req); err != nil {
-			writeError(w, http.StatusBadRequest, err)
+		if err := DecodeJSON(r, &req); err != nil {
+			WriteDecodeError(w, err)
 			return
 		}
 		targetID := strings.TrimSpace(req.TargetID)
 		if targetID == "" {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("targetId is required"))
+			WriteError(w, http.StatusBadRequest, fmt.Errorf("targetId is required"))
 			return
 		}
 		if _, ok := h.Store.GetUser(targetID); !ok {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("user %s not found", targetID))
+			WriteError(w, http.StatusBadRequest, fmt.Errorf("user %s not found", targetID))
 			return
 		}
 		reason := strings.TrimSpace(req.Reason)
 		if reason == "" {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("reason is required"))
+			WriteError(w, http.StatusBadRequest, fmt.Errorf("reason is required"))
 			return
 		}
 		messageID := strings.TrimSpace(req.MessageID)
@@ -479,12 +479,12 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 		if h.ChatGateway != nil {
 			reporter, ok := h.Store.GetUser(actor.ID)
 			if !ok {
-				writeError(w, http.StatusInternalServerError, fmt.Errorf("reporter %s not found", actor.ID))
+				WriteError(w, http.StatusInternalServerError, fmt.Errorf("reporter %s not found", actor.ID))
 				return
 			}
 			evt, err := h.ChatGateway.SubmitReport(r.Context(), reporter, channel.ID, targetID, reason, messageID, evidence)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err)
+				WriteError(w, http.StatusBadRequest, err)
 				return
 			}
 			report := models.ChatReport{
@@ -498,25 +498,25 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 				Status:      evt.Status,
 				CreatedAt:   evt.CreatedAt,
 			}
-			writeJSON(w, http.StatusAccepted, newChatReportResponse(report))
+			WriteJSON(w, http.StatusAccepted, newChatReportResponse(report))
 			return
 		}
 		report, err := h.Store.CreateChatReport(channel.ID, actor.ID, targetID, reason, messageID, evidence)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeJSON(w, http.StatusAccepted, newChatReportResponse(report))
+		WriteJSON(w, http.StatusAccepted, newChatReportResponse(report))
 	default:
 		w.Header().Set("Allow", "GET, POST")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 	}
 }
 
 func (h *Handler) ModerationQueue(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 
@@ -526,22 +526,22 @@ func (h *Handler) ModerationQueue(w http.ResponseWriter, r *http.Request) {
 
 	payload, err := h.moderationQueuePayload()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, payload)
+	WriteJSON(w, http.StatusOK, payload)
 }
 
 func (h *Handler) ModerationQueueByID(w http.ResponseWriter, r *http.Request) {
 	flagID := strings.TrimPrefix(r.URL.Path, "/api/moderation/queue/")
 	if flagID == "" {
-		writeError(w, http.StatusNotFound, fmt.Errorf("flag id missing"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("flag id missing"))
 		return
 	}
 
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 
@@ -551,22 +551,22 @@ func (h *Handler) ModerationQueueByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req resolveModerationRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err)
+	if err := DecodeJSON(r, &req); err != nil {
+		WriteDecodeError(w, err)
 		return
 	}
 	resolution := strings.TrimSpace(req.Resolution)
 	if resolution == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("resolution is required"))
+		WriteError(w, http.StatusBadRequest, fmt.Errorf("resolution is required"))
 		return
 	}
 
 	report, err := h.Store.ResolveChatReport(flagID, actor.ID, resolution)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		WriteError(w, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, newChatReportResponse(report))
+	WriteJSON(w, http.StatusOK, newChatReportResponse(report))
 }
 
 func (h *Handler) moderationQueuePayload() (moderationQueueResponse, error) {
