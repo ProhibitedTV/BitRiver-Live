@@ -117,3 +117,70 @@ func TestCORSMiddlewareAllowsSameOriginByDefault(t *testing.T) {
 		t.Fatalf("expected allow origin header for same-origin request, got %q", got)
 	}
 }
+
+func TestServerCORSAllowsConfiguredOrigins(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	srv, err := New(handler, Config{
+		Addr:      "127.0.0.1:0",
+		TLS:       TLSConfig{},
+		RateLimit: RateLimitConfig{},
+		Security:  SecurityConfig{},
+		CORS: CORSConfig{
+			AdminOrigins:  []string{"https://admin.example.com"},
+			ViewerOrigins: []string{"https://viewer.example.com"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("New error: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		origin string
+	}{
+		{name: "admin", origin: "https://admin.example.com"},
+		{name: "viewer", origin: "https://viewer.example.com"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+			req.Header.Set("Origin", tc.origin)
+
+			srv.httpServer.Handler.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected health check success, got %d", rec.Code)
+			}
+			if got := rec.Header().Get("Access-Control-Allow-Origin"); got != tc.origin {
+				t.Fatalf("unexpected allow origin header: %q", got)
+			}
+			if got := rec.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+				t.Fatalf("expected allow credentials header, got %q", got)
+			}
+		})
+	}
+}
+
+func TestServerCORSBlocksUnknownOrigin(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	srv, err := New(handler, Config{
+		Addr:      "127.0.0.1:0",
+		TLS:       TLSConfig{},
+		RateLimit: RateLimitConfig{},
+		Security:  SecurityConfig{},
+		CORS:      CORSConfig{AdminOrigins: []string{"https://admin.example.com"}},
+	})
+	if err != nil {
+		t.Fatalf("New error: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for disallowed origin, got %d", rec.Code)
+	}
+}
