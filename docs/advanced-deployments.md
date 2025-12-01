@@ -132,6 +132,22 @@ The DSN must reference an otherwise-empty database so tests can freely create an
 
 See [docs/testing.md](testing.md) for the consolidated checklist used in CI.
 
+### Postgres backups and recovery
+
+Postgres is the source of truth for channels, recordings, chat metadata, and audit history. The Compose bundle derives the DSN from `BITRIVER_POSTGRES_DB`, `BITRIVER_POSTGRES_USER`, and `BITRIVER_POSTGRES_PASSWORD` in `deploy/.env.example`; override it directly with `BITRIVER_LIVE_POSTGRES_DSN` or `--postgres-dsn` when pointing the API at managed instances.【F:deploy/.env.example†L20-L36】【F:cmd/server/main.go†L126-L138】 Keep connection pool limits aligned with your backup strategy so `pg_dump` sessions are not throttled (`BITRIVER_LIVE_POSTGRES_MAX_CONNS`, `BITRIVER_LIVE_POSTGRES_MIN_CONNS`, `--postgres-max-conns`, and `--postgres-min-conns`).【F:deploy/.env.example†L28-L31】【F:cmd/server/main.go†L128-L133】
+
+Routine logical backups rely on `pg_dump` against the DSN the server uses:
+
+```bash
+pg_dump "$BITRIVER_LIVE_POSTGRES_DSN" \
+  --format=custom \
+  --file=bitriver-live.backup
+```
+
+Restore into a fresh database with `pg_restore --clean --if-exists --create` or by piping the archive back through `psql`, then point `BITRIVER_LIVE_POSTGRES_DSN` at the restored endpoint before restarting `cmd/server` so it becomes the active source of truth. Enable WAL archiving and base backups if you need point-in-time recovery; the application does not manage archiving for you, but it tolerates replaying to any timestamp as long as migrations from `deploy/migrations/` have been applied. When converting from JSON snapshots, import them before your first backup using `cmd/tools/migrate-json-to-postgres` so subsequent dumps capture a single authoritative store.
+
+`pg_dump`/`pg_restore` run outside the container stack; use the `postgres-host` Compose profile to expose the port only during maintenance, or connect through your cloud provider’s managed endpoint to keep traffic off the application network.【F:deploy/.env.example†L37-L40】 After a restore, smoke-test with `scripts/test-postgres.sh` to verify migrations and connectivity mirror production before reopening traffic.
+
 ### Monetization amounts
 
 Tips and subscriptions now store their amounts as fixed-precision minor units (1e-8 of the major currency) to avoid floating point drift in both the JSON store and Postgres. Operators should continue to send human-readable decimal numbers such as `4.99` or `0.00000025` in API requests—values with more than eight fractional digits are rejected. When seeding data or editing snapshots manually, preserve the decimal string form to keep the minor-unit representation consistent. The API keeps the decimal format on the wire; for example, a tip can be recorded with:
@@ -175,6 +191,16 @@ Stopping a stream now generates a recording entry that captures the session meta
 | `BITRIVER_LIVE_RECORDING_RETENTION_UNPUBLISHED` | Duration that drafts stay on disk; `0` disables automatic removal before publication. |
 
 Flags with the same names (see `--object-endpoint`, `--object-bucket`, `--recording-retention-published`, etc.) override the environment variables when provided. The server keeps recordings in the JSON datastore until the retention window elapses and mirrors the policy into object storage lifecycle configuration.
+
+### Object storage lifecycle for VODs and thumbnails
+
+Buckets should enforce the same retention you configure on the server so thumbnails and manifests expire in lockstep. The `--object-lifecycle-days` flag (or `BITRIVER_LIVE_OBJECT_LIFECYCLE_DAYS`) allows the API to communicate the desired lifecycle to workers that prune old artefacts; align it with `--recording-retention-published`/`--recording-retention-unpublished` (or their env counterparts) so object expiration never precedes the database record expiry.【F:cmd/server/main.go†L182-L193】【F:cmd/server/main.go†L318-L330】 When storing regulatory copies or enabling creator rollbacks, turn on bucket versioning and set lifecycle rules to retain previous versions longer than the published retention window so deletes stay reversible.
+
+Endpoints and credentials for uploads come from the object storage flags (`--object-endpoint`, `--object-region`, `--object-access-key`, `--object-secret-key`, `--object-bucket`, `--object-prefix`, `--object-public-endpoint`, `--object-use-ssl`) or their `BITRIVER_LIVE_OBJECT_*` equivalents, letting you target MinIO/S3 in different regions without recompiling.【F:cmd/server/main.go†L182-L190】【F:cmd/server/main.go†L318-L328】 Operators running on bespoke S3 tiers should keep bucket versioning and lifecycle policies consistent with `BITRIVER_LIVE_OBJECT_LIFECYCLE_DAYS` even when CDN cache TTLs differ; the API will continue to serve presigned URLs until the backing object is deleted.
+
+### Redis persistence expectations
+
+Redis backs the chat queue (`--chat-queue-driver redis`) and optional distributed login throttling; it is treated as a cache and transport layer rather than a system of record. The Compose template wires the chat queue to `BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR`/`BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD`, and the server exposes matching flags for addresses, credentials, streams, and TLS material so you can point at managed clusters or Sentinel.【F:deploy/.env.example†L33-L36】【F:cmd/server/main.go†L167-L180】 Chat messages are delivered through Redis Streams; if the node is lost without persistence (RDB/AOF), in-flight chat and rate-limit counters are discarded, but published recordings and account state remain intact in Postgres. Enable RDB snapshots or AOF on the Redis side when you want stream history to survive restarts, and monitor reconnections—the API will recreate consumer groups and continue processing once the Redis endpoint is reachable again.
 
 Example: create a user, launch a channel, and start a stream session. These requests require an administrator session token—after promoting your account, log in at `/api/auth/login` and copy the `token` value from the JSON response.
 
