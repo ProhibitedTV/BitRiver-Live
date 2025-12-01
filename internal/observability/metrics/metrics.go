@@ -34,6 +34,15 @@ type Recorder struct {
 	chatEvents        map[string]uint64
 	monetizationCount map[string]uint64
 	monetizationTotal map[string]models.Money
+	ingestAttempts    map[string]uint64
+	ingestFailures    map[string]uint64
+	transcoderEvents  map[TranscoderJobLabel]uint64
+	activeTranscoder  atomic.Int64
+}
+
+type TranscoderJobLabel struct {
+	Kind   string
+	Status string
 }
 
 var defaultRecorder = New()
@@ -50,6 +59,9 @@ func New() *Recorder {
 		chatEvents:        make(map[string]uint64),
 		monetizationCount: make(map[string]uint64),
 		monetizationTotal: make(map[string]models.Money),
+		ingestAttempts:    make(map[string]uint64),
+		ingestFailures:    make(map[string]uint64),
+		transcoderEvents:  make(map[TranscoderJobLabel]uint64),
 	}
 }
 
@@ -85,15 +97,7 @@ func (r *Recorder) StreamStarted() {
 // stream gauge, guarding against negative counts when concurrent updates race.
 func (r *Recorder) StreamStopped() {
 	r.incrementStreamEvent("stop")
-	for {
-		current := r.activeStreams.Load()
-		if current <= 0 {
-			return
-		}
-		if r.activeStreams.CompareAndSwap(current, current-1) {
-			return
-		}
-	}
+	r.decrementGauge(&r.activeStreams)
 }
 
 func (r *Recorder) incrementStreamEvent(event string) {
@@ -103,6 +107,24 @@ func (r *Recorder) incrementStreamEvent(event string) {
 	}
 	r.mu.Lock()
 	r.streamEvents[normalized]++
+	r.mu.Unlock()
+}
+
+// ObserveIngestAttempt records an ingest operation attempt keyed by operation
+// name (e.g., "boot_stream", "shutdown_stream", "upload_transcode").
+func (r *Recorder) ObserveIngestAttempt(operation string) {
+	op := normalizeName(operation)
+	r.mu.Lock()
+	r.ingestAttempts[op]++
+	r.mu.Unlock()
+}
+
+// ObserveIngestFailure records a failed ingest operation keyed by operation
+// name. The caller should also record the attempt separately.
+func (r *Recorder) ObserveIngestFailure(operation string) {
+	op := normalizeName(operation)
+	r.mu.Lock()
+	r.ingestFailures[op]++
 	r.mu.Unlock()
 }
 
@@ -130,9 +152,48 @@ func (r *Recorder) ObserveMonetization(event string, amount models.Money) {
 	r.mu.Unlock()
 }
 
+// TranscoderJobStarted records the beginning of a transcoder job of the
+// provided kind (e.g., "live" or "upload") and increments the active job
+// gauge.
+func (r *Recorder) TranscoderJobStarted(kind string) {
+	r.recordTranscoderEvent(kind, "start")
+	r.activeTranscoder.Add(1)
+}
+
+// TranscoderJobCompleted records the completion of a transcoder job and
+// decrements the active job gauge.
+func (r *Recorder) TranscoderJobCompleted(kind string) {
+	r.recordTranscoderEvent(kind, "complete")
+	r.decrementGauge(&r.activeTranscoder)
+}
+
+// TranscoderJobFailed records a failed transcoder job and decrements the
+// active job gauge (without allowing it to go negative if the job never
+// started).
+func (r *Recorder) TranscoderJobFailed(kind string) {
+	r.recordTranscoderEvent(kind, "fail")
+	r.decrementGauge(&r.activeTranscoder)
+}
+
+func (r *Recorder) recordTranscoderEvent(kind, status string) {
+	label := TranscoderJobLabel{
+		Kind:   normalizeName(kind),
+		Status: normalizeName(status),
+	}
+	r.mu.Lock()
+	r.transcoderEvents[label]++
+	r.mu.Unlock()
+}
+
 // ActiveStreams exposes the current gauge of concurrently active streams.
 func (r *Recorder) ActiveStreams() int64 {
 	return r.activeStreams.Load()
+}
+
+// ActiveTranscoderJobs exposes the current number of active transcoder jobs
+// tracked by the recorder.
+func (r *Recorder) ActiveTranscoderJobs() int64 {
+	return r.activeTranscoder.Load()
 }
 
 // SetIngestHealth normalizes ingest service identifiers, maps status strings to
@@ -158,6 +219,54 @@ func (r *Recorder) SetIngestHealth(service, status string) {
 	r.mu.Unlock()
 }
 
+// IngestCounts returns copies of ingest attempt and failure counters for
+// testing and reporting purposes.
+func (r *Recorder) IngestCounts() (attempts map[string]uint64, failures map[string]uint64) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	attempts = make(map[string]uint64, len(r.ingestAttempts))
+	for k, v := range r.ingestAttempts {
+		attempts[k] = v
+	}
+	failures = make(map[string]uint64, len(r.ingestFailures))
+	for k, v := range r.ingestFailures {
+		failures[k] = v
+	}
+	return attempts, failures
+}
+
+// TranscoderJobCounts returns copies of transcoder job event counters and the
+// current active job gauge value.
+func (r *Recorder) TranscoderJobCounts() (events map[TranscoderJobLabel]uint64, active int64) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	events = make(map[TranscoderJobLabel]uint64, len(r.transcoderEvents))
+	for k, v := range r.transcoderEvents {
+		events[k] = v
+	}
+	return events, r.activeTranscoder.Load()
+}
+
+// Reset clears all counters and gauges on the recorder. It is intended for
+// test setups.
+func (r *Recorder) Reset() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.requestCount = make(map[requestLabel]uint64)
+	r.requestDuration = make(map[requestLabel]time.Duration)
+	r.streamEvents = make(map[string]uint64)
+	r.ingestHealthValue = make(map[string]float64)
+	r.ingestHealthState = make(map[string]string)
+	r.chatEvents = make(map[string]uint64)
+	r.monetizationCount = make(map[string]uint64)
+	r.monetizationTotal = make(map[string]models.Money)
+	r.ingestAttempts = make(map[string]uint64)
+	r.ingestFailures = make(map[string]uint64)
+	r.transcoderEvents = make(map[TranscoderJobLabel]uint64)
+	r.activeStreams.Store(0)
+	r.activeTranscoder.Store(0)
+}
+
 // Handler exposes the Recorder as an http.Handler that writes Prometheus text
 // exposition data with the appropriate content type.
 func (r *Recorder) Handler() http.Handler {
@@ -178,6 +287,8 @@ func (r *Recorder) Write(w io.Writer) {
 	ingestServices := r.sortedIngestServices()
 	chatEvents := r.sortedChatEvents()
 	monetizationEvents := r.sortedMonetizationEvents()
+	ingestOperations := r.sortedIngestOperations()
+	transcoderEvents := r.sortedTranscoderJobLabels()
 
 	fmt.Fprintln(w, "# HELP bitriver_http_requests_total Total number of HTTP requests processed by the API")
 	fmt.Fprintln(w, "# TYPE bitriver_http_requests_total counter")
@@ -219,12 +330,37 @@ func (r *Recorder) Write(w io.Writer) {
 		fmt.Fprintf(w, "bitriver_ingest_health{service=\"%s\",status=\"%s\"} %f\n", service, status, value)
 	}
 
+	fmt.Fprintln(w, "# HELP bitriver_ingest_attempts_total Total ingest operations attempted by action")
+	fmt.Fprintln(w, "# TYPE bitriver_ingest_attempts_total counter")
+	for _, op := range ingestOperations {
+		count := r.ingestAttempts[op]
+		fmt.Fprintf(w, "bitriver_ingest_attempts_total{operation=\"%s\"} %d\n", op, count)
+	}
+
+	fmt.Fprintln(w, "# HELP bitriver_ingest_failures_total Total ingest operation failures by action")
+	fmt.Fprintln(w, "# TYPE bitriver_ingest_failures_total counter")
+	for _, op := range ingestOperations {
+		count := r.ingestFailures[op]
+		fmt.Fprintf(w, "bitriver_ingest_failures_total{operation=\"%s\"} %d\n", op, count)
+	}
+
 	fmt.Fprintln(w, "# HELP bitriver_chat_events_total Chat events by type")
 	fmt.Fprintln(w, "# TYPE bitriver_chat_events_total counter")
 	for _, event := range chatEvents {
 		count := r.chatEvents[event]
 		fmt.Fprintf(w, "bitriver_chat_events_total{event=\"%s\"} %d\n", event, count)
 	}
+
+	fmt.Fprintln(w, "# HELP bitriver_transcoder_jobs_total Transcoder job events by type and status")
+	fmt.Fprintln(w, "# TYPE bitriver_transcoder_jobs_total counter")
+	for _, label := range transcoderEvents {
+		count := r.transcoderEvents[label]
+		fmt.Fprintf(w, "bitriver_transcoder_jobs_total{kind=\"%s\",status=\"%s\"} %d\n", label.Kind, label.Status, count)
+	}
+
+	fmt.Fprintln(w, "# HELP bitriver_transcoder_active_jobs Current number of active transcoder jobs")
+	fmt.Fprintln(w, "# TYPE bitriver_transcoder_active_jobs gauge")
+	fmt.Fprintf(w, "bitriver_transcoder_active_jobs %d\n", r.activeTranscoder.Load())
 
 	fmt.Fprintln(w, "# HELP bitriver_monetization_events_total Monetization events by type")
 	fmt.Fprintln(w, "# TYPE bitriver_monetization_events_total counter")
@@ -307,6 +443,36 @@ func (r *Recorder) sortedMonetizationEvents() []string {
 	return events
 }
 
+func (r *Recorder) sortedIngestOperations() []string {
+	seen := make(map[string]struct{}, len(r.ingestAttempts)+len(r.ingestFailures))
+	for op := range r.ingestAttempts {
+		seen[op] = struct{}{}
+	}
+	for op := range r.ingestFailures {
+		seen[op] = struct{}{}
+	}
+	ops := make([]string, 0, len(seen))
+	for op := range seen {
+		ops = append(ops, op)
+	}
+	sort.Strings(ops)
+	return ops
+}
+
+func (r *Recorder) sortedTranscoderJobLabels() []TranscoderJobLabel {
+	labels := make([]TranscoderJobLabel, 0, len(r.transcoderEvents))
+	for label := range r.transcoderEvents {
+		labels = append(labels, label)
+	}
+	sort.Slice(labels, func(i, j int) bool {
+		if labels[i].Kind != labels[j].Kind {
+			return labels[i].Kind < labels[j].Kind
+		}
+		return labels[i].Status < labels[j].Status
+	})
+	return labels
+}
+
 func normalizePath(path string) string {
 	if path == "" || path == "/" {
 		return "/"
@@ -344,6 +510,26 @@ func looksLikeIdentifier(segment string) bool {
 	return digitCount >= 3
 }
 
+func (r *Recorder) decrementGauge(gauge *atomic.Int64) {
+	for {
+		current := gauge.Load()
+		if current <= 0 {
+			return
+		}
+		if gauge.CompareAndSwap(current, current-1) {
+			return
+		}
+	}
+}
+
+func normalizeName(name string) string {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	if normalized == "" {
+		return "unknown"
+	}
+	return normalized
+}
+
 // ObserveRequest is a helper on the default recorder.
 func ObserveRequest(method, path string, status int, duration time.Duration) {
 	defaultRecorder.ObserveRequest(method, path, status, duration)
@@ -362,6 +548,31 @@ func StreamStopped() {
 // SetIngestHealth updates ingest health for the default recorder.
 func SetIngestHealth(service, status string) {
 	defaultRecorder.SetIngestHealth(service, status)
+}
+
+// ObserveIngestAttempt records an ingest attempt on the default recorder.
+func ObserveIngestAttempt(operation string) {
+	defaultRecorder.ObserveIngestAttempt(operation)
+}
+
+// ObserveIngestFailure records an ingest failure on the default recorder.
+func ObserveIngestFailure(operation string) {
+	defaultRecorder.ObserveIngestFailure(operation)
+}
+
+// TranscoderJobStarted records the start of a transcoder job on the default recorder.
+func TranscoderJobStarted(kind string) {
+	defaultRecorder.TranscoderJobStarted(kind)
+}
+
+// TranscoderJobCompleted records the completion of a transcoder job on the default recorder.
+func TranscoderJobCompleted(kind string) {
+	defaultRecorder.TranscoderJobCompleted(kind)
+}
+
+// TranscoderJobFailed records a failed transcoder job on the default recorder.
+func TranscoderJobFailed(kind string) {
+	defaultRecorder.TranscoderJobFailed(kind)
 }
 
 // Handler exposes the default recorder as an HTTP handler.

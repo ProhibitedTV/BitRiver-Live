@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,11 +15,96 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"bitriver-live/internal/observability/metrics"
 )
 
 const testToken = "test-token"
+
+func newTestLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func newBufferLogger() (*slog.Logger, *bytes.Buffer) {
+	buf := &bytes.Buffer{}
+	return slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})), buf
+}
+
+type healthResponse struct {
+	Status     string                    `json:"status"`
+	Components map[string]map[string]any `json:"components"`
+	Running    int                       `json:"runningJobs"`
+}
+
+func startStubTranscoder(t *testing.T, tempDir string, exitErr *atomic.Pointer[error]) (*server, *httptest.Server) {
+	t.Helper()
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
+	srv, err := newServer(testToken, tempDir, newTestLogger())
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	srv.launchProcess = func(id string, plan *transcodePlan, onExit func(error)) (*processState, error) {
+		done := make(chan struct{})
+		var once atomic.Bool
+		cancel := func() {
+			if once.CompareAndSwap(false, true) {
+				close(done)
+			}
+		}
+		go func() {
+			time.Sleep(10 * time.Millisecond)
+			if onExit != nil {
+				e := exitErr.Load()
+				if e != nil {
+					onExit(*e)
+				} else {
+					onExit(nil)
+				}
+			}
+			cancel()
+		}()
+		return &processState{cancel: cancel, done: done}, nil
+	}
+	ts := httptest.NewServer(srv.routes())
+	t.Cleanup(ts.Close)
+	return srv, ts
+}
+
+func TestAuthorizeValidToken(t *testing.T) {
+	logger, buf := newBufferLogger()
+	s := &server{token: testToken, logger: logger}
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", nil)
+	req.Header.Set("Authorization", "Bearer "+testToken)
+
+	if !s.authorize(req) {
+		t.Fatalf("expected token %q to be authorized", testToken)
+	}
+	if out := buf.String(); out != "" {
+		t.Fatalf("expected no warnings for valid token, got: %s", out)
+	}
+}
+
+func TestAuthorizeInvalidTokenLogsWarning(t *testing.T) {
+	logger, buf := newBufferLogger()
+	s := &server{token: testToken, logger: logger}
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", nil)
+	req.RemoteAddr = "192.0.2.10:1234"
+	req.Header.Set("Authorization", "Bearer invalid")
+
+	if s.authorize(req) {
+		t.Fatalf("expected invalid token to be rejected")
+	}
+	log := buf.String()
+	if !strings.Contains(log, "authorization failed") {
+		t.Fatalf("expected authorization failure to be logged, got: %s", log)
+	}
+	if !strings.Contains(log, "invalid_token") {
+		t.Fatalf("expected reason to mention invalid token, got: %s", log)
+	}
+}
 
 func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	if testing.Short() {
@@ -47,7 +133,7 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", publicDir)
 
-	srv, err := newServer(testToken, tempDir)
+	srv, err := newServer(testToken, tempDir, newTestLogger())
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -348,7 +434,7 @@ func TestNewServerRequiresPublicBaseURL(t *testing.T) {
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "")
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", "")
 
-	if _, err := newServer(testToken, tempDir); err == nil {
+	if _, err := newServer(testToken, tempDir, newTestLogger()); err == nil {
 		t.Fatal("expected error when public base URL is unset")
 	} else if !strings.Contains(err.Error(), "BITRIVER_TRANSCODER_PUBLIC_BASE_URL must be configured") {
 		t.Fatalf("unexpected error: %v", err)
@@ -386,7 +472,7 @@ func TestUploadPublishesHTTPPlayback(t *testing.T) {
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", publicDir)
 
-	srv, err := newServer(testToken, workDir)
+	srv, err := newServer(testToken, workDir, newTestLogger())
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -486,6 +572,226 @@ func TestUploadPublishesHTTPPlayback(t *testing.T) {
 	}
 }
 
+func TestHandleJobsRecordsMetrics(t *testing.T) {
+	metrics.Default().Reset()
+	t.Cleanup(metrics.Default().Reset)
+
+	tempDir := t.TempDir()
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", filepath.Join(tempDir, "public"))
+
+	srv, err := newServer(testToken, tempDir, newTestLogger())
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	srv.launchProcess = func(jobID string, plan *transcodePlan, onExit func(error)) (*processState, error) {
+		return &processState{cancel: func() {}, done: make(chan struct{})}, nil
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"channelId":  "channel-1",
+		"sessionId":  "session-1",
+		"originUrl":  "https://cdn/source.m3u8",
+		"renditions": []map[string]any{{"name": "720p", "bitrate": 2000}},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	res := httptest.NewRecorder()
+
+	srv.handleJobs(res, req)
+
+	if res.Code != http.StatusCreated {
+		t.Fatalf("unexpected status: %d", res.Code)
+	}
+
+	events, active := metrics.Default().TranscoderJobCounts()
+	if events[metrics.TranscoderJobLabel{Kind: "live", Status: "start"}] != 1 {
+		t.Fatalf("expected one live start, got %d", events[metrics.TranscoderJobLabel{Kind: "live", Status: "start"}])
+	}
+	if events[metrics.TranscoderJobLabel{Kind: "live", Status: "fail"}] != 0 {
+		t.Fatalf("expected zero live failures, got %d", events[metrics.TranscoderJobLabel{Kind: "live", Status: "fail"}])
+	}
+	if active != 1 {
+		t.Fatalf("expected active jobs gauge of 1, got %d", active)
+	}
+}
+
+func TestHandleJobsMetricsOnFailure(t *testing.T) {
+	metrics.Default().Reset()
+	t.Cleanup(metrics.Default().Reset)
+
+	tempDir := t.TempDir()
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", filepath.Join(tempDir, "public"))
+
+	srv, err := newServer(testToken, tempDir, newTestLogger())
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	srv.launchProcess = func(jobID string, plan *transcodePlan, onExit func(error)) (*processState, error) {
+		return nil, errors.New("ffmpeg missing")
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"channelId":  "channel-1",
+		"sessionId":  "session-1",
+		"originUrl":  "https://cdn/source.m3u8",
+		"renditions": []map[string]any{{"name": "720p", "bitrate": 2000}},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	res := httptest.NewRecorder()
+
+	srv.handleJobs(res, req)
+
+	if res.Code != http.StatusInternalServerError {
+		t.Fatalf("unexpected status: %d", res.Code)
+	}
+
+	events, active := metrics.Default().TranscoderJobCounts()
+	if events[metrics.TranscoderJobLabel{Kind: "live", Status: "fail"}] != 1 {
+		t.Fatalf("expected one live failure, got %d", events[metrics.TranscoderJobLabel{Kind: "live", Status: "fail"}])
+	}
+	if active != 0 {
+		t.Fatalf("expected active jobs gauge of 0, got %d", active)
+	}
+}
+
+func TestHandleUploadsRecordsMetrics(t *testing.T) {
+	metrics.Default().Reset()
+	t.Cleanup(metrics.Default().Reset)
+
+	tempDir := t.TempDir()
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", filepath.Join(tempDir, "public"))
+
+	srv, err := newServer(testToken, tempDir, newTestLogger())
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	srv.launchProcess = func(jobID string, plan *transcodePlan, onExit func(error)) (*processState, error) {
+		return &processState{cancel: func() {}, done: make(chan struct{})}, nil
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"channelId":  "channel-1",
+		"uploadId":   "upload-1",
+		"sourceUrl":  "https://cdn/source.mp4",
+		"filename":   "source.mp4",
+		"renditions": []map[string]any{{"name": "720p", "bitrate": 2000}},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/uploads", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	res := httptest.NewRecorder()
+
+	srv.handleUploads(res, req)
+
+	if res.Code != http.StatusAccepted {
+		t.Fatalf("unexpected status: %d", res.Code)
+	}
+
+	events, active := metrics.Default().TranscoderJobCounts()
+	if events[metrics.TranscoderJobLabel{Kind: "upload", Status: "start"}] != 1 {
+		t.Fatalf("expected one upload start, got %d", events[metrics.TranscoderJobLabel{Kind: "upload", Status: "start"}])
+	}
+	if events[metrics.TranscoderJobLabel{Kind: "upload", Status: "fail"}] != 0 {
+		t.Fatalf("expected zero upload failures, got %d", events[metrics.TranscoderJobLabel{Kind: "upload", Status: "fail"}])
+	}
+	if active != 1 {
+		t.Fatalf("expected active jobs gauge of 1, got %d", active)
+	}
+}
+
+func TestHandleUploadsMetricsOnFailure(t *testing.T) {
+	metrics.Default().Reset()
+	t.Cleanup(metrics.Default().Reset)
+
+	tempDir := t.TempDir()
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", filepath.Join(tempDir, "public"))
+
+	srv, err := newServer(testToken, tempDir, newTestLogger())
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	srv.launchProcess = func(jobID string, plan *transcodePlan, onExit func(error)) (*processState, error) {
+		return nil, errors.New("ffmpeg missing")
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"channelId":  "channel-1",
+		"uploadId":   "upload-1",
+		"sourceUrl":  "https://cdn/source.mp4",
+		"filename":   "source.mp4",
+		"renditions": []map[string]any{{"name": "720p", "bitrate": 2000}},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/uploads", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	res := httptest.NewRecorder()
+
+	srv.handleUploads(res, req)
+
+	if res.Code != http.StatusInternalServerError {
+		t.Fatalf("unexpected status: %d", res.Code)
+	}
+
+	events, active := metrics.Default().TranscoderJobCounts()
+	if events[metrics.TranscoderJobLabel{Kind: "upload", Status: "fail"}] != 1 {
+		t.Fatalf("expected one upload failure, got %d", events[metrics.TranscoderJobLabel{Kind: "upload", Status: "fail"}])
+	}
+	if active != 0 {
+		t.Fatalf("expected active jobs gauge of 0, got %d", active)
+	}
+}
+
+func TestExitHandlersRecordMetrics(t *testing.T) {
+	metrics.Default().Reset()
+	t.Cleanup(metrics.Default().Reset)
+
+	tempDir := t.TempDir()
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
+	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_DIR", filepath.Join(tempDir, "public"))
+
+	srv, err := newServer(testToken, tempDir, newTestLogger())
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	liveID := "job-exit"
+	uploadID := "upload-exit"
+	srv.jobs[liveID] = &job{ID: liveID}
+	srv.uploads[uploadID] = &uploadJob{ID: uploadID}
+
+	metrics.TranscoderJobStarted("live")
+	metrics.TranscoderJobStarted("upload")
+
+	srv.makeJobExitHandler(liveID)(nil)
+	srv.makeUploadExitHandler(uploadID)(errors.New("ffmpeg error"))
+
+	events, active := metrics.Default().TranscoderJobCounts()
+	if events[metrics.TranscoderJobLabel{Kind: "live", Status: "complete"}] != 1 {
+		t.Fatalf("expected one live completion, got %d", events[metrics.TranscoderJobLabel{Kind: "live", Status: "complete"}])
+	}
+	if events[metrics.TranscoderJobLabel{Kind: "upload", Status: "fail"}] != 1 {
+		t.Fatalf("expected one upload failure, got %d", events[metrics.TranscoderJobLabel{Kind: "upload", Status: "fail"}])
+	}
+	if active != 0 {
+		t.Fatalf("expected active jobs gauge of 0, got %d", active)
+	}
+}
+
 func waitFor(t *testing.T, timeout time.Duration, fn func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -498,4 +804,172 @@ func waitFor(t *testing.T, timeout time.Duration, fn func() bool) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+func TestHealthTracksFFmpegFailuresAndRecovery(t *testing.T) {
+	tempDir := t.TempDir()
+	var exitPtr atomic.Pointer[error]
+	initialErr := errors.New("ffmpeg crashed")
+	exitPtr.Store(&initialErr)
+	_, ts := startStubTranscoder(t, tempDir, &exitPtr)
+
+	submitJob(t, ts, "file:///tmp/input.mp4")
+
+	waitFor(t, 2*time.Second, func() bool {
+		status, _ := fetchHealth(t, ts)
+		return status.Status == "degraded"
+	})
+
+	exitPtr.Store(nil)
+	submitJob(t, ts, "file:///tmp/input.mp4")
+
+	waitFor(t, 2*time.Second, func() bool {
+		status, _ := fetchHealth(t, ts)
+		return status.Status == "ok"
+	})
+}
+
+func TestHealthDegradedWhenPublishFailsAndRecovers(t *testing.T) {
+	tempDir := t.TempDir()
+	var exitPtr atomic.Pointer[error]
+	srv, ts := startStubTranscoder(t, tempDir, &exitPtr)
+
+	brokenRoot := filepath.Join(tempDir, "public-broken")
+	if err := os.WriteFile(brokenRoot, []byte(""), 0o644); err != nil {
+		t.Fatalf("create broken publish root: %v", err)
+	}
+	srv.publicRoot = brokenRoot
+
+	submitJob(t, ts, "file:///tmp/input.mp4")
+
+	waitFor(t, 2*time.Second, func() bool {
+		status, code := fetchHealth(t, ts)
+		return status.Status == "degraded" && code == http.StatusServiceUnavailable
+	})
+
+	status, _ := fetchHealth(t, ts)
+	if comp := status.Components[componentPublishing]; comp["status"] != "error" {
+		t.Fatalf("expected publishing component error, got %v", comp["status"])
+	}
+
+	fixedRoot := filepath.Join(tempDir, "public-fixed")
+	if err := os.MkdirAll(fixedRoot, 0o755); err != nil {
+		t.Fatalf("create fixed publish root: %v", err)
+	}
+	srv.publicRoot = fixedRoot
+
+	submitJob(t, ts, "file:///tmp/input.mp4")
+
+	waitFor(t, 2*time.Second, func() bool {
+		status, code := fetchHealth(t, ts)
+		return status.Status == "ok" && code == http.StatusOK
+	})
+}
+
+func TestHealthDegradedWhenUploadPublishFails(t *testing.T) {
+	tempDir := t.TempDir()
+	var exitPtr atomic.Pointer[error]
+	srv, ts := startStubTranscoder(t, tempDir, &exitPtr)
+
+	brokenRoot := filepath.Join(tempDir, "public-broken")
+	if err := os.WriteFile(brokenRoot, []byte(""), 0o644); err != nil {
+		t.Fatalf("create broken publish root: %v", err)
+	}
+	srv.publicRoot = brokenRoot
+
+	submitUpload(t, ts, "file:///tmp/input.mp4")
+
+	waitFor(t, 2*time.Second, func() bool {
+		status, code := fetchHealth(t, ts)
+		return status.Status == "degraded" && code == http.StatusServiceUnavailable
+	})
+
+	status, _ := fetchHealth(t, ts)
+	if comp := status.Components[componentPublishing]; comp["status"] != "error" {
+		t.Fatalf("expected publishing component error, got %v", comp["status"])
+	}
+
+	fixedRoot := filepath.Join(tempDir, "public-fixed")
+	if err := os.MkdirAll(fixedRoot, 0o755); err != nil {
+		t.Fatalf("create fixed publish root: %v", err)
+	}
+	srv.publicRoot = fixedRoot
+
+	submitUpload(t, ts, "file:///tmp/input.mp4")
+
+	waitFor(t, 2*time.Second, func() bool {
+		status, code := fetchHealth(t, ts)
+		return status.Status == "ok" && code == http.StatusOK
+	})
+}
+
+func submitJob(t *testing.T, ts *httptest.Server, origin string) {
+	t.Helper()
+	renditions := []map[string]any{{"name": "720p", "bitrate": 2800}}
+	body, err := json.Marshal(map[string]any{
+		"channelId":  "channel-1",
+		"sessionId":  "session-1",
+		"originUrl":  origin,
+		"renditions": renditions,
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/v1/jobs", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("post job: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	}
+}
+
+func submitUpload(t *testing.T, ts *httptest.Server, source string) {
+	t.Helper()
+	renditions := []map[string]any{{"name": "720p", "bitrate": 2800}}
+	body, err := json.Marshal(map[string]any{
+		"channelId":  "channel-1",
+		"uploadId":   "upload-1",
+		"sourceUrl":  source,
+		"filename":   "input.mp4",
+		"renditions": renditions,
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/v1/uploads", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("post upload: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	}
+}
+
+func fetchHealth(t *testing.T, ts *httptest.Server) (healthResponse, int) {
+	t.Helper()
+	resp, err := ts.Client().Get(ts.URL + "/healthz")
+	if err != nil {
+		t.Fatalf("healthz request: %v", err)
+	}
+	defer resp.Body.Close()
+	var payload healthResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	return payload, resp.StatusCode
 }

@@ -22,6 +22,12 @@ def replace_tag_content(data: str, tag: str, value: str) -> str:
     return data[: start + len(open_tag)] + value + data[end:]
 
 
+def replace_optional_tag_content(data: str, tag: str, value: str) -> str:
+    if f"<{tag}>" not in data:
+        return data
+    return replace_tag_content(data, tag, value)
+
+
 def replace_all_tag_content(
     data: str, tag: str, value: str, *, required: bool = True
 ) -> str:
@@ -171,9 +177,9 @@ def render(
     text = _replace_root_ip(text, xml_escape(server_ip))
     text = _scoped_replace_control_bindings(text, escaped_bind)
 
-    # These are still expected to exist somewhere (typically under <Authentication>).
-    text = replace_tag_content(text, "ID", xml_escape(username))
-    text = replace_tag_content(text, "Password", xml_escape(password))
+    # These may not exist depending on template version; replace them when present.
+    text = replace_optional_tag_content(text, "ID", xml_escape(username))
+    text = replace_optional_tag_content(text, "Password", xml_escape(password))
 
     output.write_text(text)
 

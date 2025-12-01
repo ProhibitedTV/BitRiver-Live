@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"bitriver-live/internal/observability/metrics"
 )
 
 // flakyRoundTripper simulates a transient network failure on the first request
@@ -120,12 +122,12 @@ func (f *fakeChannelAdapter) DeleteChannel(ctx context.Context, channelID string
 }
 
 type fakeApplicationAdapter struct {
-	origin   string
-	playback string
+	origin    string
+	playback  string
 	createErr error
 	deleteErr error
 
-	lastCreateChannelID string
+	lastCreateChannelID  string
 	lastCreateRenditions []string
 	lastDeleteChannelID  string
 }
@@ -145,11 +147,11 @@ func (f *fakeApplicationAdapter) DeleteApplication(ctx context.Context, channelI
 }
 
 type fakeTranscoderAdapter struct {
-	startJobErr   error
-	stopJobErr    error
+	startJobErr    error
+	stopJobErr     error
 	startUploadErr error
 
-	startJobIDs      []string
+	startJobIDs        []string
 	startJobRenditions []Rendition
 	lastStartChannelID string
 	lastStartSessionID string
@@ -330,6 +332,52 @@ func TestHTTPControllerBootStreamRollsBackOnTranscoderFailure(t *testing.T) {
 	}
 }
 
+func TestHTTPControllerBootStreamMetricsRecorded(t *testing.T) {
+	metrics.Default().Reset()
+	t.Cleanup(metrics.Default().Reset)
+
+	controller := HTTPController{
+		channels:     &fakeChannelAdapter{createPrimary: "rtmp://primary", createBackup: "rtmp://backup"},
+		applications: &fakeApplicationAdapter{origin: "http://origin", playback: "https://play"},
+		transcoder:   &fakeTranscoderAdapter{startJobIDs: []string{"job-1"}},
+	}
+
+	params := BootParams{ChannelID: "channel-1", StreamKey: "key", SessionID: "session-1"}
+	if _, err := controller.BootStream(context.Background(), params); err != nil {
+		t.Fatalf("BootStream: %v", err)
+	}
+
+	attempts, failures := metrics.Default().IngestCounts()
+	if attempts["boot_stream"] != 1 {
+		t.Fatalf("expected one boot attempt, got %d", attempts["boot_stream"])
+	}
+	if failures["boot_stream"] != 0 {
+		t.Fatalf("expected zero boot failures, got %d", failures["boot_stream"])
+	}
+}
+
+func TestHTTPControllerBootStreamMetricsFailure(t *testing.T) {
+	metrics.Default().Reset()
+	t.Cleanup(metrics.Default().Reset)
+
+	controller := HTTPController{
+		channels: &fakeChannelAdapter{createErr: errors.New("boom")},
+	}
+
+	params := BootParams{ChannelID: "channel-1", StreamKey: "key", SessionID: "session-1"}
+	if _, err := controller.BootStream(context.Background(), params); err == nil {
+		t.Fatal("expected BootStream error")
+	}
+
+	attempts, failures := metrics.Default().IngestCounts()
+	if attempts["boot_stream"] != 1 {
+		t.Fatalf("expected one boot attempt, got %d", attempts["boot_stream"])
+	}
+	if failures["boot_stream"] != 1 {
+		t.Fatalf("expected one boot failure, got %d", failures["boot_stream"])
+	}
+}
+
 // ---- ShutdownStream tests ----
 
 // TestHTTPControllerShutdownStreamAggregatesErrors verifies that
@@ -359,6 +407,52 @@ func TestHTTPControllerShutdownStreamAggregatesErrors(t *testing.T) {
 	}
 	if len(tr.stopJobIDs) != 2 {
 		t.Fatalf("expected 2 jobs stopped, got %d", len(tr.stopJobIDs))
+	}
+}
+
+func TestHTTPControllerShutdownMetricsRecorded(t *testing.T) {
+	metrics.Default().Reset()
+	t.Cleanup(metrics.Default().Reset)
+
+	controller := HTTPController{
+		channels:     &fakeChannelAdapter{},
+		applications: &fakeApplicationAdapter{},
+		transcoder:   &fakeTranscoderAdapter{},
+	}
+
+	if err := controller.ShutdownStream(context.Background(), "channel-123", "session-abc", []string{"job-1"}); err != nil {
+		t.Fatalf("ShutdownStream: %v", err)
+	}
+
+	attempts, failures := metrics.Default().IngestCounts()
+	if attempts["shutdown_stream"] != 1 {
+		t.Fatalf("expected one shutdown attempt, got %d", attempts["shutdown_stream"])
+	}
+	if failures["shutdown_stream"] != 0 {
+		t.Fatalf("expected zero shutdown failures, got %d", failures["shutdown_stream"])
+	}
+}
+
+func TestHTTPControllerShutdownMetricsFailure(t *testing.T) {
+	metrics.Default().Reset()
+	t.Cleanup(metrics.Default().Reset)
+
+	controller := HTTPController{
+		channels:     &fakeChannelAdapter{},
+		applications: &fakeApplicationAdapter{},
+		transcoder:   &fakeTranscoderAdapter{stopJobErr: errors.New("stop failed")},
+	}
+
+	if err := controller.ShutdownStream(context.Background(), "channel-123", "session-abc", []string{"job-1"}); err == nil {
+		t.Fatal("expected ShutdownStream error")
+	}
+
+	attempts, failures := metrics.Default().IngestCounts()
+	if attempts["shutdown_stream"] != 1 {
+		t.Fatalf("expected one shutdown attempt, got %d", attempts["shutdown_stream"])
+	}
+	if failures["shutdown_stream"] != 1 {
+		t.Fatalf("expected one shutdown failure, got %d", failures["shutdown_stream"])
 	}
 }
 
@@ -433,5 +527,55 @@ func TestHTTPControllerTranscodeUploadSuccess(t *testing.T) {
 		tr.lastUploadReq.UploadID != "upload-abc" ||
 		tr.lastUploadReq.SourceURL != "https://cdn/source.mp4" {
 		t.Fatalf("unexpected upload request: %+v", tr.lastUploadReq)
+	}
+}
+
+func TestHTTPControllerTranscodeUploadMetricsRecorded(t *testing.T) {
+	metrics.Default().Reset()
+	t.Cleanup(metrics.Default().Reset)
+
+	tr := &fakeTranscoderAdapter{
+		uploadResult: uploadJobResult{JobID: "job-upload"},
+	}
+	controller := HTTPController{transcoder: tr}
+
+	if _, err := controller.TranscodeUpload(context.Background(), UploadTranscodeParams{
+		ChannelID: "channel-123",
+		UploadID:  "upload-abc",
+		SourceURL: "https://cdn/source.mp4",
+	}); err != nil {
+		t.Fatalf("TranscodeUpload: %v", err)
+	}
+
+	attempts, failures := metrics.Default().IngestCounts()
+	if attempts["upload_transcode"] != 1 {
+		t.Fatalf("expected one upload attempt, got %d", attempts["upload_transcode"])
+	}
+	if failures["upload_transcode"] != 0 {
+		t.Fatalf("expected zero upload failures, got %d", failures["upload_transcode"])
+	}
+}
+
+func TestHTTPControllerTranscodeUploadMetricsFailure(t *testing.T) {
+	metrics.Default().Reset()
+	t.Cleanup(metrics.Default().Reset)
+
+	tr := &fakeTranscoderAdapter{startUploadErr: errors.New("upload failed")}
+	controller := HTTPController{transcoder: tr}
+
+	if _, err := controller.TranscodeUpload(context.Background(), UploadTranscodeParams{
+		ChannelID: "channel-123",
+		UploadID:  "upload-abc",
+		SourceURL: "https://cdn/source.mp4",
+	}); err == nil {
+		t.Fatal("expected TranscodeUpload error")
+	}
+
+	attempts, failures := metrics.Default().IngestCounts()
+	if attempts["upload_transcode"] != 1 {
+		t.Fatalf("expected one upload attempt, got %d", attempts["upload_transcode"])
+	}
+	if failures["upload_transcode"] != 1 {
+		t.Fatalf("expected one upload failure, got %d", failures["upload_transcode"])
 	}
 }

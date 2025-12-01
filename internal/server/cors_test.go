@@ -119,21 +119,69 @@ func TestCORSMiddlewareAllowsSameOriginByDefault(t *testing.T) {
 	}
 }
 
-func TestCORSMiddlewareBlocksMismatchedSchemeForSameHost(t *testing.T) {
-	policy, err := newCORSPolicy(CORSConfig{})
+func TestServerCORSAllowsConfiguredOrigins(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	srv, err := New(handler, Config{
+		Addr:      "127.0.0.1:0",
+		TLS:       TLSConfig{},
+		RateLimit: RateLimitConfig{},
+		Security:  SecurityConfig{},
+		CORS: CORSConfig{
+			AdminOrigins:  []string{"https://admin.example.com"},
+			ViewerOrigins: []string{"https://viewer.example.com"},
+		},
+	})
 	if err != nil {
-		t.Fatalf("newCORSPolicy error: %v", err)
+		t.Fatalf("New error: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
-	req.Header.Set("Origin", "http://example.com")
-	req.Host = "example.com"
-	req.TLS = &tls.ConnectionState{}
-	rec := httptest.NewRecorder()
+	for _, tc := range []struct {
+		name   string
+		origin string
+	}{
+		{name: "admin", origin: "https://admin.example.com"},
+		{name: "viewer", origin: "https://viewer.example.com"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+			req.Header.Set("Origin", tc.origin)
 
-	corsMiddleware(policy, nil, http.NotFoundHandler()).ServeHTTP(rec, req)
+			srv.httpServer.Handler.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected health check success, got %d", rec.Code)
+			}
+			if got := rec.Header().Get("Access-Control-Allow-Origin"); got != tc.origin {
+				t.Fatalf("unexpected allow origin header: %q", got)
+			}
+			if got := rec.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+				t.Fatalf("expected allow credentials header, got %q", got)
+			}
+		})
+	}
+}
+
+func TestServerCORSBlocksUnknownOrigin(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	srv, err := New(handler, Config{
+		Addr:      "127.0.0.1:0",
+		TLS:       TLSConfig{},
+		RateLimit: RateLimitConfig{},
+		Security:  SecurityConfig{},
+		CORS:      CORSConfig{AdminOrigins: []string{"https://admin.example.com"}},
+	})
+	if err != nil {
+		t.Fatalf("New error: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+
+	srv.httpServer.Handler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 when origin scheme differs from request, got %d", rec.Code)
+		t.Fatalf("expected 403 for disallowed origin, got %d", rec.Code)
 	}
 }

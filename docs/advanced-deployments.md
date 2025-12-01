@@ -2,6 +2,14 @@
 
 Power users who want managed databases, object storage, or automated ingest can dip into the sections below. Postgres is now the standard datastore for every environment; the JSON file backend remains available for quick prototypes when invoked with `--storage-driver json`.
 
+## Ingest → transcode → playback lifecycle
+
+The live pipeline wires together three control-plane components. Use the paths below to trace behaviour and diagnose failures:
+
+- **SRS hook handling:** `internal/api/streams_srs_handlers.go` consumes the `on_publish/on_unpublish/on_play/on_stop` callbacks configured in `deploy/srs/conf/srs.conf`. The handler validates the shared token (`BITRIVER_SRS_TOKEN`), maps stream keys back to channels, and starts/stops sessions in storage. Invalid tokens or stream keys are logged with context and returned as `401/404` responses so operators can see why a publish failed.
+- **Transcoder jobs:** `cmd/transcoder` exposes `/v1/jobs` and `/v1/uploads` for the ingest controller. Jobs are persisted under the configured output root, restarted on process restarts, and tracked through a component-aware health endpoint at `/healthz` so FFmpeg crashes or publish failures surface immediately. Job mirrors under `public/live` are refreshed on restart so operators do not need to clean up stale symlinks manually.
+- **OvenMediaEngine output:** `deploy/ome/Server.xml` keeps LL-HLS enabled for the `live` application by default. The Quickstart templating in `scripts/quickstart.sh` rewrites bind addresses/ports from `BITRIVER_OME_*` and mounts the generated `Server.generated.xml` into the OME container. HLS/DASH clients should read from the LL-HLS publisher on port `8080` (or `BITRIVER_OME_LLHLS_PORT` after templating) to reach the symlinked `public/live/<job>/index.m3u8` manifests produced by the transcoder.
+
 | Flag | Purpose |
 | --- | --- |
 | `--chat-queue-driver` | Selects the chat queue implementation (`memory` for the in-process queue, `redis` for Redis Streams). |
@@ -13,6 +21,55 @@ Power users who want managed databases, object storage, or automated ingest can 
 | `--chat-queue-redis-tls-ca` / `--chat-queue-redis-tls-cert` / `--chat-queue-redis-tls-key` | TLS certificate material for securing Redis connections. |
 | `--chat-queue-redis-tls-server-name` | Overrides the expected Redis TLS server name. |
 | `--chat-queue-redis-tls-skip-verify` | Skips Redis TLS certificate verification (use with caution). |
+
+## Fault handling and recovery
+
+When any dependency falters, start with the API health surfaces. `/readyz` returns `503` once core dependencies such as Postgres or the chat queue fail their pings, while `/healthz` keeps the same status code but downgrades the JSON payload when ingest services are unreachable so dashboards still capture SRS/OME/transcoder detail.【F:internal/api/handlers.go†L84-L123】【F:internal/api/health_helpers.go†L14-L44】 The ingest controller probes each service at `<baseURL><BITRIVER_INGEST_HEALTH>` (default `/healthz`) using the credentials seeded in `.env`, and records an `error` status when any probe fails.【F:internal/ingest/http_controller.go†L308-L401】【F:deploy/.env.example†L57-L74】
+
+### Postgres offline
+
+- **What degrades:** Repository pings fail, pushing `/readyz` to `503` and marking the datastore component `degraded`, which blocks automation from routing traffic back until the pool can talk to Postgres again.【F:internal/api/health_helpers.go†L14-L44】 Requests that need persistence (signups, chat history, ingest hooks) will return errors because the store cannot be reached.
+- **API/reactive response:** `/healthz` mirrors the degraded status so operators can spot the outage even when other ingest dependencies are healthy.【F:internal/api/handlers.go†L84-L123】 Session cookies and auth remain initialised, but without a backing store mutations fail fast.
+- **Recovery checklist:**
+  1. Bring Postgres up first and validate the DSN/connection pool knobs the API will use (`BITRIVER_LIVE_POSTGRES_DSN`, `BITRIVER_POSTGRES_*`, `--postgres-*`).【F:deploy/.env.example†L20-L35】【F:cmd/server/main.go†L124-L135】 Re-run migrations if needed.
+  2. Restart the API once `psql` or the managed console confirms the database answers connections; `/readyz` should flip back to `200`.
+  3. Smoke-test mutations (create a channel, send chat) and check `/healthz` for a clean datastore status before reopening ingest traffic.
+
+### Redis or chat queue offline
+
+- **What degrades:** When `chat_queue` pings fail the API marks readiness `degraded`, and websocket publishers/consumers stop enqueueing messages because the configured queue driver cannot reach Redis.【F:internal/api/health_helpers.go†L14-L44】 Other API routes continue to serve.
+- **API/reactive response:** `/readyz` returns `503` until the queue responds, while `/healthz` continues to report ingest status separately so you can distinguish chat-only failures.【F:internal/api/handlers.go†L84-L123】 You can switch to the in-memory queue in emergencies with `--chat-queue-driver memory` or its env twin.
+- **Recovery checklist:**
+  1. Restore Redis (or swap drivers) and confirm the address/credentials (`BITRIVER_LIVE_CHAT_QUEUE_DRIVER`, `BITRIVER_LIVE_CHAT_QUEUE_REDIS_*`, `--chat-queue-*`) match the running instance.【F:deploy/.env.example†L33-L36】【F:cmd/server/main.go†L167-L180】 
+  2. Restart the API so new websocket joins rebind to the queue backend; monitor `/readyz` until it returns `200`.
+  3. Verify chat delivery by posting in a live room and ensuring consumers drain the Redis stream before reopening to viewers.
+
+### SRS offline
+
+- **What degrades:** RTMP/WebRTC ingest endpoints go dark, so SRS webhook calls never reach the API and new sessions cannot be provisioned. `/readyz` stays `200` because core dependencies remain healthy, but `/healthz` will flag the `srs` component as `error` and overall ingest status as `degraded`.【F:internal/ingest/http_controller.go†L308-L401】
+- **API/reactive response:** Attempts to boot ingest pipelines during the outage fail at channel creation, and the controller tears down any partially-created resources before returning the error.【F:internal/ingest/http_controller.go†L120-L195】 Published VODs continue to play from object storage/CDN because playback URLs are served independently of live ingest.【F:docs/advanced-deployments.md†L166-L205】
+- **Recovery checklist:**
+  1. Restart SRS and verify its `/healthz` (or the path from `BITRIVER_INGEST_HEALTH`) responds using the token in `BITRIVER_SRS_TOKEN`/`--srs-token`.【F:deploy/.env.example†L42-L43】【F:deploy/.env.example†L57-L69】
+  2. Once `/healthz` shows `srs` back to `ok`, retry ingest from the broadcaster; the API will accept hooks and start new sessions again.
+  3. Reconcile sessions by checking `/api/channels/{id}/sessions` for any aborted attempts before resuming traffic.
+
+### OvenMediaEngine offline
+
+- **What degrades:** Live playback drops because the origin is unreachable; ingest bootstraps fail when the controller cannot create an OME application and roll back SRS provisioning. `/healthz` reports the `ovenmediaengine` component as `error` while `/readyz` remains healthy if Postgres and chat are online.【F:internal/ingest/http_controller.go†L308-L401】【F:internal/ingest/http_controller.go†L120-L195】
+- **API/reactive response:** Existing VOD assets remain playable from object storage/CDN, but new live sessions cannot start until OME accepts control-plane requests.【F:docs/advanced-deployments.md†L166-L205】
+- **Recovery checklist:**
+  1. Confirm the control credentials and bind config (`BITRIVER_OME_API`, `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, `BITRIVER_OME_BIND`, `BITRIVER_OME_SERVER_PORT`, `BITRIVER_OME_SERVER_TLS_PORT`) match the running OME instance.【F:deploy/.env.example†L43-L48】【F:deploy/.env.example†L69-L71】
+  2. Restart OME, watch its health endpoint, then re-run `/healthz` on the API to ensure the component returns to `ok`.
+  3. Retry ingest start; the controller will reprovision the application and transcoder jobs once OME responds.
+
+### Transcoder offline
+
+- **What degrades:** Live ingest and VOD uploads cannot start jobs; the controller rolls back OME/SRS provisioning when job startup fails, leaving channels without active sessions. `/healthz` shows the `transcoder` component as `error`, while `/readyz` remains healthy for the rest of the API.【F:internal/ingest/http_controller.go†L120-L195】【F:internal/ingest/http_controller.go†L308-L401】
+- **API/reactive response:** Already-published VOD manifests stay available because they live on disk/object storage, but no new renditions are produced until the job service returns.【F:docs/advanced-deployments.md†L166-L205】
+- **Recovery checklist:**
+  1. Bring the transcoder back up, validating the token and endpoints (`BITRIVER_TRANSCODER_API`, `BITRIVER_TRANSCODER_TOKEN`, `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`).【F:deploy/.env.example†L48-L56】【F:deploy/.env.example†L69-L73】
+  2. Check the transcoder’s `/healthz` (or the path from `BITRIVER_INGEST_HEALTH`) until it returns `ok` and the API `/healthz` clears the error.
+  3. Restart failed ingests or VOD uploads; the controller resubmits jobs and refreshes playback manifests once the backend responds.
 
 ## Account management
 
@@ -43,6 +100,36 @@ continue to create accounts manually regardless of this setting.
 The default configuration keeps the session cookie in `SameSite=Strict` mode and only marks it as `Secure` when the incoming request arrived over HTTPS, which works for the bundled same-origin viewer. When proxying the viewer from a different domain, enable the cross-site option so the session can flow to the viewer via `SameSite=None`; doing so requires HTTPS end-to-end because browsers reject `SameSite=None` cookies without `Secure`.
 
 When the admin panel or viewer are hosted on different origins, set the corresponding CORS allowlists so browsers can reach the API. Origins must include the scheme and host (for example, `https://admin.example.com,https://watch.example.com`); any origin not listed receives a `403` by default. The quickstart path stays unchanged because same-origin requests remain allowed when the allowlists are empty.
+
+## Security headers
+
+The API emits hardening headers by default so the control centre and embedded viewer ship with internet-safe defaults:
+
+- `Content-Security-Policy`: `default-src 'self'; connect-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
+- `X-Frame-Options`: `DENY`
+- `Referrer-Policy`: `no-referrer`
+- `Permissions-Policy`: `camera=(), microphone=(), geolocation=()`
+- `X-Content-Type-Options`: `nosniff`
+
+Override the policy when you need to embed the admin panel or viewer inside a trusted host or allow external resources. Flags and environment variables let you tune the response headers without recompiling:
+
+| Flag | Purpose |
+| --- | --- |
+| `--security-csp` | Replaces the default `Content-Security-Policy` value. |
+| `--security-frame-ancestors` | Updates the `frame-ancestors` directive used in the default CSP. |
+| `--security-frame-options` | Overrides `X-Frame-Options` (default `DENY`). |
+| `--security-referrer-policy` | Overrides `Referrer-Policy` (default `no-referrer`). |
+| `--security-permissions-policy` | Overrides `Permissions-Policy` (default `camera=(), microphone=(), geolocation=()`). |
+| `--security-content-type-options` | Overrides `X-Content-Type-Options` (default `nosniff`). |
+
+| Variable | Description |
+| --- | --- |
+| `BITRIVER_LIVE_SECURITY_CSP` | Replaces the default `Content-Security-Policy` value. |
+| `BITRIVER_LIVE_SECURITY_FRAME_ANCESTORS` | Updates the `frame-ancestors` directive used in the default CSP. |
+| `BITRIVER_LIVE_SECURITY_FRAME_OPTIONS` | Overrides `X-Frame-Options` (default `DENY`). |
+| `BITRIVER_LIVE_SECURITY_REFERRER_POLICY` | Overrides `Referrer-Policy` (default `no-referrer`). |
+| `BITRIVER_LIVE_SECURITY_PERMISSIONS_POLICY` | Overrides `Permissions-Policy` (default `camera=(), microphone=(), geolocation=()`). |
+| `BITRIVER_LIVE_SECURITY_CONTENT_TYPE_OPTIONS` | Overrides `X-Content-Type-Options` (default `nosniff`). |
 
 ## Postgres backend
 
@@ -94,6 +181,22 @@ The DSN must reference an otherwise-empty database so tests can freely create an
 
 See [docs/testing.md](testing.md) for the consolidated checklist used in CI.
 
+### Postgres backups and recovery
+
+Postgres is the source of truth for channels, recordings, chat metadata, and audit history. The Compose bundle derives the DSN from `BITRIVER_POSTGRES_DB`, `BITRIVER_POSTGRES_USER`, and `BITRIVER_POSTGRES_PASSWORD` in `deploy/.env.example`; override it directly with `BITRIVER_LIVE_POSTGRES_DSN` or `--postgres-dsn` when pointing the API at managed instances.【F:deploy/.env.example†L20-L36】【F:cmd/server/main.go†L126-L138】 Keep connection pool limits aligned with your backup strategy so `pg_dump` sessions are not throttled (`BITRIVER_LIVE_POSTGRES_MAX_CONNS`, `BITRIVER_LIVE_POSTGRES_MIN_CONNS`, `--postgres-max-conns`, and `--postgres-min-conns`).【F:deploy/.env.example†L28-L31】【F:cmd/server/main.go†L128-L133】
+
+Routine logical backups rely on `pg_dump` against the DSN the server uses:
+
+```bash
+pg_dump "$BITRIVER_LIVE_POSTGRES_DSN" \
+  --format=custom \
+  --file=bitriver-live.backup
+```
+
+Restore into a fresh database with `pg_restore --clean --if-exists --create` or by piping the archive back through `psql`, then point `BITRIVER_LIVE_POSTGRES_DSN` at the restored endpoint before restarting `cmd/server` so it becomes the active source of truth. Enable WAL archiving and base backups if you need point-in-time recovery; the application does not manage archiving for you, but it tolerates replaying to any timestamp as long as migrations from `deploy/migrations/` have been applied. When converting from JSON snapshots, import them before your first backup using `cmd/tools/migrate-json-to-postgres` so subsequent dumps capture a single authoritative store.
+
+`pg_dump`/`pg_restore` run outside the container stack; use the `postgres-host` Compose profile to expose the port only during maintenance, or connect through your cloud provider’s managed endpoint to keep traffic off the application network.【F:deploy/.env.example†L37-L40】 After a restore, smoke-test with `scripts/test-postgres.sh` to verify migrations and connectivity mirror production before reopening traffic.
+
 ### Monetization amounts
 
 Tips and subscriptions now store their amounts as fixed-precision minor units (1e-8 of the major currency) to avoid floating point drift in both the JSON store and Postgres. Operators should continue to send human-readable decimal numbers such as `4.99` or `0.00000025` in API requests—values with more than eight fractional digits are rejected. When seeding data or editing snapshots manually, preserve the decimal string form to keep the minor-unit representation consistent. The API keeps the decimal format on the wire; for example, a tip can be recorded with:
@@ -137,6 +240,16 @@ Stopping a stream now generates a recording entry that captures the session meta
 | `BITRIVER_LIVE_RECORDING_RETENTION_UNPUBLISHED` | Duration that drafts stay on disk; `0` disables automatic removal before publication. |
 
 Flags with the same names (see `--object-endpoint`, `--object-bucket`, `--recording-retention-published`, etc.) override the environment variables when provided. The server keeps recordings in the JSON datastore until the retention window elapses and mirrors the policy into object storage lifecycle configuration.
+
+### Object storage lifecycle for VODs and thumbnails
+
+Buckets should enforce the same retention you configure on the server so thumbnails and manifests expire in lockstep. The `--object-lifecycle-days` flag (or `BITRIVER_LIVE_OBJECT_LIFECYCLE_DAYS`) allows the API to communicate the desired lifecycle to workers that prune old artefacts; align it with `--recording-retention-published`/`--recording-retention-unpublished` (or their env counterparts) so object expiration never precedes the database record expiry.【F:cmd/server/main.go†L182-L193】【F:cmd/server/main.go†L318-L330】 When storing regulatory copies or enabling creator rollbacks, turn on bucket versioning and set lifecycle rules to retain previous versions longer than the published retention window so deletes stay reversible.
+
+Endpoints and credentials for uploads come from the object storage flags (`--object-endpoint`, `--object-region`, `--object-access-key`, `--object-secret-key`, `--object-bucket`, `--object-prefix`, `--object-public-endpoint`, `--object-use-ssl`) or their `BITRIVER_LIVE_OBJECT_*` equivalents, letting you target MinIO/S3 in different regions without recompiling.【F:cmd/server/main.go†L182-L190】【F:cmd/server/main.go†L318-L328】 Operators running on bespoke S3 tiers should keep bucket versioning and lifecycle policies consistent with `BITRIVER_LIVE_OBJECT_LIFECYCLE_DAYS` even when CDN cache TTLs differ; the API will continue to serve presigned URLs until the backing object is deleted.
+
+### Redis persistence expectations
+
+Redis backs the chat queue (`--chat-queue-driver redis`) and optional distributed login throttling; it is treated as a cache and transport layer rather than a system of record. The Compose template wires the chat queue to `BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR`/`BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD`, and the server exposes matching flags for addresses, credentials, streams, and TLS material so you can point at managed clusters or Sentinel.【F:deploy/.env.example†L33-L36】【F:cmd/server/main.go†L167-L180】 Chat messages are delivered through Redis Streams; if the node is lost without persistence (RDB/AOF), in-flight chat and rate-limit counters are discarded, but published recordings and account state remain intact in Postgres. Enable RDB snapshots or AOF on the Redis side when you want stream history to survive restarts, and monitor reconnections—the API will recreate consumer groups and continue processing once the Redis endpoint is reachable again.
 
 Example: create a user, launch a channel, and start a stream session. These requests require an administrator session token—after promoting your account, log in at `/api/auth/login` and copy the `token` value from the JSON response.
 
@@ -284,6 +397,29 @@ All state-changing API calls emit structured audit logs containing the authentic
 BitRiver Live exports Prometheus-compatible metrics and improved health reporting out-of-the-box:
 
 - `GET /healthz` summarises dependency health and ingest orchestration.
-- `GET /metrics` emits request counters/latency, stream lifecycle events, ingest gauges, and the current number of active streams.
+- `GET /metrics` exposes the metrics below. Guard this endpoint with `--metrics-token`/`BITRIVER_LIVE_METRICS_TOKEN` (validated against the `Authorization: Bearer` or `X-Metrics-Token` header) or lock it to specific CIDRs/IPs via `--metrics-allow-networks`/`BITRIVER_LIVE_METRICS_ALLOW_NETWORKS`. Health and readiness endpoints stay public.
+
+### Metric families
+
+- **HTTP:** `bitriver_http_requests_total{method,path,status}` counters plus `bitriver_http_request_duration_seconds_sum`/`bitriver_http_request_duration_seconds_count` for cumulative request latency by method/path/status (paths are normalised by replacing identifiers with `:id`).
+- **Streams:** `bitriver_stream_events_total{event}` counters for start/stop activity and the `bitriver_active_streams` gauge tracking concurrent live channels.
+- **Ingest:** `bitriver_ingest_health{service,status}` gauges (`1=ok`, `0=disabled`, `-1=degraded`) alongside `bitriver_ingest_attempts_total{operation}` and `bitriver_ingest_failures_total{operation}` for boot/shutdown/upload orchestration.
+- **Chat:** `bitriver_chat_events_total{event}` counters for viewer chat activity, moderation, and reports.
+- **Monetization:** `bitriver_monetization_events_total{event}` counters and `bitriver_monetization_amount_sum{event}` tracking the aggregated decimal amount per tip/subscription type.
+- **Transcoder:** `bitriver_transcoder_jobs_total{kind,status}` counters and the `bitriver_transcoder_active_jobs` gauge for live/upload encoding work.
+
+### Prometheus scrape example
 
 Point Prometheus, Grafana Agent, or another scraper at `/metrics` to track latency and ingest health. The installer script and deployment assets configure the same endpoints automatically so home operators can wire them into dashboards with minimal effort.
+
+```yaml
+scrape_configs:
+  - job_name: bitriver-live
+    scrape_interval: 15s
+    metrics_path: /metrics
+    bearer_token: "changeme-metrics-token" # matches --metrics-token or BITRIVER_LIVE_METRICS_TOKEN
+    static_configs:
+      - targets: ["bitriver-live:8080"]
+```
+
+To further tighten access, run the API behind an ingress or firewall that only allows scrapers to hit `/metrics`, combine `--metrics-token` with `--metrics-allow-networks` to require both a token and a trusted IP/CIDR, and avoid publishing the endpoint publicly.

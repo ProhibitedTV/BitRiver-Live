@@ -129,6 +129,38 @@ describe("ChannelPage", () => {
     } as any);
   });
 
+  test("shows recovery UI and retries playback fetch after failure", async () => {
+    mockUseAuth.mockReturnValue({
+      user: undefined,
+      loading: false,
+      error: undefined,
+      login: jest.fn(),
+      signup: jest.fn(),
+      logout: jest.fn(),
+      refresh: jest.fn()
+    });
+
+    fetchChannelPlaybackMock.mockRejectedValueOnce(new Error("Network down"));
+    fetchChannelPlaybackMock.mockResolvedValueOnce(basePlaybackResponse as any);
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledWith("chan-42"));
+
+    expect(
+      await screen.findByRole("heading", { name: "We couldn't load this channel." })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Something went wrong while fetching playback details/i)
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Back to channels/i })).toHaveAttribute("href", "/browse");
+
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("heading", { name: "Deep Space Beats" })).toBeInTheDocument();
+  });
+
   test("renders playback details and supports follow, subscribe, and chat interactions", async () => {
     const user = userEvent.setup();
     mockUseAuth.mockReturnValue({
@@ -347,6 +379,37 @@ describe("ChannelPage", () => {
     expect(await screen.findByTestId("player")).toBeInTheDocument();
   });
 
+  test("shows VOD loading state before resolving to an empty gallery", async () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
+      loading: false,
+      error: undefined,
+      login: jest.fn(),
+      signup: jest.fn(),
+      logout: jest.fn(),
+      refresh: jest.fn(),
+    });
+
+    let resolveVods: ((value: any) => void) | undefined;
+    fetchChannelVodsMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveVods = resolve;
+        })
+    );
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    expect(await screen.findByText(/loading past broadcasts/i)).toBeInTheDocument();
+
+    await act(async () => {
+      resolveVods?.({ channelId: "chan-42", items: [] } as any);
+    });
+
+    expect(await screen.findByText(/no vods yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/loading past broadcasts/i)).not.toBeInTheDocument();
+  });
+
   test("directs channel creators to the dashboard", async () => {
     mockUseAuth.mockReturnValue({
       user: { id: "owner-42", displayName: "DJ Nova", email: "nova@example.com", roles: [] },
@@ -368,6 +431,7 @@ describe("ChannelPage", () => {
   });
 
   test("surfaces VOD loading errors", async () => {
+    const user = userEvent.setup();
     mockUseAuth.mockReturnValue({
       user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
       loading: false,
@@ -382,9 +446,17 @@ describe("ChannelPage", () => {
 
     render(<ChannelPage params={{ id: "chan-42" }} />);
 
+    await user.click(await screen.findByRole("tab", { name: "Videos" }));
+
     await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledWith("chan-42"));
 
     expect(await screen.findByText(/couldn\'t load past broadcasts right now/i)).toBeInTheDocument();
     expect(screen.getByText(/VODs temporarily offline/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /try again/i }));
+
+    await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/no vods yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/couldn\'t load past broadcasts right now/i)).not.toBeInTheDocument();
   });
 });

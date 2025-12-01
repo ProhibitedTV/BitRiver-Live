@@ -6,15 +6,32 @@ import type { VodItem } from "../lib/viewer-api";
 interface VodGalleryProps {
   items: VodItem[];
   error?: string;
+  loading?: boolean;
+  onRetry?: () => void;
 }
 
-export function VodGallery({ items, error }: VodGalleryProps) {
+export function VodGallery({ items, error, loading = false, onRetry }: VodGalleryProps) {
+  if (loading) {
+    return (
+      <section className="surface stack" aria-busy="true">
+        <h3>Past broadcasts</h3>
+        <p className="muted">Loading past broadcasts…</p>
+        <div className="skeleton skeleton--text" aria-hidden="true" />
+      </section>
+    );
+  }
+
   if (error) {
     return (
       <section className="surface stack" role="alert">
         <h3>Past broadcasts</h3>
         <p className="muted">We couldn&apos;t load past broadcasts right now.</p>
         <p className="muted">{error}</p>
+        {onRetry && (
+          <button className="secondary-button" type="button" onClick={onRetry}>
+            Try again
+          </button>
+        )}
       </section>
     );
   }

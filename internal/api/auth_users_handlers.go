@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -42,7 +43,8 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		SelfSignup:  true,
 	})
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		slog.Error("signup create user failed", "email", req.Email, "error", err)
+		writeError(w, http.StatusBadRequest, errors.New("unable to create account"))
 		return
 	}
 

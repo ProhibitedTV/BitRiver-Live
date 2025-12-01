@@ -2,6 +2,7 @@ package logging
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -102,4 +103,40 @@ func TestWithComponent(t *testing.T) {
 			t.Fatalf("expected nil logger, got %v", got)
 		}
 	})
+}
+
+func TestContextWithRequestAndStreamIDs(t *testing.T) {
+	ctx := context.Background()
+	ctx = ContextWithRequestID(ctx, "req-123")
+	ctx = ContextWithStreamID(ctx, "stream-456")
+
+	if id, ok := RequestIDFromContext(ctx); !ok || id != "req-123" {
+		t.Fatalf("expected request id req-123, got %q", id)
+	}
+	if id, ok := StreamIDFromContext(ctx); !ok || id != "stream-456" {
+		t.Fatalf("expected stream id stream-456, got %q", id)
+	}
+}
+
+func TestWithContextAnnotatesLogger(t *testing.T) {
+	ctx := context.Background()
+	ctx = ContextWithRequestID(ctx, "req-1")
+	ctx = ContextWithStreamID(ctx, "stream-1")
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	WithContext(ctx, logger).Info("hello")
+
+	var payload map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to unmarshal log output: %v", err)
+	}
+
+	if payload["request_id"] != "req-1" {
+		t.Fatalf("expected request_id to be set, got %v", payload["request_id"])
+	}
+	if payload["stream_id"] != "stream-1" {
+		t.Fatalf("expected stream_id to be set, got %v", payload["stream_id"])
+	}
 }

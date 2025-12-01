@@ -436,12 +436,14 @@ func TestChatWebsocketUpgradesThroughMiddleware(t *testing.T) {
 	auditLogger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{AddSource: false}))
 	recorder := metrics.Default()
 
-	handlerChain := http.Handler(http.HandlerFunc(handler.ChatWebsocket))
-	handlerChain = authMiddleware(handler, handlerChain)
-	handlerChain = rateLimitMiddleware(rl, resolver, logger, handlerChain)
-	handlerChain = metricsMiddleware(recorder, handlerChain)
-	handlerChain = auditMiddleware(auditLogger, resolver, handlerChain)
-	handlerChain = loggingMiddleware(logger, resolver, handlerChain)
+handlerChain := http.Handler(http.HandlerFunc(handler.ChatWebsocket))
+handlerChain = securityHeadersMiddleware(SecurityConfig{}, handlerChain)
+handlerChain = requestIDMiddleware(logger, handlerChain)
+handlerChain = authMiddleware(handler, handlerChain)
+handlerChain = rateLimitMiddleware(rl, resolver, logger, handlerChain)
+handlerChain = metricsMiddleware(recorder, handlerChain)
+handlerChain = auditMiddleware(auditLogger, resolver, handlerChain)
+handlerChain = loggingMiddleware(logger, resolver, handlerChain)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/chat/ws", nil)
 	req.AddCookie(&http.Cookie{Name: "bitriver_session", Value: token})
@@ -481,5 +483,135 @@ func TestChatWebsocketUpgradesThroughMiddleware(t *testing.T) {
 	}
 	if !foundAccept {
 		t.Fatalf("expected Sec-WebSocket-Accept header, got %q", handshake)
+	}
+}
+
+func TestRateLimitMiddlewareAuthPaths(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name   string
+		method string
+		path   string
+	}{
+		{name: "login", method: http.MethodPost, path: "/api/auth/login"},
+		{name: "signup", method: http.MethodPost, path: "/api/auth/signup"},
+		{name: "session get", method: http.MethodGet, path: "/api/auth/session"},
+		{name: "session delete", method: http.MethodDelete, path: "/api/auth/session"},
+		{name: "oauth start", method: http.MethodPost, path: "/api/auth/oauth/provider/start"},
+		{name: "oauth callback", method: http.MethodGet, path: "/api/auth/oauth/provider/callback"},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rl, err := newRateLimiter(RateLimitConfig{LoginLimit: 1, LoginWindow: time.Minute})
+			if err != nil {
+				t.Fatalf("newRateLimiter error: %v", err)
+			}
+
+			nextCalls := 0
+			handler := rateLimitMiddleware(rl, nil, nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				nextCalls++
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req.RemoteAddr = "1.2.3.4:1234"
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected first request to succeed, got %d", rec.Code)
+			}
+			if nextCalls != 1 {
+				t.Fatalf("expected next handler to be called once, got %d", nextCalls)
+			}
+
+			retryReq := httptest.NewRequest(tc.method, tc.path, nil)
+			retryReq.RemoteAddr = req.RemoteAddr
+			retryRec := httptest.NewRecorder()
+			handler.ServeHTTP(retryRec, retryReq)
+
+			if retryRec.Code != http.StatusTooManyRequests {
+				t.Fatalf("expected second request to be rate limited, got %d", retryRec.Code)
+			}
+			if retryAfter := retryRec.Header().Get("Retry-After"); retryAfter != "1" {
+				t.Fatalf("expected Retry-After header to be set, got %q", retryAfter)
+			}
+			if nextCalls != 1 {
+				t.Fatalf("expected next handler to not be called after rate limiting, got %d", nextCalls)
+			}
+		})
+	}
+}
+
+func TestMetricsAccessToken(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	srv, err := New(handler, Config{MetricsAccess: MetricsAccessConfig{Token: "scrape-secret"}})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req.RemoteAddr = "198.51.100.10:1234"
+	rec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden without token, got %d", rec.Code)
+	}
+
+	authedReq := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	authedReq.RemoteAddr = req.RemoteAddr
+	authedReq.Header.Set("Authorization", "Bearer scrape-secret")
+	authedRec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(authedRec, authedReq)
+
+	if authedRec.Code != http.StatusOK {
+		t.Fatalf("expected success with token, got %d", authedRec.Code)
+	}
+	if body := authedRec.Body.String(); body == "" {
+		t.Fatal("expected metrics body to be returned")
+	}
+}
+
+func TestMetricsAccessNetworks(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	srv, err := New(handler, Config{MetricsAccess: MetricsAccessConfig{AllowedNetworks: []string{"10.0.0.0/8"}}})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	allowedReq := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	allowedReq.RemoteAddr = "10.1.2.3:9999"
+	allowedRec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(allowedRec, allowedReq)
+
+	if allowedRec.Code != http.StatusOK {
+		t.Fatalf("expected allowlisted network to succeed, got %d", allowedRec.Code)
+	}
+
+	deniedReq := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	deniedReq.RemoteAddr = "203.0.113.10:9999"
+	deniedRec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(deniedRec, deniedReq)
+
+	if deniedRec.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden for non-allowlisted network, got %d", deniedRec.Code)
+	}
+
+	healthReq := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	healthRec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(healthRec, healthReq)
+
+	if healthRec.Code != http.StatusOK {
+		t.Fatalf("expected health endpoint to remain public, got %d", healthRec.Code)
 	}
 }

@@ -114,6 +114,12 @@ func main() {
 	sessionCookieCrossSite := flag.Bool("session-cookie-cross-site", false, "emit SameSite=None; Secure session cookies for cross-site viewer deployments")
 	adminCORSOrigins := flag.String("admin-cors-origins", "", "comma separated origins allowed to access the control centre APIs")
 	viewerCORSOrigins := flag.String("viewer-cors-origins", "", "comma separated origins allowed to access viewer APIs")
+	securityCSP := flag.String("security-csp", "", "override the Content-Security-Policy header (empty uses the secure default)")
+	securityFrameAncestors := flag.String("security-frame-ancestors", "", "frame-ancestors directive used in the default Content-Security-Policy")
+	securityFrameOptions := flag.String("security-frame-options", "", "X-Frame-Options header value")
+	securityReferrerPolicy := flag.String("security-referrer-policy", "", "Referrer-Policy header value")
+	securityPermissionsPolicy := flag.String("security-permissions-policy", "", "Permissions-Policy header value")
+	securityContentTypeOptions := flag.String("security-content-type-options", "", "X-Content-Type-Options header value")
 
 	// Storage flags (env: BITRIVER_LIVE_STORAGE_DRIVER, BITRIVER_LIVE_DATA, BITRIVER_LIVE_POSTGRES_DSN, DATABASE_URL, BITRIVER_LIVE_POSTGRES_*).
 	dataPath := flag.String("data", "", "path to JSON datastore")
@@ -135,6 +141,8 @@ func main() {
 	tlsCert := flag.String("tls-cert", "", "path to TLS certificate file")
 	tlsKey := flag.String("tls-key", "", "path to TLS private key file")
 	logLevel := flag.String("log-level", "info", "log level (debug, info, warn, error)")
+	metricsToken := flag.String("metrics-token", "", "token required to scrape /metrics (Authorization bearer or X-Metrics-Token)")
+	metricsAllowNetworks := flag.String("metrics-allow-networks", "", "comma separated CIDR blocks or IPs allowed to scrape /metrics")
 
 	// Rate limiting flags (env: BITRIVER_LIVE_RATE_*).
 	globalRPS := flag.Float64("rate-global-rps", 0, "global request rate limit in requests per second")
@@ -251,6 +259,15 @@ func main() {
 	corsConfig := server.CORSConfig{
 		AdminOrigins:  splitAndTrim(firstNonEmpty(*adminCORSOrigins, os.Getenv("BITRIVER_LIVE_ADMIN_CORS_ORIGINS"))),
 		ViewerOrigins: splitAndTrim(firstNonEmpty(*viewerCORSOrigins, os.Getenv("BITRIVER_LIVE_VIEWER_CORS_ORIGINS"))),
+	}
+
+	securityCfg := server.SecurityConfig{
+		ContentSecurityPolicy: firstNonEmpty(*securityCSP, os.Getenv("BITRIVER_LIVE_SECURITY_CSP")),
+		FrameAncestors:        firstNonEmpty(*securityFrameAncestors, os.Getenv("BITRIVER_LIVE_SECURITY_FRAME_ANCESTORS")),
+		FrameOptions:          firstNonEmpty(*securityFrameOptions, os.Getenv("BITRIVER_LIVE_SECURITY_FRAME_OPTIONS")),
+		ReferrerPolicy:        firstNonEmpty(*securityReferrerPolicy, os.Getenv("BITRIVER_LIVE_SECURITY_REFERRER_POLICY")),
+		PermissionsPolicy:     firstNonEmpty(*securityPermissionsPolicy, os.Getenv("BITRIVER_LIVE_SECURITY_PERMISSIONS_POLICY")),
+		ContentTypeOptions:    firstNonEmpty(*securityContentTypeOptions, os.Getenv("BITRIVER_LIVE_SECURITY_CONTENT_TYPE_OPTIONS")),
 	}
 
 	ingestConfig, err := ingest.LoadConfigFromEnv()
@@ -484,6 +501,11 @@ func main() {
 		},
 	}
 
+	metricsAccessCfg := server.MetricsAccessConfig{
+		Token:           firstNonEmpty(*metricsToken, os.Getenv("BITRIVER_LIVE_METRICS_TOKEN")),
+		AllowedNetworks: splitAndTrim(firstNonEmpty(*metricsAllowNetworks, os.Getenv("BITRIVER_LIVE_METRICS_ALLOW_NETWORKS"))),
+	}
+
 	tlsCfg := server.TLSConfig{
 		CertFile: tlsCertPath,
 		KeyFile:  tlsKeyPath,
@@ -494,9 +516,11 @@ func main() {
 		TLS:                    tlsCfg,
 		RateLimit:              rateCfg,
 		CORS:                   corsConfig,
+		Security:               securityCfg,
 		Logger:                 logger,
 		AuditLogger:            auditLogger,
 		Metrics:                recorder,
+		MetricsAccess:          metricsAccessCfg,
 		ViewerOrigin:           viewerURL,
 		OAuth:                  oauthManager,
 		AllowSelfSignup:        &allowSelfSignupValue,

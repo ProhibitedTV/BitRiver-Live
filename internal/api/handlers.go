@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -35,6 +36,7 @@ type Handler struct {
 	uploadDir           string
 	SessionCookiePolicy SessionCookiePolicy
 	srsViewers          *srsViewerTracker
+	Logger              *slog.Logger
 }
 
 type healthPinger interface {
@@ -54,6 +56,7 @@ func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handle
 		DefaultRenditions:   []string{"1080p", "720p", "480p"},
 		AllowSelfSignup:     true,
 		SessionCookiePolicy: DefaultSessionCookiePolicy(),
+		Logger:              slog.Default(),
 	}
 }
 
@@ -62,6 +65,13 @@ func (h *Handler) sessionManager() *auth.SessionManager {
 		h.Sessions = auth.NewSessionManager(24 * time.Hour)
 	}
 	return h.Sessions
+}
+
+func (h *Handler) logger() *slog.Logger {
+	if h.Logger == nil {
+		h.Logger = slog.Default()
+	}
+	return h.Logger
 }
 
 func (h *Handler) srsTracker() *srsViewerTracker {
