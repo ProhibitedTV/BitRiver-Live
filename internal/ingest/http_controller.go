@@ -280,7 +280,7 @@ func (c *HTTPController) TranscodeUpload(ctx context.Context, params UploadTrans
 		UploadID:   params.UploadID,
 		SourceURL:  source,
 		Filename:   strings.TrimSpace(params.Filename),
-		Renditions: cloneRenditions(params.Renditions),
+		Renditions: CloneRenditions(params.Renditions),
 	})
 	if err != nil {
 		c.logger.Error("failed to start upload transcode",
@@ -300,7 +300,7 @@ func (c *HTTPController) TranscodeUpload(ctx context.Context, params UploadTrans
 
 	return UploadTranscodeResult{
 		PlaybackURL: result.PlaybackURL,
-		Renditions:  cloneRenditions(result.Renditions),
+		Renditions:  CloneRenditions(result.Renditions),
 		JobID:       result.JobID,
 	}, nil
 }

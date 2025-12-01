@@ -167,11 +167,11 @@ func (f *fakeTranscoderAdapter) StartJobs(ctx context.Context, channelID, sessio
 	f.lastStartChannelID = channelID
 	f.lastStartSessionID = sessionID
 	f.lastStartOriginURL = originURL
-	f.startJobRenditions = cloneRenditions(ladder)
+	f.startJobRenditions = CloneRenditions(ladder)
 	if f.startJobErr != nil {
 		return nil, nil, f.startJobErr
 	}
-	return append([]string{}, f.startJobIDs...), cloneRenditions(f.startJobRenditions), nil
+	return append([]string{}, f.startJobIDs...), CloneRenditions(f.startJobRenditions), nil
 }
 
 func (f *fakeTranscoderAdapter) StopJob(ctx context.Context, jobID string) error {
