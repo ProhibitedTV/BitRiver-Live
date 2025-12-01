@@ -347,6 +347,37 @@ describe("ChannelPage", () => {
     expect(await screen.findByTestId("player")).toBeInTheDocument();
   });
 
+  test("shows VOD loading state before resolving to an empty gallery", async () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
+      loading: false,
+      error: undefined,
+      login: jest.fn(),
+      signup: jest.fn(),
+      logout: jest.fn(),
+      refresh: jest.fn(),
+    });
+
+    let resolveVods: ((value: any) => void) | undefined;
+    fetchChannelVodsMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveVods = resolve;
+        })
+    );
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    expect(await screen.findByText(/loading past broadcasts/i)).toBeInTheDocument();
+
+    await act(async () => {
+      resolveVods?.({ channelId: "chan-42", items: [] } as any);
+    });
+
+    expect(await screen.findByText(/no vods yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/loading past broadcasts/i)).not.toBeInTheDocument();
+  });
+
   test("directs channel creators to the dashboard", async () => {
     mockUseAuth.mockReturnValue({
       user: { id: "owner-42", displayName: "DJ Nova", email: "nova@example.com", roles: [] },

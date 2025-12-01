@@ -6,9 +6,20 @@ import type { VodItem } from "../lib/viewer-api";
 interface VodGalleryProps {
   items: VodItem[];
   error?: string;
+  loading?: boolean;
 }
 
-export function VodGallery({ items, error }: VodGalleryProps) {
+export function VodGallery({ items, error, loading = false }: VodGalleryProps) {
+  if (loading) {
+    return (
+      <section className="surface stack" aria-busy="true">
+        <h3>Past broadcasts</h3>
+        <p className="muted">Loading past broadcasts…</p>
+        <div className="skeleton skeleton--text" aria-hidden="true" />
+      </section>
+    );
+  }
+
   if (error) {
     return (
       <section className="surface stack" role="alert">
