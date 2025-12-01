@@ -7,7 +7,10 @@ import type { ChatMessage } from "../lib/viewer-api";
 import { fetchChannelChat, sendChatMessage } from "../lib/viewer-api";
 
 const POLL_INTERVAL_MS = 10_000;
+const MAX_RETRY_DELAY_MS = 60_000;
+const MAX_CONSECUTIVE_FAILURES = 5;
 const MAX_MESSAGES = 500;
+const RETRY_MESSAGE = "Unable to load chat. We'll retry in a bit.";
 
 export function ChatPanel({
   channelId,
@@ -126,7 +129,17 @@ export function ChatPanel({
 
     let cancelled = false;
     let shouldPoll = true;
-    let interval: ReturnType<typeof setInterval> | undefined;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let consecutiveFailures = 0;
+
+    const scheduleNextPoll = (delay: number) => {
+      if (cancelled || !shouldPoll) {
+        return;
+      }
+      timeout = setTimeout(() => {
+        void load(false);
+      }, delay);
+    };
 
     const load = async (showSpinner: boolean) => {
       if (cancelled || !shouldPoll || pausedForAuth) {
@@ -141,6 +154,8 @@ export function ChatPanel({
         if (!cancelled) {
           applyMessages(chatMessages);
           setAuthRequired(false);
+          consecutiveFailures = 0;
+          scheduleNextPoll(POLL_INTERVAL_MS);
         }
       } catch (err) {
         if (!cancelled) {
@@ -151,9 +166,17 @@ export function ChatPanel({
             setMessages([]);
             setError(undefined);
           } else {
-            const message =
-              err instanceof Error ? err.message : "Unable to load chat";
-            setError((previous) => previous ?? message);
+            consecutiveFailures += 1;
+            setError((previous) => previous ?? RETRY_MESSAGE);
+            const backoffDelay = Math.min(
+              POLL_INTERVAL_MS * 2 ** consecutiveFailures,
+              MAX_RETRY_DELAY_MS
+            );
+            const nextDelay =
+              consecutiveFailures >= MAX_CONSECUTIVE_FAILURES
+                ? MAX_RETRY_DELAY_MS
+                : backoffDelay;
+            scheduleNextPoll(nextDelay);
           }
         }
       } finally {
@@ -164,14 +187,11 @@ export function ChatPanel({
     };
 
     void load(true);
-    interval = setInterval(() => {
-      void load(false);
-    }, POLL_INTERVAL_MS);
 
     return () => {
       cancelled = true;
-      if (interval) {
-        clearInterval(interval);
+      if (timeout) {
+        clearTimeout(timeout);
       }
     };
   }, [channelId, roomId, user, pausedForAuth]);
@@ -372,7 +392,6 @@ export function ChatPanel({
         className="chat-panel__form"
         onSubmit={handleSend}
         aria-label="Send a chat message"
-        aria-disabled={isComposerDisabled}
       >
         <label htmlFor="chat-input" className="sr-only">
           Chat message
