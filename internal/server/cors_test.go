@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -115,5 +116,24 @@ func TestCORSMiddlewareAllowsSameOriginByDefault(t *testing.T) {
 	}
 	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "http://example.com" {
 		t.Fatalf("expected allow origin header for same-origin request, got %q", got)
+	}
+}
+
+func TestCORSMiddlewareBlocksMismatchedSchemeForSameHost(t *testing.T) {
+	policy, err := newCORSPolicy(CORSConfig{})
+	if err != nil {
+		t.Fatalf("newCORSPolicy error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	req.Header.Set("Origin", "http://example.com")
+	req.Host = "example.com"
+	req.TLS = &tls.ConnectionState{}
+	rec := httptest.NewRecorder()
+
+	corsMiddleware(policy, nil, http.NotFoundHandler()).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 when origin scheme differs from request, got %d", rec.Code)
 	}
 }
