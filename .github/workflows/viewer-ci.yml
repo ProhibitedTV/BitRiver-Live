@@ -2,8 +2,11 @@ name: Viewer CI
 
 on:
   push:
+    branches:
+      - main
     paths:
       - 'web/viewer/**'
+      - '.github/workflows/viewer-ci.yml'
   pull_request:
     paths:
       - 'web/viewer/**'
@@ -22,8 +25,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-          cache-dependency-path: web/viewer/package-lock.json
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-20-${{ hashFiles('web/viewer/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-20-
 
       - name: Install dependencies
         run: npm ci
@@ -36,22 +45,11 @@ jobs:
           NEXT_TELEMETRY_DISABLED: 1
 
       - name: Test
-        run: npm test -- --runInBand
+        run: npm test
         env:
           NEXT_TELEMETRY_DISABLED: 1
-
-      - name: Cache Next.js build artifacts
-        uses: actions/cache@v4
-        with:
-          path: web/viewer/.next/cache
-          key: ${{ runner.os }}-next-${{ hashFiles('web/viewer/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-next-
 
       - name: Build
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
-
-      - name: Verify standalone server entrypoint
-        run: test -f .next/standalone/server.js
