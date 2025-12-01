@@ -29,6 +29,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
   const previousChannelIdRef = useRef<string | undefined>();
   const refreshIntervalRef = useRef<NodeJS.Timeout | undefined>();
   const cancelledRef = useRef(false);
+  const vodCancelledRef = useRef(false);
 
   const clearRefreshInterval = useCallback(() => {
     if (refreshIntervalRef.current) {
@@ -110,32 +111,37 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
     setData((prev) => (prev ? { ...prev, subscription } : prev));
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    const loadVods = async () => {
-      setVodsLoading(true);
-      try {
-        const response = await fetchChannelVods(id);
-        if (!cancelled) {
-          setVodError(undefined);
-          setVods(response.items ?? []);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setVodError(err instanceof Error ? err.message : "Unable to load replays");
-          setVods([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setVodsLoading(false);
-        }
+  const loadVods = useCallback(async () => {
+    setVodsLoading(true);
+    setVodError(undefined);
+    try {
+      const response = await fetchChannelVods(id);
+      if (!vodCancelledRef.current) {
+        setVods(response.items ?? []);
       }
-    };
+    } catch (err) {
+      if (!vodCancelledRef.current) {
+        setVodError(err instanceof Error ? err.message : "Unable to load replays");
+        setVods([]);
+      }
+    } finally {
+      if (!vodCancelledRef.current) {
+        setVodsLoading(false);
+      }
+    }
+  }, [id]);
+
+  const handleVodRetry = useCallback(() => {
+    void loadVods();
+  }, [loadVods]);
+
+  useEffect(() => {
+    vodCancelledRef.current = false;
     void loadVods();
     return () => {
-      cancelled = true;
+      vodCancelledRef.current = true;
     };
-  }, [id]);
+  }, [id, loadVods]);
 
   const tabs = [
     { id: "about", label: "About" },
@@ -231,7 +237,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
                   hidden={activeTab !== "videos"}
                   className="channel-tabs__panel"
                 >
-                  <VodGallery items={vods} error={vodError} loading={vodsLoading} />
+                  <VodGallery items={vods} error={vodError} loading={vodsLoading} onRetry={handleVodRetry} />
                 </div>
               </div>
             </section>

@@ -431,6 +431,7 @@ describe("ChannelPage", () => {
   });
 
   test("surfaces VOD loading errors", async () => {
+    const user = userEvent.setup();
     mockUseAuth.mockReturnValue({
       user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
       loading: false,
@@ -445,9 +446,17 @@ describe("ChannelPage", () => {
 
     render(<ChannelPage params={{ id: "chan-42" }} />);
 
+    await user.click(await screen.findByRole("tab", { name: "Videos" }));
+
     await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledWith("chan-42"));
 
     expect(await screen.findByText(/couldn\'t load past broadcasts right now/i)).toBeInTheDocument();
     expect(screen.getByText(/VODs temporarily offline/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /try again/i }));
+
+    await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/no vods yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/couldn\'t load past broadcasts right now/i)).not.toBeInTheDocument();
   });
 });

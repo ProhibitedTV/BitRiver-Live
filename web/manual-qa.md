@@ -68,3 +68,19 @@ content flows through unchanged.
    *Expected:* the preview card updates immediately without executing any
    scripts or loading unexpected images, and a confirmation message confirms
    the save. Refreshing the page should persist the new values.
+
+## Viewer channel playback and replays
+
+1. Open a channel page while the backend API is temporarily unreachable (for
+   example, by stopping the API server).
+
+   *Expected:* the page shows a recovery surface explaining the failure with a
+   **Try again** button and a link back to **Browse**. Clicking **Try again**
+   should retry and succeed once the API is reachable again.
+
+2. Switch to the **Videos** tab on any channel with no VODs.
+
+   *Expected:* a short "Loading past broadcasts…" placeholder appears first,
+   then the "No VODs yet" empty state once the fetch resolves. If the VOD API
+   returns an error, the gallery shows a retry button that clears the error and
+   reloads the list.
