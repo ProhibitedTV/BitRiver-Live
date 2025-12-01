@@ -30,10 +30,8 @@ test("loads uploads when the viewer owns the channel", async () => {
     user: { id: "owner-1", displayName: "Owner", email: "owner@example.com", roles: ["creator"] },
     loading: false,
     error: undefined,
-    login: jest.fn(),
-    signup: jest.fn(),
-    logout: jest.fn(),
-    refresh: jest.fn(),
+    signIn: jest.fn(),
+    signOut: jest.fn(),
   });
   fetchUploadsMock.mockResolvedValue([
     {
@@ -62,10 +60,8 @@ test("redirects viewers who lack permission", async () => {
     user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
     loading: false,
     error: undefined,
-    login: jest.fn(),
-    signup: jest.fn(),
-    logout: jest.fn(),
-    refresh: jest.fn(),
+    signIn: jest.fn(),
+    signOut: jest.fn(),
   });
 
   render(<UploadManager channelId="chan-1" ownerId="owner-2" />);
@@ -80,10 +76,8 @@ test("allows creator role to manage uploads", async () => {
     user: { id: "creator-1", displayName: "Creator", email: "creator@example.com", roles: ["creator"] },
     loading: false,
     error: undefined,
-    login: jest.fn(),
-    signup: jest.fn(),
-    logout: jest.fn(),
-    refresh: jest.fn(),
+    signIn: jest.fn(),
+    signOut: jest.fn(),
   });
   fetchUploadsMock.mockResolvedValue([]);
 

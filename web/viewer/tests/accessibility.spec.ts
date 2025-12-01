@@ -62,7 +62,7 @@ const searchResponse = {
 };
 
 test.beforeEach(async ({ page }) => {
-  await page.route("**/api/auth/session", async (route) => {
+  await page.route("**/api/viewer/me", async (route) => {
     await route.fulfill({ status: 401, body: "Unauthorized" });
   });
 

@@ -78,7 +78,7 @@ test.describe("live stream playback", () => {
   test.beforeEach(async ({ page }) => {
     postedMessages = [];
 
-    await page.route("**/api/auth/session", async (route) => {
+    await page.route("**/api/viewer/me", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -88,7 +88,9 @@ test.describe("live stream playback", () => {
             displayName: "Viewer One",
             email: "viewer@example.com",
             roles: ["member"]
-          }
+          },
+          loginUrl: "https://auth.example.com/login",
+          logoutUrl: "https://auth.example.com/logout"
         })
       });
     });

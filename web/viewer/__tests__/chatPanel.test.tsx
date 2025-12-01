@@ -24,10 +24,8 @@ beforeEach(() => {
     user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
     loading: false,
     error: undefined,
-    login: jest.fn(),
-    signup: jest.fn(),
-    logout: jest.fn(),
-    refresh: jest.fn()
+    signIn: jest.fn(),
+    signOut: jest.fn()
   });
 });
 
@@ -116,10 +114,8 @@ test("treats unauthorized chat fetch as empty state for guests", async () => {
     user: undefined,
     loading: false,
     error: undefined,
-    login: jest.fn(),
-    signup: jest.fn(),
-    logout: jest.fn(),
-    refresh: jest.fn()
+    signIn: jest.fn(),
+    signOut: jest.fn()
   };
   mockUseAuth.mockReturnValue(guestAuth as ReturnType<typeof useAuth>);
   fetchChatMock.mockRejectedValueOnce(new Error("401"));
@@ -146,10 +142,8 @@ test("clears chat, shows sign-in prompt, and pauses polling on structured 401s",
     user: undefined,
     loading: false,
     error: undefined,
-    login: jest.fn(),
-    signup: jest.fn(),
-    logout: jest.fn(),
-    refresh: jest.fn()
+    signIn: jest.fn(),
+    signOut: jest.fn()
   };
   mockUseAuth.mockReturnValue(guestAuth as ReturnType<typeof useAuth>);
   fetchChatMock
@@ -234,10 +228,8 @@ test("resumes chat polling once a guest signs in", async () => {
     user: undefined,
     loading: false,
     error: undefined,
-    login: jest.fn(),
-    signup: jest.fn(),
-    logout: jest.fn(),
-    refresh: jest.fn()
+    signIn: jest.fn(),
+    signOut: jest.fn()
   };
   mockUseAuth.mockReturnValue(guestAuth as ReturnType<typeof useAuth>);
   fetchChatMock.mockRejectedValueOnce(new Error("401"));
@@ -254,10 +246,8 @@ test("resumes chat polling once a guest signs in", async () => {
     user: { id: "viewer-2", displayName: "Viewer Two", email: "viewer2@example.com", roles: [] },
     loading: false,
     error: undefined,
-    login: jest.fn(),
-    signup: jest.fn(),
-    logout: jest.fn(),
-    refresh: jest.fn()
+    signIn: jest.fn(),
+    signOut: jest.fn()
   };
   mockUseAuth.mockReturnValue(signedInAuth as ReturnType<typeof useAuth>);
   fetchChatMock.mockResolvedValueOnce([

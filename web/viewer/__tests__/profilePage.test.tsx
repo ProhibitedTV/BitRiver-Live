@@ -26,10 +26,8 @@ const updateProfileMock = updateProfile as jest.MockedFunction<typeof updateProf
 const authBase = {
   loading: false,
   error: undefined,
-  login: jest.fn(),
-  signup: jest.fn(),
-  logout: jest.fn(),
-  refresh: jest.fn(),
+  signIn: jest.fn(),
+  signOut: jest.fn(),
 } as const;
 
 const profileFixture = {
@@ -60,7 +58,7 @@ describe("ProfilePage", () => {
     render(<ProfilePage />);
 
     expect(screen.getByRole("heading", { level: 2, name: /sign in to manage your profile/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /return home/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
   });
 
   test("loads the current profile and pre-fills the form", async () => {
@@ -109,9 +107,8 @@ describe("ProfilePage", () => {
       bio: "New bio for my streams",
       avatarUrl: "https://new.example.com/me.png",
       bannerUrl: profileFixture.bannerUrl,
+      socialLinks: [],
     });
-
-    expect(mockUseAuth().refresh).toHaveBeenCalled();
 
     expect(await screen.findByText(/profile saved/i)).toBeInTheDocument();
   });

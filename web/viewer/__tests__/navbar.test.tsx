@@ -63,10 +63,8 @@ describe("Navbar", () => {
   const authBase = {
     loading: false,
     error: undefined,
-    login: jest.fn(),
-    signup: jest.fn(),
-    logout: jest.fn(),
-    refresh: jest.fn(),
+    signIn: jest.fn(),
+    signOut: jest.fn(),
   } as const;
 
   test("shows a dashboard link to admins", () => {
@@ -134,7 +132,7 @@ describe("Navbar", () => {
   test("renders each primary link once in the mobile drawer", async () => {
     mockUseAuth.mockReturnValue({
       ...authBase,
-      user: null,
+      user: undefined,
     });
 
     const user = userEvent.setup();

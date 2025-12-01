@@ -2,12 +2,14 @@ import { expect, test } from "@playwright/test";
 
 test.describe("profile page", () => {
   test("loads the viewer profile and saves edits", async ({ page }) => {
-    await page.route("**/api/auth/session", async (route) => {
+    await page.route("**/api/viewer/me", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
           user: { id: "viewer-1", displayName: "Viewer One", email: "viewer@example.com", roles: ["member"] },
+          loginUrl: "https://auth.example.com/login",
+          logoutUrl: "https://auth.example.com/logout"
         }),
       });
     });

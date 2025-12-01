@@ -72,10 +72,8 @@ beforeEach(() => {
     user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
     loading: false,
     error: undefined,
-    login: jest.fn(),
-    signup: jest.fn(),
-    logout: jest.fn(),
-    refresh: jest.fn()
+    signIn: jest.fn(),
+    signOut: jest.fn()
   });
 
   followMock.mockResolvedValue({ followers: 11, following: true });
@@ -156,10 +154,8 @@ test("disables follow actions for channel owners", () => {
     user: { id: "owner-1", displayName: "DJ Nova", email: "dj@nova.fm", roles: [] },
     loading: false,
     error: undefined,
-    login: jest.fn(),
-    signup: jest.fn(),
-    logout: jest.fn(),
-    refresh: jest.fn()
+    signIn: jest.fn(),
+    signOut: jest.fn()
   });
 
   render(<ChannelHeader data={baseData} />);

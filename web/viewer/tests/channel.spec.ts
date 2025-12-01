@@ -59,7 +59,7 @@ const chatTranscript = {
 
 test.describe("channel route", () => {
   test("allows authenticated viewers to follow, subscribe, and chat", async ({ page }) => {
-    await page.route("**/api/auth/session", async (route) => {
+    await page.route("**/api/viewer/me", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -69,7 +69,9 @@ test.describe("channel route", () => {
             displayName: "Viewer",
             email: "viewer@example.com",
             roles: ["member"]
-          }
+          },
+          loginUrl: "https://auth.example.com/login",
+          logoutUrl: "https://auth.example.com/logout"
         })
       });
     });
@@ -193,8 +195,12 @@ test.describe("channel route", () => {
   });
 
   test("prompts viewers to authenticate when required", async ({ page }) => {
-    await page.route("**/api/auth/session", async (route) => {
-      await route.fulfill({ status: 401, body: "Unauthorized" });
+    await page.route("**/api/viewer/me", async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ loginUrl: "/login" })
+      });
     });
 
     await page.route("**/api/channels/chan-42/playback", async (route) => {
@@ -232,7 +238,7 @@ test.describe("channel route", () => {
   });
 
   test("surfaces tip errors when submission fails", async ({ page }) => {
-    await page.route("**/api/auth/session", async (route) => {
+    await page.route("**/api/viewer/me", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -242,7 +248,9 @@ test.describe("channel route", () => {
             displayName: "Viewer",
             email: "viewer@example.com",
             roles: ["member"]
-          }
+          },
+          loginUrl: "https://auth.example.com/login",
+          logoutUrl: "https://auth.example.com/logout"
         })
       });
     });
@@ -277,52 +285,73 @@ test.describe("channel route", () => {
 });
 
 test.describe("authentication controls", () => {
-  test("navbar login flow authenticates and logs out via mocked APIs", async ({ page }) => {
-    let loginPayload: { email: string; password: string } | undefined;
-    let logoutCalled = false;
+  test("navbar sign-in button redirects to the configured login URL", async ({ page }) => {
+    let redirected = false;
 
-    await page.route("**/api/auth/session", async (route) => {
-      if (route.request().method() === "DELETE") {
-        logoutCalled = true;
-        await route.fulfill({ status: 204 });
-        return;
-      }
-      await route.fulfill({ status: 401, body: "Unauthorized" });
+    await page.route("**/api/viewer/me", async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ loginUrl: "/login" })
+      });
     });
 
-    await page.route("**/api/auth/login", async (route) => {
-      loginPayload = route.request().postDataJSON() as { email: string; password: string };
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          user: {
-            id: "viewer-1",
-            displayName: "Viewer",
-            email: loginPayload.email,
-            roles: ["member"]
-          }
-        })
-      });
+    await page.route("**/login**", async (route) => {
+      redirected = true;
+      await route.fulfill({ status: 200, contentType: "text/html", body: "<p>Login</p>" });
     });
 
     await page.goto("/");
 
     await page.getByRole("button", { name: "Sign in" }).click();
-    await page.getByLabel("Email").fill("viewer@example.com");
-    await page.getByLabel("Password").fill("hunter2!!");
-    await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
-    await expect.poll(() => loginPayload).toBeTruthy();
-    await expect(page.getByText(/signed in as viewer/i)).toBeVisible();
+    await expect.poll(() => redirected).toBe(true);
+    await expect(page).toHaveURL(/\/login/);
+  });
 
+  test("navbar sign-out clears the viewer session", async ({ page }) => {
+    let signedIn = true;
+    let logoutCalled = false;
+
+    await page.route("**/api/viewer/me", async (route) => {
+      if (route.request().method() === "DELETE") {
+        logoutCalled = true;
+        signedIn = false;
+        await route.fulfill({ status: 204 });
+        return;
+      }
+
+      const body = signedIn
+        ? {
+            user: {
+              id: "viewer-1",
+              displayName: "Viewer",
+              email: "viewer@example.com",
+              roles: ["member"]
+            },
+            loginUrl: "/login",
+            logoutUrl: "/logout"
+          }
+        : { loginUrl: "/login", logoutUrl: "/logout" };
+
+      await route.fulfill({
+        status: signedIn ? 200 : 401,
+        contentType: "application/json",
+        body: JSON.stringify(body)
+      });
+    });
+
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "Open account menu" }).click();
     await page.getByRole("button", { name: "Sign out" }).click();
+
     await expect.poll(() => logoutCalled).toBe(true);
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
   });
 
   test("theme toggle updates the rendered document", async ({ page }) => {
-    await page.route("**/api/auth/session", async (route) => {
+    await page.route("**/api/viewer/me", async (route) => {
       await route.fulfill({ status: 401, body: "Unauthorized" });
     });
 
