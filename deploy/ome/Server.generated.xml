@@ -1,49 +1,129 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Server version="10">
     <Name>OvenMediaEngine</Name>
-    <!-- Required for health endpoint and origin-mode APIs; Compose mounts this file at /opt/ovenmediaengine/bin/origin_conf/Server.xml -->
+
+    <!-- Host type (origin/edge) -->
     <Type>origin</Type>
+
+    <!-- Specify IP address to bind (* means all IPs) -->
     <IP>0.0.0.0</IP>
-    <!-- Quickstart rewrites bind addresses and ports from BITRIVER_OME_* env vars. -->
+
+    <!-- Delete client IPs from logs / APIs if true -->
     <PrivacyProtection>false</PrivacyProtection>
+
+    <!-- Used to discover public IP for WebRTC in some environments -->
     <StunServer>stun.l.google.com:19302</StunServer>
 
+    <!--
+      Optional server-wide modules.
+      Modern OME supports HTTP2/LLHLS/P2P here; there is no <Control> module.
+    -->
+    <Modules>
+        <HTTP2>
+            <Enable>true</Enable>
+        </HTTP2>
+
+        <LLHLS>
+            <Enable>true</Enable>
+        </LLHLS>
+
+        <P2P>
+            <Enable>false</Enable>
+            <MaxClientPeersPerHostPeer>2</MaxClientPeersPerHostPeer>
+        </P2P>
+    </Modules>
+
+    <!--
+      Bind: managers (API), providers (ingest), and publishers (playback).
+      The quickstart script will rewrite Address/Port/TLSPort values from BITRIVER_OME_*.
+    -->
     <Bind>
-        <IP>0.0.0.0</IP>
-        <Port>9000</Port>
-        <TLSPort>9443</TLSPort>
+        <Providers>
+            <!-- WebRTC ingest/signalling (default ports rewritten from BITRIVER_OME_SERVER_PORT/TLS_PORT) -->
+            <WebRTC>
+                <Signalling>
+                    <!-- WebSocket signalling for WebRTC (publish + play) -->
+                    <Port>9000</Port>
+                    <TLSPort>9443</TLSPort>
+                    <WorkerCount>1</WorkerCount>
+                </Signalling>
+                <IceCandidates>
+                    <!-- TURN / WebRTC-over-TCP relay -->
+                    <TcpRelay>*:3478</TcpRelay>
+                    <TcpForce>false</TcpForce>
+                    <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
+
+                    <!-- UDP ports for WebRTC media -->
+                    <IceCandidate>*:10000-10009/udp</IceCandidate>
+                </IceCandidates>
+            </WebRTC>
+
+            <!-- RTMP ingest: rtmp://host:1935/live/stream -->
+            <RTMP>
+                <Port>1935</Port>
+                <WorkerCount>1</WorkerCount>
+            </RTMP>
+        </Providers>
+
+        <Managers>
+            <!-- REST API for control at /v1/... -->
+            <API>
+                <Port>8081</Port>
+                <TLSPort>8082</TLSPort>
+                <WorkerCount>1</WorkerCount>
+            </API>
+        </Managers>
+
+        <Publishers>
+            <!-- LL-HLS (low-latency HLS) playback -->
+            <LLHLS>
+                <Port>8080</Port>
+                <TLSPort>8443</TLSPort>
+                <WorkerCount>1</WorkerCount>
+            </LLHLS>
+
+            <!-- WebRTC playback (reuses same signalling + ICE ports) -->
+            <WebRTC>
+                <Signalling>
+                    <Port>9000</Port>
+                    <TLSPort>9443</TLSPort>
+                    <WorkerCount>1</WorkerCount>
+                </Signalling>
+                <IceCandidates>
+                    <TcpRelay>*:3478</TcpRelay>
+                    <TcpForce>false</TcpForce>
+                    <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
+                    <IceCandidate>*:10000-10009/udp</IceCandidate>
+                </IceCandidates>
+            </WebRTC>
+        </Publishers>
     </Bind>
 
-    <Modules>
-        <Control>
-            <Server>
-                <Listeners>
-                    <TCP>
-                        <Bind>0.0.0.0</Bind>
-                        <IP>0.0.0.0</IP>
-                        <Port>8081</Port>
-                    </TCP>
-                </Listeners>
-            </Server>
-            <Authentication>
-                <User>
-                    <ID>admin</ID>
-                    <!-- Updated automatically by scripts/quickstart.sh before docker compose up. -->
-                    <Password>local-dev-password</Password>
-                </User>
-            </Authentication>
-        </Control>
+    <!--
+      Virtual host + application config.
 
-        <Host>
-            <VirtualHosts>
-                <VirtualHost>
-                    <Name>default</Name>
-                    <Host>*</Host>
-                    <App>
-                        <Name>live</Name>
-                    </App>
-                </VirtualHost>
-            </VirtualHosts>
-        </Host>
-    </Modules>
+      We keep a single vhost "default" with one application "live" to match
+      BitRiver Live’s expectation of /live as the app name.
+    -->
+    <VirtualHosts>
+        <VirtualHost>
+            <Name>default</Name>
+
+            <Host>
+                <Names>
+                    <!-- * = any host -->
+                    <Name>*</Name>
+                </Names>
+            </Host>
+
+            <Applications>
+                <Application>
+                    <Name>live</Name>
+
+                    <!-- Use default Providers/Publishers from Bind -->
+                    <!-- You can add per-app settings here if needed later -->
+                </Application>
+            </Applications>
+        </VirtualHost>
+    </VirtualHosts>
 </Server>

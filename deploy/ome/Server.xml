@@ -38,23 +38,8 @@
       The quickstart script will rewrite Address/Port/TLSPort values from BITRIVER_OME_*.
     -->
     <Bind>
-        <Managers>
-            <!-- REST API for control at /v1/... -->
-            <API>
-                <Port>8081</Port>
-                <TLSPort>8082</TLSPort>
-                <WorkerCount>1</WorkerCount>
-            </API>
-        </Managers>
-
         <Providers>
-            <!-- RTMP ingest: rtmp://host:1935/live/stream -->
-            <RTMP>
-                <Port>1935</Port>
-                <WorkerCount>1</WorkerCount>
-            </RTMP>
-
-            <!-- WebRTC ingest/signalling (optional but useful for WHIP / internal tools) -->
+            <!-- WebRTC ingest/signalling (default ports rewritten from BITRIVER_OME_SERVER_PORT/TLS_PORT) -->
             <WebRTC>
                 <Signalling>
                     <!-- WebSocket signalling for WebRTC (publish + play) -->
@@ -72,7 +57,22 @@
                     <IceCandidate>*:10000-10009/udp</IceCandidate>
                 </IceCandidates>
             </WebRTC>
+
+            <!-- RTMP ingest: rtmp://host:1935/live/stream -->
+            <RTMP>
+                <Port>1935</Port>
+                <WorkerCount>1</WorkerCount>
+            </RTMP>
         </Providers>
+
+        <Managers>
+            <!-- REST API for control at /v1/... -->
+            <API>
+                <Port>8081</Port>
+                <TLSPort>8082</TLSPort>
+                <WorkerCount>1</WorkerCount>
+            </API>
+        </Managers>
 
         <Publishers>
             <!-- LL-HLS (low-latency HLS) playback -->
