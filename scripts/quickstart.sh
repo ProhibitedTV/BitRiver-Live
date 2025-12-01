@@ -12,6 +12,35 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="$REPO_ROOT/.env"
 COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
+FORCE_RENDER=0
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/quickstart.sh [--force]
+
+Options:
+  --force  Re-render OME configuration even if it already appears up to date.
+  -h       Show this help message.
+USAGE
+}
+
+while (($# > 0)); do
+  case "$1" in
+    --force)
+      FORCE_RENDER=1
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+  shift
+done
 
 require_command docker || exit 1
 require_command curl || exit 1
@@ -285,34 +314,51 @@ wait_for_api() {
   return 1
 }
 
+wait_for_ome_health() {
+  local port
+  port=$(read_env_value BITRIVER_OME_HTTP_PORT)
+  port=${port:-8081}
+  local url="http://localhost:${port}/v1/health"
+  local attempts=${1:-45}
+  local sleep_seconds=${2:-2}
+
+  echo "Checking OME health at $url ..."
+  for ((i=1; i<=attempts; i++)); do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      echo "OME reports healthy."
+      return 0
+    fi
+    sleep "$sleep_seconds"
+  done
+
+  echo "OME did not report healthy after $((attempts * sleep_seconds)) seconds." >&2
+  echo "Inspect OME logs with: docker compose logs ome" >&2
+  echo "Current BITRIVER_OME_IMAGE_TAG: $(read_env_value BITRIVER_OME_IMAGE_TAG)" >&2
+  return 1
+}
+
 render_ome_config() {
   local template="$REPO_ROOT/deploy/ome/Server.xml"
   local output="$REPO_ROOT/deploy/ome/Server.generated.xml"
-  local renderer="$SCRIPT_DIR/render_ome_config.py"
+  local render_script="$SCRIPT_DIR/render-ome-config.sh"
+  local -a render_args=(--env-file "$ENV_FILE")
 
-  if [[ ! -f $template ]]; then
-    echo "Missing OME config template at $template" >&2
-    return 1
+  if (( FORCE_RENDER )); then
+    render_args+=(--force)
   fi
 
-  local bind_address username password ome_port ome_tls_port
-  bind_address=$(read_env_value BITRIVER_OME_BIND)
-  username=$(read_env_value BITRIVER_OME_USERNAME)
-  password=$(read_env_value BITRIVER_OME_PASSWORD)
-  ome_port=$(read_env_value BITRIVER_OME_SERVER_PORT)
-  ome_tls_port=$(read_env_value BITRIVER_OME_SERVER_TLS_PORT)
-
-  if [[ -z $bind_address || -z $username || -z $password || -z $ome_port || -z $ome_tls_port ]]; then
-    echo "OME bind or credentials are missing; set BITRIVER_OME_BIND, BITRIVER_OME_SERVER_PORT, BITRIVER_OME_SERVER_TLS_PORT, BITRIVER_OME_USERNAME, and BITRIVER_OME_PASSWORD in $ENV_FILE." >&2
-    return 1
+  if ! "$render_script" "${render_args[@]}"; then
+    local image_tag
+    image_tag=$(read_env_value BITRIVER_OME_IMAGE_TAG)
+    cat <<EOF >&2
+OME configuration rendering failed.
+Template:    $template
+Generated:   $output
+Hint: OME errors like "Unknown item found: Server.modules.Control" usually mean the template is out of sync with BITRIVER_OME_IMAGE_TAG (current: ${image_tag:-unset}).
+Fix the mismatch and rerun this script. Skipping docker compose startup.
+EOF
+    exit 1
   fi
-
-  if ! python3 "$renderer" --template "$template" --output "$output" --bind "$bind_address" --port "$ome_port" --tls-port "$ome_tls_port" --username "$username" --password "$password"; then
-    echo "Failed to render OME configuration" >&2
-    return 1
-  fi
-
-  echo "Rendered OME configuration to $output"
 }
 
 validate_compose_config() {
@@ -581,6 +627,10 @@ if ! ensure_compose_health; then
   if (( ${#remaining_unhealthy[@]} > 0 )); then
     printf '  - %s\n' "${remaining_unhealthy[@]}" >&2
   fi
+  exit 1
+fi
+
+if ! wait_for_ome_health; then
   exit 1
 fi
 
