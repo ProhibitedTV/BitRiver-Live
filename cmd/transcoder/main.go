@@ -28,6 +28,7 @@ import (
 
 	"bitriver-live/internal/observability/logging"
 	"bitriver-live/internal/observability/metrics"
+	"bitriver-live/internal/serverutil"
 )
 
 type rendition struct {
@@ -248,22 +249,16 @@ func main() {
 	}
 	srv.httpServer = httpServer
 
+	logger.Info("ffmpeg job controller listening", "bind", bind)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	go func() {
-		logger.Info("ffmpeg job controller listening", "bind", bind)
-		if err := httpServer.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("listen", "error", err)
-			os.Exit(1)
-		}
-	}()
-
-	<-ctx.Done()
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		logger.Error("graceful shutdown failed", "error", err)
+	if err := serverutil.Run(ctx, serverutil.Config{
+		Server:          httpServer,
+		ShutdownTimeout: 10 * time.Second,
+	}); err != nil {
+		logger.Error("server error", "error", err)
+		os.Exit(1)
 	}
 	logger.Info("ffmpeg job controller stopped")
 }
