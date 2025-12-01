@@ -105,9 +105,10 @@ test("uses channel chat even when no room id is provided", async () => {
   const textarea = screen.getByRole("textbox", { name: /chat message/i });
   expect(textarea).not.toBeDisabled();
   expect(textarea).toHaveAttribute("placeholder", "Share your thoughts");
+  expect(textarea).toHaveAttribute("aria-disabled", "false");
 
   const form = screen.getByRole("form", { name: /send a chat message/i });
-  expect(form).toHaveAttribute("aria-disabled", "false");
+  expect(form).not.toHaveAttribute("aria-disabled");
 });
 
 test("treats unauthorized chat fetch as empty state for guests", async () => {
@@ -138,6 +139,94 @@ test("treats unauthorized chat fetch as empty state for guests", async () => {
   const textarea = screen.getByRole("textbox", { name: /chat message/i });
   expect(textarea).toBeDisabled();
   expect(textarea).toHaveAttribute("placeholder", "Sign in to participate in chat");
+});
+
+test("clears chat, shows sign-in prompt, and pauses polling on structured 401s", async () => {
+  const guestAuth = {
+    user: undefined,
+    loading: false,
+    error: undefined,
+    login: jest.fn(),
+    signup: jest.fn(),
+    logout: jest.fn(),
+    refresh: jest.fn()
+  };
+  mockUseAuth.mockReturnValue(guestAuth as ReturnType<typeof useAuth>);
+  fetchChatMock
+    .mockResolvedValueOnce([
+      {
+        id: "m-structured-1",
+        message: "Message before auth lapse",
+        sentAt: new Date().toISOString(),
+        user: { id: "user-structured", displayName: "Structured User" }
+      }
+    ])
+    .mockRejectedValueOnce(
+      new Error(JSON.stringify({ error: "Authentication required. Please login." }))
+    );
+
+  render(<ChatPanel channelId="chan-structured" roomId="room-1" />);
+
+  await waitFor(() => {
+    expect(fetchChatMock).toHaveBeenCalledWith("chan-structured");
+    expect(screen.getByText("Message before auth lapse")).toBeInTheDocument();
+  });
+
+  jest.advanceTimersByTime(10_000);
+
+  await waitFor(() => {
+    expect(fetchChatMock).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("Message before auth lapse")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Sign in with the controls above to view and participate in chat."
+      )
+    ).toBeInTheDocument();
+  });
+
+  jest.advanceTimersByTime(60_000);
+  expect(fetchChatMock).toHaveBeenCalledTimes(2);
+
+  const textarea = screen.getByRole("textbox", { name: /chat message/i });
+  expect(textarea).toBeDisabled();
+  expect(textarea).toHaveAttribute("placeholder", "Sign in to participate in chat");
+});
+
+test("backs off after consecutive server errors and shows retry surface", async () => {
+  fetchChatMock.mockRejectedValue(new Error("500"));
+
+  render(<ChatPanel channelId="chan-error" roomId="room-1" />);
+
+  await waitFor(() => {
+    expect(fetchChatMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Unable to load chat. We'll retry in a bit."
+    );
+  });
+
+  jest.advanceTimersByTime(19_999);
+  expect(fetchChatMock).toHaveBeenCalledTimes(1);
+  jest.advanceTimersByTime(1);
+  await waitFor(() => expect(fetchChatMock).toHaveBeenCalledTimes(2));
+
+  jest.advanceTimersByTime(39_999);
+  expect(fetchChatMock).toHaveBeenCalledTimes(2);
+  jest.advanceTimersByTime(1);
+  await waitFor(() => expect(fetchChatMock).toHaveBeenCalledTimes(3));
+
+  jest.advanceTimersByTime(59_999);
+  expect(fetchChatMock).toHaveBeenCalledTimes(3);
+  jest.advanceTimersByTime(1);
+  await waitFor(() => expect(fetchChatMock).toHaveBeenCalledTimes(4));
+
+  jest.advanceTimersByTime(59_999);
+  expect(fetchChatMock).toHaveBeenCalledTimes(4);
+  jest.advanceTimersByTime(1);
+  await waitFor(() => expect(fetchChatMock).toHaveBeenCalledTimes(5));
+
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "Unable to load chat. We'll retry in a bit."
+  );
 });
 
 test("resumes chat polling once a guest signs in", async () => {
