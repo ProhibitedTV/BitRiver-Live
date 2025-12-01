@@ -3,11 +3,53 @@ package ingest
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 )
+
+func TestHTTPAdapterConstructorsNormalizeDefaults(t *testing.T) {
+	cfg := normalizeAdapterConfig(nil, 0, 0)
+
+	if cfg.logger != slog.Default() {
+		t.Fatalf("expected default logger, got %#v", cfg.logger)
+	}
+	if cfg.attempts != defaultMaxAttempts {
+		t.Fatalf("expected %d attempts, got %d", defaultMaxAttempts, cfg.attempts)
+	}
+	if cfg.interval != defaultRetryBackoff {
+		t.Fatalf("expected retry interval %s, got %s", defaultRetryBackoff, cfg.interval)
+	}
+
+	baseURL := "http://example.com/"
+	channel := newHTTPChannelAdapter(baseURL, "token", nil, nil, 0, 0)
+	application := newHTTPApplicationAdapter(baseURL, "user", "pass", nil, nil, 0, 0)
+	transcoder := newHTTPTranscoderAdapter(baseURL, "token", nil, nil, 0, 0)
+
+	adapters := map[string]struct {
+		logger   *slog.Logger
+		attempts int
+		interval time.Duration
+	}{
+		"channel":     {logger: channel.logger, attempts: channel.maxAttempts, interval: channel.retryInterval},
+		"application": {logger: application.logger, attempts: application.maxAttempts, interval: application.retryInterval},
+		"transcoder":  {logger: transcoder.logger, attempts: transcoder.maxAttempts, interval: transcoder.retryInterval},
+	}
+
+	for name, adapter := range adapters {
+		if adapter.logger != cfg.logger {
+			t.Fatalf("%s adapter logger mismatch", name)
+		}
+		if adapter.attempts != cfg.attempts {
+			t.Fatalf("%s adapter attempts = %d, want %d", name, adapter.attempts, cfg.attempts)
+		}
+		if adapter.interval != cfg.interval {
+			t.Fatalf("%s adapter interval = %s, want %s", name, adapter.interval, cfg.interval)
+		}
+	}
+}
 
 // TestHTTPChannelAdapterCreateAndDelete verifies that the channel adapter
 // correctly calls the SRS controller to create and delete channels with the

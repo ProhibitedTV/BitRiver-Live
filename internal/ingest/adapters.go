@@ -19,6 +19,30 @@ const (
 	defaultRetryBackoff = 500 * time.Millisecond
 )
 
+type adapterConfig struct {
+	logger   *slog.Logger
+	attempts int
+	interval time.Duration
+}
+
+func normalizeAdapterConfig(logger *slog.Logger, attempts int, interval time.Duration) adapterConfig {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	if attempts <= 0 {
+		attempts = defaultMaxAttempts
+	}
+	if interval == 0 {
+		interval = defaultRetryBackoff
+	}
+
+	return adapterConfig{
+		logger:   logger,
+		attempts: attempts,
+		interval: interval,
+	}
+}
+
 // channelAdapter defines the behavior required to provision and tear down
 // ingest channels on an upstream streaming server (e.g. SRS).
 //
@@ -192,22 +216,14 @@ type uploadJobResult struct {
 // If client is nil, a new http.Client with a default timeout is created
 // for each request.
 func newHTTPChannelAdapter(baseURL, token string, client *http.Client, logger *slog.Logger, attempts int, interval time.Duration) *httpChannelAdapter {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	if attempts <= 0 {
-		attempts = defaultMaxAttempts
-	}
-	if interval == 0 {
-		interval = defaultRetryBackoff
-	}
+	cfg := normalizeAdapterConfig(logger, attempts, interval)
 	return &httpChannelAdapter{
 		baseURL:       strings.TrimRight(baseURL, "/"),
 		token:         token,
 		client:        client,
-		logger:        logger,
-		maxAttempts:   attempts,
-		retryInterval: interval,
+		logger:        cfg.logger,
+		maxAttempts:   cfg.attempts,
+		retryInterval: cfg.interval,
 	}
 }
 
@@ -215,23 +231,15 @@ func newHTTPChannelAdapter(baseURL, token string, client *http.Client, logger *s
 // See newHTTPChannelAdapter for behavior of the logger, attempts, interval,
 // and client parameters.
 func newHTTPApplicationAdapter(baseURL, username, password string, client *http.Client, logger *slog.Logger, attempts int, interval time.Duration) *httpApplicationAdapter {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	if attempts <= 0 {
-		attempts = defaultMaxAttempts
-	}
-	if interval == 0 {
-		interval = defaultRetryBackoff
-	}
+	cfg := normalizeAdapterConfig(logger, attempts, interval)
 	return &httpApplicationAdapter{
 		baseURL:       strings.TrimRight(baseURL, "/"),
 		username:      username,
 		password:      password,
 		client:        client,
-		logger:        logger,
-		maxAttempts:   attempts,
-		retryInterval: interval,
+		logger:        cfg.logger,
+		maxAttempts:   cfg.attempts,
+		retryInterval: cfg.interval,
 	}
 }
 
@@ -239,22 +247,14 @@ func newHTTPApplicationAdapter(baseURL, username, password string, client *http.
 // See newHTTPChannelAdapter for behavior of the logger, attempts, interval,
 // and client parameters.
 func newHTTPTranscoderAdapter(baseURL, token string, client *http.Client, logger *slog.Logger, attempts int, interval time.Duration) *httpTranscoderAdapter {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	if attempts <= 0 {
-		attempts = defaultMaxAttempts
-	}
-	if interval == 0 {
-		interval = defaultRetryBackoff
-	}
+	cfg := normalizeAdapterConfig(logger, attempts, interval)
 	return &httpTranscoderAdapter{
 		baseURL:       strings.TrimRight(baseURL, "/"),
 		token:         token,
 		client:        client,
-		logger:        logger,
-		maxAttempts:   attempts,
-		retryInterval: interval,
+		logger:        cfg.logger,
+		maxAttempts:   cfg.attempts,
+		retryInterval: cfg.interval,
 	}
 }
 
