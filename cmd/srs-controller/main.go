@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -18,6 +17,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"bitriver-live/internal/serverutil"
 )
 
 const (
@@ -81,19 +82,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	go func() {
-		log.Printf("srs controller listening on %s", bind)
-		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("listen: %v", err)
-		}
-	}()
-
-	<-ctx.Done()
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("graceful shutdown failed: %v", err)
+	log.Printf("srs controller listening on %s", bind)
+	if err := serverutil.Run(ctx, serverutil.Config{Server: server, ShutdownTimeout: 10 * time.Second}); err != nil {
+		log.Fatalf("server error: %v", err)
 	}
 	log.Println("srs controller stopped")
 }
