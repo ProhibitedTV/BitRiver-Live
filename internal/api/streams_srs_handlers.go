@@ -92,22 +92,22 @@ func (t *srsViewerTracker) clear(channelID string) {
 func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 	if !h.srsHookAuthorized(r) {
 		if logger := h.logger(); logger != nil {
 			logger.Warn("srs hook rejected token", "path", r.URL.Path, "remote", r.RemoteAddr)
 		}
-		writeError(w, http.StatusUnauthorized, fmt.Errorf("unauthorized"))
+		WriteError(w, http.StatusUnauthorized, fmt.Errorf("unauthorized"))
 		return
 	}
 
 	var req srsHookRequest
-	if r.Body != nil && r.Body != http.NoBody {
-		if err := decodeJSONAllowUnknown(r, &req); err != nil {
+	if r.Body != nil && r.Body != http.NoBody && r.ContentLength != 0 {
+		if err := DecodeJSONAllowUnknown(r, &req); err != nil {
 			if !errors.Is(err, io.EOF) {
-				writeError(w, http.StatusBadRequest, err)
+				WriteDecodeError(w, err)
 				return
 			}
 		}
@@ -121,7 +121,7 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 
 	action := normalizeSRSAction(req.Action)
 	if action == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("action is required"))
+		WriteError(w, http.StatusBadRequest, fmt.Errorf("action is required"))
 		return
 	}
 
@@ -130,7 +130,7 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 		if logger := h.logger(); logger != nil {
 			logger.Warn("srs hook stream rejected", "stream", strings.TrimSpace(req.Stream), "action", action)
 		}
-		writeError(w, http.StatusNotFound, fmt.Errorf("stream %s not recognized", strings.TrimSpace(req.Stream)))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("stream %s not recognized", strings.TrimSpace(req.Stream)))
 		return
 	}
 
@@ -141,21 +141,21 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 		h.handleSRSPublish(channel, w, r)
 	case "play":
 		counts := tracker.increment(channel.ID)
-		writeJSON(w, http.StatusOK, map[string]int{"currentViewers": counts.current})
+		WriteJSON(w, http.StatusOK, map[string]int{"currentViewers": counts.current})
 	case "stop":
 		counts := tracker.decrement(channel.ID)
-		writeJSON(w, http.StatusOK, map[string]int{"currentViewers": counts.current})
+		WriteJSON(w, http.StatusOK, map[string]int{"currentViewers": counts.current})
 	case "unpublish":
 		peak := tracker.peak(channel.ID)
 		h.handleSRSUnpublish(channel, peak, tracker, w)
 	default:
-		writeError(w, http.StatusBadRequest, fmt.Errorf("unknown action %s", req.Action))
+		WriteError(w, http.StatusBadRequest, fmt.Errorf("unknown action %s", req.Action))
 	}
 }
 
 func (h *Handler) handleSRSPublish(channel models.Channel, w http.ResponseWriter, r *http.Request) {
 	if current, ok := h.Store.CurrentStreamSession(channel.ID); ok {
-		writeJSON(w, http.StatusOK, srsHookResponse{Status: "ok", Action: "on_publish", ChannelID: channel.ID, SessionID: current.ID})
+		WriteJSON(w, http.StatusOK, srsHookResponse{Status: "ok", Action: "on_publish", ChannelID: channel.ID, SessionID: current.ID})
 		return
 	}
 
@@ -165,11 +165,11 @@ func (h *Handler) handleSRSPublish(channel models.Channel, w http.ResponseWriter
 		if errors.Is(err, storage.ErrIngestControllerUnavailable) {
 			status = http.StatusServiceUnavailable
 		}
-		writeError(w, status, err)
+		WriteError(w, status, err)
 		return
 	}
 	metrics.StreamStarted()
-	writeJSON(w, http.StatusOK, srsHookResponse{Status: "ok", Action: "on_publish", ChannelID: channel.ID, SessionID: session.ID})
+	WriteJSON(w, http.StatusOK, srsHookResponse{Status: "ok", Action: "on_publish", ChannelID: channel.ID, SessionID: session.ID})
 }
 
 func (h *Handler) handleSRSUnpublish(channel models.Channel, peak int, tracker *srsViewerTracker, w http.ResponseWriter) {
@@ -180,14 +180,14 @@ func (h *Handler) handleSRSUnpublish(channel models.Channel, peak int, tracker *
 			if errors.Is(err, storage.ErrIngestControllerUnavailable) {
 				status = http.StatusServiceUnavailable
 			}
-			writeError(w, status, err)
+			WriteError(w, status, err)
 			return
 		}
 		if tracker != nil {
 			tracker.clear(channel.ID)
 		}
 		metrics.StreamStopped()
-		writeJSON(w, http.StatusOK, newSessionResponse(session))
+		WriteJSON(w, http.StatusOK, newSessionResponse(session))
 		return
 	}
 
@@ -197,10 +197,10 @@ func (h *Handler) handleSRSUnpublish(channel models.Channel, peak int, tracker *
 
 	offline := "offline"
 	if _, err := h.Store.UpdateChannel(channel.ID, storage.ChannelUpdate{LiveState: &offline}); err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		WriteError(w, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 type startStreamRequest struct {
@@ -226,7 +226,7 @@ type renditionManifestResponse struct {
 
 func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	if len(remaining) == 0 {
-		writeError(w, http.StatusNotFound, fmt.Errorf("stream action missing"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("stream action missing"))
 		return
 	}
 	if _, ok := h.ensureChannelAccess(w, r, channel); !ok {
@@ -237,12 +237,12 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 	case "start":
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", "POST")
-			writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+			WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 			return
 		}
 		var req startStreamRequest
-		if err := decodeJSON(r, &req); err != nil {
-			writeError(w, http.StatusBadRequest, err)
+		if err := DecodeJSON(r, &req); err != nil {
+			WriteDecodeError(w, err)
 			return
 		}
 		session, err := h.Store.StartStream(channel.ID, req.Renditions)
@@ -251,20 +251,20 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 			if errors.Is(err, storage.ErrIngestControllerUnavailable) {
 				status = http.StatusServiceUnavailable
 			}
-			writeError(w, status, err)
+			WriteError(w, status, err)
 			return
 		}
 		metrics.StreamStarted()
-		writeJSON(w, http.StatusCreated, newSessionResponse(session))
+		WriteJSON(w, http.StatusCreated, newSessionResponse(session))
 	case "stop":
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", "POST")
-			writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+			WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 			return
 		}
 		var req stopStreamRequest
-		if err := decodeJSON(r, &req); err != nil {
-			writeError(w, http.StatusBadRequest, err)
+		if err := DecodeJSON(r, &req); err != nil {
+			WriteDecodeError(w, err)
 			return
 		}
 		session, err := h.Store.StopStream(channel.ID, req.PeakConcurrent)
@@ -273,25 +273,25 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 			if errors.Is(err, storage.ErrIngestControllerUnavailable) {
 				status = http.StatusServiceUnavailable
 			}
-			writeError(w, status, err)
+			WriteError(w, status, err)
 			return
 		}
 		metrics.StreamStopped()
-		writeJSON(w, http.StatusOK, newSessionResponse(session))
+		WriteJSON(w, http.StatusOK, newSessionResponse(session))
 	case "rotate":
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", "POST")
-			writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+			WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 			return
 		}
 		updated, err := h.Store.RotateChannelStreamKey(channel.ID)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, newChannelResponse(updated))
+		WriteJSON(w, http.StatusOK, newChannelResponse(updated))
 	default:
-		writeError(w, http.StatusNotFound, fmt.Errorf("unknown stream action %s", action))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("unknown stream action %s", action))
 	}
 }
 

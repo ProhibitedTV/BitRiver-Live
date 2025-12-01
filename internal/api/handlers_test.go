@@ -24,6 +24,22 @@ import (
 	"bitriver-live/internal/storage"
 )
 
+type testErrorResponse struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+func decodeAPIError(t *testing.T, body []byte) testErrorResponse {
+	t.Helper()
+	var resp testErrorResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	return resp
+}
+
 func newTestHandler(t *testing.T) (*Handler, *storage.Storage) {
 	t.Helper()
 	dir := t.TempDir()
@@ -445,11 +461,8 @@ func TestUserByID(t *testing.T) {
 			},
 			wantStatus: http.StatusForbidden,
 			assert: func(t *testing.T, rec *httptest.ResponseRecorder, store *storage.Storage, target models.User) {
-				var resp map[string]string
-				if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-					t.Fatalf("decode response: %v", err)
-				}
-				if resp["error"] == "" {
+				resp := decodeAPIError(t, rec.Body.Bytes())
+				if resp.Error.Message == "" {
 					t.Fatal("expected error message in response")
 				}
 				if _, ok := store.GetUser(target.ID); !ok {
@@ -751,12 +764,9 @@ func TestSignupRejectsShortPassword(t *testing.T) {
 		t.Fatalf("expected signup status 400, got %d", rec.Code)
 	}
 
-	var payload map[string]string
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if payload["error"] != "password must be at least 8 characters" {
-		t.Fatalf("unexpected error message: %q", payload["error"])
+	resp := decodeAPIError(t, rec.Body.Bytes())
+	if resp.Error.Message != "password must be at least 8 characters" {
+		t.Fatalf("unexpected error message: %q", resp.Error.Message)
 	}
 
 	if _, ok := store.FindUserByEmail("viewer@example.com"); ok {
@@ -798,12 +808,9 @@ func TestSignupHidesDuplicateEmailDetails(t *testing.T) {
 		t.Fatalf("expected signup status 400, got %d", rec.Code)
 	}
 
-	var payload map[string]string
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if payload["error"] != "unable to create account" {
-		t.Fatalf("unexpected error message: %q", payload["error"])
+	resp := decodeAPIError(t, rec.Body.Bytes())
+	if resp.Error.Message != "unable to create account" {
+		t.Fatalf("unexpected error message: %q", resp.Error.Message)
 	}
 
 	if _, ok := store.FindUserByEmail("viewer@example.com"); !ok {
@@ -830,11 +837,8 @@ func TestSignupDisabled(t *testing.T) {
 		t.Fatalf("expected status 403 when self-signup disabled, got %d", rec.Code)
 	}
 
-	var payload map[string]string
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if payload["error"] == "" {
+	resp := decodeAPIError(t, rec.Body.Bytes())
+	if resp.Error.Message == "" {
 		t.Fatal("expected error message in response")
 	}
 	for _, cookie := range rec.Result().Cookies() {

@@ -111,12 +111,12 @@ func (h *Handler) Uploads(w http.ResponseWriter, r *http.Request) {
 		}
 		channelID := strings.TrimSpace(r.URL.Query().Get("channelId"))
 		if channelID == "" {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("channelId is required"))
+			WriteError(w, http.StatusBadRequest, fmt.Errorf("channelId is required"))
 			return
 		}
 		channel, exists := h.Store.GetChannel(channelID)
 		if !exists {
-			writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
+			WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 			return
 		}
 		if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
@@ -125,14 +125,14 @@ func (h *Handler) Uploads(w http.ResponseWriter, r *http.Request) {
 		}
 		uploads, err := h.Store.ListUploads(channelID)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
 		response := make([]uploadResponse, 0, len(uploads))
 		for _, upload := range uploads {
 			response = append(response, newUploadResponse(upload))
 		}
-		writeJSON(w, http.StatusOK, response)
+		WriteJSON(w, http.StatusOK, response)
 	case http.MethodPost:
 		actor, ok := h.requireAuthenticatedUser(w, r)
 		if !ok {
@@ -146,26 +146,26 @@ func (h *Handler) Uploads(w http.ResponseWriter, r *http.Request) {
 		h.createUploadFromJSON(w, r, actor)
 	default:
 		w.Header().Set("Allow", "GET, POST")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 	}
 }
 
 func (h *Handler) UploadByID(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/uploads/")
 	if path == "" {
-		writeError(w, http.StatusNotFound, fmt.Errorf("upload id missing"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("upload id missing"))
 		return
 	}
 	parts := strings.Split(path, "/")
 	uploadID := strings.TrimSpace(parts[0])
 	upload, ok := h.Store.GetUpload(uploadID)
 	if !ok {
-		writeError(w, http.StatusNotFound, fmt.Errorf("upload %s not found", uploadID))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("upload %s not found", uploadID))
 		return
 	}
 	channel, exists := h.Store.GetChannel(upload.ChannelID)
 	if !exists {
-		writeError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", upload.ChannelID))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", upload.ChannelID))
 		return
 	}
 	if len(parts) > 1 && strings.TrimSpace(parts[1]) == "media" {
@@ -184,7 +184,7 @@ func (h *Handler) UploadByID(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
-		writeJSON(w, http.StatusOK, newUploadResponse(upload))
+		WriteJSON(w, http.StatusOK, newUploadResponse(upload))
 	case http.MethodDelete:
 		if !hasActor {
 			WriteError(w, http.StatusUnauthorized, fmt.Errorf("authentication required"))
@@ -195,35 +195,35 @@ func (h *Handler) UploadByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := h.Store.DeleteUpload(uploadID); err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
 		h.deleteUploadMedia(upload)
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.Header().Set("Allow", "GET, DELETE")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 	}
 }
 
 func (h *Handler) createUploadFromJSON(w http.ResponseWriter, r *http.Request, actor models.User) {
 	var req createUploadRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err)
+	if err := DecodeJSON(r, &req); err != nil {
+		WriteDecodeError(w, err)
 		return
 	}
 	upload, status, err := h.createUploadEntry(r, actor, req, nil)
 	if err != nil {
-		writeError(w, status, err)
+		WriteError(w, status, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, newUploadResponse(upload))
+	WriteJSON(w, http.StatusCreated, newUploadResponse(upload))
 }
 
 func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Request, actor models.User) {
 	reader, err := r.MultipartReader()
 	if err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid multipart payload"))
+		WriteError(w, http.StatusBadRequest, fmt.Errorf("invalid multipart payload"))
 		return
 	}
 	req := createUploadRequest{}
@@ -235,7 +235,7 @@ func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Reque
 			break
 		}
 		if err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("read multipart data: %w", err))
+			WriteError(w, http.StatusBadRequest, fmt.Errorf("read multipart data: %w", err))
 			return
 		}
 		name := part.FormName()
@@ -250,7 +250,7 @@ func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Reque
 			}
 			saved, saveErr := h.saveMultipartFile(part)
 			if saveErr != nil {
-				writeError(w, http.StatusBadRequest, saveErr)
+				WriteError(w, http.StatusBadRequest, saveErr)
 				return
 			}
 			media = saved
@@ -259,7 +259,7 @@ func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Reque
 		payload, readErr := io.ReadAll(part)
 		_ = part.Close()
 		if readErr != nil {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("read form field: %w", readErr))
+			WriteError(w, http.StatusBadRequest, fmt.Errorf("read form field: %w", readErr))
 			return
 		}
 		value := strings.TrimSpace(string(payload))
@@ -307,10 +307,10 @@ func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Reque
 	}
 	upload, status, err := h.createUploadEntry(r, actor, req, media)
 	if err != nil {
-		writeError(w, status, err)
+		WriteError(w, status, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, newUploadResponse(upload))
+	WriteJSON(w, http.StatusCreated, newUploadResponse(upload))
 }
 
 func (h *Handler) createUploadEntry(r *http.Request, actor models.User, req createUploadRequest, media *uploadedMedia) (models.Upload, int, error) {
@@ -444,34 +444,34 @@ func (h *Handler) persistUploadMedia(uploadID string, media *uploadedMedia) (str
 func (h *Handler) serveUploadMedia(w http.ResponseWriter, r *http.Request, upload models.Upload) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 	if upload.Metadata == nil {
-		writeError(w, http.StatusNotFound, fmt.Errorf("media not found"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("media not found"))
 		return
 	}
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
 	expected := strings.TrimSpace(upload.Metadata["mediaToken"])
 	if token == "" || expected == "" || subtle.ConstantTimeCompare([]byte(token), []byte(expected)) != 1 {
-		writeError(w, http.StatusForbidden, fmt.Errorf("invalid token"))
+		WriteError(w, http.StatusForbidden, fmt.Errorf("invalid token"))
 		return
 	}
 	mediaPath := strings.TrimSpace(upload.Metadata["mediaPath"])
 	if mediaPath == "" {
-		writeError(w, http.StatusNotFound, fmt.Errorf("media not found"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("media not found"))
 		return
 	}
 	fullPath := filepath.Join(h.uploadMediaDir(), filepath.Base(mediaPath))
 	file, err := os.Open(fullPath)
 	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Errorf("media unavailable"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("media unavailable"))
 		return
 	}
 	defer file.Close()
 	stat, err := file.Stat()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Errorf("media stat failed"))
+		WriteError(w, http.StatusInternalServerError, fmt.Errorf("media stat failed"))
 		return
 	}
 	contentType := strings.TrimSpace(upload.Metadata["contentType"])

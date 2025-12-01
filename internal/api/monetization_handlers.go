@@ -123,7 +123,7 @@ func newSubscriptionResponse(sub models.Subscription) subscriptionResponse {
 
 func (h *Handler) handleMonetizationRoutes(channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	if len(remaining) == 0 {
-		writeError(w, http.StatusNotFound, fmt.Errorf("unknown monetization path"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("unknown monetization path"))
 		return
 	}
 	switch remaining[0] {
@@ -132,7 +132,7 @@ func (h *Handler) handleMonetizationRoutes(channel models.Channel, remaining []s
 	case "subscriptions":
 		h.handleSubscriptionsRoutes(channel, remaining[1:], w, r)
 	default:
-		writeError(w, http.StatusNotFound, fmt.Errorf("unknown monetization path"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("unknown monetization path"))
 	}
 }
 
@@ -142,7 +142,7 @@ func (h *Handler) handleTipsRoutes(channel models.Channel, remaining []string, w
 		return
 	}
 	if len(remaining) > 0 && strings.TrimSpace(remaining[0]) != "" {
-		writeError(w, http.StatusNotFound, fmt.Errorf("unknown tips path"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("unknown tips path"))
 		return
 	}
 	switch r.Method {
@@ -159,23 +159,23 @@ func (h *Handler) handleTipsRoutes(channel models.Channel, remaining []string, w
 		}
 		tips, err := h.Store.ListTips(channel.ID, limit)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
 		response := make([]tipResponse, 0, len(tips))
 		for _, tip := range tips {
 			response = append(response, newTipResponse(tip))
 		}
-		writeJSON(w, http.StatusOK, response)
+		WriteJSON(w, http.StatusOK, response)
 	case http.MethodPost:
 		var req createTipRequest
-		if err := decodeJSON(r, &req); err != nil {
-			writeError(w, http.StatusBadRequest, err)
+		if err := DecodeJSON(r, &req); err != nil {
+			WriteDecodeError(w, err)
 			return
 		}
 		amount, err := parseMoneyNumber(req.Amount, "amount")
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
 		params := storage.CreateTipParams{
@@ -190,14 +190,14 @@ func (h *Handler) handleTipsRoutes(channel models.Channel, remaining []string, w
 		}
 		tip, err := h.Store.CreateTip(params)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
 		metrics.Default().ObserveMonetization("tip", tip.Amount)
-		writeJSON(w, http.StatusCreated, newTipResponse(tip))
+		WriteJSON(w, http.StatusCreated, newTipResponse(tip))
 	default:
 		w.Header().Set("Allow", "GET, POST")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 	}
 }
 
@@ -211,12 +211,12 @@ func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []
 		if len(remaining) == 1 {
 			if r.Method != http.MethodDelete {
 				w.Header().Set("Allow", "DELETE")
-				writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 				return
 			}
 			sub, ok := h.Store.GetSubscription(subscriptionID)
 			if !ok {
-				writeError(w, http.StatusNotFound, fmt.Errorf("subscription %s not found", subscriptionID))
+				WriteError(w, http.StatusNotFound, fmt.Errorf("subscription %s not found", subscriptionID))
 				return
 			}
 			if sub.UserID != actor.ID && channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
@@ -226,13 +226,13 @@ func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []
 			reason := strings.TrimSpace(r.URL.Query().Get("reason"))
 			updated, err := h.Store.CancelSubscription(subscriptionID, actor.ID, reason)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err)
+				WriteError(w, http.StatusBadRequest, err)
 				return
 			}
-			writeJSON(w, http.StatusOK, newSubscriptionResponse(updated))
+			WriteJSON(w, http.StatusOK, newSubscriptionResponse(updated))
 			return
 		}
-		writeError(w, http.StatusNotFound, fmt.Errorf("unknown subscription path"))
+		WriteError(w, http.StatusNotFound, fmt.Errorf("unknown subscription path"))
 		return
 	}
 
@@ -249,28 +249,28 @@ func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []
 		}
 		subs, err := h.Store.ListSubscriptions(channel.ID, includeInactive)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
 		response := make([]subscriptionResponse, 0, len(subs))
 		for _, sub := range subs {
 			response = append(response, newSubscriptionResponse(sub))
 		}
-		writeJSON(w, http.StatusOK, response)
+		WriteJSON(w, http.StatusOK, response)
 	case http.MethodPost:
 		var req createSubscriptionRequest
-		if err := decodeJSON(r, &req); err != nil {
-			writeError(w, http.StatusBadRequest, err)
+		if err := DecodeJSON(r, &req); err != nil {
+			WriteDecodeError(w, err)
 			return
 		}
 		durationDays := req.DurationDays
 		if durationDays <= 0 {
-			writeError(w, http.StatusBadRequest, fmt.Errorf("durationDays must be positive"))
+			WriteError(w, http.StatusBadRequest, fmt.Errorf("durationDays must be positive"))
 			return
 		}
 		amount, err := parseMoneyNumber(req.Amount, "amount")
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
 		params := storage.CreateSubscriptionParams{
@@ -287,13 +287,13 @@ func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []
 		}
 		sub, err := h.Store.CreateSubscription(params)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
 		metrics.Default().ObserveMonetization("subscription", sub.Amount)
-		writeJSON(w, http.StatusCreated, newSubscriptionResponse(sub))
+		WriteJSON(w, http.StatusCreated, newSubscriptionResponse(sub))
 	default:
 		w.Header().Set("Allow", "GET, POST, DELETE")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 	}
 }

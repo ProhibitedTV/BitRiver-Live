@@ -107,7 +107,7 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	for _, check := range checks {
 		metrics.SetIngestHealth(check.Component, check.Status)
 	}
-	writeJSON(w, statusCode, payload)
+	WriteJSON(w, statusCode, payload)
 }
 
 // Ready reports the status of core API dependencies without considering ingest
@@ -119,7 +119,7 @@ func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
 		"status":     overallStatus,
 		"components": components,
 	}
-	writeJSON(w, statusCode, payload)
+	WriteJSON(w, statusCode, payload)
 }
 
 type sessionResponse struct {

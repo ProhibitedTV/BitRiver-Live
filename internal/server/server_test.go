@@ -24,6 +24,22 @@ import (
 	"bitriver-live/web"
 )
 
+type apiErrorResponse struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+func decodeAPIError(t *testing.T, body []byte) apiErrorResponse {
+	t.Helper()
+	var resp apiErrorResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	return resp
+}
+
 func newTestHandler(t *testing.T) (*api.Handler, *storage.Storage) {
 	t.Helper()
 	dir := t.TempDir()
@@ -99,11 +115,8 @@ func TestAuthMiddlewareRejectsMissingSession(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status 401, got %d", rec.Code)
 	}
-	var payload map[string]string
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if payload["error"] == "" {
+	resp := decodeAPIError(t, rec.Body.Bytes())
+	if resp.Error.Message == "" {
 		t.Fatal("expected error message in response")
 	}
 }

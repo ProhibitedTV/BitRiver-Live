@@ -35,7 +35,7 @@ type analyticsOverviewResponse struct {
 func (h *Handler) AnalyticsOverview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
-		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 		return
 	}
 	if _, ok := h.requireRole(w, r, roleAdmin); !ok {
@@ -43,10 +43,10 @@ func (h *Handler) AnalyticsOverview(w http.ResponseWriter, r *http.Request) {
 	}
 	payload, err := h.computeAnalyticsOverview(time.Now().UTC())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, payload)
+	WriteJSON(w, http.StatusOK, payload)
 }
 
 func (h *Handler) computeAnalyticsOverview(now time.Time) (analyticsOverviewResponse, error) {
