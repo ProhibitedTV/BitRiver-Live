@@ -28,6 +28,11 @@ func newTestLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
+func newBufferLogger() (*slog.Logger, *bytes.Buffer) {
+	buf := &bytes.Buffer{}
+	return slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})), buf
+}
+
 type healthResponse struct {
 	Status     string                    `json:"status"`
 	Components map[string]map[string]any `json:"components"`
@@ -66,6 +71,39 @@ func startStubTranscoder(t *testing.T, tempDir string, exitErr *atomic.Pointer[e
 	ts := httptest.NewServer(srv.routes())
 	t.Cleanup(ts.Close)
 	return srv, ts
+}
+
+func TestAuthorizeValidToken(t *testing.T) {
+	logger, buf := newBufferLogger()
+	s := &server{token: testToken, logger: logger}
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", nil)
+	req.Header.Set("Authorization", "Bearer "+testToken)
+
+	if !s.authorize(req) {
+		t.Fatalf("expected token %q to be authorized", testToken)
+	}
+	if out := buf.String(); out != "" {
+		t.Fatalf("expected no warnings for valid token, got: %s", out)
+	}
+}
+
+func TestAuthorizeInvalidTokenLogsWarning(t *testing.T) {
+	logger, buf := newBufferLogger()
+	s := &server{token: testToken, logger: logger}
+	req := httptest.NewRequest(http.MethodPost, "/v1/jobs", nil)
+	req.RemoteAddr = "192.0.2.10:1234"
+	req.Header.Set("Authorization", "Bearer invalid")
+
+	if s.authorize(req) {
+		t.Fatalf("expected invalid token to be rejected")
+	}
+	log := buf.String()
+	if !strings.Contains(log, "authorization failed") {
+		t.Fatalf("expected authorization failure to be logged, got: %s", log)
+	}
+	if !strings.Contains(log, "invalid_token") {
+		t.Fatalf("expected reason to mention invalid token, got: %s", log)
+	}
 }
 
 func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
