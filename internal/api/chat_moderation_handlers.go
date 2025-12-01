@@ -174,7 +174,7 @@ func newModerationUser(user models.User) moderationUserResponse {
 
 func (h *Handler) ChatWebsocket(w http.ResponseWriter, r *http.Request) {
 	if h.ChatGateway == nil {
-		http.Error(w, "chat gateway unavailable", http.StatusServiceUnavailable)
+		WriteRequestError(w, ServiceUnavailableError("chat gateway unavailable"))
 		return
 	}
 	user, ok := h.requireAuthenticatedUser(w, r)
@@ -214,8 +214,7 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 				return
 			}
 			if r.Method != http.MethodDelete {
-				w.Header().Set("Allow", "DELETE")
-				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteMethodNotAllowed(w, r, http.MethodDelete)
 				return
 			}
 			actor, ok := h.requireAuthenticatedUser(w, r)
@@ -242,7 +241,7 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 		if limitStr != "" {
 			parsed, err := strconv.Atoi(limitStr)
 			if err != nil || parsed < 0 {
-				WriteError(w, http.StatusBadRequest, fmt.Errorf("invalid limit value"))
+				WriteRequestError(w, ValidationError("invalid limit value"))
 				return
 			}
 			limit = parsed
@@ -263,8 +262,7 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 			return
 		}
 		var req createChatRequest
-		if err := DecodeJSON(r, &req); err != nil {
-			WriteDecodeError(w, err)
+		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
 		if req.UserID != actor.ID && !actor.HasRole(roleAdmin) {
@@ -274,7 +272,7 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 		if h.ChatGateway != nil {
 			author, ok := h.Store.GetUser(req.UserID)
 			if !ok {
-				WriteError(w, http.StatusBadRequest, fmt.Errorf("user %s not found", req.UserID))
+				WriteRequestError(w, ValidationError(fmt.Sprintf("user %s not found", req.UserID)))
 				return
 			}
 			messageEvt, err := h.ChatGateway.CreateMessage(r.Context(), author, channelID, req.Content)
@@ -299,22 +297,20 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 		}
 		WriteJSON(w, http.StatusCreated, newChatMessageResponse(message))
 	default:
-		w.Header().Set("Allow", "GET, POST")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPost)
 	}
 }
 
 func (h *Handler) handleChatModeration(actor models.User, channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	if h.ChatGateway == nil {
-		http.Error(w, "chat gateway unavailable", http.StatusServiceUnavailable)
+		WriteRequestError(w, ServiceUnavailableError("chat gateway unavailable"))
 		return
 	}
 	if len(remaining) > 0 {
 		switch remaining[0] {
 		case "restrictions":
 			if r.Method != http.MethodGet {
-				w.Header().Set("Allow", "GET")
-				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteMethodNotAllowed(w, r, http.MethodGet)
 				return
 			}
 			if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
@@ -338,8 +334,7 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 		return
 	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", "POST")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodPost)
 		return
 	}
 	if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
@@ -347,16 +342,15 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 		return
 	}
 	var req chatModerationRequest
-	if err := DecodeJSON(r, &req); err != nil {
-		WriteDecodeError(w, err)
+	if !DecodeAndValidate(w, r, &req) {
 		return
 	}
 	if strings.TrimSpace(req.TargetID) == "" {
-		WriteError(w, http.StatusBadRequest, fmt.Errorf("targetId is required"))
+		WriteRequestError(w, ValidationError("targetId is required"))
 		return
 	}
 	if _, ok := h.Store.GetUser(req.TargetID); !ok {
-		WriteError(w, http.StatusBadRequest, fmt.Errorf("user %s not found", req.TargetID))
+		WriteRequestError(w, ValidationError(fmt.Sprintf("user %s not found", req.TargetID)))
 		return
 	}
 	var evt chat.ModerationEvent
@@ -369,7 +363,7 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 	case "timeout":
 		duration := time.Duration(req.DurationMs) * time.Millisecond
 		if duration <= 0 {
-			WriteError(w, http.StatusBadRequest, fmt.Errorf("durationMs must be positive"))
+			WriteRequestError(w, ValidationError("durationMs must be positive"))
 			return
 		}
 		expires := time.Now().Add(duration).UTC()
@@ -382,7 +376,7 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 	case "unban":
 		evt.Action = chat.ModerationActionUnban
 	default:
-		WriteError(w, http.StatusBadRequest, fmt.Errorf("unknown moderation action"))
+		WriteRequestError(w, ValidationError("unknown moderation action"))
 		return
 	}
 
@@ -408,8 +402,7 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 		reportID := remaining[0]
 		if len(remaining) == 2 && remaining[1] == "resolve" {
 			if r.Method != http.MethodPost {
-				w.Header().Set("Allow", "POST")
-				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteMethodNotAllowed(w, r, http.MethodPost)
 				return
 			}
 			if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
@@ -417,8 +410,7 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 				return
 			}
 			var req resolveChatReportRequest
-			if err := DecodeJSON(r, &req); err != nil {
-				WriteDecodeError(w, err)
+			if !DecodeAndValidate(w, r, &req) {
 				return
 			}
 			report, err := h.Store.ResolveChatReport(reportID, actor.ID, req.Resolution)
@@ -456,22 +448,21 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 		WriteJSON(w, http.StatusOK, response)
 	case http.MethodPost:
 		var req chatReportRequest
-		if err := DecodeJSON(r, &req); err != nil {
-			WriteDecodeError(w, err)
+		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
 		targetID := strings.TrimSpace(req.TargetID)
 		if targetID == "" {
-			WriteError(w, http.StatusBadRequest, fmt.Errorf("targetId is required"))
+			WriteRequestError(w, ValidationError("targetId is required"))
 			return
 		}
 		if _, ok := h.Store.GetUser(targetID); !ok {
-			WriteError(w, http.StatusBadRequest, fmt.Errorf("user %s not found", targetID))
+			WriteRequestError(w, ValidationError(fmt.Sprintf("user %s not found", targetID)))
 			return
 		}
 		reason := strings.TrimSpace(req.Reason)
 		if reason == "" {
-			WriteError(w, http.StatusBadRequest, fmt.Errorf("reason is required"))
+			WriteRequestError(w, ValidationError("reason is required"))
 			return
 		}
 		messageID := strings.TrimSpace(req.MessageID)
@@ -508,15 +499,13 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 		}
 		WriteJSON(w, http.StatusAccepted, newChatReportResponse(report))
 	default:
-		w.Header().Set("Allow", "GET, POST")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPost)
 	}
 }
 
 func (h *Handler) ModerationQueue(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", "GET")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet)
 		return
 	}
 
@@ -540,8 +529,7 @@ func (h *Handler) ModerationQueueByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", "POST")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodPost)
 		return
 	}
 
@@ -551,13 +539,12 @@ func (h *Handler) ModerationQueueByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req resolveModerationRequest
-	if err := DecodeJSON(r, &req); err != nil {
-		WriteDecodeError(w, err)
+	if !DecodeAndValidate(w, r, &req) {
 		return
 	}
 	resolution := strings.TrimSpace(req.Resolution)
 	if resolution == "" {
-		WriteError(w, http.StatusBadRequest, fmt.Errorf("resolution is required"))
+		WriteRequestError(w, ValidationError("resolution is required"))
 		return
 	}
 

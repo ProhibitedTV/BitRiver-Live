@@ -186,8 +186,7 @@ func newClipExportResponse(clip models.ClipExport) clipExportResponse {
 
 func (h *Handler) Recordings(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", "GET")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet)
 		return
 	}
 
@@ -249,8 +248,7 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if r.Method != http.MethodPost {
-				w.Header().Set("Allow", "POST")
-				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteMethodNotAllowed(w, r, http.MethodPost)
 				return
 			}
 			if !hasActor {
@@ -301,8 +299,7 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				var req clipExportRequest
-				if err := DecodeJSON(r, &req); err != nil {
-					WriteDecodeError(w, err)
+				if !DecodeAndValidate(w, r, &req) {
 					return
 				}
 				clip, err := h.Store.CreateClipExport(recordingID, storage.ClipExportParams{
@@ -316,8 +313,7 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 				}
 				WriteJSON(w, http.StatusCreated, newClipExportResponse(clip))
 			default:
-				w.Header().Set("Allow", "GET, POST")
-				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPost)
 			}
 			return
 		default:
@@ -350,7 +346,6 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	default:
-		w.Header().Set("Allow", "GET, DELETE")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodDelete)
 	}
 }

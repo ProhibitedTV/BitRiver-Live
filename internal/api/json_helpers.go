@@ -162,6 +162,28 @@ func decodeJSON(r *http.Request, dest interface{}, disallowUnknown bool) error {
 	return nil
 }
 
+// DecodeAndValidate parses a JSON payload into dest and writes a structured error response on failure.
+//
+// It returns true when decoding succeeds, otherwise it writes a decode error response and returns false.
+func DecodeAndValidate(w http.ResponseWriter, r *http.Request, dest interface{}) bool {
+	if err := DecodeJSON(r, dest); err != nil {
+		WriteDecodeError(w, err)
+		return false
+	}
+	return true
+}
+
+// DecodeAllowUnknownAndValidate parses a JSON payload while allowing unknown fields and writes a structured error response on failure.
+//
+// It returns true when decoding succeeds, otherwise it writes a decode error response and returns false.
+func DecodeAllowUnknownAndValidate(w http.ResponseWriter, r *http.Request, dest interface{}) bool {
+	if err := DecodeJSONAllowUnknown(r, dest); err != nil {
+		WriteDecodeError(w, err)
+		return false
+	}
+	return true
+}
+
 func classifyDecodeError(err error) error {
 	var syntaxErr *json.SyntaxError
 	var typeErr *json.UnmarshalTypeError
@@ -228,4 +250,35 @@ func clientMessage(status int, err error) string {
 	}
 
 	return http.StatusText(status)
+}
+
+// WriteRequestError writes a structured error response using the status inferred from the error when possible.
+func WriteRequestError(w http.ResponseWriter, err error) {
+	status := http.StatusInternalServerError
+	if serr, ok := err.(statusError); ok {
+		status = serr.StatusCode()
+	}
+	WriteError(w, status, err)
+}
+
+// WriteMethodNotAllowed writes a consistent 405 response and populates the Allow header.
+func WriteMethodNotAllowed(w http.ResponseWriter, r *http.Request, allowed ...string) {
+	if len(allowed) > 0 {
+		w.Header().Set("Allow", strings.Join(allowed, ", "))
+	}
+	WriteRequestError(w, RequestError{
+		Status:  http.StatusMethodNotAllowed,
+		CodeVal: "method_not_allowed",
+		Message: fmt.Sprintf("method %s not allowed", r.Method),
+	})
+}
+
+// ValidationError builds a RequestError for invalid user input.
+func ValidationError(message string) RequestError {
+	return RequestError{Status: http.StatusBadRequest, CodeVal: "validation_failed", Message: message}
+}
+
+// ServiceUnavailableError builds a RequestError for temporarily unavailable services.
+func ServiceUnavailableError(message string) RequestError {
+	return RequestError{Status: http.StatusServiceUnavailable, CodeVal: "service_unavailable", Message: message}
 }

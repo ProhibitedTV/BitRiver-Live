@@ -80,8 +80,7 @@ func (h *Handler) Profiles(w http.ResponseWriter, r *http.Request) {
 		}
 		WriteJSON(w, http.StatusOK, response)
 	default:
-		w.Header().Set("Allow", "GET")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet)
 	}
 }
 
@@ -108,8 +107,7 @@ func (h *Handler) ProfileByID(w http.ResponseWriter, r *http.Request) {
 		}
 		h.handleUpsertProfile(userID, w, r)
 	default:
-		w.Header().Set("Allow", "GET, PUT")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPut)
 	}
 }
 
@@ -125,8 +123,7 @@ func (h *Handler) handleGetProfile(userID string, w http.ResponseWriter, r *http
 
 func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *http.Request) {
 	var req upsertProfileRequest
-	if err := DecodeJSON(r, &req); err != nil {
-		WriteDecodeError(w, err)
+	if !DecodeAndValidate(w, r, &req) {
 		return
 	}
 

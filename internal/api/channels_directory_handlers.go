@@ -128,8 +128,7 @@ type vodCollectionResponse struct {
 
 func (h *Handler) Directory(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", "GET")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet)
 		return
 	}
 
@@ -143,8 +142,7 @@ func (h *Handler) Directory(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DirectoryFeatured(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", "GET")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet)
 		return
 	}
 
@@ -173,8 +171,7 @@ func (h *Handler) DirectoryFeatured(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DirectoryRecommended(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", "GET")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet)
 		return
 	}
 
@@ -184,8 +181,7 @@ func (h *Handler) DirectoryRecommended(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DirectoryLive(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", "GET")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet)
 		return
 	}
 
@@ -196,8 +192,7 @@ func (h *Handler) DirectoryLive(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DirectoryTrending(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", "GET")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet)
 		return
 	}
 
@@ -207,8 +202,7 @@ func (h *Handler) DirectoryTrending(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DirectoryCategories(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", "GET")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet)
 		return
 	}
 
@@ -270,8 +264,7 @@ func (h *Handler) sortChannelsByFollowers(channels []models.Channel, liveFirst b
 
 func (h *Handler) DirectoryFollowing(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", "GET")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet)
 		return
 	}
 
@@ -443,8 +436,7 @@ func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var req createChannelRequest
-		if err := DecodeJSON(r, &req); err != nil {
-			WriteDecodeError(w, err)
+		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
 		if req.OwnerID == "" {
@@ -461,8 +453,7 @@ func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 		}
 		WriteJSON(w, http.StatusCreated, newChannelResponse(channel))
 	default:
-		w.Header().Set("Allow", "GET, POST")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPost)
 	}
 }
 
@@ -501,8 +492,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			var req updateChannelRequest
-			if err := DecodeJSON(r, &req); err != nil {
-				WriteDecodeError(w, err)
+			if !DecodeAndValidate(w, r, &req) {
 				return
 			}
 			update := storage.ChannelUpdate{}
@@ -537,8 +527,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			}
 			w.WriteHeader(http.StatusNoContent)
 		default:
-			w.Header().Set("Allow", "GET, PATCH, DELETE")
-			WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+			WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPatch, http.MethodDelete)
 		}
 		return
 	}
@@ -552,8 +541,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if r.Method != http.MethodGet {
-				w.Header().Set("Allow", "GET")
-				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteMethodNotAllowed(w, r, http.MethodGet)
 				return
 			}
 			owner, exists := h.Store.GetUser(channel.OwnerID)
@@ -647,8 +635,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if r.Method != http.MethodGet {
-				w.Header().Set("Allow", "GET")
-				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteMethodNotAllowed(w, r, http.MethodGet)
 				return
 			}
 			sessions, err := h.Store.ListStreamSessions(channelID)
@@ -687,8 +674,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			default:
-				w.Header().Set("Allow", "POST, DELETE")
-				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteMethodNotAllowed(w, r, http.MethodPost, http.MethodDelete)
 				return
 			}
 			state := followStateResponse{
@@ -790,8 +776,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				}
 				WriteJSON(w, http.StatusOK, state)
 			default:
-				w.Header().Set("Allow", "GET, POST, DELETE")
-				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPost, http.MethodDelete)
 			}
 			return
 		case "vods":
@@ -800,8 +785,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if r.Method != http.MethodGet {
-				w.Header().Set("Allow", "GET")
-				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteMethodNotAllowed(w, r, http.MethodGet)
 				return
 			}
 			channel, ok := h.Store.GetChannel(channelID)

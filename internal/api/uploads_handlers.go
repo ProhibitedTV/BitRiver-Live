@@ -145,8 +145,7 @@ func (h *Handler) Uploads(w http.ResponseWriter, r *http.Request) {
 		}
 		h.createUploadFromJSON(w, r, actor)
 	default:
-		w.Header().Set("Allow", "GET, POST")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPost)
 	}
 }
 
@@ -201,15 +200,13 @@ func (h *Handler) UploadByID(w http.ResponseWriter, r *http.Request) {
 		h.deleteUploadMedia(upload)
 		w.WriteHeader(http.StatusNoContent)
 	default:
-		w.Header().Set("Allow", "GET, DELETE")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodDelete)
 	}
 }
 
 func (h *Handler) createUploadFromJSON(w http.ResponseWriter, r *http.Request, actor models.User) {
 	var req createUploadRequest
-	if err := DecodeJSON(r, &req); err != nil {
-		WriteDecodeError(w, err)
+	if !DecodeAndValidate(w, r, &req) {
 		return
 	}
 	upload, status, err := h.createUploadEntry(r, actor, req, nil)
@@ -443,8 +440,7 @@ func (h *Handler) persistUploadMedia(uploadID string, media *uploadedMedia) (str
 
 func (h *Handler) serveUploadMedia(w http.ResponseWriter, r *http.Request, upload models.Upload) {
 	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", "GET")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet)
 		return
 	}
 	if upload.Metadata == nil {
