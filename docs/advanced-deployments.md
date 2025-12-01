@@ -22,6 +22,55 @@ The live pipeline wires together three control-plane components. Use the paths b
 | `--chat-queue-redis-tls-server-name` | Overrides the expected Redis TLS server name. |
 | `--chat-queue-redis-tls-skip-verify` | Skips Redis TLS certificate verification (use with caution). |
 
+## Fault handling and recovery
+
+When any dependency falters, start with the API health surfaces. `/readyz` returns `503` once core dependencies such as Postgres or the chat queue fail their pings, while `/healthz` keeps the same status code but downgrades the JSON payload when ingest services are unreachable so dashboards still capture SRS/OME/transcoder detail.【F:internal/api/handlers.go†L84-L123】【F:internal/api/health_helpers.go†L14-L44】 The ingest controller probes each service at `<baseURL><BITRIVER_INGEST_HEALTH>` (default `/healthz`) using the credentials seeded in `.env`, and records an `error` status when any probe fails.【F:internal/ingest/http_controller.go†L308-L401】【F:deploy/.env.example†L57-L74】
+
+### Postgres offline
+
+- **What degrades:** Repository pings fail, pushing `/readyz` to `503` and marking the datastore component `degraded`, which blocks automation from routing traffic back until the pool can talk to Postgres again.【F:internal/api/health_helpers.go†L14-L44】 Requests that need persistence (signups, chat history, ingest hooks) will return errors because the store cannot be reached.
+- **API/reactive response:** `/healthz` mirrors the degraded status so operators can spot the outage even when other ingest dependencies are healthy.【F:internal/api/handlers.go†L84-L123】 Session cookies and auth remain initialised, but without a backing store mutations fail fast.
+- **Recovery checklist:**
+  1. Bring Postgres up first and validate the DSN/connection pool knobs the API will use (`BITRIVER_LIVE_POSTGRES_DSN`, `BITRIVER_POSTGRES_*`, `--postgres-*`).【F:deploy/.env.example†L20-L35】【F:cmd/server/main.go†L124-L135】 Re-run migrations if needed.
+  2. Restart the API once `psql` or the managed console confirms the database answers connections; `/readyz` should flip back to `200`.
+  3. Smoke-test mutations (create a channel, send chat) and check `/healthz` for a clean datastore status before reopening ingest traffic.
+
+### Redis or chat queue offline
+
+- **What degrades:** When `chat_queue` pings fail the API marks readiness `degraded`, and websocket publishers/consumers stop enqueueing messages because the configured queue driver cannot reach Redis.【F:internal/api/health_helpers.go†L14-L44】 Other API routes continue to serve.
+- **API/reactive response:** `/readyz` returns `503` until the queue responds, while `/healthz` continues to report ingest status separately so you can distinguish chat-only failures.【F:internal/api/handlers.go†L84-L123】 You can switch to the in-memory queue in emergencies with `--chat-queue-driver memory` or its env twin.
+- **Recovery checklist:**
+  1. Restore Redis (or swap drivers) and confirm the address/credentials (`BITRIVER_LIVE_CHAT_QUEUE_DRIVER`, `BITRIVER_LIVE_CHAT_QUEUE_REDIS_*`, `--chat-queue-*`) match the running instance.【F:deploy/.env.example†L33-L36】【F:cmd/server/main.go†L167-L180】 
+  2. Restart the API so new websocket joins rebind to the queue backend; monitor `/readyz` until it returns `200`.
+  3. Verify chat delivery by posting in a live room and ensuring consumers drain the Redis stream before reopening to viewers.
+
+### SRS offline
+
+- **What degrades:** RTMP/WebRTC ingest endpoints go dark, so SRS webhook calls never reach the API and new sessions cannot be provisioned. `/readyz` stays `200` because core dependencies remain healthy, but `/healthz` will flag the `srs` component as `error` and overall ingest status as `degraded`.【F:internal/ingest/http_controller.go†L308-L401】
+- **API/reactive response:** Attempts to boot ingest pipelines during the outage fail at channel creation, and the controller tears down any partially-created resources before returning the error.【F:internal/ingest/http_controller.go†L120-L195】 Published VODs continue to play from object storage/CDN because playback URLs are served independently of live ingest.【F:docs/advanced-deployments.md†L166-L205】
+- **Recovery checklist:**
+  1. Restart SRS and verify its `/healthz` (or the path from `BITRIVER_INGEST_HEALTH`) responds using the token in `BITRIVER_SRS_TOKEN`/`--srs-token`.【F:deploy/.env.example†L42-L43】【F:deploy/.env.example†L57-L69】
+  2. Once `/healthz` shows `srs` back to `ok`, retry ingest from the broadcaster; the API will accept hooks and start new sessions again.
+  3. Reconcile sessions by checking `/api/channels/{id}/sessions` for any aborted attempts before resuming traffic.
+
+### OvenMediaEngine offline
+
+- **What degrades:** Live playback drops because the origin is unreachable; ingest bootstraps fail when the controller cannot create an OME application and roll back SRS provisioning. `/healthz` reports the `ovenmediaengine` component as `error` while `/readyz` remains healthy if Postgres and chat are online.【F:internal/ingest/http_controller.go†L308-L401】【F:internal/ingest/http_controller.go†L120-L195】
+- **API/reactive response:** Existing VOD assets remain playable from object storage/CDN, but new live sessions cannot start until OME accepts control-plane requests.【F:docs/advanced-deployments.md†L166-L205】
+- **Recovery checklist:**
+  1. Confirm the control credentials and bind config (`BITRIVER_OME_API`, `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, `BITRIVER_OME_BIND`, `BITRIVER_OME_SERVER_PORT`, `BITRIVER_OME_SERVER_TLS_PORT`) match the running OME instance.【F:deploy/.env.example†L43-L48】【F:deploy/.env.example†L69-L71】
+  2. Restart OME, watch its health endpoint, then re-run `/healthz` on the API to ensure the component returns to `ok`.
+  3. Retry ingest start; the controller will reprovision the application and transcoder jobs once OME responds.
+
+### Transcoder offline
+
+- **What degrades:** Live ingest and VOD uploads cannot start jobs; the controller rolls back OME/SRS provisioning when job startup fails, leaving channels without active sessions. `/healthz` shows the `transcoder` component as `error`, while `/readyz` remains healthy for the rest of the API.【F:internal/ingest/http_controller.go†L120-L195】【F:internal/ingest/http_controller.go†L308-L401】
+- **API/reactive response:** Already-published VOD manifests stay available because they live on disk/object storage, but no new renditions are produced until the job service returns.【F:docs/advanced-deployments.md†L166-L205】
+- **Recovery checklist:**
+  1. Bring the transcoder back up, validating the token and endpoints (`BITRIVER_TRANSCODER_API`, `BITRIVER_TRANSCODER_TOKEN`, `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`).【F:deploy/.env.example†L48-L56】【F:deploy/.env.example†L69-L73】
+  2. Check the transcoder’s `/healthz` (or the path from `BITRIVER_INGEST_HEALTH`) until it returns `ok` and the API `/healthz` clears the error.
+  3. Restart failed ingests or VOD uploads; the controller resubmits jobs and refreshes playback manifests once the backend responds.
+
 ## Account management
 
 | Flag | Purpose |
