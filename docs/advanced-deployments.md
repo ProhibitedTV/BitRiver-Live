@@ -2,6 +2,14 @@
 
 Power users who want managed databases, object storage, or automated ingest can dip into the sections below. Postgres is now the standard datastore for every environment; the JSON file backend remains available for quick prototypes when invoked with `--storage-driver json`.
 
+## Ingest → transcode → playback lifecycle
+
+The live pipeline wires together three control-plane components. Use the paths below to trace behaviour and diagnose failures:
+
+- **SRS hook handling:** `internal/api/streams_srs_handlers.go` consumes the `on_publish/on_unpublish/on_play/on_stop` callbacks configured in `deploy/srs/conf/srs.conf`. The handler validates the shared token (`BITRIVER_SRS_TOKEN`), maps stream keys back to channels, and starts/stops sessions in storage. Invalid tokens or stream keys are logged with context and returned as `401/404` responses so operators can see why a publish failed.
+- **Transcoder jobs:** `cmd/transcoder` exposes `/v1/jobs` and `/v1/uploads` for the ingest controller. Jobs are persisted under the configured output root, restarted on process restarts, and tracked through a component-aware health endpoint at `/healthz` so FFmpeg crashes or publish failures surface immediately. Job mirrors under `public/live` are refreshed on restart so operators do not need to clean up stale symlinks manually.
+- **OvenMediaEngine output:** `deploy/ome/Server.xml` keeps LL-HLS enabled for the `live` application by default. The Quickstart templating in `scripts/quickstart.sh` rewrites bind addresses/ports from `BITRIVER_OME_*` and mounts the generated `Server.generated.xml` into the OME container. HLS/DASH clients should read from the LL-HLS publisher on port `8080` (or `BITRIVER_OME_LLHLS_PORT` after templating) to reach the symlinked `public/live/<job>/index.m3u8` manifests produced by the transcoder.
+
 | Flag | Purpose |
 | --- | --- |
 | `--chat-queue-driver` | Selects the chat queue implementation (`memory` for the in-process queue, `redis` for Redis Streams). |

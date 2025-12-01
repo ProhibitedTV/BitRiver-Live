@@ -19,7 +19,7 @@ import (
 
 	"bitriver-live/internal/api"
 	"bitriver-live/internal/auth/oauth"
-"bitriver-live/internal/observability/metrics"
+	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/web"
 )
 
@@ -90,6 +90,10 @@ type Server struct {
 func New(handler *api.Handler, cfg Config) (*Server, error) {
 	if handler == nil {
 		return nil, errors.New("handler is required")
+	}
+
+	if cfg.Logger != nil {
+		handler.Logger = cfg.Logger
 	}
 
 	corsPolicy, err := newCORSPolicy(cfg.CORS)

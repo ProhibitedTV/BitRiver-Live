@@ -18,6 +18,11 @@ coverage. Keep it updated as tests are hardened or new flakes are discovered.
   synchronized on fake ingest/store completions instead of polling. If the fake
   processors change, ensure completion channels continue to fire to avoid
   deadlocks.
+- **Transcoder lifecycle tests (`cmd/transcoder/main_test.go`):** The
+  FFmpeg-integration test still depends on a local `ffmpeg` binary. A new
+  health-focused test uses a stubbed process that exits quickly; if it flakes,
+  check for goroutines still holding onto job state or health component updates
+  not firing on process exit.
 
 ## Coverage gaps to address
 

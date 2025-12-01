@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/subtle"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -13,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -26,6 +29,11 @@ type controller struct {
 	token   string
 	client  *http.Client
 	baseURL *url.URL
+
+	mu               sync.Mutex
+	lastUpstreamErr  error
+	lastUpstreamTime time.Time
+	lastSuccessTime  time.Time
 }
 
 func main() {
@@ -59,10 +67,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
+	mux.HandleFunc("/healthz", ctrl.healthz)
 	proxyHandler := http.HandlerFunc(ctrl.proxyRequest)
 	mux.Handle("/v1/channels", proxyHandler)
 	mux.Handle("/v1/channels/", proxyHandler)
@@ -99,6 +104,7 @@ func (c *controller) proxyRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !c.authorized(r.Header.Get("Authorization")) {
+		log.Printf("unauthorized request rejected: path=%s remote=%s", r.URL.Path, r.RemoteAddr)
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -122,10 +128,18 @@ func (c *controller) proxyRequest(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
+		c.recordUpstreamError(err)
+		log.Printf("upstream request failed: target=%s err=%v", target.String(), err)
 		http.Error(w, "upstream request failed", http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode >= 500 {
+		c.recordUpstreamError(fmt.Errorf("upstream status %d", resp.StatusCode))
+	} else {
+		c.recordSuccess()
+	}
 
 	copyResponseHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
@@ -156,6 +170,45 @@ func (c *controller) resolveTarget(r *http.Request) *url.URL {
 	relPath := strings.TrimPrefix(r.URL.Path, "/")
 	relative := &url.URL{Path: relPath, RawQuery: r.URL.RawQuery}
 	return c.baseURL.ResolveReference(relative)
+}
+
+func (c *controller) recordUpstreamError(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.lastUpstreamErr = err
+	c.lastUpstreamTime = time.Now()
+}
+
+func (c *controller) recordSuccess() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.lastUpstreamErr = nil
+	c.lastSuccessTime = time.Now()
+}
+
+func (c *controller) healthz(w http.ResponseWriter, _ *http.Request) {
+	c.mu.Lock()
+	lastErr := c.lastUpstreamErr
+	errTime := c.lastUpstreamTime
+	lastSuccess := c.lastSuccessTime
+	c.mu.Unlock()
+
+	status := http.StatusOK
+	payload := map[string]any{
+		"status":      "ok",
+		"lastSuccess": lastSuccess,
+	}
+	if lastErr != nil {
+		status = http.StatusServiceUnavailable
+		payload["status"] = "degraded"
+		payload["upstreamError"] = lastErr.Error()
+		payload["upstreamErrorAt"] = errTime
+	}
+
+	buf, _ := json.Marshal(payload)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write(buf)
 }
 
 func readBody(rc io.ReadCloser) ([]byte, error) {

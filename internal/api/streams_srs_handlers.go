@@ -96,6 +96,9 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !h.srsHookAuthorized(r) {
+		if logger := h.logger(); logger != nil {
+			logger.Warn("srs hook rejected token", "path", r.URL.Path, "remote", r.RemoteAddr)
+		}
 		writeError(w, http.StatusUnauthorized, fmt.Errorf("unauthorized"))
 		return
 	}
@@ -124,6 +127,9 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 
 	channel, ok := h.channelForStream(req.Stream)
 	if !ok {
+		if logger := h.logger(); logger != nil {
+			logger.Warn("srs hook stream rejected", "stream", strings.TrimSpace(req.Stream), "action", action)
+		}
 		writeError(w, http.StatusNotFound, fmt.Errorf("stream %s not recognized", strings.TrimSpace(req.Stream)))
 		return
 	}
