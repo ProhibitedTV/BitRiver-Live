@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChannelAboutPanel, ChannelHeader } from "../../../components/ChannelHero";
 import { ChatPanel } from "../../../components/ChatPanel";
@@ -27,9 +27,46 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
   const { user } = useAuth();
   const previousUserIdRef = useRef<string | undefined>();
   const previousChannelIdRef = useRef<string | undefined>();
+  const refreshIntervalRef = useRef<NodeJS.Timeout | undefined>();
+  const cancelledRef = useRef(false);
+
+  const clearRefreshInterval = useCallback(() => {
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+      refreshIntervalRef.current = undefined;
+    }
+  }, []);
+
+  const loadPlayback = useCallback(
+    async (showSpinner: boolean) => {
+      try {
+        if (showSpinner) {
+          setLoading(true);
+        }
+        setError(undefined);
+        const response = await fetchChannelPlayback(id);
+        if (!cancelledRef.current) {
+          setData(response);
+        }
+      } catch (err) {
+        if (!cancelledRef.current) {
+          setError(err instanceof Error ? err.message : "Unable to load channel");
+        }
+      } finally {
+        if (!cancelledRef.current && showSpinner) {
+          setLoading(false);
+        }
+      }
+    },
+    [id]
+  );
+
+  const handleRetry = useCallback(() => {
+    void loadPlayback(true);
+  }, [loadPlayback]);
 
   useEffect(() => {
-    let cancelled = false;
+    cancelledRef.current = false;
     const previousUserId = previousUserIdRef.current;
     const previousChannelId = previousChannelIdRef.current;
     const channelChanged = previousChannelId !== id;
@@ -45,35 +82,25 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
     previousUserIdRef.current = user?.id;
     previousChannelIdRef.current = id;
     const shouldShowSpinner = channelChanged || firstLoad;
-    const load = async (showSpinner: boolean) => {
-      try {
-        if (showSpinner) {
-          setLoading(true);
-        }
-        setError(undefined);
-        const response = await fetchChannelPlayback(id);
-        if (!cancelled) {
-          setData(response);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Unable to load channel");
-        }
-      } finally {
-        if (!cancelled && showSpinner) {
-          setLoading(false);
-        }
-      }
+    void loadPlayback(userChanged && !channelChanged ? false : shouldShowSpinner);
+    return () => {
+      cancelledRef.current = true;
+      clearRefreshInterval();
     };
-    void load(userChanged && !channelChanged ? false : shouldShowSpinner);
-    const interval = setInterval(() => {
-      void load(false);
+  }, [clearRefreshInterval, id, loadPlayback, user?.id]);
+
+  useEffect(() => {
+    clearRefreshInterval();
+    if (error) {
+      return undefined;
+    }
+    refreshIntervalRef.current = setInterval(() => {
+      void loadPlayback(false);
     }, 30_000);
     return () => {
-      cancelled = true;
-      clearInterval(interval);
+      clearRefreshInterval();
     };
-  }, [id, user?.id]);
+  }, [clearRefreshInterval, error, loadPlayback]);
 
   const handleFollowChange = (follow: FollowState) => {
     setData((prev) => (prev ? { ...prev, follow } : prev));
@@ -119,7 +146,27 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
   return (
     <div className="container channel-page">
       {loading && <div className="surface">Loading channel…</div>}
-      {error && <div className="surface">{error}</div>}
+      {error && (
+        <div className="surface stack" role="alert">
+          <div className="stack">
+            <h2>We couldn&apos;t load this channel.</h2>
+            <p className="muted">
+              Something went wrong while fetching playback details. Please try again or return to the channel list.
+            </p>
+          </div>
+          <div className="cluster" style={{ justifyContent: "flex-start", gap: "var(--space-3)" }}>
+            <button className="button" onClick={handleRetry} type="button">
+              Try again
+            </button>
+            <Link className="secondary-button" href="/browse">
+              Back to channels
+            </Link>
+          </div>
+          <p className="muted" aria-live="polite">
+            Error details: {error}
+          </p>
+        </div>
+      )}
       {data && (
         <div className="channel-page__grid">
           <div className="channel-page__hero-grid">

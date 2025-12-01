@@ -129,6 +129,38 @@ describe("ChannelPage", () => {
     } as any);
   });
 
+  test("shows recovery UI and retries playback fetch after failure", async () => {
+    mockUseAuth.mockReturnValue({
+      user: undefined,
+      loading: false,
+      error: undefined,
+      login: jest.fn(),
+      signup: jest.fn(),
+      logout: jest.fn(),
+      refresh: jest.fn()
+    });
+
+    fetchChannelPlaybackMock.mockRejectedValueOnce(new Error("Network down"));
+    fetchChannelPlaybackMock.mockResolvedValueOnce(basePlaybackResponse as any);
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledWith("chan-42"));
+
+    expect(
+      await screen.findByRole("heading", { name: "We couldn't load this channel." })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Something went wrong while fetching playback details/i)
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Back to channels/i })).toHaveAttribute("href", "/browse");
+
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("heading", { name: "Deep Space Beats" })).toBeInTheDocument();
+  });
+
   test("renders playback details and supports follow, subscribe, and chat interactions", async () => {
     const user = userEvent.setup();
     mockUseAuth.mockReturnValue({
