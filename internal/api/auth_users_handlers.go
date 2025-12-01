@@ -16,23 +16,21 @@ import (
 
 func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", "POST")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodPost)
 		return
 	}
 
 	if !h.AllowSelfSignup {
-		WriteError(w, http.StatusForbidden, errors.New("public self-signup is disabled"))
+		WriteRequestError(w, RequestError{Status: http.StatusForbidden, CodeVal: "signup_disabled", Message: "public self-signup is disabled"})
 		return
 	}
 
 	var req signupRequest
-	if err := DecodeJSON(r, &req); err != nil {
-		WriteDecodeError(w, err)
+	if !DecodeAndValidate(w, r, &req) {
 		return
 	}
 	if len(req.Password) < 8 {
-		WriteError(w, http.StatusBadRequest, fmt.Errorf("password must be at least 8 characters"))
+		WriteRequestError(w, ValidationError("password must be at least 8 characters"))
 		return
 	}
 
@@ -44,13 +42,13 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		slog.Error("signup create user failed", "email", req.Email, "error", err)
-		WriteError(w, http.StatusBadRequest, errors.New("unable to create account"))
+		WriteRequestError(w, RequestError{Status: http.StatusBadRequest, CodeVal: "signup_failed", Message: "unable to create account", Err: err})
 		return
 	}
 
 	token, expiresAt, err := h.sessionManager().Create(user.ID)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, err)
+		WriteRequestError(w, err)
 		return
 	}
 
@@ -60,26 +58,24 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", "POST")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodPost)
 		return
 	}
 
 	var req loginRequest
-	if err := DecodeJSON(r, &req); err != nil {
-		WriteDecodeError(w, err)
+	if !DecodeAndValidate(w, r, &req) {
 		return
 	}
 
 	user, err := h.Store.AuthenticateUser(req.Email, req.Password)
 	if err != nil {
-		WriteError(w, http.StatusUnauthorized, fmt.Errorf("invalid credentials"))
+		WriteRequestError(w, RequestError{Status: http.StatusUnauthorized, CodeVal: "invalid_credentials", Message: "invalid credentials", Err: err})
 		return
 	}
 
 	token, expiresAt, err := h.sessionManager().Create(user.ID)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, err)
+		WriteRequestError(w, err)
 		return
 	}
 
@@ -93,8 +89,7 @@ type oauthStartRequest struct {
 
 func (h *Handler) OAuthProviders(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", "GET")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet)
 		return
 	}
 	providers := []oauth.ProviderInfo{}
@@ -129,13 +124,11 @@ func (h *Handler) OAuthByProvider(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) oauthStart(w http.ResponseWriter, r *http.Request, provider string) {
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", "POST")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodPost)
 		return
 	}
 	var req oauthStartRequest
-	if err := DecodeJSON(r, &req); err != nil {
-		WriteDecodeError(w, err)
+	if !DecodeAndValidate(w, r, &req) {
 		return
 	}
 	begin, err := h.OAuth.Begin(provider, sanitizeReturnPath(req.ReturnTo))
@@ -152,8 +145,7 @@ func (h *Handler) oauthStart(w http.ResponseWriter, r *http.Request, provider st
 
 func (h *Handler) oauthCallback(w http.ResponseWriter, r *http.Request, provider string) {
 	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", "GET")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet)
 		return
 	}
 
@@ -169,12 +161,12 @@ func (h *Handler) oauthCallback(w http.ResponseWriter, r *http.Request, provider
 	}
 
 	if state == "" {
-		WriteError(w, http.StatusBadRequest, fmt.Errorf("state parameter is required"))
+		WriteRequestError(w, ValidationError("state parameter is required"))
 		return
 	}
 	code := query.Get("code")
 	if strings.TrimSpace(code) == "" {
-		WriteError(w, http.StatusBadRequest, fmt.Errorf("authorization code is required"))
+		WriteRequestError(w, ValidationError("authorization code is required"))
 		return
 	}
 
@@ -185,7 +177,7 @@ func (h *Handler) oauthCallback(w http.ResponseWriter, r *http.Request, provider
 	}
 	if err != nil {
 		if errors.Is(err, oauth.ErrProviderNotConfigured) {
-			WriteError(w, http.StatusNotFound, fmt.Errorf("oauth provider %s not configured", provider))
+			WriteRequestError(w, RequestError{Status: http.StatusNotFound, Message: fmt.Sprintf("oauth provider %s not configured", provider)})
 			return
 		}
 		http.Redirect(w, r, appendQueryParam(returnPath, "oauth", "error"), http.StatusSeeOther)
@@ -293,8 +285,7 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 		h.ClearSessionCookie(w, r)
 		w.WriteHeader(http.StatusNoContent)
 	default:
-		w.Header().Set("Allow", "GET, DELETE")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodDelete)
 	}
 }
 
@@ -389,8 +380,7 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var req createUserRequest
-		if err := DecodeJSON(r, &req); err != nil {
-			WriteDecodeError(w, err)
+		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
 		user, err := h.Store.CreateUser(storage.CreateUserParams{
@@ -405,8 +395,7 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 		}
 		WriteJSON(w, http.StatusCreated, newUserResponse(user))
 	default:
-		w.Header().Set("Allow", "GET, POST")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPost)
 	}
 }
 
@@ -438,8 +427,7 @@ func (h *Handler) UserByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var req updateUserRequest
-		if err := DecodeJSON(r, &req); err != nil {
-			WriteDecodeError(w, err)
+		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
 		update := storage.UserUpdate{}
@@ -469,7 +457,6 @@ func (h *Handler) UserByID(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	default:
-		w.Header().Set("Allow", "GET, PATCH, DELETE")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPatch, http.MethodDelete)
 	}
 }

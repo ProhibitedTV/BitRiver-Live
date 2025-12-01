@@ -1,7 +1,6 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -34,8 +33,7 @@ type analyticsOverviewResponse struct {
 
 func (h *Handler) AnalyticsOverview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", "GET")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet)
 		return
 	}
 	if _, ok := h.requireRole(w, r, roleAdmin); !ok {

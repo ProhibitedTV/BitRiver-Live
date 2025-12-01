@@ -91,8 +91,7 @@ func (t *srsViewerTracker) clear(channelID string) {
 
 func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", "POST")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodPost)
 		return
 	}
 	if !h.srsHookAuthorized(r) {
@@ -236,13 +235,11 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 	switch action {
 	case "start":
 		if r.Method != http.MethodPost {
-			w.Header().Set("Allow", "POST")
-			WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+			WriteMethodNotAllowed(w, r, http.MethodPost)
 			return
 		}
 		var req startStreamRequest
-		if err := DecodeJSON(r, &req); err != nil {
-			WriteDecodeError(w, err)
+		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
 		session, err := h.Store.StartStream(channel.ID, req.Renditions)
@@ -258,13 +255,11 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 		WriteJSON(w, http.StatusCreated, newSessionResponse(session))
 	case "stop":
 		if r.Method != http.MethodPost {
-			w.Header().Set("Allow", "POST")
-			WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+			WriteMethodNotAllowed(w, r, http.MethodPost)
 			return
 		}
 		var req stopStreamRequest
-		if err := DecodeJSON(r, &req); err != nil {
-			WriteDecodeError(w, err)
+		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
 		session, err := h.Store.StopStream(channel.ID, req.PeakConcurrent)
@@ -280,8 +275,7 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 		WriteJSON(w, http.StatusOK, newSessionResponse(session))
 	case "rotate":
 		if r.Method != http.MethodPost {
-			w.Header().Set("Allow", "POST")
-			WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+			WriteMethodNotAllowed(w, r, http.MethodPost)
 			return
 		}
 		updated, err := h.Store.RotateChannelStreamKey(channel.ID)

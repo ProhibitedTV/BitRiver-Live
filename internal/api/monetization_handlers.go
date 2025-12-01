@@ -169,8 +169,7 @@ func (h *Handler) handleTipsRoutes(channel models.Channel, remaining []string, w
 		WriteJSON(w, http.StatusOK, response)
 	case http.MethodPost:
 		var req createTipRequest
-		if err := DecodeJSON(r, &req); err != nil {
-			WriteDecodeError(w, err)
+		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
 		amount, err := parseMoneyNumber(req.Amount, "amount")
@@ -196,8 +195,7 @@ func (h *Handler) handleTipsRoutes(channel models.Channel, remaining []string, w
 		metrics.Default().ObserveMonetization("tip", tip.Amount)
 		WriteJSON(w, http.StatusCreated, newTipResponse(tip))
 	default:
-		w.Header().Set("Allow", "GET, POST")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPost)
 	}
 }
 
@@ -210,8 +208,7 @@ func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []
 		subscriptionID := remaining[0]
 		if len(remaining) == 1 {
 			if r.Method != http.MethodDelete {
-				w.Header().Set("Allow", "DELETE")
-				WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+				WriteMethodNotAllowed(w, r, http.MethodDelete)
 				return
 			}
 			sub, ok := h.Store.GetSubscription(subscriptionID)
@@ -259,13 +256,12 @@ func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []
 		WriteJSON(w, http.StatusOK, response)
 	case http.MethodPost:
 		var req createSubscriptionRequest
-		if err := DecodeJSON(r, &req); err != nil {
-			WriteDecodeError(w, err)
+		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
 		durationDays := req.DurationDays
 		if durationDays <= 0 {
-			WriteError(w, http.StatusBadRequest, fmt.Errorf("durationDays must be positive"))
+			WriteRequestError(w, ValidationError("durationDays must be positive"))
 			return
 		}
 		amount, err := parseMoneyNumber(req.Amount, "amount")
@@ -293,7 +289,6 @@ func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []
 		metrics.Default().ObserveMonetization("subscription", sub.Amount)
 		WriteJSON(w, http.StatusCreated, newSubscriptionResponse(sub))
 	default:
-		w.Header().Set("Allow", "GET, POST, DELETE")
-		WriteError(w, http.StatusMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
+		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPost, http.MethodDelete)
 	}
 }
