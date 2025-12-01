@@ -22,6 +22,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
   const [error, setError] = useState<string | undefined>();
   const [vods, setVods] = useState<VodItem[]>([]);
   const [vodError, setVodError] = useState<string | undefined>();
+  const [vodsLoading, setVodsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"about" | "schedule" | "videos">("about");
   const { user } = useAuth();
   const previousUserIdRef = useRef<string | undefined>();
@@ -85,6 +86,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     let cancelled = false;
     const loadVods = async () => {
+      setVodsLoading(true);
       try {
         const response = await fetchChannelVods(id);
         if (!cancelled) {
@@ -95,6 +97,10 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
         if (!cancelled) {
           setVodError(err instanceof Error ? err.message : "Unable to load replays");
           setVods([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setVodsLoading(false);
         }
       }
     };
@@ -178,7 +184,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
                   hidden={activeTab !== "videos"}
                   className="channel-tabs__panel"
                 >
-                  <VodGallery items={vods} error={vodError} />
+                  <VodGallery items={vods} error={vodError} loading={vodsLoading} />
                 </div>
               </div>
             </section>
