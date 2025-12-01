@@ -5,15 +5,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { fetchManagedChannels } from "../lib/viewer-api";
-import { AuthDialog } from "./auth/AuthDialog";
 
 export function Navbar() {
-  const { user, login, signup, logout, error } = useAuth();
+  const { user, signIn, signOut } = useAuth();
   const router = useRouter();
   const isAdmin = Boolean(user?.roles?.includes("admin"));
   const isCreator = Boolean(user?.roles?.includes("creator"));
   const canAccessCreatorTools = isAdmin || isCreator;
-  const [mode, setMode] = useState<"login" | "signup" | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [managedChannelId, setManagedChannelId] = useState<string | undefined>();
   const [searchQuery, setSearchQuery] = useState("");
@@ -145,7 +143,7 @@ export function Navbar() {
   useEffect(() => {
     setMenuOpen(false);
     setUserMenuOpen(false);
-  }, [mode, user]);
+  }, [user]);
 
   const closeMenu = () => {
     setMenuOpen(false);
@@ -157,13 +155,6 @@ export function Navbar() {
     await router.push(trimmed ? `/browse?q=${encodeURIComponent(trimmed)}` : "/browse");
     closeMenu();
   };
-
-  const handleAuthClose = () => setMode(null);
-
-  const handleLogin = async (email: string, password: string) => login(email, password);
-
-  const handleSignup = async (displayName: string, email: string, password: string) =>
-    signup(displayName, email, password);
 
   const avatarGlyph = useMemo(() => {
     if (!user?.displayName) {
@@ -276,10 +267,10 @@ export function Navbar() {
                   <button
                     type="button"
                     className="avatar-menu__link"
-                    onClick={() => {
-                      setUserMenuOpen(false);
-                      void logout();
-                    }}
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        void signOut();
+                      }}
                   >
                     Sign out
                   </button>
@@ -290,8 +281,8 @@ export function Navbar() {
                 <button
                   className="ghost-button"
                   onClick={() => {
-                    setMode("login");
                     closeMenu();
+                    void signIn();
                   }}
                 >
                   Sign in
@@ -299,11 +290,11 @@ export function Navbar() {
                 <button
                   className="accent-button"
                   onClick={() => {
-                    setMode("signup");
                     closeMenu();
+                    void signIn();
                   }}
                 >
-                  Sign up
+                  Join
                 </button>
               </div>
             )}
@@ -367,33 +358,26 @@ export function Navbar() {
             <div className="nav-drawer__cta">
               <button
                 className="ghost-button"
-                onClick={() => {
-                  setMode("login");
-                  closeMenu();
-                }}
+                  onClick={() => {
+                    closeMenu();
+                    void signIn();
+                  }}
               >
                 Sign in
               </button>
               <button
                 className="accent-button"
                 onClick={() => {
-                  setMode("signup");
                   closeMenu();
+                  void signIn();
                 }}
               >
-                Sign up
+                Join
               </button>
             </div>
           )}
         </div>
       </div>
-      <AuthDialog
-        mode={mode}
-        onClose={handleAuthClose}
-        onLogin={handleLogin}
-        onSignup={handleSignup}
-        authError={error}
-      />
     </header>
   );
 }

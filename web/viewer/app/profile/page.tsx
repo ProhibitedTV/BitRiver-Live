@@ -26,7 +26,7 @@ const defaultFormState: FormState = {
 };
 
 export default function ProfilePage() {
-  const { user, loading: authLoading, error: authError, refresh } = useAuth();
+  const { user, loading: authLoading, error: authError, signIn } = useAuth();
   const [profile, setProfile] = useState<ProfileView | undefined>();
   const [formState, setFormState] = useState<FormState>(defaultFormState);
   const [loadingProfile, setLoadingProfile] = useState(false);
@@ -85,7 +85,6 @@ export default function ProfilePage() {
       });
       setProfile(updated);
       setSuccessMessage("Profile saved");
-      await refresh();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Unable to save profile");
     } finally {
@@ -205,9 +204,9 @@ export default function ProfilePage() {
           <h2>Sign in to manage your profile</h2>
           <p className="muted">Your avatar, banner, and bio will appear on your channel cards once you&apos;re signed in.</p>
           <div>
-            <Link href="/" className="primary-button">
-              Return home
-            </Link>
+            <button type="button" className="primary-button" onClick={() => void signIn()}>
+              Sign in
+            </button>
           </div>
         </section>
       ) : (

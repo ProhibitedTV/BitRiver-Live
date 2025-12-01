@@ -134,10 +134,8 @@ describe("ChannelPage", () => {
       user: undefined,
       loading: false,
       error: undefined,
-      login: jest.fn(),
-      signup: jest.fn(),
-      logout: jest.fn(),
-      refresh: jest.fn()
+      signIn: jest.fn(),
+      signOut: jest.fn()
     });
 
     fetchChannelPlaybackMock.mockRejectedValueOnce(new Error("Network down"));
@@ -167,10 +165,8 @@ describe("ChannelPage", () => {
       user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
       loading: false,
       error: undefined,
-      login: jest.fn(),
-      signup: jest.fn(),
-      logout: jest.fn(),
-      refresh: jest.fn()
+      signIn: jest.fn(),
+      signOut: jest.fn()
     });
 
     render(<ChannelPage params={{ id: "chan-42" }} />);
@@ -209,10 +205,8 @@ describe("ChannelPage", () => {
         | undefined,
       loading: false,
       error: undefined,
-      login: jest.fn(),
-      signup: jest.fn(),
-      logout: jest.fn(),
-      refresh: jest.fn()
+      signIn: jest.fn(),
+      signOut: jest.fn()
     };
 
     const initialResponse = {
@@ -265,10 +259,8 @@ describe("ChannelPage", () => {
       user: undefined,
       loading: false,
       error: undefined,
-      login: jest.fn(),
-      signup: jest.fn(),
-      logout: jest.fn(),
-      refresh: jest.fn()
+      signIn: jest.fn(),
+      signOut: jest.fn()
     });
 
     render(<ChannelPage params={{ id: "chan-42" }} />);
@@ -306,10 +298,8 @@ describe("ChannelPage", () => {
       user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
       loading: false,
       error: undefined,
-      login: jest.fn(),
-      signup: jest.fn(),
-      logout: jest.fn(),
-      refresh: jest.fn()
+      signIn: jest.fn(),
+      signOut: jest.fn()
     });
 
     const firstChannelPlayback = {
@@ -384,10 +374,8 @@ describe("ChannelPage", () => {
       user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
       loading: false,
       error: undefined,
-      login: jest.fn(),
-      signup: jest.fn(),
-      logout: jest.fn(),
-      refresh: jest.fn(),
+      signIn: jest.fn(),
+      signOut: jest.fn(),
     });
 
     let resolveVods: ((value: any) => void) | undefined;
@@ -415,10 +403,8 @@ describe("ChannelPage", () => {
       user: { id: "owner-42", displayName: "DJ Nova", email: "nova@example.com", roles: [] },
       loading: false,
       error: undefined,
-      login: jest.fn(),
-      signup: jest.fn(),
-      logout: jest.fn(),
-      refresh: jest.fn(),
+      signIn: jest.fn(),
+      signOut: jest.fn(),
     });
 
     render(<ChannelPage params={{ id: "chan-42" }} />);
@@ -436,10 +422,8 @@ describe("ChannelPage", () => {
       user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
       loading: false,
       error: undefined,
-      login: jest.fn(),
-      signup: jest.fn(),
-      logout: jest.fn(),
-      refresh: jest.fn()
+      signIn: jest.fn(),
+      signOut: jest.fn()
     });
 
     fetchChannelVodsMock.mockRejectedValueOnce(new Error("VODs temporarily offline"));
