@@ -185,8 +185,8 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	if cfg.ViewerOrigin != nil {
 		viewerProxy := httputil.NewSingleHostReverseProxy(cfg.ViewerOrigin)
 		viewerProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-			if requestLogger := loggerWithRequestContext(r.Context(), cfg.Logger); requestLogger != nil {
-				requestLogger.Error("viewer proxy error", "error", err, "path", r.URL.Path)
+			if requestLogger := loggingWithRequest(cfg.Logger, ipResolver, r); requestLogger != nil {
+				requestLogger.Error("viewer proxy error", "error", err)
 			}
 			writeMiddlewareError(w, http.StatusBadGateway, "viewer temporarily unavailable")
 		}
@@ -296,7 +296,7 @@ func (m *metricsAccessController) handler(next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip, source := resolveClientIP(r, m.resolver)
+		ip, _ := resolveClientIP(r, m.resolver)
 
 		if m.token != "" && subtle.ConstantTimeCompare([]byte(m.token), []byte(metricsTokenFromRequest(r))) == 1 {
 			next.ServeHTTP(w, r)
@@ -308,8 +308,8 @@ func (m *metricsAccessController) handler(next http.Handler) http.Handler {
 			return
 		}
 
-		if requestLogger := loggerWithRequestContext(r.Context(), m.logger); requestLogger != nil {
-			requestLogger.Warn("metrics access denied", "remote_ip", ip, "ip_source", source)
+		if requestLogger := loggingWithRequest(m.logger, m.resolver, r); requestLogger != nil {
+			requestLogger.Warn("metrics access denied")
 		}
 		writeMiddlewareError(w, http.StatusForbidden, "metrics access denied")
 	})
@@ -354,19 +354,19 @@ func rateLimitMiddleware(rl *rateLimiter, resolver *clientIPResolver, logger *sl
 			return
 		}
 		if shouldRateLimitAuthRequest(r) {
-			ip, source := resolveClientIP(r, resolver)
-			requestLogger := loggerWithRequestContext(r.Context(), logger)
+			ip, _ := resolveClientIP(r, resolver)
+			requestLogger := loggingWithRequest(logger, resolver, r)
 			allowed, retryAfter, err := rl.AllowLogin(ip)
 			if err != nil {
 				if requestLogger != nil {
-					requestLogger.Error("rate limiter failure", "error", err, "remote_ip", ip, "ip_source", source)
+					requestLogger.Error("rate limiter failure", "error", err)
 				}
 				writeMiddlewareError(w, http.StatusServiceUnavailable, "rate limit failure")
 				return
 			}
 			if !allowed {
 				if requestLogger != nil {
-					requestLogger.Warn("login rate limited", "remote_ip", ip, "ip_source", source)
+					requestLogger.Warn("login rate limited")
 				}
 				if retryAfter > 0 {
 					w.Header().Set("Retry-After", fmt.Sprintf("%.0f", retryAfter.Seconds()))
