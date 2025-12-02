@@ -174,8 +174,6 @@ func main() {
 		}
 	}
 
-	sessionCookieCrossSiteValue := resolveBool(*sessionCookieCrossSite, "BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE")
-
 	_, oauthManager, err := oauth.LoadFromFlagsAndEnv(oauth.LoadInput{
 		Source:        *oauthProvidersFlag,
 		ClientIDs:     oauthClientIDs,
@@ -188,6 +186,8 @@ func main() {
 	}
 
 	serverMode := modeValue(*mode, os.Getenv("BITRIVER_LIVE_MODE"))
+	sessionCookieCrossSiteValue := resolveBool(*sessionCookieCrossSite, "BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE")
+	sessionCookieSecureMode := resolveSessionCookieSecureMode(serverMode)
 	listenAddr := resolveListenAddr(*addr, serverMode, os.Getenv("BITRIVER_LIVE_ADDR"))
 
 	tlsCertPath := firstNonEmpty(*tlsCert, os.Getenv("BITRIVER_LIVE_TLS_CERT"))
@@ -464,20 +464,21 @@ func main() {
 	}
 
 	srv, err := server.New(handler, server.Config{
-		Addr:                   listenAddr,
-		TLS:                    tlsCfg,
-		RateLimit:              rateCfg,
-		CORS:                   corsConfig,
-		Security:               securityCfg,
-		Logger:                 logger,
-		AuditLogger:            auditLogger,
-		Metrics:                recorder,
-		MetricsAccess:          metricsAccessCfg,
-		ViewerOrigin:           viewerURL,
-		OAuth:                  oauthManager,
-		AllowSelfSignup:        &allowSelfSignupValue,
-		SessionCookieCrossSite: sessionCookieCrossSiteValue,
-		SRSHookToken:           ingestConfig.SRSToken,
+		Addr:                    listenAddr,
+		TLS:                     tlsCfg,
+		RateLimit:               rateCfg,
+		CORS:                    corsConfig,
+		Security:                securityCfg,
+		Logger:                  logger,
+		AuditLogger:             auditLogger,
+		Metrics:                 recorder,
+		MetricsAccess:           metricsAccessCfg,
+		ViewerOrigin:            viewerURL,
+		OAuth:                   oauthManager,
+		AllowSelfSignup:         &allowSelfSignupValue,
+		SessionCookieSecureMode: sessionCookieSecureMode,
+		SessionCookieCrossSite:  sessionCookieCrossSiteValue,
+		SRSHookToken:            ingestConfig.SRSToken,
 	})
 	if err != nil {
 		logger.Error("failed to initialise server", "error", err)
@@ -844,6 +845,13 @@ func modeValue(flagMode, envMode string) string {
 		mode = "development"
 	}
 	return mode
+}
+
+func resolveSessionCookieSecureMode(mode string) api.SessionCookieSecureMode {
+	if strings.ToLower(strings.TrimSpace(mode)) == "production" {
+		return api.SessionCookieSecureAlways
+	}
+	return api.SessionCookieSecureAuto
 }
 
 func defaultListenForMode(mode string) string {

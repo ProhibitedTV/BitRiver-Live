@@ -52,12 +52,44 @@ func newTestHandler(t *testing.T) (*api.Handler, *storage.Storage) {
 	return api.NewHandler(store, sessions), store
 }
 
+func findSessionCookie(t *testing.T, cookies []*http.Cookie) *http.Cookie {
+	t.Helper()
+	for _, cookie := range cookies {
+		if cookie.Name == "bitriver_session" {
+			return cookie
+		}
+	}
+	t.Fatalf("session cookie not found: %v", cookies)
+	return nil
+}
+
 func TestNewReturnsErrorWhenHandlerNil(t *testing.T) {
 	t.Parallel()
 
 	srv, err := New(nil, Config{})
 	if err == nil {
 		t.Fatalf("expected error when handler is nil, got server: %#v", srv)
+	}
+}
+
+func TestSessionCookieSecureModeApplied(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+
+	_, err := New(handler, Config{Addr: ":0", SessionCookieSecureMode: api.SessionCookieSecureAlways})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/login", nil)
+	rec := httptest.NewRecorder()
+
+	handler.RefreshSessionCookie(rec, req, "token", time.Now().Add(time.Hour))
+
+	cookie := findSessionCookie(t, rec.Result().Cookies())
+	if !cookie.Secure {
+		t.Fatal("expected session cookie to be secure when production mode forces secure cookies")
 	}
 }
 
