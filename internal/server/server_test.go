@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -586,10 +587,62 @@ func TestRateLimitMiddlewareAuthPaths(t *testing.T) {
 			if retryAfter := retryRec.Header().Get("Retry-After"); retryAfter != "1" {
 				t.Fatalf("expected Retry-After header to be set, got %q", retryAfter)
 			}
+			resp := decodeAPIError(t, retryRec.Body.Bytes())
+			if resp.Error.Code != "rate_limited" {
+				t.Fatalf("expected rate_limited code, got %q", resp.Error.Code)
+			}
+			if resp.Error.Message != "too many login attempts" {
+				t.Fatalf("expected login rate limit message, got %q", resp.Error.Message)
+			}
 			if nextCalls != 1 {
 				t.Fatalf("expected next handler to not be called after rate limiting, got %d", nextCalls)
 			}
 		})
+	}
+}
+
+func TestRateLimitMiddlewareGlobalLimit(t *testing.T) {
+	t.Parallel()
+
+	rl, err := newRateLimiter(RateLimitConfig{GlobalRPS: 1, GlobalBurst: 1})
+	if err != nil {
+		t.Fatalf("newRateLimiter error: %v", err)
+	}
+
+	nextCalls := 0
+	handler := rateLimitMiddleware(rl, nil, nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nextCalls++
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	req.RemoteAddr = "5.6.7.8:9999"
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected first request to succeed, got %d", rec.Code)
+	}
+
+	retryReq := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	retryReq.RemoteAddr = req.RemoteAddr
+	retryRec := httptest.NewRecorder()
+	handler.ServeHTTP(retryRec, retryReq)
+
+	if retryRec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected global rate limit to trigger, got %d", retryRec.Code)
+	}
+
+	resp := decodeAPIError(t, retryRec.Body.Bytes())
+	if resp.Error.Code != "rate_limited" {
+		t.Fatalf("expected rate_limited code for global limit, got %q", resp.Error.Code)
+	}
+	if resp.Error.Message != "global rate limit exceeded" {
+		t.Fatalf("expected global rate limit message, got %q", resp.Error.Message)
+	}
+
+	if nextCalls != 1 {
+		t.Fatalf("expected next handler to be called once, got %d", nextCalls)
 	}
 }
 
@@ -609,6 +662,13 @@ func TestMetricsAccessToken(t *testing.T) {
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected forbidden without token, got %d", rec.Code)
+	}
+	resp := decodeAPIError(t, rec.Body.Bytes())
+	if resp.Error.Code != "forbidden" {
+		t.Fatalf("expected forbidden code, got %q", resp.Error.Code)
+	}
+	if resp.Error.Message != "metrics access denied" {
+		t.Fatalf("expected metrics access message, got %q", resp.Error.Message)
 	}
 
 	authedReq := httptest.NewRequest(http.MethodGet, "/metrics", nil)
@@ -658,5 +718,35 @@ func TestMetricsAccessNetworks(t *testing.T) {
 
 	if healthRec.Code != http.StatusOK {
 		t.Fatalf("expected health endpoint to remain public, got %d", healthRec.Code)
+	}
+}
+
+func TestViewerProxyErrorHandlerUsesAPIShape(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	origin, err := url.Parse("http://127.0.0.1:1")
+	if err != nil {
+		t.Fatalf("parse viewer origin: %v", err)
+	}
+	srv, err := New(handler, Config{ViewerOrigin: origin})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/viewer", nil)
+	rec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("expected bad gateway from viewer proxy error, got %d", rec.Code)
+	}
+
+	resp := decodeAPIError(t, rec.Body.Bytes())
+	if resp.Error.Code != "internal_error" {
+		t.Fatalf("expected internal_error code for proxy failure, got %q", resp.Error.Code)
+	}
+	if resp.Error.Message != "viewer temporarily unavailable" {
+		t.Fatalf("expected viewer unavailable message, got %q", resp.Error.Message)
 	}
 }

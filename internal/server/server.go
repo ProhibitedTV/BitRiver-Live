@@ -188,7 +188,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 			if requestLogger := loggerWithRequestContext(r.Context(), cfg.Logger); requestLogger != nil {
 				requestLogger.Error("viewer proxy error", "error", err, "path", r.URL.Path)
 			}
-			http.Error(w, "viewer temporarily unavailable", http.StatusBadGateway)
+			writeMiddlewareError(w, http.StatusBadGateway, "viewer temporarily unavailable")
 		}
 		viewerHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			viewerProxy.ServeHTTP(w, r)
@@ -311,7 +311,7 @@ func (m *metricsAccessController) handler(next http.Handler) http.Handler {
 		if requestLogger := loggerWithRequestContext(r.Context(), m.logger); requestLogger != nil {
 			requestLogger.Warn("metrics access denied", "remote_ip", ip, "ip_source", source)
 		}
-		http.Error(w, "metrics access denied", http.StatusForbidden)
+		writeMiddlewareError(w, http.StatusForbidden, "metrics access denied")
 	})
 }
 
@@ -350,7 +350,7 @@ func rateLimitMiddleware(rl *rateLimiter, resolver *clientIPResolver, logger *sl
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !rl.AllowRequest() {
-			http.Error(w, "global rate limit exceeded", http.StatusTooManyRequests)
+			writeMiddlewareError(w, http.StatusTooManyRequests, "global rate limit exceeded")
 			return
 		}
 		if shouldRateLimitAuthRequest(r) {
@@ -361,7 +361,7 @@ func rateLimitMiddleware(rl *rateLimiter, resolver *clientIPResolver, logger *sl
 				if requestLogger != nil {
 					requestLogger.Error("rate limiter failure", "error", err, "remote_ip", ip, "ip_source", source)
 				}
-				http.Error(w, "rate limit failure", http.StatusServiceUnavailable)
+				writeMiddlewareError(w, http.StatusServiceUnavailable, "rate limit failure")
 				return
 			}
 			if !allowed {
@@ -371,7 +371,7 @@ func rateLimitMiddleware(rl *rateLimiter, resolver *clientIPResolver, logger *sl
 				if retryAfter > 0 {
 					w.Header().Set("Retry-After", fmt.Sprintf("%.0f", retryAfter.Seconds()))
 				}
-				http.Error(w, "too many login attempts", http.StatusTooManyRequests)
+				writeMiddlewareError(w, http.StatusTooManyRequests, "too many login attempts")
 				return
 			}
 		}
