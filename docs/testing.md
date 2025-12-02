@@ -24,6 +24,18 @@ Authentication/session lifecycle coverage lives in
 logout, and admin-only enforcement without external services. No additional
 environment toggles are required beyond the standard offline Go flags above.
 
+Viewer payload contracts live in `internal/api/viewer_contract_test.go`. Run
+the suite with the same offline flags and cache-busting timeout CI expects:
+
+```bash
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1 -timeout=10s -run ViewerContractEndpoints
+```
+
+The harness spins an `httptest` server using the real API router wired to the
+JSON storage backend, then asserts that directory, playback, profile,
+following, and chat history payloads match the contracts consumed by
+`web/viewer/lib/viewer-api.ts`.
+
 OME quickstart drift is guarded by an ingest test that reads the pinned image
 in `deploy/docker-compose.yml` and compares `deploy/ome/Server.xml` to the
 expected template for that tag. It also enforces required fields such as
