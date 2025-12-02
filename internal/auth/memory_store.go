@@ -19,9 +19,9 @@ func NewMemorySessionStore() *MemorySessionStore {
 }
 
 // Save records the session details for the provided token.
-func (s *MemorySessionStore) Save(token, userID string, expiresAt time.Time) error {
+func (s *MemorySessionStore) Save(token, userID string, expiresAt, absoluteExpiresAt time.Time) error {
 	s.mu.Lock()
-	s.sessions[token] = SessionRecord{Token: token, UserID: userID, ExpiresAt: expiresAt}
+	s.sessions[token] = SessionRecord{Token: token, UserID: userID, ExpiresAt: expiresAt, AbsoluteExpiresAt: absoluteExpiresAt}
 	s.mu.Unlock()
 	return nil
 }
@@ -46,7 +46,7 @@ func (s *MemorySessionStore) Delete(token string) error {
 func (s *MemorySessionStore) PurgeExpired(now time.Time) error {
 	s.mu.Lock()
 	for token, record := range s.sessions {
-		if now.After(record.ExpiresAt) {
+		if now.After(record.ExpiresAt) || (!record.AbsoluteExpiresAt.IsZero() && now.After(record.AbsoluteExpiresAt)) {
 			delete(s.sessions, token)
 		}
 	}

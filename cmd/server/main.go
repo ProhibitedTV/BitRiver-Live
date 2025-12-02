@@ -90,9 +90,11 @@ func main() {
 	postgresAcquireTimeout := flag.Duration("postgres-acquire-timeout", 0, "timeout when acquiring a Postgres connection from the pool")
 	postgresAppName := flag.String("postgres-app-name", "", "application_name reported to Postgres")
 
-	// Session flags (env: BITRIVER_LIVE_SESSION_STORE, BITRIVER_LIVE_SESSION_POSTGRES_DSN, BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE, BITRIVER_LIVE_ALLOW_SELF_SIGNUP).
+	// Session flags (env: BITRIVER_LIVE_SESSION_STORE, BITRIVER_LIVE_SESSION_POSTGRES_DSN, BITRIVER_LIVE_SESSION_TTL, BITRIVER_LIVE_SESSION_IDLE_TIMEOUT, BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE, BITRIVER_LIVE_ALLOW_SELF_SIGNUP).
 	sessionStoreDriver := flag.String("session-store", "", "session store driver (memory or postgres)")
 	sessionPostgresDSN := flag.String("session-postgres-dsn", "", "Postgres DSN for the session store")
+	sessionTTL := flag.Duration("session-ttl", 0, "absolute session lifetime (e.g. 168h)")
+	sessionIdleTimeout := flag.Duration("session-idle-timeout", 0, "idle timeout that refreshes session expiry on activity")
 
 	// TLS flags (env: BITRIVER_LIVE_TLS_CERT, BITRIVER_LIVE_TLS_KEY).
 	tlsCert := flag.String("tls-cert", "", "path to TLS certificate file")
@@ -344,6 +346,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	sessionAbsoluteTTL := resolveDuration(*sessionTTL, "BITRIVER_LIVE_SESSION_TTL", 0)
+	sessionIdleTimeoutValue := resolveDuration(*sessionIdleTimeout, "BITRIVER_LIVE_SESSION_IDLE_TIMEOUT", 0)
+	sessionConfig.AbsoluteTTL = sessionAbsoluteTTL
+	sessionConfig.IdleTimeout = sessionIdleTimeoutValue
+
 	var (
 		sessionStore  auth.SessionStore
 		sessionCloser func(context.Context) error
@@ -365,7 +372,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	sessions := auth.NewSessionManager(24*time.Hour, auth.WithStore(sessionStore))
+	sessionOptions := []auth.SessionOption{auth.WithStore(sessionStore)}
+	if sessionIdleTimeoutValue > 0 {
+		sessionOptions = append(sessionOptions, auth.WithIdleTimeout(sessionIdleTimeoutValue))
+	}
+	sessions := auth.NewSessionManager(sessionAbsoluteTTL, sessionOptions...)
 	chatQueueCfg := chat.RedisQueueConfig{
 		Addr:       firstNonEmpty(*chatRedisAddr, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR")),
 		Addrs:      splitAndTrim(firstNonEmpty(*chatRedisAddrs, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDRS"))),
@@ -551,8 +562,10 @@ func main() {
 }
 
 type sessionStoreConfig struct {
-	Driver string
-	DSN    string
+	Driver      string
+	DSN         string
+	AbsoluteTTL time.Duration
+	IdleTimeout time.Duration
 }
 
 type startupSummaryInput struct {
@@ -595,6 +608,12 @@ func newStartupSummary(in startupSummaryInput) startupSummary {
 	}
 	if in.SessionConfig.Driver == "postgres" && in.SessionConfig.DSN != "" {
 		session["dsn"] = redactDSN(in.SessionConfig.DSN)
+	}
+	if in.SessionConfig.AbsoluteTTL > 0 {
+		session["absolute_ttl"] = in.SessionConfig.AbsoluteTTL.String()
+	}
+	if in.SessionConfig.IdleTimeout > 0 {
+		session["idle_timeout"] = in.SessionConfig.IdleTimeout.String()
 	}
 
 	loginThrottle := map[string]any{}

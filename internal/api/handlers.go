@@ -44,11 +44,10 @@ type healthPinger interface {
 }
 
 // NewHandler wires the core API dependencies together, ensuring a session
-// manager is available by creating a default 24-hour manager when none is
-// provided.
+// manager is available by creating a default manager when none is provided.
 func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handler {
 	if sessions == nil {
-		sessions = auth.NewSessionManager(24 * time.Hour)
+		sessions = auth.NewSessionManager(0)
 	}
 	return &Handler{
 		Store:               store,
@@ -62,7 +61,7 @@ func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handle
 
 func (h *Handler) sessionManager() *auth.SessionManager {
 	if h.Sessions == nil {
-		h.Sessions = auth.NewSessionManager(24 * time.Hour)
+		h.Sessions = auth.NewSessionManager(0)
 	}
 	return h.Sessions
 }

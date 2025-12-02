@@ -67,6 +67,12 @@ func (h *Handler) setSessionCookie(w http.ResponseWriter, r *http.Request, token
 	setSessionCookie(w, r, token, expires, h.sessionCookiePolicy())
 }
 
+// RefreshSessionCookie updates the session cookie using the handler's configured policy.
+// It is intended for middleware that extends session lifetimes when idle timeouts are enabled.
+func (h *Handler) RefreshSessionCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time) {
+	h.setSessionCookie(w, r, token, expires)
+}
+
 func clearSessionCookie(w http.ResponseWriter, r *http.Request, policy SessionCookiePolicy) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "bitriver_session",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"bitriver-live/internal/models"
 )
@@ -40,31 +41,31 @@ func UserFromContext(ctx context.Context) (models.User, bool) {
 }
 
 // AuthenticateRequest validates the session token on the request and returns
-// the associated user.
+// the associated user alongside the refreshed session expiry when available.
 //
 // The token is extracted using ExtractToken (e.g., from cookies or headers)
 // and validated via the sessionManager. If the token is missing, invalid,
 // expired, or the user no longer exists, an error is returned.
-func (h *Handler) AuthenticateRequest(r *http.Request) (models.User, error) {
+func (h *Handler) AuthenticateRequest(r *http.Request) (models.User, time.Time, error) {
 	token := ExtractToken(r)
 	if token == "" {
-		return models.User{}, fmt.Errorf("missing session token")
+		return models.User{}, time.Time{}, fmt.Errorf("missing session token")
 	}
 
-	userID, _, ok, err := h.sessionManager().Validate(token)
+	userID, expiresAt, ok, err := h.sessionManager().Validate(token)
 	if err != nil {
-		return models.User{}, fmt.Errorf("session validation failed: %w", err)
+		return models.User{}, time.Time{}, fmt.Errorf("session validation failed: %w", err)
 	}
 	if !ok {
-		return models.User{}, fmt.Errorf("invalid or expired session")
+		return models.User{}, time.Time{}, fmt.Errorf("invalid or expired session")
 	}
 
 	user, exists := h.Store.GetUser(userID)
 	if !exists {
-		return models.User{}, fmt.Errorf("account not found")
+		return models.User{}, time.Time{}, fmt.Errorf("account not found")
 	}
 
-	return user, nil
+	return user, expiresAt, nil
 }
 
 // requireAuthenticatedUser ensures that a request has an authenticated user

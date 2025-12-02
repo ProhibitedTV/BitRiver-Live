@@ -3,7 +3,7 @@
 Authentication + session management lives here. See the root `AGENTS.md` for general expectations.
 
 ## Session manager
-- `SessionManager` defaults to 24-hour sessions. Keep default durations + refresh behaviour unless you update README/docs and clients.
+- `SessionManager` defaults to 7-day sessions with optional idle expiry. Keep default durations + refresh behaviour unless you update README/docs and clients.
 - Supports pluggable stores (memory, Postgres). When changing persistence logic, update both implementations and keep interfaces consistent.
 
 ## Security expectations

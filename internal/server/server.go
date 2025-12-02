@@ -587,7 +587,7 @@ func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 			api.WriteError(w, http.StatusUnauthorized, fmt.Errorf("missing session token"))
 			return
 		}
-		user, err := handler.AuthenticateRequest(r)
+		user, expiresAt, err := handler.AuthenticateRequest(r)
 		if err != nil {
 			if optionalAuth {
 				handler.ClearSessionCookie(w, r)
@@ -596,6 +596,9 @@ func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 			}
 			api.WriteError(w, http.StatusUnauthorized, err)
 			return
+		}
+		if _, err := r.Cookie("bitriver_session"); err == nil {
+			handler.RefreshSessionCookie(w, r, token, expiresAt)
 		}
 		ctx := api.ContextWithUser(r.Context(), user)
 		next.ServeHTTP(w, r.WithContext(ctx))

@@ -134,3 +134,59 @@ func TestConcurrentValidationAcrossManagers(t *testing.T) {
 		t.Fatalf("replica validation error: %v", err)
 	}
 }
+
+func TestValidateRefreshesIdleTimeout(t *testing.T) {
+	store := NewMemorySessionStore()
+	manager := NewSessionManager(time.Hour, WithStore(store), WithIdleTimeout(50*time.Millisecond))
+
+	token, initialExpiry, err := manager.Create("user-refresh")
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+
+	time.Sleep(10 * time.Millisecond)
+	_, refreshed, ok, err := manager.Validate(token)
+	if err != nil {
+		t.Fatalf("Validate returned error: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected token to validate")
+	}
+	if !refreshed.After(initialExpiry) {
+		t.Fatalf("expected refreshed expiry after initial %v, got %v", initialExpiry, refreshed)
+	}
+	if record, _, _ := store.Get(token); !record.ExpiresAt.Equal(refreshed) {
+		t.Fatalf("expected store expiry to refresh to %v, got %v", refreshed, record.ExpiresAt)
+	}
+}
+
+func TestValidateHonorsAbsoluteTTL(t *testing.T) {
+	store := NewMemorySessionStore()
+	manager := NewSessionManager(100*time.Millisecond, WithStore(store), WithIdleTimeout(80*time.Millisecond))
+
+	token, _, err := manager.Create("user-absolute")
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+
+	record, ok, err := store.Get(token)
+	if err != nil || !ok {
+		t.Fatalf("expected session record, got ok=%v err=%v", ok, err)
+	}
+	absoluteExpiry := record.AbsoluteExpiresAt
+
+	time.Sleep(70 * time.Millisecond)
+	_, refreshed, ok, err := manager.Validate(token)
+	if err != nil {
+		t.Fatalf("Validate returned error: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected token to validate before absolute expiry")
+	}
+	if refreshed.After(absoluteExpiry) {
+		t.Fatalf("expected refresh capped at %v, got %v", absoluteExpiry, refreshed)
+	}
+	if !refreshed.Equal(absoluteExpiry) {
+		t.Fatalf("expected refresh to use absolute expiry %v, got %v", absoluteExpiry, refreshed)
+	}
+}
