@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# This stub mimics the parts of FFmpeg used in tests by generating predictable
+# HLS outputs for the provided variant map. When invoked without HLS flags, it
+# simply creates the requested output file.
+
+output_target="${@: -1}"
+master_name="index.m3u8"
+segment_pattern=""
+var_stream_map=""
+format=""
+
+args=()
+while (($#)); do
+  case "$1" in
+    -master_pl_name)
+      master_name="$2"
+      shift 2
+      ;;
+    -var_stream_map)
+      var_stream_map="$2"
+      shift 2
+      ;;
+    -hls_segment_filename)
+      segment_pattern="$2"
+      shift 2
+      ;;
+    -f)
+      format="$2"
+      shift 2
+      ;;
+    *)
+      args+=("$1")
+      shift
+      ;;
+  esac
+done
+
+# If this isn't an HLS invocation, just ensure the output exists.
+if [[ "$format" != "hls" ]]; then
+  mkdir -p "$(dirname "$output_target")"
+  : >"$output_target"
+  exit 0
+fi
+
+# Derive the output root directory from the pattern containing %v.
+output_dir_with_variant="${output_target%/*}"   # strip index filename
+output_root="${output_dir_with_variant%/%v}"    # strip variant placeholder
+master_path="${output_root}/${master_name}"
+mkdir -p "$output_root"
+
+names=()
+bandwidths=()
+current=-1
+for token in $var_stream_map; do
+  case "$token" in
+    name:*)
+      names+=("${token#name:}")
+      current=${#names[@]}
+      ((current--))
+      ;;
+    bandwidth:*)
+      bw="${token#bandwidth:}"
+      if (( current == -1 )); then
+        names+=("variant-${#names[@]}")
+        current=${#names[@]}
+        ((current--))
+      fi
+      bandwidths[$current]="$bw"
+      ;;
+  esac
+done
+
+if ((${#names[@]} == 0)); then
+  names=("variant")
+fi
+
+# Write a simple master playlist.
+{
+  echo "#EXTM3U"
+  echo "#EXT-X-VERSION:3"
+  for idx in "${!names[@]}"; do
+    bw="${bandwidths[$idx]:-1000000}"
+    name="${names[$idx]}"
+    echo "#EXT-X-STREAM-INF:BANDWIDTH=${bw}"
+    echo "${name}/index.m3u8"
+  done
+} >"$master_path"
+
+# Create variant playlists and at least one segment per rendition.
+for idx in "${!names[@]}"; do
+  name="${names[$idx]}"
+  bw="${bandwidths[$idx]:-1000000}"
+  variant_playlist="${output_target//%v/${name}}"
+  mkdir -p "$(dirname "$variant_playlist")"
+
+  segment_file="${segment_pattern//%v/${name}}"
+  segment_file="${segment_file//%06d/000000}"
+  segment_file="${segment_file//%d/000000}"
+  mkdir -p "$(dirname "$segment_file")"
+  echo "stub-segment-${name}" >"$segment_file"
+
+  segment_base="$(basename "$segment_file")"
+  {
+    echo "#EXTM3U"
+    echo "#EXT-X-VERSION:3"
+    echo "#EXTINF:4.000,"
+    echo "$segment_base"
+    echo "#EXT-X-ENDLIST"
+  } >"$variant_playlist"
+
+  # Add a short delay so tests can observe the running process before the
+  # stub exits and triggers cleanup.
+  sleep "${FFMPEG_STUB_DELAY:-0.2}"
+done
