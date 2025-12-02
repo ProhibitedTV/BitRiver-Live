@@ -1,6 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ChannelAboutPanel, ChannelHeader } from "../components/ChannelHero";
-import { useAuth } from "../hooks/useAuth";
 import {
   followChannel,
   createTip,
@@ -9,6 +8,11 @@ import {
   unsubscribeChannel
 } from "../lib/viewer-api";
 import type { ChannelPlaybackResponse } from "../lib/viewer-api";
+import {
+  buildAuthUser,
+  mockUseAuth,
+  signedInAuthState,
+} from "./test-utils/auth";
 
 jest.mock("../hooks/useAuth");
 
@@ -21,7 +25,6 @@ jest.mock("../lib/viewer-api", () => ({
   createTip: jest.fn()
 }));
 
-const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const followMock = followChannel as jest.MockedFunction<typeof followChannel>;
 const unfollowMock = unfollowChannel as jest.MockedFunction<typeof unfollowChannel>;
 const subscribeMock = subscribeChannel as jest.MockedFunction<typeof subscribeChannel>;
@@ -68,13 +71,7 @@ const baseData: ChannelPlaybackResponse = {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockUseAuth.mockReturnValue({
-    user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
-    loading: false,
-    error: undefined,
-    signIn: jest.fn(),
-    signOut: jest.fn()
-  });
+  mockUseAuth.mockReturnValue(signedInAuthState());
 
   followMock.mockResolvedValue({ followers: 11, following: true });
   unfollowMock.mockResolvedValue({ followers: 10, following: false });
@@ -150,13 +147,11 @@ test("toggles follow and subscribe state", async () => {
 });
 
 test("disables follow actions for channel owners", () => {
-  mockUseAuth.mockReturnValue({
-    user: { id: "owner-1", displayName: "DJ Nova", email: "dj@nova.fm", roles: [] },
-    loading: false,
-    error: undefined,
-    signIn: jest.fn(),
-    signOut: jest.fn()
-  });
+  mockUseAuth.mockReturnValue(
+    signedInAuthState(
+      buildAuthUser({ id: "owner-1", displayName: "DJ Nova", email: "dj@nova.fm" })
+    )
+  );
 
   render(<ChannelHeader data={baseData} />);
 

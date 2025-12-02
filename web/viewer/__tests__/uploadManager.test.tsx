@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { UploadManager } from "../components/UploadManager";
-import { useAuth } from "../hooks/useAuth";
 import { fetchChannelUploads } from "../lib/viewer-api";
+import { creatorUser, mockUseAuth, ownerUser, signedInAuthState, viewerUser } from "./test-utils/auth";
 
 const replaceMock = jest.fn();
 
@@ -17,7 +17,6 @@ jest.mock("../lib/viewer-api", () => ({
   createUpload: jest.fn(),
   deleteUpload: jest.fn(),
 }));
-const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const fetchUploadsMock = fetchChannelUploads as jest.MockedFunction<typeof fetchChannelUploads>;
 
 beforeEach(() => {
@@ -26,13 +25,7 @@ beforeEach(() => {
 });
 
 test("loads uploads when the viewer owns the channel", async () => {
-  mockUseAuth.mockReturnValue({
-    user: { id: "owner-1", displayName: "Owner", email: "owner@example.com", roles: ["creator"] },
-    loading: false,
-    error: undefined,
-    signIn: jest.fn(),
-    signOut: jest.fn(),
-  });
+  mockUseAuth.mockReturnValue(signedInAuthState(ownerUser));
   fetchUploadsMock.mockResolvedValue([
     {
       id: "upload-1",
@@ -56,13 +49,7 @@ test("loads uploads when the viewer owns the channel", async () => {
 });
 
 test("redirects viewers who lack permission", async () => {
-  mockUseAuth.mockReturnValue({
-    user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
-    loading: false,
-    error: undefined,
-    signIn: jest.fn(),
-    signOut: jest.fn(),
-  });
+  mockUseAuth.mockReturnValue(signedInAuthState(viewerUser));
 
   render(<UploadManager channelId="chan-1" ownerId="owner-2" />);
 
@@ -72,13 +59,7 @@ test("redirects viewers who lack permission", async () => {
 });
 
 test("allows creator role to manage uploads", async () => {
-  mockUseAuth.mockReturnValue({
-    user: { id: "creator-1", displayName: "Creator", email: "creator@example.com", roles: ["creator"] },
-    loading: false,
-    error: undefined,
-    signIn: jest.fn(),
-    signOut: jest.fn(),
-  });
+  mockUseAuth.mockReturnValue(signedInAuthState(creatorUser));
   fetchUploadsMock.mockResolvedValue([]);
 
   render(<UploadManager channelId="chan-99" ownerId="owner-2" />);

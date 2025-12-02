@@ -1,7 +1,6 @@
 import userEvent from "@testing-library/user-event";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ChannelPage from "../app/channels/[id]/page";
-import { useAuth } from "../hooks/useAuth";
 import {
   fetchChannelChat,
   fetchChannelPlayback,
@@ -13,6 +12,12 @@ import {
   unfollowChannel,
   unsubscribeChannel
 } from "../lib/viewer-api";
+import {
+  buildAuthUser,
+  guestAuthState,
+  mockUseAuth,
+  signedInAuthState,
+} from "./test-utils/auth";
 
 jest.mock("../hooks/useAuth");
 
@@ -33,7 +38,6 @@ jest.mock("../components/Player", () => ({
   Player: () => <div data-testid="player" />
 }));
 
-const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const fetchChannelPlaybackMock = fetchChannelPlayback as jest.MockedFunction<typeof fetchChannelPlayback>;
 const fetchChannelVodsMock = fetchChannelVods as jest.MockedFunction<typeof fetchChannelVods>;
 const fetchChannelChatMock = fetchChannelChat as jest.MockedFunction<typeof fetchChannelChat>;
@@ -130,13 +134,7 @@ describe("ChannelPage", () => {
   });
 
   test("shows recovery UI and retries playback fetch after failure", async () => {
-    mockUseAuth.mockReturnValue({
-      user: undefined,
-      loading: false,
-      error: undefined,
-      signIn: jest.fn(),
-      signOut: jest.fn()
-    });
+    mockUseAuth.mockReturnValue(guestAuthState());
 
     fetchChannelPlaybackMock.mockRejectedValueOnce(new Error("Network down"));
     fetchChannelPlaybackMock.mockResolvedValueOnce(basePlaybackResponse as any);
@@ -161,13 +159,7 @@ describe("ChannelPage", () => {
 
   test("renders playback details and supports follow, subscribe, and chat interactions", async () => {
     const user = userEvent.setup();
-    mockUseAuth.mockReturnValue({
-      user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
-      loading: false,
-      error: undefined,
-      signIn: jest.fn(),
-      signOut: jest.fn()
-    });
+    mockUseAuth.mockReturnValue(signedInAuthState());
 
     render(<ChannelPage params={{ id: "chan-42" }} />);
 
@@ -199,15 +191,7 @@ describe("ChannelPage", () => {
   });
 
   test("refreshes follow and subscription state immediately after logging in", async () => {
-    const authState = {
-      user: undefined as
-        | { id: string; displayName: string; email: string; roles: string[] }
-        | undefined,
-      loading: false,
-      error: undefined,
-      signIn: jest.fn(),
-      signOut: jest.fn()
-    };
+    const authState = guestAuthState();
 
     const initialResponse = {
       ...basePlaybackResponse,
@@ -235,12 +219,7 @@ describe("ChannelPage", () => {
     expect(screen.getByRole("button", { name: /subscribe/i })).toBeInTheDocument();
 
     await act(async () => {
-      authState.user = {
-        id: "viewer-1",
-        displayName: "Viewer",
-        email: "viewer@example.com",
-        roles: []
-      };
+      authState.user = signedInAuthState().user;
       rerender(<ChannelPage params={{ id: "chan-42" }} />);
     });
 
@@ -255,13 +234,7 @@ describe("ChannelPage", () => {
   });
 
   test("prompts authentication when the viewer is signed out", async () => {
-    mockUseAuth.mockReturnValue({
-      user: undefined,
-      loading: false,
-      error: undefined,
-      signIn: jest.fn(),
-      signOut: jest.fn()
-    });
+    mockUseAuth.mockReturnValue(guestAuthState());
 
     render(<ChannelPage params={{ id: "chan-42" }} />);
 
@@ -294,13 +267,7 @@ describe("ChannelPage", () => {
   });
 
   test("hides previous channel actions while loading the next channel", async () => {
-    mockUseAuth.mockReturnValue({
-      user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
-      loading: false,
-      error: undefined,
-      signIn: jest.fn(),
-      signOut: jest.fn()
-    });
+    mockUseAuth.mockReturnValue(signedInAuthState());
 
     const firstChannelPlayback = {
       ...basePlaybackResponse,
@@ -370,13 +337,7 @@ describe("ChannelPage", () => {
   });
 
   test("shows VOD loading state before resolving to an empty gallery", async () => {
-    mockUseAuth.mockReturnValue({
-      user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
-      loading: false,
-      error: undefined,
-      signIn: jest.fn(),
-      signOut: jest.fn(),
-    });
+    mockUseAuth.mockReturnValue(signedInAuthState());
 
     let resolveVods: ((value: any) => void) | undefined;
     fetchChannelVodsMock.mockImplementation(
@@ -399,13 +360,11 @@ describe("ChannelPage", () => {
   });
 
   test("directs channel creators to the dashboard", async () => {
-    mockUseAuth.mockReturnValue({
-      user: { id: "owner-42", displayName: "DJ Nova", email: "nova@example.com", roles: [] },
-      loading: false,
-      error: undefined,
-      signIn: jest.fn(),
-      signOut: jest.fn(),
-    });
+    mockUseAuth.mockReturnValue(
+      signedInAuthState(
+        buildAuthUser({ id: "owner-42", displayName: "DJ Nova", email: "nova@example.com" })
+      )
+    );
 
     render(<ChannelPage params={{ id: "chan-42" }} />);
 
@@ -418,13 +377,7 @@ describe("ChannelPage", () => {
 
   test("surfaces VOD loading errors", async () => {
     const user = userEvent.setup();
-    mockUseAuth.mockReturnValue({
-      user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
-      loading: false,
-      error: undefined,
-      signIn: jest.fn(),
-      signOut: jest.fn()
-    });
+    mockUseAuth.mockReturnValue(signedInAuthState());
 
     fetchChannelVodsMock.mockRejectedValueOnce(new Error("VODs temporarily offline"));
 

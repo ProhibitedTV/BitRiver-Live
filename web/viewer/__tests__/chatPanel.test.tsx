@@ -1,9 +1,9 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChatPanel } from "../components/ChatPanel";
-import { useAuth } from "../hooks/useAuth";
 import { fetchChannelChat, sendChatMessage } from "../lib/viewer-api";
 import type { ChatMessage } from "../lib/viewer-api";
+import { guestAuthState, mockUseAuth, signedInAuthState, viewerTwoUser } from "./test-utils/auth";
 
 jest.mock("../hooks/useAuth");
 
@@ -13,20 +13,13 @@ jest.mock("../lib/viewer-api", () => ({
   sendChatMessage: jest.fn()
 }));
 
-const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const fetchChatMock = fetchChannelChat as jest.MockedFunction<typeof fetchChannelChat>;
 const sendChatMock = sendChatMessage as jest.MockedFunction<typeof sendChatMessage>;
 
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
-  mockUseAuth.mockReturnValue({
-    user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
-    loading: false,
-    error: undefined,
-    signIn: jest.fn(),
-    signOut: jest.fn()
-  });
+  mockUseAuth.mockReturnValue(signedInAuthState());
 });
 
 afterEach(() => {
@@ -110,14 +103,7 @@ test("uses channel chat even when no room id is provided", async () => {
 });
 
 test("treats unauthorized chat fetch as empty state for guests", async () => {
-  const guestAuth = {
-    user: undefined,
-    loading: false,
-    error: undefined,
-    signIn: jest.fn(),
-    signOut: jest.fn()
-  };
-  mockUseAuth.mockReturnValue(guestAuth as ReturnType<typeof useAuth>);
+  mockUseAuth.mockReturnValue(guestAuthState());
   fetchChatMock.mockRejectedValueOnce(new Error("401"));
 
   render(<ChatPanel channelId="chan-guest" roomId="room-1" />);
@@ -138,14 +124,7 @@ test("treats unauthorized chat fetch as empty state for guests", async () => {
 });
 
 test("clears chat, shows sign-in prompt, and pauses polling on structured 401s", async () => {
-  const guestAuth = {
-    user: undefined,
-    loading: false,
-    error: undefined,
-    signIn: jest.fn(),
-    signOut: jest.fn()
-  };
-  mockUseAuth.mockReturnValue(guestAuth as ReturnType<typeof useAuth>);
+  mockUseAuth.mockReturnValue(guestAuthState());
   fetchChatMock
     .mockResolvedValueOnce([
       {
@@ -224,14 +203,7 @@ test("backs off after consecutive server errors and shows retry surface", async 
 });
 
 test("resumes chat polling once a guest signs in", async () => {
-  const guestAuth = {
-    user: undefined,
-    loading: false,
-    error: undefined,
-    signIn: jest.fn(),
-    signOut: jest.fn()
-  };
-  mockUseAuth.mockReturnValue(guestAuth as ReturnType<typeof useAuth>);
+  mockUseAuth.mockReturnValue(guestAuthState());
   fetchChatMock.mockRejectedValueOnce(new Error("401"));
 
   const { rerender } = render(<ChatPanel channelId="chan-auth" roomId="room-1" />);
@@ -242,14 +214,7 @@ test("resumes chat polling once a guest signs in", async () => {
   });
   expect(fetchChatMock).toHaveBeenCalledTimes(1);
 
-  const signedInAuth = {
-    user: { id: "viewer-2", displayName: "Viewer Two", email: "viewer2@example.com", roles: [] },
-    loading: false,
-    error: undefined,
-    signIn: jest.fn(),
-    signOut: jest.fn()
-  };
-  mockUseAuth.mockReturnValue(signedInAuth as ReturnType<typeof useAuth>);
+  mockUseAuth.mockReturnValue(signedInAuthState(viewerTwoUser));
   fetchChatMock.mockResolvedValueOnce([
     {
       id: "m-auth-1",
