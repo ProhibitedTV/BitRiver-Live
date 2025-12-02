@@ -44,23 +44,26 @@ type MetricsAccessConfig struct {
 // hardening headers, Logger and AuditLogger provide structured logging, Metrics
 // records request metrics (defaulting to metrics.Default when nil), MetricsAccess
 // restricts the Prometheus scrape endpoint, ViewerOrigin configures reverse
-// proxying for viewer traffic, and OAuth is injected into the supplied API
-// handler.
+// proxying for viewer traffic, OAuth is injected into the supplied API handler,
+// SessionCookieSecureMode forces HTTPS-only session cookies when set to
+// SessionCookieSecureAlways, and SessionCookieCrossSite enables SameSite=None
+// cookies for cross-site viewer deployments.
 type Config struct {
-	Addr                   string
-	TLS                    TLSConfig
-	RateLimit              RateLimitConfig
-	CORS                   CORSConfig
-	Security               SecurityConfig
-	Logger                 *slog.Logger
-	AuditLogger            *slog.Logger
-	Metrics                *metrics.Recorder
-	MetricsAccess          MetricsAccessConfig
-	ViewerOrigin           *url.URL
-	OAuth                  oauth.Service
-	AllowSelfSignup        *bool
-	SessionCookieCrossSite bool
-	SRSHookToken           string
+	Addr                    string
+	TLS                     TLSConfig
+	RateLimit               RateLimitConfig
+	CORS                    CORSConfig
+	Security                SecurityConfig
+	Logger                  *slog.Logger
+	AuditLogger             *slog.Logger
+	Metrics                 *metrics.Recorder
+	MetricsAccess           MetricsAccessConfig
+	ViewerOrigin            *url.URL
+	OAuth                   oauth.Service
+	AllowSelfSignup         *bool
+	SessionCookieSecureMode api.SessionCookieSecureMode
+	SessionCookieCrossSite  bool
+	SRSHookToken            string
 }
 
 // Server wraps the configured http.Server alongside observability, rate
@@ -110,6 +113,9 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	}
 	handler.SRSHookToken = cfg.SRSHookToken
 	handler.SessionCookiePolicy = api.DefaultSessionCookiePolicy()
+	if cfg.SessionCookieSecureMode != 0 {
+		handler.SessionCookiePolicy.SecureMode = cfg.SessionCookieSecureMode
+	}
 	if cfg.SessionCookieCrossSite {
 		handler.SessionCookiePolicy = api.SessionCookiePolicy{
 			SameSite:   http.SameSiteNoneMode,

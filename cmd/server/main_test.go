@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"bitriver-live/internal/api"
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/server"
@@ -39,6 +40,22 @@ func TestResolveStorageDriverDefaultsToPostgres(t *testing.T) {
 	}
 	if driver != "postgres" {
 		t.Fatalf("expected postgres driver, got %q", driver)
+	}
+}
+
+func TestResolveSessionCookieSecureMode(t *testing.T) {
+	t.Parallel()
+
+	if mode := resolveSessionCookieSecureMode("production"); mode != api.SessionCookieSecureAlways {
+		t.Fatalf("expected production mode to force secure cookies, got %v", mode)
+	}
+
+	if mode := resolveSessionCookieSecureMode("development"); mode != api.SessionCookieSecureAuto {
+		t.Fatalf("expected development mode to keep auto secure cookies, got %v", mode)
+	}
+
+	if mode := resolveSessionCookieSecureMode(" "); mode != api.SessionCookieSecureAuto {
+		t.Fatalf("expected empty mode to keep auto secure cookies, got %v", mode)
 	}
 }
 
