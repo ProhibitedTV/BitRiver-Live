@@ -1,28 +1,13 @@
+import { viewerApiMocks } from "../test/test-utils";
 import userEvent from "@testing-library/user-event";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import DirectoryPage from "../app/page";
-import {
-  fetchDirectory,
-  fetchFeaturedChannels,
-  fetchFollowingChannels,
-  fetchLiveNowChannels,
-  searchDirectory,
-} from "../lib/viewer-api";
 
-jest.mock("../lib/viewer-api", () => ({
-  ...jest.requireActual("../lib/viewer-api"),
-  fetchDirectory: jest.fn(),
-  searchDirectory: jest.fn(),
-  fetchFeaturedChannels: jest.fn(),
-  fetchFollowingChannels: jest.fn(),
-  fetchLiveNowChannels: jest.fn(),
-}));
-
-const fetchDirectoryMock = fetchDirectory as jest.MockedFunction<typeof fetchDirectory>;
-const searchDirectoryMock = searchDirectory as jest.MockedFunction<typeof searchDirectory>;
-const fetchFeaturedChannelsMock = fetchFeaturedChannels as jest.MockedFunction<typeof fetchFeaturedChannels>;
-const fetchFollowingChannelsMock = fetchFollowingChannels as jest.MockedFunction<typeof fetchFollowingChannels>;
-const fetchLiveNowChannelsMock = fetchLiveNowChannels as jest.MockedFunction<typeof fetchLiveNowChannels>;
+const fetchDirectoryMock = viewerApiMocks.fetchDirectory;
+const searchDirectoryMock = viewerApiMocks.searchDirectory;
+const fetchFeaturedChannelsMock = viewerApiMocks.fetchFeaturedChannels;
+const fetchFollowingChannelsMock = viewerApiMocks.fetchFollowingChannels;
+const fetchLiveNowChannelsMock = viewerApiMocks.fetchLiveNowChannels;
 
 const baseDirectoryResponse = {
   channels: [

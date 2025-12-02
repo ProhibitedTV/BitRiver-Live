@@ -1,31 +1,16 @@
 import { buildAuthUser, mockUseAuth, signedInAuthState } from "../test/auth";
+import { viewerApiMocks } from "../test/test-utils";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ChannelAboutPanel, ChannelHeader } from "../components/ChannelHero";
-import {
-  followChannel,
-  createTip,
-  subscribeChannel,
-  unfollowChannel,
-  unsubscribeChannel
-} from "../lib/viewer-api";
 import type { ChannelPlaybackResponse } from "../lib/viewer-api";
 
 jest.mock("../hooks/useAuth");
 
-jest.mock("../lib/viewer-api", () => ({
-  ...jest.requireActual("../lib/viewer-api"),
-  followChannel: jest.fn(),
-  unfollowChannel: jest.fn(),
-  subscribeChannel: jest.fn(),
-  unsubscribeChannel: jest.fn(),
-  createTip: jest.fn()
-}));
-
-const followMock = followChannel as jest.MockedFunction<typeof followChannel>;
-const unfollowMock = unfollowChannel as jest.MockedFunction<typeof unfollowChannel>;
-const subscribeMock = subscribeChannel as jest.MockedFunction<typeof subscribeChannel>;
-const unsubscribeMock = unsubscribeChannel as jest.MockedFunction<typeof unsubscribeChannel>;
-const createTipMock = createTip as jest.MockedFunction<typeof createTip>;
+const followMock = viewerApiMocks.followChannel;
+const unfollowMock = viewerApiMocks.unfollowChannel;
+const subscribeMock = viewerApiMocks.subscribeChannel;
+const unsubscribeMock = viewerApiMocks.unsubscribeChannel;
+const createTipMock = viewerApiMocks.createTip;
 
 const baseData: ChannelPlaybackResponse = {
   channel: {

@@ -1,47 +1,24 @@
 import { buildAuthUser, guestAuthState, mockUseAuth, signedInAuthState } from "../test/auth";
+import { viewerApiMocks } from "../test/test-utils";
 import userEvent from "@testing-library/user-event";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ChannelPage from "../app/channels/[id]/page";
-import {
-  fetchChannelChat,
-  fetchChannelPlayback,
-  fetchChannelVods,
-  followChannel,
-  createTip,
-  sendChatMessage,
-  subscribeChannel,
-  unfollowChannel,
-  unsubscribeChannel
-} from "../lib/viewer-api";
 
 jest.mock("../hooks/useAuth");
-
-jest.mock("../lib/viewer-api", () => ({
-  ...jest.requireActual("../lib/viewer-api"),
-  fetchChannelPlayback: jest.fn(),
-  fetchChannelVods: jest.fn(),
-  fetchChannelChat: jest.fn(),
-  sendChatMessage: jest.fn(),
-  followChannel: jest.fn(),
-  unfollowChannel: jest.fn(),
-  subscribeChannel: jest.fn(),
-  unsubscribeChannel: jest.fn(),
-  createTip: jest.fn()
-}));
 
 jest.mock("../components/Player", () => ({
   Player: () => <div data-testid="player" />
 }));
 
-const fetchChannelPlaybackMock = fetchChannelPlayback as jest.MockedFunction<typeof fetchChannelPlayback>;
-const fetchChannelVodsMock = fetchChannelVods as jest.MockedFunction<typeof fetchChannelVods>;
-const fetchChannelChatMock = fetchChannelChat as jest.MockedFunction<typeof fetchChannelChat>;
-const sendChatMessageMock = sendChatMessage as jest.MockedFunction<typeof sendChatMessage>;
-const followChannelMock = followChannel as jest.MockedFunction<typeof followChannel>;
-const unfollowChannelMock = unfollowChannel as jest.MockedFunction<typeof unfollowChannel>;
-const subscribeChannelMock = subscribeChannel as jest.MockedFunction<typeof subscribeChannel>;
-const unsubscribeChannelMock = unsubscribeChannel as jest.MockedFunction<typeof unsubscribeChannel>;
-const createTipMock = createTip as jest.MockedFunction<typeof createTip>;
+const fetchChannelPlaybackMock = viewerApiMocks.fetchChannelPlayback;
+const fetchChannelVodsMock = viewerApiMocks.fetchChannelVods;
+const fetchChannelChatMock = viewerApiMocks.fetchChannelChat;
+const sendChatMessageMock = viewerApiMocks.sendChatMessage;
+const followChannelMock = viewerApiMocks.followChannel;
+const unfollowChannelMock = viewerApiMocks.unfollowChannel;
+const subscribeChannelMock = viewerApiMocks.subscribeChannel;
+const unsubscribeChannelMock = viewerApiMocks.unsubscribeChannel;
+const createTipMock = viewerApiMocks.createTip;
 
 const basePlaybackResponse = {
   channel: {

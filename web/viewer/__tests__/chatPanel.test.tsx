@@ -1,20 +1,13 @@
 import { guestAuthState, mockUseAuth, signedInAuthState, viewerTwoUser } from "../test/auth";
+import { viewerApiMocks } from "../test/test-utils";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChatPanel } from "../components/ChatPanel";
-import { fetchChannelChat, sendChatMessage } from "../lib/viewer-api";
 import type { ChatMessage } from "../lib/viewer-api";
 
 jest.mock("../hooks/useAuth");
-
-jest.mock("../lib/viewer-api", () => ({
-  ...jest.requireActual("../lib/viewer-api"),
-  fetchChannelChat: jest.fn(),
-  sendChatMessage: jest.fn()
-}));
-
-const fetchChatMock = fetchChannelChat as jest.MockedFunction<typeof fetchChannelChat>;
-const sendChatMock = sendChatMessage as jest.MockedFunction<typeof sendChatMessage>;
+const fetchChatMock = viewerApiMocks.fetchChannelChat;
+const sendChatMock = viewerApiMocks.sendChatMessage;
 
 beforeEach(() => {
   jest.useFakeTimers();
