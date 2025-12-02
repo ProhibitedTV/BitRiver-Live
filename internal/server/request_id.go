@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -52,11 +51,4 @@ func newRequestID() string {
 		return hex.EncodeToString(buffer[:])
 	}
 	return fmt.Sprintf("%d", time.Now().UnixNano())
-}
-
-func loggerWithRequestContext(ctx context.Context, logger *slog.Logger) *slog.Logger {
-	if ctxLogger := logging.LoggerFromContext(ctx); ctxLogger != nil {
-		return ctxLogger
-	}
-	return logging.WithContext(ctx, logger)
 }
