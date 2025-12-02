@@ -1,9 +1,9 @@
+import { guestAuthState, mockUseAuth, signedInAuthState, viewerTwoUser } from "../test/auth";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChatPanel } from "../components/ChatPanel";
 import { fetchChannelChat, sendChatMessage } from "../lib/viewer-api";
 import type { ChatMessage } from "../lib/viewer-api";
-import { guestAuthState, mockUseAuth, signedInAuthState, viewerTwoUser } from "./test-utils/auth";
 
 jest.mock("../hooks/useAuth");
 

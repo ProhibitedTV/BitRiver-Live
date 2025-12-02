@@ -1,3 +1,4 @@
+import { buildAuthUser, mockUseAuth, signedInAuthState } from "../test/auth";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ChannelAboutPanel, ChannelHeader } from "../components/ChannelHero";
 import {
@@ -8,11 +9,6 @@ import {
   unsubscribeChannel
 } from "../lib/viewer-api";
 import type { ChannelPlaybackResponse } from "../lib/viewer-api";
-import {
-  buildAuthUser,
-  mockUseAuth,
-  signedInAuthState,
-} from "./test-utils/auth";
 
 jest.mock("../hooks/useAuth");
 
