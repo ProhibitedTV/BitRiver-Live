@@ -1,16 +1,10 @@
-import { mockUseAuth, renderWithProviders, signedInAuthState } from "../test/test-utils";
+import { mockUseAuth, renderWithProviders, signedInAuthState, viewerApiMocks } from "../test/test-utils";
 import { screen, waitFor } from "@testing-library/react";
 import { FollowingSidebar } from "../components/FollowingSidebar";
-import { fetchFollowingChannels } from "../lib/viewer-api";
 
 jest.mock("../hooks/useAuth");
 
-jest.mock("../lib/viewer-api", () => ({
-  ...jest.requireActual("../lib/viewer-api"),
-  fetchFollowingChannels: jest.fn()
-}));
-
-const fetchFollowingMock = fetchFollowingChannels as jest.MockedFunction<typeof fetchFollowingChannels>;
+const fetchFollowingMock = viewerApiMocks.fetchFollowingChannels;
 
 describe("FollowingSidebar", () => {
   beforeEach(() => {

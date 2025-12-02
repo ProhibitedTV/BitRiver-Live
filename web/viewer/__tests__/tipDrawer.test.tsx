@@ -1,15 +1,10 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { viewerApiMocks } from "../test/test-utils";
 import { TipDrawer } from "../components/TipDrawer";
 import type { CryptoAddress } from "../lib/viewer-api";
-import { createTip } from "../lib/viewer-api";
 
-jest.mock("../lib/viewer-api", () => ({
-  ...jest.requireActual("../lib/viewer-api"),
-  createTip: jest.fn()
-}));
-
-const createTipMock = createTip as jest.MockedFunction<typeof createTip>;
+const createTipMock = viewerApiMocks.createTip;
 
 describe("TipDrawer", () => {
   beforeEach(() => {

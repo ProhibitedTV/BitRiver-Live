@@ -5,21 +5,15 @@ import {
   ownerUser,
   renderWithProviders,
   resetRouterMocks,
+  viewerApiMocks,
   viewerUser,
 } from "../test/test-utils";
 import { screen, waitFor } from "@testing-library/react";
 import { UploadManager } from "../components/UploadManager";
-import { fetchChannelUploads } from "../lib/viewer-api";
 
 jest.mock("../hooks/useAuth");
 
-jest.mock("../lib/viewer-api", () => ({
-  ...jest.requireActual("../lib/viewer-api"),
-  fetchChannelUploads: jest.fn(),
-  createUpload: jest.fn(),
-  deleteUpload: jest.fn(),
-}));
-const fetchUploadsMock = fetchChannelUploads as jest.MockedFunction<typeof fetchChannelUploads>;
+const fetchUploadsMock = viewerApiMocks.fetchChannelUploads;
 
 beforeEach(() => {
   jest.clearAllMocks();

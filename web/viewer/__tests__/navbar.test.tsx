@@ -4,23 +4,16 @@ import {
   mockAuthenticatedUser,
   resetRouterMocks,
   renderWithProviders,
+  viewerApiMocks,
   viewerUser,
 } from "../test/test-utils";
 import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Navbar } from "../components/Navbar";
-import { fetchManagedChannels } from "../lib/viewer-api";
 
 jest.mock("../hooks/useAuth");
 
-jest.mock("../lib/viewer-api", () => ({
-  ...jest.requireActual("../lib/viewer-api"),
-  fetchManagedChannels: jest.fn(),
-}));
-
-const fetchManagedChannelsMock = fetchManagedChannels as jest.MockedFunction<
-  typeof fetchManagedChannels
->;
+const fetchManagedChannelsMock = viewerApiMocks.fetchManagedChannels;
 
 describe("Navbar", () => {
   beforeAll(() => {

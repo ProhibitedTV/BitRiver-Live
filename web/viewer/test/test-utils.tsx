@@ -1,7 +1,37 @@
 import { render, RenderOptions } from "@testing-library/react";
 import React, { AnchorHTMLAttributes, MouseEvent, PropsWithChildren, ReactElement, Ref } from "react";
 
+import type * as ViewerApi from "../lib/viewer-api";
+
 export * from "./auth";
+
+const actualViewerApi = jest.requireActual("../lib/viewer-api") as typeof import("../lib/viewer-api");
+
+export const viewerApiMocks: jest.Mocked<typeof actualViewerApi> = {
+  ...actualViewerApi,
+  createTip: jest.fn(),
+  createUpload: jest.fn(),
+  deleteUpload: jest.fn(),
+  fetchChannelChat: jest.fn(),
+  fetchChannelPlayback: jest.fn(),
+  fetchChannelUploads: jest.fn(),
+  fetchChannelVods: jest.fn(),
+  fetchDirectory: jest.fn(),
+  fetchFeaturedChannels: jest.fn(),
+  fetchFollowingChannels: jest.fn(),
+  fetchLiveNowChannels: jest.fn(),
+  fetchManagedChannels: jest.fn(),
+  fetchProfile: jest.fn(),
+  searchDirectory: jest.fn(),
+  sendChatMessage: jest.fn(),
+  subscribeChannel: jest.fn(),
+  unfollowChannel: jest.fn(),
+  unsubscribeChannel: jest.fn(),
+  updateProfile: jest.fn(),
+  followChannel: jest.fn(),
+};
+
+jest.mock("../lib/viewer-api", () => viewerApiMocks satisfies ViewerApi);
 
 export const mockRouter = {
   back: jest.fn(),

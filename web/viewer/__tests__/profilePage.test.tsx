@@ -1,19 +1,12 @@
-import { mockAnonymousUser, mockAuthenticatedUser, renderWithProviders } from "../test/test-utils";
+import { mockAnonymousUser, mockAuthenticatedUser, renderWithProviders, viewerApiMocks } from "../test/test-utils";
 import userEvent from "@testing-library/user-event";
 import { screen, waitFor } from "@testing-library/react";
 import ProfilePage from "../app/profile/page";
-import { fetchProfile, updateProfile } from "../lib/viewer-api";
 
 jest.mock("../hooks/useAuth");
 
-jest.mock("../lib/viewer-api", () => ({
-  ...jest.requireActual("../lib/viewer-api"),
-  fetchProfile: jest.fn(),
-  updateProfile: jest.fn(),
-}));
-
-const fetchProfileMock = fetchProfile as jest.MockedFunction<typeof fetchProfile>;
-const updateProfileMock = updateProfile as jest.MockedFunction<typeof updateProfile>;
+const fetchProfileMock = viewerApiMocks.fetchProfile;
+const updateProfileMock = viewerApiMocks.updateProfile;
 
 const profileFixture = {
   userId: "viewer-1",
