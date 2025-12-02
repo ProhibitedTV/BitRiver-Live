@@ -11,11 +11,12 @@ Run the fast unit suite (JSON datastore, REST handlers, chat flows) from the
 repository root with the same environment guardrails CI enforces. Setting
 `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off` ensures the local Go toolchain is
 used without reaching out to the network, which keeps results reproducible and
-matches the locked-down CI runners. The `-count=1 -timeout=10s` flags prevent
-test caching and match CI's deadline for each package:
+matches the locked-down CI runners. The `-count=1 -timeout=120s` flags prevent
+test caching and match CI's 120-second deadline for each package. Use the same
+timeout locally to avoid flakes on slower machines:
 
 ```bash
-GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=10s
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
 ```
 
 Authentication/session lifecycle coverage lives in
@@ -28,7 +29,7 @@ Viewer payload contracts live in `internal/api/viewer_contract_test.go`. Run
 the suite with the same offline flags and cache-busting timeout CI expects:
 
 ```bash
-GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1 -timeout=10s -run ViewerContractEndpoints
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1 -timeout=120s -run ViewerContractEndpoints
 ```
 
 The harness spins an `httptest` server using the real API router wired to the
