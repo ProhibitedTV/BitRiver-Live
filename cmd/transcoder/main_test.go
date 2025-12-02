@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -23,6 +24,44 @@ import (
 )
 
 const testToken = "test-token"
+
+func useStubFFmpeg(t *testing.T) string {
+	t.Helper()
+	_, testFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("determine test file path")
+	}
+	stubPath, err := filepath.Abs(filepath.Join(filepath.Dir(testFile), "testdata", "ffmpeg"))
+	if err != nil {
+		t.Fatalf("resolve ffmpeg stub: %v", err)
+	}
+	if _, err := os.Stat(stubPath); err != nil {
+		t.Fatalf("stat ffmpeg stub: %v", err)
+	}
+	pathList := []string{filepath.Dir(stubPath)}
+	if existing := os.Getenv("PATH"); existing != "" {
+		pathList = append(pathList, existing)
+	}
+	t.Setenv("PATH", strings.Join(pathList, string(os.PathListSeparator)))
+	resolved, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Fatalf("ffmpeg stub not on PATH: %v", err)
+	}
+	if resolved != stubPath {
+		t.Fatalf("unexpected ffmpeg path: %s", resolved)
+	}
+	return stubPath
+}
+
+func writeStubSample(t *testing.T, dst string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		t.Fatalf("prepare sample directory: %v", err)
+	}
+	if err := os.WriteFile(dst, []byte("stub-sample"), 0o644); err != nil {
+		t.Fatalf("write stub sample: %v", err)
+	}
+}
 
 func newTestLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -114,26 +153,13 @@ func TestAuthorizeInvalidTokenLogsWarning(t *testing.T) {
 
 func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test requires ffmpeg")
+		t.Skip("skipping transcoder lifecycle in short mode")
 	}
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		t.Skip("ffmpeg not available")
-	}
+	useStubFFmpeg(t)
 
 	tempDir := t.TempDir()
 	sample := filepath.Join(tempDir, "sample.mp4")
-	generate := exec.Command("ffmpeg", "-y",
-		"-f", "lavfi", "-i", "testsrc=size=160x120:rate=5",
-		"-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100",
-		"-shortest", "-t", "5",
-		"-pix_fmt", "yuv420p",
-		"-c:v", "libx264", "-preset", "ultrafast",
-		"-c:a", "aac",
-		sample,
-	)
-	if out, err := generate.CombinedOutput(); err != nil {
-		t.Fatalf("generate sample: %v (%s)", err, out)
-	}
+	writeStubSample(t, sample)
 
 	publicDir := filepath.Join(tempDir, "public")
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
@@ -176,7 +202,8 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("unexpected status: %d", resp.StatusCode)
+		data, _ := io.ReadAll(resp.Body)
+		t.Fatalf("unexpected status: %d (%s)", resp.StatusCode, strings.TrimSpace(string(data)))
 	}
 	var jobResp jobResponse
 	if err := json.NewDecoder(resp.Body).Decode(&jobResp); err != nil {
@@ -449,11 +476,9 @@ func TestNewServerRequiresPublicBaseURL(t *testing.T) {
 
 func TestUploadPublishesHTTPPlayback(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test requires ffmpeg")
+		t.Skip("skipping upload flow in short mode")
 	}
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		t.Skip("ffmpeg not available")
-	}
+	useStubFFmpeg(t)
 
 	tempDir := t.TempDir()
 	workDir := filepath.Join(tempDir, "work")
@@ -461,18 +486,7 @@ func TestUploadPublishesHTTPPlayback(t *testing.T) {
 		t.Fatalf("mkdir work: %v", err)
 	}
 	sample := filepath.Join(tempDir, "sample.mp4")
-	generate := exec.Command("ffmpeg", "-y",
-		"-f", "lavfi", "-i", "testsrc=size=160x120:rate=5",
-		"-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100",
-		"-shortest", "-t", "3",
-		"-pix_fmt", "yuv420p",
-		"-c:v", "libx264", "-preset", "ultrafast",
-		"-c:a", "aac",
-		sample,
-	)
-	if out, err := generate.CombinedOutput(); err != nil {
-		t.Fatalf("generate sample: %v (%s)", err, out)
-	}
+	writeStubSample(t, sample)
 
 	publicDir := filepath.Join(tempDir, "public")
 	t.Setenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", "https://cdn.example.com/hls")
