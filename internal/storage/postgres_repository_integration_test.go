@@ -33,7 +33,7 @@ func postgresRepositoryFactory(t *testing.T, opts ...storage.Option) (storage.Re
 	t.Helper()
 	dsn := os.Getenv("BITRIVER_TEST_POSTGRES_DSN")
 	if strings.TrimSpace(dsn) == "" {
-		t.Skip("BITRIVER_TEST_POSTGRES_DSN not set")
+		t.Fatalf("BITRIVER_TEST_POSTGRES_DSN not set; set it to a prepared database or run scripts/test-postgres.sh to provision one via Docker")
 	}
 
 	ctx := context.Background()
