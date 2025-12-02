@@ -330,6 +330,78 @@ func TestPostgresChatMessageHistoryPaging(t *testing.T) {
 	}
 }
 
+func TestPostgresProfileSocialLinksPersistence(t *testing.T) {
+	repo, cleanup, err := postgresRepositoryFactory(t)
+	if errors.Is(err, storage.ErrPostgresUnavailable) {
+		t.Skip("postgres repository unavailable in this build")
+	}
+	if err != nil {
+		t.Fatalf("failed to open postgres repository: %v", err)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	owner, err := repo.CreateUser(storage.CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Password: "initial"})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+
+	socialLinks := []models.SocialLink{
+		{Platform: " Twitch ", URL: " https://twitch.example.com/creator \\t"},
+		{Platform: "Twitter", URL: "https://twitter.com/creator"},
+	}
+	profile, err := repo.UpsertProfile(owner.ID, storage.ProfileUpdate{SocialLinks: &socialLinks})
+	if err != nil {
+		t.Fatalf("upsert profile: %v", err)
+	}
+
+	expected := []models.SocialLink{
+		{Platform: "Twitch", URL: "https://twitch.example.com/creator"},
+		{Platform: "Twitter", URL: "https://twitter.com/creator"},
+	}
+	if !reflect.DeepEqual(profile.SocialLinks, expected) {
+		t.Fatalf("expected normalized social links, got %+v", profile.SocialLinks)
+	}
+
+	reloaded, ok := repo.GetProfile(owner.ID)
+	if !ok {
+		t.Fatalf("expected profile for %s", owner.ID)
+	}
+	if !reflect.DeepEqual(reloaded.SocialLinks, expected) {
+		t.Fatalf("expected persisted social links, got %+v", reloaded.SocialLinks)
+	}
+
+	pool := postgresPoolFromRepository(t, repo)
+	var stored []byte
+	if err := pool.QueryRow(context.Background(), "SELECT social_links FROM profiles WHERE user_id = $1", owner.ID).Scan(&stored); err != nil {
+		t.Fatalf("load persisted social links: %v", err)
+	}
+	var payload []models.SocialLink
+	if err := json.Unmarshal(stored, &payload); err != nil {
+		t.Fatalf("decode persisted social links: %v", err)
+	}
+	if !reflect.DeepEqual(payload, expected) {
+		t.Fatalf("expected social links JSONB round-trip, got %+v", payload)
+	}
+
+	tooMany := make([]models.SocialLink, 9)
+	for i := range tooMany {
+		tooMany[i] = models.SocialLink{Platform: fmt.Sprintf("Link %d", i), URL: "https://example.com/profile"}
+	}
+	if _, err := repo.UpsertProfile(owner.ID, storage.ProfileUpdate{SocialLinks: &tooMany}); err == nil {
+		t.Fatal("expected error when exceeding maximum social links")
+	}
+
+	final, ok := repo.GetProfile(owner.ID)
+	if !ok {
+		t.Fatalf("expected profile to remain after failed update for %s", owner.ID)
+	}
+	if !reflect.DeepEqual(final.SocialLinks, expected) {
+		t.Fatalf("expected social links to remain unchanged after validation failure, got %+v", final.SocialLinks)
+	}
+}
+
 func TestPostgresStartStreamPersistsEmptyIngestEndpoints(t *testing.T) {
 	repo, cleanup, err := postgresRepositoryFactory(t)
 	if errors.Is(err, storage.ErrPostgresUnavailable) {
