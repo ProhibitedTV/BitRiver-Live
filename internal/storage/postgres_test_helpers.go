@@ -22,7 +22,7 @@ func startEphemeralPostgres(t *testing.T) (string, func()) {
 	t.Helper()
 
 	if _, err := exec.LookPath("docker"); err != nil {
-		t.Skip("BITRIVER_TEST_POSTGRES_DSN not set and docker unavailable")
+		t.Fatalf("BITRIVER_TEST_POSTGRES_DSN not set and docker unavailable; install Docker or set BITRIVER_TEST_POSTGRES_DSN to a prepared database")
 	}
 
 	user := os.Getenv("BITRIVER_TEST_POSTGRES_USER")
@@ -64,7 +64,7 @@ func startEphemeralPostgres(t *testing.T) (string, func()) {
 	}
 
 	if output, err := exec.Command("docker", args...).CombinedOutput(); err != nil {
-		t.Skipf("start postgres container: %v: %s", err, string(output))
+		t.Fatalf("start postgres container: %v: %s", err, string(output))
 	}
 
 	cleanup := func() {

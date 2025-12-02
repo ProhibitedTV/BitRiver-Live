@@ -6,8 +6,9 @@ coverage. Keep it updated as tests are hardened or new flakes are discovered.
 ## Known flaky or failing areas
 
 - **Postgres-tagged storage suite (`internal/storage`, `-tags postgres`):**
-  - Depends on Docker when `BITRIVER_TEST_POSTGRES_DSN` is unset; tests skip if
-    Docker is unavailable and otherwise start a disposable container.
+  - Requires either `BITRIVER_TEST_POSTGRES_DSN` or Docker to launch a clean
+    database. The harness now fails fast when neither is available instead of
+    skipping.
   - Common failures come from containers that cannot start (ports in use,
     Docker daemon down) or schema drift between migrations and test helpers.
 - **Chat Redis queue tests (`internal/chat/redis_queue_test.go`):** Previously
@@ -48,6 +49,7 @@ coverage. Keep it updated as tests are hardened or new flakes are discovered.
   executes end-to-end.
 - For Postgres-tagged tests, verify Docker is available or set
   `BITRIVER_TEST_POSTGRES_DSN` to a prepared database before invoking
-  `go test -tags postgres ./...`.
+  `go test -tags postgres ./...`. The harness will now fail fast when neither
+  is available.
 - Keep fake helpers in `internal/testsupport` deterministic; adding new hooks is
   preferable to introducing sleeps.

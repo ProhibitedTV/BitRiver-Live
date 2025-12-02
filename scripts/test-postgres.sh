@@ -13,13 +13,8 @@ IMAGE="${BITRIVER_TEST_POSTGRES_IMAGE:-postgres:15-alpine}"
 CONTAINER_NAME="bitr-postgres-test-$$"
 if [ -z "${BITRIVER_TEST_POSTGRES_DSN:-}" ]; then
   if ! command -v docker >/dev/null 2>&1; then
-    echo "error: docker is required to run postgres-tagged tests when BITRIVER_TEST_POSTGRES_DSN is unset" >&2
-    if [ -n "${CI:-}" ]; then
-      exit 1
-    fi
-
-    echo "skipping postgres-tagged tests; set BITRIVER_TEST_POSTGRES_DSN to run without docker" >&2
-    exit 0
+    echo "error: postgres-tagged tests require Docker or BITRIVER_TEST_POSTGRES_DSN; install Docker or set BITRIVER_TEST_POSTGRES_DSN to a prepared database" >&2
+    exit 1
   fi
 
   MIGRATIONS_DIR="$REPO_ROOT/deploy/migrations"
