@@ -121,6 +121,7 @@ func main() {
 	redisTLSSkipVerify := flag.Bool("rate-redis-tls-skip-verify", false, "skip Redis TLS verification for distributed login throttling")
 	redisTimeout := flag.Duration("rate-redis-timeout", 0, "timeout for Redis operations")
 
+	// Chat queue flags (env: BITRIVER_LIVE_CHAT_QUEUE_DRIVER, BITRIVER_LIVE_CHAT_QUEUE_REDIS_*).
 	chatQueueDriver := flag.String("chat-queue-driver", "", "chat queue driver (memory or redis)")
 	chatRedisAddr := flag.String("chat-queue-redis-addr", "", "Redis address for chat queue transport")
 	chatRedisAddrs := flag.String("chat-queue-redis-addrs", "", "comma separated Redis addresses for chat queue transport")
@@ -382,7 +383,7 @@ func main() {
 			InsecureSkipVerify: resolveBool(*chatRedisTLSSkipVerify, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_SKIP_VERIFY"),
 		},
 	}
-	chatDriver := resolveChatQueueDriver(*chatQueueDriver)
+	chatDriver := resolveChatQueueDriver(*chatQueueDriver, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_DRIVER"))
 	queue, err := configureChatQueue(chatDriver, chatQueueCfg, logger)
 	if err != nil {
 		logger.Error("failed to configure chat queue", "error", err)
@@ -742,8 +743,11 @@ func configureChatQueue(driver string, cfg chat.RedisQueueConfig, logger *slog.L
 	}
 }
 
-func resolveChatQueueDriver(raw string) string {
-	driver := strings.ToLower(strings.TrimSpace(raw))
+func resolveChatQueueDriver(flagValue, envValue string) string {
+	driver := strings.ToLower(strings.TrimSpace(flagValue))
+	if driver == "" {
+		driver = strings.ToLower(strings.TrimSpace(envValue))
+	}
 	if driver == "" {
 		return "memory"
 	}

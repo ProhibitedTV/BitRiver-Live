@@ -12,7 +12,7 @@ The live pipeline wires together three control-plane components. Use the paths b
 
 | Flag | Purpose |
 | --- | --- |
-| `--chat-queue-driver` | Selects the chat queue implementation (`memory` for the in-process queue, `redis` for Redis Streams). |
+| `--chat-queue-driver` / `BITRIVER_LIVE_CHAT_QUEUE_DRIVER` | Selects the chat queue implementation (`memory` for the in-process queue, `redis` for Redis Streams). |
 | `--chat-queue-redis-addr` / `--chat-queue-redis-addrs` | Redis endpoint(s) used by the chat queue. |
 | `--chat-queue-redis-username` / `--chat-queue-redis-password` | Credentials for authenticating to Redis. |
 | `--chat-queue-redis-stream` / `--chat-queue-redis-group` | Names the Redis Stream and consumer group used for chat events. |
@@ -21,6 +21,8 @@ The live pipeline wires together three control-plane components. Use the paths b
 | `--chat-queue-redis-tls-ca` / `--chat-queue-redis-tls-cert` / `--chat-queue-redis-tls-key` | TLS certificate material for securing Redis connections. |
 | `--chat-queue-redis-tls-server-name` | Overrides the expected Redis TLS server name. |
 | `--chat-queue-redis-tls-skip-verify` | Skips Redis TLS certificate verification (use with caution). |
+
+The server honours the driver from either the flag or `BITRIVER_LIVE_CHAT_QUEUE_DRIVER`, defaulting to the in-process `memory` queue when both are unset.
 
 ## Fault handling and recovery
 
