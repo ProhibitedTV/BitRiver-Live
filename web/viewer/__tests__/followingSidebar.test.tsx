@@ -1,6 +1,9 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { mockUseAuth, renderWithProviders, signedInAuthState } from "../test/test-utils";
+import { screen, waitFor } from "@testing-library/react";
 import { FollowingSidebar } from "../components/FollowingSidebar";
 import { fetchFollowingChannels } from "../lib/viewer-api";
+
+jest.mock("../hooks/useAuth");
 
 jest.mock("../lib/viewer-api", () => ({
   ...jest.requireActual("../lib/viewer-api"),
@@ -12,12 +15,13 @@ const fetchFollowingMock = fetchFollowingChannels as jest.MockedFunction<typeof 
 describe("FollowingSidebar", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseAuth.mockReturnValue(signedInAuthState());
   });
 
   it("shows a loading state while checking followed channels", () => {
     fetchFollowingMock.mockReturnValue(new Promise(() => {}) as Promise<any>);
 
-    render(<FollowingSidebar />);
+    renderWithProviders(<FollowingSidebar />);
 
     expect(screen.getByText(/checking which creators are live/i)).toBeInTheDocument();
   });
@@ -28,7 +32,7 @@ describe("FollowingSidebar", () => {
       generatedAt: new Date().toISOString()
     });
 
-    render(<FollowingSidebar />);
+    renderWithProviders(<FollowingSidebar />);
 
     await waitFor(() => {
       expect(screen.getByText(/you['’]re not following any channels yet/i)).toBeInTheDocument();

@@ -1,3 +1,4 @@
+import { buildAuthUser, guestAuthState, mockUseAuth, signedInAuthState } from "../test/auth";
 import userEvent from "@testing-library/user-event";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ChannelPage from "../app/channels/[id]/page";
@@ -12,12 +13,6 @@ import {
   unfollowChannel,
   unsubscribeChannel
 } from "../lib/viewer-api";
-import {
-  buildAuthUser,
-  guestAuthState,
-  mockUseAuth,
-  signedInAuthState,
-} from "./test-utils/auth";
 
 jest.mock("../hooks/useAuth");
 
@@ -104,6 +99,7 @@ const baseChatMessages = [
 describe("ChannelPage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseAuth.mockReturnValue(signedInAuthState());
     fetchChannelPlaybackMock.mockResolvedValue(basePlaybackResponse as any);
     fetchChannelVodsMock.mockResolvedValue({ channelId: "chan-42", items: [] } as any);
     fetchChannelChatMock.mockResolvedValue(baseChatMessages as any);

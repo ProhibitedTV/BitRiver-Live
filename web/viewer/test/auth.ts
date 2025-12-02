@@ -1,9 +1,13 @@
-import { useAuth } from "../../hooks/useAuth";
+import { useAuth } from "../hooks/useAuth";
+
+type AuthModule = typeof import("../hooks/useAuth");
+
+jest.mock("../hooks/useAuth");
 
 export type AuthState = ReturnType<typeof useAuth>;
 export type AuthUser = NonNullable<AuthState["user"]>;
 
-export const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
+export const mockUseAuth = useAuth as jest.MockedFunction<AuthModule["useAuth"]>;
 
 export const buildAuthUser = (overrides: Partial<AuthUser> = {}): AuthUser => ({
   id: "viewer-1",
@@ -60,3 +64,13 @@ export const buildAuthState = (overrides: Partial<AuthState> = {}): AuthState =>
   user: viewerUser,
   ...overrides,
 });
+
+export const mockAuthenticatedUser = (overrides: Partial<AuthUser> = {}): AuthUser => {
+  const user = buildAuthUser(overrides);
+  mockUseAuth.mockReturnValue(signedInAuthState(user));
+  return user;
+};
+
+export const mockAnonymousUser = () => {
+  mockUseAuth.mockReturnValue(guestAuthState());
+};

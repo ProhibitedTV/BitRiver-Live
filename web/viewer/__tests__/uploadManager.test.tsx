@@ -1,15 +1,17 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  creatorUser,
+  mockAuthenticatedUser,
+  mockRouter,
+  ownerUser,
+  renderWithProviders,
+  resetRouterMocks,
+  viewerUser,
+} from "../test/test-utils";
+import { screen, waitFor } from "@testing-library/react";
 import { UploadManager } from "../components/UploadManager";
 import { fetchChannelUploads } from "../lib/viewer-api";
-import { creatorUser, mockUseAuth, ownerUser, signedInAuthState, viewerUser } from "./test-utils/auth";
-
-const replaceMock = jest.fn();
 
 jest.mock("../hooks/useAuth");
-
-jest.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: replaceMock }),
-}));
 
 jest.mock("../lib/viewer-api", () => ({
   ...jest.requireActual("../lib/viewer-api"),
@@ -21,11 +23,11 @@ const fetchUploadsMock = fetchChannelUploads as jest.MockedFunction<typeof fetch
 
 beforeEach(() => {
   jest.clearAllMocks();
-  replaceMock.mockReset();
+  resetRouterMocks();
 });
 
 test("loads uploads when the viewer owns the channel", async () => {
-  mockUseAuth.mockReturnValue(signedInAuthState(ownerUser));
+  mockAuthenticatedUser(ownerUser);
   fetchUploadsMock.mockResolvedValue([
     {
       id: "upload-1",
@@ -40,31 +42,31 @@ test("loads uploads when the viewer owns the channel", async () => {
     },
   ] as any);
 
-  render(<UploadManager channelId="chan-1" ownerId="owner-1" />);
+  renderWithProviders(<UploadManager channelId="chan-1" ownerId="owner-1" />);
 
   await waitFor(() => expect(fetchUploadsMock).toHaveBeenCalledWith("chan-1"));
   expect(await screen.findByRole("heading", { name: /upload manager/i })).toBeInTheDocument();
   expect(screen.getByText(/recap/i)).toBeInTheDocument();
-  expect(replaceMock).not.toHaveBeenCalled();
+  expect(mockRouter.replace).not.toHaveBeenCalled();
 });
 
 test("redirects viewers who lack permission", async () => {
-  mockUseAuth.mockReturnValue(signedInAuthState(viewerUser));
+  mockAuthenticatedUser(viewerUser);
 
-  render(<UploadManager channelId="chan-1" ownerId="owner-2" />);
+  renderWithProviders(<UploadManager channelId="chan-1" ownerId="owner-2" />);
 
-  await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/channels/chan-1"));
+  await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith("/channels/chan-1"));
   expect(fetchUploadsMock).not.toHaveBeenCalled();
   expect(screen.queryByText(/upload manager/i)).not.toBeInTheDocument();
 });
 
 test("allows creator role to manage uploads", async () => {
-  mockUseAuth.mockReturnValue(signedInAuthState(creatorUser));
+  mockAuthenticatedUser(creatorUser);
   fetchUploadsMock.mockResolvedValue([]);
 
-  render(<UploadManager channelId="chan-99" ownerId="owner-2" />);
+  renderWithProviders(<UploadManager channelId="chan-99" ownerId="owner-2" />);
 
   await waitFor(() => expect(fetchUploadsMock).toHaveBeenCalledWith("chan-99"));
   expect(screen.getByRole("heading", { name: /upload manager/i })).toBeInTheDocument();
-  expect(replaceMock).not.toHaveBeenCalled();
+  expect(mockRouter.replace).not.toHaveBeenCalled();
 });

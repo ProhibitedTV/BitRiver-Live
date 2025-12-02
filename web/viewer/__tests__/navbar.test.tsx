@@ -1,36 +1,15 @@
-import { act, render, screen, within } from "@testing-library/react";
+import {
+  adminUser,
+  mockAnonymousUser,
+  mockAuthenticatedUser,
+  resetRouterMocks,
+  renderWithProviders,
+  viewerUser,
+} from "../test/test-utils";
+import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Navbar } from "../components/Navbar";
 import { fetchManagedChannels } from "../lib/viewer-api";
-import {
-  adminUser,
-  guestAuthState,
-  mockUseAuth,
-  signedInAuthState,
-  viewerUser,
-} from "./test-utils/auth";
-
-jest.mock("next/link", () => {
-  const React = require("react");
-  return React.forwardRef(function MockLink({ children, ...props }: any, ref: any) {
-    return React.createElement("a", {
-      ...props,
-      ref,
-      onClick: (event: any) => {
-        event.preventDefault();
-        props.onClick?.(event);
-      },
-    }, children);
-  });
-});
-
-jest.mock("next/navigation", () => ({
-  useRouter: () => ({
-    push: jest.fn(),
-    replace: jest.fn(),
-  }),
-  usePathname: () => "/",
-}));
 
 jest.mock("../hooks/useAuth");
 
@@ -62,31 +41,32 @@ describe("Navbar", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    resetRouterMocks();
     fetchManagedChannelsMock.mockResolvedValue([]);
   });
 
   test("shows a dashboard link to admins", () => {
-    mockUseAuth.mockReturnValue(signedInAuthState(adminUser));
+    mockAuthenticatedUser(adminUser);
 
-    render(<Navbar />);
+    renderWithProviders(<Navbar />);
 
     expect(screen.getByRole("link", { name: /dashboard/i })).toBeInTheDocument();
   });
 
   test("does not render a dashboard link for non-admins", () => {
-    mockUseAuth.mockReturnValue(signedInAuthState(viewerUser));
+    mockAuthenticatedUser(viewerUser);
 
-    render(<Navbar />);
+    renderWithProviders(<Navbar />);
 
     expect(screen.queryByRole("link", { name: /dashboard/i })).not.toBeInTheDocument();
   });
 
   test("closes the mobile menu after visiting the dashboard link", async () => {
-    mockUseAuth.mockReturnValue(signedInAuthState(adminUser));
+    mockAuthenticatedUser(adminUser);
 
     const user = userEvent.setup();
 
-    render(<Navbar />);
+    renderWithProviders(<Navbar />);
 
     const toggleButton = screen.getByRole("button", { name: /open navigation menu/i });
     await act(async () => {
@@ -104,11 +84,11 @@ describe("Navbar", () => {
   });
 
   test("renders each primary link once in the mobile drawer", async () => {
-    mockUseAuth.mockReturnValue(guestAuthState());
+    mockAnonymousUser();
 
     const user = userEvent.setup();
 
-    render(<Navbar />);
+    renderWithProviders(<Navbar />);
 
     const toggleButton = screen.getByRole("button", { name: /open navigation menu/i });
     await act(async () => {
