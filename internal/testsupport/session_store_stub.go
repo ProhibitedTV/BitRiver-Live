@@ -21,9 +21,9 @@ func NewSessionStoreStub() *SessionStoreStub {
 }
 
 // Save records the session details for the provided token.
-func (s *SessionStoreStub) Save(token, userID string, expiresAt time.Time) error {
+func (s *SessionStoreStub) Save(token, userID string, expiresAt, absoluteExpiresAt time.Time) error {
 	s.mu.Lock()
-	s.sessions[token] = auth.SessionRecord{Token: token, UserID: userID, ExpiresAt: expiresAt.UTC()}
+	s.sessions[token] = auth.SessionRecord{Token: token, UserID: userID, ExpiresAt: expiresAt.UTC(), AbsoluteExpiresAt: absoluteExpiresAt.UTC()}
 	s.mu.Unlock()
 	return nil
 }
@@ -48,7 +48,7 @@ func (s *SessionStoreStub) Delete(token string) error {
 func (s *SessionStoreStub) PurgeExpired(now time.Time) error {
 	s.mu.Lock()
 	for token, record := range s.sessions {
-		if now.After(record.ExpiresAt) {
+		if now.After(record.ExpiresAt) || (!record.AbsoluteExpiresAt.IsZero() && now.After(record.AbsoluteExpiresAt)) {
 			delete(s.sessions, token)
 		}
 	}
@@ -59,7 +59,7 @@ func (s *SessionStoreStub) PurgeExpired(now time.Time) error {
 // Seed inserts a session record with the provided values, overriding any existing entry.
 func (s *SessionStoreStub) Seed(token, userID string, expiresAt time.Time) {
 	s.mu.Lock()
-	s.sessions[token] = auth.SessionRecord{Token: token, UserID: userID, ExpiresAt: expiresAt.UTC()}
+	s.sessions[token] = auth.SessionRecord{Token: token, UserID: userID, ExpiresAt: expiresAt.UTC(), AbsoluteExpiresAt: expiresAt.UTC()}
 	s.mu.Unlock()
 }
 

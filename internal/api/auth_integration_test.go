@@ -98,6 +98,61 @@ func TestAuthSessionLifecycle(t *testing.T) {
 	}
 }
 
+func TestAuthSessionIdleRefresh(t *testing.T) {
+	store := newTestStorage(t)
+	sessionStore := testsupport.NewSessionStoreStub()
+	sessions := auth.NewSessionManager(10*time.Second, auth.WithStore(sessionStore), auth.WithIdleTimeout(2*time.Second))
+	handler := NewHandler(store, sessions)
+
+	_, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Admin", Email: "admin@example.com", Password: "password123", Roles: []string{"admin"}})
+	if err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	body := bytes.NewBufferString(`{"email":"admin@example.com","password":"password123"}`)
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", body)
+	loginRec := httptest.NewRecorder()
+	handler.Login(loginRec, loginReq)
+
+	loginRes := loginRec.Result()
+	if loginRes.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected login status: %d", loginRes.StatusCode)
+	}
+
+	cookie := findSessionCookie(t, loginRes.Cookies())
+	initialRecord, ok := sessionStore.Record(cookie.Value)
+	if !ok {
+		t.Fatalf("expected session to be stored")
+	}
+
+	time.Sleep(time.Second)
+	refreshReq := httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
+	refreshReq.AddCookie(cookie)
+	refreshRec := httptest.NewRecorder()
+
+	handler.Session(refreshRec, refreshReq)
+
+	if refreshRec.Code != http.StatusOK {
+		t.Fatalf("unexpected refresh status: %d", refreshRec.Code)
+	}
+
+	refreshedCookie := findSessionCookie(t, refreshRec.Result().Cookies())
+	if !refreshedCookie.Expires.After(cookie.Expires) {
+		t.Fatalf("expected cookie expiry to move forward, got %v before %v", refreshedCookie.Expires, cookie.Expires)
+	}
+
+	refreshedRecord, ok := sessionStore.Record(cookie.Value)
+	if !ok {
+		t.Fatalf("expected session to remain stored")
+	}
+	if !refreshedRecord.ExpiresAt.After(initialRecord.ExpiresAt) {
+		t.Fatalf("expected refreshed expiry after initial %v, got %v", initialRecord.ExpiresAt, refreshedRecord.ExpiresAt)
+	}
+	if refreshedRecord.AbsoluteExpiresAt != initialRecord.AbsoluteExpiresAt {
+		t.Fatalf("expected absolute expiry to remain %v, got %v", initialRecord.AbsoluteExpiresAt, refreshedRecord.AbsoluteExpiresAt)
+	}
+}
+
 func TestAuthInvalidCredentialsAndExpiredSession(t *testing.T) {
 	store := newTestStorage(t)
 	sessionStore := testsupport.NewSessionStoreStub()
@@ -194,7 +249,7 @@ func TestProtectedEndpointPermissions(t *testing.T) {
 
 func authenticateRequest(t *testing.T, h *Handler, req *http.Request) *http.Request {
 	t.Helper()
-	user, err := h.AuthenticateRequest(req)
+	user, _, err := h.AuthenticateRequest(req)
 	if err != nil {
 		t.Fatalf("failed to authenticate request: %v", err)
 	}

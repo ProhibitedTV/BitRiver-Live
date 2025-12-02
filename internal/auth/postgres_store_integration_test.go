@@ -54,7 +54,7 @@ func TestPostgresSessionStoreTimeout(t *testing.T) {
 		_, _ = cleanupConn.Exec(cleanupCtx, `DROP FUNCTION IF EXISTS slow_auth_sessions_trigger()`)
 	}()
 
-	err = store.Save("timeout-token", "timeout-user", time.Now().Add(time.Hour))
+	err = store.Save("timeout-token", "timeout-user", time.Now().Add(time.Hour), time.Now().Add(2*time.Hour))
 	if err == nil {
 		t.Fatal("expected timeout error from slow trigger")
 	}
@@ -72,7 +72,7 @@ func TestPostgresSessionStoreSavesHashedTokens(t *testing.T) {
 	token := "raw-session-token"
 	expiresAt := time.Now().Add(time.Hour)
 
-	if err := store.Save(token, "user-id", expiresAt); err != nil {
+	if err := store.Save(token, "user-id", expiresAt, expiresAt.Add(time.Hour)); err != nil {
 		t.Fatalf("save session: %v", err)
 	}
 
@@ -89,9 +89,9 @@ func TestPostgresSessionStoreSavesHashedTokens(t *testing.T) {
 	defer conn.Release()
 
 	var storedToken, storedHash, storedUser string
-	var storedExpires time.Time
-	if err := conn.QueryRow(ctx, `SELECT token, hashed_token, user_id, expires_at FROM auth_sessions WHERE hashed_token = $1`, hashedToken).
-		Scan(&storedToken, &storedHash, &storedUser, &storedExpires); err != nil {
+	var storedExpires, storedAbsolute time.Time
+	if err := conn.QueryRow(ctx, `SELECT token, hashed_token, user_id, expires_at, absolute_expires_at FROM auth_sessions WHERE hashed_token = $1`, hashedToken).
+		Scan(&storedToken, &storedHash, &storedUser, &storedExpires, &storedAbsolute); err != nil {
 		t.Fatalf("fetch stored session: %v", err)
 	}
 
@@ -118,6 +118,9 @@ func TestPostgresSessionStoreSavesHashedTokens(t *testing.T) {
 	if !record.ExpiresAt.Equal(storedExpires) {
 		t.Fatalf("expected expiresAt %v, got %v", storedExpires, record.ExpiresAt)
 	}
+	if !record.AbsoluteExpiresAt.Equal(storedAbsolute) {
+		t.Fatalf("expected absolute_expires_at %v, got %v", storedAbsolute, record.AbsoluteExpiresAt)
+	}
 }
 
 func TestPostgresSessionStoreDeleteUsesHashes(t *testing.T) {
@@ -127,7 +130,7 @@ func TestPostgresSessionStoreDeleteUsesHashes(t *testing.T) {
 	}
 
 	token := "token-to-delete"
-	if err := store.Save(token, "user-id", time.Now().Add(time.Hour)); err != nil {
+	if err := store.Save(token, "user-id", time.Now().Add(time.Hour), time.Now().Add(2*time.Hour)); err != nil {
 		t.Fatalf("save session: %v", err)
 	}
 

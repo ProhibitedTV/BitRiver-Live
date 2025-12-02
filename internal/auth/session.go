@@ -10,7 +10,7 @@ import (
 
 // SessionStore defines the persistence contract for session tokens.
 type SessionStore interface {
-	Save(token, userID string, expiresAt time.Time) error
+	Save(token, userID string, expiresAt, absoluteExpiresAt time.Time) error
 	Get(token string) (SessionRecord, bool, error)
 	Delete(token string) error
 	PurgeExpired(now time.Time) error
@@ -18,9 +18,10 @@ type SessionStore interface {
 
 // SessionRecord captures a session row retrieved from the backing store.
 type SessionRecord struct {
-	Token     string
-	UserID    string
-	ExpiresAt time.Time
+	Token             string
+	UserID            string
+	ExpiresAt         time.Time
+	AbsoluteExpiresAt time.Time
 }
 
 // SessionOption configures a SessionManager instance.
@@ -42,22 +43,34 @@ func WithTokenLength(length int) SessionOption {
 	}
 }
 
+// WithIdleTimeout enables idle session expiration by specifying the duration a session
+// remains valid without activity. When set, Validate refreshes the session expiry up to
+// the absolute TTL.
+func WithIdleTimeout(timeout time.Duration) SessionOption {
+	return func(m *SessionManager) {
+		if timeout > 0 {
+			m.idleTimeout = timeout
+		}
+	}
+}
+
 // SessionManager coordinates session creation and validation against a backing store.
 type SessionManager struct {
 	store        SessionStore
-	ttl          time.Duration
+	absoluteTTL  time.Duration
+	idleTimeout  time.Duration
 	tokenLength  int
 	tokenFactory func(int) (string, error)
 }
 
-// NewSessionManager constructs a SessionManager with the provided TTL and options.
-// The manager defaults to an in-memory store for local development when no store is supplied.
+// NewSessionManager constructs a SessionManager with the provided absolute TTL and options.
+// The manager defaults to a 7-day TTL and an in-memory store for local development when no store is supplied.
 func NewSessionManager(ttl time.Duration, opts ...SessionOption) *SessionManager {
 	if ttl <= 0 {
-		ttl = 24 * time.Hour
+		ttl = 7 * 24 * time.Hour
 	}
 	manager := &SessionManager{
-		ttl:          ttl,
+		absoluteTTL:  ttl,
 		tokenLength:  32,
 		tokenFactory: generateToken,
 	}
@@ -81,8 +94,16 @@ func (m *SessionManager) Create(userID string) (string, time.Time, error) {
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	expiresAt := time.Now().Add(m.ttl)
-	if err := m.store.Save(token, userID, expiresAt.UTC()); err != nil {
+	now := time.Now()
+	absoluteExpiresAt := now.Add(m.absoluteTTL)
+	expiresAt := absoluteExpiresAt
+	if m.idleTimeout > 0 {
+		expiresAt = now.Add(m.idleTimeout)
+		if expiresAt.After(absoluteExpiresAt) {
+			expiresAt = absoluteExpiresAt
+		}
+	}
+	if err := m.store.Save(token, userID, expiresAt.UTC(), absoluteExpiresAt.UTC()); err != nil {
 		return "", time.Time{}, err
 	}
 	return token, expiresAt, nil
@@ -100,11 +121,29 @@ func (m *SessionManager) Validate(token string) (string, time.Time, bool, error)
 	if !ok {
 		return "", time.Time{}, false, nil
 	}
-	if time.Now().After(record.ExpiresAt) {
+	now := time.Now()
+	absoluteExpiresAt := record.AbsoluteExpiresAt
+	if absoluteExpiresAt.IsZero() {
+		absoluteExpiresAt = record.ExpiresAt
+	}
+	if now.After(record.ExpiresAt) || now.After(absoluteExpiresAt) {
 		_ = m.store.Delete(token)
 		return "", time.Time{}, false, nil
 	}
-	return record.UserID, record.ExpiresAt, true, nil
+	expiresAt := record.ExpiresAt
+	if m.idleTimeout > 0 {
+		refreshTo := now.Add(m.idleTimeout)
+		if refreshTo.After(absoluteExpiresAt) {
+			refreshTo = absoluteExpiresAt
+		}
+		if refreshTo.After(record.ExpiresAt) {
+			if err := m.store.Save(record.Token, record.UserID, refreshTo.UTC(), absoluteExpiresAt.UTC()); err != nil {
+				return "", time.Time{}, false, err
+			}
+			expiresAt = refreshTo
+		}
+	}
+	return record.UserID, expiresAt, true, nil
 }
 
 // Revoke deletes the session token from the backing store.

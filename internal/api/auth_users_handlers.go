@@ -251,27 +251,30 @@ func appendQueryParam(path, key, value string) string {
 
 func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
-	case http.MethodGet:
-		token := ExtractToken(r)
-		if token == "" {
-			WriteError(w, http.StatusUnauthorized, fmt.Errorf("missing session token"))
-			return
-		}
-		userID, expiresAt, ok, err := h.sessionManager().Validate(token)
-		if err != nil {
-			WriteError(w, http.StatusInternalServerError, err)
-			return
-		}
-		if !ok {
-			WriteError(w, http.StatusUnauthorized, fmt.Errorf("invalid or expired session"))
-			return
-		}
-		user, exists := h.Store.GetUser(userID)
-		if !exists {
-			WriteError(w, http.StatusUnauthorized, fmt.Errorf("account not found"))
-			return
-		}
-		WriteJSON(w, http.StatusOK, newAuthResponse(user, expiresAt))
+case http.MethodGet:
+token := ExtractToken(r)
+if token == "" {
+WriteError(w, http.StatusUnauthorized, fmt.Errorf("missing session token"))
+return
+}
+userID, expiresAt, ok, err := h.sessionManager().Validate(token)
+if err != nil {
+WriteError(w, http.StatusInternalServerError, err)
+return
+}
+if !ok {
+WriteError(w, http.StatusUnauthorized, fmt.Errorf("invalid or expired session"))
+return
+}
+user, exists := h.Store.GetUser(userID)
+if !exists {
+WriteError(w, http.StatusUnauthorized, fmt.Errorf("account not found"))
+return
+}
+if _, err := r.Cookie("bitriver_session"); err == nil {
+h.RefreshSessionCookie(w, r, token, expiresAt)
+}
+WriteJSON(w, http.StatusOK, newAuthResponse(user, expiresAt))
 	case http.MethodDelete:
 		token := ExtractToken(r)
 		if token == "" {

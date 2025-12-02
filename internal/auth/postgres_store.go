@@ -98,7 +98,7 @@ func (s *PostgresSessionStore) Ping(ctx context.Context) error {
 }
 
 // Save stores or updates the session token.
-func (s *PostgresSessionStore) Save(token, userID string, expiresAt time.Time) error {
+func (s *PostgresSessionStore) Save(token, userID string, expiresAt, absoluteExpiresAt time.Time) error {
 	if s.pool == nil {
 		return fmt.Errorf("postgres session pool not configured")
 	}
@@ -109,10 +109,10 @@ func (s *PostgresSessionStore) Save(token, userID string, expiresAt time.Time) e
 	ctx, cancel := s.operationContext()
 	defer cancel()
 	_, err = s.pool.Exec(ctx, `
-INSERT INTO auth_sessions (token, hashed_token, user_id, expires_at)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (hashed_token) DO UPDATE SET user_id = EXCLUDED.user_id, expires_at = EXCLUDED.expires_at
-`, hashedToken, hashedToken, userID, expiresAt.UTC())
+INSERT INTO auth_sessions (token, hashed_token, user_id, expires_at, absolute_expires_at)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (hashed_token) DO UPDATE SET user_id = EXCLUDED.user_id, expires_at = EXCLUDED.expires_at, absolute_expires_at = EXCLUDED.absolute_expires_at
+`, hashedToken, hashedToken, userID, expiresAt.UTC(), absoluteExpiresAt.UTC())
 	return err
 }
 
@@ -128,13 +128,13 @@ func (s *PostgresSessionStore) Get(token string) (SessionRecord, bool, error) {
 	ctx, cancel := s.operationContext()
 	defer cancel()
 	row := s.pool.QueryRow(ctx, `
-SELECT user_id, expires_at
+SELECT user_id, expires_at, absolute_expires_at
 FROM auth_sessions
 WHERE hashed_token = $1
 `, hashedToken)
 	var record SessionRecord
 	record.Token = token
-	if err := row.Scan(&record.UserID, &record.ExpiresAt); err != nil {
+	if err := row.Scan(&record.UserID, &record.ExpiresAt, &record.AbsoluteExpiresAt); err != nil {
 		if isNoRows(err) {
 			return SessionRecord{}, false, nil
 		}
@@ -165,7 +165,7 @@ func (s *PostgresSessionStore) PurgeExpired(now time.Time) error {
 	}
 	ctx, cancel := s.operationContext()
 	defer cancel()
-	_, err := s.pool.Exec(ctx, `DELETE FROM auth_sessions WHERE expires_at <= $1`, now.UTC())
+	_, err := s.pool.Exec(ctx, `DELETE FROM auth_sessions WHERE expires_at <= $1 OR absolute_expires_at <= $1`, now.UTC())
 	return err
 }
 
