@@ -21,7 +21,7 @@ export function ChatPanel({
   roomId?: string;
   viewerCount?: number;
 }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading, signIn } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
@@ -223,7 +223,7 @@ export function ChatPanel({
 
   const isComposerDisabled = !user || sending;
 
-  const shouldShowSignInPrompt = authRequired && !user;
+  const shouldShowSignInPrompt = authRequired && !authLoading && !user;
 
   const handlePopout = () => {
     setShowPopoutDialog(true);
@@ -315,8 +315,13 @@ export function ChatPanel({
           aria-live="polite"
         >
           {shouldShowSignInPrompt && (
-            <div className="surface" role="status">
-              Sign in with the controls above to view and participate in chat.
+            <div className="surface stack" role="status">
+              <p className="muted">Sign in to view and participate in chat.</p>
+              <div>
+                <button type="button" className="primary-button" onClick={() => void signIn()}>
+                  Sign in
+                </button>
+              </div>
             </div>
           )}
           {sortedMessages.length === 0 ? (

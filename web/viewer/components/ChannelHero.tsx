@@ -24,7 +24,7 @@ export type ChannelHeaderProps = {
 };
 
 export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: ChannelHeaderProps) {
-  const { user } = useAuth();
+  const { user, signIn } = useAuth();
   const [follow, setFollow] = useState<FollowState>(data.follow);
   const initialSubscription: SubscriptionState = data.subscription ?? {
     subscribed: false,
@@ -54,7 +54,8 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
 
   const handleToggleFollow = async () => {
     if (!user) {
-      setStatus("Sign in from the header to follow this channel.");
+      setStatus("Redirecting to sign in…");
+      void signIn();
       return;
     }
     if (isOwner) {
@@ -78,7 +79,8 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
 
   const handleToggleSubscription = async () => {
     if (!user) {
-      setStatus("Sign in from the header to subscribe to this channel.");
+      setStatus("Redirecting to sign in…");
+      void signIn();
       return;
     }
     try {

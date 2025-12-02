@@ -8,7 +8,7 @@ import type { DirectoryChannel } from "../../lib/viewer-api";
 import { fetchFollowingChannels } from "../../lib/viewer-api";
 
 export default function FollowingPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, signIn } = useAuth();
   const [channels, setChannels] = useState<DirectoryChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
@@ -72,9 +72,14 @@ export default function FollowingPage() {
         <div className="surface stack" role="status">
           <p className="muted">Sign in to see channels you follow.</p>
           <p className="muted">Browse the directory to find creators and follow them from their channel pages.</p>
-          <Link href="/browse" className="primary-button" prefetch>
-            Browse channels
-          </Link>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <button type="button" className="primary-button" onClick={() => void signIn()}>
+              Sign in
+            </button>
+            <Link href="/browse" className="secondary-button" prefetch>
+              Browse channels
+            </Link>
+          </div>
         </div>
       ) : (
         <>

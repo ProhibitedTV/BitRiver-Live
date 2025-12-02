@@ -15,7 +15,7 @@ interface FetchState {
 const REFRESH_INTERVAL_MS = 30_000;
 
 export function FollowingSidebar() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, signIn } = useAuth();
   const [channels, setChannels] = useState<DirectoryChannel[]>([]);
   const [fetchState, setFetchState] = useState<FetchState>({ status: "idle" });
   const mountedRef = useRef(true);
@@ -113,9 +113,12 @@ export function FollowingSidebar() {
       {fetchState.status === "loading" ? (
         <p className="following-sidebar__state muted">Checking which creators are live…</p>
       ) : fetchState.status === "unauthenticated" ? (
-        <p className="following-sidebar__state following-sidebar__state--empty">
-          Sign in to see who you follow and get notified when they go live.
-        </p>
+        <div className="following-sidebar__state following-sidebar__state--empty">
+          <p>Sign in to see who you follow and get notified when they go live.</p>
+          <button type="button" className="primary-button" onClick={() => void signIn()}>
+            Sign in
+          </button>
+        </div>
       ) : fetchState.status === "error" ? (
         <div className="following-sidebar__state following-sidebar__state--error" role="status">
           <p>We couldn&rsquo;t load your followed channels.</p>

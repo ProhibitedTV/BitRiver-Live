@@ -25,7 +25,7 @@ const FILE_METADATA_KEYS = ["contentType", "fileLastModified"];
 
 export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, signIn } = useAuth();
   const [items, setItems] = useState<UploadItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
@@ -54,10 +54,14 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
     if (authLoading) {
       return;
     }
-    if (!user || !canManage) {
+    if (!user) {
+      void signIn(`/creator/live/${channelId}`);
+      return;
+    }
+    if (!canManage) {
       router.replace(`/channels/${channelId}`);
     }
-  }, [authLoading, canManage, channelId, router, user]);
+  }, [authLoading, canManage, channelId, router, signIn, user]);
 
   const load = useCallback(
     async (silent = false) => {
