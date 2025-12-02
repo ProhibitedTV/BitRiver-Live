@@ -1,8 +1,14 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Navbar } from "../components/Navbar";
-import { useAuth } from "../hooks/useAuth";
 import { fetchManagedChannels } from "../lib/viewer-api";
+import {
+  adminUser,
+  guestAuthState,
+  mockUseAuth,
+  signedInAuthState,
+  viewerUser,
+} from "./test-utils/auth";
 
 jest.mock("next/link", () => {
   const React = require("react");
@@ -33,7 +39,6 @@ jest.mock("../lib/viewer-api", () => ({
   fetchManagedChannels: jest.fn(),
 }));
 
-const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const fetchManagedChannelsMock = fetchManagedChannels as jest.MockedFunction<
   typeof fetchManagedChannels
 >;
@@ -60,23 +65,8 @@ describe("Navbar", () => {
     fetchManagedChannelsMock.mockResolvedValue([]);
   });
 
-  const authBase = {
-    loading: false,
-    error: undefined,
-    signIn: jest.fn(),
-    signOut: jest.fn(),
-  } as const;
-
   test("shows a dashboard link to admins", () => {
-    mockUseAuth.mockReturnValue({
-      ...authBase,
-      user: {
-        id: "admin-1",
-        displayName: "Admin",
-        email: "admin@example.com",
-        roles: ["admin"],
-      },
-    });
+    mockUseAuth.mockReturnValue(signedInAuthState(adminUser));
 
     render(<Navbar />);
 
@@ -84,15 +74,7 @@ describe("Navbar", () => {
   });
 
   test("does not render a dashboard link for non-admins", () => {
-    mockUseAuth.mockReturnValue({
-      ...authBase,
-      user: {
-        id: "viewer-1",
-        displayName: "Viewer",
-        email: "viewer@example.com",
-        roles: [],
-      },
-    });
+    mockUseAuth.mockReturnValue(signedInAuthState(viewerUser));
 
     render(<Navbar />);
 
@@ -100,15 +82,7 @@ describe("Navbar", () => {
   });
 
   test("closes the mobile menu after visiting the dashboard link", async () => {
-    mockUseAuth.mockReturnValue({
-      ...authBase,
-      user: {
-        id: "admin-1",
-        displayName: "Admin",
-        email: "admin@example.com",
-        roles: ["admin"],
-      },
-    });
+    mockUseAuth.mockReturnValue(signedInAuthState(adminUser));
 
     const user = userEvent.setup();
 
@@ -130,10 +104,7 @@ describe("Navbar", () => {
   });
 
   test("renders each primary link once in the mobile drawer", async () => {
-    mockUseAuth.mockReturnValue({
-      ...authBase,
-      user: undefined,
-    });
+    mockUseAuth.mockReturnValue(guestAuthState());
 
     const user = userEvent.setup();
 

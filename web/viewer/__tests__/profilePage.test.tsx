@@ -1,8 +1,13 @@
 import userEvent from "@testing-library/user-event";
 import { render, screen, waitFor } from "@testing-library/react";
 import ProfilePage from "../app/profile/page";
-import { useAuth } from "../hooks/useAuth";
 import { fetchProfile, updateProfile } from "../lib/viewer-api";
+import {
+  buildAuthUser,
+  guestAuthState,
+  mockUseAuth,
+  signedInAuthState,
+} from "./test-utils/auth";
 
 jest.mock("next/link", () => {
   const React = require("react");
@@ -19,16 +24,8 @@ jest.mock("../lib/viewer-api", () => ({
   updateProfile: jest.fn(),
 }));
 
-const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const fetchProfileMock = fetchProfile as jest.MockedFunction<typeof fetchProfile>;
 const updateProfileMock = updateProfile as jest.MockedFunction<typeof updateProfile>;
-
-const authBase = {
-  loading: false,
-  error: undefined,
-  signIn: jest.fn(),
-  signOut: jest.fn(),
-} as const;
 
 const profileFixture = {
   userId: "viewer-1",
@@ -53,7 +50,7 @@ describe("ProfilePage", () => {
   });
 
   test("prompts unauthenticated viewers to sign in", () => {
-    mockUseAuth.mockReturnValue({ ...authBase, user: undefined });
+    mockUseAuth.mockReturnValue(guestAuthState());
 
     render(<ProfilePage />);
 
@@ -62,10 +59,11 @@ describe("ProfilePage", () => {
   });
 
   test("loads the current profile and pre-fills the form", async () => {
-    mockUseAuth.mockReturnValue({
-      ...authBase,
-      user: { id: "viewer-1", displayName: "Viewer One", email: "viewer@example.com", roles: [] },
-    });
+    mockUseAuth.mockReturnValue(
+      signedInAuthState(
+        buildAuthUser({ id: "viewer-1", displayName: "Viewer One", email: "viewer@example.com" })
+      )
+    );
 
     render(<ProfilePage />);
 
@@ -80,10 +78,11 @@ describe("ProfilePage", () => {
   });
 
   test("saves profile changes and shows a confirmation", async () => {
-    mockUseAuth.mockReturnValue({
-      ...authBase,
-      user: { id: "viewer-1", displayName: "Viewer One", email: "viewer@example.com", roles: [] },
-    });
+    mockUseAuth.mockReturnValue(
+      signedInAuthState(
+        buildAuthUser({ id: "viewer-1", displayName: "Viewer One", email: "viewer@example.com" })
+      )
+    );
     const user = userEvent.setup();
 
     render(<ProfilePage />);
@@ -115,10 +114,11 @@ describe("ProfilePage", () => {
 
   test("surfaces errors when the profile fails to load", async () => {
     fetchProfileMock.mockRejectedValueOnce(new Error("Server offline"));
-    mockUseAuth.mockReturnValue({
-      ...authBase,
-      user: { id: "viewer-1", displayName: "Viewer One", email: "viewer@example.com", roles: [] },
-    });
+    mockUseAuth.mockReturnValue(
+      signedInAuthState(
+        buildAuthUser({ id: "viewer-1", displayName: "Viewer One", email: "viewer@example.com" })
+      )
+    );
 
     render(<ProfilePage />);
 
