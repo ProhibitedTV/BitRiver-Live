@@ -10,15 +10,36 @@ import (
 	"time"
 
 	"bitriver-live/internal/ingest"
+	"bitriver-live/internal/models"
 	"bitriver-live/internal/storage"
+)
+
+// UploadStore exposes the upload-related persistence operations required by
+// UploadProcessor. It intentionally omits unrelated repository methods.
+type UploadStore interface {
+	ListChannels(ownerID, query string) []models.Channel
+	ListUploads(channelID string) ([]models.Upload, error)
+	GetUpload(id string) (models.Upload, bool)
+	UpdateUpload(id string, update storage.UploadUpdate) (models.Upload, error)
+}
+
+// UploadIngestClient captures the ingest functionality needed to process
+// uploads.
+type UploadIngestClient interface {
+	TranscodeUpload(ctx context.Context, params ingest.UploadTranscodeParams) (ingest.UploadTranscodeResult, error)
+}
+
+var (
+	_ UploadStore        = (storage.Repository)(nil)
+	_ UploadIngestClient = (ingest.Controller)(nil)
 )
 
 // UploadProcessorConfig describes the collaborators and tunable settings used
 // to process archived uploads, including storage, ingest coordination, worker
 // concurrency, and back pressure limits.
 type UploadProcessorConfig struct {
-	Store      storage.Repository
-	Ingest     ingest.Controller
+	Store      UploadStore
+	Ingest     UploadIngestClient
 	Renditions []ingest.Rendition
 	Workers    int
 	QueueSize  int
@@ -30,8 +51,8 @@ type UploadProcessorConfig struct {
 // coordinating persistence, ingest, and rendition generation while honoring
 // queue limits and cancellation.
 type UploadProcessor struct {
-	store      storage.Repository
-	ingest     ingest.Controller
+	store      UploadStore
+	ingest     UploadIngestClient
 	renditions []ingest.Rendition
 	workers    int
 	timeout    time.Duration
