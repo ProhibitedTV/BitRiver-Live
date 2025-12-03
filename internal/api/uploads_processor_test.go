@@ -379,130 +379,168 @@ func cloneUpload(upload models.Upload) models.Upload {
 }
 
 // Unimplemented methods of storage.Repository.
+func (f *fakeUploadStore) ListUsers() []models.User { return []models.User{} }
 
-func (f *fakeUploadStore) IngestHealth(ctx context.Context) []ingest.HealthStatus {
-	panic("not implemented")
-}
-func (f *fakeUploadStore) LastIngestHealth() ([]ingest.HealthStatus, time.Time) {
-	panic("not implemented")
-}
-func (f *fakeUploadStore) CreateUser(params storage.CreateUserParams) (models.User, error) {
-	panic("not implemented")
-}
-func (f *fakeUploadStore) AuthenticateUser(email, password string) (models.User, error) {
-	panic("not implemented")
-}
-func (f *fakeUploadStore) AuthenticateOAuth(params storage.OAuthLoginParams) (models.User, error) {
-	panic("not implemented")
-}
-func (f *fakeUploadStore) ListUsers() []models.User              { panic("not implemented") }
-func (f *fakeUploadStore) GetUser(id string) (models.User, bool) { panic("not implemented") }
+func (f *fakeUploadStore) GetUser(id string) (models.User, bool) { return models.User{}, false }
+
 func (f *fakeUploadStore) UpdateUser(id string, update storage.UserUpdate) (models.User, error) {
-	panic("not implemented")
+	return models.User{}, nil
 }
 
 func (f *fakeUploadStore) SetUserPassword(id, password string) (models.User, error) {
-	panic("not implemented")
+	return models.User{}, nil
 }
-func (f *fakeUploadStore) DeleteUser(id string) error { panic("not implemented") }
+
+func (f *fakeUploadStore) DeleteUser(id string) error { return nil }
+
 func (f *fakeUploadStore) UpsertProfile(userID string, update storage.ProfileUpdate) (models.Profile, error) {
-	panic("not implemented")
+	return models.Profile{}, nil
 }
-func (f *fakeUploadStore) GetProfile(userID string) (models.Profile, bool) { panic("not implemented") }
-func (f *fakeUploadStore) ListProfiles() []models.Profile                  { panic("not implemented") }
+
+func (f *fakeUploadStore) GetProfile(userID string) (models.Profile, bool) {
+	return models.Profile{}, false
+}
+
+func (f *fakeUploadStore) ListProfiles() []models.Profile { return []models.Profile{} }
+
 func (f *fakeUploadStore) CreateChannel(ownerID, title, category string, tags []string) (models.Channel, error) {
-	panic("not implemented")
+	return models.Channel{}, nil
 }
+
 func (f *fakeUploadStore) UpdateChannel(id string, update storage.ChannelUpdate) (models.Channel, error) {
-	panic("not implemented")
+	return models.Channel{}, nil
 }
+
 func (f *fakeUploadStore) RotateChannelStreamKey(id string) (models.Channel, error) {
-	panic("not implemented")
+	return models.Channel{}, nil
 }
-func (f *fakeUploadStore) DeleteChannel(id string) error               { panic("not implemented") }
-func (f *fakeUploadStore) GetChannel(id string) (models.Channel, bool) { panic("not implemented") }
+
+func (f *fakeUploadStore) DeleteChannel(id string) error { return nil }
+
+func (f *fakeUploadStore) GetChannel(id string) (models.Channel, bool) {
+	return models.Channel{}, false
+}
+
 func (f *fakeUploadStore) GetChannelByStreamKey(streamKey string) (models.Channel, bool) {
-	panic("not implemented")
+	return models.Channel{}, false
 }
-func (f *fakeUploadStore) FollowChannel(userID, channelID string) error     { panic("not implemented") }
-func (f *fakeUploadStore) UnfollowChannel(userID, channelID string) error   { panic("not implemented") }
-func (f *fakeUploadStore) IsFollowingChannel(userID, channelID string) bool { panic("not implemented") }
-func (f *fakeUploadStore) CountFollowers(channelID string) int              { panic("not implemented") }
-func (f *fakeUploadStore) ListFollowedChannelIDs(userID string) []string    { panic("not implemented") }
+
+func (f *fakeUploadStore) FollowChannel(userID, channelID string) error { return nil }
+
+func (f *fakeUploadStore) UnfollowChannel(userID, channelID string) error { return nil }
+
+func (f *fakeUploadStore) IsFollowingChannel(userID, channelID string) bool { return false }
+
+func (f *fakeUploadStore) CountFollowers(channelID string) int { return 0 }
+
+func (f *fakeUploadStore) ListFollowedChannelIDs(userID string) []string { return []string{} }
+
 func (f *fakeUploadStore) StartStream(channelID string, renditions []string) (models.StreamSession, error) {
-	panic("not implemented")
+	return models.StreamSession{}, nil
 }
+
 func (f *fakeUploadStore) StopStream(channelID string, peakConcurrent int) (models.StreamSession, error) {
-	panic("not implemented")
+	return models.StreamSession{}, nil
 }
+
 func (f *fakeUploadStore) CurrentStreamSession(channelID string) (models.StreamSession, bool) {
-	panic("not implemented")
+	return models.StreamSession{}, false
 }
+
 func (f *fakeUploadStore) ListStreamSessions(channelID string) ([]models.StreamSession, error) {
-	panic("not implemented")
+	return []models.StreamSession{}, nil
 }
+
 func (f *fakeUploadStore) ListRecordings(channelID string, includeUnpublished bool) ([]models.Recording, error) {
-	panic("not implemented")
+	return []models.Recording{}, nil
 }
-func (f *fakeUploadStore) GetRecording(id string) (models.Recording, bool) { panic("not implemented") }
+
+func (f *fakeUploadStore) GetRecording(id string) (models.Recording, bool) {
+	return models.Recording{}, false
+}
+
 func (f *fakeUploadStore) PublishRecording(id string) (models.Recording, error) {
-	panic("not implemented")
+	return models.Recording{}, nil
 }
-func (f *fakeUploadStore) DeleteRecording(id string) error { panic("not implemented") }
+
+func (f *fakeUploadStore) DeleteRecording(id string) error { return nil }
+
 func (f *fakeUploadStore) CreateUpload(params storage.CreateUploadParams) (models.Upload, error) {
-	panic("not implemented")
+	return models.Upload{}, nil
 }
-func (f *fakeUploadStore) DeleteUpload(id string) error { panic("not implemented") }
+
+func (f *fakeUploadStore) DeleteUpload(id string) error { return nil }
+
 func (f *fakeUploadStore) CreateClipExport(recordingID string, params storage.ClipExportParams) (models.ClipExport, error) {
-	panic("not implemented")
+	return models.ClipExport{}, nil
 }
+
 func (f *fakeUploadStore) ListClipExports(recordingID string) ([]models.ClipExport, error) {
-	panic("not implemented")
+	return []models.ClipExport{}, nil
 }
+
 func (f *fakeUploadStore) CreateChatMessage(channelID, userID, content string) (models.ChatMessage, error) {
-	panic("not implemented")
+	return models.ChatMessage{}, nil
 }
+
 func (f *fakeUploadStore) DeleteChatMessage(channelID, messageID string) error {
-	panic("not implemented")
+	return nil
 }
+
 func (f *fakeUploadStore) ListChatMessages(channelID string, limit int) ([]models.ChatMessage, error) {
-	panic("not implemented")
+	return []models.ChatMessage{}, nil
 }
-func (f *fakeUploadStore) ChatRestrictions() chat.RestrictionsSnapshot { panic("not implemented") }
-func (f *fakeUploadStore) IsChatBanned(channelID, userID string) bool  { panic("not implemented") }
+
+func (f *fakeUploadStore) ChatRestrictions() chat.RestrictionsSnapshot {
+	return chat.RestrictionsSnapshot{}
+}
+
+func (f *fakeUploadStore) IsChatBanned(channelID, userID string) bool { return false }
+
 func (f *fakeUploadStore) ChatTimeout(channelID, userID string) (time.Time, bool) {
-	panic("not implemented")
+	return time.Time{}, false
 }
-func (f *fakeUploadStore) ApplyChatEvent(evt chat.Event) error { panic("not implemented") }
+
+func (f *fakeUploadStore) ApplyChatEvent(evt chat.Event) error { return nil }
+
 func (f *fakeUploadStore) ListChatRestrictions(channelID string) []models.ChatRestriction {
-	panic("not implemented")
+	return []models.ChatRestriction{}
 }
+
 func (f *fakeUploadStore) CreateChatReport(channelID, reporterID, targetID, reason, messageID, evidenceURL string) (models.ChatReport, error) {
-	panic("not implemented")
+	return models.ChatReport{}, nil
 }
+
 func (f *fakeUploadStore) ListChatReports(channelID string, includeResolved bool) ([]models.ChatReport, error) {
-	panic("not implemented")
+	return []models.ChatReport{}, nil
 }
+
 func (f *fakeUploadStore) ResolveChatReport(reportID, resolverID, resolution string) (models.ChatReport, error) {
-	panic("not implemented")
+	return models.ChatReport{}, nil
 }
+
 func (f *fakeUploadStore) CreateTip(params storage.CreateTipParams) (models.Tip, error) {
-	panic("not implemented")
+	return models.Tip{}, nil
 }
+
 func (f *fakeUploadStore) ListTips(channelID string, limit int) ([]models.Tip, error) {
-	panic("not implemented")
+	return []models.Tip{}, nil
 }
+
 func (f *fakeUploadStore) CreateSubscription(params storage.CreateSubscriptionParams) (models.Subscription, error) {
-	panic("not implemented")
+	return models.Subscription{}, nil
 }
+
 func (f *fakeUploadStore) ListSubscriptions(channelID string, includeInactive bool) ([]models.Subscription, error) {
-	panic("not implemented")
+	return []models.Subscription{}, nil
 }
+
 func (f *fakeUploadStore) GetSubscription(id string) (models.Subscription, bool) {
-	panic("not implemented")
+	return models.Subscription{}, false
 }
+
 func (f *fakeUploadStore) CancelSubscription(id, cancelledBy, reason string) (models.Subscription, error) {
-	panic("not implemented")
+	return models.Subscription{}, nil
 }
 
 var _ storage.Repository = (*fakeUploadStore)(nil)
@@ -604,15 +642,15 @@ func (f *fakeIngest) TranscodeUpload(ctx context.Context, params ingest.UploadTr
 }
 
 func (f *fakeIngest) BootStream(ctx context.Context, params ingest.BootParams) (ingest.BootResult, error) {
-	panic("not implemented")
+	return ingest.BootResult{}, nil
 }
 
 func (f *fakeIngest) ShutdownStream(ctx context.Context, channelID, sessionID string, jobIDs []string) error {
-	panic("not implemented")
+	return nil
 }
 
 func (f *fakeIngest) HealthChecks(ctx context.Context) []ingest.HealthStatus {
-	panic("not implemented")
+	return []ingest.HealthStatus{}
 }
 
 var _ ingest.Controller = (*fakeIngest)(nil)
