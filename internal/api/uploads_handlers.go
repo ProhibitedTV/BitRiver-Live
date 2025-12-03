@@ -360,13 +360,17 @@ func (h *Handler) createUploadEntry(r *http.Request, actor models.User, req crea
 }
 
 func (h *Handler) saveMultipartFile(part *multipart.Part) (*uploadedMedia, error) {
-	defer part.Close()
+	defer func() {
+		_ = part.Close()
+	}()
 	dir := h.uploadMediaDir()
 	tmp, err := os.CreateTemp(dir, "pending-upload-*")
 	if err != nil {
 		return nil, fmt.Errorf("create temp file: %w", err)
 	}
-	defer tmp.Close()
+	defer func() {
+		_ = tmp.Close()
+	}()
 	written, err := io.Copy(tmp, part)
 	if err != nil {
 		_ = os.Remove(tmp.Name())
@@ -464,7 +468,9 @@ func (h *Handler) serveUploadMedia(w http.ResponseWriter, r *http.Request, uploa
 		WriteError(w, http.StatusNotFound, fmt.Errorf("media unavailable"))
 		return
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 	stat, err := file.Stat()
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Errorf("media stat failed"))

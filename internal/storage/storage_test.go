@@ -179,7 +179,9 @@ func (m *memoryS3Server) lastRequest() memoryS3Request {
 }
 
 func (m *memoryS3Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
+	defer func() {
+		_ = r.Body.Close()
+	}()
 	bucket, key, err := parseS3Path(r.URL.Path)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)

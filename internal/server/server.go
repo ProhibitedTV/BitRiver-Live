@@ -638,7 +638,7 @@ func spaHandler(staticFS fs.FS, index []byte, fileServer http.Handler) http.Hand
 			switch {
 			case err == nil:
 				info, statErr := file.Stat()
-				file.Close()
+				_ = file.Close()
 				if statErr == nil && !info.IsDir() {
 					reqToServe := r
 					if servePath != requested {

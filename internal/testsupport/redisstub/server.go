@@ -78,9 +78,9 @@ func Start(opts Options) (*Server, error) {
 	}
 	addr := "127.0.0.1:0"
 	if opts.EnableTLS {
-		certPEM, keyPEM, cert, err := generateSelfSignedCert()
-		if err != nil {
-			return nil, err
+		certPEM, keyPEM, cert, genErr := generateSelfSignedCert()
+		if genErr != nil {
+			return nil, genErr
 		}
 		server.tlsCert = cert
 		server.certPEM = certPEM
@@ -143,7 +143,9 @@ func (s *Server) serve() {
 }
 
 func (s *Server) handleConnection(conn net.Conn) {
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 	reader := bufio.NewReader(conn)
 	writer := bufio.NewWriter(conn)
 	authenticated := s.opts.Password == ""
@@ -153,7 +155,9 @@ func (s *Server) handleConnection(conn net.Conn) {
 			return
 		}
 		if len(args) == 0 {
-			writeError(writer, "ERR wrong number of arguments")
+			if err := writeError(writer, "ERR wrong number of arguments"); err != nil {
+				return
+			}
 			continue
 		}
 		cmd := strings.ToUpper(args[0])

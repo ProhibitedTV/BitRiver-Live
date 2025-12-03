@@ -42,6 +42,13 @@ type repositoryUploadStore struct {
 	repo storage.Repository
 }
 
+// RepositoryUploadStore adapts a storage.Repository to the narrower UploadStore
+// interface used by UploadProcessor, allowing call sites to supply the broader
+// repository without re-implementing upload-specific plumbing.
+func RepositoryUploadStore(repo storage.Repository) UploadStore {
+	return repositoryUploadStore{repo: repo}
+}
+
 func (s repositoryUploadStore) ListPendingUploads(ctx context.Context, limit int) ([]models.Upload, error) {
 	if s.repo == nil {
 		return nil, nil

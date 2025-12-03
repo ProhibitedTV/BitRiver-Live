@@ -331,90 +331,90 @@ func (r *Recorder) Write(w io.Writer) {
 	ingestOperations := r.sortedIngestOperations()
 	transcoderEvents := r.sortedTranscoderJobLabels()
 
-	fmt.Fprintln(w, "# HELP bitriver_http_requests_total Total number of HTTP requests processed by the API")
-	fmt.Fprintln(w, "# TYPE bitriver_http_requests_total counter")
+	_, _ = fmt.Fprintln(w, "# HELP bitriver_http_requests_total Total number of HTTP requests processed by the API")
+	_, _ = fmt.Fprintln(w, "# TYPE bitriver_http_requests_total counter")
 	for _, label := range requestLabels {
 		count := r.requestCount[label]
-		fmt.Fprintf(w, "bitriver_http_requests_total{method=\"%s\",path=\"%s\",status=\"%s\"} %d\n", label.method, label.path, label.status, count)
+		_, _ = fmt.Fprintf(w, "bitriver_http_requests_total{method=\"%s\",path=\"%s\",status=\"%s\"} %d\n", label.method, label.path, label.status, count)
 	}
 
-	fmt.Fprintln(w, "# HELP bitriver_http_request_duration_seconds_sum Cumulative duration of HTTP requests in seconds")
-	fmt.Fprintln(w, "# TYPE bitriver_http_request_duration_seconds_sum counter")
+	_, _ = fmt.Fprintln(w, "# HELP bitriver_http_request_duration_seconds_sum Cumulative duration of HTTP requests in seconds")
+	_, _ = fmt.Fprintln(w, "# TYPE bitriver_http_request_duration_seconds_sum counter")
 	for _, label := range requestLabels {
 		duration := r.requestDuration[label].Seconds()
-		fmt.Fprintf(w, "bitriver_http_request_duration_seconds_sum{method=\"%s\",path=\"%s\",status=\"%s\"} %f\n", label.method, label.path, label.status, duration)
+		_, _ = fmt.Fprintf(w, "bitriver_http_request_duration_seconds_sum{method=\"%s\",path=\"%s\",status=\"%s\"} %f\n", label.method, label.path, label.status, duration)
 	}
 
-	fmt.Fprintln(w, "# HELP bitriver_http_request_duration_seconds_count Total number of observations for request durations")
-	fmt.Fprintln(w, "# TYPE bitriver_http_request_duration_seconds_count counter")
+	_, _ = fmt.Fprintln(w, "# HELP bitriver_http_request_duration_seconds_count Total number of observations for request durations")
+	_, _ = fmt.Fprintln(w, "# TYPE bitriver_http_request_duration_seconds_count counter")
 	for _, label := range requestLabels {
 		count := r.requestCount[label]
-		fmt.Fprintf(w, "bitriver_http_request_duration_seconds_count{method=\"%s\",path=\"%s\",status=\"%s\"} %d\n", label.method, label.path, label.status, count)
+		_, _ = fmt.Fprintf(w, "bitriver_http_request_duration_seconds_count{method=\"%s\",path=\"%s\",status=\"%s\"} %d\n", label.method, label.path, label.status, count)
 	}
 
-	fmt.Fprintln(w, "# HELP bitriver_stream_events_total Stream lifecycle events by type")
-	fmt.Fprintln(w, "# TYPE bitriver_stream_events_total counter")
+	_, _ = fmt.Fprintln(w, "# HELP bitriver_stream_events_total Stream lifecycle events by type")
+	_, _ = fmt.Fprintln(w, "# TYPE bitriver_stream_events_total counter")
 	for _, event := range streamEvents {
 		value := r.streamEvents[event]
-		fmt.Fprintf(w, "bitriver_stream_events_total{event=\"%s\"} %d\n", event, value)
+		_, _ = fmt.Fprintf(w, "bitriver_stream_events_total{event=\"%s\"} %d\n", event, value)
 	}
 
-	fmt.Fprintln(w, "# HELP bitriver_active_streams Current number of streams marked as live")
-	fmt.Fprintln(w, "# TYPE bitriver_active_streams gauge")
-	fmt.Fprintf(w, "bitriver_active_streams %d\n", r.activeStreams.Load())
+	_, _ = fmt.Fprintln(w, "# HELP bitriver_active_streams Current number of streams marked as live")
+	_, _ = fmt.Fprintln(w, "# TYPE bitriver_active_streams gauge")
+	_, _ = fmt.Fprintf(w, "bitriver_active_streams %d\n", r.activeStreams.Load())
 
-	fmt.Fprintln(w, "# HELP bitriver_ingest_health Health status reported by ingest dependencies (1=ok,0=disabled,-1=degraded)")
-	fmt.Fprintln(w, "# TYPE bitriver_ingest_health gauge")
+	_, _ = fmt.Fprintln(w, "# HELP bitriver_ingest_health Health status reported by ingest dependencies (1=ok,0=disabled,-1=degraded)")
+	_, _ = fmt.Fprintln(w, "# TYPE bitriver_ingest_health gauge")
 	for _, service := range ingestServices {
 		value := r.ingestHealthValue[service]
 		status := r.ingestHealthState[service]
-		fmt.Fprintf(w, "bitriver_ingest_health{service=\"%s\",status=\"%s\"} %f\n", service, status, value)
+		_, _ = fmt.Fprintf(w, "bitriver_ingest_health{service=\"%s\",status=\"%s\"} %f\n", service, status, value)
 	}
 
-	fmt.Fprintln(w, "# HELP bitriver_ingest_attempts_total Total ingest operations attempted by action")
-	fmt.Fprintln(w, "# TYPE bitriver_ingest_attempts_total counter")
+	_, _ = fmt.Fprintln(w, "# HELP bitriver_ingest_attempts_total Total ingest operations attempted by action")
+	_, _ = fmt.Fprintln(w, "# TYPE bitriver_ingest_attempts_total counter")
 	for _, op := range ingestOperations {
 		count := r.ingestAttempts[op]
-		fmt.Fprintf(w, "bitriver_ingest_attempts_total{operation=\"%s\"} %d\n", op, count)
+		_, _ = fmt.Fprintf(w, "bitriver_ingest_attempts_total{operation=\"%s\"} %d\n", op, count)
 	}
 
-	fmt.Fprintln(w, "# HELP bitriver_ingest_failures_total Total ingest operation failures by action")
-	fmt.Fprintln(w, "# TYPE bitriver_ingest_failures_total counter")
+	_, _ = fmt.Fprintln(w, "# HELP bitriver_ingest_failures_total Total ingest operation failures by action")
+	_, _ = fmt.Fprintln(w, "# TYPE bitriver_ingest_failures_total counter")
 	for _, op := range ingestOperations {
 		count := r.ingestFailures[op]
-		fmt.Fprintf(w, "bitriver_ingest_failures_total{operation=\"%s\"} %d\n", op, count)
+		_, _ = fmt.Fprintf(w, "bitriver_ingest_failures_total{operation=\"%s\"} %d\n", op, count)
 	}
 
-	fmt.Fprintln(w, "# HELP bitriver_chat_events_total Chat events by type")
-	fmt.Fprintln(w, "# TYPE bitriver_chat_events_total counter")
+	_, _ = fmt.Fprintln(w, "# HELP bitriver_chat_events_total Chat events by type")
+	_, _ = fmt.Fprintln(w, "# TYPE bitriver_chat_events_total counter")
 	for _, event := range chatEvents {
 		count := r.chatEvents[event]
-		fmt.Fprintf(w, "bitriver_chat_events_total{event=\"%s\"} %d\n", event, count)
+		_, _ = fmt.Fprintf(w, "bitriver_chat_events_total{event=\"%s\"} %d\n", event, count)
 	}
 
-	fmt.Fprintln(w, "# HELP bitriver_transcoder_jobs_total Transcoder job events by type and status")
-	fmt.Fprintln(w, "# TYPE bitriver_transcoder_jobs_total counter")
+	_, _ = fmt.Fprintln(w, "# HELP bitriver_transcoder_jobs_total Transcoder job events by type and status")
+	_, _ = fmt.Fprintln(w, "# TYPE bitriver_transcoder_jobs_total counter")
 	for _, label := range transcoderEvents {
 		count := r.transcoderEvents[label]
-		fmt.Fprintf(w, "bitriver_transcoder_jobs_total{kind=\"%s\",status=\"%s\"} %d\n", label.Kind, label.Status, count)
+		_, _ = fmt.Fprintf(w, "bitriver_transcoder_jobs_total{kind=\"%s\",status=\"%s\"} %d\n", label.Kind, label.Status, count)
 	}
 
-	fmt.Fprintln(w, "# HELP bitriver_transcoder_active_jobs Current number of active transcoder jobs")
-	fmt.Fprintln(w, "# TYPE bitriver_transcoder_active_jobs gauge")
-	fmt.Fprintf(w, "bitriver_transcoder_active_jobs %d\n", r.activeTranscoder.Load())
+	_, _ = fmt.Fprintln(w, "# HELP bitriver_transcoder_active_jobs Current number of active transcoder jobs")
+	_, _ = fmt.Fprintln(w, "# TYPE bitriver_transcoder_active_jobs gauge")
+	_, _ = fmt.Fprintf(w, "bitriver_transcoder_active_jobs %d\n", r.activeTranscoder.Load())
 
-	fmt.Fprintln(w, "# HELP bitriver_monetization_events_total Monetization events by type")
-	fmt.Fprintln(w, "# TYPE bitriver_monetization_events_total counter")
+	_, _ = fmt.Fprintln(w, "# HELP bitriver_monetization_events_total Monetization events by type")
+	_, _ = fmt.Fprintln(w, "# TYPE bitriver_monetization_events_total counter")
 	for _, event := range monetizationEvents {
 		count := r.monetizationCount[event]
-		fmt.Fprintf(w, "bitriver_monetization_events_total{event=\"%s\"} %d\n", event, count)
+		_, _ = fmt.Fprintf(w, "bitriver_monetization_events_total{event=\"%s\"} %d\n", event, count)
 	}
 
-	fmt.Fprintln(w, "# HELP bitriver_monetization_amount_sum Total monetization amount by event type")
-	fmt.Fprintln(w, "# TYPE bitriver_monetization_amount_sum counter")
+	_, _ = fmt.Fprintln(w, "# HELP bitriver_monetization_amount_sum Total monetization amount by event type")
+	_, _ = fmt.Fprintln(w, "# TYPE bitriver_monetization_amount_sum counter")
 	for _, event := range monetizationEvents {
 		total := r.monetizationTotal[event]
-		fmt.Fprintf(w, "bitriver_monetization_amount_sum{event=\"%s\"} %s\n", event, total.DecimalString())
+		_, _ = fmt.Fprintf(w, "bitriver_monetization_amount_sum{event=\"%s\"} %s\n", event, total.DecimalString())
 	}
 }
 

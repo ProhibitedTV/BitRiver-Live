@@ -256,7 +256,9 @@ func (m *Manager) exchangeCode(cfg ProviderConfig, code string) (tokenResponse, 
 	if err != nil {
 		return tokenResponse{}, fmt.Errorf("exchange token: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return tokenResponse{}, fmt.Errorf("read token response: %w", err)
@@ -317,7 +319,9 @@ func (m *Manager) fetchUserInfo(cfg ProviderConfig, token tokenResponse) (UserPr
 	if err != nil {
 		return UserProfile{}, fmt.Errorf("fetch userinfo: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return UserProfile{}, fmt.Errorf("read userinfo response: %w", err)
@@ -370,9 +374,9 @@ func stringFromAny(value any) string {
 	switch v := value.(type) {
 	case string:
 		return v
-	case fmt.Stringer:
-		return v.String()
 	case json.Number:
+		return v.String()
+	case fmt.Stringer:
 		return v.String()
 	case float64:
 		return strings.TrimSuffix(strings.TrimSuffix(fmt.Sprintf("%f", v), "0"), ".")

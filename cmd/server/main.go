@@ -416,7 +416,7 @@ func main() {
 	var uploadProcessor *api.UploadProcessor
 	if ingestController != nil {
 		uploadProcessor = api.NewUploadProcessor(api.UploadProcessorConfig{
-			Store:      store,
+			Store:      api.RepositoryUploadStore(store),
 			Ingest:     ingestController,
 			Renditions: ingestConfig.LadderProfiles,
 			Logger:     logging.WithComponent(logger, "uploads"),

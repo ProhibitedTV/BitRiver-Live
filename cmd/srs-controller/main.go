@@ -143,7 +143,11 @@ func (c *controller) proxyRequest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "upstream request failed", http.StatusBadGateway)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil && c.logger != nil {
+			c.logger.Warn("close upstream body", "error", err)
+		}
+	}()
 
 	if resp.StatusCode >= 500 {
 		c.recordUpstreamError(fmt.Errorf("upstream status %d", resp.StatusCode))
@@ -227,7 +231,9 @@ func readBody(rc io.ReadCloser) ([]byte, error) {
 	if rc == nil {
 		return nil, nil
 	}
-	defer rc.Close()
+	defer func() {
+		_ = rc.Close()
+	}()
 	body, err := io.ReadAll(rc)
 	if err != nil {
 		return nil, err

@@ -56,11 +56,11 @@ func Accept(w http.ResponseWriter, r *http.Request) (*Conn, error) {
 	accept := computeAcceptKey(key)
 	response := fmt.Sprintf("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n", accept)
 	if _, err := rw.WriteString(response); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, err
 	}
 	if err := rw.Flush(); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, err
 	}
 
@@ -106,10 +106,12 @@ func Dial(ctx context.Context, rawURL string, header http.Header, tlsConfig *tls
 		tlsConn := tls.Client(conn, cfg)
 		if deadline, ok := ctx.Deadline(); ok {
 			_ = tlsConn.SetDeadline(deadline)
-			defer tlsConn.SetDeadline(time.Time{})
+			defer func() {
+				_ = tlsConn.SetDeadline(time.Time{})
+			}()
 		}
 		if err := tlsConn.HandshakeContext(ctx); err != nil {
-			conn.Close()
+			_ = conn.Close()
 			return nil, err
 		}
 		conn = tlsConn
@@ -128,24 +130,24 @@ func Dial(ctx context.Context, rawURL string, header http.Header, tlsConfig *tls
 	}
 	req += "\r\n"
 	if _, err := io.WriteString(conn, req); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, err
 	}
 
 	reader := bufio.NewReader(conn)
 	status, err := reader.ReadString('\n')
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, err
 	}
 	if !strings.Contains(status, "101") {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("handshake failed: %s", strings.TrimSpace(status))
 	}
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			conn.Close()
+			_ = conn.Close()
 			return nil, err
 		}
 		if strings.TrimSpace(line) == "" {
@@ -208,7 +210,7 @@ func (c *Conn) ReadMessage(ctx context.Context) ([]byte, error) {
 				return nil, err
 			}
 		case opcodeClose:
-			c.Close()
+			_ = c.Close()
 			return nil, io.EOF
 		default:
 			// Ignore unsupported frames.
@@ -278,10 +280,10 @@ type frame struct {
 
 const (
 	opcodeText   byte = 0x1
-	opcodeBinary      = 0x2
-	opcodeClose       = 0x8
-	opcodePing        = 0x9
-	opcodePong        = 0xA
+	opcodeBinary byte = 0x2
+	opcodeClose  byte = 0x8
+	opcodePing   byte = 0x9
+	opcodePong   byte = 0xA
 )
 
 func readFrame(reader *bufio.Reader) (frame, error) {

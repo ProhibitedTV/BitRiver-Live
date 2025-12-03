@@ -686,11 +686,7 @@ func (r *postgresRepository) createRecording(session models.StreamSession, chann
 	if len(session.RenditionManifests) > 0 {
 		renditions := make([]models.RecordingRendition, 0, len(session.RenditionManifests))
 		for _, manifest := range session.RenditionManifests {
-			renditions = append(renditions, models.RecordingRendition{
-				Name:        manifest.Name,
-				ManifestURL: manifest.ManifestURL,
-				Bitrate:     manifest.Bitrate,
-			})
+			renditions = append(renditions, models.RecordingRendition(manifest))
 		}
 		recording.Renditions = renditions
 	}
@@ -1125,7 +1121,7 @@ func rollbackTx(ctx context.Context, tx pgx.Tx) {
 		return
 	}
 	if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-		// Ignore rollback errors when the transaction has already been closed.
+		slog.Default().Debug("rollback transaction", "error", err)
 	}
 }
 
@@ -4405,12 +4401,8 @@ func (r *postgresRepository) AuthenticateOAuth(params OAuthLoginParams) (models.
 		}
 
 		if userID == "" && normalizedEmail != "" {
-			err = tx.QueryRow(ctx, "SELECT id FROM users WHERE email = $1", normalizedEmail).Scan(&userID)
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("lookup user by email: %w", err)
-			}
-			if errors.Is(err, pgx.ErrNoRows) {
-				err = nil
+			if scanErr := tx.QueryRow(ctx, "SELECT id FROM users WHERE email = $1", normalizedEmail).Scan(&userID); scanErr != nil && !errors.Is(scanErr, pgx.ErrNoRows) {
+				return fmt.Errorf("lookup user by email: %w", scanErr)
 			}
 		}
 

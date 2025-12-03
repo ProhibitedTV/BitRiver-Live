@@ -65,10 +65,6 @@ type subscriptionResponse struct {
 	CancelledAt       *string      `json:"cancelledAt,omitempty"`
 }
 
-type cancelSubscriptionRequest struct {
-	Reason string `json:"reason"`
-}
-
 func parseMoneyNumber(number json.Number, field string) (models.Money, error) {
 	raw := strings.TrimSpace(number.String())
 	if raw == "" {

@@ -1513,16 +1513,16 @@ func copyDirectory(src, dst string) error {
 		}
 		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
 		if err != nil {
-			in.Close()
+			_ = in.Close()
 			return err
 		}
 		if _, err := io.Copy(out, in); err != nil {
-			out.Close()
-			in.Close()
+			_ = out.Close()
+			_ = in.Close()
 			return err
 		}
 		if err := out.Close(); err != nil {
-			in.Close()
+			_ = in.Close()
 			return err
 		}
 		return in.Close()
@@ -1537,12 +1537,12 @@ func writeJSONFile(path string, payload any) error {
 	encoder := json.NewEncoder(tmp)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(payload); err != nil {
-		tmp.Close()
-		os.Remove(tmp.Name())
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
 		return err
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
@@ -1562,7 +1562,10 @@ func (s *server) writeJSON(w http.ResponseWriter, status int, payload any) {
 }
 
 func newID(prefix string) string {
-	return fmt.Sprintf("%s-%d", prefix, rand.Int63())
+	idRandMu.Lock()
+	defer idRandMu.Unlock()
+
+	return fmt.Sprintf("%s-%d", prefix, idRand.Int63())
 }
 
 func envOrDefault(key, fallback string) string {
@@ -1572,6 +1575,7 @@ func envOrDefault(key, fallback string) string {
 	return fallback
 }
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
+var (
+	idRand   = rand.New(rand.NewSource(time.Now().UnixNano()))
+	idRandMu sync.Mutex
+)

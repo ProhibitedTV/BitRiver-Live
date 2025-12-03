@@ -132,7 +132,7 @@ func updateAdmin(repo storage.Repository, existing models.User, displayName, pas
 		}
 	}
 
-	updated, err = repo.SetUserPassword(existing.ID, password)
+	updated, err = repo.SetUserPassword(updated.ID, password)
 	if err != nil {
 		return models.User{}, false, err
 	}
