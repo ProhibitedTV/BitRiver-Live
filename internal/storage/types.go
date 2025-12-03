@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -65,6 +66,17 @@ type ObjectStorageConfig struct {
 	LifecycleDays  int
 	PublicEndpoint string
 	RequestTimeout time.Duration
+}
+
+type objectStorageClient interface {
+	Enabled() bool
+	Upload(ctx context.Context, key, contentType string, body []byte) (objectReference, error)
+	Delete(ctx context.Context, key string) error
+}
+
+type objectReference struct {
+	Key string
+	URL string
 }
 
 const defaultObjectStorageRequestTimeout = 30 * time.Second
