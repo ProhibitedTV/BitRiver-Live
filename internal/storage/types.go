@@ -25,6 +25,13 @@ const (
 	// tip message payload.
 	MaxTipMessageLength = 512
 
+	// MaxChatMessageLength defines the maximum number of characters allowed for a
+	// chat message.
+	MaxChatMessageLength = 500
+
+	ChatReportStatusOpen     = "open"
+	ChatReportStatusResolved = "resolved"
+
 	duplicateTipReferenceError = "pq: duplicate key value violates unique constraint \"tips_reference_unique\""
 )
 
