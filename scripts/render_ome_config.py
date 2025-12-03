@@ -171,12 +171,6 @@ def _scoped_replace_control_bindings(text: str, bind: str) -> str:
     return text[:control_start] + control_body + text[control_end:]
 
 
-def _strip_control_block(text: str) -> str:
-    """Remove any legacy <Control> module to keep new OME schemas happy."""
-
-    return re.sub(r"\s*<Control>.*?</Control>\s*", "", text, flags=re.DOTALL)
-
-
 def render(
     template: Path,
     output: Path,
@@ -199,7 +193,6 @@ def render(
     text = _replace_root_bindings(text, escaped_bind, escaped_port, escaped_tls_port)
     text = _replace_root_ip(text, xml_escape(server_ip))
     text = _scoped_replace_control_bindings(text, escaped_bind)
-    text = _strip_control_block(text)
 
     # These may not exist depending on template version; replace them when present.
     text = replace_optional_tag_content(text, "ID", xml_escape(username))
