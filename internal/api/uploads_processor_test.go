@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"bitriver-live/internal/chat"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/storage"
@@ -262,16 +261,6 @@ func newFakeUploadStore() *fakeUploadStore {
 	}
 }
 
-func (f *fakeUploadStore) Ping(context.Context) error { return nil }
-
-func (f *fakeUploadStore) IngestHealth(context.Context) []ingest.HealthStatus {
-	return nil
-}
-
-func (f *fakeUploadStore) LastIngestHealth() ([]ingest.HealthStatus, time.Time) {
-	return nil, time.Time{}
-}
-
 func (f *fakeUploadStore) ListChannels(ownerID, query string) []models.Channel {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -386,184 +375,7 @@ func cloneUpload(upload models.Upload) models.Upload {
 	return upload
 }
 
-// Unimplemented methods of storage.Repository.
-func (f *fakeUploadStore) ListUsers() []models.User { return []models.User{} }
-
-func (f *fakeUploadStore) CreateUser(storage.CreateUserParams) (models.User, error) {
-	return models.User{}, nil
-}
-
-func (f *fakeUploadStore) AuthenticateUser(string, string) (models.User, error) {
-	return models.User{}, nil
-}
-
-func (f *fakeUploadStore) AuthenticateOAuth(storage.OAuthLoginParams) (models.User, error) {
-	return models.User{}, nil
-}
-
-func (f *fakeUploadStore) GetUser(id string) (models.User, bool) { return models.User{}, false }
-
-func (f *fakeUploadStore) UpdateUser(id string, update storage.UserUpdate) (models.User, error) {
-	return models.User{}, nil
-}
-
-func (f *fakeUploadStore) SetUserPassword(id, password string) (models.User, error) {
-	return models.User{}, nil
-}
-
-func (f *fakeUploadStore) DeleteUser(id string) error { return nil }
-
-func (f *fakeUploadStore) UpsertProfile(userID string, update storage.ProfileUpdate) (models.Profile, error) {
-	return models.Profile{}, nil
-}
-
-func (f *fakeUploadStore) GetProfile(userID string) (models.Profile, bool) {
-	return models.Profile{}, false
-}
-
-func (f *fakeUploadStore) ListProfiles() []models.Profile { return []models.Profile{} }
-
-func (f *fakeUploadStore) CreateChannel(ownerID, title, category string, tags []string) (models.Channel, error) {
-	return models.Channel{}, nil
-}
-
-func (f *fakeUploadStore) UpdateChannel(id string, update storage.ChannelUpdate) (models.Channel, error) {
-	return models.Channel{}, nil
-}
-
-func (f *fakeUploadStore) RotateChannelStreamKey(id string) (models.Channel, error) {
-	return models.Channel{}, nil
-}
-
-func (f *fakeUploadStore) DeleteChannel(id string) error { return nil }
-
-func (f *fakeUploadStore) GetChannel(id string) (models.Channel, bool) {
-	return models.Channel{}, false
-}
-
-func (f *fakeUploadStore) GetChannelByStreamKey(streamKey string) (models.Channel, bool) {
-	return models.Channel{}, false
-}
-
-func (f *fakeUploadStore) FollowChannel(userID, channelID string) error { return nil }
-
-func (f *fakeUploadStore) UnfollowChannel(userID, channelID string) error { return nil }
-
-func (f *fakeUploadStore) IsFollowingChannel(userID, channelID string) bool { return false }
-
-func (f *fakeUploadStore) CountFollowers(channelID string) int { return 0 }
-
-func (f *fakeUploadStore) ListFollowedChannelIDs(userID string) []string { return []string{} }
-
-func (f *fakeUploadStore) StartStream(channelID string, renditions []string) (models.StreamSession, error) {
-	return models.StreamSession{}, nil
-}
-
-func (f *fakeUploadStore) StopStream(channelID string, peakConcurrent int) (models.StreamSession, error) {
-	return models.StreamSession{}, nil
-}
-
-func (f *fakeUploadStore) CurrentStreamSession(channelID string) (models.StreamSession, bool) {
-	return models.StreamSession{}, false
-}
-
-func (f *fakeUploadStore) ListStreamSessions(channelID string) ([]models.StreamSession, error) {
-	return []models.StreamSession{}, nil
-}
-
-func (f *fakeUploadStore) ListRecordings(channelID string, includeUnpublished bool) ([]models.Recording, error) {
-	return []models.Recording{}, nil
-}
-
-func (f *fakeUploadStore) GetRecording(id string) (models.Recording, bool) {
-	return models.Recording{}, false
-}
-
-func (f *fakeUploadStore) PublishRecording(id string) (models.Recording, error) {
-	return models.Recording{}, nil
-}
-
-func (f *fakeUploadStore) DeleteRecording(id string) error { return nil }
-
-func (f *fakeUploadStore) CreateUpload(params storage.CreateUploadParams) (models.Upload, error) {
-	return models.Upload{}, nil
-}
-
-func (f *fakeUploadStore) DeleteUpload(id string) error { return nil }
-
-func (f *fakeUploadStore) CreateClipExport(recordingID string, params storage.ClipExportParams) (models.ClipExport, error) {
-	return models.ClipExport{}, nil
-}
-
-func (f *fakeUploadStore) ListClipExports(recordingID string) ([]models.ClipExport, error) {
-	return []models.ClipExport{}, nil
-}
-
-func (f *fakeUploadStore) CreateChatMessage(channelID, userID, content string) (models.ChatMessage, error) {
-	return models.ChatMessage{}, nil
-}
-
-func (f *fakeUploadStore) DeleteChatMessage(channelID, messageID string) error {
-	return nil
-}
-
-func (f *fakeUploadStore) ListChatMessages(channelID string, limit int) ([]models.ChatMessage, error) {
-	return []models.ChatMessage{}, nil
-}
-
-func (f *fakeUploadStore) ChatRestrictions() chat.RestrictionsSnapshot {
-	return chat.RestrictionsSnapshot{}
-}
-
-func (f *fakeUploadStore) IsChatBanned(channelID, userID string) bool { return false }
-
-func (f *fakeUploadStore) ChatTimeout(channelID, userID string) (time.Time, bool) {
-	return time.Time{}, false
-}
-
-func (f *fakeUploadStore) ApplyChatEvent(evt chat.Event) error { return nil }
-
-func (f *fakeUploadStore) ListChatRestrictions(channelID string) []models.ChatRestriction {
-	return []models.ChatRestriction{}
-}
-
-func (f *fakeUploadStore) CreateChatReport(channelID, reporterID, targetID, reason, messageID, evidenceURL string) (models.ChatReport, error) {
-	return models.ChatReport{}, nil
-}
-
-func (f *fakeUploadStore) ListChatReports(channelID string, includeResolved bool) ([]models.ChatReport, error) {
-	return []models.ChatReport{}, nil
-}
-
-func (f *fakeUploadStore) ResolveChatReport(reportID, resolverID, resolution string) (models.ChatReport, error) {
-	return models.ChatReport{}, nil
-}
-
-func (f *fakeUploadStore) CreateTip(params storage.CreateTipParams) (models.Tip, error) {
-	return models.Tip{}, nil
-}
-
-func (f *fakeUploadStore) ListTips(channelID string, limit int) ([]models.Tip, error) {
-	return []models.Tip{}, nil
-}
-
-func (f *fakeUploadStore) CreateSubscription(params storage.CreateSubscriptionParams) (models.Subscription, error) {
-	return models.Subscription{}, nil
-}
-
-func (f *fakeUploadStore) ListSubscriptions(channelID string, includeInactive bool) ([]models.Subscription, error) {
-	return []models.Subscription{}, nil
-}
-
-func (f *fakeUploadStore) GetSubscription(id string) (models.Subscription, bool) {
-	return models.Subscription{}, false
-}
-
-func (f *fakeUploadStore) CancelSubscription(id, cancelledBy, reason string) (models.Subscription, error) {
-	return models.Subscription{}, nil
-}
-
-var _ storage.Repository = (*fakeUploadStore)(nil)
+var _ UploadStore = (*fakeUploadStore)(nil)
 
 type fakeIngest struct {
 	mu        sync.Mutex
@@ -661,19 +473,7 @@ func (f *fakeIngest) TranscodeUpload(ctx context.Context, params ingest.UploadTr
 	return ingest.UploadTranscodeResult{PlaybackURL: params.SourceURL}, nil
 }
 
-func (f *fakeIngest) BootStream(ctx context.Context, params ingest.BootParams) (ingest.BootResult, error) {
-	return ingest.BootResult{}, nil
-}
-
-func (f *fakeIngest) ShutdownStream(ctx context.Context, channelID, sessionID string, jobIDs []string) error {
-	return nil
-}
-
-func (f *fakeIngest) HealthChecks(ctx context.Context) []ingest.HealthStatus {
-	return []ingest.HealthStatus{}
-}
-
-var _ ingest.Controller = (*fakeIngest)(nil)
+var _ UploadIngestClient = (*fakeIngest)(nil)
 
 func waitForCompletion(t *testing.T, done <-chan struct{}, id string, timeout time.Duration) {
 	t.Helper()
