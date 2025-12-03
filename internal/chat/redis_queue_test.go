@@ -311,6 +311,95 @@ func waitForAck(t *testing.T, acks <-chan []string, id string) {
 	}
 }
 
+func TestBackoffIncreasesAndResets(t *testing.T) {
+	backoff := newBackoff(10*time.Millisecond, 40*time.Millisecond)
+	backoff.jitter = 0
+	waits := make(chan time.Duration, 5)
+	backoff.waitFn = func(d time.Duration) <-chan time.Time {
+		waits <- d
+		ch := make(chan time.Time, 1)
+		ch <- time.Now()
+		return ch
+	}
+
+	ctx := context.Background()
+	for i := 0; i < 4; i++ {
+		if err := backoff.Sleep(ctx); err != nil {
+			t.Fatalf("sleep %d: %v", i, err)
+		}
+	}
+
+	expected := []time.Duration{
+		10 * time.Millisecond,
+		20 * time.Millisecond,
+		40 * time.Millisecond,
+		40 * time.Millisecond,
+	}
+	for i, want := range expected {
+		select {
+		case got := <-waits:
+			if got != want {
+				t.Fatalf("wait %d: expected %v, got %v", i, want, got)
+			}
+		default:
+			t.Fatalf("wait %d: no delay recorded", i)
+		}
+	}
+
+	backoff.Reset()
+	if err := backoff.Sleep(ctx); err != nil {
+		t.Fatalf("sleep after reset: %v", err)
+	}
+	select {
+	case got := <-waits:
+		if got != 10*time.Millisecond {
+			t.Fatalf("expected base delay after reset, got %v", got)
+		}
+	default:
+		t.Fatalf("expected delay after reset")
+	}
+}
+
+func TestBackoffSleepRespectsContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	backoff := newBackoff(10*time.Millisecond, time.Second)
+	called := false
+	backoff.waitFn = func(d time.Duration) <-chan time.Time {
+		called = true
+		return time.After(d)
+	}
+
+	if err := backoff.Sleep(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation error, got %v", err)
+	}
+	if called {
+		t.Fatalf("waitFn should not be invoked when context is already canceled")
+	}
+}
+
+func TestRedisSubscriptionExitsWhenContextCanceled(t *testing.T) {
+	sub := &redisSubscription{
+		queue: &redisQueue{},
+		ch:    make(chan Event, 1),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	done := make(chan struct{})
+	go func() {
+		sub.run(ctx)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatalf("subscription did not exit promptly after cancellation")
+	}
+}
+
 func TestRedisQueueEnsureGroupRecoversAfterTransientFailure(t *testing.T) {
 	srv, err := redisstub.Start(redisstub.Options{Password: "secret"})
 	if err != nil {
