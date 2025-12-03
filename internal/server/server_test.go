@@ -499,8 +499,12 @@ func TestChatWebsocketUpgradesThroughMiddleware(t *testing.T) {
 	req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
 
 	rw, clientConn := newHijackableResponseRecorder()
-	defer rw.Close()
-	defer clientConn.Close()
+	defer func() {
+		_ = rw.Close()
+	}()
+	defer func() {
+		_ = clientConn.Close()
+	}()
 
 	handlerChain.ServeHTTP(rw, req)
 

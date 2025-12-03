@@ -21,7 +21,9 @@ func TestDialWS(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Accept: %v", err)
 		}
-		defer conn.Close()
+		defer func() {
+			_ = conn.Close()
+		}()
 
 		if err := conn.WriteText([]byte("hello")); err != nil {
 			t.Fatalf("WriteText: %v", err)
@@ -55,7 +57,9 @@ func TestDialWSS(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Accept: %v", err)
 		}
-		defer conn.Close()
+		defer func() {
+			_ = conn.Close()
+		}()
 
 		if err := conn.WriteText([]byte("secure")); err != nil {
 			t.Fatalf("WriteText: %v", err)

@@ -68,7 +68,9 @@ func LoadSnapshotFromJSON(path string) (*Snapshot, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open snapshot %s: %w", path, err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	decoder := json.NewDecoder(file)
 	var snapshot Snapshot

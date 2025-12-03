@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -240,7 +241,7 @@ func (c *HTTPController) ShutdownStream(ctx context.Context, channelID, sessionI
 
 	if len(errs) > 0 {
 		metrics.ObserveIngestFailure("shutdown_stream")
-		return fmt.Errorf(strings.Join(errs, "; "))
+		return errors.New(strings.Join(errs, "; "))
 	}
 
 	c.logger.Info("ingest pipeline removed",

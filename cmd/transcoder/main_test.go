@@ -200,7 +200,9 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("post job: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusCreated {
 		data, _ := io.ReadAll(resp.Body)
 		t.Fatalf("unexpected status: %d (%s)", resp.StatusCode, strings.TrimSpace(string(data)))
@@ -241,7 +243,9 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 		if err != nil {
 			return false
 		}
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
 		if resp.StatusCode != http.StatusOK {
 			return false
 		}
@@ -411,7 +415,7 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	if err := json.NewDecoder(resp2.Body).Decode(&jobResp2); err != nil {
 		t.Fatalf("decode response 2: %v", err)
 	}
-	resp2.Body.Close()
+	_ = resp2.Body.Close()
 	if len(jobResp2.JobIDs) == 0 {
 		t.Fatalf("expected second job id")
 	}
@@ -427,7 +431,7 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("delete job: %v", err)
 	}
-	respDel.Body.Close()
+	_ = respDel.Body.Close()
 	if respDel.StatusCode != http.StatusNoContent {
 		t.Fatalf("unexpected delete status: %d", respDel.StatusCode)
 	}
@@ -525,7 +529,9 @@ func TestUploadPublishesHTTPPlayback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("post upload: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	}
@@ -945,7 +951,9 @@ func submitJob(t *testing.T, ts *httptest.Server, origin string) {
 	if err != nil {
 		t.Fatalf("post job: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	}
@@ -974,7 +982,9 @@ func submitUpload(t *testing.T, ts *httptest.Server, source string) {
 	if err != nil {
 		t.Fatalf("post upload: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	}
@@ -986,7 +996,9 @@ func fetchHealth(t *testing.T, ts *httptest.Server) (healthResponse, int) {
 	if err != nil {
 		t.Fatalf("healthz request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	var payload healthResponse
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode health response: %v", err)

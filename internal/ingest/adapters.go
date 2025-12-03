@@ -469,7 +469,9 @@ func doWithRetry(
 			lastErr = err
 		} else {
 			func() {
-				defer resp.Body.Close()
+				defer func() {
+					_ = resp.Body.Close()
+				}()
 
 				statusCode := resp.StatusCode
 

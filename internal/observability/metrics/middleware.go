@@ -57,6 +57,8 @@ func (rr *ResponseRecorder) Push(target string, opts *http.PushOptions) error {
 }
 
 // CloseNotify keeps backwards compatibility with deprecated CloseNotifier.
+//
+//nolint:staticcheck // CloseNotifier remains to support legacy HTTP/1.1 clients.
 func (rr *ResponseRecorder) CloseNotify() <-chan bool {
 	if notifier, ok := rr.ResponseWriter.(http.CloseNotifier); ok {
 		return notifier.CloseNotify()

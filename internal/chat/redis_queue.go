@@ -111,7 +111,7 @@ func NewRedisQueue(cfg RedisQueueConfig) (Queue, error) {
 		queue.blockTimeout = 2 * time.Second
 	}
 	if err := queue.ensureGroup(context.Background()); err != nil {
-		client.Close()
+		_ = client.Close()
 		return nil, err
 	}
 	return queue, nil

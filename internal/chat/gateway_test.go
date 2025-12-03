@@ -40,9 +40,13 @@ func TestGatewayMessageFlow(t *testing.T) {
 
 	wsURL := strings.Replace(server.URL, "http", "ws", 1)
 	viewerAConn := mustDial(t, wsURL+"?user="+viewerA.ID)
-	defer viewerAConn.Close()
+	defer func() {
+		_ = viewerAConn.Close()
+	}()
 	viewerBConn := mustDial(t, wsURL+"?user="+viewerB.ID)
-	defer viewerBConn.Close()
+	defer func() {
+		_ = viewerBConn.Close()
+	}()
 
 	joinPayload := map[string]string{"type": "join", "channelId": channel.ID}
 	sendJSON(t, viewerAConn, joinPayload)
@@ -93,9 +97,13 @@ func TestGatewayModerationFlow(t *testing.T) {
 
 	wsURL := strings.Replace(server.URL, "http", "ws", 1)
 	ownerConn := mustDial(t, wsURL+"?user="+owner.ID)
-	defer ownerConn.Close()
+	defer func() {
+		_ = ownerConn.Close()
+	}()
 	viewerConn := mustDial(t, wsURL+"?user="+viewer.ID)
-	defer viewerConn.Close()
+	defer func() {
+		_ = viewerConn.Close()
+	}()
 
 	joinPayload := map[string]string{"type": "join", "channelId": channel.ID}
 	sendJSON(t, ownerConn, joinPayload)
@@ -189,18 +197,6 @@ func sendJSON(t *testing.T, conn *chat.Conn, payload interface{}) {
 	}
 	if err := conn.WriteText(data); err != nil {
 		t.Fatalf("WriteText: %v", err)
-	}
-}
-
-func expectEvent(t *testing.T, conn *chat.Conn, expectedType string) {
-	t.Helper()
-	message := waitForType(t, conn, "event")
-	event, ok := message["event"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("malformed event payload: %v", message)
-	}
-	if event["type"] != expectedType {
-		t.Fatalf("expected event %s, got %v", expectedType, event["type"])
 	}
 }
 

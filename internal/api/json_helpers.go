@@ -130,7 +130,9 @@ func decodeJSON(r *http.Request, dest interface{}, disallowUnknown bool) error {
 	if r.Body == nil {
 		return RequestError{Status: http.StatusBadRequest, CodeVal: "validation_failed", Message: "request body is required"}
 	}
-	defer r.Body.Close()
+	defer func() {
+		_ = r.Body.Close()
+	}()
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxJSONBodyBytes+1))
 	if err != nil {

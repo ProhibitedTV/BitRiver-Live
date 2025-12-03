@@ -221,7 +221,9 @@ func (c *s3ObjectStorageClient) Upload(ctx context.Context, key, contentType str
 	if err != nil {
 		return objectReference{}, fmt.Errorf("upload object %s: %w", finalKey, err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return objectReference{}, fmt.Errorf("upload object %s: unexpected status %d", finalKey, response.StatusCode)
 	}
@@ -242,7 +244,9 @@ func (c *s3ObjectStorageClient) Delete(ctx context.Context, key string) error {
 	if err != nil {
 		return fmt.Errorf("delete object %s: %w", finalKey, err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
 		return nil
 	}
@@ -825,7 +829,9 @@ func (s *Storage) load() error {
 	} else if err != nil {
 		return fmt.Errorf("open store file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	decoder := json.NewDecoder(file)
 	if err := decoder.Decode(&s.data); err != nil {
@@ -2034,9 +2040,8 @@ func (s *Storage) ListChannels(ownerID, query string) []models.Channel {
 		if ownerID != "" && channel.OwnerID != ownerID {
 			continue
 		}
-		owner := models.User{}
 		if normalizedQuery != "" {
-			owner = s.data.Users[channel.OwnerID]
+			owner := s.data.Users[channel.OwnerID]
 			if !channelMatchesQuery(channel, owner, normalizedQuery) {
 				continue
 			}
@@ -2506,11 +2511,7 @@ func (s *Storage) createRecordingLocked(session models.StreamSession, channel mo
 	if len(session.RenditionManifests) > 0 {
 		renditions := make([]models.RecordingRendition, 0, len(session.RenditionManifests))
 		for _, manifest := range session.RenditionManifests {
-			renditions = append(renditions, models.RecordingRendition{
-				Name:        manifest.Name,
-				ManifestURL: manifest.ManifestURL,
-				Bitrate:     manifest.Bitrate,
-			})
+			renditions = append(renditions, models.RecordingRendition(manifest))
 		}
 		recording.Renditions = renditions
 	}
@@ -3215,7 +3216,7 @@ func (s *Storage) removeChatTimeoutLocked(channelID, userID string) error {
 		}
 	}
 
-	if !(hadExpiry || hadIssued || hadActor || hadReason) {
+	if !hadExpiry && !hadIssued && !hadActor && !hadReason {
 		return nil
 	}
 

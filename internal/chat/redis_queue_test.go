@@ -292,25 +292,6 @@ func waitForRequeue(t *testing.T, events <-chan Event, id string) {
 	}
 }
 
-func waitForAck(t *testing.T, acks <-chan []string, id string) {
-	t.Helper()
-	timer := time.NewTimer(5 * time.Second)
-	defer timer.Stop()
-
-	for {
-		select {
-		case batch := <-acks:
-			for _, ack := range batch {
-				if ack == id {
-					return
-				}
-			}
-		case <-timer.C:
-			t.Fatalf("timed out waiting for ack of %s", id)
-		}
-	}
-}
-
 func TestBackoffIncreasesAndResets(t *testing.T) {
 	backoff := newBackoff(10*time.Millisecond, 40*time.Millisecond)
 	backoff.jitter = 0
