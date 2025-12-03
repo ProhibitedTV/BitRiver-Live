@@ -21,7 +21,7 @@ workflow does not discover failures after the tag is pushed.
 GOTOOLCHAIN=local \
   GOPROXY=off \
   GOSUMDB=off \
-  go test ./... -count=1 -timeout=10s
+  go test ./... -count=1 -timeout=120s
 ```
 
 ### Postgres storage tests

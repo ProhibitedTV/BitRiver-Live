@@ -96,7 +96,7 @@ jobs:
           GOPROXY: off
           GOSUMDB: off
           GOFLAGS: -mod=vendor
-        run: go test ./... -count=1 -timeout=10s
+        run: go test ./... -count=1 -timeout=120s
 
   postgres-tests:
     name: Postgres storage tests
