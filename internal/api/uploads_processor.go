@@ -14,13 +14,13 @@ import (
 	"bitriver-live/internal/storage"
 )
 
-// UploadStore exposes the upload-related persistence operations required by
-// UploadProcessor. It intentionally omits unrelated repository methods.
+// UploadStore exposes only the upload-related persistence operations required
+// by UploadProcessor. It intentionally omits unrelated repository methods so
+// that upload processing stays decoupled from broader storage concerns.
 type UploadStore interface {
-	ListChannels(ownerID, query string) []models.Channel
-	ListUploads(channelID string) ([]models.Upload, error)
-	GetUpload(id string) (models.Upload, bool)
-	UpdateUpload(id string, update storage.UploadUpdate) (models.Upload, error)
+	ListPendingUploads(ctx context.Context, limit int) ([]models.Upload, error)
+	GetUpload(ctx context.Context, id string) (models.Upload, bool)
+	UpdateUpload(ctx context.Context, id string, update storage.UploadUpdate) (models.Upload, error)
 }
 
 // UploadIngestClient captures the ingest functionality needed to process
@@ -30,9 +30,85 @@ type UploadIngestClient interface {
 }
 
 var (
-	_ UploadStore        = (storage.Repository)(nil)
+	_ UploadStore        = (*repositoryUploadStore)(nil)
 	_ UploadIngestClient = (ingest.Controller)(nil)
 )
+
+// repositoryUploadStore is an adapter that satisfies UploadStore using the
+// broader storage.Repository interface. It filters pending/processing uploads
+// to match UploadProcessor expectations without introducing new storage
+// behavior.
+type repositoryUploadStore struct {
+	repo storage.Repository
+}
+
+func (s repositoryUploadStore) ListPendingUploads(ctx context.Context, limit int) ([]models.Upload, error) {
+	if s.repo == nil {
+		return nil, nil
+	}
+
+	var (
+		pending  []models.Upload
+		firstErr error
+	)
+
+	for _, channel := range s.repo.ListChannels("", "") {
+		if limit > 0 && len(pending) >= limit {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return pending, ctx.Err()
+		default:
+		}
+
+		uploads, err := s.repo.ListUploads(channel.ID)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		for _, upload := range uploads {
+			status := strings.ToLower(strings.TrimSpace(upload.Status))
+			if status != "pending" && status != "processing" {
+				continue
+			}
+			pending = append(pending, upload)
+			if limit > 0 && len(pending) >= limit {
+				break
+			}
+		}
+	}
+
+	return pending, firstErr
+}
+
+func (s repositoryUploadStore) GetUpload(ctx context.Context, id string) (models.Upload, bool) {
+	if s.repo == nil {
+		return models.Upload{}, false
+	}
+	select {
+	case <-ctx.Done():
+		return models.Upload{}, false
+	default:
+	}
+
+	return s.repo.GetUpload(id)
+}
+
+func (s repositoryUploadStore) UpdateUpload(ctx context.Context, id string, update storage.UploadUpdate) (models.Upload, error) {
+	if s.repo == nil {
+		return models.Upload{}, fmt.Errorf("upload store unavailable")
+	}
+	select {
+	case <-ctx.Done():
+		return models.Upload{}, ctx.Err()
+	default:
+	}
+
+	return s.repo.UpdateUpload(id, update)
+}
 
 // UploadProcessorConfig describes the collaborators and tunable settings used
 // to process archived uploads, including storage, ingest coordination, worker
@@ -207,24 +283,17 @@ func (p *UploadProcessor) recoverPending() {
 	if p.store == nil {
 		return
 	}
-	channels := p.store.ListChannels("", "")
-	for _, channel := range channels {
+	uploads, err := p.store.ListPendingUploads(p.ctx, 0)
+	if err != nil {
+		p.logger.Error("failed to list pending uploads", "error", err)
+	}
+	for _, upload := range uploads {
 		select {
 		case <-p.ctx.Done():
 			return
 		default:
 		}
-		uploads, err := p.store.ListUploads(channel.ID)
-		if err != nil {
-			p.logger.Error("failed to list uploads", "channel_id", channel.ID, "error", err)
-			continue
-		}
-		for _, upload := range uploads {
-			status := strings.ToLower(strings.TrimSpace(upload.Status))
-			if status == "pending" || status == "processing" {
-				p.Enqueue(upload.ID)
-			}
-		}
+		p.Enqueue(upload.ID)
 	}
 }
 
@@ -232,7 +301,7 @@ func (p *UploadProcessor) processUpload(id string) {
 	if p.store == nil {
 		return
 	}
-	upload, ok := p.store.GetUpload(id)
+	upload, ok := p.store.GetUpload(p.ctx, id)
 	if !ok {
 		return
 	}
@@ -255,7 +324,7 @@ func (p *UploadProcessor) processUpload(id string) {
 	processing := "processing"
 	progress := 10
 	metadata := map[string]string{"sourceUrl": source}
-	if _, err := p.store.UpdateUpload(id, storage.UploadUpdate{
+	if _, err := p.store.UpdateUpload(p.ctx, id, storage.UploadUpdate{
 		Status:   &processing,
 		Progress: &progress,
 		Metadata: metadata,
@@ -313,7 +382,7 @@ func (p *UploadProcessor) processUpload(id string) {
 		}
 	}
 	metadata["playbackUrl"] = playbackURL
-	if _, err := p.store.UpdateUpload(id, storage.UploadUpdate{
+	if _, err := p.store.UpdateUpload(p.ctx, id, storage.UploadUpdate{
 		Status:      &ready,
 		Progress:    &progress,
 		PlaybackURL: &playbackURL,
@@ -360,7 +429,7 @@ func (p *UploadProcessor) failUpload(id, source string, err error) {
 	if source != "" {
 		metadata["sourceUrl"] = source
 	}
-	if _, updateErr := p.store.UpdateUpload(id, storage.UploadUpdate{
+	if _, updateErr := p.store.UpdateUpload(p.ctx, id, storage.UploadUpdate{
 		Status:   &failed,
 		Progress: &progress,
 		Metadata: metadata,

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -16,7 +17,6 @@ import (
 
 func TestUploadProcessorStartShutdown(t *testing.T) {
 	store := newFakeUploadStore()
-	store.channels = []models.Channel{{ID: "channel-1"}}
 	store.uploads = map[string]models.Upload{
 		"upload-1": {
 			ID:        "upload-1",
@@ -100,7 +100,6 @@ func TestUploadProcessorStartShutdown(t *testing.T) {
 
 func TestUploadProcessorFailUpload(t *testing.T) {
 	store := newFakeUploadStore()
-	store.channels = []models.Channel{{ID: "channel-1"}}
 	store.uploads = map[string]models.Upload{
 		"upload-err": {
 			ID:        "upload-err",
@@ -142,7 +141,6 @@ func TestUploadProcessorFailUpload(t *testing.T) {
 
 func TestUploadProcessorTimeout(t *testing.T) {
 	store := newFakeUploadStore()
-	store.channels = []models.Channel{{ID: "channel-1"}}
 	store.uploads = map[string]models.Upload{
 		"upload-slow": {
 			ID:        "upload-slow",
@@ -190,7 +188,6 @@ func TestUploadProcessorTimeout(t *testing.T) {
 
 func TestUploadProcessorRetryUpdateFailures(t *testing.T) {
 	store := newFakeUploadStore()
-	store.channels = []models.Channel{{ID: "channel-1"}}
 	store.uploads = map[string]models.Upload{
 		"upload-retry": {
 			ID:        "upload-retry",
@@ -245,7 +242,6 @@ func TestUploadProcessorRetryUpdateFailures(t *testing.T) {
 
 type fakeUploadStore struct {
 	mu              sync.Mutex
-	channels        []models.Channel
 	uploads         map[string]models.Upload
 	failFirstUpdate map[string]error
 	updateAttempts  map[string]int
@@ -261,27 +257,36 @@ func newFakeUploadStore() *fakeUploadStore {
 	}
 }
 
-func (f *fakeUploadStore) ListChannels(ownerID, query string) []models.Channel {
+func (f *fakeUploadStore) ListPendingUploads(ctx context.Context, limit int) ([]models.Upload, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	out := make([]models.Channel, len(f.channels))
-	copy(out, f.channels)
-	return out
-}
 
-func (f *fakeUploadStore) ListUploads(channelID string) ([]models.Upload, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	var uploads []models.Upload
+	pending := make([]models.Upload, 0)
 	for _, upload := range f.uploads {
-		if upload.ChannelID == channelID {
-			uploads = append(uploads, cloneUpload(upload))
+		select {
+		case <-ctx.Done():
+			return pending, ctx.Err()
+		default:
+		}
+		status := strings.ToLower(strings.TrimSpace(upload.Status))
+		if status != "pending" && status != "processing" {
+			continue
+		}
+		pending = append(pending, cloneUpload(upload))
+		if limit > 0 && len(pending) >= limit {
+			break
 		}
 	}
-	return uploads, nil
+	return pending, nil
 }
 
-func (f *fakeUploadStore) GetUpload(id string) (models.Upload, bool) {
+func (f *fakeUploadStore) GetUpload(ctx context.Context, id string) (models.Upload, bool) {
+	select {
+	case <-ctx.Done():
+		return models.Upload{}, false
+	default:
+	}
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	upload, ok := f.uploads[id]
@@ -302,7 +307,13 @@ func (f *fakeUploadStore) updatesFor(id string) <-chan models.Upload {
 	return ch
 }
 
-func (f *fakeUploadStore) UpdateUpload(id string, update storage.UploadUpdate) (models.Upload, error) {
+func (f *fakeUploadStore) UpdateUpload(ctx context.Context, id string, update storage.UploadUpdate) (models.Upload, error) {
+	select {
+	case <-ctx.Done():
+		return models.Upload{}, ctx.Err()
+	default:
+	}
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	upload, ok := f.uploads[id]
