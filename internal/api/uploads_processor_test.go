@@ -264,6 +264,14 @@ func newFakeUploadStore() *fakeUploadStore {
 
 func (f *fakeUploadStore) Ping(context.Context) error { return nil }
 
+func (f *fakeUploadStore) IngestHealth(context.Context) []ingest.HealthStatus {
+	return nil
+}
+
+func (f *fakeUploadStore) LastIngestHealth() ([]ingest.HealthStatus, time.Time) {
+	return nil, time.Time{}
+}
+
 func (f *fakeUploadStore) ListChannels(ownerID, query string) []models.Channel {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -380,6 +388,18 @@ func cloneUpload(upload models.Upload) models.Upload {
 
 // Unimplemented methods of storage.Repository.
 func (f *fakeUploadStore) ListUsers() []models.User { return []models.User{} }
+
+func (f *fakeUploadStore) CreateUser(storage.CreateUserParams) (models.User, error) {
+	return models.User{}, nil
+}
+
+func (f *fakeUploadStore) AuthenticateUser(string, string) (models.User, error) {
+	return models.User{}, nil
+}
+
+func (f *fakeUploadStore) AuthenticateOAuth(storage.OAuthLoginParams) (models.User, error) {
+	return models.User{}, nil
+}
 
 func (f *fakeUploadStore) GetUser(id string) (models.User, bool) { return models.User{}, false }
 
