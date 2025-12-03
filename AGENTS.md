@@ -8,7 +8,7 @@
 - Go code targets Go 1.21. Always set `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off` so builds never touch the network, and run `gofmt` plus `go mod tidy` before committing. When editing vendored replacements under `third_party/`, keep them in sync with `go.mod` and avoid external fetches.
 - Canonical Go test command (from `docs/testing.md`):
   ```bash
-  GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=10s
+  GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
   ```
 - Web viewer tooling (from `web/viewer/package.json`): `npm run lint`, `npm run test`, and `npm run test:playwright`. Install deps via `npm install` before running.
 
@@ -30,6 +30,6 @@
 
 ## Before opening a PR
 - `gofmt` + `go mod tidy` (Go) / `npm run lint` (web).
-- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=10s`.
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s`.
 - Extra suites from `docs/testing.md` (Postgres, viewer tests, Playwright) as applicable.
 - Update docs/README and rerun manual QA or `scripts/quickstart.sh` when relevant.

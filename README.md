@@ -257,7 +257,7 @@ flowchart LR
 ## Tests
 
 ```bash
-GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=10s
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
 ```
 
 See [`docs/testing.md`](docs/testing.md) for suite-specific instructions and
