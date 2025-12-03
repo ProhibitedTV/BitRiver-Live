@@ -4,10 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -27,35 +24,6 @@ import (
 
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
-	"golang.org/x/crypto/pbkdf2"
-)
-
-const (
-	passwordHashSaltLength = 16
-	passwordHashKeyLength  = 32
-	passwordHashIterations = 120000
-
-	metadataManifestPrefix  = "object:manifest:"
-	metadataThumbnailPrefix = "object:thumbnail:"
-
-	// MaxTipReferenceLength defines the maximum number of characters allowed for
-	// a tip reference identifier.
-	MaxTipReferenceLength = 256
-	// MaxTipWalletAddressLength defines the maximum number of characters allowed
-	// for a tip wallet address.
-	MaxTipWalletAddressLength = 256
-	// MaxTipMessageLength defines the maximum number of characters allowed for a
-	// tip message payload.
-	MaxTipMessageLength = 512
-
-	duplicateTipReferenceError = "pq: duplicate key value violates unique constraint \"tips_reference_unique\""
-)
-
-var (
-	// ErrIngestControllerUnavailable indicates that stream lifecycle
-	// operations cannot be performed because no ingest controller has been
-	// configured.
-	ErrIngestControllerUnavailable = errors.New("ingest controller unavailable")
 )
 
 type dataset struct {
@@ -102,30 +70,6 @@ type Storage struct {
 func (s *Storage) Ping(context.Context) error {
 	return nil
 }
-
-// RecordingRetentionPolicy specifies how long recordings are kept before being
-// purged when unpublished or published.
-type RecordingRetentionPolicy struct {
-	Published   time.Duration
-	Unpublished time.Duration
-}
-
-// ObjectStorageConfig describes the external storage bucket used for
-// persisting VOD artefacts.
-type ObjectStorageConfig struct {
-	Endpoint       string
-	Region         string
-	AccessKey      string
-	SecretKey      string
-	Bucket         string
-	UseSSL         bool
-	Prefix         string
-	LifecycleDays  int
-	PublicEndpoint string
-	RequestTimeout time.Duration
-}
-
-const defaultObjectStorageRequestTimeout = 30 * time.Second
 
 func applyObjectStorageDefaults(cfg ObjectStorageConfig) ObjectStorageConfig {
 	if cfg.RequestTimeout <= 0 {
@@ -614,55 +558,6 @@ func (s *Storage) ensureTimeoutMetadata(channelID string) {
 	if s.data.ChatTimeoutIssuedAt[channelID] == nil {
 		s.data.ChatTimeoutIssuedAt[channelID] = make(map[string]time.Time)
 	}
-}
-
-var (
-	ErrInvalidCredentials       = errors.New("invalid credentials")
-	ErrPasswordLoginUnsupported = errors.New("account does not support password login")
-)
-
-// CreateUserParams captures the attributes that can be set when creating a user.
-type CreateUserParams struct {
-	DisplayName string
-	Email       string
-	Password    string
-	Roles       []string
-	SelfSignup  bool
-}
-
-// OAuthLoginParams represents the identity information returned by an OAuth
-// provider used to authenticate or provision a user account.
-type OAuthLoginParams struct {
-	Provider    string
-	Subject     string
-	Email       string
-	DisplayName string
-}
-
-// CreateTipParams captures the information required to record a tip.
-type CreateTipParams struct {
-	ChannelID     string
-	FromUserID    string
-	Amount        models.Money
-	Currency      string
-	Provider      string
-	Reference     string
-	WalletAddress string
-	Message       string
-}
-
-// CreateSubscriptionParams captures the data needed to start a subscription.
-type CreateSubscriptionParams struct {
-	ChannelID         string
-	UserID            string
-	Tier              string
-	Provider          string
-	Reference         string
-	Amount            models.Money
-	Currency          string
-	Duration          time.Duration
-	AutoRenew         bool
-	ExternalReference string
 }
 
 // CreateUploadParams captures the information required to store an uploaded asset.
@@ -1393,27 +1288,6 @@ func (s *Storage) FindUserByEmail(email string) (models.User, bool) {
 	return models.User{}, false
 }
 
-// AuthenticateUser verifies credentials and returns the matching user on success.
-func (s *Storage) AuthenticateUser(email, password string) (models.User, error) {
-	if password == "" {
-		return models.User{}, errors.New("password is required")
-	}
-	user, ok := s.FindUserByEmail(email)
-	if !ok {
-		return models.User{}, ErrInvalidCredentials
-	}
-	if user.PasswordHash == "" {
-		return models.User{}, ErrPasswordLoginUnsupported
-	}
-	if err := verifyPassword(user.PasswordHash, password); err != nil {
-		if errors.Is(err, ErrInvalidCredentials) {
-			return models.User{}, ErrInvalidCredentials
-		}
-		return models.User{}, err
-	}
-	return user, nil
-}
-
 func (s *Storage) AuthenticateOAuth(params OAuthLoginParams) (models.User, error) {
 	provider := strings.ToLower(strings.TrimSpace(params.Provider))
 	subject := strings.TrimSpace(params.Subject)
@@ -1505,44 +1379,6 @@ func (s *Storage) AuthenticateOAuth(params OAuthLoginParams) (models.User, error
 	return user, nil
 }
 
-func hashPassword(password string) (string, error) {
-	salt := make([]byte, passwordHashSaltLength)
-	if _, err := rand.Read(salt); err != nil {
-		return "", fmt.Errorf("generate salt: %w", err)
-	}
-	derived := pbkdf2.Key([]byte(password), salt, passwordHashIterations, passwordHashKeyLength, sha256.New)
-	encodedSalt := base64.RawStdEncoding.EncodeToString(salt)
-	encodedKey := base64.RawStdEncoding.EncodeToString(derived)
-	return fmt.Sprintf("pbkdf2$sha256$%d$%s$%s", passwordHashIterations, encodedSalt, encodedKey), nil
-}
-
-func verifyPassword(encodedHash, candidate string) error {
-	parts := strings.Split(encodedHash, "$")
-	if len(parts) != 5 {
-		return fmt.Errorf("verify password: invalid hash format")
-	}
-	if parts[0] != "pbkdf2" || parts[1] != "sha256" {
-		return fmt.Errorf("verify password: unsupported hash identifier")
-	}
-	iterations, err := strconv.Atoi(parts[2])
-	if err != nil || iterations <= 0 {
-		return fmt.Errorf("verify password: invalid iteration count")
-	}
-	salt, err := base64.RawStdEncoding.DecodeString(parts[3])
-	if err != nil {
-		return fmt.Errorf("verify password: decode salt: %w", err)
-	}
-	storedKey, err := base64.RawStdEncoding.DecodeString(parts[4])
-	if err != nil {
-		return fmt.Errorf("verify password: decode hash: %w", err)
-	}
-	derived := pbkdf2.Key([]byte(candidate), salt, iterations, len(storedKey), sha256.New)
-	if len(derived) != len(storedKey) || subtle.ConstantTimeCompare(derived, storedKey) != 1 {
-		return ErrInvalidCredentials
-	}
-	return nil
-}
-
 // UserUpdate represents the fields that can be modified for an existing user.
 type UserUpdate struct {
 	DisplayName *string
@@ -1601,38 +1437,6 @@ func (s *Storage) UpdateUser(id string, update UserUpdate) (models.User, error) 
 }
 
 // SetUserPassword replaces the stored password hash for the provided user.
-func (s *Storage) SetUserPassword(id, password string) (models.User, error) {
-	if len(password) < 8 {
-		return models.User{}, errors.New("password must be at least 8 characters")
-	}
-
-	hashed, err := hashPassword(password)
-	if err != nil {
-		return models.User{}, fmt.Errorf("hash password: %w", err)
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	updatedData := cloneDataset(s.data)
-
-	user, ok := updatedData.Users[id]
-	if !ok {
-		return models.User{}, fmt.Errorf("user %s not found", id)
-	}
-
-	user.PasswordHash = hashed
-	updatedData.Users[id] = user
-
-	if err := s.persistDataset(updatedData); err != nil {
-		return models.User{}, err
-	}
-
-	s.data = updatedData
-
-	return user, nil
-}
-
 // DeleteUser removes the user, related profile, and chat history.
 func (s *Storage) DeleteUser(id string) error {
 	s.mu.Lock()
