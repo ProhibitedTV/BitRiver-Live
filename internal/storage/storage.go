@@ -19,7 +19,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
@@ -2713,250 +2712,468 @@ func (s *Storage) LastIngestHealth() ([]ingest.HealthStatus, time.Time) {
 	return snapshot, s.ingestHealthUpdated
 }
 
-// CreateTip records a tip event for a channel.
-func (s *Storage) CreateTip(params CreateTipParams) (models.Tip, error) {
+// Chat operations
+
+func (s *Storage) CreateChatMessage(channelID, userID, content string) (models.ChatMessage, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.data.Channels[params.ChannelID]; !ok {
-		return models.Tip{}, fmt.Errorf("channel %s not found", params.ChannelID)
+	if _, ok := s.data.Channels[channelID]; !ok {
+		return models.ChatMessage{}, fmt.Errorf("channel %s not found", channelID)
 	}
-	if _, ok := s.data.Users[params.FromUserID]; !ok {
-		return models.Tip{}, fmt.Errorf("user %s not found", params.FromUserID)
+	if _, ok := s.data.Users[userID]; !ok {
+		return models.ChatMessage{}, fmt.Errorf("user %s not found", userID)
 	}
-	amount := params.Amount
-	if amount.MinorUnits() <= 0 {
-		return models.Tip{}, fmt.Errorf("amount must be positive")
+
+	if err := s.ensureChatAccessLocked(channelID, userID); err != nil {
+		return models.ChatMessage{}, err
 	}
-	currency := strings.ToUpper(strings.TrimSpace(params.Currency))
-	if currency == "" {
-		return models.Tip{}, fmt.Errorf("currency is required")
+
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return models.ChatMessage{}, errors.New("message content cannot be empty")
 	}
-	provider := strings.ToLower(strings.TrimSpace(params.Provider))
-	if provider == "" {
-		return models.Tip{}, fmt.Errorf("provider is required")
+	if len([]rune(trimmed)) > 500 {
+		return models.ChatMessage{}, errors.New("message content exceeds 500 characters")
 	}
-	reference := strings.TrimSpace(params.Reference)
-	if reference == "" {
-		reference = fmt.Sprintf("tip-%d", time.Now().UnixNano())
-	}
-	if utf8.RuneCountInString(reference) > MaxTipReferenceLength {
-		return models.Tip{}, fmt.Errorf("reference exceeds %d characters", MaxTipReferenceLength)
-	}
-	wallet := strings.TrimSpace(params.WalletAddress)
-	if utf8.RuneCountInString(wallet) > MaxTipWalletAddressLength {
-		return models.Tip{}, fmt.Errorf("wallet address exceeds %d characters", MaxTipWalletAddressLength)
-	}
-	message := strings.TrimSpace(params.Message)
-	if utf8.RuneCountInString(message) > MaxTipMessageLength {
-		return models.Tip{}, fmt.Errorf("message exceeds %d characters", MaxTipMessageLength)
-	}
-	if s.tipExists(provider, reference) {
-		return models.Tip{}, errors.New(duplicateTipReferenceError)
-	}
+
 	id, err := generateID()
 	if err != nil {
-		return models.Tip{}, err
+		return models.ChatMessage{}, err
 	}
-	now := time.Now().UTC()
-	tip := models.Tip{
-		ID:            id,
-		ChannelID:     params.ChannelID,
-		FromUserID:    params.FromUserID,
-		Amount:        amount,
-		Currency:      currency,
-		Provider:      provider,
-		Reference:     reference,
-		WalletAddress: wallet,
-		Message:       message,
-		CreatedAt:     now,
+
+	message := models.ChatMessage{
+		ID:        id,
+		ChannelID: channelID,
+		UserID:    userID,
+		Content:   trimmed,
+		CreatedAt: time.Now().UTC(),
 	}
-	if s.data.Tips == nil {
-		s.data.Tips = make(map[string]models.Tip)
-	}
-	s.data.Tips[id] = tip
+
+	s.data.ChatMessages[id] = message
 	if err := s.persist(); err != nil {
-		delete(s.data.Tips, id)
-		return models.Tip{}, err
+		delete(s.data.ChatMessages, id)
+		return models.ChatMessage{}, err
 	}
-	return tip, nil
+
+	return message, nil
 }
 
-// tipExists reports whether a tip with the given provider/reference pair is
-// already persisted. Callers must hold s.mu.
-func (s *Storage) tipExists(provider, reference string) bool {
-	if len(s.data.Tips) == 0 {
-		return false
+func (s *Storage) ensureChatAccessLocked(channelID, userID string) error {
+	if s.isChatBannedLocked(channelID, userID) {
+		return fmt.Errorf("user is banned")
 	}
-	for _, tip := range s.data.Tips {
-		if tip.Provider == provider && tip.Reference == reference {
+	if expiry, ok := s.chatTimeoutLocked(channelID, userID); ok {
+		if time.Now().UTC().Before(expiry) {
+			return fmt.Errorf("user is timed out")
+		}
+		if err := s.removeChatTimeoutLocked(channelID, userID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Storage) removeChatTimeoutLocked(channelID, userID string) error {
+	var (
+		previousExpiry time.Time
+		hadExpiry      bool
+		previousIssued time.Time
+		hadIssued      bool
+		previousActor  string
+		hadActor       bool
+		previousReason string
+		hadReason      bool
+	)
+
+	if timeouts := s.data.ChatTimeouts[channelID]; timeouts != nil {
+		if expiry, ok := timeouts[userID]; ok {
+			previousExpiry = expiry
+			hadExpiry = true
+			delete(timeouts, userID)
+			if len(timeouts) == 0 {
+				delete(s.data.ChatTimeouts, channelID)
+			}
+		}
+	}
+	if issued := s.data.ChatTimeoutIssuedAt[channelID]; issued != nil {
+		if ts, ok := issued[userID]; ok {
+			previousIssued = ts
+			hadIssued = true
+			delete(issued, userID)
+			if len(issued) == 0 {
+				delete(s.data.ChatTimeoutIssuedAt, channelID)
+			}
+		}
+	}
+	if actors := s.data.ChatTimeoutActors[channelID]; actors != nil {
+		if actor, ok := actors[userID]; ok {
+			previousActor = actor
+			hadActor = true
+			delete(actors, userID)
+			if len(actors) == 0 {
+				delete(s.data.ChatTimeoutActors, channelID)
+			}
+		}
+	}
+	if reasons := s.data.ChatTimeoutReasons[channelID]; reasons != nil {
+		if reason, ok := reasons[userID]; ok {
+			previousReason = reason
+			hadReason = true
+			delete(reasons, userID)
+			if len(reasons) == 0 {
+				delete(s.data.ChatTimeoutReasons, channelID)
+			}
+		}
+	}
+
+	if !hadExpiry && !hadIssued && !hadActor && !hadReason {
+		return nil
+	}
+
+	if err := s.persist(); err != nil {
+		if hadExpiry {
+			if s.data.ChatTimeouts == nil {
+				s.data.ChatTimeouts = make(map[string]map[string]time.Time)
+			}
+			if s.data.ChatTimeouts[channelID] == nil {
+				s.data.ChatTimeouts[channelID] = make(map[string]time.Time)
+			}
+			s.data.ChatTimeouts[channelID][userID] = previousExpiry
+		}
+		if hadIssued {
+			if s.data.ChatTimeoutIssuedAt == nil {
+				s.data.ChatTimeoutIssuedAt = make(map[string]map[string]time.Time)
+			}
+			if s.data.ChatTimeoutIssuedAt[channelID] == nil {
+				s.data.ChatTimeoutIssuedAt[channelID] = make(map[string]time.Time)
+			}
+			s.data.ChatTimeoutIssuedAt[channelID][userID] = previousIssued
+		}
+		if hadActor {
+			if s.data.ChatTimeoutActors == nil {
+				s.data.ChatTimeoutActors = make(map[string]map[string]string)
+			}
+			if s.data.ChatTimeoutActors[channelID] == nil {
+				s.data.ChatTimeoutActors[channelID] = make(map[string]string)
+			}
+			s.data.ChatTimeoutActors[channelID][userID] = previousActor
+		}
+		if hadReason {
+			if s.data.ChatTimeoutReasons == nil {
+				s.data.ChatTimeoutReasons = make(map[string]map[string]string)
+			}
+			if s.data.ChatTimeoutReasons[channelID] == nil {
+				s.data.ChatTimeoutReasons[channelID] = make(map[string]string)
+			}
+			s.data.ChatTimeoutReasons[channelID][userID] = previousReason
+		}
+		return err
+	}
+
+	return nil
+}
+
+func (s *Storage) isChatBannedLocked(channelID, userID string) bool {
+	if bans := s.data.ChatBans[channelID]; bans != nil {
+		if _, exists := bans[userID]; exists {
 			return true
 		}
 	}
 	return false
 }
 
-// ListTips returns recent tips for a channel.
-func (s *Storage) ListTips(channelID string, limit int) ([]models.Tip, error) {
+func (s *Storage) chatTimeoutLocked(channelID, userID string) (time.Time, bool) {
+	if timeouts := s.data.ChatTimeouts[channelID]; timeouts != nil {
+		expiry, ok := timeouts[userID]
+		if ok {
+			return expiry, true
+		}
+	}
+	return time.Time{}, false
+}
+
+func (s *Storage) ListChatMessages(channelID string, limit int) ([]models.ChatMessage, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if _, ok := s.data.Channels[channelID]; !ok {
 		return nil, fmt.Errorf("channel %s not found", channelID)
 	}
-	tips := make([]models.Tip, 0)
-	for _, tip := range s.data.Tips {
-		if tip.ChannelID == channelID {
-			tips = append(tips, tip)
+
+	messages := make([]models.ChatMessage, 0)
+	for _, message := range s.data.ChatMessages {
+		if message.ChannelID == channelID {
+			messages = append(messages, message)
 		}
 	}
-	sort.Slice(tips, func(i, j int) bool {
-		return tips[i].CreatedAt.After(tips[j].CreatedAt)
+
+	sort.Slice(messages, func(i, j int) bool {
+		return messages[i].CreatedAt.After(messages[j].CreatedAt)
 	})
-	if limit > 0 && len(tips) > limit {
-		tips = tips[:limit]
+
+	if limit > 0 && len(messages) > limit {
+		messages = messages[:limit]
 	}
-	return tips, nil
+	return messages, nil
 }
 
-// CreateSubscription records a new channel subscription.
-func (s *Storage) CreateSubscription(params CreateSubscriptionParams) (models.Subscription, error) {
+// DeleteChatMessage removes a single chat message from the transcript.
+func (s *Storage) DeleteChatMessage(channelID, messageID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.data.Channels[params.ChannelID]; !ok {
-		return models.Subscription{}, fmt.Errorf("channel %s not found", params.ChannelID)
+	if _, ok := s.data.Channels[channelID]; !ok {
+		return fmt.Errorf("channel %s not found", channelID)
 	}
-	if _, ok := s.data.Users[params.UserID]; !ok {
-		return models.Subscription{}, fmt.Errorf("user %s not found", params.UserID)
+
+	message, ok := s.data.ChatMessages[messageID]
+	if !ok || message.ChannelID != channelID {
+		return fmt.Errorf("message %s not found for channel %s", messageID, channelID)
 	}
-	if params.Duration <= 0 {
-		return models.Subscription{}, fmt.Errorf("duration must be positive")
+
+	delete(s.data.ChatMessages, messageID)
+	if err := s.persist(); err != nil {
+		return err
 	}
-	amount := params.Amount
-	if amount.MinorUnits() < 0 {
-		return models.Subscription{}, fmt.Errorf("amount cannot be negative")
+	return nil
+}
+
+func (s *Storage) pruneExpiredTimeoutsLocked(channelID string, now time.Time) bool {
+	timeouts := s.data.ChatTimeouts[channelID]
+	if len(timeouts) == 0 {
+		return false
 	}
-	currency := strings.ToUpper(strings.TrimSpace(params.Currency))
-	if currency == "" {
-		return models.Subscription{}, fmt.Errorf("currency is required")
-	}
-	tier := strings.TrimSpace(params.Tier)
-	if tier == "" {
-		tier = "supporter"
-	}
-	provider := strings.ToLower(strings.TrimSpace(params.Provider))
-	if provider == "" {
-		return models.Subscription{}, fmt.Errorf("provider is required")
-	}
-	reference := strings.TrimSpace(params.Reference)
-	if reference == "" {
-		reference = fmt.Sprintf("sub-%d", time.Now().UnixNano())
-	}
-	for _, existing := range s.data.Subscriptions {
-		if existing.Provider == provider && existing.Reference == reference {
-			return models.Subscription{}, fmt.Errorf("subscription reference %s/%s already exists", provider, reference)
+
+	pruned := false
+	for userID, expiry := range timeouts {
+		if expiry.After(now) {
+			continue
 		}
+		delete(timeouts, userID)
+		pruned = true
+
+		if issued := s.data.ChatTimeoutIssuedAt[channelID]; issued != nil {
+			delete(issued, userID)
+			if len(issued) == 0 {
+				delete(s.data.ChatTimeoutIssuedAt, channelID)
+			}
+		}
+		if actors := s.data.ChatTimeoutActors[channelID]; actors != nil {
+			delete(actors, userID)
+			if len(actors) == 0 {
+				delete(s.data.ChatTimeoutActors, channelID)
+			}
+		}
+		if reasons := s.data.ChatTimeoutReasons[channelID]; reasons != nil {
+			delete(reasons, userID)
+			if len(reasons) == 0 {
+				delete(s.data.ChatTimeoutReasons, channelID)
+			}
+		}
+	}
+
+	if len(timeouts) == 0 {
+		delete(s.data.ChatTimeouts, channelID)
+	}
+
+	return pruned
+}
+
+// ListChatRestrictions returns the current bans and timeouts for a channel.
+func (s *Storage) ListChatRestrictions(channelID string) []models.ChatRestriction {
+	now := time.Now().UTC()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	pruned := s.pruneExpiredTimeoutsLocked(channelID, now)
+	restrictions := make([]models.ChatRestriction, 0)
+	if bans := s.data.ChatBans[channelID]; bans != nil {
+		for userID, issued := range bans {
+			restriction := models.ChatRestriction{
+				ID:        fmt.Sprintf("ban:%s:%s", channelID, userID),
+				Type:      "ban",
+				ChannelID: channelID,
+				TargetID:  userID,
+				IssuedAt:  issued,
+				ActorID:   s.lookupBanActor(channelID, userID),
+				Reason:    s.lookupBanReason(channelID, userID),
+			}
+			restrictions = append(restrictions, restriction)
+		}
+	}
+	if timeouts := s.data.ChatTimeouts[channelID]; timeouts != nil {
+		for userID, expiry := range timeouts {
+			if !expiry.After(now) {
+				continue
+			}
+			expiryUTC := expiry.UTC()
+			issued := s.lookupTimeoutIssuedAt(channelID, userID, expiryUTC)
+			expCopy := expiryUTC
+			restriction := models.ChatRestriction{
+				ID:        fmt.Sprintf("timeout:%s:%s", channelID, userID),
+				Type:      "timeout",
+				ChannelID: channelID,
+				TargetID:  userID,
+				IssuedAt:  issued,
+				ExpiresAt: &expCopy,
+				ActorID:   s.lookupTimeoutActor(channelID, userID),
+				Reason:    s.lookupTimeoutReason(channelID, userID),
+			}
+			restrictions = append(restrictions, restriction)
+		}
+	}
+	sort.Slice(restrictions, func(i, j int) bool {
+		if restrictions[i].IssuedAt.Equal(restrictions[j].IssuedAt) {
+			return restrictions[i].ID < restrictions[j].ID
+		}
+		return restrictions[i].IssuedAt.After(restrictions[j].IssuedAt)
+	})
+	if pruned {
+		if err := s.persist(); err != nil {
+			slog.Error("persist pruned chat timeouts", "err", err)
+		}
+	}
+	return restrictions
+}
+
+func (s *Storage) lookupBanActor(channelID, userID string) string {
+	if actors := s.data.ChatBanActors[channelID]; actors != nil {
+		return actors[userID]
+	}
+	return ""
+}
+
+func (s *Storage) lookupBanReason(channelID, userID string) string {
+	if reasons := s.data.ChatBanReasons[channelID]; reasons != nil {
+		return reasons[userID]
+	}
+	return ""
+}
+
+func (s *Storage) lookupTimeoutActor(channelID, userID string) string {
+	if actors := s.data.ChatTimeoutActors[channelID]; actors != nil {
+		return actors[userID]
+	}
+	return ""
+}
+
+func (s *Storage) lookupTimeoutReason(channelID, userID string) string {
+	if reasons := s.data.ChatTimeoutReasons[channelID]; reasons != nil {
+		return reasons[userID]
+	}
+	return ""
+}
+
+func (s *Storage) lookupTimeoutIssuedAt(channelID, userID string, fallback time.Time) time.Time {
+	if issued := s.data.ChatTimeoutIssuedAt[channelID]; issued != nil {
+		if ts, ok := issued[userID]; ok {
+			return ts
+		}
+	}
+	return fallback
+}
+
+// CreateChatReport persists a moderation report filed by a viewer.
+func (s *Storage) CreateChatReport(channelID, reporterID, targetID, reason, messageID, evidenceURL string) (models.ChatReport, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.data.Channels[channelID]; !ok {
+		return models.ChatReport{}, fmt.Errorf("channel %s not found", channelID)
+	}
+	if _, ok := s.data.Users[reporterID]; !ok {
+		return models.ChatReport{}, fmt.Errorf("reporter %s not found", reporterID)
+	}
+	if _, ok := s.data.Users[targetID]; !ok {
+		return models.ChatReport{}, fmt.Errorf("target %s not found", targetID)
+	}
+	trimmedReason := strings.TrimSpace(reason)
+	if trimmedReason == "" {
+		return models.ChatReport{}, fmt.Errorf("reason is required")
 	}
 	id, err := generateID()
 	if err != nil {
-		return models.Subscription{}, err
+		return models.ChatReport{}, err
 	}
-	started := time.Now().UTC()
-	expires := started.Add(params.Duration)
-	subscription := models.Subscription{
-		ID:                id,
-		ChannelID:         params.ChannelID,
-		UserID:            params.UserID,
-		Tier:              tier,
-		Provider:          provider,
-		Reference:         reference,
-		Amount:            amount,
-		Currency:          currency,
-		StartedAt:         started,
-		ExpiresAt:         expires,
-		AutoRenew:         params.AutoRenew,
-		Status:            "active",
-		ExternalReference: strings.TrimSpace(params.ExternalReference),
+	now := time.Now().UTC()
+	report := models.ChatReport{
+		ID:          id,
+		ChannelID:   channelID,
+		ReporterID:  reporterID,
+		TargetID:    targetID,
+		Reason:      trimmedReason,
+		MessageID:   strings.TrimSpace(messageID),
+		EvidenceURL: strings.TrimSpace(evidenceURL),
+		Status:      "open",
+		CreatedAt:   now,
 	}
-	if s.data.Subscriptions == nil {
-		s.data.Subscriptions = make(map[string]models.Subscription)
+	if s.data.ChatReports == nil {
+		s.data.ChatReports = make(map[string]models.ChatReport)
 	}
-	s.data.Subscriptions[id] = subscription
+	s.data.ChatReports[id] = report
 	if err := s.persist(); err != nil {
-		delete(s.data.Subscriptions, id)
-		return models.Subscription{}, err
+		delete(s.data.ChatReports, id)
+		return models.ChatReport{}, err
 	}
-	return subscription, nil
+	return report, nil
 }
 
-// ListSubscriptions lists subscriptions for a channel.
-func (s *Storage) ListSubscriptions(channelID string, includeInactive bool) ([]models.Subscription, error) {
+// ListChatReports lists reports for a channel.
+func (s *Storage) ListChatReports(channelID string, includeResolved bool) ([]models.ChatReport, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if _, ok := s.data.Channels[channelID]; !ok {
 		return nil, fmt.Errorf("channel %s not found", channelID)
 	}
-	subs := make([]models.Subscription, 0)
-	for _, sub := range s.data.Subscriptions {
-		if sub.ChannelID != channelID {
+	reports := make([]models.ChatReport, 0)
+	for _, report := range s.data.ChatReports {
+		if report.ChannelID != channelID {
 			continue
 		}
-		if !includeInactive && !strings.EqualFold(sub.Status, "active") {
+		if !includeResolved && strings.EqualFold(report.Status, "resolved") {
 			continue
 		}
-		subs = append(subs, sub)
+		reports = append(reports, report)
 	}
-	sort.Slice(subs, func(i, j int) bool {
-		if subs[i].StartedAt.Equal(subs[j].StartedAt) {
-			return subs[i].ID < subs[j].ID
+	sort.Slice(reports, func(i, j int) bool {
+		if reports[i].CreatedAt.Equal(reports[j].CreatedAt) {
+			return reports[i].ID < reports[j].ID
 		}
-		return subs[i].StartedAt.After(subs[j].StartedAt)
+		return reports[i].CreatedAt.After(reports[j].CreatedAt)
 	})
-	return subs, nil
+	return reports, nil
 }
 
-// GetSubscription returns a subscription by id.
-func (s *Storage) GetSubscription(id string) (models.Subscription, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	sub, ok := s.data.Subscriptions[id]
-	return sub, ok
-}
-
-// CancelSubscription marks a subscription as cancelled.
-func (s *Storage) CancelSubscription(id, cancelledBy, reason string) (models.Subscription, error) {
+// ResolveChatReport marks a report as addressed.
+func (s *Storage) ResolveChatReport(reportID, resolverID, resolution string) (models.ChatReport, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	subscription, ok := s.data.Subscriptions[id]
+	report, ok := s.data.ChatReports[reportID]
 	if !ok {
-		return models.Subscription{}, fmt.Errorf("subscription %s not found", id)
+		return models.ChatReport{}, fmt.Errorf("report %s not found", reportID)
 	}
-	if subscription.Status == "cancelled" {
-		return subscription, nil
+	if _, ok := s.data.Users[resolverID]; !ok {
+		return models.ChatReport{}, fmt.Errorf("resolver %s not found", resolverID)
 	}
-	if _, ok := s.data.Users[cancelledBy]; !ok {
-		return models.Subscription{}, fmt.Errorf("user %s not found", cancelledBy)
+	if strings.EqualFold(report.Status, "resolved") {
+		return report, nil
 	}
 	now := time.Now().UTC()
-	subscription.Status = "cancelled"
-	subscription.AutoRenew = false
-	subscription.CancelledBy = cancelledBy
-	subscription.CancelledAt = &now
-	trimmed := strings.TrimSpace(reason)
+	trimmed := strings.TrimSpace(resolution)
 	if trimmed == "" {
-		if cancelledBy == subscription.UserID {
-			trimmed = "user_cancelled"
-		} else {
-			trimmed = "cancelled_by_admin"
-		}
+		trimmed = "resolved"
 	}
-	subscription.CancelledReason = trimmed
-	s.data.Subscriptions[id] = subscription
+	report.Status = "resolved"
+	report.Resolution = trimmed
+	report.ResolverID = resolverID
+	report.ResolvedAt = &now
+	s.data.ChatReports[reportID] = report
 	if err := s.persist(); err != nil {
-		return models.Subscription{}, err
+		return models.ChatReport{}, err
 	}
-	return subscription, nil
+	return report, nil
 }
