@@ -184,6 +184,10 @@ jobs:
             goarch: amd64
     env:
       CGO_ENABLED: 0
+      GOTOOLCHAIN: local
+      GOPROXY: off
+      GOSUMDB: off
+      GOFLAGS: -mod=vendor
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
