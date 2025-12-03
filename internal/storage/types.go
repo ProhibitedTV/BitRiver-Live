@@ -69,6 +69,35 @@ type ObjectStorageConfig struct {
 
 const defaultObjectStorageRequestTimeout = 30 * time.Second
 
+// ClipExportParams captures the request to generate a recording clip.
+type ClipExportParams struct {
+	Title        string
+	StartSeconds int
+	EndSeconds   int
+}
+
+// CreateUploadParams captures the information required to store an uploaded asset.
+type CreateUploadParams struct {
+	ChannelID   string
+	Title       string
+	Filename    string
+	SizeBytes   int64
+	Metadata    map[string]string
+	PlaybackURL string
+}
+
+// UploadUpdate describes the mutable fields of an upload entry.
+type UploadUpdate struct {
+	Title       *string
+	Status      *string
+	Progress    *int
+	RecordingID *string
+	PlaybackURL *string
+	Metadata    map[string]string
+	Error       *string
+	CompletedAt *time.Time
+}
+
 // CreateUserParams captures the attributes that can be set when creating a user.
 type CreateUserParams struct {
 	DisplayName string
