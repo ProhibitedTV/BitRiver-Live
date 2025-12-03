@@ -73,6 +73,40 @@ func TestDeleteChatMessage(t *testing.T) {
 	}
 }
 
+func TestListFollowedChannelIDsOrdersByRecency(t *testing.T) {
+	store := newTestStore(t)
+
+	owner, err := store.CreateUser(CreateUserParams{DisplayName: "Creator", Email: "creator@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+	viewer, err := store.CreateUser(CreateUserParams{DisplayName: "Viewer", Email: "viewer@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
+	first, err := store.CreateChannel(owner.ID, "Alpha", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel alpha: %v", err)
+	}
+	second, err := store.CreateChannel(owner.ID, "Beta", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel beta: %v", err)
+	}
+
+	if err := store.FollowChannel(viewer.ID, first.ID); err != nil {
+		t.Fatalf("FollowChannel alpha: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	if err := store.FollowChannel(viewer.ID, second.ID); err != nil {
+		t.Fatalf("FollowChannel beta: %v", err)
+	}
+
+	followed := store.ListFollowedChannelIDs(viewer.ID)
+	if len(followed) != 2 || followed[0] != second.ID || followed[1] != first.ID {
+		t.Fatalf("expected channels ordered by recency, got %v", followed)
+	}
+}
+
 func TestListChatRestrictionsSkipsExpiredTimeouts(t *testing.T) {
 	store := newTestStore(t)
 
@@ -214,6 +248,14 @@ func TestExpiredTimeoutsClearedAndPersisted(t *testing.T) {
 
 func TestChatReportsLifecycle(t *testing.T) {
 	RunRepositoryChatReportsLifecycle(t, jsonRepositoryFactory)
+}
+
+func TestRepositoryChannelSearch(t *testing.T) {
+	RunRepositoryChannelSearch(t, jsonRepositoryFactory)
+}
+
+func TestRepositoryChannelLookupByStreamKey(t *testing.T) {
+	RunRepositoryChannelLookupByStreamKey(t, jsonRepositoryFactory)
 }
 
 func TestCloneDatasetCopiesModerationMetadata(t *testing.T) {

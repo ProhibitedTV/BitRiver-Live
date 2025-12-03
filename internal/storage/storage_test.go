@@ -2,55 +2,8 @@ package storage
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
-	"time"
-
-	"bitriver-live/internal/ingest"
 )
-
-func newTestStore(t *testing.T) *Storage {
-	return newTestStoreWithController(t, ingest.NoopController{})
-}
-
-func newTestStoreWithController(t *testing.T, controller ingest.Controller, extra ...Option) *Storage {
-	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "store.json")
-	if controller == nil {
-		controller = ingest.NoopController{}
-	}
-	opts := []Option{WithIngestController(controller), WithIngestRetries(1, 0)}
-	opts = append(opts, extra...)
-	store, err := NewStorage(path, opts...)
-	if err != nil {
-		t.Fatalf("NewStorage error: %v", err)
-	}
-	return store
-}
-
-func jsonRepositoryFactory(t *testing.T, opts ...Option) (Repository, func(), error) {
-	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "store.json")
-	defaults := []Option{WithIngestController(ingest.NoopController{}), WithIngestRetries(1, 0)}
-	opts = append(defaults, opts...)
-	store, err := NewStorage(path, opts...)
-	if err != nil {
-		return nil, nil, err
-	}
-	return store, func() {}, nil
-}
-
-func firstRecordingID(store *Storage) string {
-	store.mu.RLock()
-	defer store.mu.RUnlock()
-	for id := range store.data.Recordings {
-		return id
-	}
-	return ""
-}
 
 func TestDeleteUserPersistFailureLeavesDataUntouched(t *testing.T) {
 	store := newTestStore(t)
@@ -304,68 +257,4 @@ func TestFollowChannelLifecycle(t *testing.T) {
 	if store.IsFollowingChannel(viewer.ID, channel.ID) {
 		t.Fatal("expected viewer to not follow channel after unfollow")
 	}
-}
-
-func TestListFollowedChannelIDsOrdersByRecency(t *testing.T) {
-	store := newTestStore(t)
-
-	owner, err := store.CreateUser(CreateUserParams{DisplayName: "Creator", Email: "creator@example.com"})
-	if err != nil {
-		t.Fatalf("CreateUser owner: %v", err)
-	}
-	viewer, err := store.CreateUser(CreateUserParams{DisplayName: "Viewer", Email: "viewer@example.com"})
-	if err != nil {
-		t.Fatalf("CreateUser viewer: %v", err)
-	}
-	first, err := store.CreateChannel(owner.ID, "Alpha", "gaming", nil)
-	if err != nil {
-		t.Fatalf("CreateChannel alpha: %v", err)
-	}
-	second, err := store.CreateChannel(owner.ID, "Beta", "gaming", nil)
-	if err != nil {
-		t.Fatalf("CreateChannel beta: %v", err)
-	}
-
-	if err := store.FollowChannel(viewer.ID, first.ID); err != nil {
-		t.Fatalf("FollowChannel alpha: %v", err)
-	}
-	time.Sleep(10 * time.Millisecond)
-	if err := store.FollowChannel(viewer.ID, second.ID); err != nil {
-		t.Fatalf("FollowChannel beta: %v", err)
-	}
-
-	followed := store.ListFollowedChannelIDs(viewer.ID)
-	if len(followed) != 2 || followed[0] != second.ID || followed[1] != first.ID {
-		t.Fatalf("expected channels ordered by recency, got %v", followed)
-	}
-}
-
-func TestRepositoryStreamKeyRotation(t *testing.T) {
-	RunRepositoryStreamKeyRotation(t, jsonRepositoryFactory)
-}
-
-func TestRepositoryOAuthLinking(t *testing.T) {
-	RunRepositoryOAuthLinking(t, jsonRepositoryFactory)
-}
-
-func TestRepositoryChannelSearch(t *testing.T) {
-	RunRepositoryChannelSearch(t, jsonRepositoryFactory)
-}
-
-func TestRepositoryChannelLookupByStreamKey(t *testing.T) {
-	RunRepositoryChannelLookupByStreamKey(t, jsonRepositoryFactory)
-}
-
-func TestRepositoryStreamLifecycleWithoutIngest(t *testing.T) {
-	RunRepositoryStreamLifecycleWithoutIngest(t, jsonRepositoryFactory)
-}
-
-func TestRepositoryStreamTimeouts(t *testing.T) {
-	RunRepositoryStreamTimeouts(t, jsonRepositoryFactory)
-}
-
-func TestMain(m *testing.M) {
-	// ensure tests do not leave temp files behind by relying on testing package cleanup
-	code := m.Run()
-	os.Exit(code)
 }

@@ -311,3 +311,7 @@ func TestSetUserPasswordValidatesLength(t *testing.T) {
 		t.Fatal("expected error for short password")
 	}
 }
+
+func TestRepositoryOAuthLinking(t *testing.T) {
+	RunRepositoryOAuthLinking(t, jsonRepositoryFactory)
+}
