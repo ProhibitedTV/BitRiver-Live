@@ -156,7 +156,7 @@ func (s *Storage) applyReportLocked(evt chat.ReportEvent) error {
 		CreatedAt:   evt.CreatedAt.UTC(),
 	}
 	if report.Status == "" {
-		report.Status = "open"
+		report.Status = ChatReportStatusOpen
 	}
 	s.data.ChatReports[report.ID] = report
 	return nil
