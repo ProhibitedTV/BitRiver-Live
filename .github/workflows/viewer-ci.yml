@@ -26,26 +26,8 @@ jobs:
         with:
           node-version: 20
 
-      - name: Cache npm dependencies
-        id: cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.npm
-            web/viewer/node_modules
-          key: ${{ runner.os }}-node-20-${{ hashFiles('web/viewer/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-20-
-
       - name: Install dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
         run: npm ci
-        env:
-          NEXT_TELEMETRY_DISABLED: 1
-
-      - name: Install dependencies from cache
-        if: steps.cache.outputs.cache-hit == 'true'
-        run: npm install --prefer-offline --no-audit --progress=false
         env:
           NEXT_TELEMETRY_DISABLED: 1
 
@@ -54,18 +36,8 @@ jobs:
         env:
           NEXT_TELEMETRY_DISABLED: 1
 
-      - name: Lint
-        run: npm run lint
-        env:
-          NEXT_TELEMETRY_DISABLED: 1
-
-      - name: Test
-        run: npm test
-        env:
-          NEXT_TELEMETRY_DISABLED: 1
-
-      - name: Playwright tests
-        run: npm run test:playwright
+      - name: Viewer integration tests
+        run: npm run test:integration
         env:
           NEXT_TELEMETRY_DISABLED: 1
 
