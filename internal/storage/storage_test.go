@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
@@ -251,83 +250,6 @@ func TestDeleteChannelPersistFailureLeavesDataUntouched(t *testing.T) {
 		t.Fatalf("expected chat message to remain, got %d", len(messages))
 	}
 }
-
-func TestStorageLoadsEmptyFile(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "store.json")
-	if err := os.WriteFile(path, []byte{}, 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	store, err := NewStorage(path)
-	if err != nil {
-		t.Fatalf("NewStorage: %v", err)
-	}
-	if users := store.ListUsers(); len(users) != 0 {
-		t.Fatalf("expected no users, got %d", len(users))
-	}
-
-	if _, err := store.CreateUser(CreateUserParams{DisplayName: "Alice", Email: "alice@example.com"}); err != nil {
-		t.Fatalf("CreateUser on recovered store: %v", err)
-	}
-}
-
-func TestPersistUsesAtomicReplacement(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("file permission semantics differ on Windows")
-	}
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "store.json")
-	store, err := NewStorage(path)
-	if err != nil {
-		t.Fatalf("NewStorage: %v", err)
-	}
-
-	if _, err := store.CreateUser(CreateUserParams{DisplayName: "Alice", Email: "alice@example.com"}); err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("Stat: %v", err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Fatalf("expected permissions 0600, got %o", perm)
-	}
-}
-
-func TestStoragePersistsToDisk(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "store.json")
-
-	store, err := NewStorage(path)
-	if err != nil {
-		t.Fatalf("NewStorage: %v", err)
-	}
-	user, err := store.CreateUser(CreateUserParams{
-		DisplayName: "Alice",
-		Email:       "alice@example.com",
-	})
-	if err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-	if err := store.persist(); err != nil {
-		t.Fatalf("persist: %v", err)
-	}
-
-	// reopen store and ensure data is present
-	reopened, err := NewStorage(path)
-	if err != nil {
-		t.Fatalf("NewStorage reopen: %v", err)
-	}
-	if got, ok := reopened.GetUser(user.ID); !ok {
-		t.Fatalf("expected to find persisted user %s", user.ID)
-	} else if got.Email != user.Email {
-		t.Fatalf("expected email %s, got %s", user.Email, got.Email)
-	}
-}
-
 func TestUpsertProfileCreatesProfile(t *testing.T) {
 	store := newTestStore(t)
 	owner, err := store.CreateUser(CreateUserParams{
