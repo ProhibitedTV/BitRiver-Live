@@ -37,6 +37,8 @@ jobs:
           BITRIVER_SRS_CONTROLLER_IMAGE_TAG: ${{ secrets.BITRIVER_SRS_CONTROLLER_IMAGE_TAG }}
           BITRIVER_TRANSCODER_IMAGE_TAG: ${{ secrets.BITRIVER_TRANSCODER_IMAGE_TAG }}
           BITRIVER_SRS_IMAGE_TAG: ${{ secrets.BITRIVER_SRS_IMAGE_TAG }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
+          NEXT_PUBLIC_VIEWER_URL: ${{ secrets.NEXT_PUBLIC_VIEWER_URL }}
         run: |
           set -euo pipefail
           env_file=".env"
@@ -59,6 +61,8 @@ jobs:
             BITRIVER_SRS_CONTROLLER_IMAGE_TAG
             BITRIVER_TRANSCODER_IMAGE_TAG
             BITRIVER_SRS_IMAGE_TAG
+            NEXT_PUBLIC_API_BASE_URL
+            NEXT_PUBLIC_VIEWER_URL
           )
           for var in "${vars[@]}"; do
             value="${!var-}"
