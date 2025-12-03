@@ -3,8 +3,10 @@ package storage
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
+	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
 )
 
@@ -45,6 +47,46 @@ var (
 	ErrInvalidCredentials       = errors.New("invalid credentials")
 	ErrPasswordLoginUnsupported = errors.New("account does not support password login")
 )
+
+type dataset struct {
+	Users               map[string]models.User          `json:"users"`
+	OAuthAccounts       map[string]models.OAuthAccount  `json:"oauthAccounts"`
+	Channels            map[string]models.Channel       `json:"channels"`
+	StreamSessions      map[string]models.StreamSession `json:"streamSessions"`
+	ChatMessages        map[string]models.ChatMessage   `json:"chatMessages"`
+	ChatBans            map[string]map[string]time.Time `json:"chatBans"`
+	ChatTimeouts        map[string]map[string]time.Time `json:"chatTimeouts"`
+	ChatBanActors       map[string]map[string]string    `json:"chatBanActors"`
+	ChatBanReasons      map[string]map[string]string    `json:"chatBanReasons"`
+	ChatTimeoutActors   map[string]map[string]string    `json:"chatTimeoutActors"`
+	ChatTimeoutReasons  map[string]map[string]string    `json:"chatTimeoutReasons"`
+	ChatTimeoutIssuedAt map[string]map[string]time.Time `json:"chatTimeoutIssuedAt"`
+	ChatReports         map[string]models.ChatReport    `json:"chatReports"`
+	Tips                map[string]models.Tip           `json:"tips"`
+	Subscriptions       map[string]models.Subscription  `json:"subscriptions"`
+	Profiles            map[string]models.Profile       `json:"profiles"`
+	Follows             map[string]map[string]time.Time `json:"follows"`
+	Recordings          map[string]models.Recording     `json:"recordings"`
+	Uploads             map[string]models.Upload        `json:"uploads"`
+	ClipExports         map[string]models.ClipExport    `json:"clipExports"`
+}
+
+type Storage struct {
+	mu       sync.RWMutex
+	filePath string
+	data     dataset
+	// persistOverride allows tests to intercept persist operations.
+	persistOverride     func(dataset) error
+	ingestController    ingest.Controller
+	ingestMaxAttempts   int
+	ingestRetryInterval time.Duration
+	ingestTimeout       time.Duration
+	ingestHealth        []ingest.HealthStatus
+	ingestHealthUpdated time.Time
+	recordingRetention  RecordingRetentionPolicy
+	objectStorage       ObjectStorageConfig
+	objectClient        objectStorageClient
+}
 
 // RecordingRetentionPolicy specifies how long recordings are kept before being
 // purged when unpublished or published.
