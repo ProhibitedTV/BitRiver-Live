@@ -2,7 +2,7 @@ package chat
 
 import (
 	"context"
-	"crypto/rand"
+	cryptorand "crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	mathrand "math/rand"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -128,6 +129,90 @@ type redisQueue struct {
 	groupReady atomic.Bool
 }
 
+type backoff struct {
+	base    time.Duration
+	max     time.Duration
+	factor  float64
+	jitter  time.Duration
+	current time.Duration
+	rand    *mathrand.Rand
+	waitFn  func(time.Duration) <-chan time.Time
+}
+
+func newBackoff(base, max time.Duration) *backoff {
+	if base <= 0 {
+		base = 50 * time.Millisecond
+	}
+	if max > 0 && max < base {
+		max = base
+	}
+
+	seed := time.Now().UnixNano()
+	r := mathrand.New(mathrand.NewSource(seed))
+
+	return &backoff{
+		base:   base,
+		max:    max,
+		factor: 2,
+		jitter: base / 10,
+		rand:   r,
+		waitFn: time.After,
+	}
+}
+
+func (b *backoff) Sleep(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	delay := b.nextDelay()
+	waitFn := b.waitFn
+	if waitFn == nil {
+		waitFn = time.After
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-waitFn(delay):
+		return nil
+	}
+}
+
+func (b *backoff) Reset() {
+	b.current = 0
+}
+
+func (b *backoff) nextDelay() time.Duration {
+	if b.current == 0 {
+		b.current = b.base
+	}
+	delay := b.current
+	if b.jitter > 0 && b.rand != nil {
+		rangeN := int64(2*b.jitter) + 1
+		delta := time.Duration(b.rand.Int63n(rangeN)) - b.jitter
+		delay += delta
+	}
+	if delay < b.base {
+		delay = b.base
+	}
+	if b.max > 0 && delay > b.max {
+		delay = b.max
+	}
+	next := time.Duration(float64(b.current) * b.factor)
+	if next < b.base {
+		next = b.base
+	}
+	if b.max > 0 && next > b.max {
+		next = b.max
+	}
+	b.current = next
+	return delay
+}
+
 func (q *redisQueue) Publish(ctx context.Context, event Event) error {
 	if event.Type == "" {
 		return errors.New("event type is required")
@@ -226,6 +311,8 @@ func (s *redisSubscription) run(ctx context.Context) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	groupBackoff := newBackoff(200*time.Millisecond, 5*time.Second)
+	readBackoff := newBackoff(200*time.Millisecond, 5*time.Second)
 	for {
 		select {
 		case <-ctx.Done():
@@ -239,9 +326,12 @@ func (s *redisSubscription) run(ctx context.Context) {
 			if s.queue.logger != nil {
 				s.queue.logger.Warn("redis queue group ensure failed", "error", err)
 			}
-			time.Sleep(200 * time.Millisecond)
+			if err := groupBackoff.Sleep(ctx); err != nil {
+				return
+			}
 			continue
 		}
+		groupBackoff.Reset()
 		entries, err := s.read(ctx)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
@@ -250,9 +340,12 @@ func (s *redisSubscription) run(ctx context.Context) {
 			if s.queue.logger != nil {
 				s.queue.logger.Warn("redis queue read failed", "error", err)
 			}
-			time.Sleep(200 * time.Millisecond)
+			if err := readBackoff.Sleep(ctx); err != nil {
+				return
+			}
 			continue
 		}
+		readBackoff.Reset()
 		for _, entry := range entries {
 			var event Event
 			if err := json.Unmarshal(entry.Payload, &event); err != nil {
@@ -291,6 +384,7 @@ func (s *redisSubscription) requeueEntry(entry redisStreamEntry) {
 		return
 	}
 
+	retryBackoff := newBackoff(50*time.Millisecond, time.Second)
 	const maxAttempts = 3
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if _, err := s.queue.client.Do(ctx, "XADD", s.queue.stream, "*", "payload", string(entry.Payload)); err != nil {
@@ -300,10 +394,13 @@ func (s *redisSubscription) requeueEntry(entry redisStreamEntry) {
 			if ctx.Err() != nil {
 				break
 			}
-			time.Sleep(50 * time.Millisecond)
+			if err := retryBackoff.Sleep(ctx); err != nil {
+				break
+			}
 			continue
 		}
 		s.ack(ctx, entry.ID)
+		retryBackoff.Reset()
 		return
 	}
 	if s.queue.logger != nil {
@@ -407,7 +504,7 @@ func isNilReply(err error) bool {
 
 func randomConsumerID() string {
 	buf := make([]byte, 8)
-	if _, err := rand.Read(buf); err != nil {
+	if _, err := cryptorand.Read(buf); err != nil {
 		return fmt.Sprintf("consumer-%d", time.Now().UnixNano())
 	}
 	return fmt.Sprintf("consumer-%s", hex.EncodeToString(buf))
