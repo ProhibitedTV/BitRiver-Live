@@ -1,14 +1,12 @@
-"use client";
-
-import { useEffect, useState } from "react";
+import { Suspense } from "react";
+import { CategoryRail } from "../components/CategoryRail";
+import { ChannelRail } from "../components/ChannelRail";
 import { DirectoryGrid } from "../components/DirectoryGrid";
 import { FeaturedChannel } from "../components/FeaturedChannel";
 import { FollowingRail } from "../components/FollowingRail";
 import { LiveNowGrid } from "../components/LiveNowGrid";
-import { SearchBar } from "../components/SearchBar";
-import { CategoryRail } from "../components/CategoryRail";
-import { ChannelRail } from "../components/ChannelRail";
-import type { DirectoryChannel } from "../lib/viewer-api";
+import { DirectorySearchBar } from "../components/DirectorySearchBar";
+import type { CategorySummary, DirectoryChannel } from "../lib/viewer-api";
 import {
   fetchDirectory,
   fetchFeaturedChannels,
@@ -19,116 +17,109 @@ import {
   fetchTrendingChannels,
   searchDirectory,
 } from "../lib/viewer-api";
-import type { CategorySummary } from "../lib/viewer-api";
 
-export default function DirectoryPage() {
-  const [channels, setChannels] = useState<DirectoryChannel[]>([]);
-  const [featured, setFeatured] = useState<DirectoryChannel[]>([]);
-  const [recommended, setRecommended] = useState<DirectoryChannel[]>([]);
-  const [following, setFollowing] = useState<DirectoryChannel[]>([]);
-  const [liveNow, setLiveNow] = useState<DirectoryChannel[]>([]);
-  const [trending, setTrending] = useState<DirectoryChannel[]>([]);
-  const [categories, setCategories] = useState<CategorySummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [homeLoading, setHomeLoading] = useState(true);
-  const [error, setError] = useState<string | undefined>();
-  const [homeError, setHomeError] = useState<string | undefined>();
-  const [query, setQuery] = useState("");
+type HomeData = {
+  featured: DirectoryChannel[];
+  recommended: DirectoryChannel[];
+  following: DirectoryChannel[];
+  liveNow: DirectoryChannel[];
+  trending: DirectoryChannel[];
+  categories: CategorySummary[];
+  error?: string;
+};
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(undefined);
-        const data = query.trim().length > 0 ? await searchDirectory(query) : await fetchDirectory();
-        if (!cancelled) {
-          setChannels(data.channels);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Unable to load directory");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+type DirectoryData = {
+  channels: DirectoryChannel[];
+  error?: string;
+};
+
+const emptyHomeData: HomeData = {
+  featured: [],
+  recommended: [],
+  following: [],
+  liveNow: [],
+  trending: [],
+  categories: [],
+};
+
+async function loadHomeData(): Promise<HomeData> {
+  try {
+    const [
+      featuredResult,
+      followingResult,
+      liveResult,
+      recommendedResult,
+      trendingResult,
+      topCategoriesResult,
+    ] = await Promise.allSettled([
+      fetchFeaturedChannels(),
+      fetchFollowingChannels(),
+      fetchLiveNowChannels(),
+      fetchRecommendedChannels(),
+      fetchTrendingChannels(),
+      fetchTopCategories(),
+    ]);
+
+    const parseChannels = (result: PromiseSettledResult<{ channels: DirectoryChannel[] }>) =>
+      result.status === "fulfilled" ? result.value.channels : [];
+
+    const parseCategories = (result: PromiseSettledResult<{ categories?: CategorySummary[] }>) =>
+      result.status === "fulfilled" ? result.value.categories ?? [] : [];
+
+    const followingChannels = (() => {
+      if (followingResult.status === "fulfilled") {
+        return followingResult.value.channels;
       }
-    };
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [query]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const loadSlices = async () => {
-      try {
-        setHomeLoading(true);
-        setHomeError(undefined);
-        const [
-          featuredResult,
-          followingResult,
-          liveResult,
-          recommendedResult,
-          trendingResult,
-          topCategoriesResult,
-        ] = await Promise.allSettled([
-          fetchFeaturedChannels(),
-          fetchFollowingChannels(),
-          fetchLiveNowChannels(),
-          fetchRecommendedChannels(),
-          fetchTrendingChannels(),
-          fetchTopCategories(),
-        ]);
-
-        if (cancelled) {
-          return;
-        }
-
-        const parseChannels = (result: typeof featuredResult) =>
-          result.status === "fulfilled" ? result.value.channels : [];
-
-        const parseCategories = (result: typeof topCategoriesResult) =>
-          result.status === "fulfilled" ? result.value.categories ?? [] : [];
-
-        const followingChannels = (() => {
-          if (followingResult.status === "fulfilled") {
-            return followingResult.value.channels;
-          }
-          const message = followingResult.reason instanceof Error ? followingResult.reason.message : String(followingResult.reason);
-          if (message === "401" || message === "403") {
-            return [];
-          }
-          return [];
-        })();
-
-        setFeatured(parseChannels(featuredResult));
-        setRecommended(parseChannels(recommendedResult));
-        setFollowing(followingChannels);
-        setLiveNow(parseChannels(liveResult));
-        setTrending(parseChannels(trendingResult));
-        setCategories(parseCategories(topCategoriesResult));
-      } catch (err) {
-        if (!cancelled) {
-          setHomeError(err instanceof Error ? err.message : "Unable to load personalised rows");
-        }
-      } finally {
-        if (!cancelled) {
-          setHomeLoading(false);
-        }
+      const message = followingResult.reason instanceof Error ? followingResult.reason.message : String(followingResult.reason);
+      if (message === "401" || message === "403") {
+        return [];
       }
-    };
-    void loadSlices();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+      return [];
+    })();
 
-  const handleSearch = (value: string) => {
-    setQuery(value);
-  };
+    return {
+      featured: parseChannels(featuredResult),
+      recommended: parseChannels(recommendedResult),
+      following: followingChannels,
+      liveNow: parseChannels(liveResult),
+      trending: parseChannels(trendingResult),
+      categories: parseCategories(topCategoriesResult),
+    };
+  } catch (error) {
+    return {
+      ...emptyHomeData,
+      error: error instanceof Error ? error.message : "Unable to load personalised rows",
+    };
+  }
+}
+
+async function loadDirectoryData(query: string): Promise<DirectoryData> {
+  try {
+    const response = query.trim().length > 0 ? await searchDirectory(query) : await fetchDirectory();
+    return { channels: response.channels };
+  } catch (error) {
+    return {
+      channels: [],
+      error: error instanceof Error ? error.message : "Unable to load directory",
+    };
+  }
+}
+
+function HomePageView({
+  query,
+  homeData,
+  directoryData,
+  homeLoading,
+  directoryLoading,
+}: {
+  query: string;
+  homeData: HomeData;
+  directoryData: DirectoryData;
+  homeLoading: boolean;
+  directoryLoading: boolean;
+}) {
+  const { featured, recommended, following, liveNow, trending, categories, error: homeError } = homeData;
+  const { channels, error } = directoryData;
 
   return (
     <div className="home-page">
@@ -137,8 +128,8 @@ export default function DirectoryPage() {
           <div className="home-hero__content stack">
             <h1>Discover live channels</h1>
             <p className="muted">
-              Explore community broadcasts, follow your favourite creators, and jump into ultra-low-latency playback powered
-              by BitRiver Live.
+              Explore community broadcasts, follow your favourite creators, and jump into ultra-low-latency playback powered by
+              BitRiver Live.
             </p>
             <div className="home-hero__actions">
               <a className="primary-button" href="#live-now">
@@ -146,7 +137,7 @@ export default function DirectoryPage() {
               </a>
             </div>
             <div className="home-hero__search">
-              <SearchBar onSearch={handleSearch} defaultValue={query} />
+              <DirectorySearchBar defaultValue={query} />
             </div>
           </div>
 
@@ -184,7 +175,7 @@ export default function DirectoryPage() {
       <CategoryRail categories={categories} loading={homeLoading} />
 
       <div className="container stack home-page__content">
-        {homeError && (
+        {!homeLoading && homeError && (
           <div className="surface" role="alert">
             {homeError}
           </div>
@@ -211,15 +202,67 @@ export default function DirectoryPage() {
             </div>
             {query && <span className="muted">Results for “{query}”</span>}
           </div>
-          {loading && <div className="surface">Loading channels…</div>}
-          {error && (
+          {directoryLoading && <div className="surface">Loading channels…</div>}
+          {!directoryLoading && error && (
             <div className="surface" role="alert">
               {error}
             </div>
           )}
-          {!loading && !error && <DirectoryGrid channels={channels} />}
+          {!directoryLoading && !error && <DirectoryGrid channels={channels} />}
         </section>
       </div>
     </div>
+  );
+}
+
+async function DirectoryPageContent({
+  query,
+  homeDataPromise,
+  directoryDataPromise,
+}: {
+  query: string;
+  homeDataPromise: Promise<HomeData>;
+  directoryDataPromise: Promise<DirectoryData>;
+}) {
+  const [homeData, directoryData] = await Promise.all([homeDataPromise, directoryDataPromise]);
+
+  return (
+    <HomePageView
+      query={query}
+      homeData={homeData}
+      directoryData={directoryData}
+      homeLoading={false}
+      directoryLoading={false}
+    />
+  );
+}
+
+function DirectoryPageFallback({ query }: { query: string }) {
+  return (
+    <HomePageView
+      query={query}
+      homeData={emptyHomeData}
+      directoryData={{ channels: [] }}
+      homeLoading
+      directoryLoading
+    />
+  );
+}
+
+export default async function DirectoryPage({
+  searchParams,
+}: {
+  searchParams?: {
+    q?: string;
+  };
+}) {
+  const query = typeof searchParams?.q === "string" ? searchParams.q : "";
+  const homeDataPromise = loadHomeData();
+  const directoryDataPromise = loadDirectoryData(query);
+
+  return (
+    <Suspense fallback={<DirectoryPageFallback query={query} />}>
+      <DirectoryPageContent query={query} homeDataPromise={homeDataPromise} directoryDataPromise={directoryDataPromise} />
+    </Suspense>
   );
 }
