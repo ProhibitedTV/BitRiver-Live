@@ -6,7 +6,7 @@ rolling out the artefacts to your infrastructure.
 
 Recent schema changes to account for:
 
-- `0005_profile_social_links.sql` adds a `social_links` JSONB column to
+- `0006_profile_social_links.sql` adds a `social_links` JSONB column to
   `profiles` so broadcasters can surface their external accounts. Ensure this
   migration is applied during rollout.
 

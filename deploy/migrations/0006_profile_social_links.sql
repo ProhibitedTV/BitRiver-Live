@@ -1,4 +1,4 @@
--- 0005_profile_social_links.sql
+-- 0006_profile_social_links.sql
 --
 -- Adds a JSONB column to store user-provided social links alongside profile
 -- metadata.
