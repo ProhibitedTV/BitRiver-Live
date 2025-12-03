@@ -360,6 +360,18 @@ func TestDeleteClipArtifactsHonorsTimeout(t *testing.T) {
 	}
 }
 
+func TestRepositoryStreamKeyRotation(t *testing.T) {
+	RunRepositoryStreamKeyRotation(t, jsonRepositoryFactory)
+}
+
+func TestRepositoryStreamLifecycleWithoutIngest(t *testing.T) {
+	RunRepositoryStreamLifecycleWithoutIngest(t, jsonRepositoryFactory)
+}
+
+func TestRepositoryStreamTimeouts(t *testing.T) {
+	RunRepositoryStreamTimeouts(t, jsonRepositoryFactory)
+}
+
 func TestRecordingRetentionPurgesExpired(t *testing.T) {
 	RunRepositoryRecordingRetention(t, jsonRepositoryFactory)
 }
