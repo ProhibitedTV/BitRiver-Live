@@ -28,6 +28,7 @@ required_vars=(
   BITRIVER_LIVE_ADMIN_EMAIL
   BITRIVER_LIVE_ADMIN_PASSWORD
   BITRIVER_LIVE_SESSION_TTL
+  BITRIVER_LIVE_ALLOW_SELF_SIGNUP
   BITRIVER_SRS_TOKEN
   BITRIVER_OME_USERNAME
   BITRIVER_OME_PASSWORD
@@ -121,6 +122,13 @@ fi
 
 if [[ -n "${BITRIVER_LIVE_POSTGRES_DSN:-}" && "$BITRIVER_LIVE_POSTGRES_DSN" == *"bitriver:bitriver"* ]]; then
   echo "Warning: BITRIVER_LIVE_POSTGRES_DSN still references bitriver:bitriver. Update or unset it to match the Postgres credentials." >&2
+fi
+
+if [[ -n "${BITRIVER_LIVE_ALLOW_SELF_SIGNUP:-}" ]]; then
+  allow_self_signup_normalized="${BITRIVER_LIVE_ALLOW_SELF_SIGNUP,,}"
+  if [[ "$allow_self_signup_normalized" != "true" && "$allow_self_signup_normalized" != "false" ]]; then
+    errors+=("BITRIVER_LIVE_ALLOW_SELF_SIGNUP must be true or false (current: ${BITRIVER_LIVE_ALLOW_SELF_SIGNUP})")
+  fi
 fi
 
 if [[ -n "${BITRIVER_TRANSCODER_PUBLIC_BASE_URL:-}" ]]; then
