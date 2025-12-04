@@ -111,9 +111,10 @@ compose file.
   If you deploy OME outside of Docker, update `BITRIVER_OME_API` to the reachable host/IP and ensure the configured username/password match the container's baked credentials and your copied `Server.xml` before bringing the stack back up.
 - **Quickstart re-run pulled the wrong OME version** – When reusing an existing installation, keep `BITRIVER_OME_IMAGE_TAG`
   aligned with the version that matches your `Server.xml` schema before re-running `./scripts/quickstart.sh` or `docker compose
-  up -d`. The script preserves `.env` and volumes, so a stale tag can point Docker at a newer image that no longer matches the
-  persisted configuration. The default `0.15.10` tag remains compatible with the bundled configuration; if you bump the tag,
-  confirm the `<Bind>`/`<IP>` requirements against the upstream schema and adjust `deploy/ome/Server.xml` accordingly.
+  up -d`. The quickstart and `scripts/render-ome-config.sh --check` both compare the tag in `.env` with the marker stamped inside
+  `deploy/ome/Server.generated.xml` and force a regeneration before Compose starts if they diverge. The default `0.15.10` tag
+  remains compatible with the bundled configuration; if you bump the tag, confirm the `<Bind>`/`<IP>` requirements against the
+  upstream schema and adjust `deploy/ome/Server.xml` accordingly.
 - **Environment tweaks** – Edit `.env` and rerun `docker compose up -d` to apply changes. The compose stack automatically loads
   the file so you never need to touch `deploy/docker-compose.yml` directly.
 

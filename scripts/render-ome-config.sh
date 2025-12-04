@@ -76,14 +76,26 @@ OME_TLS_PORT="${BITRIVER_OME_SERVER_TLS_PORT:-9443}"
 OME_IP="${BITRIVER_OME_IP:-$OME_BIND}"
 OME_USERNAME="${BITRIVER_OME_USERNAME:-}"
 OME_PASSWORD="${BITRIVER_OME_PASSWORD:-}"
+OME_IMAGE_TAG="${BITRIVER_OME_IMAGE_TAG:-}"
 
 if [[ -z "$OME_USERNAME" || -z "$OME_PASSWORD" ]]; then
   echo "BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD must be set in $ENV_FILE before rendering." >&2
   exit 1
 fi
 
+if [[ -z "$OME_IMAGE_TAG" ]]; then
+  echo "BITRIVER_OME_IMAGE_TAG must be set in $ENV_FILE before rendering." >&2
+  exit 1
+fi
+
 needs_render=false
 reason=""
+OME_MARKER_PREFIX="<!-- Rendered for BITRIVER_OME_IMAGE_TAG="
+
+generated_ome_tag=""
+if [[ -f "$OUTPUT" ]]; then
+  generated_ome_tag=$(sed -n "s/.*${OME_MARKER_PREFIX}\(.*\) -->.*/\1/p" "$OUTPUT" | head -n1)
+fi
 
 if [[ $FORCE -eq 1 ]]; then
   needs_render=true
@@ -100,6 +112,12 @@ elif [[ "$TEMPLATE" -nt "$OUTPUT" ]]; then
 elif grep -q "<Control>" "$OUTPUT" 2>/dev/null; then
   needs_render=true
   reason="generated file contains deprecated <Control> module"
+elif [[ -z "$generated_ome_tag" ]]; then
+  needs_render=true
+  reason="generated file missing BITRIVER_OME_IMAGE_TAG marker"
+elif [[ "$generated_ome_tag" != "$OME_IMAGE_TAG" ]]; then
+  needs_render=true
+  reason="generated file rendered for BITRIVER_OME_IMAGE_TAG=$generated_ome_tag, expected $OME_IMAGE_TAG"
 fi
 
 if [[ "$MODE" == "check" ]]; then
@@ -136,6 +154,13 @@ if ! render_output=$(python3 "$SCRIPT_DIR/render_ome_config.py" \
   echo "Failed to render deploy/ome/Server.generated.xml. Check BITRIVER_OME_* values in $ENV_FILE and the template at $TEMPLATE." >&2
   echo "$render_output" >&2
   exit 1
+fi
+
+marker="${OME_MARKER_PREFIX}${OME_IMAGE_TAG} -->"
+if grep -q "$OME_MARKER_PREFIX" "$OUTPUT"; then
+  perl -0pi -e "s/${OME_MARKER_PREFIX}.* -->/${marker}/" "$OUTPUT"
+else
+  perl -0pi -e "s#(<Server[^>]*>\s*)#$1    ${marker}\n#" "$OUTPUT"
 fi
 
 if [[ $QUIET -eq 0 ]]; then

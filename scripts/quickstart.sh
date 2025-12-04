@@ -348,8 +348,15 @@ render_ome_config() {
   local output="$REPO_ROOT/deploy/ome/Server.generated.xml"
   local render_script="$SCRIPT_DIR/render-ome-config.sh"
   local -a render_args=(--env-file "$ENV_FILE")
+  local check_output=""
 
   if (( FORCE_RENDER )); then
+    render_args+=(--force)
+  fi
+
+  if ! check_output=$("$render_script" --check --env-file "$ENV_FILE" 2>&1); then
+    echo "$check_output" >&2
+    echo "OME config check failed; forcing a fresh render before Compose starts." >&2
     render_args+=(--force)
   fi
 

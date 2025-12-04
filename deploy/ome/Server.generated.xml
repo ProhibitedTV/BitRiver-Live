@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Server version="10">
+    <!-- Rendered for BITRIVER_OME_IMAGE_TAG=0.15.10 -->
     <Name>OvenMediaEngine</Name>
 
     <!-- Host type (origin/edge) -->
