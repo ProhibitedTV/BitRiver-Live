@@ -303,8 +303,13 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 				if !DecodeAndValidate(w, r, &req) {
 					return
 				}
+				title := strings.TrimSpace(req.Title)
+				if title == "" {
+					WriteError(w, http.StatusBadRequest, fmt.Errorf("title is required"))
+					return
+				}
 				clip, err := h.Store.CreateClipExport(recordingID, storage.ClipExportParams{
-					Title:        req.Title,
+					Title:        title,
 					StartSeconds: req.StartSeconds,
 					EndSeconds:   req.EndSeconds,
 				})

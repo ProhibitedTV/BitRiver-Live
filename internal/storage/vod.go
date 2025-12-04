@@ -657,6 +657,10 @@ func (s *Storage) CreateClipExport(recordingID string, params ClipExportParams) 
 	if !ok {
 		return models.ClipExport{}, fmt.Errorf("recording %s not found", recordingID)
 	}
+	title := strings.TrimSpace(params.Title)
+	if title == "" {
+		return models.ClipExport{}, fmt.Errorf("title is required")
+	}
 	if params.EndSeconds <= params.StartSeconds {
 		return models.ClipExport{}, fmt.Errorf("endSeconds must be greater than startSeconds")
 	}
@@ -676,7 +680,7 @@ func (s *Storage) CreateClipExport(recordingID string, params ClipExportParams) 
 		RecordingID:  recordingID,
 		ChannelID:    recording.ChannelID,
 		SessionID:    recording.SessionID,
-		Title:        strings.TrimSpace(params.Title),
+		Title:        title,
 		StartSeconds: params.StartSeconds,
 		EndSeconds:   params.EndSeconds,
 		Status:       "pending",

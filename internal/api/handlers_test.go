@@ -1513,8 +1513,18 @@ func TestRecordingEndpointsEndToEnd(t *testing.T) {
 	}
 
 	// Create a clip export.
-	clipPayload := clipExportRequest{Title: "Intro", StartSeconds: 0, EndSeconds: 5}
+	clipPayload := clipExportRequest{Title: "   ", StartSeconds: 0, EndSeconds: 5}
 	body, _ := json.Marshal(clipPayload)
+	req = httptest.NewRequest(http.MethodPost, "/api/recordings/"+recordingID+"/clips", bytes.NewReader(body))
+	req = withUser(req, creator)
+	rec = httptest.NewRecorder()
+	handler.RecordingByID(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected empty title status 400, got %d", rec.Code)
+	}
+
+	clipPayload = clipExportRequest{Title: "Intro", StartSeconds: 0, EndSeconds: 5}
+	body, _ = json.Marshal(clipPayload)
 	req = httptest.NewRequest(http.MethodPost, "/api/recordings/"+recordingID+"/clips", bytes.NewReader(body))
 	req = withUser(req, creator)
 	rec = httptest.NewRecorder()
