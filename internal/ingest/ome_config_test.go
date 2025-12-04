@@ -20,7 +20,7 @@ import (
 //  1. Update the key here to match the new image.
 //  2. Update the Server.xml template value to reflect any config changes.
 var expectedServerTemplates = map[string]string{
-	"airensoft/ovenmediaengine:0.15.10": strings.TrimSpace(`<?xml version="1.0" encoding="utf-8"?>
+	"airensoft/ovenmediaengine:0.16.0": strings.TrimSpace(`<?xml version="1.0" encoding="utf-8"?>
 <Server version="10">
     <Name>OvenMediaEngine</Name>
 
@@ -66,6 +66,7 @@ var expectedServerTemplates = map[string]string{
                 <Port>8081</Port>
                 <TLSPort>8082</TLSPort>
                 <WorkerCount>1</WorkerCount>
+                <AccessToken>OME-Access-Token</AccessToken>
             </API>
         </Managers>
 
@@ -141,6 +142,7 @@ var expectedServerTemplates = map[string]string{
             <Applications>
                 <Application>
                     <Name>live</Name>
+                    <Type>live</Type>
 
                     <!-- Use default Providers/Publishers from Bind -->
                     <!-- You can add per-app settings here if needed later -->
@@ -205,7 +207,7 @@ func omeImageFromCompose(t *testing.T, composePath string) string {
 
 	// Match:
 	//   ome:
-	//     image: airensoft/ovenmediaengine:0.15.10
+	//     image: airensoft/ovenmediaengine:0.16.0
 	// including optional extra lines between ome: and image:.
 	re := regexp.MustCompile(`(?m)^  ome:\n(?:^[ \t]+.*\n)*?^[ \t]+image:\s*([^\s#]+)`) //nolint:revive
 	matches := re.FindSubmatch(data)
@@ -221,11 +223,11 @@ func omeImageFromCompose(t *testing.T, composePath string) string {
 //
 // For example:
 //
-//	airensoft/ovenmediaengine:${OME_TAG:-0.15.10}
+//	airensoft/ovenmediaengine:${OME_TAG:-0.16.0}
 //
 // becomes:
 //
-//	airensoft/ovenmediaengine:0.15.10
+//	airensoft/ovenmediaengine:0.16.0
 func normalizeComposeImageRef(image string) string {
 	re := regexp.MustCompile(`\$\{[^:}]+:-([^}]+)\}`)
 	return re.ReplaceAllString(image, "$1")

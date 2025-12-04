@@ -32,13 +32,25 @@ required_vars=(
   BITRIVER_SRS_TOKEN
   BITRIVER_OME_USERNAME
   BITRIVER_OME_PASSWORD
-  BITRIVER_OME_ACCESS_TOKEN
   BITRIVER_TRANSCODER_TOKEN
   BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD
   BITRIVER_TRANSCODER_PUBLIC_BASE_URL
   NEXT_PUBLIC_API_BASE_URL
   NEXT_PUBLIC_VIEWER_URL
 )
+
+ome_requires_access_token=true
+if [[ ${BITRIVER_OME_IMAGE_TAG:-} =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+  ome_major=${BASH_REMATCH[1]}
+  ome_minor=${BASH_REMATCH[2]}
+  if (( ome_major == 0 && ome_minor < 16 )); then
+    ome_requires_access_token=false
+  fi
+fi
+
+if [[ "$ome_requires_access_token" == true ]]; then
+  required_vars+=(BITRIVER_OME_ACCESS_TOKEN)
+fi
 
 declare -A forbidden_values=(
   [BITRIVER_POSTGRES_PASSWORD]="P0stgres-Example!"

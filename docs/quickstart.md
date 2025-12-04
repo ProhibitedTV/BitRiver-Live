@@ -103,7 +103,7 @@ compose file.
 - **Port already in use** – Stop or reconfigure any services that currently bind to ports 5432, 6379, 8080, 8081, 9000, 9001,
   1935, or 1985. Alternatively edit the corresponding `*_PORT` values in `.env` (for example, `BITRIVER_LIVE_PORT=9090`) and
   rerun `docker compose up -d`.
-- **OME health check fails** – The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the container name. The health probe uses the configured `BITRIVER_OME_ACCESS_TOKEN` header (alongside `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD` for basic auth when present), so a 401 response will mark the container as unhealthy—the compose preflight reruns `./scripts/render-ome-config.sh` automatically before OME starts, mounting the regenerated `deploy/ome/Server.generated.xml` into `/opt/ovenmediaengine/bin/origin_conf/Server.xml` and `/opt/ovenmediaengine/bin/edge_conf/Server.xml`, but you can still verify the credentials landed in the rendered file:
+ - **OME health check fails** – The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the container name. The health probe forwards the `BITRIVER_OME_ACCESS_TOKEN` header when the rendered config includes `<AccessToken>` (otherwise it falls back to an unauthenticated probe with optional basic auth), so a 401 response will mark the container as unhealthy—the compose preflight reruns `./scripts/render-ome-config.sh` automatically before OME starts, mounting the regenerated `deploy/ome/Server.generated.xml` into `/opt/ovenmediaengine/bin/origin_conf/Server.xml` and `/opt/ovenmediaengine/bin/edge_conf/Server.xml`, but you can still verify the credentials landed in the rendered file:
   ```bash
   ./scripts/render-ome-config.sh --check || ./scripts/render-ome-config.sh --force
   grep -E '<(ID|Password|AccessToken)>' deploy/ome/Server.generated.xml
@@ -112,9 +112,10 @@ compose file.
 - **Quickstart re-run pulled the wrong OME version** – When reusing an existing installation, keep `BITRIVER_OME_IMAGE_TAG`
   aligned with the version that matches your `Server.xml` schema before re-running `./scripts/quickstart.sh` or `docker compose
   up -d`. The quickstart and `scripts/render-ome-config.sh --check` both compare the tag in `.env` with the marker stamped inside
-  `deploy/ome/Server.generated.xml` and force a regeneration before Compose starts if they diverge. The default `0.15.10` tag
-  remains compatible with the bundled configuration; if you bump the tag, confirm the `<Bind>`/`<IP>` requirements against the
-  upstream schema and adjust `deploy/ome/Server.xml` accordingly.
+  `deploy/ome/Server.generated.xml` and force a regeneration before Compose starts if they diverge. The default `0.16.0` tag is
+  the first OME release that accepts the managers `<AccessToken>` block used by the health check; when running an older OME tag
+  that lacks `<AccessToken>`, leave `BITRIVER_OME_ACCESS_TOKEN` empty and re-render the config so the tag is omitted from
+  `Server.generated.xml`.
 - **Environment tweaks** – Edit `.env` and rerun `docker compose up -d` to apply changes. The compose stack automatically loads
   the file so you never need to touch `deploy/docker-compose.yml` directly.
 

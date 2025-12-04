@@ -79,14 +79,38 @@ OME_PASSWORD="${BITRIVER_OME_PASSWORD:-}"
 OME_ACCESS_TOKEN="${BITRIVER_OME_ACCESS_TOKEN:-}"
 OME_IMAGE_TAG="${BITRIVER_OME_IMAGE_TAG:-}"
 
-if [[ -z "$OME_USERNAME" || -z "$OME_PASSWORD" || -z "$OME_ACCESS_TOKEN" ]]; then
-  echo "BITRIVER_OME_USERNAME, BITRIVER_OME_PASSWORD, and BITRIVER_OME_ACCESS_TOKEN must be set in $ENV_FILE before rendering." >&2
-  exit 1
-fi
-
 if [[ -z "$OME_IMAGE_TAG" ]]; then
   echo "BITRIVER_OME_IMAGE_TAG must be set in $ENV_FILE before rendering." >&2
   exit 1
+fi
+
+supports_access_token=1
+if [[ "$OME_IMAGE_TAG" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+  major="${BASH_REMATCH[1]}"
+  minor="${BASH_REMATCH[2]}"
+  if (( major == 0 && minor < 16 )); then
+    supports_access_token=0
+  fi
+fi
+
+if [[ -z "$OME_USERNAME" || -z "$OME_PASSWORD" ]]; then
+  echo "BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD must be set in $ENV_FILE before rendering." >&2
+  exit 1
+fi
+
+render_access_token="$OME_ACCESS_TOKEN"
+if [[ $supports_access_token -eq 1 && -z "$OME_ACCESS_TOKEN" ]]; then
+  cat <<EOF >&2
+BITRIVER_OME_ACCESS_TOKEN must be set in $ENV_FILE before rendering when BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG (managers <AccessToken> is supported starting with 0.16.0).
+EOF
+  exit 1
+fi
+
+if [[ $supports_access_token -eq 0 ]]; then
+  if [[ -n "$OME_ACCESS_TOKEN" && $QUIET -eq 0 ]]; then
+    echo "BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG does not advertise managers <AccessToken>; dropping BITRIVER_OME_ACCESS_TOKEN from the rendered config." >&2
+  fi
+  render_access_token=""
 fi
 
 needs_render=false
@@ -152,7 +176,7 @@ if ! render_output=$(python3 "$SCRIPT_DIR/render_ome_config.py" \
   --tls-port "$OME_TLS_PORT" \
   --username "$OME_USERNAME" \
   --password "$OME_PASSWORD" \
-  --access-token "$OME_ACCESS_TOKEN" 2>&1); then
+  --access-token "$render_access_token" 2>&1); then
   echo "Failed to render deploy/ome/Server.generated.xml. Check BITRIVER_OME_* values in $ENV_FILE and the template at $TEMPLATE." >&2
   echo "$render_output" >&2
   exit 1
