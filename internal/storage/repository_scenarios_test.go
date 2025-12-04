@@ -836,6 +836,44 @@ func RunRepositoryRecordingRetention(t *testing.T, factory RepositoryFactory) {
 	}
 }
 
+// RunRepositoryClipExportTitleValidation ensures repositories reject empty clip titles
+// and trim whitespace before persisting.
+func RunRepositoryClipExportTitleValidation(t *testing.T, factory RepositoryFactory) {
+	repo := runRepository(t, factory)
+
+	owner, err := repo.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	requireAvailable(t, err, "create owner")
+	channel, err := repo.CreateChannel(owner.ID, "Highlights", "gaming", nil)
+	requireAvailable(t, err, "create channel")
+	_, err = repo.StartStream(channel.ID, []string{"720p"})
+	requireAvailable(t, err, "start stream")
+	_, err = repo.StopStream(channel.ID, 15)
+	requireAvailable(t, err, "stop stream")
+
+	recordings, err := repo.ListRecordings(channel.ID, true)
+	requireAvailable(t, err, "list recordings")
+	if len(recordings) != 1 {
+		t.Fatalf("expected one recording, got %d", len(recordings))
+	}
+	recordingID := recordings[0].ID
+
+	if _, err := repo.CreateClipExport(recordingID, ClipExportParams{Title: "   ", StartSeconds: 0, EndSeconds: 5}); err == nil {
+		t.Fatalf("expected empty title to fail")
+	}
+
+	clip, err := repo.CreateClipExport(recordingID, ClipExportParams{Title: "  Intro  ", StartSeconds: 0, EndSeconds: 5})
+	requireAvailable(t, err, "create clip export with title")
+	if clip.Title != "Intro" {
+		t.Fatalf("expected trimmed title, got %q", clip.Title)
+	}
+
+	clips, err := repo.ListClipExports(recordingID)
+	requireAvailable(t, err, "list clip exports")
+	if len(clips) != 1 || clips[0].ID != clip.ID {
+		t.Fatalf("expected a single stored clip export")
+	}
+}
+
 // RunRepositoryStreamLifecycleWithoutIngest verifies stream start/stop requests
 // fail gracefully when no ingest controller is configured.
 func RunRepositoryStreamLifecycleWithoutIngest(t *testing.T, factory RepositoryFactory) {

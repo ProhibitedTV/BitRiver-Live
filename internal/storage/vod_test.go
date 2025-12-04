@@ -375,3 +375,7 @@ func TestRepositoryStreamTimeouts(t *testing.T) {
 func TestRecordingRetentionPurgesExpired(t *testing.T) {
 	RunRepositoryRecordingRetention(t, jsonRepositoryFactory)
 }
+
+func TestClipExportTitleValidation(t *testing.T) {
+	RunRepositoryClipExportTitleValidation(t, jsonRepositoryFactory)
+}

@@ -3094,6 +3094,10 @@ func (r *postgresRepository) CreateClipExport(recordingID string, params ClipExp
 	if strings.TrimSpace(recordingID) == "" {
 		return models.ClipExport{}, fmt.Errorf("recording id is required")
 	}
+	title := strings.TrimSpace(params.Title)
+	if title == "" {
+		return models.ClipExport{}, fmt.Errorf("title is required")
+	}
 	clip := models.ClipExport{}
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		var (
@@ -3127,7 +3131,7 @@ func (r *postgresRepository) CreateClipExport(recordingID string, params ClipExp
 			RecordingID:  recordingID,
 			ChannelID:    channelID,
 			SessionID:    sessionID,
-			Title:        strings.TrimSpace(params.Title),
+			Title:        title,
 			StartSeconds: params.StartSeconds,
 			EndSeconds:   params.EndSeconds,
 			Status:       "pending",
