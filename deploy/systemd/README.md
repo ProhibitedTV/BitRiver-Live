@@ -66,7 +66,7 @@ SRS_CONTROLLER_EXTRA_ARGS=
 EOF
 
    sudo tee /opt/bitriver-ome/.env >/dev/null <<'EOF'
-OME_IMAGE=airensoft/ovenmediaengine:0.15.10
+OME_IMAGE=airensoft/ovenmediaengine:0.16.0
 OME_CONTAINER_NAME=bitriver-ome
 OME_CONFIG=/opt/bitriver-live/deploy/ome/Server.generated.xml
 OME_HTTP_PORT=8081
@@ -100,7 +100,7 @@ EOF
    ```
 
    Adjust image tags, ports, and mount paths to match your topology. Add extra Docker flags by setting `*_EXTRA_ARGS`. When you install a new release, update the image tags above before restarting the units so the validation hooks in the service files do not block the deployment.
-   The Docker Compose bundle ships the same SRS pin via `BITRIVER_SRS_IMAGE_TAG` (defaulting to `v5.0.185`) and exposes `BITRIVER_OME_IMAGE_TAG` (defaulting to `0.15.10`) for OME, so upgrade both environments together when you validate newer upstream builds.
+   The Docker Compose bundle ships the same SRS pin via `BITRIVER_SRS_IMAGE_TAG` (defaulting to `v5.0.185`) and exposes `BITRIVER_OME_IMAGE_TAG` (defaulting to `0.16.0`) for OME, so upgrade both environments together when you validate newer upstream builds.
    The FFmpeg controller exits during startup if `TRANSCODER_PUBLIC_BASE_URL` (exported to `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`) is missing, so configure it with the HTTP origin viewers can reach before enabling the unit.
 7. (Optional) If you want to send API logs to `/opt/bitriver-live/logs/server.log`, create the directory and uncomment the `StandardOutput` and `StandardError` lines in `bitriver-live.service`.
 8. Copy the systemd unit files into place and reload systemd:

@@ -28,6 +28,11 @@ def replace_optional_tag_content(data: str, tag: str, value: str) -> str:
     return replace_tag_content(data, tag, value)
 
 
+def remove_optional_tag(data: str, tag: str) -> str:
+    pattern = re.compile(rf"\s*<{tag}>[^<]*</{tag}>\s*\n?", re.MULTILINE)
+    return pattern.sub("", data)
+
+
 def replace_all_tag_content(
     data: str, tag: str, value: str, *, required: bool = True
 ) -> str:
@@ -180,12 +185,11 @@ def render(
     tls_port: str,
     username: str,
     password: str,
-    access_token: str,
+    access_token: str | None,
 ) -> None:
     escaped_bind = xml_escape(bind)
     escaped_port = xml_escape(server_port)
     escaped_tls_port = xml_escape(tls_port)
-    escaped_access_token = xml_escape(access_token)
     text = template.read_text()
 
     # Normalize old <Server.bind> wrappers to <Bind> so very old templates don't break.
@@ -199,7 +203,12 @@ def render(
     # These may not exist depending on template version; replace them when present.
     text = replace_optional_tag_content(text, "ID", xml_escape(username))
     text = replace_optional_tag_content(text, "Password", xml_escape(password))
-    text = replace_tag_content(text, "AccessToken", escaped_access_token)
+    if access_token:
+        text = replace_optional_tag_content(
+            text, "AccessToken", xml_escape(access_token)
+        )
+    else:
+        text = remove_optional_tag(text, "AccessToken")
 
     output.write_text(text)
 
@@ -231,7 +240,11 @@ def main(argv: list[str]) -> int:
         "--password", required=True, help="OME control password"
     )
     parser.add_argument(
-        "--access-token", required=True, help="OME access token for API/authz"
+        "--access-token",
+        help=(
+            "OME access token for API/authz; omit when the configured image tag"
+            " does not support <AccessToken>"
+        ),
     )
     parser.add_argument(
         "--port", required=True, help="OME server port"

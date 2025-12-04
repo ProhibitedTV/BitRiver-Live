@@ -258,7 +258,7 @@ services:
     restart: "no"
 
   ome:
-    image: airensoft/ovenmediaengine:${BITRIVER_OME_IMAGE_TAG:-0.15.10}
+    image: airensoft/ovenmediaengine:${BITRIVER_OME_IMAGE_TAG:-0.16.0}
     container_name: bitriver-ome
     hostname: ome
     restart: unless-stopped
@@ -280,7 +280,12 @@ services:
     healthcheck:
       test:
         - "CMD-SHELL"
-        - "curl -fsS -H 'AccessToken: '$BITRIVER_OME_ACCESS_TOKEN http://localhost:8081/healthz"
+        - >
+          if [ -n "$BITRIVER_OME_ACCESS_TOKEN" ]; then
+            curl -fsS -H "AccessToken: $BITRIVER_OME_ACCESS_TOKEN" http://localhost:8081/healthz;
+          else
+            curl -fsS http://localhost:8081/healthz;
+          fi
       interval: 30s
       timeout: 5s
       retries: 5
