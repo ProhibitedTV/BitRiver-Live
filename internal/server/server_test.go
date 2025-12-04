@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -39,6 +40,17 @@ func decodeAPIError(t *testing.T, body []byte) apiErrorResponse {
 		t.Fatalf("decode response: %v", err)
 	}
 	return resp
+}
+
+type errorFS struct {
+	err error
+}
+
+func (e errorFS) Open(string) (fs.File, error) {
+	if e.err == nil {
+		return nil, fs.ErrNotExist
+	}
+	return nil, e.err
 }
 
 func newTestHandler(t *testing.T) (*api.Handler, *storage.Storage) {
@@ -346,7 +358,7 @@ func TestSPAHandlerServesSignup(t *testing.T) {
 		t.Fatalf("read index.html: %v", err)
 	}
 
-	handler := spaHandler(staticFS, index, http.FileServer(http.FS(staticFS)))
+	handler := spaHandler(staticFS, index, http.FileServer(http.FS(staticFS)), nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/signup", nil)
 	rec := httptest.NewRecorder()
@@ -359,6 +371,50 @@ func TestSPAHandlerServesSignup(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, `<form id="signup-form"`) {
 		t.Fatalf("expected signup form markup in response, got %q", body)
+	}
+}
+
+func TestSPAHandlerLogsUnexpectedErrors(t *testing.T) {
+	unexpectedErr := errors.New("unexpected open failure")
+	staticFS := errorFS{err: unexpectedErr}
+	index := []byte("index")
+	buf := &bytes.Buffer{}
+	logger := slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{AddSource: false}))
+
+	handler := spaHandler(staticFS, index, http.FileServer(http.FS(staticFS)), logger, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/broken", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected status 500, got %d", rec.Code)
+	}
+	resp := decodeAPIError(t, rec.Body.Bytes())
+	if resp.Error.Message != http.StatusText(http.StatusInternalServerError) {
+		t.Fatalf("expected generic error message, got %q", resp.Error.Message)
+	}
+	if strings.Contains(rec.Body.String(), unexpectedErr.Error()) {
+		t.Fatalf("response leaked internal error: %q", rec.Body.String())
+	}
+
+	logLine := strings.TrimSpace(buf.String())
+	if logLine == "" {
+		t.Fatal("expected log entry for unexpected error")
+	}
+	var logEntry map[string]any
+	if err := json.Unmarshal([]byte(logLine), &logEntry); err != nil {
+		t.Fatalf("unmarshal log entry: %v", err)
+	}
+	if got := logEntry["path"]; got != "/broken" {
+		t.Fatalf("expected path to be /broken, got %#v", got)
+	}
+	if got := logEntry["servePath"]; got != "broken" {
+		t.Fatalf("expected servePath to be broken, got %#v", got)
+	}
+	if got := logEntry["reason"]; got != unexpectedErr.Error() {
+		t.Fatalf("expected reason to contain error, got %#v", got)
 	}
 }
 
