@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -104,7 +105,7 @@ func TestApplyChatEventPersistsReport(t *testing.T) {
 }
 
 func TestChatWorkerProcessesQueue(t *testing.T) {
-	store := newTestStore(t)
+	store := &recordingStore{Repository: newTestStore(t), applied: make(chan chat.Event, 1)}
 	owner, err := store.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
 	if err != nil {
 		t.Fatalf("CreateUser owner: %v", err)
@@ -118,12 +119,13 @@ func TestChatWorkerProcessesQueue(t *testing.T) {
 		t.Fatalf("CreateChannel: %v", err)
 	}
 
-	queue := chat.NewMemoryQueue(8)
-	worker := NewChatWorker(store, queue, nil)
+	started := make(chan struct{})
+	queue := newRecordingQueue()
+	worker := NewChatWorker(store, queue, nil).WithStartedChannel(started)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go worker.Run(ctx)
-	time.Sleep(50 * time.Millisecond)
+	waitForSignal(t, started)
 
 	messageEvt := chat.Event{
 		Type: chat.EventTypeMessage,
@@ -140,19 +142,158 @@ func TestChatWorkerProcessesQueue(t *testing.T) {
 		t.Fatalf("Publish message: %v", err)
 	}
 
-	deadline := time.After(2 * time.Second)
-	for {
-		messages, err := store.ListChatMessages(channel.ID, 0)
-		if err != nil {
-			t.Fatalf("ListChatMessages: %v", err)
-		}
-		if len(messages) > 0 {
-			break
-		}
-		select {
-		case <-deadline:
-			t.Fatal("timeout waiting for chat persistence")
-		case <-time.After(20 * time.Millisecond):
-		}
+	waitForEvent(t, store.applied)
+
+	messages, err := store.ListChatMessages(channel.ID, 0)
+	if err != nil {
+		t.Fatalf("ListChatMessages: %v", err)
 	}
+	if len(messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(messages))
+	}
+	if messages[0].ID != messageEvt.Message.ID || messages[0].Content != messageEvt.Message.Content {
+		t.Fatalf("unexpected message payload: %+v", messages[0])
+	}
+}
+
+func TestChatWorkerSkipsFailedStoreApply(t *testing.T) {
+	baseStore := newTestStore(t)
+	store := &recordingStore{
+		Repository: baseStore,
+		applyErr:   errors.New("cannot persist"),
+		applied:    make(chan chat.Event, 1),
+	}
+	owner, err := store.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+	viewer, err := store.CreateUser(CreateUserParams{DisplayName: "viewer", Email: "viewer@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Lobby", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	started := make(chan struct{})
+	queue := newRecordingQueue()
+	worker := NewChatWorker(store, queue, nil).WithStartedChannel(started)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go worker.Run(ctx)
+	waitForSignal(t, started)
+
+	messageEvt := chat.Event{
+		Type: chat.EventTypeMessage,
+		Message: &chat.MessageEvent{
+			ID:        "evt-2",
+			ChannelID: channel.ID,
+			UserID:    viewer.ID,
+			Content:   "hello",
+			CreatedAt: time.Now().UTC(),
+		},
+		OccurredAt: time.Now().UTC(),
+	}
+	if err := queue.Publish(ctx, messageEvt); err != nil {
+		t.Fatalf("Publish message: %v", err)
+	}
+
+	waitForEvent(t, store.applied)
+
+	messages, err := baseStore.ListChatMessages(channel.ID, 0)
+	if err != nil {
+		t.Fatalf("ListChatMessages: %v", err)
+	}
+	if len(messages) != 0 {
+		t.Fatalf("expected no messages after failed apply, got %d", len(messages))
+	}
+}
+
+func TestChatWorkerPublishError(t *testing.T) {
+	queue := newRecordingQueue()
+	queue.publishErr = errors.New("queue offline")
+
+	err := queue.Publish(context.Background(), chat.Event{Type: chat.EventTypeMessage})
+	if err == nil {
+		t.Fatal("expected publish error")
+	}
+	if err.Error() != "queue offline" {
+		t.Fatalf("unexpected publish error: %v", err)
+	}
+}
+
+func waitForSignal(t *testing.T, ch <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for worker start")
+	}
+}
+
+func waitForEvent(t *testing.T, ch <-chan chat.Event) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for event")
+	}
+}
+
+type recordingQueue struct {
+	publishErr error
+	events     chan chat.Event
+}
+
+func newRecordingQueue() *recordingQueue {
+	return &recordingQueue{events: make(chan chat.Event, 4)}
+}
+
+func (q *recordingQueue) Publish(ctx context.Context, event chat.Event) error {
+	if q.publishErr != nil {
+		return q.publishErr
+	}
+	select {
+	case q.events <- event:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (q *recordingQueue) Subscribe() chat.Subscription {
+	return &recordingSubscription{events: q.events}
+}
+
+type recordingSubscription struct {
+	events chan chat.Event
+	once   bool
+}
+
+func (s *recordingSubscription) Events() <-chan chat.Event {
+	return s.events
+}
+
+func (s *recordingSubscription) Close() {
+	if !s.once {
+		close(s.events)
+		s.once = true
+	}
+}
+
+type recordingStore struct {
+	Repository
+	applyErr error
+	applied  chan chat.Event
+}
+
+func (s *recordingStore) ApplyChatEvent(evt chat.Event) error {
+	if s.applied != nil {
+		s.applied <- evt
+	}
+	if s.applyErr != nil {
+		return s.applyErr
+	}
+	return s.Repository.ApplyChatEvent(evt)
 }
