@@ -97,6 +97,9 @@ elif [[ "$ENV_FILE" -nt "$OUTPUT" ]]; then
 elif [[ "$TEMPLATE" -nt "$OUTPUT" ]]; then
   needs_render=true
   reason="template is newer than generated file"
+elif grep -q "<Control>" "$OUTPUT" 2>/dev/null; then
+  needs_render=true
+  reason="generated file contains deprecated <Control> module"
 fi
 
 if [[ "$MODE" == "check" ]]; then
