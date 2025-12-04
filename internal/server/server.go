@@ -197,7 +197,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 		mux.Handle("/viewer/", viewerHandler)
 	}
 
-	mux.HandleFunc("/", spaHandler(staticFS, index, fileServer))
+	mux.HandleFunc("/", spaHandler(staticFS, index, fileServer, cfg.Logger, ipResolver))
 
 	handlerChain := http.Handler(mux)
 	handlerChain = corsMiddleware(corsPolicy, cfg.Logger, handlerChain)
@@ -611,7 +611,7 @@ func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 	})
 }
 
-func spaHandler(staticFS fs.FS, index []byte, fileServer http.Handler) http.HandlerFunc {
+func spaHandler(staticFS fs.FS, index []byte, fileServer http.Handler, logger *slog.Logger, resolver *clientIPResolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.Error(w, fmt.Sprintf("method %s not allowed", r.Method), http.StatusMethodNotAllowed)
@@ -653,11 +653,19 @@ func spaHandler(staticFS fs.FS, index []byte, fileServer http.Handler) http.Hand
 					return
 				}
 				if statErr != nil && !errors.Is(statErr, fs.ErrNotExist) {
-					http.Error(w, statErr.Error(), http.StatusInternalServerError)
+					log := loggingWithRequest(logger, resolver, r)
+					if log != nil {
+						log.Error("serve static asset failed", "path", r.URL.Path, "servePath", servePath, "reason", statErr)
+					}
+					api.WriteError(w, http.StatusInternalServerError, statErr)
 					return
 				}
 			case err != nil && !errors.Is(err, fs.ErrNotExist):
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				log := loggingWithRequest(logger, resolver, r)
+				if log != nil {
+					log.Error("serve static asset failed", "path", r.URL.Path, "servePath", servePath, "reason", err)
+				}
+				api.WriteError(w, http.StatusInternalServerError, err)
 				return
 			}
 		}
