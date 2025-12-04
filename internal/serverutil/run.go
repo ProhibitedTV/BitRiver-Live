@@ -2,8 +2,10 @@ package serverutil
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 )
@@ -19,6 +21,7 @@ type Config struct {
 	Server          *http.Server
 	TLS             TLSConfig
 	ShutdownTimeout time.Duration
+	Ready           chan<- struct{}
 }
 
 // DefaultShutdownTimeout bounds graceful shutdown when the context is cancelled.
@@ -42,15 +45,41 @@ func Run(ctx context.Context, cfg Config) error {
 		timeout = DefaultShutdownTimeout
 	}
 
+	listenConfig := cfg.Server
+	ln, err := net.Listen("tcp", listenConfig.Addr)
+	if err != nil {
+		return err
+	}
+
+	var serve func(net.Listener) error
+	if cfg.TLS.CertFile != "" {
+		cert, err := tls.LoadX509KeyPair(cfg.TLS.CertFile, cfg.TLS.KeyFile)
+		if err != nil {
+			ln.Close()
+			return err
+		}
+
+		tlsCfg := cfg.Server.TLSConfig
+		if tlsCfg == nil {
+			tlsCfg = &tls.Config{}
+		} else {
+			tlsCfg = tlsCfg.Clone()
+		}
+		tlsCfg.Certificates = append([]tls.Certificate{cert}, tlsCfg.Certificates...)
+		cfg.Server.TLSConfig = tlsCfg
+		serve = cfg.Server.Serve
+		ln = tls.NewListener(ln, tlsCfg)
+	} else {
+		serve = cfg.Server.Serve
+	}
+
+	if cfg.Ready != nil {
+		close(cfg.Ready)
+	}
+
 	serveErr := make(chan error, 1)
 	go func() {
-		var err error
-		if cfg.TLS.CertFile != "" {
-			err = cfg.Server.ListenAndServeTLS(cfg.TLS.CertFile, cfg.TLS.KeyFile)
-		} else {
-			err = cfg.Server.ListenAndServe()
-		}
-		serveErr <- err
+		serveErr <- serve(ln)
 	}()
 
 	select {
