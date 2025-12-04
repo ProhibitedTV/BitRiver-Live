@@ -219,7 +219,7 @@ describe("ChannelPage", () => {
     });
 
     expect(followChannelMock).not.toHaveBeenCalled();
-    expect(screen.getByText(/sign in from the header to follow this channel/i)).toBeInTheDocument();
+    expect(screen.getByText(/redirecting to sign in/i)).toBeInTheDocument();
 
     const subscribeButton = screen.getByRole("button", { name: /subscribe/i });
     await act(async () => {
@@ -227,7 +227,7 @@ describe("ChannelPage", () => {
     });
 
     expect(subscribeChannelMock).not.toHaveBeenCalled();
-    expect(screen.getByText(/sign in from the header to subscribe/i)).toBeInTheDocument();
+    expect(screen.getByText(/redirecting to sign in/i)).toBeInTheDocument();
 
     const textarea = await screen.findByRole("textbox", { name: /chat message/i });
     expect(textarea).toBeDisabled();
