@@ -84,7 +84,7 @@ class RenderOmeConfigTest(unittest.TestCase):
                 tls_port="12346",
                 username="ome-user",
                 password="s3cret",
-                access_token="access-token-123",
+                api_token="access-token-123",
             )
 
             rendered = output.read_text()

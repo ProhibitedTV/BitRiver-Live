@@ -53,7 +53,7 @@
             <Enable>true</Enable>
             <Port>8081</Port>
             <AccessToken>BITRIVER_OME_API_TOKEN_PLACEHOLDER</AccessToken>
-            <!-- Keep this non-empty; quickstart rewrites from BITRIVER_OME_ACCESS_TOKEN. -->
+            <!-- Keep this non-empty; quickstart rewrites from BITRIVER_OME_API_TOKEN. -->
         </APIServer>
     </Modules>
 

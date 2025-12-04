@@ -80,6 +80,7 @@ BITRIVER_LIVE_ADMIN_PASSWORD=local-dev-password
 BITRIVER_SRS_TOKEN=local-dev-token
 BITRIVER_OME_USERNAME=admin
 BITRIVER_OME_PASSWORD=local-dev-password
+BITRIVER_OME_API_TOKEN=local-dev-access-token
 BITRIVER_OME_ACCESS_TOKEN=local-dev-access-token
 BITRIVER_TRANSCODER_TOKEN=local-dev-token
 BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD=bitriver
@@ -145,7 +146,7 @@ for line in env_path.read_text().splitlines():
     key, value = line.split("=", 1)
     env_values[key] = value
 
-required = ["BITRIVER_OME_USERNAME", "BITRIVER_OME_PASSWORD", "BITRIVER_OME_ACCESS_TOKEN"]
+required = ["BITRIVER_OME_USERNAME", "BITRIVER_OME_PASSWORD", "BITRIVER_OME_API_TOKEN"]
 missing = [key for key in required if not env_values.get(key)]
 if missing:
     sys.exit(f"error: missing required OME credentials in {env_path}: {', '.join(missing)}")
@@ -200,8 +201,14 @@ if root_bind_ip != expected_bind or root_port != expected_port or root_tls_port 
 if username != env_values["BITRIVER_OME_USERNAME"] or password != env_values["BITRIVER_OME_PASSWORD"]:
     sys.exit("error: rendered OME credentials do not match .env defaults")
 
-if api_access_token != env_values["BITRIVER_OME_ACCESS_TOKEN"]:
+if api_access_token != env_values["BITRIVER_OME_API_TOKEN"]:
     sys.exit("error: rendered OME access token does not match .env defaults")
+
+legacy_token = env_values.get("BITRIVER_OME_ACCESS_TOKEN")
+if legacy_token and legacy_token != env_values["BITRIVER_OME_API_TOKEN"]:
+    sys.exit(
+        "error: BITRIVER_OME_ACCESS_TOKEN should match BITRIVER_OME_API_TOKEN for health checks"
+    )
 
 print("OME config validation passed.")
 PY
