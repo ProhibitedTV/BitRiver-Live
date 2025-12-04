@@ -180,10 +180,12 @@ def render(
     tls_port: str,
     username: str,
     password: str,
+    access_token: str,
 ) -> None:
     escaped_bind = xml_escape(bind)
     escaped_port = xml_escape(server_port)
     escaped_tls_port = xml_escape(tls_port)
+    escaped_access_token = xml_escape(access_token)
     text = template.read_text()
 
     # Normalize old <Server.bind> wrappers to <Bind> so very old templates don't break.
@@ -197,6 +199,7 @@ def render(
     # These may not exist depending on template version; replace them when present.
     text = replace_optional_tag_content(text, "ID", xml_escape(username))
     text = replace_optional_tag_content(text, "Password", xml_escape(password))
+    text = replace_tag_content(text, "AccessToken", escaped_access_token)
 
     output.write_text(text)
 
@@ -228,6 +231,9 @@ def main(argv: list[str]) -> int:
         "--password", required=True, help="OME control password"
     )
     parser.add_argument(
+        "--access-token", required=True, help="OME access token for API/authz"
+    )
+    parser.add_argument(
         "--port", required=True, help="OME server port"
     )
     parser.add_argument(
@@ -245,6 +251,7 @@ def main(argv: list[str]) -> int:
         args.tls_port,
         args.username,
         args.password,
+        args.access_token,
     )
     return 0
 

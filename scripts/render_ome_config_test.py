@@ -84,6 +84,7 @@ class RenderOmeConfigTest(unittest.TestCase):
                 tls_port="12346",
                 username="ome-user",
                 password="s3cret",
+                access_token="access-token-123",
             )
 
             rendered = output.read_text()
@@ -98,6 +99,7 @@ class RenderOmeConfigTest(unittest.TestCase):
             self.assertIn("<TLSPort>12346</TLSPort>", rendered)
             self.assertIn("<ID>ome-user</ID>", rendered)
             self.assertIn("<Password>s3cret</Password>", rendered)
+            self.assertIn("<AccessToken>access-token-123</AccessToken>", rendered)
 
             self.assertNotIn("Server.bind", rendered)
             self.assertNotIn("<Modules><Control", rendered)
