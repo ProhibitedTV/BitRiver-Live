@@ -44,6 +44,7 @@ done
 
 require_command docker || exit 1
 require_command curl || exit 1
+require_command openssl || exit 1
 require_command python3 || exit 1
 
 generate_strong_password() {
@@ -77,6 +78,15 @@ PY
     done
   fi
   printf '%s' "$password"
+}
+
+ensure_env_default() {
+  local key=$1
+  local default_value=$2
+
+  if [[ ! -v env_defaults[$key] || -z ${env_defaults[$key]} ]]; then
+    env_defaults[$key]="$default_value"
+  fi
 }
 
 if ! docker compose version >/dev/null 2>&1; then
@@ -137,7 +147,8 @@ declare -A env_defaults=(
   [BITRIVER_OME_SERVER_TLS_PORT]='9443'
   [BITRIVER_OME_USERNAME]='admin'
   [BITRIVER_OME_PASSWORD]='local-dev-password'
-  [BITRIVER_OME_ACCESS_TOKEN]='local-dev-access-token'
+  [BITRIVER_OME_API_TOKEN]=''
+  [BITRIVER_OME_ACCESS_TOKEN]=''
   [BITRIVER_OME_HTTP_PORT]='8081'
   [BITRIVER_OME_SIGNALLING_PORT]='9000'
   [BITRIVER_TRANSCODER_API]='http://transcoder:9000'
@@ -153,6 +164,14 @@ declare -A env_defaults=(
   [BITRIVER_LIVE_ADMIN_PASSWORD]='local-dev-password'
   [BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD]='bitriver'
 )
+
+existing_ome_access_token=""
+if [[ -f "$ENV_FILE" ]]; then
+  existing_ome_access_token=$(grep -E "^BITRIVER_OME_ACCESS_TOKEN=" "$ENV_FILE" | tail -n1 | cut -d= -f2-)
+fi
+
+ensure_env_default "BITRIVER_OME_API_TOKEN" "${existing_ome_access_token:-$(openssl rand -hex 24)}"
+ensure_env_default "BITRIVER_OME_ACCESS_TOKEN" "${env_defaults[BITRIVER_OME_API_TOKEN]}"
 
 env_default_keys=(
   BITRIVER_LIVE_PORT
@@ -188,6 +207,7 @@ env_default_keys=(
   BITRIVER_OME_SERVER_TLS_PORT
   BITRIVER_OME_USERNAME
   BITRIVER_OME_PASSWORD
+  BITRIVER_OME_API_TOKEN
   BITRIVER_OME_ACCESS_TOKEN
   BITRIVER_OME_HTTP_PORT
   BITRIVER_OME_SIGNALLING_PORT
@@ -237,6 +257,8 @@ required_env_keys=(
   BITRIVER_OME_BIND
   BITRIVER_OME_USERNAME
   BITRIVER_OME_PASSWORD
+  BITRIVER_OME_API_TOKEN
+  BITRIVER_OME_ACCESS_TOKEN
   BITRIVER_OME_HTTP_PORT
   BITRIVER_OME_SIGNALLING_PORT
   BITRIVER_TRANSCODER_API

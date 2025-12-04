@@ -76,7 +76,7 @@ OME_TLS_PORT="${BITRIVER_OME_SERVER_TLS_PORT:-9443}"
 OME_IP="${BITRIVER_OME_IP:-$OME_BIND}"
 OME_USERNAME="${BITRIVER_OME_USERNAME:-}"
 OME_PASSWORD="${BITRIVER_OME_PASSWORD:-}"
-OME_ACCESS_TOKEN="${BITRIVER_OME_ACCESS_TOKEN:-}"
+OME_API_TOKEN="${BITRIVER_OME_API_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-}}"
 OME_IMAGE_TAG="${BITRIVER_OME_IMAGE_TAG:-}"
 
 if [[ -z "$OME_IMAGE_TAG" ]]; then
@@ -98,19 +98,19 @@ if [[ -z "$OME_USERNAME" || -z "$OME_PASSWORD" ]]; then
   exit 1
 fi
 
-render_access_token="$OME_ACCESS_TOKEN"
-if [[ $supports_access_token -eq 1 && -z "$OME_ACCESS_TOKEN" ]]; then
+render_api_token="$OME_API_TOKEN"
+if [[ $supports_access_token -eq 1 && -z "$OME_API_TOKEN" ]]; then
   cat <<EOF >&2
-BITRIVER_OME_ACCESS_TOKEN must be set in $ENV_FILE before rendering when BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG (managers <AccessToken> is supported starting with 0.16.0).
+BITRIVER_OME_API_TOKEN must be set in $ENV_FILE before rendering when BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG (managers <AccessToken> is supported starting with 0.16.0). If you are migrating from BITRIVER_OME_ACCESS_TOKEN, copy that value into BITRIVER_OME_API_TOKEN.
 EOF
   exit 1
 fi
 
 if [[ $supports_access_token -eq 0 ]]; then
-  if [[ -n "$OME_ACCESS_TOKEN" && $QUIET -eq 0 ]]; then
-    echo "BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG does not advertise managers <AccessToken>; dropping BITRIVER_OME_ACCESS_TOKEN from the rendered config." >&2
+  if [[ -n "$OME_API_TOKEN" && $QUIET -eq 0 ]]; then
+    echo "BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG does not advertise managers <AccessToken>; dropping BITRIVER_OME_API_TOKEN from the rendered config." >&2
   fi
-  render_access_token=""
+  render_api_token=""
 fi
 
 needs_render=false
@@ -176,7 +176,7 @@ if ! render_output=$(python3 "$SCRIPT_DIR/render_ome_config.py" \
   --tls-port "$OME_TLS_PORT" \
   --username "$OME_USERNAME" \
   --password "$OME_PASSWORD" \
-  --access-token "$render_access_token" 2>&1); then
+  --api-token "$render_api_token" 2>&1); then
   echo "Failed to render deploy/ome/Server.generated.xml. Check BITRIVER_OME_* values in $ENV_FILE and the template at $TEMPLATE." >&2
   echo "$render_output" >&2
   exit 1

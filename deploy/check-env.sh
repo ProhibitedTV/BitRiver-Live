@@ -49,6 +49,7 @@ if [[ ${BITRIVER_OME_IMAGE_TAG:-} =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
 fi
 
 if [[ "$ome_requires_access_token" == true ]]; then
+  required_vars+=(BITRIVER_OME_API_TOKEN)
   required_vars+=(BITRIVER_OME_ACCESS_TOKEN)
 fi
 
@@ -59,6 +60,7 @@ declare -A forbidden_values=(
   [BITRIVER_LIVE_ADMIN_PASSWORD]="Sup3rSecureAdmin!"
   [BITRIVER_SRS_TOKEN]="srs-secure-token-example"
   [BITRIVER_OME_PASSWORD]="OME-Example-Pass!"
+  [BITRIVER_OME_API_TOKEN]="OME-Example-Access-Token"
   [BITRIVER_OME_ACCESS_TOKEN]="OME-Example-Access-Token"
   [BITRIVER_TRANSCODER_TOKEN]="transcoder-secure-token-example"
   [BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD]="R3dis-Example!"
