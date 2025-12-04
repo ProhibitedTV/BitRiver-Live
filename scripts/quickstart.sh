@@ -12,23 +12,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="$REPO_ROOT/.env"
 COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
-FORCE_RENDER=0
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/quickstart.sh [--force]
+Usage: scripts/quickstart.sh [-h|--help]
 
 Options:
-  --force  Re-render OME configuration even if it already appears up to date.
-  -h       Show this help message.
+  -h  Show this help message.
 USAGE
 }
 
 while (($# > 0)); do
   case "$1" in
-    --force)
-      FORCE_RENDER=1
-      ;;
     -h|--help)
       usage
       exit 0
@@ -371,20 +366,10 @@ render_ome_config() {
   local template="$REPO_ROOT/deploy/ome/Server.xml"
   local output="$REPO_ROOT/deploy/ome/Server.generated.xml"
   local render_script="$SCRIPT_DIR/render-ome-config.sh"
-  local -a render_args=(--env-file "$ENV_FILE")
-  local check_output=""
 
-  if (( FORCE_RENDER )); then
-    render_args+=(--force)
-  fi
+  echo "Rendering OME config from template..."
 
-  if ! check_output=$("$render_script" --check --env-file "$ENV_FILE" 2>&1); then
-    echo "$check_output" >&2
-    echo "OME config check failed; forcing a fresh render before Compose starts." >&2
-    render_args+=(--force)
-  fi
-
-  if ! "$render_script" "${render_args[@]}"; then
+  if ! "$render_script" --force --env-file "$ENV_FILE"; then
     local image_tag
     image_tag=$(read_env_value BITRIVER_OME_IMAGE_TAG)
     cat <<EOF >&2
