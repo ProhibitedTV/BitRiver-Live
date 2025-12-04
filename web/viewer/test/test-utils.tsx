@@ -7,7 +7,7 @@ export * from "./auth";
 
 const actualViewerApi = jest.requireActual("../lib/viewer-api") as typeof import("../lib/viewer-api");
 
-export const viewerApiMocks: jest.Mocked<typeof actualViewerApi> = {
+export const viewerApiMocks = {
   ...actualViewerApi,
   createTip: jest.fn(),
   createUpload: jest.fn(),
@@ -29,9 +29,12 @@ export const viewerApiMocks: jest.Mocked<typeof actualViewerApi> = {
   unsubscribeChannel: jest.fn(),
   updateProfile: jest.fn(),
   followChannel: jest.fn(),
-};
+} satisfies typeof actualViewerApi;
 
-jest.mock("../lib/viewer-api", () => viewerApiMocks satisfies ViewerApi);
+jest.mock(
+  "../lib/viewer-api",
+  () => viewerApiMocks satisfies typeof import("../lib/viewer-api")
+);
 
 export const mockRouter = {
   back: jest.fn(),

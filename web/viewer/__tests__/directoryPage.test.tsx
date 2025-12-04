@@ -84,7 +84,8 @@ describe("DirectoryPage", () => {
   test("loads directory entries and renders channel cards", async () => {
     fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
 
-    render(<DirectoryPage />);
+    const page = await DirectoryPage({ searchParams: {} });
+    render(page);
 
     await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalledTimes(1));
 
@@ -103,13 +104,17 @@ describe("DirectoryPage", () => {
     searchDirectoryMock.mockResolvedValueOnce(searchDirectoryResponse as any);
     const user = userEvent.setup();
 
-    render(<DirectoryPage />);
+    const page = await DirectoryPage({ searchParams: {} });
+    const { rerender } = render(page);
 
     await screen.findByRole("heading", { level: 3, name: "Deep Space Beats" });
 
     await user.clear(screen.getByRole("searchbox", { name: /search channels/i }));
     await user.type(screen.getByRole("searchbox", { name: /search channels/i }), "retro");
     await user.click(screen.getByRole("button", { name: /search/i }));
+
+    const searchPage = await DirectoryPage({ searchParams: { q: "retro" } });
+    rerender(searchPage);
 
     await waitFor(() => {
       expect(searchDirectoryMock).toHaveBeenCalledWith("retro");
@@ -122,7 +127,8 @@ describe("DirectoryPage", () => {
   test("surfaces a friendly error when the directory fails to load", async () => {
     fetchDirectoryMock.mockRejectedValueOnce(new Error("Gateway timeout"));
 
-    render(<DirectoryPage />);
+    const page = await DirectoryPage({ searchParams: {} });
+    render(page);
 
     await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalled());
     expect(await screen.findByText(/unable to load directory|gateway timeout/i)).toBeInTheDocument();

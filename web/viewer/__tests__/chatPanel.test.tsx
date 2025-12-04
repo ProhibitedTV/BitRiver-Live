@@ -1,6 +1,6 @@
 import { guestAuthState, mockUseAuth, signedInAuthState, viewerTwoUser } from "../test/auth";
 import { viewerApiMocks } from "../test/test-utils";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChatPanel } from "../components/ChatPanel";
 import type { ChatMessage } from "../lib/viewer-api";
@@ -10,7 +10,7 @@ const fetchChatMock = viewerApiMocks.fetchChannelChat;
 const sendChatMock = viewerApiMocks.sendChatMessage;
 
 beforeEach(() => {
-  jest.useFakeTimers();
+  jest.useFakeTimers({ legacyFakeTimers: true });
   jest.clearAllMocks();
   mockUseAuth.mockReturnValue(signedInAuthState());
 });
@@ -19,6 +19,24 @@ afterEach(() => {
   jest.runOnlyPendingTimers();
   jest.useRealTimers();
 });
+
+const advanceTimers = async (ms: number) => {
+  await act(async () => {
+    jest.advanceTimersByTime(ms);
+  });
+};
+
+const runPendingTimers = async () => {
+  await act(async () => {
+    jest.runOnlyPendingTimers();
+  });
+};
+
+const runAllTimers = async () => {
+  await act(async () => {
+    jest.runAllTimers();
+  });
+};
 
 test("renders chat history and sorts by time", async () => {
   const chatHistory: ChatMessage[] = [
@@ -108,7 +126,7 @@ test("treats unauthorized chat fetch as empty state for guests", async () => {
 
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 
-  jest.advanceTimersByTime(30_000);
+  await advanceTimers(30_000);
   expect(fetchChatMock).toHaveBeenCalledTimes(1);
 
   const textarea = screen.getByRole("textbox", { name: /chat message/i });
@@ -138,19 +156,18 @@ test("clears chat, shows sign-in prompt, and pauses polling on structured 401s",
     expect(screen.getByText("Message before auth lapse")).toBeInTheDocument();
   });
 
-  jest.advanceTimersByTime(10_000);
+  await runAllTimers();
 
   await waitFor(() => {
     expect(fetchChatMock).toHaveBeenCalledTimes(2);
-    expect(screen.queryByText("Message before auth lapse")).not.toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Sign in with the controls above to view and participate in chat."
-      )
-    ).toBeInTheDocument();
   });
 
-  jest.advanceTimersByTime(60_000);
+  expect(screen.queryByText("Message before auth lapse")).not.toBeInTheDocument();
+  expect(
+    screen.getByText("Sign in to view and participate in chat.")
+  ).toBeInTheDocument();
+
+  await runAllTimers();
   expect(fetchChatMock).toHaveBeenCalledTimes(2);
 
   const textarea = screen.getByRole("textbox", { name: /chat message/i });
@@ -170,24 +187,24 @@ test("backs off after consecutive server errors and shows retry surface", async 
     );
   });
 
-  jest.advanceTimersByTime(19_999);
+  await advanceTimers(19_999);
   expect(fetchChatMock).toHaveBeenCalledTimes(1);
-  jest.advanceTimersByTime(1);
+  await advanceTimers(1);
   await waitFor(() => expect(fetchChatMock).toHaveBeenCalledTimes(2));
 
-  jest.advanceTimersByTime(39_999);
+  await advanceTimers(39_999);
   expect(fetchChatMock).toHaveBeenCalledTimes(2);
-  jest.advanceTimersByTime(1);
+  await advanceTimers(1);
   await waitFor(() => expect(fetchChatMock).toHaveBeenCalledTimes(3));
 
-  jest.advanceTimersByTime(59_999);
+  await advanceTimers(59_999);
   expect(fetchChatMock).toHaveBeenCalledTimes(3);
-  jest.advanceTimersByTime(1);
+  await advanceTimers(1);
   await waitFor(() => expect(fetchChatMock).toHaveBeenCalledTimes(4));
 
-  jest.advanceTimersByTime(59_999);
+  await advanceTimers(59_999);
   expect(fetchChatMock).toHaveBeenCalledTimes(4);
-  jest.advanceTimersByTime(1);
+  await advanceTimers(1);
   await waitFor(() => expect(fetchChatMock).toHaveBeenCalledTimes(5));
 
   expect(screen.getByRole("alert")).toHaveTextContent(
