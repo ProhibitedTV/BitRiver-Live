@@ -160,7 +160,7 @@ marker="${OME_MARKER_PREFIX}${OME_IMAGE_TAG} -->"
 if grep -q "$OME_MARKER_PREFIX" "$OUTPUT"; then
   perl -0pi -e "s/${OME_MARKER_PREFIX}.* -->/${marker}/" "$OUTPUT"
 else
-  perl -0pi -e "s#(<Server[^>]*>\s*)#$1    ${marker}\n#" "$OUTPUT"
+  perl -0pi -e "s#(<Server[^>]*>\\s*)#\\1    ${marker}\\n#" "$OUTPUT"
 fi
 
 if [[ $QUIET -eq 0 ]]; then
