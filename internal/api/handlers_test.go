@@ -3298,7 +3298,7 @@ func TestChannelVodsReturnPublishedRecordings(t *testing.T) {
 	if item.ID != published.ID {
 		t.Fatalf("expected VOD %s, got %s", published.ID, item.ID)
 	}
-	if item.PublishedAt == "" {
+	if item.PublishedAt == nil || *item.PublishedAt == "" {
 		t.Fatal("expected publishedAt to be populated")
 	}
 	if item.DurationSeconds != published.DurationSeconds {

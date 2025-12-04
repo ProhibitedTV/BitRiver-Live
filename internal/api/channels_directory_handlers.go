@@ -113,12 +113,12 @@ type channelPlaybackResponse struct {
 }
 
 type vodItemResponse struct {
-	ID              string `json:"id"`
-	Title           string `json:"title"`
-	DurationSeconds int    `json:"durationSeconds"`
-	PublishedAt     string `json:"publishedAt"`
-	ThumbnailURL    string `json:"thumbnailUrl,omitempty"`
-	PlaybackURL     string `json:"playbackUrl,omitempty"`
+	ID              string  `json:"id"`
+	Title           string  `json:"title"`
+	DurationSeconds int     `json:"durationSeconds"`
+	PublishedAt     *string `json:"publishedAt,omitempty"`
+	ThumbnailURL    string  `json:"thumbnailUrl,omitempty"`
+	PlaybackURL     string  `json:"playbackUrl,omitempty"`
 }
 
 type vodCollectionResponse struct {
@@ -811,7 +811,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				item := newVodItemResponse(recording)
-				if item.PublishedAt == "" {
+				if item.PublishedAt == nil {
 					continue
 				}
 				items = append(items, item)
