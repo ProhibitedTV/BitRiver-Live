@@ -103,6 +103,8 @@ continue to create accounts manually regardless of this setting.
 | `BITRIVER_LIVE_SESSION_IDLE_TIMEOUT` | Idle timeout that refreshes expiry on activity when set. |
 | `BITRIVER_LIVE_ADMIN_CORS_ORIGINS` / `BITRIVER_LIVE_VIEWER_CORS_ORIGINS` | Origins (including scheme and host) whitelisted for cross-site requests; defaults deny cross-site origins. |
 
+For Docker Compose deployments, set `BITRIVER_LIVE_SESSION_TTL` (and optionally `BITRIVER_LIVE_SESSION_IDLE_TIMEOUT`) in `.env` before running `docker compose up -d` so the API container receives the desired session lifetime values.
+
 The default configuration keeps the session cookie in `SameSite=Strict` mode and only marks it as `Secure` when the incoming request arrived over HTTPS, which works for the bundled same-origin viewer. Sessions expire after 7 days by default; set an idle timeout to refresh the expiry on activity while still enforcing the absolute TTL. When proxying the viewer from a different domain, enable the cross-site option so the session can flow to the viewer via `SameSite=None`; doing so requires HTTPS end-to-end because browsers reject `SameSite=None` cookies without `Secure`.
 
 When the admin panel or viewer are hosted on different origins, set the corresponding CORS allowlists so browsers can reach the API. Origins must include the scheme and host (for example, `https://admin.example.com,https://watch.example.com`); any origin not listed receives a `403` by default. The quickstart path stays unchanged because same-origin requests remain allowed when the allowlists are empty.
