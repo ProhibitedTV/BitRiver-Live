@@ -20,6 +20,13 @@ import (
 	"bitriver-live/internal/storage"
 )
 
+var (
+	openUploadMediaFile = os.Open
+	statUploadMediaFile = func(file *os.File) (os.FileInfo, error) {
+		return file.Stat()
+	}
+)
+
 type uploadResponse struct {
 	ID          string            `json:"id"`
 	ChannelID   string            `json:"channelId"`
@@ -463,17 +470,21 @@ func (h *Handler) serveUploadMedia(w http.ResponseWriter, r *http.Request, uploa
 		return
 	}
 	fullPath := filepath.Join(h.uploadMediaDir(), filepath.Base(mediaPath))
-	file, err := os.Open(fullPath)
+	file, err := openUploadMediaFile(fullPath)
 	if err != nil {
-		WriteError(w, http.StatusNotFound, fmt.Errorf("media unavailable"))
+		err = fmt.Errorf("open upload %s media (%s): %w", upload.ID, fullPath, err)
+		h.logger().Error("serve upload media open", "uploadId", upload.ID, "path", fullPath, "err", err)
+		WriteError(w, http.StatusNotFound, RequestError{Err: err, Status: http.StatusNotFound, Message: "media unavailable"})
 		return
 	}
 	defer func() {
 		_ = file.Close()
 	}()
-	stat, err := file.Stat()
+	stat, err := statUploadMediaFile(file)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, fmt.Errorf("media stat failed"))
+		err = fmt.Errorf("stat upload %s media (%s): %w", upload.ID, fullPath, err)
+		h.logger().Error("serve upload media stat", "uploadId", upload.ID, "path", fullPath, "err", err)
+		WriteError(w, http.StatusInternalServerError, RequestError{Err: err, Status: http.StatusInternalServerError, Message: "unable to serve media"})
 		return
 	}
 	contentType := strings.TrimSpace(upload.Metadata["contentType"])
