@@ -82,6 +82,9 @@ func NewPostgresRepository(dsn string, opts ...Option) (Repository, error) {
 	if strings.TrimSpace(cfg.DSN) == "" {
 		return nil, fmt.Errorf("postgres dsn required")
 	}
+	if pgx.IsStub {
+		return nil, ErrPostgresUnavailable
+	}
 
 	poolCfg, err := pgxpool.ParseConfig(cfg.DSN)
 	if err != nil {

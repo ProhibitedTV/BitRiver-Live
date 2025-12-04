@@ -21,6 +21,7 @@ import (
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/storage"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -31,6 +32,9 @@ import (
 // database dedicated to automated runs.
 func postgresRepositoryFactory(t *testing.T, opts ...storage.Option) (storage.Repository, func(), error) {
 	t.Helper()
+	if pgx.IsStub {
+		t.Skip("pgx stubbed; postgres support unavailable")
+	}
 	dsn := os.Getenv("BITRIVER_TEST_POSTGRES_DSN")
 	if strings.TrimSpace(dsn) == "" {
 		t.Fatalf("BITRIVER_TEST_POSTGRES_DSN not set; set it to a prepared database or run scripts/test-postgres.sh to provision one via Docker")
