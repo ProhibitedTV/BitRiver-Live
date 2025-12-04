@@ -1,5 +1,3 @@
-//go:build !postgres
-
 package pgx
 
 import (
@@ -13,6 +11,10 @@ var (
 	ErrNoRows   = errors.New("pgx stub: no rows")
 	ErrTxClosed = errors.New("pgx stub: transaction closed")
 )
+
+// IsStub returns true to indicate that this vendored pgx copy is a stub
+// implementation. The real driver code is unavailable in this environment.
+const IsStub = true
 
 type ConnConfig struct {
 	RuntimeParams map[string]string
