@@ -48,6 +48,27 @@ func requireAvailable(t *testing.T, err error, operation string) {
 	}
 }
 
+type retentionRunner interface {
+	runRecordingRetention(ctx context.Context) error
+}
+
+func runRetention(t *testing.T, repo Repository) error {
+	t.Helper()
+	runner, ok := repo.(retentionRunner)
+	if !ok {
+		t.Fatalf("repository does not expose retention runner")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := runner.runRecordingRetention(ctx); err != nil {
+		if errors.Is(err, ErrPostgresUnavailable) {
+			t.Skip("postgres repository unavailable")
+		}
+		return err
+	}
+	return nil
+}
+
 type timeoutIngestController struct {
 	bootBlock     bool
 	shutdownBlock bool
@@ -760,7 +781,8 @@ func RunRepositoryIngestHealthSnapshots(t *testing.T, factory RepositoryFactory)
 // RunRepositoryRecordingRetention validates the retention workflow that purges
 // expired recordings and associated artefacts.
 func RunRepositoryRecordingRetention(t *testing.T, factory RepositoryFactory) {
-	policy := RecordingRetentionPolicy{Published: 200 * time.Millisecond, Unpublished: 200 * time.Millisecond}
+	policy := RecordingRetentionPolicy{Published: 0, Unpublished: 0}
+	retentionNow := time.Now().UTC().Add(-1 * time.Hour)
 	controller := &fakeIngestController{bootResponses: []bootResponse{{result: ingest.BootResult{
 		Renditions: []ingest.Rendition{{Name: "720p", ManifestURL: "https://origin/720p.m3u8"}},
 	}}}}
@@ -770,7 +792,9 @@ func RunRepositoryRecordingRetention(t *testing.T, factory RepositoryFactory) {
 		PublicEndpoint: "https://cdn.example.com/content",
 	})
 
-	repo := runRepository(t, factory, WithRecordingRetention(policy), WithIngestController(controller), objectConfig)
+	repo := runRepository(t, factory, WithRecordingRetention(policy), WithRetentionClock(func() time.Time {
+		return retentionNow
+	}), WithIngestController(controller), objectConfig)
 	fakeStorage := &fakeObjectStorage{prefix: "vod/assets", baseURL: "https://cdn.example.com/content"}
 	switch r := repo.(type) {
 	case *Storage:
@@ -820,7 +844,12 @@ func RunRepositoryRecordingRetention(t *testing.T, factory RepositoryFactory) {
 	}
 
 	fakeStorage.deletes = nil
-	time.Sleep(250 * time.Millisecond)
+
+	retentionNow = time.Now().UTC().Add(time.Hour)
+
+	if err := runRetention(t, repo); err != nil {
+		t.Fatalf("run retention: %v", err)
+	}
 
 	recordings, err = repo.ListRecordings(channel.ID, true)
 	requireAvailable(t, err, "list recordings after retention")
@@ -833,6 +862,70 @@ func RunRepositoryRecordingRetention(t *testing.T, factory RepositoryFactory) {
 	}
 	if len(expectedDeletes) != 0 {
 		t.Fatalf("expected storage deletes for manifests, thumbnails, and clips; missing %v", expectedDeletes)
+	}
+}
+
+func RunRepositoryRecordingRetentionFailures(t *testing.T, factory RepositoryFactory) {
+	policy := RecordingRetentionPolicy{Published: 0, Unpublished: 0}
+	retentionNow := time.Now().UTC().Add(-1 * time.Hour)
+	controller := &fakeIngestController{bootResponses: []bootResponse{{result: ingest.BootResult{
+		Renditions: []ingest.Rendition{{Name: "720p", ManifestURL: "https://origin/720p.m3u8"}},
+	}}}}
+	failingStorage := &failingDeleteObjectStorage{
+		fakeObjectStorage: fakeObjectStorage{prefix: "vod/assets", baseURL: "https://cdn.example.com/content"},
+		err:               errors.New("delete failure"),
+	}
+	objectConfig := WithObjectStorage(ObjectStorageConfig{
+		Bucket:         "vod",
+		Prefix:         "vod/assets",
+		PublicEndpoint: "https://cdn.example.com/content",
+	})
+
+	repo := runRepository(t, factory, WithRecordingRetention(policy), WithRetentionClock(func() time.Time {
+		return retentionNow
+	}), WithIngestController(controller), objectConfig)
+	switch r := repo.(type) {
+	case *Storage:
+		r.objectClient = failingStorage
+	case *postgresRepository:
+		r.objectClient = failingStorage
+	}
+
+	owner, err := repo.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	requireAvailable(t, err, "create owner")
+	channel, err := repo.CreateChannel(owner.ID, "Speedrun", "gaming", nil)
+	requireAvailable(t, err, "create channel")
+	_, err = repo.StartStream(channel.ID, []string{"720p"})
+	requireAvailable(t, err, "start stream")
+	_, err = repo.StopStream(channel.ID, 10)
+	requireAvailable(t, err, "stop stream")
+
+	recordings, err := repo.ListRecordings(channel.ID, true)
+	requireAvailable(t, err, "list recordings before retention failure")
+	if len(recordings) != 1 {
+		t.Fatalf("expected one recording before retention purge, got %d", len(recordings))
+	}
+
+	retentionNow = time.Now().UTC().Add(time.Hour)
+
+	err = runRetention(t, repo)
+	if _, ok := repo.(*Storage); ok {
+		if err == nil {
+			t.Fatal("expected retention to surface delete failure")
+		}
+	} else if err != nil {
+		t.Fatalf("unexpected retention error: %v", err)
+	}
+
+	retentionNow = time.Now().UTC().Add(-1 * time.Hour)
+
+	recordings, err = repo.ListRecordings(channel.ID, true)
+	requireAvailable(t, err, "list recordings after retention failure")
+	if len(recordings) != 1 {
+		t.Fatalf("expected recording to remain when deletes fail, got %d", len(recordings))
+	}
+	if len(failingStorage.deletes) == 0 {
+		t.Fatal("expected retention to attempt deleting recording artifacts")
 	}
 }
 
@@ -1046,4 +1139,17 @@ func RunRepositoryStreamTimeouts(t *testing.T, factory RepositoryFactory) {
 	if current.EndedAt != nil {
 		t.Fatal("expected session to remain active after shutdown timeout")
 	}
+}
+
+type failingDeleteObjectStorage struct {
+	fakeObjectStorage
+	err error
+}
+
+func (f *failingDeleteObjectStorage) Delete(ctx context.Context, key string) error {
+	f.fakeObjectStorage.Delete(ctx, key)
+	if f.err != nil {
+		return f.err
+	}
+	return errors.New("delete failed")
 }

@@ -116,6 +116,24 @@ func WithRecordingRetention(policy RecordingRetentionPolicy) Option {
 	)
 }
 
+// WithRetentionClock overrides the clock used when evaluating recording
+// retention windows. Primarily intended for tests that need deterministic
+// retention behaviour.
+func WithRetentionClock(clock func() time.Time) Option {
+	return composeOption(
+		func(s *Storage) {
+			if clock != nil {
+				s.retentionNow = clock
+			}
+		},
+		func(cfg *PostgresConfig) {
+			if clock != nil {
+				cfg.RetentionClock = clock
+			}
+		},
+	)
+}
+
 // WithObjectStorage overrides the object storage configuration used to archive
 // or retrieve recording assets.
 func WithObjectStorage(cfg ObjectStorageConfig) Option {

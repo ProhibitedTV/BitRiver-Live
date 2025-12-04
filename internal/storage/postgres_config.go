@@ -24,6 +24,7 @@ type PostgresConfig struct {
 	IngestTimeout       time.Duration
 	RecordingRetention  RecordingRetentionPolicy
 	ObjectStorage       ObjectStorageConfig
+	RetentionClock      func() time.Time
 }
 
 func newPostgresConfig(dsn string, opts ...Option) PostgresConfig {
@@ -36,6 +37,7 @@ func newPostgresConfig(dsn string, opts ...Option) PostgresConfig {
 			Published:   90 * 24 * time.Hour,
 			Unpublished: 14 * 24 * time.Hour,
 		},
+		RetentionClock: func() time.Time { return time.Now().UTC() },
 	}
 	for _, opt := range opts {
 		if opt != nil {

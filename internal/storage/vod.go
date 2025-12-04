@@ -77,7 +77,7 @@ func (s *Storage) recordingDeadline(now time.Time, published bool) *time.Time {
 	} else {
 		window = s.recordingRetention.Unpublished
 	}
-	if window <= 0 {
+	if window < 0 {
 		return nil
 	}
 	deadline := now.Add(window)
@@ -124,6 +124,33 @@ func (s *Storage) purgeExpiredRecordingsLocked(now time.Time) (bool, dataset, er
 		return false, dataset{}, nil
 	}
 	return true, snapshot, nil
+}
+
+func (s *Storage) retentionTime() time.Time {
+	if s.retentionNow != nil {
+		return s.retentionNow()
+	}
+	return time.Now().UTC()
+}
+
+func (s *Storage) runRecordingRetention(_ context.Context) error {
+	now := s.retentionTime()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	removed, snapshot, err := s.purgeExpiredRecordingsLocked(now)
+	if err != nil {
+		return err
+	}
+	if !removed {
+		return nil
+	}
+	if err := s.persist(); err != nil {
+		s.data = snapshot
+		return err
+	}
+	return nil
 }
 
 func (s *Storage) recordingWithClipsLocked(recording models.Recording) models.Recording {
@@ -335,7 +362,7 @@ func (s *Storage) ListRecordings(channelID string, includeUnpublished bool) ([]m
 		return nil, fmt.Errorf("channel %s not found", channelID)
 	}
 
-	now := time.Now().UTC()
+	now := s.retentionTime()
 	removed, snapshot, err := s.purgeExpiredRecordingsLocked(now)
 	if err != nil {
 		return nil, err
@@ -561,7 +588,7 @@ func (s *Storage) GetRecording(id string) (models.Recording, bool) {
 	if id == "" {
 		return models.Recording{}, false
 	}
-	now := time.Now().UTC()
+	now := s.retentionTime()
 	removed, snapshot, err := s.purgeExpiredRecordingsLocked(now)
 	if err != nil {
 		return models.Recording{}, false

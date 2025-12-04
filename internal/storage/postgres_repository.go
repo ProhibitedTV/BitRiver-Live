@@ -38,6 +38,7 @@ type postgresRepository struct {
 	recordingRetention  RecordingRetentionPolicy
 	objectStorage       ObjectStorageConfig
 	objectClient        objectStorageClient
+	retentionNow        func() time.Time
 }
 
 func (r *postgresRepository) Close(ctx context.Context) error {
@@ -125,6 +126,7 @@ func NewPostgresRepository(dsn string, opts ...Option) (Repository, error) {
 		ingestHealthUpdated: time.Now().UTC(),
 		recordingRetention:  cfg.RecordingRetention,
 		objectStorage:       cfg.ObjectStorage,
+		retentionNow:        cfg.RetentionClock,
 	}
 	repo.objectStorage = applyObjectStorageDefaults(repo.objectStorage)
 	repo.objectClient = newObjectStorageClient(repo.objectStorage)
@@ -640,7 +642,7 @@ func (r *postgresRepository) recordingDeadline(now time.Time, published bool) *t
 	} else {
 		window = r.recordingRetention.Unpublished
 	}
-	if window <= 0 {
+	if window < 0 {
 		return nil
 	}
 	deadline := now.Add(window)
@@ -864,11 +866,21 @@ func (r *postgresRepository) deleteClipArtifacts(clip models.ClipExport) error {
 	return nil
 }
 
-func (r *postgresRepository) purgeExpiredRecordings(ctx context.Context) error {
+func (r *postgresRepository) retentionTime() time.Time {
+	if r.retentionNow != nil {
+		return r.retentionNow()
+	}
+	return time.Now().UTC()
+}
+
+func (r *postgresRepository) runRecordingRetention(ctx context.Context) error {
+	return r.purgeExpiredRecordings(ctx, r.retentionTime())
+}
+
+func (r *postgresRepository) purgeExpiredRecordings(ctx context.Context, now time.Time) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
 	}
-	now := time.Now().UTC()
 	rows, err := r.pool.Query(ctx, "SELECT id, metadata FROM recordings WHERE retain_until IS NOT NULL AND retain_until <= $1", now)
 	if err != nil {
 		return err
@@ -2640,7 +2652,7 @@ func (r *postgresRepository) ListRecordings(channelID string, includeUnpublished
 		if !exists {
 			return fmt.Errorf("channel %s not found", channelID)
 		}
-		if err := r.purgeExpiredRecordings(ctx); err != nil {
+		if err := r.purgeExpiredRecordings(ctx, r.retentionTime()); err != nil {
 			slog.Default().Warn("purge expired recordings failed", "channel_id", channelID, "error", err)
 		}
 		query := "SELECT id FROM recordings WHERE channel_id = $1"
@@ -2957,7 +2969,7 @@ func (r *postgresRepository) GetRecording(id string) (models.Recording, bool) {
 		return models.Recording{}, false
 	}
 	ctx, cancel := r.acquireContext()
-	if err := r.purgeExpiredRecordings(ctx); err != nil {
+	if err := r.purgeExpiredRecordings(ctx, r.retentionTime()); err != nil {
 		slog.Default().Warn("purge expired recordings failed", "recording_id", id, "error", err)
 	}
 	recording, ok, err := r.loadRecording(ctx, id)
