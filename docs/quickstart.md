@@ -91,6 +91,10 @@ compose file.
   ```
   The script reuses your existing `.env` and Docker volumes, so configuration, database data, and media files persist across updates.
 `docker compose up` (including the quickstart wrapper) reruns the `ome-config` helper so OME consumes the credentials from `.env` and the current `BITRIVER_OME_BIND` value in both the root `<Bind><IP>` entry and the control listener `<Bind>`/`<IP>` without requiring an extra compose override.
+- Running `git pull` followed by the quickstart keeps OME in a predictable state:
+  - The helper preserves your `.env` while backfilling any new variables introduced upstream (including `BITRIVER_OME_API_TOKEN`) so you avoid silent crashes from missing credentials.
+  - `deploy/ome/Server.generated.xml` is always re-rendered from `deploy/ome/Server.xml` and the refreshed `.env`, eliminating drift between the template and the live config mounted into the container.
+  - Docker images rebuild and database migrations run automatically before the stack restarts, giving you a clean, rerun-safe deploy loop whenever templates or env keys change.
 - Codex CLI users: follow the [Codex CLI guide](codex-cli.md) for installation, authentication, and edit workflows tailored to this repository. Rerun `docker compose up -d` after applying Codex patches so containers reload configuration and binaries.
 
 ## Troubleshooting
