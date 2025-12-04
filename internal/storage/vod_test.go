@@ -376,6 +376,10 @@ func TestRecordingRetentionPurgesExpired(t *testing.T) {
 	RunRepositoryRecordingRetention(t, jsonRepositoryFactory)
 }
 
+func TestRecordingRetentionDeleteFailures(t *testing.T) {
+	RunRepositoryRecordingRetentionFailures(t, jsonRepositoryFactory)
+}
+
 func TestClipExportTitleValidation(t *testing.T) {
 	RunRepositoryClipExportTitleValidation(t, jsonRepositoryFactory)
 }

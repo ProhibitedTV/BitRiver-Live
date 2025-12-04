@@ -228,6 +228,7 @@ func NewStorage(path string, opts ...Option) (*Storage, error) {
 			Unpublished: 14 * 24 * time.Hour,
 		},
 		objectClient: noopObjectStorageClient{},
+		retentionNow: func() time.Time { return time.Now().UTC() },
 	}
 	for _, opt := range opts {
 		if opt != nil {

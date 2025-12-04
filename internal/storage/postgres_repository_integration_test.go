@@ -1267,6 +1267,10 @@ func TestPostgresRecordingRetention(t *testing.T) {
 	storage.RunRepositoryRecordingRetention(t, postgresRepositoryFactory)
 }
 
+func TestPostgresRecordingRetentionFailures(t *testing.T) {
+	storage.RunRepositoryRecordingRetentionFailures(t, postgresRepositoryFactory)
+}
+
 func TestPostgresClipExportTitleValidation(t *testing.T) {
 	storage.RunRepositoryClipExportTitleValidation(t, postgresRepositoryFactory)
 }

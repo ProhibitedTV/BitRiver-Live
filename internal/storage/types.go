@@ -86,6 +86,7 @@ type Storage struct {
 	recordingRetention  RecordingRetentionPolicy
 	objectStorage       ObjectStorageConfig
 	objectClient        objectStorageClient
+	retentionNow        func() time.Time
 }
 
 // RecordingRetentionPolicy specifies how long recordings are kept before being
