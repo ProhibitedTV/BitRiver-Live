@@ -1,14 +1,15 @@
 # syntax=docker/dockerfile:1
 
-FROM --platform=$BUILDPLATFORM golang:1.21 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.22 AS builder
 WORKDIR /src
 
 ARG TARGETOS=linux
 ARG TARGETARCH
-ARG GOPROXY=direct
+ARG GOPROXY=off
 ARG GOSUMDB=off
 
-ENV CGO_ENABLED=0 GOFLAGS=-buildvcs=false
+ENV CGO_ENABLED=0 GOFLAGS="-buildvcs=false -mod=mod"
+ENV GOPROXY=$GOPROXY GOSUMDB=$GOSUMDB
 
 ENV GOOS=$TARGETOS
 ENV GOARCH=$TARGETARCH
