@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Server version="10">
-    <!-- Rendered for BITRIVER_OME_IMAGE_TAG=0.15.10 -->
-    <Name>OvenMediaEngine</Name>
+        <!-- Rendered for BITRIVER_OME_IMAGE_TAG=0.15.10 -->
+<Name>OvenMediaEngine</Name>
 
     <!-- Host type (origin/edge) -->
     <Type>origin</Type>
@@ -45,6 +45,7 @@
                 <Port>8081</Port>
                 <TLSPort>8082</TLSPort>
                 <WorkerCount>1</WorkerCount>
+                <AccessToken>OME-Example-Access-Token</AccessToken>
             </API>
         </Managers>
 

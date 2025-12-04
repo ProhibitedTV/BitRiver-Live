@@ -84,7 +84,8 @@ EOF
       --port "${BITRIVER_OME_SERVER_PORT:-9000}" \
       --tls-port "${BITRIVER_OME_SERVER_TLS_PORT:-9443}" \
       --username "$BITRIVER_OME_USERNAME" \
-     --password "$BITRIVER_OME_PASSWORD"
+      --password "$BITRIVER_OME_PASSWORD" \
+      --access-token "$BITRIVER_OME_ACCESS_TOKEN"
 
    sudo tee /opt/bitriver-transcoder/.env >/dev/null <<'EOF'
 TRANSCODER_IMAGE=ghcr.io/bitriver-live/bitriver-transcoder:vX.Y.Z

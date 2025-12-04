@@ -76,10 +76,11 @@ OME_TLS_PORT="${BITRIVER_OME_SERVER_TLS_PORT:-9443}"
 OME_IP="${BITRIVER_OME_IP:-$OME_BIND}"
 OME_USERNAME="${BITRIVER_OME_USERNAME:-}"
 OME_PASSWORD="${BITRIVER_OME_PASSWORD:-}"
+OME_ACCESS_TOKEN="${BITRIVER_OME_ACCESS_TOKEN:-}"
 OME_IMAGE_TAG="${BITRIVER_OME_IMAGE_TAG:-}"
 
-if [[ -z "$OME_USERNAME" || -z "$OME_PASSWORD" ]]; then
-  echo "BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD must be set in $ENV_FILE before rendering." >&2
+if [[ -z "$OME_USERNAME" || -z "$OME_PASSWORD" || -z "$OME_ACCESS_TOKEN" ]]; then
+  echo "BITRIVER_OME_USERNAME, BITRIVER_OME_PASSWORD, and BITRIVER_OME_ACCESS_TOKEN must be set in $ENV_FILE before rendering." >&2
   exit 1
 fi
 
@@ -150,7 +151,8 @@ if ! render_output=$(python3 "$SCRIPT_DIR/render_ome_config.py" \
   --port "$OME_PORT" \
   --tls-port "$OME_TLS_PORT" \
   --username "$OME_USERNAME" \
-  --password "$OME_PASSWORD" 2>&1); then
+  --password "$OME_PASSWORD" \
+  --access-token "$OME_ACCESS_TOKEN" 2>&1); then
   echo "Failed to render deploy/ome/Server.generated.xml. Check BITRIVER_OME_* values in $ENV_FILE and the template at $TEMPLATE." >&2
   echo "$render_output" >&2
   exit 1

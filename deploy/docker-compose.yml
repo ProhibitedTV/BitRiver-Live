@@ -5,6 +5,7 @@ x-required-credentials: &required_credentials
   BITRIVER_SRS_TOKEN: ${BITRIVER_SRS_TOKEN:?set via .env}
   BITRIVER_OME_USERNAME: ${BITRIVER_OME_USERNAME:?set via .env}
   BITRIVER_OME_PASSWORD: ${BITRIVER_OME_PASSWORD:?set via .env}
+  BITRIVER_OME_ACCESS_TOKEN: ${BITRIVER_OME_ACCESS_TOKEN:?set via .env}
   BITRIVER_TRANSCODER_TOKEN: ${BITRIVER_TRANSCODER_TOKEN:?set via .env}
   BITRIVER_REDIS_PASSWORD: ${BITRIVER_REDIS_PASSWORD:?set via .env}
   BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD: ${BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD:?set via .env}
@@ -267,6 +268,7 @@ services:
     environment:
       BITRIVER_OME_USERNAME: ${BITRIVER_OME_USERNAME:?set via .env}
       BITRIVER_OME_PASSWORD: ${BITRIVER_OME_PASSWORD:?set via .env}
+      BITRIVER_OME_ACCESS_TOKEN: ${BITRIVER_OME_ACCESS_TOKEN:?set via .env}
     networks:
       default:
         aliases:
@@ -278,7 +280,7 @@ services:
     healthcheck:
       test:
         - "CMD-SHELL"
-        - "curl -fsS -u \"$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD\" http://localhost:8081/healthz"
+        - "curl -fsS -H 'AccessToken: '$BITRIVER_OME_ACCESS_TOKEN http://localhost:8081/healthz"
       interval: 30s
       timeout: 5s
       retries: 5

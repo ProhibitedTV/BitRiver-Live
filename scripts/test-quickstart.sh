@@ -80,6 +80,7 @@ BITRIVER_LIVE_ADMIN_PASSWORD=local-dev-password
 BITRIVER_SRS_TOKEN=local-dev-token
 BITRIVER_OME_USERNAME=admin
 BITRIVER_OME_PASSWORD=local-dev-password
+BITRIVER_OME_ACCESS_TOKEN=local-dev-access-token
 BITRIVER_TRANSCODER_TOKEN=local-dev-token
 BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD=bitriver
 ENV
@@ -111,7 +112,7 @@ grep_healthcheck() {
 grep_healthcheck "bitriver-live" "http://localhost:8080/healthz"
 grep_healthcheck "srs-controller" "http://localhost:1985/healthz"
 grep_healthcheck "srs" "http://localhost:1985/healthz"
-grep_healthcheck "ome" "curl -fsS -u admin:local-dev-password http://localhost:8081/healthz"
+grep_healthcheck "ome" "curl -fsS -H 'AccessToken: local-dev-access-token' http://localhost:8081/healthz"
 grep_healthcheck "transcoder" "http://localhost:9000/healthz"
 grep_healthcheck "postgres" "pg_isready"
 grep_healthcheck "redis" "redis-cli"
@@ -144,7 +145,7 @@ for line in env_path.read_text().splitlines():
     key, value = line.split("=", 1)
     env_values[key] = value
 
-required = ["BITRIVER_OME_USERNAME", "BITRIVER_OME_PASSWORD"]
+required = ["BITRIVER_OME_USERNAME", "BITRIVER_OME_PASSWORD", "BITRIVER_OME_ACCESS_TOKEN"]
 missing = [key for key in required if not env_values.get(key)]
 if missing:
     sys.exit(f"error: missing required OME credentials in {env_path}: {', '.join(missing)}")
@@ -160,6 +161,7 @@ root = tree.getroot()
 root_bind_ip = root.findtext("./Bind/IP")
 root_port = root.findtext("./Bind/Port")
 root_tls_port = root.findtext("./Bind/TLSPort")
+api_access_token = root.findtext("./Bind/Managers/API/AccessToken")
 bind = root.findtext(".//Control/Server/Listeners/TCP/Bind")
 ip = root.findtext(".//Control/Server/Listeners/TCP/IP")
 username = root.findtext(".//Control/Authentication/User/ID")
@@ -169,6 +171,7 @@ values = {
     "RootBind": root_bind_ip,
     "RootPort": root_port,
     "RootTLSPort": root_tls_port,
+    "AccessToken": api_access_token,
     "Bind": bind,
     "IP": ip,
     "ID": username,
@@ -196,6 +199,9 @@ if root_bind_ip != expected_bind or root_port != expected_port or root_tls_port 
 
 if username != env_values["BITRIVER_OME_USERNAME"] or password != env_values["BITRIVER_OME_PASSWORD"]:
     sys.exit("error: rendered OME credentials do not match .env defaults")
+
+if api_access_token != env_values["BITRIVER_OME_ACCESS_TOKEN"]:
+    sys.exit("error: rendered OME access token does not match .env defaults")
 
 print("OME config validation passed.")
 PY

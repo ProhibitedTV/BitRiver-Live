@@ -60,7 +60,7 @@ When any dependency falters, start with the API health surfaces. `/readyz` retur
 - **What degrades:** Live playback drops because the origin is unreachable; ingest bootstraps fail when the controller cannot create an OME application and roll back SRS provisioning. `/healthz` reports the `ovenmediaengine` component as `error` while `/readyz` remains healthy if Postgres and chat are online.【F:internal/ingest/http_controller.go†L308-L401】【F:internal/ingest/http_controller.go†L120-L195】
 - **API/reactive response:** Existing VOD assets remain playable from object storage/CDN, but new live sessions cannot start until OME accepts control-plane requests.【F:docs/advanced-deployments.md†L166-L205】
 - **Recovery checklist:**
-  1. Confirm the control credentials and bind config (`BITRIVER_OME_API`, `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, `BITRIVER_OME_BIND`, `BITRIVER_OME_SERVER_PORT`, `BITRIVER_OME_SERVER_TLS_PORT`) match the running OME instance.【F:deploy/.env.example†L43-L48】【F:deploy/.env.example†L69-L71】
+  1. Confirm the control credentials and bind config (`BITRIVER_OME_API`, `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, `BITRIVER_OME_ACCESS_TOKEN`, `BITRIVER_OME_BIND`, `BITRIVER_OME_SERVER_PORT`, `BITRIVER_OME_SERVER_TLS_PORT`) match the running OME instance.【F:deploy/.env.example†L43-L49】【F:deploy/.env.example†L69-L72】
   2. Restart OME, watch its health endpoint, then re-run `/healthz` on the API to ensure the component returns to `ok`.
   3. Retry ingest start; the controller will reprovision the application and transcoder jobs once OME responds.
 
@@ -303,7 +303,7 @@ BitRiver Live can orchestrate end-to-end ingest and transcode jobs by talking to
 | `BITRIVER_OME_IP` | Public IP rendered into the `<Server><IP>` block for signalling (defaults to `BITRIVER_OME_BIND`). |
 | `BITRIVER_OME_SERVER_PORT` | Port rendered into the top-level `<Bind><Port>` entry for WebRTC signalling (defaults to `9000`). |
 | `BITRIVER_OME_SERVER_TLS_PORT` | Port rendered into `<Bind><TLSPort>` for TLS signalling (defaults to `9443`). |
-| `BITRIVER_OME_USERNAME` / `BITRIVER_OME_PASSWORD` | Basic-auth credentials for OvenMediaEngine. |
+| `BITRIVER_OME_USERNAME` / `BITRIVER_OME_PASSWORD` / `BITRIVER_OME_ACCESS_TOKEN` | Control-plane credentials for OvenMediaEngine (basic auth and API access token). |
 | `BITRIVER_TRANSCODER_API` | Base URL for the FFmpeg job runner (e.g. a lightweight controller on port `9000`). |
 | `BITRIVER_TRANSCODER_TOKEN` | Bearer token for FFmpeg job APIs. |
 | `BITRIVER_TRANSCODE_LADDER` | Optional ladder definition (`1080p:6000,720p:4000,480p:2500`). |
@@ -319,12 +319,12 @@ To keep bootstrapping predictable the server now fails fast if any of the requir
 
 - An **SRS API proxy** (the `srs-controller` service) reachable on port `1985` (or your custom management port). The proxy validates `BITRIVER_SRS_TOKEN` on every request and forwards authenticated calls to the upstream SRS raw API.
 - An **SRS** instance the proxy can reach on port `1985` (or your custom management port) with `raw_api` enabled.
-- An **OvenMediaEngine** API listener (default `8081`) with an account that has permission to create and delete applications. Provide the username/password through `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`.
+- An **OvenMediaEngine** API listener (default `8081`) with an account that has permission to create and delete applications. Provide the username/password through `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD` and the API token through `BITRIVER_OME_ACCESS_TOKEN`.
 - A **transcoder job controller** (such as an FFmpeg fleet manager) exposed over HTTP—commonly on port `9000`—secured with a bearer token supplied in `BITRIVER_TRANSCODER_TOKEN`.
 
 Open the management ports to the BitRiver Live API host and ensure the credentials map to accounts that can create/delete the corresponding resources. Set the optional `BITRIVER_INGEST_HEALTH` path if your services expose health checks somewhere other than `/healthz`.
 
-OvenMediaEngine's control server enforces basic authentication on `/healthz`; the compose bundle mounts `deploy/ome/Server.generated.xml` (rendered from `deploy/ome/Server.xml`) and forwards the same `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD` pair to the probe so a 401 will mark the container unhealthy. Keep `.env` aligned with that rendered configuration if you edit the template. The template rewrites the control listener `<Bind>`/`<IP>` values from `BITRIVER_OME_BIND` and stamps the root `<Bind>` block with `<IP>`, `<Port>`, and `<TLSPort>` derived from `BITRIVER_OME_BIND`, `BITRIVER_OME_SERVER_PORT`, and `BITRIVER_OME_SERVER_TLS_PORT` so the bind configuration stays consistent across restarts.
+OvenMediaEngine's control server enforces authentication on `/healthz`; the compose bundle mounts `deploy/ome/Server.generated.xml` (rendered from `deploy/ome/Server.xml`) and forwards the same `BITRIVER_OME_ACCESS_TOKEN` header (with optional basic auth from `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD`) to the probe so a 401 will mark the container unhealthy. Keep `.env` aligned with that rendered configuration if you edit the template. The template rewrites the control listener `<Bind>`/`<IP>` values from `BITRIVER_OME_BIND` and stamps the root `<Bind>` block with `<IP>`, `<Port>`, and `<TLSPort>` derived from `BITRIVER_OME_BIND`, `BITRIVER_OME_SERVER_PORT`, and `BITRIVER_OME_SERVER_TLS_PORT` so the bind configuration stays consistent across restarts.
 
 When refreshing an existing OME node, replace any custom `origin_conf/Server.xml` with the template from this repository before restarting the container. Keep the bind/IP entries scoped to `<Modules><Control><Server><Listeners><TCP>` and re-render the credentials with the provided helper:
 
@@ -337,7 +337,8 @@ cd /opt/bitriver-live
   --port "${BITRIVER_OME_SERVER_PORT:-9000}" \
   --tls-port "${BITRIVER_OME_SERVER_TLS_PORT:-9443}" \
   --username "$BITRIVER_OME_USERNAME" \
-  --password "$BITRIVER_OME_PASSWORD"
+  --password "$BITRIVER_OME_PASSWORD" \
+  --access-token "$BITRIVER_OME_ACCESS_TOKEN"
 ```
 
 Mount the generated file into the container at `/opt/ovenmediaengine/bin/origin_conf/Server.xml` (Compose already wires this path for you) and restart OME so the control listener bind/IP and credentials stay in sync with `.env`.
