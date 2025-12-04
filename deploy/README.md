@@ -27,6 +27,9 @@ export COMPOSE_FILE=deploy/docker-compose.yml
 docker compose up --build
 ```
 
+Viewer self-registration is disabled by default so only administrators can add users. Toggle `BITRIVER_LIVE_ALLOW_SELF_SIGNUP`
+in `.env` and rerun `./deploy/check-env.sh` followed by `docker compose up -d` to reopen or close public signups.
+
 ## Systemd installs
 For bare-metal or VM installs, start with the helpers in `deploy/install/`:
 

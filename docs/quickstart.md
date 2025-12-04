@@ -47,6 +47,8 @@ credentials (`BITRIVER_REDIS_PASSWORD` and `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSW
 `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` at the HTTP origin your viewers can actually reach instead of the default
 `http://localhost:9080`. Update the public viewer URL to match your domain or reverse proxy as well. The helper prints the
 seeded credentials after the stack is ready; log in immediately and rotate the password from the control center settings page.
+Viewer self-registration stays disabled by default to keep new accounts admin-controlled; set `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true`
+in `.env` and rerun `docker compose up -d` to reopen public signups, or leave it false to require manual invites.
 
 ## Common follow-up commands
 
