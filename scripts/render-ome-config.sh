@@ -15,8 +15,8 @@ usage() {
 Usage: scripts/render-ome-config.sh [--check] [--force] [--env-file PATH] [--quiet]
 
 Options:
-  --check       Only verify that deploy/ome/Server.generated.xml is newer than .env and the template.
-  --force       Re-render even if the generated file looks fresh.
+  --check       Only verify that deploy/ome/Server.generated.xml exists.
+  --force       Re-render even if the generated file already exists.
   --env-file    Path to the .env file to source (defaults to ./../.env).
   --quiet       Suppress informational output.
 USAGE
@@ -113,58 +113,25 @@ if [[ $supports_access_token -eq 0 ]]; then
   render_api_token=""
 fi
 
-needs_render=false
-reason=""
 OME_MARKER_PREFIX="<!-- Rendered for BITRIVER_OME_IMAGE_TAG="
 
-generated_ome_tag=""
-if [[ -f "$OUTPUT" ]]; then
-  generated_ome_tag=$(sed -n "s/.*${OME_MARKER_PREFIX}\(.*\) -->.*/\1/p" "$OUTPUT" | head -n1)
-fi
-
-if [[ $FORCE -eq 1 ]]; then
-  needs_render=true
-  reason="--force requested"
-elif [[ ! -f "$OUTPUT" ]]; then
-  needs_render=true
-  reason="generated file missing"
-elif [[ "$ENV_FILE" -nt "$OUTPUT" ]]; then
-  needs_render=true
-  reason=".env is newer than generated file"
-elif [[ "$TEMPLATE" -nt "$OUTPUT" ]]; then
-  needs_render=true
-  reason="template is newer than generated file"
-elif grep -q "<Control>" "$OUTPUT" 2>/dev/null; then
-  needs_render=true
-  reason="generated file contains deprecated <Control> module"
-elif [[ -z "$generated_ome_tag" ]]; then
-  needs_render=true
-  reason="generated file missing BITRIVER_OME_IMAGE_TAG marker"
-elif [[ "$generated_ome_tag" != "$OME_IMAGE_TAG" ]]; then
-  needs_render=true
-  reason="generated file rendered for BITRIVER_OME_IMAGE_TAG=$generated_ome_tag, expected $OME_IMAGE_TAG"
-fi
-
 if [[ "$MODE" == "check" ]]; then
-  if [[ "$needs_render" == true ]]; then
-    echo "OME config stale: $reason. Run ./scripts/render-ome-config.sh to refresh deploy/ome/Server.generated.xml." >&2
+  if [[ ! -f "$OUTPUT" ]]; then
+    echo "OME config missing at $OUTPUT. Run ./scripts/render-ome-config.sh to generate it." >&2
     exit 1
   fi
   if [[ $QUIET -eq 0 ]]; then
-    echo "OME config is up to date."
-  fi
-  exit 0
-fi
-
-if [[ "$needs_render" == false ]]; then
-  if [[ $QUIET -eq 0 ]]; then
-    echo "OME config already matches $ENV_FILE; use --force to rewrite."
+    echo "OME config found at $OUTPUT."
   fi
   exit 0
 fi
 
 if [[ $QUIET -eq 0 ]]; then
-  echo "Rendering OME config ($reason)..."
+  if [[ $FORCE -eq 1 ]]; then
+    echo "Rendering OME config (--force requested)..."
+  else
+    echo "Rendering OME config..."
+  fi
 fi
 
 if ! render_output=$(python3 "$SCRIPT_DIR/render_ome_config.py" \
