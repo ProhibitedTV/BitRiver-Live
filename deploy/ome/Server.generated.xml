@@ -120,6 +120,7 @@
             <Applications>
                 <Application>
                     <Name>live</Name>
+                    <Type>live</Type>
 
                     <!-- Use default Providers/Publishers from Bind -->
                     <!-- You can add per-app settings here if needed later -->
