@@ -4,6 +4,14 @@ BitRiver Live is a self-hosted streaming stack built with Go on the backend and 
 starts the API, control centre, public viewer, RTMP ingest, transcoder, chat, analytics, Postgres, and Redis so you can run a
 Twitch-style experience on hardware you control.
 
+## Supported versions
+
+- **Viewer:** Next.js 13.5.x with Node.js LTS (validated on Node 18/20; Next 13.5 requires Node 16.14+). Aligns with the pins
+  in `web/viewer/package.json`.
+- **Postgres:** pgx v5.7.x (via `github.com/jackc/pgx/v5`) supports PostgreSQL 10–16; the bundled Compose stack runs Postgres
+  15 by default.
+- **Redis:** go-redis v9.5.x targets Redis 6+; Docker Compose ships Redis 7-alpine.
+
 ## What you get out of the box
 
 - **Control centre + API** – `cmd/server` serves the admin UI, chat, analytics, webhooks, and REST endpoints under one binary.
