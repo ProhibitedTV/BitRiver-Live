@@ -28,11 +28,6 @@ def replace_optional_tag_content(data: str, tag: str, value: str) -> str:
     return replace_tag_content(data, tag, value)
 
 
-def remove_optional_tag(data: str, tag: str) -> str:
-    pattern = re.compile(rf"\s*<{tag}>[^<]*</{tag}>\s*\n?", re.MULTILINE)
-    return pattern.sub("", data)
-
-
 def replace_all_tag_content(
     data: str, tag: str, value: str, *, required: bool = True
 ) -> str:
@@ -185,7 +180,7 @@ def render(
     tls_port: str,
     username: str,
     password: str,
-    access_token: str | None,
+    api_token: str,
 ) -> None:
     escaped_bind = xml_escape(bind)
     escaped_port = xml_escape(server_port)
@@ -200,15 +195,11 @@ def render(
     text = _replace_root_ip(text, xml_escape(server_ip))
     text = _scoped_replace_control_bindings(text, escaped_bind)
 
-    # These may not exist depending on template version; replace them when present.
-    text = replace_optional_tag_content(text, "ID", xml_escape(username))
-    text = replace_optional_tag_content(text, "Password", xml_escape(password))
-    if access_token:
-        text = replace_optional_tag_content(
-            text, "AccessToken", xml_escape(access_token)
-        )
-    else:
-        text = remove_optional_tag(text, "AccessToken")
+    text = replace_tag_content(text, "ID", xml_escape(username))
+    text = replace_tag_content(text, "Password", xml_escape(password))
+
+    # Fill APIServer AccessToken
+    text = replace_tag_content(text, "AccessToken", xml_escape(api_token))
 
     output.write_text(text)
 
@@ -240,11 +231,9 @@ def main(argv: list[str]) -> int:
         "--password", required=True, help="OME control password"
     )
     parser.add_argument(
-        "--access-token",
-        help=(
-            "OME access token for API/authz; omit when the configured image tag"
-            " does not support <AccessToken>"
-        ),
+        "--api-token",
+        required=True,
+        help="OME API server access token",
     )
     parser.add_argument(
         "--port", required=True, help="OME server port"
@@ -264,7 +253,7 @@ def main(argv: list[str]) -> int:
         args.tls_port,
         args.username,
         args.password,
-        args.access_token,
+        args.api_token,
     )
     return 0
 
