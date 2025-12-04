@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"bitriver-live/internal/chat"
@@ -264,9 +265,11 @@ func (s *Storage) ChatTimeout(channelID, userID string) (time.Time, bool) {
 
 // ChatWorker consumes queue events and applies them to storage.
 type ChatWorker struct {
-	queue  chat.Queue
-	store  Repository
-	logger *slog.Logger
+	queue       chat.Queue
+	store       Repository
+	logger      *slog.Logger
+	started     chan struct{}
+	startedOnce sync.Once
 }
 
 // NewChatWorker prepares a worker that will persist chat events delivered via the queue.
@@ -277,6 +280,22 @@ func NewChatWorker(store Repository, queue chat.Queue, logger *slog.Logger) *Cha
 	return &ChatWorker{queue: queue, store: store, logger: logger}
 }
 
+// WithStartedChannel signals when the worker has begun consuming events. It should be set
+// before calling Run.
+func (w *ChatWorker) WithStartedChannel(started chan struct{}) *ChatWorker {
+	w.started = started
+	return w
+}
+
+func (w *ChatWorker) notifyStarted() {
+	if w.started == nil {
+		return
+	}
+	w.startedOnce.Do(func() {
+		close(w.started)
+	})
+}
+
 // Run blocks until the context is cancelled, persisting chat events as they arrive.
 func (w *ChatWorker) Run(ctx context.Context) {
 	if w.queue == nil || w.store == nil {
@@ -284,6 +303,7 @@ func (w *ChatWorker) Run(ctx context.Context) {
 	}
 	sub := w.queue.Subscribe()
 	defer sub.Close()
+	w.notifyStarted()
 	for {
 		select {
 		case <-ctx.Done():
