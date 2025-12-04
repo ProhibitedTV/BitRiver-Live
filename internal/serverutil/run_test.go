@@ -8,6 +8,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -21,11 +22,16 @@ func TestRunGracefulShutdown(t *testing.T) {
 	t.Cleanup(cancel)
 
 	done := make(chan error, 1)
+	ready := make(chan struct{})
 	go func() {
-		done <- Run(ctx, Config{Server: server, ShutdownTimeout: time.Second})
+		done <- Run(ctx, Config{Server: server, ShutdownTimeout: time.Second, Ready: ready})
 	}()
 
-	time.Sleep(50 * time.Millisecond)
+	select {
+	case <-ready:
+	case <-time.After(time.Second):
+		t.Fatal("server did not start")
+	}
 	cancel()
 
 	select {
@@ -45,10 +51,12 @@ func TestRunUsesTLSWhenConfigured(t *testing.T) {
 	t.Cleanup(cancel)
 
 	done := make(chan error, 1)
+	ready := make(chan struct{})
 	go func() {
 		done <- Run(ctx, Config{
 			Server:          server,
 			ShutdownTimeout: time.Second,
+			Ready:           ready,
 			TLS: TLSConfig{
 				CertFile: certFile,
 				KeyFile:  keyFile,
@@ -56,7 +64,11 @@ func TestRunUsesTLSWhenConfigured(t *testing.T) {
 		})
 	}()
 
-	time.Sleep(50 * time.Millisecond)
+	select {
+	case <-ready:
+	case <-time.After(time.Second):
+		t.Fatal("server did not start")
+	}
 	cancel()
 
 	select {
@@ -66,6 +78,41 @@ func TestRunUsesTLSWhenConfigured(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("server did not shut down")
+	}
+}
+
+func TestRunStartupError(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = listener.Close()
+	})
+
+	server := &http.Server{Addr: listener.Addr().String(), Handler: http.NewServeMux()}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	done := make(chan error, 1)
+	ready := make(chan struct{})
+	go func() {
+		done <- Run(ctx, Config{Server: server, ShutdownTimeout: time.Second, Ready: ready})
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected startup error")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("server run did not return")
+	}
+
+	select {
+	case <-ready:
+		t.Fatal("server unexpectedly signalled readiness")
+	default:
 	}
 }
 
