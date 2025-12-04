@@ -75,7 +75,8 @@ func newVodItemResponse(recording models.Recording) vodItemResponse {
 		DurationSeconds: recording.DurationSeconds,
 	}
 	if recording.PublishedAt != nil {
-		item.PublishedAt = recording.PublishedAt.Format(time.RFC3339Nano)
+		publishedAt := recording.PublishedAt.Format(time.RFC3339Nano)
+		item.PublishedAt = &publishedAt
 	}
 	if len(recording.Thumbnails) > 0 {
 		thumb := recording.Thumbnails[0]
