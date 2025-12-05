@@ -6,23 +6,30 @@
     <PrivacyProtection>false</PrivacyProtection>
     <StunServer>stun.l.google.com:19302</StunServer>
 
-    <!-- Server-level bind rewritten from BITRIVER_OME_* -->
-    <Bind>
-        <IP>0.0.0.0</IP>
-        <Port>9000</Port>
-        <TLSPort>9443</TLSPort>
-    </Bind>
-
     <Modules>
-        <Control>
-            <Server>
-                <Listeners>
-                    <TCP>
-                        <Enable>true</Enable>
-                        <Bind>0.0.0.0</Bind>
-                        <Port>9000</Port>
-                    </TCP>
-                </Listeners>
+        <HTTP2>
+            <Enable>true</Enable>
+        </HTTP2>
+
+        <LLHLS>
+            <Enable>true</Enable>
+        </LLHLS>
+
+        <P2P>
+            <Enable>false</Enable>
+            <MaxClientPeersPerHostPeer>2</MaxClientPeersPerHostPeer>
+        </P2P>
+    </Modules>
+
+    <Bind>
+        <Address>0.0.0.0</Address>
+
+        <Managers>
+            <API>
+                <Port>8081</Port>
+                <TLSPort>8082</TLSPort>
+                <WorkerCount>1</WorkerCount>
+                <AccessToken>BITRIVER_OME_API_TOKEN_PLACEHOLDER</AccessToken>
                 <Authentication>
                     <AutoRegister>true</AutoRegister>
                     <AllowAnonymousUser>false</AllowAnonymousUser>
@@ -32,83 +39,117 @@
                         <Password>password</Password>
                     </User>
                 </Authentication>
-            </Server>
-        </Control>
+            </API>
+        </Managers>
 
-        <Host>
-            <VirtualHosts>
-                <VirtualHost>
-                    <Name>default</Name>
-                    <Host>*</Host>
-                    <Origin>
-                        <App>
-                            <Name>live</Name>
-                        </App>
-                    </Origin>
-                </VirtualHost>
-            </VirtualHosts>
-        </Host>
+        <Providers>
+            <RTMP>
+                <Port>1935</Port>
+                <WorkerCount>1</WorkerCount>
+            </RTMP>
 
-            <APIServer>
-                <Enable>true</Enable>
-                <Port>8081</Port>
-                <AccessToken>BITRIVER_OME_API_TOKEN_PLACEHOLDER</AccessToken>
-                <!-- Keep this non-empty; quickstart rewrites from BITRIVER_OME_API_TOKEN. -->
-            </APIServer>
-    </Modules>
+            <WebRTC>
+                <Signalling>
+                    <Port>9000</Port>
+                    <TLSPort>9443</TLSPort>
+                    <WorkerCount>1</WorkerCount>
+                </Signalling>
+                <IceCandidates>
+                    <TcpRelay>*:3478</TcpRelay>
+                    <TcpForce>false</TcpForce>
+                    <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
+                    <IceCandidate>*:10000-10009/udp</IceCandidate>
+                </IceCandidates>
+            </WebRTC>
+        </Providers>
 
-    <Applications>
-        <Application>
-            <Name>live</Name>
-            <Type>live</Type>
+        <Publishers>
+            <LLHLS>
+                <Port>8080</Port>
+                <TLSPort>8443</TLSPort>
+                <WorkerCount>1</WorkerCount>
+            </LLHLS>
 
-            <Outputs>
-                <OutputProfiles>
-                    <OutputProfile>
-                        <Name>copy_passthrough</Name>
-                        <OutputStreams>
-                            <OutputStream>
-                                <Name>copy</Name>
-                                <Video>
-                                    <Codec>copy</Codec>
-                                </Video>
-                                <Audio>
-                                    <Codec>copy</Codec>
-                                </Audio>
-                            </OutputStream>
-                        </OutputStreams>
-                    </OutputProfile>
-                </OutputProfiles>
+            <WebRTC>
+                <Signalling>
+                    <Port>9000</Port>
+                    <TLSPort>9443</TLSPort>
+                    <WorkerCount>1</WorkerCount>
+                </Signalling>
+                <IceCandidates>
+                    <TcpRelay>*:3478</TcpRelay>
+                    <TcpForce>false</TcpForce>
+                    <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
+                    <IceCandidate>*:10000-10009/udp</IceCandidate>
+                </IceCandidates>
+            </WebRTC>
+        </Publishers>
+    </Bind>
 
-                <LLHLS>
-                    <SegmentDuration>6</SegmentDuration>
-                    <PartDuration>1</PartDuration>
-                    <SegmentCount>5</SegmentCount>
-                    <PartCount>3</PartCount>
-                    <PreloadHint>true</PreloadHint>
-                    <AdditionalPlaylist>true</AdditionalPlaylist>
-                </LLHLS>
-            </Outputs>
+    <VirtualHosts>
+        <VirtualHost>
+            <Name>default</Name>
 
-            <Publishers>
-                <WebRTC>
-                    <Enable>true</Enable>
-                    <OutputProfile>copy_passthrough</OutputProfile>
-                </WebRTC>
-                <LLHLS>
-                    <Enable>true</Enable>
-                    <OutputProfile>copy_passthrough</OutputProfile>
-                </LLHLS>
-            </Publishers>
+            <Host>
+                <Names>
+                    <Name>*</Name>
+                </Names>
+            </Host>
 
-            <Providers>
-                <RTMP>
-                    <Enable>true</Enable>
-                </RTMP>
-                <WebRTC>
-                    <Enable>true</Enable>
-                </WebRTC>
-            </Providers>
-        </Application>
-    </Applications>
+            <Applications>
+                <Application>
+                    <Name>live</Name>
+                    <Type>live</Type>
+
+                    <Outputs>
+                        <OutputProfiles>
+                            <OutputProfile>
+                                <Name>copy_passthrough</Name>
+                                <OutputStreams>
+                                    <OutputStream>
+                                        <Name>copy</Name>
+                                        <Video>
+                                            <Codec>copy</Codec>
+                                        </Video>
+                                        <Audio>
+                                            <Codec>copy</Codec>
+                                        </Audio>
+                                    </OutputStream>
+                                </OutputStreams>
+                            </OutputProfile>
+                        </OutputProfiles>
+
+                        <LLHLS>
+                            <SegmentDuration>6</SegmentDuration>
+                            <PartDuration>1</PartDuration>
+                            <SegmentCount>5</SegmentCount>
+                            <PartCount>3</PartCount>
+                            <PreloadHint>true</PreloadHint>
+                            <AdditionalPlaylist>true</AdditionalPlaylist>
+                        </LLHLS>
+                    </Outputs>
+
+                    <Publishers>
+                        <WebRTC>
+                            <Enable>true</Enable>
+                            <OutputProfile>copy_passthrough</OutputProfile>
+                        </WebRTC>
+                        <LLHLS>
+                            <Enable>true</Enable>
+                            <OutputProfile>copy_passthrough</OutputProfile>
+                        </LLHLS>
+                    </Publishers>
+
+                    <Providers>
+                        <RTMP>
+                            <Enable>true</Enable>
+                        </RTMP>
+                        <WebRTC>
+                            <Enable>true</Enable>
+                        </WebRTC>
+                    </Providers>
+                </Application>
+            </Applications>
+        </VirtualHost>
+    </VirtualHosts>
 </Server>
