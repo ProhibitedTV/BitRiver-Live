@@ -6,10 +6,7 @@
     <PrivacyProtection>false</PrivacyProtection>
     <StunServer>stun.l.google.com:19302</StunServer>
 
-    <!--
-      Modern OvenMediaEngine releases expect virtual hosts and applications
-      under the root <VirtualHosts> block instead of <Server.Applications>.
-    -->
+    <!-- Server.bind.Address was removed in 0.15.x; use the global <IP> and the per-protocol <Bind> block instead. -->
     <Modules>
         <HTTP2>
             <Enable>true</Enable>
@@ -25,12 +22,7 @@
         </P2P>
     </Modules>
 
-    <!--
-      Bind managers (API), providers (ingest), and publishers (playback).
-      The global <IP> above controls listen addresses; the old <Bind>/<Address>
-      element was removed because it is not part of the 0.15.x schema and
-      triggers "Unknown item" errors.
-    -->
+    <!-- Corrected: <Bind> replaces the deprecated <Server.bind.Address> container. -->
     <Bind>
 
         <Managers>
@@ -100,10 +92,7 @@
         </Publishers>
     </Bind>
 
-    <!--
-      Keep a single vhost "default" with one application "live" to match
-      BitRiver Live’s expectation of /live as the app name.
-    -->
+    <!-- Corrected: Applications must live under <VirtualHosts>/<VirtualHost>, not <Server.Applications>. -->
     <VirtualHosts>
         <VirtualHost>
             <Name>default</Name>
