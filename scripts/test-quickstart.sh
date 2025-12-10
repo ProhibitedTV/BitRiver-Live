@@ -113,7 +113,7 @@ grep_healthcheck() {
 grep_healthcheck "bitriver-live" "http://localhost:8080/healthz"
 grep_healthcheck "srs-controller" "http://localhost:1985/healthz"
 grep_healthcheck "srs" "http://localhost:1985/healthz"
-grep_healthcheck "ome" "curl -fsS -H 'AccessToken: local-dev-access-token' http://localhost:8081/healthz"
+grep_healthcheck "ome" "curl -fsS -H 'AccessToken: local-dev-access-token' http://localhost:8081/v1/health"
 grep_healthcheck "transcoder" "http://localhost:9000/healthz"
 grep_healthcheck "postgres" "pg_isready"
 grep_healthcheck "redis" "redis-cli"
