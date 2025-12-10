@@ -27,17 +27,22 @@
 
     <!--
       Bind managers (API), providers (ingest), and publishers (playback).
-      scripts/render-ome-config.sh rewrites the address/port fields from
-      BITRIVER_OME_* values before compose boots OME.
+      The global <IP> above controls listen addresses; the old <Bind>/<Address>
+      element was removed because it is not part of the 0.15.x schema and
+      triggers "Unknown item" errors.
     -->
     <Bind>
-        <Address>0.0.0.0</Address>
 
         <Managers>
             <API>
                 <Port>8081</Port>
                 <TLSPort>8082</TLSPort>
                 <WorkerCount>1</WorkerCount>
+                <!--
+                  APIServer rejects an empty token; customize this value if you
+                  want to protect API access, or leave the placeholder for
+                  open/local use.
+                -->
                 <AccessToken>BITRIVER_OME_API_TOKEN_PLACEHOLDER</AccessToken>
                 <Authentication>
                     <AutoRegister>true</AutoRegister>
