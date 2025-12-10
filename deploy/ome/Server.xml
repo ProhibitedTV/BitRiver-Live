@@ -35,7 +35,9 @@
                   want to protect API access, or leave the placeholder for
                   open/local use.
                 -->
-                <AccessToken>BITRIVER_OME_API_TOKEN_PLACEHOLDER</AccessToken>
+                <AccessTokens>
+                    <AccessToken>BITRIVER_OME_API_TOKEN_PLACEHOLDER</AccessToken>
+                </AccessTokens>
                 <Authentication>
                     <AutoRegister>true</AutoRegister>
                     <AllowAnonymousUser>false</AllowAnonymousUser>
