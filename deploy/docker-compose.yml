@@ -282,9 +282,9 @@ services:
         - "CMD-SHELL"
         - >
           if [ -n "$BITRIVER_OME_ACCESS_TOKEN" ]; then
-            curl -fsS -H "AccessToken: $BITRIVER_OME_ACCESS_TOKEN" http://localhost:8081/healthz;
+            curl -fsS -H "AccessToken: $BITRIVER_OME_ACCESS_TOKEN" http://localhost:8081/v1/health || curl -fsS -H "AccessToken: $BITRIVER_OME_ACCESS_TOKEN" http://localhost:8081/healthz;
           else
-            curl -fsS http://localhost:8081/healthz;
+            curl -fsS http://localhost:8081/v1/health || curl -fsS http://localhost:8081/healthz;
           fi
       interval: 30s
       timeout: 5s

@@ -343,16 +343,24 @@ wait_for_ome_health() {
   local port
   port=$(read_env_value BITRIVER_OME_HTTP_PORT)
   port=${port:-8081}
-  local url="http://localhost:${port}/v1/health"
+  local token_header
+  token_header=$(read_env_value BITRIVER_OME_ACCESS_TOKEN)
+  local -a curl_args=(-fsS)
+  if [[ -n $token_header ]]; then
+    curl_args+=(-H "AccessToken: $token_header")
+  fi
+  local -a paths=("/v1/health" "/healthz")
   local attempts=${1:-45}
   local sleep_seconds=${2:-2}
 
-  echo "Checking OME health at $url ..."
+  echo "Checking OME health on port ${port} (paths: ${paths[*]}) ..."
   for ((i=1; i<=attempts; i++)); do
-    if curl -fsS "$url" >/dev/null 2>&1; then
-      echo "OME reports healthy."
-      return 0
-    fi
+    for path in "${paths[@]}"; do
+      if curl "${curl_args[@]}" "http://localhost:${port}${path}" >/dev/null 2>&1; then
+        echo "OME reports healthy via ${path}."
+        return 0
+      fi
+    done
     sleep "$sleep_seconds"
   done
 
