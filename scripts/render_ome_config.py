@@ -28,6 +28,13 @@ def replace_optional_tag_content(data: str, tag: str, value: str) -> str:
     return replace_tag_content(data, tag, value)
 
 
+def remove_first_tag_block(data: str, tag: str) -> str:
+    """Remove the first occurrence of <tag>...</tag> in data, if present."""
+
+    pattern = re.compile(rf"\s*<{tag}>.*?</{tag}>\s*", re.DOTALL)
+    return pattern.sub("\n", data, count=1)
+
+
 def replace_all_tag_content(
     data: str, tag: str, value: str, *, required: bool = True
 ) -> str:
@@ -198,8 +205,11 @@ def render(
     text = replace_tag_content(text, "ID", xml_escape(username))
     text = replace_tag_content(text, "Password", xml_escape(password))
 
-    # Fill APIServer AccessToken
-    text = replace_tag_content(text, "AccessToken", xml_escape(api_token))
+    # Fill APIServer AccessToken when supported; otherwise drop the block entirely.
+    if api_token:
+        text = replace_tag_content(text, "AccessToken", xml_escape(api_token))
+    else:
+        text = remove_first_tag_block(text, "AccessTokens")
 
     output.write_text(text)
 
