@@ -6,6 +6,7 @@
     <PrivacyProtection>false</PrivacyProtection>
     <StunServer>stun.l.google.com:19302</StunServer>
 
+    <!-- Server.bind.Address is not valid in 0.15.x; rely on the global <IP> and <Bind> below. -->
     <Modules>
         <HTTP2>
             <Enable>true</Enable>
@@ -21,11 +22,7 @@
         </P2P>
     </Modules>
 
-    <!--
-      Bind managers (API), providers (ingest), and publishers (playback).
-      The global <IP> above controls listen addresses; the deprecated
-      <Bind>/<Address> tag was removed to match the 0.15.x schema.
-    -->
+    <!-- Corrected: <Bind> is the per-protocol listener section that replaces <Server.bind.Address>. -->
     <Bind>
 
         <Managers>
@@ -95,6 +92,7 @@
         </Publishers>
     </Bind>
 
+    <!-- Corrected: move applications under <VirtualHosts>/<VirtualHost> instead of <Server.Applications>. -->
     <VirtualHosts>
         <VirtualHost>
             <Name>default</Name>
