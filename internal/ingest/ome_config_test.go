@@ -138,21 +138,31 @@ var expectedServerTemplates = map[string]string{
 
                     <Outputs>
                         <OutputProfiles>
-                            <OutputProfile>
-                                <Name>copy_passthrough</Name>
-                                <OutputStreams>
-                                    <OutputStream>
-                                        <Name>copy</Name>
-                                        <Video>
-                                            <Codec>copy</Codec>
-                                        </Video>
-                                        <Audio>
-                                            <Codec>copy</Codec>
-                                        </Audio>
-                                    </OutputStream>
-                                </OutputStreams>
-                            </OutputProfile>
-                        </OutputProfiles>
+                                <OutputProfile>
+                                    <Name>copy_passthrough</Name>
+                                    <OutputStreams>
+                                        <OutputStream>
+                                            <Name>copy</Name>
+                                            <Video>
+                                                <Codec>copy</Codec>
+                                            </Video>
+                                            <Audio>
+                                                <Codec>copy</Codec>
+                                            </Audio>
+                                        </OutputStream>
+                                    </OutputStreams>
+                                    <!-- Legacy layout for pre-0.16 tags without OutputStreams; render_ome_config.py rewrites
+                                         this profile to emit codec children directly under <OutputProfile>. -->
+                                    <!--
+                                    <Video>
+                                        <Codec>copy</Codec>
+                                    </Video>
+                                    <Audio>
+                                        <Codec>copy</Codec>
+                                    </Audio>
+                                    -->
+                                </OutputProfile>
+                            </OutputProfiles>
 
                         <LLHLS>
                             <SegmentDuration>6</SegmentDuration>
@@ -360,24 +370,28 @@ func TestRenderOMEConfigRespectsManagersAuthSupport(t *testing.T) {
 		imageTag       string
 		expectManagers bool
 		expectOutputs  bool
+		expectStreams  bool
 	}{
 		{
 			name:           "current release keeps managers auth",
 			imageTag:       "0.16.0",
 			expectManagers: true,
 			expectOutputs:  true,
+			expectStreams:  true,
 		},
 		{
 			name:           "legacy tag omits managers auth",
 			imageTag:       "0.15.2",
 			expectManagers: false,
-			expectOutputs:  false,
+			expectOutputs:  true,
+			expectStreams:  false,
 		},
 		{
 			name:           "custom tag omits managers auth",
 			imageTag:       "custom-build",
 			expectManagers: false,
-			expectOutputs:  false,
+			expectOutputs:  true,
+			expectStreams:  false,
 		},
 	}
 
@@ -408,6 +422,7 @@ func TestRenderOMEConfigRespectsManagersAuthSupport(t *testing.T) {
 			hasAccessTokens := bytes.Contains(data, []byte("<AccessTokens>"))
 			hasAuthentication := bytes.Contains(data, []byte("<Authentication>"))
 			hasOutputs := bytes.Contains(data, []byte("<Outputs>"))
+			hasOutputStreams := bytes.Contains(data, []byte("<OutputStreams>"))
 			hasOutputProfiles := bytes.Contains(data, []byte("<OutputProfiles>"))
 			summary := fmt.Sprintf("AccessTokens=%t Authentication=%t", hasAccessTokens, hasAuthentication)
 
@@ -428,6 +443,16 @@ func TestRenderOMEConfigRespectsManagersAuthSupport(t *testing.T) {
 			} else {
 				if hasOutputs {
 					t.Fatalf("expected <Outputs> to be omitted for %q", tc.imageTag)
+				}
+			}
+
+			if tc.expectStreams {
+				if !hasOutputStreams {
+					t.Fatalf("expected <OutputStreams> for %q, but none found", tc.imageTag)
+				}
+			} else {
+				if hasOutputStreams {
+					t.Fatalf("expected <OutputStreams> to be omitted for %q", tc.imageTag)
 				}
 				if !hasOutputProfiles {
 					t.Fatalf("expected <OutputProfiles> fallback for %q, but none found", tc.imageTag)

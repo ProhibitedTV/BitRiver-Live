@@ -35,8 +35,8 @@ def remove_first_tag_block(data: str, tag: str) -> str:
     return pattern.sub("\n", data, count=1)
 
 
-def _outputs_supported(image_tag: str | None) -> bool:
-    """Return True when the provided image tag advertises <Outputs> support."""
+def _output_streams_supported(image_tag: str | None) -> bool:
+    """Return True when the provided image tag advertises <OutputStreams> support."""
 
     if image_tag is None:
         return True
@@ -216,6 +216,43 @@ def _scoped_replace_control_bindings(text: str, bind: str) -> str:
     return text[:control_start] + control_body + text[control_end:]
 
 
+def _rewrite_output_streams_for_legacy_tags(text: str) -> str:
+    """Flatten <OutputStreams> blocks to legacy codec tags when unsupported."""
+
+    def _flatten_output_streams(match: re.Match[str]) -> str:
+        body = match.group(2)
+        streams_match = re.search(r"<OutputStreams>(.*?)</OutputStreams>", body, re.DOTALL)
+        if streams_match is None:
+            return match.group(0)
+
+        stream_body = streams_match.group(1)
+        video_match = re.search(r"<Video>(.*?)</Video>", stream_body, re.DOTALL)
+        audio_match = re.search(r"<Audio>(.*?)</Audio>", stream_body, re.DOTALL)
+
+        indent_match = re.search(r"\n([ \t]*)<OutputStreams>", body)
+        indent = indent_match.group(1) if indent_match else ""
+
+        replacement_lines: list[str] = []
+        if video_match is not None:
+            replacement_lines.append(f"{indent}{video_match.group(0).strip()}")
+        if audio_match is not None:
+            replacement_lines.append(f"{indent}{audio_match.group(0).strip()}")
+
+        replacement = "\n".join(replacement_lines)
+        if replacement:
+            replacement = f"\n{replacement}\n"
+
+        new_body = body[: streams_match.start()] + replacement + body[streams_match.end() :]
+        return f"{match.group(1)}{new_body}{match.group(3)}"
+
+    return re.sub(
+        r"(<OutputProfile>)(.*?)(</OutputProfile>)",
+        _flatten_output_streams,
+        text,
+        flags=re.DOTALL,
+    )
+
+
 def render(
     template: Path,
     output: Path,
@@ -228,7 +265,7 @@ def render(
     api_token: str,
     *,
     include_managers_authentication: bool,
-    include_outputs: bool,
+    include_output_streams: bool,
 ) -> None:
     escaped_bind = xml_escape(bind)
     escaped_port = xml_escape(server_port)
@@ -250,25 +287,12 @@ def render(
         text = remove_first_tag_block(text, "AccessTokens")
         text = remove_first_tag_block(text, "Authentication")
     elif api_token:
-        text = replace_tag_content(text, "AccessToken", xml_escape(api_token))
+        text = replace_optional_tag_content(text, "AccessToken", xml_escape(api_token))
     else:
         text = remove_first_tag_block(text, "AccessTokens")
 
-    if not include_outputs:
-        outputs_match = re.search(r"<Outputs>(.*?)</Outputs>", text, re.DOTALL)
-        if outputs_match:
-            outputs_body = outputs_match.group(1)
-            output_profiles_match = re.search(
-                r"(\s*<OutputProfiles>.*?</OutputProfiles>\s*)",
-                outputs_body,
-                re.DOTALL,
-            )
-            replacement = output_profiles_match.group(1) if output_profiles_match else "\n"
-            text = (
-                text[: outputs_match.start()]
-                + replacement
-                + text[outputs_match.end() :]
-            )
+    if not include_output_streams:
+        text = _rewrite_output_streams_for_legacy_tags(text)
 
     output.write_text(text)
 
@@ -320,15 +344,15 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "--image-tag",
         help=(
-            "OME image tag used to detect manager authentication support; "
-            "non-semver or <0.16.0 tags omit AccessTokens/Authentication"
+            "OME image tag used to detect manager authentication and output stream support; "
+            "non-semver or <0.16.0 tags omit AccessTokens/Authentication and flatten OutputStreams"
         ),
     )
 
     args = parser.parse_args(argv)
     server_ip = args.server_ip if args.server_ip is not None else args.bind
     managers_authentication_supported = _managers_authentication_supported(args.image_tag)
-    outputs_supported = _outputs_supported(args.image_tag)
+    output_streams_supported = _output_streams_supported(args.image_tag)
     include_managers_authentication = managers_authentication_supported and not args.omit_managers_auth
     api_token = args.api_token if managers_authentication_supported else ""
     render(
@@ -342,7 +366,7 @@ def main(argv: list[str]) -> int:
         args.password,
         api_token,
         include_managers_authentication=include_managers_authentication,
-        include_outputs=outputs_supported,
+        include_output_streams=output_streams_supported,
     )
     return 0
 

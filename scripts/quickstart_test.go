@@ -175,7 +175,8 @@ func TestOmeConfigRenderingHandlesBindAsIp(t *testing.T) {
 		"--port", "8081",
 		"--tls-port", "8082",
 		"--username", "admin",
-		"--password", "password")
+		"--password", "password",
+		"--api-token", "token")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
@@ -254,7 +255,8 @@ func TestOmeConfigRenderingEscapesXml(t *testing.T) {
 		"--port", "9000",
 		"--tls-port", "9443",
 		"--username", "admin<&",
-		"--password", `pass<&>'"`)
+		"--password", `pass<&>'"`,
+		"--api-token", "token")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
