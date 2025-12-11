@@ -114,21 +114,31 @@
 
                     <Outputs>
                         <OutputProfiles>
-                            <OutputProfile>
-                                <Name>copy_passthrough</Name>
-                                <OutputStreams>
-                                    <OutputStream>
-                                        <Name>copy</Name>
-                                        <Video>
-                                            <Codec>copy</Codec>
-                                        </Video>
-                                        <Audio>
-                                            <Codec>copy</Codec>
-                                        </Audio>
-                                    </OutputStream>
-                                </OutputStreams>
-                            </OutputProfile>
-                        </OutputProfiles>
+                                <OutputProfile>
+                                    <Name>copy_passthrough</Name>
+                                    <OutputStreams>
+                                        <OutputStream>
+                                            <Name>copy</Name>
+                                            <Video>
+                                                <Codec>copy</Codec>
+                                            </Video>
+                                            <Audio>
+                                                <Codec>copy</Codec>
+                                            </Audio>
+                                        </OutputStream>
+                                    </OutputStreams>
+                                    <!-- Legacy layout for pre-0.16 tags without OutputStreams; render_ome_config.py rewrites
+                                         this profile to emit codec children directly under <OutputProfile>. -->
+                                    <!--
+                                    <Video>
+                                        <Codec>copy</Codec>
+                                    </Video>
+                                    <Audio>
+                                        <Codec>copy</Codec>
+                                    </Audio>
+                                    -->
+                                </OutputProfile>
+                            </OutputProfiles>
 
                         <LLHLS>
                             <SegmentDuration>6</SegmentDuration>
