@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -23,23 +25,12 @@ var expectedServerTemplates = map[string]string{
 	"airensoft/ovenmediaengine:0.16.0": strings.TrimSpace(`<?xml version="1.0" encoding="utf-8"?>
 <Server version="10">
     <Name>OvenMediaEngine</Name>
-
-    <!-- Host type (origin/edge) -->
     <Type>origin</Type>
-
-    <!-- Specify IP address to bind (* means all IPs) -->
-    <IP>*</IP>
-
-    <!-- Delete client IPs from logs / APIs if true -->
+    <IP>0.0.0.0</IP>
     <PrivacyProtection>false</PrivacyProtection>
-
-    <!-- Used to discover public IP for WebRTC in some environments -->
     <StunServer>stun.l.google.com:19302</StunServer>
 
-    <!--
-      Optional server-wide modules.
-      Modern OME supports HTTP2/LLHLS/P2P here; there is no <Control> module.
-    -->
+    <!-- Server.bind.Address was removed in 0.15.x; use the global <IP> and the per-protocol <Bind> block instead. -->
     <Modules>
         <HTTP2>
             <Enable>true</Enable>
@@ -55,61 +46,68 @@ var expectedServerTemplates = map[string]string{
         </P2P>
     </Modules>
 
-    <!--
-      Bind: managers (API), providers (ingest), and publishers (playback).
-      The quickstart script will rewrite Address/Port/TLSPort values from BITRIVER_OME_*.
-    -->
+    <!-- Corrected: <Bind> replaces the deprecated <Server.bind.Address> container. -->
     <Bind>
+
         <Managers>
-            <!-- REST API for control at /v1/... -->
             <API>
                 <Port>8081</Port>
                 <TLSPort>8082</TLSPort>
                 <WorkerCount>1</WorkerCount>
-                <AccessToken>OME-Access-Token</AccessToken>
+                <!--
+                  APIServer rejects an empty token; customize this value if you
+                  want to protect API access, or leave the placeholder for
+                  open/local use. Legacy builds without managers auth support
+                  will drop both AccessTokens and Authentication during
+                  templating.
+                -->
+                <AccessTokens>
+                    <AccessToken>BITRIVER_OME_API_TOKEN_PLACEHOLDER</AccessToken>
+                </AccessTokens>
+                <Authentication>
+                    <AutoRegister>true</AutoRegister>
+                    <AllowAnonymousUser>false</AllowAnonymousUser>
+                    <AllowAnonymousReferrer>false</AllowAnonymousReferrer>
+                    <User>
+                        <ID>admin</ID>
+                        <Password>password</Password>
+                    </User>
+                </Authentication>
             </API>
         </Managers>
 
         <Providers>
-            <!-- RTMP ingest: rtmp://host:1935/live/stream -->
             <RTMP>
                 <Port>1935</Port>
                 <WorkerCount>1</WorkerCount>
             </RTMP>
 
-            <!-- WebRTC ingest/signalling (optional but useful for WHIP / internal tools) -->
             <WebRTC>
                 <Signalling>
-                    <!-- WebSocket signalling for WebRTC (publish + play) -->
-                    <Port>3333</Port>
-                    <TLSPort>3334</TLSPort>
+                    <Port>9000</Port>
+                    <TLSPort>9443</TLSPort>
                     <WorkerCount>1</WorkerCount>
                 </Signalling>
                 <IceCandidates>
-                    <!-- TURN / WebRTC-over-TCP relay -->
                     <TcpRelay>*:3478</TcpRelay>
                     <TcpForce>false</TcpForce>
                     <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
-
-                    <!-- UDP ports for WebRTC media -->
                     <IceCandidate>*:10000-10009/udp</IceCandidate>
                 </IceCandidates>
             </WebRTC>
         </Providers>
 
         <Publishers>
-            <!-- LL-HLS (low-latency HLS) playback -->
             <LLHLS>
                 <Port>8080</Port>
                 <TLSPort>8443</TLSPort>
                 <WorkerCount>1</WorkerCount>
             </LLHLS>
 
-            <!-- WebRTC playback (reuses same signalling + ICE ports) -->
             <WebRTC>
                 <Signalling>
-                    <Port>3333</Port>
-                    <TLSPort>3334</TLSPort>
+                    <Port>9000</Port>
+                    <TLSPort>9443</TLSPort>
                     <WorkerCount>1</WorkerCount>
                 </Signalling>
                 <IceCandidates>
@@ -122,19 +120,13 @@ var expectedServerTemplates = map[string]string{
         </Publishers>
     </Bind>
 
-    <!--
-      Virtual host + application config.
-
-      We keep a single vhost "default" with one application "live" to match
-      BitRiver Live’s expectation of /live as the app name.
-    -->
+    <!-- Corrected: Applications must live under <VirtualHosts>/<VirtualHost>, not <Server.Applications>. -->
     <VirtualHosts>
         <VirtualHost>
             <Name>default</Name>
 
             <Host>
                 <Names>
-                    <!-- * = any host -->
                     <Name>*</Name>
                 </Names>
             </Host>
@@ -144,8 +136,53 @@ var expectedServerTemplates = map[string]string{
                     <Name>live</Name>
                     <Type>live</Type>
 
-                    <!-- Use default Providers/Publishers from Bind -->
-                    <!-- You can add per-app settings here if needed later -->
+                    <Outputs>
+                        <OutputProfiles>
+                            <OutputProfile>
+                                <Name>copy_passthrough</Name>
+                                <OutputStreams>
+                                    <OutputStream>
+                                        <Name>copy</Name>
+                                        <Video>
+                                            <Codec>copy</Codec>
+                                        </Video>
+                                        <Audio>
+                                            <Codec>copy</Codec>
+                                        </Audio>
+                                    </OutputStream>
+                                </OutputStreams>
+                            </OutputProfile>
+                        </OutputProfiles>
+
+                        <LLHLS>
+                            <SegmentDuration>6</SegmentDuration>
+                            <PartDuration>1</PartDuration>
+                            <SegmentCount>5</SegmentCount>
+                            <PartCount>3</PartCount>
+                            <PreloadHint>true</PreloadHint>
+                            <AdditionalPlaylist>true</AdditionalPlaylist>
+                        </LLHLS>
+                    </Outputs>
+
+                    <Publishers>
+                        <WebRTC>
+                            <Enable>true</Enable>
+                            <OutputProfile>copy_passthrough</OutputProfile>
+                        </WebRTC>
+                        <LLHLS>
+                            <Enable>true</Enable>
+                            <OutputProfile>copy_passthrough</OutputProfile>
+                        </LLHLS>
+                    </Publishers>
+
+                    <Providers>
+                        <RTMP>
+                            <Enable>true</Enable>
+                        </RTMP>
+                        <WebRTC>
+                            <Enable>true</Enable>
+                        </WebRTC>
+                    </Providers>
                 </Application>
             </Applications>
         </VirtualHost>
@@ -311,4 +348,72 @@ func normalizeXML(xmlContent string) string {
 	normalized := strings.ReplaceAll(xmlContent, "\r\n", "\n")
 	normalized = strings.TrimSpace(normalized)
 	return normalized
+}
+
+func TestRenderOMEConfigRespectsManagersAuthSupport(t *testing.T) {
+	repoRoot := repoRoot(t)
+	template := filepath.Join(repoRoot, "deploy", "ome", "Server.xml")
+	renderer := filepath.Join(repoRoot, "scripts", "render_ome_config.py")
+
+	testCases := []struct {
+		name           string
+		imageTag       string
+		expectManagers bool
+	}{
+		{
+			name:           "current release keeps managers auth",
+			imageTag:       "0.16.0",
+			expectManagers: true,
+		},
+		{
+			name:           "legacy tag omits managers auth",
+			imageTag:       "0.15.2",
+			expectManagers: false,
+		},
+		{
+			name:           "custom tag omits managers auth",
+			imageTag:       "custom-build",
+			expectManagers: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			output := filepath.Join(t.TempDir(), "Server.generated.xml")
+
+			cmd := exec.Command(
+				"python3", renderer,
+				"--template", template,
+				"--output", output,
+				"--bind", "0.0.0.0",
+				"--server-ip", "0.0.0.0",
+				"--port", "9000",
+				"--tls-port", "9443",
+				"--username", "admin",
+				"--password", "password",
+				"--api-token", "token",
+				"--image-tag", tc.imageTag,
+			)
+
+			if output, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("render_ome_config.py failed: %v\n%s", err, output)
+			}
+
+			data := readFile(t, output)
+			hasAccessTokens := bytes.Contains(data, []byte("<AccessTokens>"))
+			hasAuthentication := bytes.Contains(data, []byte("<Authentication>"))
+			summary := fmt.Sprintf("AccessTokens=%t Authentication=%t", hasAccessTokens, hasAuthentication)
+
+			if tc.expectManagers {
+				if !hasAccessTokens || !hasAuthentication {
+					t.Fatalf("expected managers auth for %q, but missing nodes: %s", tc.imageTag, summary)
+				}
+			} else {
+				if hasAccessTokens || hasAuthentication {
+					t.Fatalf("expected managers auth to be omitted for %q, but found nodes: %s", tc.imageTag, summary)
+				}
+			}
+		})
+	}
 }

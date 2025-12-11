@@ -35,6 +35,25 @@ def remove_first_tag_block(data: str, tag: str) -> str:
     return pattern.sub("\n", data, count=1)
 
 
+def _managers_authentication_supported(image_tag: str | None) -> bool:
+    """Return True when the provided image tag advertises managers auth support."""
+
+    if image_tag is None:
+        return True
+
+    match = re.match(r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)", image_tag)
+    if match is None:
+        return False
+
+    major = int(match.group("major"))
+    minor = int(match.group("minor"))
+
+    if major == 0 and minor < 16:
+        return False
+
+    return True
+
+
 def replace_all_tag_content(
     data: str, tag: str, value: str, *, required: bool = True
 ) -> str:
@@ -207,14 +226,13 @@ def render(
     text = replace_tag_content(text, "ID", xml_escape(username))
     text = replace_tag_content(text, "Password", xml_escape(password))
 
-    # Fill APIServer AccessToken when supported; otherwise drop the block entirely.
-    if api_token:
+    if not include_managers_authentication:
+        text = remove_first_tag_block(text, "AccessTokens")
+        text = remove_first_tag_block(text, "Authentication")
+    elif api_token:
         text = replace_tag_content(text, "AccessToken", xml_escape(api_token))
     else:
         text = remove_first_tag_block(text, "AccessTokens")
-
-    if not include_managers_authentication:
-        text = remove_first_tag_block(text, "Authentication")
 
     output.write_text(text)
 
@@ -263,8 +281,19 @@ def main(argv: list[str]) -> int:
         help="Drop the managers <Authentication> block when the target image does not support it",
     )
 
+    parser.add_argument(
+        "--image-tag",
+        help=(
+            "OME image tag used to detect manager authentication support; "
+            "non-semver or <0.16.0 tags omit AccessTokens/Authentication"
+        ),
+    )
+
     args = parser.parse_args(argv)
     server_ip = args.server_ip if args.server_ip is not None else args.bind
+    managers_authentication_supported = _managers_authentication_supported(args.image_tag)
+    include_managers_authentication = managers_authentication_supported and not args.omit_managers_auth
+    api_token = args.api_token if managers_authentication_supported else ""
     render(
         args.template,
         args.output,
@@ -274,8 +303,8 @@ def main(argv: list[str]) -> int:
         args.tls_port,
         args.username,
         args.password,
-        args.api_token,
-        include_managers_authentication=not args.omit_managers_auth,
+        api_token,
+        include_managers_authentication=include_managers_authentication,
     )
     return 0
 

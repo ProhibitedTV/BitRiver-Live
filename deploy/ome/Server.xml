@@ -33,7 +33,9 @@
                 <!--
                   APIServer rejects an empty token; customize this value if you
                   want to protect API access, or leave the placeholder for
-                  open/local use.
+                  open/local use. Legacy builds without managers auth support
+                  will drop both AccessTokens and Authentication during
+                  templating.
                 -->
                 <AccessTokens>
                     <AccessToken>BITRIVER_OME_API_TOKEN_PLACEHOLDER</AccessToken>
