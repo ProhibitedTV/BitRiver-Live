@@ -130,6 +130,32 @@ class RenderOmeConfigTest(unittest.TestCase):
             self.assertNotIn("<AccessTokens>", rendered)
             self.assertNotIn("<Authentication>", rendered)
 
+    def test_render_can_unwrap_application_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tmpdir = Path(td)
+            template, output = _prepare_template(tmpdir)
+
+            render_ome_config.render(
+                template,
+                output,
+                bind="10.0.0.1",
+                server_ip="10.0.0.1",
+                server_port="8081",
+                tls_port="8443",
+                username="ome-user",
+                password="s3cret",
+                api_token="",
+                include_managers_authentication=False,
+                include_output_streams=False,
+                include_application_outputs=False,
+            )
+
+            rendered = output.read_text()
+
+            self.assertNotIn("<Outputs>", rendered)
+            self.assertIn("<OutputProfiles>", rendered)
+            self.assertIn("<LLHLS>", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()
