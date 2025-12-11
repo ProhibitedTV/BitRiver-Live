@@ -85,9 +85,11 @@ class RenderOmeConfigTest(unittest.TestCase):
                 username="ome-user",
                 password="s3cret",
                 api_token="access-token-123",
+                include_managers_authentication=True,
             )
 
             rendered = output.read_text()
+            rendered_no_comments = re.sub(r"<!--.*?-->", "", rendered, flags=re.DOTALL)
 
             self.assertRegex(
                 rendered,
@@ -101,9 +103,32 @@ class RenderOmeConfigTest(unittest.TestCase):
             self.assertIn("<Password>s3cret</Password>", rendered)
             self.assertIn("<AccessToken>access-token-123</AccessToken>", rendered)
 
-            self.assertNotIn("Server.bind", rendered)
-            self.assertNotIn("<Modules><Control", rendered)
-            self.assertNotIn("<Bind><IP>", rendered)
+            self.assertNotIn("<Server.bind", rendered_no_comments)
+            self.assertNotIn("<Modules><Control", rendered_no_comments)
+            self.assertNotIn("<Bind><IP>", rendered_no_comments)
+
+    def test_render_can_drop_managers_authentication(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tmpdir = Path(td)
+            template, output = _prepare_template(tmpdir)
+
+            render_ome_config.render(
+                template,
+                output,
+                bind="10.0.0.1",
+                server_ip="10.0.0.1",
+                server_port="8081",
+                tls_port="8443",
+                username="ome-user",
+                password="s3cret",
+                api_token="",
+                include_managers_authentication=False,
+            )
+
+            rendered = output.read_text()
+
+            self.assertNotIn("<AccessTokens>", rendered)
+            self.assertNotIn("<Authentication>", rendered)
 
 
 if __name__ == "__main__":

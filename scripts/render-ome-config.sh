@@ -85,11 +85,13 @@ if [[ -z "$OME_IMAGE_TAG" ]]; then
 fi
 
 supports_access_token=1
-if [[ "$OME_IMAGE_TAG" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+supports_managers_authentication=1
+if [[ "$OME_IMAGE_TAG" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
   major="${BASH_REMATCH[1]}"
   minor="${BASH_REMATCH[2]}"
   if (( major == 0 && minor < 16 )); then
     supports_access_token=0
+    supports_managers_authentication=0
   fi
 fi
 
@@ -108,9 +110,14 @@ fi
 
 if [[ $supports_access_token -eq 0 ]]; then
   if [[ -n "$OME_API_TOKEN" && $QUIET -eq 0 ]]; then
-    echo "BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG does not advertise managers <AccessToken>; dropping BITRIVER_OME_API_TOKEN from the rendered config." >&2
+    echo "BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG does not advertise managers <AccessToken>/<Authentication>; dropping BITRIVER_OME_API_TOKEN from the rendered config and omitting the managers auth block." >&2
   fi
   render_api_token=""
+fi
+
+omit_managers_auth_args=()
+if [[ $supports_managers_authentication -eq 0 ]]; then
+  omit_managers_auth_args+=(--omit-managers-auth)
 fi
 
 OME_MARKER_PREFIX="<!-- Rendered for BITRIVER_OME_IMAGE_TAG="
@@ -143,7 +150,8 @@ if ! render_output=$(python3 "$SCRIPT_DIR/render_ome_config.py" \
   --tls-port "$OME_TLS_PORT" \
   --username "$OME_USERNAME" \
   --password "$OME_PASSWORD" \
-  --api-token "$render_api_token" 2>&1); then
+  --api-token "$render_api_token" \
+  "${omit_managers_auth_args[@]}" 2>&1); then
   echo "Failed to render deploy/ome/Server.generated.xml. Check BITRIVER_OME_* values in $ENV_FILE and the template at $TEMPLATE." >&2
   echo "$render_output" >&2
   exit 1
