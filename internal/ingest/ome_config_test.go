@@ -359,21 +359,25 @@ func TestRenderOMEConfigRespectsManagersAuthSupport(t *testing.T) {
 		name           string
 		imageTag       string
 		expectManagers bool
+		expectOutputs  bool
 	}{
 		{
 			name:           "current release keeps managers auth",
 			imageTag:       "0.16.0",
 			expectManagers: true,
+			expectOutputs:  true,
 		},
 		{
 			name:           "legacy tag omits managers auth",
 			imageTag:       "0.15.2",
 			expectManagers: false,
+			expectOutputs:  false,
 		},
 		{
 			name:           "custom tag omits managers auth",
 			imageTag:       "custom-build",
 			expectManagers: false,
+			expectOutputs:  false,
 		},
 	}
 
@@ -403,6 +407,8 @@ func TestRenderOMEConfigRespectsManagersAuthSupport(t *testing.T) {
 			data := readFile(t, output)
 			hasAccessTokens := bytes.Contains(data, []byte("<AccessTokens>"))
 			hasAuthentication := bytes.Contains(data, []byte("<Authentication>"))
+			hasOutputs := bytes.Contains(data, []byte("<Outputs>"))
+			hasOutputProfiles := bytes.Contains(data, []byte("<OutputProfiles>"))
 			summary := fmt.Sprintf("AccessTokens=%t Authentication=%t", hasAccessTokens, hasAuthentication)
 
 			if tc.expectManagers {
@@ -412,6 +418,19 @@ func TestRenderOMEConfigRespectsManagersAuthSupport(t *testing.T) {
 			} else {
 				if hasAccessTokens || hasAuthentication {
 					t.Fatalf("expected managers auth to be omitted for %q, but found nodes: %s", tc.imageTag, summary)
+				}
+			}
+
+			if tc.expectOutputs {
+				if !hasOutputs {
+					t.Fatalf("expected <Outputs> for %q, but none found", tc.imageTag)
+				}
+			} else {
+				if hasOutputs {
+					t.Fatalf("expected <Outputs> to be omitted for %q", tc.imageTag)
+				}
+				if !hasOutputProfiles {
+					t.Fatalf("expected <OutputProfiles> fallback for %q, but none found", tc.imageTag)
 				}
 			}
 		})

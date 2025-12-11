@@ -35,6 +35,25 @@ def remove_first_tag_block(data: str, tag: str) -> str:
     return pattern.sub("\n", data, count=1)
 
 
+def _outputs_supported(image_tag: str | None) -> bool:
+    """Return True when the provided image tag advertises <Outputs> support."""
+
+    if image_tag is None:
+        return True
+
+    match = re.match(r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)", image_tag)
+    if match is None:
+        return False
+
+    major = int(match.group("major"))
+    minor = int(match.group("minor"))
+
+    if major == 0 and minor < 16:
+        return False
+
+    return True
+
+
 def _managers_authentication_supported(image_tag: str | None) -> bool:
     """Return True when the provided image tag advertises managers auth support."""
 
@@ -209,6 +228,7 @@ def render(
     api_token: str,
     *,
     include_managers_authentication: bool,
+    include_outputs: bool,
 ) -> None:
     escaped_bind = xml_escape(bind)
     escaped_port = xml_escape(server_port)
@@ -233,6 +253,22 @@ def render(
         text = replace_tag_content(text, "AccessToken", xml_escape(api_token))
     else:
         text = remove_first_tag_block(text, "AccessTokens")
+
+    if not include_outputs:
+        outputs_match = re.search(r"<Outputs>(.*?)</Outputs>", text, re.DOTALL)
+        if outputs_match:
+            outputs_body = outputs_match.group(1)
+            output_profiles_match = re.search(
+                r"(\s*<OutputProfiles>.*?</OutputProfiles>\s*)",
+                outputs_body,
+                re.DOTALL,
+            )
+            replacement = output_profiles_match.group(1) if output_profiles_match else "\n"
+            text = (
+                text[: outputs_match.start()]
+                + replacement
+                + text[outputs_match.end() :]
+            )
 
     output.write_text(text)
 
@@ -292,6 +328,7 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     server_ip = args.server_ip if args.server_ip is not None else args.bind
     managers_authentication_supported = _managers_authentication_supported(args.image_tag)
+    outputs_supported = _outputs_supported(args.image_tag)
     include_managers_authentication = managers_authentication_supported and not args.omit_managers_auth
     api_token = args.api_token if managers_authentication_supported else ""
     render(
@@ -305,6 +342,7 @@ def main(argv: list[str]) -> int:
         args.password,
         api_token,
         include_managers_authentication=include_managers_authentication,
+        include_outputs=outputs_supported,
     )
     return 0
 
