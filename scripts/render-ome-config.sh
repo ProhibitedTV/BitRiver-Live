@@ -93,6 +93,9 @@ if [[ "$OME_IMAGE_TAG" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
     supports_access_token=0
     supports_managers_authentication=0
   fi
+else
+  supports_access_token=0
+  supports_managers_authentication=0
 fi
 
 if [[ -z "$OME_USERNAME" || -z "$OME_PASSWORD" ]]; then
@@ -151,6 +154,7 @@ if ! render_output=$(python3 "$SCRIPT_DIR/render_ome_config.py" \
   --username "$OME_USERNAME" \
   --password "$OME_PASSWORD" \
   --api-token "$render_api_token" \
+  --image-tag "$OME_IMAGE_TAG" \
   "${omit_managers_auth_args[@]}" 2>&1); then
   echo "Failed to render deploy/ome/Server.generated.xml. Check BITRIVER_OME_* values in $ENV_FILE and the template at $TEMPLATE." >&2
   echo "$render_output" >&2
