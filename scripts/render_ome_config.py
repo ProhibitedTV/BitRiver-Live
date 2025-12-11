@@ -35,8 +35,40 @@ def remove_first_tag_block(data: str, tag: str) -> str:
     return pattern.sub("\n", data, count=1)
 
 
+def unwrap_first_tag_block(data: str, tag: str) -> str:
+    """Remove the first <tag> wrapper while preserving its contents."""
+
+    pattern = re.compile(rf"(<{tag}[^>]*>)(.*?)(</{tag}>)", re.DOTALL)
+    match = pattern.search(data)
+    if match is None:
+        return data
+
+    start, end = match.span()
+    inner = match.group(2)
+    return data[:start] + inner + data[end:]
+
+
 def _output_streams_supported(image_tag: str | None) -> bool:
     """Return True when the provided image tag advertises <OutputStreams> support."""
+
+    if image_tag is None:
+        return True
+
+    match = re.match(r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)", image_tag)
+    if match is None:
+        return False
+
+    major = int(match.group("major"))
+    minor = int(match.group("minor"))
+
+    if major == 0 and minor < 16:
+        return False
+
+    return True
+
+
+def _application_outputs_supported(image_tag: str | None) -> bool:
+    """Return True when the provided image tag advertises <Outputs> support."""
 
     if image_tag is None:
         return True
@@ -265,7 +297,8 @@ def render(
     api_token: str,
     *,
     include_managers_authentication: bool,
-    include_output_streams: bool,
+    include_output_streams: bool = True,
+    include_application_outputs: bool = True,
 ) -> None:
     escaped_bind = xml_escape(bind)
     escaped_port = xml_escape(server_port)
@@ -290,6 +323,9 @@ def render(
         text = replace_optional_tag_content(text, "AccessToken", xml_escape(api_token))
     else:
         text = remove_first_tag_block(text, "AccessTokens")
+
+    if not include_application_outputs:
+        text = unwrap_first_tag_block(text, "Outputs")
 
     if not include_output_streams:
         text = _rewrite_output_streams_for_legacy_tags(text)
@@ -353,6 +389,7 @@ def main(argv: list[str]) -> int:
     server_ip = args.server_ip if args.server_ip is not None else args.bind
     managers_authentication_supported = _managers_authentication_supported(args.image_tag)
     output_streams_supported = _output_streams_supported(args.image_tag)
+    application_outputs_supported = _application_outputs_supported(args.image_tag)
     include_managers_authentication = managers_authentication_supported and not args.omit_managers_auth
     api_token = args.api_token if managers_authentication_supported else ""
     render(
@@ -367,6 +404,7 @@ def main(argv: list[str]) -> int:
         api_token,
         include_managers_authentication=include_managers_authentication,
         include_output_streams=output_streams_supported,
+        include_application_outputs=application_outputs_supported,
     )
     return 0
 

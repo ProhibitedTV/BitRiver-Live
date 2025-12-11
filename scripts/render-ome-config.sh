@@ -87,6 +87,7 @@ fi
 supports_access_token=1
 supports_managers_authentication=1
 supports_output_streams=1
+supports_application_outputs=1
 if [[ "$OME_IMAGE_TAG" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
   major="${BASH_REMATCH[1]}"
   minor="${BASH_REMATCH[2]}"
@@ -94,11 +95,13 @@ if [[ "$OME_IMAGE_TAG" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
     supports_access_token=0
     supports_managers_authentication=0
     supports_output_streams=0
+    supports_application_outputs=0
   fi
 else
   supports_access_token=0
   supports_managers_authentication=0
   supports_output_streams=0
+  supports_application_outputs=0
 fi
 
 if [[ -z "$OME_USERNAME" || -z "$OME_PASSWORD" ]]; then
@@ -127,6 +130,9 @@ if [[ $supports_managers_authentication -eq 0 ]]; then
 fi
 if [[ $supports_output_streams -eq 0 && $QUIET -eq 0 ]]; then
   echo "BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG does not advertise <OutputStreams>; flattening passthrough profile to the legacy layout." >&2
+fi
+if [[ $supports_application_outputs -eq 0 && $QUIET -eq 0 ]]; then
+  echo "BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG does not advertise <Outputs>; unwrapping the application outputs block for legacy schemas." >&2
 fi
 
 OME_MARKER_PREFIX="<!-- Rendered for BITRIVER_OME_IMAGE_TAG="
