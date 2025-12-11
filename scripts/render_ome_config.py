@@ -188,6 +188,8 @@ def render(
     username: str,
     password: str,
     api_token: str,
+    *,
+    include_managers_authentication: bool,
 ) -> None:
     escaped_bind = xml_escape(bind)
     escaped_port = xml_escape(server_port)
@@ -210,6 +212,9 @@ def render(
         text = replace_tag_content(text, "AccessToken", xml_escape(api_token))
     else:
         text = remove_first_tag_block(text, "AccessTokens")
+
+    if not include_managers_authentication:
+        text = remove_first_tag_block(text, "Authentication")
 
     output.write_text(text)
 
@@ -252,6 +257,12 @@ def main(argv: list[str]) -> int:
         "--tls-port", required=True, help="OME server TLS port"
     )
 
+    parser.add_argument(
+        "--omit-managers-auth",
+        action="store_true",
+        help="Drop the managers <Authentication> block when the target image does not support it",
+    )
+
     args = parser.parse_args(argv)
     server_ip = args.server_ip if args.server_ip is not None else args.bind
     render(
@@ -264,6 +275,7 @@ def main(argv: list[str]) -> int:
         args.username,
         args.password,
         args.api_token,
+        include_managers_authentication=not args.omit_managers_auth,
     )
     return 0
 
