@@ -128,8 +128,8 @@ compose file.
   the first OME release that accepts the managers `<AccessToken>` block used by the health check; when running an older OME tag
   that lacks `<AccessToken>`, leave `BITRIVER_OME_API_TOKEN` empty and re-render the config so the tag is omitted from
   `Server.generated.xml`. Older, non-semver, or pre-0.16.0 image tags also drop the `<Outputs>` wrapper during rendering and leave
-  only the `<OutputProfiles>` node so legacy schemas do not reject the config; LLHLS output tuning then falls back to the OME
-  defaults because the newer `<Outputs>`-scoped settings are removed.
+  only the `<OutputProfiles>` node so legacy schemas do not reject the config. In the same legacy mode, `<LLHLS>` sections are
+  removed so output tuning falls back to the OME defaults when the tag predates LLHLS support.
 - **Environment tweaks** – Edit `.env` and rerun `docker compose up -d` to apply changes. The compose stack automatically loads
   the file so you never need to touch `deploy/docker-compose.yml` directly.
 

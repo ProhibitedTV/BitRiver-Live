@@ -156,6 +156,34 @@ class RenderOmeConfigTest(unittest.TestCase):
             self.assertIn("<OutputProfiles>", rendered)
             self.assertIn("<LLHLS>", rendered)
 
+    def test_render_drops_llhls_for_legacy_image_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tmpdir = Path(td)
+            template, output = _prepare_template(tmpdir)
+
+            legacy_tag = "0.15.0"
+
+            render_ome_config.render(
+                template,
+                output,
+                bind="10.0.0.1",
+                server_ip="10.0.0.1",
+                server_port="8081",
+                tls_port="8443",
+                username="ome-user",
+                password="s3cret",
+                api_token="",
+                include_managers_authentication=False,
+                include_output_streams=render_ome_config._output_streams_supported(legacy_tag),
+                include_application_outputs=render_ome_config._application_outputs_supported(legacy_tag),
+                include_llhls=render_ome_config._llhls_supported(legacy_tag),
+            )
+
+            rendered = output.read_text()
+
+            self.assertNotIn("<LLHLS>", rendered)
+            self.assertIn("<OutputProfiles>", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()
