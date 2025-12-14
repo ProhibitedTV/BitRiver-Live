@@ -12,6 +12,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="$REPO_ROOT/.env"
 COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
+# shellcheck source=./ome-capabilities.sh
+source "$SCRIPT_DIR/ome-capabilities.sh"
 
 usage() {
   cat <<'USAGE'
@@ -82,22 +84,6 @@ ensure_env_default() {
   if [[ ! -v env_defaults[$key] || -z ${env_defaults[$key]} ]]; then
     env_defaults[$key]="$default_value"
   fi
-}
-
-ome_supports_access_token() {
-  local image_tag=$1
-  local supports_access_token=1
-  if [[ $image_tag =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
-    local major="${BASH_REMATCH[1]}"
-    local minor="${BASH_REMATCH[2]}"
-    if (( major == 0 && minor < 16 )); then
-      supports_access_token=0
-    fi
-  else
-    supports_access_token=0
-  fi
-
-  printf '%s' "$supports_access_token"
 }
 
 legacy_ome_token_stripped=0
@@ -221,7 +207,14 @@ declare -A env_defaults=(
 
 ome_image_tag=$(read_env_file_value BITRIVER_OME_IMAGE_TAG)
 ome_image_tag=${ome_image_tag:-${env_defaults[BITRIVER_OME_IMAGE_TAG]}}
-supports_ome_access_token=$(ome_supports_access_token "$ome_image_tag")
+
+eval "$(compute_ome_capabilities "$ome_image_tag" 1)"
+supports_ome_access_token=$supports_access_token
+
+if (( parsing_failed )); then
+  echo "BITRIVER_OME_IMAGE_TAG=$ome_image_tag is not semver; assuming modern OME defaults with managers <AccessToken>/<Authentication> and LLHLS enabled."
+  echo "Set a semver tag below 0.16.0 if you need the legacy schema."
+fi
 
 strip_legacy_ome_api_token "$ome_image_tag"
 
