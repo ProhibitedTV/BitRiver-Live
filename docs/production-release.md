@@ -108,6 +108,14 @@ build out:
    The release workflow surfaces this output in the deploy logs and fails when
    any OvenMediaEngine URLs, bind addresses, or ports point at loopback
    addresses, placeholders, or are missing.
+3. Verify the rendered OvenMediaEngine config matches the image tag in `.env`
+   before cutting the release tag or starting Compose:
+   ```bash
+   ./scripts/render-ome-config.sh --check
+   ```
+   The guard fails when `deploy/ome/Server.generated.xml` was rendered for a
+   different `BITRIVER_OME_IMAGE_TAG`, ensuring the preflight stays in sync
+   with the tag baked into the container image.
 3. For systemd-based installs, refresh the `.env` files under `/opt/bitriver-*`
    and restart the services only after the script reports success. Ensure any
    container image tags (`BITRIVER_LIVE_IMAGE_TAG`, `BITRIVER_VIEWER_IMAGE_TAG`,

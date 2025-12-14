@@ -76,7 +76,9 @@ OME_TLS_PORT="${BITRIVER_OME_SERVER_TLS_PORT:-9443}"
 OME_IP="${BITRIVER_OME_IP:-$OME_BIND}"
 OME_USERNAME="${BITRIVER_OME_USERNAME:-}"
 OME_PASSWORD="${BITRIVER_OME_PASSWORD:-}"
-OME_API_TOKEN="${BITRIVER_OME_API_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-}}"
+OME_API_TOKEN_VAR="${BITRIVER_OME_API_TOKEN:-}"
+OME_ACCESS_TOKEN_VAR="${BITRIVER_OME_ACCESS_TOKEN:-}"
+OME_API_TOKEN="${OME_API_TOKEN_VAR:-$OME_ACCESS_TOKEN_VAR}"
 OME_IMAGE_TAG="${BITRIVER_OME_IMAGE_TAG:-}"
 
 if [[ -z "$OME_IMAGE_TAG" ]]; then
@@ -110,7 +112,7 @@ if [[ -z "$OME_USERNAME" || -z "$OME_PASSWORD" ]]; then
 fi
 
 render_api_token="$OME_API_TOKEN"
-if [[ $supports_access_token -eq 1 && -z "$OME_API_TOKEN" ]]; then
+if [[ $supports_access_token -eq 1 && -z "$OME_API_TOKEN_VAR" ]]; then
   cat <<EOF >&2
 BITRIVER_OME_API_TOKEN must be set in $ENV_FILE before rendering when BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG (managers <AccessToken> is supported starting with 0.16.0). If you are migrating from BITRIVER_OME_ACCESS_TOKEN, copy that value into BITRIVER_OME_API_TOKEN.
 EOF
@@ -118,8 +120,11 @@ EOF
 fi
 
 if [[ $supports_access_token -eq 0 ]]; then
-  if [[ -n "$OME_API_TOKEN" && $QUIET -eq 0 ]]; then
-    echo "BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG does not advertise managers <AccessToken>/<Authentication>; dropping BITRIVER_OME_API_TOKEN from the rendered config and omitting the managers auth block." >&2
+  if [[ -n "$OME_API_TOKEN_VAR" ]]; then
+    cat <<EOF >&2
+BITRIVER_OME_API_TOKEN must be empty in $ENV_FILE when BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG because this version drops the managers <AccessToken>/<Authentication> block entirely. Clear the variable and rerun the renderer so the generated config matches the legacy schema.
+EOF
+    exit 1
   fi
   render_api_token=""
 fi
@@ -142,8 +147,13 @@ if [[ "$MODE" == "check" ]]; then
     echo "OME config missing at $OUTPUT. Run ./scripts/render-ome-config.sh to generate it." >&2
     exit 1
   fi
+  marker="${OME_MARKER_PREFIX}${OME_IMAGE_TAG} -->"
+  if ! grep -q "$marker" "$OUTPUT"; then
+    echo "OME config at $OUTPUT was rendered for a different BITRIVER_OME_IMAGE_TAG. Expected $OME_IMAGE_TAG; rerun ./scripts/render-ome-config.sh --force with the current env so the stamped tag matches." >&2
+    exit 1
+  fi
   if [[ $QUIET -eq 0 ]]; then
-    echo "OME config found at $OUTPUT."
+    echo "OME config found at $OUTPUT and stamped for BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG."
   fi
   exit 0
 fi
