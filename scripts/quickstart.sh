@@ -84,6 +84,29 @@ ensure_env_default() {
   fi
 }
 
+ome_supports_access_token() {
+  local image_tag=$1
+  local supports_access_token=1
+  if [[ $image_tag =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+    local major="${BASH_REMATCH[1]}"
+    local minor="${BASH_REMATCH[2]}"
+    if (( major == 0 && minor < 16 )); then
+      supports_access_token=0
+    fi
+  else
+    supports_access_token=0
+  fi
+
+  printf '%s' "$supports_access_token"
+}
+
+read_env_file_value() {
+  local key=$1
+  if [[ -f "$ENV_FILE" ]]; then
+    grep -E "^${key}=" "$ENV_FILE" | tail -n1 | cut -d= -f2-
+  fi
+}
+
 if ! docker compose version >/dev/null 2>&1; then
   echo "Error: Docker Compose V2 is required. Install the docker compose plugin for Docker and try again." >&2
   exit 1
@@ -160,12 +183,15 @@ declare -A env_defaults=(
   [BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD]='bitriver'
 )
 
-existing_ome_access_token=""
-if [[ -f "$ENV_FILE" ]]; then
-  existing_ome_access_token=$(grep -E "^BITRIVER_OME_ACCESS_TOKEN=" "$ENV_FILE" | tail -n1 | cut -d= -f2-)
-fi
+ome_image_tag=$(read_env_file_value BITRIVER_OME_IMAGE_TAG)
+ome_image_tag=${ome_image_tag:-${env_defaults[BITRIVER_OME_IMAGE_TAG]}}
+supports_ome_access_token=$(ome_supports_access_token "$ome_image_tag")
 
-ensure_env_default "BITRIVER_OME_API_TOKEN" "${existing_ome_access_token:-$(openssl rand -hex 24)}"
+existing_ome_access_token=$(read_env_file_value BITRIVER_OME_ACCESS_TOKEN)
+
+if (( supports_ome_access_token )); then
+  ensure_env_default "BITRIVER_OME_API_TOKEN" "${existing_ome_access_token:-$(openssl rand -hex 24)}"
+fi
 ensure_env_default "BITRIVER_OME_ACCESS_TOKEN" "${env_defaults[BITRIVER_OME_API_TOKEN]}"
 
 env_default_keys=(
@@ -202,7 +228,6 @@ env_default_keys=(
   BITRIVER_OME_SERVER_TLS_PORT
   BITRIVER_OME_USERNAME
   BITRIVER_OME_PASSWORD
-  BITRIVER_OME_API_TOKEN
   BITRIVER_OME_ACCESS_TOKEN
   BITRIVER_OME_HTTP_PORT
   BITRIVER_OME_SIGNALLING_PORT
@@ -252,7 +277,6 @@ required_env_keys=(
   BITRIVER_OME_BIND
   BITRIVER_OME_USERNAME
   BITRIVER_OME_PASSWORD
-  BITRIVER_OME_API_TOKEN
   BITRIVER_OME_ACCESS_TOKEN
   BITRIVER_OME_HTTP_PORT
   BITRIVER_OME_SIGNALLING_PORT
@@ -269,6 +293,11 @@ required_env_keys=(
   BITRIVER_LIVE_ADMIN_PASSWORD
   BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD
 )
+
+if (( supports_ome_access_token )); then
+  env_default_keys+=(BITRIVER_OME_API_TOKEN)
+  required_env_keys+=(BITRIVER_OME_API_TOKEN)
+fi
 
 reconcile_env_file() {
   if [[ ! -f "$ENV_FILE" ]]; then
