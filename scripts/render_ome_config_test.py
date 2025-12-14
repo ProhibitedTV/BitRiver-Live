@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 from pathlib import Path
 import re
 import sys
@@ -183,6 +185,23 @@ class RenderOmeConfigTest(unittest.TestCase):
 
             self.assertNotIn("<LLHLS>", rendered)
             self.assertIn("<OutputProfiles>", rendered)
+
+    def test_unparseable_tags_default_to_modern_schema(self) -> None:
+        render_ome_config._unparseable_tags_warned.clear()
+
+        with contextlib.redirect_stderr(io.StringIO()) as stderr:
+            self.assertTrue(render_ome_config._output_streams_supported("latest"))
+            self.assertTrue(render_ome_config._application_outputs_supported("latest"))
+            self.assertTrue(render_ome_config._llhls_supported("latest"))
+            self.assertTrue(render_ome_config._managers_authentication_supported("latest"))
+
+        warning_output = stderr.getvalue()
+        self.assertIn("could not parse OME image tag 'latest'", warning_output)
+        self.assertEqual(
+            1,
+            warning_output.count("could not parse OME image tag 'latest'"),
+            "Unparseable image tags should warn once while defaulting to modern schemas",
+        )
 
 
 if __name__ == "__main__":

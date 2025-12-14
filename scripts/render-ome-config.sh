@@ -90,6 +90,7 @@ supports_access_token=1
 supports_managers_authentication=1
 supports_output_streams=1
 supports_application_outputs=1
+parsing_failed=0
 if [[ "$OME_IMAGE_TAG" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
   major="${BASH_REMATCH[1]}"
   minor="${BASH_REMATCH[2]}"
@@ -100,10 +101,11 @@ if [[ "$OME_IMAGE_TAG" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
     supports_application_outputs=0
   fi
 else
-  supports_access_token=0
-  supports_managers_authentication=0
-  supports_output_streams=0
-  supports_application_outputs=0
+  parsing_failed=1
+fi
+
+if [[ $parsing_failed -eq 1 && $QUIET -eq 0 ]]; then
+  echo "BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG could not be parsed; assuming modern schema support (<AccessTokens>/<Authentication>, <Outputs>/<OutputStreams>, LLHLS)." >&2
 fi
 
 if [[ -z "$OME_USERNAME" || -z "$OME_PASSWORD" ]]; then
@@ -187,7 +189,7 @@ marker="${OME_MARKER_PREFIX}${OME_IMAGE_TAG} -->"
 if grep -q "$OME_MARKER_PREFIX" "$OUTPUT"; then
   perl -0pi -e "s/${OME_MARKER_PREFIX}.* -->/${marker}/" "$OUTPUT"
 else
-  perl -0pi -e "s#(<Server[^>]*>\\s*)#\\1    ${marker}\\n#" "$OUTPUT"
+  perl -0pi -e "s#(<Server[^>]*>\\s*)#\\1    ${marker}\\n    #" "$OUTPUT"
 fi
 
 if [[ $QUIET -eq 0 ]]; then

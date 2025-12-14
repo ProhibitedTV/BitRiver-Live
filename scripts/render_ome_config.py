@@ -55,80 +55,68 @@ def unwrap_first_tag_block(data: str, tag: str) -> str:
     return data[:start] + inner + data[end:]
 
 
-def _output_streams_supported(image_tag: str | None) -> bool:
-    """Return True when the provided image tag advertises <OutputStreams> support."""
+_unparseable_tags_warned: set[str] = set()
+
+
+def _parse_semver_tag(image_tag: str) -> tuple[int, int, int] | None:
+    match = re.match(r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)", image_tag)
+    if match is None:
+        if image_tag not in _unparseable_tags_warned:
+            print(
+                f"warning: could not parse OME image tag '{image_tag}'; "
+                "assuming modern schema support",
+                file=sys.stderr,
+            )
+            _unparseable_tags_warned.add(image_tag)
+        return None
+
+    return (
+        int(match.group("major")),
+        int(match.group("minor")),
+        int(match.group("patch")),
+    )
+
+
+def _modern_schema_supported(image_tag: str | None) -> bool:
+    """Return True for modern schemas unless a legacy tag is confirmed."""
 
     if image_tag is None:
         return True
 
-    match = re.match(r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)", image_tag)
-    if match is None:
-        return False
+    parsed_tag = _parse_semver_tag(image_tag)
+    if parsed_tag is None:
+        return True
 
-    major = int(match.group("major"))
-    minor = int(match.group("minor"))
+    major, minor, _ = parsed_tag
 
     if major == 0 and minor < 16:
         return False
 
     return True
+
+
+def _output_streams_supported(image_tag: str | None) -> bool:
+    """Return True when the provided image tag advertises <OutputStreams> support."""
+
+    return _modern_schema_supported(image_tag)
 
 
 def _application_outputs_supported(image_tag: str | None) -> bool:
     """Return True when the provided image tag advertises <Outputs> support."""
 
-    if image_tag is None:
-        return True
-
-    match = re.match(r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)", image_tag)
-    if match is None:
-        return False
-
-    major = int(match.group("major"))
-    minor = int(match.group("minor"))
-
-    if major == 0 and minor < 16:
-        return False
-
-    return True
+    return _modern_schema_supported(image_tag)
 
 
 def _llhls_supported(image_tag: str | None) -> bool:
     """Return True when the provided image tag advertises <LLHLS> support."""
 
-    if image_tag is None:
-        return True
-
-    match = re.match(r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)", image_tag)
-    if match is None:
-        return False
-
-    major = int(match.group("major"))
-    minor = int(match.group("minor"))
-
-    if major == 0 and minor < 16:
-        return False
-
-    return True
+    return _modern_schema_supported(image_tag)
 
 
 def _managers_authentication_supported(image_tag: str | None) -> bool:
     """Return True when the provided image tag advertises managers auth support."""
 
-    if image_tag is None:
-        return True
-
-    match = re.match(r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)", image_tag)
-    if match is None:
-        return False
-
-    major = int(match.group("major"))
-    minor = int(match.group("minor"))
-
-    if major == 0 and minor < 16:
-        return False
-
-    return True
+    return _modern_schema_supported(image_tag)
 
 
 def replace_all_tag_content(
@@ -411,8 +399,7 @@ def main(argv: list[str]) -> int:
         "--image-tag",
         help=(
             "OME image tag used to detect manager authentication and output stream support; "
-            "non-semver or <0.16.0 tags omit AccessTokens/Authentication, flatten OutputStreams, "
-            "and drop LLHLS"
+            "<0.16.0 tags omit AccessTokens/Authentication, flatten OutputStreams, and drop LLHLS"
         ),
     )
 
