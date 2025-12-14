@@ -100,6 +100,42 @@ ome_supports_access_token() {
   printf '%s' "$supports_access_token"
 }
 
+legacy_ome_token_stripped=0
+strip_legacy_ome_api_token() {
+  local image_tag=$1
+
+  if (( supports_ome_access_token )); then
+    return 0
+  fi
+
+  if [[ ! -f "$ENV_FILE" ]]; then
+    return 0
+  fi
+
+  if ! grep -qE '^BITRIVER_OME_API_TOKEN=' "$ENV_FILE"; then
+    return 0
+  fi
+
+  echo "BITRIVER_OME_IMAGE_TAG ${image_tag:-unset} uses legacy auth; removing BITRIVER_OME_API_TOKEN from $ENV_FILE ..."
+
+  local tmp_env
+  tmp_env=$(mktemp)
+
+  if grep -vE '^BITRIVER_OME_API_TOKEN=' "$ENV_FILE" >"$tmp_env"; then
+    mv "$tmp_env" "$ENV_FILE"
+    legacy_ome_token_stripped=1
+    echo "BITRIVER_OME_API_TOKEN removed for legacy OME compatibility. The quickstart will re-render the config to verify the legacy schema."
+    return 0
+  fi
+
+  rm -f "$tmp_env"
+  cat <<EOF >&2
+Unable to rewrite $ENV_FILE to drop BITRIVER_OME_API_TOKEN automatically.
+Remove BITRIVER_OME_API_TOKEN from the file and rerun ./scripts/quickstart.sh so legacy OME tags (<0.16.0) can render the config.
+EOF
+  exit 1
+}
+
 read_env_file_value() {
   local key=$1
   if [[ -f "$ENV_FILE" ]]; then
@@ -186,6 +222,8 @@ declare -A env_defaults=(
 ome_image_tag=$(read_env_file_value BITRIVER_OME_IMAGE_TAG)
 ome_image_tag=${ome_image_tag:-${env_defaults[BITRIVER_OME_IMAGE_TAG]}}
 supports_ome_access_token=$(ome_supports_access_token "$ome_image_tag")
+
+strip_legacy_ome_api_token "$ome_image_tag"
 
 existing_ome_access_token=$(read_env_file_value BITRIVER_OME_ACCESS_TOKEN)
 
@@ -661,6 +699,9 @@ mkdir -p "$TRANSCODER_PUBLIC_DIR"
 chmod 0777 "$TRANSCODER_DATA_DIR" "$TRANSCODER_PUBLIC_DIR"
 echo "If you provision these directories manually, keep them writable (see docs/installing-on-ubuntu.md)."
 
+if (( legacy_ome_token_stripped )); then
+  echo "Rendering OME config after removing BITRIVER_OME_API_TOKEN for legacy ${ome_image_tag} compatibility ..."
+fi
 render_ome_config
 
 cd "$REPO_ROOT"
