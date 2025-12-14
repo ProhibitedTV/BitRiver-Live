@@ -376,6 +376,13 @@ Operators can use the manifests under `deploy/` as a reference architecture for 
 
 1. **Provision ingest dependencies first.** Bring up SRS, the SRS controller proxy, OvenMediaEngine (OME), and the FFmpeg job controller before starting the BitRiver Live API. The compose file at `deploy/docker-compose.yml` defines the services as `srs`, `srs-controller`, `ome`, and `transcoder` respectively. Each service exposes an HTTP health probe on `/healthz` (with fallbacks to vendor-specific paths) so you can validate readiness with `docker compose ps` or an external probe before the API starts.
 2. **Render and verify the OME config before each launch.** Run `./scripts/render-ome-config.sh --force --env-file /opt/bitriver-live/.env` immediately before starting OME (the `ome.service` unit performs the same preflight). The render step stamps `deploy/ome/Server.generated.xml` with the image tag marker and exits non-zero when the template is missing or stale, preventing Docker from booting with an outdated control listener or credentials.
+   - The same script accepts `--check` when you want a CI guard that compares `BITRIVER_OME_IMAGE_TAG` in `.env` with the stamped marker in `deploy/ome/Server.generated.xml`, failing if they diverge so Compose reloads a freshly rendered config.
+   - Use the version/token matrix below to line up your `.env` before rendering:
+
+| `BITRIVER_OME_IMAGE_TAG` | `BITRIVER_OME_API_TOKEN` expectation | Rendering behaviour |
+| --- | --- | --- |
+| `<0.16.0` | Must be empty. Older builds reject the managers `<AccessToken>`/`<Authentication>` block, so the renderer fails fast if a token is present. | The generated `Server.generated.xml` omits the managers auth block and rewrites the legacy `<OutputProfile>`/`<OutputStreams>` sections as needed. |
+| `0.16.0+` | Must be non-empty (copy the value into `BITRIVER_OME_ACCESS_TOKEN` for legacy health probes). | The renderer injects the managers `<AccessTokens>` block with the provided token and leaves the modern output schema intact. |
 3. **Configure secrets securely.**
    - Generate an SRS management token and set it via `BITRIVER_SRS_TOKEN`.
    - Create an administrator account in OME (matching the credentials rendered from `deploy/ome/Server.xml` into `deploy/ome/Server.generated.xml`) and surface the username/password as `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`.
