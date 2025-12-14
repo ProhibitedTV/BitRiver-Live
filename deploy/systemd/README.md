@@ -76,16 +76,7 @@ EOF
 
     # Render the OME template before starting the service so the control listener,
     # advertised server IP, and bind block stay aligned with the .env values.
-    sudo /opt/bitriver-live/scripts/render_ome_config.py \
-      --template /opt/bitriver-live/deploy/ome/Server.xml \
-      --output /opt/bitriver-live/deploy/ome/Server.generated.xml \
-      --bind "$BITRIVER_OME_BIND" \
-      --server-ip "${BITRIVER_OME_IP:-$BITRIVER_OME_BIND}" \
-      --port "${BITRIVER_OME_SERVER_PORT:-9000}" \
-      --tls-port "${BITRIVER_OME_SERVER_TLS_PORT:-9443}" \
-      --username "$BITRIVER_OME_USERNAME" \
-      --password "$BITRIVER_OME_PASSWORD" \
-      --api-token "$BITRIVER_OME_API_TOKEN"
+    sudo ENV_FILE=/opt/bitriver-live/.env /opt/bitriver-live/scripts/render-ome-config.sh --force
 
    sudo tee /opt/bitriver-transcoder/.env >/dev/null <<'EOF'
 TRANSCODER_IMAGE=ghcr.io/bitriver-live/bitriver-transcoder:vX.Y.Z
@@ -102,6 +93,8 @@ EOF
    Adjust image tags, ports, and mount paths to match your topology. Add extra Docker flags by setting `*_EXTRA_ARGS`. When you install a new release, update the image tags above before restarting the units so the validation hooks in the service files do not block the deployment.
    The Docker Compose bundle ships the same SRS pin via `BITRIVER_SRS_IMAGE_TAG` (defaulting to `v5.0.185`) and exposes `BITRIVER_OME_IMAGE_TAG` (defaulting to `0.16.0`) for OME, so upgrade both environments together when you validate newer upstream builds.
    The FFmpeg controller exits during startup if `TRANSCODER_PUBLIC_BASE_URL` (exported to `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`) is missing, so configure it with the HTTP origin viewers can reach before enabling the unit.
+
+   The `ome.service` unit re-renders `deploy/ome/Server.generated.xml` with `./scripts/render-ome-config.sh --force` before each start. Keep your OME bind settings and credentials current in `/opt/bitriver-live/.env`; the service fails fast when the generated config is missing or lacks the render marker so you can correct the `.env` before Docker launches.
 7. (Optional) If you want to send API logs to `/opt/bitriver-live/logs/server.log`, create the directory and uncomment the `StandardOutput` and `StandardError` lines in `bitriver-live.service`.
 8. Copy the systemd unit files into place and reload systemd:
    ```bash

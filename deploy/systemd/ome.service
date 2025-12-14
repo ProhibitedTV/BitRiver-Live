@@ -11,9 +11,12 @@ Environment="OME_CONFIG=/opt/bitriver-live/deploy/ome/Server.generated.xml"
 Environment="OME_HTTP_PORT=8081"
 Environment="OME_SIGNALING_PORT=9000"
 Environment="OME_EXTRA_ARGS="
+Environment="OME_RENDER_ENV_FILE=/opt/bitriver-live/.env"
 EnvironmentFile=/opt/bitriver-ome/.env
 # Ensure OME_IMAGE points at the release you have installed.
 ExecStartPre=/bin/sh -c '[ -n "${OME_IMAGE}" ] || { echo "OME_IMAGE is not set. Pin it to the matching release tag in /opt/bitriver-ome/.env."; exit 1; }'
+ExecStartPre=/bin/sh -c 'ENV_FILE="${OME_RENDER_ENV_FILE}" /opt/bitriver-live/scripts/render-ome-config.sh --force --quiet'
+ExecStartPre=/bin/sh -c '[ -s "${OME_CONFIG}" ] && grep -q "<!-- Rendered for BITRIVER_OME_IMAGE_TAG=" "${OME_CONFIG}" || { echo "OME config missing or stale at ${OME_CONFIG}. Run ./scripts/render-ome-config.sh --force with the correct env before starting."; exit 1; }'
 ExecStartPre=-${OME_DOCKER} rm -f ${OME_CONTAINER_NAME}
 ExecStart=/bin/sh -c '${OME_DOCKER} run --rm --name "${OME_CONTAINER_NAME}" \
   -p "${OME_HTTP_PORT}:8081" \
