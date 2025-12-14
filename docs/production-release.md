@@ -77,6 +77,7 @@ so the job can populate every required variable and image tag:
 - `BITRIVER_OME_USERNAME`
 - `BITRIVER_OME_PASSWORD`
 - `BITRIVER_OME_API_TOKEN` (and `BITRIVER_OME_ACCESS_TOKEN` for the health probe)
+- `BITRIVER_OME_BIND`, `BITRIVER_OME_IP`, `BITRIVER_OME_SERVER_PORT`, and `BITRIVER_OME_SERVER_TLS_PORT`
 - `BITRIVER_TRANSCODER_TOKEN`
 - `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD`
 - `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`
@@ -104,6 +105,9 @@ build out:
    ```bash
    deploy/check-env.sh
    ```
+   The release workflow surfaces this output in the deploy logs and fails when
+   any OvenMediaEngine URLs, bind addresses, or ports point at loopback
+   addresses, placeholders, or are missing.
 3. For systemd-based installs, refresh the `.env` files under `/opt/bitriver-*`
    and restart the services only after the script reports success. Ensure any
    container image tags (`BITRIVER_LIVE_IMAGE_TAG`, `BITRIVER_VIEWER_IMAGE_TAG`,
