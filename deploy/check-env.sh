@@ -25,6 +25,10 @@ required_vars=(
   BITRIVER_POSTGRES_PASSWORD
   BITRIVER_REDIS_PASSWORD
   BITRIVER_OME_API
+  BITRIVER_OME_BIND
+  BITRIVER_OME_IP
+  BITRIVER_OME_SERVER_PORT
+  BITRIVER_OME_SERVER_TLS_PORT
   BITRIVER_LIVE_ADMIN_EMAIL
   BITRIVER_LIVE_ADMIN_PASSWORD
   BITRIVER_LIVE_SESSION_TTL
@@ -158,6 +162,30 @@ fi
 if [[ -n "${BITRIVER_OME_API:-}" ]]; then
   if [[ "$BITRIVER_OME_API" =~ ^https?://(localhost|127\.[0-9.]*|0\.0\.0\.0|::1|\[::1\])([:/]|$) ]]; then
     errors+=("BITRIVER_OME_API points at loopback ($BITRIVER_OME_API). Use the ome hostname from docker-compose.yml or another reachable host/IP.")
+  fi
+fi
+
+if [[ -n "${BITRIVER_OME_BIND:-}" ]]; then
+  if [[ "$BITRIVER_OME_BIND" =~ ^(localhost|127\.[0-9.]*|::1|\[::1\]|0\.0\.0\.0|::)$ ]]; then
+    errors+=("BITRIVER_OME_BIND is set to $BITRIVER_OME_BIND. Bind OvenMediaEngine to the routable interface clients will reach instead of a placeholder or loopback value.")
+  fi
+fi
+
+if [[ -n "${BITRIVER_OME_IP:-}" ]]; then
+  if [[ "$BITRIVER_OME_IP" =~ ^(localhost|127\.[0-9.]*|::1|\[::1\]|0\.0\.0\.0|::)$ ]]; then
+    errors+=("BITRIVER_OME_IP is set to $BITRIVER_OME_IP. Configure the public IP or hostname for OvenMediaEngine instead of a placeholder or loopback value.")
+  fi
+fi
+
+if [[ -n "${BITRIVER_OME_SERVER_PORT:-}" ]]; then
+  if [[ ! "$BITRIVER_OME_SERVER_PORT" =~ ^[0-9]+$ ]] || (( BITRIVER_OME_SERVER_PORT < 1 || BITRIVER_OME_SERVER_PORT > 65535 )); then
+    errors+=("BITRIVER_OME_SERVER_PORT must be a valid TCP port number (current: ${BITRIVER_OME_SERVER_PORT:-unset}).")
+  fi
+fi
+
+if [[ -n "${BITRIVER_OME_SERVER_TLS_PORT:-}" ]]; then
+  if [[ ! "$BITRIVER_OME_SERVER_TLS_PORT" =~ ^[0-9]+$ ]] || (( BITRIVER_OME_SERVER_TLS_PORT < 1 || BITRIVER_OME_SERVER_TLS_PORT > 65535 )); then
+    errors+=("BITRIVER_OME_SERVER_TLS_PORT must be a valid TCP port number (current: ${BITRIVER_OME_SERVER_TLS_PORT:-unset}).")
   fi
 fi
 

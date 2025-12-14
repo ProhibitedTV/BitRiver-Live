@@ -29,6 +29,12 @@ jobs:
           BITRIVER_SRS_TOKEN: ${{ secrets.BITRIVER_SRS_TOKEN }}
           BITRIVER_OME_USERNAME: ${{ secrets.BITRIVER_OME_USERNAME }}
           BITRIVER_OME_PASSWORD: ${{ secrets.BITRIVER_OME_PASSWORD }}
+          BITRIVER_OME_API_TOKEN: ${{ secrets.BITRIVER_OME_API_TOKEN }}
+          BITRIVER_OME_ACCESS_TOKEN: ${{ secrets.BITRIVER_OME_ACCESS_TOKEN }}
+          BITRIVER_OME_BIND: ${{ secrets.BITRIVER_OME_BIND }}
+          BITRIVER_OME_IP: ${{ secrets.BITRIVER_OME_IP }}
+          BITRIVER_OME_SERVER_PORT: ${{ secrets.BITRIVER_OME_SERVER_PORT }}
+          BITRIVER_OME_SERVER_TLS_PORT: ${{ secrets.BITRIVER_OME_SERVER_TLS_PORT }}
           BITRIVER_TRANSCODER_TOKEN: ${{ secrets.BITRIVER_TRANSCODER_TOKEN }}
           BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD: ${{ secrets.BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD }}
           BITRIVER_TRANSCODER_PUBLIC_BASE_URL: ${{ secrets.BITRIVER_TRANSCODER_PUBLIC_BASE_URL }}
@@ -53,6 +59,12 @@ jobs:
             BITRIVER_SRS_TOKEN
             BITRIVER_OME_USERNAME
             BITRIVER_OME_PASSWORD
+            BITRIVER_OME_API_TOKEN
+            BITRIVER_OME_ACCESS_TOKEN
+            BITRIVER_OME_BIND
+            BITRIVER_OME_IP
+            BITRIVER_OME_SERVER_PORT
+            BITRIVER_OME_SERVER_TLS_PORT
             BITRIVER_TRANSCODER_TOKEN
             BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD
             BITRIVER_TRANSCODER_PUBLIC_BASE_URL
@@ -74,7 +86,9 @@ jobs:
           done
 
       - name: Validate production environment configuration
-        run: ./deploy/check-env.sh .env
+        run: |
+          set -euo pipefail
+          ./deploy/check-env.sh .env | tee env-validation.log
 
   go-tests:
     name: Go unit tests
