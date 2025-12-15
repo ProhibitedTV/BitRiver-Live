@@ -303,6 +303,10 @@ BitRiver Live can orchestrate end-to-end ingest and transcode jobs by talking to
 | `BITRIVER_OME_IP` | Public IP rendered into the `<Server><IP>` block for signalling (defaults to `BITRIVER_OME_BIND`). |
 | `BITRIVER_OME_SERVER_PORT` | Port rendered into the top-level `<Bind><Port>` entry for WebRTC signalling (defaults to `9000`). |
 | `BITRIVER_OME_SERVER_TLS_PORT` | Port rendered into `<Bind><TLSPort>` for TLS signalling (defaults to `9443`). |
+| `BITRIVER_OME_RELAY_PORT` / `BITRIVER_OME_RELAY_PROTOCOL` | Host port and protocol published for the TURN/TCP relay (defaults to `3478/tcp`; set the protocol to `udp` when your network requires UDP relays). |
+| `BITRIVER_OME_TCP_RELAY` | Address advertised in `<TcpRelay>` for TURN/TCP candidates (defaults to `*:3478`; set to the externally reachable host/port when NATting). |
+| `BITRIVER_OME_ICE_PORT_RANGE` | Host-facing UDP range published for media relays (defaults to `10000-10009`). |
+| `BITRIVER_OME_ICE_CANDIDATE` | ICE candidate advertised to browsers (defaults to `*:10000-10009/udp`; replace with public IP/port range when NATting or port-forwarding). |
 | `BITRIVER_OME_USERNAME` / `BITRIVER_OME_PASSWORD` / `BITRIVER_OME_API_TOKEN` | Control-plane credentials for OvenMediaEngine (basic auth and API access token; keep `BITRIVER_OME_ACCESS_TOKEN` aligned for probes). |
 | `BITRIVER_TRANSCODER_API` | Base URL for the FFmpeg job runner (e.g. a lightweight controller on port `9000`). |
 | `BITRIVER_TRANSCODER_TOKEN` | Bearer token for FFmpeg job APIs. |
@@ -325,6 +329,13 @@ To keep bootstrapping predictable the server now fails fast if any of the requir
 Open the management ports to the BitRiver Live API host and ensure the credentials map to accounts that can create/delete the corresponding resources. Set the optional `BITRIVER_INGEST_HEALTH` path if your services expose health checks somewhere other than `/healthz`.
 
 OvenMediaEngine's control server enforces authentication on `/healthz`; the compose bundle mounts `deploy/ome/Server.generated.xml` (rendered from `deploy/ome/Server.xml`) and forwards the same `BITRIVER_OME_API_TOKEN` header (with optional basic auth from `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD`) to the probe so a 401 will mark the container unhealthy. Keep `.env` aligned with that rendered configuration if you edit the template. The template rewrites the control listener `<Bind>`/`<IP>` values from `BITRIVER_OME_BIND` and stamps the root `<Bind>` block with `<IP>`, `<Port>`, and `<TLSPort>` derived from `BITRIVER_OME_BIND`, `BITRIVER_OME_SERVER_PORT`, and `BITRIVER_OME_SERVER_TLS_PORT` so the bind configuration stays consistent across restarts.
+
+When enabling WebRTC playback, forward the relay paths end users will hit:
+
+- Publish the TURN relay port on `3478` (TCP or UDP depending on your firewall) by setting `BITRIVER_OME_RELAY_PORT`/`BITRIVER_OME_RELAY_PROTOCOL` and mirror the same host/port in `BITRIVER_OME_TCP_RELAY` so `<TcpRelay>` advertises the reachable endpoint.
+- Publish the UDP relay range from `10000-10009` (or your chosen slice in `BITRIVER_OME_ICE_PORT_RANGE`) and update `BITRIVER_OME_ICE_CANDIDATE` to point at the public IP/port range when NAT or port-forwarding rewrites the container addresses.
+
+After changing these values, run `scripts/render-ome-config.sh --force` so `deploy/ome/Server.generated.xml` advertises the updated ICE candidates, then open matching firewall/NAT rules on your load balancer or host security group. Browsers will refuse WebRTC playback when they cannot reach the configured relay ports.
 
 When refreshing an existing OME node, replace any custom `origin_conf/Server.xml` with the template from this repository before restarting the container. Keep the bind/IP entries scoped to `<Modules><Control><Server><Listeners><TCP>` and re-render the credentials with the provided helper:
 

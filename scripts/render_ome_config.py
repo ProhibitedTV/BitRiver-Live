@@ -309,6 +309,8 @@ def render(
     username: str,
     password: str,
     api_token: str,
+    tcp_relay: str,
+    ice_candidate: str,
     *,
     include_managers_authentication: bool,
     include_output_streams: bool = True,
@@ -327,6 +329,8 @@ def render(
     text = _replace_root_bindings(text, escaped_bind, escaped_port, escaped_tls_port)
     text = _replace_root_ip(text, xml_escape(server_ip))
     text = _scoped_replace_control_bindings(text, escaped_bind)
+    text = replace_all_tag_content(text, "TcpRelay", xml_escape(tcp_relay))
+    text = replace_all_tag_content(text, "IceCandidate", xml_escape(ice_candidate))
 
     text = replace_tag_content(text, "ID", xml_escape(username))
     text = replace_tag_content(text, "Password", xml_escape(password))
@@ -383,6 +387,16 @@ def main(argv: list[str]) -> int:
         help="OME API server access token",
     )
     parser.add_argument(
+        "--tcp-relay",
+        required=True,
+        help="Address advertised in <TcpRelay> inside <IceCandidates> (e.g. *:3478)",
+    )
+    parser.add_argument(
+        "--ice-candidate",
+        required=True,
+        help="Advertised ICE candidate (e.g. external-host:10000-10009/udp)",
+    )
+    parser.add_argument(
         "--port", required=True, help="OME server port"
     )
     parser.add_argument(
@@ -421,6 +435,8 @@ def main(argv: list[str]) -> int:
         args.username,
         args.password,
         api_token,
+        args.tcp_relay,
+        args.ice_candidate,
         include_managers_authentication=include_managers_authentication,
         include_output_streams=output_streams_supported,
         include_application_outputs=application_outputs_supported,
