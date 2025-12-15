@@ -284,17 +284,17 @@ services:
       test:
         - "CMD-SHELL"
         - >
-          curl_args=()
+          curl_cmd="curl -fsS"
 
-          if [ -n "$BITRIVER_OME_ACCESS_TOKEN" ]; then
-            curl_args+=("-H" "AccessToken: $BITRIVER_OME_ACCESS_TOKEN")
+          if [ -n "$$BITRIVER_OME_ACCESS_TOKEN" ]; then
+            curl_cmd="$${curl_cmd} -H \"AccessToken: $$BITRIVER_OME_ACCESS_TOKEN\""
           fi
 
-          if [ -n "$BITRIVER_OME_USERNAME" ] && [ -n "$BITRIVER_OME_PASSWORD" ]; then
-            curl_args+=("-u" "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD")
+          if [ -n "$$BITRIVER_OME_USERNAME" ] && [ -n "$$BITRIVER_OME_PASSWORD" ]; then
+            curl_cmd="$${curl_cmd} -u \"$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD\""
           fi
 
-          curl -fsS "${curl_args[@]}" http://localhost:8081/v1/health || curl -fsS "${curl_args[@]}" http://localhost:8081/healthz;
+          eval "$${curl_cmd} http://localhost:8081/v1/health" || eval "$${curl_cmd} http://localhost:8081/healthz";
       interval: 30s
       timeout: 5s
       retries: 5
