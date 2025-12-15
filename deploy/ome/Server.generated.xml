@@ -66,6 +66,9 @@
                     <WorkerCount>1</WorkerCount>
                 </Signalling>
                 <IceCandidates>
+                    <!-- When port-forwarding or NAT rewrites the container ports, update
+                         BITRIVER_OME_TCP_RELAY/BITRIVER_OME_ICE_CANDIDATE so the
+                         advertised candidates match the reachable host:port tuples. -->
                     <TcpRelay>*:3478</TcpRelay>
                     <TcpForce>false</TcpForce>
                     <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
