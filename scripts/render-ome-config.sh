@@ -78,6 +78,15 @@ OME_TLS_PORT="${BITRIVER_OME_SERVER_TLS_PORT:-9443}"
 OME_IP="${BITRIVER_OME_IP:-$OME_BIND}"
 OME_USERNAME="${BITRIVER_OME_USERNAME:-}"
 OME_PASSWORD="${BITRIVER_OME_PASSWORD:-}"
+OME_ICE_PORT_RANGE="${BITRIVER_OME_ICE_PORT_RANGE:-10000-10009}"
+OME_TCP_RELAY="${BITRIVER_OME_TCP_RELAY:-${BITRIVER_OME_RELAY_PORT:-3478}}"
+if [[ "$OME_TCP_RELAY" != *:* ]]; then
+  OME_TCP_RELAY="*:$(echo "$OME_TCP_RELAY" | tr -d '*:')"
+fi
+OME_ICE_CANDIDATE="${BITRIVER_OME_ICE_CANDIDATE:-}"
+if [[ -z "$OME_ICE_CANDIDATE" ]]; then
+  OME_ICE_CANDIDATE="*:${OME_ICE_PORT_RANGE}/udp"
+fi
 OME_API_TOKEN_VAR="${BITRIVER_OME_API_TOKEN:-}"
 OME_ACCESS_TOKEN_VAR="${BITRIVER_OME_ACCESS_TOKEN:-}"
 OME_API_TOKEN="${OME_API_TOKEN_VAR:-$OME_ACCESS_TOKEN_VAR}"
@@ -164,6 +173,8 @@ if ! render_output=$(python3 "$SCRIPT_DIR/render_ome_config.py" \
   --username "$OME_USERNAME" \
   --password "$OME_PASSWORD" \
   --api-token "$render_api_token" \
+  --tcp-relay "$OME_TCP_RELAY" \
+  --ice-candidate "$OME_ICE_CANDIDATE" \
   --image-tag "$OME_IMAGE_TAG" \
   "${omit_managers_auth_args[@]}" 2>&1); then
   echo "Failed to render deploy/ome/Server.generated.xml. Check BITRIVER_OME_* values in $ENV_FILE and the template at $TEMPLATE." >&2
