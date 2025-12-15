@@ -129,6 +129,10 @@ if (( ${#missing[@]} > 0 )); then
   done
 fi
 
+if [[ -n "${BITRIVER_OME_IMAGE_TAG:-}" && ! "$BITRIVER_OME_IMAGE_TAG" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+  errors+=("BITRIVER_OME_IMAGE_TAG must be MAJOR.MINOR.PATCH so the renderer can decide whether to include managers <AccessToken>/<Authentication>, <Outputs>, and LLHLS sections (current: ${BITRIVER_OME_IMAGE_TAG}).")
+fi
+
 if [[ -n "${BITRIVER_SRS_IMAGE_TAG:-}" && "$BITRIVER_SRS_IMAGE_TAG" != "v5.0.185" ]]; then
   echo "Reminder: BITRIVER_SRS_IMAGE_TAG is set to $BITRIVER_SRS_IMAGE_TAG." >&2
   echo "Update the SRS tag in deploy/systemd/README.md and any running systemd units to match before upgrading." >&2

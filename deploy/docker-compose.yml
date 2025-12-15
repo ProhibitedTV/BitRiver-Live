@@ -282,15 +282,14 @@ services:
     healthcheck:
       test:
         - "CMD-SHELL"
-        - >
-          if [ -n "$BITRIVER_OME_ACCESS_TOKEN" ]; then
-            auth_flags="-H \"AccessToken: $BITRIVER_OME_ACCESS_TOKEN\""
-          else
-            auth_flags=""
+        - |
+          auth_flags=""
+          if [ -n "$${BITRIVER_OME_ACCESS_TOKEN:-}" ]; then
+            auth_flags="$auth_flags -H \"AccessToken: $${BITRIVER_OME_ACCESS_TOKEN}\""
           fi
 
-          if [ -n "$BITRIVER_OME_USERNAME" ] && [ -n "$BITRIVER_OME_PASSWORD" ]; then
-            auth_flags="$auth_flags -u \"$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD\""
+          if [ -n "$${BITRIVER_OME_USERNAME:-}" ] && [ -n "$${BITRIVER_OME_PASSWORD:-}" ]; then
+            auth_flags="$auth_flags -u \"$${BITRIVER_OME_USERNAME}:$${BITRIVER_OME_PASSWORD}\""
           fi
 
           eval curl -fsS $auth_flags http://localhost:8081/v1/health || eval curl -fsS $auth_flags http://localhost:8081/healthz;
