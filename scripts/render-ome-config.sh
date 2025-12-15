@@ -99,8 +99,12 @@ fi
 
 eval "$(compute_ome_capabilities "$OME_IMAGE_TAG" 1)"
 
-if [[ $parsing_failed -eq 1 && $QUIET -eq 0 ]]; then
-  echo "BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG could not be parsed; assuming modern schema support (<AccessTokens>/<Authentication>, <Outputs>/<OutputStreams>, LLHLS)." >&2
+if [[ $parsing_failed -eq 1 ]]; then
+  cat <<EOF >&2
+BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG is not a semver tag (expected MAJOR.MINOR.PATCH).
+OME requires a pinned, parseable tag so the renderer can decide whether to include managers <AccessToken>/<Authentication>, <Outputs>, and LLHLS sections. Update BITRIVER_OME_IMAGE_TAG in $ENV_FILE to a semver value (for example, 0.16.0 for modern schemas or 0.15.0 for legacy) and rerun ./scripts/render-ome-config.sh --force.
+EOF
+  exit 1
 fi
 
 if [[ -z "$OME_USERNAME" || -z "$OME_PASSWORD" ]]; then

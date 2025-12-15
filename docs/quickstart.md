@@ -107,7 +107,7 @@ compose file.
 - **`permission denied while trying to connect to the Docker daemon socket`** – Add your account to the `docker` group with `sudo usermod -aG docker $USER` followed by `newgrp docker` (or log out and back in), then rerun the quickstart without `sudo`. You can run `sudo ./scripts/quickstart.sh` in a pinch, but expect root-owned files like `.env` until you fix the group membership.
 - **Port already in use** – Stop or reconfigure any services that currently bind to ports 5432, 6379, 8080, 8081, 9000, 9001, 1935, or 1985. Alternatively edit the corresponding `*_PORT` values in `.env` (for example, `BITRIVER_LIVE_PORT=9090`) and rerun `docker compose up -d`.
 - **`Empty <AccessToken> is not allowed`** – The OvenMediaEngine template detected a missing `BITRIVER_OME_API_TOKEN` in `.env` (you will also see the OME container exit and Compose mark `bitriver-ome` as unhealthy). Set a non-empty value in `.env`, mirror it into `BITRIVER_OME_ACCESS_TOKEN`, rerun `./scripts/render-ome-config.sh --force`, and restart the stack with `docker compose up -d` so `deploy/ome/Server.generated.xml` is regenerated with the token.
-- **`[Config] Unknown item found: Server.bind.managers.api.AccessTokens`** or **`[Config] Unknown item found: Server.bind.managers.api.Authentication`** – The rendered `Server.xml` still contains the managers `<AccessTokens>`/`<Authentication>` blocks even though your `BITRIVER_OME_IMAGE_TAG` points to a build that doesn't support them (for example, anything older than 0.16.0 or custom tags without semver prefixes). Set `BITRIVER_OME_API_TOKEN` to an empty value in `.env`, rerun `./scripts/render-ome-config.sh --force`, and restart the stack so the regenerated config drops the unsupported tags before Docker brings OME back up.
+- **`[Config] Unknown item found: Server.bind.managers.api.AccessTokens`** or **`[Config] Unknown item found: Server.bind.managers.api.Authentication`** – The rendered `Server.xml` still contains the managers `<AccessTokens>`/`<Authentication>` blocks even though your `BITRIVER_OME_IMAGE_TAG` points to a build that doesn't support them. Pin `BITRIVER_OME_IMAGE_TAG` in `.env` to a MAJOR.MINOR.PATCH tag that matches the OME image you actually run (for example, `0.15.0` for legacy builds that lack managers auth), clear `BITRIVER_OME_API_TOKEN`, rerun `./scripts/render-ome-config.sh --force`, and restart the stack so the regenerated config drops the unsupported tags before Docker brings OME back up.
 - **Reading OME startup logs after template fixes** – Quickstart reruns should show the standard OME banner, FFmpeg and version
   lines, STUN public IP resolution, a burst of ICE candidate logs, and the `All modules are initialized successfully` marker
   followed by `Create HostMetrics...` and `Create ApplicationMetrics(#default#live...)`. You should no longer see
@@ -127,9 +127,10 @@ compose file.
   `deploy/ome/Server.generated.xml` and force a regeneration before Compose starts if they diverge. The default `0.16.0` tag is
   the first OME release that accepts the managers `<AccessToken>` block used by the health check; when running an older OME tag
   that lacks `<AccessToken>`, leave `BITRIVER_OME_API_TOKEN` empty and re-render the config so the tag is omitted from
-  `Server.generated.xml`. Older, non-semver, or pre-0.16.0 image tags also drop the `<Outputs>` wrapper during rendering and leave
-  only the `<OutputProfiles>` node so legacy schemas do not reject the config. In the same legacy mode, `<LLHLS>` sections are
-  removed so output tuning falls back to the OME defaults when the tag predates LLHLS support.
+  `Server.generated.xml`. Pre-0.16.0 image tags also drop the `<Outputs>` wrapper during rendering and leave only the
+  `<OutputProfiles>` node so legacy schemas do not reject the config. In the same legacy mode, `<LLHLS>` sections are removed so
+  output tuning falls back to the OME defaults when the tag predates LLHLS support. Non-semver image tags are rejected by the
+  renderer to avoid generating configs with unsupported managers authentication fields.
 - **Environment tweaks** – Edit `.env` and rerun `docker compose up -d` to apply changes. The compose stack automatically loads
   the file so you never need to touch `deploy/docker-compose.yml` directly.
 

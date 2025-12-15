@@ -212,8 +212,9 @@ eval "$(compute_ome_capabilities "$ome_image_tag" 1)"
 supports_ome_access_token=$supports_access_token
 
 if (( parsing_failed )); then
-  echo "BITRIVER_OME_IMAGE_TAG=$ome_image_tag is not semver; assuming modern OME defaults with managers <AccessToken>/<Authentication> and LLHLS enabled."
-  echo "Set a semver tag below 0.16.0 if you need the legacy schema."
+  echo "BITRIVER_OME_IMAGE_TAG=$ome_image_tag is not a MAJOR.MINOR.PATCH value." >&2
+  echo "Pin BITRIVER_OME_IMAGE_TAG in .env to a semver tag (for example, 0.16.0 or 0.15.0) so the renderer can include or drop the managers <AccessToken>/<Authentication>, <Outputs>, and LLHLS blocks correctly." >&2
+  exit 1
 fi
 
 strip_legacy_ome_api_token "$ome_image_tag"
