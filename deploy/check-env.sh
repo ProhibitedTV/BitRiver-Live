@@ -43,18 +43,17 @@ required_vars=(
   NEXT_PUBLIC_VIEWER_URL
 )
 
-ome_requires_access_token=true
+ome_supports_api_token=true
 if [[ ${BITRIVER_OME_IMAGE_TAG:-} =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
   ome_major=${BASH_REMATCH[1]}
   ome_minor=${BASH_REMATCH[2]}
   if (( ome_major == 0 && ome_minor < 16 )); then
-    ome_requires_access_token=false
+    ome_supports_api_token=false
   fi
 fi
 
-if [[ "$ome_requires_access_token" == true ]]; then
+if [[ "$ome_supports_api_token" == true ]]; then
   required_vars+=(BITRIVER_OME_API_TOKEN)
-  required_vars+=(BITRIVER_OME_ACCESS_TOKEN)
 fi
 
 declare -A forbidden_values=(
@@ -65,7 +64,6 @@ declare -A forbidden_values=(
   [BITRIVER_SRS_TOKEN]="srs-secure-token-example"
   [BITRIVER_OME_PASSWORD]="OME-Example-Pass!"
   [BITRIVER_OME_API_TOKEN]="OME-Example-Access-Token"
-  [BITRIVER_OME_ACCESS_TOKEN]="OME-Example-Access-Token"
   [BITRIVER_TRANSCODER_TOKEN]="transcoder-secure-token-example"
   [BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD]="R3dis-Example!"
 )
