@@ -188,7 +188,6 @@ declare -A env_defaults=(
   [BITRIVER_OME_USERNAME]='admin'
   [BITRIVER_OME_PASSWORD]='local-dev-password'
   [BITRIVER_OME_API_TOKEN]=''
-  [BITRIVER_OME_ACCESS_TOKEN]=''
   [BITRIVER_OME_HTTP_PORT]='8081'
   [BITRIVER_OME_SIGNALLING_PORT]='9000'
   [BITRIVER_TRANSCODER_API]='http://transcoder:9000'
@@ -224,7 +223,6 @@ existing_ome_access_token=$(read_env_file_value BITRIVER_OME_ACCESS_TOKEN)
 if (( supports_ome_access_token )); then
   ensure_env_default "BITRIVER_OME_API_TOKEN" "${existing_ome_access_token:-$(openssl rand -hex 24)}"
 fi
-ensure_env_default "BITRIVER_OME_ACCESS_TOKEN" "${env_defaults[BITRIVER_OME_API_TOKEN]}"
 
 env_default_keys=(
   BITRIVER_LIVE_PORT
@@ -260,7 +258,6 @@ env_default_keys=(
   BITRIVER_OME_SERVER_TLS_PORT
   BITRIVER_OME_USERNAME
   BITRIVER_OME_PASSWORD
-  BITRIVER_OME_ACCESS_TOKEN
   BITRIVER_OME_HTTP_PORT
   BITRIVER_OME_SIGNALLING_PORT
   BITRIVER_TRANSCODER_API
@@ -309,7 +306,6 @@ required_env_keys=(
   BITRIVER_OME_BIND
   BITRIVER_OME_USERNAME
   BITRIVER_OME_PASSWORD
-  BITRIVER_OME_ACCESS_TOKEN
   BITRIVER_OME_HTTP_PORT
   BITRIVER_OME_SIGNALLING_PORT
   BITRIVER_TRANSCODER_API
