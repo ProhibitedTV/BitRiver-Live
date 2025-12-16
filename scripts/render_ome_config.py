@@ -172,8 +172,6 @@ def render(
     server_ip: str,
     server_port: str,
     tls_port: str,
-    username: str,
-    password: str,
     tcp_relay: str,
     ice_candidate: str,
 ) -> None:
@@ -191,9 +189,6 @@ def render(
     text = _scoped_replace_control_bindings(text, escaped_bind)
     text = replace_all_tag_content(text, "TcpRelay", xml_escape(tcp_relay))
     text = replace_all_tag_content(text, "IceCandidate", xml_escape(ice_candidate))
-
-    text = replace_tag_content(text, "ID", xml_escape(username))
-    text = replace_tag_content(text, "Password", xml_escape(password))
 
     output.write_text(text)
 
@@ -217,12 +212,6 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "--server-ip",
         help="Public IP address advertised by OME; defaults to --bind",
-    )
-    parser.add_argument(
-        "--username", required=True, help="OME control username"
-    )
-    parser.add_argument(
-        "--password", required=True, help="OME control password"
     )
     parser.add_argument(
         "--tcp-relay",
@@ -250,8 +239,6 @@ def main(argv: list[str]) -> int:
         server_ip,
         args.port,
         args.tls_port,
-        args.username,
-        args.password,
         args.tcp_relay,
         args.ice_candidate,
     )
