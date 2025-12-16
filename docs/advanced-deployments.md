@@ -397,8 +397,8 @@ Operators can use the manifests under `deploy/` as a reference architecture for 
 
 | `BITRIVER_OME_IMAGE_TAG` | `BITRIVER_OME_API_TOKEN` expectation | Rendering behaviour |
 | --- | --- | --- |
-| `<0.16.0` | Must be empty. Older builds reject the managers `<AccessToken>`/`<Authentication>` block, so the renderer fails fast if a token is present. | The generated `Server.generated.xml` omits the managers auth block and rewrites the legacy `<OutputProfile>`/`<OutputStreams>` sections as needed. |
-| `0.16.0+` | Must be non-empty. Reuse the same value in `BITRIVER_OME_ACCESS_TOKEN` only if you still need the legacy health probe header. | The renderer injects the managers `<AccessTokens>` block with the provided token and leaves the modern output schema intact. |
+| `<0.16.0` (default) | Must be empty. Older builds reject the managers `<AccessToken>`/`<Authentication>` block, so the renderer fails fast if a token is present. | The generated `Server.generated.xml` omits the managers auth block and rewrites the legacy `<OutputProfile>`/`<OutputStreams>` sections as needed. |
+| `0.16.0+` (opt-in) | Set a non-empty value to enable manager authentication. Reuse the same value in `BITRIVER_OME_ACCESS_TOKEN` only if you still need the legacy health probe header. | The renderer injects the managers `<AccessTokens>` block with the provided token and leaves the modern output schema intact. |
 3. **Configure secrets securely.**
    - Generate an SRS management token and set it via `BITRIVER_SRS_TOKEN`.
    - Create an administrator account in OME (matching the credentials rendered from `deploy/ome/Server.xml` into `deploy/ome/Server.generated.xml`) and surface the username/password as `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`.
