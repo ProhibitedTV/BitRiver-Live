@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Server version="10">
-        <!-- Rendered for BITRIVER_OME_IMAGE_TAG=0.16.0 -->
     <Name>OvenMediaEngine</Name>
     <Type>origin</Type>
     <IP>0.0.0.0</IP>
@@ -31,25 +30,6 @@
                 <Port>8081</Port>
                 <TLSPort>8082</TLSPort>
                 <WorkerCount>1</WorkerCount>
-                <!--
-                  APIServer rejects an empty token; customize this value if you
-                  want to protect API access, or leave the placeholder for
-                  open/local use. Legacy builds without managers auth support
-                  will drop both AccessTokens and Authentication during
-                  templating.
-                -->
-                <AccessTokens>
-                    <AccessToken>OME-Example-Access-Token</AccessToken>
-                </AccessTokens>
-                <Authentication>
-                    <AutoRegister>true</AutoRegister>
-                    <AllowAnonymousUser>false</AllowAnonymousUser>
-                    <AllowAnonymousReferrer>false</AllowAnonymousReferrer>
-                    <User>
-                        <ID>ome-operator</ID>
-                        <Password>OME-Example-Pass!</Password>
-                    </User>
-                </Authentication>
             </API>
         </Managers>
 

@@ -30,15 +30,6 @@
                 <Port>8081</Port>
                 <TLSPort>8082</TLSPort>
                 <WorkerCount>1</WorkerCount>
-                <Authentication>
-                    <AutoRegister>true</AutoRegister>
-                    <AllowAnonymousUser>false</AllowAnonymousUser>
-                    <AllowAnonymousReferrer>false</AllowAnonymousReferrer>
-                    <User>
-                        <ID>admin</ID>
-                        <Password>password</Password>
-                    </User>
-                </Authentication>
             </API>
         </Managers>
 
