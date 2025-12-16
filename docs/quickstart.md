@@ -107,7 +107,18 @@ compose file.
 - **`permission denied while trying to connect to the Docker daemon socket`** – Add your account to the `docker` group with `sudo usermod -aG docker $USER` followed by `newgrp docker` (or log out and back in), then rerun the quickstart without `sudo`. You can run `sudo ./scripts/quickstart.sh` in a pinch, but expect root-owned files like `.env` until you fix the group membership.
 - **Port already in use** – Stop or reconfigure any services that currently bind to ports 5432, 6379, 8080, 8081, 9000, 9001, 1935, or 1985. Alternatively edit the corresponding `*_PORT` values in `.env` (for example, `BITRIVER_LIVE_PORT=9090`) and rerun `docker compose up -d`.
 - **`Empty <AccessToken> is not allowed`** – The OvenMediaEngine template detected a missing `BITRIVER_OME_API_TOKEN` in `.env` (you will also see the OME container exit and Compose mark `bitriver-ome` as unhealthy). Set a non-empty value in `.env`, mirror it into `BITRIVER_OME_ACCESS_TOKEN`, rerun `./scripts/render-ome-config.sh --force`, and restart the stack with `docker compose up -d` so `deploy/ome/Server.generated.xml` is regenerated with the token.
-- **`[Config] Unknown item found: Server.bind.managers.api.AccessTokens`** or **`[Config] Unknown item found: Server.bind.managers.api.Authentication`** – The rendered `Server.xml` still contains the managers `<AccessTokens>`/`<Authentication>` blocks even though your `BITRIVER_OME_IMAGE_TAG` points to a build that doesn't support them. Pin `BITRIVER_OME_IMAGE_TAG` in `.env` to a MAJOR.MINOR.PATCH tag that matches the OME image you actually run (for example, `0.15.0` for legacy builds that lack managers auth), clear `BITRIVER_OME_API_TOKEN`, rerun `./scripts/render-ome-config.sh --force`, and restart the stack so the regenerated config drops the unsupported tags before Docker brings OME back up.
+- **Still seeing `AccessTokens` errors after rendering?** – Verify the stamp and contents of the generated config before restarting OME:
+  1. Ensure `.env` sets `BITRIVER_OME_IMAGE_TAG` to the version you actually run and leaves `BITRIVER_OME_API_TOKEN` empty for pre-0.16.0 images.
+  2. Force regeneration to align the schema with that tag:
+     ```bash
+     ./scripts/render-ome-config.sh --force
+     ```
+  3. Confirm the rendered file dropped managers auth for legacy tags:
+     ```bash
+     grep -n "BITRIVER_OME_IMAGE_TAG" deploy/ome/Server.generated.xml
+     rg --heading "AccessTokens|Authentication" deploy/ome/Server.generated.xml
+     ```
+     The first command should show the `<-- Rendered for BITRIVER_OME_IMAGE_TAG=<tag> -->` marker matching `.env`; the second should return no results when targeting <0.16.0 images. Only restart `docker compose up -d bitriver-ome` after both checks pass.
 - **Reading OME startup logs after template fixes** – Quickstart reruns should show the standard OME banner, FFmpeg and version
   lines, STUN public IP resolution, a burst of ICE candidate logs, and the `All modules are initialized successfully` marker
   followed by `Create HostMetrics...` and `Create ApplicationMetrics(#default#live...)`. You should no longer see
