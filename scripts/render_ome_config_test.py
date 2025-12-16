@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-import contextlib
-import io
 from pathlib import Path
 import re
 import sys
@@ -86,8 +84,8 @@ class RenderOmeConfigTest(unittest.TestCase):
                 tls_port="12346",
                 username="ome-user",
                 password="s3cret",
-                api_token="access-token-123",
-                include_managers_authentication=True,
+                tcp_relay="*:3478",
+                ice_candidate="example.com:10000-10009/udp",
             )
 
             rendered = output.read_text()
@@ -103,13 +101,14 @@ class RenderOmeConfigTest(unittest.TestCase):
             self.assertIn("<TLSPort>12346</TLSPort>", rendered)
             self.assertIn("<ID>ome-user</ID>", rendered)
             self.assertIn("<Password>s3cret</Password>", rendered)
-            self.assertIn("<AccessToken>access-token-123</AccessToken>", rendered)
+            self.assertNotIn("<AccessTokens>", rendered)
+            self.assertIn("<Authentication>", rendered)
 
             self.assertNotIn("<Server.bind", rendered_no_comments)
             self.assertNotIn("<Modules><Control", rendered_no_comments)
             self.assertNotIn("<Bind><IP>", rendered_no_comments)
 
-    def test_render_can_drop_managers_authentication(self) -> None:
+    def test_render_always_keeps_authentication_block(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             tmpdir = Path(td)
             template, output = _prepare_template(tmpdir)
@@ -117,91 +116,21 @@ class RenderOmeConfigTest(unittest.TestCase):
             render_ome_config.render(
                 template,
                 output,
-                bind="10.0.0.1",
-                server_ip="10.0.0.1",
+                bind="127.0.0.1",
+                server_ip="127.0.0.1",
                 server_port="8081",
                 tls_port="8443",
                 username="ome-user",
                 password="s3cret",
-                api_token="",
-                include_managers_authentication=False,
+                tcp_relay="*:3478",
+                ice_candidate="*:10000-10009/udp",
             )
 
             rendered = output.read_text()
 
-            self.assertNotIn("<AccessTokens>", rendered)
-            self.assertNotIn("<Authentication>", rendered)
-
-    def test_render_can_unwrap_application_outputs(self) -> None:
-        with tempfile.TemporaryDirectory() as td:
-            tmpdir = Path(td)
-            template, output = _prepare_template(tmpdir)
-
-            render_ome_config.render(
-                template,
-                output,
-                bind="10.0.0.1",
-                server_ip="10.0.0.1",
-                server_port="8081",
-                tls_port="8443",
-                username="ome-user",
-                password="s3cret",
-                api_token="",
-                include_managers_authentication=False,
-                include_output_streams=False,
-                include_application_outputs=False,
-            )
-
-            rendered = output.read_text()
-
-            self.assertNotIn("<Outputs>", rendered)
-            self.assertIn("<OutputProfiles>", rendered)
-            self.assertIn("<LLHLS>", rendered)
-
-    def test_render_drops_llhls_for_legacy_image_tag(self) -> None:
-        with tempfile.TemporaryDirectory() as td:
-            tmpdir = Path(td)
-            template, output = _prepare_template(tmpdir)
-
-            legacy_tag = "0.15.0"
-
-            render_ome_config.render(
-                template,
-                output,
-                bind="10.0.0.1",
-                server_ip="10.0.0.1",
-                server_port="8081",
-                tls_port="8443",
-                username="ome-user",
-                password="s3cret",
-                api_token="",
-                include_managers_authentication=False,
-                include_output_streams=render_ome_config._output_streams_supported(legacy_tag),
-                include_application_outputs=render_ome_config._application_outputs_supported(legacy_tag),
-                include_llhls=render_ome_config._llhls_supported(legacy_tag),
-            )
-
-            rendered = output.read_text()
-
-            self.assertNotIn("<LLHLS>", rendered)
-            self.assertIn("<OutputProfiles>", rendered)
-
-    def test_unparseable_tags_default_to_modern_schema(self) -> None:
-        render_ome_config._unparseable_tags_warned.clear()
-
-        with contextlib.redirect_stderr(io.StringIO()) as stderr:
-            self.assertTrue(render_ome_config._output_streams_supported("latest"))
-            self.assertTrue(render_ome_config._application_outputs_supported("latest"))
-            self.assertTrue(render_ome_config._llhls_supported("latest"))
-            self.assertTrue(render_ome_config._managers_authentication_supported("latest"))
-
-        warning_output = stderr.getvalue()
-        self.assertIn("could not parse OME image tag 'latest'", warning_output)
-        self.assertEqual(
-            1,
-            warning_output.count("could not parse OME image tag 'latest'"),
-            "Unparseable image tags should warn once while defaulting to modern schemas",
-        )
+            self.assertIn("<Authentication>", rendered)
+            self.assertIn("<ID>ome-user</ID>", rendered)
+            self.assertIn("<Password>s3cret</Password>", rendered)
 
 
 if __name__ == "__main__":
