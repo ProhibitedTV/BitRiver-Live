@@ -22,103 +22,6 @@ def replace_tag_content(data: str, tag: str, value: str) -> str:
     return data[: start + len(open_tag)] + value + data[end:]
 
 
-def replace_optional_tag_content(data: str, tag: str, value: str) -> str:
-    if f"<{tag}>" not in data:
-        return data
-    return replace_tag_content(data, tag, value)
-
-
-def remove_first_tag_block(data: str, tag: str) -> str:
-    """Remove the first occurrence of <tag>...</tag> in data, if present."""
-
-    pattern = re.compile(rf"\s*<{tag}>.*?</{tag}>\s*", re.DOTALL)
-    return pattern.sub("\n", data, count=1)
-
-
-def remove_all_tag_blocks(data: str, tag: str) -> str:
-    """Remove all <tag>...</tag> occurrences in data, if present."""
-
-    pattern = re.compile(rf"\s*<{tag}>.*?</{tag}>\s*", re.DOTALL)
-    return pattern.sub("\n", data)
-
-
-def unwrap_first_tag_block(data: str, tag: str) -> str:
-    """Remove the first <tag> wrapper while preserving its contents."""
-
-    pattern = re.compile(rf"(<{tag}[^>]*>)(.*?)(</{tag}>)", re.DOTALL)
-    match = pattern.search(data)
-    if match is None:
-        return data
-
-    start, end = match.span()
-    inner = match.group(2)
-    return data[:start] + inner + data[end:]
-
-
-_unparseable_tags_warned: set[str] = set()
-
-
-def _parse_semver_tag(image_tag: str) -> tuple[int, int, int] | None:
-    match = re.match(r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)", image_tag)
-    if match is None:
-        if image_tag not in _unparseable_tags_warned:
-            print(
-                f"warning: could not parse OME image tag '{image_tag}'; "
-                "assuming modern schema support",
-                file=sys.stderr,
-            )
-            _unparseable_tags_warned.add(image_tag)
-        return None
-
-    return (
-        int(match.group("major")),
-        int(match.group("minor")),
-        int(match.group("patch")),
-    )
-
-
-def _modern_schema_supported(image_tag: str | None) -> bool:
-    """Return True for modern schemas unless a legacy tag is confirmed."""
-
-    if image_tag is None:
-        return True
-
-    parsed_tag = _parse_semver_tag(image_tag)
-    if parsed_tag is None:
-        return True
-
-    major, minor, _ = parsed_tag
-
-    if major == 0 and minor < 16:
-        return False
-
-    return True
-
-
-def _output_streams_supported(image_tag: str | None) -> bool:
-    """Return True when the provided image tag advertises <OutputStreams> support."""
-
-    return _modern_schema_supported(image_tag)
-
-
-def _application_outputs_supported(image_tag: str | None) -> bool:
-    """Return True when the provided image tag advertises <Outputs> support."""
-
-    return _modern_schema_supported(image_tag)
-
-
-def _llhls_supported(image_tag: str | None) -> bool:
-    """Return True when the provided image tag advertises <LLHLS> support."""
-
-    return _modern_schema_supported(image_tag)
-
-
-def _managers_authentication_supported(image_tag: str | None) -> bool:
-    """Return True when the provided image tag advertises managers auth support."""
-
-    return _modern_schema_supported(image_tag)
-
-
 def replace_all_tag_content(
     data: str, tag: str, value: str, *, required: bool = True
 ) -> str:
@@ -262,43 +165,6 @@ def _scoped_replace_control_bindings(text: str, bind: str) -> str:
     return text[:control_start] + control_body + text[control_end:]
 
 
-def _rewrite_output_streams_for_legacy_tags(text: str) -> str:
-    """Flatten <OutputStreams> blocks to legacy codec tags when unsupported."""
-
-    def _flatten_output_streams(match: re.Match[str]) -> str:
-        body = match.group(2)
-        streams_match = re.search(r"<OutputStreams>(.*?)</OutputStreams>", body, re.DOTALL)
-        if streams_match is None:
-            return match.group(0)
-
-        stream_body = streams_match.group(1)
-        video_match = re.search(r"<Video>(.*?)</Video>", stream_body, re.DOTALL)
-        audio_match = re.search(r"<Audio>(.*?)</Audio>", stream_body, re.DOTALL)
-
-        indent_match = re.search(r"\n([ \t]*)<OutputStreams>", body)
-        indent = indent_match.group(1) if indent_match else ""
-
-        replacement_lines: list[str] = []
-        if video_match is not None:
-            replacement_lines.append(f"{indent}{video_match.group(0).strip()}")
-        if audio_match is not None:
-            replacement_lines.append(f"{indent}{audio_match.group(0).strip()}")
-
-        replacement = "\n".join(replacement_lines)
-        if replacement:
-            replacement = f"\n{replacement}\n"
-
-        new_body = body[: streams_match.start()] + replacement + body[streams_match.end() :]
-        return f"{match.group(1)}{new_body}{match.group(3)}"
-
-    return re.sub(
-        r"(<OutputProfile>)(.*?)(</OutputProfile>)",
-        _flatten_output_streams,
-        text,
-        flags=re.DOTALL,
-    )
-
-
 def render(
     template: Path,
     output: Path,
@@ -308,14 +174,8 @@ def render(
     tls_port: str,
     username: str,
     password: str,
-    api_token: str,
     tcp_relay: str,
     ice_candidate: str,
-    *,
-    include_managers_authentication: bool,
-    include_output_streams: bool = True,
-    include_application_outputs: bool = True,
-    include_llhls: bool = True,
 ) -> None:
     escaped_bind = xml_escape(bind)
     escaped_port = xml_escape(server_port)
@@ -334,23 +194,6 @@ def render(
 
     text = replace_tag_content(text, "ID", xml_escape(username))
     text = replace_tag_content(text, "Password", xml_escape(password))
-
-    if not include_managers_authentication:
-        text = remove_first_tag_block(text, "AccessTokens")
-        text = remove_first_tag_block(text, "Authentication")
-    elif api_token:
-        text = replace_optional_tag_content(text, "AccessToken", xml_escape(api_token))
-    else:
-        text = remove_first_tag_block(text, "AccessTokens")
-
-    if not include_application_outputs:
-        text = unwrap_first_tag_block(text, "Outputs")
-
-    if not include_output_streams:
-        text = _rewrite_output_streams_for_legacy_tags(text)
-
-    if not include_llhls:
-        text = remove_all_tag_blocks(text, "LLHLS")
 
     output.write_text(text)
 
@@ -382,11 +225,6 @@ def main(argv: list[str]) -> int:
         "--password", required=True, help="OME control password"
     )
     parser.add_argument(
-        "--api-token",
-        required=True,
-        help="OME API server access token",
-    )
-    parser.add_argument(
         "--tcp-relay",
         required=True,
         help="Address advertised in <TcpRelay> inside <IceCandidates> (e.g. *:3478)",
@@ -403,28 +241,8 @@ def main(argv: list[str]) -> int:
         "--tls-port", required=True, help="OME server TLS port"
     )
 
-    parser.add_argument(
-        "--omit-managers-auth",
-        action="store_true",
-        help="Drop the managers <Authentication> block when the target image does not support it",
-    )
-
-    parser.add_argument(
-        "--image-tag",
-        help=(
-            "OME image tag used to detect manager authentication and output stream support; "
-            "<0.16.0 tags omit AccessTokens/Authentication, flatten OutputStreams, and drop LLHLS"
-        ),
-    )
-
     args = parser.parse_args(argv)
     server_ip = args.server_ip if args.server_ip is not None else args.bind
-    managers_authentication_supported = _managers_authentication_supported(args.image_tag)
-    output_streams_supported = _output_streams_supported(args.image_tag)
-    application_outputs_supported = _application_outputs_supported(args.image_tag)
-    llhls_supported = _llhls_supported(args.image_tag)
-    include_managers_authentication = managers_authentication_supported and not args.omit_managers_auth
-    api_token = args.api_token if managers_authentication_supported else ""
     render(
         args.template,
         args.output,
@@ -434,13 +252,8 @@ def main(argv: list[str]) -> int:
         args.tls_port,
         args.username,
         args.password,
-        api_token,
         args.tcp_relay,
         args.ice_candidate,
-        include_managers_authentication=include_managers_authentication,
-        include_output_streams=output_streams_supported,
-        include_application_outputs=application_outputs_supported,
-        include_llhls=llhls_supported,
     )
     return 0
 

@@ -6,8 +6,6 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env}"
 TEMPLATE="$REPO_ROOT/deploy/ome/Server.xml"
 OUTPUT="$REPO_ROOT/deploy/ome/Server.generated.xml"
-# shellcheck source=./ome-capabilities.sh
-source "$SCRIPT_DIR/ome-capabilities.sh"
 MODE="render"
 QUIET=0
 FORCE=0
@@ -87,74 +85,18 @@ OME_ICE_CANDIDATE="${BITRIVER_OME_ICE_CANDIDATE:-}"
 if [[ -z "$OME_ICE_CANDIDATE" ]]; then
   OME_ICE_CANDIDATE="*:${OME_ICE_PORT_RANGE}/udp"
 fi
-OME_API_TOKEN_VAR="${BITRIVER_OME_API_TOKEN:-}"
-OME_ACCESS_TOKEN_VAR="${BITRIVER_OME_ACCESS_TOKEN:-}"
-OME_API_TOKEN="${OME_API_TOKEN_VAR:-$OME_ACCESS_TOKEN_VAR}"
-OME_IMAGE_TAG="${BITRIVER_OME_IMAGE_TAG:-}"
-
-if [[ -z "$OME_IMAGE_TAG" ]]; then
-  echo "BITRIVER_OME_IMAGE_TAG must be set in $ENV_FILE before rendering." >&2
-  exit 1
-fi
-
-eval "$(compute_ome_capabilities "$OME_IMAGE_TAG" 1)"
-
-if [[ $parsing_failed -eq 1 ]]; then
-  cat <<EOF >&2
-BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG is not a semver tag (expected MAJOR.MINOR.PATCH).
-OME requires a pinned, parseable tag so the renderer can decide whether to include managers <AccessToken>/<Authentication>, <Outputs>, and LLHLS sections. Update BITRIVER_OME_IMAGE_TAG in $ENV_FILE to a semver value (for example, 0.16.0 for modern schemas or 0.15.0 for legacy) and rerun ./scripts/render-ome-config.sh --force.
-EOF
-  exit 1
-fi
-
 if [[ -z "$OME_USERNAME" || -z "$OME_PASSWORD" ]]; then
   echo "BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD must be set in $ENV_FILE before rendering." >&2
   exit 1
 fi
-
-render_api_token="$OME_API_TOKEN"
-if [[ $supports_access_token -eq 1 && -z "$OME_API_TOKEN_VAR" ]]; then
-  cat <<EOF >&2
-BITRIVER_OME_API_TOKEN must be set in $ENV_FILE before rendering when BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG (managers <AccessToken> is supported starting with 0.16.0). If you are migrating from BITRIVER_OME_ACCESS_TOKEN, copy that value into BITRIVER_OME_API_TOKEN.
-EOF
-  exit 1
-fi
-
-if [[ $supports_access_token -eq 0 ]]; then
-  if [[ -n "$OME_API_TOKEN_VAR" ]]; then
-    cat <<EOF >&2
-BITRIVER_OME_API_TOKEN must be empty in $ENV_FILE when BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG because this version drops the managers <AccessToken>/<Authentication> block entirely. Clear the variable and rerun the renderer so the generated config matches the legacy schema.
-EOF
-    exit 1
-  fi
-  render_api_token=""
-fi
-
-omit_managers_auth_args=()
-if [[ $supports_managers_authentication -eq 0 ]]; then
-  omit_managers_auth_args+=(--omit-managers-auth)
-fi
-if [[ $supports_output_streams -eq 0 && $QUIET -eq 0 ]]; then
-  echo "BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG does not advertise <OutputStreams>; flattening passthrough profile to the legacy layout." >&2
-fi
-if [[ $supports_application_outputs -eq 0 && $QUIET -eq 0 ]]; then
-  echo "BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG does not advertise <Outputs>; unwrapping the application outputs block for legacy schemas." >&2
-fi
-
-OME_MARKER_PREFIX="<!-- Rendered for BITRIVER_OME_IMAGE_TAG="
 
 if [[ "$MODE" == "check" ]]; then
   if [[ ! -f "$OUTPUT" ]]; then
     echo "OME config missing at $OUTPUT. Run ./scripts/render-ome-config.sh to generate it." >&2
     exit 1
   fi
-  marker="${OME_MARKER_PREFIX}${OME_IMAGE_TAG} -->"
-  if ! grep -q "$marker" "$OUTPUT"; then
-    echo "OME config at $OUTPUT was rendered for a different BITRIVER_OME_IMAGE_TAG. Expected $OME_IMAGE_TAG; rerun ./scripts/render-ome-config.sh --force with the current env so the stamped tag matches." >&2
-    exit 1
-  fi
   if [[ $QUIET -eq 0 ]]; then
-    echo "OME config found at $OUTPUT and stamped for BITRIVER_OME_IMAGE_TAG=$OME_IMAGE_TAG."
+    echo "OME config found at $OUTPUT."
   fi
   exit 0
 fi
@@ -176,21 +118,11 @@ if ! render_output=$(python3 "$SCRIPT_DIR/render_ome_config.py" \
   --tls-port "$OME_TLS_PORT" \
   --username "$OME_USERNAME" \
   --password "$OME_PASSWORD" \
-  --api-token "$render_api_token" \
   --tcp-relay "$OME_TCP_RELAY" \
-  --ice-candidate "$OME_ICE_CANDIDATE" \
-  --image-tag "$OME_IMAGE_TAG" \
-  "${omit_managers_auth_args[@]}" 2>&1); then
+  --ice-candidate "$OME_ICE_CANDIDATE" 2>&1); then
   echo "Failed to render deploy/ome/Server.generated.xml. Check BITRIVER_OME_* values in $ENV_FILE and the template at $TEMPLATE." >&2
   echo "$render_output" >&2
   exit 1
-fi
-
-marker="${OME_MARKER_PREFIX}${OME_IMAGE_TAG} -->"
-if grep -q "$OME_MARKER_PREFIX" "$OUTPUT"; then
-  perl -0pi -e "s/${OME_MARKER_PREFIX}.* -->/${marker}/" "$OUTPUT"
-else
-  perl -0pi -e "s#(<Server[^>]*>\\s*)#\\1    ${marker}\\n    #" "$OUTPUT"
 fi
 
 if [[ $QUIET -eq 0 ]]; then
