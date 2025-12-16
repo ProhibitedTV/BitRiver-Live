@@ -180,7 +180,7 @@ declare -A env_defaults=(
   [BITRIVER_VIEWER_IMAGE_TAG]='latest'
   [BITRIVER_SRS_CONTROLLER_IMAGE_TAG]='latest'
   [SRS_CONTROLLER_UPSTREAM]='http://srs:1985/api/'
-  [BITRIVER_OME_IMAGE_TAG]='0.16.0'
+  [BITRIVER_OME_IMAGE_TAG]='0.15.0'
   [BITRIVER_OME_API]='http://ome:8081'
   [BITRIVER_OME_BIND]='0.0.0.0'
   [BITRIVER_OME_SERVER_PORT]='9000'
@@ -219,9 +219,14 @@ fi
 strip_legacy_ome_api_token "$ome_image_tag"
 
 existing_ome_access_token=$(read_env_file_value BITRIVER_OME_ACCESS_TOKEN)
+existing_ome_api_token=$(read_env_file_value BITRIVER_OME_API_TOKEN)
+use_ome_api_token=0
 
 if (( supports_ome_access_token )); then
-  ensure_env_default "BITRIVER_OME_API_TOKEN" "${existing_ome_access_token:-$(openssl rand -hex 24)}"
+  if [[ -n $existing_ome_api_token || -n $existing_ome_access_token ]]; then
+    ensure_env_default "BITRIVER_OME_API_TOKEN" "${existing_ome_api_token:-${existing_ome_access_token:-}}"
+    use_ome_api_token=1
+  fi
 fi
 
 env_default_keys=(
@@ -322,7 +327,7 @@ required_env_keys=(
   BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD
 )
 
-if (( supports_ome_access_token )); then
+if (( use_ome_api_token )); then
   env_default_keys+=(BITRIVER_OME_API_TOKEN)
   required_env_keys+=(BITRIVER_OME_API_TOKEN)
 fi

@@ -257,7 +257,7 @@ services:
     restart: "no"
 
   ome:
-    image: airensoft/ovenmediaengine:${BITRIVER_OME_IMAGE_TAG:-0.16.0}
+    image: airensoft/ovenmediaengine:${BITRIVER_OME_IMAGE_TAG:-0.15.0}
     container_name: bitriver-ome
     hostname: ome
     restart: unless-stopped
