@@ -1,0 +1,51 @@
+name: Ingest end-to-end
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+    paths:
+      - '**/*.go'
+      - scripts/**
+      - internal/**
+      - .github/workflows/ingest-e2e.yml
+  pull_request:
+    paths:
+      - '**/*.go'
+      - scripts/**
+      - internal/**
+      - .github/workflows/ingest-e2e.yml
+
+permissions:
+  contents: read
+
+jobs:
+  ingest-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Ensure vendored modules are available
+        run: |
+          test -d vendor
+          test -f vendor/modules.txt
+
+      - name: Run ingest pipeline integration test
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+          GOFLAGS: -mod=vendor
+        run: ./scripts/test-ingest-e2e.sh

@@ -27,10 +27,9 @@ coverage. Keep it updated as tests are hardened or new flakes are discovered.
 
 ## Coverage gaps to address
 
-- **Ingest/stream lifecycle:** End-to-end coverage for stream start/stop across
-  ingest controllers, transcoder coordination, and recording export is minimal.
-- **Viewer/client interactions:** Limited automated coverage for chat and
-  playback from the Next.js viewer beyond unit tests.
+- **Viewer/client interactions:** End-user flows such as creator uploads and
+  schedule management remain lightly covered in automated tests; extend the
+  Playwright suite to surface regressions outside the channel page.
 
 ## Recent coverage additions
 
@@ -39,6 +38,15 @@ coverage. Keep it updated as tests are hardened or new flakes are discovered.
   admin-only enforcement using the `internal/testsupport.SessionStoreStub`.
   They run with the standard Go test environment (offline module settings,
   no external services required).
+- **Ingest end-to-end guard:** `scripts/test-ingest-e2e.sh` runs the storage
+  layer against the real HTTP ingest controller with `internal/testsupport/
+  ingeststub` to assert ingest endpoints, manifest URLs, and teardown calls are
+  recorded. A dedicated GitHub Actions job enforces the run on main branches
+  and tags.
+- **Viewer playback + chat integration:** Playwright specs in
+  `web/viewer/tests/channel-chat-playback.spec.ts` now cover channel page retry
+  handling, HLS-ready states, chat send/receive, and chat authentication
+  prompts.
 
 ## Reliability checklist
 

@@ -73,6 +73,9 @@ so the job can populate every required variable and image tag:
 - `BITRIVER_OME_API`
 - `BITRIVER_LIVE_ADMIN_EMAIL`
 - `BITRIVER_LIVE_ADMIN_PASSWORD`
+- `BITRIVER_LIVE_SESSION_TTL` (use the same duration as `deploy/.env.example`,
+  currently `168h`, unless your session policy requires a shorter window)
+- `BITRIVER_LIVE_ALLOW_SELF_SIGNUP` (set to `false` in most production deploys)
 - `BITRIVER_SRS_TOKEN`
 - `BITRIVER_OME_USERNAME`
 - `BITRIVER_OME_PASSWORD`
@@ -89,6 +92,12 @@ so the job can populate every required variable and image tag:
 - `BITRIVER_OME_IMAGE_TAG`
 - `NEXT_PUBLIC_API_BASE_URL`
 - `NEXT_PUBLIC_VIEWER_URL`
+
+The release workflow persists the verified `.env` from this job and reuses it
+to render the production OvenMediaEngine config. The `build` matrix now fails
+if `deploy/ome/Server.generated.xml` would change when rendered for the
+tagged release, preventing stale placeholders from landing in the packaged
+artefacts.
 
 ## 3. Rotate credentials and validate environment files
 

@@ -18,6 +18,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Download verified environment file
+        uses: actions/download-artifact@v4
+        with:
+          name: release-env
+          path: .
+
       - name: Create production env file
         env:
           BITRIVER_POSTGRES_USER: ${{ secrets.BITRIVER_POSTGRES_USER }}
@@ -26,6 +32,8 @@ jobs:
           BITRIVER_OME_API: ${{ secrets.BITRIVER_OME_API }}
           BITRIVER_LIVE_ADMIN_EMAIL: ${{ secrets.BITRIVER_LIVE_ADMIN_EMAIL }}
           BITRIVER_LIVE_ADMIN_PASSWORD: ${{ secrets.BITRIVER_LIVE_ADMIN_PASSWORD }}
+          BITRIVER_LIVE_SESSION_TTL: ${{ secrets.BITRIVER_LIVE_SESSION_TTL }}
+          BITRIVER_LIVE_ALLOW_SELF_SIGNUP: ${{ secrets.BITRIVER_LIVE_ALLOW_SELF_SIGNUP }}
           BITRIVER_SRS_TOKEN: ${{ secrets.BITRIVER_SRS_TOKEN }}
           BITRIVER_OME_USERNAME: ${{ secrets.BITRIVER_OME_USERNAME }}
           BITRIVER_OME_PASSWORD: ${{ secrets.BITRIVER_OME_PASSWORD }}
@@ -43,6 +51,7 @@ jobs:
           BITRIVER_SRS_CONTROLLER_IMAGE_TAG: ${{ secrets.BITRIVER_SRS_CONTROLLER_IMAGE_TAG }}
           BITRIVER_TRANSCODER_IMAGE_TAG: ${{ secrets.BITRIVER_TRANSCODER_IMAGE_TAG }}
           BITRIVER_SRS_IMAGE_TAG: ${{ secrets.BITRIVER_SRS_IMAGE_TAG }}
+          BITRIVER_OME_IMAGE_TAG: ${{ secrets.BITRIVER_OME_IMAGE_TAG }}
           NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
           NEXT_PUBLIC_VIEWER_URL: ${{ secrets.NEXT_PUBLIC_VIEWER_URL }}
         run: |
@@ -56,6 +65,8 @@ jobs:
             BITRIVER_OME_API
             BITRIVER_LIVE_ADMIN_EMAIL
             BITRIVER_LIVE_ADMIN_PASSWORD
+            BITRIVER_LIVE_SESSION_TTL
+            BITRIVER_LIVE_ALLOW_SELF_SIGNUP
             BITRIVER_SRS_TOKEN
             BITRIVER_OME_USERNAME
             BITRIVER_OME_PASSWORD
@@ -73,6 +84,7 @@ jobs:
             BITRIVER_SRS_CONTROLLER_IMAGE_TAG
             BITRIVER_TRANSCODER_IMAGE_TAG
             BITRIVER_SRS_IMAGE_TAG
+            BITRIVER_OME_IMAGE_TAG
             NEXT_PUBLIC_API_BASE_URL
             NEXT_PUBLIC_VIEWER_URL
           )
@@ -90,6 +102,13 @@ jobs:
           set -euo pipefail
           ./deploy/check-env.sh .env | tee env-validation.log
 
+      - name: Upload verified environment file
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-env
+          path: .env
+          if-no-files-found: error
+
   go-tests:
     name: Go unit tests
     runs-on: ubuntu-latest
@@ -102,6 +121,39 @@ jobs:
         with:
           go-version: '1.21'
           cache: true
+
+      - name: Verify OvenMediaEngine config freshness
+        run: |
+          set -euo pipefail
+          if [[ ! -f .env ]]; then
+            echo "Verified .env not found; ensure verify-env uploaded the file." >&2
+            exit 1
+          fi
+
+          original_checksum="missing"
+          placeholder_config=0
+          if [[ -f deploy/ome/Server.generated.xml ]]; then
+            original_checksum="$(sha256sum deploy/ome/Server.generated.xml | awk '{print $1}')"
+            if grep -Eq 'OME-Example-Access-Token|OME-Example-Pass!|ome-operator|0\.0\.0\.0' deploy/ome/Server.generated.xml; then
+              placeholder_config=1
+            fi
+          fi
+
+          ./scripts/render-ome-config.sh --env-file .env --force --quiet
+
+          if [[ ! -f deploy/ome/Server.generated.xml ]]; then
+            echo "deploy/ome/Server.generated.xml was not produced by the renderer." >&2
+            exit 1
+          fi
+
+          updated_checksum="$(sha256sum deploy/ome/Server.generated.xml | awk '{print $1}')"
+          if [[ "$original_checksum" != "missing" && "$original_checksum" != "$updated_checksum" ]]; then
+            echo "deploy/ome/Server.generated.xml was re-rendered for this tag using the verified .env." >&2
+            if [[ $placeholder_config -eq 1 ]]; then
+              echo "The previously checked-in config used placeholder OvenMediaEngine credentials or bind addresses; commit the refreshed file before publishing a release." >&2
+              exit 1
+            fi
+          fi
 
       - name: Ensure vendored modules are available
         run: |
