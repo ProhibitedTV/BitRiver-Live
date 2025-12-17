@@ -60,7 +60,7 @@ When any dependency falters, start with the API health surfaces. `/readyz` retur
 - **What degrades:** Live playback drops because the origin is unreachable; ingest bootstraps fail when the controller cannot create an OME application and roll back SRS provisioning. `/healthz` reports the `ovenmediaengine` component as `error` while `/readyz` remains healthy if Postgres and chat are online.【F:internal/ingest/http_controller.go†L308-L401】【F:internal/ingest/http_controller.go†L120-L195】
 - **API/reactive response:** Existing VOD assets remain playable from object storage/CDN, but new live sessions cannot start until OME accepts control-plane requests.【F:docs/advanced-deployments.md†L166-L205】
   - **Recovery checklist:**
-    1. Confirm the control credentials and bind config (`BITRIVER_OME_API`, `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, `BITRIVER_OME_API_TOKEN`, `BITRIVER_OME_BIND`, `BITRIVER_OME_SERVER_PORT`, `BITRIVER_OME_SERVER_TLS_PORT`) match the running OME instance. Set `BITRIVER_OME_ACCESS_TOKEN` only if the legacy health probe header is still required.【F:deploy/.env.example†L53-L57】【F:deploy/.env.example†L85-L90】
+    1. Confirm the control credentials and bind config (`BITRIVER_OME_API`, `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, `BITRIVER_OME_API_TOKEN`, `BITRIVER_OME_BIND`, `BITRIVER_OME_SERVER_PORT`, `BITRIVER_OME_SERVER_TLS_PORT`) match the running OME instance. Keep `BITRIVER_OME_ACCESS_TOKEN` aligned with `BITRIVER_OME_API_TOKEN` unless you intentionally need a distinct health probe header.【F:deploy/.env.example†L53-L57】【F:deploy/.env.example†L85-L90】
   2. Restart OME, watch its health endpoint, then re-run `/healthz` on the API to ensure the component returns to `ok`.
   3. Retry ingest start; the controller will reprovision the application and transcoder jobs once OME responds.
 
@@ -307,7 +307,7 @@ BitRiver Live can orchestrate end-to-end ingest and transcode jobs by talking to
 | `BITRIVER_OME_TCP_RELAY` | Address advertised in `<TcpRelay>` for TURN/TCP candidates (defaults to `*:3478`; set to the externally reachable host/port when NATting). |
 | `BITRIVER_OME_ICE_PORT_RANGE` | Host-facing UDP range published for media relays (defaults to `10000-10009`). |
 | `BITRIVER_OME_ICE_CANDIDATE` | ICE candidate advertised to browsers (defaults to `*:10000-10009/udp`; replace with public IP/port range when NATting or port-forwarding). |
-| `BITRIVER_OME_USERNAME` / `BITRIVER_OME_PASSWORD` / `BITRIVER_OME_API_TOKEN` | Control-plane credentials for OvenMediaEngine (basic auth and API access token; set `BITRIVER_OME_ACCESS_TOKEN` only when the legacy health probe header is required). |
+| `BITRIVER_OME_USERNAME` / `BITRIVER_OME_PASSWORD` / `BITRIVER_OME_API_TOKEN` | Control-plane credentials for OvenMediaEngine (basic auth and API access token). `BITRIVER_OME_ACCESS_TOKEN` mirrors the API token for the health probe header unless you override it. |
 | `BITRIVER_TRANSCODER_API` | Base URL for the FFmpeg job runner (e.g. a lightweight controller on port `9000`). |
 | `BITRIVER_TRANSCODER_TOKEN` | Bearer token for FFmpeg job APIs. |
 | `BITRIVER_TRANSCODE_LADDER` | Optional ladder definition (`1080p:6000,720p:4000,480p:2500`). |
@@ -323,7 +323,7 @@ To keep bootstrapping predictable the server now fails fast if any of the requir
 
 - An **SRS API proxy** (the `srs-controller` service) reachable on port `1985` (or your custom management port). The proxy validates `BITRIVER_SRS_TOKEN` on every request and forwards authenticated calls to the upstream SRS raw API.
 - An **SRS** instance the proxy can reach on port `1985` (or your custom management port) with `raw_api` enabled.
-- An **OvenMediaEngine** API listener (default `8081`) with an account that has permission to create and delete applications. Provide the username/password through `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD` and the API token through `BITRIVER_OME_API_TOKEN`. Add `BITRIVER_OME_ACCESS_TOKEN` only if your deployment still uses the legacy health probe header.
+- An **OvenMediaEngine** API listener (default `8081`) with an account that has permission to create and delete applications. Provide the username/password through `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD` and the API token through `BITRIVER_OME_API_TOKEN`. Override `BITRIVER_OME_ACCESS_TOKEN` only if your deployment needs a distinct health probe header.
 - A **transcoder job controller** (such as an FFmpeg fleet manager) exposed over HTTP—commonly on port `9000`—secured with a bearer token supplied in `BITRIVER_TRANSCODER_TOKEN`.
 
 Open the management ports to the BitRiver Live API host and ensure the credentials map to accounts that can create/delete the corresponding resources. Set the optional `BITRIVER_INGEST_HEALTH` path if your services expose health checks somewhere other than `/healthz`.
@@ -397,8 +397,7 @@ Operators can use the manifests under `deploy/` as a reference architecture for 
 
 | `BITRIVER_OME_IMAGE_TAG` | `BITRIVER_OME_API_TOKEN` expectation | Rendering behaviour |
 | --- | --- | --- |
-| `<0.16.0` (default) | Must be empty. Older builds reject the managers `<AccessToken>`/`<Authentication>` block, so the renderer fails fast if a token is present. | The generated `Server.generated.xml` omits the managers auth block and rewrites the legacy `<OutputProfile>`/`<OutputStreams>` sections as needed. |
-| `0.16.0+` (opt-in) | Set a non-empty value to enable manager authentication. Reuse the same value in `BITRIVER_OME_ACCESS_TOKEN` only if you still need the legacy health probe header. | The renderer injects the managers `<AccessTokens>` block with the provided token and leaves the modern output schema intact. |
+| `0.16.0+` (default) | Must be non-empty. `BITRIVER_OME_ACCESS_TOKEN` mirrors it for health probes unless you intentionally override it. | The renderer injects the managers `<AccessTokens>` block with the provided token, stamps the render marker, and preserves the modern output schema. |
 3. **Configure secrets securely.**
    - Generate an SRS management token and set it via `BITRIVER_SRS_TOKEN`.
    - Create an administrator account in OME (matching the credentials rendered from `deploy/ome/Server.xml` into `deploy/ome/Server.generated.xml`) and surface the username/password as `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`.

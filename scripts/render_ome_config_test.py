@@ -84,8 +84,11 @@ class RenderOmeConfigTest(unittest.TestCase):
                 tls_port="12346",
                 username="ome-user",
                 password="s3cret",
+                api_token="api-token",
                 tcp_relay="*:3478",
                 ice_candidate="example.com:10000-10009/udp",
+                image_tag="0.16.0",
+                access_token="health-token",
             )
 
             rendered = output.read_text()
@@ -101,14 +104,14 @@ class RenderOmeConfigTest(unittest.TestCase):
             self.assertIn("<TLSPort>12346</TLSPort>", rendered)
             self.assertIn("<ID>ome-user</ID>", rendered)
             self.assertIn("<Password>s3cret</Password>", rendered)
-            self.assertNotIn("<AccessTokens>", rendered)
-            self.assertIn("<Authentication>", rendered)
+            self.assertIn("<AccessToken>health-token</AccessToken>", rendered)
+            self.assertIn("BITRIVER_OME_IMAGE_TAG=0.16.0", rendered)
 
             self.assertNotIn("<Server.bind", rendered_no_comments)
             self.assertNotIn("<Modules><Control", rendered_no_comments)
             self.assertNotIn("<Bind><IP>", rendered_no_comments)
 
-    def test_render_always_keeps_authentication_block(self) -> None:
+    def test_access_token_defaults_to_api_token(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             tmpdir = Path(td)
             template, output = _prepare_template(tmpdir)
@@ -122,8 +125,10 @@ class RenderOmeConfigTest(unittest.TestCase):
                 tls_port="8443",
                 username="ome-user",
                 password="s3cret",
+                api_token="api-token",
                 tcp_relay="*:3478",
                 ice_candidate="*:10000-10009/udp",
+                image_tag="0.16.1",
             )
 
             rendered = output.read_text()
@@ -131,6 +136,8 @@ class RenderOmeConfigTest(unittest.TestCase):
             self.assertIn("<Authentication>", rendered)
             self.assertIn("<ID>ome-user</ID>", rendered)
             self.assertIn("<Password>s3cret</Password>", rendered)
+            self.assertIn("<AccessTokens>", rendered)
+            self.assertIn("<AccessToken>api-token</AccessToken>", rendered)
 
 
 if __name__ == "__main__":

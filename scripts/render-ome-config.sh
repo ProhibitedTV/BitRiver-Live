@@ -9,7 +9,6 @@ OUTPUT="$REPO_ROOT/deploy/ome/Server.generated.xml"
 MODE="render"
 QUIET=0
 FORCE=0
-FORCE_LEGACY_OUTPUTS="${BITRIVER_OME_FORCE_LEGACY_OUTPUTS:-0}"
 
 usage() {
   cat <<'USAGE'
@@ -20,8 +19,6 @@ Options:
   --force       Re-render even if the generated file already exists.
   --env-file    Path to the .env file to source (defaults to ./../.env).
   --quiet       Suppress informational output.
-  --force-legacy-outputs
-                Render without <Outputs>/<OutputStreams> regardless of BITRIVER_OME_IMAGE_TAG.
 USAGE
 }
 
@@ -43,9 +40,6 @@ while (($# > 0)); do
       ;;
     --quiet)
       QUIET=1
-      ;;
-    --force-legacy-outputs)
-      FORCE_LEGACY_OUTPUTS=1
       ;;
     -h|--help)
       usage
@@ -80,7 +74,7 @@ OME_BIND="${BITRIVER_OME_BIND:-0.0.0.0}"
 OME_PORT="${BITRIVER_OME_SERVER_PORT:-9000}"
 OME_TLS_PORT="${BITRIVER_OME_SERVER_TLS_PORT:-9443}"
 OME_IP="${BITRIVER_OME_IP:-$OME_BIND}"
-OME_IMAGE_TAG="${BITRIVER_OME_IMAGE_TAG:-0.15.0}"
+OME_IMAGE_TAG="${BITRIVER_OME_IMAGE_TAG:-0.16.0}"
 OME_ICE_PORT_RANGE="${BITRIVER_OME_ICE_PORT_RANGE:-10000-10009}"
 OME_TCP_RELAY="${BITRIVER_OME_TCP_RELAY:-${BITRIVER_OME_RELAY_PORT:-3478}}"
 if [[ "$OME_TCP_RELAY" != *:* ]]; then
@@ -90,6 +84,10 @@ OME_ICE_CANDIDATE="${BITRIVER_OME_ICE_CANDIDATE:-}"
 if [[ -z "$OME_ICE_CANDIDATE" ]]; then
   OME_ICE_CANDIDATE="*:${OME_ICE_PORT_RANGE}/udp"
 fi
+OME_USERNAME="${BITRIVER_OME_USERNAME:-}"
+OME_PASSWORD="${BITRIVER_OME_PASSWORD:-}"
+OME_API_TOKEN="${BITRIVER_OME_API_TOKEN:-}"
+OME_ACCESS_TOKEN="${BITRIVER_OME_ACCESS_TOKEN:-$OME_API_TOKEN}"
 
 if [[ "$MODE" == "check" ]]; then
   if [[ ! -f "$OUTPUT" ]]; then
@@ -100,6 +98,13 @@ if [[ "$MODE" == "check" ]]; then
     echo "OME config found at $OUTPUT."
   fi
   exit 0
+fi
+
+if [[ -z "$OME_USERNAME" || -z "$OME_PASSWORD" || -z "$OME_API_TOKEN" ]]; then
+  cat <<'EOF' >&2
+BITRIVER_OME_USERNAME, BITRIVER_OME_PASSWORD, and BITRIVER_OME_API_TOKEN must be set in the environment file so the rendered config matches the running OME instance.
+EOF
+  exit 1
 fi
 
 if [[ $QUIET -eq 0 ]]; then
@@ -118,14 +123,14 @@ render_args=(
   --server-ip "$OME_IP"
   --port "$OME_PORT"
   --tls-port "$OME_TLS_PORT"
+  --username "$OME_USERNAME"
+  --password "$OME_PASSWORD"
+  --api-token "$OME_API_TOKEN"
+  --access-token "$OME_ACCESS_TOKEN"
   --image-tag "$OME_IMAGE_TAG"
   --tcp-relay "$OME_TCP_RELAY"
   --ice-candidate "$OME_ICE_CANDIDATE"
 )
-
-if [[ "$FORCE_LEGACY_OUTPUTS" == "1" ]]; then
-  render_args+=(--force-legacy-outputs)
-fi
 
 if ! render_output=$("${render_args[@]}" 2>&1); then
   echo "Failed to render deploy/ome/Server.generated.xml. Check BITRIVER_OME_* values in $ENV_FILE and the template at $TEMPLATE." >&2
