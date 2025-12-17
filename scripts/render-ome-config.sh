@@ -74,6 +74,7 @@ OME_BIND="${BITRIVER_OME_BIND:-0.0.0.0}"
 OME_PORT="${BITRIVER_OME_SERVER_PORT:-9000}"
 OME_TLS_PORT="${BITRIVER_OME_SERVER_TLS_PORT:-9443}"
 OME_IP="${BITRIVER_OME_IP:-$OME_BIND}"
+OME_IMAGE_TAG="${BITRIVER_OME_IMAGE_TAG:-0.15.0}"
 OME_ICE_PORT_RANGE="${BITRIVER_OME_ICE_PORT_RANGE:-10000-10009}"
 OME_TCP_RELAY="${BITRIVER_OME_TCP_RELAY:-${BITRIVER_OME_RELAY_PORT:-3478}}"
 if [[ "$OME_TCP_RELAY" != *:* ]]; then
@@ -110,6 +111,7 @@ if ! render_output=$(python3 "$SCRIPT_DIR/render_ome_config.py" \
   --server-ip "$OME_IP" \
   --port "$OME_PORT" \
   --tls-port "$OME_TLS_PORT" \
+  --image-tag "$OME_IMAGE_TAG" \
   --tcp-relay "$OME_TCP_RELAY" \
   --ice-candidate "$OME_ICE_CANDIDATE" 2>&1); then
   echo "Failed to render deploy/ome/Server.generated.xml. Check BITRIVER_OME_* values in $ENV_FILE and the template at $TEMPLATE." >&2

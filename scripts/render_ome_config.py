@@ -3,6 +3,7 @@ import argparse
 from pathlib import Path
 import re
 import sys
+from textwrap import dedent
 from xml.sax.saxutils import escape
 
 
@@ -165,6 +166,188 @@ def _scoped_replace_control_bindings(text: str, bind: str) -> str:
     return text[:control_start] + control_body + text[control_end:]
 
 
+def _parse_ome_capabilities(image_tag: str | None) -> tuple[bool, bool]:
+    """Return (supports_application_outputs, supports_output_streams)."""
+
+    if image_tag is None:
+        return True, True
+
+    match = re.match(r"^v?(\d+)\.(\d+)\.(\d+)", image_tag)
+    if not match:
+        raise SystemExit(
+            "BITRIVER_OME_IMAGE_TAG must be MAJOR.MINOR.PATCH to render OME config"
+        )
+
+    major, minor = int(match.group(1)), int(match.group(2))
+    if major == 0 and minor < 16:
+        return False, False
+
+    return True, True
+
+
+def _indent_block(block: str, indent: str) -> str:
+    stripped = dedent(block.strip("\n"))
+    return "\n".join(
+        f"{indent}{line}" if line else "" for line in stripped.split("\n")
+    )
+
+
+def _rewrite_output_profiles(output_profiles: str, supports_output_streams: bool) -> str:
+    if supports_output_streams:
+        return output_profiles
+
+    def _rewrite_profile(match: re.Match[str]) -> str:
+        profile_body = match.group(1)
+        streams_match = re.search(r"<OutputStreams>(.*?)</OutputStreams>", profile_body, re.DOTALL)
+        if not streams_match:
+            return match.group(0)
+
+        stream_body = streams_match.group(1)
+        first_stream = re.search(r"<OutputStream>(.*?)</OutputStream>", stream_body, re.DOTALL)
+        if not first_stream:
+            return match.group(0)
+
+        stream_contents = first_stream.group(1)
+        video = re.search(r"<Video>(.*?)</Video>", stream_contents, re.DOTALL)
+        audio = re.search(r"<Audio>(.*?)</Audio>", stream_contents, re.DOTALL)
+
+        indent_match = re.search(r"\n(\s*)<OutputStreams>", match.group(0))
+        profile_indent_match = re.search(r"\n(\s*)<OutputProfile>", match.group(0))
+        base_indent = indent_match.group(1) if indent_match else ""
+        content_indent = (
+            f"{profile_indent_match.group(1)}    " if profile_indent_match else base_indent
+        )
+
+        def _format_block(tag: str, content: str) -> str:
+            stripped = dedent(content).strip()
+            if not stripped:
+                return f"{content_indent}<{tag}></{tag}>"
+
+            inner = "\n".join(
+                f"{content_indent}    {line.strip()}" for line in stripped.split("\n")
+            )
+            return f"{content_indent}<{tag}>\n{inner}\n{content_indent}</{tag}>"
+
+        parts: list[str] = []
+        if video:
+            parts.append(_format_block("Video", video.group(1)))
+        if audio:
+            parts.append(_format_block("Audio", audio.group(1)))
+
+        if not parts:
+            return match.group(0)
+
+        replacement = "\n" + "\n".join(parts)
+        profile_body = profile_body.replace(streams_match.group(0), replacement, 1)
+        return f"<OutputProfile>{profile_body}</OutputProfile>"
+
+    return re.sub(
+        r"<OutputProfile>(.*?)</OutputProfile>",
+        _rewrite_profile,
+        output_profiles,
+        flags=re.DOTALL,
+    )
+
+
+def _rewrite_application_outputs(
+    text: str,
+    *,
+    supports_application_outputs: bool,
+    supports_output_streams: bool,
+) -> str:
+    def _process_application(match: re.Match[str]) -> str:
+        application_body = match.group(1)
+
+        outputs_match = re.search(r"<Outputs>(.*?)</Outputs>", application_body, re.DOTALL)
+        outputs_body = outputs_match.group(1) if outputs_match else None
+        outputs_full = outputs_match.group(0) if outputs_match else None
+        outputs_indent_match = re.search(r"\n(\s*)<Outputs>", application_body)
+        outputs_indent = outputs_indent_match.group(1) if outputs_indent_match else ""
+
+        output_profiles_inside = None
+        if outputs_body:
+            inside_match = re.search(
+                r"<OutputProfiles>(.*?)</OutputProfiles>", outputs_body, re.DOTALL
+            )
+            if inside_match:
+                rewritten_block = _rewrite_output_profiles(
+                    inside_match.group(0), supports_output_streams
+                )
+                outputs_body = outputs_body.replace(
+                    inside_match.group(0), rewritten_block, 1
+                )
+                output_profiles_inside = rewritten_block
+
+        search_area = application_body
+        if outputs_match:
+            start, end = outputs_match.span()
+            search_area = application_body[:start] + application_body[end:]
+
+        output_profiles_top = None
+        output_profiles_top_original = None
+        top_match = re.search(r"<OutputProfiles>(.*?)</OutputProfiles>", search_area, re.DOTALL)
+        if top_match:
+            output_profiles_top_original = top_match.group(0)
+            output_profiles_top = _rewrite_output_profiles(
+                output_profiles_top_original, supports_output_streams
+            )
+
+        if supports_application_outputs:
+            if outputs_full is None:
+                return match.group(0)
+
+            chosen_profiles = output_profiles_inside or output_profiles_top
+            outputs_body = outputs_body or ""
+            if chosen_profiles:
+                child_indent = f"{outputs_indent}    "
+                profiles_block = _indent_block(chosen_profiles, child_indent)
+                if output_profiles_inside:
+                    outputs_body = outputs_body.replace(
+                        output_profiles_inside, profiles_block, 1
+                    )
+                else:
+                    outputs_body = f"\n{profiles_block}\n" + outputs_body.lstrip("\n")
+
+            new_outputs = f"<Outputs>{outputs_body}</Outputs>"
+            new_application = application_body.replace(outputs_full, new_outputs, 1)
+            if output_profiles_top_original:
+                new_application = new_application.replace(
+                    output_profiles_top_original, "", 1
+                )
+
+            return f"<Application>{new_application}</Application>"
+
+        new_application = application_body
+        if outputs_full:
+            new_application = new_application.replace(outputs_full, "", 1)
+
+        if output_profiles_top and output_profiles_top_original:
+            new_application = new_application.replace(
+                output_profiles_top_original, output_profiles_top, 1
+            )
+            return f"<Application>{new_application}</Application>"
+
+        if output_profiles_inside:
+            insert_at = new_application.find("<Publishers>")
+            if insert_at == -1:
+                insert_at = len(new_application)
+                suffix = ""
+            else:
+                suffix = "\n\n"
+
+            profiles_block = _indent_block(output_profiles_inside, outputs_indent)
+            insertion = f"\n{profiles_block}{suffix}"
+            new_application = (
+                new_application[:insert_at] + insertion + new_application[insert_at:]
+            )
+
+        return f"<Application>{new_application}</Application>"
+
+    return re.sub(
+        r"<Application>(.*?)</Application>", _process_application, text, flags=re.DOTALL
+    )
+
+
 def render(
     template: Path,
     output: Path,
@@ -174,11 +357,15 @@ def render(
     tls_port: str,
     tcp_relay: str,
     ice_candidate: str,
+    image_tag: str | None = None,
 ) -> None:
     escaped_bind = xml_escape(bind)
     escaped_port = xml_escape(server_port)
     escaped_tls_port = xml_escape(tls_port)
     text = template.read_text()
+    supports_application_outputs, supports_output_streams = _parse_ome_capabilities(
+        image_tag
+    )
 
     # Normalize old <Server.bind> wrappers to <Bind> so very old templates don't break.
     text = re.sub(r"<\s*Server\.bind\s*>", "<Bind>", text)
@@ -189,6 +376,14 @@ def render(
     text = _scoped_replace_control_bindings(text, escaped_bind)
     text = replace_all_tag_content(text, "TcpRelay", xml_escape(tcp_relay))
     text = replace_all_tag_content(text, "IceCandidate", xml_escape(ice_candidate))
+    text = _rewrite_application_outputs(
+        text,
+        supports_application_outputs=supports_application_outputs,
+        supports_output_streams=supports_output_streams,
+    )
+
+    # Normalize excessive blank lines introduced during templating rewrites.
+    text = re.sub(r"\n{3,}", "\n\n", text)
 
     output.write_text(text)
 
@@ -229,6 +424,11 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "--tls-port", required=True, help="OME server TLS port"
     )
+    parser.add_argument(
+        "--image-tag",
+        required=False,
+        help="OME image tag used to decide whether to keep <Outputs> blocks",
+    )
 
     args = parser.parse_args(argv)
     server_ip = args.server_ip if args.server_ip is not None else args.bind
@@ -241,6 +441,7 @@ def main(argv: list[str]) -> int:
         args.tls_port,
         args.tcp_relay,
         args.ice_candidate,
+        args.image_tag,
     )
     return 0
 
