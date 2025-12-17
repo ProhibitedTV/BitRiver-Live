@@ -12,6 +12,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env}"
 COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/deploy/docker-compose.yml}"
+MIN_DOCKER_DISK_GB=15
+MIN_DOCKER_DISK_KB=$((MIN_DOCKER_DISK_GB * 1024 * 1024))
 
 usage() {
   cat <<'USAGE'
@@ -90,6 +92,52 @@ read_env_file_value() {
     grep -E "^${key}=" "$ENV_FILE" | tail -n1 | cut -d= -f2- || true
   fi
   return 0
+}
+
+get_docker_root_dir() {
+  local docker_root=""
+  docker_root=$(docker info -f '{{ .DockerRootDir }}' 2>/dev/null || true)
+  if [[ -z $docker_root ]]; then
+    docker_root=$(docker info 2>/dev/null | awk -F': *' '/Docker Root Dir/ {print $2; exit}' | tr -d $'\r')
+  fi
+  if [[ -z $docker_root ]]; then
+    docker_root="/var/lib/docker"
+  fi
+  printf '%s' "$docker_root"
+}
+
+get_available_kb() {
+  local path=$1
+  df -Pk "$path" 2>/dev/null | awk 'NR==2 {print $4}' || true
+}
+
+check_docker_disk_space() {
+  local docker_root
+  docker_root=$(get_docker_root_dir)
+  local available_kb
+  available_kb=$(get_available_kb "$docker_root")
+  local required_kb=$MIN_DOCKER_DISK_KB
+  local required_gb=$MIN_DOCKER_DISK_GB
+
+  if [[ -z $available_kb ]]; then
+    echo "Warning: Unable to determine free space for Docker storage at $docker_root; continuing without a preflight disk check." >&2
+    return 0
+  fi
+
+  local available_gb=$((available_kb / 1024 / 1024))
+  echo "Docker storage path: $docker_root (free: ${available_gb}GB; minimum recommended: ${required_gb}GB)"
+
+  if (( available_kb < required_kb )); then
+    cat <<EOF >&2
+Insufficient disk space detected for Docker builds.
+Path: $docker_root
+Free space: ${available_gb}GB
+Required: at least ${required_gb}GB to build the quickstart images locally.
+
+Free up space (or change Docker's data-root) and rerun the script.
+EOF
+    exit 1
+  fi
 }
 
 if ! docker compose version >/dev/null 2>&1; then
@@ -682,6 +730,8 @@ if (( ${#compose_files[@]} > 0 )); then
 fi
 
 validate_compose_config
+
+check_docker_disk_space
 
 echo "Starting BitRiver Live stack..."
 docker compose up --build -d

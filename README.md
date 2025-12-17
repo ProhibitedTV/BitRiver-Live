@@ -69,10 +69,11 @@ cd BitRiver-Live
 The helper script will:
 
 1. Check that Docker and `docker compose` are available.
-2. Create (or update) a `.env` file with sensible defaults and strong random passwords.
-3. Build the Go API, viewer, SRS controller, and transcoder Docker images locally, so no registry login is needed.
-4. Launch Postgres, Redis, SRS, OvenMediaEngine, the transcoder, the API, and the viewer using `deploy/docker-compose.yml`.
-5. Run the SQL migrations and seed an admin user, then print the admin email and password in your terminal.
+2. Confirm that at least 15GB is free on Docker's data root (typically `/var/lib/docker`) so image builds do not fail halfway through.
+3. Create (or update) a `.env` file with sensible defaults and strong random passwords.
+4. Build the Go API, viewer, SRS controller, and transcoder Docker images locally, so no registry login is needed.
+5. Launch Postgres, Redis, SRS, OvenMediaEngine, the transcoder, the API, and the viewer using `deploy/docker-compose.yml`.
+6. Run the SQL migrations and seed an admin user, then print the admin email and password in your terminal.
 
 The helper also regenerates `deploy/ome/Server.generated.xml` from the bundled template, applying `BITRIVER_OME_BIND` (default
 `0.0.0.0`) to the control listener bind fields and wiring in the OME credentials and tokens from `.env` so rerunning the quickstart keeps the control service healthy. The renderer stamps the image tag inside the generated file and fails fast if the schema or credentials drift from the pinned version.
