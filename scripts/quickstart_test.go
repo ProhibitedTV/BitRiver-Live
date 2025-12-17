@@ -60,13 +60,14 @@ func TestQuickstartReconciliation(t *testing.T) {
 set -euo pipefail
 PATH="%s:$PATH"
 BITRIVER_QUICKSTART_TEST_MODE=1
+ENV_FILE="%s"
 export TMPDIR="%s"
 source scripts/quickstart.sh
 reconcile_env_file
 echo "__ENV_BEGIN__"
 cat "$ENV_FILE"
 echo "__ENV_END__"
-`, stubBin, tempDir)
+`, stubBin, envPath, tempDir)
 
 	cmd := exec.Command("bash", "-c", bashScript)
 	cmd.Dir = tempDir
@@ -172,6 +173,8 @@ func TestOmeConfigRenderingHandlesBindAsIp(t *testing.T) {
 		"--template", templatePath,
 		"--output", outputPath,
 		"--bind", "0.0.0.0",
+		"--tcp-relay", "*:3478",
+		"--ice-candidate", "*:10000-10009/udp",
 		"--port", "8081",
 		"--tls-port", "8082",
 		"--username", "admin",
@@ -225,6 +228,13 @@ func TestOmeConfigRenderingEscapesXml(t *testing.T) {
         <Port>1935</Port>
         <TLSPort>2935</TLSPort>
     </Bind>
+    <IceCandidates>
+        <TcpRelay>*:3478</TcpRelay>
+        <IceCandidate>*:10000-10009/udp</IceCandidate>
+    </IceCandidates>
+    <AccessTokens>
+        <AccessToken>token</AccessToken>
+    </AccessTokens>
     <Modules>
         <Control>
             <Authentication>
@@ -252,6 +262,8 @@ func TestOmeConfigRenderingEscapesXml(t *testing.T) {
 		"--template", templatePath,
 		"--output", outputPath,
 		"--bind", "0.0.0.0",
+		"--tcp-relay", "*:3478",
+		"--ice-candidate", "*:10000-10009/udp",
 		"--port", "9000",
 		"--tls-port", "9443",
 		"--username", "admin<&",

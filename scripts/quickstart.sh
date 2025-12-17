@@ -10,8 +10,8 @@ require_command() {
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ENV_FILE="$REPO_ROOT/.env"
-COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
+ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env}"
+COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/deploy/docker-compose.yml}"
 
 usage() {
   cat <<'USAGE'
@@ -87,8 +87,9 @@ ensure_env_default() {
 read_env_file_value() {
   local key=$1
   if [[ -f "$ENV_FILE" ]]; then
-    grep -E "^${key}=" "$ENV_FILE" | tail -n1 | cut -d= -f2-
+    grep -E "^${key}=" "$ENV_FILE" | tail -n1 | cut -d= -f2- || true
   fi
+  return 0
 }
 
 if ! docker compose version >/dev/null 2>&1; then
@@ -123,6 +124,7 @@ declare -A env_defaults=(
   [BITRIVER_LIVE_POSTGRES_DSN]='postgres://bitriver:bitriver@postgres:5432/bitriver?sslmode=disable'
   [BITRIVER_LIVE_SESSION_TTL]='168h'
   [BITRIVER_LIVE_SESSION_IDLE_TIMEOUT]='0'
+  [BITRIVER_LIVE_ALLOW_SELF_SIGNUP]='false'
   [BITRIVER_POSTGRES_USER]='bitriver'
   [BITRIVER_POSTGRES_PASSWORD]='bitriver'
   [BITRIVER_LIVE_POSTGRES_MAX_CONNS]='15'
@@ -170,6 +172,7 @@ declare -A env_defaults=(
 
 ome_image_tag=$(read_env_file_value BITRIVER_OME_IMAGE_TAG)
 ome_image_tag=${ome_image_tag:-${env_defaults[BITRIVER_OME_IMAGE_TAG]}}
+use_ome_api_token=1
 
 env_default_keys=(
   BITRIVER_LIVE_PORT
@@ -178,6 +181,7 @@ env_default_keys=(
   BITRIVER_LIVE_ADDR
   BITRIVER_LIVE_POSTGRES_DSN
   BITRIVER_LIVE_SESSION_TTL
+  BITRIVER_LIVE_ALLOW_SELF_SIGNUP
   BITRIVER_LIVE_SESSION_IDLE_TIMEOUT
   BITRIVER_POSTGRES_USER
   BITRIVER_POSTGRES_PASSWORD
@@ -231,6 +235,7 @@ required_env_keys=(
   BITRIVER_LIVE_ADDR
   BITRIVER_LIVE_POSTGRES_DSN
   BITRIVER_LIVE_SESSION_TTL
+  BITRIVER_LIVE_ALLOW_SELF_SIGNUP
   BITRIVER_LIVE_SESSION_IDLE_TIMEOUT
   BITRIVER_POSTGRES_USER
   BITRIVER_POSTGRES_PASSWORD

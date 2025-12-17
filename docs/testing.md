@@ -57,6 +57,16 @@ on the lifecycle path while iterating, scope the tests with `-run`:
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ingest -count=1 -run HTTPControllerStreamLifecycleIntegration
 ```
 
+End-to-end ingest coverage (storage + HTTP controller + control-plane stub)
+is packaged as a dedicated guard so release branches and tags keep exercising
+the critical ingest → transcoder → playback path. Run the wrapper to boot the
+ingest stub, drive the real HTTP controller, and verify manifests and teardown
+calls are recorded:
+
+```bash
+./scripts/test-ingest-e2e.sh
+```
+
 ## Quickstart/Compose smoke
 
 Run the compose smoke guard to ensure the default `.env` and `deploy/docker-compose.yml` still render and that the tracked health probes stay wired:
@@ -111,4 +121,6 @@ Use `npx playwright install --with-deps` when you need an offline-friendly
 preinstall. `npm run test:playwright` builds the app and launches `npm run
 start:test` unless you override the target host with `PLAYWRIGHT_BASE_URL`; in
 either case, the specs mock the API to stay deterministic (for example,
-`tests/stream-playback.spec.ts` stubs playback metadata and chat responses).
+`tests/channel-chat-playback.spec.ts` exercises chat authentication edge cases
+and HLS player ready/error states, and `tests/stream-playback.spec.ts` stubs
+playback metadata and chat responses).
