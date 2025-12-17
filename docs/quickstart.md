@@ -36,9 +36,8 @@ The script will:
 The health payload still expects the ingest services to be reachable from the API container:
 
 - **SRS controller:** `BITRIVER_SRS_API` defaults to `http://srs-controller:1985` inside the Compose network. If you move SRS elsewhere, point this URL at a reachable host and keep the API token aligned with the controller's configuration.
-- **OvenMediaEngine:** `BITRIVER_OME_API` defaults to `http://ome:8081` and expects the username/password (plus `BITRIVER_OME_API_TOKEN` only when you opt into 0.16.x+ builds that support manager auth) from `.env`. A short-lived `ome-config` helper in the compose file renders `deploy/ome/Server.generated.xml` from `deploy/ome/Server.xml` before OME starts, keeping the control credentials aligned with `.env` so a 401 surfaces as `unhealthy` instead of silently failing. When running OME outside Compose, keep this URL reachable from the API container so `/healthz` reports the correct status even though the HTTP status code remains 200 during degraded states, and mirror the same credentials in your OME configuration. The template rewrites the control listener bind/IP from `BITRIVER_OME_BIND` (default `0.0.0.0`), stamps the server-level `<Bind><IP>`, `<Bind><Port>`, and `<Bind><TLSPort>` entries with `BITRIVER_OME_BIND`, `BITRIVER_OME_SERVER_PORT`, and `BITRIVER_OME_SERVER_TLS_PORT` to match the WebRTC signalling and TLS ports, and fills the top-level `<Server><IP>` with `BITRIVER_OME_IP` (defaulting to `BITRIVER_OME_BIND`)—update both the template and `BITRIVER_OME_API` together if you customize the control port.
-  Edit `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, `BITRIVER_OME_API_TOKEN`, `BITRIVER_OME_BIND`, `BITRIVER_OME_IP`, `BITRIVER_OME_SERVER_PORT`, or `BITRIVER_OME_SERVER_TLS_PORT` in `.env`? Re-render `deploy/ome/Server.generated.xml` with `./scripts/render-ome-config.sh` (it overwrites the generated file on every run) before running `docker compose up -d` when you operate OME outside Compose so the control credentials and bind address stay aligned with the health check. Set `BITRIVER_OME_ACCESS_TOKEN` only if your deployment still needs the legacy health probe header or you intentionally enable tokens on 0.16.x+ tags; leave it empty otherwise. The quickstart helper reruns the renderer automatically so template changes picked up via `git pull` land in the generated config before Compose starts.
-- **OME compatibility note:** OME 0.15.x and earlier do not support `<OutputStreams>` or `<Outputs>`. The renderer rewrites the passthrough output profile into the legacy `<OutputProfile>` codec children and omits the `<Outputs>` block automatically when `BITRIVER_OME_IMAGE_TAG` points at a pre-0.16 build, so older images keep working without manual XML edits.
+- **OvenMediaEngine:** `BITRIVER_OME_API` defaults to `http://ome:8081` and expects the username/password plus `BITRIVER_OME_API_TOKEN` from `.env` (the health probe forwards `BITRIVER_OME_ACCESS_TOKEN`, which defaults to the same value). A short-lived `ome-config` helper in the compose file renders `deploy/ome/Server.generated.xml` from `deploy/ome/Server.xml` before OME starts, keeping the control credentials aligned with `.env` so a 401 surfaces as `unhealthy` instead of silently failing. When running OME outside Compose, keep this URL reachable from the API container so `/healthz` reports the correct status even though the HTTP status code remains 200 during degraded states, and mirror the same credentials in your OME configuration. The template rewrites the control listener bind/IP from `BITRIVER_OME_BIND` (default `0.0.0.0`), stamps the server-level `<Bind><IP>`, `<Bind><Port>`, and `<Bind><TLSPort>` entries with `BITRIVER_OME_BIND`, `BITRIVER_OME_SERVER_PORT`, and `BITRIVER_OME_SERVER_TLS_PORT` to match the WebRTC signalling and TLS ports, and fills the top-level `<Server><IP>` with `BITRIVER_OME_IP` (defaulting to `BITRIVER_OME_BIND`)—update both the template and `BITRIVER_OME_API` together if you customize the control port.
+  Edit `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, `BITRIVER_OME_API_TOKEN`, `BITRIVER_OME_BIND`, `BITRIVER_OME_IP`, `BITRIVER_OME_SERVER_PORT`, or `BITRIVER_OME_SERVER_TLS_PORT` in `.env`? Re-render `deploy/ome/Server.generated.xml` with `./scripts/render-ome-config.sh` (it overwrites the generated file on every run) before running `docker compose up -d` when you operate OME outside Compose so the control credentials and bind address stay aligned with the health check. Override `BITRIVER_OME_ACCESS_TOKEN` only if your deployment needs a different health probe token; by default it mirrors `BITRIVER_OME_API_TOKEN`. The quickstart helper reruns the renderer automatically so template changes picked up via `git pull` land in the generated config before Compose starts.
 - **Transcoder:** `BITRIVER_TRANSCODER_API` defaults to `http://transcoder:9000`; ensure the host and port resolve from the API container and that the token matches `BITRIVER_TRANSCODER_TOKEN`.
 
 Update the generated `.env` before inviting real users—swap in a valid admin email, capture the printed admin password (the
@@ -93,7 +92,7 @@ compose file.
   The script reuses your existing `.env` and Docker volumes, so configuration, database data, and media files persist across updates.
 `docker compose up` (including the quickstart wrapper) reruns the `ome-config` helper so OME consumes the credentials from `.env` and the current `BITRIVER_OME_BIND` value in both the root `<Bind><IP>` entry and the control listener `<Bind>`/`<IP>` without requiring an extra compose override.
 - Running `git pull` followed by the quickstart keeps OME in a predictable state:
-  - The helper preserves your `.env` while backfilling any new variables introduced upstream (including `BITRIVER_OME_API_TOKEN` when you intentionally enable manager auth) so you avoid silent crashes from missing credentials.
+  - The helper preserves your `.env` while backfilling any new variables introduced upstream so you avoid silent crashes from missing credentials, including the OME managers token.
   - `deploy/ome/Server.generated.xml` is always re-rendered from `deploy/ome/Server.xml` and the refreshed `.env`, eliminating drift between the template and the live config mounted into the container.
   - Docker images rebuild and database migrations run automatically before the stack restarts, giving you a clean, rerun-safe deploy loop whenever templates or env keys change.
 - Codex CLI users: follow the [Codex CLI guide](codex-cli.md) for installation, authentication, and edit workflows tailored to this repository. Rerun `docker compose up -d` after applying Codex patches so containers reload configuration and binaries.
@@ -106,19 +105,19 @@ compose file.
   sub-command is available.
 - **`permission denied while trying to connect to the Docker daemon socket`** – Add your account to the `docker` group with `sudo usermod -aG docker $USER` followed by `newgrp docker` (or log out and back in), then rerun the quickstart without `sudo`. You can run `sudo ./scripts/quickstart.sh` in a pinch, but expect root-owned files like `.env` until you fix the group membership.
 - **Port already in use** – Stop or reconfigure any services that currently bind to ports 5432, 6379, 8080, 8081, 9000, 9001, 1935, or 1985. Alternatively edit the corresponding `*_PORT` values in `.env` (for example, `BITRIVER_LIVE_PORT=9090`) and rerun `docker compose up -d`.
-- **`Empty <AccessToken> is not allowed`** – The OvenMediaEngine template detected a missing `BITRIVER_OME_API_TOKEN` in `.env` even though a 0.16.x+ image tag was selected and manager auth was enabled. Set a non-empty value in `.env`, optionally mirror it into `BITRIVER_OME_ACCESS_TOKEN` if you still rely on the legacy health probe header, rerun `./scripts/render-ome-config.sh --force`, and restart the stack with `docker compose up -d` so `deploy/ome/Server.generated.xml` is regenerated with the token. Leave both token variables empty when sticking with the default legacy tag so the renderer omits authentication entirely.
+- **`Empty <AccessToken> is not allowed`** – The OvenMediaEngine template detected a missing `BITRIVER_OME_API_TOKEN` in `.env`. Set a non-empty value in `.env`, mirror it into `BITRIVER_OME_ACCESS_TOKEN` if you want the health probe to use a distinct header, rerun `./scripts/render-ome-config.sh --force`, and restart the stack with `docker compose up -d` so `deploy/ome/Server.generated.xml` is regenerated with the token.
 - **Still seeing `AccessTokens` errors after rendering?** – Verify the stamp and contents of the generated config before restarting OME:
-  1. Ensure `.env` sets `BITRIVER_OME_IMAGE_TAG` to the version you actually run and leaves `BITRIVER_OME_API_TOKEN` empty for the default pre-0.16.0 images.
+  1. Ensure `.env` sets `BITRIVER_OME_IMAGE_TAG` to the version you actually run and includes a non-empty `BITRIVER_OME_API_TOKEN`.
   2. Force regeneration to align the schema with that tag:
      ```bash
      ./scripts/render-ome-config.sh --force
      ```
-  3. Confirm the rendered file dropped managers auth for legacy tags:
+  3. Confirm the rendered file contains the managers auth block and matches the tag marker:
      ```bash
      grep -n "BITRIVER_OME_IMAGE_TAG" deploy/ome/Server.generated.xml
      rg --heading "AccessTokens|Authentication" deploy/ome/Server.generated.xml
      ```
-     The first command should show the `<-- Rendered for BITRIVER_OME_IMAGE_TAG=<tag> -->` marker matching `.env`; the second should return no results when targeting <0.16.0 images. Only restart `docker compose up -d bitriver-ome` after both checks pass.
+     Only restart `docker compose up -d bitriver-ome` after both checks pass.
 - **Reading OME startup logs after template fixes** – Quickstart reruns should show the standard OME banner, FFmpeg and version
   lines, STUN public IP resolution, a burst of ICE candidate logs, and the `All modules are initialized successfully` marker
   followed by `Create HostMetrics...` and `Create ApplicationMetrics(#default#live...)`. You should no longer see
@@ -135,13 +134,9 @@ compose file.
 - **Quickstart re-run pulled the wrong OME version** – When reusing an existing installation, keep `BITRIVER_OME_IMAGE_TAG`
   aligned with the version that matches your `Server.xml` schema before re-running `./scripts/quickstart.sh` or `docker compose
   up -d`. The quickstart and `scripts/render-ome-config.sh --check` both compare the tag in `.env` with the marker stamped inside
-  `deploy/ome/Server.generated.xml` and force a regeneration before Compose starts if they diverge. The default `0.15.0` tag keeps
-  manager authentication disabled; when opting into a 0.16.x+ tag that supports `<AccessToken>`, set `BITRIVER_OME_API_TOKEN`
-  (and optionally `BITRIVER_OME_ACCESS_TOKEN`) before re-rendering so the generated config includes the auth block. Pre-0.16.0
-  image tags also drop the `<Outputs>` wrapper during rendering and leave only the `<OutputProfiles>` node so legacy schemas do
-  not reject the config. In the same legacy mode, `<LLHLS>` sections are removed so output tuning falls back to the OME defaults
-  when the tag predates LLHLS support. Non-semver image tags are rejected by the renderer to avoid generating configs with
-  unsupported managers authentication fields.
+  `deploy/ome/Server.generated.xml` and force a regeneration before Compose starts if they diverge. The default `0.16.0` tag
+  always renders the managers authentication block and requires a non-empty `BITRIVER_OME_API_TOKEN`; non-semver image tags are
+  rejected by the renderer to avoid generating configs with unsupported authentication fields.
 - **Environment tweaks** – Edit `.env` and rerun `docker compose up -d` to apply changes. The compose stack automatically loads
   the file so you never need to touch `deploy/docker-compose.yml` directly.
 

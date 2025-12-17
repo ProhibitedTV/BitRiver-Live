@@ -48,6 +48,7 @@ var expectedServerTemplates = map[string]string{
 
     <!-- Corrected: <Bind> replaces the deprecated <Server.bind.Address> container. -->
     <Bind>
+        <Address>0.0.0.0</Address>
 
         <Managers>
             <API>
@@ -57,9 +58,7 @@ var expectedServerTemplates = map[string]string{
                 <!--
                   APIServer rejects an empty token; customize this value if you
                   want to protect API access, or leave the placeholder for
-                  open/local use. Legacy builds without managers auth support
-                  will drop both AccessTokens and Authentication during
-                  templating.
+                  open/local use.
                 -->
                 <AccessTokens>
                     <AccessToken>BITRIVER_OME_API_TOKEN_PLACEHOLDER</AccessToken>
@@ -69,8 +68,8 @@ var expectedServerTemplates = map[string]string{
                     <AllowAnonymousUser>false</AllowAnonymousUser>
                     <AllowAnonymousReferrer>false</AllowAnonymousReferrer>
                     <User>
-                        <ID>admin</ID>
-                        <Password>password</Password>
+                        <ID>BITRIVER_OME_USERNAME_PLACEHOLDER</ID>
+                        <Password>BITRIVER_OME_PASSWORD_PLACEHOLDER</Password>
                     </User>
                 </Authentication>
             </API>
@@ -89,6 +88,9 @@ var expectedServerTemplates = map[string]string{
                     <WorkerCount>1</WorkerCount>
                 </Signalling>
                 <IceCandidates>
+                    <!-- When port-forwarding or NAT rewrites the container ports, update
+                         BITRIVER_OME_TCP_RELAY/BITRIVER_OME_ICE_CANDIDATE so the
+                         advertised candidates match the reachable host:port tuples. -->
                     <TcpRelay>*:3478</TcpRelay>
                     <TcpForce>false</TcpForce>
                     <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
@@ -138,31 +140,22 @@ var expectedServerTemplates = map[string]string{
 
                     <Outputs>
                         <OutputProfiles>
-                                <OutputProfile>
-                                    <Name>copy_passthrough</Name>
-                                    <OutputStreams>
-                                        <OutputStream>
-                                            <Name>copy</Name>
-                                            <Video>
-                                                <Codec>copy</Codec>
-                                            </Video>
-                                            <Audio>
-                                                <Codec>copy</Codec>
-                                            </Audio>
-                                        </OutputStream>
-                                    </OutputStreams>
-                                    <!-- Legacy layout for pre-0.16 tags without OutputStreams; render_ome_config.py rewrites
-                                         this profile to emit codec children directly under <OutputProfile>. -->
-                                    <!--
-                                    <Video>
-                                        <Codec>copy</Codec>
-                                    </Video>
-                                    <Audio>
-                                        <Codec>copy</Codec>
-                                    </Audio>
-                                    -->
-                                </OutputProfile>
-                            </OutputProfiles>
+                            <OutputProfile>
+                                <Name>copy_passthrough</Name>
+                                <OutputStreams>
+                                    <OutputStream>
+                                        <Name>copy</Name>
+                                        <Video>
+                                            <Codec>copy</Codec>
+                                        </Video>
+                                        <Audio>
+                                            <Codec>copy</Codec>
+                                        </Audio>
+                                    </OutputStream>
+                                </OutputStreams>
+                                <!-- OutputStreams are required for the pinned 0.16.x schema. -->
+                            </OutputProfile>
+                        </OutputProfiles>
 
                         <LLHLS>
                             <SegmentDuration>6</SegmentDuration>
@@ -360,104 +353,49 @@ func normalizeXML(xmlContent string) string {
 	return normalized
 }
 
-func TestRenderOMEConfigRespectsManagersAuthSupport(t *testing.T) {
+func TestRenderOMEConfigRequiresManagersAuth(t *testing.T) {
 	repoRoot := repoRoot(t)
 	template := filepath.Join(repoRoot, "deploy", "ome", "Server.xml")
 	renderer := filepath.Join(repoRoot, "scripts", "render_ome_config.py")
+	output := filepath.Join(t.TempDir(), "Server.generated.xml")
 
-	testCases := []struct {
-		name           string
-		imageTag       string
-		expectManagers bool
-		expectOutputs  bool
-		expectStreams  bool
-	}{
-		{
-			name:           "current release keeps managers auth",
-			imageTag:       "0.16.0",
-			expectManagers: true,
-			expectOutputs:  true,
-			expectStreams:  true,
-		},
-		{
-			name:           "legacy tag omits managers auth",
-			imageTag:       "0.15.2",
-			expectManagers: false,
-			expectOutputs:  true,
-			expectStreams:  false,
-		},
-		{
-			name:           "custom tag omits managers auth",
-			imageTag:       "custom-build",
-			expectManagers: false,
-			expectOutputs:  true,
-			expectStreams:  false,
-		},
+	cmd := exec.Command(
+		"python3", renderer,
+		"--template", template,
+		"--output", output,
+		"--bind", "0.0.0.0",
+		"--server-ip", "0.0.0.0",
+		"--port", "9000",
+		"--tls-port", "9443",
+		"--username", "admin",
+		"--password", "password",
+		"--api-token", "token",
+		"--access-token", "health-token",
+		"--image-tag", "0.16.0",
+		"--tcp-relay", "*:3478",
+		"--ice-candidate", "example.com:10000-10009/udp",
+	)
+
+	if outputBytes, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("render_ome_config.py failed: %v\n%s", err, outputBytes)
 	}
 
-	for _, tc := range testCases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			output := filepath.Join(t.TempDir(), "Server.generated.xml")
+	data := readFile(t, output)
+	hasAccessTokens := bytes.Contains(data, []byte("<AccessTokens>"))
+	hasAuthentication := bytes.Contains(data, []byte("<Authentication>"))
+	hasOutputs := bytes.Contains(data, []byte("<Outputs>"))
+	hasOutputStreams := bytes.Contains(data, []byte("<OutputStreams>"))
+	summary := fmt.Sprintf("AccessTokens=%t Authentication=%t", hasAccessTokens, hasAuthentication)
 
-			cmd := exec.Command(
-				"python3", renderer,
-				"--template", template,
-				"--output", output,
-				"--bind", "0.0.0.0",
-				"--server-ip", "0.0.0.0",
-				"--port", "9000",
-				"--tls-port", "9443",
-				"--username", "admin",
-				"--password", "password",
-				"--api-token", "token",
-				"--image-tag", tc.imageTag,
-			)
+	if !hasAccessTokens || !hasAuthentication {
+		t.Fatalf("expected managers auth for rendered config, but missing nodes: %s", summary)
+	}
 
-			if output, err := cmd.CombinedOutput(); err != nil {
-				t.Fatalf("render_ome_config.py failed: %v\n%s", err, output)
-			}
+	if !hasOutputs {
+		t.Fatalf("expected <Outputs> in rendered config for 0.16.0")
+	}
 
-			data := readFile(t, output)
-			hasAccessTokens := bytes.Contains(data, []byte("<AccessTokens>"))
-			hasAuthentication := bytes.Contains(data, []byte("<Authentication>"))
-			hasOutputs := bytes.Contains(data, []byte("<Outputs>"))
-			hasOutputStreams := bytes.Contains(data, []byte("<OutputStreams>"))
-			hasOutputProfiles := bytes.Contains(data, []byte("<OutputProfiles>"))
-			summary := fmt.Sprintf("AccessTokens=%t Authentication=%t", hasAccessTokens, hasAuthentication)
-
-			if tc.expectManagers {
-				if !hasAccessTokens || !hasAuthentication {
-					t.Fatalf("expected managers auth for %q, but missing nodes: %s", tc.imageTag, summary)
-				}
-			} else {
-				if hasAccessTokens || hasAuthentication {
-					t.Fatalf("expected managers auth to be omitted for %q, but found nodes: %s", tc.imageTag, summary)
-				}
-			}
-
-			if tc.expectOutputs {
-				if !hasOutputs {
-					t.Fatalf("expected <Outputs> for %q, but none found", tc.imageTag)
-				}
-			} else {
-				if hasOutputs {
-					t.Fatalf("expected <Outputs> to be omitted for %q", tc.imageTag)
-				}
-			}
-
-			if tc.expectStreams {
-				if !hasOutputStreams {
-					t.Fatalf("expected <OutputStreams> for %q, but none found", tc.imageTag)
-				}
-			} else {
-				if hasOutputStreams {
-					t.Fatalf("expected <OutputStreams> to be omitted for %q", tc.imageTag)
-				}
-				if !hasOutputProfiles {
-					t.Fatalf("expected <OutputProfiles> fallback for %q, but none found", tc.imageTag)
-				}
-			}
-		})
+	if !hasOutputStreams {
+		t.Fatalf("expected <OutputStreams> in rendered config for 0.16.0")
 	}
 }

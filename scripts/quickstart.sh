@@ -12,8 +12,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="$REPO_ROOT/.env"
 COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
-# shellcheck source=./ome-capabilities.sh
-source "$SCRIPT_DIR/ome-capabilities.sh"
 
 usage() {
   cat <<'USAGE'
@@ -86,42 +84,6 @@ ensure_env_default() {
   fi
 }
 
-legacy_ome_token_stripped=0
-strip_legacy_ome_api_token() {
-  local image_tag=$1
-
-  if (( supports_ome_access_token )); then
-    return 0
-  fi
-
-  if [[ ! -f "$ENV_FILE" ]]; then
-    return 0
-  fi
-
-  if ! grep -qE '^BITRIVER_OME_API_TOKEN=' "$ENV_FILE"; then
-    return 0
-  fi
-
-  echo "BITRIVER_OME_IMAGE_TAG ${image_tag:-unset} uses legacy auth; removing BITRIVER_OME_API_TOKEN from $ENV_FILE ..."
-
-  local tmp_env
-  tmp_env=$(mktemp)
-
-  if grep -vE '^BITRIVER_OME_API_TOKEN=' "$ENV_FILE" >"$tmp_env"; then
-    mv "$tmp_env" "$ENV_FILE"
-    legacy_ome_token_stripped=1
-    echo "BITRIVER_OME_API_TOKEN removed for legacy OME compatibility. The quickstart will re-render the config to verify the legacy schema."
-    return 0
-  fi
-
-  rm -f "$tmp_env"
-  cat <<EOF >&2
-Unable to rewrite $ENV_FILE to drop BITRIVER_OME_API_TOKEN automatically.
-Remove BITRIVER_OME_API_TOKEN from the file and rerun ./scripts/quickstart.sh so legacy OME tags (<0.16.0) can render the config.
-EOF
-  exit 1
-}
-
 read_env_file_value() {
   local key=$1
   if [[ -f "$ENV_FILE" ]]; then
@@ -180,14 +142,16 @@ declare -A env_defaults=(
   [BITRIVER_VIEWER_IMAGE_TAG]='latest'
   [BITRIVER_SRS_CONTROLLER_IMAGE_TAG]='latest'
   [SRS_CONTROLLER_UPSTREAM]='http://srs:1985/api/'
-  [BITRIVER_OME_IMAGE_TAG]='0.15.0'
+  [BITRIVER_OME_IMAGE_TAG]='0.16.0'
   [BITRIVER_OME_API]='http://ome:8081'
   [BITRIVER_OME_BIND]='0.0.0.0'
+  [BITRIVER_OME_IP]='0.0.0.0'
   [BITRIVER_OME_SERVER_PORT]='9000'
   [BITRIVER_OME_SERVER_TLS_PORT]='9443'
   [BITRIVER_OME_USERNAME]='admin'
   [BITRIVER_OME_PASSWORD]='local-dev-password'
-  [BITRIVER_OME_API_TOKEN]=''
+  [BITRIVER_OME_API_TOKEN]='local-dev-access-token'
+  [BITRIVER_OME_ACCESS_TOKEN]='local-dev-access-token'
   [BITRIVER_OME_HTTP_PORT]='8081'
   [BITRIVER_OME_SIGNALLING_PORT]='9000'
   [BITRIVER_TRANSCODER_API]='http://transcoder:9000'
@@ -206,37 +170,6 @@ declare -A env_defaults=(
 
 ome_image_tag=$(read_env_file_value BITRIVER_OME_IMAGE_TAG)
 ome_image_tag=${ome_image_tag:-${env_defaults[BITRIVER_OME_IMAGE_TAG]}}
-
-eval "$(compute_ome_capabilities "$ome_image_tag" 1)"
-supports_ome_access_token=$supports_access_token
-supports_ome_application_outputs=$supports_application_outputs
-supports_ome_output_streams=$supports_output_streams
-
-if (( parsing_failed )); then
-  echo "BITRIVER_OME_IMAGE_TAG=$ome_image_tag is not a MAJOR.MINOR.PATCH value." >&2
-  echo "Pin BITRIVER_OME_IMAGE_TAG in .env to a semver tag (for example, 0.16.0 or 0.15.0) so the renderer can include or drop the managers <AccessToken>/<Authentication>, <Outputs>, and LLHLS blocks correctly." >&2
-  exit 1
-fi
-
-strip_legacy_ome_api_token "$ome_image_tag"
-
-if (( supports_ome_application_outputs == 0 )); then
-  export BITRIVER_OME_FORCE_LEGACY_OUTPUTS=1
-  echo "BITRIVER_OME_IMAGE_TAG=$ome_image_tag uses the legacy schema; the renderer will omit <Outputs>/<OutputStreams> blocks for compatibility."
-else
-  unset BITRIVER_OME_FORCE_LEGACY_OUTPUTS
-fi
-
-existing_ome_access_token=$(read_env_file_value BITRIVER_OME_ACCESS_TOKEN)
-existing_ome_api_token=$(read_env_file_value BITRIVER_OME_API_TOKEN)
-use_ome_api_token=0
-
-if (( supports_ome_access_token )); then
-  if [[ -n $existing_ome_api_token || -n $existing_ome_access_token ]]; then
-    ensure_env_default "BITRIVER_OME_API_TOKEN" "${existing_ome_api_token:-${existing_ome_access_token:-}}"
-    use_ome_api_token=1
-  fi
-fi
 
 env_default_keys=(
   BITRIVER_LIVE_PORT
@@ -268,10 +201,13 @@ env_default_keys=(
   BITRIVER_OME_IMAGE_TAG
   BITRIVER_OME_API
   BITRIVER_OME_BIND
+  BITRIVER_OME_IP
   BITRIVER_OME_SERVER_PORT
   BITRIVER_OME_SERVER_TLS_PORT
   BITRIVER_OME_USERNAME
   BITRIVER_OME_PASSWORD
+  BITRIVER_OME_API_TOKEN
+  BITRIVER_OME_ACCESS_TOKEN
   BITRIVER_OME_HTTP_PORT
   BITRIVER_OME_SIGNALLING_PORT
   BITRIVER_TRANSCODER_API
@@ -318,8 +254,11 @@ required_env_keys=(
   BITRIVER_OME_IMAGE_TAG
   BITRIVER_OME_API
   BITRIVER_OME_BIND
+  BITRIVER_OME_IP
   BITRIVER_OME_USERNAME
   BITRIVER_OME_PASSWORD
+  BITRIVER_OME_API_TOKEN
+  BITRIVER_OME_ACCESS_TOKEN
   BITRIVER_OME_HTTP_PORT
   BITRIVER_OME_SIGNALLING_PORT
   BITRIVER_TRANSCODER_API
@@ -383,6 +322,24 @@ read_env_value() {
     value="${env_defaults[$key]:-}"
   fi
   printf '%s' "$value"
+}
+
+validate_ome_image_tag() {
+  local tag
+  tag=$(read_env_value BITRIVER_OME_IMAGE_TAG)
+
+  if [[ ! $tag =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+    echo "BITRIVER_OME_IMAGE_TAG=$tag is not a MAJOR.MINOR.PATCH value." >&2
+    echo "Pin BITRIVER_OME_IMAGE_TAG to a semver tag (for example, 0.16.0) so the renderer can align the config with the pinned image." >&2
+    exit 1
+  fi
+
+  local major=${BASH_REMATCH[1]}
+  local minor=${BASH_REMATCH[2]}
+  if (( major == 0 && minor < 16 )); then
+    echo "BITRIVER_OME_IMAGE_TAG=$tag is unsupported. The quickstart targets OME 0.16.0+ so manager authentication and OutputStreams stay in sync with the template." >&2
+    exit 1
+  fi
 }
 
 wait_for_api() {
@@ -694,6 +651,8 @@ fi
 
 reconcile_env_file
 
+validate_ome_image_tag
+
 echo "Quickstart reruns will backfill any missing settings so your installation stays aligned with the current docker-compose requirements."
 
 TRANSCODER_DATA_DIR="$REPO_ROOT/deploy/transcoder-data"
@@ -703,9 +662,6 @@ mkdir -p "$TRANSCODER_PUBLIC_DIR"
 chmod 0777 "$TRANSCODER_DATA_DIR" "$TRANSCODER_PUBLIC_DIR"
 echo "If you provision these directories manually, keep them writable (see docs/installing-on-ubuntu.md)."
 
-if (( legacy_ome_token_stripped )); then
-  echo "Rendering OME config after removing BITRIVER_OME_API_TOKEN for legacy ${ome_image_tag} compatibility ..."
-fi
 render_ome_config
 
 cd "$REPO_ROOT"

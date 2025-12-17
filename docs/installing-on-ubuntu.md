@@ -158,12 +158,12 @@ Update the entries for:
 - `BITRIVER_REDIS_PASSWORD` and `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD`
 - `BITRIVER_LIVE_ADMIN_EMAIL` and `BITRIVER_LIVE_ADMIN_PASSWORD`
 - `BITRIVER_SRS_TOKEN`
-- `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, and `BITRIVER_OME_API_TOKEN` (add `BITRIVER_OME_ACCESS_TOKEN` only when the legacy health probe header is required)
+- `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, and `BITRIVER_OME_API_TOKEN` (`BITRIVER_OME_ACCESS_TOKEN` mirrors the API token for the health probe unless you override it)
 - `BITRIVER_TRANSCODER_TOKEN`
 - `BITRIVER_LIVE_IMAGE_TAG`, `BITRIVER_VIEWER_IMAGE_TAG`, `BITRIVER_SRS_CONTROLLER_IMAGE_TAG`, and `BITRIVER_TRANSCODER_IMAGE_TAG` (set all four to the release tag you extracted in [Step 4](#4-download-bitriver-live-release-assets) so every container runs the same build)
 - `BITRIVER_SRS_IMAGE_TAG` (defaults to `v5.0.185` so Compose matches the systemd units; bump it only after testing a newer SRS release and update both deployments together)
 
-If OME logs show `Empty <AccessToken> is not allowed`, the renderer detected an empty or missing `BITRIVER_OME_API_TOKEN` in `.env` (Compose will usually flag the `bitriver-ome` service as unhealthy at the same time). Set a non-empty value in `.env`, and set `BITRIVER_OME_ACCESS_TOKEN` only when your deployment still expects the legacy health probe header. Run `./scripts/render-ome-config.sh --force`, and restart with `docker compose up -d` so `deploy/ome/Server.generated.xml` picks up the token.
+If OME logs show `Empty <AccessToken> is not allowed`, the renderer detected an empty or missing `BITRIVER_OME_API_TOKEN` in `.env` (Compose will usually flag the `bitriver-ome` service as unhealthy at the same time). Set a non-empty value in `.env`, and optionally override `BITRIVER_OME_ACCESS_TOKEN` if your deployment expects a different health probe header. Run `./scripts/render-ome-config.sh --force`, and restart with `docker compose up -d` so `deploy/ome/Server.generated.xml` picks up the token.
 
 The `.env` guardrails shipped with the release bundle intentionally block the original `bitriver`/`changeme` samples. [`deploy/.env.example`](../deploy/.env.example) documents every variable, while [`deploy/check-env.sh`](../deploy/check-env.sh) refuses to continue until each credential changes and `BITRIVER_LIVE_POSTGRES_DSN` matches the database user/password you selected earlier. Rerun the script after every edit so Compose and the systemd units pick up consistent DSNs.
 

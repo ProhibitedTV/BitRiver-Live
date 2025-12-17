@@ -36,25 +36,14 @@ required_vars=(
   BITRIVER_SRS_TOKEN
   BITRIVER_OME_USERNAME
   BITRIVER_OME_PASSWORD
+  BITRIVER_OME_API_TOKEN
+  BITRIVER_OME_ACCESS_TOKEN
   BITRIVER_TRANSCODER_TOKEN
   BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD
   BITRIVER_TRANSCODER_PUBLIC_BASE_URL
   NEXT_PUBLIC_API_BASE_URL
   NEXT_PUBLIC_VIEWER_URL
 )
-
-ome_supports_api_token=true
-if [[ ${BITRIVER_OME_IMAGE_TAG:-} =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-  ome_major=${BASH_REMATCH[1]}
-  ome_minor=${BASH_REMATCH[2]}
-  if (( ome_major == 0 && ome_minor < 16 )); then
-    ome_supports_api_token=false
-  fi
-fi
-
-if [[ "$ome_supports_api_token" == true ]]; then
-  required_vars+=(BITRIVER_OME_API_TOKEN)
-fi
 
 declare -A forbidden_values=(
   [BITRIVER_POSTGRES_PASSWORD]="P0stgres-Example!"
@@ -64,6 +53,7 @@ declare -A forbidden_values=(
   [BITRIVER_SRS_TOKEN]="srs-secure-token-example"
   [BITRIVER_OME_PASSWORD]="OME-Example-Pass!"
   [BITRIVER_OME_API_TOKEN]="OME-Example-Access-Token"
+  [BITRIVER_OME_ACCESS_TOKEN]="OME-Example-Access-Token"
   [BITRIVER_TRANSCODER_TOKEN]="transcoder-secure-token-example"
   [BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD]="R3dis-Example!"
 )
@@ -127,8 +117,16 @@ if (( ${#missing[@]} > 0 )); then
   done
 fi
 
-if [[ -n "${BITRIVER_OME_IMAGE_TAG:-}" && ! "$BITRIVER_OME_IMAGE_TAG" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-  errors+=("BITRIVER_OME_IMAGE_TAG must be MAJOR.MINOR.PATCH so the renderer can decide whether to include managers <AccessToken>/<Authentication>, <Outputs>, and LLHLS sections (current: ${BITRIVER_OME_IMAGE_TAG}).")
+if [[ -n "${BITRIVER_OME_IMAGE_TAG:-}" ]]; then
+  if [[ "$BITRIVER_OME_IMAGE_TAG" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+    ome_major=${BASH_REMATCH[1]}
+    ome_minor=${BASH_REMATCH[2]}
+    if (( ome_major == 0 && ome_minor < 16 )); then
+      errors+=("BITRIVER_OME_IMAGE_TAG must be 0.16.0 or newer to match the rendered Server.xml schema (current: ${BITRIVER_OME_IMAGE_TAG}).")
+    fi
+  else
+    errors+=("BITRIVER_OME_IMAGE_TAG must be MAJOR.MINOR.PATCH so the renderer can stamp the config with the pinned tag (current: ${BITRIVER_OME_IMAGE_TAG}).")
+  fi
 fi
 
 if [[ -n "${BITRIVER_SRS_IMAGE_TAG:-}" && "$BITRIVER_SRS_IMAGE_TAG" != "v5.0.185" ]]; then

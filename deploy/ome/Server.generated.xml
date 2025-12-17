@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Server version="10">
+    <!-- Rendered for BITRIVER_OME_IMAGE_TAG=0.16.0 -->
     <Name>OvenMediaEngine</Name>
     <Type>origin</Type>
     <IP>0.0.0.0</IP>
@@ -24,12 +25,30 @@
 
     <!-- Corrected: <Bind> replaces the deprecated <Server.bind.Address> container. -->
     <Bind>
+        <Address>0.0.0.0</Address>
 
         <Managers>
             <API>
                 <Port>8081</Port>
                 <TLSPort>8082</TLSPort>
                 <WorkerCount>1</WorkerCount>
+                <!--
+                  APIServer rejects an empty token; customize this value if you
+                  want to protect API access, or leave the placeholder for
+                  open/local use.
+                -->
+                <AccessTokens>
+                    <AccessToken>local-dev-access-token</AccessToken>
+                </AccessTokens>
+                <Authentication>
+                    <AutoRegister>true</AutoRegister>
+                    <AllowAnonymousUser>false</AllowAnonymousUser>
+                    <AllowAnonymousReferrer>false</AllowAnonymousReferrer>
+                    <User>
+                        <ID>admin</ID>
+                        <Password>local-dev-password</Password>
+                    </User>
+                </Authentication>
             </API>
         </Managers>
 
@@ -96,30 +115,34 @@
                     <Name>live</Name>
                     <Type>live</Type>
 
-                    <OutputProfiles>
-                        <OutputProfile>
-                            <Name>copy_passthrough</Name>
-                            
-                            <Video>
-                                <Codec>copy</Codec>
-                            </Video>
-                            <Audio>
-                                <Codec>copy</Codec>
-                            </Audio>
-                            <!-- Legacy layout for pre-0.16 tags without OutputStreams; render_ome_config.py rewrites
-                                 this profile to emit codec children directly under <OutputProfile>. -->
-                            <!--
-                            <Video>
-                                <Codec>copy</Codec>
-                            </Video>
-                            <Audio>
-                                <Codec>copy</Codec>
-                            </Audio>
-                            -->
-                        </OutputProfile>
-                    </OutputProfiles>
+                    <Outputs>
+                        <OutputProfiles>
+                            <OutputProfile>
+                                <Name>copy_passthrough</Name>
+                                <OutputStreams>
+                                    <OutputStream>
+                                        <Name>copy</Name>
+                                        <Video>
+                                            <Codec>copy</Codec>
+                                        </Video>
+                                        <Audio>
+                                            <Codec>copy</Codec>
+                                        </Audio>
+                                    </OutputStream>
+                                </OutputStreams>
+                                <!-- OutputStreams are required for the pinned 0.16.x schema. -->
+                            </OutputProfile>
+                        </OutputProfiles>
 
-                    
+                        <LLHLS>
+                            <SegmentDuration>6</SegmentDuration>
+                            <PartDuration>1</PartDuration>
+                            <SegmentCount>5</SegmentCount>
+                            <PartCount>3</PartCount>
+                            <PreloadHint>true</PreloadHint>
+                            <AdditionalPlaylist>true</AdditionalPlaylist>
+                        </LLHLS>
+                    </Outputs>
 
                     <Publishers>
                         <WebRTC>
