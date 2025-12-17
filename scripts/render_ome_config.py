@@ -166,8 +166,13 @@ def _scoped_replace_control_bindings(text: str, bind: str) -> str:
     return text[:control_start] + control_body + text[control_end:]
 
 
-def _parse_ome_capabilities(image_tag: str | None) -> tuple[bool, bool]:
+def _parse_ome_capabilities(
+    image_tag: str | None, *, force_legacy_outputs: bool = False
+) -> tuple[bool, bool]:
     """Return (supports_application_outputs, supports_output_streams)."""
+
+    if force_legacy_outputs:
+        return False, False
 
     if image_tag is None:
         return True, True
@@ -358,13 +363,14 @@ def render(
     tcp_relay: str,
     ice_candidate: str,
     image_tag: str | None = None,
+    force_legacy_outputs: bool = False,
 ) -> None:
     escaped_bind = xml_escape(bind)
     escaped_port = xml_escape(server_port)
     escaped_tls_port = xml_escape(tls_port)
     text = template.read_text()
     supports_application_outputs, supports_output_streams = _parse_ome_capabilities(
-        image_tag
+        image_tag, force_legacy_outputs=force_legacy_outputs
     )
 
     # Normalize old <Server.bind> wrappers to <Bind> so very old templates don't break.
@@ -429,6 +435,13 @@ def main(argv: list[str]) -> int:
         required=False,
         help="OME image tag used to decide whether to keep <Outputs> blocks",
     )
+    parser.add_argument(
+        "--force-legacy-outputs",
+        action="store_true",
+        help=(
+            "Force legacy rendering for <Application> outputs (omit <Outputs> and <OutputStreams>), overriding --image-tag"
+        ),
+    )
 
     args = parser.parse_args(argv)
     server_ip = args.server_ip if args.server_ip is not None else args.bind
@@ -442,6 +455,7 @@ def main(argv: list[str]) -> int:
         args.tcp_relay,
         args.ice_candidate,
         args.image_tag,
+        args.force_legacy_outputs,
     )
     return 0
 
