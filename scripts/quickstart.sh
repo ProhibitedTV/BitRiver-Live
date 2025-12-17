@@ -209,6 +209,8 @@ ome_image_tag=${ome_image_tag:-${env_defaults[BITRIVER_OME_IMAGE_TAG]}}
 
 eval "$(compute_ome_capabilities "$ome_image_tag" 1)"
 supports_ome_access_token=$supports_access_token
+supports_ome_application_outputs=$supports_application_outputs
+supports_ome_output_streams=$supports_output_streams
 
 if (( parsing_failed )); then
   echo "BITRIVER_OME_IMAGE_TAG=$ome_image_tag is not a MAJOR.MINOR.PATCH value." >&2
@@ -217,6 +219,13 @@ if (( parsing_failed )); then
 fi
 
 strip_legacy_ome_api_token "$ome_image_tag"
+
+if (( supports_ome_application_outputs == 0 )); then
+  export BITRIVER_OME_FORCE_LEGACY_OUTPUTS=1
+  echo "BITRIVER_OME_IMAGE_TAG=$ome_image_tag uses the legacy schema; the renderer will omit <Outputs>/<OutputStreams> blocks for compatibility."
+else
+  unset BITRIVER_OME_FORCE_LEGACY_OUTPUTS
+fi
 
 existing_ome_access_token=$(read_env_file_value BITRIVER_OME_ACCESS_TOKEN)
 existing_ome_api_token=$(read_env_file_value BITRIVER_OME_API_TOKEN)

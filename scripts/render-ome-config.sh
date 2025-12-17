@@ -9,6 +9,7 @@ OUTPUT="$REPO_ROOT/deploy/ome/Server.generated.xml"
 MODE="render"
 QUIET=0
 FORCE=0
+FORCE_LEGACY_OUTPUTS="${BITRIVER_OME_FORCE_LEGACY_OUTPUTS:-0}"
 
 usage() {
   cat <<'USAGE'
@@ -19,6 +20,8 @@ Options:
   --force       Re-render even if the generated file already exists.
   --env-file    Path to the .env file to source (defaults to ./../.env).
   --quiet       Suppress informational output.
+  --force-legacy-outputs
+                Render without <Outputs>/<OutputStreams> regardless of BITRIVER_OME_IMAGE_TAG.
 USAGE
 }
 
@@ -40,6 +43,9 @@ while (($# > 0)); do
       ;;
     --quiet)
       QUIET=1
+      ;;
+    --force-legacy-outputs)
+      FORCE_LEGACY_OUTPUTS=1
       ;;
     -h|--help)
       usage
@@ -104,16 +110,24 @@ if [[ $QUIET -eq 0 ]]; then
   fi
 fi
 
-if ! render_output=$(python3 "$SCRIPT_DIR/render_ome_config.py" \
-  --template "$TEMPLATE" \
-  --output "$OUTPUT" \
-  --bind "$OME_BIND" \
-  --server-ip "$OME_IP" \
-  --port "$OME_PORT" \
-  --tls-port "$OME_TLS_PORT" \
-  --image-tag "$OME_IMAGE_TAG" \
-  --tcp-relay "$OME_TCP_RELAY" \
-  --ice-candidate "$OME_ICE_CANDIDATE" 2>&1); then
+render_args=(
+  python3 "$SCRIPT_DIR/render_ome_config.py"
+  --template "$TEMPLATE"
+  --output "$OUTPUT"
+  --bind "$OME_BIND"
+  --server-ip "$OME_IP"
+  --port "$OME_PORT"
+  --tls-port "$OME_TLS_PORT"
+  --image-tag "$OME_IMAGE_TAG"
+  --tcp-relay "$OME_TCP_RELAY"
+  --ice-candidate "$OME_ICE_CANDIDATE"
+)
+
+if [[ "$FORCE_LEGACY_OUTPUTS" == "1" ]]; then
+  render_args+=(--force-legacy-outputs)
+fi
+
+if ! render_output=$("${render_args[@]}" 2>&1); then
   echo "Failed to render deploy/ome/Server.generated.xml. Check BITRIVER_OME_* values in $ENV_FILE and the template at $TEMPLATE." >&2
   echo "$render_output" >&2
   exit 1
