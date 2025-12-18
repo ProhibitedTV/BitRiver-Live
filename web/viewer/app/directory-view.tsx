@@ -48,17 +48,10 @@ export function HomePageView({
 }) {
   const { featured, recommended, following, liveNow, trending, categories, error: homeError } = homeData;
   const { channels, error: directoryError } = directoryData;
-  const errorMessage = (() => {
-    if (directoryError) {
-      return `We couldn’t load the directory right now: ${directoryError}`;
-    }
-
-    if (homeError) {
-      return `We couldn’t load personalized rows (featured, recommended, following): ${homeError}`;
-    }
-
-    return null;
-  })();
+  const homeErrorMessage = homeError
+    ? `We couldn’t load personalized rows (featured, recommended, following): ${homeError}`
+    : null;
+  const directoryErrorMessage = directoryError ? `We couldn’t load the directory right now: ${directoryError}` : null;
 
   return (
     <div className="home-page">
@@ -86,6 +79,12 @@ export function HomePageView({
       </section>
 
       <div className="content-rail stack">
+        {!homeLoading && homeErrorMessage && (
+          <div className="surface" role="alert">
+            {homeErrorMessage}
+          </div>
+        )}
+
         <ChannelRail title="Channels We Think You’ll Like" channels={recommended} loading={homeLoading} />
 
         <div className="content-rail__grid">
@@ -134,9 +133,9 @@ export function HomePageView({
             {query && <span className="muted">Results for “{query}”</span>}
           </div>
           {directoryLoading && <div className="surface">Loading channels…</div>}
-          {!directoryLoading && errorMessage && (
+          {!directoryLoading && directoryErrorMessage && (
             <div className="surface" role="alert">
-              {errorMessage}
+              {directoryErrorMessage}
             </div>
           )}
           {!directoryLoading && !directoryError && <DirectoryGrid channels={channels} />}
