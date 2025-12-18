@@ -41,7 +41,6 @@ required_vars=(
   BITRIVER_TRANSCODER_TOKEN
   BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD
   BITRIVER_TRANSCODER_PUBLIC_BASE_URL
-  NEXT_PUBLIC_API_BASE_URL
   NEXT_PUBLIC_VIEWER_URL
 )
 
@@ -189,12 +188,13 @@ if [[ -n "${BITRIVER_OME_SERVER_TLS_PORT:-}" ]]; then
   fi
 fi
 
-if [[ -n "${NEXT_PUBLIC_API_BASE_URL:-}" ]]; then
-  if [[ "$NEXT_PUBLIC_API_BASE_URL" =~ ^https?://(localhost|127\.[0-9.]*|0\.0\.0\.0|::1|\[::1\])([:/]|$) ]]; then
-    errors+=("NEXT_PUBLIC_API_BASE_URL points at loopback ($NEXT_PUBLIC_API_BASE_URL). Point it at the API hostname end users reach.")
-  elif [[ "$NEXT_PUBLIC_API_BASE_URL" =~ example\.com ]]; then
-    errors+=("NEXT_PUBLIC_API_BASE_URL still uses an example.com placeholder ($NEXT_PUBLIC_API_BASE_URL). Replace it with the production API origin.")
-  fi
+if [[ -z "${NEXT_PUBLIC_API_BASE_URL:-}" ]]; then
+  viewer_base_path=${NEXT_VIEWER_BASE_PATH:-/viewer}
+  echo "Note: NEXT_PUBLIC_API_BASE_URL is empty; the viewer will fall back to the API origin when proxied at NEXT_VIEWER_BASE_PATH=${viewer_base_path}. Set this when hosting the viewer on its own domain." >&2
+elif [[ "$NEXT_PUBLIC_API_BASE_URL" =~ ^https?://(localhost|127\.[0-9.]*|0\.0\.0\.0|::1|\[::1\])([:/]|$) ]]; then
+  errors+=("NEXT_PUBLIC_API_BASE_URL points at loopback ($NEXT_PUBLIC_API_BASE_URL). Point it at the API hostname end users reach.")
+elif [[ "$NEXT_PUBLIC_API_BASE_URL" =~ example\.com ]]; then
+  errors+=("NEXT_PUBLIC_API_BASE_URL still uses an example.com placeholder ($NEXT_PUBLIC_API_BASE_URL). Replace it with the production API origin.")
 fi
 
 if [[ -n "${NEXT_PUBLIC_VIEWER_URL:-}" ]]; then
