@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DirectoryGrid } from "../../components/DirectoryGrid";
 import { SearchBar } from "../../components/SearchBar";
@@ -20,6 +20,8 @@ export default function BrowsePage() {
   const [sort, setSort] = useState<SortKey>("live");
   const [filter, setFilter] = useState<FilterKey>(null);
   const lastQueryFromParams = useRef(searchParamQuery);
+  const router = useRouter();
+  const pathname = usePathname();
 
   const loadChannels = useCallback(
     async (search?: string) => {
@@ -101,9 +103,27 @@ export default function BrowsePage() {
     return sortedChannels.slice(0, 3);
   }, [sortedChannels]);
 
+  const updateSearchParam = useCallback(
+    (value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      const trimmedValue = value.trim();
+
+      if (trimmedValue.length > 0) {
+        params.set("q", trimmedValue);
+      } else {
+        params.delete("q");
+      }
+
+      const queryString = params.toString();
+      router.replace(queryString ? `${pathname}?${queryString}` : pathname);
+    },
+    [pathname, router, searchParams]
+  );
+
   const handleSearch = (value: string) => {
     setQuery(value);
     setFilter(null);
+    updateSearchParam(value);
   };
 
   const handleReset = () => {
