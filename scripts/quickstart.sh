@@ -167,7 +167,7 @@ echo "Docker and Docker Compose detected."
 declare -A env_defaults=(
   [BITRIVER_LIVE_PORT]='8080'
   [BITRIVER_LIVE_STORAGE_DRIVER]='postgres'
-  [BITRIVER_LIVE_MODE]='production'
+  [BITRIVER_LIVE_MODE]='development'
   [BITRIVER_LIVE_ADDR]=':8080'
   [BITRIVER_LIVE_POSTGRES_DSN]='postgres://bitriver:bitriver@postgres:5432/bitriver?sslmode=disable'
   [BITRIVER_LIVE_SESSION_TTL]='168h'

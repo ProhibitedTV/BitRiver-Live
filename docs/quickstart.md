@@ -33,6 +33,8 @@ The script will:
 4. Wait for Postgres to accept connections. The compose bundle now launches a short-lived `postgres-migrations` service that walks the SQL files in `deploy/migrations/`, applies them with `psql`, and exits. If a migration fails the service stops and the API never starts, giving you a chance to correct the database state before retrying `docker compose up -d`.
 5. Wait for the API readiness check to pass (`/readyz`), then invoke the `bootstrap-admin` helper to seed the admin account and print the credentials. The `/healthz` endpoint still reports ingest dependency status in the JSON payload and may mark the stack as `degraded` when streaming services are unavailable, but readiness will only fail when core API dependencies are down.
 
+Quickstart defaults `BITRIVER_LIVE_MODE` to `development` so session cookies stay readable over HTTP without TLS. Keep that default for local demos, and switch to `production` only after wiring HTTPS via `BITRIVER_LIVE_TLS_CERT`/`BITRIVER_LIVE_TLS_KEY` or a reverse proxy so cookies regain the `Secure` flag.
+
 The health payload still expects the ingest services to be reachable from the API container:
 
 - **SRS controller:** `BITRIVER_SRS_API` defaults to `http://srs-controller:1985` inside the Compose network. If you move SRS elsewhere, point this URL at a reachable host and keep the API token aligned with the controller's configuration.
