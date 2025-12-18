@@ -2,10 +2,12 @@ import {
   adminUser,
   mockAnonymousUser,
   mockAuthenticatedUser,
+  mockUseAuth,
   resetRouterMocks,
   renderWithProviders,
   viewerApiMocks,
   viewerUser,
+  guestAuthState,
 } from "../test/test-utils";
 import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -16,6 +18,39 @@ jest.mock("../hooks/useAuth");
 const fetchManagedChannelsMock = viewerApiMocks.fetchManagedChannels;
 
 describe("Navbar", () => {
+  const originalApiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+  const overrideWindowLocation = (
+    overrides: Partial<Pick<Location, "hash" | "href" | "origin" | "pathname" | "search">>,
+  ) => {
+    const originalLocation = window.location;
+    const mockLocation = {
+      ancestorOrigins: originalLocation.ancestorOrigins,
+      assign: jest.fn(),
+      hash: "",
+      host: "localhost",
+      hostname: "localhost",
+      href: "http://localhost/",
+      origin: "http://localhost",
+      pathname: "/",
+      port: "",
+      protocol: "http:",
+      reload: jest.fn(),
+      replace: jest.fn(),
+      search: "",
+      toString: () => "http://localhost/",
+      ...overrides,
+    } as unknown as Location & { href: string };
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: mockLocation,
+    });
+    return {
+      mockLocation,
+      restore: () =>
+        Object.defineProperty(window, "location", { configurable: true, value: originalLocation }),
+    };
+  };
+
   beforeAll(() => {
     Object.defineProperty(window, "matchMedia", {
       writable: true,
@@ -36,6 +71,15 @@ describe("Navbar", () => {
     jest.clearAllMocks();
     resetRouterMocks();
     fetchManagedChannelsMock.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    if (originalApiBase === undefined) {
+      delete process.env.NEXT_PUBLIC_API_BASE_URL;
+    } else {
+      process.env.NEXT_PUBLIC_API_BASE_URL = originalApiBase;
+    }
+    window.history.replaceState({}, "", "/");
   });
 
   test("shows a dashboard link to admins", () => {
@@ -95,5 +139,73 @@ describe("Navbar", () => {
     ["Home", "Following", "Browse"].forEach((label) => {
       expect(drawer.getAllByRole("link", { name: new RegExp(label, "i") })).toHaveLength(1);
     });
+  });
+
+  test("shows sign in and join calls-to-action when signed out", () => {
+    mockAnonymousUser();
+
+    renderWithProviders(<Navbar />);
+
+    expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /join/i })).toBeInTheDocument();
+  });
+
+  test("sign in CTA calls the auth handler with a redirect target", async () => {
+    const signIn = jest.fn();
+    mockUseAuth.mockReturnValue({
+      ...guestAuthState(),
+      signIn,
+    });
+    window.history.pushState({}, "", "/channels/alpha?view=live#info");
+
+    const user = userEvent.setup();
+
+    renderWithProviders(<Navbar />);
+
+    const signInButton = screen.getByRole("button", { name: /sign in/i });
+    await act(async () => {
+      await user.click(signInButton);
+    });
+
+    expect(signIn).toHaveBeenCalledWith("/channels/alpha?view=live#info");
+  });
+
+  test("join CTA routes to the signup page with the current path as the next parameter", async () => {
+    mockAnonymousUser();
+    const { mockLocation, restore } = overrideWindowLocation({
+      pathname: "/browse",
+      search: "?tag=music",
+      hash: "#top",
+    });
+
+    const user = userEvent.setup();
+
+    renderWithProviders(<Navbar />);
+
+    const joinButton = screen.getByRole("button", { name: /join/i });
+    await act(async () => {
+      await user.click(joinButton);
+    });
+
+    expect(mockLocation.href).toBe("http://localhost/signup?next=%2Fbrowse%3Ftag%3Dmusic%23top");
+    restore();
+  });
+
+  test("join CTA respects a configured auth base URL", async () => {
+    mockAnonymousUser();
+    process.env.NEXT_PUBLIC_API_BASE_URL = "https://auth.example.com";
+    const { mockLocation, restore } = overrideWindowLocation({});
+
+    const user = userEvent.setup();
+
+    renderWithProviders(<Navbar />);
+
+    const joinButton = screen.getByRole("button", { name: /join/i });
+    await act(async () => {
+      await user.click(joinButton);
+    });
+
+    expect(mockLocation.href).toMatch(/^https:\/\/auth\.example\.com\/signup\?next=%2F/);
+    restore();
   });
 });

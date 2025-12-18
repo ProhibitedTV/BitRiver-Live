@@ -155,6 +155,33 @@ export function Navbar() {
     setMenuOpen(false);
   };
 
+  const buildRedirectTarget = () => {
+    if (typeof window === "undefined") {
+      return "/";
+    }
+    return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  };
+
+  const handleJoin = () => {
+    closeMenu();
+    if (typeof window === "undefined") {
+      return;
+    }
+    const signupBase = process.env.NEXT_PUBLIC_API_BASE_URL
+      ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/signup`
+      : "/signup";
+    const url = new URL(signupBase, window.location.origin);
+    if (!url.searchParams.has("next")) {
+      url.searchParams.set("next", buildRedirectTarget());
+    }
+    window.location.href = url.toString();
+  };
+
+  const handleSignIn = () => {
+    closeMenu();
+    void signIn(buildRedirectTarget());
+  };
+
   const handleSearch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmed = searchQuery.trim();
@@ -284,14 +311,11 @@ export function Navbar() {
               </div>
             ) : (
               <div className="auth-buttons">
-                <button
-                  className="accent-button"
-                  onClick={() => {
-                    closeMenu();
-                    void signIn();
-                  }}
-                >
+                <button type="button" className="ghost-button" onClick={handleSignIn}>
                   Sign in
+                </button>
+                <button type="button" className="accent-button" onClick={handleJoin}>
+                  Join
                 </button>
               </div>
             )}
@@ -353,14 +377,11 @@ export function Navbar() {
           )}
           {!user && (
             <div className="nav-drawer__cta">
-              <button
-                className="accent-button"
-                onClick={() => {
-                  closeMenu();
-                  void signIn();
-                }}
-              >
+              <button type="button" className="ghost-button" onClick={handleSignIn}>
                 Sign in
+              </button>
+              <button type="button" className="accent-button" onClick={handleJoin}>
+                Join
               </button>
             </div>
           )}

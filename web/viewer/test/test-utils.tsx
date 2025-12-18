@@ -85,6 +85,7 @@ jest.mock("next/link", () => {
 jest.mock("next/navigation", () => ({
   useRouter: () => mockRouter,
   usePathname: () => pathname,
+  useSearchParams: () => new URLSearchParams(typeof window !== "undefined" ? window.location.search : ""),
 }));
 
 jest.mock("next/image", () => ({
