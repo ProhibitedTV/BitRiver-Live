@@ -37,6 +37,8 @@ Quickstart defaults `BITRIVER_LIVE_MODE` to `development` so session cookies sta
 
 The helper leaves `NEXT_PUBLIC_API_BASE_URL` empty so the viewer inherits the API origin when proxied through `NEXT_VIEWER_BASE_PATH` (default `/viewer`). Set `NEXT_PUBLIC_API_BASE_URL` to the publicly reachable API URL when serving the viewer from its own hostname and adjust `NEXT_PUBLIC_VIEWER_URL` to match before re-running `docker compose up -d`.
 
+Running `deploy/check-env.sh` against the quickstart `.env` will now warn (instead of failing) when loopback values remain for the viewer URL, OME bind/IP, or the transcoder public base URL while `BITRIVER_LIVE_MODE` stays in development. Production deployments should still replace those placeholders with routable hosts before re-running the validator.
+
 The health payload still expects the ingest services to be reachable from the API container:
 
 - **SRS controller:** `BITRIVER_SRS_API` defaults to `http://srs-controller:1985` inside the Compose network. If you move SRS elsewhere, point this URL at a reachable host and keep the API token aligned with the controller's configuration.

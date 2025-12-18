@@ -19,6 +19,23 @@ blocked=()
 blocked_messages=()
 unset_image_tags=()
 errors=()
+is_production_env=1
+
+if [[ -n "${BITRIVER_LIVE_MODE:-}" ]]; then
+  mode_normalized="${BITRIVER_LIVE_MODE,,}"
+  if [[ "$mode_normalized" != "production" ]]; then
+    is_production_env=0
+  fi
+fi
+
+flag_env_issue() {
+  local message=$1
+  if (( is_production_env )); then
+    errors+=("$message")
+  else
+    echo "Note: $message (skipped because BITRIVER_LIVE_MODE=${BITRIVER_LIVE_MODE:-development})." >&2
+  fi
+}
 
 required_vars=(
   BITRIVER_POSTGRES_USER
@@ -154,25 +171,25 @@ if [[ -n "${BITRIVER_TRANSCODER_PUBLIC_BASE_URL:-}" ]]; then
   if [[ "$BITRIVER_TRANSCODER_PUBLIC_BASE_URL" == "https://cdn.example.com/hls" ]]; then
     errors+=("BITRIVER_TRANSCODER_PUBLIC_BASE_URL still uses the sample CDN URL (https://cdn.example.com/hls) from deploy/.env.example. Point this at the public origin end users can reach instead.")
   elif [[ "$BITRIVER_TRANSCODER_PUBLIC_BASE_URL" =~ ^https?://(localhost|127\.[0-9.]*|0\.0\.0\.0|::1|\[::1\])([:/]|$) ]]; then
-    errors+=("BITRIVER_TRANSCODER_PUBLIC_BASE_URL points at loopback ($BITRIVER_TRANSCODER_PUBLIC_BASE_URL). Configure a CDN, reverse proxy, or other routable origin instead.")
+    flag_env_issue "BITRIVER_TRANSCODER_PUBLIC_BASE_URL points at loopback ($BITRIVER_TRANSCODER_PUBLIC_BASE_URL). Configure a CDN, reverse proxy, or other routable origin instead."
   fi
 fi
 
 if [[ -n "${BITRIVER_OME_API:-}" ]]; then
   if [[ "$BITRIVER_OME_API" =~ ^https?://(localhost|127\.[0-9.]*|0\.0\.0\.0|::1|\[::1\])([:/]|$) ]]; then
-    errors+=("BITRIVER_OME_API points at loopback ($BITRIVER_OME_API). Use the ome hostname from docker-compose.yml or another reachable host/IP.")
+    flag_env_issue "BITRIVER_OME_API points at loopback ($BITRIVER_OME_API). Use the ome hostname from docker-compose.yml or another reachable host/IP."
   fi
 fi
 
 if [[ -n "${BITRIVER_OME_BIND:-}" ]]; then
   if [[ "$BITRIVER_OME_BIND" =~ ^(localhost|127\.[0-9.]*|::1|\[::1\]|0\.0\.0\.0|::)$ ]]; then
-    errors+=("BITRIVER_OME_BIND is set to $BITRIVER_OME_BIND. Bind OvenMediaEngine to the routable interface clients will reach instead of a placeholder or loopback value.")
+    flag_env_issue "BITRIVER_OME_BIND is set to $BITRIVER_OME_BIND. Bind OvenMediaEngine to the routable interface clients will reach instead of a placeholder or loopback value."
   fi
 fi
 
 if [[ -n "${BITRIVER_OME_IP:-}" ]]; then
   if [[ "$BITRIVER_OME_IP" =~ ^(localhost|127\.[0-9.]*|::1|\[::1\]|0\.0\.0\.0|::)$ ]]; then
-    errors+=("BITRIVER_OME_IP is set to $BITRIVER_OME_IP. Configure the public IP or hostname for OvenMediaEngine instead of a placeholder or loopback value.")
+    flag_env_issue "BITRIVER_OME_IP is set to $BITRIVER_OME_IP. Configure the public IP or hostname for OvenMediaEngine instead of a placeholder or loopback value."
   fi
 fi
 
@@ -192,14 +209,14 @@ if [[ -z "${NEXT_PUBLIC_API_BASE_URL:-}" ]]; then
   viewer_base_path=${NEXT_VIEWER_BASE_PATH:-/viewer}
   echo "Note: NEXT_PUBLIC_API_BASE_URL is empty; the viewer will fall back to the API origin when proxied at NEXT_VIEWER_BASE_PATH=${viewer_base_path}. Set this when hosting the viewer on its own domain." >&2
 elif [[ "$NEXT_PUBLIC_API_BASE_URL" =~ ^https?://(localhost|127\.[0-9.]*|0\.0\.0\.0|::1|\[::1\])([:/]|$) ]]; then
-  errors+=("NEXT_PUBLIC_API_BASE_URL points at loopback ($NEXT_PUBLIC_API_BASE_URL). Point it at the API hostname end users reach.")
+  flag_env_issue "NEXT_PUBLIC_API_BASE_URL points at loopback ($NEXT_PUBLIC_API_BASE_URL). Point it at the API hostname end users reach."
 elif [[ "$NEXT_PUBLIC_API_BASE_URL" =~ example\.com ]]; then
   errors+=("NEXT_PUBLIC_API_BASE_URL still uses an example.com placeholder ($NEXT_PUBLIC_API_BASE_URL). Replace it with the production API origin.")
 fi
 
 if [[ -n "${NEXT_PUBLIC_VIEWER_URL:-}" ]]; then
   if [[ "$NEXT_PUBLIC_VIEWER_URL" =~ ^https?://(localhost|127\.[0-9.]*|0\.0\.0\.0|::1|\[::1\])([:/]|$) ]]; then
-    errors+=("NEXT_PUBLIC_VIEWER_URL points at loopback ($NEXT_PUBLIC_VIEWER_URL). Point it at the viewer hostname end users reach.")
+    flag_env_issue "NEXT_PUBLIC_VIEWER_URL points at loopback ($NEXT_PUBLIC_VIEWER_URL). Point it at the viewer hostname end users reach."
   elif [[ "$NEXT_PUBLIC_VIEWER_URL" =~ example\.com ]]; then
     errors+=("NEXT_PUBLIC_VIEWER_URL still uses an example.com placeholder ($NEXT_PUBLIC_VIEWER_URL). Replace it with the production viewer origin.")
   fi
