@@ -46,7 +46,17 @@ export function HomePageView({
 }) {
   const { featured, recommended, following, liveNow, trending, categories, error: homeError } = homeData;
   const { channels, error: directoryError } = directoryData;
-  const error = directoryError ?? homeError;
+  const errorMessage = (() => {
+    if (directoryError) {
+      return `We couldn’t load the directory right now: ${directoryError}`;
+    }
+
+    if (homeError) {
+      return `We couldn’t load personalized rows (featured, recommended, following): ${homeError}`;
+    }
+
+    return null;
+  })();
 
   return (
     <div className="home-page">
@@ -100,12 +110,6 @@ export function HomePageView({
           </section>
         </div>
 
-        {error && (
-          <div className="surface" role="alert">
-            {error}
-          </div>
-        )}
-
         <FollowingRail channels={following} loading={homeLoading} />
 
         <section className="stack" id="live-now">
@@ -128,12 +132,12 @@ export function HomePageView({
             {query && <span className="muted">Results for “{query}”</span>}
           </div>
           {directoryLoading && <div className="surface">Loading channels…</div>}
-          {!directoryLoading && error && (
+          {!directoryLoading && errorMessage && (
             <div className="surface" role="alert">
-              {error}
+              {errorMessage}
             </div>
           )}
-          {!directoryLoading && !error && <DirectoryGrid channels={channels} />}
+          {!directoryLoading && !directoryError && <DirectoryGrid channels={channels} />}
         </section>
       </div>
     </div>
