@@ -17,6 +17,26 @@ import {
   searchDirectory,
 } from "../lib/viewer-api";
 
+function isUnauthorizedFollowingResponse(reason: unknown) {
+  const status = typeof reason === "object" && reason !== null && "status" in reason
+    ? (reason as { status?: number }).status
+    : undefined;
+
+  if (status === 401 || status === 403) {
+    return true;
+  }
+
+  const message = reason instanceof Error ? reason.message : String(reason ?? "");
+  const normalizedMessage = message.toLowerCase();
+
+  return (
+    /\b401\b/.test(message) ||
+    /\b403\b/.test(message) ||
+    normalizedMessage.includes("unauthorized") ||
+    normalizedMessage.includes("unauthenticated")
+  );
+}
+
 async function loadHomeData(): Promise<HomeData> {
   let isAuthenticated = true;
   try {
@@ -46,11 +66,7 @@ async function loadHomeData(): Promise<HomeData> {
       if (followingResult.status === "fulfilled") {
         return followingResult.value.channels;
       }
-      const message = followingResult.reason instanceof Error ? followingResult.reason.message : String(followingResult.reason);
-      if (message === "401" || message === "403") {
-        isAuthenticated = false;
-        return [];
-      }
+      isAuthenticated = !isUnauthorizedFollowingResponse(followingResult.reason);
       return [];
     })();
 
