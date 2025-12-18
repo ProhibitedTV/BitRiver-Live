@@ -267,10 +267,10 @@ export function Navbar() {
                   <button
                     type="button"
                     className="avatar-menu__link"
-                      onClick={() => {
-                        setUserMenuOpen(false);
-                        void signOut();
-                      }}
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      void signOut();
+                    }}
                   >
                     Sign out
                   </button>
@@ -279,22 +279,13 @@ export function Navbar() {
             ) : (
               <div className="auth-buttons">
                 <button
-                  className="ghost-button"
-                  onClick={() => {
-                    closeMenu();
-                    void signIn();
-                  }}
-                >
-                  Sign in
-                </button>
-                <button
                   className="accent-button"
                   onClick={() => {
                     closeMenu();
                     void signIn();
                   }}
                 >
-                  Join
+                  Sign in
                 </button>
               </div>
             )}
@@ -357,22 +348,13 @@ export function Navbar() {
           {!user && (
             <div className="nav-drawer__cta">
               <button
-                className="ghost-button"
-                  onClick={() => {
-                    closeMenu();
-                    void signIn();
-                  }}
-              >
-                Sign in
-              </button>
-              <button
                 className="accent-button"
                 onClick={() => {
                   closeMenu();
                   void signIn();
                 }}
               >
-                Join
+                Sign in
               </button>
             </div>
           )}
