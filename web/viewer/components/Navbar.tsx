@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { fetchManagedChannels } from "../lib/viewer-api";
@@ -9,12 +9,14 @@ import { fetchManagedChannels } from "../lib/viewer-api";
 export function Navbar() {
   const { user, signIn, signOut } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isAdmin = Boolean(user?.roles?.includes("admin"));
   const isCreator = Boolean(user?.roles?.includes("creator"));
   const canAccessCreatorTools = isAdmin || isCreator;
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [managedChannelId, setManagedChannelId] = useState<string | undefined>();
-  const [searchQuery, setSearchQuery] = useState("");
+  const initialSearchQuery = useMemo(() => searchParams.get("q") ?? "", [searchParams]);
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const pathname = usePathname();
@@ -51,6 +53,10 @@ export function Navbar() {
     }
     return canonicalPath === href || canonicalPath.startsWith(`${href}/`);
   };
+
+  useEffect(() => {
+    setSearchQuery((prev) => (prev === initialSearchQuery ? prev : initialSearchQuery));
+  }, [initialSearchQuery]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
