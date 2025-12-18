@@ -102,7 +102,7 @@ export function HomePageView({
 
         {error && (
           <div className="surface" role="alert">
-            {homeError}
+            {error}
           </div>
         )}
 
