@@ -16,9 +16,10 @@ export default function BrowsePage() {
   const [channels, setChannels] = useState<DirectoryChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
-  const [query, setQuery] = useState(searchParamQuery);
+  const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("live");
   const [filter, setFilter] = useState<FilterKey>(null);
+  const [queryHydrated, setQueryHydrated] = useState(false);
   const lastQueryFromParams = useRef(searchParamQuery);
   const router = useRouter();
   const pathname = usePathname();
@@ -42,18 +43,21 @@ export default function BrowsePage() {
   );
 
   useEffect(() => {
-    void loadChannels(query);
-  }, [loadChannels, query]);
-
-  useEffect(() => {
-    if (lastQueryFromParams.current === searchParamQuery) {
+    if (!queryHydrated) {
       return;
     }
 
-    lastQueryFromParams.current = searchParamQuery;
-    setFilter(null);
-    setQuery(searchParamQuery);
-  }, [searchParamQuery]);
+    void loadChannels(query);
+  }, [loadChannels, query, queryHydrated]);
+
+  useEffect(() => {
+    if (!queryHydrated || lastQueryFromParams.current !== searchParamQuery) {
+      lastQueryFromParams.current = searchParamQuery;
+      setFilter(null);
+      setQuery(searchParamQuery);
+      setQueryHydrated(true);
+    }
+  }, [queryHydrated, searchParamQuery]);
 
   const categoryFilters = useMemo(() => {
     const filters = new Set<string>();
@@ -115,15 +119,24 @@ export default function BrowsePage() {
       }
 
       const queryString = params.toString();
-      router.replace(queryString ? `${pathname}?${queryString}` : pathname);
+      const url = queryString ? `${pathname}?${queryString}` : pathname;
+      const shouldReplace = trimmedValue.length === 0 || trimmedValue === lastQueryFromParams.current;
+      lastQueryFromParams.current = trimmedValue;
+
+      if (shouldReplace) {
+        router.replace(url);
+      } else {
+        router.push(url);
+      }
     },
     [pathname, router, searchParams]
   );
 
   const handleSearch = (value: string) => {
-    setQuery(value);
+    const trimmedValue = value.trim();
+    setQuery(trimmedValue);
     setFilter(null);
-    updateSearchParam(value);
+    updateSearchParam(trimmedValue);
   };
 
   const handleReset = () => {
