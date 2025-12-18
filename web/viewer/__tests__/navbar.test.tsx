@@ -19,6 +19,7 @@ const fetchManagedChannelsMock = viewerApiMocks.fetchManagedChannels;
 
 describe("Navbar", () => {
   const originalApiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+  const originalSignupUrl = process.env.NEXT_PUBLIC_SIGNUP_URL;
   const overrideWindowLocation = (
     overrides: Partial<Pick<Location, "hash" | "href" | "origin" | "pathname" | "search">>,
   ) => {
@@ -78,6 +79,11 @@ describe("Navbar", () => {
       delete process.env.NEXT_PUBLIC_API_BASE_URL;
     } else {
       process.env.NEXT_PUBLIC_API_BASE_URL = originalApiBase;
+    }
+    if (originalSignupUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_SIGNUP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_SIGNUP_URL = originalSignupUrl;
     }
     window.history.replaceState({}, "", "/");
   });
@@ -191,6 +197,24 @@ describe("Navbar", () => {
     restore();
   });
 
+  test("join CTA routes to a configured onboarding URL", async () => {
+    mockAnonymousUser();
+    process.env.NEXT_PUBLIC_SIGNUP_URL = "https://accounts.example.com/onboarding";
+    const { mockLocation, restore } = overrideWindowLocation({});
+
+    const user = userEvent.setup();
+
+    renderWithProviders(<Navbar />);
+
+    const joinButton = screen.getByRole("button", { name: /join/i });
+    await act(async () => {
+      await user.click(joinButton);
+    });
+
+    expect(mockLocation.href).toMatch(/^https:\/\/accounts\.example\.com\/onboarding\?next=%2F/);
+    restore();
+  });
+
   test("join CTA respects a configured auth base URL", async () => {
     mockAnonymousUser();
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://auth.example.com";
@@ -207,5 +231,15 @@ describe("Navbar", () => {
 
     expect(mockLocation.href).toMatch(/^https:\/\/auth\.example\.com\/signup\?next=%2F/);
     restore();
+  });
+
+  test("shows only the sign in CTA when signup is not configured", () => {
+    mockAnonymousUser();
+    process.env.NEXT_PUBLIC_SIGNUP_URL = "";
+
+    renderWithProviders(<Navbar />);
+
+    expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /join/i })).not.toBeInTheDocument();
   });
 });

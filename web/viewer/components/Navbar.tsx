@@ -42,6 +42,16 @@ export function Navbar() {
     ],
     [canAccessCreatorTools, isAdmin],
   );
+  const configuredSignupUrl = process.env.NEXT_PUBLIC_SIGNUP_URL?.trim();
+  const signupUrl = useMemo(() => {
+    if (configuredSignupUrl !== undefined) {
+      return configuredSignupUrl || undefined;
+    }
+    if (process.env.NEXT_PUBLIC_API_BASE_URL) {
+      return `${process.env.NEXT_PUBLIC_API_BASE_URL}/signup`;
+    }
+    return "/signup";
+  }, [configuredSignupUrl]);
   const navItemHrefs = useMemo(() => new Set(navItems.map((item) => item.href)), [navItems]);
   const quickLinks = [
     { label: "Categories", href: "/browse" },
@@ -162,24 +172,25 @@ export function Navbar() {
     return `${window.location.pathname}${window.location.search}${window.location.hash}`;
   };
 
+  const handleSignIn = () => {
+    closeMenu();
+    void signIn(buildRedirectTarget());
+  };
+
   const handleJoin = () => {
     closeMenu();
+    if (!signupUrl) {
+      handleSignIn();
+      return;
+    }
     if (typeof window === "undefined") {
       return;
     }
-    const signupBase = process.env.NEXT_PUBLIC_API_BASE_URL
-      ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/signup`
-      : "/signup";
-    const url = new URL(signupBase, window.location.origin);
+    const url = new URL(signupUrl, window.location.origin);
     if (!url.searchParams.has("next")) {
       url.searchParams.set("next", buildRedirectTarget());
     }
     window.location.href = url.toString();
-  };
-
-  const handleSignIn = () => {
-    closeMenu();
-    void signIn(buildRedirectTarget());
   };
 
   const handleSearch = async (event: FormEvent<HTMLFormElement>) => {
@@ -311,12 +322,14 @@ export function Navbar() {
               </div>
             ) : (
               <div className="auth-buttons">
-                <button type="button" className="ghost-button" onClick={handleSignIn}>
+                <button type="button" className={signupUrl ? "ghost-button" : "accent-button"} onClick={handleSignIn}>
                   Sign in
                 </button>
-                <button type="button" className="accent-button" onClick={handleJoin}>
-                  Join
-                </button>
+                {signupUrl && (
+                  <button type="button" className="accent-button" onClick={handleJoin}>
+                    Join
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -377,12 +390,14 @@ export function Navbar() {
           )}
           {!user && (
             <div className="nav-drawer__cta">
-              <button type="button" className="ghost-button" onClick={handleSignIn}>
+              <button type="button" className={signupUrl ? "ghost-button" : "accent-button"} onClick={handleSignIn}>
                 Sign in
               </button>
-              <button type="button" className="accent-button" onClick={handleJoin}>
-                Join
-              </button>
+              {signupUrl && (
+                <button type="button" className="accent-button" onClick={handleJoin}>
+                  Join
+                </button>
+              )}
             </div>
           )}
         </div>
