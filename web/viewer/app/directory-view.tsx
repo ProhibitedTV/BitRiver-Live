@@ -14,6 +14,7 @@ export type HomeData = {
   liveNow: DirectoryChannel[];
   trending: DirectoryChannel[];
   categories: CategorySummary[];
+  isAuthenticated: boolean;
   error?: string;
 };
 
@@ -29,6 +30,7 @@ export const emptyHomeData: HomeData = {
   liveNow: [],
   trending: [],
   categories: [],
+  isAuthenticated: true,
 };
 
 export function HomePageView({
@@ -110,7 +112,7 @@ export function HomePageView({
           </section>
         </div>
 
-        <FollowingRail channels={following} loading={homeLoading} />
+        <FollowingRail channels={following} loading={homeLoading} isAuthenticated={homeData.isAuthenticated} />
 
         <section className="stack" id="live-now">
           <div className="section-heading">

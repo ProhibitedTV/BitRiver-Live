@@ -18,6 +18,7 @@ import {
 } from "../lib/viewer-api";
 
 async function loadHomeData(): Promise<HomeData> {
+  let isAuthenticated = true;
   try {
     const [
       featuredResult,
@@ -47,6 +48,7 @@ async function loadHomeData(): Promise<HomeData> {
       }
       const message = followingResult.reason instanceof Error ? followingResult.reason.message : String(followingResult.reason);
       if (message === "401" || message === "403") {
+        isAuthenticated = false;
         return [];
       }
       return [];
@@ -59,10 +61,12 @@ async function loadHomeData(): Promise<HomeData> {
       liveNow: parseChannels(liveResult),
       trending: parseChannels(trendingResult),
       categories: parseCategories(topCategoriesResult),
+      isAuthenticated,
     };
   } catch (error) {
     return {
       ...emptyHomeData,
+      isAuthenticated,
       error: error instanceof Error ? error.message : "Unable to load personalised rows",
     };
   }

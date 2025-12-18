@@ -5,9 +5,10 @@ import type { DirectoryChannel } from "../lib/viewer-api";
 interface FollowingRailProps {
   channels: DirectoryChannel[];
   loading?: boolean;
+  isAuthenticated?: boolean;
 }
 
-export function FollowingRail({ channels, loading = false }: FollowingRailProps) {
+export function FollowingRail({ channels, loading = false, isAuthenticated = true }: FollowingRailProps) {
   return (
     <section className="following-rail surface">
       <header className="following-rail__header">
@@ -20,9 +21,20 @@ export function FollowingRail({ channels, loading = false }: FollowingRailProps)
       {loading ? (
         <p className="muted">Checking who is live…</p>
       ) : channels.length === 0 ? (
-        <p className="muted">
-          You&rsquo;re not following any channels yet. Follow a broadcaster to see their stream here the moment they go live.
-        </p>
+        isAuthenticated ? (
+          <p className="muted">
+            You&rsquo;re not following any channels yet. Follow a broadcaster to see their stream here the moment they go live.
+          </p>
+        ) : (
+          <div className="stack">
+            <p className="muted">Sign in to see channels you follow.</p>
+            <div>
+              <Link href="/login" className="primary-button">
+                Sign in
+              </Link>
+            </div>
+          </div>
+        )
       ) : (
         <div className="following-rail__scroller" role="list">
           {channels.map((entry) => {
