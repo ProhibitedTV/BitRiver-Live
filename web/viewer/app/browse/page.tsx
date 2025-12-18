@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DirectoryGrid } from "../../components/DirectoryGrid";
 import { SearchBar } from "../../components/SearchBar";
 import type { DirectoryChannel } from "../../lib/viewer-api";
@@ -10,12 +11,15 @@ type SortKey = "live" | "trending" | "new";
 type FilterKey = string | null;
 
 export default function BrowsePage() {
+  const searchParams = useSearchParams();
+  const searchParamQuery = useMemo(() => searchParams.get("q")?.trim() ?? "", [searchParams]);
   const [channels, setChannels] = useState<DirectoryChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(searchParamQuery);
   const [sort, setSort] = useState<SortKey>("live");
   const [filter, setFilter] = useState<FilterKey>(null);
+  const lastQueryFromParams = useRef(searchParamQuery);
 
   const loadChannels = useCallback(
     async (search?: string) => {
@@ -38,6 +42,16 @@ export default function BrowsePage() {
   useEffect(() => {
     void loadChannels(query);
   }, [loadChannels, query]);
+
+  useEffect(() => {
+    if (lastQueryFromParams.current === searchParamQuery) {
+      return;
+    }
+
+    lastQueryFromParams.current = searchParamQuery;
+    setFilter(null);
+    setQuery(searchParamQuery);
+  }, [searchParamQuery]);
 
   const categoryFilters = useMemo(() => {
     const filters = new Set<string>();
