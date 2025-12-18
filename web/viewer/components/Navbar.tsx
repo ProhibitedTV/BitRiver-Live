@@ -10,13 +10,13 @@ export function Navbar() {
   const { user, signIn, signOut } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const searchParamQuery = searchParams?.get("q") ?? "";
   const isAdmin = Boolean(user?.roles?.includes("admin"));
   const isCreator = Boolean(user?.roles?.includes("creator"));
   const canAccessCreatorTools = isAdmin || isCreator;
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [managedChannelId, setManagedChannelId] = useState<string | undefined>();
-  const initialSearchQuery = useMemo(() => searchParams.get("q") ?? "", [searchParams]);
-  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
+  const [searchQuery, setSearchQuery] = useState(searchParamQuery);
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const pathname = usePathname();
@@ -55,8 +55,8 @@ export function Navbar() {
   };
 
   useEffect(() => {
-    setSearchQuery((prev) => (prev === initialSearchQuery ? prev : initialSearchQuery));
-  }, [initialSearchQuery]);
+    setSearchQuery((prev) => (prev === searchParamQuery ? prev : searchParamQuery));
+  }, [searchParamQuery]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
