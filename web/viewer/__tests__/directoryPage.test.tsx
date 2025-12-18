@@ -134,14 +134,25 @@ describe("DirectoryPage", () => {
     expect(await screen.findByText(/unable to load directory|gateway timeout/i)).toBeInTheDocument();
   });
 
+  test("shows an empty following message for authenticated users with no follows", async () => {
+    fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
+
+    const page = await DirectoryPage({ searchParams: {} });
+    render(page);
+
+    expect(await screen.findByText(/not following any channels yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/sign in to see channels you follow/i)).not.toBeInTheDocument();
+  });
+
   test("prompts guests to sign in when following data is unauthenticated", async () => {
     fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
-    fetchFollowingChannelsMock.mockRejectedValueOnce(new Error("401"));
+    fetchFollowingChannelsMock.mockRejectedValueOnce(new Error("unauthorized"));
 
     const page = await DirectoryPage({ searchParams: {} });
     render(page);
 
     expect(await screen.findByText(/sign in to see channels you follow/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /sign in/i })).toHaveAttribute("href", "/login");
+    expect(screen.queryByText(/not following any channels yet/i)).not.toBeInTheDocument();
   });
 });

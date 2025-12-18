@@ -8,7 +8,7 @@ interface FollowingRailProps {
   isAuthenticated?: boolean;
 }
 
-export function FollowingRail({ channels, loading = false, isAuthenticated = true }: FollowingRailProps) {
+export function FollowingRail({ channels, loading = false, isAuthenticated = false }: FollowingRailProps) {
   return (
     <section className="following-rail surface">
       <header className="following-rail__header">
