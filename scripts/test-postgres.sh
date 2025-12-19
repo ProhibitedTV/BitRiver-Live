@@ -112,4 +112,4 @@ else
   export GOFLAGS="-mod=vendor"
 fi
 
-go test -count=1 -tags postgres "${packages[@]}"
+go test -count=1 -timeout=120s -tags postgres "${packages[@]}"
