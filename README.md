@@ -66,6 +66,14 @@ cd BitRiver-Live
 ./scripts/quickstart.sh
 ```
 
+> **Windows (Docker Desktop) users:** Run the PowerShell helper from an elevated **PowerShell 7+** session if Docker permissions require it:
+>
+> ```powershell
+> pwsh ./scripts/quickstart.ps1
+> ```
+>
+> Set `COMPOSE_FILE=deploy/docker-compose.yml` in the same shell when you want to run follow-up Compose commands manually.
+
 The helper script will:
 
 1. Check that Docker and `docker compose` are available.

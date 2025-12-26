@@ -10,17 +10,25 @@ On the first run Docker builds local images for the Go API, the Next.js viewer a
 From the repository root, execute:
 
 > **Linux tip:** Add yourself to the `docker` group so you can talk to the daemon without `sudo`:
-> 
+>
 > ```bash
 > sudo usermod -aG docker $USER
 > newgrp docker  # or log out and back in
 > ```
-> 
+>
 > You can also run the quickstart with `sudo ./scripts/quickstart.sh`, but that will create root-owned files such as `.env`, so fixing the group membership first is the better long-term solution.
 
 ```bash
 ./scripts/quickstart.sh
 ```
+
+> **Windows (Docker Desktop) tip:** Use **PowerShell 7+** and run from an elevated session when Docker Desktop permissions require it:
+>
+> ```powershell
+> pwsh ./scripts/quickstart.ps1
+> ```
+>
+> Set `COMPOSE_FILE=deploy/docker-compose.yml` in the same shell to keep later `docker compose` invocations aligned with the bundled manifest.
 
 The script will:
 
