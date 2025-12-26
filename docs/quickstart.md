@@ -7,28 +7,107 @@ On the first run Docker builds local images for the Go API, the Next.js viewer a
 
 ## Run the stack
 
-From the repository root, execute:
+Pick your operating system and run Steps 0–2 in order. Each block is copy/paste-ready.
 
-> **Linux tip:** Add yourself to the `docker` group so you can talk to the daemon without `sudo`:
->
-> ```bash
-> sudo usermod -aG docker $USER
-> newgrp docker  # or log out and back in
-> ```
->
-> You can also run the quickstart with `sudo ./scripts/quickstart.sh`, but that will create root-owned files such as `.env`, so fixing the group membership first is the better long-term solution.
+### macOS (Docker Desktop)
+
+**Step 0 – Install Docker Desktop, enable Compose V2, and confirm disk space**
+
+```bash
+brew install --cask docker
+open -a Docker  # start the daemon if it is not already running
+
+# Make sure Compose V2 is enabled in Docker Desktop settings, then verify both CLIs
+
+docker --version
+docker compose version
+
+# Check that Docker's data root has at least 15GB free
+DATA_ROOT=$(docker info --format '{{.DockerRootDir}}')
+echo "Docker data root: ${DATA_ROOT}"
+df -h "${DATA_ROOT}"
+```
+
+**Step 1 – Download BitRiver Live**
+
+```bash
+git clone https://github.com/ProhibitedTV/BitRiver-Live.git
+cd BitRiver-Live
+```
+
+**Step 2 – Run the quickstart**
 
 ```bash
 ./scripts/quickstart.sh
 ```
 
-> **Windows (Docker Desktop) tip:** Use **PowerShell 7+** and run from an elevated session when Docker Desktop permissions require it:
->
-> ```powershell
-> pwsh ./scripts/quickstart.ps1
-> ```
->
-> Set `COMPOSE_FILE=deploy/docker-compose.yml` in the same shell to keep later `docker compose` invocations aligned with the bundled manifest.
+### Windows 11/WSL 2 (Docker Desktop)
+
+**Step 0 – Install Docker Desktop and confirm prerequisites**
+
+1. Install Docker Desktop for Windows (WSL 2 backend) from [docs.docker.com/desktop/install/windows-install](https://docs.docker.com/desktop/install/windows-install/).
+2. In Docker Desktop settings, ensure **General → Use Docker Compose V2** is enabled (default).
+3. Check that the Docker data disk inside `docker-desktop` has at least 15GB free:
+
+   ```powershell
+   wsl -d docker-desktop "docker info --format '{{.DockerRootDir}}'"
+   wsl -d docker-desktop df -h /var/lib/docker
+   ```
+
+**Step 1 – Download BitRiver Live (inside WSL)**
+
+```bash
+git clone https://github.com/ProhibitedTV/BitRiver-Live.git
+cd BitRiver-Live
+```
+
+**Step 2 – Run the quickstart (PowerShell helper recommended when permissions require it)**
+
+```powershell
+pwsh ./scripts/quickstart.ps1
+```
+
+Set `COMPOSE_FILE=deploy/docker-compose.yml` in the same shell if you run follow-up Compose commands manually.
+
+### Ubuntu 22.04+ (Docker Engine)
+
+**Step 0 – Install Docker Engine and Docker Compose V2**
+
+```bash
+sudo apt update
+sudo apt install -y ca-certificates curl gnupg lsb-release
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo usermod -aG docker $USER
+newgrp docker
+
+# Confirm everything works without sudo
+
+docker --version
+docker compose version
+```
+
+> **Tip:** If you prefer running Docker with `sudo`, skip the `usermod` and `newgrp` lines and prefix the later commands with
+> `sudo`. Using the Docker group keeps file ownership simple.
+
+**Step 1 – Download BitRiver Live**
+
+```bash
+git clone https://github.com/ProhibitedTV/BitRiver-Live.git
+cd BitRiver-Live
+```
+
+**Step 2 – Run the quickstart**
+
+```bash
+./scripts/quickstart.sh
+```
 
 The script will:
 

@@ -26,10 +26,42 @@ Twitch-style experience on hardware you control.
 
 ## Quickstart: copy, paste, and get a running demo
 
-The steps below assume Ubuntu 22.04+ with an account that can run `sudo`. Other operating systems can use Docker Desktop with
-Compose V2 enabled. Every command is ready to paste into a terminal.
+Pick your platform below and follow Steps 0–2 in order. Each block is self-contained and ready to paste.
 
-### Step 0 – Install Docker Engine and Docker Compose V2
+### macOS (Docker Desktop)
+
+**Step 0 – Install Docker Desktop, enable Compose V2, and confirm disk space**
+
+```bash
+brew install --cask docker
+open -a Docker  # start the daemon if it is not already running
+
+# Make sure Compose V2 is enabled in Docker Desktop settings, then verify both CLIs
+docker --version
+docker compose version
+
+# Check that Docker's data root has at least 15GB free
+DATA_ROOT=$(docker info --format '{{.DockerRootDir}}')
+echo "Docker data root: ${DATA_ROOT}"
+df -h "${DATA_ROOT}"
+```
+
+**Step 1 – Download BitRiver Live**
+
+```bash
+git clone https://github.com/ProhibitedTV/BitRiver-Live.git
+cd BitRiver-Live
+```
+
+**Step 2 – Let the quickstart script do the heavy lifting**
+
+```bash
+./scripts/quickstart.sh
+```
+
+### Ubuntu 22.04+ (Docker Engine)
+
+**Step 0 – Install Docker Engine and Docker Compose V2**
 
 ```bash
 sudo apt update
@@ -53,26 +85,46 @@ docker compose version
 > **Tip:** If you prefer running Docker with `sudo`, skip the `usermod` and `newgrp` lines and prefix the later commands with
 > `sudo`. Using the Docker group keeps file ownership simple.
 
-### Step 1 – Download BitRiver Live
+**Step 1 – Download BitRiver Live**
 
 ```bash
 git clone https://github.com/ProhibitedTV/BitRiver-Live.git
 cd BitRiver-Live
 ```
 
-### Step 2 – Let the quickstart script do the heavy lifting
+**Step 2 – Let the quickstart script do the heavy lifting**
 
 ```bash
 ./scripts/quickstart.sh
 ```
 
-> **Windows (Docker Desktop) users:** Run the PowerShell helper from an elevated **PowerShell 7+** session if Docker permissions require it:
->
-> ```powershell
-> pwsh ./scripts/quickstart.ps1
-> ```
->
-> Set `COMPOSE_FILE=deploy/docker-compose.yml` in the same shell when you want to run follow-up Compose commands manually.
+### Windows 11/WSL 2 (Docker Desktop)
+
+**Step 0 – Install Docker Desktop and confirm prerequisites**
+
+1. Install Docker Desktop for Windows (WSL 2 backend) from [docs.docker.com/desktop/install/windows-install](https://docs.docker.com/desktop/install/windows-install/).
+2. Open Docker Desktop settings and ensure **General → Use Docker Compose V2** is enabled (it is on by default).
+3. Check that the Docker data disk inside `docker-desktop` has at least 15GB free:
+
+   ```powershell
+   wsl -d docker-desktop "docker info --format '{{.DockerRootDir}}'"
+   wsl -d docker-desktop df -h /var/lib/docker
+   ```
+
+**Step 1 – Download BitRiver Live (inside WSL)**
+
+```bash
+git clone https://github.com/ProhibitedTV/BitRiver-Live.git
+cd BitRiver-Live
+```
+
+**Step 2 – Run the quickstart with the PowerShell helper when permissions require it**
+
+```powershell
+pwsh ./scripts/quickstart.ps1
+```
+
+Set `COMPOSE_FILE=deploy/docker-compose.yml` in the same shell when you want to run follow-up Compose commands manually.
 
 The helper script will:
 
