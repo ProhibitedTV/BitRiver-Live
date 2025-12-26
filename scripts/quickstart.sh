@@ -14,6 +14,11 @@ ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env}"
 COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/deploy/docker-compose.yml}"
 MIN_DOCKER_DISK_GB=15
 MIN_DOCKER_DISK_KB=$((MIN_DOCKER_DISK_GB * 1024 * 1024))
+HOST_UNAME=$(uname -s 2>/dev/null || echo "unknown")
+IS_LINUX=0
+if [[ $HOST_UNAME == "Linux" ]]; then
+  IS_LINUX=1
+fi
 
 usage() {
   cat <<'USAGE'
@@ -100,37 +105,80 @@ get_docker_root_dir() {
   if [[ -z $docker_root ]]; then
     docker_root=$(docker info 2>/dev/null | awk -F': *' '/Docker Root Dir/ {print $2; exit}' | tr -d $'\r')
   fi
-  if [[ -z $docker_root ]]; then
+  if [[ -z $docker_root && $IS_LINUX -eq 1 ]]; then
     docker_root="/var/lib/docker"
   fi
   printf '%s' "$docker_root"
 }
 
+resolve_path_for_df() {
+  local path=$1
+
+  if [[ -z $path ]]; then
+    return 0
+  fi
+
+  if [[ -e $path ]]; then
+    printf '%s' "$path"
+    return 0
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    local resolved
+    resolved=$(python3 - <<'PY' "$path"
+import os
+import sys
+
+candidate = sys.argv[1]
+print(os.path.realpath(candidate))
+PY
+)
+    if [[ -e $resolved ]]; then
+      printf '%s' "$resolved"
+      return 0
+    fi
+  fi
+
+  return 0
+}
+
 get_available_kb() {
   local path=$1
-  df -Pk "$path" 2>/dev/null | awk 'NR==2 {print $4}' || true
+  df -k "$path" 2>/dev/null | awk 'NR==2 {print $4}' || true
 }
 
 check_docker_disk_space() {
   local docker_root
   docker_root=$(get_docker_root_dir)
+  if [[ -z $docker_root ]]; then
+    echo "Warning: Docker did not report a storage root; skipping disk preflight on $HOST_UNAME." >&2
+    return 0
+  fi
+
+  local resolved_root
+  resolved_root=$(resolve_path_for_df "$docker_root")
+  if [[ -z $resolved_root ]]; then
+    echo "Warning: Unable to resolve Docker storage path '$docker_root' on $HOST_UNAME; skipping disk preflight." >&2
+    return 0
+  fi
+
   local available_kb
-  available_kb=$(get_available_kb "$docker_root")
+  available_kb=$(get_available_kb "$resolved_root")
   local required_kb=$MIN_DOCKER_DISK_KB
   local required_gb=$MIN_DOCKER_DISK_GB
 
   if [[ -z $available_kb ]]; then
-    echo "Warning: Unable to determine free space for Docker storage at $docker_root; continuing without a preflight disk check." >&2
+    echo "Warning: Unable to determine free space for Docker storage at $resolved_root; continuing without a preflight disk check." >&2
     return 0
   fi
 
   local available_gb=$((available_kb / 1024 / 1024))
-  echo "Docker storage path: $docker_root (free: ${available_gb}GB; minimum recommended: ${required_gb}GB)"
+  echo "Docker storage path: $resolved_root (free: ${available_gb}GB; minimum recommended: ${required_gb}GB)"
 
   if (( available_kb < required_kb )); then
     cat <<EOF >&2
 Insufficient disk space detected for Docker builds.
-Path: $docker_root
+Path: $resolved_root
 Free space: ${available_gb}GB
 Required: at least ${required_gb}GB to build the quickstart images locally.
 
