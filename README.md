@@ -24,122 +24,34 @@ Twitch-style experience on hardware you control.
 - **Ready-to-run tooling** – `scripts/quickstart.sh` builds images, seeds the admin account, and keeps all configuration in a
   single `.env` file.
 
-## Quickstart: copy, paste, and get a running demo
+## Quickstart: Go CLI first
 
-Pick your platform below and follow Steps 0–2 in order. Each block is self-contained and ready to paste.
+Use the Go-based quickstart command to build images, seed credentials, and launch the Compose stack. The legacy shell (`scripts/quickstart.sh`) and PowerShell (`scripts/quickstart.ps1`) helpers remain as thin shims for environments that cannot run the Go CLI directly.
 
-### macOS (Docker Desktop)
+### Prerequisites at a glance
 
-**Step 0 – Install Docker Desktop, enable Compose V2, and confirm disk space**
+| Platform | Docker runtime | Notes |
+| --- | --- | --- |
+| macOS 12+ | Docker Desktop with Compose V2 enabled | Start Docker Desktop first and keep at least 15GB free on Docker's data root. |
+| Ubuntu 22.04+ / other Linux | Docker Engine + Compose plugin | Add your user to the `docker` group (or prefix commands with `sudo`) and confirm `docker compose` works without root. |
+| Windows 11 (WSL 2 backend) | Docker Desktop | Run the quickstart inside WSL with the WSL 2 backend enabled; verify the `docker-desktop` data disk has 15GB free. |
+| Windows 11 (native PowerShell) | Docker Desktop (WSL 2 backend) | Same Docker Desktop install as above; PowerShell shells forward to the same CLI. |
 
-```bash
-brew install --cask docker
-open -a Docker  # start the daemon if it is not already running
-
-# Make sure Compose V2 is enabled in Docker Desktop settings, then verify both CLIs
-docker --version
-docker compose version
-
-# Check that Docker's data root has at least 15GB free
-DATA_ROOT=$(docker info --format '{{.DockerRootDir}}')
-echo "Docker data root: ${DATA_ROOT}"
-df -h "${DATA_ROOT}"
-```
-
-**Step 1 – Download BitRiver Live**
+### Run the Go quickstart
 
 ```bash
-git clone https://github.com/ProhibitedTV/BitRiver-Live.git
-cd BitRiver-Live
+# macOS, Linux, or Windows via WSL/bash
+go run ./cmd/quickstart --compose-file deploy/docker-compose.yml
+
+# Windows PowerShell (same CLI, different shell)
+pwsh -c "go run ./cmd/quickstart --compose-file deploy/docker-compose.yml"
 ```
 
-**Step 2 – Let the quickstart script do the heavy lifting**
+The command checks Docker/Compose availability, validates disk space, generates `.env` with strong credentials, renders `deploy/ome/Server.generated.xml`, builds the API/viewer/SRS controller/transcoder images locally, runs migrations, and prints the seeded admin login. Re-run it any time you update `.env` or pull new code to rebuild images and refresh configs.
 
-```bash
-./scripts/quickstart.sh
-```
+> Need a wrapper for a managed shell? Call `./scripts/quickstart.sh` from POSIX shells or `./scripts/quickstart.ps1` from PowerShell—they simply forward to the Go quickstart while handling shell-specific permission quirks.
 
-### Ubuntu 22.04+ (Docker Engine)
-
-**Step 0 – Install Docker Engine and Docker Compose V2**
-
-```bash
-sudo apt update
-sudo apt install -y ca-certificates curl gnupg lsb-release
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo usermod -aG docker $USER
-newgrp docker
-
-# Confirm everything works without sudo
-docker --version
-docker compose version
-```
-
-> **Tip:** If you prefer running Docker with `sudo`, skip the `usermod` and `newgrp` lines and prefix the later commands with
-> `sudo`. Using the Docker group keeps file ownership simple.
-
-**Step 1 – Download BitRiver Live**
-
-```bash
-git clone https://github.com/ProhibitedTV/BitRiver-Live.git
-cd BitRiver-Live
-```
-
-**Step 2 – Let the quickstart script do the heavy lifting**
-
-```bash
-./scripts/quickstart.sh
-```
-
-### Windows 11/WSL 2 (Docker Desktop)
-
-**Step 0 – Install Docker Desktop and confirm prerequisites**
-
-1. Install Docker Desktop for Windows (WSL 2 backend) from [docs.docker.com/desktop/install/windows-install](https://docs.docker.com/desktop/install/windows-install/).
-2. Open Docker Desktop settings and ensure **General → Use Docker Compose V2** is enabled (it is on by default).
-3. Check that the Docker data disk inside `docker-desktop` has at least 15GB free:
-
-   ```powershell
-   wsl -d docker-desktop "docker info --format '{{.DockerRootDir}}'"
-   wsl -d docker-desktop df -h /var/lib/docker
-   ```
-
-**Step 1 – Download BitRiver Live (inside WSL)**
-
-```bash
-git clone https://github.com/ProhibitedTV/BitRiver-Live.git
-cd BitRiver-Live
-```
-
-**Step 2 – Run the quickstart with the PowerShell helper when permissions require it**
-
-```powershell
-pwsh ./scripts/quickstart.ps1
-```
-
-Set `COMPOSE_FILE=deploy/docker-compose.yml` in the same shell when you want to run follow-up Compose commands manually.
-
-The helper script will:
-
-1. Check that Docker and `docker compose` are available.
-2. Confirm that at least 15GB is free on Docker's data root (typically `/var/lib/docker`) so image builds do not fail halfway through.
-3. Create (or update) a `.env` file with sensible defaults and strong random passwords.
-4. Build the Go API, viewer, SRS controller, and transcoder Docker images locally, so no registry login is needed.
-5. Launch Postgres, Redis, SRS, OvenMediaEngine, the transcoder, the API, and the viewer using `deploy/docker-compose.yml`.
-6. Run the SQL migrations and seed an admin user, then print the admin email and password in your terminal.
-
-The helper also regenerates `deploy/ome/Server.generated.xml` from the bundled template, applying `BITRIVER_OME_BIND` (default
-`0.0.0.0`) to the control listener bind fields and wiring in the OME credentials and tokens from `.env` so rerunning the quickstart keeps the control service healthy. The renderer stamps the image tag inside the generated file and fails fast if the schema or credentials drift from the pinned version.
-
-If the script exits with an error, re-run it after fixing the reported problem. You can always re-run the script to rebuild the
-stack or refresh credentials.
+If the command exits with an error, fix the reported problem and rerun it; runs are idempotent and safe to repeat when credentials or templates change.
 
 ### Step 3 – Use the running stack
 
