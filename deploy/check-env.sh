@@ -5,6 +5,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="${1:-$REPO_ROOT/.env}"
 
+if command -v go >/dev/null 2>&1; then
+  (
+    cd "$REPO_ROOT" &&
+    GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run ./cmd/bitriver env validate --env-file "$ENV_FILE"
+  )
+  exit $?
+fi
+
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Environment file not found at $ENV_FILE." >&2
   echo "Copy deploy/.env.example to .env and populate it before continuing." >&2
