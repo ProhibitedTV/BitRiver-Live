@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"bitriver-live/internal/envutil"
 )
 
 func TestInitEnvFileCreatesFromTemplate(t *testing.T) {
@@ -28,13 +30,39 @@ func TestInitEnvFileCreatesFromTemplate(t *testing.T) {
 		t.Fatalf("initEnvFile returned error: %v", err)
 	}
 
-	data, err := os.ReadFile(envPath)
+	values, err := envutil.LoadFile(envPath, nil)
 	if err != nil {
-		t.Fatalf("failed to read .env: %v", err)
+		t.Fatalf("failed to parse .env: %v", err)
 	}
 
-	if string(data) != templateContent {
-		t.Fatalf("unexpected .env content: %q", string(data))
+	if values["FOO"] != "bar" {
+		t.Fatalf("expected template value to persist, got %q", values["FOO"])
+	}
+
+	required := []string{
+		"BITRIVER_POSTGRES_PASSWORD",
+		"BITRIVER_REDIS_PASSWORD",
+		"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD",
+		"BITRIVER_LIVE_ADMIN_PASSWORD",
+		"BITRIVER_SRS_TOKEN",
+		"BITRIVER_OME_PASSWORD",
+		"BITRIVER_OME_API_TOKEN",
+		"BITRIVER_OME_ACCESS_TOKEN",
+		"BITRIVER_TRANSCODER_TOKEN",
+	}
+
+	for _, key := range required {
+		if values[key] == "" {
+			t.Fatalf("expected %s to be generated", key)
+		}
+	}
+
+	if values["BITRIVER_REDIS_PASSWORD"] != values["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"] {
+		t.Fatalf("redis password and chat queue password should match")
+	}
+
+	if values["BITRIVER_OME_API_TOKEN"] != values["BITRIVER_OME_ACCESS_TOKEN"] {
+		t.Fatalf("OME access token should default to API token")
 	}
 
 	if !strings.Contains(output.String(), "Created .env") {
@@ -66,13 +94,17 @@ func TestInitEnvFilePrefersDeployTemplate(t *testing.T) {
 		t.Fatalf("initEnvFile returned error: %v", err)
 	}
 
-	data, err := os.ReadFile(envPath)
+	values, err := envutil.LoadFile(envPath, nil)
 	if err != nil {
-		t.Fatalf("failed to read generated env: %v", err)
+		t.Fatalf("failed to parse generated env: %v", err)
 	}
 
-	if string(data) != "FROM_DEPLOY=1\n" {
-		t.Fatalf("expected deploy template content, got %q", string(data))
+	if values["FROM_DEPLOY"] != "1" {
+		t.Fatalf("expected deploy template content, got %v", values["FROM_DEPLOY"])
+	}
+
+	if _, ok := values["FROM_ROOT"]; ok {
+		t.Fatalf("expected deploy template to take precedence over root template")
 	}
 
 	if !strings.Contains(output.String(), "Created .env from .env.example") {

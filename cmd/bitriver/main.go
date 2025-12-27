@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
 	"errors"
 	"flag"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"bitriver-live/internal/envutil"
 	"bitriver-live/internal/executil"
@@ -226,8 +228,117 @@ func initEnvFile(envPath string, templateRoot string, out io.Writer) error {
 		return fmt.Errorf("failed to write .env: %w", err)
 	}
 
+	if err := seedEnvSecrets(envPath); err != nil {
+		return fmt.Errorf("failed to seed .env credentials: %w", err)
+	}
+
 	fmt.Fprintf(out, "Created .env from %s\n", filepath.Base(templatePath))
 	return nil
+}
+
+func seedEnvSecrets(envPath string) error {
+	redisPassword, err := generateSecret(24)
+	if err != nil {
+		return err
+	}
+
+	postgresPassword, err := generateSecret(24)
+	if err != nil {
+		return err
+	}
+
+	adminPassword, err := generateSecret(28)
+	if err != nil {
+		return err
+	}
+
+	srsToken, err := generateSecret(32)
+	if err != nil {
+		return err
+	}
+
+	omePassword, err := generateSecret(28)
+	if err != nil {
+		return err
+	}
+
+	omeToken, err := generateSecret(40)
+	if err != nil {
+		return err
+	}
+
+	transcoderToken, err := generateSecret(40)
+	if err != nil {
+		return err
+	}
+
+	updates := map[string]string{
+		"BITRIVER_POSTGRES_PASSWORD":              postgresPassword,
+		"BITRIVER_REDIS_PASSWORD":                 redisPassword,
+		"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD": redisPassword,
+		"BITRIVER_LIVE_ADMIN_PASSWORD":            adminPassword,
+		"BITRIVER_SRS_TOKEN":                      srsToken,
+		"BITRIVER_OME_PASSWORD":                   omePassword,
+		"BITRIVER_OME_API_TOKEN":                  omeToken,
+		"BITRIVER_OME_ACCESS_TOKEN":               omeToken,
+		"BITRIVER_TRANSCODER_TOKEN":               transcoderToken,
+	}
+
+	return applyEnvUpdates(envPath, updates)
+}
+
+func applyEnvUpdates(envPath string, updates map[string]string) error {
+	data, err := os.ReadFile(envPath)
+	if err != nil {
+		return fmt.Errorf("read env for updates: %w", err)
+	}
+
+	lines := strings.Split(string(data), "\n")
+	handled := make(map[string]struct{}, len(updates))
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+
+		idx := strings.Index(line, "=")
+		if idx == -1 {
+			continue
+		}
+
+		key := line[:idx]
+		if value, ok := updates[key]; ok {
+			lines[i] = fmt.Sprintf("%s=%s", key, value)
+			handled[key] = struct{}{}
+		}
+	}
+
+	for key, value := range updates {
+		if _, ok := handled[key]; ok {
+			continue
+		}
+
+		lines = append(lines, fmt.Sprintf("%s=%s", key, value))
+	}
+
+	content := strings.Join(lines, "\n")
+	return os.WriteFile(envPath, []byte(content), 0o644)
+}
+
+func generateSecret(length int) (string, error) {
+	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("generate secret: %w", err)
+	}
+
+	for i := range bytes {
+		bytes[i] = alphabet[int(bytes[i])%len(alphabet)]
+	}
+
+	return string(bytes), nil
 }
 
 func runCommandOutput(binaryPath string, lookupErr error, args ...string) (string, error) {
