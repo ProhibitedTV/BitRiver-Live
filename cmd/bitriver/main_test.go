@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -76,5 +77,59 @@ func TestInitEnvFileSkipsExisting(t *testing.T) {
 
 	if !strings.Contains(output.String(), "already exists") {
 		t.Fatalf("expected already exists message, got: %q", output.String())
+	}
+}
+
+func TestBuildComposeArgs(t *testing.T) {
+	tests := []struct {
+		name    string
+		action  string
+		file    string
+		want    []string
+		wantErr bool
+	}{
+		{
+			name:   "up action",
+			action: "up",
+			file:   "deploy/docker-compose.yml",
+			want: []string{
+				"compose", "-f", "deploy/docker-compose.yml", "up", "-d", "--remove-orphans",
+			},
+		},
+		{
+			name:   "down action",
+			action: "down",
+			file:   "custom.yml",
+			want: []string{
+				"compose", "-f", "custom.yml", "down", "--remove-orphans",
+			},
+		},
+		{
+			name:    "invalid action",
+			action:  "restart",
+			file:    "deploy/docker-compose.yml",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := buildComposeArgs(tt.action, tt.file)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("unexpected args: %v", got)
+			}
+		})
 	}
 }

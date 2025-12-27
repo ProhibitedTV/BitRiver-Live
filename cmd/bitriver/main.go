@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 var (
@@ -33,6 +34,8 @@ func main() {
 		runEnv(os.Args[2:])
 	case "ome":
 		runOME(os.Args[2:])
+	case "compose":
+		runCompose(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", os.Args[1])
 		usage()
@@ -47,6 +50,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  doctor    Run environment diagnostics")
 	fmt.Fprintln(os.Stderr, "  env       Manage environment files")
 	fmt.Fprintln(os.Stderr, "  ome       Manage OvenMediaEngine configuration")
+	fmt.Fprintln(os.Stderr, "  compose   Manage Docker Compose stack")
 }
 
 func runVersion(args []string) {
@@ -104,6 +108,44 @@ func runDoctor(args []string) {
 		fmt.Printf("- Working directory: error (%v)\n", err)
 	} else {
 		fmt.Printf("- Working directory: %s\n", cwd)
+	}
+}
+
+func runCompose(args []string) {
+	fs := flag.NewFlagSet("compose", flag.ExitOnError)
+	defaultFile := filepath.Join("deploy", "docker-compose.yml")
+	fileFlag := fs.String("file", defaultFile, "Path to docker-compose file")
+	fs.Usage = func() {
+		fmt.Fprintf(fs.Output(), "Usage: %s compose [--file path] <up|down>\n", os.Args[0])
+	}
+	_ = fs.Parse(args)
+
+	if fs.NArg() < 1 {
+		fs.Usage()
+		os.Exit(1)
+	}
+
+	action := fs.Arg(0)
+	composeArgs, err := buildComposeArgs(action, *fileFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
+	dockerPath, err := exec.LookPath("docker")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "docker not found in PATH: %v\n", err)
+		os.Exit(1)
+	}
+
+	cmd := exec.Command(dockerPath, composeArgs...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	fmt.Printf("Executing: %s\n", strings.Join(cmd.Args, " "))
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "docker compose %s failed: %v\n", action, err)
+		os.Exit(1)
 	}
 }
 
@@ -235,4 +277,19 @@ func versionValue(value string) string {
 	}
 
 	return value
+}
+
+func buildComposeArgs(action string, composeFile string) ([]string, error) {
+	args := []string{"compose", "-f", composeFile}
+
+	switch action {
+	case "up":
+		args = append(args, "up", "-d", "--remove-orphans")
+	case "down":
+		args = append(args, "down", "--remove-orphans")
+	default:
+		return nil, fmt.Errorf("unknown compose action: %s", action)
+	}
+
+	return args, nil
 }
