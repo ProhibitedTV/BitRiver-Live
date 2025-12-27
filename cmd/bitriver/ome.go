@@ -1,16 +1,16 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"bitriver-live/internal/envutil"
 	"bitriver-live/internal/executil"
-	"bitriver-live/internal/platform"
+	"bitriver-live/internal/platformutil"
 )
 
 type omeRenderInputs struct {
@@ -30,7 +30,15 @@ type omeRenderInputs struct {
 	ImageTag     string
 }
 
-type pythonRunner func(pythonPath string, args []string, stderr io.Writer) error
+type processRunner interface {
+	Run(name string, args []string, opts ...executil.RunOption) error
+}
+
+type execRunner struct{}
+
+func (execRunner) Run(name string, args []string, opts ...executil.RunOption) error {
+	return executil.Run(name, args, opts...)
+}
 
 func runOME(args []string) {
 	fs := flag.NewFlagSet("ome", flag.ExitOnError)
@@ -60,6 +68,10 @@ func runOME(args []string) {
 }
 
 func runOMERender(args []string) error {
+	return runOMERenderWithRunner(args, platformutil.FindPythonCommands, execRunner{})
+}
+
+func runOMERenderWithRunner(args []string, findPython func() ([]platformutil.Command, error), runner processRunner) error {
 	fs := flag.NewFlagSet("ome render", flag.ExitOnError)
 	envFile := fs.String("env-file", ".env", "Path to the environment file with OME settings")
 	template := fs.String("template", "", "Path to the Server.xml template")
@@ -120,12 +132,12 @@ func runOMERender(args []string) error {
 		return err
 	}
 
-	pythonPath, err := platform.FindPythonExecutable()
+	pythonCommands, err := findPython()
 	if err != nil {
 		return err
 	}
 
-	return renderOMEConfig(pythonPath, config, execPython)
+	return renderOMEConfig(pythonCommands, config, runner)
 }
 
 func prepareOMERenderConfig(envValues map[string]string, inputs omeRenderInputs, workDir string) (omeRenderInputs, error) {
@@ -193,8 +205,8 @@ func prepareOMERenderConfig(envValues map[string]string, inputs omeRenderInputs,
 	return inputs, nil
 }
 
-func renderOMEConfig(pythonPath string, inputs omeRenderInputs, runner pythonRunner) error {
-	args := []string{
+func renderOMEConfig(pythonCommands []platformutil.Command, inputs omeRenderInputs, runner processRunner) error {
+	scriptArgs := []string{
 		inputs.ScriptPath,
 		"--template", inputs.Template,
 		"--output", inputs.Output,
@@ -210,21 +222,28 @@ func renderOMEConfig(pythonPath string, inputs omeRenderInputs, runner pythonRun
 	}
 
 	if inputs.AccessToken != "" {
-		args = append(args, "--access-token", inputs.AccessToken)
+		scriptArgs = append(scriptArgs, "--access-token", inputs.AccessToken)
 	}
 	if inputs.ImageTag != "" {
-		args = append(args, "--image-tag", inputs.ImageTag)
+		scriptArgs = append(scriptArgs, "--image-tag", inputs.ImageTag)
 	}
 
-	if err := runner(pythonPath, args, os.Stderr); err != nil {
-		return err
+	var lastErr error
+	for _, pythonCmd := range pythonCommands {
+		args := append(append([]string{}, pythonCmd.Args...), scriptArgs...)
+		if err := runner.Run(pythonCmd.Executable, args, executil.WithStdout(os.Stdout), executil.WithStderr(os.Stderr)); err != nil {
+			lastErr = err
+			continue
+		}
+
+		return nil
 	}
 
-	return nil
-}
+	if lastErr != nil {
+		return lastErr
+	}
 
-func execPython(pythonPath string, args []string, stderr io.Writer) error {
-	return executil.Run(pythonPath, args, executil.WithStdout(os.Stdout), executil.WithStderr(stderr))
+	return errors.New("python executable not configured")
 }
 
 func loadEnvValues(envPath string) (map[string]string, error) {
