@@ -21,12 +21,12 @@ Twitch-style experience on hardware you control.
   transcoder in `cmd/transcoder` for adaptive bitrates.
 - **Stateful storage** – Postgres stores users and channels, Redis handles chat fan-out and rate limiting, and local volumes keep
   recordings and transcoder data.
-- **Ready-to-run tooling** – `scripts/quickstart.sh` builds images, seeds the admin account, and keeps all configuration in a
-  single `.env` file.
+- **Ready-to-run tooling** – `cmd/bitriver` builds images, seeds the admin account, and keeps all configuration in a
+  single `.env` file (wrappers live under `scripts/`).
 
 ## Quickstart: Go CLI first
 
-Use the Go-based quickstart command to build images, seed credentials, and launch the Compose stack. The legacy shell (`scripts/quickstart.sh`) and PowerShell (`scripts/quickstart.ps1`) helpers remain as thin shims for environments that cannot run the Go CLI directly.
+The Go CLI in `cmd/bitriver` handles environment generation, Docker Compose orchestration, and health checks. Use it directly (preferred) or fall back to `scripts/quickstart.sh` / `scripts/quickstart.ps1` if your shell cannot run Go.
 
 ### Prerequisites at a glance
 
@@ -34,24 +34,43 @@ Use the Go-based quickstart command to build images, seed credentials, and launc
 | --- | --- | --- |
 | macOS 12+ | Docker Desktop with Compose V2 enabled | Start Docker Desktop first and keep at least 15GB free on Docker's data root. |
 | Ubuntu 22.04+ / other Linux | Docker Engine + Compose plugin | Add your user to the `docker` group (or prefix commands with `sudo`) and confirm `docker compose` works without root. |
-| Windows 11 (WSL 2 backend) | Docker Desktop | Run the quickstart inside WSL with the WSL 2 backend enabled; verify the `docker-desktop` data disk has 15GB free. |
-| Windows 11 (native PowerShell) | Docker Desktop (WSL 2 backend) | Same Docker Desktop install as above; PowerShell shells forward to the same CLI. |
+| Windows 10/11 | Docker Desktop (WSL 2 backend) | Enable the WSL 2 backend, start Docker Desktop, and ensure the `docker-desktop` data disk has 15GB free. |
 
-### Run the Go quickstart
+### macOS (Docker Desktop, zsh/bash)
 
 ```bash
-# macOS, Linux, or Windows via WSL/bash
-go run ./cmd/quickstart --compose-file deploy/docker-compose.yml
-
-# Windows PowerShell (same CLI, different shell)
-pwsh -c "go run ./cmd/quickstart --compose-file deploy/docker-compose.yml"
+cd BitRiver-Live
+go run ./cmd/bitriver doctor
+go run ./cmd/bitriver env init
+go run ./cmd/bitriver ome render
+go run ./cmd/bitriver compose up
 ```
 
-The command checks Docker/Compose availability, validates disk space, generates `.env` with strong credentials, renders `deploy/ome/Server.generated.xml`, builds the API/viewer/SRS controller/transcoder images locally, runs migrations, and prints the seeded admin login. Re-run it any time you update `.env` or pull new code to rebuild images and refresh configs.
+### Ubuntu 22.04+ (Docker Engine + Compose plugin)
 
-> Need a wrapper for a managed shell? Call `./scripts/quickstart.sh` from POSIX shells or `./scripts/quickstart.ps1` from PowerShell—they simply forward to the Go quickstart while handling shell-specific permission quirks.
+```bash
+cd BitRiver-Live
+go run ./cmd/bitriver doctor
+go run ./cmd/bitriver env init
+go run ./cmd/bitriver ome render
+go run ./cmd/bitriver compose up
+```
 
-If the command exits with an error, fix the reported problem and rerun it; runs are idempotent and safe to repeat when credentials or templates change.
+Add `sudo` if your user is not in the `docker` group. The CLI will confirm prerequisites before touching Docker.
+
+### Windows 10/11 (Docker Desktop + PowerShell)
+
+Run from a PowerShell prompt with Docker Desktop running and the WSL 2 backend enabled:
+
+```powershell
+Set-Location BitRiver-Live
+go run ./cmd/bitriver doctor
+go run ./cmd/bitriver env init
+go run ./cmd/bitriver ome render
+go run ./cmd/bitriver compose up
+```
+
+The CLI checks Docker/Compose, generates `.env` with strong credentials, renders `deploy/ome/Server.generated.xml`, builds API/viewer/SRS controller/transcoder images, runs migrations, and prints the seeded admin login. Re-run the commands any time `.env` or templates change; they are idempotent.
 
 ### Step 3 – Use the running stack
 
@@ -67,7 +86,7 @@ If the command exits with an error, fix the reported problem and rerun it; runs 
    The JSON payload reports `status: "degraded"` when SRS/OME/transcoder probes fail, but the HTTP status will stay 200 unless
    core services are unavailable.
 2. Open [http://localhost:8080/signup](http://localhost:8080/signup) in your browser and sign in with the admin credentials
-   printed by the script, then change the password under **Settings → Security**.
+   printed by the CLI, then change the password under **Settings → Security**.
 3. Visit [http://localhost:8080/viewer](http://localhost:8080/viewer) in another tab to see the public viewer that proxies
    through the API.
 4. Point OBS or any RTMP encoder at `rtmp://localhost:1935/live` with the stream key shown in the control centre and watch the
@@ -103,7 +122,7 @@ the generated environment file before inviting real users.
 
 ### Key environment variables at a glance
 
-The quickstart script pre-populates `.env` so Docker Compose can bind each service to predictable ports. Edit the values below to match your host and network before rerunning `docker compose up -d`.
+The CLI pre-populates `.env` so Docker Compose can bind each service to predictable ports. Edit the values below to match your host and network before rerunning `docker compose up -d`.
 
 | Variable | Default | What it controls |
 | --- | --- | --- |
@@ -126,7 +145,7 @@ Common tweaks:
 - **Enable TLS on the API/viewer:** Mount certs under `./certs` and set `BITRIVER_LIVE_TLS_CERT`/`BITRIVER_LIVE_TLS_KEY`, then restart so the API listens with HTTPS.
 - **Lock down viewer origins:** Point `BITRIVER_VIEWER_ORIGIN` and `NEXT_PUBLIC_VIEWER_URL` at your public domain or reverse proxy to align CORS and cookie scope.
 - **Control session lifetimes:** Set `BITRIVER_LIVE_SESSION_TTL` in `.env` to cap absolute session length (for example, `168h` for seven days) and optionally add `BITRIVER_LIVE_SESSION_IDLE_TIMEOUT` to expire idle sessions sooner. Rerun `docker compose up -d` so the API picks up the new values.
-- **Keep OvenMediaEngine credentials in sync:** Whenever you edit `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, `BITRIVER_OME_API_TOKEN`, `BITRIVER_OME_BIND`, or `BITRIVER_OME_IP` in `.env`, rerun `./scripts/render-ome-config.sh` to regenerate `deploy/ome/Server.generated.xml`. The renderer overwrites the generated file on every invocation, and the quickstart script calls it automatically so template changes from `git pull` land before Compose starts. The pinned OME tag (default `0.16.0`) expects a non-empty managers API token; `BITRIVER_OME_ACCESS_TOKEN` mirrors it for health probes unless you override it. The compose bundle still runs a lightweight `ome-config` preflight before starting `ome`; it will fail fast if the generated file is missing, so fix and re-render before retrying `docker compose up -d`.
+- **Keep OvenMediaEngine credentials in sync:** Whenever you edit `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, `BITRIVER_OME_API_TOKEN`, `BITRIVER_OME_BIND`, or `BITRIVER_OME_IP` in `.env`, rerun `./scripts/render-ome-config.sh` to regenerate `deploy/ome/Server.generated.xml`. The renderer overwrites the generated file on every invocation, and the CLI calls it automatically so template changes from `git pull` land before Compose starts. The pinned OME tag (default `0.16.0`) expects a non-empty managers API token; `BITRIVER_OME_ACCESS_TOKEN` mirrors it for health probes unless you override it. The compose bundle still runs a lightweight `ome-config` preflight before starting `ome`; it will fail fast if the generated file is missing, so fix and re-render before retrying `docker compose up -d`.
 
 Find deeper explanations and additional variables (rate limiting, transcoder public URLs, external Redis/Postgres) in [`docs/quickstart.md`](docs/quickstart.md).
 
