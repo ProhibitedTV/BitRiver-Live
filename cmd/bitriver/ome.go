@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bufio"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -10,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"bitriver-live/internal/envutil"
 	"bitriver-live/internal/executil"
 	"bitriver-live/internal/platform"
 )
@@ -229,40 +228,10 @@ func execPython(pythonPath string, args []string, stderr io.Writer) error {
 }
 
 func loadEnvValues(envPath string) (map[string]string, error) {
-	values := make(map[string]string)
+	base := envutil.FromEnviron(os.Environ())
 
-	for _, pair := range os.Environ() {
-		if idx := strings.Index(pair, "="); idx != -1 {
-			key := pair[:idx]
-			val := pair[idx+1:]
-			values[key] = val
-		}
-	}
-
-	file, err := os.Open(envPath)
+	values, err := envutil.LoadFile(envPath, base)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return values, nil
-		}
-		return nil, err
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		if idx := strings.Index(line, "="); idx != -1 {
-			key := strings.TrimSpace(line[:idx])
-			val := strings.TrimSpace(line[idx+1:])
-			values[key] = val
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
 

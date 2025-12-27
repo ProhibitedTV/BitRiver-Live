@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"bitriver-live/internal/envutil"
 	"bitriver-live/internal/executil"
 )
 
@@ -211,15 +212,8 @@ func initEnvFile(envPath string, templateRoot string, out io.Writer) error {
 		filepath.Join(templateRoot, ".env"), // Fallback for repositories that track a root .env as the template.
 	}
 
-	var templatePath string
-	for _, candidate := range templateCandidates {
-		if _, err := os.Stat(candidate); err == nil {
-			templatePath = candidate
-			break
-		}
-	}
-
-	if templatePath == "" {
+	templatePath, err := envutil.FirstExistingPath(templateCandidates)
+	if err != nil {
 		return fmt.Errorf("no env template found; expected deploy/.env.example or repository .env")
 	}
 

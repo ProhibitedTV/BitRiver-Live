@@ -42,6 +42,44 @@ func TestInitEnvFileCreatesFromTemplate(t *testing.T) {
 	}
 }
 
+func TestInitEnvFilePrefersDeployTemplate(t *testing.T) {
+	tempDir := t.TempDir()
+
+	templateDir := filepath.Join(tempDir, "deploy")
+	if err := os.MkdirAll(templateDir, 0o755); err != nil {
+		t.Fatalf("failed to create template dir: %v", err)
+	}
+
+	deployTemplate := filepath.Join(templateDir, ".env.example")
+	rootTemplate := filepath.Join(tempDir, ".env")
+
+	if err := os.WriteFile(deployTemplate, []byte("FROM_DEPLOY=1\n"), 0o644); err != nil {
+		t.Fatalf("failed to write deploy template: %v", err)
+	}
+	if err := os.WriteFile(rootTemplate, []byte("FROM_ROOT=1\n"), 0o644); err != nil {
+		t.Fatalf("failed to write root template: %v", err)
+	}
+
+	envPath := filepath.Join(tempDir, "generated.env")
+	var output strings.Builder
+	if err := initEnvFile(envPath, tempDir, &output); err != nil {
+		t.Fatalf("initEnvFile returned error: %v", err)
+	}
+
+	data, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatalf("failed to read generated env: %v", err)
+	}
+
+	if string(data) != "FROM_DEPLOY=1\n" {
+		t.Fatalf("expected deploy template content, got %q", string(data))
+	}
+
+	if !strings.Contains(output.String(), "Created .env from .env.example") {
+		t.Fatalf("expected message to mention deploy template, got: %q", output.String())
+	}
+}
+
 func TestInitEnvFileSkipsExisting(t *testing.T) {
 	tempDir := t.TempDir()
 
