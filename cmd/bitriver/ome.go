@@ -162,6 +162,12 @@ func prepareOMERenderConfig(envValues map[string]string, inputs omeRenderInputs,
 		inputs.Output = filepath.Join(workDir, "deploy", "ome", "Server.generated.xml")
 	}
 
+	var err error
+	inputs, err = normalizeOMEPaths(inputs, workDir)
+	if err != nil {
+		return omeRenderInputs{}, err
+	}
+
 	inputs.Bind = apply(inputs.Bind, "BITRIVER_OME_BIND")
 	inputs.ServerIP = apply(inputs.ServerIP, "BITRIVER_OME_IP")
 	inputs.Port = apply(inputs.Port, "BITRIVER_OME_SERVER_PORT")
@@ -206,26 +212,40 @@ func prepareOMERenderConfig(envValues map[string]string, inputs omeRenderInputs,
 }
 
 func renderOMEConfig(pythonCommands []platformutil.Command, inputs omeRenderInputs, runner processRunner) error {
-	scriptArgs := []string{
-		inputs.ScriptPath,
-		"--template", inputs.Template,
-		"--output", inputs.Output,
-		"--bind", inputs.Bind,
-		"--server-ip", inputs.ServerIP,
-		"--tcp-relay", inputs.TCPRelay,
-		"--ice-candidate", inputs.ICECandidate,
-		"--port", inputs.Port,
-		"--tls-port", inputs.TLSPort,
-		"--username", inputs.Username,
-		"--password", inputs.Password,
-		"--api-token", inputs.APIToken,
+	workDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to determine working directory: %w", err)
 	}
 
-	if inputs.AccessToken != "" {
-		scriptArgs = append(scriptArgs, "--access-token", inputs.AccessToken)
+	normalizedInputs, err := normalizeOMEPaths(inputs, workDir)
+	if err != nil {
+		return err
 	}
-	if inputs.ImageTag != "" {
-		scriptArgs = append(scriptArgs, "--image-tag", inputs.ImageTag)
+
+	if err := os.MkdirAll(filepath.Dir(normalizedInputs.Output), 0o755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	scriptArgs := []string{
+		normalizedInputs.ScriptPath,
+		"--template", normalizedInputs.Template,
+		"--output", normalizedInputs.Output,
+		"--bind", normalizedInputs.Bind,
+		"--server-ip", normalizedInputs.ServerIP,
+		"--tcp-relay", normalizedInputs.TCPRelay,
+		"--ice-candidate", normalizedInputs.ICECandidate,
+		"--port", normalizedInputs.Port,
+		"--tls-port", normalizedInputs.TLSPort,
+		"--username", normalizedInputs.Username,
+		"--password", normalizedInputs.Password,
+		"--api-token", normalizedInputs.APIToken,
+	}
+
+	if normalizedInputs.AccessToken != "" {
+		scriptArgs = append(scriptArgs, "--access-token", normalizedInputs.AccessToken)
+	}
+	if normalizedInputs.ImageTag != "" {
+		scriptArgs = append(scriptArgs, "--image-tag", normalizedInputs.ImageTag)
 	}
 
 	var lastErr error
@@ -255,4 +275,61 @@ func loadEnvValues(envPath string) (map[string]string, error) {
 	}
 
 	return values, nil
+}
+
+func normalizeOMEPaths(inputs omeRenderInputs, baseDir string) (omeRenderInputs, error) {
+	normalize := func(path string) (string, error) {
+		if path == "" {
+			return "", nil
+		}
+
+		cleaned := filepath.Clean(filepath.FromSlash(strings.ReplaceAll(path, "\\", "/")))
+		if isAbsolutePath(cleaned) {
+			return cleaned, nil
+		}
+
+		if baseDir != "" {
+			cleaned = filepath.Join(baseDir, cleaned)
+		}
+
+		abs, err := filepath.Abs(cleaned)
+		if err != nil {
+			return "", err
+		}
+
+		return filepath.Clean(abs), nil
+	}
+
+	var err error
+	inputs.ScriptPath, err = normalize(inputs.ScriptPath)
+	if err != nil {
+		return omeRenderInputs{}, fmt.Errorf("normalize script path: %w", err)
+	}
+
+	inputs.Template, err = normalize(inputs.Template)
+	if err != nil {
+		return omeRenderInputs{}, fmt.Errorf("normalize template path: %w", err)
+	}
+
+	inputs.Output, err = normalize(inputs.Output)
+	if err != nil {
+		return omeRenderInputs{}, fmt.Errorf("normalize output path: %w", err)
+	}
+
+	return inputs, nil
+}
+
+func isAbsolutePath(path string) bool {
+	if filepath.IsAbs(path) {
+		return true
+	}
+
+	if len(path) >= 2 {
+		letter := path[0]
+		if path[1] == ':' && ((letter >= 'A' && letter <= 'Z') || (letter >= 'a' && letter <= 'z')) {
+			return true
+		}
+	}
+
+	return false
 }

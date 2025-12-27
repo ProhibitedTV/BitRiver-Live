@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -82,6 +83,11 @@ func TestPrepareOMERenderConfigMissingRequired(t *testing.T) {
 }
 
 func TestRenderOMEConfigPassesArguments(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+
 	inputs := omeRenderInputs{
 		ScriptPath:   filepath.Join("scripts", "render_ome_config.py"),
 		Template:     "template.xml",
@@ -110,11 +116,16 @@ func TestRenderOMEConfigPassesArguments(t *testing.T) {
 	}
 
 	capturedArgs := append([]string{runner.calls[0].executable}, runner.calls[0].args...)
+	normalizedInputs, err := normalizeOMEPaths(inputs, cwd)
+	if err != nil {
+		t.Fatalf("failed to normalize paths: %v", err)
+	}
+
 	expected := []string{
 		"python",
-		filepath.Join("scripts", "render_ome_config.py"),
-		"--template", "template.xml",
-		"--output", "output.xml",
+		normalizedInputs.ScriptPath,
+		"--template", normalizedInputs.Template,
+		"--output", normalizedInputs.Output,
 		"--bind", "0.0.0.0",
 		"--server-ip", "1.2.3.4",
 		"--tcp-relay", "*:3478",
@@ -130,6 +141,72 @@ func TestRenderOMEConfigPassesArguments(t *testing.T) {
 
 	if !reflect.DeepEqual(expected, capturedArgs) {
 		t.Fatalf("unexpected args: got %v, want %v", capturedArgs, expected)
+	}
+}
+
+func TestRenderOMEConfigHandlesWindowsPaths(t *testing.T) {
+	workDir := t.TempDir()
+	originalWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to read working directory: %v", err)
+	}
+
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("failed to change working directory: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(originalWD)
+	})
+
+	inputs := omeRenderInputs{
+		ScriptPath:   filepath.Clean(filepath.Join("C:", "ome", "scripts", "render_ome_config.py")),
+		Template:     filepath.Clean(filepath.Join("C:", "ome", "Server.xml")),
+		Output:       filepath.Clean(filepath.Join("C:", "ome", "Server.generated.xml")),
+		Bind:         "0.0.0.0",
+		ServerIP:     "1.2.3.4",
+		Port:         "9000",
+		TLSPort:      "9443",
+		TCPRelay:     "*:3478",
+		ICECandidate: "*:10000-10009/udp",
+		Username:     "user",
+		Password:     "pass",
+		APIToken:     "api-token",
+	}
+
+	commands := []platformutil.Command{{Executable: "python"}}
+	runner := &fakeRunner{}
+	if err := renderOMEConfig(commands, inputs, runner); err != nil {
+		t.Fatalf("renderOMEConfig returned error: %v", err)
+	}
+
+	if len(runner.calls) != 1 {
+		t.Fatalf("expected one call, got %d", len(runner.calls))
+	}
+
+	normalizedInputs, err := normalizeOMEPaths(inputs, workDir)
+	if err != nil {
+		t.Fatalf("failed to normalize paths: %v", err)
+	}
+
+	expected := []string{
+		"python",
+		normalizedInputs.ScriptPath,
+		"--template", normalizedInputs.Template,
+		"--output", normalizedInputs.Output,
+		"--bind", "0.0.0.0",
+		"--server-ip", "1.2.3.4",
+		"--tcp-relay", "*:3478",
+		"--ice-candidate", "*:10000-10009/udp",
+		"--port", "9000",
+		"--tls-port", "9443",
+		"--username", "user",
+		"--password", "pass",
+		"--api-token", "api-token",
+	}
+
+	capturedArgs := append([]string{runner.calls[0].executable}, runner.calls[0].args...)
+	if !reflect.DeepEqual(expected, capturedArgs) {
+		t.Fatalf("unexpected args for windows-like paths: got %v, want %v", capturedArgs, expected)
 	}
 }
 
