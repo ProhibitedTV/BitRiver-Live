@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 )
 
@@ -26,6 +29,8 @@ func main() {
 		runVersion(os.Args[2:])
 	case "doctor":
 		runDoctor(os.Args[2:])
+	case "env":
+		runEnv(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", os.Args[1])
 		usage()
@@ -38,6 +43,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "Commands:")
 	fmt.Fprintln(os.Stderr, "  version   Show BitRiver Live version information")
 	fmt.Fprintln(os.Stderr, "  doctor    Run environment diagnostics")
+	fmt.Fprintln(os.Stderr, "  env       Manage environment files")
 }
 
 func runVersion(args []string) {
@@ -96,6 +102,94 @@ func runDoctor(args []string) {
 	} else {
 		fmt.Printf("- Working directory: %s\n", cwd)
 	}
+}
+
+func runEnv(args []string) {
+	fs := flag.NewFlagSet("env", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(fs.Output(), "Usage: %s env <command>\n", os.Args[0])
+		fmt.Fprintln(fs.Output(), "Commands:")
+		fmt.Fprintln(fs.Output(), "  init    Initialize .env file from template")
+	}
+	_ = fs.Parse(args)
+
+	if fs.NArg() < 1 {
+		fs.Usage()
+		os.Exit(1)
+	}
+
+	switch fs.Arg(0) {
+	case "init":
+		runEnvInit(fs.Args()[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "unknown env subcommand: %s\n", fs.Arg(0))
+		fs.Usage()
+		os.Exit(1)
+	}
+}
+
+func runEnvInit(args []string) {
+	fs := flag.NewFlagSet("env init", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(fs.Output(), "Usage: %s env init\n", os.Args[0])
+	}
+	_ = fs.Parse(args)
+
+	if fs.NArg() > 0 {
+		fs.Usage()
+		os.Exit(1)
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to determine working directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := initEnvFile(cwd, os.Stdout); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}
+
+func initEnvFile(workDir string, out io.Writer) error {
+	envPath := filepath.Join(workDir, ".env")
+
+	if _, err := os.Stat(envPath); err == nil {
+		fmt.Fprintln(out, ".env already exists; leaving unchanged.")
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("could not check .env: %w", err)
+	}
+
+	templateCandidates := []string{
+		filepath.Join(workDir, "deploy", ".env.example"),
+		filepath.Join(workDir, ".env"), // Fallback for repositories that track a root .env as the template.
+	}
+
+	var templatePath string
+	for _, candidate := range templateCandidates {
+		if _, err := os.Stat(candidate); err == nil {
+			templatePath = candidate
+			break
+		}
+	}
+
+	if templatePath == "" {
+		return fmt.Errorf("no env template found; expected deploy/.env.example or repository .env")
+	}
+
+	templateData, err := os.ReadFile(templatePath)
+	if err != nil {
+		return fmt.Errorf("failed to read env template: %w", err)
+	}
+
+	if err := os.WriteFile(envPath, templateData, 0o644); err != nil {
+		return fmt.Errorf("failed to write .env: %w", err)
+	}
+
+	fmt.Fprintf(out, "Created .env from %s\n", filepath.Base(templatePath))
+	return nil
 }
 
 func runCommandOutput(binaryPath string, lookupErr error, args ...string) (string, error) {
