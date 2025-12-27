@@ -31,6 +31,8 @@ func main() {
 		runDoctor(os.Args[2:])
 	case "env":
 		runEnv(os.Args[2:])
+	case "ome":
+		runOME(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", os.Args[1])
 		usage()
@@ -44,6 +46,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  version   Show BitRiver Live version information")
 	fmt.Fprintln(os.Stderr, "  doctor    Run environment diagnostics")
 	fmt.Fprintln(os.Stderr, "  env       Manage environment files")
+	fmt.Fprintln(os.Stderr, "  ome       Manage OvenMediaEngine configuration")
 }
 
 func runVersion(args []string) {
