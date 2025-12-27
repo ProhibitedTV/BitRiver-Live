@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
+
+	"bitriver-live/internal/executil"
 )
 
 var (
@@ -74,7 +74,7 @@ func runDoctor(args []string) {
 
 	fmt.Println("BitRiver Live environment check")
 
-	dockerPath, dockerErr := exec.LookPath("docker")
+	dockerPath, dockerErr := executil.LookPath("docker")
 	if dockerErr != nil {
 		fmt.Printf("- docker in PATH: no (%v)\n", dockerErr)
 	} else {
@@ -132,18 +132,13 @@ func runCompose(args []string) {
 		os.Exit(1)
 	}
 
-	dockerPath, err := exec.LookPath("docker")
+	dockerPath, err := executil.LookPath("docker")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "docker not found in PATH: %v\n", err)
 		os.Exit(1)
 	}
 
-	cmd := exec.Command(dockerPath, composeArgs...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	fmt.Printf("Executing: %s\n", strings.Join(cmd.Args, " "))
-	if err := cmd.Run(); err != nil {
+	if err := executil.Run(dockerPath, composeArgs, executil.WithPrintCommand()); err != nil {
 		fmt.Fprintf(os.Stderr, "docker compose %s failed: %v\n", action, err)
 		os.Exit(1)
 	}
@@ -246,11 +241,8 @@ func runCommandOutput(binaryPath string, lookupErr error, args ...string) (strin
 		return "", lookupErr
 	}
 
-	cmd := exec.Command(binaryPath, args...)
 	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
-	if err := cmd.Run(); err != nil {
+	if err := executil.Run(binaryPath, args, executil.WithStdout(&buf), executil.WithStderr(&buf)); err != nil {
 		return buf.String(), err
 	}
 

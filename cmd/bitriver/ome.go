@@ -2,16 +2,15 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"bitriver-live/internal/executil"
 	"bitriver-live/internal/platform"
 )
 
@@ -226,25 +225,7 @@ func renderOMEConfig(pythonPath string, inputs omeRenderInputs, runner pythonRun
 }
 
 func execPython(pythonPath string, args []string, stderr io.Writer) error {
-	cmd := exec.Command(pythonPath, args...)
-	cmd.Stdout = os.Stdout
-	var stderrBuf bytes.Buffer
-	cmd.Stderr = &stderrBuf
-
-	if err := cmd.Run(); err != nil {
-		if stderrBuf.Len() > 0 {
-			if _, copyErr := io.Copy(stderr, bytes.NewReader(stderrBuf.Bytes())); copyErr != nil {
-				return errors.Join(err, copyErr)
-			}
-		}
-		return err
-	}
-
-	if stderrBuf.Len() > 0 {
-		_, _ = io.Copy(stderr, bytes.NewReader(stderrBuf.Bytes()))
-	}
-
-	return nil
+	return executil.Run(pythonPath, args, executil.WithStdout(os.Stdout), executil.WithStderr(stderr))
 }
 
 func loadEnvValues(envPath string) (map[string]string, error) {
