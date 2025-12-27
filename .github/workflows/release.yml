@@ -327,6 +327,85 @@ jobs:
           path: dist/bitriver-live-${{ matrix.goos }}-${{ matrix.goarch }}.*
           if-no-files-found: error
 
+  build-bitriver:
+    name: Build bitriver CLI binaries
+    needs:
+      - go-tests
+      - postgres-tests
+      - verify-env
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+          - goos: linux
+            goarch: amd64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    env:
+      CGO_ENABLED: 0
+      GOTOOLCHAIN: local
+      GOPROXY: off
+      GOSUMDB: off
+      GOFLAGS: -mod=vendor
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Build bitriver binary
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          build_date="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+          out_dir="dist/bitriver-${GOOS}-${GOARCH}"
+          rm -rf "$out_dir"
+          mkdir -p "$out_dir"
+
+          bin_ext=""
+          archive_ext="tar.gz"
+          if [ "$GOOS" = "windows" ]; then
+            bin_ext=".exe"
+            archive_ext="zip"
+          fi
+
+          ldflags=(
+            "-X" "main.version=${RELEASE_TAG}"
+            "-X" "main.commit=${COMMIT_SHA}"
+            "-X" "main.date=${build_date}"
+          )
+
+          go build -trimpath -ldflags "${ldflags[*]}" -o "$out_dir/bitriver${bin_ext}" ./cmd/bitriver
+
+          if [ "$archive_ext" = "zip" ]; then
+            (cd dist && zip -r "bitriver-${GOOS}-${GOARCH}.zip" "bitriver-${GOOS}-${GOARCH}")
+          else
+            tar -C dist -czf "dist/bitriver-${GOOS}-${GOARCH}.tar.gz" "bitriver-${GOOS}-${GOARCH}"
+          fi
+
+      - name: Upload bitriver binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitriver-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/bitriver-${{ matrix.goos }}-${{ matrix.goarch }}.*
+          if-no-files-found: error
+
   build-viewer:
     name: Build viewer bundle
     needs:
@@ -483,6 +562,7 @@ jobs:
       - postgres-tests
       - verify-env
       - build
+      - build-bitriver
       - build-viewer
       - publish-images
     runs-on: ubuntu-latest
