@@ -34,7 +34,7 @@ sudo tar -xzvf bitriver-viewer-v1.2.3.tar.gz -C /opt/bitriver-viewer --strip-com
 The extraction creates `/opt/bitriver-viewer/.next/standalone/`,
 `/opt/bitriver-viewer/.next/static/`, and `/opt/bitriver-viewer/public/`. Keep
 that layout intact—systemd units and reverse proxies expect the Next.js server
-to run from the `standalone` directory and serve static assets from `.next/static`.
+to run from the `standalone` directory and serve static assets from `.next/static`. Those systemd units are Linux-only and intended for advanced operators; the default path for all platforms is to run the bundled Docker Compose stack via `go run ./cmd/bitriver compose up`.
 
 Create `/opt/bitriver-viewer/.env` with the configuration your deployment needs.
 A minimal environment looks like:

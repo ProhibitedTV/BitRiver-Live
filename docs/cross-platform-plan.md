@@ -12,7 +12,7 @@ This document inventories the platform-specific assumptions in BitRiver Live tod
 - **Windows-specific helper**
   - `scripts/quickstart.ps1` targets Windows PowerShell and Docker Desktop, with guidance to rerun from an elevated shell when the daemon requires it.【F:scripts/quickstart.ps1†L1-L55】
 - **Systemd-managed services**
-  - The unit files under `deploy/systemd/*.service` and their README assume Ubuntu/Debian hosts with systemd, sudo, and directories rooted at `/opt/bitriver-live`, `/opt/bitriver-viewer`, and related ingest dirs.【F:deploy/systemd/README.md†L1-L103】
+  - The unit files under `deploy/systemd/*.service` and their README assume Ubuntu/Debian hosts with systemd, sudo, and directories rooted at `/opt/bitriver-live`, `/opt/bitriver-viewer`, and related ingest dirs.【F:deploy/systemd/README.md†L1-L103】 They remain Linux-only helpers; the recommended default for all platforms is to run `go run ./cmd/bitriver compose up` so Docker Compose orchestrates the stack.
 - **Ubuntu-focused installation docs**
   - `docs/installing-on-ubuntu.md` documents only Ubuntu Server 22.04+ with `apt`, `ufw`, `systemctl`, and hard-coded ports for RTMP/HLS/API endpoints.【F:docs/installing-on-ubuntu.md†L1-L76】
 - **Compose and repo layout expectations**
