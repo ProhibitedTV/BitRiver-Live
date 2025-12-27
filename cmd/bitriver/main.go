@@ -22,6 +22,23 @@ var (
 	date    = "dev"
 )
 
+type doctorDeps struct {
+	lookPath func(string) (string, error)
+	runner   processRunner
+	getwd    func() (string, error)
+}
+
+type doctorResult struct {
+	dockerPath        string
+	dockerErr         error
+	dockerVersionOut  string
+	dockerVersionErr  error
+	composeVersionOut string
+	composeVersionErr error
+	workDir           string
+	workDirErr        error
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -39,6 +56,8 @@ func main() {
 		runOME(os.Args[2:])
 	case "compose":
 		runCompose(os.Args[2:])
+	case "quickstart":
+		runQuickstart(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", os.Args[1])
 		usage()
@@ -54,6 +73,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  env       Manage environment files")
 	fmt.Fprintln(os.Stderr, "  ome       Manage OvenMediaEngine configuration")
 	fmt.Fprintln(os.Stderr, "  compose   Manage Docker Compose stack")
+	fmt.Fprintln(os.Stderr, "  quickstart    Run doctor, env init, OME render, and docker compose up")
 }
 
 func runVersion(args []string) {
@@ -75,42 +95,63 @@ func runDoctor(args []string) {
 	}
 	_ = fs.Parse(args)
 
-	fmt.Println("BitRiver Live environment check")
+	deps := doctorDeps{lookPath: executil.LookPath, runner: execRunner{}, getwd: os.Getwd}
+	result := runDoctorChecks(os.Stdout, deps)
+	printDoctorResult(os.Stdout, result)
+}
 
-	dockerPath, dockerErr := executil.LookPath("docker")
-	if dockerErr != nil {
-		fmt.Printf("- docker in PATH: no (%v)\n", dockerErr)
+func runDoctorChecks(out io.Writer, deps doctorDeps) doctorResult {
+	fmt.Fprintln(out, "BitRiver Live environment check")
+
+	dockerPath, dockerErr := deps.lookPath("docker")
+	dockerVersionOutput, dockerVersionErr := runCommandOutputWithRunner(deps.runner, dockerPath, dockerErr, "version")
+	composeOutput, composeErr := runCommandOutputWithRunner(deps.runner, dockerPath, dockerErr, "compose", "version")
+
+	cwd, cwdErr := deps.getwd()
+
+	return doctorResult{
+		dockerPath:        dockerPath,
+		dockerErr:         dockerErr,
+		dockerVersionOut:  dockerVersionOutput,
+		dockerVersionErr:  dockerVersionErr,
+		composeVersionOut: composeOutput,
+		composeVersionErr: composeErr,
+		workDir:           cwd,
+		workDirErr:        cwdErr,
+	}
+}
+
+func printDoctorResult(out io.Writer, result doctorResult) {
+	if result.dockerErr != nil {
+		fmt.Fprintf(out, "- docker in PATH: no (%v)\n", result.dockerErr)
 	} else {
-		fmt.Printf("- docker in PATH: yes (%s)\n", dockerPath)
+		fmt.Fprintf(out, "- docker in PATH: yes (%s)\n", result.dockerPath)
 	}
 
-	dockerVersionOutput, dockerVersionErr := runCommandOutput(dockerPath, dockerErr, "version")
-	if dockerVersionErr != nil {
-		fmt.Printf("- docker version: failed (%v)\n", dockerVersionErr)
-		if len(dockerVersionOutput) > 0 {
-			fmt.Println(indentOutput(dockerVersionOutput))
+	if result.dockerVersionErr != nil {
+		fmt.Fprintf(out, "- docker version: failed (%v)\n", result.dockerVersionErr)
+		if len(result.dockerVersionOut) > 0 {
+			fmt.Fprintln(out, indentOutput(result.dockerVersionOut))
 		}
 	} else {
-		fmt.Println("- docker version: ok")
+		fmt.Fprintln(out, "- docker version: ok")
 	}
 
-	composeOutput, composeErr := runCommandOutput(dockerPath, dockerErr, "compose", "version")
-	if composeErr != nil {
-		fmt.Printf("- docker compose version: failed (%v)\n", composeErr)
-		if len(composeOutput) > 0 {
-			fmt.Println(indentOutput(composeOutput))
+	if result.composeVersionErr != nil {
+		fmt.Fprintf(out, "- docker compose version: failed (%v)\n", result.composeVersionErr)
+		if len(result.composeVersionOut) > 0 {
+			fmt.Fprintln(out, indentOutput(result.composeVersionOut))
 		}
 	} else {
-		fmt.Println("- docker compose version: ok")
+		fmt.Fprintln(out, "- docker compose version: ok")
 	}
 
-	fmt.Printf("- OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+	fmt.Fprintf(out, "- OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Printf("- Working directory: error (%v)\n", err)
+	if result.workDirErr != nil {
+		fmt.Fprintf(out, "- Working directory: error (%v)\n", result.workDirErr)
 	} else {
-		fmt.Printf("- Working directory: %s\n", cwd)
+		fmt.Fprintf(out, "- Working directory: %s\n", result.workDir)
 	}
 }
 
@@ -129,22 +170,28 @@ func runCompose(args []string) {
 	}
 
 	action := fs.Arg(0)
-	composeArgs, err := buildComposeArgs(action, *fileFlag)
-	if err != nil {
+	if err := composeAction(action, *fileFlag, execRunner{}); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
+	}
+}
+
+func composeAction(action string, composeFile string, runner processRunner) error {
+	composeArgs, err := buildComposeArgs(action, composeFile)
+	if err != nil {
+		return err
 	}
 
 	dockerPath, err := executil.LookPath("docker")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "docker not found in PATH: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("docker not found in PATH: %w", err)
 	}
 
-	if err := executil.Run(dockerPath, composeArgs, executil.WithPrintCommand()); err != nil {
-		fmt.Fprintf(os.Stderr, "docker compose %s failed: %v\n", action, err)
-		os.Exit(1)
+	if err := runner.Run(dockerPath, composeArgs, executil.WithPrintCommand()); err != nil {
+		return fmt.Errorf("docker compose %s failed: %w", action, err)
 	}
+
+	return nil
 }
 
 func runEnv(args []string) {
@@ -169,6 +216,125 @@ func runEnv(args []string) {
 		fs.Usage()
 		os.Exit(1)
 	}
+}
+
+type quickstartConfig struct {
+	envFile     string
+	composeFile string
+}
+
+type quickstartDeps struct {
+	doctor    func(io.Writer) doctorResult
+	envInit   func(envPath string, templateRoot string, out io.Writer) error
+	omeRender func(args []string) error
+	composeUp func(composeFile string) error
+	getwd     func() (string, error)
+	stdout    io.Writer
+}
+
+func runQuickstart(args []string) {
+	config, err := parseQuickstartFlags(args, os.Stderr)
+	if err != nil {
+		os.Exit(1)
+	}
+
+	deps := defaultQuickstartDeps(os.Stdout)
+
+	if err := executeQuickstart(config, deps); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func parseQuickstartFlags(args []string, output io.Writer) (quickstartConfig, error) {
+	fs := flag.NewFlagSet("quickstart", flag.ContinueOnError)
+	fs.SetOutput(output)
+	defaultCompose := filepath.Join("deploy", "docker-compose.yml")
+	envFile := fs.String("env-file", ".env", "Path to the environment file")
+	composeFile := fs.String("compose-file", defaultCompose, "Path to the Docker Compose file")
+	fs.Usage = func() {
+		fmt.Fprintf(output, "Usage: %s quickstart [options]\n", os.Args[0])
+		fs.PrintDefaults()
+	}
+
+	if err := fs.Parse(args); err != nil {
+		return quickstartConfig{}, err
+	}
+
+	if fs.NArg() > 0 {
+		fs.Usage()
+		return quickstartConfig{}, fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
+	}
+
+	return quickstartConfig{
+		envFile:     *envFile,
+		composeFile: *composeFile,
+	}, nil
+}
+
+func defaultQuickstartDeps(stdout io.Writer) quickstartDeps {
+	return quickstartDeps{
+		doctor: func(out io.Writer) doctorResult {
+			deps := doctorDeps{lookPath: executil.LookPath, runner: execRunner{}, getwd: os.Getwd}
+			result := runDoctorChecks(out, deps)
+			printDoctorResult(out, result)
+			return result
+		},
+		envInit:   initEnvFile,
+		omeRender: runOMERender,
+		composeUp: func(composeFile string) error { return composeAction("up", composeFile, execRunner{}) },
+		getwd:     os.Getwd,
+		stdout:    stdout,
+	}
+}
+
+func executeQuickstart(config quickstartConfig, deps quickstartDeps) error {
+	stdout := deps.stdout
+	if stdout == nil {
+		stdout = io.Discard
+	}
+
+	workDir, err := deps.getwd()
+	if err != nil {
+		return fmt.Errorf("failed to determine working directory: %w", err)
+	}
+
+	fmt.Fprintln(stdout, "Running environment checks...")
+	result := deps.doctor(stdout)
+	if result.dockerErr != nil {
+		return fmt.Errorf("docker is required for quickstart: %w", result.dockerErr)
+	}
+	if result.composeVersionErr != nil {
+		return fmt.Errorf("docker compose v2 is required for quickstart: %w", result.composeVersionErr)
+	}
+
+	envPath := config.envFile
+	if !filepath.IsAbs(envPath) {
+		envPath = filepath.Join(workDir, envPath)
+	}
+
+	fmt.Fprintf(stdout, "\nPreparing environment file at %s...\n", envPath)
+	if err := deps.envInit(envPath, workDir, stdout); err != nil {
+		return fmt.Errorf("failed to initialize environment: %w", err)
+	}
+
+	fmt.Fprintln(stdout, "\nRendering OvenMediaEngine configuration...")
+	if err := deps.omeRender([]string{"--env-file", envPath}); err != nil {
+		return fmt.Errorf("python 3 is required to render OvenMediaEngine configuration: %w", err)
+	}
+
+	composePath := config.composeFile
+	if !filepath.IsAbs(composePath) {
+		composePath = filepath.Join(workDir, composePath)
+	}
+
+	fmt.Fprintf(stdout, "\nStarting Docker Compose using %s...\n", composePath)
+	if err := deps.composeUp(composePath); err != nil {
+		return err
+	}
+
+	fmt.Fprintln(stdout, "\nQuickstart complete. Containers are starting in Docker.")
+	return nil
 }
 
 func runEnvInit(args []string) {
@@ -342,12 +508,16 @@ func generateSecret(length int) (string, error) {
 }
 
 func runCommandOutput(binaryPath string, lookupErr error, args ...string) (string, error) {
+	return runCommandOutputWithRunner(execRunner{}, binaryPath, lookupErr, args...)
+}
+
+func runCommandOutputWithRunner(runner processRunner, binaryPath string, lookupErr error, args ...string) (string, error) {
 	if lookupErr != nil {
 		return "", lookupErr
 	}
 
 	var buf bytes.Buffer
-	if err := executil.Run(binaryPath, args, executil.WithStdout(&buf), executil.WithStderr(&buf)); err != nil {
+	if err := runner.Run(binaryPath, args, executil.WithStdout(&buf), executil.WithStderr(&buf)); err != nil {
 		return buf.String(), err
 	}
 

@@ -40,20 +40,14 @@ The Go CLI in `cmd/bitriver` handles environment generation, Docker Compose orch
 
 ```bash
 cd BitRiver-Live
-go run ./cmd/bitriver doctor
-go run ./cmd/bitriver env init
-go run ./cmd/bitriver ome render
-go run ./cmd/bitriver compose up
+go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml
 ```
 
 ### Ubuntu 22.04+ (Docker Engine + Compose plugin)
 
 ```bash
 cd BitRiver-Live
-go run ./cmd/bitriver doctor
-go run ./cmd/bitriver env init
-go run ./cmd/bitriver ome render
-go run ./cmd/bitriver compose up
+go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml
 ```
 
 Add `sudo` if your user is not in the `docker` group. The CLI will confirm prerequisites before touching Docker.
@@ -64,13 +58,10 @@ Run from a PowerShell prompt with Docker Desktop running and the WSL 2 backend e
 
 ```powershell
 Set-Location BitRiver-Live
-go run ./cmd/bitriver doctor
-go run ./cmd/bitriver env init
-go run ./cmd/bitriver ome render
-go run ./cmd/bitriver compose up
+go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml
 ```
 
-The CLI checks Docker/Compose, generates `.env` from `deploy/.env.example` with strong credentials when the file is missing, renders `deploy/ome/Server.generated.xml`, builds API/viewer/SRS controller/transcoder images, runs migrations, and prints the seeded admin login. The `.env` file is gitignored; `go run ./cmd/bitriver env init` and the quickstart scripts will create it and mint fresh credentials the first time you run them so new clones never share secrets. Re-run the commands any time `.env` or templates change; they are idempotent.
+The CLI checks Docker/Compose, generates `.env` from `deploy/.env.example` with strong credentials when the file is missing, renders `deploy/ome/Server.generated.xml` (Python required), builds API/viewer/SRS controller/transcoder images, runs migrations, and prints the seeded admin login. The `.env` file is gitignored; `go run ./cmd/bitriver env init` and the quickstart scripts will create it and mint fresh credentials the first time you run them so new clones never share secrets. Re-run the commands any time `.env` or templates change; they are idempotent.
 
 ### Step 3 – Use the running stack
 
