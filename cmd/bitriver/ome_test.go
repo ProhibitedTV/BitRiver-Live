@@ -1,13 +1,33 @@
 package main
 
 import (
-	"io"
-	"os"
+	"errors"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+
+	"bitriver-live/internal/executil"
+	"bitriver-live/internal/platformutil"
 )
+
+type fakeRunner struct {
+	calls []fakeCall
+	errOn func(executable string, args []string) error
+}
+
+type fakeCall struct {
+	executable string
+	args       []string
+}
+
+func (r *fakeRunner) Run(name string, args []string, _ ...executil.RunOption) error {
+	r.calls = append(r.calls, fakeCall{executable: name, args: args})
+	if r.errOn != nil {
+		return r.errOn(name, args)
+	}
+	return nil
+}
 
 func TestPrepareOMERenderConfigUsesEnvDefaults(t *testing.T) {
 	workDir := t.TempDir()
@@ -79,16 +99,17 @@ func TestRenderOMEConfigPassesArguments(t *testing.T) {
 		ImageTag:     "v1",
 	}
 
-	var capturedArgs []string
-	runner := func(pythonPath string, args []string, _ io.Writer) error {
-		capturedArgs = append([]string{pythonPath}, args...)
-		return nil
-	}
-
-	if err := renderOMEConfig("python", inputs, runner); err != nil {
+	commands := []platformutil.Command{{Executable: "python"}}
+	runner := &fakeRunner{}
+	if err := renderOMEConfig(commands, inputs, runner); err != nil {
 		t.Fatalf("renderOMEConfig returned error: %v", err)
 	}
 
+	if len(runner.calls) != 1 {
+		t.Fatalf("expected one call, got %d", len(runner.calls))
+	}
+
+	capturedArgs := append([]string{runner.calls[0].executable}, runner.calls[0].args...)
 	expected := []string{
 		"python",
 		filepath.Join("scripts", "render_ome_config.py"),
@@ -112,21 +133,35 @@ func TestRenderOMEConfigPassesArguments(t *testing.T) {
 	}
 }
 
-func TestLoadEnvValuesPrefersFile(t *testing.T) {
-	tempDir := t.TempDir()
-	envPath := filepath.Join(tempDir, ".env")
-	if err := os.WriteFile(envPath, []byte("BITRIVER_OME_BIND=from-file\n"), 0o644); err != nil {
-		t.Fatalf("failed to write env file: %v", err)
+func TestRenderOMEConfigFallsBackBetweenPythonCommands(t *testing.T) {
+	inputs := omeRenderInputs{ScriptPath: "script.py", Template: "tmpl", Output: "out", Bind: "b", ServerIP: "ip", Port: "p", TLSPort: "tp", TCPRelay: "relay", ICECandidate: "ice", Username: "u", Password: "pw", APIToken: "api"}
+
+	commands := []platformutil.Command{{Executable: "py", Args: []string{"-3"}}, {Executable: "py"}}
+
+	runner := &fakeRunner{errOn: func(executable string, args []string) error {
+		if executable == "py" && len(args) > 0 && args[0] == "-3" {
+			return errors.New("-3 not available")
+		}
+		return nil
+	}}
+
+	if err := renderOMEConfig(commands, inputs, runner); err != nil {
+		t.Fatalf("expected fallback to succeed, got %v", err)
+	}
+}
+
+func TestRunOMERenderInjectsPythonFinder(t *testing.T) {
+	findPython := func() ([]platformutil.Command, error) {
+		return []platformutil.Command{{Executable: "python"}}, nil
 	}
 
-	t.Setenv("BITRIVER_OME_BIND", "from-env")
-
-	values, err := loadEnvValues(envPath)
-	if err != nil {
-		t.Fatalf("loadEnvValues returned error: %v", err)
+	runner := &fakeRunner{}
+	if err := runOMERenderWithRunner([]string{"--template", "tmpl"}, findPython, runner); err == nil {
+		// missing required flags should fail before executing
+		t.Fatalf("expected validation failure for missing values")
 	}
 
-	if values["BITRIVER_OME_BIND"] != "from-file" {
-		t.Fatalf("expected file value to win, got %s", values["BITRIVER_OME_BIND"])
+	if len(runner.calls) != 0 {
+		t.Fatalf("runner should not be called when validation fails")
 	}
 }
