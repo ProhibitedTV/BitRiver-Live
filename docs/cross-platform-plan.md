@@ -32,6 +32,12 @@ Adopt a Go-based control plane CLI (`cmd/bitriver`) that mirrors the current beh
 - **Installer flows:** Replace `deploy/install/ubuntu.sh` and `deploy/install/wizard.sh` with CLI subcommands that stage binaries/configs under user-selected paths and emit OS-specific service definitions (systemd on Linux; launchd/Windows Service templates later).
 - **Gradual deprecation of shell wrappers:** Keep `scripts/quickstart.sh` and `scripts/quickstart.ps1` as thin shims that call the Go CLI, preserving current entrypoints while steering users to the cross-platform binary.
 
+You can exercise the initial CLI scaffold today with:
+
+```
+go run ./cmd/bitriver doctor
+```
+
 ## Migration checklist and milestones
 
 1. **Codify support tiers in docs:** Publish this plan and reference it from the root README to set expectations for Tier 1 vs. Tier 2 platforms.
