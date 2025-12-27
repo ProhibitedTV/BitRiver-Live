@@ -80,6 +80,9 @@ reconcile_env_file() {
     echo "Created environment file at $ENV_FILE_PATH from $template"
   fi
 
+  ensure_kv "BITRIVER_LIVE_IMAGE_TAG" "latest"
+  ensure_kv "BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD" "bitriver"
+
   while IFS= read -r line; do
     if [[ -z "$line" || "${line:0:1}" == "#" ]]; then
       continue
@@ -90,9 +93,6 @@ reconcile_env_file() {
       echo "$line" >>"$ENV_FILE_PATH"
     fi
   done <"$template"
-
-  ensure_kv "BITRIVER_LIVE_IMAGE_TAG" "latest"
-  ensure_kv "BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD" "bitriver"
 
   if [[ "$env_preexisting" == "false" ]]; then
     local redis_password

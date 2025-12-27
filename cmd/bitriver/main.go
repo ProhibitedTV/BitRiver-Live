@@ -199,7 +199,8 @@ func runEnv(args []string) {
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "Usage: %s env <command>\n", os.Args[0])
 		fmt.Fprintln(fs.Output(), "Commands:")
-		fmt.Fprintln(fs.Output(), "  init    Initialize .env file from template")
+		fmt.Fprintln(fs.Output(), "  init        Initialize .env file from template")
+		fmt.Fprintln(fs.Output(), "  validate    Validate required environment variables")
 	}
 	_ = fs.Parse(args)
 
@@ -211,6 +212,8 @@ func runEnv(args []string) {
 	switch fs.Arg(0) {
 	case "init":
 		runEnvInit(fs.Args()[1:])
+	case "validate":
+		runEnvValidate(fs.Args()[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown env subcommand: %s\n", fs.Arg(0))
 		fs.Usage()
