@@ -31,7 +31,12 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: Go tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
       - name: Check out repository
@@ -45,14 +50,17 @@ jobs:
           cache: true
 
       - name: Ensure vendored modules are available
+        shell: bash
         run: |
           test -d vendor
           test -f vendor/modules.txt
 
       - name: Smoke test OME renderer
+        if: matrix.os == 'ubuntu-latest'
         run: python3 scripts/render_ome_config_test.py
 
       - name: Run unit tests
+        shell: bash
         env:
           GOTOOLCHAIN: local
           GOPROXY: off
@@ -60,3 +68,12 @@ jobs:
           GOFLAGS: -mod=vendor
         # Increase timeout to reduce flakes
         run: go test ./... -count=1 -timeout=120s
+
+      - name: Build bitriver binary
+        shell: bash
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+          GOFLAGS: -mod=vendor
+        run: go build ./cmd/bitriver
