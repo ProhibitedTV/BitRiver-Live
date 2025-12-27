@@ -43,28 +43,41 @@ CODE_ROOT="${BITRIVER_QUICKSTART_REPO_ROOT:-$REPO_ROOT}"
 DEFAULT_ENV_FILE="$CODE_ROOT/.env"
 ENV_FILE_PATH="${ENV_FILE:-$DEFAULT_ENV_FILE}"
 COMPOSE_FILE_PATH="${COMPOSE_FILE:-$CODE_ROOT/deploy/docker-compose.yml}"
+ENV_FILE_PREEXISTS=false
+if [[ -f "$ENV_FILE_PATH" ]]; then
+  ENV_FILE_PREEXISTS=true
+fi
 
 reconcile_env_file() {
   local template="$CODE_ROOT/deploy/.env.example"
+  local env_preexisting=${ENV_FILE_PREEXISTS:-false}
+
+  generate_secret() {
+    local length=${1:-32}
+    LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "$length"
+  }
 
   ensure_kv() {
     local key="$1" value="$2"
 
     if grep -q "^${key}=" "$ENV_FILE_PATH"; then
-      sed -i "s/^${key}=.*/${key}=${value}/" "$ENV_FILE_PATH"
+      if [[ "$env_preexisting" == "false" ]]; then
+        sed -i "s/^${key}=.*/${key}=${value}/" "$ENV_FILE_PATH"
+      fi
     else
       echo "${key}=${value}" >>"$ENV_FILE_PATH"
     fi
   }
 
-  if [[ ! -f "$ENV_FILE_PATH" ]]; then
-    echo "Environment file missing at $ENV_FILE_PATH" >&2
-    exit 1
-  fi
-
   if [[ ! -f "$template" ]]; then
     echo "Template missing at $template" >&2
     exit 1
+  fi
+
+  if [[ ! -f "$ENV_FILE_PATH" ]]; then
+    mkdir -p "$(dirname "$ENV_FILE_PATH")"
+    cp "$template" "$ENV_FILE_PATH"
+    echo "Created environment file at $ENV_FILE_PATH from $template"
   fi
 
   while IFS= read -r line; do
@@ -80,6 +93,26 @@ reconcile_env_file() {
 
   ensure_kv "BITRIVER_LIVE_IMAGE_TAG" "latest"
   ensure_kv "BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD" "bitriver"
+
+  if [[ "$env_preexisting" == "false" ]]; then
+    local redis_password
+    redis_password=$(generate_secret 24)
+
+    ensure_kv "BITRIVER_POSTGRES_PASSWORD" "$(generate_secret 24)"
+    ensure_kv "BITRIVER_REDIS_PASSWORD" "$redis_password"
+    ensure_kv "BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD" "$redis_password"
+    ensure_kv "BITRIVER_LIVE_ADMIN_PASSWORD" "$(generate_secret 28)"
+    ensure_kv "BITRIVER_SRS_TOKEN" "$(generate_secret 32)"
+
+    local ome_password ome_token
+    ome_password=$(generate_secret 28)
+    ome_token=$(generate_secret 40)
+    ensure_kv "BITRIVER_OME_PASSWORD" "$ome_password"
+    ensure_kv "BITRIVER_OME_API_TOKEN" "$ome_token"
+    ensure_kv "BITRIVER_OME_ACCESS_TOKEN" "$ome_token"
+
+    ensure_kv "BITRIVER_TRANSCODER_TOKEN" "$(generate_secret 40)"
+  fi
 }
 
 run_cli() {
