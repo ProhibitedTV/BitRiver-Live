@@ -175,8 +175,9 @@ func runEnv(args []string) {
 
 func runEnvInit(args []string) {
 	fs := flag.NewFlagSet("env init", flag.ExitOnError)
+	envFile := fs.String("env-file", ".env", "Path to write the generated environment file")
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "Usage: %s env init\n", os.Args[0])
+		fmt.Fprintf(fs.Output(), "Usage: %s env init [--env-file path]\n", os.Args[0])
 	}
 	_ = fs.Parse(args)
 
@@ -191,15 +192,18 @@ func runEnvInit(args []string) {
 		os.Exit(1)
 	}
 
-	if err := initEnvFile(cwd, os.Stdout); err != nil {
+	envFilePath := *envFile
+	if !filepath.IsAbs(envFilePath) {
+		envFilePath = filepath.Join(cwd, envFilePath)
+	}
+
+	if err := initEnvFile(envFilePath, cwd, os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 }
 
-func initEnvFile(workDir string, out io.Writer) error {
-	envPath := filepath.Join(workDir, ".env")
-
+func initEnvFile(envPath string, templateRoot string, out io.Writer) error {
 	if _, err := os.Stat(envPath); err == nil {
 		fmt.Fprintln(out, ".env already exists; leaving unchanged.")
 		return nil
@@ -208,8 +212,8 @@ func initEnvFile(workDir string, out io.Writer) error {
 	}
 
 	templateCandidates := []string{
-		filepath.Join(workDir, "deploy", ".env.example"),
-		filepath.Join(workDir, ".env"), // Fallback for repositories that track a root .env as the template.
+		filepath.Join(templateRoot, "deploy", ".env.example"),
+		filepath.Join(templateRoot, ".env"), // Fallback for repositories that track a root .env as the template.
 	}
 
 	var templatePath string

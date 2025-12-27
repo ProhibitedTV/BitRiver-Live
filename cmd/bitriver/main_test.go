@@ -22,12 +22,12 @@ func TestInitEnvFileCreatesFromTemplate(t *testing.T) {
 		t.Fatalf("failed to write template: %v", err)
 	}
 
+	envPath := filepath.Join(tempDir, ".env")
 	var output strings.Builder
-	if err := initEnvFile(tempDir, &output); err != nil {
+	if err := initEnvFile(envPath, tempDir, &output); err != nil {
 		t.Fatalf("initEnvFile returned error: %v", err)
 	}
 
-	envPath := filepath.Join(tempDir, ".env")
 	data, err := os.ReadFile(envPath)
 	if err != nil {
 		t.Fatalf("failed to read .env: %v", err)
@@ -62,7 +62,7 @@ func TestInitEnvFileSkipsExisting(t *testing.T) {
 	}
 
 	var output strings.Builder
-	if err := initEnvFile(tempDir, &output); err != nil {
+	if err := initEnvFile(envPath, tempDir, &output); err != nil {
 		t.Fatalf("initEnvFile returned error: %v", err)
 	}
 

@@ -60,6 +60,7 @@ func TestQuickstartReconciliation(t *testing.T) {
 set -euo pipefail
 PATH="%s:$PATH"
 BITRIVER_QUICKSTART_TEST_MODE=1
+BITRIVER_QUICKSTART_REPO_ROOT="%s"
 ENV_FILE="%s"
 export TMPDIR="%s"
 source scripts/quickstart.sh
@@ -67,7 +68,7 @@ reconcile_env_file
 echo "__ENV_BEGIN__"
 cat "$ENV_FILE"
 echo "__ENV_END__"
-`, stubBin, envPath, tempDir)
+`, stubBin, repoRoot, envPath, tempDir)
 
 	cmd := exec.Command("bash", "-c", bashScript)
 	cmd.Dir = tempDir
@@ -126,9 +127,9 @@ func TestQuickstartOmeRenderingRunsByDefault(t *testing.T) {
 		case "fi":
 			guardActive = false
 			continue
-		case "render_ome_config":
+		case "run_cli ome render --env-file \"$ENV_FILE_PATH\"":
 			if guardActive {
-				t.Fatalf("render_ome_config should run even when BITRIVER_OME_CUSTOM_CONFIG is unset")
+				t.Fatalf("ome render should run even when BITRIVER_OME_CUSTOM_CONFIG is unset")
 			}
 			found = true
 		}
