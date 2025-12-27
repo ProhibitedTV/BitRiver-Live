@@ -17,11 +17,13 @@ On the first run Docker builds local images for the Go API, the Next.js viewer a
 
 ```bash
 # macOS, Linux, or Windows via WSL/bash
-go run ./cmd/quickstart --compose-file deploy/docker-compose.yml
+go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml
 
 # Windows PowerShell (same CLI, different shell)
-pwsh -c "go run ./cmd/quickstart --compose-file deploy/docker-compose.yml"
+pwsh -c "go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml"
 ```
+
+Python 3 must be available in `PATH` so the command can render `deploy/ome/Server.generated.xml`; it will exit with setup instructions when Python is missing.
 
 Want a shim to handle shell-specific permissions? Use `./scripts/quickstart.sh` from POSIX shells or `./scripts/quickstart.ps1` from PowerShell—they call the same Go quickstart and keep the `COMPOSE_FILE` defaulted to `deploy/docker-compose.yml`.
 
@@ -85,7 +87,7 @@ compose file.
   ```
 - Re-run the quickstart to rebuild images when Dockerfiles or dependencies change and to ensure services restart with the latest code and environment values:
   ```bash
-  go run ./cmd/quickstart --compose-file deploy/docker-compose.yml
+  go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml
   ```
   The Go command reuses your existing `.env` and Docker volumes, so configuration, database data, and media files persist across updates. Prefer this entry point even on Windows (with `pwsh -c`), and fall back to `./scripts/quickstart.sh` or `./scripts/quickstart.ps1` only when your shell cannot run `go` directly.
 `docker compose up` (including the quickstart wrapper) reruns the `ome-config` helper so OME consumes the credentials from `.env` and the current `BITRIVER_OME_BIND` value in both the root `<Bind><IP>` entry and the control listener `<Bind>`/`<IP>` without requiring an extra compose override.
@@ -98,10 +100,10 @@ compose file.
 ## Troubleshooting
 
 - **`Error: Docker is required`** – Install Docker Engine from [docs.docker.com/engine/install](https://docs.docker.com/engine/install/)
-  and re-run `go run ./cmd/quickstart --compose-file deploy/docker-compose.yml` (or the shim for your shell).
+  and re-run `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` (or the shim for your shell).
 - **`Error: Docker Compose V2 is required`** – Install the compose plugin or upgrade Docker Desktop/Engine so the `docker compose`
   sub-command is available for the Go quickstart across all platforms.
-- **`permission denied while trying to connect to the Docker daemon socket`** – Add your account to the `docker` group with `sudo usermod -aG docker $USER` followed by `newgrp docker` (or log out and back in), then rerun the quickstart without `sudo`. You can run `sudo go run ./cmd/quickstart --compose-file deploy/docker-compose.yml` or the shell/PowerShell shims in a pinch, but expect root-owned files like `.env` until you fix the group membership.
+- **`permission denied while trying to connect to the Docker daemon socket`** – Add your account to the `docker` group with `sudo usermod -aG docker $USER` followed by `newgrp docker` (or log out and back in), then rerun the quickstart without `sudo`. You can run `sudo go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` or the shell/PowerShell shims in a pinch, but expect root-owned files like `.env` until you fix the group membership.
 - **Port already in use** – Stop or reconfigure any services that currently bind to ports 5432, 6379, 8080, 8081, 9000, 9001, 1935, or 1985. Alternatively edit the corresponding `*_PORT` values in `.env` (for example, `BITRIVER_LIVE_PORT=9090`) and rerun `docker compose up -d`.
 - **`Empty <AccessToken> is not allowed`** – The OvenMediaEngine template detected a missing `BITRIVER_OME_API_TOKEN` in `.env`. Set a non-empty value in `.env`, mirror it into `BITRIVER_OME_ACCESS_TOKEN` if you want the health probe to use a distinct header, rerun `./scripts/render-ome-config.sh --force`, and restart the stack with `docker compose up -d` so `deploy/ome/Server.generated.xml` is regenerated with the token.
 - **Still seeing `AccessTokens` errors after rendering?** – Verify the stamp and contents of the generated config before restarting OME:
@@ -130,7 +132,7 @@ compose file.
   ```
   If you deploy OME outside of Docker, update `BITRIVER_OME_API` to the reachable host/IP and ensure the configured username/password/access token match the container's baked credentials and your copied `Server.xml` before bringing the stack back up.
 - **Quickstart re-run pulled the wrong OME version** – When reusing an existing installation, keep `BITRIVER_OME_IMAGE_TAG`
-  aligned with the version that matches your `Server.xml` schema before re-running the Go quickstart (`go run ./cmd/quickstart --compose-file deploy/docker-compose.yml`) or `docker compose up -d`. The quickstart and `scripts/render-ome-config.sh --check` both compare the tag in `.env` with the marker stamped inside
+  aligned with the version that matches your `Server.xml` schema before re-running the Go quickstart (`go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml`) or `docker compose up -d`. The quickstart and `scripts/render-ome-config.sh --check` both compare the tag in `.env` with the marker stamped inside
   `deploy/ome/Server.generated.xml` and force a regeneration before Compose starts if they diverge. The default `0.16.0` tag
   always renders the managers authentication block and requires a non-empty `BITRIVER_OME_API_TOKEN`; non-semver image tags are
   rejected by the renderer to avoid generating configs with unsupported authentication fields.
