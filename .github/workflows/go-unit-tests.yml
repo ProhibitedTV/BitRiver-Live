@@ -38,12 +38,18 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
 
+    env:
+      GOTOOLCHAIN: local
+      GOPROXY: off
+      GOSUMDB: off
+      GOFLAGS: -mod=vendor
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           # Keeps CI in sync with go.mod
           go-version-file: 'go.mod'
@@ -61,19 +67,9 @@ jobs:
 
       - name: Run unit tests
         shell: bash
-        env:
-          GOTOOLCHAIN: local
-          GOPROXY: off
-          GOSUMDB: off
-          GOFLAGS: -mod=vendor
         # Increase timeout to reduce flakes
         run: go test ./... -count=1 -timeout=120s
 
       - name: Build bitriver binary
         shell: bash
-        env:
-          GOTOOLCHAIN: local
-          GOPROXY: off
-          GOSUMDB: off
-          GOFLAGS: -mod=vendor
         run: go build ./cmd/bitriver
