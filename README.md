@@ -137,6 +137,8 @@ Find deeper explanations and additional variables (rate limiting, transcoder pub
 - **Install TLS / go beyond one host:** Follow [`docs/advanced-deployments.md`](docs/advanced-deployments.md).
 - **Understand every service:** Read [`docs/production-release.md`](docs/production-release.md) and the release notes under
   `docs/releases/` when preparing a launch.
+- **Plan for portability:** Review [`docs/cross-platform-plan.md`](docs/cross-platform-plan.md) for the current platform
+  assumptions and how we will converge on a Go-based control plane.
 - **AI-assisted edits:** Use the [Codex CLI guide](docs/codex-cli.md) to install the CLI, authenticate, and point it at this repository.
 
 ## Manual development workflow (optional)
