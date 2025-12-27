@@ -5,18 +5,18 @@ This document inventories the platform-specific assumptions in BitRiver Live tod
 ## Platform-specific assumptions in the current repo
 
 - **Bash-first automation and Linux paths**
-  - `scripts/quickstart.sh` requires Bash, Linux/macOS tooling, and defaults to `/var/lib/docker` when `docker info` cannot report a root directory on Linux hosts.【F:scripts/quickstart.sh†L1-L87】
-  - `deploy/check-env.sh` loads `.env` with Bash, enforces production secrets, and assumes the file lives at the repo root or a path passed as the first argument.【F:deploy/check-env.sh†L1-L43】
-  - `deploy/install/ubuntu.sh` and the interactive `deploy/install/wizard.sh` assume sudo, systemd, and Linux file ownership semantics while staging binaries and data under paths such as `/opt/bitriver-live` and `/var/lib/bitriver-live`.【F:deploy/install/ubuntu.sh†L1-L49】【F:deploy/install/wizard.sh†L1-L37】
-  - `scripts/render-ome-config.sh` is a Bash renderer for the OvenMediaEngine template and reuses `.env` defaults for Linux Compose deployments.【F:scripts/render-ome-config.sh†L1-L33】
+  - `scripts/quickstart.sh` requires Bash, Linux/macOS tooling, and defaults to `/var/lib/docker` when `docker info` cannot report a root directory on Linux hosts.
+  - `deploy/check-env.sh` loads `.env` with Bash, enforces production secrets, and assumes the file lives at the repo root or a path passed as the first argument.
+  - `deploy/install/ubuntu.sh` and the interactive `deploy/install/wizard.sh` assume sudo, systemd, and Linux file ownership semantics while staging binaries and data under paths such as `/opt/bitriver-live` and `/var/lib/bitriver-live`.
+  - `scripts/render-ome-config.sh` is a Bash renderer for the OvenMediaEngine template and reuses `.env` defaults for Linux Compose deployments.
 - **Windows-specific helper**
-  - `scripts/quickstart.ps1` targets Windows PowerShell and Docker Desktop, with guidance to rerun from an elevated shell when the daemon requires it.【F:scripts/quickstart.ps1†L1-L55】
+  - `scripts/quickstart.ps1` targets Windows PowerShell and Docker Desktop, with guidance to rerun from an elevated shell when the daemon requires it.
 - **Systemd-managed services**
-  - The unit files under `deploy/systemd/*.service` and their README assume Ubuntu/Debian hosts with systemd, sudo, and directories rooted at `/opt/bitriver-live`, `/opt/bitriver-viewer`, and related ingest dirs.【F:deploy/systemd/README.md†L1-L103】 They remain Linux-only helpers; the recommended default for all platforms is to run `go run ./cmd/bitriver compose up` so Docker Compose orchestrates the stack.
+  - The unit files under `deploy/systemd/*.service` and their README assume Ubuntu/Debian hosts with systemd, sudo, and directories rooted at `/opt/bitriver-live`, `/opt/bitriver-viewer`, and related ingest dirs. They remain Linux-only helpers; the recommended default for all platforms is to run `go run ./cmd/bitriver compose up` so Docker Compose orchestrates the stack.
 - **Ubuntu-focused installation docs**
-  - `docs/installing-on-ubuntu.md` documents only Ubuntu Server 22.04+ with `apt`, `ufw`, `systemctl`, and hard-coded ports for RTMP/HLS/API endpoints.【F:docs/installing-on-ubuntu.md†L1-L76】
+  - `docs/installing-on-ubuntu.md` documents only Ubuntu Server 22.04+ with `apt`, `ufw`, `systemctl`, and hard-coded ports for RTMP/HLS/API endpoints.
 - **Compose and repo layout expectations**
-  - The root `README.md` and quickstart scripts expect `.env` at the repo root and `deploy/docker-compose.yml` as the default Compose file, reinforcing a Unix-style path layout even on Windows/WSL.【F:README.md†L27-L63】【F:scripts/quickstart.sh†L11-L30】
+  - The root `README.md` and quickstart scripts expect `.env` at the repo root and `deploy/docker-compose.yml` as the default Compose file, reinforcing a Unix-style path layout even on Windows/WSL.
 
 ## Support tiers
 
