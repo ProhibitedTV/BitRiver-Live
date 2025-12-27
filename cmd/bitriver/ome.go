@@ -62,39 +62,43 @@ func runOME(args []string) {
 }
 
 func runOMERender(args []string) error {
-	workDir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to determine working directory: %w", err)
-	}
-
-	envValues, err := loadEnvValues(filepath.Join(workDir, ".env"))
-	if err != nil {
-		return fmt.Errorf("failed to read .env: %w", err)
-	}
-
-	scriptPath := filepath.Join(workDir, "scripts", "render_ome_config.py")
-	templateDefault := filepath.Join(workDir, "deploy", "ome", "Server.xml")
-	outputDefault := filepath.Join(workDir, "deploy", "ome", "Server.generated.xml")
-
 	fs := flag.NewFlagSet("ome render", flag.ExitOnError)
-	template := fs.String("template", templateDefault, "Path to the Server.xml template")
-	output := fs.String("output", outputDefault, "Destination for the rendered Server.xml")
-	bind := fs.String("bind", envValues["BITRIVER_OME_BIND"], "Bind address for OME")
-	serverIP := fs.String("server-ip", envValues["BITRIVER_OME_IP"], "Public IP advertised by OME")
-	port := fs.String("port", envValues["BITRIVER_OME_SERVER_PORT"], "OME server port")
-	tlsPort := fs.String("tls-port", envValues["BITRIVER_OME_SERVER_TLS_PORT"], "OME server TLS port")
-	tcpRelay := fs.String("tcp-relay", envValues["BITRIVER_OME_TCP_RELAY"], "TCP relay address")
-	iceCandidate := fs.String("ice-candidate", envValues["BITRIVER_OME_ICE_CANDIDATE"], "Advertised ICE candidate")
-	username := fs.String("username", envValues["BITRIVER_OME_USERNAME"], "Authentication username")
-	password := fs.String("password", envValues["BITRIVER_OME_PASSWORD"], "Authentication password")
-	apiToken := fs.String("api-token", envValues["BITRIVER_OME_API_TOKEN"], "Managers API token")
-	accessToken := fs.String("access-token", envValues["BITRIVER_OME_ACCESS_TOKEN"], "Health probe access token")
-	imageTag := fs.String("image-tag", envValues["BITRIVER_OME_IMAGE_TAG"], "OME image tag recorded in the render")
+	envFile := fs.String("env-file", ".env", "Path to the environment file with OME settings")
+	template := fs.String("template", "", "Path to the Server.xml template")
+	output := fs.String("output", "", "Destination for the rendered Server.xml")
+	bind := fs.String("bind", "", "Bind address for OME")
+	serverIP := fs.String("server-ip", "", "Public IP advertised by OME")
+	port := fs.String("port", "", "OME server port")
+	tlsPort := fs.String("tls-port", "", "OME server TLS port")
+	tcpRelay := fs.String("tcp-relay", "", "TCP relay address")
+	iceCandidate := fs.String("ice-candidate", "", "Advertised ICE candidate")
+	username := fs.String("username", "", "Authentication username")
+	password := fs.String("password", "", "Authentication password")
+	apiToken := fs.String("api-token", "", "Managers API token")
+	accessToken := fs.String("access-token", "", "Health probe access token")
+	imageTag := fs.String("image-tag", "", "OME image tag recorded in the render")
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "Usage: %s ome render [options]\n", os.Args[0])
 		fs.PrintDefaults()
 	}
 	_ = fs.Parse(args)
+
+	workDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to determine working directory: %w", err)
+	}
+
+	envPath := *envFile
+	if !filepath.IsAbs(envPath) {
+		envPath = filepath.Join(workDir, envPath)
+	}
+
+	envValues, err := loadEnvValues(envPath)
+	if err != nil {
+		return fmt.Errorf("failed to read .env: %w", err)
+	}
+
+	scriptPath := filepath.Join(workDir, "scripts", "render_ome_config.py")
 
 	inputs := omeRenderInputs{
 		ScriptPath:   scriptPath,
