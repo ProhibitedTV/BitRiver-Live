@@ -1,6 +1,8 @@
-# Systemd units
+# Systemd units (Linux-only, advanced)
 
-These unit files are optional helpers for keeping BitRiver Live running on Ubuntu and Debian hosts. Complete the basic setup in the root [README](../../README.md) first so you have working API binaries and a viewer release extracted or pulled from the container registry.
+These unit files are optional helpers for keeping BitRiver Live running on Ubuntu and Debian hosts. The recommended, cross-platform path is to use the Go CLI (`go run ./cmd/bitriver compose up`) so Docker Compose manages the stack for you. Reach for systemd only when you need native Linux services instead of containers.
+
+Complete the basic setup in the root [README](../../README.md) first so you have working API binaries and a viewer release extracted or pulled from the container registry.
 
 ## Prerequisites
 

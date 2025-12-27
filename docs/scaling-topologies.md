@@ -1,6 +1,6 @@
 # Scaling topologies for BitRiver Live
 
-BitRiver Live scales from a single host to a multi-region footprint. This guide summarises three proven layouts and explains how to size each component, where to terminate TLS, and how to introduce load balancers or CDNs while keeping ingest and playback responsive.
+BitRiver Live scales from a single host to a multi-region footprint. This guide summarises three proven layouts and explains how to size each component, where to terminate TLS, and how to introduce load balancers or CDNs while keeping ingest and playback responsive. Use the cross-platform Go CLI (`go run ./cmd/bitriver compose up`) for the default Docker Compose deployment; the systemd units mentioned below are Linux-only and intended for advanced operators who need native services.
 
 ## Service reference
 
