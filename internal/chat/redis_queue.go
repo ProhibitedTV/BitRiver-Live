@@ -289,8 +289,9 @@ type redisSubscription struct {
 	consumer string
 	cancel   context.CancelFunc
 
-	once sync.Once
-	ch   chan Event
+	cancelOnce sync.Once
+	wg         sync.WaitGroup
+	ch         chan Event
 }
 
 func (s *redisSubscription) Events() <-chan Event {
@@ -298,16 +299,18 @@ func (s *redisSubscription) Events() <-chan Event {
 }
 
 func (s *redisSubscription) Close() {
-	s.once.Do(func() {
-		if s.cancel != nil {
+	if s.cancel != nil {
+		s.cancelOnce.Do(func() {
 			s.cancel()
-		}
-		close(s.ch)
-	})
+		})
+	}
+	s.wg.Wait()
 }
 
 func (s *redisSubscription) run(ctx context.Context) {
-	defer s.Close()
+	s.wg.Add(1)
+	defer close(s.ch)
+	defer s.wg.Done()
 	if ctx == nil {
 		ctx = context.Background()
 	}
