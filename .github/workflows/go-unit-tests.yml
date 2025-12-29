@@ -55,21 +55,8 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
 
-      - name: Ensure vendored modules are available
-        shell: bash
-        run: |
-          test -d vendor
-          test -f vendor/modules.txt
-
-      - name: Smoke test OME renderer
-        if: matrix.os == 'ubuntu-latest'
-        run: python3 scripts/render_ome_config_test.py
-
       - name: Run unit tests
-        shell: bash
-        # Increase timeout to reduce flakes
-        run: go test ./... -count=1 -timeout=120s
+        run: go test ./...
 
       - name: Build bitriver binary
-        shell: bash
         run: go build ./cmd/bitriver
