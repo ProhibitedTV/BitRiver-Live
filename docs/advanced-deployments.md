@@ -388,7 +388,7 @@ Local and single-node installs can rely on the `transcoder-public` Nginx sidecar
 
 ## Operations runbook
 
-Operators can use the manifests under `deploy/` as a reference architecture for production or staging clusters. For a step-by-step Ubuntu installation, follow the [Installing BitRiver Live on Ubuntu guide](installing-on-ubuntu.md).
+Operators can use the manifests under `deploy/` as a reference architecture for production or staging clusters. For host-managed installs, the BitRiver CLI now ships installers for systemd (Linux), launchd (macOS), and Windows Services alongside the [Installing BitRiver Live on Ubuntu guide](installing-on-ubuntu.md).
 
 1. **Provision ingest dependencies first.** Bring up SRS, the SRS controller proxy, OvenMediaEngine (OME), and the FFmpeg job controller before starting the BitRiver Live API. The compose file at `deploy/docker-compose.yml` defines the services as `srs`, `srs-controller`, `ome`, and `transcoder` respectively. Each service exposes an HTTP health probe on `/healthz` (with fallbacks to vendor-specific paths) so you can validate readiness with `docker compose ps` or an external probe before the API starts.
 2. **Render and verify the OME config before each launch.** Run `./scripts/render-ome-config.sh --force --env-file /opt/bitriver-live/.env` immediately before starting OME (the `ome.service` unit performs the same preflight). The render step stamps `deploy/ome/Server.generated.xml` with the image tag marker and exits non-zero when the template is missing or stale, preventing Docker from booting with an outdated control listener or credentials.
