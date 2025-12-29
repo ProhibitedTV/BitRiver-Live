@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
 
 func TestVersionOutputIncludesVersionLabel(t *testing.T) {
-var buf bytes.Buffer
-Version = "test-version"
-Commit = "test-commit"
-Date = "2024-01-01"
+	var buf bytes.Buffer
+	Version = "test-version"
+	Commit = "test-commit"
+	Date = "2024-01-01"
 
 	printVersionInfo(&buf)
 
@@ -29,8 +30,8 @@ Date = "2024-01-01"
 }
 
 func TestEnvInitWritesGeneratedValues(t *testing.T) {
-envPath := filepath.Join(t.TempDir(), ".env")
-examplePath := defaultExampleEnv()
+	envPath := filepath.Join(t.TempDir(), ".env")
+	examplePath := defaultExampleEnv()
 
 	if err := runEnvInit([]string{"--env-file", envPath, "--example", examplePath}); err != nil {
 		t.Fatalf("env init failed: %v", err)
@@ -104,5 +105,111 @@ func TestEnvValidateBlocksPlaceholders(t *testing.T) {
 func TestComposeRejectsUnknownSubcommand(t *testing.T) {
 	if err := runCompose([]string{"noop"}); err == nil {
 		t.Fatal("expected compose to error on unknown subcommand")
+	}
+}
+
+func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	composePath := filepath.Join(t.TempDir(), "compose.yml")
+
+	envContent := strings.Join([]string{
+		"BITRIVER_LIVE_ADMIN_EMAIL=admin@example.com",
+		"BITRIVER_LIVE_ADMIN_PASSWORD=supersecret",
+		"BITRIVER_LIVE_PORT=18080",
+		"BITRIVER_POSTGRES_USER=brlive_app",
+		"BITRIVER_POSTGRES_PASSWORD=testpass",
+	}, "\n") + "\n"
+	if err := os.WriteFile(envPath, []byte(envContent), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	originalDoctor := doctorRunner
+	originalEnvInit := envInitRunner
+	originalEnvValidate := envValidateRunner
+	originalOMERunner := omeRunner
+	originalMigrations := migrationsRunner
+	originalCompose := composeUpRunner
+	originalWaiter := quickstartWaiter
+	originalBootstrap := bootstrapAdminRunner
+	t.Cleanup(func() {
+		doctorRunner = originalDoctor
+		envInitRunner = originalEnvInit
+		envValidateRunner = originalEnvValidate
+		omeRunner = originalOMERunner
+		migrationsRunner = originalMigrations
+		composeUpRunner = originalCompose
+		quickstartWaiter = originalWaiter
+		bootstrapAdminRunner = originalBootstrap
+	})
+
+	var calls []string
+	doctorRunner = func([]string) bool {
+		calls = append(calls, "doctor")
+		return true
+	}
+	envInitRunner = func(args []string) error {
+		calls = append(calls, "env-init")
+		expected := []string{"--env-file", envPath}
+		if !reflect.DeepEqual(args, expected) {
+			t.Fatalf("env init args = %v, want %v", args, expected)
+		}
+		return nil
+	}
+	envValidateRunner = func(args []string) error {
+		calls = append(calls, "env-validate")
+		expected := []string{"--env-file", envPath}
+		if !reflect.DeepEqual(args, expected) {
+			t.Fatalf("env validate args = %v, want %v", args, expected)
+		}
+		return nil
+	}
+	omeRunner = func(args []string) error {
+		calls = append(calls, "ome")
+		expected := []string{"render", "--env-file", envPath, "--force"}
+		if !reflect.DeepEqual(args, expected) {
+			t.Fatalf("ome args = %v, want %v", args, expected)
+		}
+		return nil
+	}
+	migrationsRunner = func(composeFile string) error {
+		calls = append(calls, "migrations")
+		if composeFile != composePath {
+			t.Fatalf("migrations compose file = %s, want %s", composeFile, composePath)
+		}
+		return nil
+	}
+	composeUpRunner = func(args []string) error {
+		calls = append(calls, "compose-up")
+		expected := []string{"--file", composePath}
+		if !reflect.DeepEqual(args, expected) {
+			t.Fatalf("compose args = %v, want %v", args, expected)
+		}
+		return nil
+	}
+	quickstartWaiter = func(values map[string]string) error {
+		calls = append(calls, "wait")
+		if values["BITRIVER_LIVE_PORT"] != "18080" {
+			t.Fatalf("expected env values to be passed to waiter, got %v", values["BITRIVER_LIVE_PORT"])
+		}
+		return nil
+	}
+	bootstrapAdminRunner = func(composeFile string, values map[string]string) error {
+		calls = append(calls, "bootstrap")
+		if composeFile != composePath {
+			t.Fatalf("bootstrap compose file = %s, want %s", composeFile, composePath)
+		}
+		if values["BITRIVER_LIVE_ADMIN_EMAIL"] != "admin@example.com" {
+			t.Fatalf("expected admin email to propagate, got %s", values["BITRIVER_LIVE_ADMIN_EMAIL"])
+		}
+		return nil
+	}
+
+	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
+		t.Fatalf("quickstart failed: %v", err)
+	}
+
+	expectedCalls := []string{"doctor", "env-init", "env-validate", "ome", "migrations", "compose-up", "wait", "bootstrap"}
+	if !reflect.DeepEqual(calls, expectedCalls) {
+		t.Fatalf("call order = %v, want %v", calls, expectedCalls)
 	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
@@ -9,6 +10,8 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -16,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"bitriver-live/internal/executil"
 )
@@ -331,6 +335,14 @@ func runCompose(args []string) error {
 }
 
 var commandRunner = executil.Run
+var quickstartWaiter = waitForAPIReadiness
+var bootstrapAdminRunner = runBootstrapAdmin
+var migrationsRunner = runMigrations
+var composeUpRunner = runComposeUp
+var envInitRunner = runEnvInit
+var envValidateRunner = runEnvValidate
+var omeRunner = runOME
+var doctorRunner = runDoctor
 
 func runComposeUp(args []string) error {
 	fs := flag.NewFlagSet("compose up", flag.ContinueOnError)
@@ -383,27 +395,40 @@ func runQuickstart(args []string) error {
 		return err
 	}
 
-	if !runDoctor(nil) {
+	if !doctorRunner(nil) {
 		return errors.New("doctor checks failed")
 	}
 
-	if err := runEnvInit([]string{"--env-file", *envFile}); err != nil {
+	if err := envInitRunner([]string{"--env-file", *envFile}); err != nil {
 		return fmt.Errorf("env init: %w", err)
 	}
-	if err := runEnvValidate([]string{"--env-file", *envFile}); err != nil {
+	if err := envValidateRunner([]string{"--env-file", *envFile}); err != nil {
 		return fmt.Errorf("env validate: %w", err)
 	}
 
-	if err := runOME([]string{"render", "--env-file", *envFile, "--force"}); err != nil {
+	envValues, err := readEnvFile(*envFile)
+	if err != nil {
+		return fmt.Errorf("read env file: %w", err)
+	}
+
+	if err := omeRunner([]string{"render", "--env-file", *envFile, "--force"}); err != nil {
 		return fmt.Errorf("render OME config: %w", err)
 	}
 
-	if err := runMigrations(*composeFile); err != nil {
+	if err := migrationsRunner(*composeFile); err != nil {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
-	if err := runComposeUp([]string{"--file", *composeFile}); err != nil {
+	if err := composeUpRunner([]string{"--file", *composeFile}); err != nil {
 		return fmt.Errorf("docker compose up: %w", err)
+	}
+
+	if err := quickstartWaiter(envValues); err != nil {
+		return fmt.Errorf("wait for API readiness: %w", err)
+	}
+
+	if err := bootstrapAdminRunner(*composeFile, envValues); err != nil {
+		return fmt.Errorf("bootstrap admin: %w", err)
 	}
 
 	return nil
@@ -416,6 +441,119 @@ func runMigrations(composeFile string) error {
 
 	args := []string{"compose", "--file", composeFile, "run", "--rm", "postgres-migrations"}
 	return commandRunner("docker", args...)
+}
+
+func waitForAPIReadiness(values map[string]string) error {
+	readyzURL := fmt.Sprintf("http://127.0.0.1:%s/readyz", resolveAPIPort(values))
+	fmt.Fprintf(os.Stdout, "Waiting for API readiness at %s...\n", readyzURL)
+
+	deadline := time.Now().Add(2 * time.Minute)
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, readyzURL, nil)
+		if reqErr != nil {
+			cancel()
+			return fmt.Errorf("build readiness request: %w", reqErr)
+		}
+
+		resp, err := http.DefaultClient.Do(req)
+		cancel()
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				fmt.Fprintln(os.Stdout, "API is ready.")
+				return nil
+			}
+		}
+
+		time.Sleep(3 * time.Second)
+	}
+
+	return errors.New("API did not become ready before timeout")
+}
+
+func resolveAPIPort(values map[string]string) string {
+	if port := strings.TrimSpace(values["BITRIVER_LIVE_PORT"]); port != "" {
+		return port
+	}
+
+	addr := strings.TrimSpace(values["BITRIVER_LIVE_ADDR"])
+	if p := extractPort(addr); p != 0 {
+		return strconv.Itoa(p)
+	}
+
+	return "8080"
+}
+
+func runBootstrapAdmin(composeFile string, values map[string]string) error {
+	email := strings.TrimSpace(values["BITRIVER_LIVE_ADMIN_EMAIL"])
+	password := strings.TrimSpace(values["BITRIVER_LIVE_ADMIN_PASSWORD"])
+	if email == "" || password == "" {
+		return errors.New("admin email/password missing from environment")
+	}
+
+	storageDriver := strings.ToLower(strings.TrimSpace(values["BITRIVER_LIVE_STORAGE_DRIVER"]))
+	if storageDriver == "" {
+		storageDriver = "postgres"
+	}
+
+	args := []string{"compose", "--file", composeFile, "exec", "-T", "bitriver-live", "/app/bootstrap-admin"}
+	switch storageDriver {
+	case "postgres":
+		dsn, err := buildPostgresDSN(values)
+		if err != nil {
+			return err
+		}
+		args = append(args, "--postgres-dsn", dsn)
+	case "json":
+		dataPath := strings.TrimSpace(values["BITRIVER_LIVE_DATA"])
+		if dataPath == "" {
+			dataPath = "/var/lib/bitriver-live/store.json"
+		}
+		args = append(args, "--json", dataPath)
+	default:
+		return fmt.Errorf("unsupported storage driver %q for bootstrap-admin", storageDriver)
+	}
+
+	args = append(args, "--email", email, "--password", password)
+
+	fmt.Fprintln(os.Stdout, "Seeding administrator account via bootstrap-admin...")
+	if err := commandRunner("docker", args...); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stdout, "Admin credentials: %s / %s\n", email, password)
+	return nil
+}
+
+func buildPostgresDSN(values map[string]string) (string, error) {
+	if dsn := strings.TrimSpace(values["BITRIVER_LIVE_POSTGRES_DSN"]); dsn != "" {
+		return dsn, nil
+	}
+
+	user := strings.TrimSpace(values["BITRIVER_POSTGRES_USER"])
+	password := strings.TrimSpace(values["BITRIVER_POSTGRES_PASSWORD"])
+	db := strings.TrimSpace(values["BITRIVER_POSTGRES_DB"])
+	if db == "" {
+		db = "bitriver"
+	}
+	if user == "" || password == "" {
+		return "", errors.New("postgres credentials missing for bootstrap-admin")
+	}
+
+	host := "postgres"
+	port := "5432"
+	u := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(user, password),
+		Host:   fmt.Sprintf("%s:%s", host, port),
+		Path:   "/" + db,
+	}
+	q := u.Query()
+	q.Set("sslmode", "disable")
+	u.RawQuery = q.Encode()
+
+	return u.String(), nil
 }
 
 func runOME(args []string) error {
