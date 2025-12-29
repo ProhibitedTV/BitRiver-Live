@@ -241,3 +241,75 @@ func TestBuildComposeArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestParseComposeFlags(t *testing.T) {
+	defaultFile := filepath.Join("deploy", "docker-compose.yml")
+	tests := []struct {
+		name      string
+		args      []string
+		want      composeConfig
+		wantError string
+	}{
+		{
+			name: "up default file",
+			args: []string{"up"},
+			want: composeConfig{action: "up", composeFile: defaultFile},
+		},
+		{
+			name: "down custom file before action",
+			args: []string{"--file", "custom.yml", "down"},
+			want: composeConfig{action: "down", composeFile: "custom.yml"},
+		},
+		{
+			name: "up custom file after action",
+			args: []string{"up", "--file", "custom.yml"},
+			want: composeConfig{action: "up", composeFile: "custom.yml"},
+		},
+		{
+			name: "up custom file via equals",
+			args: []string{"--file=custom.yml", "up"},
+			want: composeConfig{action: "up", composeFile: "custom.yml"},
+		},
+		{
+			name:      "missing action",
+			args:      []string{},
+			wantError: "compose action is required",
+		},
+		{
+			name:      "unknown flag",
+			args:      []string{"--unknown"},
+			wantError: "unknown flag",
+		},
+		{
+			name:      "extra positional",
+			args:      []string{"up", "down"},
+			wantError: "unexpected argument",
+		},
+		{
+			name:      "missing file value",
+			args:      []string{"--file"},
+			wantError: "requires a value",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseComposeFlags(tt.args, defaultFile)
+			if tt.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantError) {
+					t.Fatalf("expected error containing %q, got %v", tt.wantError, err)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("unexpected config: %+v", got)
+			}
+		})
+	}
+}

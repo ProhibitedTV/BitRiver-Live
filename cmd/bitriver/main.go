@@ -157,21 +157,18 @@ func printDoctorResult(out io.Writer, result doctorResult) {
 }
 
 func runCompose(args []string) {
-	fs := flag.NewFlagSet("compose", flag.ExitOnError)
 	defaultFile := filepath.Join("deploy", "docker-compose.yml")
-	fileFlag := fs.String("file", defaultFile, "Path to docker-compose file")
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "Usage: %s compose [--file path] <up|down>\n", os.Args[0])
-	}
-	_ = fs.Parse(args)
-
-	if fs.NArg() < 1 {
-		fs.Usage()
+	config, err := parseComposeFlags(args, defaultFile)
+	if errors.Is(err, flag.ErrHelp) {
+		composeUsage(os.Stdout, defaultFile)
+		return
+	} else if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		composeUsage(os.Stderr, defaultFile)
 		os.Exit(1)
 	}
 
-	action := fs.Arg(0)
-	if err := composeAction(action, *fileFlag, execRunner{}); err != nil {
+	if err := composeAction(config.action, config.composeFile, execRunner{}); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
@@ -650,4 +647,49 @@ func buildComposeArgs(action string, composeFile string) ([]string, error) {
 	}
 
 	return args, nil
+}
+
+type composeConfig struct {
+	action      string
+	composeFile string
+}
+
+func composeUsage(out io.Writer, defaultFile string) {
+	fmt.Fprintf(out, "Usage: %s compose [--file path] <up|down>\n", os.Args[0])
+	fmt.Fprintf(out, "       %s compose <up|down> [--file path]\n", os.Args[0])
+	fmt.Fprintf(out, "\nDefaults to %s when --file is not provided.\n", defaultFile)
+}
+
+func parseComposeFlags(args []string, defaultFile string) (composeConfig, error) {
+	composeFile := defaultFile
+	var action string
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		switch {
+		case arg == "-h" || arg == "--help":
+			return composeConfig{}, flag.ErrHelp
+		case strings.HasPrefix(arg, "--file="):
+			composeFile = strings.TrimPrefix(arg, "--file=")
+		case arg == "--file":
+			if i+1 >= len(args) {
+				return composeConfig{}, fmt.Errorf("--file flag requires a value")
+			}
+			composeFile = args[i+1]
+			i++
+		case strings.HasPrefix(arg, "-"):
+			return composeConfig{}, fmt.Errorf("unknown flag: %s", arg)
+		case action == "":
+			action = arg
+		default:
+			return composeConfig{}, fmt.Errorf("unexpected argument: %s", arg)
+		}
+	}
+
+	if action == "" {
+		return composeConfig{}, fmt.Errorf("compose action is required (up or down)")
+	}
+
+	return composeConfig{action: action, composeFile: composeFile}, nil
 }
