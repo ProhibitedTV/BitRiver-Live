@@ -7,9 +7,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"html"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -213,8 +215,6 @@ var forbiddenPlaceholders = map[string]string{
 	"BITRIVER_OME_ACCESS_TOKEN":               "OME-Example-Access-Token",
 	"BITRIVER_TRANSCODER_TOKEN":               "transcoder-secure-token-example",
 	"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD": "R3dis-Example!",
-	"BITRIVER_TRANSCODER_PUBLIC_BASE_URL":     "https://cdn.example.com/hls",
-	"NEXT_PUBLIC_VIEWER_URL":                  "https://stream.example.com/viewer",
 }
 
 type envValidatorResult struct {
@@ -430,28 +430,427 @@ func runOMERender(args []string) error {
 	envPath := fs.String("env-file", defaultEnvFile(), "path to env file")
 	force := fs.Bool("force", false, "force regeneration")
 	checkOnly := fs.Bool("check", false, "only verify the file exists")
+	quiet := fs.Bool("quiet", false, "suppress informational output")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	scriptPath := filepath.Join(repoRoot(), "scripts", "render-ome-config.sh")
-	if _, err := executil.LookPath("python3"); err != nil {
-		return fmt.Errorf("python3 is required to render OME config: %w", err)
-	}
-	if _, err := os.Stat(scriptPath); err != nil {
-		return fmt.Errorf("renderer script missing at %s: %w", scriptPath, err)
+	return renderOMEFromEnv(*envPath, *force, *checkOnly, *quiet)
+}
+
+func renderOMEFromEnv(envPath string, force, checkOnly, quiet bool) error {
+	templatePath := filepath.Join(repoRoot(), "deploy", "ome", "Server.xml")
+	outputPath := filepath.Join(repoRoot(), "deploy", "ome", "Server.generated.xml")
+
+	if checkOnly {
+		if _, err := os.Stat(outputPath); err != nil {
+			return fmt.Errorf("OME config missing at %s: %w", outputPath, err)
+		}
+		if !quiet {
+			fmt.Fprintf(os.Stdout, "OME config found at %s.\n", outputPath)
+		}
+		return nil
 	}
 
-	renderArgs := []string{scriptPath}
-	if *checkOnly {
-		renderArgs = append(renderArgs, "--check")
+	values, err := readEnvFile(envPath)
+	if err != nil {
+		return err
 	}
-	if *force {
-		renderArgs = append(renderArgs, "--force")
-	}
-	renderArgs = append(renderArgs, "--env-file", *envPath)
 
-	return commandRunner("bash", renderArgs...)
+	cfg, err := buildOMERenderConfig(values, templatePath, outputPath)
+	if err != nil {
+		return err
+	}
+
+	if !force {
+		if _, err := os.Stat(outputPath); err == nil {
+			if !quiet {
+				fmt.Fprintf(os.Stdout, "OME config already exists at %s (use --force to regenerate).\n", outputPath)
+			}
+			return nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to check generated config: %w", err)
+		}
+	}
+
+	if !quiet {
+		if force {
+			fmt.Fprintln(os.Stdout, "Rendering OME config (--force requested)...")
+		} else {
+			fmt.Fprintln(os.Stdout, "Rendering OME config...")
+		}
+	}
+
+	if err := renderOMEConfig(cfg); err != nil {
+		return fmt.Errorf("render deploy/ome/Server.generated.xml: %w", err)
+	}
+
+	if !quiet {
+		fmt.Fprintf(os.Stdout, "Rendered OME configuration to %s\n", outputPath)
+	}
+
+	return nil
+}
+
+type omeRenderConfig struct {
+	TemplatePath string
+	OutputPath   string
+	Bind         string
+	ServerIP     string
+	Port         string
+	TLSPort      string
+	Username     string
+	Password     string
+	APIToken     string
+	AccessToken  string
+	ImageTag     string
+	TCPRelay     string
+	ICECandidate string
+}
+
+func buildOMERenderConfig(values map[string]string, templatePath, outputPath string) (omeRenderConfig, error) {
+	if _, err := os.Stat(templatePath); err != nil {
+		return omeRenderConfig{}, fmt.Errorf("OME template missing at %s: %w", templatePath, err)
+	}
+
+	bind := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_BIND"]), "0.0.0.0")
+	port := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_SERVER_PORT"]), "9000")
+	tlsPort := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_SERVER_TLS_PORT"]), "9443")
+	ip := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_IP"]), bind)
+	imageTag := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_IMAGE_TAG"]), "0.16.0")
+	icePortRange := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_ICE_PORT_RANGE"]), "10000-10009")
+	tcpRelay := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_TCP_RELAY"]), strings.TrimSpace(values["BITRIVER_OME_RELAY_PORT"]), "3478")
+	if !strings.Contains(tcpRelay, ":") {
+		tcpRelay = "*:" + strings.Trim(tcpRelay, "*:")
+	}
+	iceCandidate := strings.TrimSpace(values["BITRIVER_OME_ICE_CANDIDATE"])
+	if iceCandidate == "" {
+		iceCandidate = fmt.Sprintf("*:%s/udp", icePortRange)
+	}
+
+	username := strings.TrimSpace(values["BITRIVER_OME_USERNAME"])
+	password := strings.TrimSpace(values["BITRIVER_OME_PASSWORD"])
+	apiToken := strings.TrimSpace(values["BITRIVER_OME_API_TOKEN"])
+	accessToken := strings.TrimSpace(values["BITRIVER_OME_ACCESS_TOKEN"])
+	if accessToken == "" {
+		accessToken = apiToken
+	}
+
+	missing := make([]string, 0)
+	for key, value := range map[string]string{
+		"BITRIVER_OME_USERNAME":        username,
+		"BITRIVER_OME_PASSWORD":        password,
+		"BITRIVER_OME_API_TOKEN":       apiToken,
+		"BITRIVER_OME_SERVER_PORT":     port,
+		"BITRIVER_OME_SERVER_TLS_PORT": tlsPort,
+	} {
+		if strings.TrimSpace(value) == "" {
+			missing = append(missing, key)
+		}
+	}
+	if len(missing) > 0 {
+		return omeRenderConfig{}, fmt.Errorf("missing required OME variables: %s", strings.Join(missing, ", "))
+	}
+
+	return omeRenderConfig{
+		TemplatePath: templatePath,
+		OutputPath:   outputPath,
+		Bind:         bind,
+		ServerIP:     ip,
+		Port:         port,
+		TLSPort:      tlsPort,
+		Username:     username,
+		Password:     password,
+		APIToken:     apiToken,
+		AccessToken:  accessToken,
+		ImageTag:     imageTag,
+		TCPRelay:     tcpRelay,
+		ICECandidate: iceCandidate,
+	}, nil
+}
+
+func renderOMEConfig(cfg omeRenderConfig) error {
+	data, err := os.ReadFile(cfg.TemplatePath)
+	if err != nil {
+		return fmt.Errorf("read template: %w", err)
+	}
+
+	text := string(data)
+	text = regexp.MustCompile(`<\s*Server\.bind\s*>`).ReplaceAllString(text, "<Bind>")
+	text = regexp.MustCompile(`</\s*Server\.bind\s*>`).ReplaceAllString(text, "</Bind>")
+
+	text, err = replaceRootBindings(text, xmlEscape(cfg.Bind), xmlEscape(cfg.Port), xmlEscape(cfg.TLSPort))
+	if err != nil {
+		return err
+	}
+
+	text, err = replaceRootIP(text, xmlEscape(cfg.ServerIP))
+	if err != nil {
+		return err
+	}
+
+	text, err = scopedReplaceControlBindings(text, xmlEscape(cfg.Bind))
+	if err != nil {
+		return err
+	}
+
+	text, err = replaceAllTagContent(text, "TcpRelay", xmlEscape(cfg.TCPRelay), true)
+	if err != nil {
+		return err
+	}
+
+	text, err = replaceAllTagContent(text, "IceCandidate", xmlEscape(cfg.ICECandidate), true)
+	if err != nil {
+		return err
+	}
+
+	text, err = replaceAccessToken(text, cfg.AccessToken)
+	if err != nil {
+		return err
+	}
+
+	text, err = replaceAuthentication(text, cfg.Username, cfg.Password)
+	if err != nil {
+		return err
+	}
+
+	text = stampImageTag(text, cfg.ImageTag)
+
+	text = regexp.MustCompile("\\n{3,}").ReplaceAllString(text, "\n\n")
+
+	if err := os.WriteFile(cfg.OutputPath, []byte(text), 0o644); err != nil {
+		return fmt.Errorf("write generated config: %w", err)
+	}
+
+	return nil
+}
+
+func replaceTagContent(data, tag, value string) (string, error) {
+	openTag := fmt.Sprintf("<%s>", tag)
+	closeTag := fmt.Sprintf("</%s>", tag)
+
+	start := strings.Index(data, openTag)
+	if start == -1 {
+		return "", fmt.Errorf("missing %s in template", openTag)
+	}
+
+	end := strings.Index(data[start:], closeTag)
+	if end == -1 {
+		return "", fmt.Errorf("missing %s in template", closeTag)
+	}
+
+	end += start
+	return data[:start+len(openTag)] + value + data[end:], nil
+}
+
+func replaceAllTagContent(data, tag, value string, required bool) (string, error) {
+	pattern := regexp.MustCompile(fmt.Sprintf(`(<%s>)([^<]*)(</%s>)`, tag, tag))
+	replaced := pattern.ReplaceAllString(data, fmt.Sprintf(`$1%s$3`, value))
+	if required && replaced == data {
+		return "", fmt.Errorf("missing <%s> in template", tag)
+	}
+	return replaced, nil
+}
+
+func replaceRootBindings(text, address, port, tlsPort string) (string, error) {
+	serverRe := regexp.MustCompile(`(?s)<Server[^>]*>(.*)</Server>`)
+	serverLoc := serverRe.FindStringSubmatchIndex(text)
+	if serverLoc == nil {
+		return "", errors.New("missing <Server> root element in template")
+	}
+
+	serverBody := text[serverLoc[2]:serverLoc[3]]
+	bindRe := regexp.MustCompile(`(?s)<Bind>(.*?)</Bind>`)
+	bindLoc := bindRe.FindStringSubmatchIndex(serverBody)
+	if bindLoc == nil {
+		return "", errors.New("missing <Bind> section under <Server> in template")
+	}
+
+	bindBody := serverBody[bindLoc[2]:bindLoc[3]]
+	var err error
+	if strings.Contains(bindBody, "<Address>") {
+		bindBody, err = replaceTagContent(bindBody, "Address", address)
+	} else if strings.Contains(bindBody, "<IP>") {
+		bindBody, err = replaceTagContent(bindBody, "IP", address)
+	}
+	if err != nil {
+		return "", err
+	}
+
+	signallingRe := regexp.MustCompile(`(?s)<Signalling>(.*?)</Signalling>`)
+	rewriteErr := error(nil)
+	signallingCount := 0
+	bindBody = signallingRe.ReplaceAllStringFunc(bindBody, func(section string) string {
+		signallingCount++
+		match := signallingRe.FindStringSubmatch(section)
+		inner := match[1]
+		updated, errPort := replaceTagContent(inner, "Port", port)
+		if errPort != nil {
+			rewriteErr = errPort
+			return section
+		}
+		updated, errPort = replaceTagContent(updated, "TLSPort", tlsPort)
+		if errPort != nil {
+			rewriteErr = errPort
+			return section
+		}
+		return "<Signalling>" + updated + "</Signalling>"
+	})
+	if rewriteErr != nil {
+		return "", rewriteErr
+	}
+
+	if signallingCount == 0 {
+		bindBody, err = replaceTagContent(bindBody, "Port", port)
+		if err != nil {
+			return "", err
+		}
+		bindBody, err = replaceTagContent(bindBody, "TLSPort", tlsPort)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	serverBody = serverBody[:bindLoc[2]] + bindBody + serverBody[bindLoc[3]:]
+	return text[:serverLoc[2]] + serverBody + text[serverLoc[3]:], nil
+}
+
+func replaceRootIP(text, ip string) (string, error) {
+	serverRe := regexp.MustCompile(`(?s)<Server[^>]*>(.*)</Server>`)
+	serverLoc := serverRe.FindStringSubmatchIndex(text)
+	if serverLoc == nil {
+		return "", errors.New("missing <Server> root element in template")
+	}
+
+	serverBody := text[serverLoc[2]:serverLoc[3]]
+	ipRe := regexp.MustCompile(`(?s)<IP>(.*?)</IP>`)
+	matches := ipRe.FindAllStringSubmatchIndex(serverBody, -1)
+	for _, loc := range matches {
+		start, end := loc[2], loc[3]
+		bindOpen := strings.LastIndex(serverBody[:start], "<Bind>")
+		bindClose := strings.LastIndex(serverBody[:start], "</Bind>")
+		if bindOpen != -1 && (bindClose == -1 || bindClose < bindOpen) {
+			continue
+		}
+
+		vhostOpen := strings.LastIndex(serverBody[:start], "<VirtualHosts>")
+		vhostClose := strings.LastIndex(serverBody[:start], "</VirtualHosts>")
+		if vhostOpen != -1 && (vhostClose == -1 || vhostClose < vhostOpen) {
+			continue
+		}
+
+		serverBody = serverBody[:start] + ip + serverBody[end:]
+		return text[:serverLoc[2]] + serverBody + text[serverLoc[3]:], nil
+	}
+
+	return text, nil
+}
+
+func scopedReplaceControlBindings(text, bind string) (string, error) {
+	controlRe := regexp.MustCompile(`(?s)<Control>(.*?)</Control>`)
+	controlLoc := controlRe.FindStringSubmatchIndex(text)
+	if controlLoc == nil {
+		return text, nil
+	}
+
+	controlBody := text[controlLoc[0]:controlLoc[1]]
+	serverRe := regexp.MustCompile(`(?s)<Server>(.*?)</Server>`)
+	serverLoc := serverRe.FindStringSubmatchIndex(controlBody)
+	if serverLoc == nil {
+		return text, nil
+	}
+
+	serverBody := controlBody[serverLoc[0]:serverLoc[1]]
+	inner := serverLoc[2] - serverLoc[0]
+	outer := serverLoc[3] - serverLoc[0]
+	content := serverBody[inner:outer]
+
+	var err error
+	if strings.Contains(content, "<Bind>") {
+		content, err = replaceAllTagContent(content, "Bind", bind, false)
+		if err != nil {
+			return "", err
+		}
+	}
+	if strings.Contains(content, "<IP>") {
+		content, err = replaceAllTagContent(content, "IP", bind, false)
+		if err != nil {
+			return "", err
+		}
+	}
+	if strings.Contains(content, "<Address>") {
+		content, err = replaceAllTagContent(content, "Address", bind, false)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	serverBody = serverBody[:inner] + content + serverBody[outer:]
+	controlBody = controlBody[:serverLoc[0]] + serverBody + controlBody[serverLoc[1]:]
+	return text[:controlLoc[0]] + controlBody + text[controlLoc[1]:], nil
+}
+
+func replaceAccessToken(text, token string) (string, error) {
+	token = xmlEscape(token)
+	accessTokensRe := regexp.MustCompile(`(?s)<AccessTokens>(.*?)</AccessTokens>`)
+	loc := accessTokensRe.FindStringSubmatchIndex(text)
+	if loc != nil {
+		inner := text[loc[2]:loc[3]]
+		replaced, err := replaceTagContent(inner, "AccessToken", token)
+		if err != nil {
+			return "", err
+		}
+		return text[:loc[2]] + replaced + text[loc[3]:], nil
+	}
+
+	if strings.Contains(text, "<AccessToken>") {
+		replaced, err := replaceTagContent(text, "AccessToken", token)
+		if err != nil {
+			return "", err
+		}
+		return replaced, nil
+	}
+
+	return "", errors.New("missing <AccessTokens> or <AccessToken> in template")
+}
+
+func replaceAuthentication(text, username, password string) (string, error) {
+	authRe := regexp.MustCompile(`(?s)<Authentication>(.*?)</Authentication>`)
+	loc := authRe.FindStringSubmatchIndex(text)
+	if loc == nil {
+		return "", errors.New("missing <Authentication> block in template")
+	}
+
+	inner := text[loc[2]:loc[3]]
+	var err error
+	inner, err = replaceTagContent(inner, "ID", xmlEscape(username))
+	if err != nil {
+		return "", err
+	}
+	inner, err = replaceTagContent(inner, "Password", xmlEscape(password))
+	if err != nil {
+		return "", err
+	}
+
+	return text[:loc[2]] + inner + text[loc[3]:], nil
+}
+
+func stampImageTag(text, imageTag string) string {
+	if strings.TrimSpace(imageTag) == "" {
+		return text
+	}
+
+	marker := fmt.Sprintf("<!-- Rendered for BITRIVER_OME_IMAGE_TAG=%s -->", xmlEscape(imageTag))
+	pattern := regexp.MustCompile(`<!--\s*Rendered for BITRIVER_OME_IMAGE_TAG=.*?-->`)
+	if pattern.MatchString(text) {
+		return pattern.ReplaceAllString(text, marker)
+	}
+
+	return strings.Replace(text, "<Server version=\"10\">", "<Server version=\"10\">\n    "+marker, 1)
+}
+
+func xmlEscape(value string) string {
+	return html.EscapeString(value)
 }
 
 func readEnvTemplate(path string) ([]templateLine, error) {
@@ -613,12 +1012,6 @@ func randomSecret() string {
 
 func validateEnv(values map[string]string) envValidatorResult {
 	requiredVars := []string{
-		"BITRIVER_LIVE_IMAGE_TAG",
-		"BITRIVER_VIEWER_IMAGE_TAG",
-		"BITRIVER_SRS_CONTROLLER_IMAGE_TAG",
-		"BITRIVER_TRANSCODER_IMAGE_TAG",
-		"BITRIVER_SRS_IMAGE_TAG",
-		"BITRIVER_OME_IMAGE_TAG",
 		"BITRIVER_POSTGRES_USER",
 		"BITRIVER_POSTGRES_PASSWORD",
 		"BITRIVER_REDIS_PASSWORD",
@@ -642,9 +1035,27 @@ func validateEnv(values map[string]string) envValidatorResult {
 		"NEXT_PUBLIC_VIEWER_URL",
 	}
 
+	imageTags := []string{
+		"BITRIVER_LIVE_IMAGE_TAG",
+		"BITRIVER_VIEWER_IMAGE_TAG",
+		"BITRIVER_SRS_CONTROLLER_IMAGE_TAG",
+		"BITRIVER_TRANSCODER_IMAGE_TAG",
+		"BITRIVER_SRS_IMAGE_TAG",
+		"BITRIVER_OME_IMAGE_TAG",
+	}
+
+	mode := strings.ToLower(strings.TrimSpace(values["BITRIVER_LIVE_MODE"]))
+	production := mode == "" || mode == "production"
+
 	res := envValidatorResult{}
 
 	for _, key := range requiredVars {
+		if strings.TrimSpace(values[key]) == "" {
+			res.Missing = append(res.Missing, key)
+		}
+	}
+
+	for _, key := range imageTags {
 		if strings.TrimSpace(values[key]) == "" {
 			res.Missing = append(res.Missing, key)
 		}
@@ -656,10 +1067,36 @@ func validateEnv(values map[string]string) envValidatorResult {
 		}
 	}
 
-	if val := strings.TrimSpace(values["BITRIVER_OME_IMAGE_TAG"]); val != "" {
-		if parts := strings.Split(val, "."); len(parts) != 3 {
-			res.Errors = append(res.Errors, fmt.Sprintf("BITRIVER_OME_IMAGE_TAG must be MAJOR.MINOR.PATCH (current: %s)", val))
+	if values["BITRIVER_REDIS_PASSWORD"] != "" && values["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"] != "" &&
+		values["BITRIVER_REDIS_PASSWORD"] != values["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"] {
+		res.Warnings = append(res.Warnings, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD does not match BITRIVER_REDIS_PASSWORD. Ensure Redis credentials stay in sync unless intentionally different.")
+	}
+
+	if profiles := strings.TrimSpace(values["COMPOSE_PROFILES"]); profiles != "" {
+		for _, profile := range strings.FieldsFunc(profiles, func(r rune) bool { return r == ',' || r == ':' }) {
+			if profile == "postgres-host" {
+				res.Warnings = append(res.Warnings, "COMPOSE_PROFILES includes postgres-host, which publishes PostgreSQL to the host.")
+				break
+			}
 		}
+	}
+
+	if val := strings.TrimSpace(values["BITRIVER_OME_IMAGE_TAG"]); val != "" {
+		parts := strings.Split(val, ".")
+		if len(parts) != 3 {
+			res.Errors = append(res.Errors, fmt.Sprintf("BITRIVER_OME_IMAGE_TAG must be MAJOR.MINOR.PATCH so the renderer can stamp the config (current: %s)", val))
+		} else {
+			if parts[0] == "0" {
+				minor, _ := strconv.Atoi(parts[1])
+				if minor < 16 {
+					res.Errors = append(res.Errors, fmt.Sprintf("BITRIVER_OME_IMAGE_TAG must be 0.16.0 or newer to match the rendered Server.xml schema (current: %s).", val))
+				}
+			}
+		}
+	}
+
+	if val := strings.TrimSpace(values["BITRIVER_SRS_IMAGE_TAG"]); val != "" && val != "v5.0.185" {
+		res.Warnings = append(res.Warnings, fmt.Sprintf("BITRIVER_SRS_IMAGE_TAG is set to %s. Update systemd docs or units before upgrading.", val))
 	}
 
 	if val := strings.TrimSpace(values["BITRIVER_OME_SERVER_PORT"]); val != "" {
@@ -681,36 +1118,63 @@ func validateEnv(values map[string]string) envValidatorResult {
 		}
 	}
 
-	mode := strings.ToLower(strings.TrimSpace(values["BITRIVER_LIVE_MODE"]))
-	production := mode == "" || mode == "production"
+	if val := strings.TrimSpace(values["BITRIVER_LIVE_POSTGRES_DSN"]); strings.Contains(val, "bitriver:bitriver") {
+		res.Warnings = append(res.Warnings, "BITRIVER_LIVE_POSTGRES_DSN still references bitriver:bitriver. Update or unset it to match the Postgres credentials.")
+	}
 
-	if val := strings.TrimSpace(values["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"]); val != "" {
-		if strings.Contains(val, "localhost") || strings.Contains(val, "127.0.0.1") {
-			warn := fmt.Sprintf("BITRIVER_TRANSCODER_PUBLIC_BASE_URL points at loopback (%s). Configure a routable origin before production.", val)
-			if production {
-				res.Errors = append(res.Errors, warn)
-			} else {
-				res.Warnings = append(res.Warnings, warn)
-			}
+	loopback := regexp.MustCompile(`^https?://(localhost|127\\.[0-9.]*|0\\.0\\.0\\.0|::1|\\[::1\\])([:/]|$)`)
+	loopbackHost := regexp.MustCompile(`^(localhost|127\\.[0-9.]*|::1|\\[::1\\]|0\\.0\\.0\\.0|::)$`)
+
+	flagEnvIssue := func(message string) {
+		if production {
+			res.Errors = append(res.Errors, message)
+		} else {
+			res.Warnings = append(res.Warnings, message)
 		}
 	}
 
-	if val := strings.TrimSpace(values["NEXT_PUBLIC_VIEWER_URL"]); val != "" {
-		if strings.Contains(val, "example.com") {
-			res.Errors = append(res.Errors, fmt.Sprintf("NEXT_PUBLIC_VIEWER_URL still uses an example.com placeholder (%s)", val))
-		} else if strings.Contains(val, "localhost") || strings.HasPrefix(val, "http://127.") || strings.HasPrefix(val, "https://127.") {
-			warn := fmt.Sprintf("NEXT_PUBLIC_VIEWER_URL points at loopback (%s).", val)
-			if production {
-				res.Errors = append(res.Errors, warn)
-			} else {
-				res.Warnings = append(res.Warnings, warn)
-			}
+	if val := strings.TrimSpace(values["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"]); val != "" {
+		switch {
+		case val == "https://cdn.example.com/hls":
+			res.Errors = append(res.Errors, "BITRIVER_TRANSCODER_PUBLIC_BASE_URL still uses the sample CDN URL (https://cdn.example.com/hls). Replace it with the public origin end users can reach.")
+		case loopback.MatchString(val):
+			flagEnvIssue(fmt.Sprintf("BITRIVER_TRANSCODER_PUBLIC_BASE_URL points at loopback (%s). Configure a CDN, reverse proxy, or routable origin instead.", val))
 		}
+	}
+
+	if val := strings.TrimSpace(values["BITRIVER_OME_API"]); val != "" && loopback.MatchString(val) {
+		flagEnvIssue(fmt.Sprintf("BITRIVER_OME_API points at loopback (%s). Use the ome hostname from docker-compose.yml or another reachable host/IP.", val))
+	}
+
+	if val := strings.TrimSpace(values["BITRIVER_OME_BIND"]); val != "" && loopbackHost.MatchString(val) {
+		flagEnvIssue(fmt.Sprintf("BITRIVER_OME_BIND is set to %s. Bind OvenMediaEngine to a routable interface instead of loopback.", val))
+	}
+
+	if val := strings.TrimSpace(values["BITRIVER_OME_IP"]); val != "" && loopbackHost.MatchString(val) {
+		flagEnvIssue(fmt.Sprintf("BITRIVER_OME_IP is set to %s. Configure the public IP or hostname for OvenMediaEngine instead of a placeholder or loopback value.", val))
 	}
 
 	if val := strings.TrimSpace(values["NEXT_PUBLIC_API_BASE_URL"]); val != "" {
-		if strings.Contains(val, "example.com") {
-			res.Errors = append(res.Errors, fmt.Sprintf("NEXT_PUBLIC_API_BASE_URL still uses an example.com placeholder (%s)", val))
+		switch {
+		case loopback.MatchString(val):
+			flagEnvIssue(fmt.Sprintf("NEXT_PUBLIC_API_BASE_URL points at loopback (%s). Point it at the API hostname end users reach.", val))
+		case strings.Contains(val, "example.com"):
+			res.Errors = append(res.Errors, fmt.Sprintf("NEXT_PUBLIC_API_BASE_URL still uses an example.com placeholder (%s). Replace it with the production API origin.", val))
+		}
+	} else {
+		viewerBasePath := values["NEXT_VIEWER_BASE_PATH"]
+		if viewerBasePath == "" {
+			viewerBasePath = "/viewer"
+		}
+		res.Warnings = append(res.Warnings, fmt.Sprintf("NEXT_PUBLIC_API_BASE_URL is empty; the viewer will fall back to the API origin when proxied at NEXT_VIEWER_BASE_PATH=%s.", viewerBasePath))
+	}
+
+	if val := strings.TrimSpace(values["NEXT_PUBLIC_VIEWER_URL"]); val != "" {
+		switch {
+		case loopback.MatchString(val):
+			flagEnvIssue(fmt.Sprintf("NEXT_PUBLIC_VIEWER_URL points at loopback (%s). Point it at the viewer hostname end users reach.", val))
+		case strings.Contains(val, "example.com"):
+			res.Errors = append(res.Errors, fmt.Sprintf("NEXT_PUBLIC_VIEWER_URL still uses an example.com placeholder (%s). Replace it with the production viewer origin.", val))
 		}
 	}
 
