@@ -7,12 +7,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
-	"bitriver-live/internal/envutil"
 	"bitriver-live/internal/executil"
 )
 
@@ -378,14 +379,9 @@ func initEnvFile(envPath string, templateRoot string, out io.Writer) error {
 		return fmt.Errorf("could not check .env: %w", err)
 	}
 
-	templateCandidates := []string{
-		filepath.Join(templateRoot, "deploy", ".env.example"),
-		filepath.Join(templateRoot, ".env"), // Fallback for repositories that track a root .env as the template.
-	}
-
-	templatePath, err := envutil.FirstExistingPath(templateCandidates)
+	templatePath, err := findEnvTemplate(templateRoot)
 	if err != nil {
-		return fmt.Errorf("no env template found; expected deploy/.env.example or repository .env")
+		return err
 	}
 
 	templateData, err := os.ReadFile(templatePath)
@@ -403,6 +399,94 @@ func initEnvFile(envPath string, templateRoot string, out io.Writer) error {
 
 	fmt.Fprintf(out, "Created .env from %s\n", filepath.Base(templatePath))
 	return nil
+}
+
+func findEnvTemplate(templateRoot string) (string, error) {
+	preferred := filepath.Join(templateRoot, "deploy", ".env.example")
+	if info, err := os.Stat(preferred); err == nil {
+		if info.IsDir() {
+			return "", fmt.Errorf("preferred env template at %s is a directory", preferred)
+		}
+		return preferred, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("check preferred env template: %w", err)
+	}
+
+	templates, err := findEnvExamples(templateRoot)
+	if err != nil {
+		return "", err
+	}
+
+	if len(templates) > 0 {
+		sort.Slice(templates, func(i, j int) bool {
+			depthI := templateDepth(templateRoot, templates[i])
+			depthJ := templateDepth(templateRoot, templates[j])
+			if depthI != depthJ {
+				return depthI < depthJ
+			}
+
+			relI, errI := filepath.Rel(templateRoot, templates[i])
+			relJ, errJ := filepath.Rel(templateRoot, templates[j])
+			if errI != nil || errJ != nil {
+				return templates[i] < templates[j]
+			}
+
+			return relI < relJ
+		})
+
+		return templates[0], nil
+	}
+
+	fallback := filepath.Join(templateRoot, ".env")
+	if info, err := os.Stat(fallback); err == nil {
+		if info.IsDir() {
+			return "", fmt.Errorf("env template at %s is a directory", fallback)
+		}
+		return fallback, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("check fallback env template: %w", err)
+	}
+
+	return "", fmt.Errorf("no env template found; expected deploy/.env.example or another .env.example file")
+}
+
+func findEnvExamples(templateRoot string) ([]string, error) {
+	var templates []string
+
+	err := filepath.WalkDir(templateRoot, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if d.IsDir() {
+			return nil
+		}
+
+		if d.Name() == ".env.example" {
+			templates = append(templates, path)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("search env templates: %w", err)
+	}
+
+	return templates, nil
+}
+
+func templateDepth(root string, path string) int {
+	rel, err := filepath.Rel(root, filepath.Dir(path))
+	if err != nil {
+		return strings.Count(filepath.Clean(path), string(filepath.Separator))
+	}
+
+	cleaned := filepath.Clean(rel)
+	if cleaned == "." {
+		return 0
+	}
+
+	return len(strings.Split(cleaned, string(filepath.Separator)))
 }
 
 func seedEnvSecrets(envPath string) error {
