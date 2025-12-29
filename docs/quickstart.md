@@ -52,15 +52,11 @@ Update the generated `.env` before inviting real users—swap in a valid admin e
 
 ## Common follow-up commands
 
-Compose lives in `deploy/docker-compose.yml`. Set the file path once from the repository root to avoid `no configuration file p
-rovided` errors, then use the standard Compose subcommands:
-
-```bash
-export COMPOSE_FILE=deploy/docker-compose.yml
-```
+Compose lives in `deploy/docker-compose.yml`. The Go CLI wraps Docker Compose so you can stay on the same command set across platforms:
 
 - Inspect service health (Compose rerenders `deploy/ome/Server.generated.xml` via the `ome-config` preflight before OME starts, so stale configs block startup instead of leaving the container unhealthy):
   ```bash
+  go run ./cmd/bitriver compose up --file deploy/docker-compose.yml
   docker compose ps
   ```
 - Follow logs for every container:
@@ -69,15 +65,14 @@ export COMPOSE_FILE=deploy/docker-compose.yml
   ```
 - Stop the stack and keep data volumes intact:
   ```bash
-  docker compose down
+  go run ./cmd/bitriver compose down --file deploy/docker-compose.yml
   ```
 - Stop the stack and remove data volumes (destructive):
   ```bash
-  docker compose down -v
+  go run ./cmd/bitriver compose down --file deploy/docker-compose.yml --volumes
   ```
 
-All commands assume you are still in the repository root (where `.env` lives) so Docker Compose can locate the project name and
-compose file.
+All commands assume you are still in the repository root (where `.env` lives) so Docker Compose can locate the project name and compose file. Use `go run ./cmd/bitriver env validate --env-file ./.env` to double-check credentials before a restart.
 
 ## Updating your stack
 
