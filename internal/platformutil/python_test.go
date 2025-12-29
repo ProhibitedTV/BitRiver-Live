@@ -2,7 +2,37 @@ package platformutil
 
 import "testing"
 
-func TestFindPythonCommandsPrefersPython(t *testing.T) {
+func TestFindPythonCommandsPrefersPython3(t *testing.T) {
+	lookPath := func(file string) (string, error) {
+		switch file {
+		case "python3":
+			return "/bin/python3", nil
+		case "python":
+			return "/bin/python", nil
+		default:
+			return "", errNotFound
+		}
+	}
+
+	commands, err := findPythonCommands(lookPath, "linux")
+	if err != nil {
+		t.Fatalf("findPythonCommands returned error: %v", err)
+	}
+
+	if len(commands) != 2 {
+		t.Fatalf("expected two commands, got %d", len(commands))
+	}
+
+	if commands[0].Executable != "/bin/python3" || len(commands[0].Args) != 0 {
+		t.Fatalf("unexpected first command: %+v", commands[0])
+	}
+
+	if commands[1].Executable != "/bin/python" || len(commands[1].Args) != 0 {
+		t.Fatalf("unexpected second command: %+v", commands[1])
+	}
+}
+
+func TestFindPythonCommandsFallsBackToPython(t *testing.T) {
 	lookPath := func(file string) (string, error) {
 		if file == "python" {
 			return "/bin/python", nil
