@@ -75,12 +75,9 @@ func TestQuickstartDelegatesToCli(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(logContent)), "\n")
-	expected := []string{
-		fmt.Sprintf("%s:run ./cmd/bitriver doctor", tempDir),
-		fmt.Sprintf("%s:run ./cmd/bitriver env init --env-file %s", tempDir, envPath),
-		fmt.Sprintf("%s:run ./cmd/bitriver ome render --env-file %s", tempDir, envPath),
-		fmt.Sprintf("%s:run ./cmd/bitriver compose --file %s up", tempDir, composePath),
-	}
+        expected := []string{
+                fmt.Sprintf("%s:run ./cmd/bitriver quickstart --env-file %s --compose-file %s", tempDir, envPath, composePath),
+        }
 
 	if !reflect.DeepEqual(lines, expected) {
 		t.Fatalf("unexpected go invocations:\n%s", strings.Join(lines, "\n"))
@@ -100,9 +97,9 @@ func TestQuickstartOmeRenderingRunsByDefault(t *testing.T) {
 		t.Fatalf("read quickstart: %v", err)
 	}
 
-	if !strings.Contains(string(content), "run_cli ome render") {
-		t.Fatalf("render_ome_config invocation not found in quickstart")
-	}
+        if !strings.Contains(string(content), "run_cli quickstart") {
+                t.Fatalf("quickstart invocation not found in quickstart script")
+        }
 }
 
 func TestComposeMountsOmeConfigByDefault(t *testing.T) {

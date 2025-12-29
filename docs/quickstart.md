@@ -23,7 +23,7 @@ go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml
 pwsh -c "go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml"
 ```
 
-Python 3 must be available in `PATH` so the command can render `deploy/ome/Server.generated.xml`; it will exit with setup instructions when Python is missing.
+Python 3 must be available in `PATH` so the command can render `deploy/ome/Server.generated.xml`; it will exit with setup instructions when Python is missing. The quickstart waits for the API `/readyz` probe to succeed before seeding the admin user via the bundled `bootstrap-admin` binary, then prints the email/password from `.env` so you can log in immediately.
 
 Want a shim to handle shell-specific permissions? Use `./scripts/quickstart.sh` from POSIX shells or `./scripts/quickstart.ps1` from PowerShell—they call the same Go quickstart and keep the `COMPOSE_FILE` defaulted to `deploy/docker-compose.yml`.
 

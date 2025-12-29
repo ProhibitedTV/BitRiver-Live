@@ -5,9 +5,10 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/quickstart.sh [-h|--help]
 
-Runs the Go-based BitRiver Live CLI to run doctor, initialize the environment,
-render OME configuration, and start Docker Compose. Override ENV_FILE or
-COMPOSE_FILE to point at custom locations.
+Runs the Go-based BitRiver Live CLI quickstart command to run doctor, initialize
+the environment, render OME configuration, start Docker Compose, wait for the
+API readiness probe, and seed the admin user. Override ENV_FILE or COMPOSE_FILE
+to point at custom locations.
 
 Options:
   -h, --help   Show this help message.
@@ -49,20 +50,7 @@ run_cli() {
   (cd "$CODE_ROOT" && GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run ./cmd/bitriver "$@")
 }
 
-env_args=("--env-file" "$ENV_FILE_PATH")
-compose_args=("up")
-if [[ "$COMPOSE_FILE_PATH" != "$DEFAULT_COMPOSE_FILE" ]]; then
-  compose_args=("--file" "$COMPOSE_FILE_PATH" "up")
-fi
+quickstart_args=("--env-file" "$ENV_FILE_PATH" "--compose-file" "$COMPOSE_FILE_PATH")
 
-echo "Running environment doctor ..."
-run_cli doctor
-
-echo "Initializing environment file via Go CLI ..."
-run_cli env init "${env_args[@]}"
-
-echo "Rendering OME configuration ..."
-run_cli ome render "${env_args[@]}"
-
-echo "Starting Docker Compose ..."
-run_cli compose "${compose_args[@]}"
+echo "Running BitRiver Live quickstart ..."
+run_cli quickstart "${quickstart_args[@]}"
