@@ -21,6 +21,7 @@ import (
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
+	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/storage"
 )
 
@@ -3482,6 +3483,101 @@ func TestAnalyticsOverview(t *testing.T) {
 	}
 	if entry.ChatMessages < 2 {
 		t.Fatalf("expected channel chat messages >= 2, got %d", entry.ChatMessages)
+	}
+}
+
+func TestAnalyticsOverviewLiveStateFallback(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	originalMetrics := metrics.Default()
+	metrics.SetDefault(metrics.New())
+	t.Cleanup(func() { metrics.SetDefault(originalMetrics) })
+
+	admin, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Admin",
+		Email:       "admin@example.com",
+		Roles:       []string{"admin"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser admin: %v", err)
+	}
+	liveOwner, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Live Owner",
+		Email:       "live@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser liveOwner: %v", err)
+	}
+	startingOwner, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Starting Owner",
+		Email:       "starting@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser startingOwner: %v", err)
+	}
+	viewerOne, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Viewer One", Email: "viewer1@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser viewerOne: %v", err)
+	}
+	viewerTwo, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Viewer Two", Email: "viewer2@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser viewerTwo: %v", err)
+	}
+
+	liveChannel, err := store.CreateChannel(liveOwner.ID, "Live Stage", "", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel live: %v", err)
+	}
+	startingChannel, err := store.CreateChannel(startingOwner.ID, "Starting Soon", "", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel starting: %v", err)
+	}
+
+	liveState := "live"
+	if _, err := store.UpdateChannel(liveChannel.ID, storage.ChannelUpdate{LiveState: &liveState}); err != nil {
+		t.Fatalf("UpdateChannel live state: %v", err)
+	}
+	startingState := "starting"
+	if _, err := store.UpdateChannel(startingChannel.ID, storage.ChannelUpdate{LiveState: &startingState}); err != nil {
+		t.Fatalf("UpdateChannel starting state: %v", err)
+	}
+
+	if err := store.FollowChannel(viewerOne.ID, liveChannel.ID); err != nil {
+		t.Fatalf("FollowChannel viewerOne live: %v", err)
+	}
+	if err := store.FollowChannel(viewerTwo.ID, liveChannel.ID); err != nil {
+		t.Fatalf("FollowChannel viewerTwo live: %v", err)
+	}
+	if err := store.FollowChannel(viewerTwo.ID, startingChannel.ID); err != nil {
+		t.Fatalf("FollowChannel viewerTwo starting: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/overview", nil)
+	req = withUser(req, admin)
+	rec := httptest.NewRecorder()
+	handler.AnalyticsOverview(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected analytics status 200, got %d", rec.Code)
+	}
+
+	var payload analyticsOverviewResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode analytics payload: %v", err)
+	}
+	if payload.Summary == nil {
+		t.Fatal("expected analytics summary")
+	}
+	if payload.Summary.StreamsLive != 2 {
+		t.Fatalf("expected streamsLive fallback count 2, got %d", payload.Summary.StreamsLive)
+	}
+	if len(payload.PerChannel) != 2 {
+		t.Fatalf("expected two channel entries, got %d", len(payload.PerChannel))
+	}
+	if payload.PerChannel[0].ChannelID != liveChannel.ID {
+		t.Fatalf("expected live channel first, got %s", payload.PerChannel[0].ChannelID)
+	}
+	if payload.PerChannel[1].ChannelID != startingChannel.ID {
+		t.Fatalf("expected starting channel second, got %s", payload.PerChannel[1].ChannelID)
 	}
 }
 
