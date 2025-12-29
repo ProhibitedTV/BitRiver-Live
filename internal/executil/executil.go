@@ -11,7 +11,6 @@ import (
 
 const stderrTailLimit = 8 * 1024
 
-// CommandError wraps failures from external commands with exit code and stderr tail information.
 type CommandError struct {
 	Command    []string
 	ExitCode   int
@@ -28,64 +27,21 @@ func (e *CommandError) Error() string {
 	return fmt.Sprintf("%s exited with code %d: %s", command, e.ExitCode, tail)
 }
 
-// RunOption configures the behaviour of Run.
-type RunOption func(*runConfig)
-
-type runConfig struct {
-	Stdout        io.Writer
-	Stderr        io.Writer
-	CommandOutput io.Writer
-	PrintCommand  bool
+// Run executes a command with live stdout/stderr streaming.
+func Run(name string, args ...string) error {
+	return runWithWriters(os.Stdout, os.Stderr, name, args...)
 }
 
-// WithStdout overrides the destination for stdout streaming.
-func WithStdout(w io.Writer) RunOption {
-	return func(cfg *runConfig) {
-		cfg.Stdout = w
-	}
-}
-
-// WithStderr overrides the destination for stderr streaming.
-func WithStderr(w io.Writer) RunOption {
-	return func(cfg *runConfig) {
-		cfg.Stderr = w
-	}
-}
-
-// WithCommandOutput overrides where the executed command line is printed.
-func WithCommandOutput(w io.Writer) RunOption {
-	return func(cfg *runConfig) {
-		cfg.CommandOutput = w
-	}
-}
-
-// WithPrintCommand enables printing the command before execution.
-func WithPrintCommand() RunOption {
-	return func(cfg *runConfig) {
-		cfg.PrintCommand = true
-	}
-}
-
-// Run executes an external command with streaming stdout/stderr and rich errors.
-func Run(name string, args []string, opts ...RunOption) error {
-	cfg := runConfig{Stdout: os.Stdout, Stderr: os.Stderr, CommandOutput: os.Stdout}
-	for _, opt := range opts {
-		opt(&cfg)
-	}
-
+func runWithWriters(stdout, stderr io.Writer, name string, args ...string) error {
 	cmd := exec.Command(name, args...)
-	if cfg.PrintCommand {
-		fmt.Fprintf(cfg.CommandOutput, "Executing: %s\n", strings.Join(cmd.Args, " "))
-	}
-
-	cmd.Stdout = cfg.Stdout
+	cmd.Stdout = stdout
 
 	stderrTail := &tailBuffer{limit: stderrTailLimit}
 	switch {
-	case cfg.Stderr == nil:
+	case stderr == nil:
 		cmd.Stderr = stderrTail
 	default:
-		cmd.Stderr = io.MultiWriter(cfg.Stderr, stderrTail)
+		cmd.Stderr = io.MultiWriter(stderr, stderrTail)
 	}
 
 	if err := cmd.Run(); err != nil {
