@@ -247,9 +247,15 @@ services:
       start_period: 20s
 
   ome-config:
-    image: python:3.11-slim
+    build:
+      context: ..
+      dockerfile: deploy/ome-config/Dockerfile
+      args:
+        GOPROXY: ${GOPROXY:-direct}
+        GOSUMDB: ${GOSUMDB:-off}
+    image: bitriver-live/ome-config:local
     working_dir: /workspace
-    command: ["bash", "-lc", "cd /workspace && ./scripts/render-ome-config.sh --check --env-file /workspace/.env || ./scripts/render-ome-config.sh --env-file /workspace/.env"]
+    command: ["ome", "render", "--env-file", "/workspace/.env"]
     volumes:
       - ..:/workspace
     env_file:
