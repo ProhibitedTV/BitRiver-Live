@@ -38,6 +38,15 @@ You can exercise the initial CLI scaffold today with:
 go run ./cmd/bitriver doctor
 ```
 
+## Canonical production deployment path
+
+- Production deployments continue to flow through `deploy/docker-compose.yml` with configuration sourced from the repo-root
+  `.env` (generated from `deploy/.env.example`, validated by `deploy/check-env.sh`, and rendered into
+  `deploy/ome/Server.generated.xml` via `scripts/render-ome-config.sh`).
+- The Go control plane will wrap these same steps instead of introducing a second runbook. Any new subcommands must treat the
+  Compose file and `.env` guardrails as source-of-truth inputs so the production pipeline stays identical on Windows, macOS,
+  and Linux.
+
 ## Migration checklist and milestones
 
 1. **Codify support tiers in docs:** Publish this plan and reference it from the root README to set expectations for Tier 1 vs. Tier 2 platforms.

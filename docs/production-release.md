@@ -4,6 +4,12 @@ This checklist keeps production releases consistent across the API, viewer, and
 supporting services. Follow each section in order before publishing a new tag or
 rolling out the artefacts to your infrastructure.
 
+**Canonical deployment path:** Production rollouts must flow through the
+repository-root `.env`, `deploy/docker-compose.yml`, and their guardrails
+(`deploy/check-env.sh`, `scripts/render-ome-config.sh`). Go CLI shims and CI
+workflows wrap these artefacts rather than inventing alternate deployment
+paths.
+
 Recent schema changes to account for:
 
 - `0006_profile_social_links.sql` adds a `social_links` JSONB column to
