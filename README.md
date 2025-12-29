@@ -85,26 +85,24 @@ The CLI checks Docker/Compose, generates `.env` from `deploy/.env.example` with 
 
 ### Step 4 – Start, stop, and troubleshoot
 
-Run these commands from the repository root (where `.env` lives). Set the compose path once so Docker finds `deploy/docker-comp
-ose.yml`, then use the usual subcommands:
+Run these commands from the repository root (where `.env` lives). The Go CLI wraps Docker Compose so you do not need to export `COMPOSE_FILE`:
 
 ```bash
-export COMPOSE_FILE=deploy/docker-compose.yml
-
 # Show container status
+go run ./cmd/bitriver compose up --file deploy/docker-compose.yml
 docker compose ps
 
 # Follow logs for everything
 docker compose logs -f
 
 # Stop the stack but keep data
-docker compose down
+go run ./cmd/bitriver compose down --file deploy/docker-compose.yml
 
 # Restart after editing .env
-docker compose up -d
+go run ./cmd/bitriver compose up --file deploy/docker-compose.yml
 
 # Refresh the OME config when .env changes
-./scripts/render-ome-config.sh
+go run ./cmd/bitriver ome render --force --env-file ./.env
 ```
 
 If ports are already in use, edit the matching values in `.env` (for example `BITRIVER_LIVE_PORT=9090`), save the file, and rerun
