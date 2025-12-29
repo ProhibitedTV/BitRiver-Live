@@ -1,5 +1,12 @@
 # BitRiver Live Quickstart
 
+## TL;DR
+
+| Platform | Go CLI command | Shim alternative |
+| --- | --- | --- |
+| macOS, Linux, or Windows via WSL/bash | `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` | `./scripts/quickstart.sh` |
+| Windows PowerShell | `pwsh -c "go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml"` | `./scripts/quickstart.ps1` |
+
 Use the Go-based quickstart command to provision the full stack with Docker in a few minutes. It performs the same checks and templating as the legacy helpers while keeping every platform on one CLI. The shell (`scripts/quickstart.sh`) and PowerShell (`scripts/quickstart.ps1`) shims simply forward to the Go binary when you cannot run `go` directly.
 
 On the first run Docker builds local images for the Go API, the Next.js viewer app, the SRS controller, and the bundled FFmpeg job controller (located in `cmd/transcoder/`), so you can launch the stack without signing in to any container registry.
