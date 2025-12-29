@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -109,6 +110,43 @@ func TestInitEnvFilePrefersDeployTemplate(t *testing.T) {
 
 	if !strings.Contains(output.String(), "Created .env from .env.example") {
 		t.Fatalf("expected message to mention deploy template, got: %q", output.String())
+	}
+}
+
+func TestInitEnvFileFallsBackToOtherTemplates(t *testing.T) {
+	tempDir := t.TempDir()
+
+	otherTemplateDir := filepath.Join(tempDir, "configs")
+	if err := os.MkdirAll(otherTemplateDir, 0o755); err != nil {
+		t.Fatalf("failed to create alternate template dir: %v", err)
+	}
+
+	otherTemplate := filepath.Join(otherTemplateDir, ".env.example")
+	if err := os.WriteFile(otherTemplate, []byte("FROM_OTHER=1\n"), 0o644); err != nil {
+		t.Fatalf("failed to write alternate template: %v", err)
+	}
+
+	rootEnv := filepath.Join(tempDir, ".env")
+	if err := os.WriteFile(rootEnv, []byte("FROM_ROOT=1\n"), 0o644); err != nil {
+		t.Fatalf("failed to write root env template: %v", err)
+	}
+
+	envPath := filepath.Join(tempDir, "generated.env")
+	if err := initEnvFile(envPath, tempDir, io.Discard); err != nil {
+		t.Fatalf("initEnvFile returned error: %v", err)
+	}
+
+	values, err := envutil.LoadFile(envPath, nil)
+	if err != nil {
+		t.Fatalf("failed to parse generated env: %v", err)
+	}
+
+	if values["FROM_OTHER"] != "1" {
+		t.Fatalf("expected alternate template content, got %v", values["FROM_OTHER"])
+	}
+
+	if _, ok := values["FROM_ROOT"]; ok {
+		t.Fatalf("expected alternate template to take precedence over root env")
 	}
 }
 
