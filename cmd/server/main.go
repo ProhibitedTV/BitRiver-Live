@@ -218,9 +218,8 @@ func main() {
 		ContentTypeOptions:    firstNonEmpty(*securityContentTypeOptions, os.Getenv("BITRIVER_LIVE_SECURITY_CONTENT_TYPE_OPTIONS")),
 	}
 
-	ingestConfig, err := ingest.LoadConfigFromEnv()
-	if err != nil {
-		logger.Error("failed to load ingest configuration", "error", err)
+	ingestConfig, ingestErr := ingest.LoadConfigFromEnv()
+	if fatal := logIngestConfigResult(logger, ingestErr); fatal {
 		os.Exit(1)
 	}
 
@@ -231,7 +230,7 @@ func main() {
 	if ingestConfig.RetryInterval > 0 || ingestConfig.MaxBootAttempts > 0 {
 		options = append(options, storage.WithIngestRetries(ingestConfig.MaxBootAttempts, ingestConfig.RetryInterval))
 	}
-	if ingestConfig.Enabled() {
+	if ingestErr == nil && ingestConfig.Enabled() {
 		controller, err := ingestConfig.NewHTTPController()
 		if err != nil {
 			logger.Error("failed to initialise ingest controller", "error", err)
@@ -1015,6 +1014,26 @@ func ladderProfileNames(profiles []ingest.Rendition) []string {
 		return []string{"1080p", "720p", "480p"}
 	}
 	return names
+}
+
+func logIngestConfigResult(logger *slog.Logger, loadErr error) bool {
+	if loadErr == nil {
+		return false
+	}
+
+	if errors.Is(loadErr, ingest.ErrConfigDisabled) {
+		logger.Warn("ingest controller disabled; set BITRIVER_SRS_API, BITRIVER_OME_API, and BITRIVER_TRANSCODER_API to enable")
+		return false
+	}
+
+	var missing ingest.MissingConfigError
+	if errors.As(loadErr, &missing) {
+		logger.Error("ingest configuration incomplete", "missing_env", missing.Missing)
+		return true
+	}
+
+	logger.Error("failed to load ingest configuration", "error", loadErr)
+	return true
 }
 
 func resolveDuration(flagValue time.Duration, envKey string, fallback time.Duration) time.Duration {

@@ -11,6 +11,18 @@ import (
 	"time"
 )
 
+var ErrConfigDisabled = errors.New("ingest disabled: no configuration provided")
+
+// MissingConfigError reports which environment variables are required to enable
+// the ingest controller.
+type MissingConfigError struct {
+	Missing []string
+}
+
+func (e MissingConfigError) Error() string {
+	return fmt.Sprintf("missing ingest configuration: %s", strings.Join(e.Missing, ", "))
+}
+
 // Config stores connectivity information for the ingest controller.
 type Config struct {
 	SRSBaseURL        string
@@ -117,6 +129,9 @@ func LoadConfigFromEnv() (Config, error) {
 	}
 
 	if err := cfg.Validate(); err != nil {
+		if errors.Is(err, ErrConfigDisabled) {
+			return cfg, ErrConfigDisabled
+		}
 		return Config{}, err
 	}
 
@@ -150,22 +165,16 @@ func parseLadder(spec string) ([]Rendition, error) {
 // Enabled reports whether enough configuration has been provided to talk to
 // external ingest services.
 func (c Config) Enabled() bool {
-	if !c.hasAnyConfig() {
-		return false
-	}
-	if len(c.missingRequiredFields()) > 0 {
-		return false
-	}
-	return len(c.LadderProfiles) > 0
+	return c.Validate() == nil
 }
 
 // Validate ensures the configuration is usable.
 func (c Config) Validate() error {
 	if !c.hasAnyConfig() {
-		return nil
+		return ErrConfigDisabled
 	}
 	if missing := c.missingRequiredFields(); len(missing) > 0 {
-		return fmt.Errorf("missing ingest configuration: %s", strings.Join(missing, ", "))
+		return MissingConfigError{Missing: missing}
 	}
 	if len(c.LadderProfiles) == 0 {
 		return errors.New("no rendition profiles configured")

@@ -1,6 +1,8 @@
 package ingest
 
 import (
+	"errors"
+	"slices"
 	"testing"
 	"time"
 )
@@ -15,11 +17,14 @@ func TestConfigDisabledWhenEmpty(t *testing.T) {
 	t.Setenv("BITRIVER_TRANSCODER_TOKEN", "")
 
 	cfg, err := LoadConfigFromEnv()
-	if err != nil {
-		t.Fatalf("LoadConfigFromEnv returned error: %v", err)
+	if !errors.Is(err, ErrConfigDisabled) {
+		t.Fatalf("expected disabled error, got %v", err)
 	}
 	if cfg.Enabled() {
 		t.Fatal("expected ingest to remain disabled with empty configuration")
+	}
+	if !errors.Is(cfg.Validate(), ErrConfigDisabled) {
+		t.Fatalf("expected validate to report disabled config")
 	}
 }
 
@@ -32,8 +37,16 @@ func TestConfigPartialFailsValidation(t *testing.T) {
 	t.Setenv("BITRIVER_TRANSCODER_API", "")
 	t.Setenv("BITRIVER_TRANSCODER_TOKEN", "")
 
-	if _, err := LoadConfigFromEnv(); err == nil {
-		t.Fatal("expected validation error for partial ingest configuration")
+	cfg, err := LoadConfigFromEnv()
+	var missing MissingConfigError
+	if err == nil || !errors.As(err, &missing) {
+		t.Fatalf("expected missing config error, got %v", err)
+	}
+	if got, want := missing.Missing, []string{"BITRIVER_SRS_TOKEN", "BITRIVER_OME_API", "BITRIVER_OME_USERNAME", "BITRIVER_OME_PASSWORD", "BITRIVER_TRANSCODER_API", "BITRIVER_TRANSCODER_TOKEN"}; !slices.Equal(got, want) {
+		t.Fatalf("unexpected missing fields: %v", got)
+	}
+	if cfg.Enabled() {
+		t.Fatal("expected partial configuration to leave ingest disabled")
 	}
 }
 
