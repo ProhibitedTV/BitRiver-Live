@@ -191,6 +191,11 @@ func main() {
 		logger.Error("invalid server mode", "error", err)
 		os.Exit(2)
 	}
+	loginLimitValue, err := resolveLoginLimit(serverMode, *loginLimit, "BITRIVER_LIVE_RATE_LOGIN_LIMIT")
+	if err != nil {
+		logger.Error(err.Error())
+		os.Exit(1)
+	}
 	sessionCookieCrossSiteValue := resolveBool(*sessionCookieCrossSite, "BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE")
 	sessionCookieSecureMode := resolveSessionCookieSecureMode(serverMode)
 	listenAddr := resolveListenAddr(*addr, serverMode, os.Getenv("BITRIVER_LIVE_ADDR"))
@@ -435,19 +440,20 @@ func main() {
 	go storage.NewChatWorker(store, queue, logging.WithComponent(logger, "chat-worker")).Run(workerCtx)
 
 	rateCfg := server.RateLimitConfig{
-		GlobalRPS:             resolveFloat(*globalRPS, "BITRIVER_LIVE_RATE_GLOBAL_RPS"),
-		GlobalBurst:           resolveInt(*globalBurst, "BITRIVER_LIVE_RATE_GLOBAL_BURST"),
-		LoginLimit:            resolveInt(*loginLimit, "BITRIVER_LIVE_RATE_LOGIN_LIMIT"),
-		LoginWindow:           resolveDuration(*loginWindow, "BITRIVER_LIVE_RATE_LOGIN_WINDOW", time.Minute),
-		TrustForwardedHeaders: resolveBool(*trustForwarded, "BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS"),
-		TrustedProxies:        splitAndTrim(firstNonEmpty(*trustedProxies, os.Getenv("BITRIVER_LIVE_RATE_TRUSTED_PROXIES"))),
-		RedisAddr:             firstNonEmpty(*redisAddr, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDR")),
-		RedisAddrs:            splitAndTrim(firstNonEmpty(*redisAddrs, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDRS"))),
-		RedisUsername:         firstNonEmpty(*redisUsername, os.Getenv("BITRIVER_LIVE_RATE_REDIS_USERNAME")),
-		RedisPassword:         firstNonEmpty(*redisPassword, os.Getenv("BITRIVER_LIVE_RATE_REDIS_PASSWORD")),
-		RedisMasterName:       firstNonEmpty(*redisMasterName, os.Getenv("BITRIVER_LIVE_RATE_REDIS_MASTER_NAME")),
-		RedisTimeout:          resolveDuration(*redisTimeout, "BITRIVER_LIVE_RATE_REDIS_TIMEOUT", 2*time.Second),
-		RedisPoolSize:         resolveInt(*redisPoolSize, "BITRIVER_LIVE_RATE_REDIS_POOL_SIZE"),
+		GlobalRPS:              resolveFloat(*globalRPS, "BITRIVER_LIVE_RATE_GLOBAL_RPS"),
+		GlobalBurst:            resolveInt(*globalBurst, "BITRIVER_LIVE_RATE_GLOBAL_BURST"),
+		LoginLimit:             loginLimitValue,
+		LoginWindow:            resolveDuration(*loginWindow, "BITRIVER_LIVE_RATE_LOGIN_WINDOW", time.Minute),
+		RequireLoginProtection: requiresLoginProtection(serverMode),
+		TrustForwardedHeaders:  resolveBool(*trustForwarded, "BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS"),
+		TrustedProxies:         splitAndTrim(firstNonEmpty(*trustedProxies, os.Getenv("BITRIVER_LIVE_RATE_TRUSTED_PROXIES"))),
+		RedisAddr:              firstNonEmpty(*redisAddr, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDR")),
+		RedisAddrs:             splitAndTrim(firstNonEmpty(*redisAddrs, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDRS"))),
+		RedisUsername:          firstNonEmpty(*redisUsername, os.Getenv("BITRIVER_LIVE_RATE_REDIS_USERNAME")),
+		RedisPassword:          firstNonEmpty(*redisPassword, os.Getenv("BITRIVER_LIVE_RATE_REDIS_PASSWORD")),
+		RedisMasterName:        firstNonEmpty(*redisMasterName, os.Getenv("BITRIVER_LIVE_RATE_REDIS_MASTER_NAME")),
+		RedisTimeout:           resolveDuration(*redisTimeout, "BITRIVER_LIVE_RATE_REDIS_TIMEOUT", 2*time.Second),
+		RedisPoolSize:          resolveInt(*redisPoolSize, "BITRIVER_LIVE_RATE_REDIS_POOL_SIZE"),
 		RedisTLS: server.RedisTLSConfig{
 			CAFile:             firstNonEmpty(*redisTLSCA, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_CA")),
 			CertFile:           firstNonEmpty(*redisTLSCert, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_CERT")),
@@ -871,7 +877,11 @@ func resolveSessionCookieSecureMode(mode string) api.SessionCookieSecureMode {
 }
 
 func requiresMetricsProtection(mode string) bool {
-	return strings.EqualFold(strings.TrimSpace(mode), "production")
+	return isProductionMode(mode)
+}
+
+func requiresLoginProtection(mode string) bool {
+	return isProductionMode(mode)
 }
 
 func validateMetricsProtection(mode string, cfg server.MetricsAccessConfig) error {
@@ -883,10 +893,14 @@ func validateMetricsProtection(mode string, cfg server.MetricsAccessConfig) erro
 }
 
 func defaultListenForMode(mode string) string {
-	if mode == "production" {
+	if isProductionMode(mode) {
 		return ":80"
 	}
 	return ":8080"
+}
+
+func isProductionMode(mode string) bool {
+	return strings.EqualFold(strings.TrimSpace(mode), "production")
 }
 
 func resolveStorageDriver(flagValue, envValue, postgresDSN string) (string, bool, error) {
@@ -989,6 +1003,22 @@ func resolveFloat(flagValue float64, envKey string) float64 {
 		}
 	}
 	return 0
+}
+
+const defaultLoginLimitNonProduction = 10
+
+func resolveLoginLimit(mode string, flagValue int, envKey string) (int, error) {
+	limit := resolveInt(flagValue, envKey)
+	if requiresLoginProtection(mode) {
+		if limit <= 0 {
+			return 0, fmt.Errorf("production mode requires non-zero login throttling; set --rate-login-limit or BITRIVER_LIVE_RATE_LOGIN_LIMIT")
+		}
+		return limit, nil
+	}
+	if limit <= 0 {
+		return defaultLoginLimitNonProduction, nil
+	}
+	return limit, nil
 }
 
 func resolveInt(flagValue int, envKey string) int {

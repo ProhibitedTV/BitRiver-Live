@@ -2,26 +2,28 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 )
 
 type RateLimitConfig struct {
-	GlobalRPS             float64
-	GlobalBurst           int
-	LoginLimit            int
-	LoginWindow           time.Duration
-	TrustForwardedHeaders bool
-	TrustedProxies        []string
-	RedisAddr             string
-	RedisAddrs            []string
-	RedisUsername         string
-	RedisPassword         string
-	RedisMasterName       string
-	RedisTimeout          time.Duration
-	RedisPoolSize         int
-	RedisTLS              RedisTLSConfig
+	GlobalRPS              float64
+	GlobalBurst            int
+	LoginLimit             int
+	LoginWindow            time.Duration
+	RequireLoginProtection bool
+	TrustForwardedHeaders  bool
+	TrustedProxies         []string
+	RedisAddr              string
+	RedisAddrs             []string
+	RedisUsername          string
+	RedisPassword          string
+	RedisMasterName        string
+	RedisTimeout           time.Duration
+	RedisPoolSize          int
+	RedisTLS               RedisTLSConfig
 }
 
 type rateLimiter struct {
@@ -43,6 +45,10 @@ type tokenStore interface {
 }
 
 func newRateLimiter(cfg RateLimitConfig) (*rateLimiter, error) {
+	if cfg.RequireLoginProtection && cfg.LoginLimit <= 0 {
+		return nil, errors.New("login rate limiting required in production; set BITRIVER_LIVE_RATE_LOGIN_LIMIT or --rate-login-limit")
+	}
+
 	rl := &rateLimiter{
 		loginLimit:   cfg.LoginLimit,
 		loginWindow:  cfg.LoginWindow,
