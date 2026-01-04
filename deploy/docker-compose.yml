@@ -255,7 +255,7 @@ services:
         GOSUMDB: ${GOSUMDB:-off}
     image: bitriver-live/ome-config:local
     working_dir: /workspace
-    command: ["ome", "render", "--env-file", "/workspace/.env"]
+    command: ["ome", "render", "--env-file", "/workspace/.env", "--force"]
     volumes:
       - ..:/workspace
     env_file:

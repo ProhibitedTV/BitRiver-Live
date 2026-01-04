@@ -157,6 +157,94 @@ func TestRenderOMEConfigFromEnv(t *testing.T) {
 	}
 }
 
+func TestRenderOMEConfigRejectsTestDefaults(t *testing.T) {
+	workspace, envPath := setupOMERenderWorkspace(t)
+
+	env := strings.Join([]string{
+		"BITRIVER_OME_BIND=10.1.2.3",
+		"BITRIVER_OME_SERVER_PORT=9999",
+		"BITRIVER_OME_SERVER_TLS_PORT=9443",
+		"BITRIVER_OME_USERNAME=ome-test-user",
+		"BITRIVER_OME_PASSWORD=ome-test-pass",
+		"BITRIVER_OME_API_TOKEN=ome-test-access-token",
+		"BITRIVER_OME_ACCESS_TOKEN=ome-test-access-token",
+	}, "\n") + "\n"
+
+	if err := os.WriteFile(envPath, []byte(env), 0o600); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	err := renderOMEFromEnv(envPath, true, false, true)
+	if err == nil {
+		t.Fatalf("expected ome-test defaults to be rejected")
+	}
+	if !strings.Contains(err.Error(), "ome-test") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(workspace, "deploy", "ome", "Server.generated.xml")); err == nil {
+		t.Fatalf("generated config should not be written when ome-test defaults are present")
+	}
+}
+
+func TestRenderOMEConfigFromEnvWritesSecrets(t *testing.T) {
+	workspace, envPath := setupOMERenderWorkspace(t)
+
+	env := strings.Join([]string{
+		"BITRIVER_OME_BIND=10.9.0.1",
+		"BITRIVER_OME_SERVER_PORT=9999",
+		"BITRIVER_OME_SERVER_TLS_PORT=9443",
+		"BITRIVER_OME_USERNAME=operator-user",
+		"BITRIVER_OME_PASSWORD=operator-pass",
+		"BITRIVER_OME_API_TOKEN=operator-api-token",
+		"BITRIVER_OME_ACCESS_TOKEN=operator-access-token",
+		"BITRIVER_OME_IP=10.9.0.2",
+		"BITRIVER_OME_ICE_PORT_RANGE=20000-20009",
+		"BITRIVER_OME_TCP_RELAY=25000",
+		"BITRIVER_OME_IMAGE_TAG=0.17.1",
+	}, "\n") + "\n"
+
+	if err := os.WriteFile(envPath, []byte(env), 0o600); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	if err := renderOMEFromEnv(envPath, true, false, true); err != nil {
+		t.Fatalf("render config: %v", err)
+	}
+
+	data := readFile(t, filepath.Join(workspace, "deploy", "ome", "Server.generated.xml"))
+	for _, expected := range []string{"operator-user", "operator-pass", "operator-access-token", "<!-- Rendered for BITRIVER_OME_IMAGE_TAG=0.17.1 -->"} {
+		if !strings.Contains(data, expected) {
+			t.Fatalf("expected %q in generated config, got %q", expected, data)
+		}
+	}
+}
+
+func setupOMERenderWorkspace(t *testing.T) (string, string) {
+	t.Helper()
+
+	templateRoot := repoRoot()
+	previousRoot := cachedRepoRoot
+
+	workspace := t.TempDir()
+	omeDir := filepath.Join(workspace, "deploy", "ome")
+	if err := os.MkdirAll(omeDir, 0o755); err != nil {
+		t.Fatalf("mkdir ome dir: %v", err)
+	}
+
+	template := readFile(t, filepath.Join(templateRoot, "deploy", "ome", "Server.xml"))
+	if err := os.WriteFile(filepath.Join(omeDir, "Server.xml"), []byte(template), 0o644); err != nil {
+		t.Fatalf("write template: %v", err)
+	}
+
+	cachedRepoRoot = workspace
+	t.Cleanup(func() {
+		cachedRepoRoot = previousRoot
+	})
+
+	return workspace, filepath.Join(workspace, ".env")
+}
+
 func readFile(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)

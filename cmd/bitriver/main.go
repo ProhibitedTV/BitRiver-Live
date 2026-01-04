@@ -620,8 +620,8 @@ func renderOMEFromEnv(envPath string, force, checkOnly, quiet bool) error {
 	outputPath := filepath.Join(repoRoot(), "deploy", "ome", "Server.generated.xml")
 
 	if checkOnly {
-		if _, err := os.Stat(outputPath); err != nil {
-			return fmt.Errorf("OME config missing at %s: %w", outputPath, err)
+		if err := validateOMEGeneratedConfig(outputPath); err != nil {
+			return err
 		}
 		if !quiet {
 			fmt.Fprintf(os.Stdout, "OME config found at %s.\n", outputPath)
@@ -641,6 +641,9 @@ func renderOMEFromEnv(envPath string, force, checkOnly, quiet bool) error {
 
 	if !force {
 		if _, err := os.Stat(outputPath); err == nil {
+			if err := validateOMEGeneratedConfig(outputPath); err != nil {
+				return fmt.Errorf("invalid OME config at %s (re-render with --force): %w", outputPath, err)
+			}
 			if !quiet {
 				fmt.Fprintf(os.Stdout, "OME config already exists at %s (use --force to regenerate).\n", outputPath)
 			}
@@ -660,6 +663,10 @@ func renderOMEFromEnv(envPath string, force, checkOnly, quiet bool) error {
 
 	if err := renderOMEConfig(cfg); err != nil {
 		return fmt.Errorf("render deploy/ome/Server.generated.xml: %w", err)
+	}
+
+	if err := validateOMEGeneratedConfig(outputPath); err != nil {
+		return fmt.Errorf("validate generated OME config: %w", err)
 	}
 
 	if !quiet {
@@ -683,6 +690,14 @@ type omeRenderConfig struct {
 	ImageTag     string
 	TCPRelay     string
 	ICECandidate string
+}
+
+var omeTestDefaults = map[string]string{
+	"BITRIVER_OME_USERNAME":  "ome-test-user",
+	"BITRIVER_OME_PASSWORD":  "ome-test-pass",
+	"BITRIVER_OME_API_TOKEN": "ome-test-access-token",
+	// BITRIVER_OME_ACCESS_TOKEN falls back to BITRIVER_OME_API_TOKEN when unset.
+	"BITRIVER_OME_ACCESS_TOKEN": "ome-test-access-token",
 }
 
 func buildOMERenderConfig(values map[string]string, templatePath, outputPath string) (omeRenderConfig, error) {
@@ -727,6 +742,19 @@ func buildOMERenderConfig(values map[string]string, templatePath, outputPath str
 	}
 	if len(missing) > 0 {
 		return omeRenderConfig{}, fmt.Errorf("missing required OME variables: %s", strings.Join(missing, ", "))
+	}
+
+	for key, forbidden := range omeTestDefaults {
+		switch key {
+		case "BITRIVER_OME_ACCESS_TOKEN":
+			if strings.TrimSpace(accessToken) == forbidden {
+				return omeRenderConfig{}, fmt.Errorf("%s is set to ome-test-* default; provide deployment credentials before rendering", key)
+			}
+		default:
+			if strings.TrimSpace(values[key]) == forbidden {
+				return omeRenderConfig{}, fmt.Errorf("%s is set to ome-test-* default; provide deployment credentials before rendering", key)
+			}
+		}
 	}
 
 	return omeRenderConfig{
@@ -797,6 +825,22 @@ func renderOMEConfig(cfg omeRenderConfig) error {
 
 	if err := os.WriteFile(cfg.OutputPath, []byte(text), 0o644); err != nil {
 		return fmt.Errorf("write generated config: %w", err)
+	}
+
+	return nil
+}
+
+func validateOMEGeneratedConfig(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("OME config missing at %s: %w", path, err)
+	}
+
+	contents := string(data)
+	for key, forbidden := range omeTestDefaults {
+		if strings.Contains(contents, forbidden) {
+			return fmt.Errorf("%s still set to ome-test-* default in %s", key, path)
+		}
 	}
 
 	return nil
