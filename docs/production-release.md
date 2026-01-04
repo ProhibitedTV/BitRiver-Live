@@ -8,7 +8,9 @@ rolling out the artefacts to your infrastructure.
 repository-root `.env`, `deploy/docker-compose.yml`, and their guardrails
 (`deploy/check-env.sh`, `scripts/render-ome-config.sh`). Go CLI shims and CI
 workflows wrap these artefacts rather than inventing alternate deployment
-paths.
+paths. Set `BITRIVER_LIVE_MODE=production` in the release `.env` before
+starting the API; the binary now fails fast when the mode is missing so
+production-only protections (including `/metrics` guardrails) stay enabled.
 
 Recent schema changes to account for:
 

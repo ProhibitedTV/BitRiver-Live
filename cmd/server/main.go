@@ -66,7 +66,7 @@ func (kv *keyValueFlag) Set(value string) error {
 
 func main() {
 	addr := flag.String("addr", "", "HTTP listen address")
-	mode := flag.String("mode", "", "server runtime mode (development or production)")
+	mode := flag.String("mode", "", "server runtime mode (development or production, required; production enforces /metrics protection)")
 	allowSelfSignup := flag.Bool("allow-self-signup", false, "allow unauthenticated viewers to register accounts")
 	sessionCookieCrossSite := flag.Bool("session-cookie-cross-site", false, "emit SameSite=None; Secure session cookies for cross-site viewer deployments")
 	adminCORSOrigins := flag.String("admin-cors-origins", "", "comma separated origins allowed to access the control centre APIs")
@@ -100,8 +100,8 @@ func main() {
 	tlsCert := flag.String("tls-cert", "", "path to TLS certificate file")
 	tlsKey := flag.String("tls-key", "", "path to TLS private key file")
 	logLevel := flag.String("log-level", "info", "log level (debug, info, warn, error)")
-	metricsToken := flag.String("metrics-token", "", "token required to scrape /metrics (Authorization bearer or X-Metrics-Token)")
-	metricsAllowNetworks := flag.String("metrics-allow-networks", "", "comma separated CIDR blocks or IPs allowed to scrape /metrics")
+	metricsToken := flag.String("metrics-token", "", "token required to scrape /metrics (Authorization bearer or X-Metrics-Token); production requires this or --metrics-allow-networks/BITRIVER_LIVE_METRICS_ALLOW_NETWORKS")
+	metricsAllowNetworks := flag.String("metrics-allow-networks", "", "comma separated CIDR blocks or IPs allowed to scrape /metrics; production requires this or --metrics-token/BITRIVER_LIVE_METRICS_TOKEN")
 
 	// Rate limiting flags (env: BITRIVER_LIVE_RATE_*).
 	globalRPS := flag.Float64("rate-global-rps", 0, "global request rate limit in requests per second")
@@ -185,7 +185,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	serverMode := modeValue(*mode, os.Getenv("BITRIVER_LIVE_MODE"))
+	serverMode, err := resolveMode(*mode, os.Getenv("BITRIVER_LIVE_MODE"))
+	if err != nil {
+		flag.Usage()
+		logger.Error("invalid server mode", "error", err)
+		os.Exit(2)
+	}
 	sessionCookieCrossSiteValue := resolveBool(*sessionCookieCrossSite, "BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE")
 	sessionCookieSecureMode := resolveSessionCookieSecureMode(serverMode)
 	listenAddr := resolveListenAddr(*addr, serverMode, os.Getenv("BITRIVER_LIVE_ADDR"))
@@ -458,9 +463,9 @@ func main() {
 		AllowedNetworks: splitAndTrim(firstNonEmpty(*metricsAllowNetworks, os.Getenv("BITRIVER_LIVE_METRICS_ALLOW_NETWORKS"))),
 	}
 
-	requireMetricsProtection := strings.EqualFold(serverMode, "production")
-	if requireMetricsProtection && !server.MetricsAccessConfigured(metricsAccessCfg) {
-		logger.Error("production mode requires protecting /metrics with BITRIVER_LIVE_METRICS_TOKEN or BITRIVER_LIVE_METRICS_ALLOW_NETWORKS")
+	requireMetricsProtection := requiresMetricsProtection(serverMode)
+	if err := validateMetricsProtection(serverMode, metricsAccessCfg); err != nil {
+		logger.Error(err.Error())
 		os.Exit(1)
 	}
 
@@ -843,15 +848,20 @@ func resolveListenAddr(flagValue, mode, envAddr string) string {
 	return listenAddr
 }
 
-func modeValue(flagMode, envMode string) string {
+func resolveMode(flagMode, envMode string) (string, error) {
 	mode := strings.ToLower(strings.TrimSpace(flagMode))
 	if mode == "" {
 		mode = strings.ToLower(strings.TrimSpace(envMode))
 	}
-	if mode == "" {
-		mode = "development"
+
+	switch mode {
+	case "development", "production":
+		return mode, nil
+	case "":
+		return "", errors.New("server mode is required; set --mode or BITRIVER_LIVE_MODE to development or production")
+	default:
+		return "", fmt.Errorf("invalid mode %q: must be development or production", mode)
 	}
-	return mode
 }
 
 func resolveSessionCookieSecureMode(mode string) api.SessionCookieSecureMode {
@@ -859,6 +869,18 @@ func resolveSessionCookieSecureMode(mode string) api.SessionCookieSecureMode {
 		return api.SessionCookieSecureAlways
 	}
 	return api.SessionCookieSecureAuto
+}
+
+func requiresMetricsProtection(mode string) bool {
+	return strings.EqualFold(strings.TrimSpace(mode), "production")
+}
+
+func validateMetricsProtection(mode string, cfg server.MetricsAccessConfig) error {
+	if requiresMetricsProtection(mode) && !server.MetricsAccessConfigured(cfg) {
+		return errors.New("production mode requires protecting /metrics with BITRIVER_LIVE_METRICS_TOKEN or BITRIVER_LIVE_METRICS_ALLOW_NETWORKS")
+	}
+
+	return nil
 }
 
 func defaultListenForMode(mode string) string {
