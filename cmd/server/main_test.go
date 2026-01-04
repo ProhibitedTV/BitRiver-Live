@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"log/slog"
 	"strings"
 	"testing"
@@ -19,6 +20,33 @@ func TestConfigureChatQueueMemory(t *testing.T) {
 	}
 	if queue == nil {
 		t.Fatalf("configureChatQueue returned nil queue")
+	}
+}
+
+func TestLogIngestConfigResultDisabled(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	if fatal := logIngestConfigResult(logger, ingest.ErrConfigDisabled); fatal {
+		t.Fatal("expected disabled ingest to be non-fatal")
+	}
+
+	if got := buf.String(); !strings.Contains(got, "disabled") || !strings.Contains(got, "BITRIVER_SRS_API") {
+		t.Fatalf("unexpected log output: %s", got)
+	}
+}
+
+func TestLogIngestConfigResultMissingFields(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	err := ingest.MissingConfigError{Missing: []string{"BITRIVER_SRS_API", "BITRIVER_SRS_TOKEN"}}
+
+	if fatal := logIngestConfigResult(logger, err); !fatal {
+		t.Fatal("expected missing ingest config to be fatal")
+	}
+
+	if got := buf.String(); !strings.Contains(got, "missing_env") || !strings.Contains(got, "BITRIVER_SRS_TOKEN") {
+		t.Fatalf("unexpected log output: %s", got)
 	}
 }
 

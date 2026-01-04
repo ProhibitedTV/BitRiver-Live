@@ -319,7 +319,7 @@ BitRiver Live can orchestrate end-to-end ingest and transcode jobs by talking to
 
 The SRS controller proxy accepts two optional environment variables of its own: `SRS_CONTROLLER_BIND` to override the listen address (default `:1985`) and `SRS_CONTROLLER_UPSTREAM` to point at the actual SRS raw API endpoint (default `http://srs:1985/api/`).
 
-To keep bootstrapping predictable the server now fails fast if any of the required endpoints or credentials above are missing. A complete setup requires:
+Leaving all of the ingest variables empty disables the controller and produces a startup warning so deployments without ingest can proceed. Supplying only part of the configuration is treated as an error: the API process will exit and log the specific `BITRIVER_*` variables still required. A complete setup requires:
 
 - An **SRS API proxy** (the `srs-controller` service) reachable on port `1985` (or your custom management port). The proxy validates `BITRIVER_SRS_TOKEN` on every request and forwards authenticated calls to the upstream SRS raw API.
 - An **SRS** instance the proxy can reach on port `1985` (or your custom management port) with `raw_api` enabled.
