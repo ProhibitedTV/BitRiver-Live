@@ -114,11 +114,14 @@ build out:
 
 1. Copy the updated `deploy/.env.example` into the release directory or target
    host and fill in the values for Postgres, Redis, SRS, OvenMediaEngine, and
-   transcoder credentials. Ensure `NEXT_PUBLIC_API_BASE_URL` and
-   `NEXT_PUBLIC_VIEWER_URL` point at the public API and viewer endpoints users
-   will reach (not localhost or example.com placeholders).
+   transcoder credentials. Run `cmd/bitriver env init` when you need the tool to
+   regenerate fresh secrets so none of the sample credentials from
+   `deploy/.env.example` survive in production. Ensure `NEXT_PUBLIC_API_BASE_URL`
+   and `NEXT_PUBLIC_VIEWER_URL` point at the public API and viewer endpoints
+   users will reach (not localhost or example.com placeholders).
 2. Run the guard script to confirm defaults are gone and service URLs match the
-   target environment:
+   target environment. The validator now fails when any sample credential from
+   `deploy/.env.example` remains in the release `.env`:
    ```bash
    deploy/check-env.sh
    ```
