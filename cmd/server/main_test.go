@@ -405,6 +405,62 @@ func TestStartupSummaryMemoryDefaults(t *testing.T) {
 	}
 }
 
+func TestResolveLoginLimit(t *testing.T) {
+        cases := []struct {
+                name    string
+                mode    string
+                flag    int
+                env     string
+		want    int
+		wantErr bool
+	}{
+		{
+			name:    "ProductionRequiresExplicitLimit",
+			mode:    "production",
+			flag:    0,
+			wantErr: true,
+		},
+		{
+			name: "ProductionUsesFlag",
+			mode: "production",
+			flag: 7,
+			want: 7,
+		},
+		{
+			name: "ProductionUsesEnv",
+			mode: "production",
+			env:  "12",
+			want: 12,
+		},
+		{
+			name: "DevelopmentFallsBackToDefault",
+			mode: "development",
+			want: defaultLoginLimitNonProduction,
+		},
+	}
+
+        for _, tc := range cases {
+                tc := tc
+                t.Run(tc.name, func(t *testing.T) {
+                        t.Setenv("BITRIVER_LIVE_RATE_LOGIN_LIMIT", tc.env)
+
+                        got, err := resolveLoginLimit(tc.mode, tc.flag, "BITRIVER_LIVE_RATE_LOGIN_LIMIT")
+                        if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("expected %d, got %d", tc.want, got)
+			}
+		})
+	}
+}
+
 func summaryArgsToMap(t *testing.T, args []any) map[string]any {
 	t.Helper()
 	if len(args)%2 != 0 {

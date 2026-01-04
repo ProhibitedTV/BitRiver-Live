@@ -418,6 +418,22 @@ func TestSPAHandlerLogsUnexpectedErrors(t *testing.T) {
 	}
 }
 
+func TestNewRateLimiterRequiresLoginLimitInProduction(t *testing.T) {
+	t.Parallel()
+
+	if _, err := newRateLimiter(RateLimitConfig{RequireLoginProtection: true}); err == nil {
+		t.Fatal("expected error when login limit is missing")
+	}
+
+	rl, err := newRateLimiter(RateLimitConfig{RequireLoginProtection: true, LoginLimit: 5, LoginWindow: time.Minute})
+	if err != nil {
+		t.Fatalf("unexpected error when login limit set: %v", err)
+	}
+	if rl == nil {
+		t.Fatal("expected rate limiter instance")
+	}
+}
+
 func TestRateLimitMiddlewareSpoofedHeadersIgnoredByDefault(t *testing.T) {
 	rl, err := newRateLimiter(RateLimitConfig{LoginLimit: 1, LoginWindow: time.Minute})
 	if err != nil {

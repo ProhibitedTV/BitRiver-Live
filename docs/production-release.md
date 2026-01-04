@@ -11,6 +11,9 @@ workflows wrap these artefacts rather than inventing alternate deployment
 paths. Set `BITRIVER_LIVE_MODE=production` in the release `.env` before
 starting the API; the binary now fails fast when the mode is missing so
 production-only protections (including `/metrics` guardrails) stay enabled.
+Production also refuses to start without a non-zero login throttle
+(`BITRIVER_LIVE_RATE_LOGIN_LIMIT`/`BITRIVER_LIVE_RATE_LOGIN_WINDOW`) so
+password spray protection is always enabled in release builds.
 
 Recent schema changes to account for:
 
@@ -86,6 +89,8 @@ so the job can populate every required variable and image tag:
 - `BITRIVER_LIVE_ALLOW_SELF_SIGNUP` (set to `false` in most production deploys)
 - `BITRIVER_LIVE_METRICS_TOKEN` (or `BITRIVER_LIVE_METRICS_ALLOW_NETWORKS` when
   you enforce a scrape allowlist) so `/metrics` remains protected
+- `BITRIVER_LIVE_RATE_LOGIN_LIMIT` (set to a non-zero value, such as `10`, and
+  pair with `BITRIVER_LIVE_RATE_LOGIN_WINDOW` to cap password spray attempts)
 - `BITRIVER_SRS_TOKEN`
 - `BITRIVER_OME_USERNAME`
 - `BITRIVER_OME_PASSWORD`
