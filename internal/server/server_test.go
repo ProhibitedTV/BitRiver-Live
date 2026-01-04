@@ -710,7 +710,10 @@ func TestMetricsAccessToken(t *testing.T) {
 	t.Parallel()
 
 	handler, _ := newTestHandler(t)
-	srv, err := New(handler, Config{MetricsAccess: MetricsAccessConfig{Token: "scrape-secret"}})
+	srv, err := New(handler, Config{
+		MetricsAccess:            MetricsAccessConfig{Token: "scrape-secret"},
+		RequireMetricsProtection: true,
+	})
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -749,7 +752,10 @@ func TestMetricsAccessNetworks(t *testing.T) {
 	t.Parallel()
 
 	handler, _ := newTestHandler(t)
-	srv, err := New(handler, Config{MetricsAccess: MetricsAccessConfig{AllowedNetworks: []string{"10.0.0.0/8"}}})
+	srv, err := New(handler, Config{
+		MetricsAccess:            MetricsAccessConfig{AllowedNetworks: []string{"10.0.0.0/8"}},
+		RequireMetricsProtection: true,
+	})
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -778,6 +784,19 @@ func TestMetricsAccessNetworks(t *testing.T) {
 
 	if healthRec.Code != http.StatusOK {
 		t.Fatalf("expected health endpoint to remain public, got %d", healthRec.Code)
+	}
+}
+
+func TestMetricsAccessRequiredWhenUnconfigured(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	_, err := New(handler, Config{RequireMetricsProtection: true})
+	if err == nil {
+		t.Fatal("expected error when metrics protection is required")
+	}
+	if !strings.Contains(err.Error(), "metrics protection required") {
+		t.Fatalf("expected metrics protection error, got %v", err)
 	}
 }
 

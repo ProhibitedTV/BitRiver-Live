@@ -37,6 +37,21 @@ type MetricsAccessConfig struct {
 	AllowedNetworks []string
 }
 
+// MetricsAccessConfigured reports whether a metrics token or allowlisted network
+// is configured. Empty and whitespace-only values do not count as configured
+// protection.
+func MetricsAccessConfigured(cfg MetricsAccessConfig) bool {
+	if strings.TrimSpace(cfg.Token) != "" {
+		return true
+	}
+	for _, network := range cfg.AllowedNetworks {
+		if strings.TrimSpace(network) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // Config aggregates the dependencies and settings required to construct a
 // Server. Addr determines the listen address for the HTTP server, TLS controls
 // whether HTTPS is enabled, RateLimit configures per-client throttling, CORS
@@ -49,21 +64,22 @@ type MetricsAccessConfig struct {
 // SessionCookieSecureAlways, and SessionCookieCrossSite enables SameSite=None
 // cookies for cross-site viewer deployments.
 type Config struct {
-	Addr                    string
-	TLS                     TLSConfig
-	RateLimit               RateLimitConfig
-	CORS                    CORSConfig
-	Security                SecurityConfig
-	Logger                  *slog.Logger
-	AuditLogger             *slog.Logger
-	Metrics                 *metrics.Recorder
-	MetricsAccess           MetricsAccessConfig
-	ViewerOrigin            *url.URL
-	OAuth                   oauth.Service
-	AllowSelfSignup         *bool
-	SessionCookieSecureMode api.SessionCookieSecureMode
-	SessionCookieCrossSite  bool
-	SRSHookToken            string
+	Addr                     string
+	TLS                      TLSConfig
+	RateLimit                RateLimitConfig
+	CORS                     CORSConfig
+	Security                 SecurityConfig
+	Logger                   *slog.Logger
+	AuditLogger              *slog.Logger
+	Metrics                  *metrics.Recorder
+	MetricsAccess            MetricsAccessConfig
+	RequireMetricsProtection bool
+	ViewerOrigin             *url.URL
+	OAuth                    oauth.Service
+	AllowSelfSignup          *bool
+	SessionCookieSecureMode  api.SessionCookieSecureMode
+	SessionCookieCrossSite   bool
+	SRSHookToken             string
 }
 
 // Server wraps the configured http.Server alongside observability, rate
@@ -131,6 +147,9 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	ipResolver, err := newClientIPResolver(cfg.RateLimit)
 	if err != nil {
 		return nil, fmt.Errorf("configure client ip resolver: %w", err)
+	}
+	if cfg.RequireMetricsProtection && !MetricsAccessConfigured(cfg.MetricsAccess) {
+		return nil, errors.New("metrics protection required: configure metrics token or allowlisted networks")
 	}
 	metricsAccess, err := newMetricsAccessController(cfg.MetricsAccess, ipResolver, cfg.Logger)
 	if err != nil {
