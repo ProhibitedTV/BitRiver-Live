@@ -111,13 +111,13 @@ the generated environment file before inviting real users.
 
 ### Key environment variables at a glance
 
-Set `BITRIVER_LIVE_MODE` to either `development` (local quickstart) or `production` (deployments) before starting the API; the server now fails fast when the mode is missing so production guardrails stay enabled.
+Set `BITRIVER_LIVE_MODE=production` in `.env` (the default). `deploy/check-env.sh` now fails fast when the mode is empty or still set to `development` so the server always boots with production guardrails. For local HTTP-only demos, leave `.env` at production and override the variable inline (for example, `BITRIVER_LIVE_MODE=development docker compose --env-file ./.env -f deploy/docker-compose.yml up -d`) instead of committing the change to your deployment file.
 
 The CLI pre-populates `.env` so Docker Compose can bind each service to predictable ports. Edit the values below to match your host and network before rerunning `docker compose up -d`.
 
 | Variable | Default | What it controls |
 | --- | --- | --- |
-| `BITRIVER_LIVE_MODE` | `development` | Required runtime mode (`development` for local demos, `production` for real deployments). The server exits when unset so `/metrics` protection and production hardening are not skipped. |
+| `BITRIVER_LIVE_MODE` | `production` | Required runtime mode (`production` for deployments; override inline for one-off local demos). `deploy/check-env.sh` fails when this is unset or set to `development` so `/metrics` protection and production hardening are never skipped by accident. |
 | `BITRIVER_LIVE_PORT` | `8080` | Host port for the Go API and proxied viewer (`deploy/docker-compose.yml` maps host `8080` to container `8080`). |
 | `BITRIVER_SRS_RTMP_PORT` | `1935` | Host RTMP ingest port forwarded to the SRS container (`1935`). |
 | `BITRIVER_SRS_API_PORT` | `1985` | Host port for the SRS API, used by the controller and health checks. |
