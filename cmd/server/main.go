@@ -458,27 +458,34 @@ func main() {
 		AllowedNetworks: splitAndTrim(firstNonEmpty(*metricsAllowNetworks, os.Getenv("BITRIVER_LIVE_METRICS_ALLOW_NETWORKS"))),
 	}
 
+	requireMetricsProtection := strings.EqualFold(serverMode, "production")
+	if requireMetricsProtection && !server.MetricsAccessConfigured(metricsAccessCfg) {
+		logger.Error("production mode requires protecting /metrics with BITRIVER_LIVE_METRICS_TOKEN or BITRIVER_LIVE_METRICS_ALLOW_NETWORKS")
+		os.Exit(1)
+	}
+
 	tlsCfg := server.TLSConfig{
 		CertFile: tlsCertPath,
 		KeyFile:  tlsKeyPath,
 	}
 
 	srv, err := server.New(handler, server.Config{
-		Addr:                    listenAddr,
-		TLS:                     tlsCfg,
-		RateLimit:               rateCfg,
-		CORS:                    corsConfig,
-		Security:                securityCfg,
-		Logger:                  logger,
-		AuditLogger:             auditLogger,
-		Metrics:                 recorder,
-		MetricsAccess:           metricsAccessCfg,
-		ViewerOrigin:            viewerURL,
-		OAuth:                   oauthManager,
-		AllowSelfSignup:         &allowSelfSignupValue,
-		SessionCookieSecureMode: sessionCookieSecureMode,
-		SessionCookieCrossSite:  sessionCookieCrossSiteValue,
-		SRSHookToken:            ingestConfig.SRSToken,
+		Addr:                     listenAddr,
+		TLS:                      tlsCfg,
+		RateLimit:                rateCfg,
+		CORS:                     corsConfig,
+		Security:                 securityCfg,
+		Logger:                   logger,
+		AuditLogger:              auditLogger,
+		Metrics:                  recorder,
+		MetricsAccess:            metricsAccessCfg,
+		RequireMetricsProtection: requireMetricsProtection,
+		ViewerOrigin:             viewerURL,
+		OAuth:                    oauthManager,
+		AllowSelfSignup:          &allowSelfSignupValue,
+		SessionCookieSecureMode:  sessionCookieSecureMode,
+		SessionCookieCrossSite:   sessionCookieCrossSiteValue,
+		SRSHookToken:             ingestConfig.SRSToken,
 	})
 	if err != nil {
 		logger.Error("failed to initialise server", "error", err)

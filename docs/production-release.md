@@ -82,6 +82,8 @@ so the job can populate every required variable and image tag:
 - `BITRIVER_LIVE_SESSION_TTL` (use the same duration as `deploy/.env.example`,
   currently `168h`, unless your session policy requires a shorter window)
 - `BITRIVER_LIVE_ALLOW_SELF_SIGNUP` (set to `false` in most production deploys)
+- `BITRIVER_LIVE_METRICS_TOKEN` (or `BITRIVER_LIVE_METRICS_ALLOW_NETWORKS` when
+  you enforce a scrape allowlist) so `/metrics` remains protected
 - `BITRIVER_SRS_TOKEN`
 - `BITRIVER_OME_USERNAME`
 - `BITRIVER_OME_PASSWORD`
