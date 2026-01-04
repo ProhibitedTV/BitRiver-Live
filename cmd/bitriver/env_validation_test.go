@@ -42,6 +42,46 @@ func TestValidateEnvRequiresImageTags(t *testing.T) {
 	}
 }
 
+func TestValidateEnvBlocksSampleCredentials(t *testing.T) {
+	placeholders, err := loadSampleCredentialValues(defaultExampleEnv(), sampleCredentialKeys)
+	if err != nil {
+		t.Fatalf("load sample credentials: %v", err)
+	}
+
+	values := map[string]string{
+		"BITRIVER_POSTGRES_USER":              "brlive_app",
+		"BITRIVER_OME_API":                    "http://ome:8081",
+		"BITRIVER_OME_BIND":                   "10.0.0.5",
+		"BITRIVER_OME_IP":                     "10.0.0.6",
+		"BITRIVER_OME_SERVER_PORT":            "9000",
+		"BITRIVER_OME_SERVER_TLS_PORT":        "9443",
+		"BITRIVER_LIVE_SESSION_TTL":           "168h",
+		"BITRIVER_LIVE_ALLOW_SELF_SIGNUP":     "false",
+		"BITRIVER_TRANSCODER_PUBLIC_BASE_URL": "https://cdn.example.net/hls",
+		"NEXT_PUBLIC_API_BASE_URL":            "https://api.example.net",
+		"NEXT_PUBLIC_VIEWER_URL":              "https://viewer.example.net",
+		"BITRIVER_LIVE_IMAGE_TAG":             "1.2.3",
+		"BITRIVER_VIEWER_IMAGE_TAG":           "1.2.3",
+		"BITRIVER_SRS_CONTROLLER_IMAGE_TAG":   "1.2.3",
+		"BITRIVER_TRANSCODER_IMAGE_TAG":       "1.2.3",
+		"BITRIVER_SRS_IMAGE_TAG":              "v5.0.185",
+		"BITRIVER_OME_IMAGE_TAG":              "0.16.1",
+		"BITRIVER_LIVE_MODE":                  "production",
+	}
+
+	for key, value := range placeholders {
+		values[key] = value
+	}
+
+	res := validateEnv(values)
+
+	for _, key := range sampleCredentialKeys {
+		if !containsValue(res.Blocked, key) {
+			t.Fatalf("expected %s to be blocked when using the sample credential", key)
+		}
+	}
+}
+
 func TestValidateEnvFlagsLoopbackInProduction(t *testing.T) {
 	values := map[string]string{
 		"BITRIVER_POSTGRES_USER":                  "brlive_app",
@@ -124,4 +164,13 @@ func readFile(t *testing.T, path string) string {
 		t.Fatalf("read file: %v", err)
 	}
 	return string(data)
+}
+
+func containsValue(list []string, value string) bool {
+	for _, item := range list {
+		if item == value {
+			return true
+		}
+	}
+	return false
 }

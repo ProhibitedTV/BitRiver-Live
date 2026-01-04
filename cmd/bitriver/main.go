@@ -214,17 +214,50 @@ var defaultEnvSecrets = envSecrets{
 	},
 }
 
-var forbiddenPlaceholders = map[string]string{
-	"BITRIVER_POSTGRES_PASSWORD":              "P0stgres-Example!",
-	"BITRIVER_REDIS_PASSWORD":                 "R3dis-Example!",
-	"BITRIVER_LIVE_ADMIN_EMAIL":               "admin@stream.example.com",
-	"BITRIVER_LIVE_ADMIN_PASSWORD":            "Sup3rSecureAdmin!",
-	"BITRIVER_SRS_TOKEN":                      "srs-secure-token-example",
-	"BITRIVER_OME_PASSWORD":                   "OME-Example-Pass!",
-	"BITRIVER_OME_API_TOKEN":                  "OME-Example-Access-Token",
-	"BITRIVER_OME_ACCESS_TOKEN":               "OME-Example-Access-Token",
-	"BITRIVER_TRANSCODER_TOKEN":               "transcoder-secure-token-example",
-	"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD": "R3dis-Example!",
+var (
+	sampleCredentialKeys = []string{
+		"BITRIVER_LIVE_METRICS_TOKEN",
+		"BITRIVER_POSTGRES_PASSWORD",
+		"BITRIVER_REDIS_PASSWORD",
+		"BITRIVER_LIVE_ADMIN_EMAIL",
+		"BITRIVER_LIVE_ADMIN_PASSWORD",
+		"BITRIVER_SRS_TOKEN",
+		"BITRIVER_OME_USERNAME",
+		"BITRIVER_OME_PASSWORD",
+		"BITRIVER_OME_API_TOKEN",
+		"BITRIVER_OME_ACCESS_TOKEN",
+		"BITRIVER_TRANSCODER_TOKEN",
+		"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD",
+	}
+
+	forbiddenPlaceholders = defaultForbiddenPlaceholders()
+	placeholderLoadErr    error
+)
+
+func init() {
+	placeholders, err := loadSampleCredentialValues(defaultExampleEnv(), sampleCredentialKeys)
+	if err != nil {
+		placeholderLoadErr = err
+		return
+	}
+	forbiddenPlaceholders = placeholders
+}
+
+func defaultForbiddenPlaceholders() map[string]string {
+	return map[string]string{
+		"BITRIVER_LIVE_METRICS_TOKEN":             "metrics-collector-token",
+		"BITRIVER_POSTGRES_PASSWORD":              "P0stgres-Example!",
+		"BITRIVER_REDIS_PASSWORD":                 "R3dis-Example!",
+		"BITRIVER_LIVE_ADMIN_EMAIL":               "admin@stream.example.com",
+		"BITRIVER_LIVE_ADMIN_PASSWORD":            "Sup3rSecureAdmin!",
+		"BITRIVER_SRS_TOKEN":                      "srs-secure-token-example",
+		"BITRIVER_OME_USERNAME":                   "ome-operator",
+		"BITRIVER_OME_PASSWORD":                   "OME-Example-Pass!",
+		"BITRIVER_OME_API_TOKEN":                  "OME-Example-Access-Token",
+		"BITRIVER_OME_ACCESS_TOKEN":               "OME-Example-Access-Token",
+		"BITRIVER_TRANSCODER_TOKEN":               "transcoder-secure-token-example",
+		"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD": "R3dis-Example!",
+	}
 }
 
 type envValidatorResult struct {
@@ -997,6 +1030,40 @@ func xmlEscape(value string) string {
 	return html.EscapeString(value)
 }
 
+func loadSampleCredentialValues(path string, keys []string) (map[string]string, error) {
+	templateLines, err := readEnvTemplate(path)
+	if err != nil {
+		return nil, fmt.Errorf("load sample credentials: %w", err)
+	}
+
+	allowed := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		allowed[key] = struct{}{}
+	}
+
+	placeholders := make(map[string]string)
+	for _, line := range templateLines {
+		if line.Key == "" {
+			continue
+		}
+		if _, ok := allowed[line.Key]; ok {
+			placeholders[line.Key] = line.Value
+		}
+	}
+
+	var missing []string
+	for _, key := range keys {
+		if _, ok := placeholders[key]; !ok {
+			missing = append(missing, key)
+		}
+	}
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("missing sample credentials for %s in %s", strings.Join(missing, ", "), path)
+	}
+
+	return placeholders, nil
+}
+
 func readEnvTemplate(path string) ([]templateLine, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -1192,6 +1259,10 @@ func validateEnv(values map[string]string) envValidatorResult {
 	production := mode == "" || mode == "production"
 
 	res := envValidatorResult{}
+
+	if placeholderLoadErr != nil {
+		res.Errors = append(res.Errors, fmt.Sprintf("failed to load sample credentials from %s: %v", defaultExampleEnv(), placeholderLoadErr))
+	}
 
 	for _, key := range requiredVars {
 		if strings.TrimSpace(values[key]) == "" {
