@@ -130,6 +130,12 @@ build out:
    The release workflow surfaces this output in the deploy logs and fails when
    any OvenMediaEngine URLs, bind addresses, or ports point at loopback
    addresses, placeholders, or are missing.
+   Postgres DSNs in production must use TLS; keep `sslmode` at `require` or
+   `verify-full` on both `BITRIVER_LIVE_POSTGRES_DSN` and
+   `BITRIVER_LIVE_SESSION_POSTGRES_DSN`, and append
+   `sslrootcert=/certs/postgres-ca.pem` (or a similar mounted path) when the
+   database presents a private CA. The validator rejects `sslmode=disable` so
+   plaintext connections cannot slip into a release.
 3. Verify the rendered OvenMediaEngine config matches the image tag in `.env`
    before cutting the release tag or starting Compose:
    ```bash

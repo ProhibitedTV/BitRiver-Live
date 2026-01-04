@@ -128,9 +128,11 @@ The CLI pre-populates `.env` so Docker Compose can bind each service to predicta
 | `BITRIVER_OME_SERVER_TLS_PORT` | `9443` | OME TLS signalling port rendered into `Server.xml` and exposed on the same host/container port. |
 | `BITRIVER_OME_BIND` | `0.0.0.0` | Listener address injected into the generated OME `Server.xml` control listener `<Bind>`/`<IP>` fields and the root `<Bind><Address>` entry. |
 | `BITRIVER_OME_IP` | `0.0.0.0` | Public IP advertised in the top-level `<Server><IP>` block (defaults to `BITRIVER_OME_BIND`). |
-| `BITRIVER_LIVE_POSTGRES_DSN` | `postgres://bitriver:bitriver@postgres:5432/bitriver?sslmode=disable` | Connection string the API uses for its primary database. Combine with `BITRIVER_POSTGRES_HOST_PORT` (default `5432`, profile `postgres-host`) to publish Postgres to the host. |
+| `BITRIVER_LIVE_POSTGRES_DSN` | `postgres://bitriver:bitriver@postgres:5432/bitriver?sslmode=require` | Connection string the API uses for its primary database. Combine with `BITRIVER_POSTGRES_HOST_PORT` (default `5432`, profile `postgres-host`) to publish Postgres to the host. |
 | `BITRIVER_LIVE_METRICS_TOKEN` | `metrics-collector-token` | Bearer token required to scrape `/metrics`; production mode refuses to start without this or `BITRIVER_LIVE_METRICS_ALLOW_NETWORKS`. Pair with `BITRIVER_LIVE_METRICS_ALLOW_NETWORKS` (comma-separated CIDRs/IPs) to restrict scrapes to trusted networks. |
 | `BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR` | `redis:6379` | Redis endpoint for chat fan-out; update alongside `BITRIVER_REDIS_PASSWORD` if you run Redis outside Compose. |
+
+Postgres connections default to TLS. Keep the database on a trusted network segment and set `sslmode=require` or `sslmode=verify-full` on both `BITRIVER_LIVE_POSTGRES_DSN` and `BITRIVER_LIVE_SESSION_POSTGRES_DSN`. When Postgres uses a private CA, mount the certificate into the Compose bundle (for example, `./certs/postgres-ca.pem`) and append `sslrootcert=/certs/postgres-ca.pem` to the DSNs; the server refuses to start in production when `sslmode=disable` is present.
 
 In production mode you must set `BITRIVER_LIVE_METRICS_TOKEN` or
 `BITRIVER_LIVE_METRICS_ALLOW_NETWORKS` to keep the `/metrics` endpoint
