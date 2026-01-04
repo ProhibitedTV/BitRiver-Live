@@ -583,7 +583,7 @@ func buildPostgresDSN(values map[string]string) (string, error) {
 		Path:   "/" + db,
 	}
 	q := u.Query()
-	q.Set("sslmode", "disable")
+	q.Set("sslmode", "require")
 	u.RawQuery = q.Encode()
 
 	return u.String(), nil

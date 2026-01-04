@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -754,6 +755,11 @@ func resolveSessionStoreConfig(flagDriver, envDriver, storageDriver, storageDSN,
 		if sessionDSN == "" {
 			return sessionStoreConfig{}, fmt.Errorf("postgres session store selected without DSN")
 		}
+		if requirePostgres {
+			if err := validatePostgresTLS(sessionDSN, "BITRIVER_LIVE_SESSION_POSTGRES_DSN"); err != nil {
+				return sessionStoreConfig{}, err
+			}
+		}
 		return sessionStoreConfig{Driver: "postgres", DSN: sessionDSN}, nil
 	default:
 		return sessionStoreConfig{}, fmt.Errorf("unsupported session store driver %q", driver)
@@ -929,6 +935,9 @@ func validateProductionDatastore(driver, resolvedPostgresDSN, envPostgresDSN str
 	if strings.TrimSpace(resolvedPostgresDSN) == "" {
 		return fmt.Errorf("postgres storage selected without DSN")
 	}
+	if err := validatePostgresTLS(resolvedPostgresDSN, "BITRIVER_LIVE_POSTGRES_DSN"); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -972,6 +981,22 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+var sslModeDisablePattern = regexp.MustCompile(`(?i)(^|[?&\s;])sslmode=disable([&#;\s]|$)`)
+
+func validatePostgresTLS(dsn, envVar string) error {
+	if dsn == "" {
+		return nil
+	}
+	if postgresSSLModeDisable(dsn) {
+		return fmt.Errorf("%s must enable TLS (set sslmode=require or provide a CA with verify-full)", envVar)
+	}
+	return nil
+}
+
+func postgresSSLModeDisable(dsn string) bool {
+	return sslModeDisablePattern.MatchString(dsn)
 }
 
 func splitAndTrim(raw string) []string {

@@ -13,6 +13,23 @@ fi
 mode_line=$(grep -E '^[[:space:]]*BITRIVER_LIVE_MODE=' "$ENV_FILE" | tail -n 1 || true)
 mode_value=$(echo "${mode_line#*=}" | xargs)
 
+check_insecure_dsn() {
+  local env_var="$1"
+  local raw_line value lowered
+
+  raw_line=$(grep -E "^[[:space:]]*${env_var}=" "$ENV_FILE" | tail -n 1 || true)
+  value=$(echo "${raw_line#*=}" | xargs)
+  if [ -z "$value" ]; then
+    return
+  fi
+
+  lowered=$(echo "$value" | tr '[:upper:]' '[:lower:]')
+  if [[ "$lowered" == *"sslmode=disable"* ]]; then
+    echo "${env_var} must enable TLS in production (set sslmode=require or supply a CA for verify-full)" >&2
+    exit 1
+  fi
+}
+
 if [ -z "$mode_line" ] || [ -z "$mode_value" ]; then
   echo "BITRIVER_LIVE_MODE must be set to production in $ENV_FILE" >&2
   echo "Keep the primary .env at production and apply a one-off override (for example, BITRIVER_LIVE_MODE=development docker compose --env-file $ENV_FILE -f deploy/docker-compose.yml up) when you intentionally need development mode." >&2
@@ -23,6 +40,11 @@ if [ "${mode_value,,}" = "development" ]; then
   echo "BITRIVER_LIVE_MODE=development is not allowed in $ENV_FILE; deployments must default to production." >&2
   echo "Use an explicit override (for example, BITRIVER_LIVE_MODE=development docker compose --env-file $ENV_FILE -f deploy/docker-compose.yml up) for local HTTP-only demos instead of changing the main env file." >&2
   exit 1
+fi
+
+if [ "${mode_value,,}" = "production" ]; then
+  check_insecure_dsn "BITRIVER_LIVE_POSTGRES_DSN"
+  check_insecure_dsn "BITRIVER_LIVE_SESSION_POSTGRES_DSN"
 fi
 
 if ! command -v go >/dev/null 2>&1; then

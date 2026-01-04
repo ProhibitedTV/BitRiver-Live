@@ -187,6 +187,16 @@ func TestValidateProductionDatastoreRequiresResolvedDSN(t *testing.T) {
 	}
 }
 
+func TestValidateProductionDatastoreRejectsInsecureSSLMode(t *testing.T) {
+	err := validateProductionDatastore("postgres", "postgres://resolved/db?sslmode=disable", "postgres://env")
+	if err == nil {
+		t.Fatal("expected error when sslmode=disable is configured in production")
+	}
+	if !strings.Contains(err.Error(), "sslmode") {
+		t.Fatalf("expected sslmode guidance, got %v", err)
+	}
+}
+
 func TestResolvePostgresDSNPriority(t *testing.T) {
 	t.Setenv("BITRIVER_LIVE_POSTGRES_DSN", "postgres://env")
 	t.Setenv("DATABASE_URL", "postgres://database")
@@ -271,6 +281,14 @@ func TestResolveSessionStoreConfig(t *testing.T) {
 			requirePostgres: true,
 			wantErr:         true,
 		},
+		{
+			name:            "ProductionRejectsInsecureSessionDSN",
+			storageDriver:   "postgres",
+			storageDSN:      "postgres://main?sslmode=require",
+			envDSN:          "postgres://sessions?sslmode=disable",
+			requirePostgres: true,
+			wantErr:         true,
+		},
 	}
 
 	for _, tc := range cases {
@@ -299,7 +317,7 @@ func TestResolveSessionStoreConfig(t *testing.T) {
 func TestStartupSummaryPostgresRedis(t *testing.T) {
 	summary := newStartupSummary(startupSummaryInput{
 		StorageDriver: "postgres",
-		StorageDSN:    "postgres://user:secret@localhost/db?sslmode=disable",
+		StorageDSN:    "postgres://user:secret@localhost/db?sslmode=require",
 		SessionConfig: sessionStoreConfig{Driver: "postgres", DSN: "postgres://session:secret@localhost/sessions"},
 		RateLimit: server.RateLimitConfig{
 			RedisAddr:       "127.0.0.1:6379",
