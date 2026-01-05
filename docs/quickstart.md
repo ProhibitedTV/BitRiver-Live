@@ -2,14 +2,14 @@
 
 ## TL;DR
 
-| Platform | Go CLI command | Shim alternative |
+| Platform | Recommended launcher | Advanced (Go from source) |
 | --- | --- | --- |
-| macOS, Linux, or Windows via WSL/bash | `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` | `./scripts/quickstart.sh` |
-| Windows PowerShell | `pwsh -c "go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml"` | `./scripts/quickstart.ps1` |
+| macOS | `brew install --formula https://github.com/bitriver-live/bitriver-live/releases/latest/download/bitriver-live.rb && bitriver-live` | `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` |
+| Linux | Install the `.deb` or `.rpm` from the latest release then run `bitriver-live` (desktop shortcut: **Start BitRiver Live**) | `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` |
+| Windows | Install `bitriver-live-<version>.msi` and launch **Start BitRiver Live** from the Start menu/desktop | `pwsh -c "go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml"` |
 
-Use the Go-based quickstart command to provision the full stack with Docker in a few minutes. It performs the same checks and templating as the legacy helpers while keeping every platform on one CLI. The shell (`scripts/quickstart.sh`) and PowerShell (`scripts/quickstart.ps1`) shims simply forward to the Go binary when you cannot run `go` directly.
+Use the installer-backed launcher when you want a zero-build setup that checks Docker/Compose, copies `deploy/.env.example` into place, pulls release images, and starts the stack. The Go-based quickstart remains the canonical contributor path because it builds local images and runs migrations from source.
 
-On the first run Docker builds local images for the Go API, the Next.js viewer app, the SRS controller, and the bundled FFmpeg job controller (located in `cmd/transcoder/`), so you can launch the stack without signing in to any container registry.
 
 ## Platform prerequisites
 
@@ -25,6 +25,14 @@ On the first run Docker builds local images for the Go API, the Next.js viewer a
 The Go-based quickstart is the canonical entry point across the Tier 1 platforms—Windows 10/11 with Docker Desktop, macOS with Docker Desktop, and Ubuntu/Debian with Docker Engine plus the Compose plugin. The shell and PowerShell shims stay in place for compatibility but only forward to the same Go command. See [`docs/cross-platform-plan.md`](cross-platform-plan.md) for the full support matrix.
 
 ## Run the quickstart command
+
+Installer path (recommended for operators):
+
+```bash
+bitriver-live
+```
+
+The launcher keeps its assets under `/usr/local/share/bitriver-live` (macOS/Linux) or `Program Files\BitRiver Live` (Windows) and reuses `deploy/.env.example` from the installer bundle.
 
 ```bash
 # macOS, Linux, or Windows via WSL/bash

@@ -1,0 +1,31 @@
+name: bitriver-live
+arch: "{{ .Env.NFPM_ARCH }}"
+platform: linux
+version: "{{ .Env.NFPM_VERSION }}"
+section: misc
+priority: optional
+maintainer: BitRiver Live Team <dev@bitriver.live>
+description: BitRiver Live launcher and CLI
+homepage: https://github.com/bitriver-live/bitriver-live
+license: MIT
+bindir: /usr/local/bin
+contents:
+  - src: "{{ .Env.LAUNCHER_ROOT }}/bin/bitriver"
+    dst: /usr/local/bin/bitriver
+    file_info:
+      mode: 0755
+  - src: "{{ .Env.LAUNCHER_ROOT }}/bin/bitriver-live"
+    dst: /usr/local/bin/bitriver-live
+    file_info:
+      mode: 0755
+  - src: "{{ .Env.LAUNCHER_ROOT }}/share"
+    dst: /usr/local/share/bitriver-live
+  - src: deploy/installers/bitriver-live.desktop
+    dst: /usr/share/applications/bitriver-live.desktop
+    file_info:
+      mode: 0644
+rpm:
+  summary: BitRiver Live launcher and CLI
+  compression: zstd
+deb:
+  compression: zstd

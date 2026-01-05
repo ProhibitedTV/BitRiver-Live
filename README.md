@@ -24,9 +24,23 @@ Twitch-style experience on hardware you control.
 - **Ready-to-run tooling** – `cmd/bitriver` builds images, seeds the admin account, and keeps all configuration in a
   single `.env` file (wrappers live under `scripts/`).
 
-## Quickstart: Go CLI first
+## Quickstart: installer-first (recommended)
 
-The Go CLI in `cmd/bitriver` handles environment generation, Docker Compose orchestration, and health checks. Use it directly (preferred) or fall back to `scripts/quickstart.sh` / `scripts/quickstart.ps1` if your shell cannot run Go.
+Use the packaged launcher (`bitriver-live`) if you just want to bring the stack up with Docker Compose. It bundles the compose file, copies `deploy/.env.example` into place on the first run, checks Docker/Compose, pulls release images, and starts the stack without requiring Go or Node.
+
+- **macOS (Homebrew):**
+  ```bash
+  brew install --formula https://github.com/bitriver-live/bitriver-live/releases/latest/download/bitriver-live.rb
+  bitriver-live
+  ```
+- **Linux (Deb/RPM):** Download the `.deb` or `.rpm` from the latest [releases](https://github.com/bitriver-live/bitriver-live/releases), install it with `sudo dpkg -i` or `sudo rpm -i`, then run `bitriver-live` from your shell or the desktop shortcut named **Start BitRiver Live**.
+- **Windows:** Install the MSI from the latest release. The installer drops `bitriver.exe` and `bitriver-live.ps1` into `Program Files\BitRiver Live` and adds **Start BitRiver Live** shortcuts to the Start menu and desktop.
+
+The launcher keeps using the Compose bundle under `/usr/local/share/bitriver-live` (macOS/Linux) or `Program Files\BitRiver Live` (Windows). Edit the generated `.env` there before restarting the service.
+
+## Advanced quickstart: Go CLI from source
+
+Prefer the source-based workflow when developing features or rebuilding images locally. The Go CLI in `cmd/bitriver` handles environment generation, Docker Compose orchestration, and health checks. Use it directly or fall back to `scripts/quickstart.sh` / `scripts/quickstart.ps1` if your shell cannot run Go.
 
 ### Prerequisites at a glance
 
