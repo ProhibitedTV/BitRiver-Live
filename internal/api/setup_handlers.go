@@ -109,6 +109,7 @@ func validateSetupConfig(cfg SetupConfig) error {
 	required := map[string]string{
 		"postgresPassword": cfg.PostgresPassword,
 		"redisPassword":    cfg.RedisPassword,
+		"metricsToken":     cfg.MetricsToken,
 		"srsToken":         cfg.SRSToken,
 		"omeToken":         cfg.OMEToken,
 		"transcoderToken":  cfg.TranscoderToken,

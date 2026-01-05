@@ -80,6 +80,33 @@ func TestSetupWizardValidatesPayload(t *testing.T) {
 	}
 }
 
+func TestSetupWizardRequiresMetricsProtection(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	handler.Setup = &setupStub{result: SetupResult{RestartScheduled: true}}
+
+	user := models.User{ID: "admin-1", DisplayName: "Admin", Roles: []string{"admin"}}
+	body := map[string]any{
+		"adminEmail":       "admin@example.com",
+		"viewerUrl":        "https://viewer.example.com",
+		"apiPort":          8080,
+		"postgresPassword": "postgres-pass",
+		"redisPassword":    "redis-pass",
+		"srsToken":         "srs-token",
+		"omeToken":         "ome-token",
+		"transcoderToken":  "transcoder-token",
+	}
+	raw, _ := json.Marshal(body)
+
+	req := withUser(httptest.NewRequest(http.MethodPost, "/api/setup", bytes.NewBuffer(raw)), user)
+	rr := httptest.NewRecorder()
+
+	handler.SetupWizard(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 bad request due to missing metrics protection, got %d", rr.Code)
+	}
+}
+
 func TestSetupWizardSuccess(t *testing.T) {
 	handler, _ := newTestHandler(t)
 	stub := &setupStub{result: SetupResult{RestartScheduled: true}}
