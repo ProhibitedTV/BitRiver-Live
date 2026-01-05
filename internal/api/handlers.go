@@ -26,6 +26,7 @@ type Handler struct {
 	ChatGateway         *chat.Gateway
 	OAuth               oauth.Service
 	UploadProcessor     *UploadProcessor
+	Setup               SetupManager
 	DefaultRenditions   []string
 	SRSHookToken        string
 	AllowSelfSignup     bool

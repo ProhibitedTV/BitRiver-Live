@@ -60,6 +60,8 @@ The helper leaves `NEXT_PUBLIC_API_BASE_URL` empty so the viewer inherits the AP
 
 Running `deploy/check-env.sh` against the quickstart `.env` now errors if `BITRIVER_LIVE_MODE` is missing or left at `development`; keep the saved file at production and rely on an inline override or Compose override file for HTTP-only demos. The validator still warns when loopback values remain for the viewer URL, OME bind/IP, or the transcoder public base URL so production deployments replace placeholders with routable hosts before re-running.
 
+The control centre now exposes a **Setup wizard** under **Settings**. Use it as the default path for production-ready configuration instead of hand-editing `.env`: it prompts for the admin email, viewer domain, API port, TLS certificate paths, and required secrets (Postgres, Redis, SRS, OME, transcoder, metrics) then writes them to the environment file and schedules a safe restart. The wizard keeps Docker/systemd installs aligned without risking partial writes.
+
 The health payload still expects the ingest services to be reachable from the API container:
 
 - **SRS controller:** `BITRIVER_SRS_API` defaults to `http://srs-controller:1985` inside the Compose network. If you move SRS elsewhere, point this URL at a reachable host and keep the API token aligned with the controller's configuration.

@@ -25,6 +25,11 @@ const state = {
 let moderationLoaded = false;
 let analyticsLoaded = false;
 
+function isCurrentUserAdmin() {
+    const roles = state.currentUser?.roles;
+    return Array.isArray(roles) && roles.includes("admin");
+}
+
 function escapeHTML(value) {
     const div = document.createElement("div");
     div.textContent = value ?? "";
@@ -1932,6 +1937,84 @@ function renderStreamControls() {
     });
 }
 
+function renderSetupWizard() {
+    const container = document.getElementById("setup-wizard");
+    if (!container) {
+        return;
+    }
+    clearElement(container);
+    const template = document.getElementById("setup-wizard-template");
+    if (!template) {
+        return;
+    }
+    if (!isCurrentUserAdmin()) {
+        const notice = createElement("p", {
+            className: "setup-wizard__status",
+            textContent: "The setup wizard is restricted to administrators.",
+        });
+        notice.dataset.state = "error";
+        container.appendChild(notice);
+        return;
+    }
+    container.appendChild(template.content.cloneNode(true));
+    const form = container.querySelector("#setup-wizard-form");
+    const status = container.querySelector("#setup-wizard-status");
+    const submit = container.querySelector("#setup-wizard-submit");
+    const setStatus = (state, message) => {
+        if (!status) {
+            return;
+        }
+        status.dataset.state = state;
+        status.textContent = message || "";
+    };
+    setStatus("idle", "Provide production-ready values. Saving will restart the service.");
+    form?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!form) {
+            return;
+        }
+        const formData = new FormData(form);
+        const apiPort = Number(formData.get("apiPort"));
+        const payload = {
+            adminEmail: formData.get("adminEmail")?.toString().trim() ?? "",
+            adminPassword: formData.get("adminPassword")?.toString().trim() ?? "",
+            viewerUrl: formData.get("viewerUrl")?.toString().trim() ?? "",
+            publicApiUrl: formData.get("publicApiUrl")?.toString().trim() ?? "",
+            viewerOrigin: formData.get("viewerOrigin")?.toString().trim() ?? "",
+            apiPort: Number.isFinite(apiPort) ? apiPort : 0,
+            tlsCertPath: formData.get("tlsCertPath")?.toString().trim() ?? "",
+            tlsKeyPath: formData.get("tlsKeyPath")?.toString().trim() ?? "",
+            postgresPassword: formData.get("postgresPassword")?.toString().trim() ?? "",
+            redisPassword: formData.get("redisPassword")?.toString().trim() ?? "",
+            metricsToken: formData.get("metricsToken")?.toString().trim() ?? "",
+            srsToken: formData.get("srsToken")?.toString().trim() ?? "",
+            omeToken: formData.get("omeToken")?.toString().trim() ?? "",
+            transcoderToken: formData.get("transcoderToken")?.toString().trim() ?? "",
+        };
+
+        for (const key of ["adminPassword", "publicApiUrl", "viewerOrigin", "tlsCertPath", "tlsKeyPath", "metricsToken"]) {
+            if (!payload[key]) {
+                delete payload[key];
+            }
+        }
+
+        setStatus("pending", "Saving configuration and scheduling a restart...");
+        if (submit) {
+            submit.disabled = true;
+        }
+        try {
+            await apiRequest("/api/setup", { method: "POST", body: JSON.stringify(payload) });
+            setStatus("ready", "Configuration saved. The service will restart shortly.");
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            setStatus("error", message);
+            if (submit) {
+                submit.disabled = false;
+            }
+        }
+    });
+}
+
 function computeInstallerScript(data) {
     const mode = data.mode || "production";
     const addr = data.addr || (mode === "production" ? ":80" : ":8080");
@@ -2451,6 +2534,7 @@ async function initialize() {
     initChatClient();
     renderAccountStatus();
     attachActions();
+    renderSetupWizard();
     setupInstaller();
     await refreshAll();
 }

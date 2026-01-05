@@ -953,6 +953,60 @@ chat-log {
     gap: 0.5rem;
 }
 
+.setup-wizard {
+    display: grid;
+    gap: 1rem;
+}
+
+.setup-wizard__header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    justify-content: space-between;
+}
+
+.setup-wizard__eyebrow {
+    margin: 0;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+}
+
+.setup-wizard__form {
+    display: grid;
+    gap: 1rem;
+}
+
+.setup-wizard__grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.setup-wizard__field {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.setup-wizard__hint {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.setup-wizard__actions {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.setup-wizard__buttons {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+}
+
 .installer__preview {
     display: grid;
     gap: 1rem;
@@ -964,7 +1018,8 @@ chat-log {
     top: 2rem;
 }
 
-.installer__status {
+.installer__status,
+.setup-wizard__status {
     margin: 0;
     font-size: 0.9rem;
     padding: 0.9rem 1rem;
@@ -974,16 +1029,24 @@ chat-log {
 }
 
 .installer__status[data-state="ready"],
-.installer__status[data-state="copied"] {
+.installer__status[data-state="copied"],
+.setup-wizard__status[data-state="ready"] {
     border-style: solid;
     border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
     background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-.installer__status[data-state="dirty"] {
+.installer__status[data-state="dirty"],
+.setup-wizard__status[data-state="pending"] {
     border-style: solid;
     border-color: color-mix(in srgb, #facc15 55%, var(--border));
     background: color-mix(in srgb, #f59e0b 16%, transparent);
+}
+
+.setup-wizard__status[data-state="error"] {
+    border-style: solid;
+    border-color: color-mix(in srgb, #ef4444 60%, var(--border));
+    background: color-mix(in srgb, #ef4444 15%, transparent);
 }
 
 .installer__hint {

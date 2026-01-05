@@ -183,7 +183,10 @@
         </section>
 
         <section id="settings" class="panel">
-            <h2>Home Server Installer</h2>
+            <h2>Setup wizard</h2>
+            <p>Capture production-ready values, write them to your environment file, and trigger a safe restart.</p>
+            <div id="setup-wizard"></div>
+            <h3>Home Server Installer</h3>
             <p>The guided installer provisions directories and launches BitRiver Live as a system service.</p>
             <div id="installer"></div>
         </section>
@@ -201,6 +204,95 @@
             </menu>
         </form>
     </dialog>
+
+    <template id="setup-wizard-template">
+        <section class="card setup-wizard">
+            <header class="setup-wizard__header">
+                <p class="setup-wizard__eyebrow">Protected</p>
+                <div>
+                    <h3>Production configuration</h3>
+                    <p class="card__meta">Write required secrets to your .env and restart the service from the control centre.</p>
+                </div>
+            </header>
+            <form id="setup-wizard-form" class="setup-wizard__form">
+                <div class="setup-wizard__grid">
+                    <label class="setup-wizard__field">
+                        Admin email
+                        <input type="email" name="adminEmail" autocomplete="email" required />
+                        <span class="setup-wizard__hint">Used for the control centre administrator account.</span>
+                    </label>
+                    <label class="setup-wizard__field">
+                        Admin password
+                        <input type="password" name="adminPassword" autocomplete="new-password" />
+                        <span class="setup-wizard__hint">Optional; leave blank to keep the existing password.</span>
+                    </label>
+                    <label class="setup-wizard__field">
+                        Public viewer URL
+                        <input type="url" name="viewerUrl" placeholder="https://stream.example.com/viewer" required />
+                        <span class="setup-wizard__hint">Domain where viewers load the experience.</span>
+                    </label>
+                    <label class="setup-wizard__field">
+                        Public API URL
+                        <input type="url" name="publicApiUrl" placeholder="https://api.example.com" />
+                        <span class="setup-wizard__hint">Leave blank to inherit the control centre origin.</span>
+                    </label>
+                    <label class="setup-wizard__field">
+                        Viewer runtime origin
+                        <input type="url" name="viewerOrigin" placeholder="https://viewer.internal:3000" />
+                        <span class="setup-wizard__hint">Optional origin for the embedded or proxied viewer runtime.</span>
+                    </label>
+                    <label class="setup-wizard__field">
+                        API port
+                        <input type="number" name="apiPort" inputmode="numeric" min="1" max="65535" value="8080" required />
+                        <span class="setup-wizard__hint">Updates BITRIVER_LIVE_PORT and BITRIVER_LIVE_ADDR.</span>
+                    </label>
+                    <label class="setup-wizard__field">
+                        TLS certificate path
+                        <input type="text" name="tlsCertPath" placeholder="/etc/ssl/certs/fullchain.pem" />
+                    </label>
+                    <label class="setup-wizard__field">
+                        TLS private key path
+                        <input type="text" name="tlsKeyPath" placeholder="/etc/ssl/private/privkey.pem" />
+                    </label>
+                </div>
+
+                <div class="setup-wizard__grid">
+                    <label class="setup-wizard__field">
+                        Postgres password
+                        <input type="password" name="postgresPassword" autocomplete="off" required />
+                    </label>
+                    <label class="setup-wizard__field">
+                        Redis password
+                        <input type="password" name="redisPassword" autocomplete="off" required />
+                    </label>
+                    <label class="setup-wizard__field">
+                        Metrics token
+                        <input type="text" name="metricsToken" autocomplete="off" placeholder="metrics-collector-token" />
+                    </label>
+                    <label class="setup-wizard__field">
+                        SRS token
+                        <input type="text" name="srsToken" autocomplete="off" required />
+                    </label>
+                    <label class="setup-wizard__field">
+                        OME API token
+                        <input type="text" name="omeToken" autocomplete="off" required />
+                    </label>
+                    <label class="setup-wizard__field">
+                        Transcoder token
+                        <input type="text" name="transcoderToken" autocomplete="off" required />
+                    </label>
+                </div>
+
+                <div class="setup-wizard__actions">
+                    <div id="setup-wizard-status" class="setup-wizard__status" data-state="idle" aria-live="polite"></div>
+                    <div class="setup-wizard__buttons">
+                        <button type="submit" id="setup-wizard-submit" class="primary">Save and restart</button>
+                        <p class="setup-wizard__hint">The service will shut down gracefully so your supervisor can restart it.</p>
+                    </div>
+                </div>
+            </form>
+        </section>
+    </template>
 
     <template id="user-form">
         <label>
