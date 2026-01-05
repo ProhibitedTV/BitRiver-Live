@@ -122,5 +122,8 @@ preinstall. `npm run test:playwright` builds the app and launches `npm run
 start:test` unless you override the target host with `PLAYWRIGHT_BASE_URL`; in
 either case, the specs mock the API to stay deterministic (for example,
 `tests/channel-chat-playback.spec.ts` exercises chat authentication edge cases
-and HLS player ready/error states, and `tests/stream-playback.spec.ts` stubs
-playback metadata and chat responses).
+and HLS player ready/error states, `tests/creator-uploads.spec.ts` walks the
+upload manager through failed and recovered API calls, and
+`tests/creator-schedule.spec.ts` validates ingest retries and stream title
+updates alongside `tests/stream-playback.spec.ts`, which stubs playback
+metadata and chat responses).

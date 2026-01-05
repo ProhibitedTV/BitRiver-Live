@@ -27,9 +27,8 @@ coverage. Keep it updated as tests are hardened or new flakes are discovered.
 
 ## Coverage gaps to address
 
-- **Viewer/client interactions:** End-user flows such as creator uploads and
-  schedule management remain lightly covered in automated tests; extend the
-  Playwright suite to surface regressions outside the channel page.
+- (None currently tracked.) Add entries here when you discover areas that need
+  dedicated guards.
 
 ## Recent coverage additions
 
@@ -47,6 +46,10 @@ coverage. Keep it updated as tests are hardened or new flakes are discovered.
   `web/viewer/tests/channel-chat-playback.spec.ts` now cover channel page retry
   handling, HLS-ready states, chat send/receive, and chat authentication
   prompts.
+- **Creator dashboards:** Playwright specs in
+  `web/viewer/tests/creator-uploads.spec.ts` and
+  `web/viewer/tests/creator-schedule.spec.ts` cover upload registration error
+  handling, ingest retries, and stream title updates in the creator dashboards.
 
 ## Reliability checklist
 
