@@ -20,6 +20,7 @@ const state = {
     moderation: { queue: [], actions: [] },
     analytics: { summary: null, perChannel: [] },
     uploads: new Map(),
+    statusReport: null,
 };
 
 let moderationLoaded = false;
@@ -182,6 +183,7 @@ const modal = document.getElementById("modal");
 const modalTitle = document.getElementById("modal-title");
 const modalBody = document.getElementById("modal-body");
 const overviewCards = document.getElementById("overview-cards");
+const statusBoard = document.getElementById("status-board");
 const profileDetail = document.getElementById("profile-detail");
 const accountActions = document.getElementById("account-actions");
 const accountName = document.getElementById("current-user-name");
@@ -457,6 +459,26 @@ function formatDuration(ms) {
     return `${minutes}m`;
 }
 
+function formatStatusName(value) {
+    if (!value) {
+        return "Unknown";
+    }
+    return value
+        .split(/[_\s]+/)
+        .filter(Boolean)
+        .map((segment) => segment[0].toUpperCase() + segment.slice(1))
+        .join(" ");
+}
+
+function createStatusBadge(status) {
+    const normalized = (status || "degraded").toLowerCase();
+    const badge = createElement("span", {
+        className: `badge status-badge status-badge--${normalized}`,
+        textContent: normalized[0].toUpperCase() + normalized.slice(1),
+    });
+    return badge;
+}
+
 const numberFormatter = new Intl.NumberFormat();
 
 function formatNumber(value) {
@@ -504,6 +526,7 @@ function exportSnapshot() {
         sessions: state.sessions,
         chat: state.chat,
         profiles: state.profiles,
+        status: state.statusReport,
     };
     const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -529,6 +552,30 @@ function pruneChannelState() {
             delete state.chat[id];
         }
     }
+}
+
+async function loadStatus() {
+    try {
+        const response = await fetch("/api/status", { credentials: "include" });
+        const contentType = response.headers.get("content-type") || "";
+        const isJSON = contentType.includes("application/json");
+        const payload = isJSON ? await response.json().catch(() => null) : null;
+        if (!response.ok) {
+            throw new Error(payload?.error || response.statusText);
+        }
+        state.statusReport = payload;
+    } catch (error) {
+        state.statusReport = {
+            status: "down",
+            checkedAt: new Date().toISOString(),
+            checks: [],
+            recentFailures: [],
+            logHints: [],
+            error: error.message,
+        };
+        showToast(`Status check failed: ${error.message}`, "error");
+    }
+    renderDashboard();
 }
 
 async function loadUsers() {
@@ -1735,7 +1782,145 @@ async function openProfileEditor(userId) {
     });
 }
 
+function renderStatusCheck(check) {
+    const item = createElement("article", { className: "status-item" });
+    const header = createElement("div", { className: "status-item__header" });
+    header.append(
+        createElement("h4", { textContent: formatStatusName(check.name) }),
+        createStatusBadge(check.status),
+    );
+    item.appendChild(header);
+
+    item.appendChild(
+        createElement("div", {
+            className: "card__meta",
+            textContent: check.category === "ingest" ? "Ingest" : "Core dependency",
+        }),
+    );
+
+    if (check.detail) {
+        item.appendChild(createElement("p", { className: "status-detail", textContent: check.detail }));
+    }
+
+    item.appendChild(
+        createElement("p", {
+            className: "status-remediation",
+            textContent: check.remediation || "Inspect logs to continue triage.",
+        }),
+    );
+
+    item.appendChild(
+        createElement("p", {
+            className: "status-meta",
+            textContent: check.checkedAt ? `Checked ${formatRelativeTime(check.checkedAt)}` : "Pending check",
+        }),
+    );
+
+    return item;
+}
+
+function renderLogHints(logHints) {
+    const container = createElement("div", { className: "log-hints" });
+    container.appendChild(createElement("h4", { textContent: "Logs" }));
+    if (!logHints?.length) {
+        container.appendChild(createElement("p", { className: "card__meta", textContent: "No log references available." }));
+        return container;
+    }
+
+    const list = createElement("div", { className: "log-hints__list" });
+    for (const hint of logHints) {
+        const row = createElement("div", { className: "log-hints__item" });
+        row.appendChild(createElement("span", { className: "log-hints__label", textContent: hint.label }));
+        row.appendChild(createElement("code", { className: "log-hints__command", textContent: hint.command }));
+        const copy = createElement("button", { className: "secondary", textContent: "Copy" });
+        copy.addEventListener("click", async () => {
+            try {
+                await navigator.clipboard.writeText(hint.command);
+                showToast("Log command copied");
+            } catch (error) {
+                showToast(`Copy failed: ${error.message}`, "error");
+            }
+        });
+        row.appendChild(copy);
+        list.appendChild(row);
+    }
+    container.appendChild(list);
+    return container;
+}
+
+function renderStatusBoard() {
+    if (!statusBoard) {
+        return;
+    }
+    clearElement(statusBoard);
+    const report = state.statusReport;
+    const card = createElement("article", { className: "card status-card" });
+    const header = createElement("div", { className: "card__header status-card__header" });
+    const title = createElement("div");
+    title.appendChild(createElement("p", { className: "eyebrow", textContent: "Health" }));
+    title.appendChild(createElement("h3", { textContent: "System status" }));
+    const subtitle = report?.checkedAt
+        ? `Updated ${formatRelativeTime(report.checkedAt)}`
+        : "Waiting for the first status check";
+    title.appendChild(createElement("p", { className: "card__meta", textContent: subtitle }));
+    header.appendChild(title);
+
+    header.appendChild(createStatusBadge(report?.status || "degraded"));
+
+    const actions = createElement("div", { className: "status-card__actions" });
+    const refresh = createElement("button", { className: "secondary", textContent: "Refresh status" });
+    refresh.addEventListener("click", () => loadStatus());
+    actions.appendChild(refresh);
+    header.appendChild(actions);
+    card.appendChild(header);
+
+    if (report?.error) {
+        card.appendChild(createElement("p", { className: "status-error", textContent: report.error }));
+    }
+
+    const grid = createElement("div", { className: "status-grid" });
+    if (!report || !report.checks?.length) {
+        grid.appendChild(
+            createElement("p", { className: "card__meta", textContent: "No checks have run yet." }),
+        );
+    } else {
+        for (const check of report.checks) {
+            grid.appendChild(renderStatusCheck(check));
+        }
+    }
+    card.appendChild(grid);
+
+    const failures = report?.recentFailures ?? [];
+    const failuresSection = createElement("section", { className: "status-failures" });
+    failuresSection.appendChild(createElement("h4", { textContent: "Recent failures" }));
+    if (!failures.length) {
+        failuresSection.appendChild(
+            createElement("p", { className: "card__meta", textContent: "All components are ready." }),
+        );
+    } else {
+        const list = document.createElement("ul");
+        list.className = "status-failure-list";
+        for (const failure of failures) {
+            const item = document.createElement("li");
+            item.append(
+                createStatusBadge(failure.status),
+                createElement("span", {
+                    textContent: `${formatStatusName(failure.name)}: ${failure.detail || failure.remediation}`,
+                }),
+            );
+            list.appendChild(item);
+        }
+        failuresSection.appendChild(list);
+    }
+    card.appendChild(failuresSection);
+
+    card.appendChild(renderLogHints(report?.logHints));
+
+    statusBoard.appendChild(card);
+}
+
 function renderDashboard() {
+    renderStatusBoard();
     const sessions = Object.values(state.sessions).flat();
     const totalDuration = sessions.reduce((sum, session) => sum + computeSessionDuration(session), 0);
     const totalPeak = sessions.reduce((sum, session) => sum + session.peakConcurrent, 0);
@@ -2492,6 +2677,7 @@ function renderAnalytics() {
 
 async function refreshAll() {
     await Promise.all([
+        loadStatus(),
         loadUsers(),
         loadChannels({ hydrate: true }),
         loadProfiles(),

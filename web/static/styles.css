@@ -606,6 +606,137 @@ textarea {
     border: 1px solid rgba(14, 165, 233, 0.4);
 }
 
+.status-card {
+    gap: 1rem;
+}
+
+.status-card__header {
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.status-card__actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.status-grid {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.status-item {
+    padding: 0.75rem 0.9rem;
+    border-radius: 0.85rem;
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface) 60%, var(--surface-strong) 40%);
+    display: grid;
+    gap: 0.35rem;
+}
+
+.status-item__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.status-detail {
+    margin: 0;
+}
+
+.status-remediation {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+}
+
+.status-meta {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.status-failures {
+    border-top: 1px solid var(--border);
+    padding-top: 0.75rem;
+    display: grid;
+    gap: 0.35rem;
+}
+
+.status-failure-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.4rem;
+}
+
+.status-failure-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.status-badge.status-badge--ready {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.35);
+    color: #22c55e;
+}
+
+.status-badge.status-badge--degraded {
+    background: rgba(234, 179, 8, 0.15);
+    border-color: rgba(234, 179, 8, 0.4);
+    color: #eab308;
+}
+
+.status-badge.status-badge--down {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: var(--danger);
+}
+
+.status-error {
+    margin: 0;
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.log-hints {
+    border-top: 1px solid var(--border);
+    padding-top: 0.75rem;
+    display: grid;
+    gap: 0.5rem;
+}
+
+.log-hints__list {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.log-hints__item {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    border: 1px dashed var(--border);
+    padding: 0.65rem 0.75rem;
+    border-radius: 0.75rem;
+}
+
+.log-hints__label {
+    font-weight: 700;
+}
+
+.log-hints__command {
+    background: var(--surface);
+    padding: 0.35rem 0.55rem;
+    border-radius: 0.5rem;
+}
+
 .pill {
     display: inline-flex;
     align-items: center;

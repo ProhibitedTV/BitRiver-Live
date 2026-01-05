@@ -1874,6 +1874,97 @@ func TestHealthDegradedWhenRedisDependencyFails(t *testing.T) {
 	t.Fatalf("expected rate limiter component entry")
 }
 
+func TestStatusAggregatesReadinessAndIngest(t *testing.T) {
+	handler, store := newTestHandler(t)
+	handler.RateLimiter = pingFunc(func(context.Context) error { return nil })
+	handler.ChatQueue = pingFunc(func(context.Context) error { return nil })
+	handler.Store = ingestHealthRepository{
+		Repository: store,
+		health: []ingest.HealthStatus{
+			{Component: "srs", Status: "ok"},
+			{Component: "transcoder", Status: "ok"},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Status(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var payload statusResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode status payload: %v", err)
+	}
+	if payload.Status != "ready" {
+		t.Fatalf("expected overall ready status, got %s", payload.Status)
+	}
+	if len(payload.Checks) != 6 {
+		t.Fatalf("expected 6 checks, got %d", len(payload.Checks))
+	}
+	if len(payload.LogHints) == 0 {
+		t.Fatalf("expected log hints to be present")
+	}
+	for _, check := range payload.Checks {
+		if check.Remediation == "" {
+			t.Fatalf("expected remediation message for %s", check.Name)
+		}
+		if check.CheckedAt.IsZero() {
+			t.Fatalf("expected checkedAt to be set for %s", check.Name)
+		}
+	}
+}
+
+func TestStatusSurfacesFailuresAndRemediation(t *testing.T) {
+	handler, store := newTestHandler(t)
+	failing := failingRepository{Repository: store, err: errors.New("datastore unreachable")}
+	handler.Store = ingestHealthRepository{
+		Repository: failing,
+		health:     []ingest.HealthStatus{{Component: "transcoder", Status: "error", Detail: "worker stopped"}},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Status(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var payload statusResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode status payload: %v", err)
+	}
+	if payload.Status != "down" {
+		t.Fatalf("expected overall down status, got %s", payload.Status)
+	}
+	foundDatastore := false
+	foundTranscoder := false
+	for _, check := range payload.Checks {
+		if check.Name == "datastore" && check.Status == "down" && strings.Contains(check.Detail, "datastore unreachable") {
+			foundDatastore = true
+		}
+		if check.Name == "transcoder" && check.Status == "down" && strings.Contains(check.Detail, "worker stopped") {
+			foundTranscoder = true
+		}
+	}
+	if !foundDatastore || !foundTranscoder {
+		t.Fatalf("expected datastore and transcoder failures in payload")
+	}
+	if len(payload.RecentFailures) < 2 {
+		t.Fatalf("expected recent failures to include degraded components")
+	}
+	for _, failure := range payload.RecentFailures {
+		if failure.Remediation == "" {
+			t.Fatalf("expected remediation string for failure %s", failure.Name)
+		}
+	}
+}
+
 func findCookie(t *testing.T, cookies []*http.Cookie, name string) *http.Cookie {
 	t.Helper()
 	for _, cookie := range cookies {

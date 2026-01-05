@@ -52,7 +52,7 @@ Want a shim to handle shell-specific permissions? Use `./scripts/quickstart.sh` 
 2. Generates `.env` with the same defaults baked into `deploy/docker-compose.yml` (including placeholders for the admin email and viewer URL) and rotates the administrator password to a strong random value unless the file already exists. When a pre-existing `.env` is missing required credentials, the helper backfills them (including the OME API username/password and the `BITRIVER_OME_BIND` listener address for the control listener) so Compose can start without manual edits.
 3. Launches the containers with `docker compose up --build -d` using the compose file in `deploy/`. Docker automatically builds the API, viewer, SRS controller, and transcoder images the first time, so no registry login is required, and the manifest enables `restart: unless-stopped` for each long-lived service so they come back online after crashes or host reboots.
 4. Renders `deploy/ome/Server.generated.xml` from the bundled template via the Go renderer, applying `BITRIVER_OME_BIND`, stamping the configured ports, and mirroring the credentials from `.env` so health checks see the same managers authentication the compose preflight expects. If the template or credentials drift, the generator stops Compose before OME starts.
-5. Waits for the API readiness check to pass (`/readyz`), then invokes the `bootstrap-admin` helper to seed the admin account and print the credentials. The `/healthz` endpoint still reports ingest dependency status in the JSON payload and may mark the stack as `degraded` when streaming services are unavailable, but readiness will only fail when core API dependencies are down.
+5. Waits for the API readiness check to pass (`/readyz`), then invokes the `bootstrap-admin` helper to seed the admin account and print the credentials. Once you sign in, use the control centre **System status** card (powered by `/api/status`) as the primary health view. The raw `/readyz` and `/healthz` endpoints remain available for automation and deep debugging.
 
 Deployment `.env` files must keep `BITRIVER_LIVE_MODE=production`; `deploy/check-env.sh` now fails fast when the mode is empty or still `development`. For local HTTP-only demos, leave `.env` at production and override the mode inline (for example, `BITRIVER_LIVE_MODE=development docker compose --env-file ./.env -f deploy/docker-compose.yml up -d`) or with a one-off Compose override that sets the API service's `BITRIVER_LIVE_MODE` to `development`. Drop the override after you enable HTTPS via `BITRIVER_LIVE_TLS_CERT`/`BITRIVER_LIVE_TLS_KEY` or a reverse proxy so cookies regain the `Secure` flag.
 
@@ -70,6 +70,14 @@ The health payload still expects the ingest services to be reachable from the AP
 - **Transcoder:** `BITRIVER_TRANSCODER_API` defaults to `http://transcoder:9000`; ensure the host and port resolve from the API container and that the token matches `BITRIVER_TRANSCODER_TOKEN`.
 
 Update the generated `.env` before inviting real users—swap in a valid admin email, capture the printed admin password (the quickstart rotates it automatically on first run), rotate the `BITRIVER_POSTGRES_USER`/`BITRIVER_POSTGRES_PASSWORD` pair (and update `BITRIVER_LIVE_POSTGRES_DSN` to match), change the Redis credentials (`BITRIVER_REDIS_PASSWORD` and `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD`), and point `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` at the HTTP origin your viewers can actually reach instead of the default `http://localhost:9080`. Update the public viewer URL to match your domain or reverse proxy as well. The helper prints the seeded credentials after the stack is ready; log in immediately and rotate the password from the control center settings page. Viewer self-registration stays disabled by default to keep new accounts admin-controlled; set `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true` in `.env` and rerun `docker compose up -d` to reopen public signups, or leave it false to require manual invites.
+
+### Appendix: Health endpoints (advanced)
+
+The Overview page in the control centre is the preferred health view. It calls `/api/status` to combine readiness, datastore/Redis checks, ingest probes, and remediation hints with links to relevant logs. Use the endpoints below when you need raw JSON for automation or troubleshooting:
+
+- `/api/status` (aggregated dashboard payload with remediation guidance and log suggestions)
+- `/readyz` (core dependency readiness for load balancers)
+- `/healthz` (adds ingest information to `/readyz` while keeping HTTP 200 unless core dependencies fail)
 
 ## Common follow-up commands
 
