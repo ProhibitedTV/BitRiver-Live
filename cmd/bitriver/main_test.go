@@ -9,6 +9,54 @@ import (
 	"testing"
 )
 
+func containsString(values []string, target string) bool {
+	for _, v := range values {
+		if strings.Contains(v, target) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func buildValidProductionEnv(t *testing.T) map[string]string {
+	t.Helper()
+
+	return map[string]string{
+		"BITRIVER_LIVE_IMAGE_TAG":                 "1.0.0",
+		"BITRIVER_VIEWER_IMAGE_TAG":               "1.0.0",
+		"BITRIVER_SRS_CONTROLLER_IMAGE_TAG":       "1.0.0",
+		"BITRIVER_TRANSCODER_IMAGE_TAG":           "1.0.0",
+		"BITRIVER_SRS_IMAGE_TAG":                  "v5.0.185",
+		"BITRIVER_OME_IMAGE_TAG":                  "0.16.0",
+		"BITRIVER_POSTGRES_USER":                  "brlive_app",
+		"BITRIVER_POSTGRES_PASSWORD":              "secret",
+		"BITRIVER_REDIS_PASSWORD":                 "secret",
+		"BITRIVER_OME_API":                        "http://ome.internal:8081",
+		"BITRIVER_OME_BIND":                       "10.0.0.5",
+		"BITRIVER_OME_IP":                         "10.0.0.6",
+		"BITRIVER_OME_SERVER_PORT":                "9000",
+		"BITRIVER_OME_SERVER_TLS_PORT":            "9443",
+		"BITRIVER_LIVE_ADMIN_EMAIL":               "admin@bitriver.test",
+		"BITRIVER_LIVE_ADMIN_PASSWORD":            "secure",
+		"BITRIVER_LIVE_SESSION_TTL":               "168h",
+		"BITRIVER_LIVE_ALLOW_SELF_SIGNUP":         "false",
+		"BITRIVER_SRS_TOKEN":                      "token",
+		"BITRIVER_OME_USERNAME":                   "omeuser",
+		"BITRIVER_OME_PASSWORD":                   "omepass",
+		"BITRIVER_OME_API_TOKEN":                  "apitoken",
+		"BITRIVER_OME_ACCESS_TOKEN":               "accesstoken",
+		"BITRIVER_TRANSCODER_TOKEN":               "transcodertoken",
+		"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD": "secret",
+		"BITRIVER_TRANSCODER_PUBLIC_BASE_URL":     "http://cdn.edge/hls",
+		"NEXT_PUBLIC_VIEWER_URL":                  "http://viewer.internal/viewer",
+		"NEXT_PUBLIC_API_BASE_URL":                "http://api.internal",
+		"BITRIVER_LIVE_MODE":                      "production",
+		"BITRIVER_LIVE_METRICS_TOKEN":             "metrics-token",
+		"BITRIVER_LIVE_RATE_LOGIN_LIMIT":          "10",
+	}
+}
+
 func TestVersionOutputIncludesVersionLabel(t *testing.T) {
 	var buf bytes.Buffer
 	Version = "test-version"
@@ -99,6 +147,41 @@ func TestEnvValidateBlocksPlaceholders(t *testing.T) {
 	err := runEnvValidate([]string{"--env-file", envPath})
 	if err == nil {
 		t.Fatal("expected validation to fail due to placeholder password")
+	}
+}
+
+func TestValidateEnvRequiresMetricsProtectionInProduction(t *testing.T) {
+	values := buildValidProductionEnv(t)
+	values["BITRIVER_LIVE_METRICS_TOKEN"] = ""
+	values["BITRIVER_LIVE_METRICS_ALLOW_NETWORKS"] = ""
+
+	res := validateEnv(values)
+
+	if !containsString(res.Errors, "requires protecting /metrics") {
+		t.Fatalf("expected metrics protection requirement in production, got errors=%v", res.Errors)
+	}
+}
+
+func TestValidateEnvRequiresLoginRateLimitInProduction(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{name: "empty", value: ""},
+		{name: "zero", value: "0"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			values := buildValidProductionEnv(t)
+			values["BITRIVER_LIVE_RATE_LOGIN_LIMIT"] = tt.value
+
+			res := validateEnv(values)
+
+			if !containsString(res.Errors, "login throttling") {
+				t.Fatalf("expected login throttling requirement for %s value, got errors=%v", tt.name, res.Errors)
+			}
+		})
 	}
 }
 

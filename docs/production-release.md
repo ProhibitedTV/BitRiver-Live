@@ -135,6 +135,10 @@ build out:
    The release workflow surfaces this output in the deploy logs and fails when
    any OvenMediaEngine URLs, bind addresses, or ports point at loopback
    addresses, placeholders, or are missing.
+   The same preflight now errors when `/metrics` lacks
+   `BITRIVER_LIVE_METRICS_TOKEN`/`BITRIVER_LIVE_METRICS_ALLOW_NETWORKS` or the
+   login throttling floor (`BITRIVER_LIVE_RATE_LOGIN_LIMIT`) is missing, so
+   release deployments match the protections enforced by the runtime binary.
    Postgres DSNs in production must use TLS; keep `sslmode` at `require` or
    `verify-full` on both `BITRIVER_LIVE_POSTGRES_DSN` and
    `BITRIVER_LIVE_SESSION_POSTGRES_DSN`, and append

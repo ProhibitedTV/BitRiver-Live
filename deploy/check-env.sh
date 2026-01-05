@@ -56,6 +56,27 @@ fi
 if [ "${mode_value,,}" = "production" ]; then
   check_insecure_dsn "BITRIVER_LIVE_POSTGRES_DSN"
   check_insecure_dsn "BITRIVER_LIVE_SESSION_POSTGRES_DSN"
+
+  metrics_token=$(read_env_value "BITRIVER_LIVE_METRICS_TOKEN")
+  metrics_allow_networks=$(read_env_value "BITRIVER_LIVE_METRICS_ALLOW_NETWORKS")
+  if [ -z "$metrics_token" ] && [ -z "$metrics_allow_networks" ]; then
+    echo "Production mode requires protecting /metrics with BITRIVER_LIVE_METRICS_TOKEN or BITRIVER_LIVE_METRICS_ALLOW_NETWORKS" >&2
+    exit 1
+  fi
+
+  login_limit_raw=$(read_env_value "BITRIVER_LIVE_RATE_LOGIN_LIMIT")
+  if [ -z "$login_limit_raw" ]; then
+    echo "Production mode requires non-zero login throttling; set BITRIVER_LIVE_RATE_LOGIN_LIMIT" >&2
+    exit 1
+  fi
+  if ! [[ "$login_limit_raw" =~ ^[0-9]+$ ]]; then
+    echo "BITRIVER_LIVE_RATE_LOGIN_LIMIT must be a positive integer in production (current: $login_limit_raw)" >&2
+    exit 1
+  fi
+  if [ "$login_limit_raw" -le 0 ]; then
+    echo "Production mode requires non-zero login throttling; set BITRIVER_LIVE_RATE_LOGIN_LIMIT" >&2
+    exit 1
+  fi
 fi
 
 tls_cert=$(read_env_value "BITRIVER_LIVE_TLS_CERT")

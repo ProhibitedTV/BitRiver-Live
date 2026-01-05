@@ -1363,6 +1363,33 @@ func validateEnv(values map[string]string) envValidatorResult {
 		res.Errors = append(res.Errors, "HTTPS URLs are configured for the viewer or API, but BITRIVER_LIVE_TLS_CERT/BITRIVER_LIVE_TLS_KEY are empty. Provide TLS files or terminate HTTPS in front of the service and update the URLs accordingly.")
 	}
 
+	metricsToken := strings.TrimSpace(values["BITRIVER_LIVE_METRICS_TOKEN"])
+	metricsAllowNetworks := strings.TrimSpace(values["BITRIVER_LIVE_METRICS_ALLOW_NETWORKS"])
+
+	if metricsToken == "" && metricsAllowNetworks == "" {
+		message := "production mode requires protecting /metrics with BITRIVER_LIVE_METRICS_TOKEN or BITRIVER_LIVE_METRICS_ALLOW_NETWORKS"
+		if production {
+			res.Errors = append(res.Errors, message)
+		} else {
+			res.Warnings = append(res.Warnings, message)
+		}
+	}
+
+	loginLimitRaw := strings.TrimSpace(values["BITRIVER_LIVE_RATE_LOGIN_LIMIT"])
+	loginLimit := 0
+	if loginLimitRaw != "" {
+		parsed, err := strconv.Atoi(loginLimitRaw)
+		if err != nil {
+			res.Errors = append(res.Errors, fmt.Sprintf("BITRIVER_LIVE_RATE_LOGIN_LIMIT must be an integer (current: %s)", loginLimitRaw))
+		} else {
+			loginLimit = parsed
+		}
+	}
+
+	if production && (loginLimit <= 0 || loginLimitRaw == "") {
+		res.Errors = append(res.Errors, "production mode requires non-zero login throttling; set BITRIVER_LIVE_RATE_LOGIN_LIMIT")
+	}
+
 	if profiles := strings.TrimSpace(values["COMPOSE_PROFILES"]); profiles != "" {
 		for _, profile := range strings.FieldsFunc(profiles, func(r rune) bool { return r == ',' || r == ':' }) {
 			if profile == "postgres-host" {
