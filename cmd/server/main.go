@@ -68,6 +68,7 @@ func (kv *keyValueFlag) Set(value string) error {
 func main() {
 	addr := flag.String("addr", "", "HTTP listen address")
 	mode := flag.String("mode", "", "server runtime mode (development or production, required; production enforces /metrics protection)")
+	envFile := flag.String("env-file", "", "path to the environment file written by the setup wizard")
 	allowSelfSignup := flag.Bool("allow-self-signup", false, "allow unauthenticated viewers to register accounts")
 	sessionCookieCrossSite := flag.Bool("session-cookie-cross-site", false, "emit SameSite=None; Secure session cookies for cross-site viewer deployments")
 	adminCORSOrigins := flag.String("admin-cors-origins", "", "comma separated origins allowed to access the control centre APIs")
@@ -200,6 +201,7 @@ func main() {
 	sessionCookieCrossSiteValue := resolveBool(*sessionCookieCrossSite, "BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE")
 	sessionCookieSecureMode := resolveSessionCookieSecureMode(serverMode)
 	listenAddr := resolveListenAddr(*addr, serverMode, os.Getenv("BITRIVER_LIVE_ADDR"))
+	envFilePath := strings.TrimSpace(firstNonEmpty(*envFile, os.Getenv("BITRIVER_LIVE_ENV_FILE")))
 
 	tlsCertPath := firstNonEmpty(*tlsCert, os.Getenv("BITRIVER_LIVE_TLS_CERT"))
 	tlsKeyPath := firstNonEmpty(*tlsKey, os.Getenv("BITRIVER_LIVE_TLS_KEY"))
@@ -415,9 +417,11 @@ func main() {
 		Store:  store,
 		Logger: logging.WithComponent(logger, "chat"),
 	})
+	restartChan := make(chan struct{}, 1)
 	handler := api.NewHandler(store, sessions)
 	handler.AllowSelfSignup = allowSelfSignupValue
 	handler.ChatGateway = gateway
+	handler.Setup = newSetupManager(envFilePath, restartChan)
 	handler.DefaultRenditions = ladderProfileNames(ingestConfig.LadderProfiles)
 	handler.SRSHookToken = ingestConfig.SRSToken
 	if pingable, ok := queue.(interface{ Ping(context.Context) error }); ok {
@@ -530,11 +534,16 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
+	restartRequested := false
+
 	select {
 	case sig := <-quit:
 		logger.Info("received shutdown signal", "signal", sig.String())
 	case err := <-errs:
 		logger.Error("server error", "error", err)
+	case <-restartChan:
+		logger.Info("setup wizard requested restart")
+		restartRequested = true
 	}
 
 	workerCancel()
@@ -578,6 +587,9 @@ func main() {
 	}
 
 	logger.Info("server stopped")
+	if restartRequested {
+		logger.Info("exiting for restart after setup wizard")
+	}
 }
 
 type sessionStoreConfig struct {
