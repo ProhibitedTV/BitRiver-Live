@@ -15,6 +15,9 @@
 #   --mode                 / BITRIVER_LIVE_MODE              (production|development, default production)
 #   --enable-logs                                           (enable systemd log redirection)
 #   --log-dir              / BITRIVER_LIVE_LOG_DIR           (defaults to DATA_DIR/logs when enabled)
+#   --viewer-url           / NEXT_PUBLIC_VIEWER_URL          (for example, https://stream.example.com/viewer)
+#   --public-api-url       / NEXT_PUBLIC_API_BASE_URL        (for example, https://stream.example.com/api)
+#   --viewer-origin        / BITRIVER_VIEWER_ORIGIN          (CORS origin for the viewer when proxied)
 #   --rate-global-rps      / BITRIVER_LIVE_RATE_GLOBAL_RPS
 #   --rate-login-limit     / BITRIVER_LIVE_RATE_LOGIN_LIMIT
 #   --rate-login-window    / BITRIVER_LIVE_RATE_LOGIN_WINDOW
@@ -58,6 +61,9 @@ Optional flags:
   --addr LISTEN_ADDR (defaults to :80 in production / :8080 in development; privileged ports grant CAP_NET_BIND_SERVICE)
   --enable-logs
   --log-dir LOG_DIR
+  --viewer-url VIEWER_URL
+  --public-api-url API_URL
+  --viewer-origin VIEWER_ORIGIN
   --tls-cert CERT_PATH
   --tls-key KEY_PATH
   --allow-self-signup (true|false)
@@ -130,8 +136,8 @@ validate_password_strength() {
 }
 
 extract_listen_port() {
-	local addr=$1
-	addr=${addr#*://}
+        local addr=$1
+        addr=${addr#*://}
 	if [[ $addr =~ ^\[[^]]*\]:(.+)$ ]]; then
 		echo "${BASH_REMATCH[1]}"
 		return 0
@@ -143,8 +149,25 @@ extract_listen_port() {
 	if [[ $addr =~ ^.+:([0-9]+)$ ]]; then
 		echo "${BASH_REMATCH[1]}"
 		return 0
-	fi
-	echo ""
+        fi
+        echo ""
+}
+
+stage_tls_files() {
+        local cert_path=$1
+        local key_path=$2
+        local dest_dir=$3
+
+        sudo install -d -m 0755 -o "$SERVICE_USER" -g "$SERVICE_USER" "$dest_dir"
+
+        local cert_target="$dest_dir/$(basename "$cert_path")"
+        local key_target="$dest_dir/$(basename "$key_path")"
+
+        sudo install -m 0600 -o "$SERVICE_USER" -g "$SERVICE_USER" "$cert_path" "$cert_target"
+        sudo install -m 0600 -o "$SERVICE_USER" -g "$SERVICE_USER" "$key_path" "$key_target"
+
+        TLS_CERT=$cert_target
+        TLS_KEY=$key_target
 }
 
 INSTALL_DIR=${INSTALL_DIR:-}
@@ -162,6 +185,9 @@ RATE_LOGIN_WINDOW=${BITRIVER_LIVE_RATE_LOGIN_WINDOW:-}
 REDIS_ADDR=${BITRIVER_LIVE_RATE_REDIS_ADDR:-}
 REDIS_PASSWORD=${BITRIVER_LIVE_RATE_REDIS_PASSWORD:-}
 HOSTNAME_HINT=${BITRIVER_LIVE_HOSTNAME_HINT:-}
+VIEWER_URL=${NEXT_PUBLIC_VIEWER_URL:-}
+PUBLIC_API_URL=${NEXT_PUBLIC_API_BASE_URL:-}
+VIEWER_ORIGIN=${BITRIVER_VIEWER_ORIGIN:-}
 STORAGE_DRIVER=${BITRIVER_LIVE_STORAGE_DRIVER:-}
 POSTGRES_DSN=${BITRIVER_LIVE_POSTGRES_DSN:-}
 SESSION_STORE_DRIVER=${BITRIVER_LIVE_SESSION_STORE:-}
@@ -204,6 +230,21 @@ while [[ $# -gt 0 ]]; do
         --log-dir)
                 require_arg "$@"
                 LOG_DIR=$2
+                shift 2
+                ;;
+        --viewer-url)
+                require_arg "$@"
+                VIEWER_URL=$2
+                shift 2
+                ;;
+        --public-api-url)
+                require_arg "$@"
+                PUBLIC_API_URL=$2
+                shift 2
+                ;;
+        --viewer-origin)
+                require_arg "$@"
+                VIEWER_ORIGIN=$2
                 shift 2
                 ;;
         --tls-cert)
@@ -327,6 +368,13 @@ if [[ -n $BOOTSTRAP_ADMIN_EMAIL ]]; then
         fi
 fi
 
+if [[ -n $TLS_CERT || -n $TLS_KEY ]]; then
+        if [[ -z $TLS_CERT || -z $TLS_KEY ]]; then
+                echo "--tls-cert and --tls-key must be provided together" >&2
+                exit 1
+        fi
+fi
+
 STORAGE_DRIVER=${STORAGE_DRIVER,,}
 if [[ -z $STORAGE_DRIVER ]]; then
         STORAGE_DRIVER="postgres"
@@ -429,6 +477,10 @@ if [[ $REQUIRES_CAP_NET_BIND_SERVICE == true ]]; then
         sudo setcap 'cap_net_bind_service=+ep' "$INSTALL_DIR/bitriver-live"
 fi
 
+if [[ -n $TLS_CERT ]]; then
+        stage_tls_files "$TLS_CERT" "$TLS_KEY" "$INSTALL_DIR/certs"
+fi
+
 env_file=$(mktemp)
 service_file=$(mktemp)
 cleanup() {
@@ -441,6 +493,15 @@ trap cleanup EXIT
         echo "BITRIVER_LIVE_DATA=$DATA_FILE"
         echo "BITRIVER_LIVE_STORAGE_DRIVER=$STORAGE_DRIVER"
         echo "BITRIVER_LIVE_ALLOW_SELF_SIGNUP=$ALLOW_SELF_SIGNUP"
+        if [[ -n $VIEWER_URL ]]; then
+                echo "NEXT_PUBLIC_VIEWER_URL=$VIEWER_URL"
+        fi
+        if [[ -n $PUBLIC_API_URL ]]; then
+                echo "NEXT_PUBLIC_API_BASE_URL=$PUBLIC_API_URL"
+        fi
+        if [[ -n $VIEWER_ORIGIN ]]; then
+                echo "BITRIVER_VIEWER_ORIGIN=$VIEWER_ORIGIN"
+        fi
         if [[ -n $TLS_CERT ]]; then
                 echo "BITRIVER_LIVE_TLS_CERT=$TLS_CERT"
         fi

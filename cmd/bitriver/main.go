@@ -1337,6 +1337,32 @@ func validateEnv(values map[string]string) envValidatorResult {
 		res.Warnings = append(res.Warnings, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD does not match BITRIVER_REDIS_PASSWORD. Ensure Redis credentials stay in sync unless intentionally different.")
 	}
 
+	tlsCert := strings.TrimSpace(values["BITRIVER_LIVE_TLS_CERT"])
+	tlsKey := strings.TrimSpace(values["BITRIVER_LIVE_TLS_KEY"])
+
+	if (tlsCert == "") != (tlsKey == "") {
+		res.Errors = append(res.Errors, "BITRIVER_LIVE_TLS_CERT and BITRIVER_LIVE_TLS_KEY must both be set to enable HTTPS.")
+	}
+
+	httpsRequested := false
+	for _, candidate := range []string{values["NEXT_PUBLIC_API_BASE_URL"], values["NEXT_PUBLIC_VIEWER_URL"]} {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(candidate)), "https://") {
+			httpsRequested = true
+			break
+		}
+	}
+
+	if tlsCert != "" && tlsKey != "" {
+		if _, err := os.Stat(tlsCert); err != nil {
+			res.Errors = append(res.Errors, fmt.Sprintf("BITRIVER_LIVE_TLS_CERT is set to %s but is not readable: %v", tlsCert, err))
+		}
+		if _, err := os.Stat(tlsKey); err != nil {
+			res.Errors = append(res.Errors, fmt.Sprintf("BITRIVER_LIVE_TLS_KEY is set to %s but is not readable: %v", tlsKey, err))
+		}
+	} else if httpsRequested {
+		res.Errors = append(res.Errors, "HTTPS URLs are configured for the viewer or API, but BITRIVER_LIVE_TLS_CERT/BITRIVER_LIVE_TLS_KEY are empty. Provide TLS files or terminate HTTPS in front of the service and update the URLs accordingly.")
+	}
+
 	if profiles := strings.TrimSpace(values["COMPOSE_PROFILES"]); profiles != "" {
 		for _, profile := range strings.FieldsFunc(profiles, func(r rune) bool { return r == ',' || r == ':' }) {
 			if profile == "postgres-host" {

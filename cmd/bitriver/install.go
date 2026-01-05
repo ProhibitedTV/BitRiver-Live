@@ -47,6 +47,9 @@ func runInstallSystemd(args []string) error {
 	serviceUser := fs.String("service-user", "", "service user for the systemd unit")
 	mode := fs.String("mode", "production", "application mode (production|development)")
 	addr := fs.String("addr", "", "listen address for the API (default :80 production / :8080 development)")
+	viewerURL := fs.String("viewer-url", "", "public viewer URL (for example, https://stream.example.com/viewer)")
+	publicAPIURL := fs.String("public-api-url", "", "public API URL (for example, https://stream.example.com/api)")
+	viewerOrigin := fs.String("viewer-origin", "", "CORS origin for the viewer when reverse proxied")
 	enableLogs := fs.Bool("enable-logs", false, "redirect stdout/stderr to a log file")
 	logDir := fs.String("log-dir", "", "directory for log files (defaults to <data-dir>/logs when logs are enabled)")
 	tlsCert := fs.String("tls-cert", "", "path to TLS certificate")
@@ -75,6 +78,9 @@ func runInstallSystemd(args []string) error {
 
 	if strings.TrimSpace(*installDir) == "" || strings.TrimSpace(*dataDir) == "" || strings.TrimSpace(*serviceUser) == "" {
 		return errors.New("install-dir, data-dir, and service-user are required")
+	}
+	if (*tlsCert == "") != (*tlsKey == "") {
+		return errors.New("tls-cert and tls-key must be provided together")
 	}
 
 	if *addr == "" {
@@ -156,6 +162,16 @@ func runInstallSystemd(args []string) error {
 	}
 
 	dataFile := filepath.Join(*dataDir, "store.json")
+	stagedCert := strings.TrimSpace(*tlsCert)
+	stagedKey := strings.TrimSpace(*tlsKey)
+	if stagedCert != "" && stagedKey != "" {
+		stagedCertPath, stagedKeyPath, err := stageTLSFiles(stagedCert, stagedKey, filepath.Join(*installDir, "certs"))
+		if err != nil {
+			return fmt.Errorf("stage TLS files: %w", err)
+		}
+		stagedCert = stagedCertPath
+		stagedKey = stagedKeyPath
+	}
 	envValues := map[string]string{
 		"BITRIVER_LIVE_ADDR":              *addr,
 		"BITRIVER_LIVE_MODE":              *mode,
@@ -164,11 +180,20 @@ func runInstallSystemd(args []string) error {
 		"BITRIVER_LIVE_ALLOW_SELF_SIGNUP": strconv.FormatBool(*allowSelfSignup),
 	}
 
-	if *tlsCert != "" {
-		envValues["BITRIVER_LIVE_TLS_CERT"] = *tlsCert
+	if stagedCert != "" {
+		envValues["BITRIVER_LIVE_TLS_CERT"] = stagedCert
 	}
-	if *tlsKey != "" {
-		envValues["BITRIVER_LIVE_TLS_KEY"] = *tlsKey
+	if stagedKey != "" {
+		envValues["BITRIVER_LIVE_TLS_KEY"] = stagedKey
+	}
+	if *viewerURL != "" {
+		envValues["NEXT_PUBLIC_VIEWER_URL"] = *viewerURL
+	}
+	if *publicAPIURL != "" {
+		envValues["NEXT_PUBLIC_API_BASE_URL"] = *publicAPIURL
+	}
+	if *viewerOrigin != "" {
+		envValues["BITRIVER_VIEWER_ORIGIN"] = *viewerOrigin
 	}
 	if *rateGlobalRPS != "" {
 		envValues["BITRIVER_LIVE_RATE_GLOBAL_RPS"] = *rateGlobalRPS
@@ -500,6 +525,45 @@ func writeEnvFile(path string, values map[string]string) error {
 		return fmt.Errorf("write env file: %w", err)
 	}
 	return nil
+}
+
+func stageTLSFiles(certPath, keyPath, destDir string) (string, string, error) {
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return "", "", err
+	}
+
+	copy := func(src string) (string, error) {
+		base := filepath.Base(src)
+		dest := filepath.Join(destDir, base)
+
+		if absSrc, _ := filepath.Abs(src); absSrc != "" {
+			if absDest, _ := filepath.Abs(dest); absDest == absSrc {
+				return dest, nil
+			}
+		}
+
+		data, err := os.ReadFile(src)
+		if err != nil {
+			return "", err
+		}
+
+		if err := os.WriteFile(dest, data, 0o600); err != nil {
+			return "", err
+		}
+		return dest, nil
+	}
+
+	stagedCert, err := copy(certPath)
+	if err != nil {
+		return "", "", err
+	}
+
+	stagedKey, err := copy(keyPath)
+	if err != nil {
+		return "", "", err
+	}
+
+	return stagedCert, stagedKey, nil
 }
 
 func copyExecutable(src, dst string) error {

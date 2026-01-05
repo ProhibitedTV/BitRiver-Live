@@ -39,6 +39,16 @@ func (s *setupManager) ApplySetup(ctx context.Context, cfg api.SetupConfig) (api
 		values = make(map[string]string)
 	}
 
+	if cfg.TLSCertPath != "" && cfg.TLSKeyPath != "" {
+		targetDir := filepath.Join(filepath.Dir(envPath), "deploy", "certs")
+		stagedCert, stagedKey, stageErr := stageTLSFiles(cfg.TLSCertPath, cfg.TLSKeyPath, targetDir)
+		if stageErr != nil {
+			return api.SetupResult{}, stageErr
+		}
+		cfg.TLSCertPath = stagedCert
+		cfg.TLSKeyPath = stagedKey
+	}
+
 	applySetupConfig(values, cfg)
 
 	backupPath, err := backupEnv(envPath)
@@ -186,4 +196,41 @@ func requestRestart(ctx context.Context, restartCh chan<- struct{}) error {
 	case <-time.After(2 * time.Second):
 		return fmt.Errorf("failed to schedule restart: timeout")
 	}
+}
+
+func stageTLSFiles(certPath, keyPath, destDir string) (string, string, error) {
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return "", "", err
+	}
+
+	copy := func(src string) (string, error) {
+		base := filepath.Base(src)
+		dest := filepath.Join(destDir, base)
+		if absSrc, _ := filepath.Abs(src); absSrc != "" {
+			if absDest, _ := filepath.Abs(dest); absDest == absSrc {
+				return dest, nil
+			}
+		}
+
+		data, err := os.ReadFile(src)
+		if err != nil {
+			return "", err
+		}
+		if err := os.WriteFile(dest, data, 0o600); err != nil {
+			return "", err
+		}
+		return dest, nil
+	}
+
+	stagedCert, err := copy(certPath)
+	if err != nil {
+		return "", "", err
+	}
+
+	stagedKey, err := copy(keyPath)
+	if err != nil {
+		return "", "", err
+	}
+
+	return stagedCert, stagedKey, nil
 }
