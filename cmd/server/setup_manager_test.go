@@ -19,6 +19,15 @@ func TestSetupManagerAppliesConfigAndSignalsRestart(t *testing.T) {
 		t.Fatalf("seed env: %v", err)
 	}
 
+	certPath := filepath.Join(dir, "cert.pem")
+	keyPath := filepath.Join(dir, "key.pem")
+	if err := os.WriteFile(certPath, []byte("cert"), 0o600); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+	if err := os.WriteFile(keyPath, []byte("key"), 0o600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+
 	restartCh := make(chan struct{}, 1)
 	manager := newSetupManager(envPath, restartCh)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -31,8 +40,8 @@ func TestSetupManagerAppliesConfigAndSignalsRestart(t *testing.T) {
 		PublicAPIURL:     "https://api.example.com",
 		ViewerOrigin:     "https://viewer.internal",
 		APIPort:          9090,
-		TLSCertPath:      "/etc/ssl/certs/example.crt",
-		TLSKeyPath:       "/etc/ssl/private/example.key",
+		TLSCertPath:      certPath,
+		TLSKeyPath:       keyPath,
 		PostgresPassword: "postgres-pass",
 		RedisPassword:    "redis-pass",
 		MetricsToken:     "metrics-token",
@@ -70,6 +79,10 @@ func TestSetupManagerAppliesConfigAndSignalsRestart(t *testing.T) {
 	}
 	if values["BITRIVER_OME_ACCESS_TOKEN"] != "ome-token" {
 		t.Fatalf("expected OME token to mirror access token")
+	}
+	expectedCert := filepath.Join(filepath.Dir(envPath), "deploy", "certs", filepath.Base(certPath))
+	if values["BITRIVER_LIVE_TLS_CERT"] != expectedCert || values["BITRIVER_LIVE_TLS_KEY"] != filepath.Join(filepath.Dir(envPath), "deploy", "certs", filepath.Base(keyPath)) {
+		t.Fatalf("expected staged TLS paths, got %#v", values)
 	}
 }
 

@@ -12,6 +12,17 @@ fi
 
 mode_line=$(grep -E '^[[:space:]]*BITRIVER_LIVE_MODE=' "$ENV_FILE" | tail -n 1 || true)
 mode_value=$(echo "${mode_line#*=}" | xargs)
+read_env_value() {
+  local env_var="$1"
+  local raw_line
+
+  raw_line=$(grep -E "^[[:space:]]*${env_var}=" "$ENV_FILE" | tail -n 1 || true)
+  raw_line=${raw_line#*=}
+  raw_line=${raw_line%""""}
+  raw_line=${raw_line%\"}
+  raw_line=${raw_line#\"}
+  echo "$raw_line" | xargs
+}
 
 check_insecure_dsn() {
   local env_var="$1"
@@ -45,6 +56,39 @@ fi
 if [ "${mode_value,,}" = "production" ]; then
   check_insecure_dsn "BITRIVER_LIVE_POSTGRES_DSN"
   check_insecure_dsn "BITRIVER_LIVE_SESSION_POSTGRES_DSN"
+fi
+
+tls_cert=$(read_env_value "BITRIVER_LIVE_TLS_CERT")
+tls_key=$(read_env_value "BITRIVER_LIVE_TLS_KEY")
+api_url=$(read_env_value "NEXT_PUBLIC_API_BASE_URL")
+viewer_url=$(read_env_value "NEXT_PUBLIC_VIEWER_URL")
+
+https_requested=false
+for val in "$api_url" "$viewer_url"; do
+  lower=$(echo "$val" | tr '[:upper:]' '[:lower:]')
+  if [[ "$lower" == https://* ]]; then
+    https_requested=true
+    break
+  fi
+done
+
+if [ -n "$tls_cert" ] || [ -n "$tls_key" ]; then
+  if [ -z "$tls_cert" ] || [ -z "$tls_key" ]; then
+    echo "BITRIVER_LIVE_TLS_CERT and BITRIVER_LIVE_TLS_KEY must both be set to enable HTTPS" >&2
+    exit 1
+  fi
+  if [ ! -r "$tls_cert" ]; then
+    echo "BITRIVER_LIVE_TLS_CERT points at $tls_cert but the file is not readable" >&2
+    exit 1
+  fi
+  if [ ! -r "$tls_key" ]; then
+    echo "BITRIVER_LIVE_TLS_KEY points at $tls_key but the file is not readable" >&2
+    exit 1
+  fi
+elif [ "$https_requested" = true ]; then
+  echo "HTTPS URLs are configured for the API/viewer, but BITRIVER_LIVE_TLS_CERT/BITRIVER_LIVE_TLS_KEY are empty." >&2
+  echo "Provide TLS files or terminate HTTPS upstream and update NEXT_PUBLIC_API_BASE_URL/NEXT_PUBLIC_VIEWER_URL accordingly." >&2
+  exit 1
 fi
 
 if ! command -v go >/dev/null 2>&1; then

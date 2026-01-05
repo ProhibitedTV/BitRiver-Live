@@ -8,6 +8,7 @@ import (
 )
 
 func TestValidateEnvRequiresImageTags(t *testing.T) {
+	cert, key := tempTLSFiles(t)
 	values := map[string]string{
 		"BITRIVER_POSTGRES_USER":                  "brlive_app",
 		"BITRIVER_POSTGRES_PASSWORD":              "secret",
@@ -30,6 +31,8 @@ func TestValidateEnvRequiresImageTags(t *testing.T) {
 		"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD": "secret",
 		"BITRIVER_TRANSCODER_PUBLIC_BASE_URL":     "https://cdn.example.com/hls",
 		"NEXT_PUBLIC_VIEWER_URL":                  "https://viewer.example.com",
+		"BITRIVER_LIVE_TLS_CERT":                  cert,
+		"BITRIVER_LIVE_TLS_KEY":                   key,
 	}
 
 	res := validateEnv(values)
@@ -48,6 +51,7 @@ func TestValidateEnvBlocksSampleCredentials(t *testing.T) {
 		t.Fatalf("load sample credentials: %v", err)
 	}
 
+	cert, key := tempTLSFiles(t)
 	values := map[string]string{
 		"BITRIVER_POSTGRES_USER":              "brlive_app",
 		"BITRIVER_OME_API":                    "http://ome:8081",
@@ -67,6 +71,8 @@ func TestValidateEnvBlocksSampleCredentials(t *testing.T) {
 		"BITRIVER_SRS_IMAGE_TAG":              "v5.0.185",
 		"BITRIVER_OME_IMAGE_TAG":              "0.16.1",
 		"BITRIVER_LIVE_MODE":                  "production",
+		"BITRIVER_LIVE_TLS_CERT":              cert,
+		"BITRIVER_LIVE_TLS_KEY":               key,
 	}
 
 	for key, value := range placeholders {
@@ -80,6 +86,23 @@ func TestValidateEnvBlocksSampleCredentials(t *testing.T) {
 			t.Fatalf("expected %s to be blocked when using the sample credential", key)
 		}
 	}
+}
+
+func tempTLSFiles(t *testing.T) (string, string) {
+	t.Helper()
+
+	dir := t.TempDir()
+	cert := filepath.Join(dir, "cert.pem")
+	key := filepath.Join(dir, "key.pem")
+
+	if err := os.WriteFile(cert, []byte("dummy-cert"), 0o600); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+	if err := os.WriteFile(key, []byte("dummy-key"), 0o600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+
+	return cert, key
 }
 
 func TestValidateEnvFlagsLoopbackInProduction(t *testing.T) {
