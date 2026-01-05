@@ -79,19 +79,11 @@ The CLI checks Docker/Compose, generates `.env` from `deploy/.env.example` with 
 
 ### Step 3 – Use the running stack
 
-1. Check that the API is ready:
-   ```bash
-   curl http://localhost:8080/readyz
-   ```
-   The endpoint returns HTTP 200 when core dependencies (database, sessions, rate limiting) are available.
-   To inspect ingest dependencies, call `/healthz` as well:
-   ```bash
-   curl http://localhost:8080/healthz
-   ```
-   The JSON payload reports `status: "degraded"` when SRS/OME/transcoder probes fail, but the HTTP status will stay 200 unless
-   core services are unavailable.
-2. Open [http://localhost:8080/signup](http://localhost:8080/signup) in your browser and sign in with the admin credentials
+1. Open [http://localhost:8080/signup](http://localhost:8080/signup) in your browser and sign in with the admin credentials
    printed by the CLI, then change the password under **Settings → Security**.
+2. Check the **System status** card on the control centre overview at [http://localhost:8080](http://localhost:8080). It pulls
+   from `/api/status` to merge readiness, database/Redis checks, and ingest probes (SRS/OME/transcoder) with remediation tips
+   and copy-to-clipboard log commands—no `curl` required.
 3. Visit [http://localhost:8080/viewer](http://localhost:8080/viewer) in another tab to see the public viewer that proxies
    through the API.
 4. Point OBS or any RTMP encoder at `rtmp://localhost:1935/live` with the stream key shown in the control centre and watch the
@@ -164,6 +156,14 @@ Common tweaks:
 - **Keep OvenMediaEngine credentials in sync:** Whenever you edit `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, `BITRIVER_OME_API_TOKEN`, `BITRIVER_OME_BIND`, or `BITRIVER_OME_IP` in `.env`, rerun `go run ./cmd/bitriver ome render --force --env-file ./.env` (or the `./scripts/render-ome-config.sh` wrapper) to regenerate `deploy/ome/Server.generated.xml`. The Go renderer overwrites the generated file on every invocation, and the CLI calls it automatically so template changes from `git pull` land before Compose starts. The pinned OME tag (default `0.16.0`) expects a non-empty managers API token; `BITRIVER_OME_ACCESS_TOKEN` mirrors it for health probes unless you override it. The compose bundle still runs a lightweight `ome-config` preflight before starting `ome`; it will fail fast if the generated file is missing, so fix and re-render before retrying `docker compose up -d`.
 
 Find deeper explanations and additional variables (rate limiting, transcoder public URLs, external Redis/Postgres) in [`docs/quickstart.md`](docs/quickstart.md).
+
+### Appendix: Health endpoints (advanced)
+
+The dashboard’s **System status** card is the primary health check for operators. For automation or low-level debugging:
+
+- `/api/status` returns the aggregated health payload used by the dashboard, including remediation hints and log suggestions.
+- `/readyz` reports core dependency readiness (database, session store, rate limiting) for load balancers.
+- `/healthz` adds ingest details to `/readyz` but keeps HTTP 200 unless core dependencies are down.
 
 ## Need more control?
 
