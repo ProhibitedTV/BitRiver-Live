@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>BitRiver Live Control Panel</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 16px; background: #f6f7fb; }
+    h1 { margin-top: 0; }
+    .actions button { margin-right: 8px; padding: 8px 12px; }
+    .status { background: #fff; border: 1px solid #ddd; padding: 12px; margin-top: 12px; }
+    .error { color: #b00020; font-weight: bold; }
+    .logs { background: #0b1021; color: #c8d3f5; padding: 12px; border-radius: 4px; height: 300px; overflow-y: scroll; font-family: Menlo, Consolas, monospace; white-space: pre-wrap; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: 6px; border-bottom: 1px solid #eee; }
+  </style>
+</head>
+<body>
+  <h1>BitRiver Live control panel</h1>
+  <p>Use the tray to keep this window handy. Start, stop, or restart the stack and jump straight to the health dashboard when you need deeper detail.</p>
+  <div class="actions">
+    <button onclick="action('start')">Start</button>
+    <button onclick="action('stop')">Stop</button>
+    <button onclick="action('restart')">Restart</button>
+    <button onclick="action('logs')">Refresh logs</button>
+    <a id="dashboardLink" href="{{.Dashboard}}" target="_blank">Open health dashboard</a>
+  </div>
+
+  <div class="status">
+    <h2>Compose status</h2>
+    <div id="statusError" class="error"></div>
+    <table>
+      <thead><tr><th>Service</th><th>State</th><th>Health</th></tr></thead>
+      <tbody id="statusRows"></tbody>
+    </table>
+  </div>
+
+  <div class="status">
+    <h2>Recent logs</h2>
+    <div id="logError" class="error"></div>
+    <div class="logs" id="logs"></div>
+  </div>
+
+  <script>
+    async function fetchStatus() {
+      const res = await fetch('/api/status');
+      const payload = await res.json();
+      document.getElementById('dashboardLink').href = payload.dashboard || '#';
+      const tbody = document.getElementById('statusRows');
+      tbody.innerHTML = '';
+      payload.services.forEach(svc => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${svc.service}</td><td>${svc.state}</td><td>${svc.health}</td>`;
+        tbody.appendChild(tr);
+      });
+      document.getElementById('statusError').textContent = payload.statusErr || '';
+      document.getElementById('logError').textContent = payload.logErr || '';
+      const logBox = document.getElementById('logs');
+      logBox.textContent = (payload.logs || []).join('\n');
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    async function action(name) {
+      const res = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: name })});
+      if (!res.ok) {
+        const text = await res.text();
+        alert('Action failed: ' + text);
+      } else {
+        fetchStatus();
+      }
+    }
+
+    fetchStatus();
+    setInterval(fetchStatus, 2500);
+  </script>
+</body>
+</html>
