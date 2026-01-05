@@ -38,6 +38,15 @@ Use the packaged launcher (`bitriver-live`) if you just want to bring the stack 
 
 The launcher keeps using the Compose bundle under `/usr/local/share/bitriver-live` (macOS/Linux) or `Program Files\BitRiver Live` (Windows). Edit the generated `.env` there before restarting the service.
 
+### Desktop control panel (default for operators)
+
+The installer now ships a lightweight desktop/tray control panel so non-developers can manage Docker Compose without memorising commands. Launch it from the Start menu/Applications folder or from the shell:
+
+- **macOS/Linux:** `bitriver-live ui` (or `./scripts/bitriver-live-wrapper.sh ui` if you are running from a cloned repo)
+- **Windows:** `bitriver-live.ps1 -Command ui`
+
+The panel polls `docker compose ps` to show service state + health, tails recent logs, and exposes Start/Stop/Restart/Refresh logs buttons that shell out to Compose. Use the **Open health dashboard** link to jump back into the control centre overview when troubleshooting. Contributors can still call the CLI directly (`bitriver-live start`, `bitriver-live stop`, or `go run ./cmd/bitriver desktop --compose-file deploy/docker-compose.yml`) when they prefer the terminal.
+
 ## Advanced quickstart: Go CLI from source
 
 Prefer the source-based workflow when developing features or rebuilding images locally. The Go CLI in `cmd/bitriver` handles environment generation, Docker Compose orchestration, and health checks. Use it directly or fall back to `scripts/quickstart.sh` / `scripts/quickstart.ps1` if your shell cannot run Go.

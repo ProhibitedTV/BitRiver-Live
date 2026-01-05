@@ -53,23 +53,93 @@ pull_images() {
   docker compose -f "$compose_file" --env-file "$env_file" pull
 }
 
+compose_cmd() {
+  docker compose -f "$compose_file" --env-file "$env_file" "$@"
+}
+
 bring_up() {
   echo "Starting BitRiver Live stack..."
-  docker compose -f "$compose_file" --env-file "$env_file" up -d
+  compose_cmd up -d
+}
+
+stop_stack() {
+  echo "Stopping BitRiver Live stack..."
+  compose_cmd stop
+}
+
+restart_stack() {
+  echo "Restarting BitRiver Live stack..."
+  compose_cmd restart
+}
+
+follow_logs() {
+  echo "Tailing BitRiver Live logs..."
+  compose_cmd logs -f
+}
+
+open_desktop() {
+  if [ ! -x "$binary_path" ]; then
+    fatal "bitriver binary not found at $binary_path; reinstall or rebuild the launcher"
+  fi
+
+  echo "Launching BitRiver Live control panel..."
+  "$binary_path" desktop --compose-file "$compose_file" --env-file "$env_file"
+}
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [start|stop|restart|logs|ui]
+
+Commands:
+  start    Pull images and start the BitRiver Live stack (default)
+  stop     Stop running containers without removing volumes
+  restart  Restart running containers
+  logs     Follow docker compose logs
+  ui       Open the desktop control panel
+EOF
 }
 
 main() {
-  check_prereqs
-  ensure_assets
-  if [ -x "$binary_path" ]; then
-    echo "Running bitriver doctor for sanity checks..."
-    if ! "$binary_path" doctor; then
-      echo "warning: bitriver doctor reported issues; continuing because Docker is available" >&2
-    fi
-  fi
-  pull_images
-  bring_up
-  echo "BitRiver Live is starting. Use 'docker compose -f $compose_file logs -f' to follow logs."
+  command=${1:-start}
+  case "$command" in
+    start)
+      check_prereqs
+      ensure_assets
+      if [ -x "$binary_path" ]; then
+        echo "Running bitriver doctor for sanity checks..."
+        if ! "$binary_path" doctor; then
+          echo "warning: bitriver doctor reported issues; continuing because Docker is available" >&2
+        fi
+      fi
+      pull_images
+      bring_up
+      echo "BitRiver Live is starting. Use '$(basename "$0") logs' to follow logs or '$(basename "$0") ui' for the tray."
+      ;;
+    stop)
+      check_prereqs
+      ensure_assets
+      stop_stack
+      ;;
+    restart)
+      check_prereqs
+      ensure_assets
+      restart_stack
+      ;;
+    logs)
+      check_prereqs
+      ensure_assets
+      follow_logs
+      ;;
+    ui)
+      check_prereqs
+      ensure_assets
+      open_desktop
+      ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
 }
 
 main "$@"

@@ -34,6 +34,11 @@ bitriver-live
 
 The launcher keeps its assets under `/usr/local/share/bitriver-live` (macOS/Linux) or `Program Files\BitRiver Live` (Windows) and reuses `deploy/.env.example` from the installer bundle.
 
+### Desktop/system-tray control panel
+
+Run `bitriver-live ui` (or `./scripts/bitriver-live-wrapper.sh ui` / `./scripts/bitriver-live-wrapper.ps1 -Command ui` from a cloned repository) to open the desktop control panel. It keeps a tray icon handy, polls `docker compose ps` for service state/health, tails recent logs, and exposes Start/Stop/Restart/Refresh logs buttons that shell out to Docker Compose. The **Open health dashboard** link jumps straight to the control centre overview. Contributors can keep using the CLI directly when they need to rebuild images or run migrations from source.
+
+
 ```bash
 # macOS, Linux, or Windows via WSL/bash
 go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml

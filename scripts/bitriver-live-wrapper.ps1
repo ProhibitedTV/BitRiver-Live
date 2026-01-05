@@ -1,7 +1,8 @@
 param(
   [string]$LauncherRoot,
   [string]$EnvFile,
-  [string]$BinaryPath
+  [string]$BinaryPath,
+  [string]$Command = 'start'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,30 +53,84 @@ function Check-Prereqs {
   & docker compose version | Out-Null
 }
 
+function Invoke-Compose {
+  param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
+  & docker compose -f $composeFile --env-file $envFilePath @Args
+}
+
 function Pull-Images {
   Write-Host 'Pulling BitRiver Live images...'
-  & docker compose -f $composeFile --env-file $envFilePath pull
+  Invoke-Compose pull
 }
 
 function Bring-Up {
   Write-Host 'Starting BitRiver Live stack...'
-  & docker compose -f $composeFile --env-file $envFilePath up -d
+  Invoke-Compose up -d
 }
 
-function Invoke-Main {
-  Check-Prereqs
-  Ensure-Assets
-  if (Test-Path -LiteralPath $binary) {
-    Write-Host 'Running bitriver doctor for sanity checks...'
-    try {
-      & $binary doctor | Write-Output
-    } catch {
-      Write-Warning "bitriver doctor reported issues; continuing because Docker is available. $_"
-    }
+function Stop-Stack {
+  Write-Host 'Stopping BitRiver Live stack...'
+  Invoke-Compose stop
+}
+
+function Restart-Stack {
+  Write-Host 'Restarting BitRiver Live stack...'
+  Invoke-Compose restart
+}
+
+function Follow-Logs {
+  Write-Host 'Tailing BitRiver Live logs...'
+  Invoke-Compose logs -f
+}
+
+function Open-Desktop {
+  if (-not (Test-Path -LiteralPath $binary)) {
+    throw "bitriver binary not found at $binary. Reinstall the launcher or set BITRIVER_BINARY."
   }
-  Pull-Images
-  Bring-Up
-  Write-Host "BitRiver Live is starting. Use 'docker compose -f $composeFile logs -f' to follow logs."
+
+  Write-Host 'Launching BitRiver Live control panel...'
+  & $binary desktop --compose-file $composeFile --env-file $envFilePath
 }
 
-Invoke-Main
+function Show-Usage {
+  Write-Host "Usage: bitriver-live-wrapper.ps1 [-LauncherRoot path] [-EnvFile path] [-BinaryPath path] [-Command start|stop|restart|logs|ui]"
+}
+
+switch ($Command.ToLowerInvariant()) {
+  'start' {
+    Check-Prereqs
+    Ensure-Assets
+    if (Test-Path -LiteralPath $binary) {
+      Write-Host 'Running bitriver doctor for sanity checks...'
+      try {
+        & $binary doctor | Write-Output
+      } catch {
+        Write-Warning "bitriver doctor reported issues; continuing because Docker is available. $_"
+      }
+    }
+    Pull-Images
+    Bring-Up
+    Write-Host "BitRiver Live is starting. Use '.\\bitriver-live-wrapper.ps1 -Command logs' to follow logs or '.\\bitriver-live-wrapper.ps1 -Command ui' to keep the control panel in your tray."
+  }
+  'stop' {
+    Check-Prereqs
+    Ensure-Assets
+    Stop-Stack
+  }
+  'restart' {
+    Check-Prereqs
+    Ensure-Assets
+    Restart-Stack
+  }
+  'logs' {
+    Check-Prereqs
+    Ensure-Assets
+    Follow-Logs
+  }
+  'ui' {
+    Check-Prereqs
+    Ensure-Assets
+    Open-Desktop
+  }
+  Default { Show-Usage }
+}
