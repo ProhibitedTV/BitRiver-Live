@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Start BitRiver Live
+Comment=Launch BitRiver Live services with Docker Compose
+Exec=/usr/local/bin/bitriver-live
+Terminal=true
+Categories=Utility;

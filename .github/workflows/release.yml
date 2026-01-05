@@ -9,6 +9,7 @@ permissions:
   contents: write
   actions: read
   packages: write
+  id-token: write
 
 jobs:
   verify-env:
@@ -406,6 +407,120 @@ jobs:
           path: dist/bitriver-${{ matrix.goos }}-${{ matrix.goarch }}.*
           if-no-files-found: error
 
+  build-launcher:
+    name: Build launcher bundles and signatures
+    needs:
+      - go-tests
+      - postgres-tests
+      - verify-env
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+          - goos: linux
+            goarch: amd64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    env:
+      CGO_ENABLED: 0
+      GOTOOLCHAIN: local
+      GOPROXY: off
+      GOSUMDB: off
+      GOFLAGS: -mod=vendor
+      COSIGN_EXPERIMENTAL: "true"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.5.0
+
+      - name: Build launcher bundle
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          build_date="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+          launcher_root="dist/bitriver-launcher-${GOOS}-${GOARCH}"
+          rm -rf "$launcher_root"
+          mkdir -p "$launcher_root/bin" "$launcher_root/share/deploy"
+
+          bin_ext=""
+          archive_ext="tar.gz"
+          if [ "$GOOS" = "windows" ]; then
+            bin_ext=".exe"
+            archive_ext="zip"
+          fi
+
+          ldflags=(
+            "-X" "main.version=${RELEASE_TAG}"
+            "-X" "main.commit=${COMMIT_SHA}"
+            "-X" "main.date=${build_date}"
+          )
+
+          go build -trimpath -ldflags "${ldflags[*]}" -o "$launcher_root/bin/bitriver${bin_ext}" ./cmd/bitriver
+          cp deploy/docker-compose.yml "$launcher_root/share/deploy/docker-compose.yml"
+          cp deploy/.env.example "$launcher_root/share/deploy/.env.example"
+
+          if [ "$GOOS" = "windows" ]; then
+            cp scripts/bitriver-live-wrapper.ps1 "$launcher_root/bin/bitriver-live.ps1"
+            chmod +x "$launcher_root/bin/bitriver${bin_ext}"
+          else
+            cp scripts/bitriver-live-wrapper.sh "$launcher_root/bin/bitriver-live"
+            chmod +x "$launcher_root/bin/bitriver-live" "$launcher_root/bin/bitriver${bin_ext}"
+          fi
+
+          cosign sign-blob --yes --output-signature "$launcher_root/bin/bitriver${bin_ext}.sig" "$launcher_root/bin/bitriver${bin_ext}"
+
+          if [ "$archive_ext" = "zip" ]; then
+            (cd dist && zip -r "bitriver-launcher-${GOOS}-${GOARCH}.zip" "bitriver-launcher-${GOOS}-${GOARCH}")
+          else
+            tar -C dist -czf "dist/bitriver-launcher-${GOOS}-${GOARCH}.tar.gz" "bitriver-launcher-${GOOS}-${GOARCH}"
+          fi
+
+          if [ "$GOOS" = "linux" ]; then
+            export PATH="$HOME/go/bin:$PATH"
+            go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.37.1
+            NFPM_ARCH="$GOARCH" NFPM_VERSION="$RELEASE_TAG" LAUNCHER_ROOT="$launcher_root" \
+              nfpm pkg --packager deb --config deploy/installers/nfpm.yaml --target "dist/bitriver-live_${RELEASE_TAG}_${GOARCH}.deb"
+            NFPM_ARCH="$GOARCH" NFPM_VERSION="$RELEASE_TAG" LAUNCHER_ROOT="$launcher_root" \
+              nfpm pkg --packager rpm --config deploy/installers/nfpm.yaml --target "dist/bitriver-live_${RELEASE_TAG}_${GOARCH}.rpm"
+          fi
+
+      - name: Upload launcher archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/bitriver-launcher-${{ matrix.goos }}-${{ matrix.goarch }}.*
+          if-no-files-found: error
+
+      - name: Upload Linux installer packages
+        if: matrix.goos == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-linux-packages
+          path: |
+            dist/bitriver-live_${{ github.ref_name }}_${{ matrix.goarch }}.deb
+            dist/bitriver-live_${{ github.ref_name }}_${{ matrix.goarch }}.rpm
+          if-no-files-found: error
+
   build-viewer:
     name: Build viewer bundle
     needs:
@@ -555,6 +670,100 @@ jobs:
           path: ${{ matrix.image_name }}-${{ env.RELEASE_TAG }}.spdx.json
           if-no-files-found: error
 
+  brew-formula:
+    name: Generate Homebrew formula
+    needs:
+      - build-launcher
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download macOS launcher artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: launcher-darwin-*
+          path: dist
+          merge-multiple: true
+
+      - name: Generate formula
+        env:
+          VERSION: ${{ github.ref_name }}
+          REPO_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          arm_tar="dist/bitriver-launcher-darwin-arm64.tar.gz"
+          amd_tar="dist/bitriver-launcher-darwin-amd64.tar.gz"
+          arm_sha="$(sha256sum "$arm_tar" | awk '{print $1}')"
+          amd_sha="$(sha256sum "$amd_tar" | awk '{print $1}')"
+          arm_url="$REPO_URL/$(basename "$arm_tar")"
+          amd_url="$REPO_URL/$(basename "$amd_tar")"
+          mkdir -p dist/formula
+          scripts/generate-brew-formula.sh "$VERSION" "$arm_url" "$arm_sha" "$amd_url" "$amd_sha" dist/formula/bitriver-live.rb
+
+      - name: Upload formula artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: homebrew-formula
+          path: dist/formula/bitriver-live.rb
+          if-no-files-found: error
+
+  windows-msi:
+    name: Build Windows MSI installer
+    needs:
+      - go-tests
+      - postgres-tests
+      - verify-env
+    runs-on: windows-latest
+    env:
+      CGO_ENABLED: 0
+      GOTOOLCHAIN: local
+      GOPROXY: off
+      GOSUMDB: off
+      GOFLAGS: -mod=vendor
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Build MSI
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $buildDate = (Get-Date).ToUniversalTime().ToString("s") + "Z"
+          $launcherRoot = Join-Path $env:RUNNER_TEMP "bitriver-launcher-windows-amd64"
+          if (Test-Path $launcherRoot) { Remove-Item -Recurse -Force $launcherRoot }
+          New-Item -ItemType Directory -Path (Join-Path $launcherRoot "bin") | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $launcherRoot "share\deploy") | Out-Null
+
+          $ldflags = "-X main.version=$env:RELEASE_TAG -X main.commit=$env:COMMIT_SHA -X main.date=$buildDate"
+          go build -trimpath -ldflags $ldflags -o (Join-Path $launcherRoot "bin/bitriver.exe") ./cmd/bitriver
+          Copy-Item scripts/bitriver-live-wrapper.ps1 (Join-Path $launcherRoot "bin/bitriver-live.ps1")
+          Copy-Item deploy/docker-compose.yml (Join-Path $launcherRoot "share/deploy/docker-compose.yml")
+          Copy-Item deploy/.env.example (Join-Path $launcherRoot "share/deploy/.env.example")
+
+          $distDir = Join-Path (Get-Location) "dist"
+          if (-not (Test-Path $distDir)) { New-Item -ItemType Directory -Path $distDir | Out-Null }
+          $candle = "C:\\Program Files (x86)\\WiX Toolset v3.11\\bin\\candle.exe"
+          $light = "C:\\Program Files (x86)\\WiX Toolset v3.11\\bin\\light.exe"
+          & $candle -dProductVersion=$env:RELEASE_TAG -dSourceDir=$launcherRoot deploy/installers/bitriver-live.wxs
+          & $light -ext WixUIExtension bitriver-live.wixobj -o (Join-Path $distDir "bitriver-live-$($env:RELEASE_TAG).msi")
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/bitriver-live-${{ github.ref_name }}.msi
+          if-no-files-found: error
+
   release:
     name: Create GitHub release
     needs:
@@ -563,8 +772,11 @@ jobs:
       - verify-env
       - build
       - build-bitriver
+      - build-launcher
       - build-viewer
       - publish-images
+      - brew-formula
+      - windows-msi
     runs-on: ubuntu-latest
     steps:
       - name: Download build artifacts
@@ -579,6 +791,10 @@ jobs:
           find release -type f -name '*.tar.gz' -exec cp {} dist/ \;
           find release -type f -name '*.zip' -exec cp {} dist/ \;
           find release -type f -name '*.spdx.json' -exec cp {} dist/ \;
+          find release -type f -name '*.deb' -exec cp {} dist/ \;
+          find release -type f -name '*.rpm' -exec cp {} dist/ \;
+          find release -type f -name '*.msi' -exec cp {} dist/ \;
+          find release -type f -name '*.rb' -exec cp {} dist/ \;
 
       - name: Generate checksums
         run: |
@@ -610,5 +826,9 @@ jobs:
             dist/*.zip
             dist/CHECKSUMS.txt
             dist/*.spdx.json
+            dist/*.deb
+            dist/*.rpm
+            dist/*.msi
+            dist/*.rb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
