@@ -159,9 +159,11 @@ func TestChatWorkerProcessesQueue(t *testing.T) {
 func TestChatWorkerSkipsFailedStoreApply(t *testing.T) {
 	baseStore := newTestStore(t)
 	store := &recordingStore{
-		Repository: baseStore,
-		applyErr:   errors.New("cannot persist"),
-		applied:    make(chan chat.Event, 1),
+		Repository: &failingChatRepository{
+			Repository: baseStore,
+			applyErr:   errors.New("cannot persist"),
+		},
+		applied: make(chan chat.Event, 1),
 	}
 	owner, err := store.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
 	if err != nil {
@@ -284,16 +286,25 @@ func (s *recordingSubscription) Close() {
 
 type recordingStore struct {
 	Repository
-	applyErr error
-	applied  chan chat.Event
+	applied chan chat.Event
 }
 
 func (s *recordingStore) ApplyChatEvent(evt chat.Event) error {
+	err := s.Repository.ApplyChatEvent(evt)
 	if s.applied != nil {
 		s.applied <- evt
 	}
-	if s.applyErr != nil {
-		return s.applyErr
+	return err
+}
+
+type failingChatRepository struct {
+	Repository
+	applyErr error
+}
+
+func (r *failingChatRepository) ApplyChatEvent(evt chat.Event) error {
+	if r.applyErr != nil {
+		return r.applyErr
 	}
-	return s.Repository.ApplyChatEvent(evt)
+	return r.Repository.ApplyChatEvent(evt)
 }
