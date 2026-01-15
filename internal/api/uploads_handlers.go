@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -531,8 +532,12 @@ func (h *Handler) uploadMediaURL(r *http.Request, uploadID, token string) string
 	if r == nil {
 		return ""
 	}
-	scheme := requestScheme(r)
-	base := forwardedHost(r)
+	trustForwarded := h.shouldTrustForwarded(r)
+	scheme := requestScheme(r, trustForwarded)
+	base := ""
+	if trustForwarded {
+		base = forwardedHost(r)
+	}
 	if base == "" {
 		base = r.Host
 	}
@@ -599,18 +604,92 @@ func firstForwardedValue(value string) string {
 	return strings.TrimSpace(parts[0])
 }
 
-func requestScheme(r *http.Request) string {
+func requestScheme(r *http.Request, trustForwarded bool) string {
 	if r == nil {
 		return "http"
 	}
-	if proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); proto != "" {
-		parts := strings.Split(proto, ",")
-		return strings.TrimSpace(parts[0])
+	if trustForwarded {
+		if proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); proto != "" {
+			parts := strings.Split(proto, ",")
+			return strings.TrimSpace(parts[0])
+		}
 	}
 	if r.TLS != nil {
 		return "https"
 	}
 	return "http"
+}
+
+func (h *Handler) shouldTrustForwarded(r *http.Request) bool {
+	if h == nil || r == nil {
+		return false
+	}
+	if h.TrustForwardedHeaders {
+		return true
+	}
+	if len(h.TrustedProxies) == 0 {
+		return false
+	}
+	h.trustedProxyOnce.Do(func() {
+		networks, err := parseTrustedProxyNetworks(h.TrustedProxies)
+		if err != nil {
+			h.logger().Error("parse trusted proxies", "error", err)
+			return
+		}
+		h.trustedProxyNets = networks
+	})
+	if len(h.trustedProxyNets) == 0 {
+		return false
+	}
+	host := clientIPFromRemoteAddr(r.RemoteAddr)
+	if host == "" {
+		return false
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	for _, network := range h.trustedProxyNets {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func parseTrustedProxyNetworks(raw []string) ([]*net.IPNet, error) {
+	var networks []*net.IPNet
+	for _, value := range raw {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, network, err := net.ParseCIDR(trimmed); err == nil {
+			networks = append(networks, network)
+			continue
+		}
+		ip := net.ParseIP(trimmed)
+		if ip == nil {
+			return nil, fmt.Errorf("parse trusted proxy %q: invalid address", trimmed)
+		}
+		maskSize := 128
+		if ip.To4() != nil {
+			maskSize = 32
+		}
+		networks = append(networks, &net.IPNet{IP: ip, Mask: net.CIDRMask(maskSize, maskSize)})
+	}
+	return networks, nil
+}
+
+func clientIPFromRemoteAddr(remoteAddr string) string {
+	if remoteAddr == "" {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return remoteAddr
+	}
+	return host
 }
 
 func generateUploadMediaToken() string {

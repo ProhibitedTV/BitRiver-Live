@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -21,23 +22,27 @@ import (
 // the shared services they depend on, such as persistence, chat, and upload
 // processing.
 type Handler struct {
-	Store               storage.Repository
-	Sessions            *auth.SessionManager
-	ChatGateway         *chat.Gateway
-	OAuth               oauth.Service
-	UploadProcessor     *UploadProcessor
-	Setup               SetupManager
-	DefaultRenditions   []string
-	SRSHookToken        string
-	AllowSelfSignup     bool
-	RateLimiter         healthPinger
-	ChatQueue           healthPinger
-	UploadMediaDir      string
-	uploadDirOnce       sync.Once
-	uploadDir           string
-	SessionCookiePolicy SessionCookiePolicy
-	srsViewers          *srsViewerTracker
-	Logger              *slog.Logger
+	Store                 storage.Repository
+	Sessions              *auth.SessionManager
+	ChatGateway           *chat.Gateway
+	OAuth                 oauth.Service
+	UploadProcessor       *UploadProcessor
+	Setup                 SetupManager
+	DefaultRenditions     []string
+	SRSHookToken          string
+	AllowSelfSignup       bool
+	RateLimiter           healthPinger
+	ChatQueue             healthPinger
+	UploadMediaDir        string
+	TrustForwardedHeaders bool
+	TrustedProxies        []string
+	uploadDirOnce         sync.Once
+	uploadDir             string
+	trustedProxyOnce      sync.Once
+	trustedProxyNets      []*net.IPNet
+	SessionCookiePolicy   SessionCookiePolicy
+	srsViewers            *srsViewerTracker
+	Logger                *slog.Logger
 }
 
 type healthPinger interface {
