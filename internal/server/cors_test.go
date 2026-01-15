@@ -22,7 +22,7 @@ func TestCORSMiddlewareAllowsConfiguredOrigins(t *testing.T) {
 	req.Host = "api.example.com"
 	rec := httptest.NewRecorder()
 
-	corsMiddleware(policy, nil, next).ServeHTTP(rec, req)
+	corsMiddleware(policy, nil, nil, next).ServeHTTP(rec, req)
 
 	if !called {
 		t.Fatal("expected next handler to be called")
@@ -48,7 +48,7 @@ func TestCORSMiddlewareAllowsPreflightForViewerOrigin(t *testing.T) {
 	req.Host = "api.example.com"
 	rec := httptest.NewRecorder()
 
-	corsMiddleware(policy, nil, http.NotFoundHandler()).ServeHTTP(rec, req)
+	corsMiddleware(policy, nil, nil, http.NotFoundHandler()).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("expected 204 for preflight, got %d", rec.Code)
@@ -79,7 +79,7 @@ func TestCORSMiddlewareBlocksUnknownOrigin(t *testing.T) {
 	req.Host = "api.example.com"
 	rec := httptest.NewRecorder()
 
-	corsMiddleware(policy, nil, next).ServeHTTP(rec, req)
+	corsMiddleware(policy, nil, nil, next).ServeHTTP(rec, req)
 
 	if called {
 		t.Fatal("expected request to be blocked before reaching next handler")
@@ -105,7 +105,7 @@ func TestCORSMiddlewareAllowsSameOriginByDefault(t *testing.T) {
 	req.Host = "example.com"
 	rec := httptest.NewRecorder()
 
-	corsMiddleware(policy, nil, next).ServeHTTP(rec, req)
+	corsMiddleware(policy, nil, nil, next).ServeHTTP(rec, req)
 
 	if !called {
 		t.Fatal("expected same-origin request to reach next handler")
@@ -115,6 +115,87 @@ func TestCORSMiddlewareAllowsSameOriginByDefault(t *testing.T) {
 	}
 	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "http://example.com" {
 		t.Fatalf("expected allow origin header for same-origin request, got %q", got)
+	}
+}
+
+func TestCORSMiddlewareAllowsForwardedSchemeForTrustedProxy(t *testing.T) {
+	policy, err := newCORSPolicy(CORSConfig{})
+	if err != nil {
+		t.Fatalf("newCORSPolicy error: %v", err)
+	}
+	resolver, err := newClientIPResolver(RateLimitConfig{TrustForwardedHeaders: true})
+	if err != nil {
+		t.Fatalf("newClientIPResolver error: %v", err)
+	}
+	for _, tc := range []struct {
+		name      string
+		configure func(*http.Request)
+	}{
+		{
+			name: "x-forwarded-proto",
+			configure: func(r *http.Request) {
+				r.Header.Set("X-Forwarded-Proto", "https")
+			},
+		},
+		{
+			name: "forwarded-header",
+			configure: func(r *http.Request) {
+				r.Header.Set("Forwarded", "for=203.0.113.1;proto=https")
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			called := false
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				w.WriteHeader(http.StatusOK)
+			})
+
+			req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+			req.Header.Set("Origin", "https://example.com")
+			req.Host = "example.com"
+			tc.configure(req)
+			rec := httptest.NewRecorder()
+
+			corsMiddleware(policy, nil, resolver, next).ServeHTTP(rec, req)
+
+			if !called {
+				t.Fatal("expected forwarded-proto request to reach next handler")
+			}
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected 200 status, got %d", rec.Code)
+			}
+		})
+	}
+}
+
+func TestCORSMiddlewareIgnoresForwardedSchemeForUntrustedProxy(t *testing.T) {
+	policy, err := newCORSPolicy(CORSConfig{})
+	if err != nil {
+		t.Fatalf("newCORSPolicy error: %v", err)
+	}
+	resolver, err := newClientIPResolver(RateLimitConfig{})
+	if err != nil {
+		t.Fatalf("newClientIPResolver error: %v", err)
+	}
+	called := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	req.Header.Set("Origin", "https://example.com")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Host = "example.com"
+	rec := httptest.NewRecorder()
+
+	corsMiddleware(policy, nil, resolver, next).ServeHTTP(rec, req)
+
+	if called {
+		t.Fatal("expected untrusted proxy request to be blocked")
+	}
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 status, got %d", rec.Code)
 	}
 }
 

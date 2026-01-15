@@ -221,7 +221,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	mux.HandleFunc("/", spaHandler(staticFS, index, fileServer, cfg.Logger, ipResolver))
 
 	handlerChain := http.Handler(mux)
-	handlerChain = corsMiddleware(corsPolicy, cfg.Logger, handlerChain)
+	handlerChain = corsMiddleware(corsPolicy, cfg.Logger, ipResolver, handlerChain)
 	securityCfg := cfg.Security.withDefaults()
 	handlerChain = securityHeadersMiddleware(securityCfg, handlerChain)
 	handlerChain = requestIDMiddleware(cfg.Logger, handlerChain)

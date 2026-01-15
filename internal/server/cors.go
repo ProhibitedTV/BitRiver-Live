@@ -52,7 +52,7 @@ func normalizeOrigin(origin string) (string, error) {
 	return fmt.Sprintf("%s://%s", strings.ToLower(parsed.Scheme), strings.ToLower(parsed.Host)), nil
 }
 
-func corsMiddleware(policy corsPolicy, logger *slog.Logger, next http.Handler) http.Handler {
+func corsMiddleware(policy corsPolicy, logger *slog.Logger, resolver *clientIPResolver, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := strings.TrimSpace(r.Header.Get("Origin"))
 		if origin == "" {
@@ -60,7 +60,7 @@ func corsMiddleware(policy corsPolicy, logger *slog.Logger, next http.Handler) h
 			return
 		}
 
-		reqOrigin := originForRequest(r)
+		reqOrigin := originForRequest(r, resolver)
 		if !policy.allows(origin, reqOrigin) {
 			if logger != nil {
 				logger.Warn("blocked CORS origin", "origin", origin, "path", r.URL.Path)
@@ -114,16 +114,89 @@ func (p corsPolicy) allows(origin string, requestOrigin string) bool {
 	return normalizedOrigin == requestOrigin
 }
 
-func originForRequest(r *http.Request) string {
+func originForRequest(r *http.Request, resolver *clientIPResolver) string {
 	host := strings.ToLower(strings.TrimSpace(r.Host))
 	if host == "" {
 		return ""
 	}
 
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
+	scheme := requestScheme(r, resolver)
+	if scheme == "" {
+		return ""
 	}
 
 	return fmt.Sprintf("%s://%s", scheme, host)
+}
+
+func requestScheme(r *http.Request, resolver *clientIPResolver) string {
+	if resolver != nil && resolver.shouldTrust(r.RemoteAddr) {
+		if proto := forwardedProto(r); proto != "" {
+			return proto
+		}
+	}
+	if r.TLS != nil {
+		return "https"
+	}
+	return "http"
+}
+
+func forwardedProto(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if proto := headerForwardedProto(r.Header.Get("X-Forwarded-Proto")); proto != "" {
+		return proto
+	}
+	values := r.Header.Values("Forwarded")
+	for _, value := range values {
+		if proto := forwardedProtoFromHeader(value); proto != "" {
+			return proto
+		}
+	}
+	return ""
+}
+
+func headerForwardedProto(header string) string {
+	if header == "" {
+		return ""
+	}
+	parts := strings.Split(header, ",")
+	if len(parts) == 0 {
+		return ""
+	}
+	proto := strings.ToLower(strings.TrimSpace(parts[0]))
+	if proto == "http" || proto == "https" {
+		return proto
+	}
+	return ""
+}
+
+func forwardedProtoFromHeader(header string) string {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return ""
+	}
+	entries := strings.Split(header, ",")
+	for _, entry := range entries {
+		params := strings.Split(entry, ";")
+		for _, param := range params {
+			param = strings.TrimSpace(param)
+			if param == "" {
+				continue
+			}
+			kv := strings.SplitN(param, "=", 2)
+			if len(kv) != 2 {
+				continue
+			}
+			if strings.ToLower(strings.TrimSpace(kv[0])) != "proto" {
+				continue
+			}
+			value := strings.Trim(strings.TrimSpace(kv[1]), "\"")
+			value = strings.ToLower(value)
+			if value == "http" || value == "https" {
+				return value
+			}
+		}
+	}
+	return ""
 }
