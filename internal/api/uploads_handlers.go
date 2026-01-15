@@ -532,7 +532,10 @@ func (h *Handler) uploadMediaURL(r *http.Request, uploadID, token string) string
 		return ""
 	}
 	scheme := requestScheme(r)
-	base := r.Host
+	base := forwardedHost(r)
+	if base == "" {
+		base = r.Host
+	}
 	if base == "" && r.URL != nil {
 		base = r.URL.Host
 	}
@@ -550,6 +553,50 @@ func (h *Handler) uploadMediaURL(r *http.Request, uploadID, token string) string
 		mediaURL.RawQuery = q.Encode()
 	}
 	return mediaURL.String()
+}
+
+func forwardedHost(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if host := firstForwardedValue(r.Header.Get("X-Forwarded-Host")); host != "" {
+		return host
+	}
+	forwarded := strings.TrimSpace(r.Header.Get("Forwarded"))
+	if forwarded == "" {
+		return ""
+	}
+	entries := strings.Split(forwarded, ",")
+	if len(entries) == 0 {
+		return ""
+	}
+	for _, param := range strings.Split(strings.TrimSpace(entries[0]), ";") {
+		key, value, ok := strings.Cut(strings.TrimSpace(param), "=")
+		if !ok {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(key), "host") {
+			continue
+		}
+		host := strings.TrimSpace(value)
+		host = strings.Trim(host, "\"")
+		if host != "" {
+			return host
+		}
+	}
+	return ""
+}
+
+func firstForwardedValue(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	parts := strings.Split(value, ",")
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(parts[0])
 }
 
 func requestScheme(r *http.Request) string {

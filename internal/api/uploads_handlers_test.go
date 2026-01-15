@@ -154,3 +154,33 @@ func TestServeUploadMediaLogsStatError(t *testing.T) {
 		t.Fatalf("log missing wrapped error: %s", logOutput)
 	}
 }
+
+func TestUploadMediaURLRespectsForwardedHost(t *testing.T) {
+	h := &Handler{}
+
+	t.Run("x-forwarded-host", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "http://internal.local/api/uploads/upload-123/media", nil)
+		req.Header.Set("X-Forwarded-Host", "cdn.example.com, proxy.local")
+		req.Header.Set("X-Forwarded-Proto", "https")
+
+		got := h.uploadMediaURL(req, "upload-123", "token-abc")
+		want := "https://cdn.example.com/api/uploads/upload-123/media?token=token-abc"
+
+		if got != want {
+			t.Fatalf("url = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("forwarded-host", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "http://internal.local/api/uploads/upload-123/media", nil)
+		req.Header.Set("Forwarded", `for=192.0.2.60; proto=https; host="media.example.com:8443"`)
+		req.Header.Set("X-Forwarded-Proto", "https")
+
+		got := h.uploadMediaURL(req, "upload-123", "token-abc")
+		want := "https://media.example.com:8443/api/uploads/upload-123/media?token=token-abc"
+
+		if got != want {
+			t.Fatalf("url = %q, want %q", got, want)
+		}
+	})
+}
