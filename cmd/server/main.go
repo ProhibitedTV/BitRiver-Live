@@ -112,6 +112,7 @@ func main() {
 	loginWindow := flag.Duration("rate-login-window", 0, "window for counting login attempts")
 	trustForwarded := flag.Bool("rate-trust-forwarded-headers", false, "trust proxy-provided client IP headers")
 	trustedProxies := flag.String("rate-trusted-proxies", "", "comma separated CIDR blocks or IPs of trusted proxies")
+	uploadsTrustForwarded := flag.Bool("uploads-trust-forwarded-headers", false, "trust proxy-provided forwarded headers when building upload media URLs")
 	redisAddr := flag.String("rate-redis-addr", "", "Redis address for distributed login throttling")
 	redisAddrs := flag.String("rate-redis-addrs", "", "comma separated Redis addresses for distributed login throttling")
 	redisUsername := flag.String("rate-redis-username", "", "Redis username for distributed login throttling")
@@ -424,6 +425,7 @@ func main() {
 	handler.Setup = newSetupManager(envFilePath, restartChan)
 	handler.DefaultRenditions = ladderProfileNames(ingestConfig.LadderProfiles)
 	handler.SRSHookToken = ingestConfig.SRSToken
+	handler.TrustForwardedHeaders = resolveBool(*uploadsTrustForwarded, "BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS")
 	if pingable, ok := queue.(interface{ Ping(context.Context) error }); ok {
 		handler.ChatQueue = pingable
 	}
@@ -467,6 +469,7 @@ func main() {
 			InsecureSkipVerify: resolveBool(*redisTLSSkipVerify, "BITRIVER_LIVE_RATE_REDIS_TLS_SKIP_VERIFY"),
 		},
 	}
+	handler.TrustedProxies = rateCfg.TrustedProxies
 
 	metricsAccessCfg := server.MetricsAccessConfig{
 		Token:           firstNonEmpty(*metricsToken, os.Getenv("BITRIVER_LIVE_METRICS_TOKEN")),

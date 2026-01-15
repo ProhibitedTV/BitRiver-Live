@@ -156,10 +156,12 @@ func TestServeUploadMediaLogsStatError(t *testing.T) {
 }
 
 func TestUploadMediaURLRespectsForwardedHost(t *testing.T) {
-	h := &Handler{}
-
-	t.Run("x-forwarded-host", func(t *testing.T) {
+	t.Run("trusted proxy honors forwarded headers", func(t *testing.T) {
+		h := &Handler{
+			TrustedProxies: []string{"10.0.0.0/8"},
+		}
 		req := httptest.NewRequest(http.MethodGet, "http://internal.local/api/uploads/upload-123/media", nil)
+		req.RemoteAddr = "10.1.2.3:1234"
 		req.Header.Set("X-Forwarded-Host", "cdn.example.com, proxy.local")
 		req.Header.Set("X-Forwarded-Proto", "https")
 
@@ -171,8 +173,29 @@ func TestUploadMediaURLRespectsForwardedHost(t *testing.T) {
 		}
 	})
 
-	t.Run("forwarded-host", func(t *testing.T) {
+	t.Run("untrusted proxy ignores forwarded headers", func(t *testing.T) {
+		h := &Handler{
+			TrustedProxies: []string{"10.0.0.0/8"},
+		}
 		req := httptest.NewRequest(http.MethodGet, "http://internal.local/api/uploads/upload-123/media", nil)
+		req.RemoteAddr = "192.168.1.10:4321"
+		req.Header.Set("Forwarded", `for=192.0.2.60; proto=https; host="media.example.com:8443"`)
+		req.Header.Set("X-Forwarded-Proto", "https")
+
+		got := h.uploadMediaURL(req, "upload-123", "token-abc")
+		want := "http://internal.local/api/uploads/upload-123/media?token=token-abc"
+
+		if got != want {
+			t.Fatalf("url = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("explicit trust flag honors forwarded headers", func(t *testing.T) {
+		h := &Handler{
+			TrustForwardedHeaders: true,
+		}
+		req := httptest.NewRequest(http.MethodGet, "http://internal.local/api/uploads/upload-123/media", nil)
+		req.RemoteAddr = "192.168.1.10:4321"
 		req.Header.Set("Forwarded", `for=192.0.2.60; proto=https; host="media.example.com:8443"`)
 		req.Header.Set("X-Forwarded-Proto", "https")
 
