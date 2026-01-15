@@ -444,17 +444,17 @@ func (c *client) readLoop(ctx context.Context) {
 		case "leave":
 			c.handleLeave(msg.ChannelID)
 		case "message":
-			c.handleMessage(msg)
+			c.handleMessage(ctx, msg)
 		case "timeout":
-			c.handleModeration(msg, ModerationActionTimeout)
+			c.handleModeration(ctx, msg, ModerationActionTimeout)
 		case "remove_timeout":
-			c.handleModeration(msg, ModerationActionRemoveTimeout)
+			c.handleModeration(ctx, msg, ModerationActionRemoveTimeout)
 		case "ban":
-			c.handleModeration(msg, ModerationActionBan)
+			c.handleModeration(ctx, msg, ModerationActionBan)
 		case "unban":
-			c.handleModeration(msg, ModerationActionUnban)
+			c.handleModeration(ctx, msg, ModerationActionUnban)
 		case "report":
-			c.handleReport(msg)
+			c.handleReport(ctx, msg)
 		default:
 			c.sendError("unknown command")
 		}
@@ -497,7 +497,7 @@ func (c *client) handleLeave(channelID string) {
 	delete(c.rooms, channelID)
 }
 
-func (c *client) handleMessage(msg inboundMessage) {
+func (c *client) handleMessage(ctx context.Context, msg inboundMessage) {
 	if msg.ChannelID == "" {
 		c.sendError("channel required")
 		return
@@ -506,7 +506,7 @@ func (c *client) handleMessage(msg inboundMessage) {
 		c.sendError("join channel first")
 		return
 	}
-	event, err := c.gateway.CreateMessage(context.Background(), c.user, msg.ChannelID, msg.Content)
+	event, err := c.gateway.CreateMessage(ctx, c.user, msg.ChannelID, msg.Content)
 	if err != nil {
 		c.sendError(err.Error())
 		return
@@ -516,7 +516,7 @@ func (c *client) handleMessage(msg inboundMessage) {
 	c.send <- outboundMessage{Raw: payload}
 }
 
-func (c *client) handleModeration(msg inboundMessage, action ModerationAction) {
+func (c *client) handleModeration(ctx context.Context, msg inboundMessage, action ModerationAction) {
 	if msg.ChannelID == "" || msg.TargetID == "" {
 		c.sendError("channel and target required")
 		return
@@ -540,13 +540,13 @@ func (c *client) handleModeration(msg inboundMessage, action ModerationAction) {
 		expires := time.Now().Add(duration).UTC()
 		evt.ExpiresAt = &expires
 	}
-	if err := c.gateway.ApplyModeration(context.Background(), c.user, evt); err != nil {
+	if err := c.gateway.ApplyModeration(ctx, c.user, evt); err != nil {
 		c.sendError(err.Error())
 		return
 	}
 }
 
-func (c *client) handleReport(msg inboundMessage) {
+func (c *client) handleReport(ctx context.Context, msg inboundMessage) {
 	if msg.ChannelID == "" || msg.TargetID == "" {
 		c.sendError("channel and target required")
 		return
@@ -555,7 +555,7 @@ func (c *client) handleReport(msg inboundMessage) {
 		c.sendError("join channel first")
 		return
 	}
-	report, err := c.gateway.SubmitReport(context.Background(), c.user, msg.ChannelID, msg.TargetID, msg.Reason, msg.MessageID, msg.Evidence)
+	report, err := c.gateway.SubmitReport(ctx, c.user, msg.ChannelID, msg.TargetID, msg.Reason, msg.MessageID, msg.Evidence)
 	if err != nil {
 		c.sendError(err.Error())
 		return
