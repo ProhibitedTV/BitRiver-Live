@@ -82,10 +82,6 @@ func (g *Gateway) HandleConnection(w http.ResponseWriter, r *http.Request, user 
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		<-r.Context().Done()
-		cancel()
-	}()
 
 	c := &client{
 		gateway: g,
