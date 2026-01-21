@@ -25,7 +25,9 @@ func TestGatewayMessageFlow(t *testing.T) {
 	gateway := chat.NewGateway(chat.GatewayConfig{Queue: queue, Store: store})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go storage.NewChatWorker(store, queue, nil).Run(ctx)
+	started := make(chan struct{})
+	go storage.NewChatWorker(store, queue, nil).WithStartedChannel(started).Run(ctx)
+	<-started
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID := r.URL.Query().Get("user")
@@ -82,7 +84,9 @@ func TestGatewayModerationFlow(t *testing.T) {
 	gateway := chat.NewGateway(chat.GatewayConfig{Queue: queue, Store: store})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go storage.NewChatWorker(store, queue, nil).Run(ctx)
+	started := make(chan struct{})
+	go storage.NewChatWorker(store, queue, nil).WithStartedChannel(started).Run(ctx)
+	<-started
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID := r.URL.Query().Get("user")
