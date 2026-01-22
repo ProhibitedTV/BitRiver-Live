@@ -73,7 +73,7 @@ test.describe("creator schedule management", () => {
         await route.fulfill({
           status: 500,
           contentType: "application/json",
-          body: JSON.stringify({ error: "sessions unavailable" }),
+          body: JSON.stringify({ message: "Sessions unavailable" }),
         });
         return;
       }
@@ -102,7 +102,7 @@ test.describe("creator schedule management", () => {
         await route.fulfill({
           status: 500,
           contentType: "application/json",
-          body: JSON.stringify({ error: "channel list offline" }),
+          body: JSON.stringify({ message: "Channel list offline" }),
         });
         return;
       }
@@ -118,7 +118,7 @@ test.describe("creator schedule management", () => {
           await route.fulfill({
             status: 500,
             contentType: "application/json",
-            body: JSON.stringify({ error: "schedule locked" }),
+            body: JSON.stringify({ message: "Schedule locked" }),
           });
           return;
         }
@@ -155,7 +155,8 @@ test.describe("creator schedule management", () => {
     await expect(page.getByText(/stream title updated/i)).toBeVisible();
     await expect.poll(() => lastPatch?.title).toBe("Scheduled Deep Dive");
 
-    await page.getByRole("button", { name: /show/i }).click();
+    const streamKeySection = page.getByText("Stream key").locator("..");
+    await streamKeySection.getByRole("button", { name: "Show", exact: true }).click();
     await expect(page.getByText(/sk_schedule_primary/)).toBeVisible();
     await expect(page.getByText(/primary ingest/i)).toBeVisible();
     await expect(page.getByText(/backup ingest/i)).toBeVisible();

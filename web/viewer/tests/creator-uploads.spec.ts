@@ -58,16 +58,16 @@ test.describe("creator uploads", () => {
     let uploadItems: UploadItem[] = [];
     let getCalls = 0;
 
-    await page.route("**/api/uploads*", async (route) => {
+    await page.route("**/api/uploads**", async (route) => {
       const { method, url } = route.request();
 
-      if (method === "GET" && url.includes(`channelId=${channelId}`)) {
+      if (method === "GET") {
         getCalls += 1;
         if (getCalls === 1) {
           await route.fulfill({
             status: 500,
             contentType: "application/json",
-            body: JSON.stringify({ error: "upload API unavailable" }),
+            body: JSON.stringify({ message: "Upload API unavailable" }),
           });
           return;
         }

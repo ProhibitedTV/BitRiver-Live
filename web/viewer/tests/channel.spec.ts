@@ -40,22 +40,15 @@ const basePlayback = {
   }
 };
 
-const chatTranscript = {
-  roomId: "room-1",
-  participants: 2,
-  messages: [
-    {
-      id: "msg-1",
-      message: "Welcome to the stream!",
-      sentAt: new Date("2023-10-21T12:00:00Z").toISOString(),
-      user: {
-        id: "owner-42",
-        displayName: "DJ Nova",
-        role: "host"
-      }
-    }
-  ]
-};
+const chatTranscript = [
+  {
+    id: "msg-1",
+    channelId: "chan-42",
+    userId: "owner-42",
+    content: "Welcome to the stream!",
+    createdAt: new Date("2023-10-21T12:00:00Z").toISOString()
+  }
+];
 
 test.describe("channel route", () => {
   test("allows authenticated viewers to follow, subscribe, and chat", async ({ page }) => {
@@ -90,20 +83,16 @@ test.describe("channel route", () => {
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(chatTranscript) });
         return;
       }
-      const body = route.request().postDataJSON() as { message: string };
-      lastPostedMessage = body.message;
+      const body = route.request().postDataJSON() as { content: string };
+      lastPostedMessage = body.content;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
           id: "msg-2",
-          message: body.message,
-          sentAt: new Date("2023-10-21T12:05:00Z").toISOString(),
-          user: {
-            id: "viewer-1",
-            displayName: "Viewer",
-            role: "member"
-          }
+          content: body.content,
+          createdAt: new Date("2023-10-21T12:05:00Z").toISOString(),
+          userId: "viewer-1"
         })
       });
     });
@@ -163,7 +152,7 @@ test.describe("channel route", () => {
     await page.goto("/channels/chan-42");
 
     await expect(page.getByRole("heading", { level: 1, name: "Deep Space Beats" })).toBeVisible();
-    await expect(page.getByText(/welcome to the stream/i)).toBeVisible();
+    await expect(page.getByText(/enjoy low-latency playback powered by the ingest pipeline/i)).toBeVisible();
 
     await page.getByRole("button", { name: /follow · 10 supporters/i }).click();
     await expect(page.getByRole("button", { name: /following · 11 supporters/i })).toBeVisible();
@@ -175,15 +164,21 @@ test.describe("channel route", () => {
 
     const chatInput = page.getByRole("textbox", { name: /chat message/i });
     await chatInput.fill("Hello from viewer");
-    await page.getByRole("button", { name: "Send" }).click();
+    await page
+      .getByRole("form", { name: "Send a chat message" })
+      .getByRole("button", { name: "Send", exact: true })
+      .click();
 
     await expect.poll(() => lastPostedMessage).toBe("Hello from viewer");
     await expect(page.getByText("Hello from viewer")).toBeVisible();
 
     await page.getByRole("button", { name: /send a tip/i }).click();
     const tipDialog = page.getByRole("dialog", { name: /send a tip/i });
-    await tipDialog.getByLabel("Amount").fill("0.0005");
-    await tipDialog.getByLabel("Currency").selectOption("BTC");
+    const amountInput = tipDialog.getByLabel("Amount");
+    await expect(amountInput).toBeVisible();
+    await expect(amountInput).toHaveValue("");
+    await amountInput.fill("0.0005");
+    await tipDialog.getByLabel("Currency").selectOption({ label: "BTC" });
     await tipDialog.getByLabel("Wallet reference").fill("txn-77");
     await tipDialog.getByLabel("Message (optional)").fill("Great vibes!");
     await tipDialog.getByRole("button", { name: /send tip/i }).click();
@@ -221,20 +216,28 @@ test.describe("channel route", () => {
       await route.fulfill({ status: 403, body: "Forbidden" });
     });
 
-    await page.goto("/channels/chan-42");
+    await page.route("**/login", async (route) => {
+      await route.fulfill({ status: 200, contentType: "text/html", body: "<p>Login</p>" });
+    });
 
-    const followButton = page.getByRole("button", { name: /follow · 10 supporters/i });
-    await followButton.click();
-    await expect(page.getByText(/sign in from the header to follow this channel/i)).toBeVisible();
-    await expect.poll(() => followAttempted).toBe(false);
+    await page.goto("/channels/chan-42");
 
     const textarea = page.getByRole("textbox", { name: /chat message/i });
     await expect(textarea).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
+    await expect(
+      page
+        .getByRole("form", { name: "Send a chat message" })
+        .getByRole("button", { name: "Send", exact: true })
+    ).toBeDisabled();
 
     const tipButton = page.getByRole("button", { name: /send a tip/i });
     await tipButton.click();
     await expect(page.getByText(/sign in from the header to send a tip/i)).toBeVisible();
+
+    const followButton = page.getByRole("button", { name: /follow · 10 supporters/i });
+    await followButton.click();
+    await expect(page).toHaveURL(/\/login/);
+    await expect.poll(() => followAttempted).toBe(false);
   });
 
   test("surfaces tip errors when submission fails", async ({ page }) => {
@@ -341,13 +344,21 @@ test.describe("authentication controls", () => {
       });
     });
 
+    await page.route("**/logout", async (route) => {
+      logoutCalled = true;
+      signedIn = false;
+      await route.fulfill({ status: 204 });
+    });
+
     await page.goto("/");
 
     await page.getByRole("button", { name: "Open account menu" }).click();
     await page.getByRole("button", { name: "Sign out" }).click();
 
     await expect.poll(() => logoutCalled).toBe(true);
-    await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+    await expect(
+      page.getByLabel("Viewer quick actions").getByRole("button", { name: "Sign in" })
+    ).toBeVisible();
   });
 
   test("theme toggle updates the rendered document", async ({ page }) => {
@@ -365,14 +376,24 @@ test.describe("authentication controls", () => {
 
     await page.goto("/");
 
-    const toggle = page.getByRole("button", { name: /switch to light theme/i });
-    await expect(page.locator("body")).not.toHaveAttribute("data-theme", "light");
+    const toggle = page.getByRole("button", { name: /switch to (light|dark) theme/i });
+    const body = page.locator("body");
+    const initialTheme = await body.getAttribute("data-theme");
 
     await toggle.click();
-    await expect(page.locator("body")).toHaveAttribute("data-theme", "light");
-    await expect(toggle).toHaveAttribute("aria-label", /switch to dark theme/i);
+    if (initialTheme === "light") {
+      await expect(body).not.toHaveAttribute("data-theme", "light");
+      await expect(toggle).toHaveAttribute("aria-label", /switch to light theme/i);
+    } else {
+      await expect(body).toHaveAttribute("data-theme", "light");
+      await expect(toggle).toHaveAttribute("aria-label", /switch to dark theme/i);
+    }
 
     await toggle.click();
-    await expect(page.locator("body")).not.toHaveAttribute("data-theme", "light");
+    if (initialTheme === "light") {
+      await expect(body).toHaveAttribute("data-theme", "light");
+    } else {
+      await expect(body).not.toHaveAttribute("data-theme", "light");
+    }
   });
 });

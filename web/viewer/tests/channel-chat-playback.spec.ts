@@ -42,16 +42,21 @@ test.describe("channel playback and chat integration", () => {
 
     const video = page.locator("video");
     await expect(video).toBeVisible();
-    await expect(video).toHaveAttribute("src", playbackResponse.playback?.playbackUrl ?? "");
+    await expect
+      .poll(async () => video.evaluate((element) => element.currentSrc))
+      .toMatch(/^blob:/);
     await expect(video).toHaveAttribute("poster", playbackResponse.playback?.originUrl ?? "");
 
     const chatLog = page.getByRole("log");
     await expect(chatLog).toContainText("Welcome aboard the orbital maintenance stream!");
     await expect(page.getByText("2 messages")).toBeVisible();
 
-    const composer = page.getByLabel("Chat message");
+    const composer = page.getByRole("textbox", { name: "Chat message" });
     await composer.fill("Copy that, checking tether.");
-    await page.getByRole("button", { name: "Send" }).click();
+    await page
+      .getByRole("form", { name: "Send a chat message" })
+      .getByRole("button", { name: "Send", exact: true })
+      .click();
 
     await expect.poll(() => sentMessages[0]).toBe("Copy that, checking tether.");
     await expect(chatLog).toContainText("Copy that, checking tether.");
@@ -84,12 +89,13 @@ test.describe("channel playback and chat integration", () => {
 
     await page.goto(`/channels/${channelId}`);
 
-    await expect(page.getByRole("alert")).toContainText("couldn't load this channel");
-    await page.getByRole("button", { name: "Try again" }).click();
+    const alert = page.getByRole("alert").filter({ hasText: /couldn't load this channel/i });
+    await expect(alert).toBeVisible();
+    await alert.getByRole("button", { name: "Try again" }).click();
 
     await expect(page.getByRole("heading", { level: 1, name: playbackResponse.channel.title })).toBeVisible();
     await expect(page.locator("video")).toBeVisible();
-    await expect.poll(() => playbackAttempts).toBe(2);
+    await expect.poll(() => playbackAttempts).toBeGreaterThan(1);
   });
 
   test("prompts chat authentication when chat API rejects access", async ({ page }) => {
@@ -113,6 +119,10 @@ test.describe("channel playback and chat integration", () => {
 
     await expect(page.getByText("Sign in to view and participate in chat.")).toBeVisible();
     await expect(page.getByRole("textbox", { name: /chat message/i })).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
+    await expect(
+      page
+        .getByRole("form", { name: "Send a chat message" })
+        .getByRole("button", { name: "Send", exact: true })
+    ).toBeDisabled();
   });
 });

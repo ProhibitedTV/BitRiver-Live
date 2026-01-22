@@ -138,12 +138,14 @@ test.describe("live stream playback", () => {
     await page.goto(`/channels/${channelId}`);
 
     await expect(page.getByRole("heading", { level: 1, name: playbackResponse.channel.title })).toBeVisible();
-    await expect(page.getByText("128 viewers")).toBeVisible();
+    await expect(page.getByText("128 watching")).toBeVisible();
 
     const video = page.locator("video");
     await expect(video).toBeVisible();
     await expect(video).toHaveAttribute("controls", "");
-    await expect(video).toHaveAttribute("src", playbackResponse.playback?.playbackUrl ?? "");
+    await expect
+      .poll(async () => video.evaluate((element) => element.currentSrc))
+      .toMatch(/^blob:/);
     await expect(video).toHaveAttribute("poster", playbackResponse.playback?.originUrl ?? "");
 
     const chatLog = page.getByRole("log");
@@ -151,9 +153,12 @@ test.describe("live stream playback", () => {
     await expect(chatLog).toContainText("Engine chilldown has started.");
     await expect(page.getByText("2 messages")).toBeVisible();
 
-    const chatInput = page.getByLabel("Chat message");
+    const chatInput = page.getByRole("textbox", { name: "Chat message" });
     await chatInput.fill("Systems green across the board.");
-    await page.getByRole("button", { name: "Send" }).click();
+    await page
+      .getByRole("form", { name: "Send a chat message" })
+      .getByRole("button", { name: "Send", exact: true })
+      .click();
 
     await expect.poll(() => postedMessages[0]).toBe("Systems green across the board.");
     await expect(chatLog).toContainText("Systems green across the board.");

@@ -1,4 +1,4 @@
-import { injectAxe, checkA11y } from "@axe-core/playwright";
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 const directoryResponse = {
@@ -74,22 +74,20 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("directory page renders accessible markup and supports search", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/browse");
 
-  await expect(page.getByRole("heading", { level: 1, name: /discover live channels/i })).toBeVisible();
-  await expect(page.getByRole("heading", { level: 3, name: "Deep Space Beats" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /find your next live channel/i })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 3, name: "Deep Space Beats" }).first()).toBeVisible();
 
-  await page.fill("input[type=search]", "retro");
+  await page.getByLabel("Search channels").fill("retro");
   await page.click("button:has-text('Search')");
 
-  await expect(page.getByRole("heading", { level: 3, name: "Retro Speedruns" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 3, name: "Retro Speedruns" }).first()).toBeVisible();
   await expect(page.getByRole("heading", { level: 3, name: "Deep Space Beats" })).toHaveCount(0);
 
-  await injectAxe(page);
-  await checkA11y(page, "main", {
-    runOnly: {
-      type: "tag",
-      values: ["wcag2a", "wcag2aa"]
-    }
-  });
+  const results = await new AxeBuilder({ page })
+    .include("main")
+    .withTags(["wcag2a", "wcag2aa"])
+    .analyze();
+  expect(results.violations).toEqual([]);
 });
