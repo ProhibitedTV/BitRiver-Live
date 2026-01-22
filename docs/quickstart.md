@@ -20,6 +20,9 @@ Use the installer-backed launcher when you want a zero-build setup that checks D
 | Windows 11 (WSL 2 backend) | Docker Desktop | Run the quickstart inside WSL with the WSL 2 backend enabled; check `docker-desktop` has 15GB free. |
 | Windows 11 (native PowerShell) | Docker Desktop (WSL 2 backend) | Same Docker Desktop install as above; native shells call the same Go CLI. |
 
+Install Go 1.21+ to use the source-based quickstart (`go run ./cmd/bitriver quickstart`) or CLI tooling. Installer-backed
+launchers ship a bundled CLI and do not require Go on the host.
+
 ### Tier 1 coverage
 
 The Go-based quickstart is the canonical entry point across the Tier 1 platforms—Windows 10/11 with Docker Desktop, macOS with Docker Desktop, and Ubuntu/Debian with Docker Engine plus the Compose plugin. The shell and PowerShell shims stay in place for compatibility but only forward to the same Go command. See [`docs/cross-platform-plan.md`](cross-platform-plan.md) for the full support matrix.
