@@ -109,6 +109,56 @@ The default configuration keeps the session cookie in `SameSite=Strict` mode and
 
 When the admin panel or viewer are hosted on different origins, set the corresponding CORS allowlists so browsers can reach the API. Origins must include the scheme and host (for example, `https://admin.example.com,https://watch.example.com`); any origin not listed receives a `403` by default. The quickstart path stays unchanged because same-origin requests remain allowed when the allowlists are empty.
 
+## TLS reverse proxy (Caddy)
+
+The optional TLS compose override (`deploy/docker-compose.tls.yml`) runs a Caddy reverse proxy with automatic HTTPS. It routes `/viewer` to the Next.js viewer, forwards `/api` and websocket traffic to the API container, and keeps `/` served by the API. To enable it:
+
+1. Set the public hostname and ACME email in `.env`:
+   ```bash
+   BITRIVER_PUBLIC_DOMAIN=stream.example.com
+   BITRIVER_TLS_EMAIL=admin@stream.example.com
+   ```
+2. Update the viewer URL to the HTTPS origin you expect users to hit:
+   ```bash
+   NEXT_PUBLIC_VIEWER_URL=https://stream.example.com/viewer
+   ```
+3. Start Compose with the override:
+   ```bash
+   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.tls.yml up -d
+   ```
+
+### Disable HTTP-only host ports
+
+Once HTTPS is in place, remove or firewall the host ports that should never be exposed publicly (for example the API service on `8080`, the OME control plane on `8081`, and the transcoder control port on `9001`). The recommended approach is a local override that clears the `ports:` list for those services, while keeping ingest-facing ports (RTMP/WebRTC) published:
+
+```yaml
+# deploy/docker-compose.no-http.yml
+services:
+  bitriver-live:
+    ports: []
+  srs-controller:
+    ports: []
+  ome:
+    ports:
+      - "${BITRIVER_OME_SIGNALLING_PORT:-${BITRIVER_OME_SERVER_PORT:-9000}}:${BITRIVER_OME_SERVER_PORT:-9000}"
+      - "${BITRIVER_OME_SERVER_TLS_PORT:-9443}:${BITRIVER_OME_SERVER_TLS_PORT:-9443}"
+      - "${BITRIVER_OME_RELAY_PORT:-3478}:3478/udp"
+      - "${BITRIVER_OME_RELAY_PORT:-3478}:3478/${BITRIVER_OME_RELAY_PROTOCOL:-tcp}"
+      - "${BITRIVER_OME_ICE_PORT_RANGE:-10000-10009}:10000-10009/udp"
+  transcoder:
+    ports: []
+  transcoder-public:
+    ports: []
+```
+
+Then run:
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.tls.yml -f deploy/docker-compose.no-http.yml up -d
+```
+
+If you prefer not to manage another override file, enforce the same restrictions with host firewall rules or security groups so only ports 80/443 (plus your ingest ports) are reachable.
+
 ## Security headers
 
 The API emits hardening headers by default so the control centre and embedded viewer ship with internet-safe defaults:

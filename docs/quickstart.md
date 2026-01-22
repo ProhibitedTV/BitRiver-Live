@@ -68,6 +68,52 @@ The bundled Compose Postgres runs without TLS, so the generated DSN uses `sslmod
 
 The helper leaves `NEXT_PUBLIC_API_BASE_URL` empty so the viewer inherits the API origin when proxied through `NEXT_VIEWER_BASE_PATH` (default `/viewer`). Set `NEXT_PUBLIC_API_BASE_URL` to the publicly reachable API URL when serving the viewer from its own hostname and adjust `NEXT_PUBLIC_VIEWER_URL` to match before re-running `docker compose up -d`.
 
+### Enable HTTPS with the Caddy reverse proxy
+
+The TLS compose override adds a Caddy reverse proxy that terminates HTTPS and routes `/viewer` to the Next.js viewer while keeping `/` and `/api` on the BitRiver Live API service (websocket upgrades are proxied automatically).
+
+1. Update `.env` with your public hostname and ACME email:
+   ```bash
+   BITRIVER_PUBLIC_DOMAIN=stream.example.com
+   BITRIVER_TLS_EMAIL=admin@stream.example.com
+   NEXT_PUBLIC_VIEWER_URL=https://stream.example.com/viewer
+   ```
+2. Start the stack with the TLS override:
+   ```bash
+   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.tls.yml up -d
+   ```
+3. Ensure ports 80 and 443 are reachable from the internet for ACME validation.
+
+For production hosts, disable HTTP-only host ports once the proxy is handling traffic. The easiest approach is to create a local override (not checked in) that clears the published ports for services you do not want exposed, then include it after the TLS file:
+
+```yaml
+# deploy/docker-compose.no-http.yml
+services:
+  bitriver-live:
+    ports: []
+  srs-controller:
+    ports: []
+  ome:
+    ports:
+      - "${BITRIVER_OME_SIGNALLING_PORT:-${BITRIVER_OME_SERVER_PORT:-9000}}:${BITRIVER_OME_SERVER_PORT:-9000}"
+      - "${BITRIVER_OME_SERVER_TLS_PORT:-9443}:${BITRIVER_OME_SERVER_TLS_PORT:-9443}"
+      - "${BITRIVER_OME_RELAY_PORT:-3478}:3478/udp"
+      - "${BITRIVER_OME_RELAY_PORT:-3478}:3478/${BITRIVER_OME_RELAY_PROTOCOL:-tcp}"
+      - "${BITRIVER_OME_ICE_PORT_RANGE:-10000-10009}:10000-10009/udp"
+  transcoder:
+    ports: []
+  transcoder-public:
+    ports: []
+```
+
+Apply it with:
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.tls.yml -f deploy/docker-compose.no-http.yml up -d
+```
+
+Alternatively, keep the existing port mappings and enforce the same restrictions using host firewall rules or security groups.
+
 Running `deploy/check-env.sh` against the quickstart `.env` now errors if `BITRIVER_LIVE_MODE` is missing or left at `development`; keep the saved file at production and rely on an inline override or Compose override file for HTTP-only demos. The validator still warns when loopback values remain for the viewer URL, OME bind/IP, or the transcoder public base URL so production deployments replace placeholders with routable hosts before re-running.
 
 The control centre now exposes a **Setup wizard** under **Settings**. Use it as the default path for production-ready configuration instead of hand-editing `.env`: it prompts for the admin email, viewer domain, API port, TLS certificate paths, and required secrets (Postgres, Redis, SRS, OME, transcoder, metrics) then writes them to the environment file and schedules a safe restart. When you provide certificate paths the wizard copies them into `deploy/certs/` (next to the compose bundle) and updates `BITRIVER_LIVE_TLS_CERT`/`BITRIVER_LIVE_TLS_KEY` automatically so HTTPS is ready on the next restart. The wizard keeps Docker/systemd installs aligned without risking partial writes.

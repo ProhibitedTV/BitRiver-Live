@@ -1,0 +1,15 @@
+{
+  email {$BITRIVER_TLS_EMAIL}
+}
+
+{$BITRIVER_PUBLIC_DOMAIN} {
+  encode gzip zstd
+
+  @viewer path /viewer*
+  reverse_proxy @viewer viewer:3000
+
+  @api path /api* /ws* /socket*
+  reverse_proxy @api bitriver-live:8080
+
+  reverse_proxy bitriver-live:8080
+}
