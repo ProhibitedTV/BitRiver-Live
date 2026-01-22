@@ -159,6 +159,50 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.tls.yml -f 
 
 If you prefer not to manage another override file, enforce the same restrictions with host firewall rules or security groups so only ports 80/443 (plus your ingest ports) are reachable.
 
+## Resource limits + ulimits override
+
+For production-ish deployments, add the optional Compose override `deploy/docker-compose.resources.yml`. It sets higher `nofile` limits and CPU/memory reservations for the ingest trio (SRS, OME, and transcoder) while keeping the quickstart path unchanged.
+
+Enable it with:
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.resources.yml up -d
+```
+
+The override uses `nofile=262144` and the following baseline reservations/limits (adjust for your workload):
+
+| Service | CPU reservation | CPU limit | Memory reservation | Memory limit |
+| --- | --- | --- | --- | --- |
+| `srs` | 1.0 | 2.0 | 1G | 2G |
+| `ome` | 1.5 | 4.0 | 2G | 4G |
+| `transcoder` | 2.0 | 6.0 | 4G | 12G |
+
+### Host kernel settings (recommended)
+
+Make sure the host kernel and Docker daemon allow the higher file descriptor limits. On Linux, a typical baseline is:
+
+```bash
+sudo tee /etc/sysctl.d/99-bitriver-live.conf <<'EOF'
+fs.file-max = 1048576
+fs.nr_open = 1048576
+net.core.somaxconn = 4096
+net.ipv4.ip_local_port_range = 10240 65535
+EOF
+
+sudo sysctl --system
+```
+
+Ensure the Docker daemon inherits a matching limit (e.g., `LimitNOFILE=262144` in a systemd override) and validate with `docker run --rm alpine sh -c "ulimit -n"`.
+
+### Tuning based on stream count
+
+Use the defaults as a starting point for ~2-3 concurrent 1080p streams with a 3-rendition ladder. Then scale roughly as follows:
+
+- **Transcoder:** add ~1 vCPU and ~1–2 GB RAM per additional 1080p stream (double for 4K or larger ladders). GPU-backed encoding can trade CPU for GPU capacity but still needs RAM for segmenting and muxing.
+- **OME + SRS:** add ~0.25 vCPU and ~256–512 MB RAM per additional 1,000 concurrent viewers or per ~50 publishers, plus headroom for peaks. If you push WebRTC or low-latency HLS aggressively, favor CPU headroom over tight limits.
+
+If queues back up (late segments, rising encode latency, or dropped viewer connections), increase transcoder CPU/memory first, then expand OME/SRS headroom.
+
 ## Security headers
 
 The API emits hardening headers by default so the control centre and embedded viewer ship with internet-safe defaults:

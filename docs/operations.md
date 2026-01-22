@@ -58,6 +58,46 @@ Tune to your traffic profile, but the defaults below are a good starting point f
 - **Chat backlog:** Redis stream length grows continuously for 10 minutes or consumer lag > 1000 messages (warning).
 - **Storage:** `./transcoder-data` > 80% full (warning), > 90% (critical).
 
+## Resource sizing + kernel tuning
+
+Use the optional Compose override `deploy/docker-compose.resources.yml` to set higher `nofile` limits and baseline CPU/memory
+reservations for SRS, OME, and the transcoder:
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.resources.yml up -d
+```
+
+It sets `nofile=262144` and these baseline reservations/limits:
+
+| Service | CPU reservation | CPU limit | Memory reservation | Memory limit |
+| --- | --- | --- | --- | --- |
+| `srs` | 1.0 | 2.0 | 1G | 2G |
+| `ome` | 1.5 | 4.0 | 2G | 4G |
+| `transcoder` | 2.0 | 6.0 | 4G | 12G |
+
+**Host kernel recommendations:** ensure the Docker daemon can raise file descriptor limits and that the host allows them:
+
+```bash
+sudo tee /etc/sysctl.d/99-bitriver-live.conf <<'EOF'
+fs.file-max = 1048576
+fs.nr_open = 1048576
+net.core.somaxconn = 4096
+net.ipv4.ip_local_port_range = 10240 65535
+EOF
+
+sudo sysctl --system
+```
+
+If you are using systemd, set `LimitNOFILE=262144` in a Docker service override so containers can inherit the higher limit.
+
+**Tuning by stream count:**
+
+- **Transcoder:** add ~1 vCPU and ~1–2 GB RAM per additional 1080p stream (double for 4K or higher ladders).
+- **OME + SRS:** add ~0.25 vCPU and ~256–512 MB RAM per additional 1,000 concurrent viewers or ~50 publishers, plus headroom.
+
+Scale transcoder first when encode latency rises, then increase OME/SRS headroom when ingest connections churn or viewer drops
+increase.
+
 ### Log locations and triage flows
 
 **Log locations (default Compose stack):**
