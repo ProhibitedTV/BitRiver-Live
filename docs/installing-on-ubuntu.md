@@ -211,7 +211,7 @@ If you prefer a different publication path, mount an object storage bucket or a 
 
 Review `deploy/srs/conf/srs.conf` for the default SRS ports and authentication settings. Mount a customised version into the container when you need stricter access control or TLS certificates for RTMP/RTMPS.
 
-The sample config enables `http_hooks` that call the BitRiver Live ingest endpoint at `http://bitriver-live:8080/api/ingest/srs-hook`.
+The sample config enables `http_hooks` that call the BitRiver Live ingest endpoints at `http://bitriver-live:8080/api/ingest/srs/{connect,publish,unpublish,play,stop}` and always read the shared token from `BITRIVER_SRS_TOKEN` in `.env`.
 SRS posts JSON payloads that look like:
 
 ```json
@@ -227,7 +227,7 @@ SRS posts JSON payloads that look like:
 }
 ```
 
-Keep the same URL for both `on_publish` and `on_unpublish`; the API validates the stream key, boots ingest when a publish arrives, and stops or marks the channel offline when SRS sends an unpublish. Replace the `token` query string in the hook URLs with the same value you set for `BITRIVER_SRS_TOKEN` and point the host at wherever the API listens (for example, `localhost:8080` when running the API outside Docker).
+When a publish arrives, the API validates the stream key, boots ingest, and later stops or marks the channel offline when SRS sends an unpublish. Keep the hook host pointed at wherever the API listens (for example, `localhost:8080` when running the API outside Docker) and update the token via `.env` instead of hardcoding it in the SRS config.
 
 #### Upgrading the SRS container
 
