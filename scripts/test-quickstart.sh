@@ -90,8 +90,17 @@ fi
 echo "Rendering docker compose config..."
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config >"$COMPOSE_CONFIG_OUTPUT"
 
+if ! command -v go >/dev/null 2>&1; then
+  echo "error: go is required to render the OME config" >&2
+  exit 1
+fi
+
 echo "Rendering OME config from template..."
-"$SCRIPT_DIR/render-ome-config.sh" --force --env-file "$ENV_FILE" --quiet
+(
+  cd "$REPO_ROOT" &&
+  GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off \
+    go run ./cmd/bitriver ome render --force --env-file "$ENV_FILE" --quiet
+)
 
 OME_CONFIG="$REPO_ROOT/deploy/ome/Server.generated.xml"
 
