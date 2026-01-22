@@ -188,12 +188,19 @@ func TestValidateProductionDatastoreRequiresResolvedDSN(t *testing.T) {
 }
 
 func TestValidateProductionDatastoreRejectsInsecureSSLMode(t *testing.T) {
-	err := validateProductionDatastore("postgres", "postgres://resolved/db?sslmode=disable", "postgres://env")
+	err := validateProductionDatastore("postgres", "postgres://resolved@db.example/db?sslmode=disable", "postgres://env")
 	if err == nil {
 		t.Fatal("expected error when sslmode=disable is configured in production")
 	}
 	if !strings.Contains(err.Error(), "sslmode") {
 		t.Fatalf("expected sslmode guidance, got %v", err)
+	}
+}
+
+func TestValidateProductionDatastoreAllowsComposeSSLModeDisable(t *testing.T) {
+	err := validateProductionDatastore("postgres", "postgres://user:pass@postgres:5432/db?sslmode=disable", "postgres://env")
+	if err != nil {
+		t.Fatalf("expected sslmode=disable to be allowed for local compose, got %v", err)
 	}
 }
 
@@ -285,7 +292,7 @@ func TestResolveSessionStoreConfig(t *testing.T) {
 			name:            "ProductionRejectsInsecureSessionDSN",
 			storageDriver:   "postgres",
 			storageDSN:      "postgres://main?sslmode=require",
-			envDSN:          "postgres://sessions?sslmode=disable",
+			envDSN:          "postgres://sessions@db.example/sessions?sslmode=disable",
 			requirePostgres: true,
 			wantErr:         true,
 		},
@@ -424,11 +431,11 @@ func TestStartupSummaryMemoryDefaults(t *testing.T) {
 }
 
 func TestResolveLoginLimit(t *testing.T) {
-        cases := []struct {
-                name    string
-                mode    string
-                flag    int
-                env     string
+	cases := []struct {
+		name    string
+		mode    string
+		flag    int
+		env     string
 		want    int
 		wantErr bool
 	}{
@@ -457,13 +464,13 @@ func TestResolveLoginLimit(t *testing.T) {
 		},
 	}
 
-        for _, tc := range cases {
-                tc := tc
-                t.Run(tc.name, func(t *testing.T) {
-                        t.Setenv("BITRIVER_LIVE_RATE_LOGIN_LIMIT", tc.env)
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("BITRIVER_LIVE_RATE_LOGIN_LIMIT", tc.env)
 
-                        got, err := resolveLoginLimit(tc.mode, tc.flag, "BITRIVER_LIVE_RATE_LOGIN_LIMIT")
-                        if tc.wantErr {
+			got, err := resolveLoginLimit(tc.mode, tc.flag, "BITRIVER_LIVE_RATE_LOGIN_LIMIT")
+			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil")
 				}

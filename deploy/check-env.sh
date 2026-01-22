@@ -24,6 +24,25 @@ read_env_value() {
   echo "$raw_line" | xargs
 }
 
+is_compose_postgres_dsn() {
+  local value lowered host_port host
+
+  lowered=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+  if [[ "$lowered" == *"host=postgres"* ]]; then
+    return 0
+  fi
+  if [[ "$lowered" =~ ^postgres(ql)?:// ]]; then
+    host_port=${lowered#*://}
+    host_port=${host_port#*@}
+    host_port=${host_port%%/*}
+    host=${host_port%%:*}
+    if [[ "$host" == "postgres" ]]; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
 check_insecure_dsn() {
   local env_var="$1"
   local raw_line value lowered
@@ -36,8 +55,11 @@ check_insecure_dsn() {
 
   lowered=$(echo "$value" | tr '[:upper:]' '[:lower:]')
   if [[ "$lowered" == *"sslmode=disable"* ]]; then
-    echo "${env_var} must enable TLS in production (set sslmode=require or supply a CA for verify-full)" >&2
-    exit 1
+    if ! is_compose_postgres_dsn "$value"; then
+      echo "${env_var} must enable TLS in production (set sslmode=require or supply a CA for verify-full)." >&2
+      echo "sslmode=disable is only allowed when the DSN points at the local Compose postgres service." >&2
+      exit 1
+    fi
   fi
 }
 
