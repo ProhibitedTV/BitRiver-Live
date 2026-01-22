@@ -1,0 +1,21 @@
+services:
+  caddy:
+    image: caddy:2.7-alpine
+    container_name: bitriver-caddy
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - bitriver-live
+      - viewer
+
+volumes:
+  caddy-data:
+  caddy-config:
