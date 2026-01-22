@@ -346,15 +346,7 @@ When refreshing an existing OME node, replace any custom `origin_conf/Server.xml
 
 ```bash
 cd /opt/bitriver-live
-./scripts/render_ome_config.py \
-  --template deploy/ome/Server.xml \
-  --output deploy/ome/Server.generated.xml \
-  --bind "$BITRIVER_OME_BIND" \
-  --port "${BITRIVER_OME_SERVER_PORT:-9000}" \
-  --tls-port "${BITRIVER_OME_SERVER_TLS_PORT:-9443}" \
-  --username "$BITRIVER_OME_USERNAME" \
-  --password "$BITRIVER_OME_PASSWORD" \
-  --api-token "$BITRIVER_OME_API_TOKEN"
+./scripts/render-ome-config.sh --force --env-file /opt/bitriver-live/.env
 ```
 
 Mount the generated file into the container at `/opt/ovenmediaengine/bin/origin_conf/Server.xml` (Compose already wires this path for you) and restart OME so the control listener bind/IP and credentials stay in sync with `.env`.
