@@ -2,6 +2,36 @@
 
 Use this guide when you are moving an existing deployment to a newer release. It assumes you are running the supported Docker Compose bundle (`deploy/docker-compose.yml`) with the repository-root `.env` file and the generated OvenMediaEngine config in `deploy/ome/Server.generated.xml`.
 
+## Upgrade essentials: migrations, `.env` updates, and OME re-render
+
+Use this section as the concise checklist when you need to ensure schema, environment, and OvenMediaEngine configuration stay aligned during upgrades. The full, step-by-step flow follows in the numbered sections below.
+
+### Schema migrations
+
+- **Compose path (default):** `docker compose up` always runs the `postgres-migrations` helper before the API starts, applying every SQL file in `deploy/migrations/`.
+- **External Postgres:** apply the migrations in `deploy/migrations/` with your database tooling before starting the API, and keep the schema in sync with the release notes under `docs/releases/`.
+
+### Safe upgrade flow (summary)
+
+1. Stop the stack (keep volumes): `docker compose -f deploy/docker-compose.yml down`.
+2. Refresh `.env` from `deploy/.env.example` and validate it with `deploy/check-env.sh`.
+3. Re-render OME config: `./scripts/render-ome-config.sh --check || ./scripts/render-ome-config.sh --force`.
+4. Optionally run migrations explicitly: `docker compose -f deploy/docker-compose.yml run --rm postgres-migrations`.
+5. Start everything again: `docker compose -f deploy/docker-compose.yml up -d`.
+
+### `.env` changes
+
+- Compare your existing `.env` against `deploy/.env.example` whenever you upgrade, then add new keys or defaults before restarting.
+- Run `deploy/check-env.sh` to confirm there are no sample credentials or missing required variables.
+
+### OME re-render steps
+
+- When you change `BITRIVER_OME_*` variables or update `deploy/ome/Server.xml`, regenerate `deploy/ome/Server.generated.xml` with:
+  ```bash
+  ./scripts/render-ome-config.sh --check || ./scripts/render-ome-config.sh --force
+  ```
+- The Compose `ome-config` preflight runs on every `docker compose up`, but a manual render is still recommended after `.env` edits so you can catch config issues before bringing the stack online.
+
 ## 1. Review release notes and incompatibilities
 
 Before you pull new images or rebuild containers, read the release notes under `docs/releases/` (for example, [`docs/releases/v1.0.0.md`](releases/v1.0.0.md)). Any breaking changes, new required environment variables, or schema changes are called out there so you can plan the upgrade safely.

@@ -21,6 +21,8 @@ Recent schema changes to account for:
   `profiles` so broadcasters can surface their external accounts. Ensure this
   migration is applied during rollout.
 
+For the upgrade mechanics around schema migrations, safe Compose sequencing, `.env` changes, and OvenMediaEngine config regeneration, follow the upgrade essentials in [`docs/upgrades.md`](upgrades.md#upgrade-essentials-migrations-env-updates-and-ome-re-render).
+
 ## 1. Pre-release verification
 
 Run every test suite locally (or on a staging CI run) so the GitHub release
