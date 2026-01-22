@@ -128,6 +128,7 @@ All commands assume you are still in the repository root (where `.env` lives) so
 
 ## Troubleshooting
 
+- **`Error: doctor checks failed` with `Docker: not found` in the doctor output** – The quickstart starts with the BitRiver Live doctor check and exits early when the `docker` binary is not on your `PATH`. Install Docker Engine or Docker Desktop, reopen your shell so `docker` is discoverable, and rerun `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` or `./scripts/quickstart.sh`.
 - **`Error: Docker is required`** – Install Docker Engine from [docs.docker.com/engine/install](https://docs.docker.com/engine/install/)
   and re-run `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` (or the shim for your shell).
 - **`Error: Docker Compose V2 is required`** – Install the compose plugin or upgrade Docker Desktop/Engine so the `docker compose`
