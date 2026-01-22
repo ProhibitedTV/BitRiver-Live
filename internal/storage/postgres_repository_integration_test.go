@@ -182,6 +182,10 @@ func TestPostgresChatReportsLifecycle(t *testing.T) {
 	storage.RunRepositoryChatReportsLifecycle(t, postgresRepositoryFactory)
 }
 
+func TestPostgresChatRetention(t *testing.T) {
+	storage.RunRepositoryChatRetention(t, postgresRepositoryFactory)
+}
+
 func TestPostgresChannelSearch(t *testing.T) {
 	storage.RunRepositoryChannelSearch(t, postgresRepositoryFactory)
 }

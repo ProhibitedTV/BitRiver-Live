@@ -396,12 +396,80 @@ func (s *Storage) chatTimeoutLocked(channelID, userID string) (time.Time, bool) 
 	return time.Time{}, false
 }
 
+func (s *Storage) purgeExpiredChatMessagesLocked(now time.Time) (bool, dataset, error) {
+	retention := s.chatRetention.Messages
+	if retention <= 0 || len(s.data.ChatMessages) == 0 {
+		return false, dataset{}, nil
+	}
+	cutoff := now.Add(-retention)
+	removed := false
+	snapshotTaken := false
+	var snapshot dataset
+	for id, message := range s.data.ChatMessages {
+		if message.CreatedAt.After(cutoff) {
+			continue
+		}
+		if !snapshotTaken {
+			snapshot = cloneDataset(s.data)
+			snapshotTaken = true
+		}
+		delete(s.data.ChatMessages, id)
+		removed = true
+	}
+	if !removed {
+		return false, dataset{}, nil
+	}
+	return true, snapshot, nil
+}
+
+func (s *Storage) purgeExpiredChatReportsLocked(now time.Time) (bool, dataset, error) {
+	retention := s.chatRetention.ModerationLogs
+	if retention <= 0 || len(s.data.ChatReports) == 0 {
+		return false, dataset{}, nil
+	}
+	cutoff := now.Add(-retention)
+	removed := false
+	snapshotTaken := false
+	var snapshot dataset
+	for id, report := range s.data.ChatReports {
+		reportTime := report.CreatedAt
+		if report.ResolvedAt != nil && report.ResolvedAt.After(reportTime) {
+			reportTime = report.ResolvedAt.UTC()
+		}
+		if reportTime.After(cutoff) {
+			continue
+		}
+		if !snapshotTaken {
+			snapshot = cloneDataset(s.data)
+			snapshotTaken = true
+		}
+		delete(s.data.ChatReports, id)
+		removed = true
+	}
+	if !removed {
+		return false, dataset{}, nil
+	}
+	return true, snapshot, nil
+}
+
 func (s *Storage) ListChatMessages(channelID string, limit int) ([]models.ChatMessage, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	if _, ok := s.data.Channels[channelID]; !ok {
 		return nil, fmt.Errorf("channel %s not found", channelID)
+	}
+
+	now := s.retentionTime()
+	removed, snapshot, err := s.purgeExpiredChatMessagesLocked(now)
+	if err != nil {
+		return nil, err
+	}
+	if removed {
+		if err := s.persist(); err != nil {
+			s.data = snapshot
+			return nil, err
+		}
 	}
 
 	messages := make([]models.ChatMessage, 0)
@@ -625,12 +693,25 @@ func (s *Storage) CreateChatReport(channelID, reporterID, targetID, reason, mess
 
 // ListChatReports lists reports for a channel.
 func (s *Storage) ListChatReports(channelID string, includeResolved bool) ([]models.ChatReport, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	if _, ok := s.data.Channels[channelID]; !ok {
 		return nil, fmt.Errorf("channel %s not found", channelID)
 	}
+
+	now := s.retentionTime()
+	removed, snapshot, err := s.purgeExpiredChatReportsLocked(now)
+	if err != nil {
+		return nil, err
+	}
+	if removed {
+		if err := s.persist(); err != nil {
+			s.data = snapshot
+			return nil, err
+		}
+	}
+
 	reports := make([]models.ChatReport, 0)
 	for _, report := range s.data.ChatReports {
 		if report.ChannelID != channelID {

@@ -929,6 +929,48 @@ func RunRepositoryRecordingRetentionFailures(t *testing.T, factory RepositoryFac
 	}
 }
 
+// RunRepositoryChatRetention validates the retention workflow for chat messages
+// and moderation logs.
+func RunRepositoryChatRetention(t *testing.T, factory RepositoryFactory) {
+	policy := ChatRetentionPolicy{Messages: time.Hour, ModerationLogs: time.Hour}
+	retentionNow := time.Now().UTC()
+	repo := runRepository(t, factory, WithChatRetention(policy), WithRetentionClock(func() time.Time {
+		return retentionNow
+	}))
+
+	owner, err := repo.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	requireAvailable(t, err, "create owner")
+	reporter, err := repo.CreateUser(CreateUserParams{DisplayName: "reporter", Email: "reporter@example.com"})
+	requireAvailable(t, err, "create reporter")
+	target, err := repo.CreateUser(CreateUserParams{DisplayName: "target", Email: "target@example.com"})
+	requireAvailable(t, err, "create target")
+
+	channel, err := repo.CreateChannel(owner.ID, "Chat", "gaming", nil)
+	requireAvailable(t, err, "create channel")
+
+	_, err = repo.CreateChatMessage(channel.ID, reporter.ID, "hello")
+	requireAvailable(t, err, "create chat message")
+
+	report, err := repo.CreateChatReport(channel.ID, reporter.ID, target.ID, "spam", "", "")
+	requireAvailable(t, err, "create chat report")
+	_, err = repo.ResolveChatReport(report.ID, owner.ID, "resolved")
+	requireAvailable(t, err, "resolve chat report")
+
+	retentionNow = retentionNow.Add(2 * time.Hour)
+
+	messages, err := repo.ListChatMessages(channel.ID, 0)
+	requireAvailable(t, err, "list chat messages after retention")
+	if len(messages) != 0 {
+		t.Fatalf("expected chat retention to purge messages, got %d", len(messages))
+	}
+
+	reports, err := repo.ListChatReports(channel.ID, true)
+	requireAvailable(t, err, "list chat reports after retention")
+	if len(reports) != 0 {
+		t.Fatalf("expected chat retention to purge reports, got %d", len(reports))
+	}
+}
+
 // RunRepositoryClipExportTitleValidation ensures repositories reject empty clip titles
 // and trim whitespace before persisting.
 func RunRepositoryClipExportTitleValidation(t *testing.T, factory RepositoryFactory) {

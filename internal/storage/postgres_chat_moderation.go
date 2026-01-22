@@ -152,6 +152,10 @@ func (r *postgresRepository) ListChatMessages(channelID string, limit int) ([]mo
 		return nil, fmt.Errorf("channel %s not found", channelID)
 	}
 
+	if err := r.purgeExpiredChatMessages(ctx, r.retentionTime()); err != nil {
+		return nil, fmt.Errorf("purge chat messages: %w", err)
+	}
+
 	query := "SELECT id, channel_id, user_id, content, created_at FROM chat_messages WHERE channel_id = $1 ORDER BY created_at DESC, id ASC"
 	args := []any{channelID}
 	if limit > 0 {
@@ -180,6 +184,18 @@ func (r *postgresRepository) ListChatMessages(channelID string, limit int) ([]mo
 	}
 
 	return messages, nil
+}
+
+func (r *postgresRepository) purgeExpiredChatMessages(ctx context.Context, now time.Time) error {
+	retention := r.chatRetention.Messages
+	if retention <= 0 || r == nil || r.pool == nil {
+		return nil
+	}
+	cutoff := now.Add(-retention)
+	if _, err := r.pool.Exec(ctx, "DELETE FROM chat_messages WHERE created_at <= $1", cutoff); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *postgresRepository) ChatRestrictions() chat.RestrictionsSnapshot {
@@ -583,6 +599,10 @@ func (r *postgresRepository) ListChatReports(channelID string, includeResolved b
 			return fmt.Errorf("channel %s not found", channelID)
 		}
 
+		if err := r.purgeExpiredChatReports(ctx, r.retentionTime()); err != nil {
+			return fmt.Errorf("purge chat reports: %w", err)
+		}
+
 		query := "SELECT id, channel_id, reporter_id, target_id, reason, message_id, evidence_url, status, resolution, resolver_id, created_at, resolved_at FROM chat_reports WHERE channel_id = $1"
 		args := []any{channelID}
 		if !includeResolved {
@@ -639,6 +659,18 @@ func (r *postgresRepository) ListChatReports(channelID string, includeResolved b
 		return nil, err
 	}
 	return reports, nil
+}
+
+func (r *postgresRepository) purgeExpiredChatReports(ctx context.Context, now time.Time) error {
+	retention := r.chatRetention.ModerationLogs
+	if retention <= 0 || r == nil || r.pool == nil {
+		return nil
+	}
+	cutoff := now.Add(-retention)
+	if _, err := r.pool.Exec(ctx, "DELETE FROM chat_reports WHERE COALESCE(resolved_at, created_at) <= $1", cutoff); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *postgresRepository) ResolveChatReport(reportID, resolverID, resolution string) (models.ChatReport, error) {

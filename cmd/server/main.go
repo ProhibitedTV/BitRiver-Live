@@ -153,6 +153,8 @@ func main() {
 	objectLifecycleDays := flag.Int("object-lifecycle-days", 0, "lifecycle policy in days for archived objects")
 	recordingRetentionPublished := flag.String("recording-retention-published", "", "retention duration for published recordings (e.g. 720h, 0 disables expiry)")
 	recordingRetentionUnpublished := flag.String("recording-retention-unpublished", "", "retention duration for unpublished recordings")
+	chatRetentionMessages := flag.String("chat-retention-messages", "", "retention duration for chat messages (e.g. 720h, 0 disables expiry)")
+	chatRetentionModeration := flag.String("chat-retention-moderation-logs", "", "retention duration for chat moderation logs")
 	// OAuth flags (env: BITRIVER_LIVE_OAUTH_CONFIG, BITRIVER_LIVE_OAUTH_PROVIDERS, BITRIVER_LIVE_OAUTH_* overrides).
 	oauthProvidersFlag := flag.String("oauth-providers", "", "JSON array or path describing OAuth providers")
 	var oauthClientIDs keyValueFlag
@@ -269,6 +271,27 @@ func main() {
 			policy.Unpublished = unpublishedRetention
 		}
 		options = append(options, storage.WithRecordingRetention(policy))
+	}
+
+	chatMessagesRetention, chatMessagesSet, err := resolveDurationSetting(*chatRetentionMessages, "BITRIVER_LIVE_CHAT_RETENTION_MESSAGES")
+	if err != nil {
+		logger.Error("invalid chat message retention", "error", err)
+		os.Exit(1)
+	}
+	chatModerationRetention, chatModerationSet, err := resolveDurationSetting(*chatRetentionModeration, "BITRIVER_LIVE_CHAT_RETENTION_MODERATION_LOGS")
+	if err != nil {
+		logger.Error("invalid chat moderation retention", "error", err)
+		os.Exit(1)
+	}
+	if chatMessagesSet || chatModerationSet {
+		policy := storage.ChatRetentionPolicy{Messages: -1, ModerationLogs: -1}
+		if chatMessagesSet {
+			policy.Messages = chatMessagesRetention
+		}
+		if chatModerationSet {
+			policy.ModerationLogs = chatModerationRetention
+		}
+		options = append(options, storage.WithChatRetention(policy))
 	}
 
 	objectCfg := storage.ObjectStorageConfig{

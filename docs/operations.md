@@ -173,3 +173,37 @@ Recordings metadata lives in Postgres, but the media files live wherever you con
 
 Keep backups of Postgres and media assets in the same recovery window so channel metadata and playback artefacts stay in
 sync after a restore.
+
+### Retention expectations
+
+Use the settings below to match your compliance or storage policies. Unless stated otherwise, leaving a value empty or `0`
+keeps data indefinitely.
+
+#### Transcoder artifacts (`/work/public`, `./transcoder-data`)
+
+- **Live sessions:** FFmpeg output is written under `/work/live/<jobId>` and mirrored to `/work/public/live/<jobId>`. The
+  mirror symlink is removed when a stream stops, but the output directory stays on disk by default.
+- **Uploads/VOD jobs:** Outputs land in `/work/uploads/<jobId>` and are copied into `/work/public/uploads/<jobId>` for
+  playback. These folders are retained until you delete them manually or configure cleanup.
+- **Cleanup configuration:** Set `BITRIVER_TRANSCODER_RETENTION_LIVE` and/or `BITRIVER_TRANSCODER_RETENTION_UPLOADS` (for
+  example, `168h`) to let the transcoder delete stopped live outputs or completed upload outputs after the specified
+  duration. The cleanup sweep runs every 30 minutes and removes both the output directory and the public mirror.
+
+#### Recordings and VOD metadata
+
+- **API retention windows:** Configure `BITRIVER_LIVE_RECORDING_RETENTION_PUBLISHED` and
+  `BITRIVER_LIVE_RECORDING_RETENTION_UNPUBLISHED` to control how long recordings are kept after a stream stops. Defaults
+  are 90 days for published VODs and 14 days for unpublished drafts. Use `0` to disable expiry.
+- **Purge behavior:** When the retention window elapses, the API deletes the recording metadata, clip exports, and any
+  object-storage manifests/thumbnails it created. Local transcoder artifacts on disk are not deleted by the API, so pair
+  this with the transcoder retention settings (above) or a storage lifecycle policy for on-disk HLS outputs.
+
+#### Chat messages and moderation logs
+
+- **Stored history:** Chat transcripts and moderation reports are stored in Postgres/JSON. Redis only handles live fan-out
+  and does not persist history by default.
+- **Retention configuration:** Use `BITRIVER_LIVE_CHAT_RETENTION_MESSAGES` for chat history and
+  `BITRIVER_LIVE_CHAT_RETENTION_MODERATION_LOGS` for moderation reports (example: `720h`). These apply to report creation
+  timestamps or resolution timestamps when present.
+- **Purge behavior:** Retention is enforced when the API loads chat history or moderation queues, so expired messages and
+  reports are deleted on access.

@@ -74,19 +74,21 @@ type processState struct {
 }
 
 type server struct {
-	httpServer    *http.Server
-	token         string
-	outputRoot    string
-	publicRoot    string
-	publicBase    string
-	mu            sync.RWMutex
-	jobs          map[string]*job
-	uploads       map[string]*uploadJob
-	processes     map[string]*processState
-	store         *metadataStore
-	launchProcess func(string, *transcodePlan, func(error)) (*processState, error)
-	logger        *slog.Logger
-	metrics       *metrics.Registry
+	httpServer      *http.Server
+	token           string
+	outputRoot      string
+	publicRoot      string
+	publicBase      string
+	liveRetention   time.Duration
+	uploadRetention time.Duration
+	mu              sync.RWMutex
+	jobs            map[string]*job
+	uploads         map[string]*uploadJob
+	processes       map[string]*processState
+	store           *metadataStore
+	launchProcess   func(string, *transcodePlan, func(error)) (*processState, error)
+	logger          *slog.Logger
+	metrics         *metrics.Registry
 
 	healthMu   sync.Mutex
 	components map[string]*componentState
@@ -236,6 +238,16 @@ func main() {
 		logger.Error("JOB_CONTROLLER_TOKEN must be configured before starting the transcoder")
 		os.Exit(1)
 	}
+	liveRetention, err := parseDurationEnv("BITRIVER_TRANSCODER_RETENTION_LIVE")
+	if err != nil {
+		logger.Error("invalid BITRIVER_TRANSCODER_RETENTION_LIVE", "error", err)
+		os.Exit(1)
+	}
+	uploadRetention, err := parseDurationEnv("BITRIVER_TRANSCODER_RETENTION_UPLOADS")
+	if err != nil {
+		logger.Error("invalid BITRIVER_TRANSCODER_RETENTION_UPLOADS", "error", err)
+		os.Exit(1)
+	}
 	outputRoot := envOrDefault("JOB_CONTROLLER_OUTPUT_ROOT", "./work")
 
 	srv, err := newServer(token, outputRoot, logger, registry)
@@ -243,6 +255,8 @@ func main() {
 		logger.Error("initialise server", "error", err)
 		os.Exit(1)
 	}
+	srv.liveRetention = liveRetention
+	srv.uploadRetention = uploadRetention
 
 	httpServer := &http.Server{
 		Addr:              bind,
@@ -254,6 +268,8 @@ func main() {
 	logger.Info("ffmpeg job controller listening", "bind", bind)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	srv.startRetentionWorker(ctx)
 
 	if err := serverutil.Run(ctx, serverutil.Config{
 		Server:          httpServer,
@@ -336,6 +352,98 @@ func (s *server) routes() http.Handler {
 	}
 
 	return logging.RequestLogger(logging.RequestLoggerConfig{Logger: s.logger})(handler)
+}
+
+func (s *server) startRetentionWorker(ctx context.Context) {
+	if s == nil || (s.liveRetention <= 0 && s.uploadRetention <= 0) {
+		return
+	}
+	const sweepInterval = 30 * time.Minute
+	go func() {
+		s.runRetentionSweep(time.Now().UTC())
+		ticker := time.NewTicker(sweepInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case now := <-ticker.C:
+				s.runRetentionSweep(now.UTC())
+			}
+		}
+	}()
+}
+
+func (s *server) runRetentionSweep(now time.Time) {
+	if s == nil {
+		return
+	}
+	sweepLogger := s.logger
+	if sweepLogger == nil {
+		sweepLogger = slog.Default()
+	}
+	if s.liveRetention > 0 {
+		if err := s.cleanupLiveArtifacts(now); err != nil {
+			sweepLogger.Warn("live retention sweep failed", "error", err)
+		}
+	}
+	if s.uploadRetention > 0 {
+		if err := s.cleanupUploadArtifacts(now); err != nil {
+			sweepLogger.Warn("upload retention sweep failed", "error", err)
+		}
+	}
+}
+
+func (s *server) cleanupLiveArtifacts(now time.Time) error {
+	root := filepath.Join(s.outputRoot, "live")
+	jobs := make(map[string]*job)
+	if err := loadJobMetadata(root, jobs); err != nil {
+		return err
+	}
+	cutoff := now.Add(-s.liveRetention)
+	for id, meta := range jobs {
+		if meta == nil || meta.StoppedAt == nil || meta.StoppedAt.After(cutoff) {
+			continue
+		}
+		outputDir := strings.TrimSpace(meta.OutputPath)
+		if outputDir == "" {
+			outputDir = filepath.Join(root, id)
+		}
+		if err := os.RemoveAll(outputDir); err != nil {
+			return err
+		}
+		if err := s.removeLiveMirror(id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *server) cleanupUploadArtifacts(now time.Time) error {
+	root := filepath.Join(s.outputRoot, "uploads")
+	uploads := make(map[string]*uploadJob)
+	if err := loadUploadMetadata(root, uploads); err != nil {
+		return err
+	}
+	cutoff := now.Add(-s.uploadRetention)
+	for id, meta := range uploads {
+		if meta == nil || meta.CompletedAt == nil || meta.CompletedAt.After(cutoff) {
+			continue
+		}
+		outputDir := strings.TrimSpace(meta.OutputPath)
+		if outputDir == "" {
+			outputDir = filepath.Join(root, id)
+		}
+		if err := os.RemoveAll(outputDir); err != nil {
+			return err
+		}
+		if s.publicRoot != "" {
+			if err := os.RemoveAll(filepath.Join(s.publicRoot, "uploads", id)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (s *server) restoreActiveProcesses() {
@@ -1573,6 +1681,14 @@ func envOrDefault(key, fallback string) string {
 		return val
 	}
 	return fallback
+}
+
+func parseDurationEnv(key string) (time.Duration, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return 0, nil
+	}
+	return time.ParseDuration(raw)
 }
 
 var (

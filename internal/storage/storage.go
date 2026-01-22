@@ -227,6 +227,10 @@ func NewStorage(path string, opts ...Option) (*Storage, error) {
 			Published:   90 * 24 * time.Hour,
 			Unpublished: 14 * 24 * time.Hour,
 		},
+		chatRetention: ChatRetentionPolicy{
+			Messages:       0,
+			ModerationLogs: 0,
+		},
 		objectClient: noopObjectStorageClient{},
 		retentionNow: func() time.Time { return time.Now().UTC() },
 	}
