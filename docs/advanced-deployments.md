@@ -148,6 +148,8 @@ psql "postgres://bitriver:bitriver@localhost:5432/bitriver?sslmode=disable" \
   --file deploy/migrations/0001_initial.sql
 ```
 
+The local Compose Postgres container does not ship with TLS certificates, so `sslmode=disable` is acceptable for `localhost` or the Compose service. When you target an external or managed database, require TLS by switching to `sslmode=require` or `sslmode=verify-full` and supply `sslrootcert=/certs/postgres-ca.pem` (or another mounted CA path) in the DSN.
+
 With the migrations applied and a Postgres driver such as `pgxpool` available, start the API and point it at the relational database. When compiling from source, always pass the `postgres` build tag so the real driver is linked instead of the lightweight stubs used for JSON-only development:
 
 ```bash
@@ -172,7 +174,7 @@ The same configuration can be supplied via environment variables:
 | `BITRIVER_LIVE_POSTGRES_HEALTH_INTERVAL` | Frequency of pool health probes. |
 | `BITRIVER_LIVE_POSTGRES_APP_NAME` | Optional `application_name` reported to Postgres. |
 
-`deploy/docker-compose.yml` provisions a local Postgres container and wires these environment variables automatically. The Postgres repository implementation lives in `internal/storage/postgres_repository.go`; ensure the migrations in `deploy/migrations/` stay in sync with the Go structs as development progresses. Existing JSON installs can be upgraded with `cmd/tools/migrate-json-to-postgres`, which copies `store.json` records into Postgres and verifies the row counts before finishing.
+`deploy/docker-compose.yml` provisions a local Postgres container and wires these environment variables automatically, defaulting to `sslmode=disable` for the local `postgres` service. The environment validator rejects `sslmode=disable` when you point the DSN at anything other than the Compose service, so remember to enable TLS for managed databases. The Postgres repository implementation lives in `internal/storage/postgres_repository.go`; ensure the migrations in `deploy/migrations/` stay in sync with the Go structs as development progresses. Existing JSON installs can be upgraded with `cmd/tools/migrate-json-to-postgres`, which copies `store.json` records into Postgres and verifies the row counts before finishing.
 
 The Postgres-backed storage tests run behind the build tag `postgres`. Provide a clean database that has been migrated with the contents of `deploy/migrations/` and point `BITRIVER_TEST_POSTGRES_DSN` at it before invoking `go test`:
 

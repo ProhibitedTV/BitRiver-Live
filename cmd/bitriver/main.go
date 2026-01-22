@@ -238,6 +238,7 @@ var (
 
 	forbiddenPlaceholders = defaultForbiddenPlaceholders()
 	placeholderLoadErr    error
+	sslModeDisablePattern = regexp.MustCompile(`(?i)(^|[?&\s;])sslmode=disable([&#;\s]|$)`)
 )
 
 func init() {
@@ -589,7 +590,7 @@ func buildPostgresDSN(values map[string]string) (string, error) {
 		Path:   "/" + db,
 	}
 	q := u.Query()
-	q.Set("sslmode", "require")
+	q.Set("sslmode", "disable")
 	u.RawQuery = q.Encode()
 
 	return u.String(), nil
@@ -1271,6 +1272,27 @@ func randomSecret() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
+func postgresSSLModeDisable(dsn string) bool {
+	return sslModeDisablePattern.MatchString(dsn)
+}
+
+func isComposePostgresDSN(dsn string) bool {
+	trimmed := strings.ToLower(strings.TrimSpace(dsn))
+	if trimmed == "" {
+		return false
+	}
+	if strings.Contains(trimmed, "host=postgres") {
+		return true
+	}
+	if strings.HasPrefix(trimmed, "postgres://") || strings.HasPrefix(trimmed, "postgresql://") {
+		parsed, err := url.Parse(trimmed)
+		if err == nil && strings.EqualFold(parsed.Hostname(), "postgres") {
+			return true
+		}
+	}
+	return false
+}
+
 func validateEnv(values map[string]string) envValidatorResult {
 	requiredVars := []string{
 		"BITRIVER_POSTGRES_USER",
@@ -1388,6 +1410,17 @@ func validateEnv(values map[string]string) envValidatorResult {
 
 	if production && (loginLimit <= 0 || loginLimitRaw == "") {
 		res.Errors = append(res.Errors, "production mode requires non-zero login throttling; set BITRIVER_LIVE_RATE_LOGIN_LIMIT")
+	}
+
+	for _, key := range []string{"BITRIVER_LIVE_POSTGRES_DSN", "BITRIVER_LIVE_SESSION_POSTGRES_DSN"} {
+		if val := strings.TrimSpace(values[key]); val != "" && postgresSSLModeDisable(val) && !isComposePostgresDSN(val) {
+			message := fmt.Sprintf("%s disables TLS. Use sslmode=require or verify-full for external Postgres; sslmode=disable is only allowed for the local Compose postgres service.", key)
+			if production {
+				res.Errors = append(res.Errors, message)
+			} else {
+				res.Warnings = append(res.Warnings, message)
+			}
+		}
 	}
 
 	if profiles := strings.TrimSpace(values["COMPOSE_PROFILES"]); profiles != "" {

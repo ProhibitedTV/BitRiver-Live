@@ -1028,13 +1028,32 @@ func validatePostgresTLS(dsn, envVar string) error {
 		return nil
 	}
 	if postgresSSLModeDisable(dsn) {
-		return fmt.Errorf("%s must enable TLS (set sslmode=require or provide a CA with verify-full)", envVar)
+		if !isComposePostgresDSN(dsn) {
+			return fmt.Errorf("%s must enable TLS (set sslmode=require or provide a CA with verify-full); sslmode=disable is only allowed for the local Compose postgres service", envVar)
+		}
 	}
 	return nil
 }
 
 func postgresSSLModeDisable(dsn string) bool {
 	return sslModeDisablePattern.MatchString(dsn)
+}
+
+func isComposePostgresDSN(dsn string) bool {
+	trimmed := strings.ToLower(strings.TrimSpace(dsn))
+	if trimmed == "" {
+		return false
+	}
+	if strings.Contains(trimmed, "host=postgres") {
+		return true
+	}
+	if strings.HasPrefix(trimmed, "postgres://") || strings.HasPrefix(trimmed, "postgresql://") {
+		parsed, err := url.Parse(trimmed)
+		if err == nil && strings.EqualFold(parsed.Hostname(), "postgres") {
+			return true
+		}
+	}
+	return false
 }
 
 func splitAndTrim(raw string) []string {
