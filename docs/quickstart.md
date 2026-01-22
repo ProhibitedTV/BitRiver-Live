@@ -70,6 +70,14 @@ Running `deploy/check-env.sh` against the quickstart `.env` now errors if `BITRI
 
 The control centre now exposes a **Setup wizard** under **Settings**. Use it as the default path for production-ready configuration instead of hand-editing `.env`: it prompts for the admin email, viewer domain, API port, TLS certificate paths, and required secrets (Postgres, Redis, SRS, OME, transcoder, metrics) then writes them to the environment file and schedules a safe restart. When you provide certificate paths the wizard copies them into `deploy/certs/` (next to the compose bundle) and updates `BITRIVER_LIVE_TLS_CERT`/`BITRIVER_LIVE_TLS_KEY` automatically so HTTPS is ready on the next restart. The wizard keeps Docker/systemd installs aligned without risking partial writes.
 
+### Retention and cleanup defaults
+
+The quickstart keeps retention settings unset, so the API and transcoder apply their built-in defaults until you configure overrides in `.env`:
+
+- **Recordings + VODs:** `BITRIVER_LIVE_RECORDING_RETENTION_PUBLISHED` defaults to 90 days and `BITRIVER_LIVE_RECORDING_RETENTION_UNPUBLISHED` defaults to 14 days. Set either to `0` to keep recordings indefinitely, and pair it with object storage lifecycle rules when you archive recordings outside the host filesystem.
+- **Chat logs:** `BITRIVER_LIVE_CHAT_RETENTION_MESSAGES` and `BITRIVER_LIVE_CHAT_RETENTION_MODERATION_LOGS` default to `0` (no automatic purge). Set durations like `720h` to prune messages and moderation reports.
+- **Transcoder outputs:** `BITRIVER_TRANSCODER_RETENTION_LIVE` and `BITRIVER_TRANSCODER_RETENTION_UPLOADS` default to empty/disabled, so HLS output under `./transcoder-data` persists until you delete it. Set a duration (for example, `168h`) to enable the 30-minute cleanup sweep for stopped live sessions and finished uploads.
+
 The health payload still expects the ingest services to be reachable from the API container:
 
 - **SRS controller:** `BITRIVER_SRS_API` defaults to `http://srs-controller:1985` inside the Compose network. If you move SRS elsewhere, point this URL at a reachable host and keep the API token aligned with the controller's configuration.
