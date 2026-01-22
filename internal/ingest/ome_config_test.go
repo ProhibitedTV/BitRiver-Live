@@ -235,6 +235,54 @@ func repoRoot(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
 }
 
+func renderOMEConfig(t *testing.T, repoRoot string, envContents string) []byte {
+	t.Helper()
+
+	envPath := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(envPath, []byte(envContents+"\n"), 0o644); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	outputPath := filepath.Join(repoRoot, "deploy", "ome", "Server.generated.xml")
+	original, err := os.ReadFile(outputPath)
+	var originalMode os.FileMode
+	if err == nil {
+		stat, statErr := os.Stat(outputPath)
+		if statErr != nil {
+			t.Fatalf("stat generated config: %v", statErr)
+		}
+		originalMode = stat.Mode()
+		t.Cleanup(func() {
+			_ = os.WriteFile(outputPath, original, originalMode)
+		})
+	} else if errors.Is(err, os.ErrNotExist) {
+		t.Cleanup(func() {
+			_ = os.Remove(outputPath)
+		})
+	} else {
+		t.Fatalf("read generated config: %v", err)
+	}
+
+	cmd := exec.Command("go", "run", "./cmd/bitriver", "ome", "render", "--force", "--env-file", envPath)
+	cmd.Dir = repoRoot
+	cmd.Env = append(os.Environ(),
+		"GOTOOLCHAIN=local",
+		"GOPROXY=off",
+		"GOSUMDB=off",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go renderer failed: %v\n%s", err, output)
+	}
+
+	rendered, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read generated output: %v", err)
+	}
+
+	return rendered
+}
+
 // omeImageFromCompose extracts the OME image reference from the
 // deploy/docker-compose.yml file, normalizing any ${VAR:-default} expansion
 // to the default value.
@@ -355,32 +403,20 @@ func normalizeXML(xmlContent string) string {
 
 func TestRenderOMEConfigRequiresManagersAuth(t *testing.T) {
 	repoRoot := repoRoot(t)
-	template := filepath.Join(repoRoot, "deploy", "ome", "Server.xml")
-	renderer := filepath.Join(repoRoot, "scripts", "render_ome_config.py")
-	output := filepath.Join(t.TempDir(), "Server.generated.xml")
-
-	cmd := exec.Command(
-		"python3", renderer,
-		"--template", template,
-		"--output", output,
-		"--bind", "0.0.0.0",
-		"--server-ip", "0.0.0.0",
-		"--port", "9000",
-		"--tls-port", "9443",
-		"--username", "admin",
-		"--password", "password",
-		"--api-token", "token",
-		"--access-token", "health-token",
-		"--image-tag", "0.16.0",
-		"--tcp-relay", "*:3478",
-		"--ice-candidate", "example.com:10000-10009/udp",
-	)
-
-	if outputBytes, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("render_ome_config.py failed: %v\n%s", err, outputBytes)
-	}
-
-	data := readFile(t, output)
+	envContents := strings.Join([]string{
+		"BITRIVER_OME_BIND=0.0.0.0",
+		"BITRIVER_OME_IP=0.0.0.0",
+		"BITRIVER_OME_SERVER_PORT=9000",
+		"BITRIVER_OME_SERVER_TLS_PORT=9443",
+		"BITRIVER_OME_USERNAME=admin",
+		"BITRIVER_OME_PASSWORD=password",
+		"BITRIVER_OME_API_TOKEN=token",
+		"BITRIVER_OME_ACCESS_TOKEN=health-token",
+		"BITRIVER_OME_IMAGE_TAG=0.16.0",
+		"BITRIVER_OME_TCP_RELAY=*:3478",
+		"BITRIVER_OME_ICE_CANDIDATE=example.com:10000-10009/udp",
+	}, "\n")
+	data := renderOMEConfig(t, repoRoot, envContents)
 	hasAccessTokens := bytes.Contains(data, []byte("<AccessTokens>"))
 	hasAuthentication := bytes.Contains(data, []byte("<Authentication>"))
 	hasOutputs := bytes.Contains(data, []byte("<Outputs>"))

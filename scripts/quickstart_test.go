@@ -3,6 +3,7 @@ package scripts_test
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -75,9 +76,9 @@ func TestQuickstartDelegatesToCli(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(logContent)), "\n")
-        expected := []string{
-                fmt.Sprintf("%s:run ./cmd/bitriver quickstart --env-file %s --compose-file %s", tempDir, envPath, composePath),
-        }
+	expected := []string{
+		fmt.Sprintf("%s:run ./cmd/bitriver quickstart --env-file %s --compose-file %s", tempDir, envPath, composePath),
+	}
 
 	if !reflect.DeepEqual(lines, expected) {
 		t.Fatalf("unexpected go invocations:\n%s", strings.Join(lines, "\n"))
@@ -97,9 +98,9 @@ func TestQuickstartOmeRenderingRunsByDefault(t *testing.T) {
 		t.Fatalf("read quickstart: %v", err)
 	}
 
-        if !strings.Contains(string(content), "run_cli quickstart") {
-                t.Fatalf("quickstart invocation not found in quickstart script")
-        }
+	if !strings.Contains(string(content), "run_cli quickstart") {
+		t.Fatalf("quickstart invocation not found in quickstart script")
+	}
 }
 
 func TestComposeMountsOmeConfigByDefault(t *testing.T) {
@@ -127,33 +128,19 @@ func TestOmeConfigRenderingHandlesBindAsIp(t *testing.T) {
 	}
 	repoRoot := filepath.Dir(wd)
 
-	tempDir := t.TempDir()
-	templatePath := filepath.Join(repoRoot, "deploy", "ome", "Server.xml")
-	outputPath := filepath.Join(tempDir, "Server.generated.xml")
-
-	renderer := filepath.Join(repoRoot, "scripts", "render_ome_config.py")
-	cmd := exec.Command("python3", renderer,
-		"--template", templatePath,
-		"--output", outputPath,
-		"--bind", "0.0.0.0",
-		"--tcp-relay", "*:3478",
-		"--ice-candidate", "*:10000-10009/udp",
-		"--port", "8081",
-		"--tls-port", "8082",
-		"--username", "admin",
-		"--password", "password",
-		"--api-token", "token")
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("python render failed: %v; stderr: %s", err, stderr.String())
-	}
-
-	output, err := os.ReadFile(outputPath)
-	if err != nil {
-		t.Fatalf("read output: %v", err)
-	}
+	envContents := strings.Join([]string{
+		"BITRIVER_OME_BIND=0.0.0.0",
+		"BITRIVER_OME_IP=0.0.0.0",
+		"BITRIVER_OME_SERVER_PORT=8081",
+		"BITRIVER_OME_SERVER_TLS_PORT=8082",
+		"BITRIVER_OME_USERNAME=admin",
+		"BITRIVER_OME_PASSWORD=password",
+		"BITRIVER_OME_API_TOKEN=token",
+		"BITRIVER_OME_TCP_RELAY=*:3478",
+		"BITRIVER_OME_ICE_CANDIDATE=*:10000-10009/udp",
+		"BITRIVER_OME_IMAGE_TAG=0.16.0",
+	}, "\n")
+	output := renderOMEConfig(t, repoRoot, envContents)
 
 	var parsed struct {
 		IP   string `xml:"IP"`
@@ -180,69 +167,24 @@ func TestOmeConfigRenderingHandlesBindAsIp(t *testing.T) {
 }
 
 func TestOmeConfigRenderingEscapesXml(t *testing.T) {
-	outputPath := filepath.Join(t.TempDir(), "Server.generated.xml")
-	templatePath := filepath.Join(t.TempDir(), "Server.template.xml")
-
-	template := strings.TrimSpace(`<?xml version="1.0" encoding="utf-8"?>
-<Server>
-    <IP>*</IP>
-    <Bind>
-        <Address>0.0.0.0</Address>
-        <Port>1935</Port>
-        <TLSPort>2935</TLSPort>
-    </Bind>
-    <IceCandidates>
-        <TcpRelay>*:3478</TcpRelay>
-        <IceCandidate>*:10000-10009/udp</IceCandidate>
-    </IceCandidates>
-    <AccessTokens>
-        <AccessToken>token</AccessToken>
-    </AccessTokens>
-    <Modules>
-        <Control>
-            <Authentication>
-                <User>
-                    <ID>admin</ID>
-                    <Password>password</Password>
-                </User>
-            </Authentication>
-        </Control>
-    </Modules>
-</Server>`) + "\n"
-
-	if err := os.WriteFile(templatePath, []byte(template), 0o644); err != nil {
-		t.Fatalf("write template: %v", err)
-	}
-
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
 	}
 	repoRoot := filepath.Dir(wd)
-	renderer := filepath.Join(repoRoot, "scripts", "render_ome_config.py")
-
-	cmd := exec.Command("python3", renderer,
-		"--template", templatePath,
-		"--output", outputPath,
-		"--bind", "0.0.0.0",
-		"--tcp-relay", "*:3478",
-		"--ice-candidate", "*:10000-10009/udp",
-		"--port", "9000",
-		"--tls-port", "9443",
-		"--username", "admin<&",
-		"--password", `pass<&>'"`,
-		"--api-token", "token")
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("ome config render failed: %v; stderr: %s", err, stderr.String())
-	}
-
-	rendered, err := os.ReadFile(outputPath)
-	if err != nil {
-		t.Fatalf("read rendered output: %v", err)
-	}
+	envContents := strings.Join([]string{
+		"BITRIVER_OME_BIND=0.0.0.0",
+		"BITRIVER_OME_IP=0.0.0.0",
+		"BITRIVER_OME_SERVER_PORT=9000",
+		"BITRIVER_OME_SERVER_TLS_PORT=9443",
+		"BITRIVER_OME_USERNAME=admin<&",
+		"BITRIVER_OME_PASSWORD=pass<&>'\"",
+		"BITRIVER_OME_API_TOKEN=token",
+		"BITRIVER_OME_TCP_RELAY=*:3478",
+		"BITRIVER_OME_ICE_CANDIDATE=*:10000-10009/udp",
+		"BITRIVER_OME_IMAGE_TAG=0.16.0",
+	}, "\n")
+	rendered := renderOMEConfig(t, repoRoot, envContents)
 
 	contents := string(rendered)
 	if !strings.Contains(contents, "admin&lt;&amp;") {
@@ -251,6 +193,54 @@ func TestOmeConfigRenderingEscapesXml(t *testing.T) {
 	if !strings.Contains(contents, "pass&lt;&amp;&gt;&apos;&quot;") {
 		t.Fatalf("expected password to be escaped, got:\n%s", contents)
 	}
+}
+
+func renderOMEConfig(t *testing.T, repoRoot, envContents string) []byte {
+	t.Helper()
+
+	envPath := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(envPath, []byte(envContents+"\n"), 0o644); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	outputPath := filepath.Join(repoRoot, "deploy", "ome", "Server.generated.xml")
+	original, err := os.ReadFile(outputPath)
+	var originalMode os.FileMode
+	if err == nil {
+		stat, statErr := os.Stat(outputPath)
+		if statErr != nil {
+			t.Fatalf("stat generated config: %v", statErr)
+		}
+		originalMode = stat.Mode()
+		t.Cleanup(func() {
+			_ = os.WriteFile(outputPath, original, originalMode)
+		})
+	} else if errors.Is(err, os.ErrNotExist) {
+		t.Cleanup(func() {
+			_ = os.Remove(outputPath)
+		})
+	} else {
+		t.Fatalf("read generated config: %v", err)
+	}
+
+	cmd := exec.Command("go", "run", "./cmd/bitriver", "ome", "render", "--force", "--env-file", envPath)
+	cmd.Dir = repoRoot
+	cmd.Env = append(os.Environ(),
+		"GOTOOLCHAIN=local",
+		"GOPROXY=off",
+		"GOSUMDB=off",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go renderer failed: %v\n%s", err, output)
+	}
+
+	rendered, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read generated output: %v", err)
+	}
+
+	return rendered
 }
 
 func extractSection(output, startMarker, endMarker string) string {
