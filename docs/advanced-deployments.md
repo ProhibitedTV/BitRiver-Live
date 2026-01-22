@@ -191,6 +191,9 @@ See [docs/testing.md](testing.md) for the consolidated checklist used in CI.
 
 ### Postgres backups and recovery
 
+For a step-by-step runbook (including Compose service names and restore commands), see the operations guide in
+[`docs/operations.md`](operations.md).
+
 Postgres is the source of truth for channels, recordings, chat metadata, and audit history. The Compose bundle derives the DSN from `BITRIVER_POSTGRES_DB`, `BITRIVER_POSTGRES_USER`, and `BITRIVER_POSTGRES_PASSWORD` in `deploy/.env.example`; override it directly with `BITRIVER_LIVE_POSTGRES_DSN` or `--postgres-dsn` when pointing the API at managed instances.【F:deploy/.env.example†L20-L36】【F:cmd/server/main.go†L126-L138】 Keep connection pool limits aligned with your backup strategy so `pg_dump` sessions are not throttled (`BITRIVER_LIVE_POSTGRES_MAX_CONNS`, `BITRIVER_LIVE_POSTGRES_MIN_CONNS`, `--postgres-max-conns`, and `--postgres-min-conns`).【F:deploy/.env.example†L28-L31】【F:cmd/server/main.go†L128-L133】
 
 Routine logical backups rely on `pg_dump` against the DSN the server uses:
@@ -257,7 +260,7 @@ Endpoints and credentials for uploads come from the object storage flags (`--obj
 
 ### Redis persistence expectations
 
-Redis backs the chat queue (`--chat-queue-driver redis`) and optional distributed login throttling; it is treated as a cache and transport layer rather than a system of record. The Compose template wires the chat queue to `BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR`/`BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD`, and the server exposes matching flags for addresses, credentials, streams, and TLS material so you can point at managed clusters or Sentinel.【F:deploy/.env.example†L43-L46】【F:cmd/server/main.go†L167-L180】 Chat messages are delivered through Redis Streams; if the node is lost without persistence (RDB/AOF), in-flight chat and rate-limit counters are discarded, but published recordings and account state remain intact in Postgres. Enable RDB snapshots or AOF on the Redis side when you want stream history to survive restarts, and monitor reconnections—the API will recreate consumer groups and continue processing once the Redis endpoint is reachable again.
+Redis backs the chat queue (`--chat-queue-driver redis`) and optional distributed login throttling; it is treated as a cache and transport layer rather than a system of record. The Compose template wires the chat queue to `BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR`/`BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD`, and the server exposes matching flags for addresses, credentials, streams, and TLS material so you can point at managed clusters or Sentinel.【F:deploy/.env.example†L43-L46】【F:cmd/server/main.go†L167-L180】 Chat messages are delivered through Redis Streams; if the node is lost without persistence (RDB/AOF), in-flight chat and rate-limit counters are discarded, but published recordings and account state remain intact in Postgres. Enable RDB snapshots or AOF on the Redis side when you want stream history to survive restarts, and monitor reconnections—the API will recreate consumer groups and continue processing once the Redis endpoint is reachable again. The operations runbook calls out the default cache-only Compose settings and how to snapshot the `redis-data` volume when you enable persistence.【F:docs/operations.md†L55-L95】
 
 Example: create a user, launch a channel, and start a stream session. These requests require an administrator session token—after promoting your account, log in at `/api/auth/login` and copy the `token` value from the JSON response.
 

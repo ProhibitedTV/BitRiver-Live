@@ -184,6 +184,7 @@ The dashboard’s **System status** card is the primary health check for operato
 - **Tweak settings:** Edit `.env` to change domain names, exposed ports, Redis/Postgres credentials, or viewer origins, then run
   `docker compose up -d` again to apply the changes.
 - **Install TLS / go beyond one host:** Follow [`docs/advanced-deployments.md`](docs/advanced-deployments.md).
+- **Run backups + restores:** Use the operations runbook in [`docs/operations.md`](docs/operations.md).
 - **Understand every service:** Read [`docs/production-release.md`](docs/production-release.md) and the release notes under
   `docs/releases/` when preparing a launch.
 - **Plan for portability:** Review [`docs/cross-platform-plan.md`](docs/cross-platform-plan.md) for the current platform
