@@ -59,6 +59,8 @@ Prefer the source-based workflow when developing features or rebuilding images l
 | Ubuntu 22.04+ / other Linux | Docker Engine + Compose plugin | Add your user to the `docker` group (or prefix commands with `sudo`) and confirm `docker compose` works without root. |
 | Windows 10/11 | Docker Desktop (WSL 2 backend) | Enable the WSL 2 backend, start Docker Desktop, and ensure the `docker-desktop` data disk has 15GB free. |
 
+Both `go run ./cmd/bitriver quickstart` and `./scripts/quickstart.sh` start by running the built-in doctor checks. If Docker is missing from your `PATH`, the command prints a `BitRiver Live doctor` block that includes `Docker: not found` and exits with `Error: doctor checks failed` so you can fix the prerequisite before it touches Compose.
+
 ### macOS (Docker Desktop, zsh/bash)
 
 ```bash
