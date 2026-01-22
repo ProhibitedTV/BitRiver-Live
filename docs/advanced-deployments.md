@@ -340,13 +340,13 @@ Open matching firewall or security group rules before testing playback:
 - Allow UDP traffic to `3478` (and TCP `3478` when `BITRIVER_OME_RELAY_PROTOCOL=tcp`) so TURN allocation succeeds.
 - Allow UDP traffic across the `BITRIVER_OME_ICE_PORT_RANGE` (default `10000-10009`) to pass the media relay packets.
 
-After changing these values, run `scripts/render-ome-config.sh --force` so `deploy/ome/Server.generated.xml` advertises the updated ICE candidates, then open matching firewall/NAT rules on your load balancer or host security group. Browsers will refuse WebRTC playback when they cannot reach the configured relay ports.
+After changing these values, run `go run ./cmd/bitriver ome render --force --env-file ./.env` (or `./scripts/render-ome-config.sh --force`) so `deploy/ome/Server.generated.xml` advertises the updated ICE candidates, then open matching firewall/NAT rules on your load balancer or host security group. Browsers will refuse WebRTC playback when they cannot reach the configured relay ports.
 
 When refreshing an existing OME node, replace any custom `origin_conf/Server.xml` with the template from this repository before restarting the container. Keep the bind/IP entries scoped to `<Modules><Control><Server><Listeners><TCP>` and re-render the credentials with the provided helper:
 
 ```bash
 cd /opt/bitriver-live
-./scripts/render-ome-config.sh --force --env-file /opt/bitriver-live/.env
+go run ./cmd/bitriver ome render --force --env-file /opt/bitriver-live/.env
 ```
 
 Mount the generated file into the container at `/opt/ovenmediaengine/bin/origin_conf/Server.xml` (Compose already wires this path for you) and restart OME so the control listener bind/IP and credentials stay in sync with `.env`.
@@ -383,8 +383,8 @@ Local and single-node installs can rely on the `transcoder-public` Nginx sidecar
 Operators can use the manifests under `deploy/` as a reference architecture for production or staging clusters. For host-managed installs, the BitRiver CLI now ships installers for systemd (Linux), launchd (macOS), and Windows Services alongside the [Installing BitRiver Live on Ubuntu guide](installing-on-ubuntu.md).
 
 1. **Provision ingest dependencies first.** Bring up SRS, the SRS controller proxy, OvenMediaEngine (OME), and the FFmpeg job controller before starting the BitRiver Live API. The compose file at `deploy/docker-compose.yml` defines the services as `srs`, `srs-controller`, `ome`, and `transcoder` respectively. Each service exposes an HTTP health probe on `/healthz` (with fallbacks to vendor-specific paths) so you can validate readiness with `docker compose ps` or an external probe before the API starts.
-2. **Render and verify the OME config before each launch.** Run `./scripts/render-ome-config.sh --force --env-file /opt/bitriver-live/.env` immediately before starting OME (the `ome.service` unit performs the same preflight). The render step stamps `deploy/ome/Server.generated.xml` with the image tag marker and exits non-zero when the template is missing or stale, preventing Docker from booting with an outdated control listener or credentials.
-   - The same script accepts `--check` when you want a CI guard that compares `BITRIVER_OME_IMAGE_TAG` in `.env` with the stamped marker in `deploy/ome/Server.generated.xml`, failing if they diverge so Compose reloads a freshly rendered config.
+2. **Render and verify the OME config before each launch.** Run `go run ./cmd/bitriver ome render --force --env-file /opt/bitriver-live/.env` (or the `./scripts/render-ome-config.sh` wrapper) immediately before starting OME (the `ome.service` unit performs the same preflight). The render step stamps `deploy/ome/Server.generated.xml` with the image tag marker and exits non-zero when the template is missing or stale, preventing Docker from booting with an outdated control listener or credentials. The only supported render path is the Go renderer and its wrapper script.
+   - The wrapper accepts `--check` when you want a CI guard that compares `BITRIVER_OME_IMAGE_TAG` in `.env` with the stamped marker in `deploy/ome/Server.generated.xml`, failing if they diverge so Compose reloads a freshly rendered config.
    - Use the version/token matrix below to line up your `.env` before rendering:
 
 | `BITRIVER_OME_IMAGE_TAG` | `BITRIVER_OME_API_TOKEN` expectation | Rendering behaviour |

@@ -59,7 +59,7 @@ Want a shim to handle shell-specific permissions? Use `./scripts/quickstart.sh` 
 1. Verifies that both Docker and Docker Compose V2 are available and warns when disk space under the Docker data root is below 15GB.
 2. Generates `.env` with the same defaults baked into `deploy/docker-compose.yml` (including placeholders for the admin email and viewer URL) and rotates the administrator password to a strong random value unless the file already exists. When a pre-existing `.env` is missing required credentials, the helper backfills them (including the OME API username/password and the `BITRIVER_OME_BIND` listener address for the control listener) so Compose can start without manual edits.
 3. Launches the containers with `docker compose up --build -d` using the compose file in `deploy/`. Docker automatically builds the API, viewer, SRS controller, and transcoder images the first time, so no registry login is required, and the manifest enables `restart: unless-stopped` for each long-lived service so they come back online after crashes or host reboots.
-4. Renders `deploy/ome/Server.generated.xml` from the bundled template via the Go renderer, applying `BITRIVER_OME_BIND`, stamping the configured ports, and mirroring the credentials from `.env` so health checks see the same managers authentication the compose preflight expects. If the template or credentials drift, the generator stops Compose before OME starts.
+4. Renders `deploy/ome/Server.generated.xml` from the bundled template via the Go renderer, applying `BITRIVER_OME_BIND`, stamping the configured ports, and mirroring the credentials from `.env` so health checks see the same managers authentication the compose preflight expects. If the template or credentials drift, the generator stops Compose before OME starts. The only supported render path is `go run ./cmd/bitriver ome render` (or the `./scripts/render-ome-config.sh` wrapper).
 5. Waits for the API readiness check to pass (`/readyz`), then invokes the `bootstrap-admin` helper to seed the admin account and print the credentials. Once you sign in, use the control centre **System status** card (powered by `/api/status`) as the primary health view. The raw `/readyz` and `/healthz` endpoints remain available for automation and deep debugging.
 
 Deployment `.env` files must keep `BITRIVER_LIVE_MODE=production`; `deploy/check-env.sh` now fails fast when the mode is empty or still `development`. For local HTTP-only demos, leave `.env` at production and override the mode inline (for example, `BITRIVER_LIVE_MODE=development docker compose --env-file ./.env -f deploy/docker-compose.yml up -d`) or with a one-off Compose override that sets the API service's `BITRIVER_LIVE_MODE` to `development`. Drop the override after you enable HTTPS via `BITRIVER_LIVE_TLS_CERT`/`BITRIVER_LIVE_TLS_KEY` or a reverse proxy so cookies regain the `Secure` flag.
@@ -143,7 +143,7 @@ All commands assume you are still in the repository root (where `.env` lives) so
   1. Ensure `.env` sets `BITRIVER_OME_IMAGE_TAG` to the version you actually run and includes a non-empty `BITRIVER_OME_API_TOKEN`.
   2. Force regeneration to align the schema with that tag:
      ```bash
-     ./scripts/render-ome-config.sh --force
+     go run ./cmd/bitriver ome render --force --env-file ./.env
      ```
   3. Confirm the rendered file contains the managers auth block and matches the tag marker:
      ```bash
