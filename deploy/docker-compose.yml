@@ -236,7 +236,6 @@ services:
     restart: unless-stopped
     ports:
       - "${BITRIVER_SRS_RTMP_PORT:-1935}:1935"
-      - "${BITRIVER_SRS_API_PORT:-1985}:1985"
     volumes:
       - ./srs/conf:/usr/local/srs/conf
     healthcheck:
@@ -245,6 +244,20 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+
+  # Optional profile to publish the SRS HTTP API (1985) to the host for debugging.
+  srs-api:
+    profiles:
+      - srs-api
+    image: alpine:3.19
+    container_name: bitriver-srs-api
+    command: ["sh", "-c", "sleep infinity"]
+    restart: unless-stopped
+    network_mode: "service:srs"
+    depends_on:
+      - srs
+    ports:
+      - "${BITRIVER_SRS_API_PORT:-1985}:1985"
 
   ome-config:
     build:
