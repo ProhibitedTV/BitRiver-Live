@@ -12,12 +12,38 @@ fails when core dependencies (API, Postgres, Redis) are unhealthy. `/healthz` in
 without flipping non-core failures into HTTP errors, so you can monitor ingest drift without tearing down the API. Use
 `/api/status` when you need richer JSON and remediation hints. Also see the health appendix in `docs/quickstart.md`.
 
+### Health endpoints and monitoring usage
+
+Use the endpoints below as tiered signals: `/readyz` for gating deploys and load balancers, `/healthz` for ingest visibility,
+and `/api/status` for operator-facing summaries with remediation tips and log hints.
+
+- **`GET /readyz` (readiness):** Returns HTTP `200` when core dependencies (API, Postgres, Redis, rate limiting, chat queue)
+  are healthy. Returns HTTP `503` when those dependencies fail, which is the signal to drain traffic or fail a rollout.
+- **`GET /healthz` (dependency visibility):** Mirrors `/readyz` for core dependencies and adds ingest component status for
+  SRS/OME/transcoder. It only flips to HTTP `503` when core dependencies fail, so ingest-only failures still produce `200`
+  with degraded JSON payloads. Use this for dashboards and on-call triage.
+- **`GET /api/status` (operator summary):** Aggregates readiness plus ingest probes, remediation hints, and log suggestions
+  used in the control centre Overview. Use this endpoint when you want a human-readable payload for alerts or ChatOps.
+
+**Typical monitoring flows:**
+
+- **Load balancer / orchestration probe:** Poll `/readyz` every 10-30s; alert on `503` for 2-3 consecutive checks and remove
+  the API instance from rotation until it returns `200`.
+- **Ingest service watch:** Poll `/healthz` every 30-60s; alert when any ingest component reports `error` for 3 checks while
+  `/readyz` remains healthy. This keeps the API online while surfacing ingest degradation.
+- **Operator dashboards:** Poll `/api/status` for an at-a-glance summary, and link to the referenced logs when a component
+  is degraded.
+
 ### Key metrics to track
 
 - **API latency** (p50/p95/p99 by route, especially `/api/status`, auth, channel CRUD).
 - **API error rate** (5xx, 4xx spikes from rate limiting or auth).
-- **Ingest errors** (SRS/OME health probe failures, ingest disconnects, publish failures).
-- **Transcoder failure rate** (job failures, segment generation errors, queue depth if exposed).
+- **HTTP volume:** `bitriver_http_requests_total{method,path,status}` with latency via
+  `bitriver_http_request_duration_seconds_sum`/`count` (paths are normalised to `:id`).
+- **Ingest health & orchestration:** `bitriver_ingest_health{service,status}` gauges alongside
+  `bitriver_ingest_attempts_total{operation}` and `bitriver_ingest_failures_total{operation}`.
+- **Transcoder workload:** `bitriver_transcoder_jobs_total{kind,status}` counters and
+  `bitriver_transcoder_active_jobs` gauge.
 - **Chat backlog** (Redis stream length and consumer lag).
 - **Dependency saturation** (Postgres connection usage, Redis memory usage, disk usage for `./transcoder-data`).
 
@@ -40,8 +66,16 @@ Tune to your traffic profile, but the defaults below are a good starting point f
   ```bash
   docker compose logs -f
   ```
+- **Targeted logs:** filter by service name when triaging a specific component:
+  ```bash
+  docker compose logs -f bitriver-live
+  docker compose logs -f transcoder
+  docker compose logs -f srs srs-controller ome
+  ```
 - **Postgres / Redis:** stdout/stderr via Docker (same command). Postgres data lives under the `postgres-data` volume.
 - **Host-mounted assets:** `./transcoder-data` contains HLS output and recordings (also used for disk usage checks).
+- **Audit trail:** the API emits structured audit logs for state-changing requests (user, path, status, IP). Forward these
+  logs to your SIEM for forensics and alert correlation.
 
 **Example triage flows:**
 
