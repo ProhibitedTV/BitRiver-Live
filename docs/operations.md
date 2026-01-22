@@ -92,7 +92,8 @@ docker compose cp postgres:/tmp/bitriver-live.backup \
 ```
 
 If you prefer to run `pg_dump` from a workstation or a job runner, point it at the same DSN the API uses (`postgres:5432`
-inside Compose, or the host port if you enable the `postgres-host` profile).
+inside Compose, or the host port if you enable the `postgres-host` profile with
+`docker compose --profile postgres-host up -d`).
 
 ### Restore with `pg_restore`
 
@@ -121,6 +122,8 @@ docker compose start bitriver-live
 ```
 
 If you restore into a new database name or host, update `BITRIVER_LIVE_POSTGRES_DSN` in `.env` before restarting the stack.
+Re-run the `postgres-migrations` helper if you restore into an empty database without schema (the helper is wired into
+Compose and will apply `deploy/migrations/*.sql` on the next `docker compose up -d`).
 
 ## Redis persistence and recovery
 
@@ -149,8 +152,21 @@ docker run --rm \
   tar czf /backup/redis-data-$(date +%F).tgz -C /data .
 ```
 
-To restore, stop the stack, replace the contents of the `redis-data` volume with the archive, then start `redis` again. When
-running cache-only (default), you can skip Redis backups entirely.
+To restore, stop the stack, replace the contents of the `redis-data` volume with the archive, then start `redis` again:
+
+```bash
+docker compose stop redis
+
+docker run --rm \
+  -v bitriver-live_redis-data:/data \
+  -v "$PWD/backups":/backup \
+  alpine \
+  sh -c "rm -rf /data/* && tar xzf /backup/redis-data-2024-01-01.tgz -C /data"
+
+docker compose start redis
+```
+
+When running cache-only (default), you can skip Redis backups entirely.
 
 ## Media assets: transcoder output + recordings
 
@@ -165,7 +181,8 @@ rsync -av --delete ./transcoder-data/ /mnt/backup/bitriver-transcoder-data/
 Recordings metadata lives in Postgres, but the media files live wherever you configured the recording storage:
 
 - **Default Compose stack:** recordings and HLS assets live under `./transcoder-data/public` (from `/work/public`). Back up the
-  directory alongside the other transcoder data.
+  directory alongside the other transcoder data. If you keep long-term recordings on disk, add an explicit retention policy
+  (see below) so storage does not grow without bound.
 - **Object storage configured:** follow your provider’s snapshot/replication runbook, and make sure bucket lifecycle rules
   align with the retention settings configured in the API.
 - **Mounted storage (NFS/S3FS/etc.):** treat the mount point as the source of truth and back it up using your normal
