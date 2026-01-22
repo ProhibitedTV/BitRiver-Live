@@ -116,6 +116,29 @@ func WithRecordingRetention(policy RecordingRetentionPolicy) Option {
 	)
 }
 
+// WithChatRetention customises how long chat transcripts and moderation logs
+// are retained before cleanup.
+func WithChatRetention(policy ChatRetentionPolicy) Option {
+	return composeOption(
+		func(s *Storage) {
+			if policy.Messages >= 0 {
+				s.chatRetention.Messages = policy.Messages
+			}
+			if policy.ModerationLogs >= 0 {
+				s.chatRetention.ModerationLogs = policy.ModerationLogs
+			}
+		},
+		func(cfg *PostgresConfig) {
+			if policy.Messages >= 0 {
+				cfg.ChatRetention.Messages = policy.Messages
+			}
+			if policy.ModerationLogs >= 0 {
+				cfg.ChatRetention.ModerationLogs = policy.ModerationLogs
+			}
+		},
+	)
+}
+
 // WithRetentionClock overrides the clock used when evaluating recording
 // retention windows. Primarily intended for tests that need deterministic
 // retention behaviour.

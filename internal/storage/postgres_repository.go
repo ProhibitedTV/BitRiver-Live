@@ -32,6 +32,7 @@ type postgresRepository struct {
 	ingestHealth        []ingest.HealthStatus
 	ingestHealthUpdated time.Time
 	recordingRetention  RecordingRetentionPolicy
+	chatRetention       ChatRetentionPolicy
 	objectStorage       ObjectStorageConfig
 	objectClient        objectStorageClient
 	retentionNow        func() time.Time
@@ -124,6 +125,7 @@ func NewPostgresRepository(dsn string, opts ...Option) (Repository, error) {
 		ingestHealth:        []ingest.HealthStatus{{Component: "ingest", Status: "disabled"}},
 		ingestHealthUpdated: time.Now().UTC(),
 		recordingRetention:  cfg.RecordingRetention,
+		chatRetention:       cfg.ChatRetention,
 		objectStorage:       cfg.ObjectStorage,
 		retentionNow:        cfg.RetentionClock,
 	}

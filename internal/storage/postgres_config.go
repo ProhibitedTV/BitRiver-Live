@@ -23,6 +23,7 @@ type PostgresConfig struct {
 	IngestRetryInterval time.Duration
 	IngestTimeout       time.Duration
 	RecordingRetention  RecordingRetentionPolicy
+	ChatRetention       ChatRetentionPolicy
 	ObjectStorage       ObjectStorageConfig
 	RetentionClock      func() time.Time
 }
@@ -36,6 +37,10 @@ func newPostgresConfig(dsn string, opts ...Option) PostgresConfig {
 		RecordingRetention: RecordingRetentionPolicy{
 			Published:   90 * 24 * time.Hour,
 			Unpublished: 14 * 24 * time.Hour,
+		},
+		ChatRetention: ChatRetentionPolicy{
+			Messages:       0,
+			ModerationLogs: 0,
 		},
 		RetentionClock: func() time.Time { return time.Now().UTC() },
 	}

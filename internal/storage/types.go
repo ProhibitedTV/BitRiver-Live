@@ -84,6 +84,7 @@ type Storage struct {
 	ingestHealth        []ingest.HealthStatus
 	ingestHealthUpdated time.Time
 	recordingRetention  RecordingRetentionPolicy
+	chatRetention       ChatRetentionPolicy
 	objectStorage       ObjectStorageConfig
 	objectClient        objectStorageClient
 	retentionNow        func() time.Time
@@ -94,6 +95,13 @@ type Storage struct {
 type RecordingRetentionPolicy struct {
 	Published   time.Duration
 	Unpublished time.Duration
+}
+
+// ChatRetentionPolicy specifies how long chat messages and moderation logs are
+// retained before they are purged.
+type ChatRetentionPolicy struct {
+	Messages       time.Duration
+	ModerationLogs time.Duration
 }
 
 // ObjectStorageConfig describes the external storage bucket used for
