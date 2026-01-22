@@ -185,6 +185,7 @@ The dashboard’s **System status** card is the primary health check for operato
   `docker compose up -d` again to apply the changes.
 - **Install TLS / go beyond one host:** Follow [`docs/advanced-deployments.md`](docs/advanced-deployments.md).
 - **Run backups + restores:** Use the operations runbook in [`docs/operations.md`](docs/operations.md).
+- **Plan upgrades:** Follow [`docs/upgrades.md`](docs/upgrades.md) for the safe Compose upgrade flow, migration timing, and `.env`/OME template handling.
 - **Understand every service:** Read [`docs/production-release.md`](docs/production-release.md) and the release notes under
   `docs/releases/` when preparing a launch.
 - **Plan for portability:** Review [`docs/cross-platform-plan.md`](docs/cross-platform-plan.md) for the current platform
