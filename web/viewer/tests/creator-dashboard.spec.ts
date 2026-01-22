@@ -59,10 +59,10 @@ test.describe("creator dashboard", () => {
     let uploadItems: UploadItem[] = [];
     let uploadAttempts = 0;
 
-    await page.route("**/api/uploads*", async (route) => {
+    await page.route("**/api/uploads**", async (route) => {
       const { method, url } = route.request();
 
-      if (method === "GET" && url.includes(`channelId=${channelId}`)) {
+      if (method === "GET") {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -79,7 +79,7 @@ test.describe("creator dashboard", () => {
           await route.fulfill({
             status: 500,
             contentType: "application/json",
-            body: JSON.stringify({ error: "transient failure" }),
+            body: JSON.stringify({ message: "Unable to create upload" }),
           });
           return;
         }
@@ -207,7 +207,11 @@ test.describe("creator dashboard", () => {
     await page.route(`**/api/channels/${channelId}/sessions`, async (route) => {
       sessionCalls += 1;
       if (sessionCalls === 1) {
-        await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "offline" }) });
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "Unable to load ingest details" }),
+        });
         return;
       }
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(sessionResponse) });
@@ -245,7 +249,11 @@ test.describe("creator dashboard", () => {
       updateAttempts += 1;
       if (route.request().method() === "PATCH") {
         if (updateAttempts === 1) {
-          await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "locked" }) });
+          await route.fulfill({
+            status: 500,
+            contentType: "application/json",
+            body: JSON.stringify({ message: "Unable to update stream title" }),
+          });
           return;
         }
         lastUpdatePayload = route.request().postDataJSON();
