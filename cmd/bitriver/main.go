@@ -815,12 +815,12 @@ func renderOMEConfig(cfg omeRenderConfig) error {
 		return err
 	}
 
-	text, err = replaceAllTagContent(text, "TcpRelay", xmlEscape(cfg.TCPRelay), true)
+	text, err = ensureIceCandidatesTag(text, "TcpRelay", xmlEscape(cfg.TCPRelay), cfg.TemplatePath)
 	if err != nil {
 		return err
 	}
 
-	text, err = replaceAllTagContent(text, "IceCandidate", xmlEscape(cfg.ICECandidate), true)
+	text, err = ensureIceCandidatesTag(text, "IceCandidate", xmlEscape(cfg.ICECandidate), cfg.TemplatePath)
 	if err != nil {
 		return err
 	}
@@ -887,6 +887,45 @@ func replaceAllTagContent(data, tag, value string, required bool) (string, error
 		return "", fmt.Errorf("missing <%s> in template", tag)
 	}
 	return replaced, nil
+}
+
+func ensureIceCandidatesTag(text, tag, value, templatePath string) (string, error) {
+	iceRe := regexp.MustCompile(`(?s)<IceCandidates>(.*?)</IceCandidates>`)
+	matches := 0
+	rewriteErr := error(nil)
+	updated := iceRe.ReplaceAllStringFunc(text, func(section string) string {
+		matches++
+		if strings.Contains(section, "<"+tag+">") {
+			replaced, err := replaceAllTagContent(section, tag, value, false)
+			if err != nil {
+				rewriteErr = err
+				return section
+			}
+			return replaced
+		}
+
+		closing := "</IceCandidates>"
+		insertPos := strings.LastIndex(section, closing)
+		if insertPos == -1 {
+			return section
+		}
+
+		indent := "    "
+		if indentMatch := regexp.MustCompile(`\n([ \t]*)</IceCandidates>`).FindStringSubmatch(section); indentMatch != nil {
+			indent = indentMatch[1]
+		}
+		childIndent := indent + "    "
+		insertion := fmt.Sprintf("\n%s<%s>%s</%s>", childIndent, tag, value, tag)
+		return section[:insertPos] + insertion + section[insertPos:]
+	})
+
+	if rewriteErr != nil {
+		return "", rewriteErr
+	}
+	if matches == 0 {
+		return "", fmt.Errorf("missing <IceCandidates> block in %s while injecting <%s>", templatePath, tag)
+	}
+	return updated, nil
 }
 
 func replaceRootBindings(text, address, port, tlsPort string) (string, error) {
