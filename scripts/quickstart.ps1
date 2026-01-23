@@ -45,8 +45,8 @@ function Get-DockerDesktopPath {
     return $null
 }
 
-function Test-DockerEnginePipe {
-    return Test-Path '\\.\pipe\docker_engine'
+function Test-DockerDesktopEnginePipe {
+    return (Test-Path '\\.\pipe\dockerDesktopLinuxEngine') -or (Test-Path '\\.\pipe\dockerDesktopWindowsEngine')
 }
 
 function Test-DockerCliReady {
@@ -81,13 +81,16 @@ function Ensure-DockerDesktopRunning {
         Write-Error "Docker Desktop is not running and the Docker Desktop executable was not found. Install Docker Desktop from https://www.docker.com/products/docker-desktop/ and try again."
     }
 
-    if (-not (Test-DockerEnginePipe)) {
-        Write-Output "Docker engine pipe not detected. Starting Docker Desktop..."
+    $desktopProcess = Get-Process "Docker Desktop" -ErrorAction SilentlyContinue
+    if (-not $desktopProcess) {
+        Write-Output "Docker Desktop process not detected. Starting Docker Desktop..."
         Start-Process -FilePath $desktopPath | Out-Null
+    } elseif (-not (Test-DockerDesktopEnginePipe)) {
+        Write-Output "Docker Desktop engine pipe not detected yet. Waiting for startup..."
     }
 
     if (-not (Wait-ForDocker -TimeoutSeconds 120)) {
-        Write-Error "Docker Desktop failed to start; please open it manually."
+        Write-Error "Timed out waiting for Docker Desktop to become ready. Start Docker Desktop manually and try again."
     }
 }
 
