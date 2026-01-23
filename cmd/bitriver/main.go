@@ -309,7 +309,7 @@ func runEnvInit(args []string) error {
 		return err
 	}
 
-	generated := generateEnvValues(existingValues)
+	generated, _ := generateEnvValues(existingValues)
 	content := mergeEnv(templateLines, existingValues, generated)
 	if err := os.WriteFile(*envPath, []byte(content), 0o600); err != nil {
 		return fmt.Errorf("write env file: %w", err)
@@ -440,6 +440,15 @@ func runQuickstart(args []string) error {
 		return errors.New("doctor checks failed")
 	}
 
+	preExisting := map[string]string{}
+	if existingValues, err := readEnvFile(*envFile); err == nil {
+		preExisting = existingValues
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("read env file before init: %w", err)
+	}
+	preExistingCopy := copyEnvValues(preExisting)
+	_, generatedSecrets := generateEnvValues(preExistingCopy)
+
 	if err := envInitRunner([]string{"--env-file", *envFile}); err != nil {
 		return fmt.Errorf("env init: %w", err)
 	}
@@ -472,6 +481,7 @@ func runQuickstart(args []string) error {
 		return fmt.Errorf("bootstrap admin: %w", err)
 	}
 
+	printGeneratedSecrets(generatedSecrets)
 	return nil
 }
 
@@ -562,8 +572,6 @@ func runBootstrapAdmin(composeFile string, values map[string]string) error {
 	if err := commandRunner("docker", args...); err != nil {
 		return err
 	}
-
-	fmt.Fprintf(os.Stdout, "Admin credentials: %s / %s\n", email, password)
 	return nil
 }
 
@@ -1219,8 +1227,9 @@ func mergeEnv(template []templateLine, existing, generated map[string]string) st
 	return strings.Join(out, "\n") + "\n"
 }
 
-func generateEnvValues(existing map[string]string) map[string]string {
+func generateEnvValues(existing map[string]string) (map[string]string, map[string]string) {
 	generated := make(map[string]string)
+	newlyGenerated := make(map[string]string)
 
 	generated["BITRIVER_LIVE_MODE"] = firstNonEmpty(existing["BITRIVER_LIVE_MODE"], "development")
 	generated["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"] = defaultIfPlaceholder("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", existing, "http://localhost:9001/hls")
@@ -1230,13 +1239,17 @@ func generateEnvValues(existing map[string]string) map[string]string {
 	for key := range defaultEnvSecrets.secrets {
 		current := existing[key]
 		if current == "" || isForbiddenValue(key, current) {
-			generated[key] = randomSecret()
+			secret := randomSecret()
+			generated[key] = secret
+			newlyGenerated[key] = secret
 		}
 	}
 
 	if current := existing["BITRIVER_LIVE_METRICS_TOKEN"]; current == "" || isForbiddenValue("BITRIVER_LIVE_METRICS_TOKEN", current) {
 		if generated["BITRIVER_LIVE_METRICS_TOKEN"] == "" {
-			generated["BITRIVER_LIVE_METRICS_TOKEN"] = randomSecret()
+			secret := randomSecret()
+			generated["BITRIVER_LIVE_METRICS_TOKEN"] = secret
+			newlyGenerated["BITRIVER_LIVE_METRICS_TOKEN"] = secret
 		}
 		existing["BITRIVER_LIVE_METRICS_TOKEN"] = ""
 	}
@@ -1252,15 +1265,45 @@ func generateEnvValues(existing map[string]string) map[string]string {
 
 	if val := existing["BITRIVER_REDIS_PASSWORD"]; val != "" && !isForbiddenValue("BITRIVER_REDIS_PASSWORD", val) {
 		generated["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"] = firstNonEmpty(existing["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"], val)
+		delete(newlyGenerated, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD")
 	} else {
 		generated["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"] = generated["BITRIVER_REDIS_PASSWORD"]
+		if _, ok := newlyGenerated["BITRIVER_REDIS_PASSWORD"]; ok {
+			newlyGenerated["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"] = generated["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"]
+		}
 	}
 
 	if existing["BITRIVER_LIVE_ADMIN_EMAIL"] == "" || isForbiddenValue("BITRIVER_LIVE_ADMIN_EMAIL", existing["BITRIVER_LIVE_ADMIN_EMAIL"]) {
 		generated["BITRIVER_LIVE_ADMIN_EMAIL"] = defaultEnvSecrets.adminEmail
 	}
 
-	return generated
+	return generated, newlyGenerated
+}
+
+func copyEnvValues(values map[string]string) map[string]string {
+	clone := make(map[string]string, len(values))
+	for key, value := range values {
+		clone[key] = value
+	}
+	return clone
+}
+
+func printGeneratedSecrets(values map[string]string) {
+	if len(values) == 0 {
+		return
+	}
+
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	fmt.Fprintln(os.Stdout)
+	fmt.Fprintln(os.Stdout, "Generated credentials (store these securely):")
+	for _, key := range keys {
+		fmt.Fprintf(os.Stdout, "  %s=%s\n", key, values[key])
+	}
 }
 
 func defaultIfPlaceholder(key string, existing map[string]string, defaultValue string) string {
