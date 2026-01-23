@@ -1,8 +1,8 @@
 #!/usr/bin/env pwsh
-<#!
+<#
   Quickstart helper for Docker Desktop on Windows.
   Delegates to the Go CLI for environment setup and stack startup.
-!>
+#>
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
