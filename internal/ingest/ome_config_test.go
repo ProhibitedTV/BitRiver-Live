@@ -113,6 +113,7 @@ var expectedServerTemplates = map[string]string{
                     <WorkerCount>1</WorkerCount>
                 </Signalling>
                 <IceCandidates>
+                    <!-- Renderer requires <TcpRelay> and <IceCandidate> to exist for token replacement. -->
                     <TcpRelay>*:3478</TcpRelay>
                     <TcpForce>false</TcpForce>
                     <TcpRelayWorkerCount>1</TcpRelayWorkerCount>

@@ -32,6 +32,57 @@ function Ensure-Go {
     }
 }
 
+function Get-DockerDesktopPath {
+    $candidates = @(
+        'C:\Program Files\Docker\Docker\Docker Desktop.exe',
+        'C:\Program Files (x86)\Docker\Docker\Docker Desktop.exe',
+        "$Env:ProgramFiles\Docker\Docker\Docker Desktop.exe",
+        "$Env:ProgramFiles(x86)\Docker\Docker\Docker Desktop.exe"
+    )
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path $candidate)) {
+            return $candidate
+        }
+    }
+    return $null
+}
+
+function Test-DockerEnginePipe {
+    return Test-Path '\\.\pipe\docker_engine'
+}
+
+function Wait-ForDocker {
+    param([int]$TimeoutSeconds = 90)
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($stopwatch.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
+        try {
+            docker version | Out-Null
+            return $true
+        } catch {
+            Start-Sleep -Seconds 2
+        }
+    }
+    return $false
+}
+
+function Ensure-DockerDesktopRunning {
+    if (Test-DockerEnginePipe) {
+        return
+    }
+
+    $desktopPath = Get-DockerDesktopPath
+    if (-not $desktopPath) {
+        Write-Error "Docker Desktop is not running and the Docker Desktop executable was not found. Install Docker Desktop from https://www.docker.com/products/docker-desktop/ and try again."
+    }
+
+    Write-Output "Docker engine pipe not detected. Starting Docker Desktop..."
+    Start-Process -FilePath $desktopPath | Out-Null
+
+    if (-not (Wait-ForDocker -TimeoutSeconds 90)) {
+        Write-Error "Docker Desktop did not become ready within 90 seconds. Please start Docker Desktop manually, wait for it to finish initializing, and re-run this script."
+    }
+}
+
 if ($h -or $help) {
     Show-Usage
     exit 0
