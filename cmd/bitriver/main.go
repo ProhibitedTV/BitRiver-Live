@@ -923,7 +923,7 @@ func ensureIceCandidatesTag(text, tag, value, templatePath string) (string, erro
 		return "", rewriteErr
 	}
 	if matches == 0 {
-		return "", fmt.Errorf("missing <IceCandidates> block in %s while injecting <%s>", templatePath, tag)
+		return "", fmt.Errorf("OME template %s missing <%s> (expected under <IceCandidates>)", templatePath, tag)
 	}
 	return updated, nil
 }
