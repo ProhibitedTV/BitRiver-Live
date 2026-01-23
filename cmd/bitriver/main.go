@@ -1269,6 +1269,10 @@ func mergeEnv(template []templateLine, existing, generated map[string]string) st
 }
 
 func generateEnvValues(existing map[string]string) (map[string]string, map[string]string) {
+	if existing == nil {
+		existing = make(map[string]string)
+	}
+
 	generated := make(map[string]string)
 	newlyGenerated := make(map[string]string)
 
@@ -1278,11 +1282,14 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 	generated["BITRIVER_OME_ACCESS_TOKEN"] = existing["BITRIVER_OME_ACCESS_TOKEN"]
 
 	for key := range defaultEnvSecrets.secrets {
-		current := existing[key]
+		current := strings.TrimSpace(existing[key])
 		if current == "" || isForbiddenValue(key, current) {
 			secret := randomSecret()
 			generated[key] = secret
 			newlyGenerated[key] = secret
+			existing[key] = ""
+		}
+		if isForbiddenValue(key, existing[key]) {
 			existing[key] = ""
 		}
 	}
@@ -1315,9 +1322,11 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 		}
 	}
 
-	if existing["BITRIVER_LIVE_ADMIN_EMAIL"] == "" || isForbiddenValue("BITRIVER_LIVE_ADMIN_EMAIL", existing["BITRIVER_LIVE_ADMIN_EMAIL"]) {
+	if current := strings.TrimSpace(existing["BITRIVER_LIVE_ADMIN_EMAIL"]); current == "" || isForbiddenValue("BITRIVER_LIVE_ADMIN_EMAIL", current) {
 		generated["BITRIVER_LIVE_ADMIN_EMAIL"] = defaultEnvSecrets.adminEmail
-		existing["BITRIVER_LIVE_ADMIN_EMAIL"] = ""
+		if current != "" {
+			existing["BITRIVER_LIVE_ADMIN_EMAIL"] = ""
+		}
 	}
 
 	return generated, newlyGenerated
