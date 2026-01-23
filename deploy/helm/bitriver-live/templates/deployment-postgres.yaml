@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-postgres
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "bitriver-live.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        {{- include "bitriver-live.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.images.postgres }}:{{ .Values.tags.postgres }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.env.BITRIVER_POSTGRES_DB | quote }}
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_POSTGRES_PASSWORD
+          ports:
+            - name: postgres
+              containerPort: 5432
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: postgres-data
+          {{- if .Values.persistence.postgres.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "bitriver-live.fullname" . }}-postgres-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-postgres
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.postgres.type }}
+  ports:
+    - name: postgres
+      port: {{ .Values.service.postgres.port }}
+      targetPort: postgres
+  selector:
+    {{- include "bitriver-live.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres

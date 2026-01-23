@@ -166,6 +166,26 @@ build out:
    container image tags (`BITRIVER_LIVE_IMAGE_TAG`, `BITRIVER_VIEWER_IMAGE_TAG`,
    etc.) match the newly published release.
 
+### Helm-based releases
+
+If you deploy via `deploy/helm/bitriver-live`, keep the same `.env` validation flow and then map the validated settings into your Helm values file:
+
+1. Update `.env` with the new image tags and any new variables, then rerun the guard scripts:
+   ```bash
+   deploy/check-env.sh
+   ./scripts/render-ome-config.sh --check
+   ```
+2. Translate the `.env` changes into your Helm values file (`values.prod.yaml`), updating `values.tags`, `values.env`, and `values.secrets` with the new release credentials and URLs.
+3. Apply the upgrade:
+   ```bash
+   helm upgrade --install bitriver-live deploy/helm/bitriver-live -f values.prod.yaml
+   ```
+4. Confirm the pre-upgrade Postgres migration job completes and the API reports healthy status before reopening traffic:
+   ```bash
+   kubectl get jobs
+   kubectl rollout status deployment/bitriver-live-api
+   ```
+
 ## 4. Confirm ingest and object storage configuration
 
 Review [`docs/advanced-deployments.md`](advanced-deployments.md) and verify the

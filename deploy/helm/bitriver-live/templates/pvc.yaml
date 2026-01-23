@@ -1,0 +1,71 @@
+{{- if .Values.persistence.api.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-api-data
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.persistence.api.size }}
+  {{- if .Values.persistence.api.storageClass }}
+  storageClassName: {{ .Values.persistence.api.storageClass }}
+  {{- end }}
+---
+{{- end }}
+{{- if .Values.persistence.redis.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-redis-data
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.persistence.redis.size }}
+  {{- if .Values.persistence.redis.storageClass }}
+  storageClassName: {{ .Values.persistence.redis.storageClass }}
+  {{- end }}
+---
+{{- end }}
+{{- if .Values.persistence.postgres.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-postgres-data
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.persistence.postgres.size }}
+  {{- if .Values.persistence.postgres.storageClass }}
+  storageClassName: {{ .Values.persistence.postgres.storageClass }}
+  {{- end }}
+---
+{{- end }}
+{{- if .Values.persistence.transcoder.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-transcoder-data
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.persistence.transcoder.size }}
+  {{- if .Values.persistence.transcoder.storageClass }}
+  storageClassName: {{ .Values.persistence.transcoder.storageClass }}
+  {{- end }}
+{{- end }}

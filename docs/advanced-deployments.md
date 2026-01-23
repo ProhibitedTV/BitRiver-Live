@@ -24,6 +24,48 @@ The live pipeline wires together three control-plane components. Use the paths b
 
 The server honours the driver from either the flag or `BITRIVER_LIVE_CHAT_QUEUE_DRIVER`, defaulting to the in-process `memory` queue when both are unset.
 
+## Kubernetes (Helm) deployments
+
+The Helm chart under `deploy/helm/bitriver-live` mirrors the Compose stack (API, viewer, SRS controller, SRS, OME, transcoder, Redis, Postgres, and the transcoder public proxy). Use it when you want Kubernetes-managed services while still honoring the same `.env` validation that the Compose path expects.
+
+1. Copy the baseline environment template and fill in production-grade credentials:
+   ```bash
+   cp deploy/.env.example .env
+   # edit .env with your production values
+   ```
+2. Run the same env validation used by Compose to catch placeholder credentials and unsafe URLs before templating values:
+   ```bash
+   deploy/check-env.sh
+   ```
+3. Translate `.env` values into a Helm values file. Use `values.env` for non-secret settings (ports, URLs, retention) and `values.secrets` for credentials and tokens. For example:
+   ```yaml
+   # values.prod.yaml
+   env:
+     BITRIVER_TRANSCODER_PUBLIC_BASE_URL: https://cdn.example.com/hls
+     NEXT_PUBLIC_VIEWER_URL: https://stream.example.com/viewer
+   secrets:
+     BITRIVER_LIVE_ADMIN_EMAIL: admin@stream.example.com
+     BITRIVER_LIVE_ADMIN_PASSWORD: "your-admin-password"
+     BITRIVER_SRS_TOKEN: "your-srs-token"
+     BITRIVER_OME_API_TOKEN: "your-ome-api-token"
+     BITRIVER_TRANSCODER_TOKEN: "your-transcoder-token"
+     BITRIVER_REDIS_PASSWORD: "your-redis-password"
+     BITRIVER_POSTGRES_PASSWORD: "your-postgres-password"
+   ```
+4. Install or upgrade the release:
+   ```bash
+   helm upgrade --install bitriver-live deploy/helm/bitriver-live -f values.prod.yaml
+   ```
+5. Watch rollout status and confirm health endpoints (`/healthz`, `/readyz`) once the deployments settle:
+   ```bash
+   kubectl rollout status deployment/bitriver-live-api
+   kubectl get pods
+   ```
+
+The chart renders `Server.xml` for OME from `values.secrets`/`values.ome`, and it runs Postgres migrations as a pre-install/upgrade hook using the SQL files vendored under `deploy/helm/bitriver-live/migrations`. Keep those migrations in sync with `deploy/migrations` whenever schema changes land.
+
+Persistent volumes mirror Compose mounts: the API stores state under `/var/lib/bitriver-live`, Redis under `/data`, Postgres under `/var/lib/postgresql/data`, and the transcoder workspace under `/work`. Adjust `values.persistence.*` sizes and storage classes for your cluster.
+
 ## Fault handling and recovery
 
 When any dependency falters, start with the API health surfaces. `/readyz` returns `503` once core dependencies such as Postgres or the chat queue fail their pings, while `/healthz` keeps the same status code but downgrades the JSON payload when ingest services are unreachable so dashboards still capture SRS/OME/transcoder detail.【F:internal/api/handlers.go†L84-L123】【F:internal/api/health_helpers.go†L14-L44】 The ingest controller probes each service at `<baseURL><BITRIVER_INGEST_HEALTH>` (default `/healthz`) using the credentials seeded in `.env`, and records an `error` status when any probe fails.【F:internal/ingest/http_controller.go†L308-L401】【F:deploy/.env.example†L57-L74】

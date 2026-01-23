@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-srs
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "bitriver-live.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: srs
+  template:
+    metadata:
+      labels:
+        {{- include "bitriver-live.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: srs
+    spec:
+      containers:
+        - name: srs
+          image: {{ .Values.images.srs }}:{{ .Values.tags.srs }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - name: rtmp
+              containerPort: 1935
+            - name: api
+              containerPort: 1985
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - curl -fsS http://localhost:1985/healthz || curl -fsS http://localhost:1985/api/v1/versions
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - curl -fsS http://localhost:1985/healthz || curl -fsS http://localhost:1985/api/v1/versions
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          volumeMounts:
+            - name: srs-conf
+              mountPath: /usr/local/srs/conf/srs.conf
+              subPath: srs.conf
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: srs-conf
+          configMap:
+            name: {{ include "bitriver-live.fullname" . }}-srs-conf
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-srs
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.srs.type }}
+  ports:
+    - name: rtmp
+      port: {{ .Values.service.srs.rtmpPort }}
+      targetPort: rtmp
+    - name: api
+      port: {{ .Values.service.srs.apiPort }}
+      targetPort: api
+  selector:
+    {{- include "bitriver-live.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: srs

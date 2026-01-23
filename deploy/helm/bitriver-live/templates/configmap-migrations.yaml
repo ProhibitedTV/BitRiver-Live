@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-migrations
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+data:
+{{- range $path, $bytes := .Files.Glob "migrations/*.sql" }}
+  {{ base $path }}: |-
+{{ $bytes | indent 4 }}
+{{- end }}

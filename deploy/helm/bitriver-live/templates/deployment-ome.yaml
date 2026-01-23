@@ -1,0 +1,141 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-ome
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "bitriver-live.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ome
+  template:
+    metadata:
+      labels:
+        {{- include "bitriver-live.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ome
+    spec:
+      containers:
+        - name: ome
+          image: {{ .Values.images.ome }}:{{ .Values.tags.ome }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: BITRIVER_OME_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_OME_USERNAME
+            - name: BITRIVER_OME_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_OME_PASSWORD
+            - name: BITRIVER_OME_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_OME_ACCESS_TOKEN
+          ports:
+            - name: api
+              containerPort: 8081
+            - name: signalling
+              containerPort: {{ .Values.service.ome.signallingPort }}
+            - name: signalling-tls
+              containerPort: {{ .Values.service.ome.tlsPort }}
+            - name: relay-tcp
+              containerPort: {{ .Values.service.ome.relayPort }}
+              protocol: TCP
+            - name: relay-udp
+              containerPort: {{ .Values.service.ome.relayPort }}
+              protocol: UDP
+{{- range $index, $port := .Values.service.ome.icePorts }}
+            - name: ice-udp-{{ $port }}
+              containerPort: {{ $port }}
+              protocol: UDP
+{{- end }}
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  curl_cmd="curl -fsS"
+                  if [ -n "$BITRIVER_OME_ACCESS_TOKEN" ]; then
+                    curl_cmd="$curl_cmd -H \"AccessToken: $BITRIVER_OME_ACCESS_TOKEN\""
+                  fi
+                  if [ -n "$BITRIVER_OME_USERNAME" ] && [ -n "$BITRIVER_OME_PASSWORD" ]; then
+                    curl_cmd="$curl_cmd -u \"$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD\""
+                  fi
+                  sh -c "$curl_cmd http://localhost:8081/v1/health" || sh -c "$curl_cmd http://localhost:8081/healthz"
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  curl_cmd="curl -fsS"
+                  if [ -n "$BITRIVER_OME_ACCESS_TOKEN" ]; then
+                    curl_cmd="$curl_cmd -H \"AccessToken: $BITRIVER_OME_ACCESS_TOKEN\""
+                  fi
+                  if [ -n "$BITRIVER_OME_USERNAME" ] && [ -n "$BITRIVER_OME_PASSWORD" ]; then
+                    curl_cmd="$curl_cmd -u \"$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD\""
+                  fi
+                  sh -c "$curl_cmd http://localhost:8081/v1/health" || sh -c "$curl_cmd http://localhost:8081/healthz"
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          volumeMounts:
+            - name: ome-conf
+              mountPath: /opt/ovenmediaengine/bin/origin_conf/Server.xml
+              subPath: Server.xml
+            - name: ome-conf
+              mountPath: /opt/ovenmediaengine/bin/edge_conf/Server.xml
+              subPath: Server.xml
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: ome-conf
+          secret:
+            secretName: {{ include "bitriver-live.fullname" . }}-ome-conf
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-ome
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.ome.type }}
+  ports:
+    - name: api
+      port: {{ .Values.service.ome.apiPort }}
+      targetPort: api
+    - name: signalling
+      port: {{ .Values.service.ome.signallingPort }}
+      targetPort: signalling
+    - name: signalling-tls
+      port: {{ .Values.service.ome.tlsPort }}
+      targetPort: signalling-tls
+    - name: relay-tcp
+      port: {{ .Values.service.ome.relayPort }}
+      targetPort: relay-tcp
+      protocol: TCP
+    - name: relay-udp
+      port: {{ .Values.service.ome.relayPort }}
+      targetPort: relay-udp
+      protocol: UDP
+{{- range $index, $port := .Values.service.ome.icePorts }}
+    - name: ice-udp-{{ $port }}
+      port: {{ $port }}
+      targetPort: ice-udp-{{ $port }}
+      protocol: UDP
+{{- end }}
+  selector:
+    {{- include "bitriver-live.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ome

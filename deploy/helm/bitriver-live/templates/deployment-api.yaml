@@ -1,0 +1,145 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-api
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "bitriver-live.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        {{- include "bitriver-live.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+    spec:
+      containers:
+        - name: api
+          image: {{ .Values.images.api }}:{{ .Values.tags.api }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: ["/app/bitriver-live"]
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: {{ include "bitriver-live.fullname" . }}-api-env
+          env:
+            - name: BITRIVER_LIVE_ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_LIVE_ADMIN_EMAIL
+            - name: BITRIVER_LIVE_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_LIVE_ADMIN_PASSWORD
+            - name: BITRIVER_SRS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_SRS_TOKEN
+            - name: BITRIVER_OME_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_OME_USERNAME
+            - name: BITRIVER_OME_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_OME_PASSWORD
+            - name: BITRIVER_OME_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_OME_API_TOKEN
+            - name: BITRIVER_OME_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_OME_ACCESS_TOKEN
+            - name: BITRIVER_TRANSCODER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_TRANSCODER_TOKEN
+            - name: BITRIVER_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_REDIS_PASSWORD
+            - name: BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD
+            - name: BITRIVER_LIVE_METRICS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_LIVE_METRICS_TOKEN
+            - name: BITRIVER_LIVE_RATE_LOGIN_LIMIT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_LIVE_RATE_LOGIN_LIMIT
+            - name: BITRIVER_LIVE_RATE_LOGIN_WINDOW
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_LIVE_RATE_LOGIN_WINDOW
+            - name: BITRIVER_LIVE_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_LIVE_POSTGRES_DSN
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          volumeMounts:
+            - name: api-data
+              mountPath: /var/lib/bitriver-live
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: api-data
+          {{- if .Values.persistence.api.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "bitriver-live.fullname" . }}-api-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-api
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.api.type }}
+  ports:
+    - name: http
+      port: {{ .Values.service.api.port }}
+      targetPort: http
+  selector:
+    {{- include "bitriver-live.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api
