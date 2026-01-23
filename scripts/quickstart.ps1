@@ -70,8 +70,11 @@ Invoke-Cli -CliArgs @('doctor')
 Write-Output 'Initializing environment file via Go CLI ...'
 Invoke-Cli -CliArgs (@('env', 'init') + $envArgs)
 
+Write-Output 'Validating environment file via Go CLI ...'
+Invoke-Cli -CliArgs (@('env', 'validate') + $envArgs)
+
 Write-Output 'Rendering OME configuration ...'
-Invoke-Cli -CliArgs (@('ome', 'render') + $envArgs)
+Invoke-Cli -CliArgs (@('ome', 'render', '--force') + $envArgs)
 
 Write-Output 'Starting Docker Compose ...'
 Invoke-Cli -CliArgs (@('compose') + $composeArgs)
