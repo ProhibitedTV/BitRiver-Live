@@ -58,6 +58,33 @@ Tune to your traffic profile, but the defaults below are a good starting point f
 - **Chat backlog:** Redis stream length grows continuously for 10 minutes or consumer lag > 1000 messages (warning).
 - **Storage:** `./transcoder-data` > 80% full (warning), > 90% (critical).
 
+### Monitoring stack (Prometheus + Grafana)
+
+The monitoring profile adds Prometheus and Grafana alongside the default Compose stack.
+
+1. Set the API metrics token in `.env` (required in production mode):
+   ```bash
+   BITRIVER_LIVE_METRICS_TOKEN=replace-with-strong-token
+   ```
+2. Create a Prometheus token file that matches the API token:
+   ```bash
+   cp deploy/monitoring/metrics.token.example deploy/monitoring/metrics.token
+   ```
+   Edit `deploy/monitoring/metrics.token` so it contains the same value as `BITRIVER_LIVE_METRICS_TOKEN` (single line).
+3. Start the monitoring profile:
+   ```bash
+   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.monitoring.yml --profile monitoring up -d
+   ```
+
+Prometheus listens on `http://localhost:9090` and Grafana listens on `http://localhost:3001` (default credentials are
+`admin` / `admin`, override with `BITRIVER_GRAFANA_ADMIN_USER` and `BITRIVER_GRAFANA_ADMIN_PASSWORD` in `.env`).
+
+**Import the dashboard:**
+
+1. Sign into Grafana and add a Prometheus data source pointing at `http://prometheus:9090`.
+2. From **Dashboards → New → Import**, upload `deploy/monitoring/bitriver-live-dashboard.json` and select the Prometheus data
+   source when prompted.
+
 ## Resource sizing + kernel tuning
 
 Use the optional Compose override `deploy/docker-compose.resources.yml` to set higher `nofile` limits and baseline CPU/memory

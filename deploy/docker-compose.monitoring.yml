@@ -1,0 +1,43 @@
+# Monitoring stack (Prometheus + Grafana).
+# Apply with:
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.monitoring.yml --profile monitoring up -d
+services:
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: bitriver-prometheus
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/metrics.token:/etc/prometheus/metrics.token:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - bitriver-live
+
+  grafana:
+    image: grafana/grafana-oss:10.4.3
+    container_name: bitriver-grafana
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    environment:
+      GF_SECURITY_ADMIN_USER: ${BITRIVER_GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${BITRIVER_GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  grafana-data:
+  prometheus-data:
