@@ -50,12 +50,25 @@ function Test-DockerDesktopEnginePipe {
 }
 
 function Test-DockerCliReady {
+    $output = ''
     try {
-        docker version | Out-Null
-        return $true
+        $output = docker version 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            return $false
+        }
     } catch {
         return $false
     }
+
+    if (-not $output) {
+        return $false
+    }
+
+    if ($output -match 'Internal Server Error' -or $output -match '(?i)pipe') {
+        return $false
+    }
+
+    return $output -match '(?m)^\s*Server:'
 }
 
 function Test-DockerDesktopReady {
@@ -63,7 +76,7 @@ function Test-DockerDesktopReady {
 }
 
 function Wait-ForDocker {
-    param([int]$TimeoutSeconds = 120)
+    param([int]$TimeoutSeconds = 210)
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     while ($stopwatch.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
         if (Test-DockerDesktopReady) {
@@ -93,7 +106,7 @@ function Ensure-DockerDesktopRunning {
         Write-Output "Docker Desktop engine pipe not detected yet. Waiting for startup..."
     }
 
-    if (-not (Wait-ForDocker -TimeoutSeconds 120)) {
+    if (-not (Wait-ForDocker -TimeoutSeconds 210)) {
         Write-Error "Docker Desktop did not start; open it manually and retry."
     }
 }
