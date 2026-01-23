@@ -1330,6 +1330,15 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 		existing["BITRIVER_OME_USERNAME"] = ""
 	}
 
+	if generated["BITRIVER_OME_ACCESS_TOKEN"] == "" {
+		if token := generated["BITRIVER_OME_API_TOKEN"]; token != "" {
+			generated["BITRIVER_OME_ACCESS_TOKEN"] = token
+			if _, ok := newlyGenerated["BITRIVER_OME_API_TOKEN"]; ok {
+				newlyGenerated["BITRIVER_OME_ACCESS_TOKEN"] = token
+			}
+		}
+	}
+
 	if v := existing["BITRIVER_OME_API_TOKEN"]; generated["BITRIVER_OME_ACCESS_TOKEN"] == "" && v != "" {
 		generated["BITRIVER_OME_ACCESS_TOKEN"] = v
 	}

@@ -98,6 +98,13 @@ func TestEnvInitWritesGeneratedValues(t *testing.T) {
 	if values["BITRIVER_LIVE_ADMIN_EMAIL"] == "" || values["BITRIVER_LIVE_ADMIN_EMAIL"] == "admin@stream.example.com" {
 		t.Fatalf("expected admin email to be set, got %q", values["BITRIVER_LIVE_ADMIN_EMAIL"])
 	}
+
+	if values["BITRIVER_OME_API_TOKEN"] == "" {
+		t.Fatalf("expected OME API token to be generated, got empty value")
+	}
+	if values["BITRIVER_OME_ACCESS_TOKEN"] != values["BITRIVER_OME_API_TOKEN"] {
+		t.Fatalf("expected OME access token to match API token, got %q vs %q", values["BITRIVER_OME_ACCESS_TOKEN"], values["BITRIVER_OME_API_TOKEN"])
+	}
 }
 
 func TestEnvValidateFailsForMissingFile(t *testing.T) {
