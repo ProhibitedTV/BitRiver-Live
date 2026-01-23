@@ -52,21 +52,22 @@ function Test-DockerEnginePipe {
 }
 
 function Wait-ForDocker {
-    param([int]$TimeoutSeconds = 90)
+    param([int]$TimeoutSeconds = 120)
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     while ($stopwatch.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
         try {
             docker version | Out-Null
             return $true
         } catch {
-            Start-Sleep -Seconds 2
+            Write-Output 'Waiting for Docker Desktop to start...'
+            Start-Sleep -Seconds 3
         }
     }
     return $false
 }
 
 function Ensure-DockerDesktopRunning {
-    if (Test-DockerEnginePipe) {
+    if (Wait-ForDocker -TimeoutSeconds 5) {
         return
     }
 
@@ -78,8 +79,8 @@ function Ensure-DockerDesktopRunning {
     Write-Output "Docker engine pipe not detected. Starting Docker Desktop..."
     Start-Process -FilePath $desktopPath | Out-Null
 
-    if (-not (Wait-ForDocker -TimeoutSeconds 90)) {
-        Write-Error "Docker Desktop did not become ready within 90 seconds. Please start Docker Desktop manually, wait for it to finish initializing, and re-run this script."
+    if (-not (Wait-ForDocker -TimeoutSeconds 120)) {
+        Write-Error "Docker Desktop did not become ready within 120 seconds. Please start Docker Desktop manually, wait for it to finish initializing, and re-run this script."
     }
 }
 
@@ -89,6 +90,7 @@ if ($h -or $help) {
 }
 
 Ensure-Go
+Ensure-DockerDesktopRunning
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $RepoRoot = Resolve-Path "$ScriptDir/.."
