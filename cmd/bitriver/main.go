@@ -309,6 +309,8 @@ func runEnvInit(args []string) error {
 		return err
 	}
 
+	promptForAdminEmail(existingValues)
+
 	generated, _ := generateEnvValues(existingValues)
 	content := mergeEnv(templateLines, existingValues, generated)
 	if err := os.WriteFile(*envPath, []byte(content), 0o600); err != nil {
@@ -1285,6 +1287,7 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 			secret := randomSecret()
 			generated[key] = secret
 			newlyGenerated[key] = secret
+			existing[key] = ""
 		}
 		if isForbiddenValue(key, existing[key]) {
 			existing[key] = ""
@@ -1327,6 +1330,40 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 	}
 
 	return generated, newlyGenerated
+}
+
+func promptForAdminEmail(existing map[string]string) {
+	current := strings.TrimSpace(existing["BITRIVER_LIVE_ADMIN_EMAIL"])
+	if current != "" && !isForbiddenValue("BITRIVER_LIVE_ADMIN_EMAIL", current) {
+		return
+	}
+
+	defaultEmail := defaultEnvSecrets.adminEmail
+	if !stdinIsTerminal() {
+		existing["BITRIVER_LIVE_ADMIN_EMAIL"] = defaultEmail
+		return
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Fprintf(os.Stdout, "Enter the administrator email for BitRiver Live [%s]: ", defaultEmail)
+	line, err := reader.ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		existing["BITRIVER_LIVE_ADMIN_EMAIL"] = defaultEmail
+		return
+	}
+	email := strings.TrimSpace(line)
+	if email == "" {
+		email = defaultEmail
+	}
+	existing["BITRIVER_LIVE_ADMIN_EMAIL"] = email
+}
+
+func stdinIsTerminal() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
 }
 
 func copyEnvValues(values map[string]string) map[string]string {
