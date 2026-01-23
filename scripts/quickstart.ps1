@@ -65,13 +65,13 @@ $envArgs = @('--env-file', $EnvFile)
 $composeArgs = if ($ComposeFile -ne $DefaultComposeFile) { @('--file', $ComposeFile, 'up') } else { @('up') }
 
 Write-Output 'Running environment doctor ...'
-Invoke-Cli -Args @('doctor')
+Invoke-Cli -CliArgs @('doctor')
 
 Write-Output 'Initializing environment file via Go CLI ...'
-Invoke-Cli -Args (@('env', 'init') + $envArgs)
+Invoke-Cli -CliArgs (@('env', 'init') + $envArgs)
 
 Write-Output 'Rendering OME configuration ...'
-Invoke-Cli -Args (@('ome', 'render') + $envArgs)
+Invoke-Cli -CliArgs (@('ome', 'render') + $envArgs)
 
 Write-Output 'Starting Docker Compose ...'
-Invoke-Cli -Args (@('compose') + $composeArgs)
+Invoke-Cli -CliArgs (@('compose') + $composeArgs)
