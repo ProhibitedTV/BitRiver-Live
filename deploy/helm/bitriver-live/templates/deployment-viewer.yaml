@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-viewer
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "bitriver-live.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: viewer
+  template:
+    metadata:
+      labels:
+        {{- include "bitriver-live.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: viewer
+    spec:
+      containers:
+        - name: viewer
+          image: {{ .Values.images.viewer }}:{{ .Values.tags.viewer }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: {{ include "bitriver-live.fullname" . }}-viewer-env
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.env.NEXT_VIEWER_BASE_PATH | quote }}
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.env.NEXT_VIEWER_BASE_PATH | quote }}
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-viewer
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.viewer.type }}
+  ports:
+    - name: http
+      port: {{ .Values.service.viewer.port }}
+      targetPort: http
+  selector:
+    {{- include "bitriver-live.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: viewer

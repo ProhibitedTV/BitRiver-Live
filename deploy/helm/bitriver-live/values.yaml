@@ -1,0 +1,160 @@
+nameOverride: ""
+fullnameOverride: ""
+
+imagePullPolicy: IfNotPresent
+
+images:
+  api: ghcr.io/bitriver-live/bitriver-live
+  viewer: ghcr.io/bitriver-live/bitriver-viewer
+  srsController: ghcr.io/bitriver-live/bitriver-srs-controller
+  transcoder: ghcr.io/bitriver-live/bitriver-transcoder
+  srs: ossrs/srs
+  ome: airensoft/ovenmediaengine
+  redis: redis
+  postgres: postgres
+  nginx: nginx
+
+tags:
+  api: v1.2.3
+  viewer: v1.2.3
+  srsController: v1.2.3
+  transcoder: v1.2.3
+  srs: v5.0.185
+  ome: 0.16.0
+  redis: 7-alpine
+  postgres: 15-alpine
+  nginx: alpine
+
+service:
+  api:
+    type: ClusterIP
+    port: 8080
+  viewer:
+    type: ClusterIP
+    port: 3000
+  redis:
+    type: ClusterIP
+    port: 6379
+  postgres:
+    type: ClusterIP
+    port: 5432
+  srsController:
+    type: ClusterIP
+    port: 1985
+  srs:
+    type: ClusterIP
+    rtmpPort: 1935
+    apiPort: 1985
+  ome:
+    type: ClusterIP
+    apiPort: 8081
+    signallingPort: 9000
+    tlsPort: 9443
+    relayPort: 3478
+    icePorts:
+      - 10000
+      - 10001
+      - 10002
+      - 10003
+      - 10004
+      - 10005
+      - 10006
+      - 10007
+      - 10008
+      - 10009
+  transcoder:
+    type: ClusterIP
+    port: 9000
+  transcoderPublic:
+    type: ClusterIP
+    port: 8080
+
+persistence:
+  api:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+  redis:
+    enabled: true
+    size: 1Gi
+    storageClass: ""
+  postgres:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+  transcoder:
+    enabled: true
+    size: 50Gi
+    storageClass: ""
+
+resources: {}
+
+env:
+  BITRIVER_LIVE_STORAGE_DRIVER: postgres
+  BITRIVER_LIVE_SESSION_STORE: postgres
+  BITRIVER_LIVE_SESSION_TTL: 168h
+  BITRIVER_LIVE_SESSION_IDLE_TIMEOUT: "0"
+  BITRIVER_LIVE_MODE: production
+  BITRIVER_LIVE_ALLOW_SELF_SIGNUP: "false"
+  BITRIVER_LIVE_ADDR: ":8080"
+  BITRIVER_LIVE_POSTGRES_MAX_CONNS: "15"
+  BITRIVER_LIVE_POSTGRES_MIN_CONNS: "5"
+  BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT: 5s
+  BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME: 30m
+  BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE: "false"
+  BITRIVER_LIVE_CHAT_QUEUE_DRIVER: redis
+  BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR: ""
+  BITRIVER_LIVE_CHAT_QUEUE_REDIS_STREAM: bitriver-live-chat
+  BITRIVER_LIVE_CHAT_QUEUE_REDIS_GROUP: bitriver-live-api
+  BITRIVER_LIVE_RECORDING_RETENTION_PUBLISHED: ""
+  BITRIVER_LIVE_RECORDING_RETENTION_UNPUBLISHED: ""
+  BITRIVER_LIVE_CHAT_RETENTION_MESSAGES: ""
+  BITRIVER_LIVE_CHAT_RETENTION_MODERATION_LOGS: ""
+  BITRIVER_LIVE_ADMIN_CORS_ORIGINS: ""
+  BITRIVER_LIVE_VIEWER_CORS_ORIGINS: ""
+  BITRIVER_VIEWER_ORIGIN: ""
+  BITRIVER_SRS_API: ""
+  BITRIVER_OME_API: ""
+  BITRIVER_TRANSCODER_API: ""
+  BITRIVER_INGEST_HEALTH: /healthz
+  BITRIVER_TRANSCODER_PUBLIC_BASE_URL: https://cdn.example.com/hls
+  BITRIVER_TRANSCODER_PUBLIC_DIR: /work/public
+  BITRIVER_TRANSCODER_RETENTION_LIVE: ""
+  BITRIVER_TRANSCODER_RETENTION_UPLOADS: ""
+  BITRIVER_POSTGRES_DB: brlive_app
+  BITRIVER_POSTGRES_HOST_PORT: "5432"
+  SRS_CONTROLLER_UPSTREAM: http://bitriver-live-srs:1985/api/
+  NEXT_PUBLIC_API_BASE_URL: ""
+  NEXT_VIEWER_BASE_PATH: /viewer
+  NEXT_PUBLIC_VIEWER_URL: https://stream.example.com/viewer
+  BITRIVER_LIVE_METRICS_ALLOW_NETWORKS: ""
+
+ome:
+  bindAddress: 0.0.0.0
+  apiTlsPort: 8082
+  llhlsPort: 8080
+  llhlsTlsPort: 8443
+  webrtcSignallingPort: 9000
+  webrtcTlsPort: 9443
+  relayPort: 3478
+  icePortRange: 10000-10009
+  iceCandidate: "*:10000-10009/udp"
+  tcpRelay: "*:3478"
+
+secrets:
+  BITRIVER_LIVE_ADMIN_EMAIL: admin@stream.example.com
+  BITRIVER_LIVE_ADMIN_PASSWORD: Sup3rSecureAdmin!
+  BITRIVER_SRS_TOKEN: srs-secure-token-example
+  BITRIVER_OME_USERNAME: ome-operator
+  BITRIVER_OME_PASSWORD: OME-Example-Pass!
+  BITRIVER_OME_API_TOKEN: OME-Example-Access-Token
+  BITRIVER_OME_ACCESS_TOKEN: OME-Example-Access-Token
+  BITRIVER_TRANSCODER_TOKEN: transcoder-secure-token-example
+  BITRIVER_REDIS_PASSWORD: R3dis-Example!
+  BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD: R3dis-Example!
+  BITRIVER_POSTGRES_USER: brlive_app
+  BITRIVER_POSTGRES_PASSWORD: P0stgres-Example!
+  BITRIVER_LIVE_METRICS_TOKEN: metrics-collector-token
+  BITRIVER_LIVE_RATE_LOGIN_LIMIT: "10"
+  BITRIVER_LIVE_RATE_LOGIN_WINDOW: 1m
+  BITRIVER_LIVE_POSTGRES_DSN: ""

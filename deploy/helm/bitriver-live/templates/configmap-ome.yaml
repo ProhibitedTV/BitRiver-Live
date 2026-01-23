@@ -1,0 +1,166 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-ome-conf
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  Server.xml: |-
+    <?xml version="1.0" encoding="utf-8"?>
+    <Server version="10">
+        <Name>OvenMediaEngine</Name>
+        <Type>origin</Type>
+        <IP>{{ .Values.ome.bindAddress }}</IP>
+        <PrivacyProtection>false</PrivacyProtection>
+        <StunServer>stun.l.google.com:19302</StunServer>
+
+        <Modules>
+            <HTTP2>
+                <Enable>true</Enable>
+            </HTTP2>
+
+            <LLHLS>
+                <Enable>true</Enable>
+            </LLHLS>
+
+            <P2P>
+                <Enable>false</Enable>
+                <MaxClientPeersPerHostPeer>2</MaxClientPeersPerHostPeer>
+            </P2P>
+        </Modules>
+
+        <Bind>
+            <Address>{{ .Values.ome.bindAddress }}</Address>
+
+            <Managers>
+                <API>
+                    <Port>{{ .Values.service.ome.apiPort }}</Port>
+                    <TLSPort>{{ .Values.ome.apiTlsPort }}</TLSPort>
+                    <WorkerCount>1</WorkerCount>
+                    <AccessTokens>
+                        <AccessToken>{{ .Values.secrets.BITRIVER_OME_API_TOKEN }}</AccessToken>
+                    </AccessTokens>
+                    <Authentication>
+                        <AutoRegister>true</AutoRegister>
+                        <AllowAnonymousUser>false</AllowAnonymousUser>
+                        <AllowAnonymousReferrer>false</AllowAnonymousReferrer>
+                        <User>
+                            <ID>{{ .Values.secrets.BITRIVER_OME_USERNAME }}</ID>
+                            <Password>{{ .Values.secrets.BITRIVER_OME_PASSWORD }}</Password>
+                        </User>
+                    </Authentication>
+                </API>
+            </Managers>
+
+            <Providers>
+                <RTMP>
+                    <Port>{{ .Values.service.srs.rtmpPort }}</Port>
+                    <WorkerCount>1</WorkerCount>
+                </RTMP>
+
+                <WebRTC>
+                    <Signalling>
+                        <Port>{{ .Values.ome.webrtcSignallingPort }}</Port>
+                        <TLSPort>{{ .Values.ome.webrtcTlsPort }}</TLSPort>
+                        <WorkerCount>1</WorkerCount>
+                    </Signalling>
+                    <IceCandidates>
+                        <TcpRelay>{{ .Values.ome.tcpRelay }}</TcpRelay>
+                        <TcpForce>false</TcpForce>
+                        <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
+                        <IceCandidate>{{ .Values.ome.iceCandidate }}</IceCandidate>
+                    </IceCandidates>
+                </WebRTC>
+            </Providers>
+
+            <Publishers>
+                <LLHLS>
+                    <Port>{{ .Values.ome.llhlsPort }}</Port>
+                    <TLSPort>{{ .Values.ome.llhlsTlsPort }}</TLSPort>
+                    <WorkerCount>1</WorkerCount>
+                </LLHLS>
+
+                <WebRTC>
+                    <Signalling>
+                        <Port>{{ .Values.ome.webrtcSignallingPort }}</Port>
+                        <TLSPort>{{ .Values.ome.webrtcTlsPort }}</TLSPort>
+                        <WorkerCount>1</WorkerCount>
+                    </Signalling>
+                    <IceCandidates>
+                        <TcpRelay>{{ .Values.ome.tcpRelay }}</TcpRelay>
+                        <TcpForce>false</TcpForce>
+                        <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
+                        <IceCandidate>{{ .Values.ome.iceCandidate }}</IceCandidate>
+                    </IceCandidates>
+                </WebRTC>
+            </Publishers>
+        </Bind>
+
+        <VirtualHosts>
+            <VirtualHost>
+                <Name>default</Name>
+
+                <Host>
+                    <Names>
+                        <Name>*</Name>
+                    </Names>
+                </Host>
+
+                <Applications>
+                    <Application>
+                        <Name>live</Name>
+                        <Type>live</Type>
+
+                        <Outputs>
+                            <OutputProfiles>
+                                <OutputProfile>
+                                    <Name>copy_passthrough</Name>
+                                    <OutputStreams>
+                                        <OutputStream>
+                                            <Name>copy</Name>
+                                            <Video>
+                                                <Codec>copy</Codec>
+                                            </Video>
+                                            <Audio>
+                                                <Codec>copy</Codec>
+                                            </Audio>
+                                        </OutputStream>
+                                    </OutputStreams>
+                                </OutputProfile>
+                            </OutputProfiles>
+
+                            <LLHLS>
+                                <SegmentDuration>6</SegmentDuration>
+                                <PartDuration>1</PartDuration>
+                                <SegmentCount>5</SegmentCount>
+                                <PartCount>3</PartCount>
+                                <PreloadHint>true</PreloadHint>
+                                <AdditionalPlaylist>true</AdditionalPlaylist>
+                            </LLHLS>
+                        </Outputs>
+
+                        <Publishers>
+                            <WebRTC>
+                                <Enable>true</Enable>
+                                <OutputProfile>copy_passthrough</OutputProfile>
+                            </WebRTC>
+                            <LLHLS>
+                                <Enable>true</Enable>
+                                <OutputProfile>copy_passthrough</OutputProfile>
+                            </LLHLS>
+                        </Publishers>
+
+                        <Providers>
+                            <RTMP>
+                                <Enable>true</Enable>
+                            </RTMP>
+                            <WebRTC>
+                                <Enable>true</Enable>
+                            </WebRTC>
+                        </Providers>
+                    </Application>
+                </Applications>
+            </VirtualHost>
+        </VirtualHosts>
+    </Server>

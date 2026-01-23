@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-redis
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "bitriver-live.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        {{- include "bitriver-live.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: {{ .Values.images.redis }}:{{ .Values.tags.redis }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command:
+            - sh
+            - -c
+            - >-
+              redis-server --save "" --appendonly no --requirepass "$BITRIVER_REDIS_PASSWORD"
+          env:
+            - name: BITRIVER_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_REDIS_PASSWORD
+          ports:
+            - name: redis
+              containerPort: 6379
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - redis-cli --no-auth-warning -a "$BITRIVER_REDIS_PASSWORD" ping
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - redis-cli --no-auth-warning -a "$BITRIVER_REDIS_PASSWORD" ping
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: redis-data
+          {{- if .Values.persistence.redis.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "bitriver-live.fullname" . }}-redis-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-redis
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.redis.type }}
+  ports:
+    - name: redis
+      port: {{ .Values.service.redis.port }}
+      targetPort: redis
+  selector:
+    {{- include "bitriver-live.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: redis

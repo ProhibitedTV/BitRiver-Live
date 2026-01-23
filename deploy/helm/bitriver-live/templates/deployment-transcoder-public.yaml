@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-transcoder-public
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "bitriver-live.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: transcoder-public
+  template:
+    metadata:
+      labels:
+        {{- include "bitriver-live.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: transcoder-public
+    spec:
+      containers:
+        - name: nginx
+          image: {{ .Values.images.nginx }}:{{ .Values.tags.nginx }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          volumeMounts:
+            - name: transcoder-data
+              mountPath: /work
+              readOnly: true
+            - name: transcoder-public-conf
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: transcoder-data
+          {{- if .Values.persistence.transcoder.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "bitriver-live.fullname" . }}-transcoder-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: transcoder-public-conf
+          configMap:
+            name: {{ include "bitriver-live.fullname" . }}-transcoder-public
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-transcoder-public
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.transcoderPublic.type }}
+  ports:
+    - name: http
+      port: {{ .Values.service.transcoderPublic.port }}
+      targetPort: http
+  selector:
+    {{- include "bitriver-live.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: transcoder-public

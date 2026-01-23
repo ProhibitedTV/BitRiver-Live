@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-api-env
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+data:
+  BITRIVER_LIVE_STORAGE_DRIVER: {{ .Values.env.BITRIVER_LIVE_STORAGE_DRIVER | quote }}
+  BITRIVER_LIVE_SESSION_STORE: {{ .Values.env.BITRIVER_LIVE_SESSION_STORE | quote }}
+  BITRIVER_LIVE_SESSION_TTL: {{ .Values.env.BITRIVER_LIVE_SESSION_TTL | quote }}
+  BITRIVER_LIVE_SESSION_IDLE_TIMEOUT: {{ .Values.env.BITRIVER_LIVE_SESSION_IDLE_TIMEOUT | quote }}
+  BITRIVER_LIVE_MODE: {{ .Values.env.BITRIVER_LIVE_MODE | quote }}
+  BITRIVER_LIVE_ALLOW_SELF_SIGNUP: {{ .Values.env.BITRIVER_LIVE_ALLOW_SELF_SIGNUP | quote }}
+  BITRIVER_LIVE_ADDR: {{ .Values.env.BITRIVER_LIVE_ADDR | quote }}
+  BITRIVER_LIVE_POSTGRES_MAX_CONNS: {{ .Values.env.BITRIVER_LIVE_POSTGRES_MAX_CONNS | quote }}
+  BITRIVER_LIVE_POSTGRES_MIN_CONNS: {{ .Values.env.BITRIVER_LIVE_POSTGRES_MIN_CONNS | quote }}
+  BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT: {{ .Values.env.BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT | quote }}
+  BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME: {{ .Values.env.BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME | quote }}
+  BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE: {{ .Values.env.BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE | quote }}
+  BITRIVER_LIVE_CHAT_QUEUE_DRIVER: {{ .Values.env.BITRIVER_LIVE_CHAT_QUEUE_DRIVER | quote }}
+  BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR: {{ default (printf "%s-redis:%d" (include "bitriver-live.fullname" .) (.Values.service.redis.port | int)) .Values.env.BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR | quote }}
+  BITRIVER_LIVE_CHAT_QUEUE_REDIS_STREAM: {{ .Values.env.BITRIVER_LIVE_CHAT_QUEUE_REDIS_STREAM | quote }}
+  BITRIVER_LIVE_CHAT_QUEUE_REDIS_GROUP: {{ .Values.env.BITRIVER_LIVE_CHAT_QUEUE_REDIS_GROUP | quote }}
+  BITRIVER_LIVE_RECORDING_RETENTION_PUBLISHED: {{ .Values.env.BITRIVER_LIVE_RECORDING_RETENTION_PUBLISHED | quote }}
+  BITRIVER_LIVE_RECORDING_RETENTION_UNPUBLISHED: {{ .Values.env.BITRIVER_LIVE_RECORDING_RETENTION_UNPUBLISHED | quote }}
+  BITRIVER_LIVE_CHAT_RETENTION_MESSAGES: {{ .Values.env.BITRIVER_LIVE_CHAT_RETENTION_MESSAGES | quote }}
+  BITRIVER_LIVE_CHAT_RETENTION_MODERATION_LOGS: {{ .Values.env.BITRIVER_LIVE_CHAT_RETENTION_MODERATION_LOGS | quote }}
+  BITRIVER_LIVE_ADMIN_CORS_ORIGINS: {{ .Values.env.BITRIVER_LIVE_ADMIN_CORS_ORIGINS | quote }}
+  BITRIVER_LIVE_VIEWER_CORS_ORIGINS: {{ .Values.env.BITRIVER_LIVE_VIEWER_CORS_ORIGINS | quote }}
+  BITRIVER_VIEWER_ORIGIN: {{ default (printf "http://%s-viewer:%d" (include "bitriver-live.fullname" .) (.Values.service.viewer.port | int)) .Values.env.BITRIVER_VIEWER_ORIGIN | quote }}
+  BITRIVER_SRS_API: {{ default (printf "http://%s-srs-controller:%d" (include "bitriver-live.fullname" .) (.Values.service.srsController.port | int)) .Values.env.BITRIVER_SRS_API | quote }}
+  BITRIVER_OME_API: {{ default (printf "http://%s-ome:%d" (include "bitriver-live.fullname" .) (.Values.service.ome.apiPort | int)) .Values.env.BITRIVER_OME_API | quote }}
+  BITRIVER_TRANSCODER_API: {{ default (printf "http://%s-transcoder:%d" (include "bitriver-live.fullname" .) (.Values.service.transcoder.port | int)) .Values.env.BITRIVER_TRANSCODER_API | quote }}
+  BITRIVER_LIVE_METRICS_ALLOW_NETWORKS: {{ .Values.env.BITRIVER_LIVE_METRICS_ALLOW_NETWORKS | quote }}
+  BITRIVER_INGEST_HEALTH: {{ .Values.env.BITRIVER_INGEST_HEALTH | quote }}
+  BITRIVER_TRANSCODER_PUBLIC_BASE_URL: {{ .Values.env.BITRIVER_TRANSCODER_PUBLIC_BASE_URL | quote }}

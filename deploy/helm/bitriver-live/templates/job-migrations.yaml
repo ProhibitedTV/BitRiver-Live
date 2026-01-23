@@ -1,0 +1,77 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-postgres-migrations
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "bitriver-live.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: postgres-migrations
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrations
+          image: {{ .Values.images.postgres }}:{{ .Values.tags.postgres }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_POSTGRES_PASSWORD
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_POSTGRES_USER
+            - name: POSTGRES_DB
+              value: {{ .Values.env.BITRIVER_POSTGRES_DB | quote }}
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              until pg_isready -h {{ include "bitriver-live.fullname" . }}-postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB"; do
+                echo "Waiting for Postgres..."
+                sleep 2
+              done
+
+              if ! ls /migrations/*.sql >/dev/null 2>&1; then
+                echo "No Postgres migrations found; exiting."
+                exit 1
+              fi
+
+              for file in /migrations/*.sql; do
+                echo "Applying $file"
+                psql \
+                  -h {{ include "bitriver-live.fullname" . }}-postgres \
+                  -U "$POSTGRES_USER" \
+                  -d "$POSTGRES_DB" \
+                  -v ON_ERROR_STOP=1 \
+                  -f "$file"
+              done
+
+              echo "Running post-migration sanity check"
+              psql \
+                -h {{ include "bitriver-live.fullname" . }}-postgres \
+                -U "$POSTGRES_USER" \
+                -d "$POSTGRES_DB" \
+                -v ON_ERROR_STOP=1 \
+                -c "SELECT 1 FROM users LIMIT 1;"
+
+              echo "Postgres migrations completed."
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+              readOnly: true
+      volumes:
+        - name: migrations
+          configMap:
+            name: {{ include "bitriver-live.fullname" . }}-migrations

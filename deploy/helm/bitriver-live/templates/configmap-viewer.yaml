@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-viewer-env
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+data:
+  NODE_ENV: production
+  NEXT_PUBLIC_API_BASE_URL: {{ .Values.env.NEXT_PUBLIC_API_BASE_URL | quote }}
+  NEXT_VIEWER_BASE_PATH: {{ .Values.env.NEXT_VIEWER_BASE_PATH | quote }}
+  NEXT_PUBLIC_VIEWER_URL: {{ .Values.env.NEXT_PUBLIC_VIEWER_URL | quote }}
+  PORT: "3000"
+  HOSTNAME: 0.0.0.0
