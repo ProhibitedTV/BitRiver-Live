@@ -254,16 +254,19 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 		}
 		return nil
 	}
-	migrationsRunner = func(composeFile string) error {
+	migrationsRunner = func(composeFile, envFile string) error {
 		calls = append(calls, "migrations")
 		if composeFile != composePath {
 			t.Fatalf("migrations compose file = %s, want %s", composeFile, composePath)
+		}
+		if envFile != envPath {
+			t.Fatalf("migrations env file = %s, want %s", envFile, envPath)
 		}
 		return nil
 	}
 	composeUpRunner = func(args []string) error {
 		calls = append(calls, "compose-up")
-		expected := []string{"--file", composePath}
+		expected := []string{"--file", composePath, "--env-file", envPath}
 		if !reflect.DeepEqual(args, expected) {
 			t.Fatalf("compose args = %v, want %v", args, expected)
 		}

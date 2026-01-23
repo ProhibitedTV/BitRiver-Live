@@ -390,6 +390,7 @@ var doctorRunner = runDoctor
 func runComposeUp(args []string) error {
 	fs := flag.NewFlagSet("compose up", flag.ContinueOnError)
 	composeFile := fs.String("file", defaultComposeFile(), "compose file to use")
+	envFile := fs.String("env-file", "", "environment file to load")
 	detach := fs.Bool("detached", true, "run docker compose in detached mode")
 	build := fs.Bool("build", true, "build images before starting")
 	if err := fs.Parse(args); err != nil {
@@ -400,7 +401,11 @@ func runComposeUp(args []string) error {
 		return err
 	}
 
-	composeArgs := []string{"compose", "--file", *composeFile, "up"}
+	composeArgs := []string{"compose", "--file", *composeFile}
+	if strings.TrimSpace(*envFile) != "" {
+		composeArgs = append(composeArgs, "--env-file", *envFile)
+	}
+	composeArgs = append(composeArgs, "up")
 	if *build {
 		composeArgs = append(composeArgs, "--build")
 	}
@@ -467,11 +472,11 @@ func runQuickstart(args []string) error {
 		return fmt.Errorf("render OME config: %w", err)
 	}
 
-	if err := migrationsRunner(*composeFile); err != nil {
+	if err := migrationsRunner(*composeFile, *envFile); err != nil {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
-	if err := composeUpRunner([]string{"--file", *composeFile}); err != nil {
+	if err := composeUpRunner([]string{"--file", *composeFile, "--env-file", *envFile}); err != nil {
 		return fmt.Errorf("docker compose up: %w", err)
 	}
 
@@ -487,12 +492,12 @@ func runQuickstart(args []string) error {
 	return nil
 }
 
-func runMigrations(composeFile string) error {
+func runMigrations(composeFile, envFile string) error {
 	if _, err := executil.LookPath("docker"); err != nil {
 		return err
 	}
 
-	args := []string{"compose", "--file", composeFile, "run", "--rm", "postgres-migrations"}
+	args := []string{"compose", "--env-file", envFile, "--file", composeFile, "run", "--rm", "-T", "postgres-migrations"}
 	return commandRunner("docker", args...)
 }
 
