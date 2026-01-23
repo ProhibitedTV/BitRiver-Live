@@ -387,9 +387,23 @@ var envValidateRunner = runEnvValidate
 var omeRunner = runOME
 var doctorRunner = runDoctor
 
+func composeArgsWithEnv(composeFile, envFile string) []string {
+	args := []string{"compose"}
+	if strings.TrimSpace(envFile) != "" {
+		args = append(args, "--env-file", envFile)
+	} else {
+		args = append(args, "--project-directory", repoRoot())
+	}
+	if strings.TrimSpace(composeFile) != "" {
+		args = append(args, "--file", composeFile)
+	}
+	return args
+}
+
 func runComposeUp(args []string) error {
 	fs := flag.NewFlagSet("compose up", flag.ContinueOnError)
 	composeFile := fs.String("file", defaultComposeFile(), "compose file to use")
+	envFile := fs.String("env-file", "", "env file to use for compose interpolation")
 	detach := fs.Bool("detached", true, "run docker compose in detached mode")
 	build := fs.Bool("build", true, "build images before starting")
 	if err := fs.Parse(args); err != nil {
@@ -400,7 +414,7 @@ func runComposeUp(args []string) error {
 		return err
 	}
 
-	composeArgs := []string{"compose", "--file", *composeFile, "up"}
+	composeArgs := append(composeArgsWithEnv(*composeFile, *envFile), "up")
 	if *build {
 		composeArgs = append(composeArgs, "--build")
 	}
@@ -414,6 +428,7 @@ func runComposeUp(args []string) error {
 func runComposeDown(args []string) error {
 	fs := flag.NewFlagSet("compose down", flag.ContinueOnError)
 	composeFile := fs.String("file", defaultComposeFile(), "compose file to use")
+	envFile := fs.String("env-file", "", "env file to use for compose interpolation")
 	volumes := fs.Bool("volumes", false, "remove named volumes")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -423,7 +438,7 @@ func runComposeDown(args []string) error {
 		return err
 	}
 
-	composeArgs := []string{"compose", "--file", *composeFile, "down"}
+	composeArgs := append(composeArgsWithEnv(*composeFile, *envFile), "down")
 	if *volumes {
 		composeArgs = append(composeArgs, "-v")
 	}
@@ -467,11 +482,11 @@ func runQuickstart(args []string) error {
 		return fmt.Errorf("render OME config: %w", err)
 	}
 
-	if err := migrationsRunner(*composeFile); err != nil {
+	if err := migrationsRunner(*composeFile, *envFile); err != nil {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
-	if err := composeUpRunner([]string{"--file", *composeFile}); err != nil {
+	if err := composeUpRunner([]string{"--file", *composeFile, "--env-file", *envFile}); err != nil {
 		return fmt.Errorf("docker compose up: %w", err)
 	}
 
@@ -479,7 +494,7 @@ func runQuickstart(args []string) error {
 		return fmt.Errorf("wait for API readiness: %w", err)
 	}
 
-	if err := bootstrapAdminRunner(*composeFile, envValues); err != nil {
+	if err := bootstrapAdminRunner(*composeFile, *envFile, envValues); err != nil {
 		return fmt.Errorf("bootstrap admin: %w", err)
 	}
 
@@ -487,12 +502,12 @@ func runQuickstart(args []string) error {
 	return nil
 }
 
-func runMigrations(composeFile string) error {
+func runMigrations(composeFile, envFile string) error {
 	if _, err := executil.LookPath("docker"); err != nil {
 		return err
 	}
 
-	args := []string{"compose", "--file", composeFile, "run", "--rm", "postgres-migrations"}
+	args := append(composeArgsWithEnv(composeFile, envFile), "run", "--rm", "postgres-migrations")
 	return commandRunner("docker", args...)
 }
 
@@ -538,7 +553,7 @@ func resolveAPIPort(values map[string]string) string {
 	return "8080"
 }
 
-func runBootstrapAdmin(composeFile string, values map[string]string) error {
+func runBootstrapAdmin(composeFile, envFile string, values map[string]string) error {
 	email := strings.TrimSpace(values["BITRIVER_LIVE_ADMIN_EMAIL"])
 	password := strings.TrimSpace(values["BITRIVER_LIVE_ADMIN_PASSWORD"])
 	if email == "" || password == "" {
@@ -550,7 +565,7 @@ func runBootstrapAdmin(composeFile string, values map[string]string) error {
 		storageDriver = "postgres"
 	}
 
-	args := []string{"compose", "--file", composeFile, "exec", "-T", "bitriver-live", "/app/bootstrap-admin"}
+	args := append(composeArgsWithEnv(composeFile, envFile), "exec", "-T", "bitriver-live", "/app/bootstrap-admin")
 	switch storageDriver {
 	case "postgres":
 		dsn, err := buildPostgresDSN(values)
