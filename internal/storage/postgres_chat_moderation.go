@@ -401,6 +401,30 @@ func (r *postgresRepository) ApplyChatEvent(evt chat.Event) error {
 				return fmt.Errorf("apply report event: %w", err)
 			}
 			return nil
+		case chat.EventTypeAutoMod:
+			if evt.AutoMod == nil {
+				return fmt.Errorf("automod payload missing")
+			}
+			action := evt.AutoMod
+			if strings.TrimSpace(action.ID) == "" {
+				return fmt.Errorf("automod action id missing")
+			}
+			var filterID any
+			if strings.TrimSpace(action.FilterID) != "" {
+				filterID = strings.TrimSpace(action.FilterID)
+			}
+			actionName := strings.TrimSpace(action.Action)
+			if actionName == "" {
+				actionName = "blocked"
+			}
+			created := action.CreatedAt.UTC()
+			if created.IsZero() {
+				created = time.Now().UTC()
+			}
+			if _, err := conn.Exec(ctx, "INSERT INTO chat_automod_actions (id, channel_id, user_id, filter_id, filter_kind, filter_pattern, message, action, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (id) DO UPDATE SET channel_id = EXCLUDED.channel_id, user_id = EXCLUDED.user_id, filter_id = EXCLUDED.filter_id, filter_kind = EXCLUDED.filter_kind, filter_pattern = EXCLUDED.filter_pattern, message = EXCLUDED.message, action = EXCLUDED.action, created_at = EXCLUDED.created_at", strings.TrimSpace(action.ID), strings.TrimSpace(action.ChannelID), strings.TrimSpace(action.UserID), filterID, strings.TrimSpace(action.FilterKind), strings.TrimSpace(action.FilterPattern), action.Message, actionName, created); err != nil {
+				return fmt.Errorf("apply automod event: %w", err)
+			}
+			return nil
 		default:
 			return fmt.Errorf("unsupported chat event %q", evt.Type)
 		}
@@ -777,4 +801,248 @@ func (r *postgresRepository) ResolveChatReport(reportID, resolverID, resolution 
 		return models.ChatReport{}, err
 	}
 	return resolved, nil
+}
+
+func (r *postgresRepository) ListChatFilters(channelID string) ([]models.ChatFilter, error) {
+	if r == nil || r.pool == nil {
+		return nil, ErrPostgresUnavailable
+	}
+	ctx, cancel := r.acquireContext()
+	defer cancel()
+
+	var exists bool
+	if err := r.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM channels WHERE id = $1)", channelID).Scan(&exists); err != nil {
+		return nil, fmt.Errorf("check channel %s: %w", channelID, err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("channel %s not found", channelID)
+	}
+
+	rows, err := r.pool.Query(ctx, "SELECT id, channel_id, kind, pattern, enabled, created_at, updated_at FROM chat_filters WHERE channel_id = $1 ORDER BY created_at DESC, id ASC", channelID)
+	if err != nil {
+		return nil, fmt.Errorf("list chat filters: %w", err)
+	}
+	defer rows.Close()
+
+	filters := make([]models.ChatFilter, 0)
+	for rows.Next() {
+		var filter models.ChatFilter
+		var createdAt time.Time
+		var updatedAt time.Time
+		if err := rows.Scan(&filter.ID, &filter.ChannelID, &filter.Kind, &filter.Pattern, &filter.Enabled, &createdAt, &updatedAt); err != nil {
+			return nil, fmt.Errorf("scan chat filter: %w", err)
+		}
+		filter.CreatedAt = createdAt.UTC()
+		filter.UpdatedAt = updatedAt.UTC()
+		filters = append(filters, filter)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate chat filters: %w", err)
+	}
+	return filters, nil
+}
+
+func (r *postgresRepository) CreateChatFilter(channelID string, params ChatFilterParams) (models.ChatFilter, error) {
+	if r == nil || r.pool == nil {
+		return models.ChatFilter{}, ErrPostgresUnavailable
+	}
+	kind, pattern, err := normalizeChatFilter(params.Kind, params.Pattern)
+	if err != nil {
+		return models.ChatFilter{}, err
+	}
+	id, err := generateID()
+	if err != nil {
+		return models.ChatFilter{}, err
+	}
+	now := time.Now().UTC()
+	filter := models.ChatFilter{}
+	saveErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("begin create chat filter tx: %w", err)
+		}
+		defer rollbackTx(ctx, tx)
+
+		if err := ensureChannelExists(ctx, tx, channelID); err != nil {
+			return err
+		}
+
+		if _, err := tx.Exec(ctx, "INSERT INTO chat_filters (id, channel_id, kind, pattern, enabled, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)", id, channelID, kind, pattern, params.Enabled, now, now); err != nil {
+			return fmt.Errorf("insert chat filter: %w", err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit chat filter: %w", err)
+		}
+
+		filter = models.ChatFilter{
+			ID:        id,
+			ChannelID: channelID,
+			Kind:      kind,
+			Pattern:   pattern,
+			Enabled:   params.Enabled,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		return nil
+	})
+	if saveErr != nil {
+		return models.ChatFilter{}, saveErr
+	}
+	return filter, nil
+}
+
+func (r *postgresRepository) UpdateChatFilter(id string, update ChatFilterUpdate) (models.ChatFilter, error) {
+	if r == nil || r.pool == nil {
+		return models.ChatFilter{}, ErrPostgresUnavailable
+	}
+	updated := models.ChatFilter{}
+	updateErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("begin update chat filter tx: %w", err)
+		}
+		defer rollbackTx(ctx, tx)
+
+		var existing models.ChatFilter
+		var createdAt time.Time
+		var updatedAt time.Time
+		row := tx.QueryRow(ctx, "SELECT id, channel_id, kind, pattern, enabled, created_at, updated_at FROM chat_filters WHERE id = $1", id)
+		if err := row.Scan(&existing.ID, &existing.ChannelID, &existing.Kind, &existing.Pattern, &existing.Enabled, &createdAt, &updatedAt); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("filter %s not found", id)
+			}
+			return fmt.Errorf("lookup chat filter: %w", err)
+		}
+		existing.CreatedAt = createdAt.UTC()
+		existing.UpdatedAt = updatedAt.UTC()
+
+		kind := existing.Kind
+		pattern := existing.Pattern
+		if update.Kind != nil {
+			kind = *update.Kind
+		}
+		if update.Pattern != nil {
+			pattern = *update.Pattern
+		}
+		if update.Enabled != nil {
+			existing.Enabled = *update.Enabled
+		}
+
+		normalizedKind, normalizedPattern, err := normalizeChatFilter(kind, pattern)
+		if err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		updateRow := tx.QueryRow(ctx, "UPDATE chat_filters SET kind = $1, pattern = $2, enabled = $3, updated_at = $4 WHERE id = $5 RETURNING id, channel_id, kind, pattern, enabled, created_at, updated_at", normalizedKind, normalizedPattern, existing.Enabled, now, id)
+		if err := updateRow.Scan(&updated.ID, &updated.ChannelID, &updated.Kind, &updated.Pattern, &updated.Enabled, &createdAt, &updatedAt); err != nil {
+			return fmt.Errorf("update chat filter %s: %w", id, err)
+		}
+		updated.CreatedAt = createdAt.UTC()
+		updated.UpdatedAt = updatedAt.UTC()
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit chat filter update: %w", err)
+		}
+		return nil
+	})
+	if updateErr != nil {
+		return models.ChatFilter{}, updateErr
+	}
+	return updated, nil
+}
+
+func (r *postgresRepository) DeleteChatFilter(id string) error {
+	if r == nil || r.pool == nil {
+		return ErrPostgresUnavailable
+	}
+	deleteErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("begin delete chat filter tx: %w", err)
+		}
+		defer rollbackTx(ctx, tx)
+
+		var exists bool
+		if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM chat_filters WHERE id = $1)", id).Scan(&exists); err != nil {
+			return fmt.Errorf("lookup chat filter %s: %w", id, err)
+		}
+		if !exists {
+			return fmt.Errorf("filter %s not found", id)
+		}
+
+		if _, err := tx.Exec(ctx, "DELETE FROM chat_filters WHERE id = $1", id); err != nil {
+			return fmt.Errorf("delete chat filter %s: %w", id, err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit delete chat filter: %w", err)
+		}
+		return nil
+	})
+	return deleteErr
+}
+
+func (r *postgresRepository) ListChatAutoModActions(channelID string, limit int) ([]models.ChatAutoModAction, error) {
+	if r == nil || r.pool == nil {
+		return nil, ErrPostgresUnavailable
+	}
+	ctx, cancel := r.acquireContext()
+	defer cancel()
+
+	var exists bool
+	if err := r.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM channels WHERE id = $1)", channelID).Scan(&exists); err != nil {
+		return nil, fmt.Errorf("check channel %s: %w", channelID, err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("channel %s not found", channelID)
+	}
+
+	if err := r.purgeExpiredChatAutoModActions(ctx, r.retentionTime()); err != nil {
+		return nil, fmt.Errorf("purge chat automod actions: %w", err)
+	}
+
+	query := "SELECT id, channel_id, user_id, filter_id, filter_kind, filter_pattern, message, action, created_at FROM chat_automod_actions WHERE channel_id = $1 ORDER BY created_at DESC, id ASC"
+	args := []any{channelID}
+	if limit > 0 {
+		query += " LIMIT $2"
+		args = append(args, limit)
+	}
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list chat automod actions: %w", err)
+	}
+	defer rows.Close()
+
+	actions := make([]models.ChatAutoModAction, 0)
+	for rows.Next() {
+		var action models.ChatAutoModAction
+		var filterID pgtype.Text
+		var createdAt time.Time
+		if err := rows.Scan(&action.ID, &action.ChannelID, &action.UserID, &filterID, &action.FilterKind, &action.FilterPattern, &action.Message, &action.Action, &createdAt); err != nil {
+			return nil, fmt.Errorf("scan chat automod action: %w", err)
+		}
+		if filterID.Valid {
+			action.FilterID = filterID.String
+		}
+		action.CreatedAt = createdAt.UTC()
+		actions = append(actions, action)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate chat automod actions: %w", err)
+	}
+	return actions, nil
+}
+
+func (r *postgresRepository) purgeExpiredChatAutoModActions(ctx context.Context, now time.Time) error {
+	retention := r.chatRetention.ModerationLogs
+	if retention <= 0 || r == nil || r.pool == nil {
+		return nil
+	}
+	cutoff := now.Add(-retention)
+	if _, err := r.pool.Exec(ctx, "DELETE FROM chat_automod_actions WHERE created_at <= $1", cutoff); err != nil {
+		return err
+	}
+	return nil
 }

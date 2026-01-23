@@ -318,10 +318,11 @@ keeps data indefinitely.
 
 #### Chat messages and moderation logs
 
-- **Stored history:** Chat transcripts and moderation reports are stored in Postgres/JSON. Redis only handles live fan-out
-  and does not persist history by default.
+- **Stored history:** Chat transcripts, moderation reports, and automated filter actions are stored in Postgres/JSON.
+  Redis only handles live fan-out and does not persist history by default. Automated actions are only visible in the
+  control-centre moderation views and are not broadcast to viewer chat transcripts.
 - **Retention configuration:** Use `BITRIVER_LIVE_CHAT_RETENTION_MESSAGES` for chat history and
-  `BITRIVER_LIVE_CHAT_RETENTION_MODERATION_LOGS` for moderation reports (example: `720h`). These apply to report creation
-  timestamps or resolution timestamps when present.
-- **Purge behavior:** Retention is enforced when the API loads chat history or moderation queues, so expired messages and
-  reports are deleted on access.
+  `BITRIVER_LIVE_CHAT_RETENTION_MODERATION_LOGS` for moderation reports and automod actions (example: `720h`). These apply
+  to report creation timestamps or resolution timestamps when present.
+- **Purge behavior:** Retention is enforced when the API loads chat history or moderation queues, so expired messages,
+  reports, and automod actions are deleted on access.

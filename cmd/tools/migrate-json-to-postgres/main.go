@@ -96,6 +96,8 @@ func verifyCounts(ctx context.Context, dsn string, counts storage.SnapshotCounts
 		{"chat_bans", "SELECT COUNT(*) FROM chat_bans", counts.ChatBans},
 		{"chat_timeouts", "SELECT COUNT(*) FROM chat_timeouts", counts.ChatTimeouts},
 		{"chat_reports", "SELECT COUNT(*) FROM chat_reports", counts.ChatReports},
+		{"chat_filters", "SELECT COUNT(*) FROM chat_filters", counts.ChatFilters},
+		{"chat_automod_actions", "SELECT COUNT(*) FROM chat_automod_actions", counts.ChatAutoModActions},
 		{"tips", "SELECT COUNT(*) FROM tips", counts.Tips},
 		{"subscriptions", "SELECT COUNT(*) FROM subscriptions", counts.Subscriptions},
 		{"oauth_accounts", "SELECT COUNT(*) FROM oauth_accounts", counts.OAuthAccounts},

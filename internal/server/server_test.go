@@ -166,6 +166,24 @@ func TestAuthMiddlewareRejectsMissingSession(t *testing.T) {
 	}
 }
 
+func TestModerationAutoModRouteRequiresAuth(t *testing.T) {
+	handler, _ := newTestHandler(t)
+
+	srv, err := New(handler, Config{Addr: ":0"})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/moderation/automod", nil)
+	rec := httptest.NewRecorder()
+
+	srv.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rec.Code)
+	}
+}
+
 func TestAuthMiddlewareAllowsExpiredSessionOnOptionalRoutes(t *testing.T) {
 	handler, store := newTestHandler(t)
 	owner, err := store.CreateUser(storage.CreateUserParams{

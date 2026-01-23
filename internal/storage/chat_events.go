@@ -48,6 +48,13 @@ func (s *Storage) ApplyChatEvent(evt chat.Event) error {
 		if err := s.applyReportLocked(*evt.Report); err != nil {
 			return err
 		}
+	case chat.EventTypeAutoMod:
+		if evt.AutoMod == nil {
+			return fmt.Errorf("automod payload missing")
+		}
+		if err := s.applyAutoModLocked(*evt.AutoMod); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("unsupported chat event %q", evt.Type)
 	}
@@ -160,6 +167,31 @@ func (s *Storage) applyReportLocked(evt chat.ReportEvent) error {
 		report.Status = ChatReportStatusOpen
 	}
 	s.data.ChatReports[report.ID] = report
+	return nil
+}
+
+func (s *Storage) applyAutoModLocked(evt chat.AutoModEvent) error {
+	if strings.TrimSpace(evt.ID) == "" {
+		return fmt.Errorf("automod action id missing")
+	}
+	if s.data.ChatAutoModActions == nil {
+		s.data.ChatAutoModActions = make(map[string]models.ChatAutoModAction)
+	}
+	action := models.ChatAutoModAction{
+		ID:            evt.ID,
+		ChannelID:     evt.ChannelID,
+		UserID:        evt.UserID,
+		FilterID:      evt.FilterID,
+		FilterKind:    evt.FilterKind,
+		FilterPattern: evt.FilterPattern,
+		Message:       evt.Message,
+		Action:        strings.TrimSpace(evt.Action),
+		CreatedAt:     evt.CreatedAt.UTC(),
+	}
+	if action.Action == "" {
+		action.Action = "blocked"
+	}
+	s.data.ChatAutoModActions[action.ID] = action
 	return nil
 }
 

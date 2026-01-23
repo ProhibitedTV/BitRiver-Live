@@ -3065,6 +3065,65 @@ func TestChatModerationRestrictionsOmitExpiredTimeouts(t *testing.T) {
 	}
 }
 
+func TestChatFiltersAPI(t *testing.T) {
+	handler, store := newTestHandler(t)
+	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Arena", "gaming", nil)
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+
+	createBody, _ := json.Marshal(chatFilterRequest{Kind: "word", Pattern: "spoiler", Enabled: true})
+	req := httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/chat/moderation/filters", bytes.NewReader(createBody))
+	req = withUser(req, owner)
+	rec := httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected create filter status 201, got %d", rec.Code)
+	}
+
+	var created chatFilterResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID+"/chat/moderation/filters", nil)
+	req = withUser(req, owner)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected list filters status 200, got %d", rec.Code)
+	}
+	var filters []chatFilterResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &filters); err != nil {
+		t.Fatalf("decode filters response: %v", err)
+	}
+	if len(filters) != 1 {
+		t.Fatalf("expected 1 filter, got %d", len(filters))
+	}
+
+	disable := false
+	updateBody, _ := json.Marshal(chatFilterUpdateRequest{Enabled: &disable})
+	req = httptest.NewRequest(http.MethodPatch, "/api/channels/"+channel.ID+"/chat/moderation/filters/"+created.ID, bytes.NewReader(updateBody))
+	req = withUser(req, owner)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected update filter status 200, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/channels/"+channel.ID+"/chat/moderation/filters/"+created.ID, nil)
+	req = withUser(req, owner)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected delete filter status 204, got %d", rec.Code)
+	}
+}
+
 func TestMonetizationEndpoints(t *testing.T) {
 	handler, store := newTestHandler(t)
 	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})

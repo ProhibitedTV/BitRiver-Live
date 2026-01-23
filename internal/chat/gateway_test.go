@@ -138,6 +138,50 @@ func TestGatewayModerationFlow(t *testing.T) {
 	})
 }
 
+func TestGatewayAutoModBlocksMessage(t *testing.T) {
+	store := newTestStorage(t)
+	owner := mustCreateUser(t, store, storage.CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"admin"}})
+	viewer := mustCreateUser(t, store, storage.CreateUserParams{DisplayName: "viewer", Email: "viewer@example.com"})
+	channel := mustCreateChannel(t, store, owner.ID, "Main")
+
+	_, err := store.CreateChatFilter(channel.ID, storage.ChatFilterParams{
+		Kind:    "word",
+		Pattern: "spoiler",
+		Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateChatFilter: %v", err)
+	}
+
+	queue := chat.NewMemoryQueue(32)
+	gateway := chat.NewGateway(chat.GatewayConfig{Queue: queue, Store: store})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
+	go storage.NewChatWorker(store, queue, nil).WithStartedChannel(started).Run(ctx)
+	<-started
+
+	if _, err := gateway.CreateMessage(ctx, viewer, channel.ID, "no spoilers please"); err == nil {
+		t.Fatalf("expected automod rejection, got nil")
+	}
+
+	waitUntil(t, time.Second, func() bool {
+		actions, err := store.ListChatAutoModActions(channel.ID, 0)
+		if err != nil || len(actions) == 0 {
+			return false
+		}
+		return actions[0].UserID == viewer.ID
+	})
+
+	messages, err := store.ListChatMessages(channel.ID, 0)
+	if err != nil {
+		t.Fatalf("ListChatMessages: %v", err)
+	}
+	if len(messages) != 0 {
+		t.Fatalf("expected zero messages, got %d", len(messages))
+	}
+}
+
 func TestGatewayApplyModerationWithoutStore(t *testing.T) {
 	gateway := chat.NewGateway(chat.GatewayConfig{})
 	actor := models.User{ID: "moderator", Roles: []string{"admin"}}

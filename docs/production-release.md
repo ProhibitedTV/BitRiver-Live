@@ -17,6 +17,8 @@ password spray protection is always enabled in release builds.
 
 Recent schema changes to account for:
 
+- `0002_chat_filters.sql` adds `chat_filters` and `chat_automod_actions` to
+  support automated chat moderation filters and action logs.
 - `0006_profile_social_links.sql` adds a `social_links` JSONB column to
   `profiles` so broadcasters can surface their external accounts. Ensure this
   migration is applied during rollout.

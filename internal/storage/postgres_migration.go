@@ -58,7 +58,13 @@ func (r *postgresRepository) importSnapshot(ctx context.Context, snapshot *Snaps
 		if err := r.importSnapshotChatModeration(ctx, tx, snapshot); err != nil {
 			return err
 		}
+		if err := r.importSnapshotChatFilters(ctx, tx, snapshot.ChatFilters); err != nil {
+			return err
+		}
 		if err := r.importSnapshotChatReports(ctx, tx, snapshot.ChatReports); err != nil {
+			return err
+		}
+		if err := r.importSnapshotChatAutoModActions(ctx, tx, snapshot.ChatAutoModActions); err != nil {
 			return err
 		}
 		if err := r.importSnapshotTips(ctx, tx, snapshot.Tips); err != nil {
@@ -497,6 +503,37 @@ func (r *postgresRepository) importSnapshotChatModeration(ctx context.Context, t
 	return nil
 }
 
+func (r *postgresRepository) importSnapshotChatFilters(ctx context.Context, tx pgx.Tx, filters map[string]models.ChatFilter) error {
+	if len(filters) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(filters))
+	for id := range filters {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, key := range ids {
+		filter := filters[key]
+		id := strings.TrimSpace(filter.ID)
+		if id == "" {
+			id = key
+		}
+		created := filter.CreatedAt.UTC()
+		if created.IsZero() {
+			created = time.Now().UTC()
+		}
+		updated := filter.UpdatedAt.UTC()
+		if updated.IsZero() {
+			updated = created
+		}
+		_, err := tx.Exec(ctx, "INSERT INTO chat_filters (id, channel_id, kind, pattern, enabled, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO NOTHING", id, strings.TrimSpace(filter.ChannelID), strings.TrimSpace(filter.Kind), strings.TrimSpace(filter.Pattern), filter.Enabled, created, updated)
+		if err != nil {
+			return fmt.Errorf("insert chat filter %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
 func (r *postgresRepository) importSnapshotChatReports(ctx context.Context, tx pgx.Tx, reports map[string]models.ChatReport) error {
 	if len(reports) == 0 {
 		return nil
@@ -535,6 +572,37 @@ func (r *postgresRepository) importSnapshotChatReports(ctx context.Context, tx p
 		_, err := tx.Exec(ctx, "INSERT INTO chat_reports (id, channel_id, reporter_id, target_id, reason, message_id, evidence_url, status, resolution, resolver_id, created_at, resolved_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (id) DO NOTHING", id, strings.TrimSpace(report.ChannelID), strings.TrimSpace(report.ReporterID), strings.TrimSpace(report.TargetID), strings.TrimSpace(report.Reason), messageID, evidence, strings.TrimSpace(report.Status), strings.TrimSpace(report.Resolution), resolver, created, resolvedAt)
 		if err != nil {
 			return fmt.Errorf("insert chat report %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
+func (r *postgresRepository) importSnapshotChatAutoModActions(ctx context.Context, tx pgx.Tx, actions map[string]models.ChatAutoModAction) error {
+	if len(actions) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(actions))
+	for id := range actions {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, key := range ids {
+		action := actions[key]
+		id := strings.TrimSpace(action.ID)
+		if id == "" {
+			id = key
+		}
+		created := action.CreatedAt.UTC()
+		if created.IsZero() {
+			created = time.Now().UTC()
+		}
+		var filterID any
+		if strings.TrimSpace(action.FilterID) != "" {
+			filterID = strings.TrimSpace(action.FilterID)
+		}
+		_, err := tx.Exec(ctx, "INSERT INTO chat_automod_actions (id, channel_id, user_id, filter_id, filter_kind, filter_pattern, message, action, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (id) DO NOTHING", id, strings.TrimSpace(action.ChannelID), strings.TrimSpace(action.UserID), filterID, strings.TrimSpace(action.FilterKind), strings.TrimSpace(action.FilterPattern), action.Message, strings.TrimSpace(action.Action), created)
+		if err != nil {
+			return fmt.Errorf("insert chat automod action %s: %w", id, err)
 		}
 	}
 	return nil

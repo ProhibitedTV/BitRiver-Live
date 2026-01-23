@@ -77,6 +77,11 @@ type Repository interface {
 	CreateChatReport(channelID, reporterID, targetID, reason, messageID, evidenceURL string) (models.ChatReport, error)
 	ListChatReports(channelID string, includeResolved bool) ([]models.ChatReport, error)
 	ResolveChatReport(reportID, resolverID, resolution string) (models.ChatReport, error)
+	ListChatFilters(channelID string) ([]models.ChatFilter, error)
+	CreateChatFilter(channelID string, params ChatFilterParams) (models.ChatFilter, error)
+	UpdateChatFilter(id string, update ChatFilterUpdate) (models.ChatFilter, error)
+	DeleteChatFilter(id string) error
+	ListChatAutoModActions(channelID string, limit int) ([]models.ChatAutoModAction, error)
 
 	CreateTip(params CreateTipParams) (models.Tip, error)
 	ListTips(channelID string, limit int) ([]models.Tip, error)

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ type Store interface {
 	ChatRestrictions() RestrictionsSnapshot
 	IsChatBanned(channelID, userID string) bool
 	ChatTimeout(channelID, userID string) (time.Time, bool)
+	ListChatFilters(channelID string) ([]models.ChatFilter, error)
 }
 
 // GatewayConfig configures a chat Gateway.
@@ -111,6 +113,16 @@ func (g *Gateway) CreateMessage(ctx context.Context, author models.User, channel
 	if len([]rune(trimmed)) > 500 {
 		return MessageEvent{}, fmt.Errorf("message exceeds 500 characters")
 	}
+	if g.store != nil {
+		filter, err := g.matchChatFilter(channelID, trimmed)
+		if err != nil {
+			if g.logger != nil {
+				g.logger.Warn("failed to evaluate chat filters", "error", err)
+			}
+		} else if filter != nil {
+			return MessageEvent{}, g.emitAutoMod(ctx, author, channelID, trimmed, *filter)
+		}
+	}
 	id, err := generateID()
 	if err != nil {
 		return MessageEvent{}, err
@@ -127,6 +139,69 @@ func (g *Gateway) CreateMessage(ctx context.Context, author models.User, channel
 	g.publish(ctx, event)
 	metrics.Default().ObserveChatEvent("message")
 	return message, nil
+}
+
+func (g *Gateway) matchChatFilter(channelID, content string) (*models.ChatFilter, error) {
+	filters, err := g.store.ListChatFilters(channelID)
+	if err != nil {
+		return nil, err
+	}
+	if len(filters) == 0 {
+		return nil, nil
+	}
+	lowerContent := strings.ToLower(content)
+	for _, filter := range filters {
+		if !filter.Enabled {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(filter.Kind)) {
+		case "word":
+			pattern := strings.ToLower(strings.TrimSpace(filter.Pattern))
+			if pattern != "" && strings.Contains(lowerContent, pattern) {
+				return &filter, nil
+			}
+		case "regex":
+			pattern := strings.TrimSpace(filter.Pattern)
+			if pattern == "" {
+				continue
+			}
+			re, err := regexp.Compile(pattern)
+			if err != nil {
+				if g.logger != nil {
+					g.logger.Warn("invalid chat filter regex", "filter_id", filter.ID, "error", err)
+				}
+				continue
+			}
+			if re.MatchString(content) {
+				return &filter, nil
+			}
+		}
+	}
+	return nil, nil
+}
+
+func (g *Gateway) emitAutoMod(ctx context.Context, author models.User, channelID, content string, filter models.ChatFilter) error {
+	id, err := generateID()
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	event := AutoModEvent{
+		ID:            id,
+		ChannelID:     channelID,
+		UserID:        author.ID,
+		FilterID:      filter.ID,
+		FilterKind:    filter.Kind,
+		FilterPattern: filter.Pattern,
+		Message:       content,
+		Action:        "blocked",
+		CreatedAt:     now,
+	}
+	evt := Event{Type: EventTypeAutoMod, AutoMod: &event, OccurredAt: now}
+	g.broadcast(evt)
+	g.publish(ctx, evt)
+	metrics.Default().ObserveChatEvent("automod")
+	return fmt.Errorf("message blocked by automated moderation")
 }
 
 // ApplyModeration emits a moderation event into the chat stream.

@@ -317,6 +317,28 @@ type ChatRestriction struct {
 	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
 }
 
+type ChatFilter struct {
+	ID        string    `json:"id"`
+	ChannelID string    `json:"channelId"`
+	Kind      string    `json:"kind"`
+	Pattern   string    `json:"pattern"`
+	Enabled   bool      `json:"enabled"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type ChatAutoModAction struct {
+	ID            string    `json:"id"`
+	ChannelID     string    `json:"channelId"`
+	UserID        string    `json:"userId"`
+	FilterID      string    `json:"filterId,omitempty"`
+	FilterKind    string    `json:"filterKind,omitempty"`
+	FilterPattern string    `json:"filterPattern,omitempty"`
+	Message       string    `json:"message"`
+	Action        string    `json:"action"`
+	CreatedAt     time.Time `json:"createdAt"`
+}
+
 // Tip describes a viewer tip recorded for a channel. Amount uses the fixed
 // precision Money type (1e-8 minor units) while the public JSON API continues to
 // expose human-readable decimal values.

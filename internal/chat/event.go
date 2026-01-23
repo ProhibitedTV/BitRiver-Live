@@ -15,6 +15,8 @@ const (
 	EventTypeModeration EventType = "moderation"
 	// EventTypeReport represents a viewer-submitted moderation report.
 	EventTypeReport EventType = "report"
+	// EventTypeAutoMod represents a system-generated moderation action.
+	EventTypeAutoMod EventType = "automod"
 )
 
 // ModerationAction captures the different moderation operations available to
@@ -39,6 +41,7 @@ type Event struct {
 	Message    *MessageEvent    `json:"message,omitempty"`
 	Moderation *ModerationEvent `json:"moderation,omitempty"`
 	Report     *ReportEvent     `json:"report,omitempty"`
+	AutoMod    *AutoModEvent    `json:"automod,omitempty"`
 	OccurredAt time.Time        `json:"occurredAt"`
 }
 
@@ -73,6 +76,19 @@ type ReportEvent struct {
 	EvidenceURL string    `json:"evidenceUrl,omitempty"`
 	Status      string    `json:"status"`
 	CreatedAt   time.Time `json:"createdAt"`
+}
+
+// AutoModEvent captures a message blocked by automated moderation.
+type AutoModEvent struct {
+	ID            string    `json:"id"`
+	ChannelID     string    `json:"channelId"`
+	UserID        string    `json:"userId"`
+	FilterID      string    `json:"filterId,omitempty"`
+	FilterKind    string    `json:"filterKind,omitempty"`
+	FilterPattern string    `json:"filterPattern,omitempty"`
+	Message       string    `json:"message"`
+	Action        string    `json:"action"`
+	CreatedAt     time.Time `json:"createdAt"`
 }
 
 // RestrictionsSnapshot represents the currently active moderation state for
