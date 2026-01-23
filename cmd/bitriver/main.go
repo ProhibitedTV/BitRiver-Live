@@ -1234,8 +1234,16 @@ func generateEnvValues(existing map[string]string) map[string]string {
 		}
 	}
 
+	if current := existing["BITRIVER_LIVE_METRICS_TOKEN"]; current == "" || isForbiddenValue("BITRIVER_LIVE_METRICS_TOKEN", current) {
+		if generated["BITRIVER_LIVE_METRICS_TOKEN"] == "" {
+			generated["BITRIVER_LIVE_METRICS_TOKEN"] = randomSecret()
+		}
+		existing["BITRIVER_LIVE_METRICS_TOKEN"] = ""
+	}
+
 	if current := existing["BITRIVER_OME_USERNAME"]; current == "" || isForbiddenValue("BITRIVER_OME_USERNAME", current) {
 		generated["BITRIVER_OME_USERNAME"] = fmt.Sprintf("ome-operator-%s", randomSuffix())
+		existing["BITRIVER_OME_USERNAME"] = ""
 	}
 
 	if v := existing["BITRIVER_OME_API_TOKEN"]; generated["BITRIVER_OME_ACCESS_TOKEN"] == "" && v != "" {
