@@ -198,6 +198,14 @@ All commands assume you are still in the repository root (where `.env` lives) so
 - **`Error: Docker Compose V2 is required`** – Install the compose plugin or upgrade Docker Desktop/Engine so the `docker compose`
   sub-command is available for the Go quickstart across all platforms.
 - **`permission denied while trying to connect to the Docker daemon socket`** – Add your account to the `docker` group with `sudo usermod -aG docker $USER` followed by `newgrp docker` (or log out and back in), then rerun the quickstart without `sudo`. You can run `sudo go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` or the shell/PowerShell shims in a pinch, but expect root-owned files like `.env` until you fix the group membership.
+
+### Windows troubleshooting (Docker Desktop + WSL 2)
+
+If Docker Desktop fails to accept Compose traffic from WSL, you may see `http2: server: error reading preface from client //./pipe/dockerDesktopLinuxEngine` when running the quickstart or `docker compose up`. When it happens:
+
+1. Restart Docker Desktop to reset the engine and pipe.
+2. Confirm the WSL 2 backend is healthy (`wsl --status`, and verify the `docker-desktop` distro is running).
+3. Re-run `docker compose up -d` from the repository root (or re-run `bitriver-live` / `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml`).
 - **Port already in use** – Stop or reconfigure any services that currently bind to ports 5432, 6379, 8080, 8081, 9000, 9001, or 1935 (plus 1985 when the `srs-api` profile is enabled). Alternatively edit the corresponding `*_PORT` values in `.env` (for example, `BITRIVER_LIVE_PORT=9090`) and rerun `docker compose up -d`.
 - **`Empty <AccessToken> is not allowed`** – The OvenMediaEngine template detected a missing `BITRIVER_OME_API_TOKEN` in `.env`. Set a non-empty value in `.env`, mirror it into `BITRIVER_OME_ACCESS_TOKEN` if you want the health probe to use a distinct header, rerun `go run ./cmd/bitriver ome render --force --env-file ./.env` (or `./scripts/render-ome-config.sh --force`), and restart the stack with `docker compose up -d` so `deploy/ome/Server.generated.xml` is regenerated with the token.
 - **Still seeing `AccessTokens` errors after rendering?** – Verify the stamp and contents of the generated config before restarting OME:
