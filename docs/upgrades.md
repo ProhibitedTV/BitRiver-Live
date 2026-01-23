@@ -16,7 +16,7 @@ Use this section as the concise checklist when you need to ensure schema, enviro
 1. Stop the stack (keep volumes): `docker compose -f deploy/docker-compose.yml down`.
 2. Refresh `.env` from `deploy/.env.example` and validate it with `deploy/check-env.sh`.
 3. Re-render OME config: `./scripts/render-ome-config.sh --check || ./scripts/render-ome-config.sh --force`.
-4. Optionally run migrations explicitly: `docker compose -f deploy/docker-compose.yml run --rm postgres-migrations`.
+4. Optionally run migrations explicitly: `docker compose -f deploy/docker-compose.yml run --rm postgres-migrations` (add `-T` on Windows shells without a TTY).
 5. Start everything again: `docker compose -f deploy/docker-compose.yml up -d`.
 
 ### `.env` changes
@@ -69,6 +69,7 @@ Follow this flow to avoid partial upgrades:
    docker compose -f deploy/docker-compose.yml up -d postgres
    docker compose -f deploy/docker-compose.yml run --rm postgres-migrations
    ```
+   On Windows shells without a TTY, add `-T` to the `docker compose run` command to disable pseudo-TTY allocation.
 6. **Restart the stack:**
    ```bash
    docker compose -f deploy/docker-compose.yml up -d
