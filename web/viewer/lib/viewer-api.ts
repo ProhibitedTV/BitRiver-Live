@@ -147,6 +147,37 @@ export type Playback = {
   renditions?: Rendition[];
 };
 
+export type ViewerQoEEvent = {
+  channelId: string;
+  sessionId?: string;
+  event: string;
+  player?: string;
+  protocol?: string;
+  latencyMode?: string;
+  rendition?: string;
+  playbackUrl?: string;
+  currentTime?: number;
+  duration?: number;
+  bufferedSeconds?: number;
+  droppedFrames?: number;
+  error?: string;
+};
+
+export async function reportViewerQoE(payload: ViewerQoEEvent): Promise<void> {
+  const body = JSON.stringify(payload);
+  if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+    const blob = new Blob([body], { type: "application/json" });
+    navigator.sendBeacon("/api/metrics/qoe", blob);
+    return;
+  }
+  await fetch("/api/metrics/qoe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+    keepalive: true
+  });
+}
+
 export type FollowState = {
   followers: number;
   following: boolean;

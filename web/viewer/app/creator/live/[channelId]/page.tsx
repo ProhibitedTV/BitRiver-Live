@@ -342,7 +342,7 @@ export default function CreatorLivePage() {
               <span className="muted">No active session yet</span>
             )}
           </div>
-          <Player playback={playback.playback} />
+          <Player playback={playback.playback} channelId={params.channelId} />
         </section>
       </div>
     </div>

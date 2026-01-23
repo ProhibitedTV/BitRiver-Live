@@ -10,6 +10,7 @@ import (
 
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/observability/metrics"
+	"bitriver-live/internal/observability/tracing"
 	"bitriver-live/internal/storage"
 )
 
@@ -90,6 +91,10 @@ func (t *srsViewerTracker) clear(channelID string) {
 }
 
 func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
+	r, span := h.startSpan(r, "api.srs_hook")
+	if span != nil {
+		defer span.End()
+	}
 	if r.Method != http.MethodPost {
 		WriteMethodNotAllowed(w, r, http.MethodPost)
 		return
@@ -131,6 +136,12 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 		}
 		WriteError(w, http.StatusNotFound, fmt.Errorf("stream %s not recognized", strings.TrimSpace(req.Stream)))
 		return
+	}
+	if span != nil {
+		span.AddAttributes(
+			tracing.StringAttr("channel.id", channel.ID),
+			tracing.StringAttr("srs.action", action),
+		)
 	}
 
 	tracker := h.srsTracker()

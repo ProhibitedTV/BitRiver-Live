@@ -27,6 +27,7 @@ import (
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/observability/logging"
 	"bitriver-live/internal/observability/metrics"
+	"bitriver-live/internal/observability/tracing"
 	"bitriver-live/internal/server"
 	"bitriver-live/internal/storage"
 )
@@ -102,6 +103,8 @@ func main() {
 	tlsCert := flag.String("tls-cert", "", "path to TLS certificate file")
 	tlsKey := flag.String("tls-key", "", "path to TLS private key file")
 	logLevel := flag.String("log-level", "info", "log level (debug, info, warn, error)")
+	otelEndpoint := flag.String("otel-endpoint", "", "OTLP endpoint for OpenTelemetry traces (e.g. http://collector:4318)")
+	otelSampleRatio := flag.Float64("otel-sample-ratio", 1, "OpenTelemetry trace sampling ratio (0.0-1.0)")
 	metricsToken := flag.String("metrics-token", "", "token required to scrape /metrics (Authorization bearer or X-Metrics-Token); production requires this or --metrics-allow-networks/BITRIVER_LIVE_METRICS_ALLOW_NETWORKS")
 	metricsAllowNetworks := flag.String("metrics-allow-networks", "", "comma separated CIDR blocks or IPs allowed to scrape /metrics; production requires this or --metrics-token/BITRIVER_LIVE_METRICS_TOKEN")
 
@@ -196,6 +199,24 @@ func main() {
 		logger.Error("invalid server mode", "error", err)
 		os.Exit(2)
 	}
+	otelEndpointValue := firstNonEmpty(*otelEndpoint, os.Getenv("BITRIVER_LIVE_OTEL_EXPORTER_OTLP_ENDPOINT"), os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	otelSampleRatioValue := resolveSampleRatio(*otelSampleRatio, os.Getenv("BITRIVER_LIVE_OTEL_SAMPLE_RATIO"), os.Getenv("OTEL_TRACES_SAMPLER_ARG"), logger)
+	environmentValue := firstNonEmpty(os.Getenv("BITRIVER_LIVE_ENVIRONMENT"), string(serverMode))
+	tracingProvider := tracing.NewProvider(tracing.Config{
+		ServiceName: "bitriver-live-api",
+		Environment: environmentValue,
+		Endpoint:    otelEndpointValue,
+		SampleRatio: otelSampleRatioValue,
+		Logger:      logger,
+	})
+	tracing.SetDefault(tracingProvider.Tracer())
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := tracingProvider.Shutdown(shutdownCtx); err != nil {
+			logger.Warn("trace exporter shutdown failed", "error", err)
+		}
+	}()
 	loginLimitValue, err := resolveLoginLimit(serverMode, *loginLimit, "BITRIVER_LIVE_RATE_LOGIN_LIMIT")
 	if err != nil {
 		logger.Error(err.Error())
@@ -531,6 +552,7 @@ func main() {
 		Logger:                   logger,
 		AuditLogger:              auditLogger,
 		Metrics:                  recorder,
+		Tracer:                   tracingProvider.Tracer(),
 		MetricsAccess:            metricsAccessCfg,
 		RequireMetricsProtection: requireMetricsProtection,
 		ViewerOrigin:             viewerURL,
@@ -944,6 +966,33 @@ func resolveSessionCookieSecureMode(mode string) api.SessionCookieSecureMode {
 		return api.SessionCookieSecureAlways
 	}
 	return api.SessionCookieSecureAuto
+}
+
+func resolveSampleRatio(flagValue float64, envValue string, otelSamplerArg string, logger *slog.Logger) float64 {
+	value := flagValue
+	if envValue != "" {
+		if parsed, err := strconv.ParseFloat(strings.TrimSpace(envValue), 64); err == nil {
+			value = parsed
+		} else if logger != nil {
+			logger.Warn("invalid BITRIVER_LIVE_OTEL_SAMPLE_RATIO", "value", envValue, "error", err)
+		}
+	} else if otelSamplerArg != "" {
+		if parsed, err := strconv.ParseFloat(strings.TrimSpace(otelSamplerArg), 64); err == nil {
+			value = parsed
+		} else if logger != nil {
+			logger.Warn("invalid OTEL_TRACES_SAMPLER_ARG", "value", otelSamplerArg, "error", err)
+		}
+	}
+	if value < 0 {
+		return 0
+	}
+	if value > 1 {
+		return 1
+	}
+	if value == 0 {
+		return 1
+	}
+	return value
 }
 
 func requiresMetricsProtection(mode string) bool {

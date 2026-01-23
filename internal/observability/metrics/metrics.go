@@ -25,9 +25,9 @@ type Registry struct {
 }
 
 // Recorder aggregates in-memory metrics counters and gauges for HTTP requests,
-// stream lifecycle events, ingest health, chat activity, and monetization
-// signals. It coordinates concurrent writers via a RWMutex while exposing a
-// thread-safe gauge for active stream tracking.
+// stream lifecycle events, ingest health, chat activity, monetization signals,
+// and viewer QoE events. It coordinates concurrent writers via a RWMutex while
+// exposing a thread-safe gauge for active stream tracking.
 type Recorder struct {
 	mu                sync.RWMutex
 	requestCount      map[requestLabel]uint64
@@ -43,11 +43,20 @@ type Recorder struct {
 	ingestFailures    map[string]uint64
 	transcoderEvents  map[TranscoderJobLabel]uint64
 	activeTranscoder  atomic.Int64
+	viewerQoEEvents   map[ViewerQoELabel]uint64
 }
 
 type TranscoderJobLabel struct {
 	Kind   string
 	Status string
+}
+
+type ViewerQoELabel struct {
+	Event       string
+	Player      string
+	Protocol    string
+	Rendition   string
+	LatencyMode string
 }
 
 var defaultRecorder = New()
@@ -84,6 +93,7 @@ func New() *Recorder {
 		ingestAttempts:    make(map[string]uint64),
 		ingestFailures:    make(map[string]uint64),
 		transcoderEvents:  make(map[TranscoderJobLabel]uint64),
+		viewerQoEEvents:   make(map[ViewerQoELabel]uint64),
 	}
 }
 
@@ -207,6 +217,18 @@ func (r *Recorder) recordTranscoderEvent(kind, status string) {
 	r.mu.Unlock()
 }
 
+// ObserveViewerQoE records viewer quality-of-experience events.
+func (r *Recorder) ObserveViewerQoE(label ViewerQoELabel) {
+	label.Event = normalizeName(label.Event)
+	label.Player = normalizeName(label.Player)
+	label.Protocol = normalizeName(label.Protocol)
+	label.Rendition = normalizeName(label.Rendition)
+	label.LatencyMode = normalizeName(label.LatencyMode)
+	r.mu.Lock()
+	r.viewerQoEEvents[label]++
+	r.mu.Unlock()
+}
+
 // ActiveStreams exposes the current gauge of concurrently active streams.
 func (r *Recorder) ActiveStreams() int64 {
 	return r.activeStreams.Load()
@@ -285,6 +307,7 @@ func (r *Recorder) Reset() {
 	r.ingestAttempts = make(map[string]uint64)
 	r.ingestFailures = make(map[string]uint64)
 	r.transcoderEvents = make(map[TranscoderJobLabel]uint64)
+	r.viewerQoEEvents = make(map[ViewerQoELabel]uint64)
 	r.activeStreams.Store(0)
 	r.activeTranscoder.Store(0)
 }
@@ -330,6 +353,7 @@ func (r *Recorder) Write(w io.Writer) {
 	monetizationEvents := r.sortedMonetizationEvents()
 	ingestOperations := r.sortedIngestOperations()
 	transcoderEvents := r.sortedTranscoderJobLabels()
+	viewerQoELabels := r.sortedViewerQoELabels()
 
 	_, _ = fmt.Fprintln(w, "# HELP bitriver_http_requests_total Total number of HTTP requests processed by the API")
 	_, _ = fmt.Fprintln(w, "# TYPE bitriver_http_requests_total counter")
@@ -415,6 +439,13 @@ func (r *Recorder) Write(w io.Writer) {
 	for _, event := range monetizationEvents {
 		total := r.monetizationTotal[event]
 		_, _ = fmt.Fprintf(w, "bitriver_monetization_amount_sum{event=\"%s\"} %s\n", event, total.DecimalString())
+	}
+
+	_, _ = fmt.Fprintln(w, "# HELP bitriver_viewer_qoe_events_total Viewer quality-of-experience events by category")
+	_, _ = fmt.Fprintln(w, "# TYPE bitriver_viewer_qoe_events_total counter")
+	for _, label := range viewerQoELabels {
+		count := r.viewerQoEEvents[label]
+		_, _ = fmt.Fprintf(w, "bitriver_viewer_qoe_events_total{event=\"%s\",player=\"%s\",protocol=\"%s\",rendition=\"%s\",latency_mode=\"%s\"} %d\n", label.Event, label.Player, label.Protocol, label.Rendition, label.LatencyMode, count)
 	}
 }
 
@@ -510,6 +541,29 @@ func (r *Recorder) sortedTranscoderJobLabels() []TranscoderJobLabel {
 			return labels[i].Kind < labels[j].Kind
 		}
 		return labels[i].Status < labels[j].Status
+	})
+	return labels
+}
+
+func (r *Recorder) sortedViewerQoELabels() []ViewerQoELabel {
+	labels := make([]ViewerQoELabel, 0, len(r.viewerQoEEvents))
+	for label := range r.viewerQoEEvents {
+		labels = append(labels, label)
+	}
+	sort.Slice(labels, func(i, j int) bool {
+		if labels[i].Event != labels[j].Event {
+			return labels[i].Event < labels[j].Event
+		}
+		if labels[i].Player != labels[j].Player {
+			return labels[i].Player < labels[j].Player
+		}
+		if labels[i].Protocol != labels[j].Protocol {
+			return labels[i].Protocol < labels[j].Protocol
+		}
+		if labels[i].Rendition != labels[j].Rendition {
+			return labels[i].Rendition < labels[j].Rendition
+		}
+		return labels[i].LatencyMode < labels[j].LatencyMode
 	})
 	return labels
 }

@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"bitriver-live/internal/observability/tracing"
 )
 
 // Default values used when callers do not provide explicit settings.
@@ -265,11 +267,20 @@ func newHTTPTranscoderAdapter(baseURL, token string, client *http.Client, logger
 // responses) up to maxAttempts. Callers are encouraged to pass a context
 // with a deadline to bound the overall operation duration.
 func (a *httpChannelAdapter) CreateChannel(ctx context.Context, channelID, streamKey string) (string, string, error) {
+	ctx, span := tracing.Default().StartSpan(ctx, "ingest.srs.create_channel",
+		tracing.StringAttr("channel.id", channelID),
+	)
+	if span != nil {
+		defer span.End()
+	}
 	payload := srsChannelRequest{ChannelID: channelID, StreamKey: streamKey}
 	var response srsChannelResponse
 	if err := postJSON(ctx, a.client, fmt.Sprintf("%s/v1/channels", a.baseURL), payload, &response, func(req *http.Request) {
 		setBearer(req, a.token)
 	}, a.logger, a.maxAttempts, a.retryInterval); err != nil {
+		if span != nil {
+			span.RecordError(err)
+		}
 		return "", "", err
 	}
 	return response.PrimaryIngest, response.BackupIngest, nil
@@ -278,9 +289,19 @@ func (a *httpChannelAdapter) CreateChannel(ctx context.Context, channelID, strea
 // DeleteChannel tears down the channel identified by channelID by calling
 // the configured SRS controller.
 func (a *httpChannelAdapter) DeleteChannel(ctx context.Context, channelID string) error {
-	return deleteRequest(ctx, a.client, fmt.Sprintf("%s/v1/channels/%s", a.baseURL, channelID), func(req *http.Request) {
+	ctx, span := tracing.Default().StartSpan(ctx, "ingest.srs.delete_channel",
+		tracing.StringAttr("channel.id", channelID),
+	)
+	if span != nil {
+		defer span.End()
+	}
+	err := deleteRequest(ctx, a.client, fmt.Sprintf("%s/v1/channels/%s", a.baseURL, channelID), func(req *http.Request) {
 		setBearer(req, a.token)
 	}, a.logger, a.maxAttempts, a.retryInterval)
+	if err != nil && span != nil {
+		span.RecordError(err)
+	}
+	return err
 }
 
 // CreateApplication provisions a new application on the origin server (OME)
@@ -289,6 +310,13 @@ func (a *httpChannelAdapter) DeleteChannel(ctx context.Context, channelID string
 // The renditions slice is defensively copied to avoid accidental mutation by
 // callers after the request is initiated.
 func (a *httpApplicationAdapter) CreateApplication(ctx context.Context, channelID string, renditions []string) (string, string, error) {
+	ctx, span := tracing.Default().StartSpan(ctx, "ingest.ome.create_application",
+		tracing.StringAttr("channel.id", channelID),
+		tracing.StringAttr("renditions", strings.Join(renditions, ",")),
+	)
+	if span != nil {
+		defer span.End()
+	}
 	payload := omeApplicationRequest{
 		ChannelID:  channelID,
 		Renditions: append([]string{}, renditions...),
@@ -297,6 +325,9 @@ func (a *httpApplicationAdapter) CreateApplication(ctx context.Context, channelI
 	if err := postJSON(ctx, a.client, fmt.Sprintf("%s/v1/applications", a.baseURL), payload, &response, func(req *http.Request) {
 		req.SetBasicAuth(a.username, a.password)
 	}, a.logger, a.maxAttempts, a.retryInterval); err != nil {
+		if span != nil {
+			span.RecordError(err)
+		}
 		return "", "", err
 	}
 	return response.OriginURL, response.PlaybackURL, nil
@@ -305,9 +336,19 @@ func (a *httpApplicationAdapter) CreateApplication(ctx context.Context, channelI
 // DeleteApplication removes the application associated with channelID from
 // the origin server (OME).
 func (a *httpApplicationAdapter) DeleteApplication(ctx context.Context, channelID string) error {
-	return deleteRequest(ctx, a.client, fmt.Sprintf("%s/v1/applications/%s", a.baseURL, channelID), func(req *http.Request) {
+	ctx, span := tracing.Default().StartSpan(ctx, "ingest.ome.delete_application",
+		tracing.StringAttr("channel.id", channelID),
+	)
+	if span != nil {
+		defer span.End()
+	}
+	err := deleteRequest(ctx, a.client, fmt.Sprintf("%s/v1/applications/%s", a.baseURL, channelID), func(req *http.Request) {
 		req.SetBasicAuth(a.username, a.password)
 	}, a.logger, a.maxAttempts, a.retryInterval)
+	if err != nil && span != nil {
+		span.RecordError(err)
+	}
+	return err
 }
 
 // StartJobs starts one or more live transcoding jobs for the given channel,
@@ -316,6 +357,15 @@ func (a *httpApplicationAdapter) DeleteApplication(ctx context.Context, channelI
 // The returned jobIDs slice may contain IDs from both JobID and JobIDs
 // response fields to maintain backward compatibility with older backends.
 func (a *httpTranscoderAdapter) StartJobs(ctx context.Context, channelID, sessionID, originURL string, ladder []Rendition) ([]string, []Rendition, error) {
+	ctx, span := tracing.Default().StartSpan(ctx, "ingest.transcoder.start_jobs",
+		tracing.StringAttr("channel.id", channelID),
+		tracing.StringAttr("session.id", sessionID),
+		tracing.StringAttr("origin.url", originURL),
+		tracing.StringAttr("renditions", renditionsLabel(ladder)),
+	)
+	if span != nil {
+		defer span.End()
+	}
 	payload := ffmpegJobRequest{
 		ChannelID:  channelID,
 		SessionID:  sessionID,
@@ -326,6 +376,9 @@ func (a *httpTranscoderAdapter) StartJobs(ctx context.Context, channelID, sessio
 	if err := postJSON(ctx, a.client, fmt.Sprintf("%s/v1/jobs", a.baseURL), payload, &response, func(req *http.Request) {
 		setBearer(req, a.token)
 	}, a.logger, a.maxAttempts, a.retryInterval); err != nil {
+		if span != nil {
+			span.RecordError(err)
+		}
 		return nil, nil, err
 	}
 
@@ -339,9 +392,19 @@ func (a *httpTranscoderAdapter) StartJobs(ctx context.Context, channelID, sessio
 
 // StopJob stops a live transcoding job with the specified jobID.
 func (a *httpTranscoderAdapter) StopJob(ctx context.Context, jobID string) error {
-	return deleteRequest(ctx, a.client, fmt.Sprintf("%s/v1/jobs/%s", a.baseURL, jobID), func(req *http.Request) {
+	ctx, span := tracing.Default().StartSpan(ctx, "ingest.transcoder.stop_job",
+		tracing.StringAttr("job.id", jobID),
+	)
+	if span != nil {
+		defer span.End()
+	}
+	err := deleteRequest(ctx, a.client, fmt.Sprintf("%s/v1/jobs/%s", a.baseURL, jobID), func(req *http.Request) {
 		setBearer(req, a.token)
 	}, a.logger, a.maxAttempts, a.retryInterval)
+	if err != nil && span != nil {
+		span.RecordError(err)
+	}
+	return err
 }
 
 // StartUpload starts a VOD transcoding/upload job for the given upload
@@ -350,6 +413,15 @@ func (a *httpTranscoderAdapter) StopJob(ctx context.Context, jobID string) error
 //
 // Renditions are defensively copied to avoid aliasing.
 func (a *httpTranscoderAdapter) StartUpload(ctx context.Context, req uploadJobRequest) (uploadJobResult, error) {
+	ctx, span := tracing.Default().StartSpan(ctx, "ingest.transcoder.start_upload",
+		tracing.StringAttr("channel.id", req.ChannelID),
+		tracing.StringAttr("upload.id", req.UploadID),
+		tracing.StringAttr("source.url", req.SourceURL),
+		tracing.StringAttr("renditions", renditionsLabel(req.Renditions)),
+	)
+	if span != nil {
+		defer span.End()
+	}
 	payload := ffmpegUploadRequest{
 		ChannelID:  req.ChannelID,
 		UploadID:   req.UploadID,
@@ -361,6 +433,9 @@ func (a *httpTranscoderAdapter) StartUpload(ctx context.Context, req uploadJobRe
 	if err := postJSON(ctx, a.client, fmt.Sprintf("%s/v1/uploads", a.baseURL), payload, &response, func(httpReq *http.Request) {
 		setBearer(httpReq, a.token)
 	}, a.logger, a.maxAttempts, a.retryInterval); err != nil {
+		if span != nil {
+			span.RecordError(err)
+		}
 		return uploadJobResult{}, err
 	}
 	return uploadJobResult{
@@ -368,6 +443,19 @@ func (a *httpTranscoderAdapter) StartUpload(ctx context.Context, req uploadJobRe
 		PlaybackURL: response.PlaybackURL,
 		Renditions:  CloneRenditions(response.Renditions),
 	}, nil
+}
+
+func renditionsLabel(renditions []Rendition) string {
+	if len(renditions) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(renditions))
+	for _, rendition := range renditions {
+		if rendition.Name != "" {
+			names = append(names, rendition.Name)
+		}
+	}
+	return strings.Join(names, ",")
 }
 
 // postJSON issues an HTTP POST with a JSON payload and decodes the JSON
