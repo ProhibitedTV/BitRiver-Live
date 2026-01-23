@@ -15,6 +15,7 @@ import (
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/observability/metrics"
+	"bitriver-live/internal/observability/tracing"
 	"bitriver-live/internal/storage"
 )
 
@@ -44,6 +45,7 @@ type Handler struct {
 	SessionCookiePolicy   SessionCookiePolicy
 	srsViewers            *srsViewerTracker
 	Logger                *slog.Logger
+	Tracer                *tracing.Tracer
 }
 
 type healthPinger interface {
@@ -88,6 +90,21 @@ func (h *Handler) logger() *slog.Logger {
 	return h.Logger
 }
 
+func (h *Handler) tracer() *tracing.Tracer {
+	if h.Tracer == nil {
+		h.Tracer = tracing.Default()
+	}
+	return h.Tracer
+}
+
+func (h *Handler) startSpan(r *http.Request, name string, attrs ...tracing.Attribute) (*http.Request, *tracing.Span) {
+	if r == nil {
+		return r, nil
+	}
+	ctx, span := h.tracer().StartSpan(r.Context(), name, attrs...)
+	return r.WithContext(ctx), span
+}
+
 func (h *Handler) srsTracker() *srsViewerTracker {
 	if h.srsViewers == nil {
 		h.srsViewers = newSRSViewerTracker()
@@ -96,6 +113,10 @@ func (h *Handler) srsTracker() *srsViewerTracker {
 }
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
+	r, span := h.startSpan(r, "api.health")
+	if span != nil {
+		defer span.End()
+	}
 	ctx := r.Context()
 
 	components, overallStatus, statusCode := h.componentHealth(ctx)
@@ -128,6 +149,10 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 // services so load balancers can gate traffic on database and session readiness
 // alone.
 func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
+	r, span := h.startSpan(r, "api.ready")
+	if span != nil {
+		defer span.End()
+	}
 	components, overallStatus, statusCode := h.componentHealth(r.Context())
 	payload := map[string]interface{}{
 		"status":     overallStatus,

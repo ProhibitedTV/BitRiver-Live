@@ -32,6 +32,10 @@ type statusResponse struct {
 // Status combines readiness, ingest health, and backing store/queue checks into
 // a single operator-friendly payload.
 func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
+	r, span := h.startSpan(r, "api.status")
+	if span != nil {
+		defer span.End()
+	}
 	ctx := r.Context()
 	checkedAt := time.Now().UTC()
 

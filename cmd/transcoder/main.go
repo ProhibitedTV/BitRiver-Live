@@ -28,6 +28,7 @@ import (
 
 	"bitriver-live/internal/observability/logging"
 	"bitriver-live/internal/observability/metrics"
+	"bitriver-live/internal/observability/tracing"
 	"bitriver-live/internal/serverutil"
 )
 
@@ -234,6 +235,30 @@ func main() {
 	token := strings.TrimSpace(os.Getenv("JOB_CONTROLLER_TOKEN"))
 	logger := logging.WithComponent(logging.Init(logging.Config{Format: string(logging.FormatJSON)}), "transcoder")
 	registry := metrics.NewRegistry()
+	otelEndpoint := firstNonEmpty(
+		os.Getenv("BITRIVER_LIVE_OTEL_EXPORTER_OTLP_ENDPOINT"),
+		os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+	)
+	otelSampleRatio := parseSampleRatio(
+		os.Getenv("BITRIVER_LIVE_OTEL_SAMPLE_RATIO"),
+		os.Getenv("OTEL_TRACES_SAMPLER_ARG"),
+		logger,
+	)
+	tracingProvider := tracing.NewProvider(tracing.Config{
+		ServiceName: "bitriver-transcoder",
+		Environment: os.Getenv("BITRIVER_LIVE_ENVIRONMENT"),
+		Endpoint:    otelEndpoint,
+		SampleRatio: otelSampleRatio,
+		Logger:      logger,
+	})
+	tracing.SetDefault(tracingProvider.Tracer())
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := tracingProvider.Shutdown(shutdownCtx); err != nil {
+			logger.Warn("trace exporter shutdown failed", "error", err)
+		}
+	}()
 	if token == "" {
 		logger.Error("JOB_CONTROLLER_TOKEN must be configured before starting the transcoder")
 		os.Exit(1)
@@ -350,6 +375,7 @@ func (s *server) routes() http.Handler {
 	} else {
 		handler = metrics.HTTPMiddleware(nil, handler)
 	}
+	handler = tracing.HTTPMiddleware(tracing.Default(), handler)
 
 	return logging.RequestLogger(logging.RequestLoggerConfig{Logger: s.logger})(handler)
 }
@@ -585,6 +611,11 @@ func (s *server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
+	ctx, span := tracing.Default().StartSpan(r.Context(), "transcoder.jobs.create")
+	if span != nil {
+		defer span.End()
+	}
+	r = r.WithContext(ctx)
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -598,18 +629,37 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid payload", http.StatusBadRequest)
 		metrics.TranscoderJobFailed("live")
+		if span != nil {
+			span.RecordError(err)
+		}
 		return
 	}
 	if strings.TrimSpace(req.ChannelID) == "" || strings.TrimSpace(req.SessionID) == "" || strings.TrimSpace(req.OriginURL) == "" {
 		http.Error(w, "channelId, sessionId, and originUrl are required", http.StatusBadRequest)
 		metrics.TranscoderJobFailed("live")
+		if span != nil {
+			span.RecordError(errors.New("missing required fields"))
+		}
 		return
+	}
+	if span != nil {
+		span.AddAttributes(
+			tracing.StringAttr("channel.id", req.ChannelID),
+			tracing.StringAttr("session.id", req.SessionID),
+			tracing.StringAttr("origin.url", req.OriginURL),
+		)
 	}
 	renditions, err := decodeRenditions(req.Renditions)
 	if err != nil {
 		http.Error(w, "invalid renditions", http.StatusBadRequest)
 		metrics.TranscoderJobFailed("live")
+		if span != nil {
+			span.RecordError(err)
+		}
 		return
+	}
+	if span != nil {
+		span.AddAttributes(tracing.StringAttr("renditions", renditionsLabel(renditions)))
 	}
 
 	jobID := newID("live")
@@ -617,6 +667,9 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "unable to prepare transcode", http.StatusInternalServerError)
 		metrics.TranscoderJobFailed("live")
+		if span != nil {
+			span.RecordError(err)
+		}
 		return
 	}
 
@@ -644,6 +697,9 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to start ffmpeg", http.StatusInternalServerError)
 		s.updateComponent(componentFFmpeg, err)
 		metrics.TranscoderJobFailed("live")
+		if span != nil {
+			span.RecordError(err)
+		}
 		return
 	}
 
@@ -661,6 +717,9 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to persist job", http.StatusInternalServerError)
 		s.updateComponent(componentPublishing, err)
 		metrics.TranscoderJobFailed("live")
+		if span != nil {
+			span.RecordError(err)
+		}
 		return
 	}
 
@@ -694,6 +753,11 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleJobByID(w http.ResponseWriter, r *http.Request) {
+	ctx, span := tracing.Default().StartSpan(r.Context(), "transcoder.jobs.delete")
+	if span != nil {
+		defer span.End()
+	}
+	r = r.WithContext(ctx)
 	if r.Method != http.MethodDelete {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -708,6 +772,9 @@ func (s *server) handleJobByID(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if span != nil {
+		span.AddAttributes(tracing.StringAttr("job.id", id))
+	}
 
 	s.mu.RLock()
 	meta, ok := s.jobs[id]
@@ -716,6 +783,12 @@ func (s *server) handleJobByID(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		http.NotFound(w, r)
 		return
+	}
+	if span != nil {
+		span.AddAttributes(
+			tracing.StringAttr("channel.id", meta.ChannelID),
+			tracing.StringAttr("session.id", meta.SessionID),
+		)
 	}
 	jobLogger := s.jobLogger(id, meta)
 
@@ -736,10 +809,16 @@ func (s *server) handleJobByID(w http.ResponseWriter, r *http.Request) {
 		if jobLogger != nil {
 			jobLogger.Error("persist stopped job", "error", err)
 		}
+		if span != nil {
+			span.RecordError(err)
+		}
 	}
 	if err := s.removeLiveMirror(id); err != nil {
 		if jobLogger != nil {
 			jobLogger.Warn("cleanup live mirror", "error", err)
+		}
+		if span != nil {
+			span.RecordError(err)
 		}
 	}
 
@@ -752,6 +831,11 @@ func (s *server) handleJobByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleUploads(w http.ResponseWriter, r *http.Request) {
+	ctx, span := tracing.Default().StartSpan(r.Context(), "transcoder.uploads.create")
+	if span != nil {
+		defer span.End()
+	}
+	r = r.WithContext(ctx)
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -765,18 +849,37 @@ func (s *server) handleUploads(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid payload", http.StatusBadRequest)
 		metrics.TranscoderJobFailed("upload")
+		if span != nil {
+			span.RecordError(err)
+		}
 		return
 	}
 	if strings.TrimSpace(req.ChannelID) == "" || strings.TrimSpace(req.UploadID) == "" || strings.TrimSpace(req.SourceURL) == "" {
 		http.Error(w, "channelId, uploadId, and sourceUrl are required", http.StatusBadRequest)
 		metrics.TranscoderJobFailed("upload")
+		if span != nil {
+			span.RecordError(errors.New("missing required fields"))
+		}
 		return
+	}
+	if span != nil {
+		span.AddAttributes(
+			tracing.StringAttr("channel.id", req.ChannelID),
+			tracing.StringAttr("upload.id", req.UploadID),
+			tracing.StringAttr("source.url", req.SourceURL),
+		)
 	}
 	renditions, err := decodeRenditions(req.Renditions)
 	if err != nil {
 		http.Error(w, "invalid renditions", http.StatusBadRequest)
 		metrics.TranscoderJobFailed("upload")
+		if span != nil {
+			span.RecordError(err)
+		}
 		return
+	}
+	if span != nil {
+		span.AddAttributes(tracing.StringAttr("renditions", renditionsLabel(renditions)))
 	}
 
 	jobID := newID("upload")
@@ -1681,6 +1784,55 @@ func envOrDefault(key, fallback string) string {
 		return val
 	}
 	return fallback
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func parseSampleRatio(value string, otelSamplerArg string, logger *slog.Logger) float64 {
+	raw := strings.TrimSpace(value)
+	if raw == "" {
+		raw = strings.TrimSpace(otelSamplerArg)
+	}
+	if raw == "" {
+		return 1
+	}
+	parsed, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		if logger != nil {
+			logger.Warn("invalid OTEL sample ratio", "value", raw, "error", err)
+		}
+		return 1
+	}
+	if parsed < 0 {
+		return 0
+	}
+	if parsed > 1 {
+		return 1
+	}
+	if parsed == 0 {
+		return 1
+	}
+	return parsed
+}
+
+func renditionsLabel(renditions []rendition) string {
+	if len(renditions) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(renditions))
+	for _, rendition := range renditions {
+		if rendition.Name != "" {
+			names = append(names, rendition.Name)
+		}
+	}
+	return strings.Join(names, ",")
 }
 
 func parseDurationEnv(key string) (time.Duration, error) {

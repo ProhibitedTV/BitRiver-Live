@@ -187,6 +187,13 @@ func TestWriteAndHandlerOutput(t *testing.T) {
 	recorder.ObserveMonetization("tip", models.MustParseMoney("1.5"))
 	recorder.ObserveMonetization("tip", models.MustParseMoney("0.25"))
 	recorder.ObserveMonetization("subscription", models.MustParseMoney("10"))
+	recorder.ObserveViewerQoE(ViewerQoELabel{
+		Event:       "play",
+		Player:      "hls",
+		Protocol:    "hls",
+		Rendition:   "720p",
+		LatencyMode: "low-latency",
+	})
 
 	var buf bytes.Buffer
 	recorder.Write(&buf)
@@ -241,7 +248,10 @@ bitriver_monetization_events_total{event="tip"} 2
 # HELP bitriver_monetization_amount_sum Total monetization amount by event type
 # TYPE bitriver_monetization_amount_sum counter
 bitriver_monetization_amount_sum{event="subscription"} 10
-bitriver_monetization_amount_sum{event="tip"} 1.75`
+bitriver_monetization_amount_sum{event="tip"} 1.75
+# HELP bitriver_viewer_qoe_events_total Viewer quality-of-experience events by category
+# TYPE bitriver_viewer_qoe_events_total counter
+bitriver_viewer_qoe_events_total{event="play",player="hls",protocol="hls",rendition="720p",latency_mode="low-latency"} 1`
 
 	if diff := compareLines(buf.String(), expected); diff != "" {
 		t.Fatalf("unexpected write output:\n%s", diff)

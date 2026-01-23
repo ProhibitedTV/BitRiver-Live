@@ -19,6 +19,7 @@ import (
 	"bitriver-live/internal/auth/oauth"
 	"bitriver-live/internal/observability/logging"
 	"bitriver-live/internal/observability/metrics"
+	"bitriver-live/internal/observability/tracing"
 	"bitriver-live/web"
 )
 
@@ -57,9 +58,10 @@ func MetricsAccessConfigured(cfg MetricsAccessConfig) bool {
 // whether HTTPS is enabled, RateLimit configures per-client throttling, CORS
 // whitelists cross-site admin and viewer origins, Security sets the HTTP
 // hardening headers, Logger and AuditLogger provide structured logging, Metrics
-// records request metrics (defaulting to metrics.Default when nil), MetricsAccess
-// restricts the Prometheus scrape endpoint, ViewerOrigin configures reverse
-// proxying for viewer traffic, OAuth is injected into the supplied API handler,
+// records request metrics (defaulting to metrics.Default when nil), Tracer
+// injects OpenTelemetry spans for HTTP requests, MetricsAccess restricts the
+// Prometheus scrape endpoint, ViewerOrigin configures reverse proxying for
+// viewer traffic, OAuth is injected into the supplied API handler,
 // SessionCookieSecureMode forces HTTPS-only session cookies when set to
 // SessionCookieSecureAlways, and SessionCookieCrossSite enables SameSite=None
 // cookies for cross-site viewer deployments.
@@ -72,6 +74,7 @@ type Config struct {
 	Logger                   *slog.Logger
 	AuditLogger              *slog.Logger
 	Metrics                  *metrics.Recorder
+	Tracer                   *tracing.Tracer
 	MetricsAccess            MetricsAccessConfig
 	RequireMetricsProtection bool
 	ViewerOrigin             *url.URL
@@ -113,6 +116,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	if cfg.Logger != nil {
 		handler.Logger = cfg.Logger
 	}
+	handler.Tracer = cfg.Tracer
 
 	corsPolicy, err := newCORSPolicy(cfg.CORS)
 	if err != nil {
@@ -194,6 +198,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	mux.HandleFunc("/api/moderation/queue/", handler.ModerationQueueByID)
 	mux.HandleFunc("/api/moderation/automod", handler.ModerationAutoMod)
 	mux.HandleFunc("/api/analytics/overview", handler.AnalyticsOverview)
+	mux.HandleFunc("/api/metrics/qoe", handler.ViewerQoE)
 	mux.HandleFunc("/api/setup", handler.SetupWizard)
 	mux.HandleFunc("/api/ingest/srs-hook", handler.SRSHook)
 
@@ -230,6 +235,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	securityCfg := cfg.Security.withDefaults()
 	handlerChain = securityHeadersMiddleware(securityCfg, handlerChain)
 	handlerChain = requestIDMiddleware(cfg.Logger, handlerChain)
+	handlerChain = tracing.HTTPMiddleware(cfg.Tracer, handlerChain)
 	handlerChain = authMiddleware(handler, handlerChain)
 	handlerChain = rateLimitMiddleware(rl, ipResolver, cfg.Logger, handlerChain)
 	handlerChain = metrics.HTTPMiddleware(recorder, handlerChain)
@@ -591,7 +597,7 @@ func clientIP(remoteAddr string) string {
 func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		if path == "/healthz" || path == "/metrics" || path == "/api/ingest/srs-hook" || strings.HasPrefix(path, "/api/auth/") || !strings.HasPrefix(path, "/api/") {
+		if path == "/healthz" || path == "/metrics" || path == "/api/ingest/srs-hook" || path == "/api/metrics/qoe" || strings.HasPrefix(path, "/api/auth/") || !strings.HasPrefix(path, "/api/") {
 			next.ServeHTTP(w, r)
 			return
 		}

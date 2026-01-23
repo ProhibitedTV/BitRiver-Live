@@ -44,8 +44,30 @@ and `/api/status` for operator-facing summaries with remediation tips and log hi
   `bitriver_ingest_attempts_total{operation}` and `bitriver_ingest_failures_total{operation}`.
 - **Transcoder workload:** `bitriver_transcoder_jobs_total{kind,status}` counters and
   `bitriver_transcoder_active_jobs` gauge.
+- **Viewer QoE events:** `bitriver_viewer_qoe_events_total{event,player,protocol,rendition,latency_mode}` to catch buffering,
+  error, and rendition-change spikes.
 - **Chat backlog** (Redis stream length and consumer lag).
 - **Dependency saturation** (Postgres connection usage, Redis memory usage, disk usage for `./transcoder-data`).
+
+### Tracing (OpenTelemetry)
+
+The API and transcoder emit OpenTelemetry-style spans for HTTP requests, ingest/transcode orchestration, and viewer QoE
+events. Configure an OTLP collector and sampling rate via flags or environment variables.
+
+**API flags (cmd/server):**
+
+- `--otel-endpoint` (env: `BITRIVER_LIVE_OTEL_EXPORTER_OTLP_ENDPOINT`, or `OTEL_EXPORTER_OTLP_ENDPOINT`): OTLP HTTP endpoint.
+- `--otel-sample-ratio` (env: `BITRIVER_LIVE_OTEL_SAMPLE_RATIO`, or `OTEL_TRACES_SAMPLER_ARG`): sampling ratio (0.0–1.0).
+
+**Transcoder env vars (cmd/transcoder):**
+
+- `BITRIVER_LIVE_OTEL_EXPORTER_OTLP_ENDPOINT` (or `OTEL_EXPORTER_OTLP_ENDPOINT`)
+- `BITRIVER_LIVE_OTEL_SAMPLE_RATIO` (or `OTEL_TRACES_SAMPLER_ARG`)
+
+**Viewer QoE collection:**
+
+The viewer posts playback events to `POST /api/metrics/qoe` and increments the QoE counters above. Use the trace context
+header (`traceparent`) to correlate client-side playback with API spans when your proxy forwards headers end-to-end.
 
 ### Recommended alerts + thresholds
 
