@@ -1319,8 +1319,11 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 		}
 	}
 
-	if existing["BITRIVER_LIVE_ADMIN_EMAIL"] == "" || isForbiddenValue("BITRIVER_LIVE_ADMIN_EMAIL", existing["BITRIVER_LIVE_ADMIN_EMAIL"]) {
+	if current := strings.TrimSpace(existing["BITRIVER_LIVE_ADMIN_EMAIL"]); current == "" || isForbiddenValue("BITRIVER_LIVE_ADMIN_EMAIL", current) {
 		generated["BITRIVER_LIVE_ADMIN_EMAIL"] = defaultEnvSecrets.adminEmail
+		if current != "" {
+			existing["BITRIVER_LIVE_ADMIN_EMAIL"] = ""
+		}
 	}
 
 	return generated, newlyGenerated
