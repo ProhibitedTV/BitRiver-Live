@@ -35,7 +35,7 @@ Installer path (recommended for operators):
 bitriver-live
 ```
 
-The launcher keeps its assets under `/usr/local/share/bitriver-live` (macOS/Linux) or `Program Files\BitRiver Live` (Windows) and reuses `deploy/.env.example` from the installer bundle.
+The launcher keeps its assets under `/usr/local/share/bitriver-live` (macOS/Linux) or `Program Files\BitRiver Live` (Windows) and reuses `deploy/.env.example` from the installer bundle. On first run, the Windows launcher fills in `BITRIVER_REDIS_PASSWORD` (and keeps `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD` in sync) if the file still uses the sample placeholder so Docker Compose can interpolate the Redis credentials.
 
 ### Desktop/system-tray control panel
 
