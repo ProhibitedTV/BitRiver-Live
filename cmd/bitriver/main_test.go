@@ -107,6 +107,22 @@ func TestEnvInitWritesGeneratedValues(t *testing.T) {
 	}
 }
 
+func TestGenerateEnvValuesDefaultsOMEAccessToken(t *testing.T) {
+	generated, _ := generateEnvValues(map[string]string{})
+
+	apiToken := generated["BITRIVER_OME_API_TOKEN"]
+	accessToken := generated["BITRIVER_OME_ACCESS_TOKEN"]
+	if apiToken == "" {
+		t.Fatal("expected OME API token to be generated")
+	}
+	if accessToken == "" {
+		t.Fatal("expected OME access token to be generated")
+	}
+	if apiToken != accessToken {
+		t.Fatalf("expected OME access token to match API token, got %q and %q", accessToken, apiToken)
+	}
+}
+
 func TestEnvValidateFailsForMissingFile(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing.env")
 	if err := runEnvValidate([]string{"--env-file", missing}); err == nil {

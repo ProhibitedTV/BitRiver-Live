@@ -1301,7 +1301,8 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 	generated["BITRIVER_LIVE_MODE"] = firstNonEmpty(existing["BITRIVER_LIVE_MODE"], "development")
 	generated["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"] = defaultIfPlaceholder("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", existing, "http://localhost:9001/hls")
 	generated["NEXT_PUBLIC_VIEWER_URL"] = defaultIfPlaceholder("NEXT_PUBLIC_VIEWER_URL", existing, "http://localhost:8080/viewer")
-	generated["BITRIVER_OME_ACCESS_TOKEN"] = existing["BITRIVER_OME_ACCESS_TOKEN"]
+	accessTokenValue := strings.TrimSpace(existing["BITRIVER_OME_ACCESS_TOKEN"])
+	accessTokenProvided := accessTokenValue != "" && !isForbiddenValue("BITRIVER_OME_ACCESS_TOKEN", accessTokenValue)
 
 	for key := range defaultEnvSecrets.secrets {
 		current := strings.TrimSpace(existing[key])
@@ -1330,17 +1331,19 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 		existing["BITRIVER_OME_USERNAME"] = ""
 	}
 
-	if generated["BITRIVER_OME_ACCESS_TOKEN"] == "" {
-		if token := generated["BITRIVER_OME_API_TOKEN"]; token != "" {
-			generated["BITRIVER_OME_ACCESS_TOKEN"] = token
+	if !accessTokenProvided {
+		apiToken := strings.TrimSpace(existing["BITRIVER_OME_API_TOKEN"])
+		if apiToken == "" {
+			apiToken = generated["BITRIVER_OME_API_TOKEN"]
+		}
+		if apiToken != "" {
+			generated["BITRIVER_OME_ACCESS_TOKEN"] = apiToken
 			if _, ok := newlyGenerated["BITRIVER_OME_API_TOKEN"]; ok {
-				newlyGenerated["BITRIVER_OME_ACCESS_TOKEN"] = token
+				newlyGenerated["BITRIVER_OME_ACCESS_TOKEN"] = apiToken
+			} else {
+				delete(newlyGenerated, "BITRIVER_OME_ACCESS_TOKEN")
 			}
 		}
-	}
-
-	if v := existing["BITRIVER_OME_API_TOKEN"]; generated["BITRIVER_OME_ACCESS_TOKEN"] == "" && v != "" {
-		generated["BITRIVER_OME_ACCESS_TOKEN"] = v
 	}
 
 	if val := existing["BITRIVER_REDIS_PASSWORD"]; val != "" && !isForbiddenValue("BITRIVER_REDIS_PASSWORD", val) {
