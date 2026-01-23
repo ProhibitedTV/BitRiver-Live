@@ -33,6 +33,20 @@ with your OME credentials first—`ome-test-*` defaults are rejected and will ca
 Viewer self-registration is disabled by default so only administrators can add users. Toggle `BITRIVER_LIVE_ALLOW_SELF_SIGNUP`
 in `.env` and rerun `./deploy/check-env.sh` followed by `docker compose up -d` to reopen or close public signups.
 
+### OME healthcheck
+
+The OME service in `deploy/docker-compose.yml` uses a `curl`-based healthcheck that hits the control API inside the container
+(`http://localhost:8081/v1/health` with a fallback to `/healthz`), optionally adding the `AccessToken` header and basic auth
+based on `BITRIVER_OME_ACCESS_TOKEN` and `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD`. To run the same probe manually,
+execute it inside the container so it reuses the environment variables already injected by Compose:
+
+```bash
+docker compose exec ome sh -c 'curl -fsS http://localhost:8081/v1/health || curl -fsS http://localhost:8081/healthz'
+docker compose exec ome sh -c 'curl -fsS -H "AccessToken: $BITRIVER_OME_ACCESS_TOKEN" -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" http://localhost:8081/v1/health'
+```
+
+If either command returns 401, re-check the credentials rendered into `ome/Server.generated.xml` and the values in `.env`.
+
 ## Systemd installs
 For bare-metal or VM installs, start with the helpers in `deploy/install/`:
 
