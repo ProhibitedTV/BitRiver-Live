@@ -208,6 +208,7 @@ type envSecrets struct {
 var defaultEnvSecrets = envSecrets{
 	adminEmail: "admin@bitriver.local",
 	secrets: map[string]string{
+		"BITRIVER_LIVE_METRICS_TOKEN":             "",
 		"BITRIVER_POSTGRES_PASSWORD":              "",
 		"BITRIVER_REDIS_PASSWORD":                 "",
 		"BITRIVER_LIVE_ADMIN_PASSWORD":            "",
@@ -1233,6 +1234,10 @@ func generateEnvValues(existing map[string]string) map[string]string {
 		}
 	}
 
+	if current := existing["BITRIVER_OME_USERNAME"]; current == "" || isForbiddenValue("BITRIVER_OME_USERNAME", current) {
+		generated["BITRIVER_OME_USERNAME"] = fmt.Sprintf("ome-operator-%s", randomSuffix())
+	}
+
 	if v := existing["BITRIVER_OME_API_TOKEN"]; generated["BITRIVER_OME_ACCESS_TOKEN"] == "" && v != "" {
 		generated["BITRIVER_OME_ACCESS_TOKEN"] = v
 	}
@@ -1268,6 +1273,14 @@ func randomSecret() string {
 	b := make([]byte, 24)
 	if _, err := rand.Read(b); err != nil {
 		panic(fmt.Errorf("failed to generate secret: %w", err))
+	}
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+func randomSuffix() string {
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Errorf("failed to generate suffix: %w", err))
 	}
 	return base64.RawURLEncoding.EncodeToString(b)
 }
