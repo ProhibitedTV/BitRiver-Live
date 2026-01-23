@@ -308,6 +308,9 @@ func runEnvInit(args []string) error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+	if existingValues == nil {
+		existingValues = map[string]string{}
+	}
 
 	promptForAdminEmail(existingValues)
 
@@ -507,7 +510,11 @@ func runMigrations(composeFile, envFile string) error {
 		return err
 	}
 
-	args := append(composeArgsWithEnv(composeFile, envFile), "run", "--rm", "-T", "postgres-migrations")
+	args := append(composeArgsWithEnv(composeFile, envFile), "run", "--rm")
+	if !stdinIsTerminal() {
+		args = append(args, "-T")
+	}
+	args = append(args, "postgres-migrations")
 	return commandRunner("docker", args...)
 }
 

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -150,30 +151,60 @@ func TestEnvValidateBlocksPlaceholders(t *testing.T) {
 	}
 }
 
-func TestRunMigrationsDisablesTTY(t *testing.T) {
-	originalRunner := commandRunner
-	t.Cleanup(func() { commandRunner = originalRunner })
+func TestRunMigrationsAddsNoTTYForNonTerminalStdin(t *testing.T) {
+	tempDir := t.TempDir()
+	dockerName := "docker"
+	if runtime.GOOS == "windows" {
+		dockerName = "docker.exe"
+	}
+	dockerPath := filepath.Join(tempDir, dockerName)
+	if err := os.WriteFile(dockerPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("write docker stub: %v", err)
+	}
+	t.Setenv("PATH", tempDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	var gotName string
+	originalRunner := commandRunner
+	originalStdin := os.Stdin
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		os.Stdin = originalStdin
+	})
+
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = reader.Close()
+		_ = writer.Close()
+	})
+	os.Stdin = reader
+
 	var gotArgs []string
 	commandRunner = func(name string, args ...string) error {
-		gotName = name
-		gotArgs = args
+		gotArgs = append([]string{name}, args...)
 		return nil
 	}
 
-	composeFile := "compose.yml"
-	envFile := "env.local"
-	if err := runMigrations(composeFile, envFile); err != nil {
+	if err := runMigrations("compose.yml", "env"); err != nil {
 		t.Fatalf("run migrations: %v", err)
 	}
 
-	expected := []string{"compose", "--env-file", envFile, "--file", composeFile, "run", "--rm", "-T", "postgres-migrations"}
-	if !reflect.DeepEqual(gotArgs, expected) {
-		t.Fatalf("command args = %v, want %v", gotArgs, expected)
+	noTTYIndex := -1
+	serviceIndex := -1
+	for idx, arg := range gotArgs {
+		if arg == "-T" {
+			noTTYIndex = idx
+		}
+		if arg == "postgres-migrations" {
+			serviceIndex = idx
+		}
 	}
-	if gotName != "docker" {
-		t.Fatalf("command name = %s, want docker", gotName)
+	if noTTYIndex == -1 {
+		t.Fatalf("expected -T in args, got %v", gotArgs)
+	}
+	if serviceIndex == -1 || noTTYIndex > serviceIndex {
+		t.Fatalf("expected -T before service name, got %v", gotArgs)
 	}
 }
 
@@ -306,10 +337,13 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 		}
 		return nil
 	}
-	bootstrapAdminRunner = func(composeFile string, values map[string]string) error {
+	bootstrapAdminRunner = func(composeFile, envFile string, values map[string]string) error {
 		calls = append(calls, "bootstrap")
 		if composeFile != composePath {
 			t.Fatalf("bootstrap compose file = %s, want %s", composeFile, composePath)
+		}
+		if envFile != envPath {
+			t.Fatalf("bootstrap env file = %s, want %s", envFile, envPath)
 		}
 		if values["BITRIVER_LIVE_ADMIN_EMAIL"] != "admin@example.com" {
 			t.Fatalf("expected admin email to propagate, got %s", values["BITRIVER_LIVE_ADMIN_EMAIL"])
