@@ -4,6 +4,11 @@
   Delegates to the Go CLI for environment setup and stack startup.
 #>
 
+param(
+    [switch]$h,
+    [switch]$help
+)
+
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
@@ -25,11 +30,6 @@ function Ensure-Go {
         Write-Error "Go is required to run the BitRiver Live CLI. Install Go 1.21+ from https://go.dev/dl/ and ensure it is in your PATH."
     }
 }
-
-param(
-    [switch]$h,
-    [switch]$help
-)
 
 if ($h -or $help) {
     Show-Usage
