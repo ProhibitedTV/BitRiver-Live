@@ -16,6 +16,7 @@ import (
 // be persisted and later replayed into another backing store.
 type Snapshot struct {
 	Users               map[string]models.User          `json:"users"`
+	MFASettings         map[string]models.MFASettings   `json:"mfaSettings"`
 	OAuthAccounts       map[string]models.OAuthAccount  `json:"oauthAccounts"`
 	Channels            map[string]models.Channel       `json:"channels"`
 	StreamSessions      map[string]models.StreamSession `json:"streamSessions"`
@@ -41,6 +42,7 @@ type Snapshot struct {
 // help operators understand how much data will be serialised and imported.
 type SnapshotCounts struct {
 	Users                  int
+	MFASettings            int
 	OAuthAccounts          int
 	Channels               int
 	StreamSessions         int
@@ -88,6 +90,9 @@ func LoadSnapshotFromJSON(path string) (*Snapshot, error) {
 func (s *Snapshot) ensureInitialized() {
 	if s.Users == nil {
 		s.Users = make(map[string]models.User)
+	}
+	if s.MFASettings == nil {
+		s.MFASettings = make(map[string]models.MFASettings)
 	}
 	if s.OAuthAccounts == nil {
 		s.OAuthAccounts = make(map[string]models.OAuthAccount)
@@ -156,6 +161,7 @@ func (s *Snapshot) Counts() SnapshotCounts {
 	}
 	counts := SnapshotCounts{
 		Users:          len(s.Users),
+		MFASettings:    len(s.MFASettings),
 		OAuthAccounts:  len(s.OAuthAccounts),
 		Channels:       len(s.Channels),
 		StreamSessions: len(s.StreamSessions),

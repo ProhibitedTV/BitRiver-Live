@@ -50,6 +50,7 @@ var (
 
 type dataset struct {
 	Users               map[string]models.User          `json:"users"`
+	MFASettings         map[string]models.MFASettings   `json:"mfaSettings"`
 	OAuthAccounts       map[string]models.OAuthAccount  `json:"oauthAccounts"`
 	Channels            map[string]models.Channel       `json:"channels"`
 	StreamSessions      map[string]models.StreamSession `json:"streamSessions"`

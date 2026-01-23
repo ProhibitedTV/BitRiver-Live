@@ -1,8 +1,13 @@
 const signupForm = document.getElementById("signup-form");
 const loginForm = document.getElementById("login-form");
 const feedback = document.getElementById("auth-feedback");
+const mfaStep = document.getElementById("mfa-step");
+const mfaForm = document.getElementById("mfa-form");
+const mfaEnrollment = document.getElementById("mfa-enrollment");
+const mfaRecoveryCodes = document.getElementById("mfa-recovery-codes");
 const DEFAULT_DESTINATION = "/viewer";
 const REDIRECT_DELAY_MS = 600;
+let pendingMFAToken = null;
 
 function isSafeOnsitePath(candidate) {
     if (!candidate || typeof candidate !== "string") {
@@ -47,6 +52,42 @@ function clearFeedback() {
     feedback.classList.remove("error");
 }
 
+function showMFA(stepVisible) {
+    if (!mfaStep) {
+        return;
+    }
+    mfaStep.hidden = !stepVisible;
+}
+
+function renderEnrollment(enrollment) {
+    if (!mfaEnrollment) {
+        return;
+    }
+    if (!enrollment) {
+        mfaEnrollment.hidden = true;
+        return;
+    }
+    mfaEnrollment.hidden = false;
+    const secretInput = mfaEnrollment.querySelector('input[name="secret"]');
+    const urlInput = mfaEnrollment.querySelector('input[name="otpauthUrl"]');
+    if (secretInput) {
+        secretInput.value = enrollment.secret || "";
+    }
+    if (urlInput) {
+        urlInput.value = enrollment.otpauthUrl || "";
+    }
+    if (mfaRecoveryCodes) {
+        mfaRecoveryCodes.innerHTML = "";
+        if (Array.isArray(enrollment.recoveryCodes)) {
+            enrollment.recoveryCodes.forEach((code) => {
+                const li = document.createElement("li");
+                li.textContent = code;
+                mfaRecoveryCodes.appendChild(li);
+            });
+        }
+    }
+}
+
 async function requestAuth(path, payload) {
     const response = await fetch(path, {
         method: "POST",
@@ -59,6 +100,15 @@ async function requestAuth(path, payload) {
         throw new Error(data.error || response.statusText);
     }
     return response.json();
+}
+
+async function handleMFAEnrollment(token) {
+    try {
+        const enrollment = await requestAuth("/api/auth/mfa/enroll", { token });
+        renderEnrollment(enrollment);
+    } catch (error) {
+        showFeedback(error.message, "error");
+    }
 }
 
 if (signupForm) {
@@ -87,7 +137,14 @@ if (loginForm) {
         const form = event.currentTarget;
         const data = Object.fromEntries(new FormData(form).entries());
         try {
-            await requestAuth("/api/auth/login", data);
+            const response = await requestAuth("/api/auth/login", data);
+            if (response.mfaRequired) {
+                pendingMFAToken = response.mfaToken;
+                renderEnrollment(response.enrollment);
+                showMFA(true);
+                showFeedback("MFA required. Enter the verification code to continue.");
+                return;
+            }
             showFeedback("Signed in! Redirecting you now.");
             window.setTimeout(() => {
                 window.location.assign(destination);
@@ -96,4 +153,35 @@ if (loginForm) {
             showFeedback(error.message, "error");
         }
     });
+}
+
+if (mfaForm) {
+    mfaForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        clearFeedback();
+        const form = event.currentTarget;
+        const data = Object.fromEntries(new FormData(form).entries());
+        if (pendingMFAToken) {
+            data.token = pendingMFAToken;
+        }
+        try {
+            await requestAuth("/api/auth/mfa/verify", data);
+            showFeedback("Verified! Redirecting you now.");
+            window.setTimeout(() => {
+                window.location.assign(destination);
+            }, REDIRECT_DELAY_MS);
+        } catch (error) {
+            showFeedback(error.message, "error");
+        }
+    });
+}
+
+const params = new URLSearchParams(window.location.search);
+const mfaToken = params.get("mfaToken");
+if (mfaToken) {
+    pendingMFAToken = mfaToken;
+    showMFA(true);
+    if (params.get("mfa") === "enroll") {
+        handleMFAEnrollment(mfaToken);
+    }
 }

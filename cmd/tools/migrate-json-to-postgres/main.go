@@ -81,6 +81,7 @@ func verifyCounts(ctx context.Context, dsn string, counts storage.SnapshotCounts
 		expected int
 	}{
 		{"users", "SELECT COUNT(*) FROM users", counts.Users},
+		{"auth_mfa", "SELECT COUNT(*) FROM auth_mfa", counts.MFASettings},
 		{"profiles", "SELECT COUNT(*) FROM profiles", counts.Profiles},
 		{"channels", "SELECT COUNT(*) FROM channels", counts.Channels},
 		{"follows", "SELECT COUNT(*) FROM follows", counts.Follows},

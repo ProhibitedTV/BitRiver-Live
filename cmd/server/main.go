@@ -388,13 +388,16 @@ func main() {
 	sessionConfig.IdleTimeout = sessionIdleTimeoutValue
 
 	var (
-		sessionStore  auth.SessionStore
-		sessionCloser func(context.Context) error
+		sessionStore      auth.SessionStore
+		sessionCloser     func(context.Context) error
+		mfaChallengeStore auth.MFAChallengeStore
+		mfaCloser         func(context.Context) error
 	)
 
 	switch sessionConfig.Driver {
 	case "memory":
 		sessionStore = auth.NewMemorySessionStore()
+		mfaChallengeStore = auth.NewMemoryMFAChallengeStore()
 	case "postgres":
 		pgStore, err := auth.NewPostgresSessionStore(sessionConfig.DSN, auth.WithTimeout(datastoreAcquireTimeout))
 		if err != nil {
@@ -403,6 +406,13 @@ func main() {
 		}
 		sessionStore = pgStore
 		sessionCloser = func(ctx context.Context) error { return pgStore.Close(ctx) }
+		mfaStore, err := auth.NewPostgresMFAChallengeStore(sessionConfig.DSN, auth.WithMFAChallengeTimeout(datastoreAcquireTimeout))
+		if err != nil {
+			logger.Error("failed to open mfa challenge store", "error", err)
+			os.Exit(1)
+		}
+		mfaCloser = func(ctx context.Context) error { return mfaStore.Close(ctx) }
+		mfaChallengeStore = mfaStore
 	default:
 		logger.Error("unsupported session store driver", "driver", sessionConfig.Driver)
 		os.Exit(1)
@@ -413,6 +423,7 @@ func main() {
 		sessionOptions = append(sessionOptions, auth.WithIdleTimeout(sessionIdleTimeoutValue))
 	}
 	sessions := auth.NewSessionManager(sessionAbsoluteTTL, sessionOptions...)
+	mfaChallenges := auth.NewMFAChallengeManager(0, auth.WithMFAChallengeStore(mfaChallengeStore))
 	chatQueueCfg := chat.RedisQueueConfig{
 		Addr:       firstNonEmpty(*chatRedisAddr, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR")),
 		Addrs:      splitAndTrim(firstNonEmpty(*chatRedisAddrs, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDRS"))),
@@ -443,6 +454,7 @@ func main() {
 	})
 	restartChan := make(chan struct{}, 1)
 	handler := api.NewHandler(store, sessions)
+	handler.MFAChallenges = mfaChallenges
 	handler.AllowSelfSignup = allowSelfSignupValue
 	handler.ChatGateway = gateway
 	handler.Setup = newSetupManager(envFilePath, restartChan)
@@ -609,6 +621,20 @@ func main() {
 	} else if closer, ok := sessionStore.(interface{ Close() error }); ok {
 		if err := closer.Close(); err != nil {
 			logger.Warn("failed to close session store", "error", err)
+		}
+	}
+
+	if mfaCloser != nil {
+		if err := mfaCloser(ctx); err != nil {
+			logger.Warn("failed to close mfa challenge store", "error", err)
+		}
+	} else if closer, ok := mfaChallengeStore.(interface{ Close(context.Context) error }); ok {
+		if err := closer.Close(ctx); err != nil {
+			logger.Warn("failed to close mfa challenge store", "error", err)
+		}
+	} else if closer, ok := mfaChallengeStore.(interface{ Close() error }); ok {
+		if err := closer.Close(); err != nil {
+			logger.Warn("failed to close mfa challenge store", "error", err)
 		}
 	}
 

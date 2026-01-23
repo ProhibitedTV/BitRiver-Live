@@ -19,7 +19,7 @@ func TestAuthSessionLifecycle(t *testing.T) {
 	sessions := auth.NewSessionManager(30*time.Minute, auth.WithStore(sessionStore))
 	handler := NewHandler(store, sessions)
 
-	user, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Admin", Email: "admin@example.com", Password: "password123", Roles: []string{"admin"}})
+	user, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Admin", Email: "admin@example.com", Password: "password123", Roles: []string{"viewer"}})
 	if err != nil {
 		t.Fatalf("failed to create user: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestAuthSessionIdleRefresh(t *testing.T) {
 	sessions := auth.NewSessionManager(10*time.Second, auth.WithStore(sessionStore), auth.WithIdleTimeout(2*time.Second))
 	handler := NewHandler(store, sessions)
 
-	_, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Admin", Email: "admin@example.com", Password: "password123", Roles: []string{"admin"}})
+	_, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Admin", Email: "admin@example.com", Password: "password123", Roles: []string{"viewer"}})
 	if err != nil {
 		t.Fatalf("failed to create user: %v", err)
 	}
