@@ -150,6 +150,33 @@ func TestEnvValidateBlocksPlaceholders(t *testing.T) {
 	}
 }
 
+func TestRunMigrationsDisablesTTY(t *testing.T) {
+	originalRunner := commandRunner
+	t.Cleanup(func() { commandRunner = originalRunner })
+
+	var gotName string
+	var gotArgs []string
+	commandRunner = func(name string, args ...string) error {
+		gotName = name
+		gotArgs = args
+		return nil
+	}
+
+	composeFile := "compose.yml"
+	envFile := "env.local"
+	if err := runMigrations(composeFile, envFile); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+
+	expected := []string{"compose", "--env-file", envFile, "--file", composeFile, "run", "--rm", "-T", "postgres-migrations"}
+	if !reflect.DeepEqual(gotArgs, expected) {
+		t.Fatalf("command args = %v, want %v", gotArgs, expected)
+	}
+	if gotName != "docker" {
+		t.Fatalf("command name = %s, want docker", gotName)
+	}
+}
+
 func TestValidateEnvRequiresMetricsProtectionInProduction(t *testing.T) {
 	values := buildValidProductionEnv(t)
 	values["BITRIVER_LIVE_METRICS_TOKEN"] = ""

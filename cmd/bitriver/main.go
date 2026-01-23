@@ -507,7 +507,7 @@ func runMigrations(composeFile, envFile string) error {
 		return err
 	}
 
-	args := append(composeArgsWithEnv(composeFile, envFile), "run", "--rm", "postgres-migrations")
+	args := append(composeArgsWithEnv(composeFile, envFile), "run", "--rm", "-T", "postgres-migrations")
 	return commandRunner("docker", args...)
 }
 
