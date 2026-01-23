@@ -24,6 +24,9 @@ type Repository interface {
 	UpdateUser(id string, update UserUpdate) (models.User, error)
 	SetUserPassword(id, password string) (models.User, error)
 	DeleteUser(id string) error
+	GetMFASettings(userID string) (models.MFASettings, bool, error)
+	UpsertMFASettings(settings models.MFASettings) (models.MFASettings, error)
+	DeleteMFASettings(userID string) error
 
 	UpsertProfile(userID string, update ProfileUpdate) (models.Profile, error)
 	GetProfile(userID string) (models.Profile, bool)

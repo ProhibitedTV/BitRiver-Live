@@ -21,6 +21,7 @@ const state = {
     analytics: { summary: null, perChannel: [] },
     uploads: new Map(),
     statusReport: null,
+    mfaStatus: null,
 };
 
 let moderationLoaded = false;
@@ -354,6 +355,132 @@ function renderAccountStatus() {
             accountName.textContent = "";
         }
     }
+}
+
+async function loadMFAStatus() {
+    try {
+        const status = await apiRequest("/api/auth/mfa");
+        state.mfaStatus = status;
+    } catch (error) {
+        console.warn("Failed to load MFA status", error);
+        state.mfaStatus = null;
+    }
+    renderMFASettings();
+}
+
+function renderMFASettings() {
+    const container = document.getElementById("mfa-settings");
+    if (!container) {
+        return;
+    }
+    clearElement(container);
+    const template = document.getElementById("mfa-settings-template");
+    if (!template) {
+        return;
+    }
+    container.appendChild(template.content.cloneNode(true));
+    const statusText = container.querySelector("#mfa-status-text");
+    const recoveryHint = container.querySelector("#mfa-recovery-hint");
+    const actionButton = container.querySelector("#mfa-action-button");
+    const status = state.mfaStatus;
+    if (!statusText || !recoveryHint || !actionButton) {
+        return;
+    }
+    if (!status) {
+        statusText.textContent = "MFA status is unavailable.";
+        recoveryHint.textContent = "";
+        actionButton.disabled = true;
+        return;
+    }
+    if (status.enabled) {
+        statusText.textContent = "MFA is enabled for your account.";
+        recoveryHint.textContent = `Recovery codes remaining: ${status.recoveryCodesRemaining ?? 0}.`;
+        actionButton.textContent = "Disable MFA";
+        actionButton.addEventListener("click", () => openDisableMFA());
+    } else {
+        statusText.textContent = status.pending
+            ? "MFA enrollment is pending verification."
+            : "MFA is not enabled for your account.";
+        recoveryHint.textContent = status.pending
+            ? "Complete setup by verifying a code from your authenticator app."
+            : "Enable MFA to protect privileged access.";
+        actionButton.textContent = status.pending ? "Verify MFA" : "Enable MFA";
+        actionButton.addEventListener("click", () => openEnrollMFA());
+    }
+}
+
+function renderRecoveryCodes(container, codes) {
+    if (!container) {
+        return;
+    }
+    clearElement(container);
+    if (!Array.isArray(codes)) {
+        return;
+    }
+    for (const code of codes) {
+        const item = createElement("li", { textContent: code });
+        container.appendChild(item);
+    }
+}
+
+function openEnrollMFA() {
+    openModal("Enable multi-factor authentication", "mfa-enroll-template", {
+        confirmLabel: "Verify",
+        onOpen: async (form) => {
+            if (!form) {
+                return;
+            }
+            const secretInput = form.querySelector('input[name="secret"]');
+            const urlInput = form.querySelector('input[name="otpauthUrl"]');
+            const recoveryList = form.querySelector("#mfa-recovery-codes");
+            if (secretInput) {
+                secretInput.value = "Loading...";
+            }
+            if (urlInput) {
+                urlInput.value = "Loading...";
+            }
+            try {
+                const enrollment = await apiRequest("/api/auth/mfa/enroll", { method: "POST", body: JSON.stringify({}) });
+                if (secretInput) {
+                    secretInput.value = enrollment.secret || "";
+                }
+                if (urlInput) {
+                    urlInput.value = enrollment.otpauthUrl || "";
+                }
+                renderRecoveryCodes(recoveryList, enrollment.recoveryCodes || []);
+            } catch (error) {
+                showToast(error.message, "error");
+                if (secretInput) {
+                    secretInput.value = "";
+                }
+                if (urlInput) {
+                    urlInput.value = "";
+                }
+            }
+        },
+        onSubmit: async (values) => {
+            await apiRequest("/api/auth/mfa/verify", {
+                method: "POST",
+                body: JSON.stringify({ code: values.code }),
+            });
+            await loadMFAStatus();
+            showToast("MFA enabled", "info");
+        },
+    });
+}
+
+function openDisableMFA() {
+    openModal("Disable multi-factor authentication", "mfa-disable-template", {
+        confirmLabel: "Disable",
+        onSubmit: async (values) => {
+            await apiRequest("/api/auth/mfa/disable", {
+                method: "POST",
+                body: JSON.stringify({ code: values.code }),
+            });
+            await loadMFAStatus();
+            showToast("MFA disabled", "info");
+        },
+    });
 }
 
 async function handleSignOut() {
@@ -2683,6 +2810,7 @@ async function refreshAll() {
         loadProfiles(),
         loadModeration(true),
         loadAnalytics(true),
+        loadMFAStatus(),
     ]);
 }
 
@@ -2720,6 +2848,7 @@ async function initialize() {
     initChatClient();
     renderAccountStatus();
     attachActions();
+    await loadMFAStatus();
     renderSetupWizard();
     setupInstaller();
     await refreshAll();

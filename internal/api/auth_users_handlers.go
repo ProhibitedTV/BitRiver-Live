@@ -73,6 +73,39 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	settings, exists, requiresMFA, err := h.mfaRequirement(user)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if requiresMFA {
+		token, expiresAt, err := h.mfaChallengeManager().Create(user.ID)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, err)
+			return
+		}
+		var enrollment *mfaEnrollmentResponse
+		if !exists || !settings.Enabled {
+			enrollResp, updated, err := h.prepareMFAEnrollment(user)
+			if err != nil {
+				WriteError(w, http.StatusInternalServerError, err)
+				return
+			}
+			if _, err := h.Store.UpsertMFASettings(updated); err != nil {
+				WriteError(w, http.StatusInternalServerError, err)
+				return
+			}
+			enrollment = &enrollResp
+		}
+		WriteJSON(w, http.StatusOK, mfaChallengeResponse{
+			MFARequired: true,
+			MFAToken:    token,
+			MFAExpires:  expiresAt.Format(time.RFC3339Nano),
+			Enrollment:  enrollment,
+		})
+		return
+	}
+
 	token, expiresAt, err := h.sessionManager().Create(user.ID)
 	if err != nil {
 		WriteRequestError(w, err)
@@ -195,6 +228,23 @@ func (h *Handler) oauthCallback(w http.ResponseWriter, r *http.Request, provider
 		return
 	}
 
+	settings, exists, requiresMFA, err := h.mfaRequirement(user)
+	if err != nil {
+		http.Redirect(w, r, appendQueryParam(returnPath, "oauth", "error"), http.StatusSeeOther)
+		return
+	}
+	if requiresMFA {
+		token, _, err := h.mfaChallengeManager().Create(user.ID)
+		if err != nil {
+			http.Redirect(w, r, appendQueryParam(returnPath, "oauth", "error"), http.StatusSeeOther)
+			return
+		}
+		requiresEnrollment := !exists || !settings.Enabled
+		redirectTarget := buildMFARedirect(returnPath, token, requiresEnrollment)
+		http.Redirect(w, r, redirectTarget, http.StatusSeeOther)
+		return
+	}
+
 	token, expiresAt, err := h.sessionManager().Create(user.ID)
 	if err != nil {
 		http.Redirect(w, r, appendQueryParam(returnPath, "oauth", "error"), http.StatusSeeOther)
@@ -247,6 +297,27 @@ func appendQueryParam(path, key, value string) string {
 		parsed.Path = "/"
 	}
 	return parsed.String()
+}
+
+func buildMFARedirect(returnPath, token string, enroll bool) string {
+	destination := "/signup"
+	values := url.Values{}
+	if returnPath != "" {
+		values.Set("next", returnPath)
+	}
+	if token != "" {
+		values.Set("mfaToken", token)
+	}
+	if enroll {
+		values.Set("mfa", "enroll")
+	} else {
+		values.Set("mfa", "verify")
+	}
+	encoded := values.Encode()
+	if encoded == "" {
+		return destination
+	}
+	return destination + "?" + encoded
 }
 
 func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {

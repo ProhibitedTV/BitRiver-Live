@@ -20,6 +20,9 @@ Recent schema changes to account for:
 - `0006_profile_social_links.sql` adds a `social_links` JSONB column to
   `profiles` so broadcasters can surface their external accounts. Ensure this
   migration is applied during rollout.
+- `0007_auth_mfa.sql` adds `auth_mfa` and `auth_mfa_challenges` for TOTP-based
+  MFA. Apply the migration before you promote new admin/creator logins so
+  privileged accounts can complete MFA verification.
 
 For the upgrade mechanics around schema migrations, safe Compose sequencing, `.env` changes, and OvenMediaEngine config regeneration, follow the upgrade essentials in [`docs/upgrades.md`](upgrades.md#upgrade-essentials-migrations-env-updates-and-ome-re-render).
 

@@ -24,6 +24,7 @@ import (
 type Handler struct {
 	Store                 storage.Repository
 	Sessions              *auth.SessionManager
+	MFAChallenges         *auth.MFAChallengeManager
 	ChatGateway           *chat.Gateway
 	OAuth                 oauth.Service
 	UploadProcessor       *UploadProcessor
@@ -58,6 +59,7 @@ func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handle
 	return &Handler{
 		Store:               store,
 		Sessions:            sessions,
+		MFAChallenges:       auth.NewMFAChallengeManager(0),
 		DefaultRenditions:   []string{"1080p", "720p", "480p"},
 		AllowSelfSignup:     true,
 		SessionCookiePolicy: DefaultSessionCookiePolicy(),
@@ -70,6 +72,13 @@ func (h *Handler) sessionManager() *auth.SessionManager {
 		h.Sessions = auth.NewSessionManager(0)
 	}
 	return h.Sessions
+}
+
+func (h *Handler) mfaChallengeManager() *auth.MFAChallengeManager {
+	if h.MFAChallenges == nil {
+		h.MFAChallenges = auth.NewMFAChallengeManager(0)
+	}
+	return h.MFAChallenges
 }
 
 func (h *Handler) logger() *slog.Logger {

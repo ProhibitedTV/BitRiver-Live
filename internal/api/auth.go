@@ -103,6 +103,17 @@ func (h *Handler) requireRole(w http.ResponseWriter, r *http.Request, roles ...s
 	return user, true
 }
 
+// requireSessionUser validates the session token on the request and returns
+// the authenticated user.
+func (h *Handler) requireSessionUser(w http.ResponseWriter, r *http.Request) (models.User, bool) {
+	user, _, err := h.AuthenticateRequest(r)
+	if err != nil {
+		WriteError(w, http.StatusUnauthorized, err)
+		return models.User{}, false
+	}
+	return user, true
+}
+
 // userHasAnyRole reports whether the user has at least one of the provided
 // roles. If roles is empty, it returns true.
 func userHasAnyRole(user models.User, roles ...string) bool {

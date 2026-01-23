@@ -42,6 +42,29 @@
                 </label>
                 <button type="submit" class="secondary">Sign in</button>
             </form>
+            <div id="mfa-step" class="auth-mfa" hidden>
+                <p class="auth-mfa__intro">Enter the code from your authenticator app or a recovery code.</p>
+                <form id="mfa-form" class="auth-form">
+                    <label>
+                        Verification code
+                        <input type="text" name="code" autocomplete="one-time-code" required />
+                    </label>
+                    <button type="submit" class="primary">Verify</button>
+                </form>
+                <div id="mfa-enrollment" class="auth-mfa__enrollment" hidden>
+                    <h3>Set up MFA</h3>
+                    <p>Save your recovery codes and add the secret to your authenticator app.</p>
+                    <label>
+                        MFA secret
+                        <input type="text" name="secret" readonly />
+                    </label>
+                    <label>
+                        Otpauth URL
+                        <input type="text" name="otpauthUrl" readonly />
+                    </label>
+                    <ul class="mfa-recovery-codes" id="mfa-recovery-codes"></ul>
+                </div>
+            </div>
         </section>
         <div id="auth-feedback" class="auth-feedback" hidden></div>
     </main>

@@ -28,6 +28,9 @@ func (r *postgresRepository) importSnapshot(ctx context.Context, snapshot *Snaps
 		if err := r.importSnapshotUsers(ctx, tx, snapshot.Users); err != nil {
 			return err
 		}
+		if err := r.importSnapshotMFA(ctx, tx, snapshot.MFASettings); err != nil {
+			return err
+		}
 		if err := r.importSnapshotProfiles(ctx, tx, snapshot.Profiles); err != nil {
 			return err
 		}
@@ -103,6 +106,57 @@ func (r *postgresRepository) importSnapshotUsers(ctx context.Context, tx pgx.Tx,
 		_, err := tx.Exec(ctx, "INSERT INTO users (id, display_name, email, roles, password_hash, self_signup, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO NOTHING", id, strings.TrimSpace(user.DisplayName), strings.TrimSpace(user.Email), roles, strings.TrimSpace(user.PasswordHash), user.SelfSignup, createdAt)
 		if err != nil {
 			return fmt.Errorf("insert user %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
+func (r *postgresRepository) importSnapshotMFA(ctx context.Context, tx pgx.Tx, settings map[string]models.MFASettings) error {
+	if len(settings) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(settings))
+	for id := range settings {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, userID := range ids {
+		setting := settings[userID]
+		id := strings.TrimSpace(setting.UserID)
+		if id == "" {
+			id = userID
+		}
+		createdAt := setting.CreatedAt
+		if createdAt.IsZero() {
+			createdAt = time.Now().UTC()
+		} else {
+			createdAt = createdAt.UTC()
+		}
+		updatedAt := setting.UpdatedAt
+		if updatedAt.IsZero() {
+			updatedAt = createdAt
+		} else {
+			updatedAt = updatedAt.UTC()
+		}
+		var enabledAt any
+		if setting.EnabledAt != nil && !setting.EnabledAt.IsZero() {
+			enabledAt = setting.EnabledAt.UTC()
+		}
+		var lastUsedAt any
+		if setting.LastUsedAt != nil && !setting.LastUsedAt.IsZero() {
+			lastUsedAt = setting.LastUsedAt.UTC()
+		}
+		recoveryCodes := append([]string(nil), setting.RecoveryCodes...)
+		if recoveryCodes == nil {
+			recoveryCodes = []string{}
+		}
+		_, err := tx.Exec(ctx, `
+INSERT INTO auth_mfa (user_id, secret, recovery_codes, enabled, created_at, updated_at, enabled_at, last_used_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (user_id) DO NOTHING
+`, id, strings.TrimSpace(setting.Secret), recoveryCodes, setting.Enabled, createdAt, updatedAt, enabledAt, lastUsedAt)
+		if err != nil {
+			return fmt.Errorf("insert mfa settings %s: %w", id, err)
 		}
 	}
 	return nil

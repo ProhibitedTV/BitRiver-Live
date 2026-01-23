@@ -184,6 +184,8 @@
         </section>
 
         <section id="settings" class="panel">
+            <h2>Security</h2>
+            <div id="mfa-settings"></div>
             <h2>Setup wizard</h2>
             <p>Capture production-ready values, write them to your environment file, and trigger a safe restart.</p>
             <div id="setup-wizard"></div>
@@ -205,6 +207,52 @@
             </menu>
         </form>
     </dialog>
+
+    <template id="mfa-settings-template">
+        <section class="card mfa-settings">
+            <header class="card__header">
+                <div>
+                    <h3>Multi-factor authentication</h3>
+                    <p class="card__meta">Add a second factor to protect privileged accounts.</p>
+                </div>
+                <button type="button" class="primary" id="mfa-action-button">Enable MFA</button>
+            </header>
+            <p class="mfa-settings__status" id="mfa-status-text"></p>
+            <p class="card__meta" id="mfa-recovery-hint"></p>
+        </section>
+    </template>
+
+    <template id="mfa-enroll-template">
+        <div class="stack">
+            <p>Scan the secret in your authenticator app, then enter the six digit code to confirm.</p>
+            <label>
+                MFA secret
+                <input type="text" name="secret" readonly />
+            </label>
+            <label>
+                Otpauth URL
+                <input type="text" name="otpauthUrl" readonly />
+            </label>
+            <div class="stack">
+                <p class="card__meta">Save your recovery codes somewhere safe.</p>
+                <ul class="mfa-recovery-codes" id="mfa-recovery-codes"></ul>
+            </div>
+            <label>
+                Verification code
+                <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" required />
+            </label>
+        </div>
+    </template>
+
+    <template id="mfa-disable-template">
+        <div class="stack">
+            <p>Enter a current MFA or recovery code to disable multi-factor authentication.</p>
+            <label>
+                Code
+                <input type="text" name="code" autocomplete="one-time-code" required />
+            </label>
+        </div>
+    </template>
 
     <template id="setup-wizard-template">
         <section class="card setup-wizard">

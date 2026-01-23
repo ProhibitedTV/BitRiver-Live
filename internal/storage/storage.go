@@ -26,6 +26,7 @@ func (s *Storage) Ping(context.Context) error {
 func newDataset() dataset {
 	ds := dataset{
 		Users:          make(map[string]models.User),
+		MFASettings:    make(map[string]models.MFASettings),
 		OAuthAccounts:  make(map[string]models.OAuthAccount),
 		Channels:       make(map[string]models.Channel),
 		StreamSessions: make(map[string]models.StreamSession),
@@ -43,6 +44,9 @@ func newDataset() dataset {
 func (s *Storage) ensureDatasetInitializedLocked() {
 	if s.data.Users == nil {
 		s.data.Users = make(map[string]models.User)
+	}
+	if s.data.MFASettings == nil {
+		s.data.MFASettings = make(map[string]models.MFASettings)
 	}
 	if s.data.OAuthAccounts == nil {
 		s.data.OAuthAccounts = make(map[string]models.OAuthAccount)
@@ -346,6 +350,25 @@ func cloneDataset(src dataset) dataset {
 				cloned.Roles = append([]string(nil), user.Roles...)
 			}
 			clone.Users[id] = cloned
+		}
+	}
+
+	if src.MFASettings != nil {
+		clone.MFASettings = make(map[string]models.MFASettings, len(src.MFASettings))
+		for userID, settings := range src.MFASettings {
+			cloned := settings
+			if settings.RecoveryCodes != nil {
+				cloned.RecoveryCodes = append([]string(nil), settings.RecoveryCodes...)
+			}
+			if settings.EnabledAt != nil {
+				enabledAt := *settings.EnabledAt
+				cloned.EnabledAt = &enabledAt
+			}
+			if settings.LastUsedAt != nil {
+				lastUsed := *settings.LastUsedAt
+				cloned.LastUsedAt = &lastUsed
+			}
+			clone.MFASettings[userID] = cloned
 		}
 	}
 
@@ -733,6 +756,7 @@ func (s *Storage) DeleteUser(id string) error {
 	}
 
 	delete(updatedData.Users, id)
+	delete(updatedData.MFASettings, id)
 	delete(updatedData.Profiles, id)
 	delete(updatedData.Follows, id)
 

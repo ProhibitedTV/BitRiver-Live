@@ -149,6 +149,17 @@ type User struct {
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
+type MFASettings struct {
+	UserID        string     `json:"userId"`
+	Secret        string     `json:"secret"`
+	RecoveryCodes []string   `json:"recoveryCodes"`
+	Enabled       bool       `json:"enabled"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+	EnabledAt     *time.Time `json:"enabledAt,omitempty"`
+	LastUsedAt    *time.Time `json:"lastUsedAt,omitempty"`
+}
+
 // HasRole reports whether the user has the provided role, ignoring case.
 func (u User) HasRole(role string) bool {
 	for _, existing := range u.Roles {
