@@ -41,13 +41,13 @@ Ensure-Go
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $RepoRoot = Resolve-Path "$ScriptDir/.."
 function Invoke-Cli {
-    param([string[]]$Args)
+    param([string[]]$CliArgs)
     pushd $RepoRoot | Out-Null
     try {
         $env:GOTOOLCHAIN = 'local'
         $env:GOPROXY = 'off'
         $env:GOSUMDB = 'off'
-        go run ./cmd/bitriver @Args
+        go run ./cmd/bitriver @CliArgs
     } finally {
         popd | Out-Null
         Remove-Item Env:GOTOOLCHAIN -ErrorAction SilentlyContinue
@@ -68,10 +68,10 @@ Write-Output 'Running environment doctor ...'
 Invoke-Cli -Args @('doctor')
 
 Write-Output 'Initializing environment file via Go CLI ...'
-Invoke-Cli -Args @('env', 'init') + $envArgs
+Invoke-Cli -Args (@('env', 'init') + $envArgs)
 
 Write-Output 'Rendering OME configuration ...'
-Invoke-Cli -Args @('ome', 'render') + $envArgs
+Invoke-Cli -Args (@('ome', 'render') + $envArgs)
 
 Write-Output 'Starting Docker Compose ...'
-Invoke-Cli -Args @('compose') + $composeArgs
+Invoke-Cli -Args (@('compose') + $composeArgs)
