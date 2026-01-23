@@ -192,6 +192,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	mux.HandleFunc("/api/uploads/", handler.UploadByID)
 	mux.HandleFunc("/api/moderation/queue", handler.ModerationQueue)
 	mux.HandleFunc("/api/moderation/queue/", handler.ModerationQueueByID)
+	mux.HandleFunc("/api/moderation/automod", handler.ModerationAutoMod)
 	mux.HandleFunc("/api/analytics/overview", handler.AnalyticsOverview)
 	mux.HandleFunc("/api/setup", handler.SetupWizard)
 	mux.HandleFunc("/api/ingest/srs-hook", handler.SRSHook)

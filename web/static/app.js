@@ -17,7 +17,7 @@ const state = {
     selectedProfileId: null,
     currentUser: null,
     chatClient: null,
-    moderation: { queue: [], actions: [] },
+    moderation: { queue: [], actions: [], automod: [], filters: {} },
     analytics: { summary: null, perChannel: [] },
     uploads: new Map(),
     statusReport: null,
@@ -136,6 +136,11 @@ function handleChatEvent(event) {
         const target = event.moderation.targetId;
         showToast(`Moderation ${action} for ${target}`, "info");
     }
+    if (event.type === "automod" && event.automod) {
+        const target = event.automod.userId || "unknown user";
+        showToast(`Automod blocked a message from ${target}`, "warning");
+        moderationLoaded = false;
+    }
 }
 
 async function sendChatMessage(channelId, userId, content) {
@@ -178,6 +183,32 @@ async function sendModerationAction(channelId, action, targetId, durationMs = 0)
         method: "POST",
         body: JSON.stringify({ action, targetId, durationMs }),
     });
+}
+
+async function createChatFilter(channelId, payload) {
+    await apiRequest(`/api/channels/${channelId}/chat/moderation/filters`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+    });
+    moderationLoaded = false;
+    await loadModeration(true);
+}
+
+async function updateChatFilter(channelId, filterId, payload) {
+    await apiRequest(`/api/channels/${channelId}/chat/moderation/filters/${filterId}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+    });
+    moderationLoaded = false;
+    await loadModeration(true);
+}
+
+async function deleteChatFilter(channelId, filterId) {
+    await apiRequest(`/api/channels/${channelId}/chat/moderation/filters/${filterId}`, {
+        method: "DELETE",
+    });
+    moderationLoaded = false;
+    await loadModeration(true);
 }
 
 const modal = document.getElementById("modal");
@@ -2554,9 +2585,28 @@ async function loadModeration(force = false) {
         return;
     }
     try {
-        const payload = await apiRequest("/api/moderation/queue");
-        state.moderation.queue = Array.isArray(payload?.queue) ? payload.queue : [];
-        state.moderation.actions = Array.isArray(payload?.actions) ? payload.actions : [];
+        const [queuePayload, automodPayload] = await Promise.all([
+            apiRequest("/api/moderation/queue"),
+            apiRequest("/api/moderation/automod?limit=50"),
+        ]);
+        state.moderation.queue = Array.isArray(queuePayload?.queue) ? queuePayload.queue : [];
+        state.moderation.actions = Array.isArray(queuePayload?.actions) ? queuePayload.actions : [];
+        state.moderation.automod = Array.isArray(automodPayload) ? automodPayload : [];
+        const filters = {};
+        if (Array.isArray(state.channels) && state.channels.length) {
+            await Promise.all(
+                state.channels.map(async (channel) => {
+                    try {
+                        const response = await apiRequest(`/api/channels/${channel.id}/chat/moderation/filters`);
+                        filters[channel.id] = Array.isArray(response) ? response : [];
+                    } catch (error) {
+                        console.warn("Failed to load filters", error);
+                        filters[channel.id] = [];
+                    }
+                }),
+            );
+        }
+        state.moderation.filters = filters;
         moderationLoaded = true;
         renderModeration();
     } catch (error) {
@@ -2580,11 +2630,15 @@ async function resolveModerationFlag(flagId, resolution) {
 function renderModeration() {
     const queueContainer = document.getElementById("moderation-queue");
     const historyContainer = document.getElementById("moderation-history");
-    if (!queueContainer || !historyContainer) {
+    const filtersContainer = document.getElementById("moderation-filters");
+    const automodContainer = document.getElementById("moderation-automod");
+    if (!queueContainer || !historyContainer || !filtersContainer || !automodContainer) {
         return;
     }
     clearElement(queueContainer);
     clearElement(historyContainer);
+    clearElement(filtersContainer);
+    clearElement(automodContainer);
 
     const queue = state.moderation.queue;
     if (!queue.length) {
@@ -2668,31 +2722,230 @@ function renderModeration() {
                 textContent: "No recent moderation actions.",
             }),
         );
-        return;
+    } else {
+        for (const entry of actions) {
+            const card = createElement("article", { className: "card" });
+            card.appendChild(
+                createElement("div", {
+                    className: "card__header",
+                    textContent: `${entry.moderator?.displayName || "System"} → ${entry.action?.replace(/_/g, " ")}`,
+                }),
+            );
+            card.appendChild(
+                createElement("div", {
+                    className: "card__meta",
+                    textContent: `Target: ${entry.targetId || "unknown"}`,
+                }),
+            );
+            card.appendChild(
+                createElement("div", {
+                    className: "card__meta",
+                    textContent: formatDate(entry.createdAt),
+                }),
+            );
+            historyContainer.appendChild(card);
+        }
     }
 
-    for (const entry of actions) {
-        const card = createElement("article", { className: "card" });
-        card.appendChild(
+    const automodActions = state.moderation.automod || [];
+    if (!automodActions.length) {
+        automodContainer.appendChild(
             createElement("div", {
-                className: "card__header",
-                textContent: `${entry.moderator?.displayName || "System"} → ${entry.action?.replace(/_/g, " ")}`,
+                className: "empty",
+                textContent: "No automod actions yet.",
             }),
         );
-        card.appendChild(
-            createElement("div", {
-                className: "card__meta",
-                textContent: `Target: ${entry.targetId || "unknown"}`,
-            }),
-        );
-        card.appendChild(
-            createElement("div", {
-                className: "card__meta",
-                textContent: formatDate(entry.createdAt),
-            }),
-        );
-        historyContainer.appendChild(card);
+    } else {
+        for (const entry of automodActions) {
+            const card = createElement("article", { className: "card" });
+            const header = createElement("div", { className: "card__header" });
+            header.append(
+                createElement("h3", { textContent: entry.channelTitle || entry.channelId }),
+                createElement("span", {
+                    className: "card__meta",
+                    textContent: formatRelativeTime(entry.createdAt),
+                }),
+            );
+            card.appendChild(header);
+            card.appendChild(
+                createElement("div", {
+                    className: "card__meta",
+                    textContent: `User: ${entry.user?.displayName || entry.userId || "unknown"}`,
+                }),
+            );
+            if (entry.filterPattern) {
+                card.appendChild(
+                    createElement("div", {
+                        className: "card__meta",
+                        textContent: `Filter: ${entry.filterKind || "unknown"} · ${entry.filterPattern}`,
+                    }),
+                );
+            }
+            if (entry.message) {
+                card.appendChild(
+                    createElement("blockquote", {
+                        className: "moderation-quote",
+                        textContent: entry.message,
+                    }),
+                );
+            }
+            card.appendChild(
+                createElement("div", {
+                    className: "card__meta",
+                    textContent: `Action: ${entry.action || "blocked"}`,
+                }),
+            );
+            automodContainer.appendChild(card);
+        }
     }
+
+    const channels = Array.isArray(state.channels) ? state.channels : [];
+    if (!channels.length) {
+        filtersContainer.appendChild(
+            createElement("div", {
+                className: "empty",
+                textContent: "Create a channel to configure automod filters.",
+            }),
+        );
+    } else {
+        for (const channel of channels) {
+            const card = createElement("article", { className: "card" });
+            const header = createElement("div", { className: "card__header" });
+            header.append(
+                createElement("h3", { textContent: channel.title }),
+                createElement("span", { className: "card__meta", textContent: channel.id }),
+            );
+            card.appendChild(header);
+
+            const filters = state.moderation.filters?.[channel.id] || [];
+            if (!filters.length) {
+                card.appendChild(
+                    createElement("div", {
+                        className: "card__meta",
+                        textContent: "No filters configured yet.",
+                    }),
+                );
+            } else {
+                for (const filter of filters) {
+                    const row = createElement("div", { className: "card__meta" });
+                    row.textContent = `${filter.kind.toUpperCase()} · ${filter.pattern}`;
+                    const badge = createElement("span", {
+                        className: "badge",
+                        textContent: filter.enabled ? "Enabled" : "Disabled",
+                    });
+                    row.appendChild(badge);
+                    card.appendChild(row);
+
+                    const actions = createElement("div", { className: "card__actions" });
+                    actions.append(
+                        createElement("button", {
+                            className: "secondary",
+                            textContent: filter.enabled ? "Disable" : "Enable",
+                            dataset: {
+                                action: "toggle-filter",
+                                channel: channel.id,
+                                id: filter.id,
+                                enabled: String(!filter.enabled),
+                            },
+                        }),
+                        createElement("button", {
+                            className: "danger",
+                            textContent: "Delete",
+                            dataset: { action: "delete-filter", channel: channel.id, id: filter.id },
+                        }),
+                    );
+                    card.appendChild(actions);
+                }
+            }
+
+            const form = createElement("form", { dataset: { channel: channel.id } });
+            form.classList.add("filter-form");
+            const kindLabel = document.createElement("label");
+            kindLabel.append("Filter type");
+            const kindSelect = document.createElement("select");
+            kindSelect.name = "kind";
+            kindSelect.append(
+                createElement("option", { textContent: "Word", attributes: { value: "word" } }),
+                createElement("option", { textContent: "Regex", attributes: { value: "regex" } }),
+            );
+            kindLabel.appendChild(kindSelect);
+            form.appendChild(kindLabel);
+
+            const patternLabel = document.createElement("label");
+            patternLabel.append("Pattern");
+            const patternInput = document.createElement("input");
+            patternInput.name = "pattern";
+            patternInput.placeholder = "spam phrase or regex";
+            patternLabel.appendChild(patternInput);
+            form.appendChild(patternLabel);
+
+            const enabledLabel = document.createElement("label");
+            enabledLabel.append("Enabled");
+            const enabledCheckbox = document.createElement("input");
+            enabledCheckbox.type = "checkbox";
+            enabledCheckbox.name = "enabled";
+            enabledCheckbox.checked = true;
+            enabledLabel.appendChild(enabledCheckbox);
+            form.appendChild(enabledLabel);
+
+            form.appendChild(
+                createElement("button", {
+                    className: "primary",
+                    textContent: "Add filter",
+                    attributes: { type: "submit" },
+                }),
+            );
+            card.appendChild(form);
+
+            filtersContainer.appendChild(card);
+        }
+    }
+
+    filtersContainer.querySelectorAll("form.filter-form").forEach((form) => {
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const channelId = form.dataset.channel;
+            const kind = form.elements.kind.value;
+            const pattern = form.elements.pattern.value.trim();
+            const enabled = form.elements.enabled.checked;
+            if (!channelId || !pattern) {
+                showToast("Provide a filter pattern", "error");
+                return;
+            }
+            try {
+                await createChatFilter(channelId, { kind, pattern, enabled });
+                form.reset();
+                form.elements.enabled.checked = true;
+            } catch (error) {
+                showToast(error.message, "error");
+            }
+        });
+    });
+
+    filtersContainer.querySelectorAll("[data-action=toggle-filter]").forEach((button) => {
+        button.addEventListener("click", async () => {
+            const { channel, id, enabled } = button.dataset;
+            try {
+                await updateChatFilter(channel, id, { enabled: enabled === "true" });
+            } catch (error) {
+                showToast(error.message, "error");
+            }
+        });
+    });
+
+    filtersContainer.querySelectorAll("[data-action=delete-filter]").forEach((button) => {
+        button.addEventListener("click", async () => {
+            const { channel, id } = button.dataset;
+            if (!confirmAction("Delete this filter?")) {
+                return;
+            }
+            try {
+                await deleteChatFilter(channel, id);
+            } catch (error) {
+                showToast(error.message, "error");
+            }
+        });
+    });
 }
 
 async function loadAnalytics(force = false) {
@@ -2803,15 +3056,9 @@ function renderAnalytics() {
 }
 
 async function refreshAll() {
-    await Promise.all([
-        loadStatus(),
-        loadUsers(),
-        loadChannels({ hydrate: true }),
-        loadProfiles(),
-        loadModeration(true),
-        loadAnalytics(true),
-        loadMFAStatus(),
-    ]);
+    await Promise.all([loadStatus(), loadUsers(), loadProfiles(), loadAnalytics(true), loadMFAStatus()]);
+    await loadChannels({ hydrate: true });
+    await loadModeration(true);
 }
 
 function attachActions() {

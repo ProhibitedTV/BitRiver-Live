@@ -10,6 +10,7 @@ import (
 
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/models"
+	"bitriver-live/internal/storage"
 )
 
 // Chat request/response DTOs.
@@ -30,6 +31,28 @@ type chatModerationResponse struct {
 	ChannelID string  `json:"channelId"`
 	TargetID  string  `json:"targetId"`
 	ExpiresAt *string `json:"expiresAt,omitempty"`
+}
+
+type chatFilterRequest struct {
+	Kind    string `json:"kind"`
+	Pattern string `json:"pattern"`
+	Enabled bool   `json:"enabled"`
+}
+
+type chatFilterUpdateRequest struct {
+	Kind    *string `json:"kind,omitempty"`
+	Pattern *string `json:"pattern,omitempty"`
+	Enabled *bool   `json:"enabled,omitempty"`
+}
+
+type chatFilterResponse struct {
+	ID        string `json:"id"`
+	ChannelID string `json:"channelId"`
+	Kind      string `json:"kind"`
+	Pattern   string `json:"pattern"`
+	Enabled   bool   `json:"enabled"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
 }
 
 type moderationUserResponse struct {
@@ -59,6 +82,20 @@ type moderationActionResponse struct {
 	TargetID     string                  `json:"targetId,omitempty"`
 	Moderator    *moderationUserResponse `json:"moderator,omitempty"`
 	CreatedAt    string                  `json:"createdAt,omitempty"`
+}
+
+type moderationAutoModResponse struct {
+	ID            string                  `json:"id"`
+	ChannelID     string                  `json:"channelId"`
+	ChannelTitle  string                  `json:"channelTitle,omitempty"`
+	UserID        string                  `json:"userId,omitempty"`
+	User          *moderationUserResponse `json:"user,omitempty"`
+	FilterID      string                  `json:"filterId,omitempty"`
+	FilterKind    string                  `json:"filterKind,omitempty"`
+	FilterPattern string                  `json:"filterPattern,omitempty"`
+	Message       string                  `json:"message,omitempty"`
+	Action        string                  `json:"action,omitempty"`
+	CreatedAt     string                  `json:"createdAt,omitempty"`
 }
 
 type moderationQueueResponse struct {
@@ -141,6 +178,18 @@ func newChatRestrictionResponse(r models.ChatRestriction) chatRestrictionRespons
 		resp.ActorID = r.ActorID
 	}
 	return resp
+}
+
+func newChatFilterResponse(filter models.ChatFilter) chatFilterResponse {
+	return chatFilterResponse{
+		ID:        filter.ID,
+		ChannelID: filter.ChannelID,
+		Kind:      filter.Kind,
+		Pattern:   filter.Pattern,
+		Enabled:   filter.Enabled,
+		CreatedAt: filter.CreatedAt.Format(time.RFC3339Nano),
+		UpdatedAt: filter.UpdatedAt.Format(time.RFC3339Nano),
+	}
 }
 
 func newChatReportResponse(report models.ChatReport) chatReportResponse {
@@ -324,6 +373,9 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 			}
 			WriteJSON(w, http.StatusOK, response)
 			return
+		case "filters":
+			h.handleChatFilters(actor, channel, remaining[1:], w, r)
+			return
 		case "reports":
 			h.handleChatReports(actor, channel, remaining[1:], w, r)
 			return
@@ -395,6 +447,81 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 		TargetID:  evt.TargetID,
 		ExpiresAt: expires,
 	})
+}
+
+func (h *Handler) handleChatFilters(actor models.User, channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
+	if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
+		WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+		return
+	}
+
+	if len(remaining) > 0 && strings.TrimSpace(remaining[0]) != "" {
+		filterID := remaining[0]
+		switch r.Method {
+		case http.MethodPatch:
+			var req chatFilterUpdateRequest
+			if !DecodeAndValidate(w, r, &req) {
+				return
+			}
+			if req.Kind == nil && req.Pattern == nil && req.Enabled == nil {
+				WriteRequestError(w, ValidationError("at least one field is required"))
+				return
+			}
+			update := storage.ChatFilterUpdate{
+				Kind:    req.Kind,
+				Pattern: req.Pattern,
+				Enabled: req.Enabled,
+			}
+			filter, err := h.Store.UpdateChatFilter(filterID, update)
+			if err != nil {
+				WriteError(w, http.StatusBadRequest, err)
+				return
+			}
+			WriteJSON(w, http.StatusOK, newChatFilterResponse(filter))
+			return
+		case http.MethodDelete:
+			if err := h.Store.DeleteChatFilter(filterID); err != nil {
+				WriteError(w, http.StatusBadRequest, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		default:
+			WriteMethodNotAllowed(w, r, http.MethodPatch, http.MethodDelete)
+			return
+		}
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		filters, err := h.Store.ListChatFilters(channel.ID)
+		if err != nil {
+			WriteError(w, http.StatusBadRequest, err)
+			return
+		}
+		response := make([]chatFilterResponse, 0, len(filters))
+		for _, filter := range filters {
+			response = append(response, newChatFilterResponse(filter))
+		}
+		WriteJSON(w, http.StatusOK, response)
+	case http.MethodPost:
+		var req chatFilterRequest
+		if !DecodeAndValidate(w, r, &req) {
+			return
+		}
+		filter, err := h.Store.CreateChatFilter(channel.ID, storage.ChatFilterParams{
+			Kind:    req.Kind,
+			Pattern: req.Pattern,
+			Enabled: req.Enabled,
+		})
+		if err != nil {
+			WriteError(w, http.StatusBadRequest, err)
+			return
+		}
+		WriteJSON(w, http.StatusCreated, newChatFilterResponse(filter))
+	default:
+		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPost)
+	}
 }
 
 func (h *Handler) handleChatReports(actor models.User, channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
@@ -556,6 +683,34 @@ func (h *Handler) ModerationQueueByID(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, newChatReportResponse(report))
 }
 
+func (h *Handler) ModerationAutoMod(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		WriteMethodNotAllowed(w, r, http.MethodGet)
+		return
+	}
+
+	if _, ok := h.requireRole(w, r, roleAdmin); !ok {
+		return
+	}
+
+	limit := 50
+	if value := strings.TrimSpace(r.URL.Query().Get("limit")); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 1 {
+			WriteRequestError(w, ValidationError("limit must be a positive integer"))
+			return
+		}
+		limit = parsed
+	}
+
+	payload, err := h.moderationAutoModPayload(limit)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, payload)
+}
+
 func (h *Handler) moderationQueuePayload() (moderationQueueResponse, error) {
 	channels := h.Store.ListChannels("", "")
 	type flaggedItem struct {
@@ -643,4 +798,50 @@ func (h *Handler) moderationQueuePayload() (moderationQueueResponse, error) {
 		resolved[i] = actions[i].payload
 	}
 	return moderationQueueResponse{Queue: queue, Actions: resolved}, nil
+}
+
+func (h *Handler) moderationAutoModPayload(limit int) ([]moderationAutoModResponse, error) {
+	channels := h.Store.ListChannels("", "")
+	type actionItem struct {
+		payload moderationAutoModResponse
+		created time.Time
+	}
+	actions := make([]actionItem, 0)
+	for _, channel := range channels {
+		items, err := h.Store.ListChatAutoModActions(channel.ID, 0)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range items {
+			createdAt := item.CreatedAt
+			resp := moderationAutoModResponse{
+				ID:            item.ID,
+				ChannelID:     item.ChannelID,
+				ChannelTitle:  channel.Title,
+				UserID:        item.UserID,
+				FilterID:      item.FilterID,
+				FilterKind:    item.FilterKind,
+				FilterPattern: item.FilterPattern,
+				Message:       item.Message,
+				Action:        item.Action,
+				CreatedAt:     createdAt.Format(time.RFC3339Nano),
+			}
+			if user, ok := h.Store.GetUser(item.UserID); ok {
+				userResp := newModerationUser(user)
+				resp.User = &userResp
+			}
+			actions = append(actions, actionItem{payload: resp, created: createdAt})
+		}
+	}
+	sort.Slice(actions, func(i, j int) bool {
+		return actions[i].created.After(actions[j].created)
+	})
+	if limit <= 0 || limit > len(actions) {
+		limit = len(actions)
+	}
+	output := make([]moderationAutoModResponse, limit)
+	for i := 0; i < limit; i++ {
+		output[i] = actions[i].payload
+	}
+	return output, nil
 }

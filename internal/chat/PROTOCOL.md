@@ -35,7 +35,8 @@ Responses from the server also use JSON:
 The `<Event>` object mirrors the Go `chat.Event` structure and always carries an
 `occurredAt` timestamp. Message events include the message ID, author and the
 UTC creation time so that clients can update their transcripts without a REST
-roundtrip.
+roundtrip. Automated moderation emits `automod` events that include the filter
+metadata and blocked message content for review.
 
 ## Lightweight JS client
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -21,6 +22,8 @@ func initChatDataset(ds *dataset) {
 	ds.ChatTimeoutReasons = make(map[string]map[string]string)
 	ds.ChatTimeoutIssuedAt = make(map[string]map[string]time.Time)
 	ds.ChatReports = make(map[string]models.ChatReport)
+	ds.ChatFilters = make(map[string]models.ChatFilter)
+	ds.ChatAutoModActions = make(map[string]models.ChatAutoModAction)
 }
 
 func (s *Storage) ensureChatDatasetInitializedLocked() {
@@ -50,6 +53,12 @@ func (s *Storage) ensureChatDatasetInitializedLocked() {
 	}
 	if s.data.ChatReports == nil {
 		s.data.ChatReports = make(map[string]models.ChatReport)
+	}
+	if s.data.ChatFilters == nil {
+		s.data.ChatFilters = make(map[string]models.ChatFilter)
+	}
+	if s.data.ChatAutoModActions == nil {
+		s.data.ChatAutoModActions = make(map[string]models.ChatAutoModAction)
 	}
 }
 
@@ -177,6 +186,20 @@ func cloneChatData(src dataset, clone *dataset) {
 			clone.ChatReports[id] = cloned
 		}
 	}
+
+	if src.ChatFilters != nil {
+		clone.ChatFilters = make(map[string]models.ChatFilter, len(src.ChatFilters))
+		for id, filter := range src.ChatFilters {
+			clone.ChatFilters[id] = filter
+		}
+	}
+
+	if src.ChatAutoModActions != nil {
+		clone.ChatAutoModActions = make(map[string]models.ChatAutoModAction, len(src.ChatAutoModActions))
+		for id, action := range src.ChatAutoModActions {
+			clone.ChatAutoModActions[id] = action
+		}
+	}
 }
 
 func (s *Storage) ensureBanMetadata(channelID string) {
@@ -213,6 +236,25 @@ func (s *Storage) ensureTimeoutMetadata(channelID string) {
 	if s.data.ChatTimeoutIssuedAt[channelID] == nil {
 		s.data.ChatTimeoutIssuedAt[channelID] = make(map[string]time.Time)
 	}
+}
+
+func normalizeChatFilter(kind, pattern string) (string, string, error) {
+	normalizedKind := strings.ToLower(strings.TrimSpace(kind))
+	trimmedPattern := strings.TrimSpace(pattern)
+	if trimmedPattern == "" {
+		return "", "", fmt.Errorf("pattern is required")
+	}
+	switch normalizedKind {
+	case "word", "regex":
+	default:
+		return "", "", fmt.Errorf("filter kind must be word or regex")
+	}
+	if normalizedKind == "regex" {
+		if _, err := regexp.Compile(trimmedPattern); err != nil {
+			return "", "", fmt.Errorf("invalid regex pattern: %w", err)
+		}
+	}
+	return normalizedKind, trimmedPattern, nil
 }
 
 // Chat operations
@@ -444,6 +486,32 @@ func (s *Storage) purgeExpiredChatReportsLocked(now time.Time) (bool, dataset, e
 			snapshotTaken = true
 		}
 		delete(s.data.ChatReports, id)
+		removed = true
+	}
+	if !removed {
+		return false, dataset{}, nil
+	}
+	return true, snapshot, nil
+}
+
+func (s *Storage) purgeExpiredChatAutoModActionsLocked(now time.Time) (bool, dataset, error) {
+	retention := s.chatRetention.ModerationLogs
+	if retention <= 0 || len(s.data.ChatAutoModActions) == 0 {
+		return false, dataset{}, nil
+	}
+	cutoff := now.Add(-retention)
+	removed := false
+	snapshotTaken := false
+	var snapshot dataset
+	for id, action := range s.data.ChatAutoModActions {
+		if action.CreatedAt.After(cutoff) {
+			continue
+		}
+		if !snapshotTaken {
+			snapshot = cloneDataset(s.data)
+			snapshotTaken = true
+		}
+		delete(s.data.ChatAutoModActions, id)
 		removed = true
 	}
 	if !removed {
@@ -760,4 +828,156 @@ func (s *Storage) ResolveChatReport(reportID, resolverID, resolution string) (mo
 		return models.ChatReport{}, err
 	}
 	return report, nil
+}
+
+// ListChatFilters returns the configured auto-moderation filters for a channel.
+func (s *Storage) ListChatFilters(channelID string) ([]models.ChatFilter, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if _, ok := s.data.Channels[channelID]; !ok {
+		return nil, fmt.Errorf("channel %s not found", channelID)
+	}
+
+	filters := make([]models.ChatFilter, 0)
+	for _, filter := range s.data.ChatFilters {
+		if filter.ChannelID != channelID {
+			continue
+		}
+		filters = append(filters, filter)
+	}
+	sort.Slice(filters, func(i, j int) bool {
+		if filters[i].CreatedAt.Equal(filters[j].CreatedAt) {
+			return filters[i].ID < filters[j].ID
+		}
+		return filters[i].CreatedAt.After(filters[j].CreatedAt)
+	})
+	return filters, nil
+}
+
+// CreateChatFilter registers a new auto-moderation filter for a channel.
+func (s *Storage) CreateChatFilter(channelID string, params ChatFilterParams) (models.ChatFilter, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.data.Channels[channelID]; !ok {
+		return models.ChatFilter{}, fmt.Errorf("channel %s not found", channelID)
+	}
+	kind, pattern, err := normalizeChatFilter(params.Kind, params.Pattern)
+	if err != nil {
+		return models.ChatFilter{}, err
+	}
+	id, err := generateID()
+	if err != nil {
+		return models.ChatFilter{}, err
+	}
+	now := time.Now().UTC()
+	filter := models.ChatFilter{
+		ID:        id,
+		ChannelID: channelID,
+		Kind:      kind,
+		Pattern:   pattern,
+		Enabled:   params.Enabled,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if s.data.ChatFilters == nil {
+		s.data.ChatFilters = make(map[string]models.ChatFilter)
+	}
+	s.data.ChatFilters[id] = filter
+	if err := s.persist(); err != nil {
+		delete(s.data.ChatFilters, id)
+		return models.ChatFilter{}, err
+	}
+	return filter, nil
+}
+
+// UpdateChatFilter updates an existing auto-moderation filter.
+func (s *Storage) UpdateChatFilter(id string, update ChatFilterUpdate) (models.ChatFilter, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	filter, ok := s.data.ChatFilters[id]
+	if !ok {
+		return models.ChatFilter{}, fmt.Errorf("filter %s not found", id)
+	}
+	kind := filter.Kind
+	pattern := filter.Pattern
+	if update.Kind != nil {
+		kind = *update.Kind
+	}
+	if update.Pattern != nil {
+		pattern = *update.Pattern
+	}
+	if update.Enabled != nil {
+		filter.Enabled = *update.Enabled
+	}
+	normalizedKind, normalizedPattern, err := normalizeChatFilter(kind, pattern)
+	if err != nil {
+		return models.ChatFilter{}, err
+	}
+	filter.Kind = normalizedKind
+	filter.Pattern = normalizedPattern
+	filter.UpdatedAt = time.Now().UTC()
+	s.data.ChatFilters[id] = filter
+	if err := s.persist(); err != nil {
+		return models.ChatFilter{}, err
+	}
+	return filter, nil
+}
+
+// DeleteChatFilter removes a filter from the channel's automod configuration.
+func (s *Storage) DeleteChatFilter(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	filter, ok := s.data.ChatFilters[id]
+	if !ok {
+		return fmt.Errorf("filter %s not found", id)
+	}
+	delete(s.data.ChatFilters, id)
+	if err := s.persist(); err != nil {
+		s.data.ChatFilters[id] = filter
+		return err
+	}
+	return nil
+}
+
+// ListChatAutoModActions returns recent auto-moderation actions for a channel.
+func (s *Storage) ListChatAutoModActions(channelID string, limit int) ([]models.ChatAutoModAction, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.data.Channels[channelID]; !ok {
+		return nil, fmt.Errorf("channel %s not found", channelID)
+	}
+	now := s.retentionTime()
+	removed, snapshot, err := s.purgeExpiredChatAutoModActionsLocked(now)
+	if err != nil {
+		return nil, err
+	}
+	if removed {
+		if err := s.persist(); err != nil {
+			s.data = snapshot
+			return nil, err
+		}
+	}
+
+	actions := make([]models.ChatAutoModAction, 0)
+	for _, action := range s.data.ChatAutoModActions {
+		if action.ChannelID != channelID {
+			continue
+		}
+		actions = append(actions, action)
+	}
+	sort.Slice(actions, func(i, j int) bool {
+		if actions[i].CreatedAt.Equal(actions[j].CreatedAt) {
+			return actions[i].ID < actions[j].ID
+		}
+		return actions[i].CreatedAt.After(actions[j].CreatedAt)
+	})
+	if limit > 0 && len(actions) > limit {
+		actions = actions[:limit]
+	}
+	return actions, nil
 }

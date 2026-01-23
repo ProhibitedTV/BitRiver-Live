@@ -15,27 +15,29 @@ import (
 // datastore, grouping each model collection by its primary identifier so it can
 // be persisted and later replayed into another backing store.
 type Snapshot struct {
-	Users               map[string]models.User          `json:"users"`
-	MFASettings         map[string]models.MFASettings   `json:"mfaSettings"`
-	OAuthAccounts       map[string]models.OAuthAccount  `json:"oauthAccounts"`
-	Channels            map[string]models.Channel       `json:"channels"`
-	StreamSessions      map[string]models.StreamSession `json:"streamSessions"`
-	ChatMessages        map[string]models.ChatMessage   `json:"chatMessages"`
-	ChatBans            map[string]map[string]time.Time `json:"chatBans"`
-	ChatTimeouts        map[string]map[string]time.Time `json:"chatTimeouts"`
-	ChatBanActors       map[string]map[string]string    `json:"chatBanActors"`
-	ChatBanReasons      map[string]map[string]string    `json:"chatBanReasons"`
-	ChatTimeoutActors   map[string]map[string]string    `json:"chatTimeoutActors"`
-	ChatTimeoutReasons  map[string]map[string]string    `json:"chatTimeoutReasons"`
-	ChatTimeoutIssuedAt map[string]map[string]time.Time `json:"chatTimeoutIssuedAt"`
-	ChatReports         map[string]models.ChatReport    `json:"chatReports"`
-	Tips                map[string]models.Tip           `json:"tips"`
-	Subscriptions       map[string]models.Subscription  `json:"subscriptions"`
-	Profiles            map[string]models.Profile       `json:"profiles"`
-	Follows             map[string]map[string]time.Time `json:"follows"`
-	Recordings          map[string]models.Recording     `json:"recordings"`
-	Uploads             map[string]models.Upload        `json:"uploads"`
-	ClipExports         map[string]models.ClipExport    `json:"clipExports"`
+	Users               map[string]models.User              `json:"users"`
+	MFASettings         map[string]models.MFASettings       `json:"mfaSettings"`
+	OAuthAccounts       map[string]models.OAuthAccount      `json:"oauthAccounts"`
+	Channels            map[string]models.Channel           `json:"channels"`
+	StreamSessions      map[string]models.StreamSession     `json:"streamSessions"`
+	ChatMessages        map[string]models.ChatMessage       `json:"chatMessages"`
+	ChatBans            map[string]map[string]time.Time     `json:"chatBans"`
+	ChatTimeouts        map[string]map[string]time.Time     `json:"chatTimeouts"`
+	ChatBanActors       map[string]map[string]string        `json:"chatBanActors"`
+	ChatBanReasons      map[string]map[string]string        `json:"chatBanReasons"`
+	ChatTimeoutActors   map[string]map[string]string        `json:"chatTimeoutActors"`
+	ChatTimeoutReasons  map[string]map[string]string        `json:"chatTimeoutReasons"`
+	ChatTimeoutIssuedAt map[string]map[string]time.Time     `json:"chatTimeoutIssuedAt"`
+	ChatReports         map[string]models.ChatReport        `json:"chatReports"`
+	ChatFilters         map[string]models.ChatFilter        `json:"chatFilters"`
+	ChatAutoModActions  map[string]models.ChatAutoModAction `json:"chatAutoModActions"`
+	Tips                map[string]models.Tip               `json:"tips"`
+	Subscriptions       map[string]models.Subscription      `json:"subscriptions"`
+	Profiles            map[string]models.Profile           `json:"profiles"`
+	Follows             map[string]map[string]time.Time     `json:"follows"`
+	Recordings          map[string]models.Recording         `json:"recordings"`
+	Uploads             map[string]models.Upload            `json:"uploads"`
+	ClipExports         map[string]models.ClipExport        `json:"clipExports"`
 }
 
 // SnapshotCounts summarises the size of each collection stored in a Snapshot to
@@ -51,6 +53,8 @@ type SnapshotCounts struct {
 	ChatBans               int
 	ChatTimeouts           int
 	ChatReports            int
+	ChatFilters            int
+	ChatAutoModActions     int
 	Tips                   int
 	Subscriptions          int
 	Profiles               int
@@ -130,6 +134,12 @@ func (s *Snapshot) ensureInitialized() {
 	if s.ChatReports == nil {
 		s.ChatReports = make(map[string]models.ChatReport)
 	}
+	if s.ChatFilters == nil {
+		s.ChatFilters = make(map[string]models.ChatFilter)
+	}
+	if s.ChatAutoModActions == nil {
+		s.ChatAutoModActions = make(map[string]models.ChatAutoModAction)
+	}
 	if s.Tips == nil {
 		s.Tips = make(map[string]models.Tip)
 	}
@@ -160,19 +170,21 @@ func (s *Snapshot) Counts() SnapshotCounts {
 		return SnapshotCounts{}
 	}
 	counts := SnapshotCounts{
-		Users:          len(s.Users),
-		MFASettings:    len(s.MFASettings),
-		OAuthAccounts:  len(s.OAuthAccounts),
-		Channels:       len(s.Channels),
-		StreamSessions: len(s.StreamSessions),
-		ChatMessages:   len(s.ChatMessages),
-		ChatReports:    len(s.ChatReports),
-		Tips:           len(s.Tips),
-		Subscriptions:  len(s.Subscriptions),
-		Profiles:       len(s.Profiles),
-		Recordings:     len(s.Recordings),
-		Uploads:        len(s.Uploads),
-		ClipExports:    len(s.ClipExports),
+		Users:              len(s.Users),
+		MFASettings:        len(s.MFASettings),
+		OAuthAccounts:      len(s.OAuthAccounts),
+		Channels:           len(s.Channels),
+		StreamSessions:     len(s.StreamSessions),
+		ChatMessages:       len(s.ChatMessages),
+		ChatReports:        len(s.ChatReports),
+		ChatFilters:        len(s.ChatFilters),
+		ChatAutoModActions: len(s.ChatAutoModActions),
+		Tips:               len(s.Tips),
+		Subscriptions:      len(s.Subscriptions),
+		Profiles:           len(s.Profiles),
+		Recordings:         len(s.Recordings),
+		Uploads:            len(s.Uploads),
+		ClipExports:        len(s.ClipExports),
 	}
 	for _, follows := range s.Follows {
 		counts.Follows += len(follows)

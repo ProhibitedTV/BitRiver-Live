@@ -49,27 +49,29 @@ var (
 )
 
 type dataset struct {
-	Users               map[string]models.User          `json:"users"`
-	MFASettings         map[string]models.MFASettings   `json:"mfaSettings"`
-	OAuthAccounts       map[string]models.OAuthAccount  `json:"oauthAccounts"`
-	Channels            map[string]models.Channel       `json:"channels"`
-	StreamSessions      map[string]models.StreamSession `json:"streamSessions"`
-	ChatMessages        map[string]models.ChatMessage   `json:"chatMessages"`
-	ChatBans            map[string]map[string]time.Time `json:"chatBans"`
-	ChatTimeouts        map[string]map[string]time.Time `json:"chatTimeouts"`
-	ChatBanActors       map[string]map[string]string    `json:"chatBanActors"`
-	ChatBanReasons      map[string]map[string]string    `json:"chatBanReasons"`
-	ChatTimeoutActors   map[string]map[string]string    `json:"chatTimeoutActors"`
-	ChatTimeoutReasons  map[string]map[string]string    `json:"chatTimeoutReasons"`
-	ChatTimeoutIssuedAt map[string]map[string]time.Time `json:"chatTimeoutIssuedAt"`
-	ChatReports         map[string]models.ChatReport    `json:"chatReports"`
-	Tips                map[string]models.Tip           `json:"tips"`
-	Subscriptions       map[string]models.Subscription  `json:"subscriptions"`
-	Profiles            map[string]models.Profile       `json:"profiles"`
-	Follows             map[string]map[string]time.Time `json:"follows"`
-	Recordings          map[string]models.Recording     `json:"recordings"`
-	Uploads             map[string]models.Upload        `json:"uploads"`
-	ClipExports         map[string]models.ClipExport    `json:"clipExports"`
+	Users               map[string]models.User              `json:"users"`
+	MFASettings         map[string]models.MFASettings       `json:"mfaSettings"`
+	OAuthAccounts       map[string]models.OAuthAccount      `json:"oauthAccounts"`
+	Channels            map[string]models.Channel           `json:"channels"`
+	StreamSessions      map[string]models.StreamSession     `json:"streamSessions"`
+	ChatMessages        map[string]models.ChatMessage       `json:"chatMessages"`
+	ChatBans            map[string]map[string]time.Time     `json:"chatBans"`
+	ChatTimeouts        map[string]map[string]time.Time     `json:"chatTimeouts"`
+	ChatBanActors       map[string]map[string]string        `json:"chatBanActors"`
+	ChatBanReasons      map[string]map[string]string        `json:"chatBanReasons"`
+	ChatTimeoutActors   map[string]map[string]string        `json:"chatTimeoutActors"`
+	ChatTimeoutReasons  map[string]map[string]string        `json:"chatTimeoutReasons"`
+	ChatTimeoutIssuedAt map[string]map[string]time.Time     `json:"chatTimeoutIssuedAt"`
+	ChatReports         map[string]models.ChatReport        `json:"chatReports"`
+	ChatFilters         map[string]models.ChatFilter        `json:"chatFilters"`
+	ChatAutoModActions  map[string]models.ChatAutoModAction `json:"chatAutoModActions"`
+	Tips                map[string]models.Tip               `json:"tips"`
+	Subscriptions       map[string]models.Subscription      `json:"subscriptions"`
+	Profiles            map[string]models.Profile           `json:"profiles"`
+	Follows             map[string]map[string]time.Time     `json:"follows"`
+	Recordings          map[string]models.Recording         `json:"recordings"`
+	Uploads             map[string]models.Upload            `json:"uploads"`
+	ClipExports         map[string]models.ClipExport        `json:"clipExports"`
 }
 
 type Storage struct {
@@ -103,6 +105,20 @@ type RecordingRetentionPolicy struct {
 type ChatRetentionPolicy struct {
 	Messages       time.Duration
 	ModerationLogs time.Duration
+}
+
+// ChatFilterParams describes a moderation filter to enforce on chat messages.
+type ChatFilterParams struct {
+	Kind    string
+	Pattern string
+	Enabled bool
+}
+
+// ChatFilterUpdate allows partial updates for existing chat filters.
+type ChatFilterUpdate struct {
+	Kind    *string
+	Pattern *string
+	Enabled *bool
 }
 
 // ObjectStorageConfig describes the external storage bucket used for
