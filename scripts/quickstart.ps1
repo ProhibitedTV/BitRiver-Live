@@ -58,11 +58,15 @@ function Test-DockerCliReady {
     }
 }
 
+function Test-DockerDesktopReady {
+    return (Test-DockerDesktopEnginePipe) -and (Test-DockerCliReady)
+}
+
 function Wait-ForDocker {
     param([int]$TimeoutSeconds = 120)
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     while ($stopwatch.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
-        if (Test-DockerCliReady) {
+        if (Test-DockerDesktopReady) {
             return $true
         }
         Write-Output 'Waiting for Docker Desktop...'
@@ -72,7 +76,7 @@ function Wait-ForDocker {
 }
 
 function Ensure-DockerDesktopRunning {
-    if (Test-DockerCliReady) {
+    if (Test-DockerDesktopReady) {
         return
     }
 
@@ -90,7 +94,7 @@ function Ensure-DockerDesktopRunning {
     }
 
     if (-not (Wait-ForDocker -TimeoutSeconds 120)) {
-        Write-Error "Timed out waiting for Docker Desktop to become ready. Start Docker Desktop manually and try again."
+        Write-Error "Docker Desktop did not start; open it manually and retry."
     }
 }
 
