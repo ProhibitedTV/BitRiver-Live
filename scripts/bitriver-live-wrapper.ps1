@@ -46,6 +46,86 @@ function Ensure-Assets {
   }
 }
 
+function Get-EnvValue {
+  param(
+    [string]$Path,
+    [string]$Key
+  )
+  if (-not (Test-Path -LiteralPath $Path)) {
+    return $null
+  }
+  $pattern = "^\s*$([regex]::Escape($Key))\s*=\s*(.*)$"
+  foreach ($line in Get-Content -LiteralPath $Path) {
+    if ($line -match '^\s*#') {
+      continue
+    }
+    if ($line -match $pattern) {
+      return $Matches[1].Trim()
+    }
+  }
+  return $null
+}
+
+function Set-EnvValue {
+  param(
+    [string]$Path,
+    [string]$Key,
+    [string]$Value
+  )
+  $lines = @()
+  $pattern = "^\s*$([regex]::Escape($Key))\s*="
+  $found = $false
+  if (Test-Path -LiteralPath $Path) {
+    $lines = Get-Content -LiteralPath $Path
+  }
+  for ($i = 0; $i -lt $lines.Count; $i++) {
+    if ($lines[$i] -match $pattern) {
+      $lines[$i] = "$Key=$Value"
+      $found = $true
+    }
+  }
+  if (-not $found) {
+    $lines += "$Key=$Value"
+  }
+  Set-Content -LiteralPath $Path -Value $lines
+}
+
+function New-RandomSecret {
+  param([int]$Bytes = 24)
+  $buffer = New-Object byte[] $Bytes
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $rng.GetBytes($buffer)
+  } finally {
+    $rng.Dispose()
+  }
+  return ([Convert]::ToBase64String($buffer)).TrimEnd('=')
+}
+
+function Is-PlaceholderSecret {
+  param([string]$Value)
+  return [string]::IsNullOrWhiteSpace($Value) -or $Value -eq 'R3dis-Example!'
+}
+
+function Ensure-RedisPassword {
+  $redisPassword = Get-EnvValue -Path $envFilePath -Key 'BITRIVER_REDIS_PASSWORD'
+  $chatPassword = Get-EnvValue -Path $envFilePath -Key 'BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD'
+
+  if (Is-PlaceholderSecret -Value $redisPassword) {
+    if (-not (Is-PlaceholderSecret -Value $chatPassword)) {
+      $redisPassword = $chatPassword
+    } else {
+      $redisPassword = New-RandomSecret
+    }
+    Set-EnvValue -Path $envFilePath -Key 'BITRIVER_REDIS_PASSWORD' -Value $redisPassword
+    Write-Host "Generated BITRIVER_REDIS_PASSWORD in $envFilePath."
+  }
+
+  if (Is-PlaceholderSecret -Value $chatPassword) {
+    Set-EnvValue -Path $envFilePath -Key 'BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD' -Value $redisPassword
+  }
+}
+
 function Check-Prereqs {
   Write-Host 'Checking Docker and Compose prerequisites...'
   Require-Command 'docker'
@@ -100,6 +180,7 @@ switch ($Command.ToLowerInvariant()) {
   'start' {
     Check-Prereqs
     Ensure-Assets
+    Ensure-RedisPassword
     if (Test-Path -LiteralPath $binary) {
       Write-Host 'Running bitriver doctor for sanity checks...'
       try {
