@@ -511,7 +511,7 @@ func runMigrations(composeFile, envFile string) error {
 	}
 
 	args := append(composeArgsWithEnv(composeFile, envFile), "run", "--rm")
-	if !stdinIsTerminal() {
+	if runtime.GOOS == "windows" || !stdinIsTerminal() {
 		args = append(args, "-T")
 	}
 	args = append(args, "postgres-migrations")
