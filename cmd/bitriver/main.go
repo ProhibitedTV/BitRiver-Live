@@ -1267,6 +1267,10 @@ func mergeEnv(template []templateLine, existing, generated map[string]string) st
 }
 
 func generateEnvValues(existing map[string]string) (map[string]string, map[string]string) {
+	if existing == nil {
+		existing = make(map[string]string)
+	}
+
 	generated := make(map[string]string)
 	newlyGenerated := make(map[string]string)
 
@@ -1276,11 +1280,14 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 	generated["BITRIVER_OME_ACCESS_TOKEN"] = existing["BITRIVER_OME_ACCESS_TOKEN"]
 
 	for key := range defaultEnvSecrets.secrets {
-		current := existing[key]
+		current := strings.TrimSpace(existing[key])
 		if current == "" || isForbiddenValue(key, current) {
 			secret := randomSecret()
 			generated[key] = secret
 			newlyGenerated[key] = secret
+		}
+		if isForbiddenValue(key, existing[key]) {
+			existing[key] = ""
 		}
 	}
 
