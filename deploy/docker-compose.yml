@@ -266,7 +266,7 @@ services:
     image: debian:12-slim
     container_name: bitriver-srs-config
     working_dir: /workspace
-    command: ["bash", "-c", "/workspace/scripts/render-srs-config.sh --env-file /workspace/.env --force"]
+    command: ["bash", "/workspace/scripts/render-srs-config.sh", "--env-file", "/workspace/.env", "--force"]
     volumes:
       - ..:/workspace
     env_file:
