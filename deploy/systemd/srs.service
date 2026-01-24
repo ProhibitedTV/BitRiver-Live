@@ -17,7 +17,7 @@ EnvironmentFile=/opt/bitriver-srs/.env
 # Ensure SRS_IMAGE stays aligned with the release bundle.
 ExecStartPre=/bin/sh -c '[ -n "${SRS_IMAGE}" ] || { echo "SRS_IMAGE is not set. Set it to the release tag in /opt/bitriver-srs/.env."; exit 1; }'
 ExecStartPre=/bin/mkdir -p ${SRS_CONF_DIR}
-ExecStartPre=/bin/sh -c '/opt/bitriver-live/scripts/render-srs-config.sh --env-file "${SRS_ENV_FILE}" --force'
+ExecStartPre=/bin/bash /opt/bitriver-live/scripts/render-srs-config.sh --env-file "${SRS_ENV_FILE}" --force
 ExecStartPre=-${SRS_DOCKER} rm -f ${SRS_CONTAINER_NAME}
 ExecStart=/bin/sh -c '${SRS_DOCKER} run --rm --name "${SRS_CONTAINER_NAME}" \
   -p "${SRS_RTMP_PORT}:1935" \
