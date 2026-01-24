@@ -821,6 +821,7 @@ func renderOMEConfig(cfg omeRenderConfig) error {
 	}
 
 	text := string(data)
+	text = replaceLegacyBindAddress(text)
 	text = regexp.MustCompile(`<\s*Server\.bind\s*>`).ReplaceAllString(text, "<Bind>")
 	text = regexp.MustCompile(`</\s*Server\.bind\s*>`).ReplaceAllString(text, "</Bind>")
 
@@ -870,6 +871,24 @@ func renderOMEConfig(cfg omeRenderConfig) error {
 	return nil
 }
 
+func replaceLegacyBindAddress(text string) string {
+	openLegacy := regexp.MustCompile(`<\s*Server\.bind\.Address\s*>`)
+	closeLegacy := regexp.MustCompile(`</\s*Server\.bind\.Address\s*>`)
+	if !openLegacy.MatchString(text) && !closeLegacy.MatchString(text) {
+		return text
+	}
+
+	if regexp.MustCompile(`<\s*Bind\s*>`).MatchString(text) || regexp.MustCompile(`<\s*Server\.bind\s*>`).MatchString(text) {
+		text = openLegacy.ReplaceAllString(text, "<Address>")
+		text = closeLegacy.ReplaceAllString(text, "</Address>")
+		return text
+	}
+
+	text = openLegacy.ReplaceAllString(text, "<Bind><Address>")
+	text = closeLegacy.ReplaceAllString(text, "</Address></Bind>")
+	return text
+}
+
 func validateOMEGeneratedConfig(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -879,7 +898,7 @@ func validateOMEGeneratedConfig(path string) error {
 	contents := string(data)
 	contents = regexp.MustCompile(`(?s)<!--.*?-->`).ReplaceAllString(contents, "")
 	if regexp.MustCompile(`<\s*Server\.bind\.Address\b`).MatchString(contents) {
-		return fmt.Errorf("deprecated <Server.bind.Address> found in %s; regenerate deploy/ome/Server.generated.xml with `go run ./cmd/bitriver ome render --force --env-file ./.env` (or `./scripts/render-ome-config.sh --force`)", path)
+		return fmt.Errorf("deprecated <Server.bind.Address> found in %s; update the template to use <Bind><Address> and regenerate deploy/ome/Server.generated.xml with `go run ./cmd/bitriver ome render --force --env-file ./.env` (or `./scripts/render-ome-config.sh --force`)", path)
 	}
 	for key, forbidden := range omeTestDefaults {
 		if strings.Contains(contents, forbidden) {
