@@ -877,6 +877,10 @@ func validateOMEGeneratedConfig(path string) error {
 	}
 
 	contents := string(data)
+	contents = regexp.MustCompile(`(?s)<!--.*?-->`).ReplaceAllString(contents, "")
+	if regexp.MustCompile(`<\s*Server\.bind\.Address\b`).MatchString(contents) {
+		return fmt.Errorf("deprecated <Server.bind.Address> found in %s; regenerate deploy/ome/Server.generated.xml with `go run ./cmd/bitriver ome render --force --env-file ./.env` (or `./scripts/render-ome-config.sh --force`)", path)
+	}
 	for key, forbidden := range omeTestDefaults {
 		if strings.Contains(contents, forbidden) {
 			return fmt.Errorf("%s still set to ome-test-* default in %s", key, path)

@@ -174,6 +174,33 @@ func TestEnvValidateBlocksPlaceholders(t *testing.T) {
 	}
 }
 
+func TestValidateOMEGeneratedConfigRejectsDeprecatedBindAddress(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "Server.generated.xml")
+	content := strings.Join([]string{
+		"<Server>",
+		"  <Server.bind.Address>127.0.0.1</Server.bind.Address>",
+		"</Server>",
+	}, "\n")
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	err := validateOMEGeneratedConfig(path)
+	if err == nil {
+		t.Fatal("expected validation to fail for deprecated Server.bind.Address")
+	}
+	if !strings.Contains(err.Error(), "deploy/ome/Server.generated.xml") {
+		t.Fatalf("expected error to reference deploy/ome/Server.generated.xml, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "go run ./cmd/bitriver ome render --force --env-file ./.env") {
+		t.Fatalf("expected error to suggest go run command, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "./scripts/render-ome-config.sh --force") {
+		t.Fatalf("expected error to mention render-ome-config.sh, got %v", err)
+	}
+}
+
 func TestRunMigrationsAddsNoTTYForNonTerminalStdin(t *testing.T) {
 	tempDir := t.TempDir()
 	dockerName := "docker"
