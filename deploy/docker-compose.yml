@@ -287,6 +287,7 @@ services:
       BITRIVER_OME_USERNAME: ${BITRIVER_OME_USERNAME:?set via .env}
       BITRIVER_OME_PASSWORD: ${BITRIVER_OME_PASSWORD:?set via .env}
       BITRIVER_OME_ACCESS_TOKEN: ${BITRIVER_OME_ACCESS_TOKEN:-}
+      BITRIVER_OME_API_TOKEN: ${BITRIVER_OME_API_TOKEN:?set via .env}
     networks:
       default:
         aliases:
@@ -303,8 +304,12 @@ services:
         - "CMD-SHELL"
         - |
           curl_cmd="curl -fsS"
-          if [ -n "$$BITRIVER_OME_ACCESS_TOKEN" ]; then
-            curl_cmd="$$curl_cmd -H \"AccessToken: $$BITRIVER_OME_ACCESS_TOKEN\""
+          token="$$BITRIVER_OME_ACCESS_TOKEN"
+          if [ -z "$$token" ]; then
+            token="$$BITRIVER_OME_API_TOKEN"
+          fi
+          if [ -n "$$token" ]; then
+            curl_cmd="$$curl_cmd -H \"AccessToken: $$token\""
           fi
           if [ -n "$$BITRIVER_OME_USERNAME" ] && [ -n "$$BITRIVER_OME_PASSWORD" ]; then
             curl_cmd="$$curl_cmd -u \"$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD\""
