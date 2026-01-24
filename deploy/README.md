@@ -37,7 +37,8 @@ in `.env` and rerun `./deploy/check-env.sh` followed by `docker compose up -d` t
 
 The OME service in `deploy/docker-compose.yml` uses a `curl`-based healthcheck that hits the control API inside the container
 (`http://localhost:8081/v1/health` with a fallback to `/healthz`), optionally adding the `AccessToken` header and basic auth
-based on `BITRIVER_OME_ACCESS_TOKEN` and `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD`. To run the same probe manually,
+based on `BITRIVER_OME_ACCESS_TOKEN` (falling back to `BITRIVER_OME_API_TOKEN` when the access token is unset) and
+`BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD`. To run the same probe manually,
 execute it inside the container so it reuses the environment variables already injected by Compose:
 
 ```bash
