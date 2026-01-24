@@ -19,3 +19,4 @@ bin/
 # App data
 /data/
 .env
+/deploy/srs/conf/srs.generated.conf

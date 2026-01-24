@@ -237,7 +237,10 @@ services:
     ports:
       - "${BITRIVER_SRS_RTMP_PORT:-1935}:1935"
     volumes:
-      - ./srs/conf:/usr/local/srs/conf
+      - ./srs/conf/srs.generated.conf:/usr/local/srs/conf/srs.conf:ro
+    depends_on:
+      srs-config:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:1985/healthz || curl -fsS http://localhost:1985/api/v1/versions"]
       interval: 30s
@@ -258,6 +261,17 @@ services:
       - srs
     ports:
       - "${BITRIVER_SRS_API_PORT:-1985}:1985"
+
+  srs-config:
+    image: debian:12-slim
+    container_name: bitriver-srs-config
+    working_dir: /workspace
+    command: ["bash", "-c", "/workspace/scripts/render-srs-config.sh --env-file /workspace/.env --force"]
+    volumes:
+      - ..:/workspace
+    env_file:
+      - ../.env
+    restart: "no"
 
   ome-config:
     build:

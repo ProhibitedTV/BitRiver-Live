@@ -6,4 +6,4 @@ metadata:
     {{- include "bitriver-live.labels" . | nindent 4 }}
 data:
   srs.conf: |-
-{{ .Files.Get "files/srs.conf" | indent 4 }}
+{{ .Files.Get "files/srs.conf" | replace "${BITRIVER_SRS_TOKEN}" .Values.secrets.BITRIVER_SRS_TOKEN | indent 4 }}
