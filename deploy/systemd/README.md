@@ -56,6 +56,8 @@ EOF
    # the hook query token aligned with BITRIVER_SRS_TOKEN so the server
    # can authenticate requests such as:
    #   http://bitriver-live:8080/api/ingest/srs/publish?token=${BITRIVER_SRS_TOKEN}
+   # The srs.service unit renders deploy/srs/conf/srs.generated.conf from
+   # deploy/srs/conf/srs.conf before each start using /opt/bitriver-live/.env.
 
    sudo tee /opt/bitriver-srs-controller/.env >/dev/null <<'EOF'
 SRS_CONTROLLER_IMAGE=ghcr.io/bitriver-live/bitriver-srs-controller:vX.Y.Z

@@ -8,6 +8,8 @@ Type=simple
 Environment="SRS_DOCKER=/usr/bin/docker"
 Environment="SRS_CONTAINER_NAME=bitriver-srs"
 Environment="SRS_CONF_DIR=/opt/bitriver-live/deploy/srs/conf"
+Environment="SRS_CONF_FILE=/opt/bitriver-live/deploy/srs/conf/srs.generated.conf"
+Environment="SRS_ENV_FILE=/opt/bitriver-live/.env"
 Environment="SRS_RTMP_PORT=1935"
 Environment="SRS_API_PORT=1985"
 Environment="SRS_EXTRA_ARGS="
@@ -15,11 +17,12 @@ EnvironmentFile=/opt/bitriver-srs/.env
 # Ensure SRS_IMAGE stays aligned with the release bundle.
 ExecStartPre=/bin/sh -c '[ -n "${SRS_IMAGE}" ] || { echo "SRS_IMAGE is not set. Set it to the release tag in /opt/bitriver-srs/.env."; exit 1; }'
 ExecStartPre=/bin/mkdir -p ${SRS_CONF_DIR}
+ExecStartPre=/bin/sh -c '/opt/bitriver-live/scripts/render-srs-config.sh --env-file "${SRS_ENV_FILE}" --force'
 ExecStartPre=-${SRS_DOCKER} rm -f ${SRS_CONTAINER_NAME}
 ExecStart=/bin/sh -c '${SRS_DOCKER} run --rm --name "${SRS_CONTAINER_NAME}" \
   -p "${SRS_RTMP_PORT}:1935" \
   -p "${SRS_API_PORT}:1985" \
-  -v "${SRS_CONF_DIR}:/usr/local/srs/conf:ro" \
+  -v "${SRS_CONF_FILE}:/usr/local/srs/conf/srs.conf:ro" \
   ${SRS_EXTRA_ARGS} \
   "${SRS_IMAGE}"'
 ExecStop=${SRS_DOCKER} stop ${SRS_CONTAINER_NAME}
