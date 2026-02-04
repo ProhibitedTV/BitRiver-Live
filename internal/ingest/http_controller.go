@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"bitriver-live/internal/observability/metrics"
@@ -36,6 +37,8 @@ type HTTPController struct {
 	retryAttempts int
 	retryInterval time.Duration
 }
+
+const healthProbeConcurrency = 2
 
 // ensureAdapters ensures HTTP clients, logger, retry settings, and the
 // three HTTP adapters are initialized before use.
@@ -347,58 +350,65 @@ func (c *HTTPController) HealthChecks(ctx context.Context) []HealthStatus {
 		},
 	}
 
-	statuses := make([]HealthStatus, 0, len(services))
+	statuses := make([]HealthStatus, len(services))
+	reqCtx, cancel := context.WithTimeout(ctx, c.config.HealthTimeout)
+	defer cancel()
+	sem := make(chan struct{}, healthProbeConcurrency)
+	var wg sync.WaitGroup
 
-	for _, svc := range services {
-		status := HealthStatus{Component: svc.name}
+	for idx, svc := range services {
+		statuses[idx] = HealthStatus{Component: svc.name}
 
 		if strings.TrimSpace(svc.base) == "" {
-			status.Status = "unknown"
-			status.Detail = "base URL not configured"
-			statuses = append(statuses, status)
+			statuses[idx].Status = "unknown"
+			statuses[idx].Detail = "base URL not configured"
 			continue
 		}
 
-		url := fmt.Sprintf("%s%s", strings.TrimRight(svc.base, "/"), c.config.HealthEndpoint)
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(idx int, svc service) {
+			defer wg.Done()
+			defer func() { <-sem }()
 
-		reqCtx, cancel := context.WithTimeout(ctx, c.config.HealthTimeout)
-		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
-		if err != nil {
-			status.Status = "error"
-			status.Detail = err.Error()
-			statuses = append(statuses, status)
-			cancel()
-			continue
-		}
+			status := HealthStatus{Component: svc.name}
+			url := fmt.Sprintf("%s%s", strings.TrimRight(svc.base, "/"), c.config.HealthEndpoint)
+			req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
+			if err != nil {
+				status.Status = "error"
+				status.Detail = err.Error()
+				statuses[idx] = status
+				return
+			}
 
-		if svc.auth != nil {
-			svc.auth(req)
-		}
+			if svc.auth != nil {
+				svc.auth(req)
+			}
 
-		resp, err := c.config.HTTPClient.Do(req)
-		if err != nil {
-			status.Status = "error"
-			status.Detail = err.Error()
-			statuses = append(statuses, status)
-			cancel()
-			continue
-		}
+			resp, err := c.config.HTTPClient.Do(req)
+			if err != nil {
+				status.Status = "error"
+				status.Detail = err.Error()
+				statuses[idx] = status
+				return
+			}
 
-		// Fully drain and close the body to allow connection reuse.
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
+			// Fully drain and close the body to allow connection reuse.
+			_, _ = io.Copy(io.Discard, resp.Body)
+			_ = resp.Body.Close()
 
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			status.Status = "ok"
-		} else {
-			status.Status = "error"
-			status.Detail = resp.Status
-		}
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				status.Status = "ok"
+			} else {
+				status.Status = "error"
+				status.Detail = resp.Status
+			}
 
-		cancel()
-		statuses = append(statuses, status)
+			statuses[idx] = status
+		}(idx, svc)
 	}
 
+	wg.Wait()
 	return statuses
 }
 
