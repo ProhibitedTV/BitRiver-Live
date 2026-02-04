@@ -206,6 +206,36 @@ func TestValidateEnvAllowsLoopbackOMEWhenComposeAPI(t *testing.T) {
 	}
 }
 
+func TestLoadEnvValuesPreservesQuotedValues(t *testing.T) {
+	tempDir := t.TempDir()
+	envPath := filepath.Join(tempDir, ".env")
+	content := "" +
+		"PLAIN=value\n" +
+		"QUOTED=\"quoted value with spaces\"\n" +
+		"TRIM=  spaced  \n"
+
+	if err := os.WriteFile(envPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	values, err := loadEnvValues(envPath, false)
+	if err != nil {
+		t.Fatalf("load env values: %v", err)
+	}
+
+	if values["PLAIN"] != "value" {
+		t.Fatalf("expected PLAIN parsed, got %q", values["PLAIN"])
+	}
+
+	if values["QUOTED"] != "\"quoted value with spaces\"" {
+		t.Fatalf("expected QUOTED to preserve quotes, got %q", values["QUOTED"])
+	}
+
+	if values["TRIM"] != "spaced" {
+		t.Fatalf("expected TRIM whitespace trimmed, got %q", values["TRIM"])
+	}
+}
+
 func TestValidateEnvWarnsLoopbackOMEOnQuickstart(t *testing.T) {
 	values := map[string]string{
 		"BITRIVER_POSTGRES_USER":                  "brlive_app",
