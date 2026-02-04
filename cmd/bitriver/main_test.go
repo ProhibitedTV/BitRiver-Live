@@ -174,6 +174,21 @@ func TestEnvValidateBlocksPlaceholders(t *testing.T) {
 	}
 }
 
+func TestValidateEnvRejectsInvalidLLHLSPorts(t *testing.T) {
+	values := buildValidProductionEnv(t)
+	values["BITRIVER_OME_LLHLS_PORT"] = "70000"
+	values["BITRIVER_OME_LLHLS_TLS_PORT"] = "invalid"
+
+	res := validateEnv(values)
+
+	if !containsString(res.Errors, "BITRIVER_OME_LLHLS_PORT") {
+		t.Fatalf("expected BITRIVER_OME_LLHLS_PORT error, got %v", res.Errors)
+	}
+	if !containsString(res.Errors, "BITRIVER_OME_LLHLS_TLS_PORT") {
+		t.Fatalf("expected BITRIVER_OME_LLHLS_TLS_PORT error, got %v", res.Errors)
+	}
+}
+
 func TestValidateOMEGeneratedConfigRejectsDeprecatedBindAddress(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "Server.generated.xml")
 	content := strings.Join([]string{
