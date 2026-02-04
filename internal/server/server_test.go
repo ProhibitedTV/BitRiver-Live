@@ -177,7 +177,7 @@ func TestModerationAutoModRouteRequiresAuth(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/moderation/automod", nil)
 	rec := httptest.NewRecorder()
 
-	srv.Handler.ServeHTTP(rec, req)
+	srv.httpServer.Handler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status 401, got %d", rec.Code)
