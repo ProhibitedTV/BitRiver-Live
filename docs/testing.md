@@ -80,8 +80,10 @@ When no `.env` exists in the repository root, the helper seeds one with the same
 ## Postgres storage layer
 
 Storage integration tests live behind the `postgres` build tag. They expect an
-empty database that matches the schema in `deploy/migrations/`. Point
-`BITRIVER_TEST_POSTGRES_DSN` at the database before launching `go test`:
+empty database that matches the schema in `deploy/migrations/`. The configured
+user must be able to connect, create temporary tables, and read/write the
+schema tables. Point `BITRIVER_TEST_POSTGRES_DSN` at the database before
+launching `go test`:
 
 ```bash
 BITRIVER_TEST_POSTGRES_DSN="postgres://bitriver:bitriver@127.0.0.1:5432/bitriver_test?sslmode=disable" \
@@ -96,10 +98,14 @@ postgres-tagged tests fail fast instead of skipping. For local development, run
 the helper script instead of managing the database by hand. It uses a provided
 `BITRIVER_TEST_POSTGRES_DSN` when set or starts a disposable Postgres
 container, applies the tracked migrations, and executes the storage suite in
-one step. If Docker is unavailable and `BITRIVER_TEST_POSTGRES_DSN` is also
-unset, the harness exits with an error explaining how to proceed. The script
-forces an offline module mode (`GOPROXY=off GOSUMDB=off GOFLAGS=-mod=vendor`)
-so vendored replacements stay intact and `go.mod`/`go.sum` remain untouched:
+one step. When you supply `BITRIVER_TEST_POSTGRES_DSN`, the script runs a
+connectivity/permissions preflight and verifies the schema is present; set
+`BITRIVER_TEST_POSTGRES_RUN_MIGRATIONS=1` to have it apply the migrations
+directly to that database when needed. If Docker is unavailable and
+`BITRIVER_TEST_POSTGRES_DSN` is also unset, the harness exits with an error
+explaining how to proceed. The script forces an offline module mode
+(`GOPROXY=off GOSUMDB=off GOFLAGS=-mod=vendor`) so vendored replacements stay
+intact and `go.mod`/`go.sum` remain untouched:
 
 ```bash
 ./scripts/test-postgres.sh
