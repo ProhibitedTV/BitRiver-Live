@@ -166,6 +166,37 @@ func TestOmeConfigRenderingHandlesBindAsIp(t *testing.T) {
 	}
 }
 
+func TestOmeConfigRenderingPreservesXmlComments(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	envContents := strings.Join([]string{
+		"BITRIVER_OME_BIND=0.0.0.0",
+		"BITRIVER_OME_IP=0.0.0.0",
+		"BITRIVER_OME_SERVER_PORT=8081",
+		"BITRIVER_OME_SERVER_TLS_PORT=8082",
+		"BITRIVER_OME_USERNAME=admin",
+		"BITRIVER_OME_PASSWORD=password",
+		"BITRIVER_OME_API_TOKEN=token",
+		"BITRIVER_OME_TCP_RELAY=*:3478",
+		"BITRIVER_OME_ICE_CANDIDATE=*:10000-10009/udp",
+		"BITRIVER_OME_IMAGE_TAG=0.16.0",
+	}, "\n")
+	output := renderOMEConfig(t, repoRoot, envContents)
+
+	comment := "<!-- Corrected: <Bind> replaces the deprecated <Server.bind.Address> container. -->"
+	if !strings.Contains(string(output), comment) {
+		t.Fatalf("expected comment to be preserved, got:\n%s", string(output))
+	}
+	var parsed struct{}
+	if err := xml.Unmarshal(output, &parsed); err != nil {
+		t.Fatalf("expected well-formed XML output, got error: %v", err)
+	}
+}
+
 func TestOmeConfigRenderingEscapesXml(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {

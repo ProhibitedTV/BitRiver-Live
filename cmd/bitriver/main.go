@@ -883,21 +883,22 @@ func renderOMEConfig(cfg omeRenderConfig) error {
 }
 
 func replaceLegacyBindAddress(text string) string {
+	text, comments := stripXMLComments(text)
 	openLegacy := regexp.MustCompile(`<\s*Server\.bind\.Address\s*>`)
 	closeLegacy := regexp.MustCompile(`</\s*Server\.bind\.Address\s*>`)
 	if !openLegacy.MatchString(text) && !closeLegacy.MatchString(text) {
-		return text
+		return restoreXMLComments(text, comments)
 	}
 
 	if regexp.MustCompile(`<\s*Bind\s*>`).MatchString(text) || regexp.MustCompile(`<\s*Server\.bind\s*>`).MatchString(text) {
 		text = openLegacy.ReplaceAllString(text, "<Address>")
 		text = closeLegacy.ReplaceAllString(text, "</Address>")
-		return text
+		return restoreXMLComments(text, comments)
 	}
 
 	text = openLegacy.ReplaceAllString(text, "<Bind><Address>")
 	text = closeLegacy.ReplaceAllString(text, "</Address></Bind>")
-	return text
+	return restoreXMLComments(text, comments)
 }
 
 func validateOMEGeneratedConfig(path string) error {
@@ -987,6 +988,7 @@ func ensureIceCandidatesTag(text, tag, value, templatePath string) (string, erro
 }
 
 func replaceRootBindings(text, address, port, tlsPort string) (string, error) {
+	text, comments := stripXMLComments(text)
 	serverRe := regexp.MustCompile(`(?s)<Server[^>]*>(.*)</Server>`)
 	serverLoc := serverRe.FindStringSubmatchIndex(text)
 	if serverLoc == nil {
@@ -1046,7 +1048,8 @@ func replaceRootBindings(text, address, port, tlsPort string) (string, error) {
 	}
 
 	serverBody = serverBody[:bindLoc[2]] + bindBody + serverBody[bindLoc[3]:]
-	return text[:serverLoc[2]] + serverBody + text[serverLoc[3]:], nil
+	output := text[:serverLoc[2]] + serverBody + text[serverLoc[3]:]
+	return restoreXMLComments(output, comments), nil
 }
 
 func replaceLLHLSPublisherPorts(text, port, tlsPort string) (string, error) {
@@ -1127,17 +1130,18 @@ func replaceRootIP(text, ip string) (string, error) {
 }
 
 func scopedReplaceControlBindings(text, bind string) (string, error) {
+	text, comments := stripXMLComments(text)
 	controlRe := regexp.MustCompile(`(?s)<Control>(.*?)</Control>`)
 	controlLoc := controlRe.FindStringSubmatchIndex(text)
 	if controlLoc == nil {
-		return text, nil
+		return restoreXMLComments(text, comments), nil
 	}
 
 	controlBody := text[controlLoc[0]:controlLoc[1]]
 	serverRe := regexp.MustCompile(`(?s)<Server>(.*?)</Server>`)
 	serverLoc := serverRe.FindStringSubmatchIndex(controlBody)
 	if serverLoc == nil {
-		return text, nil
+		return restoreXMLComments(text, comments), nil
 	}
 
 	serverBody := controlBody[serverLoc[0]:serverLoc[1]]
@@ -1167,7 +1171,37 @@ func scopedReplaceControlBindings(text, bind string) (string, error) {
 
 	serverBody = serverBody[:inner] + content + serverBody[outer:]
 	controlBody = controlBody[:serverLoc[0]] + serverBody + controlBody[serverLoc[1]:]
-	return text[:controlLoc[0]] + controlBody + text[controlLoc[1]:], nil
+	output := text[:controlLoc[0]] + controlBody + text[controlLoc[1]:]
+	return restoreXMLComments(output, comments), nil
+}
+
+type xmlComment struct {
+	placeholder string
+	content     string
+}
+
+func stripXMLComments(text string) (string, []xmlComment) {
+	commentRe := regexp.MustCompile(`(?s)<!--.*?-->`)
+	comments := []xmlComment{}
+	index := 0
+	stripped := commentRe.ReplaceAllStringFunc(text, func(match string) string {
+		placeholder := fmt.Sprintf("%%BITRIVER_XML_COMMENT_%d%%", index)
+		index++
+		comments = append(comments, xmlComment{
+			placeholder: placeholder,
+			content:     match,
+		})
+		return placeholder
+	})
+	return stripped, comments
+}
+
+func restoreXMLComments(text string, comments []xmlComment) string {
+	restored := text
+	for _, comment := range comments {
+		restored = strings.ReplaceAll(restored, comment.placeholder, comment.content)
+	}
+	return restored
 }
 
 func replaceAccessToken(text, token string) (string, error) {

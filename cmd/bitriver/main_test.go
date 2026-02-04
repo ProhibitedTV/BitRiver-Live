@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/xml"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -262,6 +263,53 @@ func TestRenderOMEConfigRewritesLegacyBindAddress(t *testing.T) {
 	}
 	if !strings.Contains(string(output), "<Address>10.0.0.10</Address>") {
 		t.Fatalf("expected bind address to be updated, got output:\n%s", string(output))
+	}
+}
+
+func TestRenderOMEConfigPreservesXmlComments(t *testing.T) {
+	templatePath := filepath.Join(t.TempDir(), "Server.xml")
+	outputPath := filepath.Join(t.TempDir(), "Server.generated.xml")
+	templateBytes, err := os.ReadFile(filepath.Join(repoRoot(), "deploy", "ome", "Server.xml"))
+	if err != nil {
+		t.Fatalf("read template: %v", err)
+	}
+	comment := "        <!-- legacy <Server.bind.Address> <Address>keep-me</Address> -->\n"
+	template := strings.Replace(string(templateBytes), "<Bind>\n", "<Bind>\n"+comment, 1)
+	if err := os.WriteFile(templatePath, []byte(template), 0o644); err != nil {
+		t.Fatalf("write template: %v", err)
+	}
+
+	cfg := omeRenderConfig{
+		TemplatePath: templatePath,
+		OutputPath:   outputPath,
+		Bind:         "10.0.0.10",
+		ServerIP:     "10.0.0.11",
+		Port:         "9000",
+		TLSPort:      "9443",
+		Username:     "ome-user",
+		Password:     "ome-pass",
+		APIToken:     "api-token",
+		AccessToken:  "access-token",
+		ImageTag:     "0.16.0",
+		TCPRelay:     "127.0.0.1:3478",
+		ICECandidate: "127.0.0.1:10000-10009/udp",
+	}
+
+	if err := renderOMEConfig(cfg); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+
+	output, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+
+	if !strings.Contains(string(output), comment) {
+		t.Fatalf("expected comment to be preserved, got output:\n%s", string(output))
+	}
+	var parsed struct{}
+	if err := xml.Unmarshal(output, &parsed); err != nil {
+		t.Fatalf("expected well-formed XML output, got error: %v", err)
 	}
 }
 
