@@ -87,7 +87,7 @@ func TestEnvInitWritesGeneratedValues(t *testing.T) {
 		t.Fatalf("env init failed: %v", err)
 	}
 
-	values, err := readEnvFile(envPath)
+	values, err := loadEnvValues(envPath, false)
 	if err != nil {
 		t.Fatalf("read env file: %v", err)
 	}
@@ -255,7 +255,8 @@ func TestRenderOMEConfigRewritesLegacyBindAddress(t *testing.T) {
 		t.Fatalf("read output: %v", err)
 	}
 
-	if strings.Contains(string(output), "Server.bind.Address") {
+	stripped, _ := stripXMLComments(string(output))
+	if strings.Contains(stripped, "Server.bind.Address") {
 		t.Fatalf("expected legacy bind address tag to be rewritten, got output:\n%s", string(output))
 	}
 	if !strings.Contains(string(output), "<Bind>") {

@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"bitriver-live/internal/envutil"
 	"bitriver-live/internal/executil"
 )
 
@@ -304,12 +305,9 @@ func runEnvInit(args []string) error {
 		return err
 	}
 
-	existingValues, err := readEnvFile(*envPath)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	existingValues, err := loadEnvValues(*envPath, true)
+	if err != nil {
 		return err
-	}
-	if existingValues == nil {
-		existingValues = map[string]string{}
 	}
 
 	promptForAdminEmail(existingValues)
@@ -331,7 +329,7 @@ func runEnvValidate(args []string) error {
 		return err
 	}
 
-	values, err := readEnvFile(*envPath)
+	values, err := loadEnvValues(*envPath, false)
 	if err != nil {
 		return err
 	}
@@ -461,7 +459,7 @@ func runQuickstart(args []string) error {
 	}
 
 	preExisting := map[string]string{}
-	if existingValues, err := readEnvFile(*envFile); err == nil {
+	if existingValues, err := loadEnvValues(*envFile, true); err == nil {
 		preExisting = existingValues
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("read env file before init: %w", err)
@@ -476,7 +474,7 @@ func runQuickstart(args []string) error {
 		return fmt.Errorf("env validate: %w", err)
 	}
 
-	envValues, err := readEnvFile(*envFile)
+	envValues, err := loadEnvValues(*envFile, false)
 	if err != nil {
 		return fmt.Errorf("read env file: %w", err)
 	}
@@ -669,7 +667,7 @@ func renderOMEFromEnv(envPath string, force, checkOnly, quiet bool) error {
 		return nil
 	}
 
-	values, err := readEnvFile(envPath)
+	values, err := loadEnvValues(envPath, false)
 	if err != nil {
 		return err
 	}
@@ -941,7 +939,7 @@ func replaceTagContent(data, tag, value string) (string, error) {
 
 func replaceAllTagContent(data, tag, value string, required bool) (string, error) {
 	pattern := regexp.MustCompile(fmt.Sprintf(`(<%s>)([^<]*)(</%s>)`, tag, tag))
-	replaced := pattern.ReplaceAllString(data, fmt.Sprintf(`$1%s$3`, value))
+	replaced := pattern.ReplaceAllString(data, fmt.Sprintf(`${1}%s${3}`, value))
 	if required && replaced == data {
 		return "", fmt.Errorf("missing <%s> in template", tag)
 	}
@@ -1312,7 +1310,7 @@ func readEnvTemplate(path string) ([]templateLine, error) {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		raw := scanner.Text()
-		key, value, ok := parseEnvLine(raw)
+		key, value, ok := parseTemplateLine(raw)
 		if ok {
 			lines = append(lines, templateLine{Key: key, Value: value, Raw: raw})
 			continue
@@ -1326,7 +1324,34 @@ func readEnvTemplate(path string) ([]templateLine, error) {
 	return lines, nil
 }
 
-func readEnvFile(path string) (map[string]string, error) {
+func loadEnvValues(path string, allowMissing bool) (map[string]string, error) {
+	if !allowMissing {
+		if _, err := os.Stat(path); err != nil {
+			return nil, err
+		}
+	}
+
+	values, err := envutil.LoadFile(path, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	quotedValues, err := quotedEnvValues(path)
+	if err != nil {
+		if allowMissing && errors.Is(err, os.ErrNotExist) {
+			return values, nil
+		}
+		return nil, err
+	}
+
+	for key, value := range quotedValues {
+		values[key] = value
+	}
+
+	return values, nil
+}
+
+func quotedEnvValues(path string) (map[string]string, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -1336,8 +1361,8 @@ func readEnvFile(path string) (map[string]string, error) {
 	values := make(map[string]string)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		key, value, ok := parseEnvLine(scanner.Text())
-		if ok {
+		key, value, ok := parseTemplateLine(scanner.Text())
+		if ok && len(value) >= 2 && strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
 			values[key] = value
 		}
 	}
@@ -1353,7 +1378,7 @@ type templateLine struct {
 	Raw   string
 }
 
-func parseEnvLine(line string) (string, string, bool) {
+func parseTemplateLine(line string) (string, string, bool) {
 	if strings.HasPrefix(strings.TrimSpace(line), "#") || !strings.Contains(line, "=") {
 		return "", "", false
 	}
