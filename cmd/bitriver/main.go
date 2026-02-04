@@ -1680,8 +1680,12 @@ func validateEnv(values map[string]string) envValidatorResult {
 		res.Warnings = append(res.Warnings, "BITRIVER_LIVE_POSTGRES_DSN still references bitriver:bitriver. Update or unset it to match the Postgres credentials.")
 	}
 
-	loopback := regexp.MustCompile(`^https?://(localhost|127\\.[0-9.]*|0\\.0\\.0\\.0|::1|\\[::1\\])([:/]|$)`)
-	loopbackHost := regexp.MustCompile(`^(localhost|127\\.[0-9.]*|::1|\\[::1\\]|0\\.0\\.0\\.0|::)$`)
+	loopback := regexp.MustCompile(`^https?://(localhost|127\.[0-9.]*|0\.0\.0\.0|::1|\[::1\])([:/]|$)`)
+	loopbackHost := regexp.MustCompile(`^(localhost|127\.[0-9.]*|::1|\[::1\]|0\.0\.0\.0|::)$`)
+	composeOMEAPI := strings.EqualFold(strings.TrimSpace(values["BITRIVER_OME_API"]), "http://ome:8081")
+	localQuickstart := loopback.MatchString(strings.TrimSpace(values["NEXT_PUBLIC_VIEWER_URL"])) &&
+		loopback.MatchString(strings.TrimSpace(values["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"]))
+	omeLoopbackAllowed := composeOMEAPI || localQuickstart
 
 	flagEnvIssue := func(message string) {
 		if production {
@@ -1689,6 +1693,14 @@ func validateEnv(values map[string]string) envValidatorResult {
 		} else {
 			res.Warnings = append(res.Warnings, message)
 		}
+	}
+
+	flagOMEIssue := func(message string) {
+		if production && !omeLoopbackAllowed {
+			res.Errors = append(res.Errors, message)
+			return
+		}
+		res.Warnings = append(res.Warnings, message)
 	}
 
 	if val := strings.TrimSpace(values["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"]); val != "" {
@@ -1705,11 +1717,11 @@ func validateEnv(values map[string]string) envValidatorResult {
 	}
 
 	if val := strings.TrimSpace(values["BITRIVER_OME_BIND"]); val != "" && loopbackHost.MatchString(val) {
-		flagEnvIssue(fmt.Sprintf("BITRIVER_OME_BIND is set to %s. Bind OvenMediaEngine to a routable interface instead of loopback.", val))
+		flagOMEIssue(fmt.Sprintf("BITRIVER_OME_BIND is set to %s. Bind OvenMediaEngine to a routable interface instead of loopback.", val))
 	}
 
 	if val := strings.TrimSpace(values["BITRIVER_OME_IP"]); val != "" && loopbackHost.MatchString(val) {
-		flagEnvIssue(fmt.Sprintf("BITRIVER_OME_IP is set to %s. Configure the public IP or hostname for OvenMediaEngine instead of a placeholder or loopback value.", val))
+		flagOMEIssue(fmt.Sprintf("BITRIVER_OME_IP is set to %s. Configure the public IP or hostname for OvenMediaEngine instead of a placeholder or loopback value.", val))
 	}
 
 	if val := strings.TrimSpace(values["NEXT_PUBLIC_API_BASE_URL"]); val != "" {
