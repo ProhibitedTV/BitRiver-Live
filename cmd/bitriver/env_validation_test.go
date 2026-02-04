@@ -110,6 +110,107 @@ func TestValidateEnvFlagsLoopbackInProduction(t *testing.T) {
 		"BITRIVER_POSTGRES_USER":                  "brlive_app",
 		"BITRIVER_POSTGRES_PASSWORD":              "secret",
 		"BITRIVER_REDIS_PASSWORD":                 "secret",
+		"BITRIVER_OME_API":                        "https://ome.stream.local",
+		"BITRIVER_OME_BIND":                       "0.0.0.0",
+		"BITRIVER_OME_IP":                         "0.0.0.0",
+		"BITRIVER_OME_SERVER_PORT":                "9000",
+		"BITRIVER_OME_SERVER_TLS_PORT":            "9443",
+		"BITRIVER_LIVE_ADMIN_EMAIL":               "admin@example.com",
+		"BITRIVER_LIVE_ADMIN_PASSWORD":            "secure",
+		"BITRIVER_LIVE_SESSION_TTL":               "168h",
+		"BITRIVER_LIVE_ALLOW_SELF_SIGNUP":         "false",
+		"BITRIVER_SRS_TOKEN":                      "token",
+		"BITRIVER_OME_USERNAME":                   "omeuser",
+		"BITRIVER_OME_PASSWORD":                   "omepass",
+		"BITRIVER_OME_API_TOKEN":                  "apitoken",
+		"BITRIVER_OME_ACCESS_TOKEN":               "accesstoken",
+		"BITRIVER_TRANSCODER_TOKEN":               "transcodertoken",
+		"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD": "secret",
+		"BITRIVER_TRANSCODER_PUBLIC_BASE_URL":     "https://cdn.stream.local/hls",
+		"NEXT_PUBLIC_VIEWER_URL":                  "https://viewer.stream.local",
+		"BITRIVER_LIVE_IMAGE_TAG":                 "1.0.0",
+		"BITRIVER_VIEWER_IMAGE_TAG":               "1.0.0",
+		"BITRIVER_SRS_CONTROLLER_IMAGE_TAG":       "1.0.0",
+		"BITRIVER_TRANSCODER_IMAGE_TAG":           "1.0.0",
+		"BITRIVER_SRS_IMAGE_TAG":                  "v5.0.185",
+		"BITRIVER_OME_IMAGE_TAG":                  "0.16.0",
+		"BITRIVER_LIVE_MODE":                      "production",
+		"BITRIVER_LIVE_METRICS_TOKEN":             "metrics-token",
+		"BITRIVER_LIVE_RATE_LOGIN_LIMIT":          "10",
+	}
+
+	res := validateEnv(values)
+	joinedErrors := strings.Join(res.Errors, " ")
+	if !strings.Contains(joinedErrors, "BITRIVER_OME_BIND") || !strings.Contains(joinedErrors, "BITRIVER_OME_IP") {
+		t.Fatalf("expected loopback bind/ip errors in production, got %v", res.Errors)
+	}
+}
+
+func TestValidateEnvRejectsExternalInsecurePostgresDSN(t *testing.T) {
+	cert, key := tempTLSFiles(t)
+	values := baseEnvValues(cert, key)
+	values["BITRIVER_LIVE_POSTGRES_DSN"] = "postgres://user:secret@db.example:5432/bitriver?sslmode=disable"
+
+	res := validateEnv(values)
+	if len(res.Errors) == 0 {
+		t.Fatal("expected sslmode=disable to be rejected for external Postgres")
+	}
+	if !strings.Contains(strings.Join(res.Errors, " "), "sslmode") {
+		t.Fatalf("expected sslmode guidance in errors, got %v", res.Errors)
+	}
+}
+
+func TestValidateEnvAllowsLoopbackOMEWhenComposeAPI(t *testing.T) {
+	values := map[string]string{
+		"BITRIVER_POSTGRES_USER":                  "brlive_app",
+		"BITRIVER_POSTGRES_PASSWORD":              "secret",
+		"BITRIVER_REDIS_PASSWORD":                 "secret",
+		"BITRIVER_OME_API":                        "http://ome:8081",
+		"BITRIVER_OME_BIND":                       "0.0.0.0",
+		"BITRIVER_OME_IP":                         "0.0.0.0",
+		"BITRIVER_OME_SERVER_PORT":                "9000",
+		"BITRIVER_OME_SERVER_TLS_PORT":            "9443",
+		"BITRIVER_LIVE_ADMIN_EMAIL":               "admin@example.com",
+		"BITRIVER_LIVE_ADMIN_PASSWORD":            "secure",
+		"BITRIVER_LIVE_SESSION_TTL":               "168h",
+		"BITRIVER_LIVE_ALLOW_SELF_SIGNUP":         "false",
+		"BITRIVER_SRS_TOKEN":                      "token",
+		"BITRIVER_OME_USERNAME":                   "omeuser",
+		"BITRIVER_OME_PASSWORD":                   "omepass",
+		"BITRIVER_OME_API_TOKEN":                  "apitoken",
+		"BITRIVER_OME_ACCESS_TOKEN":               "accesstoken",
+		"BITRIVER_TRANSCODER_TOKEN":               "transcodertoken",
+		"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD": "secret",
+		"BITRIVER_TRANSCODER_PUBLIC_BASE_URL":     "https://cdn.stream.local/hls",
+		"NEXT_PUBLIC_VIEWER_URL":                  "https://viewer.stream.local",
+		"BITRIVER_LIVE_IMAGE_TAG":                 "1.0.0",
+		"BITRIVER_VIEWER_IMAGE_TAG":               "1.0.0",
+		"BITRIVER_SRS_CONTROLLER_IMAGE_TAG":       "1.0.0",
+		"BITRIVER_TRANSCODER_IMAGE_TAG":           "1.0.0",
+		"BITRIVER_SRS_IMAGE_TAG":                  "v5.0.185",
+		"BITRIVER_OME_IMAGE_TAG":                  "0.16.0",
+		"BITRIVER_LIVE_MODE":                      "production",
+		"BITRIVER_LIVE_METRICS_TOKEN":             "metrics-token",
+		"BITRIVER_LIVE_RATE_LOGIN_LIMIT":          "10",
+	}
+
+	res := validateEnv(values)
+	for _, err := range res.Errors {
+		if strings.Contains(err, "BITRIVER_OME_BIND") || strings.Contains(err, "BITRIVER_OME_IP") {
+			t.Fatalf("did not expect loopback bind/ip errors for compose OME API, got %v", res.Errors)
+		}
+	}
+	warnings := strings.Join(res.Warnings, " ")
+	if !strings.Contains(warnings, "BITRIVER_OME_BIND") || !strings.Contains(warnings, "BITRIVER_OME_IP") {
+		t.Fatalf("expected loopback bind/ip warnings for compose OME API, got %v", res.Warnings)
+	}
+}
+
+func TestValidateEnvWarnsLoopbackOMEOnQuickstart(t *testing.T) {
+	values := map[string]string{
+		"BITRIVER_POSTGRES_USER":                  "brlive_app",
+		"BITRIVER_POSTGRES_PASSWORD":              "secret",
+		"BITRIVER_REDIS_PASSWORD":                 "secret",
 		"BITRIVER_OME_API":                        "http://localhost:8081",
 		"BITRIVER_OME_BIND":                       "0.0.0.0",
 		"BITRIVER_OME_IP":                         "0.0.0.0",
@@ -135,28 +236,21 @@ func TestValidateEnvFlagsLoopbackInProduction(t *testing.T) {
 		"BITRIVER_SRS_IMAGE_TAG":                  "v5.0.185",
 		"BITRIVER_OME_IMAGE_TAG":                  "0.16.0",
 		"BITRIVER_LIVE_MODE":                      "production",
+		"BITRIVER_LIVE_METRICS_TOKEN":             "metrics-token",
+		"BITRIVER_LIVE_RATE_LOGIN_LIMIT":          "10",
 	}
 
 	res := validateEnv(values)
-	if len(res.Errors) == 0 {
-		t.Fatalf("expected loopback values to produce errors in production")
+	for _, err := range res.Errors {
+		if strings.Contains(err, "BITRIVER_OME_BIND") || strings.Contains(err, "BITRIVER_OME_IP") {
+			t.Fatalf("did not expect loopback bind/ip errors for quickstart, got %v", res.Errors)
+		}
+	}
+	warnings := strings.Join(res.Warnings, " ")
+	if !strings.Contains(warnings, "BITRIVER_OME_BIND") || !strings.Contains(warnings, "BITRIVER_OME_IP") {
+		t.Fatalf("expected loopback bind/ip warnings for quickstart, got %v", res.Warnings)
 	}
 }
-
-func TestValidateEnvRejectsExternalInsecurePostgresDSN(t *testing.T) {
-	cert, key := tempTLSFiles(t)
-	values := baseEnvValues(cert, key)
-	values["BITRIVER_LIVE_POSTGRES_DSN"] = "postgres://user:secret@db.example:5432/bitriver?sslmode=disable"
-
-	res := validateEnv(values)
-	if len(res.Errors) == 0 {
-		t.Fatal("expected sslmode=disable to be rejected for external Postgres")
-	}
-	if !strings.Contains(strings.Join(res.Errors, " "), "sslmode") {
-		t.Fatalf("expected sslmode guidance in errors, got %v", res.Errors)
-	}
-}
-
 func TestValidateEnvAllowsComposeInsecurePostgresDSN(t *testing.T) {
 	cert, key := tempTLSFiles(t)
 	values := baseEnvValues(cert, key)
