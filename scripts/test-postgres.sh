@@ -11,6 +11,44 @@ DB_NAME="${BITRIVER_TEST_POSTGRES_DB:-bitriver_test}"
 PORT="${BITRIVER_TEST_POSTGRES_PORT:-54329}"
 IMAGE="${BITRIVER_TEST_POSTGRES_IMAGE:-postgres:15-alpine}"
 CONTAINER_NAME="bitr-postgres-test-$$"
+
+describe_dsn() {
+  python3 - "$1" <<'PY'
+import sys
+import urllib.parse
+
+dsn = sys.argv[1]
+parsed = urllib.parse.urlparse(dsn)
+user = urllib.parse.unquote(parsed.username or "") or "unknown"
+host = parsed.hostname or "unknown"
+database = parsed.path.lstrip("/") or "unknown"
+print(f"host={host} database={database} user={user}")
+PY
+}
+
+preflight_failed() {
+  local reason="$1"
+  echo "error: postgres preflight failed (${reason})." >&2
+  echo "  dsn: $(describe_dsn "$BITRIVER_TEST_POSTGRES_DSN")" >&2
+  echo "  verify connectivity, credentials, and firewall rules before rerunning." >&2
+}
+
+apply_migrations_with_psql() {
+  local migrations_dir="$1"
+  mapfile -t migrations < <(find "$migrations_dir" -maxdepth 1 -type f -name '*.sql' | sort)
+  if [ ${#migrations[@]} -eq 0 ]; then
+    echo "error: no migrations found in $migrations_dir" >&2
+    exit 1
+  fi
+
+  echo "applying migrations from $migrations_dir" >&2
+  for migration in "${migrations[@]}"; do
+    base_name="$(basename "$migration")"
+    echo "  -> $base_name" >&2
+    psql "$BITRIVER_TEST_POSTGRES_DSN" -v ON_ERROR_STOP=1 -f "$migration"
+  done
+}
+
 if [ -z "${BITRIVER_TEST_POSTGRES_DSN:-}" ]; then
   if ! command -v docker >/dev/null 2>&1; then
     echo "error: postgres-tagged tests require Docker or BITRIVER_TEST_POSTGRES_DSN; install Docker or set BITRIVER_TEST_POSTGRES_DSN to a prepared database" >&2
@@ -89,6 +127,33 @@ if [ -z "${BITRIVER_TEST_POSTGRES_DSN:-}" ]; then
   done
 else
   echo "using provided BITRIVER_TEST_POSTGRES_DSN; skipping docker setup" >&2
+  if ! command -v psql >/dev/null 2>&1; then
+    echo "error: psql is required to run preflight checks when BITRIVER_TEST_POSTGRES_DSN is set" >&2
+    exit 1
+  fi
+
+  if ! psql "$BITRIVER_TEST_POSTGRES_DSN" -v ON_ERROR_STOP=1 -tAc "SELECT 1;" >/dev/null; then
+    preflight_failed "could not connect"
+    exit 1
+  fi
+
+  if ! psql "$BITRIVER_TEST_POSTGRES_DSN" -v ON_ERROR_STOP=1 -tAc "CREATE TEMP TABLE bitriver_preflight (id INT); DROP TABLE bitriver_preflight;" >/dev/null; then
+    preflight_failed "insufficient privileges"
+    exit 1
+  fi
+
+  schema_present="$(psql "$BITRIVER_TEST_POSTGRES_DSN" -v ON_ERROR_STOP=1 -tAc "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='users';")"
+  if [ "$schema_present" != "1" ]; then
+    migrations_dir="$REPO_ROOT/deploy/migrations"
+    if [ "${BITRIVER_TEST_POSTGRES_RUN_MIGRATIONS:-}" = "1" ]; then
+      apply_migrations_with_psql "$migrations_dir"
+    else
+      echo "error: expected schema not found in provided database." >&2
+      echo "  dsn: $(describe_dsn "$BITRIVER_TEST_POSTGRES_DSN")" >&2
+      echo "  apply migrations in $migrations_dir or set BITRIVER_TEST_POSTGRES_RUN_MIGRATIONS=1" >&2
+      exit 1
+    fi
+  fi
 fi
 
 default_packages=("./internal/storage/...")
