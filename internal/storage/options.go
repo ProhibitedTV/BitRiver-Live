@@ -198,6 +198,16 @@ func WithPostgresAcquireTimeout(timeout time.Duration) Option {
 	})
 }
 
+// WithPostgresPingTimeout configures how long the repository waits for the
+// initial health check ping during construction.
+func WithPostgresPingTimeout(timeout time.Duration) Option {
+	return postgresOnlyOption(func(cfg *PostgresConfig) {
+		if timeout > 0 {
+			cfg.PingTimeout = timeout
+		}
+	})
+}
+
 // WithPostgresPoolDurations adjusts how long connections live, how long they
 // may remain idle, and how frequently health checks run against the pool.
 func WithPostgresPoolDurations(maxLifetime, maxIdle, healthInterval time.Duration) Option {

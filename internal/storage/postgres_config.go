@@ -17,6 +17,7 @@ type PostgresConfig struct {
 	MaxConnIdleTime     time.Duration
 	HealthCheckInterval time.Duration
 	AcquireTimeout      time.Duration
+	PingTimeout         time.Duration
 	ApplicationName     string
 	IngestController    ingest.Controller
 	IngestMaxAttempts   int
