@@ -21,6 +21,8 @@ import (
 // been wired into the build.
 var ErrPostgresUnavailable = fmt.Errorf("postgres repository unavailable")
 
+const defaultPostgresPingTimeout = 5 * time.Second
+
 type postgresRepository struct {
 	pool                *pgxpool.Pool
 	cfg                 PostgresConfig
@@ -62,13 +64,7 @@ func (r *postgresRepository) Ping(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	conn, err := r.pool.Acquire(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Release()
-	_, execErr := conn.Exec(ctx, "SELECT 1")
-	return execErr
+	return pingPostgresPool(ctx, r.pool)
 }
 
 // NewPostgresRepository opens a Postgres-backed repository. The caller must
@@ -80,7 +76,7 @@ func NewPostgresRepository(dsn string, opts ...Option) (Repository, error) {
 		return nil, fmt.Errorf("postgres dsn required")
 	}
 	if pgx.IsStub {
-		return nil, ErrPostgresUnavailable
+		return nil, wrapPostgresUnavailable(errors.New("pgx driver stubbed in this build"))
 	}
 
 	poolCfg, err := pgxpool.ParseConfig(cfg.DSN)
@@ -115,6 +111,17 @@ func NewPostgresRepository(dsn string, opts ...Option) (Repository, error) {
 		return nil, fmt.Errorf("open postgres pool: %w", err)
 	}
 
+	pingTimeout := cfg.PingTimeout
+	if pingTimeout <= 0 {
+		pingTimeout = defaultPostgresPingTimeout
+	}
+	pingCtx, cancel := context.WithTimeout(context.Background(), pingTimeout)
+	defer cancel()
+	if err := pingPostgresPool(pingCtx, pool); err != nil {
+		pool.Close()
+		return nil, wrapPostgresUnavailable(err)
+	}
+
 	repo := &postgresRepository{
 		pool:                pool,
 		cfg:                 cfg,
@@ -132,6 +139,31 @@ func NewPostgresRepository(dsn string, opts ...Option) (Repository, error) {
 	repo.objectStorage = applyObjectStorageDefaults(repo.objectStorage)
 	repo.objectClient = newObjectStorageClient(repo.objectStorage)
 	return repo, nil
+}
+
+func pingPostgresPool(ctx context.Context, pool *pgxpool.Pool) error {
+	if pool == nil {
+		return errors.New("postgres pool unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire postgres connection: %w", err)
+	}
+	defer conn.Release()
+	if _, execErr := conn.Exec(ctx, "SELECT 1"); execErr != nil {
+		return fmt.Errorf("ping postgres: %w", execErr)
+	}
+	return nil
+}
+
+func wrapPostgresUnavailable(err error) error {
+	if err == nil {
+		return ErrPostgresUnavailable
+	}
+	return fmt.Errorf("%w: %w", ErrPostgresUnavailable, err)
 }
 
 func (r *postgresRepository) IngestHealth(ctx context.Context) []ingest.HealthStatus {
