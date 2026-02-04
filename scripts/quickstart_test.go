@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -218,11 +219,18 @@ func TestOmeConfigRenderingEscapesXml(t *testing.T) {
 	rendered := renderOMEConfig(t, repoRoot, envContents)
 
 	contents := string(rendered)
-	if !strings.Contains(contents, "admin&lt;&amp;") {
-		t.Fatalf("expected username to be escaped, got:\n%s", contents)
+	authBlock := extractSection(contents, "<Authentication>", "</Authentication>")
+	if authBlock == "" {
+		t.Fatalf("expected Authentication block in rendered output, got:\n%s", contents)
 	}
-	if !strings.Contains(contents, "pass&lt;&amp;&gt;&apos;&quot;") {
-		t.Fatalf("expected password to be escaped, got:\n%s", contents)
+	username := extractTagValue(t, authBlock, "ID")
+	password := extractTagValue(t, authBlock, "Password")
+
+	if username != "admin&lt;&amp;" {
+		t.Fatalf("expected username to be escaped, got %q", username)
+	}
+	if password != "pass&lt;&amp;&gt;&#39;&quot;" {
+		t.Fatalf("expected password to be escaped, got %q", password)
 	}
 }
 
@@ -282,4 +290,15 @@ func extractSection(output, startMarker, endMarker string) string {
 	}
 	section := output[start+len(startMarker) : end]
 	return strings.TrimSpace(section)
+}
+
+func extractTagValue(t *testing.T, output, tag string) string {
+	t.Helper()
+
+	re := regexp.MustCompile(fmt.Sprintf(`(?s)<%s>(.*?)</%s>`, tag, tag))
+	matches := re.FindStringSubmatch(output)
+	if len(matches) < 2 {
+		t.Fatalf("missing <%s> tag in output:\n%s", tag, output)
+	}
+	return matches[1]
 }
