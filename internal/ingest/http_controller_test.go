@@ -66,30 +66,124 @@ func TestHTTPControllerHealthChecksFailFastOnTransientError(t *testing.T) {
 		t.Fatalf("expected 3 statuses, got %d", len(statuses))
 	}
 
+	var transientCount int
+	for _, status := range statuses {
+		if strings.Contains(status.Detail, "temporary DNS failure") {
+			transientCount++
+			if status.Status != "error" {
+				t.Fatalf("expected transient failure status error, got %s", status.Status)
+			}
+			continue
+		}
+		if status.Status != "ok" {
+			t.Fatalf("expected status ok, got %s for %s", status.Status, status.Component)
+		}
+	}
+	if transientCount != 1 {
+		t.Fatalf("expected one transient failure, got %d", transientCount)
+	}
+}
+
+func TestHTTPControllerHealthChecksRunConcurrentlyAndDeterministically(t *testing.T) {
+	var current atomic.Int32
+	var maxSeen atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cur := current.Add(1)
+		for {
+			observed := maxSeen.Load()
+			if cur <= observed {
+				break
+			}
+			if maxSeen.CompareAndSwap(observed, cur) {
+				break
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+		current.Add(-1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	controller := HTTPController{
+		config: Config{
+			SRSBaseURL:     server.URL,
+			OMEBaseURL:     server.URL,
+			JobBaseURL:     server.URL,
+			HealthEndpoint: "/healthz",
+			HealthTimeout:  500 * time.Millisecond,
+			HTTPClient:     server.Client(),
+		},
+	}
+
+	statuses := controller.HealthChecks(context.Background())
+	if len(statuses) != 3 {
+		t.Fatalf("expected 3 statuses, got %d", len(statuses))
+	}
+	if maxSeen.Load() < 2 {
+		t.Fatalf("expected concurrent probes, saw max %d", maxSeen.Load())
+	}
+	if maxSeen.Load() > healthProbeConcurrency {
+		t.Fatalf("expected max concurrency <= %d, got %d", healthProbeConcurrency, maxSeen.Load())
+	}
+	for idx, component := range []string{"srs", "ovenmediaengine", "transcoder"} {
+		if statuses[idx].Component != component {
+			t.Fatalf("expected status[%d] component %q, got %q", idx, component, statuses[idx].Component)
+		}
+		if statuses[idx].Status != "ok" {
+			t.Fatalf("expected %s status ok, got %s", component, statuses[idx].Status)
+		}
+	}
+}
+
+func TestHTTPControllerHealthChecksAggregatesErrorsByComponent(t *testing.T) {
+	errorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(errorServer.Close)
+
+	unavailableServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(unavailableServer.Close)
+
+	okServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(okServer.Close)
+
+	controller := HTTPController{
+		config: Config{
+			SRSBaseURL:     errorServer.URL,
+			OMEBaseURL:     unavailableServer.URL,
+			JobBaseURL:     okServer.URL,
+			HealthEndpoint: "/healthz",
+			HealthTimeout:  500 * time.Millisecond,
+			HTTPClient:     okServer.Client(),
+		},
+	}
+
+	statuses := controller.HealthChecks(context.Background())
+	if len(statuses) != 3 {
+		t.Fatalf("expected 3 statuses, got %d", len(statuses))
+	}
+
 	statusMap := make(map[string]HealthStatus)
 	for _, status := range statuses {
 		statusMap[status.Component] = status
 	}
 
-	srsStatus, ok := statusMap["srs"]
-	if !ok {
-		t.Fatalf("missing SRS status")
+	srsStatus := statusMap["srs"]
+	if srsStatus.Status != "error" || !strings.Contains(srsStatus.Detail, "500") {
+		t.Fatalf("expected SRS error with 500 detail, got %+v", srsStatus)
 	}
-	if srsStatus.Status != "error" {
-		t.Fatalf("expected SRS status error, got %s", srsStatus.Status)
+	omeStatus := statusMap["ovenmediaengine"]
+	if omeStatus.Status != "error" || !strings.Contains(omeStatus.Detail, "503") {
+		t.Fatalf("expected OME error with 503 detail, got %+v", omeStatus)
 	}
-	if !strings.Contains(srsStatus.Detail, "temporary DNS failure") {
-		t.Fatalf("expected transient failure detail, got %s", srsStatus.Detail)
-	}
-
-	for _, component := range []string{"ovenmediaengine", "transcoder"} {
-		status, ok := statusMap[component]
-		if !ok {
-			t.Fatalf("missing status for %s", component)
-		}
-		if status.Status != "ok" {
-			t.Fatalf("expected %s status ok, got %s", component, status.Status)
-		}
+	transcoderStatus := statusMap["transcoder"]
+	if transcoderStatus.Status != "ok" {
+		t.Fatalf("expected transcoder ok, got %+v", transcoderStatus)
 	}
 }
 
