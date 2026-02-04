@@ -436,3 +436,28 @@ func TestRenderOMEConfigRequiresManagersAuth(t *testing.T) {
 		t.Fatalf("expected <OutputStreams> in rendered config for 0.16.0")
 	}
 }
+
+func TestRenderOMEConfigRewritesLLHLSPorts(t *testing.T) {
+	repoRoot := repoRoot(t)
+	envContents := strings.Join([]string{
+		"BITRIVER_OME_BIND=0.0.0.0",
+		"BITRIVER_OME_IP=0.0.0.0",
+		"BITRIVER_OME_SERVER_PORT=9000",
+		"BITRIVER_OME_SERVER_TLS_PORT=9443",
+		"BITRIVER_OME_LLHLS_PORT=8099",
+		"BITRIVER_OME_LLHLS_TLS_PORT=9444",
+		"BITRIVER_OME_USERNAME=admin",
+		"BITRIVER_OME_PASSWORD=password",
+		"BITRIVER_OME_API_TOKEN=token",
+		"BITRIVER_OME_ACCESS_TOKEN=health-token",
+		"BITRIVER_OME_IMAGE_TAG=0.16.0",
+		"BITRIVER_OME_TCP_RELAY=*:3478",
+		"BITRIVER_OME_ICE_CANDIDATE=example.com:10000-10009/udp",
+	}, "\n")
+
+	data := renderOMEConfig(t, repoRoot, envContents)
+	llhlsPattern := regexp.MustCompile(`(?s)<Publishers>.*?<LLHLS>.*?<Port>8099</Port>.*?<TLSPort>9444</TLSPort>.*?</LLHLS>.*?</Publishers>`)
+	if !llhlsPattern.Match(data) {
+		t.Fatalf("expected LLHLS ports to be rewritten in rendered config, but did not find the expected block")
+	}
+}

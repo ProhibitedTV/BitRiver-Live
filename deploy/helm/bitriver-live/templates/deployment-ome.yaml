@@ -39,6 +39,10 @@ spec:
           ports:
             - name: api
               containerPort: 8081
+            - name: llhls
+              containerPort: {{ .Values.ome.llhlsPort }}
+            - name: llhls-tls
+              containerPort: {{ .Values.ome.llhlsTlsPort }}
             - name: signalling
               containerPort: {{ .Values.service.ome.signallingPort }}
             - name: signalling-tls
@@ -116,6 +120,12 @@ spec:
     - name: api
       port: {{ .Values.service.ome.apiPort }}
       targetPort: api
+    - name: llhls
+      port: {{ .Values.ome.llhlsPort }}
+      targetPort: llhls
+    - name: llhls-tls
+      port: {{ .Values.ome.llhlsTlsPort }}
+      targetPort: llhls-tls
     - name: signalling
       port: {{ .Values.service.ome.signallingPort }}
       targetPort: signalling

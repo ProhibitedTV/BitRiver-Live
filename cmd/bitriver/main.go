@@ -723,6 +723,8 @@ type omeRenderConfig struct {
 	ServerIP     string
 	Port         string
 	TLSPort      string
+	LLHLSPort    string
+	LLHLSTLSPort string
 	Username     string
 	Password     string
 	APIToken     string
@@ -748,6 +750,8 @@ func buildOMERenderConfig(values map[string]string, templatePath, outputPath str
 	bind := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_BIND"]), "0.0.0.0")
 	port := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_SERVER_PORT"]), "9000")
 	tlsPort := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_SERVER_TLS_PORT"]), "9443")
+	llhlsPort := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_LLHLS_PORT"]), "8080")
+	llhlsTLSPort := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_LLHLS_TLS_PORT"]), "8443")
 	ip := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_IP"]), bind)
 	imageTag := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_IMAGE_TAG"]), "0.16.0")
 	icePortRange := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_ICE_PORT_RANGE"]), "10000-10009")
@@ -804,6 +808,8 @@ func buildOMERenderConfig(values map[string]string, templatePath, outputPath str
 		ServerIP:     ip,
 		Port:         port,
 		TLSPort:      tlsPort,
+		LLHLSPort:    llhlsPort,
+		LLHLSTLSPort: llhlsTLSPort,
 		Username:     username,
 		Password:     password,
 		APIToken:     apiToken,
@@ -826,6 +832,11 @@ func renderOMEConfig(cfg omeRenderConfig) error {
 	text = regexp.MustCompile(`</\s*Server\.bind\s*>`).ReplaceAllString(text, "</Bind>")
 
 	text, err = replaceRootBindings(text, xmlEscape(cfg.Bind), xmlEscape(cfg.Port), xmlEscape(cfg.TLSPort))
+	if err != nil {
+		return err
+	}
+
+	text, err = replaceLLHLSPublisherPorts(text, xmlEscape(cfg.LLHLSPort), xmlEscape(cfg.LLHLSTLSPort))
 	if err != nil {
 		return err
 	}
@@ -1034,6 +1045,52 @@ func replaceRootBindings(text, address, port, tlsPort string) (string, error) {
 		}
 	}
 
+	serverBody = serverBody[:bindLoc[2]] + bindBody + serverBody[bindLoc[3]:]
+	return text[:serverLoc[2]] + serverBody + text[serverLoc[3]:], nil
+}
+
+func replaceLLHLSPublisherPorts(text, port, tlsPort string) (string, error) {
+	serverRe := regexp.MustCompile(`(?s)<Server[^>]*>(.*)</Server>`)
+	serverLoc := serverRe.FindStringSubmatchIndex(text)
+	if serverLoc == nil {
+		return "", errors.New("missing <Server> root element in template")
+	}
+
+	serverBody := text[serverLoc[2]:serverLoc[3]]
+	bindRe := regexp.MustCompile(`(?s)<Bind>(.*?)</Bind>`)
+	bindLoc := bindRe.FindStringSubmatchIndex(serverBody)
+	if bindLoc == nil {
+		return "", errors.New("missing <Bind> section under <Server> in template")
+	}
+
+	bindBody := serverBody[bindLoc[2]:bindLoc[3]]
+	publishersRe := regexp.MustCompile(`(?s)<Publishers>(.*?)</Publishers>`)
+	publishersLoc := publishersRe.FindStringSubmatchIndex(bindBody)
+	if publishersLoc == nil {
+		return "", errors.New("missing <Publishers> section under <Bind> in template")
+	}
+
+	publishersBody := bindBody[publishersLoc[2]:publishersLoc[3]]
+	llhlsRe := regexp.MustCompile(`(?s)<LLHLS>(.*?)</LLHLS>`)
+	llhlsLoc := llhlsRe.FindStringSubmatchIndex(publishersBody)
+	if llhlsLoc == nil {
+		return "", errors.New("missing <LLHLS> section under <Publishers> in template")
+	}
+
+	llhlsBody := publishersBody[llhlsLoc[2]:llhlsLoc[3]]
+	updated, err := replaceTagContent(llhlsBody, "Port", port)
+	if err != nil {
+		return "", err
+	}
+	if strings.Contains(updated, "<TLSPort>") {
+		updated, err = replaceTagContent(updated, "TLSPort", tlsPort)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	publishersBody = publishersBody[:llhlsLoc[2]] + updated + publishersBody[llhlsLoc[3]:]
+	bindBody = bindBody[:publishersLoc[2]] + publishersBody + bindBody[publishersLoc[3]:]
 	serverBody = serverBody[:bindLoc[2]] + bindBody + serverBody[bindLoc[3]:]
 	return text[:serverLoc[2]] + serverBody + text[serverLoc[3]:], nil
 }
@@ -1665,6 +1722,18 @@ func validateEnv(values map[string]string) envValidatorResult {
 
 	if val := strings.TrimSpace(values["BITRIVER_OME_SERVER_TLS_PORT"]); val != "" {
 		if portErr := validatePort(val, "BITRIVER_OME_SERVER_TLS_PORT"); portErr != "" {
+			res.Errors = append(res.Errors, portErr)
+		}
+	}
+
+	if val := strings.TrimSpace(values["BITRIVER_OME_LLHLS_PORT"]); val != "" {
+		if portErr := validatePort(val, "BITRIVER_OME_LLHLS_PORT"); portErr != "" {
+			res.Errors = append(res.Errors, portErr)
+		}
+	}
+
+	if val := strings.TrimSpace(values["BITRIVER_OME_LLHLS_TLS_PORT"]); val != "" {
+		if portErr := validatePort(val, "BITRIVER_OME_LLHLS_TLS_PORT"); portErr != "" {
 			res.Errors = append(res.Errors, portErr)
 		}
 	}
