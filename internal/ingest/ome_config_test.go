@@ -15,183 +15,15 @@ import (
 	"testing"
 )
 
-// expectedServerTemplates contains canonical Server.xml templates keyed by the
-// OME Docker image reference used in docker-compose.
+// expectedServerTemplatePaths contains canonical Server.xml templates keyed by
+// the OME Docker image reference used in docker-compose.
 //
 // When bumping the OME image tag in deploy/docker-compose.yml, you should:
 //  1. Update the key here to match the new image.
-//  2. Update the Server.xml template value to reflect any config changes.
-var expectedServerTemplates = map[string]string{
-	"airensoft/ovenmediaengine:0.16.0": strings.TrimSpace(`<?xml version="1.0" encoding="utf-8"?>
-<Server version="10">
-    <Name>OvenMediaEngine</Name>
-    <Type>origin</Type>
-    <IP>0.0.0.0</IP>
-    <PrivacyProtection>false</PrivacyProtection>
-    <StunServer>stun.l.google.com:19302</StunServer>
-
-    <!-- Server.bind.Address was removed in 0.15.x; use the global <IP> and the per-protocol <Bind> block instead. -->
-    <Modules>
-        <HTTP2>
-            <Enable>true</Enable>
-        </HTTP2>
-
-        <LLHLS>
-            <Enable>true</Enable>
-        </LLHLS>
-
-        <P2P>
-            <Enable>false</Enable>
-            <MaxClientPeersPerHostPeer>2</MaxClientPeersPerHostPeer>
-        </P2P>
-    </Modules>
-
-    <!-- Corrected: <Bind> replaces the deprecated <Server.bind.Address> container. -->
-    <Bind>
-        <Address>0.0.0.0</Address>
-
-        <Managers>
-            <API>
-                <Port>8081</Port>
-                <TLSPort>8082</TLSPort>
-                <WorkerCount>1</WorkerCount>
-                <!--
-                  APIServer rejects an empty token; customize this value if you
-                  want to protect API access, or leave the placeholder for
-                  open/local use.
-                -->
-                <AccessTokens>
-                    <AccessToken>BITRIVER_OME_API_TOKEN_PLACEHOLDER</AccessToken>
-                </AccessTokens>
-                <Authentication>
-                    <AutoRegister>true</AutoRegister>
-                    <AllowAnonymousUser>false</AllowAnonymousUser>
-                    <AllowAnonymousReferrer>false</AllowAnonymousReferrer>
-                    <User>
-                        <ID>BITRIVER_OME_USERNAME_PLACEHOLDER</ID>
-                        <Password>BITRIVER_OME_PASSWORD_PLACEHOLDER</Password>
-                    </User>
-                </Authentication>
-            </API>
-        </Managers>
-
-        <Providers>
-            <RTMP>
-                <Port>1935</Port>
-                <WorkerCount>1</WorkerCount>
-            </RTMP>
-
-            <WebRTC>
-                <Signalling>
-                    <Port>9000</Port>
-                    <TLSPort>9443</TLSPort>
-                    <WorkerCount>1</WorkerCount>
-                </Signalling>
-                <IceCandidates>
-                    <!-- When port-forwarding or NAT rewrites the container ports, update
-                         BITRIVER_OME_TCP_RELAY/BITRIVER_OME_ICE_CANDIDATE so the
-                         advertised candidates match the reachable host:port tuples. -->
-                    <TcpRelay>*:3478</TcpRelay>
-                    <TcpForce>false</TcpForce>
-                    <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
-                    <IceCandidate>*:10000-10009/udp</IceCandidate>
-                </IceCandidates>
-            </WebRTC>
-        </Providers>
-
-        <Publishers>
-            <LLHLS>
-                <Port>8080</Port>
-                <TLSPort>8443</TLSPort>
-                <WorkerCount>1</WorkerCount>
-            </LLHLS>
-
-            <WebRTC>
-                <Signalling>
-                    <Port>9000</Port>
-                    <TLSPort>9443</TLSPort>
-                    <WorkerCount>1</WorkerCount>
-                </Signalling>
-                <IceCandidates>
-                    <!-- Renderer requires <TcpRelay> and <IceCandidate> to exist for token replacement. -->
-                    <TcpRelay>*:3478</TcpRelay>
-                    <TcpForce>false</TcpForce>
-                    <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
-                    <IceCandidate>*:10000-10009/udp</IceCandidate>
-                </IceCandidates>
-            </WebRTC>
-        </Publishers>
-    </Bind>
-
-    <!-- Corrected: Applications must live under <VirtualHosts>/<VirtualHost>, not <Server.Applications>. -->
-    <VirtualHosts>
-        <VirtualHost>
-            <Name>default</Name>
-
-            <Host>
-                <Names>
-                    <Name>*</Name>
-                </Names>
-            </Host>
-
-            <Applications>
-                <Application>
-                    <Name>live</Name>
-                    <Type>live</Type>
-
-                    <Outputs>
-                        <OutputProfiles>
-                            <OutputProfile>
-                                <Name>copy_passthrough</Name>
-                                <OutputStreams>
-                                    <OutputStream>
-                                        <Name>copy</Name>
-                                        <Video>
-                                            <Codec>copy</Codec>
-                                        </Video>
-                                        <Audio>
-                                            <Codec>copy</Codec>
-                                        </Audio>
-                                    </OutputStream>
-                                </OutputStreams>
-                                <!-- OutputStreams are required for the pinned 0.16.x schema. -->
-                            </OutputProfile>
-                        </OutputProfiles>
-
-                        <LLHLS>
-                            <SegmentDuration>6</SegmentDuration>
-                            <PartDuration>1</PartDuration>
-                            <SegmentCount>5</SegmentCount>
-                            <PartCount>3</PartCount>
-                            <PreloadHint>true</PreloadHint>
-                            <AdditionalPlaylist>true</AdditionalPlaylist>
-                        </LLHLS>
-                    </Outputs>
-
-                    <Publishers>
-                        <WebRTC>
-                            <Enable>true</Enable>
-                            <OutputProfile>copy_passthrough</OutputProfile>
-                        </WebRTC>
-                        <LLHLS>
-                            <Enable>true</Enable>
-                            <OutputProfile>copy_passthrough</OutputProfile>
-                        </LLHLS>
-                    </Publishers>
-
-                    <Providers>
-                        <RTMP>
-                            <Enable>true</Enable>
-                        </RTMP>
-                        <WebRTC>
-                            <Enable>true</Enable>
-                        </WebRTC>
-                    </Providers>
-                </Application>
-            </Applications>
-        </VirtualHost>
-    </VirtualHosts>
-</Server>`),
+//  2. Point to the appropriate Server.xml template on disk. Store older
+//     templates in internal/ingest/testdata when needed.
+var expectedServerTemplatePaths = map[string]string{
+	"airensoft/ovenmediaengine:0.16.0": filepath.Join("deploy", "ome", "Server.xml"),
 }
 
 // TestOMEConfigMatchesComposeTemplate ensures that the OvenMediaEngine
@@ -212,12 +44,14 @@ func TestOMEConfigMatchesComposeTemplate(t *testing.T) {
 	// Basic structural sanity checks on Server.xml.
 	validateServerXML(t, serverXML)
 
-	expected, ok := expectedServerTemplates[image]
+	expectedPath, ok := expectedServerTemplatePaths[image]
 	if !ok {
-		t.Fatalf("missing expected template for OME image %q; update expectedServerTemplates in ome_config_test.go when bumping the image tag", image)
+		t.Fatalf("missing expected template for OME image %q; update expectedServerTemplatePaths in ome_config_test.go when bumping the image tag", image)
 	}
 
-	normalizedExpected := normalizeXML(expected)
+	expectedPath = filepath.Join(repoRoot, expectedPath)
+	expectedXML := readFile(t, expectedPath)
+	normalizedExpected := normalizeXML(string(expectedXML))
 	normalizedActual := normalizeXML(string(serverXML))
 	if normalizedActual != normalizedExpected {
 		t.Fatalf("deploy/ome/Server.xml does not match expected template for %s\n\nExpected:\n%s\n\nActual:\n%s", image, normalizedExpected, normalizedActual)
