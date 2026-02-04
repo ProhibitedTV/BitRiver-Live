@@ -160,6 +160,48 @@ func TestValidateEnvRejectsExternalInsecurePostgresDSN(t *testing.T) {
 	}
 }
 
+func TestValidateEnvRequiresProductionMode(t *testing.T) {
+	cert, key := tempTLSFiles(t)
+	values := baseEnvValues(cert, key)
+	delete(values, "BITRIVER_LIVE_MODE")
+
+	res := validateEnv(values)
+	if len(res.Errors) == 0 {
+		t.Fatal("expected missing BITRIVER_LIVE_MODE to be rejected")
+	}
+	if !strings.Contains(strings.Join(res.Errors, " "), "BITRIVER_LIVE_MODE must be set to production") {
+		t.Fatalf("expected production mode guidance, got %v", res.Errors)
+	}
+}
+
+func TestValidateEnvRejectsDevelopmentMode(t *testing.T) {
+	cert, key := tempTLSFiles(t)
+	values := baseEnvValues(cert, key)
+	values["BITRIVER_LIVE_MODE"] = "development"
+
+	res := validateEnv(values)
+	if len(res.Errors) == 0 {
+		t.Fatal("expected development mode to be rejected")
+	}
+	if !strings.Contains(strings.Join(res.Errors, " "), "development") {
+		t.Fatalf("expected development mode guidance, got %v", res.Errors)
+	}
+}
+
+func TestValidateEnvRejectsUnreadableTLSCert(t *testing.T) {
+	cert, key := tempTLSFiles(t)
+	values := baseEnvValues(cert, key)
+	values["BITRIVER_LIVE_TLS_CERT"] = filepath.Join(t.TempDir(), "missing.pem")
+
+	res := validateEnv(values)
+	if len(res.Errors) == 0 {
+		t.Fatal("expected unreadable TLS cert to be rejected")
+	}
+	if !strings.Contains(strings.Join(res.Errors, " "), "BITRIVER_LIVE_TLS_CERT") {
+		t.Fatalf("expected TLS cert guidance, got %v", res.Errors)
+	}
+}
+
 func TestValidateEnvAllowsLoopbackOMEWhenComposeAPI(t *testing.T) {
 	values := map[string]string{
 		"BITRIVER_POSTGRES_USER":                  "brlive_app",

@@ -1625,10 +1625,22 @@ func validateEnv(values map[string]string) envValidatorResult {
 		"BITRIVER_OME_IMAGE_TAG",
 	}
 
-	mode := strings.ToLower(strings.TrimSpace(values["BITRIVER_LIVE_MODE"]))
-	production := mode == "" || mode == "production"
+	modeRaw := strings.TrimSpace(values["BITRIVER_LIVE_MODE"])
+	mode := strings.ToLower(modeRaw)
+	production := mode == "production"
 
 	res := envValidatorResult{}
+
+	switch mode {
+	case "":
+		res.Errors = append(res.Errors, "BITRIVER_LIVE_MODE must be set to production in the environment file. Use an inline override (for example, BITRIVER_LIVE_MODE=development docker compose --env-file ./.env -f deploy/docker-compose.yml up) for temporary HTTP-only demos.")
+	case "production":
+		// Allowed.
+	case "development":
+		res.Errors = append(res.Errors, "BITRIVER_LIVE_MODE=development is not allowed in the saved environment file. Keep .env at production and override BITRIVER_LIVE_MODE only for one-off local demos.")
+	default:
+		res.Errors = append(res.Errors, fmt.Sprintf("BITRIVER_LIVE_MODE must be set to production (current: %s)", modeRaw))
+	}
 
 	if placeholderLoadErr != nil {
 		res.Errors = append(res.Errors, fmt.Sprintf("failed to load sample credentials from %s: %v", defaultExampleEnv(), placeholderLoadErr))

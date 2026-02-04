@@ -35,8 +35,9 @@ The Helm chart under `deploy/helm/bitriver-live` mirrors the Compose stack (API,
    ```
 2. Run the same env validation used by Compose to catch placeholder credentials and unsafe URLs before templating values:
    ```bash
-   deploy/check-env.sh
+   go run ./cmd/bitriver env validate --env-file ./.env
    ```
+   (You can also use the `deploy/check-env.sh` wrapper, which delegates to the same Go validator.)
 3. Translate `.env` values into a Helm values file. Use `values.env` for non-secret settings (ports, URLs, retention) and `values.secrets` for credentials and tokens. For example:
    ```yaml
    # values.prod.yaml
@@ -515,7 +516,7 @@ Two environment variables determine how playback links are minted:
 | Variable | Purpose |
 | --- | --- |
 | `BITRIVER_TRANSCODER_PUBLIC_DIR` | Absolute path inside the transcoder container that should be mirrored to a CDN or web server (defaults to `/work/public`). |
-| `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` | HTTP origin advertised to viewers for the mirrored directory. Set this to the CDN, reverse proxy, or other routable hostname you expose; `deploy/check-env.sh` and Compose fail fast when it is empty or points at loopback. |
+| `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` | HTTP origin advertised to viewers for the mirrored directory. Set this to the CDN, reverse proxy, or other routable hostname you expose; the Go env validator (used by `deploy/check-env.sh` and Compose) fails fast when it is empty or points at loopback. |
 
 Local and single-node installs can rely on the `transcoder-public` Nginx sidecar defined in `deploy/docker-compose.yml`. It serves `/work/public` read-only (following the live-job symlinks via `disable_symlinks off;`) and publishes the content on port `9080` (`docker compose` host). Override `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` when fronting the directory with an existing CDN, S3 static site, or reverse proxy. Advanced operators can also bind additional volumes (e.g. an object storage mount) to `/work` while keeping the base URL aligned with the distribution tier. Whatever origin you select must resolve for end users—playback will fail until viewers can reach the advertised URL.
 
