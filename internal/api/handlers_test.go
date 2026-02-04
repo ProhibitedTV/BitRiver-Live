@@ -3067,6 +3067,13 @@ func TestChatModerationRestrictionsOmitExpiredTimeouts(t *testing.T) {
 
 func TestChatFiltersAPI(t *testing.T) {
 	handler, store := newTestHandler(t)
+	t.Setenv("BITRIVER_LIVE_CHAT_QUEUE_DRIVER", "memory")
+	handler.ChatQueue = pingFunc(func(context.Context) error { return nil })
+	handler.RateLimiter = pingFunc(func(context.Context) error { return nil })
+	handler.ChatGateway = chat.NewGateway(chat.GatewayConfig{
+		Queue: chat.NewMemoryQueue(32),
+		Store: handler.Store,
+	})
 	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
 	if err != nil {
 		t.Fatalf("create owner: %v", err)
@@ -3074,6 +3081,42 @@ func TestChatFiltersAPI(t *testing.T) {
 	channel, err := store.CreateChannel(owner.ID, "Arena", "gaming", nil)
 	if err != nil {
 		t.Fatalf("create channel: %v", err)
+	}
+
+	healthReq := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	healthRec := httptest.NewRecorder()
+	handler.Health(healthRec, healthReq)
+	if healthRec.Code != http.StatusOK {
+		t.Fatalf("expected health status 200, got %d", healthRec.Code)
+	}
+	var healthPayload map[string]interface{}
+	if err := json.Unmarshal(healthRec.Body.Bytes(), &healthPayload); err != nil {
+		t.Fatalf("decode health payload: %v", err)
+	}
+	components, ok := healthPayload["components"].([]interface{})
+	if !ok {
+		t.Fatalf("expected components array in health response")
+	}
+	statuses := make(map[string]map[string]interface{})
+	for _, raw := range components {
+		entry, ok := raw.(map[string]interface{})
+		if !ok {
+			t.Fatalf("unexpected component entry type %T", raw)
+		}
+		name, _ := entry["component"].(string)
+		statuses[name] = entry
+	}
+	for _, name := range []string{"datastore", "sessions", "rate_limiter", "chat_queue"} {
+		entry, ok := statuses[name]
+		if !ok {
+			t.Fatalf("missing component %s in health response", name)
+		}
+		if status, _ := entry["status"].(string); status != "ok" {
+			t.Fatalf("expected component %s to be ok, got %s", name, status)
+		}
+		if errVal, hasErr := entry["error"]; hasErr && errVal != "" {
+			t.Fatalf("expected no error for component %s, got %v", name, errVal)
+		}
 	}
 
 	createBody, _ := json.Marshal(chatFilterRequest{Kind: "word", Pattern: "spoiler", Enabled: true})
