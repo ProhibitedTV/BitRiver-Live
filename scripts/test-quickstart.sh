@@ -179,6 +179,7 @@ api_access_token = root.findtext("./Managers/API/AccessToken")
 legacy_access_tokens = root.find("./Managers/API/AccessTokens")
 outputs_wrapper = root.find(".//Application/Outputs")
 output_profiles = root.find(".//Application/OutputProfiles")
+application_llhls = root.find(".//Application/LLHLS")
 misplaced_listener_token = root.find("./Bind/Managers/API/AccessToken")
 misplaced_auth_listener = [
     tag for tag in ("Port", "TLSPort", "WorkerCount")
@@ -217,6 +218,9 @@ if outputs_wrapper is not None:
 
 if output_profiles is None:
     sys.exit("error: rendered OME config is missing direct <Application><OutputProfiles>")
+
+if application_llhls is not None:
+    sys.exit("error: rendered OME config still contains deprecated application-level <LLHLS> node")
 
 if misplaced_auth_listener:
     sys.exit(

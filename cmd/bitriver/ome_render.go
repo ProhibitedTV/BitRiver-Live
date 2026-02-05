@@ -880,6 +880,9 @@ func validateOMEGeneratedConfig(path string) error {
 	if regexp.MustCompile(`(?s)<\s*Application\b[^>]*>.*?<\s*Outputs\b`).MatchString(contents) {
 		return fmt.Errorf("deprecated <Application><Outputs> found in %s; place output definitions directly under <Application><OutputProfiles>", path)
 	}
+	if regexp.MustCompile(`(?s)<\s*Application\b[^>]*>.*?<\s*LLHLS\b`).MatchString(contents) {
+		return fmt.Errorf("deprecated application-level <Application><LLHLS> found in %s; keep LL-HLS configuration under <Bind><Publishers><LLHLS> only", path)
+	}
 
 	var parsed struct {
 		Managers struct {

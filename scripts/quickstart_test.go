@@ -150,6 +150,9 @@ func TestOmeConfigRenderingOmitsUnsupportedRootBindHostTags(t *testing.T) {
 	if !strings.Contains(contents, "<Application>") || !strings.Contains(contents, "<OutputProfiles>") {
 		t.Fatalf("expected rendered config to include direct <Application><OutputProfiles>, got:\n%s", contents)
 	}
+	if regexp.MustCompile(`(?s)<Application\b[^>]*>.*?<LLHLS>`).MatchString(contents) {
+		t.Fatalf("expected rendered config to avoid deprecated <Application><LLHLS>, got:\n%s", contents)
+	}
 	var parsed struct {
 		IP   string `xml:"IP"`
 		Bind struct {

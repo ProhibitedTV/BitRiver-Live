@@ -313,8 +313,15 @@ func TestRenderOMEConfigRequiresManagersAuth(t *testing.T) {
 		t.Fatalf("expected rendered config to avoid deprecated <Application><Outputs> wrapper")
 	}
 
+	hasApplicationLLHLS := bytes.Contains(data, []byte("<Application><LLHLS>")) ||
+		regexp.MustCompile(`(?s)<Application\b[^>]*>.*?<LLHLS>`).Match(data)
+
 	if !hasOutputProfiles {
 		t.Fatalf("expected rendered config to include direct <Application><OutputProfiles>")
+	}
+
+	if hasApplicationLLHLS {
+		t.Fatalf("expected rendered config to avoid deprecated <Application><LLHLS> block")
 	}
 
 	if !hasOutputStreams {

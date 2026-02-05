@@ -131,10 +131,6 @@
                             <Enable>true</Enable>
                             <OutputProfile>copy_passthrough</OutputProfile>
                         </WebRTC>
-                        <LLHLS>
-                            <Enable>true</Enable>
-                            <OutputProfile>copy_passthrough</OutputProfile>
-                        </LLHLS>
                     </Publishers>
 
                     <Providers>
