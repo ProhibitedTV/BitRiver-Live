@@ -31,7 +31,7 @@ stringData:
         </Modules>
 
         <Bind>
-            <Address>{{ .Values.ome.bindAddress }}</Address>
+            <IP>{{ .Values.ome.bindAddress }}</IP>
 
             <Managers>
                 <API>
