@@ -47,6 +47,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -63,6 +65,15 @@ jobs:
 
       - name: Run unit tests
         run: go test ./...
+
+      - name: Check Go function comment coverage
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_REF="origin/${{ github.base_ref }}"
+          else
+            BASE_REF="HEAD~1"
+          fi
+          ./scripts/check-function-comments.py --strict-unexported --git-base "$BASE_REF"
 
       - name: Build bitriver binary
         run: go build ./cmd/bitriver
