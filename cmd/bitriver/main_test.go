@@ -770,6 +770,9 @@ func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 	if !strings.Contains(string(envContents), "BITRIVER_LIVE_MODE=production") {
 		t.Fatalf("expected generated .env to contain BITRIVER_LIVE_MODE=production, got:\n%s", string(envContents))
 	}
+	if strings.Contains(string(envContents), "BITRIVER_LIVE_MODE=development") {
+		t.Fatalf("expected generated .env to avoid persisting development mode, got:\n%s", string(envContents))
+	}
 }
 
 func TestRunQuickstartFirstRunInitPassesEnvValidationWindowsPath(t *testing.T) {
