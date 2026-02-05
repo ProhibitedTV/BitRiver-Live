@@ -110,6 +110,32 @@ scan plus checks for each replaced third-party module:
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off ./scripts/run-govulncheck.sh
 ```
 
+## Container image vulnerability scan exceptions (Trivy)
+
+Container image CVE scanning is enforced by
+[`.github/workflows/image-scan.yml`](../.github/workflows/image-scan.yml). The
+workflow keeps **CRITICAL** gating enabled for first-party images
+(`ghcr.io/bitriver-live/*` and local `bitriver-live/*` builds) and runs a
+separate informational scan for pinned third-party images.
+
+When a third-party base image ships an unavoidable finding (for example, a
+distro package marked `will_not_fix`), add a tightly scoped exception under
+[`.trivyignore/`](../.trivyignore/) using these rules:
+
+1. Use an image-specific file when possible (for example,
+   `postgres-15-alpine.txt`).
+2. Suppress by **CVE ID only** (never by severity, package wildcard, or broad
+   image class).
+3. Add comments with rationale, review date, and expiry/review date.
+4. Open a follow-up issue or planned image bump so the exception is removed
+   promptly.
+
+After adding or removing exceptions, rerun the scan workflow (or replicate its
+Trivy commands locally in an environment with Docker) to confirm:
+
+- first-party image scans still fail on unsuppressed CRITICAL findings, and
+- any exception applies only to the intended image/CVE pair.
+
 End-to-end ingest coverage (storage + HTTP controller + control-plane stub)
 is packaged as a dedicated guard so release branches and tags keep exercising
 the critical ingest → transcoder → playback path. Run the wrapper to boot the

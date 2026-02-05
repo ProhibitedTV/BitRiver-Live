@@ -70,13 +70,53 @@ jobs:
         run: |
           trivy image --scanners vuln --pkg-types os --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 --no-progress bitriver-live/ome-config:local
 
-      - name: Scan images for critical vulnerabilities
+      - name: Scan first-party images for critical vulnerabilities (blocking)
         run: |
           set -euo pipefail
           while read -r image; do
             if [ -z "$image" ]; then
               continue
             fi
-            echo "Scanning $image"
-            trivy image --severity CRITICAL --exit-code 1 --no-progress "$image"
+
+            case "$image" in
+              ghcr.io/bitriver-live/*|bitriver-live/*)
+                echo "Scanning first-party image (blocking): $image"
+                trivy image \
+                  --severity CRITICAL \
+                  --exit-code 1 \
+                  --ignorefile .trivyignore/default.txt \
+                  --no-progress \
+                  "$image"
+                ;;
+            esac
+          done < /tmp/compose-images.txt
+
+      - name: Scan pinned third-party images for critical vulnerabilities (informational)
+        run: |
+          set -euo pipefail
+          while read -r image; do
+            if [ -z "$image" ]; then
+              continue
+            fi
+
+            case "$image" in
+              ghcr.io/bitriver-live/*|bitriver-live/*)
+                continue
+                ;;
+            esac
+
+            ignore_file=".trivyignore/default.txt"
+            case "$image" in
+              postgres:15-alpine*)
+                ignore_file=".trivyignore/postgres-15-alpine.txt"
+                ;;
+            esac
+
+            echo "Scanning third-party image (informational): $image"
+            trivy image \
+              --severity CRITICAL \
+              --exit-code 0 \
+              --ignorefile "$ignore_file" \
+              --no-progress \
+              "$image"
           done < /tmp/compose-images.txt

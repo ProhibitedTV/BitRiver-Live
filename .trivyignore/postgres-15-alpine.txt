@@ -1,0 +1,7 @@
+# postgres:15-alpine
+# REVIEWED: 2026-02-05
+# EXPIRES: 2026-03-15
+# RATIONALE: Upstream Alpine/postgres package currently reports will_not_fix for this
+# CVE in the pinned tag used by deploy/docker-compose.yml. Keep the exception scoped
+# to postgres images only and remove immediately once the base image is bumped and fixed.
+CVE-2024-56433
