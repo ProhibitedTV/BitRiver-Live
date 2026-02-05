@@ -877,6 +877,9 @@ func validateOMEGeneratedConfig(path string) error {
 	if regexp.MustCompile(`<\s*AccessTokens\b`).MatchString(contents) {
 		return fmt.Errorf("deprecated <AccessTokens> found in %s; use singular <Managers><API><AccessToken> instead", path)
 	}
+	if regexp.MustCompile(`(?s)<\s*Application\b[^>]*>.*?<\s*Outputs\b`).MatchString(contents) {
+		return fmt.Errorf("deprecated <Application><Outputs> found in %s; place output definitions directly under <Application><OutputProfiles>", path)
+	}
 
 	var parsed struct {
 		Managers struct {

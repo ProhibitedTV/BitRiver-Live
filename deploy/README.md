@@ -70,7 +70,7 @@ docker compose exec ome sh -c 'curl -fsS -H "AccessToken: $BITRIVER_OME_ACCESS_T
 ```
 
 If either command returns 401, re-check the credentials rendered into `ome/Server.generated.xml` and the values in `.env`.
-The canonical OME auth element is top-level `<Managers><API><AccessToken>` in the rendered `Server.xml`; the quickstart renderer rejects deprecated `<AccessTokens>` wrappers.
+The canonical OME auth element is top-level `<Managers><API><AccessToken>` in the rendered `Server.xml`; the quickstart renderer rejects deprecated `<AccessTokens>` wrappers. The renderer also enforces direct `<Application><OutputProfiles>` blocks and rejects deprecated `<Application><Outputs>` wrappers.
 
 ## Systemd installs
 For bare-metal or VM installs, start with the helpers in `deploy/install/`:

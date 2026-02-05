@@ -219,6 +219,28 @@ func TestValidateOMEGeneratedConfigRejectsDeprecatedBindAddress(t *testing.T) {
 		t.Fatalf("expected error to mention render-ome-config.sh, got %v", err)
 	}
 }
+func TestValidateOMEGeneratedConfigRejectsApplicationOutputsWrapper(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "Server.generated.xml")
+	content := strings.Join([]string{
+		"<Server>",
+		"  <Managers><API><AccessToken>token</AccessToken></API></Managers>",
+		"  <Bind><Managers><API><Port>9000</Port><TLSPort>9443</TLSPort><WorkerCount>1</WorkerCount></API></Managers></Bind>",
+		"  <VirtualHosts><VirtualHost><Applications><Application><Outputs><OutputProfiles /></Outputs></Application></Applications></VirtualHost></VirtualHosts>",
+		"</Server>",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	err := validateOMEGeneratedConfig(path)
+	if err == nil {
+		t.Fatal("expected validation to fail for deprecated <Application><Outputs>")
+	}
+	if !strings.Contains(err.Error(), "<Application><Outputs>") {
+		t.Fatalf("expected outputs-wrapper validation error, got %v", err)
+	}
+}
+
 func TestRenderOMEConfigRewritesLegacyBindAddress(t *testing.T) {
 	templatePath := filepath.Join(t.TempDir(), "Server.xml")
 	outputPath := filepath.Join(t.TempDir(), "Server.generated.xml")
@@ -452,6 +474,9 @@ func TestRenderOMEConfigSkipsUnsupportedRootBindHostTagsAndFillsAccessTokenAndIc
 	}
 	if strings.Contains(got, "<AccessTokens>") {
 		t.Fatalf("expected singular <AccessToken> without deprecated <AccessTokens> wrapper, got output:\n%s", got)
+	}
+	if strings.Contains(got, "<Application><Outputs>") || strings.Contains(got, "<Outputs>") {
+		t.Fatalf("expected rendered config to define output profiles directly under <Application><OutputProfiles>, got output:\n%s", got)
 	}
 	if !strings.Contains(got, "<TcpRelay>127.0.0.1:3478</TcpRelay>") {
 		t.Fatalf("expected TcpRelay insertion, got output:\n%s", got)
