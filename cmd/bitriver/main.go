@@ -825,78 +825,757 @@ func renderOMEConfig(cfg omeRenderConfig) error {
 	}
 
 	text := string(data)
-	text = replaceLegacyBindAddress(text)
-	text = regexp.MustCompile(`<\s*Server\.bind\s*>`).ReplaceAllString(text, "<Bind>")
-	text = regexp.MustCompile(`</\s*Server\.bind\s*>`).ReplaceAllString(text, "</Bind>")
-
-	text, err = replaceRootBindings(text, xmlEscape(cfg.Bind), xmlEscape(cfg.Port), xmlEscape(cfg.TLSPort))
+	info, err := scanOMETemplateInfo(text)
 	if err != nil {
 		return err
 	}
 
-	text, err = replaceLLHLSPublisherPorts(text, xmlEscape(cfg.LLHLSPort), xmlEscape(cfg.LLHLSTLSPort))
+	replaced, err := rewriteOMEConfig(text, cfg, info)
 	if err != nil {
 		return err
 	}
 
-	text, err = replaceRootIP(text, xmlEscape(cfg.ServerIP))
-	if err != nil {
-		return err
-	}
+	replaced = stampImageTag(replaced, cfg.ImageTag)
+	replaced = collapseBlankLines(replaced)
 
-	text, err = scopedReplaceControlBindings(text, xmlEscape(cfg.Bind))
-	if err != nil {
-		return err
-	}
-
-	text, err = ensureIceCandidatesTag(text, "TcpRelay", xmlEscape(cfg.TCPRelay), cfg.TemplatePath)
-	if err != nil {
-		return err
-	}
-
-	text, err = ensureIceCandidatesTag(text, "IceCandidate", xmlEscape(cfg.ICECandidate), cfg.TemplatePath)
-	if err != nil {
-		return err
-	}
-
-	text, err = replaceAccessToken(text, cfg.AccessToken)
-	if err != nil {
-		return err
-	}
-
-	text, err = replaceAuthentication(text, cfg.Username, cfg.Password)
-	if err != nil {
-		return err
-	}
-
-	text = stampImageTag(text, cfg.ImageTag)
-
-	text = regexp.MustCompile("\\n{3,}").ReplaceAllString(text, "\n\n")
-
-	if err := os.WriteFile(cfg.OutputPath, []byte(text), 0o644); err != nil {
+	if err := os.WriteFile(cfg.OutputPath, []byte(replaced), 0o644); err != nil {
 		return fmt.Errorf("write generated config: %w", err)
 	}
 
 	return nil
 }
 
-func replaceLegacyBindAddress(text string) string {
-	text, comments := stripXMLComments(text)
-	openLegacy := regexp.MustCompile(`<\s*Server\.bind\.Address\s*>`)
-	closeLegacy := regexp.MustCompile(`</\s*Server\.bind\.Address\s*>`)
-	if !openLegacy.MatchString(text) && !closeLegacy.MatchString(text) {
-		return restoreXMLComments(text, comments)
+type omeTemplateInfo struct {
+	hasBindTag            bool
+	rootBindHasAddress    bool
+	rootBindHasSignalling bool
+	hasAccessTokens       bool
+}
+
+type xmlTokenKind int
+
+const (
+	xmlTokenCharData xmlTokenKind = iota
+	xmlTokenStartTag
+	xmlTokenEndTag
+	xmlTokenComment
+	xmlTokenDirective
+)
+
+type xmlToken struct {
+	kind        xmlTokenKind
+	raw         string
+	name        string
+	selfClosing bool
+}
+
+type xmlScanner struct {
+	data string
+	pos  int
+}
+
+func newXMLScanner(data string) *xmlScanner {
+	return &xmlScanner{data: data}
+}
+
+func (s *xmlScanner) next() (xmlToken, bool, error) {
+	if s.pos >= len(s.data) {
+		return xmlToken{}, false, nil
 	}
 
-	if regexp.MustCompile(`<\s*Bind\s*>`).MatchString(text) || regexp.MustCompile(`<\s*Server\.bind\s*>`).MatchString(text) {
-		text = openLegacy.ReplaceAllString(text, "<Address>")
-		text = closeLegacy.ReplaceAllString(text, "</Address>")
-		return restoreXMLComments(text, comments)
+	if s.data[s.pos] != '<' {
+		next := strings.IndexByte(s.data[s.pos:], '<')
+		if next == -1 {
+			next = len(s.data)
+		} else {
+			next += s.pos
+		}
+		raw := s.data[s.pos:next]
+		s.pos = next
+		return xmlToken{kind: xmlTokenCharData, raw: raw}, true, nil
 	}
 
-	text = openLegacy.ReplaceAllString(text, "<Bind><Address>")
-	text = closeLegacy.ReplaceAllString(text, "</Address></Bind>")
-	return restoreXMLComments(text, comments)
+	if strings.HasPrefix(s.data[s.pos:], "<!--") {
+		end := strings.Index(s.data[s.pos+4:], "-->")
+		if end == -1 {
+			return xmlToken{}, false, errors.New("unterminated XML comment")
+		}
+		end = s.pos + 4 + end + 3
+		raw := s.data[s.pos:end]
+		s.pos = end
+		return xmlToken{kind: xmlTokenComment, raw: raw}, true, nil
+	}
+
+	if strings.HasPrefix(s.data[s.pos:], "<![CDATA[") {
+		end := strings.Index(s.data[s.pos+9:], "]]>")
+		if end == -1 {
+			return xmlToken{}, false, errors.New("unterminated XML CDATA section")
+		}
+		end = s.pos + 9 + end + 3
+		raw := s.data[s.pos:end]
+		s.pos = end
+		return xmlToken{kind: xmlTokenDirective, raw: raw}, true, nil
+	}
+
+	if strings.HasPrefix(s.data[s.pos:], "<?") {
+		end := strings.Index(s.data[s.pos+2:], "?>")
+		if end == -1 {
+			return xmlToken{}, false, errors.New("unterminated XML directive")
+		}
+		end = s.pos + 2 + end + 2
+		raw := s.data[s.pos:end]
+		s.pos = end
+		return xmlToken{kind: xmlTokenDirective, raw: raw}, true, nil
+	}
+
+	if strings.HasPrefix(s.data[s.pos:], "<!") {
+		end, err := findTagEnd(s.data, s.pos)
+		if err != nil {
+			return xmlToken{}, false, err
+		}
+		raw := s.data[s.pos : end+1]
+		s.pos = end + 1
+		return xmlToken{kind: xmlTokenDirective, raw: raw}, true, nil
+	}
+
+	end, err := findTagEnd(s.data, s.pos)
+	if err != nil {
+		return xmlToken{}, false, err
+	}
+	raw := s.data[s.pos : end+1]
+	s.pos = end + 1
+	name, isEnd, selfClosing := parseTag(raw)
+	if isEnd {
+		return xmlToken{kind: xmlTokenEndTag, raw: raw, name: name}, true, nil
+	}
+	return xmlToken{kind: xmlTokenStartTag, raw: raw, name: name, selfClosing: selfClosing}, true, nil
+}
+
+func findTagEnd(data string, start int) (int, error) {
+	var quote byte
+	for i := start + 1; i < len(data); i++ {
+		ch := data[i]
+		if quote != 0 {
+			if ch == quote {
+				quote = 0
+			}
+			continue
+		}
+		if ch == '"' || ch == '\'' {
+			quote = ch
+			continue
+		}
+		if ch == '>' {
+			return i, nil
+		}
+	}
+	return -1, errors.New("unterminated XML tag")
+}
+
+func parseTag(raw string) (string, bool, bool) {
+	if len(raw) < 3 {
+		return "", false, false
+	}
+	content := strings.TrimSpace(raw[1 : len(raw)-1])
+	if content == "" {
+		return "", false, false
+	}
+	isEnd := strings.HasPrefix(content, "/")
+	if isEnd {
+		content = strings.TrimSpace(content[1:])
+	}
+	nameEnd := 0
+	for nameEnd < len(content) && !isSpace(content[nameEnd]) && content[nameEnd] != '/' {
+		nameEnd++
+	}
+	name := content[:nameEnd]
+	selfClosing := !isEnd && strings.HasSuffix(strings.TrimSpace(content), "/")
+	return name, isEnd, selfClosing
+}
+
+func renameTag(raw, newName string) string {
+	if len(raw) < 3 {
+		return raw
+	}
+	idx := 1
+	for idx < len(raw) && isSpace(raw[idx]) {
+		idx++
+	}
+	if idx < len(raw) && raw[idx] == '/' {
+		idx++
+		for idx < len(raw) && isSpace(raw[idx]) {
+			idx++
+		}
+	}
+	nameStart := idx
+	for idx < len(raw) && !isSpace(raw[idx]) && raw[idx] != '/' && raw[idx] != '>' {
+		idx++
+	}
+	nameEnd := idx
+	if nameStart >= len(raw) {
+		return raw
+	}
+	return raw[:nameStart] + newName + raw[nameEnd:]
+}
+
+func isSpace(ch byte) bool {
+	return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r'
+}
+
+func scanOMETemplateInfo(text string) (omeTemplateInfo, error) {
+	scanner := newXMLScanner(text)
+	var stack []string
+	rootServerDepth := -1
+	rootBindDepth := -1
+	controlDepth := -1
+
+	info := omeTemplateInfo{}
+	for {
+		token, ok, err := scanner.next()
+		if err != nil {
+			return omeTemplateInfo{}, err
+		}
+		if !ok {
+			break
+		}
+		switch token.kind {
+		case xmlTokenStartTag:
+			name := token.name
+			if name == "Bind" || name == "Server.bind" {
+				info.hasBindTag = true
+			}
+			if name == "AccessTokens" {
+				info.hasAccessTokens = true
+			}
+			if name == "Control" {
+				controlDepth = len(stack) + 1
+			}
+			if name == "Server" && controlDepth == -1 && rootServerDepth == -1 {
+				rootServerDepth = len(stack) + 1
+			}
+			if name == "Bind" || name == "Server.bind" {
+				if rootServerDepth != -1 && len(stack) >= rootServerDepth && controlDepth == -1 {
+					rootBindDepth = len(stack) + 1
+				}
+			}
+			if (name == "Address" || name == "Server.bind.Address") && rootBindDepth != -1 && len(stack) >= rootBindDepth {
+				info.rootBindHasAddress = true
+			}
+			if name == "Signalling" && rootBindDepth != -1 && len(stack) >= rootBindDepth {
+				info.rootBindHasSignalling = true
+			}
+			if !token.selfClosing {
+				stack = append(stack, name)
+			}
+		case xmlTokenEndTag:
+			name := token.name
+			if len(stack) > 0 {
+				stack = stack[:len(stack)-1]
+			}
+			if controlDepth != -1 && len(stack) < controlDepth {
+				controlDepth = -1
+			}
+			if rootBindDepth != -1 && len(stack) < rootBindDepth {
+				rootBindDepth = -1
+			}
+			if rootServerDepth != -1 && len(stack) < rootServerDepth {
+				rootServerDepth = -1
+			}
+			if name == "Control" {
+				controlDepth = -1
+			}
+		}
+	}
+
+	return info, nil
+}
+
+type signallingState struct {
+	depth           int
+	portReplaced    bool
+	tlsPortReplaced bool
+}
+
+type llhlsState struct {
+	depth           int
+	portReplaced    bool
+	tlsPortReplaced bool
+}
+
+type iceCandidatesState struct {
+	depth           int
+	hasTcpRelay     bool
+	hasIceCandidate bool
+}
+
+type replaceState struct {
+	active      bool
+	tagName     string
+	depth       int
+	endOverride string
+}
+
+func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (string, error) {
+	scanner := newXMLScanner(text)
+	var out strings.Builder
+	lineTail := ""
+	write := func(value string) {
+		out.WriteString(value)
+		lineTail = updateLineTail(lineTail, value)
+	}
+	var stack []string
+	rootServerDepth := -1
+	rootBindDepth := -1
+	controlDepth := -1
+	controlServerDepth := -1
+	virtualHostsDepth := -1
+	publishersDepth := -1
+	accessTokensDepth := -1
+	authenticationDepth := -1
+
+	var signallingStack []signallingState
+	var llhlsStack []llhlsState
+	var iceCandidatesStack []iceCandidatesState
+
+	rootServerFound := false
+	rootBindFound := false
+	publishersFound := false
+	llhlsFound := false
+	iceCandidatesFound := 0
+	accessTokenReplaced := false
+	authIDReplaced := false
+	authPasswordReplaced := false
+	authBlockSeen := false
+	rootBindAddressReplaced := false
+	rootBindIPReplaced := false
+	rootBindPortReplaced := false
+	rootBindTLSPortReplaced := false
+	rootServerIPReplaced := false
+
+	bindValue := xmlEscape(cfg.Bind)
+	portValue := xmlEscape(cfg.Port)
+	tlsPortValue := xmlEscape(cfg.TLSPort)
+	llhlsPortValue := xmlEscape(cfg.LLHLSPort)
+	llhlsTLSPortValue := xmlEscape(cfg.LLHLSTLSPort)
+	serverIPValue := xmlEscape(cfg.ServerIP)
+	tcpRelayValue := xmlEscape(cfg.TCPRelay)
+	iceCandidateValue := xmlEscape(cfg.ICECandidate)
+	accessTokenValue := xmlEscape(cfg.AccessToken)
+	usernameValue := xmlEscape(cfg.Username)
+	passwordValue := xmlEscape(cfg.Password)
+
+	replacement := replaceState{}
+
+	for {
+		token, ok, err := scanner.next()
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			break
+		}
+
+		if replacement.active {
+			switch token.kind {
+			case xmlTokenStartTag:
+				if token.name == replacement.tagName && !token.selfClosing {
+					replacement.depth++
+				}
+			case xmlTokenEndTag:
+				if token.name == replacement.tagName {
+					replacement.depth--
+					if replacement.depth == 0 {
+						if replacement.endOverride != "" {
+							write(replacement.endOverride)
+						} else {
+							write(token.raw)
+						}
+						replacement.active = false
+					}
+				}
+			}
+			continue
+		}
+
+		switch token.kind {
+		case xmlTokenCharData, xmlTokenComment, xmlTokenDirective:
+			write(token.raw)
+		case xmlTokenStartTag:
+			name := token.name
+			raw := token.raw
+
+			if name == "Server.bind.Address" {
+				rootBindFound = true
+				replacement = replaceState{
+					active:  true,
+					tagName: name,
+					depth:   1,
+				}
+				if info.hasBindTag {
+					raw = renameTag(raw, "Address")
+					replacement.endOverride = "</Address>"
+					write(raw)
+					write(bindValue)
+				} else {
+					write("<Bind><Address>")
+					write(bindValue)
+					replacement.endOverride = "</Address></Bind>"
+				}
+				rootBindAddressReplaced = true
+				continue
+			}
+
+			if name == "Server.bind" {
+				name = "Bind"
+				raw = renameTag(raw, name)
+			}
+
+			if name == "Control" {
+				controlDepth = len(stack) + 1
+			}
+			if name == "Server" && controlDepth == -1 && rootServerDepth == -1 {
+				rootServerDepth = len(stack) + 1
+				rootServerFound = true
+			}
+			if name == "Server" && controlDepth != -1 && controlServerDepth == -1 {
+				controlServerDepth = len(stack) + 1
+			}
+			if name == "VirtualHosts" && rootServerDepth != -1 && len(stack) >= rootServerDepth && controlDepth == -1 {
+				virtualHostsDepth = len(stack) + 1
+			}
+			if name == "Bind" && rootServerDepth != -1 && len(stack) >= rootServerDepth && controlDepth == -1 {
+				rootBindDepth = len(stack) + 1
+				rootBindFound = true
+			}
+			if name == "Publishers" && rootBindDepth != -1 && len(stack) >= rootBindDepth {
+				publishersDepth = len(stack) + 1
+				publishersFound = true
+			}
+			if name == "LLHLS" && publishersDepth != -1 && len(stack) >= publishersDepth {
+				llhlsDepth := len(stack) + 1
+				llhlsStack = append(llhlsStack, llhlsState{depth: llhlsDepth})
+				llhlsFound = true
+			}
+			if name == "Signalling" && rootBindDepth != -1 && len(stack) >= rootBindDepth {
+				signallingDepth := len(stack) + 1
+				signallingStack = append(signallingStack, signallingState{depth: signallingDepth})
+			}
+			if name == "IceCandidates" {
+				iceCandidatesDepth := len(stack) + 1
+				iceCandidatesStack = append(iceCandidatesStack, iceCandidatesState{depth: iceCandidatesDepth})
+				iceCandidatesFound++
+			}
+			if name == "AccessTokens" {
+				accessTokensDepth = len(stack) + 1
+			}
+			if name == "Authentication" {
+				authenticationDepth = len(stack) + 1
+				authBlockSeen = true
+			}
+
+			inControlServer := controlServerDepth != -1 && len(stack) >= controlServerDepth
+			inRootServer := rootServerDepth != -1 && len(stack) >= rootServerDepth && controlDepth == -1
+			inRootBind := rootBindDepth != -1 && len(stack) >= rootBindDepth
+			inVirtualHosts := virtualHostsDepth != -1 && len(stack) >= virtualHostsDepth
+			inAccessTokens := accessTokensDepth != -1 && len(stack) >= accessTokensDepth
+			inAuthentication := authenticationDepth != -1 && len(stack) >= authenticationDepth
+
+			if inControlServer && (name == "Bind" || name == "IP" || name == "Address") {
+				replacement = replaceState{active: true, tagName: name, depth: 1}
+				write(raw)
+				write(bindValue)
+				continue
+			}
+
+			if name == "Address" && inRootBind && info.rootBindHasAddress && !rootBindAddressReplaced {
+				replacement = replaceState{active: true, tagName: name, depth: 1}
+				write(raw)
+				write(bindValue)
+				rootBindAddressReplaced = true
+				continue
+			}
+
+			if name == "IP" && inRootBind && !info.rootBindHasAddress && !rootBindIPReplaced {
+				replacement = replaceState{active: true, tagName: name, depth: 1}
+				write(raw)
+				write(bindValue)
+				rootBindIPReplaced = true
+				continue
+			}
+
+			if name == "IP" && inRootServer && !inRootBind && !inVirtualHosts && !rootServerIPReplaced {
+				replacement = replaceState{active: true, tagName: name, depth: 1}
+				write(raw)
+				write(serverIPValue)
+				rootServerIPReplaced = true
+				continue
+			}
+
+			if name == "Port" || name == "TLSPort" {
+				if len(llhlsStack) > 0 && len(stack) >= llhlsStack[len(llhlsStack)-1].depth {
+					state := &llhlsStack[len(llhlsStack)-1]
+					if name == "Port" && !state.portReplaced {
+						replacement = replaceState{active: true, tagName: name, depth: 1}
+						write(raw)
+						write(llhlsPortValue)
+						state.portReplaced = true
+						if inRootBind && !info.rootBindHasSignalling {
+							rootBindPortReplaced = true
+						}
+						continue
+					}
+					if name == "TLSPort" && !state.tlsPortReplaced {
+						replacement = replaceState{active: true, tagName: name, depth: 1}
+						write(raw)
+						write(llhlsTLSPortValue)
+						state.tlsPortReplaced = true
+						if inRootBind && !info.rootBindHasSignalling {
+							rootBindTLSPortReplaced = true
+						}
+						continue
+					}
+				}
+			}
+
+			if info.rootBindHasSignalling && len(signallingStack) > 0 && len(stack) >= signallingStack[len(signallingStack)-1].depth {
+				state := &signallingStack[len(signallingStack)-1]
+				if name == "Port" && !state.portReplaced {
+					replacement = replaceState{active: true, tagName: name, depth: 1}
+					write(raw)
+					write(portValue)
+					state.portReplaced = true
+					continue
+				}
+				if name == "TLSPort" && !state.tlsPortReplaced {
+					replacement = replaceState{active: true, tagName: name, depth: 1}
+					write(raw)
+					write(tlsPortValue)
+					state.tlsPortReplaced = true
+					continue
+				}
+			}
+
+			if !info.rootBindHasSignalling && inRootBind {
+				if name == "Port" && !rootBindPortReplaced {
+					replacement = replaceState{active: true, tagName: name, depth: 1}
+					write(raw)
+					write(portValue)
+					rootBindPortReplaced = true
+					continue
+				}
+				if name == "TLSPort" && !rootBindTLSPortReplaced {
+					replacement = replaceState{active: true, tagName: name, depth: 1}
+					write(raw)
+					write(tlsPortValue)
+					rootBindTLSPortReplaced = true
+					continue
+				}
+			}
+
+			if name == "TcpRelay" && len(iceCandidatesStack) > 0 {
+				state := &iceCandidatesStack[len(iceCandidatesStack)-1]
+				replacement = replaceState{active: true, tagName: name, depth: 1}
+				write(raw)
+				write(tcpRelayValue)
+				state.hasTcpRelay = true
+				continue
+			}
+			if name == "IceCandidate" && len(iceCandidatesStack) > 0 {
+				state := &iceCandidatesStack[len(iceCandidatesStack)-1]
+				replacement = replaceState{active: true, tagName: name, depth: 1}
+				write(raw)
+				write(iceCandidateValue)
+				state.hasIceCandidate = true
+				continue
+			}
+
+			if name == "AccessToken" && !accessTokenReplaced && (!info.hasAccessTokens || inAccessTokens) {
+				replacement = replaceState{active: true, tagName: name, depth: 1}
+				write(raw)
+				write(accessTokenValue)
+				accessTokenReplaced = true
+				continue
+			}
+
+			if inAuthentication {
+				if name == "ID" && !authIDReplaced {
+					replacement = replaceState{active: true, tagName: name, depth: 1}
+					write(raw)
+					write(usernameValue)
+					authIDReplaced = true
+					continue
+				}
+				if name == "Password" && !authPasswordReplaced {
+					replacement = replaceState{active: true, tagName: name, depth: 1}
+					write(raw)
+					write(passwordValue)
+					authPasswordReplaced = true
+					continue
+				}
+			}
+
+			write(raw)
+			if !token.selfClosing {
+				stack = append(stack, name)
+			}
+		case xmlTokenEndTag:
+			name := token.name
+			raw := token.raw
+
+			if name == "Server.bind" {
+				name = "Bind"
+				raw = renameTag(raw, name)
+			}
+
+			if name == "IceCandidates" && len(iceCandidatesStack) > 0 {
+				state := iceCandidatesStack[len(iceCandidatesStack)-1]
+				if !state.hasTcpRelay || !state.hasIceCandidate {
+					indent := "    "
+					if lineTail != "" {
+						ws := lineTail
+						indent = ""
+						for i := 0; i < len(ws); i++ {
+							if ws[i] != ' ' && ws[i] != '\t' {
+								break
+							}
+							indent += string(ws[i])
+						}
+					}
+					childIndent := indent + "    "
+					if !state.hasTcpRelay {
+						write("\n" + childIndent + "<TcpRelay>" + tcpRelayValue + "</TcpRelay>")
+					}
+					if !state.hasIceCandidate {
+						write("\n" + childIndent + "<IceCandidate>" + iceCandidateValue + "</IceCandidate>")
+					}
+				}
+				iceCandidatesStack = iceCandidatesStack[:len(iceCandidatesStack)-1]
+			}
+
+			write(raw)
+
+			if len(stack) > 0 {
+				stack = stack[:len(stack)-1]
+			}
+			if controlDepth != -1 && len(stack) < controlDepth {
+				controlDepth = -1
+				controlServerDepth = -1
+			}
+			if controlServerDepth != -1 && len(stack) < controlServerDepth {
+				controlServerDepth = -1
+			}
+			if rootBindDepth != -1 && len(stack) < rootBindDepth {
+				rootBindDepth = -1
+			}
+			if publishersDepth != -1 && len(stack) < publishersDepth {
+				publishersDepth = -1
+			}
+			if virtualHostsDepth != -1 && len(stack) < virtualHostsDepth {
+				virtualHostsDepth = -1
+			}
+			if accessTokensDepth != -1 && len(stack) < accessTokensDepth {
+				accessTokensDepth = -1
+			}
+			if authenticationDepth != -1 && len(stack) < authenticationDepth {
+				authenticationDepth = -1
+			}
+			if len(signallingStack) > 0 && len(stack) < signallingStack[len(signallingStack)-1].depth {
+				state := signallingStack[len(signallingStack)-1]
+				if !state.portReplaced {
+					return "", errors.New("missing <Port> in template")
+				}
+				if !state.tlsPortReplaced {
+					return "", errors.New("missing <TLSPort> in template")
+				}
+				signallingStack = signallingStack[:len(signallingStack)-1]
+			}
+			if len(llhlsStack) > 0 && len(stack) < llhlsStack[len(llhlsStack)-1].depth {
+				state := llhlsStack[len(llhlsStack)-1]
+				if !state.portReplaced {
+					return "", errors.New("missing <Port> in template")
+				}
+				llhlsStack = llhlsStack[:len(llhlsStack)-1]
+			}
+			if rootServerDepth != -1 && len(stack) < rootServerDepth {
+				rootServerDepth = -1
+			}
+		}
+	}
+
+	if !rootServerFound {
+		return "", errors.New("missing <Server> root element in template")
+	}
+	if !rootBindFound {
+		return "", errors.New("missing <Bind> section under <Server> in template")
+	}
+	if !publishersFound {
+		return "", errors.New("missing <Publishers> section under <Bind> in template")
+	}
+	if !llhlsFound {
+		return "", errors.New("missing <LLHLS> section under <Publishers> in template")
+	}
+	if info.rootBindHasSignalling {
+		for _, state := range signallingStack {
+			if !state.portReplaced {
+				return "", errors.New("missing <Port> in template")
+			}
+			if !state.tlsPortReplaced {
+				return "", errors.New("missing <TLSPort> in template")
+			}
+		}
+	} else {
+		if !rootBindPortReplaced {
+			return "", errors.New("missing <Port> in template")
+		}
+		if !rootBindTLSPortReplaced {
+			return "", errors.New("missing <TLSPort> in template")
+		}
+	}
+	if info.hasAccessTokens && !accessTokenReplaced {
+		return "", errors.New("missing <AccessToken> in template")
+	}
+	if !info.hasAccessTokens && !accessTokenReplaced {
+		return "", errors.New("missing <AccessTokens> or <AccessToken> in template")
+	}
+	if !authBlockSeen {
+		return "", errors.New("missing <Authentication> block in template")
+	}
+	if !authIDReplaced {
+		return "", errors.New("missing <ID> in template")
+	}
+	if !authPasswordReplaced {
+		return "", errors.New("missing <Password> in template")
+	}
+	if iceCandidatesFound == 0 {
+		return "", fmt.Errorf("OME template %s missing <%s> (expected under <IceCandidates>)", cfg.TemplatePath, "TcpRelay")
+	}
+
+	return out.String(), nil
+}
+
+func collapseBlankLines(text string) string {
+	var out strings.Builder
+	newlineCount := 0
+	for i := 0; i < len(text); i++ {
+		ch := text[i]
+		if ch == '\n' {
+			newlineCount++
+			if newlineCount > 2 {
+				continue
+			}
+		} else {
+			newlineCount = 0
+		}
+		out.WriteByte(ch)
+	}
+	return out.String()
+}
+
+func updateLineTail(tail, addition string) string {
+	if idx := strings.LastIndex(addition, "\n"); idx != -1 {
+		return addition[idx+1:]
+	}
+	return tail + addition
 }
 
 func validateOMEGeneratedConfig(path string) error {
@@ -917,260 +1596,6 @@ func validateOMEGeneratedConfig(path string) error {
 	}
 
 	return nil
-}
-
-func replaceTagContent(data, tag, value string) (string, error) {
-	openTag := fmt.Sprintf("<%s>", tag)
-	closeTag := fmt.Sprintf("</%s>", tag)
-
-	start := strings.Index(data, openTag)
-	if start == -1 {
-		return "", fmt.Errorf("missing %s in template", openTag)
-	}
-
-	end := strings.Index(data[start:], closeTag)
-	if end == -1 {
-		return "", fmt.Errorf("missing %s in template", closeTag)
-	}
-
-	end += start
-	return data[:start+len(openTag)] + value + data[end:], nil
-}
-
-func replaceAllTagContent(data, tag, value string, required bool) (string, error) {
-	pattern := regexp.MustCompile(fmt.Sprintf(`(<%s>)([^<]*)(</%s>)`, tag, tag))
-	replaced := pattern.ReplaceAllString(data, fmt.Sprintf(`${1}%s${3}`, value))
-	if required && replaced == data {
-		return "", fmt.Errorf("missing <%s> in template", tag)
-	}
-	return replaced, nil
-}
-
-func ensureIceCandidatesTag(text, tag, value, templatePath string) (string, error) {
-	iceRe := regexp.MustCompile(`(?s)<IceCandidates>(.*?)</IceCandidates>`)
-	matches := 0
-	rewriteErr := error(nil)
-	updated := iceRe.ReplaceAllStringFunc(text, func(section string) string {
-		matches++
-		if strings.Contains(section, "<"+tag+">") {
-			replaced, err := replaceAllTagContent(section, tag, value, false)
-			if err != nil {
-				rewriteErr = err
-				return section
-			}
-			return replaced
-		}
-
-		closing := "</IceCandidates>"
-		insertPos := strings.LastIndex(section, closing)
-		if insertPos == -1 {
-			return section
-		}
-
-		indent := "    "
-		if indentMatch := regexp.MustCompile(`\n([ \t]*)</IceCandidates>`).FindStringSubmatch(section); indentMatch != nil {
-			indent = indentMatch[1]
-		}
-		childIndent := indent + "    "
-		insertion := fmt.Sprintf("\n%s<%s>%s</%s>", childIndent, tag, value, tag)
-		return section[:insertPos] + insertion + section[insertPos:]
-	})
-
-	if rewriteErr != nil {
-		return "", rewriteErr
-	}
-	if matches == 0 {
-		return "", fmt.Errorf("OME template %s missing <%s> (expected under <IceCandidates>)", templatePath, tag)
-	}
-	return updated, nil
-}
-
-func replaceRootBindings(text, address, port, tlsPort string) (string, error) {
-	text, comments := stripXMLComments(text)
-	serverRe := regexp.MustCompile(`(?s)<Server[^>]*>(.*)</Server>`)
-	serverLoc := serverRe.FindStringSubmatchIndex(text)
-	if serverLoc == nil {
-		return "", errors.New("missing <Server> root element in template")
-	}
-
-	serverBody := text[serverLoc[2]:serverLoc[3]]
-	bindRe := regexp.MustCompile(`(?s)<Bind>(.*?)</Bind>`)
-	bindLoc := bindRe.FindStringSubmatchIndex(serverBody)
-	if bindLoc == nil {
-		return "", errors.New("missing <Bind> section under <Server> in template")
-	}
-
-	bindBody := serverBody[bindLoc[2]:bindLoc[3]]
-	var err error
-	if strings.Contains(bindBody, "<Address>") {
-		bindBody, err = replaceTagContent(bindBody, "Address", address)
-	} else if strings.Contains(bindBody, "<IP>") {
-		bindBody, err = replaceTagContent(bindBody, "IP", address)
-	}
-	if err != nil {
-		return "", err
-	}
-
-	signallingRe := regexp.MustCompile(`(?s)<Signalling>(.*?)</Signalling>`)
-	rewriteErr := error(nil)
-	signallingCount := 0
-	bindBody = signallingRe.ReplaceAllStringFunc(bindBody, func(section string) string {
-		signallingCount++
-		match := signallingRe.FindStringSubmatch(section)
-		inner := match[1]
-		updated, errPort := replaceTagContent(inner, "Port", port)
-		if errPort != nil {
-			rewriteErr = errPort
-			return section
-		}
-		updated, errPort = replaceTagContent(updated, "TLSPort", tlsPort)
-		if errPort != nil {
-			rewriteErr = errPort
-			return section
-		}
-		return "<Signalling>" + updated + "</Signalling>"
-	})
-	if rewriteErr != nil {
-		return "", rewriteErr
-	}
-
-	if signallingCount == 0 {
-		bindBody, err = replaceTagContent(bindBody, "Port", port)
-		if err != nil {
-			return "", err
-		}
-		bindBody, err = replaceTagContent(bindBody, "TLSPort", tlsPort)
-		if err != nil {
-			return "", err
-		}
-	}
-
-	serverBody = serverBody[:bindLoc[2]] + bindBody + serverBody[bindLoc[3]:]
-	output := text[:serverLoc[2]] + serverBody + text[serverLoc[3]:]
-	return restoreXMLComments(output, comments), nil
-}
-
-func replaceLLHLSPublisherPorts(text, port, tlsPort string) (string, error) {
-	serverRe := regexp.MustCompile(`(?s)<Server[^>]*>(.*)</Server>`)
-	serverLoc := serverRe.FindStringSubmatchIndex(text)
-	if serverLoc == nil {
-		return "", errors.New("missing <Server> root element in template")
-	}
-
-	serverBody := text[serverLoc[2]:serverLoc[3]]
-	bindRe := regexp.MustCompile(`(?s)<Bind>(.*?)</Bind>`)
-	bindLoc := bindRe.FindStringSubmatchIndex(serverBody)
-	if bindLoc == nil {
-		return "", errors.New("missing <Bind> section under <Server> in template")
-	}
-
-	bindBody := serverBody[bindLoc[2]:bindLoc[3]]
-	publishersRe := regexp.MustCompile(`(?s)<Publishers>(.*?)</Publishers>`)
-	publishersLoc := publishersRe.FindStringSubmatchIndex(bindBody)
-	if publishersLoc == nil {
-		return "", errors.New("missing <Publishers> section under <Bind> in template")
-	}
-
-	publishersBody := bindBody[publishersLoc[2]:publishersLoc[3]]
-	llhlsRe := regexp.MustCompile(`(?s)<LLHLS>(.*?)</LLHLS>`)
-	llhlsLoc := llhlsRe.FindStringSubmatchIndex(publishersBody)
-	if llhlsLoc == nil {
-		return "", errors.New("missing <LLHLS> section under <Publishers> in template")
-	}
-
-	llhlsBody := publishersBody[llhlsLoc[2]:llhlsLoc[3]]
-	updated, err := replaceTagContent(llhlsBody, "Port", port)
-	if err != nil {
-		return "", err
-	}
-	if strings.Contains(updated, "<TLSPort>") {
-		updated, err = replaceTagContent(updated, "TLSPort", tlsPort)
-		if err != nil {
-			return "", err
-		}
-	}
-
-	publishersBody = publishersBody[:llhlsLoc[2]] + updated + publishersBody[llhlsLoc[3]:]
-	bindBody = bindBody[:publishersLoc[2]] + publishersBody + bindBody[publishersLoc[3]:]
-	serverBody = serverBody[:bindLoc[2]] + bindBody + serverBody[bindLoc[3]:]
-	return text[:serverLoc[2]] + serverBody + text[serverLoc[3]:], nil
-}
-
-func replaceRootIP(text, ip string) (string, error) {
-	serverRe := regexp.MustCompile(`(?s)<Server[^>]*>(.*)</Server>`)
-	serverLoc := serverRe.FindStringSubmatchIndex(text)
-	if serverLoc == nil {
-		return "", errors.New("missing <Server> root element in template")
-	}
-
-	serverBody := text[serverLoc[2]:serverLoc[3]]
-	ipRe := regexp.MustCompile(`(?s)<IP>(.*?)</IP>`)
-	matches := ipRe.FindAllStringSubmatchIndex(serverBody, -1)
-	for _, loc := range matches {
-		start, end := loc[2], loc[3]
-		bindOpen := strings.LastIndex(serverBody[:start], "<Bind>")
-		bindClose := strings.LastIndex(serverBody[:start], "</Bind>")
-		if bindOpen != -1 && (bindClose == -1 || bindClose < bindOpen) {
-			continue
-		}
-
-		vhostOpen := strings.LastIndex(serverBody[:start], "<VirtualHosts>")
-		vhostClose := strings.LastIndex(serverBody[:start], "</VirtualHosts>")
-		if vhostOpen != -1 && (vhostClose == -1 || vhostClose < vhostOpen) {
-			continue
-		}
-
-		serverBody = serverBody[:start] + ip + serverBody[end:]
-		return text[:serverLoc[2]] + serverBody + text[serverLoc[3]:], nil
-	}
-
-	return text, nil
-}
-
-func scopedReplaceControlBindings(text, bind string) (string, error) {
-	text, comments := stripXMLComments(text)
-	controlRe := regexp.MustCompile(`(?s)<Control>(.*?)</Control>`)
-	controlLoc := controlRe.FindStringSubmatchIndex(text)
-	if controlLoc == nil {
-		return restoreXMLComments(text, comments), nil
-	}
-
-	controlBody := text[controlLoc[0]:controlLoc[1]]
-	serverRe := regexp.MustCompile(`(?s)<Server>(.*?)</Server>`)
-	serverLoc := serverRe.FindStringSubmatchIndex(controlBody)
-	if serverLoc == nil {
-		return restoreXMLComments(text, comments), nil
-	}
-
-	serverBody := controlBody[serverLoc[0]:serverLoc[1]]
-	inner := serverLoc[2] - serverLoc[0]
-	outer := serverLoc[3] - serverLoc[0]
-	content := serverBody[inner:outer]
-
-	var err error
-	if strings.Contains(content, "<Bind>") {
-		content, err = replaceAllTagContent(content, "Bind", bind, false)
-		if err != nil {
-			return "", err
-		}
-	}
-	if strings.Contains(content, "<IP>") {
-		content, err = replaceAllTagContent(content, "IP", bind, false)
-		if err != nil {
-			return "", err
-		}
-	}
-	if strings.Contains(content, "<Address>") {
-		content, err = replaceAllTagContent(content, "Address", bind, false)
-		if err != nil {
-			return "", err
-		}
-	}
-
-	serverBody = serverBody[:inner] + content + serverBody[outer:]
-	controlBody = controlBody[:serverLoc[0]] + serverBody + controlBody[serverLoc[1]:]
-	output := text[:controlLoc[0]] + controlBody + text[controlLoc[1]:]
-	return restoreXMLComments(output, comments), nil
 }
 
 type xmlComment struct {
@@ -1202,60 +1627,18 @@ func restoreXMLComments(text string, comments []xmlComment) string {
 	return restored
 }
 
-func replaceAccessToken(text, token string) (string, error) {
-	token = xmlEscape(token)
-	accessTokensRe := regexp.MustCompile(`(?s)<AccessTokens>(.*?)</AccessTokens>`)
-	loc := accessTokensRe.FindStringSubmatchIndex(text)
-	if loc != nil {
-		inner := text[loc[2]:loc[3]]
-		replaced, err := replaceTagContent(inner, "AccessToken", token)
-		if err != nil {
-			return "", err
-		}
-		return text[:loc[2]] + replaced + text[loc[3]:], nil
-	}
-
-	if strings.Contains(text, "<AccessToken>") {
-		replaced, err := replaceTagContent(text, "AccessToken", token)
-		if err != nil {
-			return "", err
-		}
-		return replaced, nil
-	}
-
-	return "", errors.New("missing <AccessTokens> or <AccessToken> in template")
-}
-
-func replaceAuthentication(text, username, password string) (string, error) {
-	authRe := regexp.MustCompile(`(?s)<Authentication>(.*?)</Authentication>`)
-	loc := authRe.FindStringSubmatchIndex(text)
-	if loc == nil {
-		return "", errors.New("missing <Authentication> block in template")
-	}
-
-	inner := text[loc[2]:loc[3]]
-	var err error
-	inner, err = replaceTagContent(inner, "ID", xmlEscape(username))
-	if err != nil {
-		return "", err
-	}
-	inner, err = replaceTagContent(inner, "Password", xmlEscape(password))
-	if err != nil {
-		return "", err
-	}
-
-	return text[:loc[2]] + inner + text[loc[3]:], nil
-}
-
 func stampImageTag(text, imageTag string) string {
 	if strings.TrimSpace(imageTag) == "" {
 		return text
 	}
 
 	marker := fmt.Sprintf("<!-- Rendered for BITRIVER_OME_IMAGE_TAG=%s -->", xmlEscape(imageTag))
-	pattern := regexp.MustCompile(`<!--\s*Rendered for BITRIVER_OME_IMAGE_TAG=.*?-->`)
-	if pattern.MatchString(text) {
-		return pattern.ReplaceAllString(text, marker)
+	prefix := "<!-- Rendered for BITRIVER_OME_IMAGE_TAG="
+	if start := strings.Index(text, prefix); start != -1 {
+		if end := strings.Index(text[start:], "-->"); end != -1 {
+			end += start + len("-->")
+			return text[:start] + marker + text[end:]
+		}
 	}
 
 	return strings.Replace(text, "<Server version=\"10\">", "<Server version=\"10\">\n    "+marker, 1)
