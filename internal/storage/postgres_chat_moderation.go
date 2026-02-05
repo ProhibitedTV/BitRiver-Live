@@ -15,6 +15,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// CreateChatMessage executes CreateChatMessage.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) CreateChatMessage(channelID, userID, content string) (models.ChatMessage, error) {
 	if r == nil || r.pool == nil {
 		return models.ChatMessage{}, ErrPostgresUnavailable
@@ -97,6 +105,14 @@ func (r *postgresRepository) CreateChatMessage(channelID, userID, content string
 	return message, nil
 }
 
+// DeleteChatMessage executes DeleteChatMessage.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) DeleteChatMessage(channelID, messageID string) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -137,6 +153,15 @@ func (r *postgresRepository) DeleteChatMessage(channelID, messageID string) erro
 	return deleteErr
 }
 
+// ListChatMessages executes ListChatMessages.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (r *postgresRepository) ListChatMessages(channelID string, limit int) ([]models.ChatMessage, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
@@ -186,6 +211,14 @@ func (r *postgresRepository) ListChatMessages(channelID string, limit int) ([]mo
 	return messages, nil
 }
 
+// purgeExpiredChatMessages executes purgeExpiredChatMessages.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) purgeExpiredChatMessages(ctx context.Context, now time.Time) error {
 	retention := r.chatRetention.Messages
 	if retention <= 0 || r == nil || r.pool == nil {
@@ -198,6 +231,13 @@ func (r *postgresRepository) purgeExpiredChatMessages(ctx context.Context, now t
 	return nil
 }
 
+// ChatRestrictions executes ChatRestrictions.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) ChatRestrictions() chat.RestrictionsSnapshot {
 	snapshot := chat.RestrictionsSnapshot{
 		Bans:            map[string]map[string]struct{}{},
@@ -289,6 +329,13 @@ func (r *postgresRepository) ChatRestrictions() chat.RestrictionsSnapshot {
 	return snapshot
 }
 
+// IsChatBanned executes IsChatBanned.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) IsChatBanned(channelID, userID string) bool {
 	if r == nil || r.pool == nil {
 		return false
@@ -302,6 +349,14 @@ func (r *postgresRepository) IsChatBanned(channelID, userID string) bool {
 	return banned
 }
 
+// ChatTimeout executes ChatTimeout.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this signature does not return `error`; not-found/absence is represented by the
+// boolean return value.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) ChatTimeout(channelID, userID string) (time.Time, bool) {
 	if r == nil || r.pool == nil {
 		return time.Time{}, false
@@ -315,6 +370,14 @@ func (r *postgresRepository) ChatTimeout(channelID, userID string) (time.Time, b
 	return expires.UTC(), true
 }
 
+// ApplyChatEvent executes ApplyChatEvent.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) ApplyChatEvent(evt chat.Event) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -431,6 +494,14 @@ func (r *postgresRepository) ApplyChatEvent(evt chat.Event) error {
 	})
 }
 
+// ListChatRestrictions executes ListChatRestrictions.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (r *postgresRepository) ListChatRestrictions(channelID string) []models.ChatRestriction {
 	if r == nil || r.pool == nil {
 		return nil
@@ -527,6 +598,15 @@ func (r *postgresRepository) ListChatRestrictions(channelID string) []models.Cha
 	})
 	return restrictions
 }
+
+// CreateChatReport executes CreateChatReport.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) CreateChatReport(channelID, reporterID, targetID, reason, messageID, evidenceURL string) (models.ChatReport, error) {
 	if r == nil || r.pool == nil {
 		return models.ChatReport{}, ErrPostgresUnavailable
@@ -609,6 +689,15 @@ func (r *postgresRepository) CreateChatReport(channelID, reporterID, targetID, r
 	return report, nil
 }
 
+// ListChatReports executes ListChatReports.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (r *postgresRepository) ListChatReports(channelID string, includeResolved bool) ([]models.ChatReport, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
@@ -685,6 +774,14 @@ func (r *postgresRepository) ListChatReports(channelID string, includeResolved b
 	return reports, nil
 }
 
+// purgeExpiredChatReports executes purgeExpiredChatReports.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) purgeExpiredChatReports(ctx context.Context, now time.Time) error {
 	retention := r.chatRetention.ModerationLogs
 	if retention <= 0 || r == nil || r.pool == nil {
@@ -697,6 +794,14 @@ func (r *postgresRepository) purgeExpiredChatReports(ctx context.Context, now ti
 	return nil
 }
 
+// ResolveChatReport executes ResolveChatReport.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) ResolveChatReport(reportID, resolverID, resolution string) (models.ChatReport, error) {
 	if r == nil || r.pool == nil {
 		return models.ChatReport{}, ErrPostgresUnavailable
@@ -803,6 +908,15 @@ func (r *postgresRepository) ResolveChatReport(reportID, resolverID, resolution 
 	return resolved, nil
 }
 
+// ListChatFilters executes ListChatFilters.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (r *postgresRepository) ListChatFilters(channelID string) ([]models.ChatFilter, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
@@ -842,6 +956,14 @@ func (r *postgresRepository) ListChatFilters(channelID string) ([]models.ChatFil
 	return filters, nil
 }
 
+// CreateChatFilter executes CreateChatFilter.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) CreateChatFilter(channelID string, params ChatFilterParams) (models.ChatFilter, error) {
 	if r == nil || r.pool == nil {
 		return models.ChatFilter{}, ErrPostgresUnavailable
@@ -892,6 +1014,14 @@ func (r *postgresRepository) CreateChatFilter(channelID string, params ChatFilte
 	return filter, nil
 }
 
+// UpdateChatFilter executes UpdateChatFilter.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) UpdateChatFilter(id string, update ChatFilterUpdate) (models.ChatFilter, error) {
 	if r == nil || r.pool == nil {
 		return models.ChatFilter{}, ErrPostgresUnavailable
@@ -952,6 +1082,14 @@ func (r *postgresRepository) UpdateChatFilter(id string, update ChatFilterUpdate
 	return updated, nil
 }
 
+// DeleteChatFilter executes DeleteChatFilter.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) DeleteChatFilter(id string) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -983,6 +1121,15 @@ func (r *postgresRepository) DeleteChatFilter(id string) error {
 	return deleteErr
 }
 
+// ListChatAutoModActions executes ListChatAutoModActions.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (r *postgresRepository) ListChatAutoModActions(channelID string, limit int) ([]models.ChatAutoModAction, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
@@ -1035,6 +1182,14 @@ func (r *postgresRepository) ListChatAutoModActions(channelID string, limit int)
 	return actions, nil
 }
 
+// purgeExpiredChatAutoModActions executes purgeExpiredChatAutoModActions.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) purgeExpiredChatAutoModActions(ctx context.Context, now time.Time) error {
 	retention := r.chatRetention.ModerationLogs
 	if retention <= 0 || r == nil || r.pool == nil {

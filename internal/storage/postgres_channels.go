@@ -18,6 +18,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// loadStreamSession executes loadStreamSession.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this signature does not return `error`; not-found/absence is represented by the
+// boolean return value.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) loadStreamSession(ctx context.Context, id string) (models.StreamSession, bool) {
 	if strings.TrimSpace(id) == "" {
 		return models.StreamSession{}, false
@@ -90,6 +98,13 @@ func (r *postgresRepository) loadStreamSession(ctx context.Context, id string) (
 	return session, true
 }
 
+// recordingDeadline executes recordingDeadline.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) recordingDeadline(now time.Time, published bool) *time.Time {
 	var window time.Duration
 	if published {
@@ -104,6 +119,14 @@ func (r *postgresRepository) recordingDeadline(now time.Time, published bool) *t
 	return &deadline
 }
 
+// createRecording executes createRecording.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) createRecording(session models.StreamSession, channel models.Channel, ended time.Time) (models.Recording, error) {
 	recordingID, err := generateID()
 	if err != nil {
@@ -153,6 +176,14 @@ func (r *postgresRepository) createRecording(session models.StreamSession, chann
 	return recording, nil
 }
 
+// populateRecordingArtifacts executes populateRecordingArtifacts.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) populateRecordingArtifacts(recording *models.Recording, session models.StreamSession) error {
 	client := r.objectClient
 	if client == nil || !client.Enabled() {
@@ -228,6 +259,14 @@ func (r *postgresRepository) populateRecordingArtifacts(recording *models.Record
 	return nil
 }
 
+// insertRecording executes insertRecording.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: requires an already-open pgx transaction supplied by the caller;
+// it does not commit/rollback and does not retry automatically.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) insertRecording(ctx context.Context, tx pgx.Tx, recording models.Recording) error {
 	metadata := recording.Metadata
 	if metadata == nil {
@@ -273,6 +312,14 @@ func (r *postgresRepository) insertRecording(ctx context.Context, tx pgx.Tx, rec
 	return nil
 }
 
+// deleteRecordingArtifacts executes deleteRecordingArtifacts.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) deleteRecordingArtifacts(recording models.Recording) error {
 	client := r.objectClient
 	if client == nil || !client.Enabled() {
@@ -304,6 +351,14 @@ func (r *postgresRepository) deleteRecordingArtifacts(recording models.Recording
 	return nil
 }
 
+// deleteClipArtifacts executes deleteClipArtifacts.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) deleteClipArtifacts(clip models.ClipExport) error {
 	client := r.objectClient
 	if client == nil || !client.Enabled() {
@@ -321,6 +376,13 @@ func (r *postgresRepository) deleteClipArtifacts(clip models.ClipExport) error {
 	return nil
 }
 
+// retentionTime executes retentionTime.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) retentionTime() time.Time {
 	if r.retentionNow != nil {
 		return r.retentionNow()
@@ -328,10 +390,26 @@ func (r *postgresRepository) retentionTime() time.Time {
 	return time.Now().UTC()
 }
 
+// runRecordingRetention executes runRecordingRetention.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) runRecordingRetention(ctx context.Context) error {
 	return r.purgeExpiredRecordings(ctx, r.retentionTime())
 }
 
+// purgeExpiredRecordings executes purgeExpiredRecordings.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) purgeExpiredRecordings(ctx context.Context, now time.Time) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -405,6 +483,14 @@ func (r *postgresRepository) purgeExpiredRecordings(ctx context.Context, now tim
 	return nil
 }
 
+// loadRecording executes loadRecording.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns infrastructure/persistence errors as wrapped `error` values; not-found is
+// represented by the boolean return when provided by this signature.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) loadRecording(ctx context.Context, id string) (models.Recording, bool, error) {
 	var (
 		channelID       string
@@ -522,6 +608,14 @@ func (r *postgresRepository) loadRecording(ctx context.Context, id string) (mode
 	return recording, true, nil
 }
 
+// loadUpload executes loadUpload.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns infrastructure/persistence errors as wrapped `error` values; not-found is
+// represented by the boolean return when provided by this signature.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) loadUpload(ctx context.Context, id string) (models.Upload, bool, error) {
 	var (
 		channelID     string
@@ -583,6 +677,14 @@ func (r *postgresRepository) loadUpload(ctx context.Context, id string) (models.
 	return upload, true, nil
 }
 
+// CreateChannel executes CreateChannel.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) CreateChannel(ownerID, title, category string, tags []string) (models.Channel, error) {
 	if r == nil || r.pool == nil {
 		return models.Channel{}, ErrPostgresUnavailable
@@ -667,6 +769,14 @@ func (r *postgresRepository) CreateChannel(ownerID, title, category string, tags
 	return channel, nil
 }
 
+// UpdateChannel executes UpdateChannel.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) UpdateChannel(id string, update ChannelUpdate) (models.Channel, error) {
 	if r == nil || r.pool == nil {
 		return models.Channel{}, ErrPostgresUnavailable
@@ -762,6 +872,14 @@ func (r *postgresRepository) UpdateChannel(id string, update ChannelUpdate) (mod
 	return channel, nil
 }
 
+// RotateChannelStreamKey executes RotateChannelStreamKey.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) RotateChannelStreamKey(id string) (models.Channel, error) {
 	if r == nil || r.pool == nil {
 		return models.Channel{}, ErrPostgresUnavailable
@@ -830,6 +948,14 @@ func (r *postgresRepository) RotateChannelStreamKey(id string) (models.Channel, 
 	return channel, nil
 }
 
+// DeleteChannel executes DeleteChannel.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) DeleteChannel(id string) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -865,6 +991,14 @@ func (r *postgresRepository) DeleteChannel(id string) error {
 	})
 }
 
+// GetChannel executes GetChannel.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this signature does not return `error`; not-found/absence is represented by the
+// boolean return value.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) GetChannel(id string) (models.Channel, bool) {
 	if r == nil || r.pool == nil {
 		return models.Channel{}, false
@@ -912,6 +1046,14 @@ func (r *postgresRepository) GetChannel(id string) (models.Channel, bool) {
 	return channel, true
 }
 
+// GetChannelByStreamKey executes GetChannelByStreamKey.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this signature does not return `error`; not-found/absence is represented by the
+// boolean return value.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) GetChannelByStreamKey(streamKey string) (models.Channel, bool) {
 	if r == nil || r.pool == nil {
 		return models.Channel{}, false
@@ -957,6 +1099,14 @@ func (r *postgresRepository) GetChannelByStreamKey(streamKey string) (models.Cha
 	return channel, true
 }
 
+// ListChannels executes ListChannels.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (r *postgresRepository) ListChannels(ownerID, query string) []models.Channel {
 	if r == nil || r.pool == nil {
 		return nil
@@ -1030,6 +1180,14 @@ func (r *postgresRepository) ListChannels(ownerID, query string) []models.Channe
 	return channels
 }
 
+// FollowChannel executes FollowChannel.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) FollowChannel(userID, channelID string) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -1058,6 +1216,14 @@ func (r *postgresRepository) FollowChannel(userID, channelID string) error {
 	})
 }
 
+// UnfollowChannel executes UnfollowChannel.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) UnfollowChannel(userID, channelID string) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -1086,6 +1252,13 @@ func (r *postgresRepository) UnfollowChannel(userID, channelID string) error {
 	})
 }
 
+// IsFollowingChannel executes IsFollowingChannel.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) IsFollowingChannel(userID, channelID string) bool {
 	if r == nil || r.pool == nil {
 		return false
@@ -1100,6 +1273,13 @@ func (r *postgresRepository) IsFollowingChannel(userID, channelID string) bool {
 	return exists
 }
 
+// CountFollowers executes CountFollowers.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) CountFollowers(channelID string) int {
 	if r == nil || r.pool == nil {
 		return 0
@@ -1114,6 +1294,14 @@ func (r *postgresRepository) CountFollowers(channelID string) int {
 	return count
 }
 
+// ListFollowedChannelIDs executes ListFollowedChannelIDs.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (r *postgresRepository) ListFollowedChannelIDs(userID string) []string {
 	if r == nil || r.pool == nil {
 		return nil
@@ -1141,6 +1329,14 @@ func (r *postgresRepository) ListFollowedChannelIDs(userID string) []string {
 	return ids
 }
 
+// StartStream executes StartStream.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) StartStream(channelID string, renditions []string) (models.StreamSession, error) {
 	if r == nil || r.pool == nil {
 		return models.StreamSession{}, ErrPostgresUnavailable
@@ -1312,6 +1508,14 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 	return session, nil
 }
 
+// StopStream executes StopStream.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (session models.StreamSession, err error) {
 	if r == nil || r.pool == nil {
 		return models.StreamSession{}, ErrPostgresUnavailable
@@ -1493,6 +1697,14 @@ func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (s
 	return session, nil
 }
 
+// CurrentStreamSession executes CurrentStreamSession.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this signature does not return `error`; not-found/absence is represented by the
+// boolean return value.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) CurrentStreamSession(channelID string) (models.StreamSession, bool) {
 	if r == nil || r.pool == nil {
 		return models.StreamSession{}, false
@@ -1515,6 +1727,15 @@ func (r *postgresRepository) CurrentStreamSession(channelID string) (models.Stre
 	return session, true
 }
 
+// ListStreamSessions executes ListStreamSessions.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (r *postgresRepository) ListStreamSessions(channelID string) ([]models.StreamSession, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
@@ -1559,6 +1780,15 @@ func (r *postgresRepository) ListStreamSessions(channelID string) ([]models.Stre
 	return sessions, nil
 }
 
+// ListRecordings executes ListRecordings.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (r *postgresRepository) ListRecordings(channelID string, includeUnpublished bool) ([]models.Recording, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
@@ -1614,6 +1844,14 @@ func (r *postgresRepository) ListRecordings(channelID string, includeUnpublished
 	return recordings, nil
 }
 
+// CreateUpload executes CreateUpload.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) CreateUpload(params CreateUploadParams) (models.Upload, error) {
 	if r == nil || r.pool == nil {
 		return models.Upload{}, ErrPostgresUnavailable
@@ -1692,6 +1930,15 @@ func (r *postgresRepository) CreateUpload(params CreateUploadParams) (models.Upl
 	return upload, nil
 }
 
+// ListUploads executes ListUploads.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (r *postgresRepository) ListUploads(channelID string) ([]models.Upload, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
@@ -1739,6 +1986,14 @@ func (r *postgresRepository) ListUploads(channelID string) ([]models.Upload, err
 	return uploads, nil
 }
 
+// GetUpload executes GetUpload.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this signature does not return `error`; not-found/absence is represented by the
+// boolean return value.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) GetUpload(id string) (models.Upload, bool) {
 	if r == nil || r.pool == nil {
 		return models.Upload{}, false
@@ -1752,6 +2007,14 @@ func (r *postgresRepository) GetUpload(id string) (models.Upload, bool) {
 	return upload, true
 }
 
+// UpdateUpload executes UpdateUpload.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) UpdateUpload(id string, update UploadUpdate) (models.Upload, error) {
 	if r == nil || r.pool == nil {
 		return models.Upload{}, ErrPostgresUnavailable
@@ -1868,6 +2131,14 @@ func (r *postgresRepository) UpdateUpload(id string, update UploadUpdate) (model
 	return result, nil
 }
 
+// DeleteUpload executes DeleteUpload.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) DeleteUpload(id string) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -1884,6 +2155,14 @@ func (r *postgresRepository) DeleteUpload(id string) error {
 	return nil
 }
 
+// GetRecording executes GetRecording.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this signature does not return `error`; not-found/absence is represented by the
+// boolean return value.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) GetRecording(id string) (models.Recording, bool) {
 	if r == nil || r.pool == nil {
 		return models.Recording{}, false
@@ -1900,6 +2179,14 @@ func (r *postgresRepository) GetRecording(id string) (models.Recording, bool) {
 	return recording, true
 }
 
+// PublishRecording executes PublishRecording.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) PublishRecording(id string) (models.Recording, error) {
 	if r == nil || r.pool == nil {
 		return models.Recording{}, ErrPostgresUnavailable
@@ -1968,6 +2255,14 @@ func (r *postgresRepository) PublishRecording(id string) (models.Recording, erro
 	return recording, nil
 }
 
+// DeleteRecording executes DeleteRecording.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) DeleteRecording(id string) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -2019,6 +2314,14 @@ func (r *postgresRepository) DeleteRecording(id string) error {
 	return nil
 }
 
+// CreateClipExport executes CreateClipExport.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) CreateClipExport(recordingID string, params ClipExportParams) (models.ClipExport, error) {
 	if r == nil || r.pool == nil {
 		return models.ClipExport{}, ErrPostgresUnavailable
@@ -2091,6 +2394,15 @@ func (r *postgresRepository) CreateClipExport(recordingID string, params ClipExp
 	return clip, nil
 }
 
+// ListClipExports executes ListClipExports.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (r *postgresRepository) ListClipExports(recordingID string) ([]models.ClipExport, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
