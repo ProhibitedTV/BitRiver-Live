@@ -22,7 +22,7 @@ COPY deploy ./deploy
 
 RUN go build -tags postgres -o /out/bitriver ./cmd/bitriver
 
-FROM debian:12-slim AS runner
+FROM scratch AS runner
 WORKDIR /workspace
 
 COPY --from=builder /out/bitriver /usr/local/bin/bitriver
