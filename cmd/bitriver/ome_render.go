@@ -236,8 +236,6 @@ func renderOMEConfig(cfg omeRenderConfig) error {
 
 type omeTemplateInfo struct {
 	hasBindTag            bool
-	rootBindHasAddress    bool
-	rootBindHasIP         bool
 	rootBindHasSignalling bool
 	hasAccessTokens       bool
 }
@@ -448,12 +446,6 @@ func scanOMETemplateInfo(text string) (omeTemplateInfo, error) {
 					rootBindDepth = len(stack) + 1
 				}
 			}
-			if (name == "Address" || name == "Server.bind.Address") && rootBindDepth != -1 && len(stack) >= rootBindDepth {
-				info.rootBindHasAddress = true
-			}
-			if name == "IP" && rootBindDepth != -1 && len(stack) >= rootBindDepth {
-				info.rootBindHasIP = true
-			}
 			if name == "Signalling" && rootBindDepth != -1 && len(stack) >= rootBindDepth {
 				info.rootBindHasSignalling = true
 			}
@@ -506,6 +498,7 @@ type replaceState struct {
 	tagName     string
 	depth       int
 	endOverride string
+	dropEnd     bool
 }
 
 func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (string, error) {
@@ -539,7 +532,6 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 	authIDReplaced := false
 	authPasswordReplaced := false
 	authBlockSeen := false
-	rootBindIPReplaced := false
 	rootBindPortReplaced := false
 	rootBindTLSPortReplaced := false
 	rootServerIPReplaced := false
@@ -579,7 +571,7 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 					if replacement.depth == 0 {
 						if replacement.endOverride != "" {
 							write(replacement.endOverride)
-						} else {
+						} else if !replacement.dropEnd {
 							write(token.raw)
 						}
 						replacement.active = false
@@ -595,27 +587,6 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 		case xmlTokenStartTag:
 			name := token.name
 			raw := token.raw
-
-			if name == "Server.bind.Address" {
-				rootBindFound = true
-				replacement = replaceState{
-					active:  true,
-					tagName: name,
-					depth:   1,
-				}
-				if info.hasBindTag {
-					raw = renameTag(raw, "IP")
-					replacement.endOverride = "</IP>"
-					write(raw)
-					write(bindValue)
-				} else {
-					write("<Bind><IP>")
-					write(bindValue)
-					replacement.endOverride = "</IP></Bind>"
-				}
-				rootBindIPReplaced = true
-				continue
-			}
 
 			if name == "Server.bind" {
 				name = "Bind"
@@ -672,27 +643,18 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 			inAccessTokens := accessTokensDepth != -1 && len(stack) >= accessTokensDepth
 			inAuthentication := authenticationDepth != -1 && len(stack) >= authenticationDepth
 
+			if inRootBind && (name == "Address" || name == "IP" || name == "Server.bind.Address") {
+				if token.selfClosing {
+					continue
+				}
+				replacement = replaceState{active: true, tagName: name, depth: 1, dropEnd: true}
+				continue
+			}
+
 			if inControlServer && (name == "Bind" || name == "IP" || name == "Address") {
 				replacement = replaceState{active: true, tagName: name, depth: 1}
 				write(raw)
 				write(bindValue)
-				continue
-			}
-
-			if name == "Address" && inRootBind && !rootBindIPReplaced {
-				replacement = replaceState{active: true, tagName: name, depth: 1}
-				write(renameTag(raw, "IP"))
-				replacement.endOverride = "</IP>"
-				write(bindValue)
-				rootBindIPReplaced = true
-				continue
-			}
-
-			if name == "IP" && inRootBind && !rootBindIPReplaced {
-				replacement = replaceState{active: true, tagName: name, depth: 1}
-				write(raw)
-				write(bindValue)
-				rootBindIPReplaced = true
 				continue
 			}
 
@@ -907,9 +869,6 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 	if !llhlsFound {
 		return "", errors.New("missing <LLHLS> section under <Publishers> in template")
 	}
-	if (info.rootBindHasAddress || info.rootBindHasIP) && !rootBindIPReplaced {
-		return "", errors.New("missing <IP> in template (root <Bind> may use legacy <Address>)")
-	}
 	if info.rootBindHasSignalling {
 		for _, state := range signallingStack {
 			if !state.portReplaced {
@@ -983,7 +942,7 @@ func validateOMEGeneratedConfig(path string) error {
 	contents := string(data)
 	contents = regexp.MustCompile(`(?s)<!--.*?-->`).ReplaceAllString(contents, "")
 	if regexp.MustCompile(`<\s*Server\.bind\.Address\b`).MatchString(contents) {
-		return fmt.Errorf("deprecated <Server.bind.Address> found in %s; update the template to use <Bind><IP> and regenerate deploy/ome/Server.generated.xml with `go run ./cmd/bitriver ome render --force --env-file ./.env` (or `./scripts/render-ome-config.sh --force`)", path)
+		return fmt.Errorf("deprecated <Server.bind.Address> found in %s; update the template to remove root bind address tags and rely on top-level <Server><IP>, then regenerate deploy/ome/Server.generated.xml with `go run ./cmd/bitriver ome render --force --env-file ./.env` (or `./scripts/render-ome-config.sh --force`)", path)
 	}
 	for key, forbidden := range omeTestDefaults {
 		if strings.Contains(contents, forbidden) {
