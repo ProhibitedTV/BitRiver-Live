@@ -23,32 +23,33 @@
         </P2P>
     </Modules>
 
+    <Managers>
+        <API>
+            <Port>8081</Port>
+            <TLSPort>8082</TLSPort>
+            <WorkerCount>1</WorkerCount>
+            <!--
+              APIServer rejects an empty token; customize this value if you
+              want to protect API access, or leave the placeholder for
+              open/local use.
+            -->
+            <AccessTokens>
+                <AccessToken>OME-Example-Access-Token</AccessToken>
+            </AccessTokens>
+            <Authentication>
+                <AutoRegister>true</AutoRegister>
+                <AllowAnonymousUser>false</AllowAnonymousUser>
+                <AllowAnonymousReferrer>false</AllowAnonymousReferrer>
+                <User>
+                    <ID>ome-operator</ID>
+                    <Password>OME-Example-Pass!</Password>
+                </User>
+            </Authentication>
+        </API>
+    </Managers>
+
     <!-- Root <IP> is the canonical bind host; keep protocol sections inside <Bind>. -->
     <Bind>
-        <Managers>
-            <API>
-                <Port>8081</Port>
-                <TLSPort>8082</TLSPort>
-                <WorkerCount>1</WorkerCount>
-                <!--
-                  APIServer rejects an empty token; customize this value if you
-                  want to protect API access, or leave the placeholder for
-                  open/local use.
-                -->
-                <AccessTokens>
-                    <AccessToken>OME-Example-Access-Token</AccessToken>
-                </AccessTokens>
-                <Authentication>
-                    <AutoRegister>true</AutoRegister>
-                    <AllowAnonymousUser>false</AllowAnonymousUser>
-                    <AllowAnonymousReferrer>false</AllowAnonymousReferrer>
-                    <User>
-                        <ID>ome-operator</ID>
-                        <Password>OME-Example-Pass!</Password>
-                    </User>
-                </Authentication>
-            </API>
-        </Managers>
 
         <Providers>
             <RTMP>
