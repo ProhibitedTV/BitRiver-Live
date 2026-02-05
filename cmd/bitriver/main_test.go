@@ -149,6 +149,13 @@ func TestGenerateEnvValuesPromotesDevelopmentModeToProduction(t *testing.T) {
 	}
 }
 
+func TestGenerateEnvValuesPlaceholderModeDefaultsToProduction(t *testing.T) {
+	generated, _ := generateEnvValues(map[string]string{"BITRIVER_LIVE_MODE": "placeholder"})
+	if generated["BITRIVER_LIVE_MODE"] != "production" {
+		t.Fatalf("expected placeholder mode to default to production, got %q", generated["BITRIVER_LIVE_MODE"])
+	}
+}
+
 func TestEnvValidateFailsForMissingFile(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing.env")
 	if err := runEnvValidate([]string{"--env-file", missing}); err == nil {
