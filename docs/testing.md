@@ -104,8 +104,10 @@ GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ingest -count=1 -ru
 Security scanning uses `govulncheck` with the same offline Go settings and
 vendor mode to ensure the results track the pinned `third_party/` replacements
 that are mirrored into `vendor/`. Install the same pinned tool version used in
-CI, then use the helper script to run the root module scan plus checks for each
-replaced third-party module:
+CI (`v1.1.3`, matching `.github/workflows/go-unit-tests.yml`) instead of
+`@latest`; pinning is required so CI's Go 1.21 runners always use a compatible
+`govulncheck` release. Then use the helper script to run the root module scan
+plus checks for each replaced third-party module:
 
 ```bash
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go install golang.org/x/vuln/cmd/govulncheck@v1.1.3
