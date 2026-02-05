@@ -266,8 +266,8 @@ services:
     image: debian:12-slim${BITRIVER_DEBIAN_IMAGE_DIGEST:-}
     container_name: bitriver-srs-config
     working_dir: /workspace
-    # Render via a sanitized copy under /workspace so REPO_ROOT resolves correctly.
-    command: ["bash", "-lc", "mkdir -p /workspace/.tmp && tr -d '\\r' < /workspace/scripts/render-srs-config.sh > /workspace/.tmp/render-srs-config.sh && chmod +x /workspace/.tmp/render-srs-config.sh && exec /workspace/.tmp/render-srs-config.sh --env-file /workspace/.env --force"]
+    # Render via a sanitized /tmp copy while explicitly pinning REPO_ROOT.
+    command: ["bash", "-lc", "tr -d '\\r' < /workspace/scripts/render-srs-config.sh > /tmp/render-srs-config.sh && chmod +x /tmp/render-srs-config.sh && exec env REPO_ROOT=/workspace /tmp/render-srs-config.sh --env-file /workspace/.env --force"]
     volumes:
       - ..:/workspace
     env_file:

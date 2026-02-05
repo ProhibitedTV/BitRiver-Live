@@ -2,7 +2,8 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+DEFAULT_REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="${REPO_ROOT:-$DEFAULT_REPO_ROOT}"
 ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env}"
 TEMPLATE_FILE="$REPO_ROOT/deploy/srs/conf/srs.conf"
 OUTPUT_FILE="$REPO_ROOT/deploy/srs/conf/srs.generated.conf"
