@@ -25,7 +25,7 @@
 
     <!-- Corrected: <Bind> replaces the deprecated <Server.bind.Address> container. -->
     <Bind>
-        <Address>0.0.0.0</Address>
+        <IP>0.0.0.0</IP>
 
         <Managers>
             <API>
@@ -38,15 +38,15 @@
                   open/local use.
                 -->
                 <AccessTokens>
-                    <AccessToken>ome-test-access-token</AccessToken>
+                    <AccessToken>OME-Example-Access-Token</AccessToken>
                 </AccessTokens>
                 <Authentication>
                     <AutoRegister>true</AutoRegister>
                     <AllowAnonymousUser>false</AllowAnonymousUser>
                     <AllowAnonymousReferrer>false</AllowAnonymousReferrer>
                     <User>
-                        <ID>ome-test-user</ID>
-                        <Password>ome-test-pass</Password>
+                        <ID>ome-operator</ID>
+                        <Password>OME-Example-Pass!</Password>
                     </User>
                 </Authentication>
             </API>
