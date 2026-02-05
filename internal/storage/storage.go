@@ -23,7 +23,12 @@ func (s *Storage) Ping(context.Context) error {
 	return nil
 }
 
-// newDataset builds and returns dataset using the supplied dependencies.
+// newDataset executes newDataset.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func newDataset() dataset {
 	ds := dataset{
 		Users:          make(map[string]models.User),
@@ -42,7 +47,13 @@ func newDataset() dataset {
 	return ds
 }
 
-// ensureDatasetInitializedLocked performs ensure dataset initialized locked and propagates validation or dependency failures to the caller.
+// ensureDatasetInitializedLocked executes ensureDatasetInitializedLocked.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) ensureDatasetInitializedLocked() {
 	if s.data.Users == nil {
 		s.data.Users = make(map[string]models.User)
@@ -83,7 +94,12 @@ func (s *Storage) ensureDatasetInitializedLocked() {
 	}
 }
 
-// buildObjectKey builds object key from runtime state used by downstream handlers.
+// buildObjectKey executes buildObjectKey.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func buildObjectKey(parts ...string) string {
 	normalized := make([]string, 0, len(parts))
 	for _, part := range parts {
@@ -96,7 +112,12 @@ func buildObjectKey(parts ...string) string {
 	return strings.Join(normalized, "/")
 }
 
-// normalizeObjectComponent performs normalize object component and propagates validation or dependency failures to the caller.
+// normalizeObjectComponent executes normalizeObjectComponent.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func normalizeObjectComponent(input string) string {
 	lowered := strings.ToLower(strings.TrimSpace(input))
 	if lowered == "" {
@@ -122,17 +143,32 @@ func normalizeObjectComponent(input string) string {
 	return normalized
 }
 
-// manifestMetadataKey performs manifest metadata key and propagates validation or dependency failures to the caller.
+// manifestMetadataKey executes manifestMetadataKey.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func manifestMetadataKey(name string) string {
 	return metadataManifestPrefix + normalizeObjectComponent(name)
 }
 
-// thumbnailMetadataKey performs thumbnail metadata key and propagates validation or dependency failures to the caller.
+// thumbnailMetadataKey executes thumbnailMetadataKey.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func thumbnailMetadataKey(id string) string {
 	return metadataThumbnailPrefix + id
 }
 
-// normalizeRoles performs normalize roles and propagates validation or dependency failures to the caller.
+// normalizeRoles executes normalizeRoles.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func normalizeRoles(input []string) []string {
 	if len(input) == 0 {
 		return nil
@@ -158,14 +194,24 @@ func normalizeRoles(input []string) []string {
 	return roles
 }
 
-// oauthAccountKey performs oauth account key and propagates validation or dependency failures to the caller.
+// oauthAccountKey executes oauthAccountKey.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func oauthAccountKey(provider, subject string) string {
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	subject = strings.TrimSpace(subject)
 	return provider + "|" + subject
 }
 
-// fallbackOAuthEmail performs fallback oauth email and propagates validation or dependency failures to the caller.
+// fallbackOAuthEmail executes fallbackOAuthEmail.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func fallbackOAuthEmail(provider, subject string) string {
 	domain := strings.ToLower(strings.TrimSpace(provider))
 	if domain == "" {
@@ -177,7 +223,12 @@ func fallbackOAuthEmail(provider, subject string) string {
 	return fmt.Sprintf("%s@%s.oauth", local, domain)
 }
 
-// defaultOAuthDisplayName returns the default oauth display name for the current runtime mode.
+// defaultOAuthDisplayName executes defaultOAuthDisplayName.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func defaultOAuthDisplayName(provider, email, subject string) string {
 	trimmedEmail := strings.TrimSpace(email)
 	if trimmedEmail != "" {
@@ -199,7 +250,12 @@ func defaultOAuthDisplayName(provider, email, subject string) string {
 	return capitalizeWord(provider) + " user"
 }
 
-// sanitizeOAuthComponent performs sanitize oauth component and propagates validation or dependency failures to the caller.
+// sanitizeOAuthComponent executes sanitizeOAuthComponent.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func sanitizeOAuthComponent(input string) string {
 	lower := strings.ToLower(strings.TrimSpace(input))
 	if lower == "" {
@@ -221,7 +277,12 @@ func sanitizeOAuthComponent(input string) string {
 	return strings.TrimSpace(builder.String())
 }
 
-// capitalizeWord performs capitalize word and propagates validation or dependency failures to the caller.
+// capitalizeWord executes capitalizeWord.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func capitalizeWord(input string) string {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {
@@ -231,7 +292,13 @@ func capitalizeWord(input string) string {
 	return strings.ToUpper(lower[:1]) + lower[1:]
 }
 
-// NewStorage constructs storage using the provided dependencies and returns an error when initialization fails.
+// NewStorage executes NewStorage.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func NewStorage(path string, opts ...Option) (*Storage, error) {
 	store := &Storage{
 		filePath:            path,
@@ -271,7 +338,14 @@ func NewStorage(path string, opts ...Option) (*Storage, error) {
 	return store, nil
 }
 
-// load performs load and propagates validation or dependency failures to the caller.
+// load executes load.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -305,12 +379,26 @@ func (s *Storage) load() error {
 	return nil
 }
 
-// persist performs persist and propagates validation or dependency failures to the caller.
+// persist executes persist.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) persist() error {
 	return s.persistDataset(s.data)
 }
 
-// persistDataset performs persist dataset and propagates validation or dependency failures to the caller.
+// persistDataset executes persistDataset.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) persistDataset(data dataset) error {
 	if s.persistOverride != nil {
 		if err := s.persistOverride(data); err != nil {
@@ -355,7 +443,12 @@ func (s *Storage) persistDataset(data dataset) error {
 	return nil
 }
 
-// cloneDataset performs clone dataset and propagates validation or dependency failures to the caller.
+// cloneDataset executes cloneDataset.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func cloneDataset(src dataset) dataset {
 	clone := dataset{}
 
@@ -572,7 +665,14 @@ func (s *Storage) CreateUser(params CreateUserParams) (models.User, error) {
 	return user, nil
 }
 
-// ListUsers returns users from the configured backing services.
+// ListUsers executes ListUsers.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (s *Storage) ListUsers() []models.User {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -587,7 +687,14 @@ func (s *Storage) ListUsers() []models.User {
 	return users
 }
 
-// GetUser returns user from the configured backing services.
+// GetUser executes GetUser.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this signature does not return `error`; not-found/absence is represented by the
+// boolean return value.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) GetUser(id string) (models.User, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -608,7 +715,14 @@ func (s *Storage) FindUserByEmail(email string) (models.User, bool) {
 	return models.User{}, false
 }
 
-// AuthenticateOAuth performs authenticate oauth and returns an error when dependent systems reject the operation.
+// AuthenticateOAuth executes AuthenticateOAuth.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) AuthenticateOAuth(params OAuthLoginParams) (models.User, error) {
 	provider := strings.ToLower(strings.TrimSpace(params.Provider))
 	subject := strings.TrimSpace(params.Subject)
@@ -823,7 +937,14 @@ type ProfileUpdate struct {
 	DonationAddresses *[]models.CryptoAddress
 }
 
-// UpsertProfile performs upsert profile and returns an error when dependent systems reject the operation.
+// UpsertProfile executes UpsertProfile.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Profile, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -930,7 +1051,14 @@ func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Pro
 	return profile, nil
 }
 
-// GetProfile returns profile from the configured backing services.
+// GetProfile executes GetProfile.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this signature does not return `error`; not-found/absence is represented by the
+// boolean return value.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) GetProfile(userID string) (models.Profile, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -965,7 +1093,14 @@ func (s *Storage) GetProfile(userID string) (models.Profile, bool) {
 	return profile, true
 }
 
-// ListProfiles returns profiles from the configured backing services.
+// ListProfiles executes ListProfiles.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (s *Storage) ListProfiles() []models.Profile {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -998,7 +1133,14 @@ type ChannelUpdate struct {
 	LiveState *string
 }
 
-// CreateChannel creates channel and returns an error when persistence or validation fails.
+// CreateChannel executes CreateChannel.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) CreateChannel(ownerID, title, category string, tags []string) (models.Channel, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1041,7 +1183,12 @@ func (s *Storage) CreateChannel(ownerID, title, category string, tags []string) 
 	return channel, nil
 }
 
-// normalizeTags performs normalize tags and propagates validation or dependency failures to the caller.
+// normalizeTags executes normalizeTags.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func normalizeTags(tags []string) []string {
 	if len(tags) == 0 {
 		return []string{}
@@ -1063,7 +1210,14 @@ func normalizeTags(tags []string) []string {
 	return normalized
 }
 
-// UpdateChannel updates channel and returns an error when persistence or validation fails.
+// UpdateChannel executes UpdateChannel.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) UpdateChannel(id string, update ChannelUpdate) (models.Channel, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1107,7 +1261,14 @@ func (s *Storage) UpdateChannel(id string, update ChannelUpdate) (models.Channel
 	return channel, nil
 }
 
-// RotateChannelStreamKey performs rotate channel stream key and returns an error when dependent systems reject the operation.
+// RotateChannelStreamKey executes RotateChannelStreamKey.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) RotateChannelStreamKey(id string) (models.Channel, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1137,7 +1298,14 @@ func (s *Storage) RotateChannelStreamKey(id string) (models.Channel, error) {
 	return channel, nil
 }
 
-// GetChannel returns channel from the configured backing services.
+// GetChannel executes GetChannel.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this signature does not return `error`; not-found/absence is represented by the
+// boolean return value.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) GetChannel(id string) (models.Channel, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1164,7 +1332,14 @@ func (s *Storage) GetChannelByStreamKey(streamKey string) (models.Channel, bool)
 	return models.Channel{}, false
 }
 
-// ListChannels returns channels from the configured backing services.
+// ListChannels executes ListChannels.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (s *Storage) ListChannels(ownerID, query string) []models.Channel {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1192,7 +1367,12 @@ func (s *Storage) ListChannels(ownerID, query string) []models.Channel {
 	return channels
 }
 
-// channelMatchesQuery performs channel matches query and propagates validation or dependency failures to the caller.
+// channelMatchesQuery executes channelMatchesQuery.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func channelMatchesQuery(channel models.Channel, owner models.User, normalizedQuery string) bool {
 	if normalizedQuery == "" {
 		return true
@@ -1527,7 +1707,14 @@ func (s *Storage) StartStream(channelID string, renditions []string) (models.Str
 	return session, nil
 }
 
-// StopStream stops stream and returns an error when cleanup operations fail.
+// StopStream executes StopStream.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) StopStream(channelID string, peakConcurrent int) (models.StreamSession, error) {
 	s.mu.Lock()
 	channel, ok := s.data.Channels[channelID]
@@ -1607,7 +1794,15 @@ func (s *Storage) StopStream(channelID string, peakConcurrent int) (models.Strea
 	return session, nil
 }
 
-// ListStreamSessions returns stream sessions from the configured backing services.
+// ListStreamSessions executes ListStreamSessions.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (s *Storage) ListStreamSessions(channelID string) ([]models.StreamSession, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1660,7 +1855,13 @@ func (s *Storage) IngestHealth(ctx context.Context) []ingest.HealthStatus {
 	return checks
 }
 
-// recordIngestHealth performs record ingest health and propagates validation or dependency failures to the caller.
+// recordIngestHealth executes recordIngestHealth.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) recordIngestHealth(statuses []ingest.HealthStatus) {
 	snapshot := append([]ingest.HealthStatus(nil), statuses...)
 	s.mu.Lock()

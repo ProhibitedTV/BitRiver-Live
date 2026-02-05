@@ -12,7 +12,12 @@ import (
 	"bitriver-live/internal/models"
 )
 
-// cloneRecording performs clone recording and propagates validation or dependency failures to the caller.
+// cloneRecording executes cloneRecording.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func cloneRecording(recording models.Recording) models.Recording {
 	cloned := recording
 	if recording.Renditions != nil {
@@ -42,7 +47,12 @@ func cloneRecording(recording models.Recording) models.Recording {
 	return cloned
 }
 
-// cloneUpload performs clone upload and propagates validation or dependency failures to the caller.
+// cloneUpload executes cloneUpload.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func cloneUpload(upload models.Upload) models.Upload {
 	cloned := upload
 	if upload.Metadata != nil {
@@ -63,7 +73,12 @@ func cloneUpload(upload models.Upload) models.Upload {
 	return cloned
 }
 
-// cloneClipExport performs clone clip export and propagates validation or dependency failures to the caller.
+// cloneClipExport executes cloneClipExport.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func cloneClipExport(clip models.ClipExport) models.ClipExport {
 	cloned := clip
 	if clip.CompletedAt != nil {
@@ -73,7 +88,13 @@ func cloneClipExport(clip models.ClipExport) models.ClipExport {
 	return cloned
 }
 
-// recordingDeadline performs recording deadline and propagates validation or dependency failures to the caller.
+// recordingDeadline executes recordingDeadline.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) recordingDeadline(now time.Time, published bool) *time.Time {
 	var window time.Duration
 	if published {
@@ -88,7 +109,14 @@ func (s *Storage) recordingDeadline(now time.Time, published bool) *time.Time {
 	return &deadline
 }
 
-// purgeExpiredRecordingsLocked performs purge expired recordings locked and propagates validation or dependency failures to the caller.
+// purgeExpiredRecordingsLocked executes purgeExpiredRecordingsLocked.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns infrastructure/persistence errors as wrapped `error` values; not-found is
+// represented by the boolean return when provided by this signature.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) purgeExpiredRecordingsLocked(now time.Time) (bool, dataset, error) {
 	if len(s.data.Recordings) == 0 {
 		return false, dataset{}, nil
@@ -131,7 +159,13 @@ func (s *Storage) purgeExpiredRecordingsLocked(now time.Time) (bool, dataset, er
 	return true, snapshot, nil
 }
 
-// retentionTime performs retention time and propagates validation or dependency failures to the caller.
+// retentionTime executes retentionTime.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) retentionTime() time.Time {
 	if s.retentionNow != nil {
 		return s.retentionNow()
@@ -139,7 +173,14 @@ func (s *Storage) retentionTime() time.Time {
 	return time.Now().UTC()
 }
 
-// runRecordingRetention runs recording retention and exits when the work completes or a dependency fails.
+// runRecordingRetention executes runRecordingRetention.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) runRecordingRetention(_ context.Context) error {
 	now := s.retentionTime()
 
@@ -160,7 +201,13 @@ func (s *Storage) runRecordingRetention(_ context.Context) error {
 	return nil
 }
 
-// recordingWithClipsLocked performs recording with clips locked and propagates validation or dependency failures to the caller.
+// recordingWithClipsLocked executes recordingWithClipsLocked.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) recordingWithClipsLocked(recording models.Recording) models.Recording {
 	cloned := cloneRecording(recording)
 	if len(s.data.ClipExports) == 0 {
@@ -192,7 +239,14 @@ func (s *Storage) recordingWithClipsLocked(recording models.Recording) models.Re
 	return cloned
 }
 
-// createRecordingLocked creates recording locked and returns an error when validation or persistence fails.
+// createRecordingLocked executes createRecordingLocked.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) createRecordingLocked(session models.StreamSession, channel models.Channel, ended time.Time) (models.Recording, error) {
 	s.ensureDatasetInitializedLocked()
 	id, err := generateID()
@@ -244,7 +298,14 @@ func (s *Storage) createRecordingLocked(session models.StreamSession, channel mo
 	return recording, nil
 }
 
-// populateRecordingArtifactsLocked performs populate recording artifacts locked and propagates validation or dependency failures to the caller.
+// populateRecordingArtifactsLocked executes populateRecordingArtifactsLocked.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) populateRecordingArtifactsLocked(recording *models.Recording, session models.StreamSession) error {
 	client := s.objectClient
 	if client == nil || !client.Enabled() {
@@ -319,7 +380,14 @@ func (s *Storage) populateRecordingArtifactsLocked(recording *models.Recording, 
 	return nil
 }
 
-// deleteRecordingArtifactsLocked deletes recording artifacts locked and returns an error when cleanup or persistence fails.
+// deleteRecordingArtifactsLocked executes deleteRecordingArtifactsLocked.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) deleteRecordingArtifactsLocked(recording models.Recording) error {
 	client := s.objectClient
 	if client == nil || !client.Enabled() {
@@ -351,7 +419,14 @@ func (s *Storage) deleteRecordingArtifactsLocked(recording models.Recording) err
 	return nil
 }
 
-// deleteClipArtifactsLocked deletes clip artifacts locked and returns an error when cleanup or persistence fails.
+// deleteClipArtifactsLocked executes deleteClipArtifactsLocked.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) deleteClipArtifactsLocked(clip models.ClipExport) error {
 	client := s.objectClient
 	if client == nil || !client.Enabled() || strings.TrimSpace(clip.StorageObject) == "" {
@@ -366,7 +441,15 @@ func (s *Storage) deleteClipArtifactsLocked(clip models.ClipExport) error {
 	return nil
 }
 
-// ListRecordings returns recordings from the configured backing services.
+// ListRecordings executes ListRecordings.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (s *Storage) ListRecordings(channelID string, includeUnpublished bool) ([]models.Recording, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -403,7 +486,14 @@ func (s *Storage) ListRecordings(channelID string, includeUnpublished bool) ([]m
 	return recordings, nil
 }
 
-// CreateUpload creates upload and returns an error when persistence or validation fails.
+// CreateUpload executes CreateUpload.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) CreateUpload(params CreateUploadParams) (models.Upload, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -469,7 +559,15 @@ func (s *Storage) CreateUpload(params CreateUploadParams) (models.Upload, error)
 	return upload, nil
 }
 
-// ListUploads returns uploads from the configured backing services.
+// ListUploads executes ListUploads.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (s *Storage) ListUploads(channelID string) ([]models.Upload, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -491,7 +589,14 @@ func (s *Storage) ListUploads(channelID string) ([]models.Upload, error) {
 	return uploads, nil
 }
 
-// GetUpload returns upload from the configured backing services.
+// GetUpload executes GetUpload.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this signature does not return `error`; not-found/absence is represented by the
+// boolean return value.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) GetUpload(id string) (models.Upload, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -503,7 +608,14 @@ func (s *Storage) GetUpload(id string) (models.Upload, bool) {
 	return cloneUpload(upload), true
 }
 
-// UpdateUpload updates upload and returns an error when persistence or validation fails.
+// UpdateUpload executes UpdateUpload.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) UpdateUpload(id string, update UploadUpdate) (models.Upload, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -581,7 +693,14 @@ func (s *Storage) UpdateUpload(id string, update UploadUpdate) (models.Upload, e
 	return cloneUpload(upload), nil
 }
 
-// DeleteUpload deletes upload and returns an error when persistence or validation fails.
+// DeleteUpload executes DeleteUpload.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) DeleteUpload(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -599,7 +718,14 @@ func (s *Storage) DeleteUpload(id string) error {
 	return nil
 }
 
-// GetRecording returns recording from the configured backing services.
+// GetRecording executes GetRecording.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this signature does not return `error`; not-found/absence is represented by the
+// boolean return value.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) GetRecording(id string) (models.Recording, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -625,7 +751,14 @@ func (s *Storage) GetRecording(id string) (models.Recording, bool) {
 	return s.recordingWithClipsLocked(recording), true
 }
 
-// PublishRecording performs publish recording and returns an error when dependent systems reject the operation.
+// PublishRecording executes PublishRecording.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) PublishRecording(id string) (models.Recording, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -660,7 +793,14 @@ func (s *Storage) PublishRecording(id string) (models.Recording, error) {
 	return s.recordingWithClipsLocked(updated), nil
 }
 
-// DeleteRecording deletes recording and returns an error when persistence or validation fails.
+// DeleteRecording executes DeleteRecording.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) DeleteRecording(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -694,7 +834,14 @@ func (s *Storage) DeleteRecording(id string) error {
 	return nil
 }
 
-// CreateClipExport creates clip export and returns an error when persistence or validation fails.
+// CreateClipExport executes CreateClipExport.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) CreateClipExport(recordingID string, params ClipExportParams) (models.ClipExport, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -744,7 +891,15 @@ func (s *Storage) CreateClipExport(recordingID string, params ClipExportParams) 
 	return clip, nil
 }
 
-// ListClipExports returns clip exports from the configured backing services.
+// ListClipExports executes ListClipExports.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no external transaction is required; it coordinates access with
+// the in-memory mutex and persists snapshots to disk/object storage as needed.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (s *Storage) ListClipExports(recordingID string) ([]models.ClipExport, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

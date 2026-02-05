@@ -14,7 +14,12 @@ import (
 	"time"
 )
 
-// applyObjectStorageDefaults performs apply object storage defaults and propagates validation or dependency failures to the caller.
+// applyObjectStorageDefaults executes applyObjectStorageDefaults.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func applyObjectStorageDefaults(cfg ObjectStorageConfig) ObjectStorageConfig {
 	if cfg.RequestTimeout <= 0 {
 		cfg.RequestTimeout = defaultObjectStorageRequestTimeout
@@ -22,7 +27,12 @@ func applyObjectStorageDefaults(cfg ObjectStorageConfig) ObjectStorageConfig {
 	return cfg
 }
 
-// requestTimeout performs request timeout and propagates validation or dependency failures to the caller.
+// requestTimeout executes requestTimeout.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (cfg ObjectStorageConfig) requestTimeout() time.Duration {
 	if cfg.RequestTimeout <= 0 {
 		return defaultObjectStorageRequestTimeout
@@ -32,20 +42,42 @@ func (cfg ObjectStorageConfig) requestTimeout() time.Duration {
 
 type noopObjectStorageClient struct{}
 
-// Enabled performs enabled and returns an error when dependent systems reject the operation.
+// Enabled executes Enabled.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (noopObjectStorageClient) Enabled() bool { return false }
 
-// Upload performs upload and returns an error when dependent systems reject the operation.
+// Upload executes Upload.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (noopObjectStorageClient) Upload(ctx context.Context, key, contentType string, body []byte) (objectReference, error) {
 	return objectReference{}, nil
 }
 
-// Delete performs delete and returns an error when dependent systems reject the operation.
+// Delete executes Delete.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (noopObjectStorageClient) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-// newObjectStorageClient builds and returns object storage client using the supplied dependencies.
+// newObjectStorageClient executes newObjectStorageClient.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func newObjectStorageClient(cfg ObjectStorageConfig) objectStorageClient {
 	cfg = applyObjectStorageDefaults(cfg)
 	trimmedBucket := strings.TrimSpace(cfg.Bucket)
@@ -83,10 +115,21 @@ type s3ObjectStorageClient struct {
 	httpClient *http.Client
 }
 
-// Enabled performs enabled and returns an error when dependent systems reject the operation.
+// Enabled executes Enabled.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (c *s3ObjectStorageClient) Enabled() bool { return true }
 
-// Upload performs upload and returns an error when dependent systems reject the operation.
+// Upload executes Upload.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (c *s3ObjectStorageClient) Upload(ctx context.Context, key, contentType string, body []byte) (objectReference, error) {
 	finalKey := c.applyPrefix(key)
 	target := c.objectURL(finalKey)
@@ -114,7 +157,13 @@ func (c *s3ObjectStorageClient) Upload(ctx context.Context, key, contentType str
 	return objectReference{Key: finalKey, URL: c.publicURL(finalKey)}, nil
 }
 
-// Delete performs delete and returns an error when dependent systems reject the operation.
+// Delete executes Delete.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (c *s3ObjectStorageClient) Delete(ctx context.Context, key string) error {
 	finalKey := c.applyPrefix(key)
 	target := c.objectURL(finalKey)
@@ -138,7 +187,12 @@ func (c *s3ObjectStorageClient) Delete(ctx context.Context, key string) error {
 	return fmt.Errorf("delete object %s: unexpected status %d", finalKey, response.StatusCode)
 }
 
-// applyPrefix performs apply prefix and propagates validation or dependency failures to the caller.
+// applyPrefix executes applyPrefix.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (c *s3ObjectStorageClient) applyPrefix(key string) string {
 	trimmed := strings.TrimLeft(strings.TrimSpace(key), "/")
 	prefix := strings.Trim(strings.TrimSpace(c.cfg.Prefix), "/")
@@ -154,7 +208,12 @@ func (c *s3ObjectStorageClient) applyPrefix(key string) string {
 	return prefix + "/" + trimmed
 }
 
-// objectURL performs object url and propagates validation or dependency failures to the caller.
+// objectURL executes objectURL.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (c *s3ObjectStorageClient) objectURL(finalKey string) *url.URL {
 	basePath := strings.TrimRight(c.endpoint.Path, "/")
 	path := "/" + strings.TrimLeft(c.cfg.Bucket, "/")
@@ -170,7 +229,12 @@ func (c *s3ObjectStorageClient) objectURL(finalKey string) *url.URL {
 	return &u
 }
 
-// publicURL performs public url and propagates validation or dependency failures to the caller.
+// publicURL executes publicURL.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (c *s3ObjectStorageClient) publicURL(key string) string {
 	base := strings.TrimSpace(c.cfg.PublicEndpoint)
 	if base == "" {
@@ -184,7 +248,13 @@ func (c *s3ObjectStorageClient) publicURL(key string) string {
 	return trimmedBase + "/" + trimmedKey
 }
 
-// signRequest performs sign request and propagates validation or dependency failures to the caller.
+// signRequest executes signRequest.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (c *s3ObjectStorageClient) signRequest(req *http.Request, payloadHash string) error {
 	req.Host = req.URL.Host
 	req.Header.Set("Host", req.URL.Host)
@@ -232,7 +302,12 @@ func (c *s3ObjectStorageClient) signRequest(req *http.Request, payloadHash strin
 	return nil
 }
 
-// canonicalizeHeaders performs canonicalize headers and propagates validation or dependency failures to the caller.
+// canonicalizeHeaders executes canonicalizeHeaders.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func canonicalizeHeaders(req *http.Request) (string, string) {
 	headerMap := make(map[string][]string)
 	for key, values := range req.Header {
@@ -267,7 +342,12 @@ func canonicalizeHeaders(req *http.Request) (string, string) {
 	return builder.String(), strings.Join(signed, ";")
 }
 
-// canonicalURI performs canonical uri and propagates validation or dependency failures to the caller.
+// canonicalURI executes canonicalURI.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func canonicalURI(u *url.URL) string {
 	if u == nil {
 		return "/"
@@ -282,7 +362,12 @@ func canonicalURI(u *url.URL) string {
 	return path
 }
 
-// canonicalQuery performs canonical query and propagates validation or dependency failures to the caller.
+// canonicalQuery executes canonicalQuery.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func canonicalQuery(u *url.URL) string {
 	if u == nil {
 		return ""
@@ -314,7 +399,12 @@ func canonicalQuery(u *url.URL) string {
 	return builder.String()
 }
 
-// deriveSigningKey performs derive signing key and propagates validation or dependency failures to the caller.
+// deriveSigningKey executes deriveSigningKey.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func deriveSigningKey(secret, dateStamp, region string) []byte {
 	kDate := hmacSHA256([]byte("AWS4"+secret), []byte(dateStamp))
 	kRegion := hmacSHA256(kDate, []byte(region))
@@ -322,14 +412,24 @@ func deriveSigningKey(secret, dateStamp, region string) []byte {
 	return hmacSHA256(kService, []byte("aws4_request"))
 }
 
-// hmacSHA256 performs hmac sha256 and propagates validation or dependency failures to the caller.
+// hmacSHA256 executes hmacSHA256.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func hmacSHA256(key []byte, data []byte) []byte {
 	mac := hmac.New(sha256.New, key)
 	mac.Write(data)
 	return mac.Sum(nil)
 }
 
-// hmacSHA256Hex performs hmac sha256 hex and propagates validation or dependency failures to the caller.
+// hmacSHA256Hex executes hmacSHA256Hex.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func hmacSHA256Hex(key []byte, data string) string {
 	mac := hmac.New(sha256.New, key)
 	mac.Write([]byte(data))
@@ -338,7 +438,12 @@ func hmacSHA256Hex(key []byte, data string) string {
 
 var emptyPayloadHash = hashSHA256Hex(nil)
 
-// hashSHA256Hex performs hash sha256 hex and propagates validation or dependency failures to the caller.
+// hashSHA256Hex executes hashSHA256Hex.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: no transaction/connection contract applies for this pure helper.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func hashSHA256Hex(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
