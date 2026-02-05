@@ -55,8 +55,17 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
 
+      - name: Install govulncheck
+        env:
+          GOFLAGS: ''
+          GOPROXY: https://proxy.golang.org,direct
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
       - name: Run unit tests
         run: go test ./...
 
       - name: Build bitriver binary
         run: go build ./cmd/bitriver
+
+      - name: Run govulncheck
+        run: ./scripts/run-govulncheck.sh

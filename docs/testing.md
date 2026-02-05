@@ -57,6 +57,15 @@ on the lifecycle path while iterating, scope the tests with `-run`:
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ingest -count=1 -run HTTPControllerStreamLifecycleIntegration
 ```
 
+Security scanning uses `govulncheck` with the same offline Go settings and
+vendor mode to ensure the results track the pinned `third_party/` replacements
+that are mirrored into `vendor/`. Use the helper script to run the root module
+scan plus checks for each replaced third-party module:
+
+```bash
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off ./scripts/run-govulncheck.sh
+```
+
 End-to-end ingest coverage (storage + HTTP controller + control-plane stub)
 is packaged as a dedicated guard so release branches and tags keep exercising
 the critical ingest → transcoder → playback path. Run the wrapper to boot the
