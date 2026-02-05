@@ -25,9 +25,6 @@
 
     <Managers>
         <API>
-            <Port>8081</Port>
-            <TLSPort>8082</TLSPort>
-            <WorkerCount>1</WorkerCount>
             <!--
               APIServer rejects an empty token; customize this value if you
               want to protect API access, or leave the placeholder for
@@ -39,6 +36,14 @@
 
     <!-- Root <IP> is the canonical bind host; keep protocol sections inside <Bind>. -->
     <Bind>
+
+        <Managers>
+            <API>
+                <Port>8081</Port>
+                <TLSPort>8082</TLSPort>
+                <WorkerCount>1</WorkerCount>
+            </API>
+        </Managers>
 
         <Providers>
             <RTMP>

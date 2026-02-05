@@ -292,9 +292,14 @@ func TestRenderOMEConfigRewritesLLHLSPorts(t *testing.T) {
 	}, "\n")
 
 	data := renderOMEConfig(t, repoRoot, envContents)
-	rootBindPattern := regexp.MustCompile(`(?s)<Bind>\s*<Providers>.*?</Providers>\s*<Publishers>`)
+	rootBindPattern := regexp.MustCompile(`(?s)<Bind>\s*(?:<Managers>.*?</Managers>\s*)?<Providers>.*?</Providers>\s*<Publishers>`)
 	if !rootBindPattern.Match(data) {
 		t.Fatalf("expected rendered config root <Bind> to contain Providers/Publishers sections")
+	}
+
+	apiBindPattern := regexp.MustCompile(`(?s)<Bind>.*?<Managers>\s*<API>.*?<Port>\d+</Port>.*?<TLSPort>\d+</TLSPort>.*?<WorkerCount>\d+</WorkerCount>.*?</API>\s*</Managers>`)
+	if !apiBindPattern.Match(data) {
+		t.Fatalf("expected rendered config to place API listener ports under <Bind><Managers><API>")
 	}
 	if bytes.Contains(data, []byte("<Bind>\n        <IP>")) || bytes.Contains(data, []byte("<Bind>\n        <Address>")) {
 		t.Fatalf("expected rendered config to avoid root <Bind><IP>/<Address> output")
