@@ -21,6 +21,8 @@ Use this section as the concise checklist when you need to ensure schema, enviro
 
 ### `.env` changes
 
+> **Upgrade callout (OME auth mode):** Releases that include OME healthcheck auth-mode validation require `BITRIVER_OME_HEALTHCHECK_AUTH_MODE` in `.env` whenever `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD` are set. Use `token+basic` for username/password deployments, or set `token-only` and leave both username/password values empty for token-only probes.
+
 - Compare your existing `.env` against `deploy/.env.example` whenever you upgrade, then add new keys or defaults before restarting.
 - Run `deploy/check-env.sh` to confirm there are no sample credentials or missing required variables.
 
