@@ -290,6 +290,13 @@ func TestRenderOMEConfigRewritesLLHLSPorts(t *testing.T) {
 	}, "\n")
 
 	data := renderOMEConfig(t, repoRoot, envContents)
+	rootBindIPPattern := regexp.MustCompile(`(?s)<Bind>\s*<IP>0\.0\.0\.0</IP>`)
+	if !rootBindIPPattern.Match(data) {
+		t.Fatalf("expected rendered config to include canonical root <Bind><IP>, but it was missing")
+	}
+	if bytes.Contains(data, []byte("<Bind>\n    <Address>")) {
+		t.Fatalf("expected rendered config to avoid root <Bind><Address> output")
+	}
 	llhlsPattern := regexp.MustCompile(`(?s)<Publishers>.*?<LLHLS>.*?<Port>8099</Port>.*?<TLSPort>9444</TLSPort>.*?</LLHLS>.*?</Publishers>`)
 	if !llhlsPattern.Match(data) {
 		t.Fatalf("expected LLHLS ports to be rewritten in rendered config, but did not find the expected block")
