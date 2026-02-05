@@ -280,6 +280,7 @@ func TestRenderOMEConfigRequiresManagersAuth(t *testing.T) {
 	hasLegacyAccessTokens := bytes.Contains(data, []byte("<AccessTokens>"))
 	hasAuthentication := bytes.Contains(data, []byte("<Authentication>"))
 	hasOutputs := bytes.Contains(data, []byte("<Outputs>"))
+	hasOutputProfiles := bytes.Contains(data, []byte("<OutputProfiles>"))
 	hasOutputStreams := bytes.Contains(data, []byte("<OutputStreams>"))
 	summary := fmt.Sprintf(
 		"TopAccessToken=%q TopPort=%q TopTLSPort=%q TopWorkerCount=%q BindAccessToken=%q BindPort=%q BindTLSPort=%q BindWorkerCount=%q AccessTokens=%t Authentication=%t",
@@ -308,8 +309,12 @@ func TestRenderOMEConfigRequiresManagersAuth(t *testing.T) {
 		t.Fatalf("expected split OME API contexts in rendered config, got: %s", summary)
 	}
 
-	if !hasOutputs {
-		t.Fatalf("expected <Outputs> in rendered config for 0.16.0")
+	if hasOutputs {
+		t.Fatalf("expected rendered config to avoid deprecated <Application><Outputs> wrapper")
+	}
+
+	if !hasOutputProfiles {
+		t.Fatalf("expected rendered config to include direct <Application><OutputProfiles>")
 	}
 
 	if !hasOutputStreams {

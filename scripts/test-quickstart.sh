@@ -177,6 +177,8 @@ listener_tls_port = root.findtext("./Bind/Managers/API/TLSPort")
 listener_worker_count = root.findtext("./Bind/Managers/API/WorkerCount")
 api_access_token = root.findtext("./Managers/API/AccessToken")
 legacy_access_tokens = root.find("./Managers/API/AccessTokens")
+outputs_wrapper = root.find(".//Application/Outputs")
+output_profiles = root.find(".//Application/OutputProfiles")
 misplaced_listener_token = root.find("./Bind/Managers/API/AccessToken")
 misplaced_auth_listener = [
     tag for tag in ("Port", "TLSPort", "WorkerCount")
@@ -209,6 +211,12 @@ if legacy_access_tokens is not None:
 
 if misplaced_listener_token is not None:
     sys.exit("error: rendered OME config placed <AccessToken> under <Bind><Managers><API>")
+
+if outputs_wrapper is not None:
+    sys.exit("error: rendered OME config still wraps output profiles in deprecated <Application><Outputs>")
+
+if output_profiles is None:
+    sys.exit("error: rendered OME config is missing direct <Application><OutputProfiles>")
 
 if misplaced_auth_listener:
     sys.exit(

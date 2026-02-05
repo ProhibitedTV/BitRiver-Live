@@ -143,6 +143,13 @@ func TestOmeConfigRenderingOmitsUnsupportedRootBindHostTags(t *testing.T) {
 	}, "\n")
 	output := renderOMEConfig(t, repoRoot, envContents)
 
+	contents := string(output)
+	if strings.Contains(contents, "<Application><Outputs>") || strings.Contains(contents, "<Outputs>") {
+		t.Fatalf("expected rendered config to define output profiles directly under <Application><OutputProfiles>, got:\n%s", contents)
+	}
+	if !strings.Contains(contents, "<Application>") || !strings.Contains(contents, "<OutputProfiles>") {
+		t.Fatalf("expected rendered config to include direct <Application><OutputProfiles>, got:\n%s", contents)
+	}
 	var parsed struct {
 		IP   string `xml:"IP"`
 		Bind struct {
