@@ -224,7 +224,7 @@ func TestValidateOMEGeneratedConfigRejectsApplicationOutputsWrapper(t *testing.T
 	content := strings.Join([]string{
 		"<Server>",
 		"  <Managers><API><AccessToken>token</AccessToken></API></Managers>",
-		"  <Bind><Managers><API><Port>9000</Port><TLSPort>9443</TLSPort><WorkerCount>1</WorkerCount></API></Managers></Bind>",
+		"  <Bind><Managers><API><Port>8081</Port><TLSPort>9443</TLSPort><WorkerCount>1</WorkerCount></API></Managers></Bind>",
 		"  <VirtualHosts><VirtualHost><Applications><Application><Outputs><OutputProfiles /></Outputs></Application></Applications></VirtualHost></VirtualHosts>",
 		"</Server>",
 	}, "\n")
@@ -241,12 +241,57 @@ func TestValidateOMEGeneratedConfigRejectsApplicationOutputsWrapper(t *testing.T
 	}
 }
 
+func TestRunOMERenderFailsWhenBindManagersAPIPortMismatchesComposeHealthcheckContract(t *testing.T) {
+	_, envPath := setupOMERenderWorkspace(t)
+	env := strings.Join([]string{
+		"BITRIVER_OME_BIND=0.0.0.0",
+		"BITRIVER_OME_IP=10.9.0.2",
+		"BITRIVER_OME_SERVER_PORT=9000",
+		"BITRIVER_OME_SERVER_TLS_PORT=9443",
+		"BITRIVER_OME_HTTP_PORT=19001",
+		"BITRIVER_OME_HTTP_TLS_PORT=19444",
+		"BITRIVER_OME_LLHLS_PORT=8080",
+		"BITRIVER_OME_LLHLS_TLS_PORT=8443",
+		"BITRIVER_OME_API_TOKEN=operator-api-token",
+		"BITRIVER_OME_ACCESS_TOKEN=operator-access-token",
+	}, "\n") + "\n"
+	if err := os.WriteFile(envPath, []byte(env), 0o600); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	originalHealthcheckPort := os.Getenv("BITRIVER_OME_HTTP_PORT")
+	if err := os.Setenv("BITRIVER_OME_HTTP_PORT", "8081"); err != nil {
+		t.Fatalf("set env: %v", err)
+	}
+	t.Cleanup(func() {
+		if originalHealthcheckPort == "" {
+			_ = os.Unsetenv("BITRIVER_OME_HTTP_PORT")
+			return
+		}
+		_ = os.Setenv("BITRIVER_OME_HTTP_PORT", originalHealthcheckPort)
+	})
+
+	err := runOMERender([]string{"--env-file", envPath, "--force", "--quiet"})
+	if err == nil {
+		t.Fatal("expected runOMERender to fail for compose healthcheck contract mismatch")
+	}
+	if !strings.Contains(err.Error(), "rendered <Server><Bind><Managers><API><Port> is \"19001\"") {
+		t.Fatalf("expected mismatch error to include rendered API port, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "BITRIVER_OME_HTTP_PORT=\"8081\"") {
+		t.Fatalf("expected mismatch error to include expected healthcheck port, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "BITRIVER_OME_API") {
+		t.Fatalf("expected mismatch error to include remediation env vars, got %v", err)
+	}
+}
+
 func TestValidateOMEGeneratedConfigRejectsApplicationLLHLS(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "Server.generated.xml")
 	content := strings.Join([]string{
 		"<Server>",
 		"  <Managers><API><AccessToken>token</AccessToken></API></Managers>",
-		"  <Bind><Managers><API><Port>9000</Port><TLSPort>9443</TLSPort><WorkerCount>1</WorkerCount></API></Managers></Bind>",
+		"  <Bind><Managers><API><Port>8081</Port><TLSPort>9443</TLSPort><WorkerCount>1</WorkerCount></API></Managers></Bind>",
 		"  <VirtualHosts><VirtualHost><Applications><Application><LLHLS><Enable>true</Enable></LLHLS></Application></Applications></VirtualHost></VirtualHosts>",
 		"</Server>",
 	}, "\n")
