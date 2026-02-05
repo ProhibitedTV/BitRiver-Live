@@ -227,13 +227,13 @@ If Docker Desktop fails to accept Compose traffic from WSL, you may see `http2: 
   #default#live application, so it was not created` simply reflect the `<Publishers>`/`<Providers>` switches in your
   `<Application>` block being set to `Off`; toggle them to match whether BitRiver Live should push or pull streams via WebRTC,
   LLHLS, and related outputs.
-- **OME health check fails** – The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the container name. The health probe forwards the `BITRIVER_OME_API_TOKEN` header when the rendered config includes `<AccessToken>` (otherwise it falls back to an unauthenticated probe with optional basic auth), so a 401 response will mark the container as unhealthy—the compose preflight reruns `./scripts/render-ome-config.sh` automatically before OME starts, mounting the regenerated `deploy/ome/Server.generated.xml` into `/opt/ovenmediaengine/bin/origin_conf/Server.xml` and `/opt/ovenmediaengine/bin/edge_conf/Server.xml`, but you can still verify the credentials landed in the rendered file:
+- **OME health check fails** – The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the container name. The health probe now follows only the auth mode selected by `BITRIVER_OME_HEALTHCHECK_AUTH_MODE`, so a 401 response will mark the container as unhealthy under token-based modes—the compose preflight reruns `./scripts/render-ome-config.sh` automatically before OME starts, mounting the regenerated `deploy/ome/Server.generated.xml` into `/opt/ovenmediaengine/bin/origin_conf/Server.xml` and `/opt/ovenmediaengine/bin/edge_conf/Server.xml`, but you can still verify the credentials landed in the rendered file:
   ```bash
   [ "$(grep -oPm1 '(?<=<AccessToken>).*?(?=</AccessToken>)' deploy/ome/Server.generated.xml)" = "${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}" ] || echo "OME auth mismatch: rerun ./scripts/render-ome-config.sh --force before docker compose up"
   ./scripts/render-ome-config.sh --check || ./scripts/render-ome-config.sh --force
   grep -E '<(AccessToken)>' deploy/ome/Server.generated.xml
   ```
-  The health check is defined in `deploy/docker-compose.yml` and runs `curl` against `http://localhost:8081/v1/health` with a fallback to `/healthz` inside the container. Authentication attempts are explicit and limited per check run: first `AccessToken` plus basic auth, then `AccessToken` only, then an unauthenticated probe only when both token variables are intentionally empty.
+  The health check is defined in `deploy/docker-compose.yml` and runs `curl` against `http://localhost:8081/v1/health` with a fallback to `/healthz` inside the container. Mixed-mode fallback was removed: each healthcheck run now uses exactly one authentication strategy selected by `BITRIVER_OME_HEALTHCHECK_AUTH_MODE`, and will fail instead of trying a contradictory mode.
 
   Troubleshoot auth mode with one of these valid `.env` combinations:
 
@@ -241,6 +241,7 @@ If Docker Desktop fails to accept Compose traffic from WSL, you may see `http2: 
   | --- | --- |
   | `token+basic` | Set `BITRIVER_OME_HEALTHCHECK_AUTH_MODE=token+basic`, `BITRIVER_OME_USERNAME=<user>`, `BITRIVER_OME_PASSWORD=<pass>`, and keep `BITRIVER_OME_API_TOKEN` non-empty (`BITRIVER_OME_ACCESS_TOKEN` may mirror or override it). |
   | `token-only` | Set `BITRIVER_OME_HEALTHCHECK_AUTH_MODE=token-only`, set `BITRIVER_OME_USERNAME=` and `BITRIVER_OME_PASSWORD=` (both empty), and keep `BITRIVER_OME_API_TOKEN` non-empty (`BITRIVER_OME_ACCESS_TOKEN` optional). |
+  | `none` | Set `BITRIVER_OME_HEALTHCHECK_AUTH_MODE=none` only for local unsecured OME setups where the control API intentionally has no token/basic auth. |
 
   If render-time validation fails, search logs for the exact fragment `BITRIVER_OME_USERNAME/BITRIVER_OME_PASSWORD are set, but BITRIVER_OME_HEALTHCHECK_AUTH_MODE=` and update `.env` accordingly before rerunning `./scripts/render-ome-config.sh --force`.
   If you deploy OME outside of Docker, update `BITRIVER_OME_API` to the reachable host/IP and ensure the configured API access token in `.env` matches the copied `Server.xml` before bringing the stack back up.
