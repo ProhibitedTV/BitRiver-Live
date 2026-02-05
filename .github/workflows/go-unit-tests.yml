@@ -83,3 +83,11 @@ jobs:
       - name: Run govulncheck (Go 1.21 policy)
         shell: bash
         run: ./scripts/run-govulncheck.sh
+
+      - name: Upload govulncheck artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: govulncheck-${{ matrix.os }}
+          path: .artifacts/govulncheck/
+          if-no-files-found: warn
