@@ -10,9 +10,12 @@ cd "$ROOT_DIR"
 
 export GOTOOLCHAIN GOPROXY GOSUMDB
 
+GOVULNCHECK_VERSION="v1.1.3"
+
 if ! command -v govulncheck >/dev/null 2>&1; then
   echo "govulncheck not found in PATH." >&2
-  echo "Install it with: GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go install golang.org/x/vuln/cmd/govulncheck@v1.1.3" >&2
+  echo "Install pinned version with: GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go install golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" >&2
+  echo "Do not use @latest; keep version pinned to match CI workflow (.github/workflows/go-unit-tests.yml)." >&2
   exit 1
 fi
 
