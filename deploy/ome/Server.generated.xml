@@ -30,7 +30,7 @@
               want to protect API access, or leave the placeholder for
               open/local use.
             -->
-            <AccessToken>health-token</AccessToken>
+            <AccessToken>OME-Example-Access-Token</AccessToken>
         </API>
     </Managers>
 
@@ -64,7 +64,7 @@
                     <TcpRelay>*:3478</TcpRelay>
                     <TcpForce>false</TcpForce>
                     <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
-                    <IceCandidate>example.com:10000-10009/udp</IceCandidate>
+                    <IceCandidate>*:10000-10009/udp</IceCandidate>
                 </IceCandidates>
             </WebRTC>
         </Providers>
@@ -87,7 +87,7 @@
                     <TcpRelay>*:3478</TcpRelay>
                     <TcpForce>false</TcpForce>
                     <TcpRelayWorkerCount>1</TcpRelayWorkerCount>
-                    <IceCandidate>example.com:10000-10009/udp</IceCandidate>
+                    <IceCandidate>*:10000-10009/udp</IceCandidate>
                 </IceCandidates>
             </WebRTC>
         </Publishers>
