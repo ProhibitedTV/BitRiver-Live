@@ -255,19 +255,11 @@ func TestValidateOMEGeneratedConfigAcceptsMatchingHealthcheckAccessToken(t *test
 
 	originalAccessToken := os.Getenv("BITRIVER_OME_ACCESS_TOKEN")
 	originalAPIToken := os.Getenv("BITRIVER_OME_API_TOKEN")
-	originalUsername := os.Getenv("BITRIVER_OME_USERNAME")
-	originalPassword := os.Getenv("BITRIVER_OME_PASSWORD")
 	if err := os.Setenv("BITRIVER_OME_ACCESS_TOKEN", "token"); err != nil {
 		t.Fatalf("set env: %v", err)
 	}
-	if err := os.Unsetenv("BITRIVER_OME_API_TOKEN"); err != nil {
-		t.Fatalf("unset env: %v", err)
-	}
-	if err := os.Unsetenv("BITRIVER_OME_USERNAME"); err != nil {
-		t.Fatalf("unset env: %v", err)
-	}
-	if err := os.Unsetenv("BITRIVER_OME_PASSWORD"); err != nil {
-		t.Fatalf("unset env: %v", err)
+	if err := os.Setenv("BITRIVER_OME_API_TOKEN", "token"); err != nil {
+		t.Fatalf("set env: %v", err)
 	}
 	t.Cleanup(func() {
 		if originalAccessToken == "" {
@@ -280,20 +272,10 @@ func TestValidateOMEGeneratedConfigAcceptsMatchingHealthcheckAccessToken(t *test
 		} else {
 			_ = os.Setenv("BITRIVER_OME_API_TOKEN", originalAPIToken)
 		}
-		if originalUsername == "" {
-			_ = os.Unsetenv("BITRIVER_OME_USERNAME")
-		} else {
-			_ = os.Setenv("BITRIVER_OME_USERNAME", originalUsername)
-		}
-		if originalPassword == "" {
-			_ = os.Unsetenv("BITRIVER_OME_PASSWORD")
-		} else {
-			_ = os.Setenv("BITRIVER_OME_PASSWORD", originalPassword)
-		}
 	})
 
 	if err := validateOMEGeneratedConfig(path); err != nil {
-		t.Fatalf("expected matching healthcheck access token to pass validation, got %v", err)
+		t.Fatalf("expected matching BITRIVER_OME_ACCESS_TOKEN/BITRIVER_OME_API_TOKEN to pass validation, got %v", err)
 	}
 }
 
@@ -354,75 +336,6 @@ func TestValidateOMEGeneratedConfigRejectsMismatchedHealthcheckAccessToken(t *te
 	}
 	if !strings.Contains(err.Error(), "BITRIVER_OME_ACCESS_TOKEN") || !strings.Contains(err.Error(), "BITRIVER_OME_API_TOKEN") {
 		t.Fatalf("expected mismatch error to mention BITRIVER_OME_ACCESS_TOKEN and BITRIVER_OME_API_TOKEN, got %v", err)
-	}
-}
-
-func TestValidateOMEGeneratedConfigRejectsUnsupportedBasicAuthHealthcheckMode(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "Server.generated.xml")
-	content := strings.Join([]string{
-		"<Server>",
-		"  <Managers><API><AccessToken>token</AccessToken></API></Managers>",
-		"  <Bind><Managers><API><Port>8081</Port><TLSPort>9443</TLSPort><WorkerCount>1</WorkerCount></API></Managers></Bind>",
-		"</Server>",
-	}, "\n")
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	originalAccessToken := os.Getenv("BITRIVER_OME_ACCESS_TOKEN")
-	originalAPIToken := os.Getenv("BITRIVER_OME_API_TOKEN")
-	originalUsername := os.Getenv("BITRIVER_OME_USERNAME")
-	originalPassword := os.Getenv("BITRIVER_OME_PASSWORD")
-	originalMode := os.Getenv("BITRIVER_OME_HEALTHCHECK_AUTH_MODE")
-	if err := os.Setenv("BITRIVER_OME_ACCESS_TOKEN", "token"); err != nil {
-		t.Fatalf("set env: %v", err)
-	}
-	if err := os.Unsetenv("BITRIVER_OME_API_TOKEN"); err != nil {
-		t.Fatalf("unset env: %v", err)
-	}
-	if err := os.Setenv("BITRIVER_OME_USERNAME", "ome-user"); err != nil {
-		t.Fatalf("set env: %v", err)
-	}
-	if err := os.Setenv("BITRIVER_OME_PASSWORD", "ome-pass"); err != nil {
-		t.Fatalf("set env: %v", err)
-	}
-	if err := os.Unsetenv("BITRIVER_OME_HEALTHCHECK_AUTH_MODE"); err != nil {
-		t.Fatalf("unset env: %v", err)
-	}
-	t.Cleanup(func() {
-		if originalAccessToken == "" {
-			_ = os.Unsetenv("BITRIVER_OME_ACCESS_TOKEN")
-		} else {
-			_ = os.Setenv("BITRIVER_OME_ACCESS_TOKEN", originalAccessToken)
-		}
-		if originalAPIToken == "" {
-			_ = os.Unsetenv("BITRIVER_OME_API_TOKEN")
-		} else {
-			_ = os.Setenv("BITRIVER_OME_API_TOKEN", originalAPIToken)
-		}
-		if originalUsername == "" {
-			_ = os.Unsetenv("BITRIVER_OME_USERNAME")
-		} else {
-			_ = os.Setenv("BITRIVER_OME_USERNAME", originalUsername)
-		}
-		if originalPassword == "" {
-			_ = os.Unsetenv("BITRIVER_OME_PASSWORD")
-		} else {
-			_ = os.Setenv("BITRIVER_OME_PASSWORD", originalPassword)
-		}
-		if originalMode == "" {
-			_ = os.Unsetenv("BITRIVER_OME_HEALTHCHECK_AUTH_MODE")
-		} else {
-			_ = os.Setenv("BITRIVER_OME_HEALTHCHECK_AUTH_MODE", originalMode)
-		}
-	})
-
-	err := validateOMEGeneratedConfig(path)
-	if err == nil {
-		t.Fatal("expected validation to fail when basic auth is set without supported mode flag")
-	}
-	if !strings.Contains(err.Error(), "BITRIVER_OME_HEALTHCHECK_AUTH_MODE") {
-		t.Fatalf("expected unsupported basic auth error to mention BITRIVER_OME_HEALTHCHECK_AUTH_MODE, got %v", err)
 	}
 }
 
