@@ -180,6 +180,8 @@ legacy_access_tokens = root.find("./Managers/API/AccessTokens")
 outputs_wrapper = root.find(".//Application/Outputs")
 output_profiles = root.find(".//Application/OutputProfiles")
 application_llhls = root.find(".//Application/LLHLS")
+output_streams = root.find(".//Application/OutputProfiles/OutputProfile/OutputStreams")
+output_stream_name = root.findtext(".//Application/OutputProfiles/OutputProfile/OutputStreamName")
 misplaced_listener_token = root.find("./Bind/Managers/API/AccessToken")
 misplaced_auth_listener = [
     tag for tag in ("Port", "TLSPort", "WorkerCount")
@@ -221,6 +223,12 @@ if output_profiles is None:
 
 if application_llhls is not None:
     sys.exit("error: rendered OME config still contains deprecated application-level <LLHLS> node")
+
+if output_streams is not None:
+    sys.exit("error: rendered OME config still uses deprecated <OutputStreams> wrapper")
+
+if (output_stream_name or "").strip() != "${OriginStreamName}":
+    sys.exit("error: rendered OME config must set <OutputStreamName>${OriginStreamName}</OutputStreamName>")
 
 if misplaced_auth_listener:
     sys.exit(

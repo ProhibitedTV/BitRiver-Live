@@ -282,6 +282,7 @@ func TestRenderOMEConfigRequiresManagersAuth(t *testing.T) {
 	hasOutputs := bytes.Contains(data, []byte("<Outputs>"))
 	hasOutputProfiles := bytes.Contains(data, []byte("<OutputProfiles>"))
 	hasOutputStreams := bytes.Contains(data, []byte("<OutputStreams>"))
+	hasOutputStreamName := bytes.Contains(data, []byte("<OutputStreamName>${OriginStreamName}</OutputStreamName>"))
 	summary := fmt.Sprintf(
 		"TopAccessToken=%q TopPort=%q TopTLSPort=%q TopWorkerCount=%q BindAccessToken=%q BindPort=%q BindTLSPort=%q BindWorkerCount=%q AccessTokens=%t Authentication=%t",
 		parsed.Managers.API.AccessToken,
@@ -314,7 +315,7 @@ func TestRenderOMEConfigRequiresManagersAuth(t *testing.T) {
 	}
 
 	hasApplicationLLHLS := bytes.Contains(data, []byte("<Application><LLHLS>")) ||
-		regexp.MustCompile(`(?s)<Application\b[^>]*>.*?<LLHLS>`).Match(data)
+		regexp.MustCompile(`(?s)<Application\b[^>]*>\s*<LLHLS\b`).Match(data)
 
 	if !hasOutputProfiles {
 		t.Fatalf("expected rendered config to include direct <Application><OutputProfiles>")
@@ -324,8 +325,12 @@ func TestRenderOMEConfigRequiresManagersAuth(t *testing.T) {
 		t.Fatalf("expected rendered config to avoid deprecated <Application><LLHLS> block")
 	}
 
-	if !hasOutputStreams {
-		t.Fatalf("expected <OutputStreams> in rendered config for 0.16.0")
+	if hasOutputStreams {
+		t.Fatalf("expected rendered config to avoid deprecated <OutputStreams> wrapper")
+	}
+
+	if !hasOutputStreamName {
+		t.Fatalf("expected <OutputStreamName>${OriginStreamName}</OutputStreamName> in rendered config")
 	}
 }
 

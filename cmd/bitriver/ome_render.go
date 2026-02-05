@@ -880,10 +880,6 @@ func validateOMEGeneratedConfig(path string) error {
 	if regexp.MustCompile(`(?s)<\s*Application\b[^>]*>.*?<\s*Outputs\b`).MatchString(contents) {
 		return fmt.Errorf("deprecated <Application><Outputs> found in %s; place output definitions directly under <Application><OutputProfiles>", path)
 	}
-	if regexp.MustCompile(`(?s)<\s*Application\b[^>]*>.*?<\s*LLHLS\b`).MatchString(contents) {
-		return fmt.Errorf("deprecated application-level <Application><LLHLS> found in %s; keep LL-HLS configuration under <Bind><Publishers><LLHLS> only", path)
-	}
-
 	var parsed struct {
 		Managers struct {
 			API struct {
@@ -903,6 +899,15 @@ func validateOMEGeneratedConfig(path string) error {
 				} `xml:"API"`
 			} `xml:"Managers"`
 		} `xml:"Bind"`
+		VirtualHosts struct {
+			VirtualHost struct {
+				Applications struct {
+					Application struct {
+						LLHLS *struct{} `xml:"LLHLS"`
+					} `xml:"Application"`
+				} `xml:"Applications"`
+			} `xml:"VirtualHost"`
+		} `xml:"VirtualHosts"`
 	}
 	if err := xml.Unmarshal([]byte(contents), &parsed); err != nil {
 		return fmt.Errorf("parse %s: %w", path, err)
@@ -919,6 +924,9 @@ func validateOMEGeneratedConfig(path string) error {
 	}
 	if strings.TrimSpace(parsed.Bind.Managers.API.AccessToken) != "" {
 		return fmt.Errorf("invalid <AccessToken> found under <Server><Bind><Managers><API> in %s; keep auth token only under top-level <Server><Managers><API>", path)
+	}
+	if parsed.VirtualHosts.VirtualHost.Applications.Application.LLHLS != nil {
+		return fmt.Errorf("deprecated application-level <Application><LLHLS> found in %s; keep LL-HLS configuration under <Application><Publishers><LLHLS> only", path)
 	}
 
 	return nil
