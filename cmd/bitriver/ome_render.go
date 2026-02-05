@@ -967,18 +967,10 @@ func validateOMEGeneratedConfig(path string) error {
 	}
 	renderedAccessToken := strings.TrimSpace(parsed.Managers.API.AccessToken)
 	if expectedHealthcheckToken != "" && renderedAccessToken != expectedHealthcheckToken {
-		return fmt.Errorf("healthcheck auth mismatch in %s: rendered <Server><Managers><API><AccessToken> is %q but docker-compose healthcheck sends BITRIVER_OME_ACCESS_TOKEN (fallback BITRIVER_OME_API_TOKEN) as %q; align BITRIVER_OME_ACCESS_TOKEN/BITRIVER_OME_API_TOKEN with the rendered token and regenerate deploy/ome/Server.generated.xml", path, renderedAccessToken, expectedHealthcheckToken)
+		return fmt.Errorf("healthcheck auth mismatch in %s: rendered <Server><Managers><API><AccessToken> is %q but docker-compose healthcheck sends BITRIVER_OME_ACCESS_TOKEN (falling back to BITRIVER_OME_API_TOKEN when access token is empty) as %q; align BITRIVER_OME_ACCESS_TOKEN/BITRIVER_OME_API_TOKEN with the rendered token and regenerate deploy/ome/Server.generated.xml", path, renderedAccessToken, expectedHealthcheckToken)
 	}
 	if strings.TrimSpace(parsed.Bind.Managers.API.AccessToken) != "" {
 		return fmt.Errorf("invalid <AccessToken> found under <Server><Bind><Managers><API> in %s; keep auth token only under top-level <Server><Managers><API>", path)
-	}
-	basicAuthUser := strings.TrimSpace(os.Getenv("BITRIVER_OME_USERNAME"))
-	basicAuthPass := strings.TrimSpace(os.Getenv("BITRIVER_OME_PASSWORD"))
-	if basicAuthUser != "" && basicAuthPass != "" {
-		mode := strings.TrimSpace(os.Getenv("BITRIVER_OME_HEALTHCHECK_AUTH_MODE"))
-		if mode != "token+basic" {
-			return fmt.Errorf("BITRIVER_OME_USERNAME/BITRIVER_OME_PASSWORD are set, but BITRIVER_OME_HEALTHCHECK_AUTH_MODE=%q. Set BITRIVER_OME_HEALTHCHECK_AUTH_MODE=token+basic to explicitly enable Compose basic-auth healthchecks, or unset BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD", mode)
-		}
 	}
 	if parsed.VirtualHosts.VirtualHost.Applications.Application.LLHLS != nil {
 		return fmt.Errorf("deprecated application-level <Application><LLHLS> found in %s; keep LL-HLS configuration under <Application><Publishers><LLHLS> only", path)

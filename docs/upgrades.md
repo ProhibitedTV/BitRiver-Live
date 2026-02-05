@@ -21,7 +21,7 @@ Use this section as the concise checklist when you need to ensure schema, enviro
 
 ### `.env` changes
 
-> **Upgrade callout (OME auth mode):** Releases that include OME healthcheck auth-mode validation require `BITRIVER_OME_HEALTHCHECK_AUTH_MODE` in `.env` whenever `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD` are set. Use `token+basic` for username/password deployments, or set `token-only` and leave both username/password values empty for token-only probes.
+> **Upgrade callout (OME auth token source):** The OME healthcheck now always sends a single `AccessToken` header, choosing `BITRIVER_OME_ACCESS_TOKEN` when non-empty and otherwise `BITRIVER_OME_API_TOKEN`. After changing either value, re-render `deploy/ome/Server.generated.xml` so `<Managers><API><AccessToken>` matches `${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}` before `docker compose up`.
 
 - Compare your existing `.env` against `deploy/.env.example` whenever you upgrade, then add new keys or defaults before restarting.
 - Run `deploy/check-env.sh` to confirm there are no sample credentials or missing required variables.
