@@ -172,15 +172,22 @@ root_bind_ip = root.findtext("./Bind/IP")
 legacy_root_bind_address = root.findtext("./Bind/Address")
 if (root_bind_ip and root_bind_ip.strip()) or (legacy_root_bind_address and legacy_root_bind_address.strip()):
     sys.exit("error: expected root <Bind> to omit unsupported host child tags (<IP>/<Address>)")
-root_port = root.findtext(".//Bind/Providers/WebRTC/Signalling/Port")
-root_tls_port = root.findtext(".//Bind/Providers/WebRTC/Signalling/TLSPort")
+listener_port = root.findtext("./Bind/Managers/API/Port")
+listener_tls_port = root.findtext("./Bind/Managers/API/TLSPort")
+listener_worker_count = root.findtext("./Bind/Managers/API/WorkerCount")
 api_access_token = root.findtext("./Managers/API/AccessToken")
 legacy_access_tokens = root.find("./Managers/API/AccessTokens")
+misplaced_listener_token = root.find("./Bind/Managers/API/AccessToken")
+misplaced_auth_listener = [
+    tag for tag in ("Port", "TLSPort", "WorkerCount")
+    if root.find(f"./Managers/API/{tag}") is not None
+]
 
 values = {
     "RootBind": root_bind_ip,
-    "RootPort": root_port,
-    "RootTLSPort": root_tls_port,
+    "ListenerPort": listener_port,
+    "ListenerTLSPort": listener_tls_port,
+    "ListenerWorkerCount": listener_worker_count,
     "AccessToken": api_access_token,
 }
 
@@ -190,15 +197,24 @@ if empty:
         "error: OME config is missing required tags: " + ", ".join(f"<{tag}>" for tag in empty)
     )
 
-if root_port != expected_port or root_tls_port != expected_tls_port:
+if listener_port != expected_port or listener_tls_port != expected_tls_port:
     sys.exit(
-        "error: expected root <Bind> signalling ports to match env values: "
-        f"port={root_port}, tlsPort={root_tls_port}, "
+        "error: expected <Bind><Managers><API> listener ports to match env values: "
+        f"port={listener_port}, tlsPort={listener_tls_port}, "
         f"expected port={expected_port}, tlsPort={expected_tls_port}"
     )
 
 if legacy_access_tokens is not None:
     sys.exit("error: rendered OME config still uses deprecated <AccessTokens> wrapper")
+
+if misplaced_listener_token is not None:
+    sys.exit("error: rendered OME config placed <AccessToken> under <Bind><Managers><API>")
+
+if misplaced_auth_listener:
+    sys.exit(
+        "error: rendered OME config placed listener field(s) under top-level <Managers><API>: "
+        + ", ".join(misplaced_auth_listener)
+    )
 
 if api_access_token != env_values["BITRIVER_OME_API_TOKEN"]:
     sys.exit("error: rendered OME API <AccessToken> does not match .env defaults")

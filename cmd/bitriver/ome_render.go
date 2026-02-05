@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/xml"
 	"errors"
 	"flag"
 	"fmt"
@@ -463,12 +464,6 @@ func scanOMETemplateInfo(text string) (omeTemplateInfo, error) {
 	return info, nil
 }
 
-type signallingState struct {
-	depth           int
-	portReplaced    bool
-	tlsPortReplaced bool
-}
-
 type llhlsState struct {
 	depth           int
 	portReplaced    bool
@@ -502,12 +497,13 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 	rootBindDepth := -1
 	controlDepth := -1
 	controlServerDepth := -1
-	managersDepth := -1
-	managersAPIDepth := -1
+	topLevelManagersDepth := -1
+	topLevelManagersAPIDepth := -1
+	bindManagersDepth := -1
+	bindManagersAPIDepth := -1
 	virtualHostsDepth := -1
 	publishersDepth := -1
 
-	var signallingStack []signallingState
 	var llhlsStack []llhlsState
 	var iceCandidatesStack []iceCandidatesState
 
@@ -517,10 +513,11 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 	llhlsFound := false
 	iceCandidatesFound := 0
 	accessTokenReplaced := false
-	rootBindPortReplaced := false
-	rootBindTLSPortReplaced := false
+	bindManagersPortReplaced := false
+	bindManagersTLSPortReplaced := false
 	rootServerIPReplaced := false
-	managersAPIFound := false
+	topLevelManagersAPIFound := false
+	bindManagersAPIFound := false
 
 	bindValue := xmlEscape(cfg.Bind)
 	portValue := xmlEscape(cfg.Port)
@@ -588,11 +585,21 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 				controlServerDepth = len(stack) + 1
 			}
 			if name == "Managers" && rootServerDepth != -1 && len(stack) >= rootServerDepth && controlDepth == -1 {
-				managersDepth = len(stack) + 1
+				if rootBindDepth != -1 && len(stack) >= rootBindDepth {
+					bindManagersDepth = len(stack) + 1
+				} else {
+					topLevelManagersDepth = len(stack) + 1
+				}
 			}
-			if name == "API" && managersDepth != -1 && len(stack) >= managersDepth {
-				managersAPIDepth = len(stack) + 1
-				managersAPIFound = true
+			if name == "API" {
+				if topLevelManagersDepth != -1 && len(stack) >= topLevelManagersDepth {
+					topLevelManagersAPIDepth = len(stack) + 1
+					topLevelManagersAPIFound = true
+				}
+				if bindManagersDepth != -1 && len(stack) >= bindManagersDepth {
+					bindManagersAPIDepth = len(stack) + 1
+					bindManagersAPIFound = true
+				}
 			}
 			if name == "VirtualHosts" && rootServerDepth != -1 && len(stack) >= rootServerDepth && controlDepth == -1 {
 				virtualHostsDepth = len(stack) + 1
@@ -610,10 +617,6 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 				llhlsStack = append(llhlsStack, llhlsState{depth: llhlsDepth})
 				llhlsFound = true
 			}
-			if name == "Signalling" && rootBindDepth != -1 && len(stack) >= rootBindDepth {
-				signallingDepth := len(stack) + 1
-				signallingStack = append(signallingStack, signallingState{depth: signallingDepth})
-			}
 			if name == "IceCandidates" {
 				iceCandidatesDepth := len(stack) + 1
 				iceCandidatesStack = append(iceCandidatesStack, iceCandidatesState{depth: iceCandidatesDepth})
@@ -621,7 +624,8 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 			}
 
 			inControlServer := controlServerDepth != -1 && len(stack) >= controlServerDepth
-			inManagersAPI := managersAPIDepth != -1 && len(stack) >= managersAPIDepth
+			inTopLevelManagersAPI := topLevelManagersAPIDepth != -1 && len(stack) >= topLevelManagersAPIDepth
+			inBindManagersAPI := bindManagersAPIDepth != -1 && len(stack) >= bindManagersAPIDepth
 			inRootServer := rootServerDepth != -1 && len(stack) >= rootServerDepth && controlDepth == -1
 			inRootBind := rootBindDepth != -1 && len(stack) >= rootBindDepth
 			inVirtualHosts := virtualHostsDepth != -1 && len(stack) >= virtualHostsDepth
@@ -657,9 +661,6 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 						write(raw)
 						write(llhlsPortValue)
 						state.portReplaced = true
-						if inRootBind && !info.rootBindHasSignalling {
-							rootBindPortReplaced = true
-						}
 						continue
 					}
 					if name == "TLSPort" && !state.tlsPortReplaced {
@@ -667,45 +668,24 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 						write(raw)
 						write(llhlsTLSPortValue)
 						state.tlsPortReplaced = true
-						if inRootBind && !info.rootBindHasSignalling {
-							rootBindTLSPortReplaced = true
-						}
 						continue
 					}
 				}
 			}
 
-			if info.rootBindHasSignalling && len(signallingStack) > 0 && len(stack) >= signallingStack[len(signallingStack)-1].depth {
-				state := &signallingStack[len(signallingStack)-1]
-				if name == "Port" && !state.portReplaced {
+			if inBindManagersAPI {
+				if name == "Port" && !bindManagersPortReplaced {
 					replacement = replaceState{active: true, tagName: name, depth: 1}
 					write(raw)
 					write(portValue)
-					state.portReplaced = true
+					bindManagersPortReplaced = true
 					continue
 				}
-				if name == "TLSPort" && !state.tlsPortReplaced {
+				if name == "TLSPort" && !bindManagersTLSPortReplaced {
 					replacement = replaceState{active: true, tagName: name, depth: 1}
 					write(raw)
 					write(tlsPortValue)
-					state.tlsPortReplaced = true
-					continue
-				}
-			}
-
-			if !info.rootBindHasSignalling && inRootBind {
-				if name == "Port" && !rootBindPortReplaced {
-					replacement = replaceState{active: true, tagName: name, depth: 1}
-					write(raw)
-					write(portValue)
-					rootBindPortReplaced = true
-					continue
-				}
-				if name == "TLSPort" && !rootBindTLSPortReplaced {
-					replacement = replaceState{active: true, tagName: name, depth: 1}
-					write(raw)
-					write(tlsPortValue)
-					rootBindTLSPortReplaced = true
+					bindManagersTLSPortReplaced = true
 					continue
 				}
 			}
@@ -727,7 +707,7 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 				continue
 			}
 
-			if inManagersAPI && name == "AccessToken" && !accessTokenReplaced {
+			if inTopLevelManagersAPI && name == "AccessToken" && !accessTokenReplaced {
 				replacement = replaceState{active: true, tagName: name, depth: 1}
 				write(raw)
 				write(accessTokenValue)
@@ -782,11 +762,17 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 				controlDepth = -1
 				controlServerDepth = -1
 			}
-			if managersDepth != -1 && len(stack) < managersDepth {
-				managersDepth = -1
+			if topLevelManagersDepth != -1 && len(stack) < topLevelManagersDepth {
+				topLevelManagersDepth = -1
 			}
-			if managersAPIDepth != -1 && len(stack) < managersAPIDepth {
-				managersAPIDepth = -1
+			if topLevelManagersAPIDepth != -1 && len(stack) < topLevelManagersAPIDepth {
+				topLevelManagersAPIDepth = -1
+			}
+			if bindManagersDepth != -1 && len(stack) < bindManagersDepth {
+				bindManagersDepth = -1
+			}
+			if bindManagersAPIDepth != -1 && len(stack) < bindManagersAPIDepth {
+				bindManagersAPIDepth = -1
 			}
 			if controlServerDepth != -1 && len(stack) < controlServerDepth {
 				controlServerDepth = -1
@@ -799,16 +785,6 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 			}
 			if virtualHostsDepth != -1 && len(stack) < virtualHostsDepth {
 				virtualHostsDepth = -1
-			}
-			if len(signallingStack) > 0 && len(stack) < signallingStack[len(signallingStack)-1].depth {
-				state := signallingStack[len(signallingStack)-1]
-				if !state.portReplaced {
-					return "", errors.New("missing <Port> in template")
-				}
-				if !state.tlsPortReplaced {
-					return "", errors.New("missing <TLSPort> in template")
-				}
-				signallingStack = signallingStack[:len(signallingStack)-1]
 			}
 			if len(llhlsStack) > 0 && len(stack) < llhlsStack[len(llhlsStack)-1].depth {
 				state := llhlsStack[len(llhlsStack)-1]
@@ -835,28 +811,20 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 	if !llhlsFound {
 		return "", errors.New("missing <LLHLS> section under <Publishers> in template")
 	}
-	if !managersAPIFound {
-		return "", errors.New("missing <Managers><API> section in template")
+	if !topLevelManagersAPIFound {
+		return "", errors.New("missing top-level <Managers><API> auth section under <Server> in template")
 	}
-	if info.rootBindHasSignalling {
-		for _, state := range signallingStack {
-			if !state.portReplaced {
-				return "", errors.New("missing <Port> in template")
-			}
-			if !state.tlsPortReplaced {
-				return "", errors.New("missing <TLSPort> in template")
-			}
-		}
-	} else {
-		if !rootBindPortReplaced {
-			return "", errors.New("missing <Port> in template")
-		}
-		if !rootBindTLSPortReplaced {
-			return "", errors.New("missing <TLSPort> in template")
-		}
+	if !bindManagersAPIFound {
+		return "", errors.New("missing <Bind><Managers><API> listener section in template")
+	}
+	if !bindManagersPortReplaced {
+		return "", errors.New("missing <Port> under <Bind><Managers><API> in template")
+	}
+	if !bindManagersTLSPortReplaced {
+		return "", errors.New("missing <TLSPort> under <Bind><Managers><API> in template")
 	}
 	if !accessTokenReplaced {
-		return "", errors.New("missing <AccessToken> under <Managers><API> in template")
+		return "", errors.New("missing <AccessToken> under top-level <Server><Managers><API> in template")
 	}
 	if iceCandidatesFound == 0 {
 		return "", fmt.Errorf("OME template %s missing <%s> (expected under <IceCandidates>)", cfg.TemplatePath, "TcpRelay")
@@ -906,11 +874,45 @@ func validateOMEGeneratedConfig(path string) error {
 			return fmt.Errorf("%s still set to ome-test-* default in %s", key, path)
 		}
 	}
-	if !regexp.MustCompile(`(?s)<Managers>\s*<API>.*?<AccessToken>\s*[^<\s].*?</AccessToken>.*?</API>\s*</Managers>`).MatchString(contents) {
-		return fmt.Errorf("missing canonical <Managers><API><AccessToken> in %s", path)
-	}
 	if regexp.MustCompile(`<\s*AccessTokens\b`).MatchString(contents) {
 		return fmt.Errorf("deprecated <AccessTokens> found in %s; use singular <Managers><API><AccessToken> instead", path)
+	}
+
+	var parsed struct {
+		Managers struct {
+			API struct {
+				AccessToken string `xml:"AccessToken"`
+				Port        string `xml:"Port"`
+				TLSPort     string `xml:"TLSPort"`
+				WorkerCount string `xml:"WorkerCount"`
+			} `xml:"API"`
+		} `xml:"Managers"`
+		Bind struct {
+			Managers struct {
+				API struct {
+					AccessToken string `xml:"AccessToken"`
+					Port        string `xml:"Port"`
+					TLSPort     string `xml:"TLSPort"`
+					WorkerCount string `xml:"WorkerCount"`
+				} `xml:"API"`
+			} `xml:"Managers"`
+		} `xml:"Bind"`
+	}
+	if err := xml.Unmarshal([]byte(contents), &parsed); err != nil {
+		return fmt.Errorf("parse %s: %w", path, err)
+	}
+
+	if strings.TrimSpace(parsed.Managers.API.AccessToken) == "" {
+		return fmt.Errorf("missing top-level <Server><Managers><API><AccessToken> auth block in %s", path)
+	}
+	if strings.TrimSpace(parsed.Managers.API.Port) != "" || strings.TrimSpace(parsed.Managers.API.TLSPort) != "" || strings.TrimSpace(parsed.Managers.API.WorkerCount) != "" {
+		return fmt.Errorf("invalid listener fields found under top-level <Server><Managers><API> in %s; keep listener ports under <Server><Bind><Managers><API>", path)
+	}
+	if strings.TrimSpace(parsed.Bind.Managers.API.Port) == "" || strings.TrimSpace(parsed.Bind.Managers.API.TLSPort) == "" || strings.TrimSpace(parsed.Bind.Managers.API.WorkerCount) == "" {
+		return fmt.Errorf("missing <Server><Bind><Managers><API> listener block with <Port>/<TLSPort>/<WorkerCount> in %s", path)
+	}
+	if strings.TrimSpace(parsed.Bind.Managers.API.AccessToken) != "" {
+		return fmt.Errorf("invalid <AccessToken> found under <Server><Bind><Managers><API> in %s; keep auth token only under top-level <Server><Managers><API>", path)
 	}
 
 	return nil

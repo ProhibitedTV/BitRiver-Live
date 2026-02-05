@@ -252,16 +252,60 @@ func TestRenderOMEConfigRequiresManagersAuth(t *testing.T) {
 		"BITRIVER_OME_ICE_CANDIDATE=example.com:10000-10009/udp",
 	}, "\n")
 	data := renderOMEConfig(t, repoRoot, envContents)
-	hasAccessToken := regexp.MustCompile(`(?s)<Managers>\s*<API>.*?<AccessToken>health-token</AccessToken>.*?</API>\s*</Managers>`).Match(data)
-	hasTopLevelManagers := regexp.MustCompile(`(?s)<Server\b[^>]*>.*?<Managers>\s*<API>.*?</API>\s*</Managers>`).Match(data)
+
+	var parsed struct {
+		Managers struct {
+			API struct {
+				AccessToken string `xml:"AccessToken"`
+				Port        string `xml:"Port"`
+				TLSPort     string `xml:"TLSPort"`
+				WorkerCount string `xml:"WorkerCount"`
+			} `xml:"API"`
+		} `xml:"Managers"`
+		Bind struct {
+			Managers struct {
+				API struct {
+					AccessToken string `xml:"AccessToken"`
+					Port        string `xml:"Port"`
+					TLSPort     string `xml:"TLSPort"`
+					WorkerCount string `xml:"WorkerCount"`
+				} `xml:"API"`
+			} `xml:"Managers"`
+		} `xml:"Bind"`
+	}
+	if err := xml.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("failed to parse rendered config: %v", err)
+	}
+
 	hasLegacyAccessTokens := bytes.Contains(data, []byte("<AccessTokens>"))
 	hasAuthentication := bytes.Contains(data, []byte("<Authentication>"))
 	hasOutputs := bytes.Contains(data, []byte("<Outputs>"))
 	hasOutputStreams := bytes.Contains(data, []byte("<OutputStreams>"))
-	summary := fmt.Sprintf("TopLevelManagers=%t AccessToken=%t AccessTokens=%t Authentication=%t", hasTopLevelManagers, hasAccessToken, hasLegacyAccessTokens, hasAuthentication)
+	summary := fmt.Sprintf(
+		"TopAccessToken=%q TopPort=%q TopTLSPort=%q TopWorkerCount=%q BindAccessToken=%q BindPort=%q BindTLSPort=%q BindWorkerCount=%q AccessTokens=%t Authentication=%t",
+		parsed.Managers.API.AccessToken,
+		parsed.Managers.API.Port,
+		parsed.Managers.API.TLSPort,
+		parsed.Managers.API.WorkerCount,
+		parsed.Bind.Managers.API.AccessToken,
+		parsed.Bind.Managers.API.Port,
+		parsed.Bind.Managers.API.TLSPort,
+		parsed.Bind.Managers.API.WorkerCount,
+		hasLegacyAccessTokens,
+		hasAuthentication,
+	)
 
-	if !hasTopLevelManagers || !hasAccessToken || hasLegacyAccessTokens || hasAuthentication {
-		t.Fatalf("expected canonical managers API auth in rendered config, got: %s", summary)
+	if parsed.Managers.API.AccessToken != "health-token" ||
+		parsed.Managers.API.Port != "" ||
+		parsed.Managers.API.TLSPort != "" ||
+		parsed.Managers.API.WorkerCount != "" ||
+		parsed.Bind.Managers.API.AccessToken != "" ||
+		parsed.Bind.Managers.API.Port == "" ||
+		parsed.Bind.Managers.API.TLSPort == "" ||
+		parsed.Bind.Managers.API.WorkerCount == "" ||
+		hasLegacyAccessTokens ||
+		hasAuthentication {
+		t.Fatalf("expected split OME API contexts in rendered config, got: %s", summary)
 	}
 
 	if !hasOutputs {
