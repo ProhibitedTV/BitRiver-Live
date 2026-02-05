@@ -321,18 +321,37 @@ services:
       test:
         - "CMD-SHELL"
         - |
-          curl_cmd="curl -fsS"
+          base_cmd='curl -fsS --connect-timeout 2 --max-time 4'
+          health_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health"
+          healthz_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/healthz"
+
           token="$$BITRIVER_OME_ACCESS_TOKEN"
-          if [ -z "$$token" ]; then
+          # AccessToken header source: prefer BITRIVER_OME_ACCESS_TOKEN, then BITRIVER_OME_API_TOKEN.
+          if [ -z "$$token" ] && [ -n "$$BITRIVER_OME_API_TOKEN" ]; then
             token="$$BITRIVER_OME_API_TOKEN"
           fi
-          if [ -n "$$token" ]; then
-            curl_cmd="$$curl_cmd -H \"AccessToken: $$token\""
+
+          probe_with_args() {
+            extra_args="$$1"
+            sh -c "$$base_cmd $$extra_args '$$health_url'" || sh -c "$$base_cmd $$extra_args '$$healthz_url'"
+          }
+
+          # Attempt 1: AccessToken + HTTP basic auth (BITRIVER_OME_USERNAME / BITRIVER_OME_PASSWORD).
+          if [ -n "$$token" ] && [ -n "$$BITRIVER_OME_USERNAME" ] && [ -n "$$BITRIVER_OME_PASSWORD" ] && probe_with_args "-H \"AccessToken: $$token\" -u \"$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD\""; then
+            exit 0
           fi
-          if [ -n "$$BITRIVER_OME_USERNAME" ] && [ -n "$$BITRIVER_OME_PASSWORD" ]; then
-            curl_cmd="$$curl_cmd -u \"$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD\""
+
+          # Attempt 2: AccessToken header only (BITRIVER_OME_ACCESS_TOKEN or BITRIVER_OME_API_TOKEN).
+          if [ -n "$$token" ] && probe_with_args "-H \"AccessToken: $$token\""; then
+            exit 0
           fi
-          sh -c "$$curl_cmd http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health" || sh -c "$$curl_cmd http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/healthz"
+
+          # Attempt 3: unauthenticated fallback, but only when no token is configured by intent.
+          if [ -z "$$BITRIVER_OME_ACCESS_TOKEN" ] && [ -z "$$BITRIVER_OME_API_TOKEN" ] && probe_with_args ""; then
+            exit 0
+          fi
+
+          exit 1
       interval: 30s
       timeout: 5s
       retries: 5
