@@ -396,6 +396,11 @@ func TestRenderOMEConfigSkipsUnsupportedRootBindHostTagsAndFillsAccessTokenAndIc
 	template := strings.Join([]string{
 		"<Server version=\"10\">",
 		"  <IP>0.0.0.0</IP>",
+		"  <Managers>",
+		"    <API>",
+		"      <AccessToken>old-token</AccessToken>",
+		"    </API>",
+		"  </Managers>",
 		"  <Bind>",
 		"    <Address>0.0.0.0</Address>",
 		"    <Port>9000</Port>",
@@ -406,7 +411,6 @@ func TestRenderOMEConfigSkipsUnsupportedRootBindHostTagsAndFillsAccessTokenAndIc
 		"      </LLHLS>",
 		"    </Publishers>",
 		"  </Bind>",
-		"  <AccessToken>old-token</AccessToken>",
 		"  <IceCandidates>",
 		"  </IceCandidates>",
 		"</Server>",
@@ -449,8 +453,14 @@ func TestRenderOMEConfigSkipsUnsupportedRootBindHostTagsAndFillsAccessTokenAndIc
 	if !strings.Contains(got, "<IP>10.10.0.2</IP>") {
 		t.Fatalf("expected top-level <Server><IP> to be updated from BITRIVER_OME_IP, got output:\n%s", got)
 	}
+	if !strings.Contains(got, "<Managers>") || !strings.Contains(got, "<API>") {
+		t.Fatalf("expected top-level <Managers><API> block, got output:\n%s", got)
+	}
 	if !strings.Contains(got, "<AccessToken>access-token</AccessToken>") {
 		t.Fatalf("expected access token replacement, got output:\n%s", got)
+	}
+	if strings.Contains(got, "<AccessTokens>") {
+		t.Fatalf("expected singular <AccessToken> without deprecated <AccessTokens> wrapper, got output:\n%s", got)
 	}
 	if !strings.Contains(got, "<TcpRelay>127.0.0.1:3478</TcpRelay>") {
 		t.Fatalf("expected TcpRelay insertion, got output:\n%s", got)
