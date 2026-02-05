@@ -40,6 +40,14 @@ type postgresRepository struct {
 	retentionNow        func() time.Time
 }
 
+// Close executes Close.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) Close(ctx context.Context) error {
 	if r == nil || r.pool == nil {
 		return nil
@@ -57,6 +65,14 @@ func (r *postgresRepository) Close(ctx context.Context) error {
 	}
 }
 
+// Ping executes Ping.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) Ping(ctx context.Context) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -141,6 +157,14 @@ func NewPostgresRepository(dsn string, opts ...Option) (Repository, error) {
 	return repo, nil
 }
 
+// pingPostgresPool executes pingPostgresPool.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func pingPostgresPool(ctx context.Context, pool *pgxpool.Pool) error {
 	if pool == nil {
 		return errors.New("postgres pool unavailable")
@@ -159,6 +183,14 @@ func pingPostgresPool(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
+// wrapPostgresUnavailable executes wrapPostgresUnavailable.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func wrapPostgresUnavailable(err error) error {
 	if err == nil {
 		return ErrPostgresUnavailable
@@ -166,6 +198,13 @@ func wrapPostgresUnavailable(err error) error {
 	return fmt.Errorf("%w: %w", ErrPostgresUnavailable, err)
 }
 
+// IngestHealth executes IngestHealth.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) IngestHealth(ctx context.Context) []ingest.HealthStatus {
 	controller := r.ingestController
 	var statuses []ingest.HealthStatus
@@ -187,6 +226,13 @@ func (r *postgresRepository) IngestHealth(ctx context.Context) []ingest.HealthSt
 	return snapshot
 }
 
+// LastIngestHealth executes LastIngestHealth.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) LastIngestHealth() ([]ingest.HealthStatus, time.Time) {
 	r.ingestHealthMu.RLock()
 	defer r.ingestHealthMu.RUnlock()
@@ -194,6 +240,13 @@ func (r *postgresRepository) LastIngestHealth() ([]ingest.HealthStatus, time.Tim
 	return clone, r.ingestHealthUpdated
 }
 
+// acquireContext executes acquireContext.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) acquireContext() (context.Context, context.CancelFunc) {
 	if r == nil {
 		return context.Background(), func() {}
@@ -204,6 +257,14 @@ func (r *postgresRepository) acquireContext() (context.Context, context.CancelFu
 	return context.Background(), func() {}
 }
 
+// withConn executes withConn.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) withConn(fn func(context.Context, *pgxpool.Conn) error) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -218,6 +279,14 @@ func (r *postgresRepository) withConn(fn func(context.Context, *pgxpool.Conn) er
 	return fn(ctx, conn)
 }
 
+// encodeDonationAddresses executes encodeDonationAddresses.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func encodeDonationAddresses(addresses []models.CryptoAddress) ([]byte, error) {
 	if addresses == nil {
 		addresses = []models.CryptoAddress{}
@@ -229,6 +298,14 @@ func encodeDonationAddresses(addresses []models.CryptoAddress) ([]byte, error) {
 	return data, nil
 }
 
+// decodeDonationAddresses executes decodeDonationAddresses.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func decodeDonationAddresses(data []byte) ([]models.CryptoAddress, error) {
 	if len(data) == 0 {
 		return []models.CryptoAddress{}, nil
@@ -243,6 +320,14 @@ func decodeDonationAddresses(data []byte) ([]models.CryptoAddress, error) {
 	return addresses, nil
 }
 
+// encodeSocialLinks executes encodeSocialLinks.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func encodeSocialLinks(links []models.SocialLink) ([]byte, error) {
 	if links == nil {
 		links = []models.SocialLink{}
@@ -254,6 +339,14 @@ func encodeSocialLinks(links []models.SocialLink) ([]byte, error) {
 	return data, nil
 }
 
+// decodeSocialLinks executes decodeSocialLinks.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func decodeSocialLinks(data []byte) ([]models.SocialLink, error) {
 	if len(data) == 0 {
 		return []models.SocialLink{}, nil
@@ -268,6 +361,13 @@ func decodeSocialLinks(data []byte) ([]models.SocialLink, error) {
 	return links, nil
 }
 
+// rollbackTx executes rollbackTx.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: requires an already-open pgx transaction supplied by the caller;
+// it does not commit/rollback and does not retry automatically.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func rollbackTx(ctx context.Context, tx pgx.Tx) {
 	if tx == nil {
 		return
@@ -277,6 +377,14 @@ func rollbackTx(ctx context.Context, tx pgx.Tx) {
 	}
 }
 
+// ensureUserExists executes ensureUserExists.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: requires an already-open pgx transaction supplied by the caller;
+// it does not commit/rollback and does not retry automatically.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func ensureUserExists(ctx context.Context, tx pgx.Tx, userID string) error {
 	var exists bool
 	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1)", userID).Scan(&exists); err != nil {
@@ -288,6 +396,14 @@ func ensureUserExists(ctx context.Context, tx pgx.Tx, userID string) error {
 	return nil
 }
 
+// ensureChannelExists executes ensureChannelExists.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: requires an already-open pgx transaction supplied by the caller;
+// it does not commit/rollback and does not retry automatically.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func ensureChannelExists(ctx context.Context, tx pgx.Tx, channelID string) error {
 	var exists bool
 	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM channels WHERE id = $1)", channelID).Scan(&exists); err != nil {
@@ -299,6 +415,14 @@ func ensureChannelExists(ctx context.Context, tx pgx.Tx, channelID string) error
 	return nil
 }
 
+// UpsertProfile executes UpsertProfile.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
+// storage/object backend failures; not-found is returned as an error when applicable.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) UpsertProfile(userID string, update ProfileUpdate) (models.Profile, error) {
 	if r == nil || r.pool == nil {
 		return models.Profile{}, ErrPostgresUnavailable
@@ -540,6 +664,14 @@ RETURNING created_at, updated_at`,
 	return profile, nil
 }
 
+// GetProfile executes GetProfile.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this signature does not return `error`; not-found/absence is represented by the
+// boolean return value.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (r *postgresRepository) GetProfile(userID string) (models.Profile, bool) {
 	if r == nil || r.pool == nil {
 		return models.Profile{}, false
@@ -651,6 +783,14 @@ func (r *postgresRepository) GetProfile(userID string) (models.Profile, bool) {
 	return profile, found
 }
 
+// ListProfiles executes ListProfiles.
+// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
+// this function still normalizes/trims where needed and rejects empty required fields.
+// Errors: this helper does not return `error`; failures are handled by callers.
+// Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
+// does not mutate caller arguments or perform automatic retries unless explicitly coded below.
+// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
+// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
 func (r *postgresRepository) ListProfiles() []models.Profile {
 	if r == nil || r.pool == nil {
 		return nil
