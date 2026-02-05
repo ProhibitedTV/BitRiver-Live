@@ -241,6 +241,28 @@ func TestValidateOMEGeneratedConfigRejectsApplicationOutputsWrapper(t *testing.T
 	}
 }
 
+func TestValidateOMEGeneratedConfigRejectsApplicationLLHLS(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "Server.generated.xml")
+	content := strings.Join([]string{
+		"<Server>",
+		"  <Managers><API><AccessToken>token</AccessToken></API></Managers>",
+		"  <Bind><Managers><API><Port>9000</Port><TLSPort>9443</TLSPort><WorkerCount>1</WorkerCount></API></Managers></Bind>",
+		"  <VirtualHosts><VirtualHost><Applications><Application><LLHLS><Enable>true</Enable></LLHLS></Application></Applications></VirtualHost></VirtualHosts>",
+		"</Server>",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	err := validateOMEGeneratedConfig(path)
+	if err == nil {
+		t.Fatal("expected validation to fail for deprecated <Application><LLHLS>")
+	}
+	if !strings.Contains(err.Error(), "<Application><LLHLS>") {
+		t.Fatalf("expected application-level LLHLS validation error, got %v", err)
+	}
+}
+
 func TestRenderOMEConfigRewritesLegacyBindAddress(t *testing.T) {
 	templatePath := filepath.Join(t.TempDir(), "Server.xml")
 	outputPath := filepath.Join(t.TempDir(), "Server.generated.xml")
