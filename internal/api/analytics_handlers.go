@@ -31,6 +31,7 @@ type analyticsOverviewResponse struct {
 	PerChannel []analyticsChannelResponse `json:"perChannel"`
 }
 
+// AnalyticsOverview performs analytics overview and returns an error when dependent systems reject the operation.
 func (h *Handler) AnalyticsOverview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteMethodNotAllowed(w, r, http.MethodGet)
@@ -47,6 +48,7 @@ func (h *Handler) AnalyticsOverview(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, payload)
 }
 
+// computeAnalyticsOverview performs compute analytics overview and propagates validation or dependency failures to the caller.
 func (h *Handler) computeAnalyticsOverview(now time.Time) (analyticsOverviewResponse, error) {
 	channels := h.Store.ListChannels("", "")
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
@@ -118,6 +120,7 @@ func (h *Handler) computeAnalyticsOverview(now time.Time) (analyticsOverviewResp
 	return resp, nil
 }
 
+// sessionDurationMinutes performs session duration minutes and propagates validation or dependency failures to the caller.
 func sessionDurationMinutes(session models.StreamSession, now time.Time) float64 {
 	end := now
 	if session.EndedAt != nil && session.EndedAt.Before(end) {
@@ -129,6 +132,7 @@ func sessionDurationMinutes(session models.StreamSession, now time.Time) float64
 	return end.Sub(session.StartedAt).Minutes()
 }
 
+// streamWatchOverlapMinutes performs stream watch overlap minutes and propagates validation or dependency failures to the caller.
 func streamWatchOverlapMinutes(session models.StreamSession, windowStart, windowEnd time.Time) float64 {
 	start := session.StartedAt
 	if start.Before(windowStart) {

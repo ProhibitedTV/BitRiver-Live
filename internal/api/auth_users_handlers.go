@@ -14,6 +14,7 @@ import (
 	"bitriver-live/internal/storage"
 )
 
+// Signup performs signup and returns an error when dependent systems reject the operation.
 func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		WriteMethodNotAllowed(w, r, http.MethodPost)
@@ -56,6 +57,7 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusCreated, newAuthResponse(user, expiresAt))
 }
 
+// Login performs login and returns an error when dependent systems reject the operation.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		WriteMethodNotAllowed(w, r, http.MethodPost)
@@ -120,6 +122,7 @@ type oauthStartRequest struct {
 	ReturnTo string `json:"returnTo"`
 }
 
+// OAuthProviders performs oauth providers and returns an error when dependent systems reject the operation.
 func (h *Handler) OAuthProviders(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteMethodNotAllowed(w, r, http.MethodGet)
@@ -132,6 +135,7 @@ func (h *Handler) OAuthProviders(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, map[string]any{"providers": providers})
 }
 
+// OAuthByProvider performs oauth by provider and returns an error when dependent systems reject the operation.
 func (h *Handler) OAuthByProvider(w http.ResponseWriter, r *http.Request) {
 	if h.OAuth == nil {
 		WriteError(w, http.StatusNotFound, fmt.Errorf("oauth providers not configured"))
@@ -155,6 +159,7 @@ func (h *Handler) OAuthByProvider(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// oauthStart performs oauth start and propagates validation or dependency failures to the caller.
 func (h *Handler) oauthStart(w http.ResponseWriter, r *http.Request, provider string) {
 	if r.Method != http.MethodPost {
 		WriteMethodNotAllowed(w, r, http.MethodPost)
@@ -176,6 +181,7 @@ func (h *Handler) oauthStart(w http.ResponseWriter, r *http.Request, provider st
 	WriteJSON(w, http.StatusOK, map[string]string{"url": begin.URL})
 }
 
+// oauthCallback performs oauth callback and propagates validation or dependency failures to the caller.
 func (h *Handler) oauthCallback(w http.ResponseWriter, r *http.Request, provider string) {
 	if r.Method != http.MethodGet {
 		WriteMethodNotAllowed(w, r, http.MethodGet)
@@ -254,6 +260,7 @@ func (h *Handler) oauthCallback(w http.ResponseWriter, r *http.Request, provider
 	http.Redirect(w, r, appendQueryParam(returnPath, "oauth", "success"), http.StatusSeeOther)
 }
 
+// sanitizeReturnPath performs sanitize return path and propagates validation or dependency failures to the caller.
 func sanitizeReturnPath(input string) string {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {
@@ -280,6 +287,7 @@ func sanitizeReturnPath(input string) string {
 	return trimmed
 }
 
+// appendQueryParam performs append query param and propagates validation or dependency failures to the caller.
 func appendQueryParam(path, key, value string) string {
 	parsed, err := url.Parse(path)
 	if err != nil {
@@ -299,6 +307,7 @@ func appendQueryParam(path, key, value string) string {
 	return parsed.String()
 }
 
+// buildMFARedirect builds mfaredirect from runtime state used by downstream handlers.
 func buildMFARedirect(returnPath, token string, enroll bool) string {
 	destination := "/signup"
 	values := url.Values{}
@@ -320,6 +329,7 @@ func buildMFARedirect(returnPath, token string, enroll bool) string {
 	return destination + "?" + encoded
 }
 
+// Session performs session and returns an error when dependent systems reject the operation.
 func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -363,6 +373,7 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ExtractToken performs extract token and returns an error when dependent systems reject the operation.
 func ExtractToken(r *http.Request) string {
 	header := r.Header.Get("Authorization")
 	if header != "" {
@@ -418,6 +429,7 @@ type userResponse struct {
 	CreatedAt   string   `json:"createdAt"`
 }
 
+// newUserResponse builds and returns user response using the supplied dependencies.
 func newUserResponse(user models.User) userResponse {
 	return userResponse{
 		ID:          user.ID,
@@ -430,6 +442,7 @@ func newUserResponse(user models.User) userResponse {
 	}
 }
 
+// newAuthResponse builds and returns auth response using the supplied dependencies.
 func newAuthResponse(user models.User, expires time.Time) authResponse {
 	return authResponse{
 		ExpiresAt: expires.UTC().Format(time.RFC3339Nano),
@@ -437,6 +450,7 @@ func newAuthResponse(user models.User, expires time.Time) authResponse {
 	}
 }
 
+// Users performs users and returns an error when dependent systems reject the operation.
 func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -473,6 +487,7 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// UserByID performs user by id and returns an error when dependent systems reject the operation.
 func (h *Handler) UserByID(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/users/")
 	if id == "" {

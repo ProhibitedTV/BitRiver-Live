@@ -126,6 +126,7 @@ type vodCollectionResponse struct {
 	Items     []vodItemResponse `json:"items"`
 }
 
+// Directory performs directory and returns an error when dependent systems reject the operation.
 func (h *Handler) Directory(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteMethodNotAllowed(w, r, http.MethodGet)
@@ -140,6 +141,7 @@ func (h *Handler) Directory(w http.ResponseWriter, r *http.Request) {
 	h.writeDirectoryResponse(w, channels)
 }
 
+// DirectoryFeatured performs directory featured and returns an error when dependent systems reject the operation.
 func (h *Handler) DirectoryFeatured(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteMethodNotAllowed(w, r, http.MethodGet)
@@ -169,6 +171,7 @@ func (h *Handler) DirectoryFeatured(w http.ResponseWriter, r *http.Request) {
 	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, true))
 }
 
+// DirectoryRecommended performs directory recommended and returns an error when dependent systems reject the operation.
 func (h *Handler) DirectoryRecommended(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteMethodNotAllowed(w, r, http.MethodGet)
@@ -179,6 +182,7 @@ func (h *Handler) DirectoryRecommended(w http.ResponseWriter, r *http.Request) {
 	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, false))
 }
 
+// DirectoryLive performs directory live and returns an error when dependent systems reject the operation.
 func (h *Handler) DirectoryLive(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteMethodNotAllowed(w, r, http.MethodGet)
@@ -190,6 +194,7 @@ func (h *Handler) DirectoryLive(w http.ResponseWriter, r *http.Request) {
 	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, true))
 }
 
+// DirectoryTrending performs directory trending and returns an error when dependent systems reject the operation.
 func (h *Handler) DirectoryTrending(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteMethodNotAllowed(w, r, http.MethodGet)
@@ -200,6 +205,7 @@ func (h *Handler) DirectoryTrending(w http.ResponseWriter, r *http.Request) {
 	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, true))
 }
 
+// DirectoryCategories performs directory categories and returns an error when dependent systems reject the operation.
 func (h *Handler) DirectoryCategories(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteMethodNotAllowed(w, r, http.MethodGet)
@@ -231,6 +237,7 @@ func (h *Handler) DirectoryCategories(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, payload)
 }
 
+// filterLiveChannels performs filter live channels and propagates validation or dependency failures to the caller.
 func filterLiveChannels(channels []models.Channel) []models.Channel {
 	live := make([]models.Channel, 0, len(channels))
 	for _, channel := range channels {
@@ -241,6 +248,7 @@ func filterLiveChannels(channels []models.Channel) []models.Channel {
 	return live
 }
 
+// sortChannelsByFollowers performs sort channels by followers and propagates validation or dependency failures to the caller.
 func (h *Handler) sortChannelsByFollowers(channels []models.Channel, liveFirst bool) []models.Channel {
 	followers := make(map[string]int, len(channels))
 	for _, channel := range channels {
@@ -262,6 +270,7 @@ func (h *Handler) sortChannelsByFollowers(channels []models.Channel, liveFirst b
 	return channels
 }
 
+// DirectoryFollowing performs directory following and returns an error when dependent systems reject the operation.
 func (h *Handler) DirectoryFollowing(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteMethodNotAllowed(w, r, http.MethodGet)
@@ -289,6 +298,7 @@ func (h *Handler) DirectoryFollowing(w http.ResponseWriter, r *http.Request) {
 	h.writeDirectoryResponse(w, channels)
 }
 
+// writeDirectoryResponse writes directory response to the active response or stream and surfaces encode or I/O failures.
 func (h *Handler) writeDirectoryResponse(w http.ResponseWriter, channels []models.Channel) {
 	response := make([]directoryChannelResponse, 0, len(channels))
 	for _, channel := range channels {
@@ -314,6 +324,7 @@ func (h *Handler) writeDirectoryResponse(w http.ResponseWriter, channels []model
 	WriteJSON(w, http.StatusOK, payload)
 }
 
+// buildChannelResponse builds channel response from runtime state used by downstream handlers.
 func buildChannelResponse(channel models.Channel, includeStreamKey bool) channelResponse {
 	resp := channelResponse{
 		channelPublicResponse: channelPublicResponse{
@@ -337,14 +348,17 @@ func buildChannelResponse(channel models.Channel, includeStreamKey bool) channel
 	return resp
 }
 
+// newChannelResponse builds and returns channel response using the supplied dependencies.
 func newChannelResponse(channel models.Channel) channelResponse {
 	return buildChannelResponse(channel, true)
 }
 
+// newChannelPublicResponse builds and returns channel public response using the supplied dependencies.
 func newChannelPublicResponse(channel models.Channel) channelPublicResponse {
 	return buildChannelResponse(channel, false).channelPublicResponse
 }
 
+// newOwnerResponse builds and returns owner response using the supplied dependencies.
 func newOwnerResponse(user models.User, profile models.Profile) channelOwnerResponse {
 	owner := channelOwnerResponse{ID: user.ID, DisplayName: user.DisplayName}
 	if profile.AvatarURL != "" {
@@ -353,6 +367,7 @@ func newOwnerResponse(user models.User, profile models.Profile) channelOwnerResp
 	return owner
 }
 
+// newProfileSummaryResponse builds and returns profile summary response using the supplied dependencies.
 func newProfileSummaryResponse(profile models.Profile) profileSummaryResponse {
 	summary := profileSummaryResponse{}
 	if profile.Bio != "" {
@@ -374,6 +389,7 @@ func newProfileSummaryResponse(profile models.Profile) profileSummaryResponse {
 	return summary
 }
 
+// subscriptionState performs subscription state and propagates validation or dependency failures to the caller.
 func (h *Handler) subscriptionState(channelID string, actor *models.User) (subscriptionStateResponse, error) {
 	subs, err := h.Store.ListSubscriptions(channelID, false)
 	if err != nil {
@@ -398,6 +414,7 @@ func (h *Handler) subscriptionState(channelID string, actor *models.User) (subsc
 	return state, nil
 }
 
+// Channels performs channels and returns an error when dependent systems reject the operation.
 func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -457,6 +474,7 @@ func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ChannelByID performs channel by id and returns an error when dependent systems reject the operation.
 func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/channels/")
 	parts := strings.Split(path, "/")

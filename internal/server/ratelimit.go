@@ -44,6 +44,7 @@ type tokenStore interface {
 	Allow(key string, limit int, window time.Duration) (bool, time.Duration, error)
 }
 
+// newRateLimiter builds and returns rate limiter using the supplied dependencies.
 func newRateLimiter(cfg RateLimitConfig) (*rateLimiter, error) {
 	if cfg.RequireLoginProtection && cfg.LoginLimit <= 0 {
 		return nil, errors.New("login rate limiting required in production; set BITRIVER_LIVE_RATE_LOGIN_LIMIT or --rate-login-limit")
@@ -90,6 +91,7 @@ func newRateLimiter(cfg RateLimitConfig) (*rateLimiter, error) {
 	return rl, nil
 }
 
+// AllowRequest performs allow request and returns an error when dependent systems reject the operation.
 func (r *rateLimiter) AllowRequest() bool {
 	if r == nil || r.global == nil {
 		return true
@@ -97,6 +99,7 @@ func (r *rateLimiter) AllowRequest() bool {
 	return r.global.Allow()
 }
 
+// AllowLogin performs allow login and returns an error when dependent systems reject the operation.
 func (r *rateLimiter) AllowLogin(key string) (bool, time.Duration, error) {
 	if r == nil || r.loginLimit <= 0 {
 		return true, 0, nil
@@ -128,6 +131,7 @@ func (r *rateLimiter) AllowLogin(key string) (bool, time.Duration, error) {
 	return false, time.Second, nil
 }
 
+// cleanupLocked performs cleanup locked and propagates validation or dependency failures to the caller.
 func (r *rateLimiter) cleanupLocked() {
 	if len(r.loginBuckets) == 0 {
 		return
@@ -140,6 +144,7 @@ func (r *rateLimiter) cleanupLocked() {
 	}
 }
 
+// Ping performs ping and returns an error when dependent systems reject the operation.
 func (r *rateLimiter) Ping(ctx context.Context) error {
 	if r == nil || r.store == nil {
 		return nil
@@ -158,6 +163,7 @@ type tokenBucket struct {
 	lastCheck time.Time
 }
 
+// newTokenBucket builds and returns token bucket using the supplied dependencies.
 func newTokenBucket(rate float64, burst int) *tokenBucket {
 	if rate <= 0 {
 		rate = 1
@@ -174,6 +180,7 @@ func newTokenBucket(rate float64, burst int) *tokenBucket {
 	}
 }
 
+// Allow performs allow and returns an error when dependent systems reject the operation.
 func (tb *tokenBucket) Allow() bool {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()

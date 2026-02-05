@@ -18,6 +18,7 @@ type SessionCookiePolicy struct {
 	SecureMode SessionCookieSecureMode
 }
 
+// DefaultSessionCookiePolicy returns the default session cookie policy for the current runtime mode.
 func DefaultSessionCookiePolicy() SessionCookiePolicy {
 	return SessionCookiePolicy{
 		SameSite:   http.SameSiteStrictMode,
@@ -25,6 +26,7 @@ func DefaultSessionCookiePolicy() SessionCookiePolicy {
 	}
 }
 
+// secure performs secure and propagates validation or dependency failures to the caller.
 func (p SessionCookiePolicy) secure(r *http.Request) bool {
 	if p.SecureMode == SessionCookieSecureAlways {
 		return true
@@ -32,6 +34,7 @@ func (p SessionCookiePolicy) secure(r *http.Request) bool {
 	return isSecureRequest(r)
 }
 
+// sessionCookiePolicy performs session cookie policy and propagates validation or dependency failures to the caller.
 func (h *Handler) sessionCookiePolicy() SessionCookiePolicy {
 	policy := h.SessionCookiePolicy
 	if policy.SameSite == 0 {
@@ -43,6 +46,7 @@ func (h *Handler) sessionCookiePolicy() SessionCookiePolicy {
 	return policy
 }
 
+// setSessionCookie parses and stores a flag assignment, returning an error when the format is invalid.
 func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time, policy SessionCookiePolicy) {
 	if token == "" {
 		return
@@ -63,6 +67,7 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expi
 	})
 }
 
+// setSessionCookie parses and stores a flag assignment, returning an error when the format is invalid.
 func (h *Handler) setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time) {
 	setSessionCookie(w, r, token, expires, h.sessionCookiePolicy())
 }
@@ -73,6 +78,7 @@ func (h *Handler) RefreshSessionCookie(w http.ResponseWriter, r *http.Request, t
 	h.setSessionCookie(w, r, token, expires)
 }
 
+// clearSessionCookie performs clear session cookie and propagates validation or dependency failures to the caller.
 func clearSessionCookie(w http.ResponseWriter, r *http.Request, policy SessionCookiePolicy) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "bitriver_session",
@@ -96,6 +102,7 @@ func (h *Handler) ClearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	clearSessionCookie(w, r, h.sessionCookiePolicy())
 }
 
+// isSecureRequest reports whether secure request is satisfied for the current input.
 func isSecureRequest(r *http.Request) bool {
 	if r == nil {
 		return false

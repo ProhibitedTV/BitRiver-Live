@@ -29,6 +29,7 @@ type PostgresConfig struct {
 	RetentionClock      func() time.Time
 }
 
+// newPostgresConfig builds and returns postgres config using the supplied dependencies.
 func newPostgresConfig(dsn string, opts ...Option) PostgresConfig {
 	cfg := PostgresConfig{
 		DSN:               dsn,

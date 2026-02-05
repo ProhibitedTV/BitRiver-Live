@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// GetMFASettings returns mfasettings from the configured backing services.
 func (r *postgresRepository) GetMFASettings(userID string) (models.MFASettings, bool, error) {
 	if r == nil || r.pool == nil {
 		return models.MFASettings{}, false, ErrPostgresUnavailable
@@ -59,6 +60,7 @@ WHERE user_id = $1
 	return settings, true, nil
 }
 
+// UpsertMFASettings performs upsert mfasettings and returns an error when dependent systems reject the operation.
 func (r *postgresRepository) UpsertMFASettings(settings models.MFASettings) (models.MFASettings, error) {
 	if r == nil || r.pool == nil {
 		return models.MFASettings{}, ErrPostgresUnavailable
@@ -99,6 +101,7 @@ SET secret = EXCLUDED.secret,
 	return settings, nil
 }
 
+// DeleteMFASettings deletes mfasettings and returns an error when persistence or validation fails.
 func (r *postgresRepository) DeleteMFASettings(userID string) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable

@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// importSnapshot performs import snapshot and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshot(ctx context.Context, snapshot *Snapshot) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -84,6 +85,7 @@ func (r *postgresRepository) importSnapshot(ctx context.Context, snapshot *Snaps
 	})
 }
 
+// importSnapshotUsers performs import snapshot users and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshotUsers(ctx context.Context, tx pgx.Tx, users map[string]models.User) error {
 	if len(users) == 0 {
 		return nil
@@ -117,6 +119,7 @@ func (r *postgresRepository) importSnapshotUsers(ctx context.Context, tx pgx.Tx,
 	return nil
 }
 
+// importSnapshotMFA performs import snapshot mfa and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshotMFA(ctx context.Context, tx pgx.Tx, settings map[string]models.MFASettings) error {
 	if len(settings) == 0 {
 		return nil
@@ -168,6 +171,7 @@ ON CONFLICT (user_id) DO NOTHING
 	return nil
 }
 
+// importSnapshotProfiles performs import snapshot profiles and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshotProfiles(ctx context.Context, tx pgx.Tx, profiles map[string]models.Profile) error {
 	if len(profiles) == 0 {
 		return nil
@@ -215,6 +219,7 @@ func (r *postgresRepository) importSnapshotProfiles(ctx context.Context, tx pgx.
 	return nil
 }
 
+// importSnapshotChannels performs import snapshot channels and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshotChannels(ctx context.Context, tx pgx.Tx, channels map[string]models.Channel) error {
 	if len(channels) == 0 {
 		return nil
@@ -258,6 +263,7 @@ func (r *postgresRepository) importSnapshotChannels(ctx context.Context, tx pgx.
 	return nil
 }
 
+// importSnapshotFollows performs import snapshot follows and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshotFollows(ctx context.Context, tx pgx.Tx, follows map[string]map[string]time.Time) error {
 	for userID, entries := range follows {
 		for channelID, followedAt := range entries {
@@ -270,6 +276,7 @@ func (r *postgresRepository) importSnapshotFollows(ctx context.Context, tx pgx.T
 	return nil
 }
 
+// importSnapshotStreamSessions performs import snapshot stream sessions and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshotStreamSessions(ctx context.Context, tx pgx.Tx, sessions map[string]models.StreamSession) error {
 	if len(sessions) == 0 {
 		return nil
@@ -321,6 +328,7 @@ func (r *postgresRepository) importSnapshotStreamSessions(ctx context.Context, t
 	return nil
 }
 
+// importSnapshotRecordings performs import snapshot recordings and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshotRecordings(ctx context.Context, tx pgx.Tx, recordings map[string]models.Recording) error {
 	if len(recordings) == 0 {
 		return nil
@@ -354,6 +362,7 @@ func (r *postgresRepository) importSnapshotRecordings(ctx context.Context, tx pg
 	return nil
 }
 
+// importSnapshotUploads performs import snapshot uploads and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshotUploads(ctx context.Context, tx pgx.Tx, uploads map[string]models.Upload) error {
 	if len(uploads) == 0 {
 		return nil
@@ -405,6 +414,7 @@ func (r *postgresRepository) importSnapshotUploads(ctx context.Context, tx pgx.T
 	return nil
 }
 
+// importSnapshotClipExports performs import snapshot clip exports and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshotClipExports(ctx context.Context, tx pgx.Tx, clips map[string]models.ClipExport) error {
 	if len(clips) == 0 {
 		return nil
@@ -440,6 +450,7 @@ func (r *postgresRepository) importSnapshotClipExports(ctx context.Context, tx p
 	return nil
 }
 
+// importSnapshotChatMessages performs import snapshot chat messages and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshotChatMessages(ctx context.Context, tx pgx.Tx, messages map[string]models.ChatMessage) error {
 	if len(messages) == 0 {
 		return nil
@@ -467,6 +478,7 @@ func (r *postgresRepository) importSnapshotChatMessages(ctx context.Context, tx 
 	return nil
 }
 
+// importSnapshotChatModeration performs import snapshot chat moderation and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshotChatModeration(ctx context.Context, tx pgx.Tx, snapshot *Snapshot) error {
 	for channelID, entries := range snapshot.ChatBans {
 		for userID, issuedAt := range entries {
@@ -503,6 +515,7 @@ func (r *postgresRepository) importSnapshotChatModeration(ctx context.Context, t
 	return nil
 }
 
+// importSnapshotChatFilters performs import snapshot chat filters and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshotChatFilters(ctx context.Context, tx pgx.Tx, filters map[string]models.ChatFilter) error {
 	if len(filters) == 0 {
 		return nil
@@ -534,6 +547,7 @@ func (r *postgresRepository) importSnapshotChatFilters(ctx context.Context, tx p
 	return nil
 }
 
+// importSnapshotChatReports performs import snapshot chat reports and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshotChatReports(ctx context.Context, tx pgx.Tx, reports map[string]models.ChatReport) error {
 	if len(reports) == 0 {
 		return nil
@@ -577,6 +591,7 @@ func (r *postgresRepository) importSnapshotChatReports(ctx context.Context, tx p
 	return nil
 }
 
+// importSnapshotChatAutoModActions performs import snapshot chat auto mod actions and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshotChatAutoModActions(ctx context.Context, tx pgx.Tx, actions map[string]models.ChatAutoModAction) error {
 	if len(actions) == 0 {
 		return nil
@@ -608,6 +623,7 @@ func (r *postgresRepository) importSnapshotChatAutoModActions(ctx context.Contex
 	return nil
 }
 
+// importSnapshotTips performs import snapshot tips and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshotTips(ctx context.Context, tx pgx.Tx, tips map[string]models.Tip) error {
 	if len(tips) == 0 {
 		return nil
@@ -643,6 +659,7 @@ func (r *postgresRepository) importSnapshotTips(ctx context.Context, tx pgx.Tx, 
 	return nil
 }
 
+// importSnapshotSubscriptions performs import snapshot subscriptions and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshotSubscriptions(ctx context.Context, tx pgx.Tx, subs map[string]models.Subscription) error {
 	if len(subs) == 0 {
 		return nil
@@ -690,6 +707,7 @@ func (r *postgresRepository) importSnapshotSubscriptions(ctx context.Context, tx
 	return nil
 }
 
+// importSnapshotOAuthAccounts performs import snapshot oauth accounts and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) importSnapshotOAuthAccounts(ctx context.Context, tx pgx.Tx, accounts map[string]models.OAuthAccount) error {
 	if len(accounts) == 0 {
 		return nil
@@ -713,6 +731,7 @@ func (r *postgresRepository) importSnapshotOAuthAccounts(ctx context.Context, tx
 	return nil
 }
 
+// lookupString performs lookup string and propagates validation or dependency failures to the caller.
 func lookupString(container map[string]map[string]string, channelID, userID string) string {
 	if container == nil {
 		return ""
@@ -725,6 +744,7 @@ func lookupString(container map[string]map[string]string, channelID, userID stri
 	return ""
 }
 
+// lookupTime performs lookup time and propagates validation or dependency failures to the caller.
 func lookupTime(container map[string]map[string]time.Time, channelID, userID string) time.Time {
 	if container == nil {
 		return time.Time{}

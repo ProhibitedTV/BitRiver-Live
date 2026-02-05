@@ -65,6 +65,7 @@ type subscriptionResponse struct {
 	CancelledAt       *string      `json:"cancelledAt,omitempty"`
 }
 
+// parseMoneyNumber parses money number and returns an error when the input is malformed.
 func parseMoneyNumber(number json.Number, field string) (models.Money, error) {
 	raw := strings.TrimSpace(number.String())
 	if raw == "" {
@@ -77,6 +78,7 @@ func parseMoneyNumber(number json.Number, field string) (models.Money, error) {
 	return money, nil
 }
 
+// newTipResponse builds and returns tip response using the supplied dependencies.
 func newTipResponse(tip models.Tip) tipResponse {
 	return tipResponse{
 		ID:            tip.ID,
@@ -92,6 +94,7 @@ func newTipResponse(tip models.Tip) tipResponse {
 	}
 }
 
+// newSubscriptionResponse builds and returns subscription response using the supplied dependencies.
 func newSubscriptionResponse(sub models.Subscription) subscriptionResponse {
 	resp := subscriptionResponse{
 		ID:                sub.ID,
@@ -117,6 +120,7 @@ func newSubscriptionResponse(sub models.Subscription) subscriptionResponse {
 	return resp
 }
 
+// handleMonetizationRoutes routes and serves monetization routes requests, writing HTTP errors for invalid input or backend failures.
 func (h *Handler) handleMonetizationRoutes(channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	if len(remaining) == 0 {
 		WriteError(w, http.StatusNotFound, fmt.Errorf("unknown monetization path"))
@@ -132,6 +136,7 @@ func (h *Handler) handleMonetizationRoutes(channel models.Channel, remaining []s
 	}
 }
 
+// handleTipsRoutes routes and serves tips routes requests, writing HTTP errors for invalid input or backend failures.
 func (h *Handler) handleTipsRoutes(channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	actor, ok := h.requireAuthenticatedUser(w, r)
 	if !ok {
@@ -195,6 +200,7 @@ func (h *Handler) handleTipsRoutes(channel models.Channel, remaining []string, w
 	}
 }
 
+// handleSubscriptionsRoutes routes and serves subscriptions routes requests, writing HTTP errors for invalid input or backend failures.
 func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	actor, ok := h.requireAuthenticatedUser(w, r)
 	if !ok {

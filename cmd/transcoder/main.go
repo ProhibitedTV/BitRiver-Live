@@ -102,6 +102,7 @@ type componentState struct {
 	Failures   int       `json:"failures,omitempty"`
 }
 
+// jobLogger performs job logger and propagates validation or dependency failures to the caller.
 func (s *server) jobLogger(jobID string, meta *job) *slog.Logger {
 	if s == nil || s.logger == nil {
 		return nil
@@ -118,6 +119,7 @@ func (s *server) jobLogger(jobID string, meta *job) *slog.Logger {
 	return logger
 }
 
+// uploadLogger performs upload logger and propagates validation or dependency failures to the caller.
 func (s *server) uploadLogger(jobID string, meta *uploadJob) *slog.Logger {
 	if s == nil || s.logger == nil {
 		return nil
@@ -134,6 +136,7 @@ func (s *server) uploadLogger(jobID string, meta *uploadJob) *slog.Logger {
 	return logger
 }
 
+// constantTimeEqual performs constant time equal and propagates validation or dependency failures to the caller.
 func constantTimeEqual(expected, provided string) bool {
 	if expected == "" || provided == "" {
 		return false
@@ -144,6 +147,7 @@ func constantTimeEqual(expected, provided string) bool {
 	return subtle.ConstantTimeCompare([]byte(expected), []byte(provided)) == 1
 }
 
+// logAuthFailure logs auth failure details for observability without mutating runtime state.
 func logAuthFailure(logger *slog.Logger, r *http.Request, reason string) {
 	if logger == nil || r == nil {
 		return
@@ -155,6 +159,7 @@ func logAuthFailure(logger *slog.Logger, r *http.Request, reason string) {
 	)
 }
 
+// updateComponent updates component and returns an error when validation or persistence fails.
 func (s *server) updateComponent(name string, err error) {
 	if s == nil {
 		return
@@ -180,6 +185,7 @@ func (s *server) updateComponent(name string, err error) {
 	}
 }
 
+// componentSnapshot performs component snapshot and propagates validation or dependency failures to the caller.
 func (s *server) componentSnapshot() map[string]*componentState {
 	s.healthMu.Lock()
 	defer s.healthMu.Unlock()
@@ -230,6 +236,7 @@ const (
 	componentPublishing = "publishing"
 )
 
+// main parses configuration, initializes runtime dependencies, and runs the process until shutdown.
 func main() {
 	bind := envOrDefault("JOB_CONTROLLER_BIND", ":9000")
 	token := strings.TrimSpace(os.Getenv("JOB_CONTROLLER_TOKEN"))
@@ -306,6 +313,7 @@ func main() {
 	logger.Info("ffmpeg job controller stopped")
 }
 
+// newServer builds and returns server using the supplied dependencies.
 func newServer(token, outputRoot string, logger *slog.Logger, registry *metrics.Registry) (*server, error) {
 	store, err := newMetadataStore(outputRoot)
 	if err != nil {
@@ -361,6 +369,7 @@ func newServer(token, outputRoot string, logger *slog.Logger, registry *metrics.
 	return srv, nil
 }
 
+// routes performs routes and propagates validation or dependency failures to the caller.
 func (s *server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", s.metrics.Handler())
@@ -380,6 +389,7 @@ func (s *server) routes() http.Handler {
 	return logging.RequestLogger(logging.RequestLoggerConfig{Logger: s.logger})(handler)
 }
 
+// startRetentionWorker starts retention worker and returns an error when startup or dependency checks fail.
 func (s *server) startRetentionWorker(ctx context.Context) {
 	if s == nil || (s.liveRetention <= 0 && s.uploadRetention <= 0) {
 		return
@@ -400,6 +410,7 @@ func (s *server) startRetentionWorker(ctx context.Context) {
 	}()
 }
 
+// runRetentionSweep runs retention sweep and exits when the work completes or a dependency fails.
 func (s *server) runRetentionSweep(now time.Time) {
 	if s == nil {
 		return
@@ -420,6 +431,7 @@ func (s *server) runRetentionSweep(now time.Time) {
 	}
 }
 
+// cleanupLiveArtifacts performs cleanup live artifacts and propagates validation or dependency failures to the caller.
 func (s *server) cleanupLiveArtifacts(now time.Time) error {
 	root := filepath.Join(s.outputRoot, "live")
 	jobs := make(map[string]*job)
@@ -445,6 +457,7 @@ func (s *server) cleanupLiveArtifacts(now time.Time) error {
 	return nil
 }
 
+// cleanupUploadArtifacts performs cleanup upload artifacts and propagates validation or dependency failures to the caller.
 func (s *server) cleanupUploadArtifacts(now time.Time) error {
 	root := filepath.Join(s.outputRoot, "uploads")
 	uploads := make(map[string]*uploadJob)
@@ -472,6 +485,7 @@ func (s *server) cleanupUploadArtifacts(now time.Time) error {
 	return nil
 }
 
+// restoreActiveProcesses performs restore active processes and propagates validation or dependency failures to the caller.
 func (s *server) restoreActiveProcesses() {
 	for id, jb := range s.jobs {
 		if jb == nil {
@@ -565,6 +579,7 @@ func (s *server) restoreActiveProcesses() {
 	}
 }
 
+// authorize performs authorize and propagates validation or dependency failures to the caller.
 func (s *server) authorize(r *http.Request) bool {
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
 	if header == "" {
@@ -584,6 +599,7 @@ func (s *server) authorize(r *http.Request) bool {
 	return false
 }
 
+// handleHealthz routes and serves healthz requests, writing HTTP errors for invalid input or backend failures.
 func (s *server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -610,6 +626,7 @@ func (s *server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, code, payload)
 }
 
+// handleJobs routes and serves jobs requests, writing HTTP errors for invalid input or backend failures.
 func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 	ctx, span := tracing.Default().StartSpan(r.Context(), "transcoder.jobs.create")
 	if span != nil {
@@ -752,6 +769,7 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusCreated, resp)
 }
 
+// handleJobByID routes and serves job by id requests, writing HTTP errors for invalid input or backend failures.
 func (s *server) handleJobByID(w http.ResponseWriter, r *http.Request) {
 	ctx, span := tracing.Default().StartSpan(r.Context(), "transcoder.jobs.delete")
 	if span != nil {
@@ -830,6 +848,7 @@ func (s *server) handleJobByID(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleUploads routes and serves uploads requests, writing HTTP errors for invalid input or backend failures.
 func (s *server) handleUploads(w http.ResponseWriter, r *http.Request) {
 	ctx, span := tracing.Default().StartSpan(r.Context(), "transcoder.uploads.create")
 	if span != nil {
@@ -961,6 +980,7 @@ func (s *server) handleUploads(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusAccepted, resp)
 }
 
+// makeJobExitHandler performs make job exit handler and propagates validation or dependency failures to the caller.
 func (s *server) makeJobExitHandler(id string) func(error) {
 	return func(err error) {
 		now := time.Now().UTC()
@@ -999,6 +1019,7 @@ func (s *server) makeJobExitHandler(id string) func(error) {
 	}
 }
 
+// makeUploadExitHandler performs make upload exit handler and propagates validation or dependency failures to the caller.
 func (s *server) makeUploadExitHandler(id string) func(error) {
 	return func(err error) {
 		now := time.Now().UTC()
@@ -1042,6 +1063,7 @@ func (s *server) makeUploadExitHandler(id string) func(error) {
 	}
 }
 
+// decodeRenditions performs decode renditions and propagates validation or dependency failures to the caller.
 func decodeRenditions(raw json.RawMessage) ([]rendition, error) {
 	if len(raw) == 0 {
 		return nil, nil
@@ -1055,6 +1077,7 @@ func decodeRenditions(raw json.RawMessage) ([]rendition, error) {
 	return out, nil
 }
 
+// encodeRenditions performs encode renditions and propagates validation or dependency failures to the caller.
 func encodeRenditions(r []rendition) json.RawMessage {
 	if len(r) == 0 {
 		return json.RawMessage("[]")
@@ -1066,6 +1089,7 @@ func encodeRenditions(r []rendition) json.RawMessage {
 	return data
 }
 
+// cloneRenditions performs clone renditions and propagates validation or dependency failures to the caller.
 func cloneRenditions(src []rendition) []rendition {
 	if len(src) == 0 {
 		return nil
@@ -1082,6 +1106,7 @@ type transcodePlan struct {
 	master     string
 }
 
+// buildTranscodePlan builds transcode plan from runtime state used by downstream handlers.
 func buildTranscodePlan(input, outputDir string, ladder []rendition) (*transcodePlan, error) {
 	if strings.TrimSpace(input) == "" {
 		return nil, fmt.Errorf("input source is required")
@@ -1237,6 +1262,7 @@ func buildTranscodePlan(input, outputDir string, ladder []rendition) (*transcode
 	}, nil
 }
 
+// startFFmpeg starts ffmpeg and returns an error when startup or dependency checks fail.
 func (s *server) startFFmpeg(jobID string, plan *transcodePlan, onExit func(error)) (*processState, error) {
 	if plan == nil {
 		return nil, fmt.Errorf("transcode plan is required")
@@ -1274,6 +1300,7 @@ type logWriter struct {
 	logger *slog.Logger
 }
 
+// newLogWriter builds and returns log writer using the supplied dependencies.
 func newLogWriter(jobID, stream string, logger *slog.Logger) *logWriter {
 	if logger != nil && stream != "" {
 		logger = logger.With("stream", stream)
@@ -1281,6 +1308,7 @@ func newLogWriter(jobID, stream string, logger *slog.Logger) *logWriter {
 	return &logWriter{prefix: fmt.Sprintf("[%s][%s] ", jobID, stream), logger: logger}
 }
 
+// Write performs write and returns an error when dependent systems reject the operation.
 func (w *logWriter) Write(p []byte) (int, error) {
 	total := len(p)
 	for len(p) > 0 {
@@ -1304,6 +1332,7 @@ func (w *logWriter) Write(p []byte) (int, error) {
 	return total, nil
 }
 
+// sanitizeName performs sanitize name and propagates validation or dependency failures to the caller.
 func sanitizeName(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -1328,6 +1357,7 @@ func sanitizeName(name string) string {
 
 var resolutionPattern = regexp.MustCompile(`(?i)(\d{3,4})p`)
 
+// resolveDimensions resolves dimensions from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveDimensions(name string) (int, int) {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
@@ -1354,6 +1384,7 @@ func resolveDimensions(name string) (int, int) {
 	return 1280, 720
 }
 
+// buildScaleFilter builds scale filter from runtime state used by downstream handlers.
 func buildScaleFilter(width, height int) string {
 	if width <= 0 || height <= 0 {
 		width = 1280
@@ -1364,6 +1395,7 @@ func buildScaleFilter(width, height int) string {
 	return fmt.Sprintf("scale=w=%d:h=%d:force_original_aspect_ratio=decrease,setsar=1,pad=%d:%d:(ow-iw)/2:(oh-ih)/2", width, height, width, height)
 }
 
+// ensureEven performs ensure even and propagates validation or dependency failures to the caller.
 func ensureEven(value int) int {
 	if value%2 != 0 {
 		return value + 1
@@ -1374,6 +1406,7 @@ func ensureEven(value int) int {
 	return value
 }
 
+// defaultVideoBitrate returns the default video bitrate for the current runtime mode.
 func defaultVideoBitrate(height int) int {
 	switch {
 	case height >= 1080:
@@ -1393,6 +1426,7 @@ func defaultVideoBitrate(height int) int {
 	}
 }
 
+// defaultAudioBitrate returns the default audio bitrate for the current runtime mode.
 func defaultAudioBitrate(videoBitrate int) int {
 	switch {
 	case videoBitrate >= 5000:
@@ -1410,6 +1444,7 @@ func defaultAudioBitrate(videoBitrate int) int {
 	}
 }
 
+// videoProfileForHeight performs video profile for height and propagates validation or dependency failures to the caller.
 func videoProfileForHeight(height int) string {
 	switch {
 	case height >= 1080:
@@ -1423,6 +1458,7 @@ func videoProfileForHeight(height int) string {
 	}
 }
 
+// newMetadataStore builds and returns metadata store using the supplied dependencies.
 func newMetadataStore(root string) (*metadataStore, error) {
 	if strings.TrimSpace(root) == "" {
 		return nil, fmt.Errorf("output root is required")
@@ -1439,6 +1475,7 @@ func newMetadataStore(root string) (*metadataStore, error) {
 	return &metadataStore{root: absRoot}, nil
 }
 
+// Load performs load and returns an error when dependent systems reject the operation.
 func (m *metadataStore) Load() (map[string]*job, map[string]*uploadJob, error) {
 	jobs := make(map[string]*job)
 	uploads := make(map[string]*uploadJob)
@@ -1451,6 +1488,7 @@ func (m *metadataStore) Load() (map[string]*job, map[string]*uploadJob, error) {
 	return jobs, uploads, nil
 }
 
+// SaveJob performs save job and returns an error when dependent systems reject the operation.
 func (m *metadataStore) SaveJob(j *job) error {
 	if j == nil {
 		return nil
@@ -1465,6 +1503,7 @@ func (m *metadataStore) SaveJob(j *job) error {
 	return writeJSONFile(filepath.Join(dir, "metadata.json"), j)
 }
 
+// SaveUpload performs save upload and returns an error when dependent systems reject the operation.
 func (m *metadataStore) SaveUpload(u *uploadJob) error {
 	if u == nil {
 		return nil
@@ -1479,6 +1518,7 @@ func (m *metadataStore) SaveUpload(u *uploadJob) error {
 	return writeJSONFile(filepath.Join(dir, "metadata.json"), u)
 }
 
+// loadJobMetadata performs load job metadata and propagates validation or dependency failures to the caller.
 func loadJobMetadata(root string, dest map[string]*job) error {
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -1514,6 +1554,7 @@ func loadJobMetadata(root string, dest map[string]*job) error {
 	return nil
 }
 
+// loadUploadMetadata performs load upload metadata and propagates validation or dependency failures to the caller.
 func loadUploadMetadata(root string, dest map[string]*uploadJob) error {
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -1549,6 +1590,7 @@ func loadUploadMetadata(root string, dest map[string]*uploadJob) error {
 	return nil
 }
 
+// publishLive performs publish live and propagates validation or dependency failures to the caller.
 func (s *server) publishLive(j *job) error {
 	if s.publicBase == "" || j == nil {
 		return nil
@@ -1593,6 +1635,7 @@ func (s *server) publishLive(j *job) error {
 	return nil
 }
 
+// removeLiveMirror performs remove live mirror and propagates validation or dependency failures to the caller.
 func (s *server) removeLiveMirror(jobID string) error {
 	if s.publicBase == "" || strings.TrimSpace(jobID) == "" {
 		return nil
@@ -1609,6 +1652,7 @@ func (s *server) removeLiveMirror(jobID string) error {
 	return nil
 }
 
+// publishUpload performs publish upload and propagates validation or dependency failures to the caller.
 func (s *server) publishUpload(up *uploadJob) error {
 	if s.publicBase == "" || up == nil {
 		return nil
@@ -1645,6 +1689,7 @@ func (s *server) publishUpload(up *uploadJob) error {
 	return nil
 }
 
+// publicLiveURL performs public live url and propagates validation or dependency failures to the caller.
 func (s *server) publicLiveURL(jobID, rel string) string {
 	if s.publicBase == "" {
 		return ""
@@ -1652,6 +1697,7 @@ func (s *server) publicLiveURL(jobID, rel string) string {
 	return joinURL(s.publicBase, "live", jobID, rel)
 }
 
+// publicUploadURL performs public upload url and propagates validation or dependency failures to the caller.
 func (s *server) publicUploadURL(jobID, rel string) string {
 	if s.publicBase == "" {
 		return ""
@@ -1659,6 +1705,7 @@ func (s *server) publicUploadURL(jobID, rel string) string {
 	return joinURL(s.publicBase, "uploads", jobID, rel)
 }
 
+// relativeLocation performs relative location and propagates validation or dependency failures to the caller.
 func relativeLocation(baseDir, target string) string {
 	base := strings.TrimSpace(baseDir)
 	trimmed := strings.TrimSpace(target)
@@ -1676,6 +1723,7 @@ func relativeLocation(baseDir, target string) string {
 	return filepath.ToSlash(rel)
 }
 
+// joinURL performs join url and propagates validation or dependency failures to the caller.
 func joinURL(base string, parts ...string) string {
 	trimmed := strings.TrimRight(base, "/")
 	addition := path.Join(parts...)
@@ -1691,6 +1739,7 @@ func joinURL(base string, parts ...string) string {
 	return trimmed + "/" + strings.TrimLeft(addition, "/")
 }
 
+// copyDirectory performs copy directory and propagates validation or dependency failures to the caller.
 func copyDirectory(src, dst string) error {
 	return filepath.WalkDir(src, func(current string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -1740,6 +1789,7 @@ func copyDirectory(src, dst string) error {
 	})
 }
 
+// writeJSONFile writes jsonfile to the active response or stream and surfaces encode or I/O failures.
 func writeJSONFile(path string, payload any) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), "meta-*.tmp")
 	if err != nil {
@@ -1759,6 +1809,7 @@ func writeJSONFile(path string, payload any) error {
 	return os.Rename(tmp.Name(), path)
 }
 
+// writeJSON writes json to the active response or stream and surfaces encode or I/O failures.
 func (s *server) writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -1772,6 +1823,7 @@ func (s *server) writeJSON(w http.ResponseWriter, status int, payload any) {
 	}
 }
 
+// newID builds and returns id using the supplied dependencies.
 func newID(prefix string) string {
 	idRandMu.Lock()
 	defer idRandMu.Unlock()
@@ -1779,6 +1831,7 @@ func newID(prefix string) string {
 	return fmt.Sprintf("%s-%d", prefix, idRand.Int63())
 }
 
+// envOrDefault performs env or default and propagates validation or dependency failures to the caller.
 func envOrDefault(key, fallback string) string {
 	if val := strings.TrimSpace(os.Getenv(key)); val != "" {
 		return val
@@ -1786,6 +1839,7 @@ func envOrDefault(key, fallback string) string {
 	return fallback
 }
 
+// firstNonEmpty returns the first non-empty value from the provided candidates.
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if trimmed := strings.TrimSpace(value); trimmed != "" {
@@ -1795,6 +1849,7 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+// parseSampleRatio parses sample ratio and returns an error when the input is malformed.
 func parseSampleRatio(value string, otelSamplerArg string, logger *slog.Logger) float64 {
 	raw := strings.TrimSpace(value)
 	if raw == "" {
@@ -1822,6 +1877,7 @@ func parseSampleRatio(value string, otelSamplerArg string, logger *slog.Logger) 
 	return parsed
 }
 
+// renditionsLabel performs renditions label and propagates validation or dependency failures to the caller.
 func renditionsLabel(renditions []rendition) string {
 	if len(renditions) == 0 {
 		return ""
@@ -1835,6 +1891,7 @@ func renditionsLabel(renditions []rendition) string {
 	return strings.Join(names, ",")
 }
 
+// parseDurationEnv parses duration env and returns an error when the input is malformed.
 func parseDurationEnv(key string) (time.Duration, error) {
 	raw := strings.TrimSpace(os.Getenv(key))
 	if raw == "" {

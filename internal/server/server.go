@@ -269,6 +269,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	return srv, nil
 }
 
+// Start performs start and returns an error when dependent systems reject the operation.
 func (s *Server) Start() error {
 	if s.httpServer == nil {
 		return fmt.Errorf("http server is not configured")
@@ -281,6 +282,7 @@ func (s *Server) Start() error {
 	return s.httpServer.ListenAndServe()
 }
 
+// Shutdown performs shutdown and returns an error when dependent systems reject the operation.
 func (s *Server) Shutdown(ctx context.Context) error {
 	if s.httpServer == nil {
 		return nil
@@ -288,6 +290,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
 }
 
+// loggingMiddleware performs logging middleware and propagates validation or dependency failures to the caller.
 func loggingMiddleware(logger *slog.Logger, resolver *clientIPResolver, next http.Handler) http.Handler {
 	return logging.RequestLogger(logging.RequestLoggerConfig{
 		Logger:            logger,
@@ -309,6 +312,7 @@ type metricsAccessController struct {
 	logger   *slog.Logger
 }
 
+// newMetricsAccessController builds and returns metrics access controller using the supplied dependencies.
 func newMetricsAccessController(cfg MetricsAccessConfig, resolver *clientIPResolver, logger *slog.Logger) (*metricsAccessController, error) {
 	networks, err := parseNetworks(cfg.AllowedNetworks, "metrics network")
 	if err != nil {
@@ -322,6 +326,7 @@ func newMetricsAccessController(cfg MetricsAccessConfig, resolver *clientIPResol
 	}, nil
 }
 
+// handler performs handler and propagates validation or dependency failures to the caller.
 func (m *metricsAccessController) handler(next http.Handler) http.Handler {
 	if m == nil || (m.token == "" && len(m.networks) == 0) {
 		return next
@@ -347,6 +352,7 @@ func (m *metricsAccessController) handler(next http.Handler) http.Handler {
 	})
 }
 
+// metricsTokenFromRequest performs metrics token from request and propagates validation or dependency failures to the caller.
 func metricsTokenFromRequest(r *http.Request) string {
 	auth := strings.TrimSpace(r.Header.Get("Authorization"))
 	if strings.HasPrefix(strings.ToLower(auth), "bearer ") {
@@ -360,6 +366,7 @@ func metricsTokenFromRequest(r *http.Request) string {
 	return ""
 }
 
+// ipAllowed performs ip allowed and propagates validation or dependency failures to the caller.
 func ipAllowed(ip string, networks []*net.IPNet) bool {
 	if ip == "" {
 		return false
@@ -376,6 +383,7 @@ func ipAllowed(ip string, networks []*net.IPNet) bool {
 	return false
 }
 
+// rateLimitMiddleware performs rate limit middleware and propagates validation or dependency failures to the caller.
 func rateLimitMiddleware(rl *rateLimiter, resolver *clientIPResolver, logger *slog.Logger, next http.Handler) http.Handler {
 	if rl == nil {
 		return next
@@ -411,6 +419,7 @@ func rateLimitMiddleware(rl *rateLimiter, resolver *clientIPResolver, logger *sl
 	})
 }
 
+// shouldRateLimitAuthRequest performs should rate limit auth request and propagates validation or dependency failures to the caller.
 func shouldRateLimitAuthRequest(r *http.Request) bool {
 	if r == nil || r.URL == nil {
 		return false
@@ -439,6 +448,7 @@ func shouldRateLimitAuthRequest(r *http.Request) bool {
 	return false
 }
 
+// auditMiddleware performs audit middleware and propagates validation or dependency failures to the caller.
 func auditMiddleware(logger *slog.Logger, resolver *clientIPResolver, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sr := metrics.NewResponseRecorder(w)
@@ -469,6 +479,7 @@ func auditMiddleware(logger *slog.Logger, resolver *clientIPResolver, next http.
 	})
 }
 
+// shouldAudit performs should audit and propagates validation or dependency failures to the caller.
 func shouldAudit(r *http.Request) bool {
 	if r.Method == http.MethodGet || r.Method == http.MethodHead {
 		return false
@@ -487,6 +498,7 @@ const (
 	ipSourceXRealIP       = "x_real_ip"
 )
 
+// parseNetworks parses networks and returns an error when the input is malformed.
 func parseNetworks(raw []string, descriptor string) ([]*net.IPNet, error) {
 	var networks []*net.IPNet
 	for _, value := range raw {
@@ -516,6 +528,7 @@ type clientIPResolver struct {
 	trustedNets    []*net.IPNet
 }
 
+// newClientIPResolver builds and returns client ipresolver using the supplied dependencies.
 func newClientIPResolver(cfg RateLimitConfig) (*clientIPResolver, error) {
 	resolver := &clientIPResolver{trustForwarded: cfg.TrustForwardedHeaders}
 	trusted, err := parseNetworks(cfg.TrustedProxies, "trusted proxy")
@@ -529,6 +542,7 @@ func newClientIPResolver(cfg RateLimitConfig) (*clientIPResolver, error) {
 	return resolver, nil
 }
 
+// ClientIPFromRequest performs client ipfrom request and returns an error when dependent systems reject the operation.
 func (r *clientIPResolver) ClientIPFromRequest(req *http.Request) (string, string) {
 	if req == nil {
 		return "", ipSourceRemoteAddr
@@ -550,6 +564,7 @@ func (r *clientIPResolver) ClientIPFromRequest(req *http.Request) (string, strin
 	return clientIP(req.RemoteAddr), ipSourceRemoteAddr
 }
 
+// shouldTrust performs should trust and propagates validation or dependency failures to the caller.
 func (r *clientIPResolver) shouldTrust(remoteAddr string) bool {
 	if r == nil {
 		return false
@@ -576,6 +591,7 @@ func (r *clientIPResolver) shouldTrust(remoteAddr string) bool {
 	return false
 }
 
+// resolveClientIP resolves client ip from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveClientIP(r *http.Request, resolver *clientIPResolver) (string, string) {
 	if resolver == nil {
 		return clientIP(r.RemoteAddr), ipSourceRemoteAddr
@@ -583,6 +599,7 @@ func resolveClientIP(r *http.Request, resolver *clientIPResolver) (string, strin
 	return resolver.ClientIPFromRequest(r)
 }
 
+// clientIP performs client ip and propagates validation or dependency failures to the caller.
 func clientIP(remoteAddr string) string {
 	if remoteAddr == "" {
 		return ""
@@ -594,6 +611,7 @@ func clientIP(remoteAddr string) string {
 	return host
 }
 
+// authMiddleware performs auth middleware and propagates validation or dependency failures to the caller.
 func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
@@ -643,6 +661,7 @@ func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 	})
 }
 
+// spaHandler performs spa handler and propagates validation or dependency failures to the caller.
 func spaHandler(staticFS fs.FS, index []byte, fileServer http.Handler, logger *slog.Logger, resolver *clientIPResolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {

@@ -12,6 +12,7 @@ import (
 	"bitriver-live/internal/models"
 )
 
+// initChatDataset performs init chat dataset and propagates validation or dependency failures to the caller.
 func initChatDataset(ds *dataset) {
 	ds.ChatMessages = make(map[string]models.ChatMessage)
 	ds.ChatBans = make(map[string]map[string]time.Time)
@@ -26,6 +27,7 @@ func initChatDataset(ds *dataset) {
 	ds.ChatAutoModActions = make(map[string]models.ChatAutoModAction)
 }
 
+// ensureChatDatasetInitializedLocked performs ensure chat dataset initialized locked and propagates validation or dependency failures to the caller.
 func (s *Storage) ensureChatDatasetInitializedLocked() {
 	if s.data.ChatMessages == nil {
 		s.data.ChatMessages = make(map[string]models.ChatMessage)
@@ -62,6 +64,7 @@ func (s *Storage) ensureChatDatasetInitializedLocked() {
 	}
 }
 
+// cloneChatData performs clone chat data and propagates validation or dependency failures to the caller.
 func cloneChatData(src dataset, clone *dataset) {
 	if src.ChatMessages != nil {
 		clone.ChatMessages = make(map[string]models.ChatMessage, len(src.ChatMessages))
@@ -202,6 +205,7 @@ func cloneChatData(src dataset, clone *dataset) {
 	}
 }
 
+// ensureBanMetadata performs ensure ban metadata and propagates validation or dependency failures to the caller.
 func (s *Storage) ensureBanMetadata(channelID string) {
 	if s.data.ChatBanActors == nil {
 		s.data.ChatBanActors = make(map[string]map[string]string)
@@ -217,6 +221,7 @@ func (s *Storage) ensureBanMetadata(channelID string) {
 	}
 }
 
+// ensureTimeoutMetadata performs ensure timeout metadata and propagates validation or dependency failures to the caller.
 func (s *Storage) ensureTimeoutMetadata(channelID string) {
 	if s.data.ChatTimeoutActors == nil {
 		s.data.ChatTimeoutActors = make(map[string]map[string]string)
@@ -238,6 +243,7 @@ func (s *Storage) ensureTimeoutMetadata(channelID string) {
 	}
 }
 
+// normalizeChatFilter performs normalize chat filter and propagates validation or dependency failures to the caller.
 func normalizeChatFilter(kind, pattern string) (string, string, error) {
 	normalizedKind := strings.ToLower(strings.TrimSpace(kind))
 	trimmedPattern := strings.TrimSpace(pattern)
@@ -304,6 +310,7 @@ func (s *Storage) CreateChatMessage(channelID, userID, content string) (models.C
 	return message, nil
 }
 
+// ensureChatAccessLocked performs ensure chat access locked and propagates validation or dependency failures to the caller.
 func (s *Storage) ensureChatAccessLocked(channelID, userID string) error {
 	if s.isChatBannedLocked(channelID, userID) {
 		return fmt.Errorf("user is banned")
@@ -319,6 +326,7 @@ func (s *Storage) ensureChatAccessLocked(channelID, userID string) error {
 	return nil
 }
 
+// removeChatTimeoutLocked performs remove chat timeout locked and propagates validation or dependency failures to the caller.
 func (s *Storage) removeChatTimeoutLocked(channelID, userID string) error {
 	var (
 		previousExpiry time.Time
@@ -419,6 +427,7 @@ func (s *Storage) removeChatTimeoutLocked(channelID, userID string) error {
 	return nil
 }
 
+// isChatBannedLocked reports whether chat banned locked is satisfied for the current input.
 func (s *Storage) isChatBannedLocked(channelID, userID string) bool {
 	if bans := s.data.ChatBans[channelID]; bans != nil {
 		if _, exists := bans[userID]; exists {
@@ -428,6 +437,7 @@ func (s *Storage) isChatBannedLocked(channelID, userID string) bool {
 	return false
 }
 
+// chatTimeoutLocked performs chat timeout locked and propagates validation or dependency failures to the caller.
 func (s *Storage) chatTimeoutLocked(channelID, userID string) (time.Time, bool) {
 	if timeouts := s.data.ChatTimeouts[channelID]; timeouts != nil {
 		expiry, ok := timeouts[userID]
@@ -438,6 +448,7 @@ func (s *Storage) chatTimeoutLocked(channelID, userID string) (time.Time, bool) 
 	return time.Time{}, false
 }
 
+// purgeExpiredChatMessagesLocked performs purge expired chat messages locked and propagates validation or dependency failures to the caller.
 func (s *Storage) purgeExpiredChatMessagesLocked(now time.Time) (bool, dataset, error) {
 	retention := s.chatRetention.Messages
 	if retention <= 0 || len(s.data.ChatMessages) == 0 {
@@ -464,6 +475,7 @@ func (s *Storage) purgeExpiredChatMessagesLocked(now time.Time) (bool, dataset, 
 	return true, snapshot, nil
 }
 
+// purgeExpiredChatReportsLocked performs purge expired chat reports locked and propagates validation or dependency failures to the caller.
 func (s *Storage) purgeExpiredChatReportsLocked(now time.Time) (bool, dataset, error) {
 	retention := s.chatRetention.ModerationLogs
 	if retention <= 0 || len(s.data.ChatReports) == 0 {
@@ -494,6 +506,7 @@ func (s *Storage) purgeExpiredChatReportsLocked(now time.Time) (bool, dataset, e
 	return true, snapshot, nil
 }
 
+// purgeExpiredChatAutoModActionsLocked performs purge expired chat auto mod actions locked and propagates validation or dependency failures to the caller.
 func (s *Storage) purgeExpiredChatAutoModActionsLocked(now time.Time) (bool, dataset, error) {
 	retention := s.chatRetention.ModerationLogs
 	if retention <= 0 || len(s.data.ChatAutoModActions) == 0 {
@@ -520,6 +533,7 @@ func (s *Storage) purgeExpiredChatAutoModActionsLocked(now time.Time) (bool, dat
 	return true, snapshot, nil
 }
 
+// ListChatMessages returns chat messages from the configured backing services.
 func (s *Storage) ListChatMessages(channelID string, limit int) ([]models.ChatMessage, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -582,6 +596,7 @@ func (s *Storage) DeleteChatMessage(channelID, messageID string) error {
 	return nil
 }
 
+// pruneExpiredTimeoutsLocked performs prune expired timeouts locked and propagates validation or dependency failures to the caller.
 func (s *Storage) pruneExpiredTimeoutsLocked(channelID string, now time.Time) bool {
 	timeouts := s.data.ChatTimeouts[channelID]
 	if len(timeouts) == 0 {
@@ -677,6 +692,7 @@ func (s *Storage) ListChatRestrictions(channelID string) []models.ChatRestrictio
 	return restrictions
 }
 
+// lookupBanActor performs lookup ban actor and propagates validation or dependency failures to the caller.
 func (s *Storage) lookupBanActor(channelID, userID string) string {
 	if actors := s.data.ChatBanActors[channelID]; actors != nil {
 		return actors[userID]
@@ -684,6 +700,7 @@ func (s *Storage) lookupBanActor(channelID, userID string) string {
 	return ""
 }
 
+// lookupBanReason performs lookup ban reason and propagates validation or dependency failures to the caller.
 func (s *Storage) lookupBanReason(channelID, userID string) string {
 	if reasons := s.data.ChatBanReasons[channelID]; reasons != nil {
 		return reasons[userID]
@@ -691,6 +708,7 @@ func (s *Storage) lookupBanReason(channelID, userID string) string {
 	return ""
 }
 
+// lookupTimeoutActor performs lookup timeout actor and propagates validation or dependency failures to the caller.
 func (s *Storage) lookupTimeoutActor(channelID, userID string) string {
 	if actors := s.data.ChatTimeoutActors[channelID]; actors != nil {
 		return actors[userID]
@@ -698,6 +716,7 @@ func (s *Storage) lookupTimeoutActor(channelID, userID string) string {
 	return ""
 }
 
+// lookupTimeoutReason performs lookup timeout reason and propagates validation or dependency failures to the caller.
 func (s *Storage) lookupTimeoutReason(channelID, userID string) string {
 	if reasons := s.data.ChatTimeoutReasons[channelID]; reasons != nil {
 		return reasons[userID]
@@ -705,6 +724,7 @@ func (s *Storage) lookupTimeoutReason(channelID, userID string) string {
 	return ""
 }
 
+// lookupTimeoutIssuedAt performs lookup timeout issued at and propagates validation or dependency failures to the caller.
 func (s *Storage) lookupTimeoutIssuedAt(channelID, userID string, fallback time.Time) time.Time {
 	if issued := s.data.ChatTimeoutIssuedAt[channelID]; issued != nil {
 		if ts, ok := issued[userID]; ok {

@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+// generateID performs generate id and propagates validation or dependency failures to the caller.
 func generateID() (string, error) {
 	bytes := make([]byte, 16)
 	if _, err := rand.Read(bytes); err != nil {
@@ -15,6 +16,7 @@ func generateID() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
+// generateStreamKey performs generate stream key and propagates validation or dependency failures to the caller.
 func generateStreamKey() (string, error) {
 	bytes := make([]byte, 24)
 	if _, err := rand.Read(bytes); err != nil {

@@ -38,6 +38,7 @@ type memoryQueue struct {
 	buffer int
 }
 
+// Publish performs publish and returns an error when dependent systems reject the operation.
 func (q *memoryQueue) Publish(ctx context.Context, event Event) error {
 	if event.Type == "" {
 		return errors.New("event type is required")
@@ -57,6 +58,7 @@ func (q *memoryQueue) Publish(ctx context.Context, event Event) error {
 	return nil
 }
 
+// Subscribe performs subscribe and returns an error when dependent systems reject the operation.
 func (q *memoryQueue) Subscribe() Subscription {
 	sub := &memorySubscription{
 		queue: q,
@@ -74,10 +76,12 @@ type memorySubscription struct {
 	ch    chan Event
 }
 
+// Events performs events and returns an error when dependent systems reject the operation.
 func (s *memorySubscription) Events() <-chan Event {
 	return s.ch
 }
 
+// Close performs close and returns an error when dependent systems reject the operation.
 func (s *memorySubscription) Close() {
 	s.once.Do(func() {
 		s.queue.mu.Lock()

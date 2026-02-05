@@ -62,6 +62,7 @@ func (s *Storage) ApplyChatEvent(evt chat.Event) error {
 	return s.persist()
 }
 
+// applyModerationLocked performs apply moderation locked and propagates validation or dependency failures to the caller.
 func (s *Storage) applyModerationLocked(evt chat.ModerationEvent, occurredAt time.Time) {
 	switch evt.Action {
 	case chat.ModerationActionBan:
@@ -145,6 +146,7 @@ func (s *Storage) applyModerationLocked(evt chat.ModerationEvent, occurredAt tim
 	}
 }
 
+// applyReportLocked performs apply report locked and propagates validation or dependency failures to the caller.
 func (s *Storage) applyReportLocked(evt chat.ReportEvent) error {
 	if strings.TrimSpace(evt.ID) == "" {
 		return fmt.Errorf("report id missing")
@@ -170,6 +172,7 @@ func (s *Storage) applyReportLocked(evt chat.ReportEvent) error {
 	return nil
 }
 
+// applyAutoModLocked performs apply auto mod locked and propagates validation or dependency failures to the caller.
 func (s *Storage) applyAutoModLocked(evt chat.AutoModEvent) error {
 	if strings.TrimSpace(evt.ID) == "" {
 		return fmt.Errorf("automod action id missing")
@@ -319,6 +322,7 @@ func (w *ChatWorker) WithStartedChannel(started chan struct{}) *ChatWorker {
 	return w
 }
 
+// notifyStarted performs notify started and propagates validation or dependency failures to the caller.
 func (w *ChatWorker) notifyStarted() {
 	if w.started == nil {
 		return

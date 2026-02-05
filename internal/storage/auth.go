@@ -68,6 +68,7 @@ func (s *Storage) SetUserPassword(id, password string) (models.User, error) {
 	return user, nil
 }
 
+// hashPassword performs hash password and propagates validation or dependency failures to the caller.
 func hashPassword(password string) (string, error) {
 	salt := make([]byte, passwordHashSaltLength)
 	if _, err := rand.Read(salt); err != nil {
@@ -79,6 +80,7 @@ func hashPassword(password string) (string, error) {
 	return fmt.Sprintf("pbkdf2$sha256$%d$%s$%s", passwordHashIterations, encodedSalt, encodedKey), nil
 }
 
+// verifyPassword performs verify password and propagates validation or dependency failures to the caller.
 func verifyPassword(encodedHash, candidate string) error {
 	parts := strings.Split(encodedHash, "$")
 	if len(parts) != 5 {

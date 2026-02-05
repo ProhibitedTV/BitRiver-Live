@@ -14,12 +14,14 @@ import (
 	"bitriver-live/internal/storage"
 )
 
+// normalizeSRSAction performs normalize srsaction and propagates validation or dependency failures to the caller.
 func normalizeSRSAction(action string) string {
 	normalized := strings.ToLower(strings.TrimSpace(action))
 	normalized = strings.TrimPrefix(normalized, "on_")
 	return normalized
 }
 
+// channelForStream performs channel for stream and propagates validation or dependency failures to the caller.
 func (h *Handler) channelForStream(stream string) (models.Channel, bool) {
 	trimmed := strings.TrimSpace(stream)
 	if trimmed == "" || h.Store == nil {
@@ -51,10 +53,12 @@ type viewerCount struct {
 	peak    int
 }
 
+// newSRSViewerTracker builds and returns srsviewer tracker using the supplied dependencies.
 func newSRSViewerTracker() *srsViewerTracker {
 	return &srsViewerTracker{entries: make(map[string]viewerCount)}
 }
 
+// increment performs increment and propagates validation or dependency failures to the caller.
 func (t *srsViewerTracker) increment(channelID string) viewerCount {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -67,6 +71,7 @@ func (t *srsViewerTracker) increment(channelID string) viewerCount {
 	return counts
 }
 
+// decrement performs decrement and propagates validation or dependency failures to the caller.
 func (t *srsViewerTracker) decrement(channelID string) viewerCount {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -78,18 +83,21 @@ func (t *srsViewerTracker) decrement(channelID string) viewerCount {
 	return counts
 }
 
+// peak performs peak and propagates validation or dependency failures to the caller.
 func (t *srsViewerTracker) peak(channelID string) int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.entries[channelID].peak
 }
 
+// clear performs clear and propagates validation or dependency failures to the caller.
 func (t *srsViewerTracker) clear(channelID string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	delete(t.entries, channelID)
 }
 
+// SRSHook performs srshook and returns an error when dependent systems reject the operation.
 func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 	r, span := h.startSpan(r, "api.srs_hook")
 	if span != nil {
@@ -163,6 +171,7 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleSRSPublish routes and serves srspublish requests, writing HTTP errors for invalid input or backend failures.
 func (h *Handler) handleSRSPublish(channel models.Channel, w http.ResponseWriter, r *http.Request) {
 	if current, ok := h.Store.CurrentStreamSession(channel.ID); ok {
 		WriteJSON(w, http.StatusOK, srsHookResponse{Status: "ok", Action: "on_publish", ChannelID: channel.ID, SessionID: current.ID})
@@ -182,6 +191,7 @@ func (h *Handler) handleSRSPublish(channel models.Channel, w http.ResponseWriter
 	WriteJSON(w, http.StatusOK, srsHookResponse{Status: "ok", Action: "on_publish", ChannelID: channel.ID, SessionID: session.ID})
 }
 
+// handleSRSUnpublish routes and serves srsunpublish requests, writing HTTP errors for invalid input or backend failures.
 func (h *Handler) handleSRSUnpublish(channel models.Channel, peak int, tracker *srsViewerTracker, w http.ResponseWriter) {
 	if _, ok := h.Store.CurrentStreamSession(channel.ID); ok {
 		session, err := h.Store.StopStream(channel.ID, peak)
@@ -234,6 +244,7 @@ type renditionManifestResponse struct {
 	Bitrate     int    `json:"bitrate,omitempty"`
 }
 
+// handleStreamRoutes routes and serves stream routes requests, writing HTTP errors for invalid input or backend failures.
 func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	if len(remaining) == 0 {
 		WriteError(w, http.StatusNotFound, fmt.Errorf("stream action missing"))

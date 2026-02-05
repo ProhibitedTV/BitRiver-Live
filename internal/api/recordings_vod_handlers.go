@@ -68,6 +68,7 @@ type clipExportResponse struct {
 	CompletedAt  *string `json:"completedAt,omitempty"`
 }
 
+// newVodItemResponse builds and returns vod item response using the supplied dependencies.
 func newVodItemResponse(recording models.Recording) vodItemResponse {
 	item := vodItemResponse{
 		ID:              recording.ID,
@@ -96,6 +97,7 @@ func newVodItemResponse(recording models.Recording) vodItemResponse {
 	return item
 }
 
+// newRecordingResponse builds and returns recording response using the supplied dependencies.
 func newRecordingResponse(recording models.Recording) recordingResponse {
 	resp := recordingResponse{
 		ID:              recording.ID,
@@ -163,6 +165,7 @@ func newRecordingResponse(recording models.Recording) recordingResponse {
 	return resp
 }
 
+// newClipExportResponse builds and returns clip export response using the supplied dependencies.
 func newClipExportResponse(clip models.ClipExport) clipExportResponse {
 	resp := clipExportResponse{
 		ID:           clip.ID,
@@ -185,6 +188,7 @@ func newClipExportResponse(clip models.ClipExport) clipExportResponse {
 	return resp
 }
 
+// Recordings performs recordings and returns an error when dependent systems reject the operation.
 func (h *Handler) Recordings(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteMethodNotAllowed(w, r, http.MethodGet)
@@ -218,6 +222,7 @@ func (h *Handler) Recordings(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, response)
 }
 
+// RecordingByID performs recording by id and returns an error when dependent systems reject the operation.
 func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/recordings/")
 	if path == "" {

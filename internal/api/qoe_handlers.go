@@ -25,6 +25,7 @@ type viewerQoERequest struct {
 	Error           string  `json:"error,omitempty"`
 }
 
+// ViewerQoE performs viewer qo e and returns an error when dependent systems reject the operation.
 func (h *Handler) ViewerQoE(w http.ResponseWriter, r *http.Request) {
 	r, span := h.startSpan(r, "api.viewer_qoe")
 	if span != nil {

@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// CreateTip creates tip and returns an error when persistence or validation fails.
 func (r *postgresRepository) CreateTip(params CreateTipParams) (models.Tip, error) {
 	if r == nil || r.pool == nil {
 		return models.Tip{}, ErrPostgresUnavailable
@@ -112,6 +113,7 @@ func (r *postgresRepository) CreateTip(params CreateTipParams) (models.Tip, erro
 	return tip, nil
 }
 
+// ListTips returns tips from the configured backing services.
 func (r *postgresRepository) ListTips(channelID string, limit int) ([]models.Tip, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
@@ -177,6 +179,7 @@ func (r *postgresRepository) ListTips(channelID string, limit int) ([]models.Tip
 	return tips, nil
 }
 
+// CreateSubscription creates subscription and returns an error when persistence or validation fails.
 func (r *postgresRepository) CreateSubscription(params CreateSubscriptionParams) (models.Subscription, error) {
 	if r == nil || r.pool == nil {
 		return models.Subscription{}, ErrPostgresUnavailable
@@ -278,6 +281,7 @@ func (r *postgresRepository) CreateSubscription(params CreateSubscriptionParams)
 	return subscription, nil
 }
 
+// ListSubscriptions returns subscriptions from the configured backing services.
 func (r *postgresRepository) ListSubscriptions(channelID string, includeInactive bool) ([]models.Subscription, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
@@ -332,6 +336,7 @@ func (r *postgresRepository) ListSubscriptions(channelID string, includeInactive
 	return subscriptions, nil
 }
 
+// GetSubscription returns subscription from the configured backing services.
 func (r *postgresRepository) GetSubscription(id string) (models.Subscription, bool) {
 	if r == nil || r.pool == nil {
 		return models.Subscription{}, false
@@ -352,6 +357,7 @@ func (r *postgresRepository) GetSubscription(id string) (models.Subscription, bo
 	return sub, true
 }
 
+// CancelSubscription performs cancel subscription and returns an error when dependent systems reject the operation.
 func (r *postgresRepository) CancelSubscription(id, cancelledBy, reason string) (models.Subscription, error) {
 	if r == nil || r.pool == nil {
 		return models.Subscription{}, ErrPostgresUnavailable
@@ -423,6 +429,7 @@ func (r *postgresRepository) CancelSubscription(id, cancelledBy, reason string) 
 	return updated, nil
 }
 
+// AuthenticateOAuth performs authenticate oauth and returns an error when dependent systems reject the operation.
 func (r *postgresRepository) AuthenticateOAuth(params OAuthLoginParams) (models.User, error) {
 	if r == nil || r.pool == nil {
 		return models.User{}, ErrPostgresUnavailable
@@ -541,6 +548,7 @@ SET user_id = EXCLUDED.user_id, email = EXCLUDED.email, display_name = EXCLUDED.
 
 var _ Repository = (*postgresRepository)(nil)
 
+// scanSubscriptionRow scans subscription row from database rows and returns an error when type conversion fails.
 func scanSubscriptionRow(row pgx.Row) (models.Subscription, error) {
 	var (
 		sub               models.Subscription
