@@ -2209,8 +2209,13 @@ func validateEnv(values map[string]string) envValidatorResult {
 	localQuickstart := loopback.MatchString(strings.TrimSpace(values["NEXT_PUBLIC_VIEWER_URL"])) &&
 		loopback.MatchString(strings.TrimSpace(values["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"]))
 	omeLoopbackAllowed := composeOMEAPI || localQuickstart
+	localQuickstartMessage := " This is expected for first-run Docker Desktop quickstart demos and remains a non-fatal warning, but you must replace it with a public/routable value before any internet-facing or production deployment."
 
 	flagEnvIssue := func(message string) {
+		if localQuickstart {
+			res.Warnings = append(res.Warnings, message+localQuickstartMessage)
+			return
+		}
 		if production {
 			res.Errors = append(res.Errors, message)
 		} else {
@@ -2219,6 +2224,10 @@ func validateEnv(values map[string]string) envValidatorResult {
 	}
 
 	flagOMEIssue := func(message string) {
+		if localQuickstart {
+			res.Warnings = append(res.Warnings, message+localQuickstartMessage)
+			return
+		}
 		if production && !omeLoopbackAllowed {
 			res.Errors = append(res.Errors, message)
 			return

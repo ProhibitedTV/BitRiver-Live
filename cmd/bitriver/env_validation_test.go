@@ -313,14 +313,68 @@ func TestValidateEnvWarnsLoopbackOMEOnQuickstart(t *testing.T) {
 	}
 
 	res := validateEnv(values)
+	joinedWarnings := strings.Join(res.Warnings, " ")
 	for _, err := range res.Errors {
+		if strings.Contains(err, "loopback") {
+			t.Fatalf("did not expect loopback errors for quickstart defaults, got %v", res.Errors)
+		}
 		if strings.Contains(err, "BITRIVER_OME_BIND") || strings.Contains(err, "BITRIVER_OME_IP") {
 			t.Fatalf("did not expect loopback bind/ip errors for quickstart, got %v", res.Errors)
 		}
 	}
-	warnings := strings.Join(res.Warnings, " ")
-	if !strings.Contains(warnings, "BITRIVER_OME_BIND") || !strings.Contains(warnings, "BITRIVER_OME_IP") {
+	if !strings.Contains(joinedWarnings, "BITRIVER_OME_BIND") || !strings.Contains(joinedWarnings, "BITRIVER_OME_IP") {
 		t.Fatalf("expected loopback bind/ip warnings for quickstart, got %v", res.Warnings)
+	}
+	if !strings.Contains(joinedWarnings, "expected for first-run Docker Desktop quickstart demos") {
+		t.Fatalf("expected quickstart warning guidance, got %v", res.Warnings)
+	}
+	if !strings.Contains(joinedWarnings, "must replace it with a public/routable value") {
+		t.Fatalf("expected production replacement guidance in warnings, got %v", res.Warnings)
+	}
+}
+
+func TestValidateEnvKeepsProductionLoopbackStrictWhenNotQuickstart(t *testing.T) {
+	values := map[string]string{
+		"BITRIVER_POSTGRES_USER":                  "brlive_app",
+		"BITRIVER_POSTGRES_PASSWORD":              "secret",
+		"BITRIVER_REDIS_PASSWORD":                 "secret",
+		"BITRIVER_OME_API":                        "http://localhost:8081",
+		"BITRIVER_OME_BIND":                       "0.0.0.0",
+		"BITRIVER_OME_IP":                         "0.0.0.0",
+		"BITRIVER_OME_SERVER_PORT":                "9000",
+		"BITRIVER_OME_SERVER_TLS_PORT":            "9443",
+		"BITRIVER_LIVE_ADMIN_EMAIL":               "admin@example.com",
+		"BITRIVER_LIVE_ADMIN_PASSWORD":            "secure",
+		"BITRIVER_LIVE_SESSION_TTL":               "168h",
+		"BITRIVER_LIVE_ALLOW_SELF_SIGNUP":         "false",
+		"BITRIVER_SRS_TOKEN":                      "token",
+		"BITRIVER_OME_USERNAME":                   "omeuser",
+		"BITRIVER_OME_PASSWORD":                   "omepass",
+		"BITRIVER_OME_API_TOKEN":                  "apitoken",
+		"BITRIVER_OME_ACCESS_TOKEN":               "accesstoken",
+		"BITRIVER_TRANSCODER_TOKEN":               "transcodertoken",
+		"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD": "secret",
+		"BITRIVER_TRANSCODER_PUBLIC_BASE_URL":     "https://cdn.stream.local/hls",
+		"NEXT_PUBLIC_VIEWER_URL":                  "https://viewer.stream.local",
+		"NEXT_PUBLIC_API_BASE_URL":                "https://api.stream.local",
+		"BITRIVER_LIVE_IMAGE_TAG":                 "1.0.0",
+		"BITRIVER_VIEWER_IMAGE_TAG":               "1.0.0",
+		"BITRIVER_SRS_CONTROLLER_IMAGE_TAG":       "1.0.0",
+		"BITRIVER_TRANSCODER_IMAGE_TAG":           "1.0.0",
+		"BITRIVER_SRS_IMAGE_TAG":                  "v5.0.185",
+		"BITRIVER_OME_IMAGE_TAG":                  "0.16.0",
+		"BITRIVER_LIVE_MODE":                      "production",
+		"BITRIVER_LIVE_METRICS_TOKEN":             "metrics-token",
+		"BITRIVER_LIVE_RATE_LOGIN_LIMIT":          "10",
+	}
+
+	res := validateEnv(values)
+	joinedErrors := strings.Join(res.Errors, " ")
+	if !strings.Contains(joinedErrors, "BITRIVER_OME_API points at loopback") {
+		t.Fatalf("expected strict production loopback error outside quickstart defaults, got %v", res.Errors)
+	}
+	if strings.Contains(strings.Join(res.Warnings, " "), "expected for first-run Docker Desktop quickstart demos") {
+		t.Fatalf("did not expect quickstart-only wording in non-quickstart production warnings, got %v", res.Warnings)
 	}
 }
 func TestValidateEnvAllowsComposeInsecurePostgresDSN(t *testing.T) {
