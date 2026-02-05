@@ -112,6 +112,7 @@ so the job can populate every required variable and image tag:
 - `BITRIVER_TRANSCODER_IMAGE_TAG`
 - `BITRIVER_SRS_IMAGE_TAG`
 - `BITRIVER_OME_IMAGE_TAG`
+- Optional: `BITRIVER_*_IMAGE_DIGEST` values when you pin digests in production
 - `NEXT_PUBLIC_API_BASE_URL`
 - `NEXT_PUBLIC_VIEWER_URL`
 
@@ -120,6 +121,24 @@ to render the production OvenMediaEngine config. The `build` matrix now fails
 if `deploy/ome/Server.generated.xml` would change when rendered for the
 tagged release, preventing stale placeholders from landing in the packaged
 artefacts.
+
+### Record image digests for production
+
+After the release images are published, resolve their digests and record them in
+the release notes (and/or update `deploy/.env.example`) so production deployments
+can pin to immutable references:
+
+```bash
+docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-live:vX.Y.Z --format '{{.Manifest.Digest}}'
+docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-viewer:vX.Y.Z --format '{{.Manifest.Digest}}'
+docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-srs-controller:vX.Y.Z --format '{{.Manifest.Digest}}'
+docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-transcoder:vX.Y.Z --format '{{.Manifest.Digest}}'
+```
+
+Capture any third-party image digests (`redis`, `postgres`, `ossrs/srs`,
+`airensoft/ovenmediaengine`, `nginx`, and helper base images) you intend to pin
+alongside the release so operators can mirror the same verified set in their
+`.env` files.
 
 ## 3. Rotate credentials and validate environment files
 

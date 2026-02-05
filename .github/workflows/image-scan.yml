@@ -1,0 +1,78 @@
+name: Image vulnerability scan
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  image-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Prepare Compose environment
+        run: |
+          cat <<'ENV' > .ci.env
+          BITRIVER_LIVE_IMAGE_TAG=ci
+          BITRIVER_VIEWER_IMAGE_TAG=ci
+          BITRIVER_SRS_CONTROLLER_IMAGE_TAG=ci
+          BITRIVER_TRANSCODER_IMAGE_TAG=ci
+          BITRIVER_SRS_IMAGE_TAG=v5.0.185
+          BITRIVER_OME_IMAGE_TAG=0.16.0
+          BITRIVER_LIVE_ADMIN_EMAIL=ci@example.com
+          BITRIVER_LIVE_ADMIN_PASSWORD=ci-admin-password
+          BITRIVER_SRS_TOKEN=ci-srs-token
+          BITRIVER_OME_USERNAME=ci-ome-user
+          BITRIVER_OME_PASSWORD=ci-ome-password
+          BITRIVER_OME_API_TOKEN=ci-ome-api-token
+          BITRIVER_TRANSCODER_TOKEN=ci-transcoder-token
+          BITRIVER_REDIS_PASSWORD=ci-redis-password
+          BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD=ci-redis-password
+          BITRIVER_POSTGRES_USER=ci-postgres
+          BITRIVER_POSTGRES_PASSWORD=ci-postgres-password
+          BITRIVER_TRANSCODER_PUBLIC_BASE_URL=https://example.com/hls
+          ENV
+
+      - name: Build local images from the Compose stack
+        run: |
+          docker compose --env-file .ci.env -f deploy/docker-compose.yml build \
+            bitriver-live \
+            viewer \
+            srs-controller \
+            transcoder \
+            srs \
+            ome-config
+
+      - name: Collect Compose images
+        run: |
+          docker compose --env-file .ci.env -f deploy/docker-compose.yml config --images | sort -u > /tmp/compose-images.txt
+          cat /tmp/compose-images.txt
+
+      - name: Install Trivy
+        run: |
+          TRIVY_VERSION=0.50.1
+          curl -sfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
+            | tar -xz
+          sudo install trivy /usr/local/bin/trivy
+
+      - name: Scan images for critical vulnerabilities
+        run: |
+          set -euo pipefail
+          while read -r image; do
+            if [ -z "$image" ]; then
+              continue
+            fi
+            echo "Scanning $image"
+            trivy image --severity CRITICAL --exit-code 1 --no-progress "$image"
+          done < /tmp/compose-images.txt

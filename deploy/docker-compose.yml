@@ -11,7 +11,7 @@ x-required-credentials: &required_credentials
 
 services:
   bitriver-live:
-    image: ghcr.io/bitriver-live/bitriver-live:${BITRIVER_LIVE_IMAGE_TAG:?set via .env}
+    image: ghcr.io/bitriver-live/bitriver-live:${BITRIVER_LIVE_IMAGE_TAG:?set via .env}${BITRIVER_LIVE_IMAGE_DIGEST:-}
     build:
       context: ..
       dockerfile: Dockerfile
@@ -84,7 +84,7 @@ services:
         condition: service_started
 
   viewer:
-    image: ghcr.io/bitriver-live/bitriver-viewer:${BITRIVER_VIEWER_IMAGE_TAG:?set via .env}
+    image: ghcr.io/bitriver-live/bitriver-viewer:${BITRIVER_VIEWER_IMAGE_TAG:?set via .env}${BITRIVER_VIEWER_IMAGE_DIGEST:-}
     build:
       context: ../web/viewer
     container_name: bitriver-viewer
@@ -104,7 +104,7 @@ services:
       - bitriver-live
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine${BITRIVER_REDIS_IMAGE_DIGEST:-}
     restart: unless-stopped
     command:
       - "redis-server"
@@ -124,7 +124,7 @@ services:
       start_period: 5s
 
   postgres:
-    image: postgres:15-alpine
+    image: postgres:15-alpine${BITRIVER_POSTGRES_IMAGE_DIGEST:-}
     container_name: bitriver-postgres
     restart: unless-stopped
     environment:
@@ -142,7 +142,7 @@ services:
       start_period: 10s
 
   postgres-migrations:
-    image: postgres:15-alpine
+    image: postgres:15-alpine${BITRIVER_POSTGRES_IMAGE_DIGEST:-}
     restart: "no"
     env_file:
       - ../.env
@@ -185,7 +185,7 @@ services:
   # includes "postgres-host". Leave the profile disabled to keep the database
   # network-isolated inside the compose project.
   postgres-host-port:
-    image: alpine:3
+    image: alpine:3${BITRIVER_ALPINE_3_IMAGE_DIGEST:-}
     container_name: bitriver-postgres-host-port
     restart: unless-stopped
     command: ["sh", "-c", "while true; do sleep 3600; done"]
@@ -199,7 +199,7 @@ services:
       - "${BITRIVER_POSTGRES_HOST_PORT:-5432}:5432"
 
   srs-controller:
-    image: ghcr.io/bitriver-live/bitriver-srs-controller:${BITRIVER_SRS_CONTROLLER_IMAGE_TAG:?set via .env}
+    image: ghcr.io/bitriver-live/bitriver-srs-controller:${BITRIVER_SRS_CONTROLLER_IMAGE_TAG:?set via .env}${BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST:-}
     build:
       context: ..
       dockerfile: cmd/srs-controller/Dockerfile
@@ -226,7 +226,7 @@ services:
       start_period: 10s
 
   srs:
-    image: ossrs/srs:${BITRIVER_SRS_IMAGE_TAG:-v5.0.185}
+    image: ossrs/srs:${BITRIVER_SRS_IMAGE_TAG:-v5.0.185}${BITRIVER_SRS_IMAGE_DIGEST:-}
     build:
       context: ..
       dockerfile: deploy/srs/Dockerfile
@@ -252,7 +252,7 @@ services:
   srs-api:
     profiles:
       - srs-api
-    image: alpine:3.19
+    image: alpine:3.19${BITRIVER_ALPINE_3_19_IMAGE_DIGEST:-}
     container_name: bitriver-srs-api
     command: ["sh", "-c", "sleep infinity"]
     restart: unless-stopped
@@ -263,7 +263,7 @@ services:
       - "${BITRIVER_SRS_API_PORT:-1985}:1985"
 
   srs-config:
-    image: debian:12-slim
+    image: debian:12-slim${BITRIVER_DEBIAN_IMAGE_DIGEST:-}
     container_name: bitriver-srs-config
     working_dir: /workspace
     command: ["bash", "/workspace/scripts/render-srs-config.sh", "--env-file", "/workspace/.env", "--force"]
@@ -290,7 +290,7 @@ services:
     restart: "no"
 
   ome:
-    image: airensoft/ovenmediaengine:${BITRIVER_OME_IMAGE_TAG:-0.16.0}
+    image: airensoft/ovenmediaengine:${BITRIVER_OME_IMAGE_TAG:-0.16.0}${BITRIVER_OME_IMAGE_DIGEST:-}
     container_name: bitriver-ome
     hostname: ome
     restart: unless-stopped
@@ -340,7 +340,7 @@ services:
         condition: service_completed_successfully
 
   transcoder:
-    image: ghcr.io/bitriver-live/bitriver-transcoder:${BITRIVER_TRANSCODER_IMAGE_TAG:?set via .env}
+    image: ghcr.io/bitriver-live/bitriver-transcoder:${BITRIVER_TRANSCODER_IMAGE_TAG:?set via .env}${BITRIVER_TRANSCODER_IMAGE_DIGEST:-}
     build:
       context: ..
       dockerfile: cmd/transcoder/Dockerfile
@@ -368,7 +368,7 @@ services:
       start_period: 10s
 
   transcoder-public:
-    image: nginx:alpine
+    image: nginx:alpine${BITRIVER_NGINX_IMAGE_DIGEST:-}
     container_name: bitriver-transcoder-public
     depends_on:
       - transcoder
