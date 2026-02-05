@@ -231,13 +231,40 @@ func TestOmeConfigRenderingUsesCanonicalAPIAccessToken(t *testing.T) {
 	if strings.Contains(contents, "<Authentication>") {
 		t.Fatalf("expected rendered config to omit unsupported API <Authentication> block, got:\n%s", contents)
 	}
-	apiBlock := extractSection(contents, "<API>", "</API>")
-	if apiBlock == "" {
-		t.Fatalf("expected API block in rendered output, got:\n%s", contents)
+	var parsed struct {
+		Managers struct {
+			API struct {
+				AccessToken string `xml:"AccessToken"`
+				Port        string `xml:"Port"`
+				TLSPort     string `xml:"TLSPort"`
+				WorkerCount string `xml:"WorkerCount"`
+			} `xml:"API"`
+		} `xml:"Managers"`
+		Bind struct {
+			Managers struct {
+				API struct {
+					AccessToken string `xml:"AccessToken"`
+					Port        string `xml:"Port"`
+					TLSPort     string `xml:"TLSPort"`
+					WorkerCount string `xml:"WorkerCount"`
+				} `xml:"API"`
+			} `xml:"Managers"`
+		} `xml:"Bind"`
 	}
-	accessToken := extractTagValue(t, apiBlock, "AccessToken")
-	if accessToken != "token&lt;&amp;&gt;&#39;&#34;" {
-		t.Fatalf("expected access token to be escaped, got %q", accessToken)
+	if err := xml.Unmarshal(rendered, &parsed); err != nil {
+		t.Fatalf("expected rendered config to be parseable XML, got error: %v", err)
+	}
+	if parsed.Managers.API.AccessToken != "token<&>'\"" {
+		t.Fatalf("expected top-level auth access token to unmarshal correctly, got %q", parsed.Managers.API.AccessToken)
+	}
+	if parsed.Managers.API.Port != "" || parsed.Managers.API.TLSPort != "" || parsed.Managers.API.WorkerCount != "" {
+		t.Fatalf("expected top-level <Managers><API> auth block to omit listener-only fields, got port=%q tls=%q workers=%q", parsed.Managers.API.Port, parsed.Managers.API.TLSPort, parsed.Managers.API.WorkerCount)
+	}
+	if parsed.Bind.Managers.API.AccessToken != "" {
+		t.Fatalf("expected <Bind><Managers><API> to omit auth-only <AccessToken>, got %q", parsed.Bind.Managers.API.AccessToken)
+	}
+	if parsed.Bind.Managers.API.Port != "9000" || parsed.Bind.Managers.API.TLSPort != "9443" || parsed.Bind.Managers.API.WorkerCount != "1" {
+		t.Fatalf("expected <Bind><Managers><API> listener fields to remain present, got port=%q tls=%q workers=%q", parsed.Bind.Managers.API.Port, parsed.Bind.Managers.API.TLSPort, parsed.Bind.Managers.API.WorkerCount)
 	}
 }
 func renderOMEConfig(t *testing.T, repoRoot, envContents string) []byte {

@@ -20,13 +20,10 @@ func containsString(values []string, target string) bool {
 			return true
 		}
 	}
-
 	return false
 }
-
 func buildValidProductionEnv(t *testing.T) map[string]string {
 	t.Helper()
-
 	return map[string]string{
 		"BITRIVER_LIVE_IMAGE_TAG":                 "1.0.0",
 		"BITRIVER_VIEWER_IMAGE_TAG":               "1.0.0",
@@ -61,15 +58,12 @@ func buildValidProductionEnv(t *testing.T) map[string]string {
 		"BITRIVER_LIVE_RATE_LOGIN_LIMIT":          "10",
 	}
 }
-
 func TestVersionOutputIncludesVersionLabel(t *testing.T) {
 	var buf bytes.Buffer
 	Version = "test-version"
 	Commit = "test-commit"
 	Date = "2024-01-01"
-
 	printVersionInfo(&buf)
-
 	output := buf.String()
 	if !strings.Contains(output, "Version:") {
 		t.Fatalf("expected output to contain Version:, got %q", output)
@@ -81,47 +75,37 @@ func TestVersionOutputIncludesVersionLabel(t *testing.T) {
 		t.Fatalf("expected output to contain Date:, got %q", output)
 	}
 }
-
 func TestEnvInitWritesGeneratedValues(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), ".env")
 	examplePath := defaultExampleEnv()
-
 	if err := runEnvInit([]string{"--env-file", envPath, "--example", examplePath}); err != nil {
 		t.Fatalf("env init failed: %v", err)
 	}
-
 	values, err := loadEnvValues(envPath, false)
 	if err != nil {
 		t.Fatalf("read env file: %v", err)
 	}
-
 	if values["BITRIVER_POSTGRES_PASSWORD"] == "P0stgres-Example!" || values["BITRIVER_POSTGRES_PASSWORD"] == "" {
 		t.Fatalf("expected postgres password to be generated, got %q", values["BITRIVER_POSTGRES_PASSWORD"])
 	}
-
 	if values["BITRIVER_LIVE_ADMIN_EMAIL"] == "" || values["BITRIVER_LIVE_ADMIN_EMAIL"] == "admin@stream.example.com" {
 		t.Fatalf("expected admin email to be set, got %q", values["BITRIVER_LIVE_ADMIN_EMAIL"])
 	}
-
 	if values["BITRIVER_OME_API_TOKEN"] == "" {
 		t.Fatalf("expected OME API token to be generated, got empty value")
 	}
 	if values["BITRIVER_OME_ACCESS_TOKEN"] != values["BITRIVER_OME_API_TOKEN"] {
 		t.Fatalf("expected OME access token to match API token, got %q vs %q", values["BITRIVER_OME_ACCESS_TOKEN"], values["BITRIVER_OME_API_TOKEN"])
 	}
-
 	if values["BITRIVER_LIVE_MODE"] != "production" {
 		t.Fatalf("expected generated .env to persist BITRIVER_LIVE_MODE=production, got %q", values["BITRIVER_LIVE_MODE"])
 	}
 }
-
 func TestGenerateEnvValuesDefaultsOMEAccessToken(t *testing.T) {
 	generated, _ := generateEnvValues(map[string]string{})
-
 	if generated["BITRIVER_LIVE_MODE"] != "production" {
 		t.Fatalf("expected BITRIVER_LIVE_MODE default to production, got %q", generated["BITRIVER_LIVE_MODE"])
 	}
-
 	apiToken := generated["BITRIVER_OME_API_TOKEN"]
 	accessToken := generated["BITRIVER_OME_ACCESS_TOKEN"]
 	if apiToken == "" {
@@ -134,35 +118,30 @@ func TestGenerateEnvValuesDefaultsOMEAccessToken(t *testing.T) {
 		t.Fatalf("expected OME access token to match API token, got %q and %q", accessToken, apiToken)
 	}
 }
-
 func TestGenerateEnvValuesEmptyModeDefaultsToProduction(t *testing.T) {
 	generated, _ := generateEnvValues(map[string]string{"BITRIVER_LIVE_MODE": "   "})
 	if generated["BITRIVER_LIVE_MODE"] != "production" {
 		t.Fatalf("expected empty mode to default to production, got %q", generated["BITRIVER_LIVE_MODE"])
 	}
 }
-
 func TestGenerateEnvValuesPromotesDevelopmentModeToProduction(t *testing.T) {
 	generated, _ := generateEnvValues(map[string]string{"BITRIVER_LIVE_MODE": "development"})
 	if generated["BITRIVER_LIVE_MODE"] != "production" {
 		t.Fatalf("expected development mode to be rewritten to production, got %q", generated["BITRIVER_LIVE_MODE"])
 	}
 }
-
 func TestGenerateEnvValuesPlaceholderModeDefaultsToProduction(t *testing.T) {
 	generated, _ := generateEnvValues(map[string]string{"BITRIVER_LIVE_MODE": "placeholder"})
 	if generated["BITRIVER_LIVE_MODE"] != "production" {
 		t.Fatalf("expected placeholder mode to default to production, got %q", generated["BITRIVER_LIVE_MODE"])
 	}
 }
-
 func TestEnvValidateFailsForMissingFile(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing.env")
 	if err := runEnvValidate([]string{"--env-file", missing}); err == nil {
 		t.Fatal("expected validation to fail for missing env file")
 	}
 }
-
 func TestEnvValidateBlocksPlaceholders(t *testing.T) {
 	root := t.TempDir()
 	envPath := filepath.Join(root, ".env")
@@ -196,24 +175,19 @@ func TestEnvValidateBlocksPlaceholders(t *testing.T) {
 		"NEXT_PUBLIC_VIEWER_URL=http://localhost:8080/viewer",
 		"BITRIVER_LIVE_MODE=development",
 	}, "\n") + "\n"
-
 	if err := os.WriteFile(envPath, []byte(content), 0o600); err != nil {
 		t.Fatalf("write env: %v", err)
 	}
-
 	err := runEnvValidate([]string{"--env-file", envPath})
 	if err == nil {
 		t.Fatal("expected validation to fail due to placeholder password")
 	}
 }
-
 func TestValidateEnvRejectsInvalidLLHLSPorts(t *testing.T) {
 	values := buildValidProductionEnv(t)
 	values["BITRIVER_OME_LLHLS_PORT"] = "70000"
 	values["BITRIVER_OME_LLHLS_TLS_PORT"] = "invalid"
-
 	res := validateEnv(values)
-
 	if !containsString(res.Errors, "BITRIVER_OME_LLHLS_PORT") {
 		t.Fatalf("expected BITRIVER_OME_LLHLS_PORT error, got %v", res.Errors)
 	}
@@ -221,7 +195,6 @@ func TestValidateEnvRejectsInvalidLLHLSPorts(t *testing.T) {
 		t.Fatalf("expected BITRIVER_OME_LLHLS_TLS_PORT error, got %v", res.Errors)
 	}
 }
-
 func TestValidateOMEGeneratedConfigRejectsDeprecatedBindAddress(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "Server.generated.xml")
 	content := strings.Join([]string{
@@ -229,11 +202,9 @@ func TestValidateOMEGeneratedConfigRejectsDeprecatedBindAddress(t *testing.T) {
 		"  <Server.bind.Address>127.0.0.1</Server.bind.Address>",
 		"</Server>",
 	}, "\n")
-
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-
 	err := validateOMEGeneratedConfig(path)
 	if err == nil {
 		t.Fatal("expected validation to fail for deprecated Server.bind.Address")
@@ -248,7 +219,6 @@ func TestValidateOMEGeneratedConfigRejectsDeprecatedBindAddress(t *testing.T) {
 		t.Fatalf("expected error to mention render-ome-config.sh, got %v", err)
 	}
 }
-
 func TestRenderOMEConfigRewritesLegacyBindAddress(t *testing.T) {
 	templatePath := filepath.Join(t.TempDir(), "Server.xml")
 	outputPath := filepath.Join(t.TempDir(), "Server.generated.xml")
@@ -261,7 +231,6 @@ func TestRenderOMEConfigRewritesLegacyBindAddress(t *testing.T) {
 	if err := os.WriteFile(templatePath, []byte(template), 0o644); err != nil {
 		t.Fatalf("write template: %v", err)
 	}
-
 	cfg := omeRenderConfig{
 		TemplatePath: templatePath,
 		OutputPath:   outputPath,
@@ -277,16 +246,13 @@ func TestRenderOMEConfigRewritesLegacyBindAddress(t *testing.T) {
 		TCPRelay:     "127.0.0.1:3478",
 		ICECandidate: "127.0.0.1:10000-10009/udp",
 	}
-
 	if err := renderOMEConfig(cfg); err != nil {
 		t.Fatalf("render: %v", err)
 	}
-
 	output, err := os.ReadFile(outputPath)
 	if err != nil {
 		t.Fatalf("read output: %v", err)
 	}
-
 	stripped, _ := stripXMLComments(string(output))
 	if strings.Contains(stripped, "Server.bind.Address") {
 		t.Fatalf("expected legacy bind address tag to be rewritten, got output:\n%s", string(output))
@@ -301,7 +267,6 @@ func TestRenderOMEConfigRewritesLegacyBindAddress(t *testing.T) {
 		t.Fatalf("expected top-level server IP to be updated, got output:\n%s", string(output))
 	}
 }
-
 func TestRenderOMEConfigPreservesXmlComments(t *testing.T) {
 	templatePath := filepath.Join(t.TempDir(), "Server.xml")
 	outputPath := filepath.Join(t.TempDir(), "Server.generated.xml")
@@ -314,7 +279,6 @@ func TestRenderOMEConfigPreservesXmlComments(t *testing.T) {
 	if err := os.WriteFile(templatePath, []byte(template), 0o644); err != nil {
 		t.Fatalf("write template: %v", err)
 	}
-
 	cfg := omeRenderConfig{
 		TemplatePath: templatePath,
 		OutputPath:   outputPath,
@@ -330,16 +294,13 @@ func TestRenderOMEConfigPreservesXmlComments(t *testing.T) {
 		TCPRelay:     "127.0.0.1:3478",
 		ICECandidate: "127.0.0.1:10000-10009/udp",
 	}
-
 	if err := renderOMEConfig(cfg); err != nil {
 		t.Fatalf("render: %v", err)
 	}
-
 	output, err := os.ReadFile(outputPath)
 	if err != nil {
 		t.Fatalf("read output: %v", err)
 	}
-
 	if !strings.Contains(string(output), comment) {
 		t.Fatalf("expected comment to be preserved, got output:\n%s", string(output))
 	}
@@ -348,11 +309,9 @@ func TestRenderOMEConfigPreservesXmlComments(t *testing.T) {
 		t.Fatalf("expected well-formed XML output, got error: %v", err)
 	}
 }
-
-func TestRenderOMEConfigMatchesLegacyOutput(t *testing.T) {
+func TestRenderOMEConfigDiffersFromLegacyWhenUsingSplitAPIContexts(t *testing.T) {
 	templatePath := filepath.Join(repoRoot(), "deploy", "ome", "Server.xml")
 	outputPath := filepath.Join(t.TempDir(), "Server.generated.xml")
-
 	cfg := omeRenderConfig{
 		TemplatePath: templatePath,
 		OutputPath:   outputPath,
@@ -370,23 +329,22 @@ func TestRenderOMEConfigMatchesLegacyOutput(t *testing.T) {
 		TCPRelay:     "127.0.0.1:3478",
 		ICECandidate: "127.0.0.1:10000-10009/udp",
 	}
-
 	if err := renderOMEConfig(cfg); err != nil {
 		t.Fatalf("render: %v", err)
 	}
-
 	newOutput, err := os.ReadFile(outputPath)
 	if err != nil {
 		t.Fatalf("read output: %v", err)
 	}
-
 	legacyOutput, err := renderOMEConfigLegacy(cfg)
 	if err != nil {
 		t.Fatalf("legacy render: %v", err)
 	}
-
-	if string(newOutput) != legacyOutput {
-		t.Fatalf("expected new output to match legacy renderer")
+	if string(newOutput) == legacyOutput {
+		t.Fatalf("expected split-context renderer output to differ from legacy renderer")
+	}
+	if err := validateOMEGeneratedConfig(outputPath); err != nil {
+		t.Fatalf("expected generated output to pass split-context validation: %v", err)
 	}
 }
 
@@ -403,8 +361,13 @@ func TestRenderOMEConfigSkipsUnsupportedRootBindHostTagsAndFillsAccessTokenAndIc
 		"  </Managers>",
 		"  <Bind>",
 		"    <Address>0.0.0.0</Address>",
-		"    <Port>9000</Port>",
-		"    <TLSPort>9443</TLSPort>",
+		"    <Managers>",
+		"      <API>",
+		"        <Port>9000</Port>",
+		"        <TLSPort>9443</TLSPort>",
+		"        <WorkerCount>1</WorkerCount>",
+		"      </API>",
+		"    </Managers>",
 		"    <Publishers>",
 		"      <LLHLS>",
 		"        <Port>8080</Port>",
@@ -418,7 +381,6 @@ func TestRenderOMEConfigSkipsUnsupportedRootBindHostTagsAndFillsAccessTokenAndIc
 	if err := os.WriteFile(templatePath, []byte(template), 0o644); err != nil {
 		t.Fatalf("write template: %v", err)
 	}
-
 	cfg := omeRenderConfig{
 		TemplatePath: templatePath,
 		OutputPath:   outputPath,
@@ -436,16 +398,13 @@ func TestRenderOMEConfigSkipsUnsupportedRootBindHostTagsAndFillsAccessTokenAndIc
 		TCPRelay:     "127.0.0.1:3478",
 		ICECandidate: "127.0.0.1:10000-10009/udp",
 	}
-
 	if err := renderOMEConfig(cfg); err != nil {
 		t.Fatalf("render: %v", err)
 	}
-
 	output, err := os.ReadFile(outputPath)
 	if err != nil {
 		t.Fatalf("read output: %v", err)
 	}
-
 	got := string(output)
 	if strings.Contains(got, "<Bind>\n    <IP>") || strings.Contains(got, "<Bind>\n    <Address>") {
 		t.Fatalf("expected root <Bind> to omit unsupported host tags, got output:\n%s", got)
@@ -454,10 +413,42 @@ func TestRenderOMEConfigSkipsUnsupportedRootBindHostTagsAndFillsAccessTokenAndIc
 		t.Fatalf("expected top-level <Server><IP> to be updated from BITRIVER_OME_IP, got output:\n%s", got)
 	}
 	if !strings.Contains(got, "<Managers>") || !strings.Contains(got, "<API>") {
-		t.Fatalf("expected top-level <Managers><API> block, got output:\n%s", got)
+		t.Fatalf("expected both top-level and bind API contexts, got output:\n%s", got)
 	}
-	if !strings.Contains(got, "<AccessToken>access-token</AccessToken>") {
-		t.Fatalf("expected access token replacement, got output:\n%s", got)
+	var parsed struct {
+		Managers struct {
+			API struct {
+				AccessToken string `xml:"AccessToken"`
+				Port        string `xml:"Port"`
+				TLSPort     string `xml:"TLSPort"`
+				WorkerCount string `xml:"WorkerCount"`
+			} `xml:"API"`
+		} `xml:"Managers"`
+		Bind struct {
+			Managers struct {
+				API struct {
+					AccessToken string `xml:"AccessToken"`
+					Port        string `xml:"Port"`
+					TLSPort     string `xml:"TLSPort"`
+					WorkerCount string `xml:"WorkerCount"`
+				} `xml:"API"`
+			} `xml:"Managers"`
+		} `xml:"Bind"`
+	}
+	if err := xml.Unmarshal(output, &parsed); err != nil {
+		t.Fatalf("parse output: %v", err)
+	}
+	if parsed.Managers.API.AccessToken != "access-token" {
+		t.Fatalf("expected top-level auth access token replacement, got %q", parsed.Managers.API.AccessToken)
+	}
+	if parsed.Managers.API.Port != "" || parsed.Managers.API.TLSPort != "" || parsed.Managers.API.WorkerCount != "" {
+		t.Fatalf("expected top-level auth block to omit listener fields, got port=%q tls=%q workers=%q", parsed.Managers.API.Port, parsed.Managers.API.TLSPort, parsed.Managers.API.WorkerCount)
+	}
+	if parsed.Bind.Managers.API.AccessToken != "" {
+		t.Fatalf("expected bind listener block to omit <AccessToken>, got %q", parsed.Bind.Managers.API.AccessToken)
+	}
+	if parsed.Bind.Managers.API.Port != "9001" || parsed.Bind.Managers.API.TLSPort != "9444" || parsed.Bind.Managers.API.WorkerCount != "1" {
+		t.Fatalf("expected <Bind><Managers><API> listener fields to be rewritten, got port=%q tls=%q workers=%q", parsed.Bind.Managers.API.Port, parsed.Bind.Managers.API.TLSPort, parsed.Bind.Managers.API.WorkerCount)
 	}
 	if strings.Contains(got, "<AccessTokens>") {
 		t.Fatalf("expected singular <AccessToken> without deprecated <AccessTokens> wrapper, got output:\n%s", got)
@@ -469,7 +460,6 @@ func TestRenderOMEConfigSkipsUnsupportedRootBindHostTagsAndFillsAccessTokenAndIc
 		t.Fatalf("expected IceCandidate insertion, got output:\n%s", got)
 	}
 }
-
 func BenchmarkRenderOMEConfig(b *testing.B) {
 	templatePath := filepath.Join(repoRoot(), "deploy", "ome", "Server.xml")
 	outputPath := filepath.Join(b.TempDir(), "Server.generated.xml")
@@ -490,7 +480,6 @@ func BenchmarkRenderOMEConfig(b *testing.B) {
 		TCPRelay:     "127.0.0.1:3478",
 		ICECandidate: "127.0.0.1:10000-10009/udp",
 	}
-
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if err := renderOMEConfig(cfg); err != nil {
@@ -498,7 +487,6 @@ func BenchmarkRenderOMEConfig(b *testing.B) {
 		}
 	}
 }
-
 func BenchmarkRenderOMEConfigLegacy(b *testing.B) {
 	templatePath := filepath.Join(repoRoot(), "deploy", "ome", "Server.xml")
 	cfg := omeRenderConfig{
@@ -518,7 +506,6 @@ func BenchmarkRenderOMEConfigLegacy(b *testing.B) {
 		TCPRelay:     "127.0.0.1:3478",
 		ICECandidate: "127.0.0.1:10000-10009/udp",
 	}
-
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if _, err := renderOMEConfigLegacy(cfg); err != nil {
@@ -526,7 +513,6 @@ func BenchmarkRenderOMEConfigLegacy(b *testing.B) {
 		}
 	}
 }
-
 func TestRunMigrationsAddsNoTTYForNonTerminalStdin(t *testing.T) {
 	tempDir := t.TempDir()
 	dockerName := "docker"
@@ -538,14 +524,12 @@ func TestRunMigrationsAddsNoTTYForNonTerminalStdin(t *testing.T) {
 		t.Fatalf("write docker stub: %v", err)
 	}
 	t.Setenv("PATH", tempDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
 	originalRunner := commandRunner
 	originalStdin := os.Stdin
 	t.Cleanup(func() {
 		commandRunner = originalRunner
 		os.Stdin = originalStdin
 	})
-
 	reader, writer, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("pipe: %v", err)
@@ -555,17 +539,14 @@ func TestRunMigrationsAddsNoTTYForNonTerminalStdin(t *testing.T) {
 		_ = writer.Close()
 	})
 	os.Stdin = reader
-
 	var gotArgs []string
 	commandRunner = func(name string, args ...string) error {
 		gotArgs = append([]string{name}, args...)
 		return nil
 	}
-
 	if err := runMigrations("compose.yml", "env"); err != nil {
 		t.Fatalf("run migrations: %v", err)
 	}
-
 	noTTYIndex := -1
 	serviceIndex := -1
 	for idx, arg := range gotArgs {
@@ -583,19 +564,15 @@ func TestRunMigrationsAddsNoTTYForNonTerminalStdin(t *testing.T) {
 		t.Fatalf("expected -T before service name, got %v", gotArgs)
 	}
 }
-
 func TestValidateEnvRequiresMetricsProtectionInProduction(t *testing.T) {
 	values := buildValidProductionEnv(t)
 	values["BITRIVER_LIVE_METRICS_TOKEN"] = ""
 	values["BITRIVER_LIVE_METRICS_ALLOW_NETWORKS"] = ""
-
 	res := validateEnv(values)
-
 	if !containsString(res.Errors, "requires protecting /metrics") {
 		t.Fatalf("expected metrics protection requirement in production, got errors=%v", res.Errors)
 	}
 }
-
 func TestValidateEnvRequiresLoginRateLimitInProduction(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -604,31 +581,25 @@ func TestValidateEnvRequiresLoginRateLimitInProduction(t *testing.T) {
 		{name: "empty", value: ""},
 		{name: "zero", value: "0"},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			values := buildValidProductionEnv(t)
 			values["BITRIVER_LIVE_RATE_LOGIN_LIMIT"] = tt.value
-
 			res := validateEnv(values)
-
 			if !containsString(res.Errors, "login throttling") {
 				t.Fatalf("expected login throttling requirement for %s value, got errors=%v", tt.name, res.Errors)
 			}
 		})
 	}
 }
-
 func TestComposeRejectsUnknownSubcommand(t *testing.T) {
 	if err := runCompose([]string{"noop"}); err == nil {
 		t.Fatal("expected compose to error on unknown subcommand")
 	}
 }
-
 func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), ".env")
 	composePath := filepath.Join(t.TempDir(), "compose.yml")
-
 	envContent := strings.Join([]string{
 		"BITRIVER_LIVE_ADMIN_EMAIL=admin@example.com",
 		"BITRIVER_LIVE_ADMIN_PASSWORD=supersecret",
@@ -639,7 +610,6 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	if err := os.WriteFile(envPath, []byte(envContent), 0o644); err != nil {
 		t.Fatalf("write env: %v", err)
 	}
-
 	originalDoctor := doctorRunner
 	originalEnvInit := envInitRunner
 	originalEnvValidate := envValidateRunner
@@ -658,7 +628,6 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 		quickstartWaiter = originalWaiter
 		bootstrapAdminRunner = originalBootstrap
 	})
-
 	var calls []string
 	doctorRunner = func([]string) bool {
 		calls = append(calls, "doctor")
@@ -726,25 +695,20 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 		}
 		return nil
 	}
-
 	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
 		t.Fatalf("quickstart failed: %v", err)
 	}
-
 	expectedCalls := []string{"doctor", "env-init", "env-validate", "ome", "migrations", "compose-up", "wait", "bootstrap"}
 	if !reflect.DeepEqual(calls, expectedCalls) {
 		t.Fatalf("call order = %v, want %v", calls, expectedCalls)
 	}
 }
-
 func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), ".env")
 	composePath := filepath.Join(t.TempDir(), "compose.yml")
-
 	if err := os.WriteFile(composePath, []byte("services: {}\n"), 0o644); err != nil {
 		t.Fatalf("write compose: %v", err)
 	}
-
 	originalDoctor := doctorRunner
 	originalOMERunner := omeRunner
 	originalMigrations := migrationsRunner
@@ -759,18 +723,15 @@ func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 		quickstartWaiter = originalWaiter
 		bootstrapAdminRunner = originalBootstrap
 	})
-
 	doctorRunner = func([]string) bool { return true }
 	omeRunner = func([]string) error { return nil }
 	migrationsRunner = func(string, string) error { return nil }
 	composeUpRunner = func([]string) error { return nil }
 	quickstartWaiter = func(map[string]string) error { return nil }
 	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
-
 	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
 		t.Fatalf("quickstart failed on first run: %v", err)
 	}
-
 	values, err := loadEnvValues(envPath, false)
 	if err != nil {
 		t.Fatalf("read env file: %v", err)
@@ -778,7 +739,6 @@ func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 	if values["BITRIVER_LIVE_MODE"] != "production" {
 		t.Fatalf("expected first-run quickstart env to persist production mode, got %q", values["BITRIVER_LIVE_MODE"])
 	}
-
 	envContents, err := os.ReadFile(envPath)
 	if err != nil {
 		t.Fatalf("read env file contents: %v", err)
@@ -790,23 +750,19 @@ func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 		t.Fatalf("expected generated .env to avoid persisting development mode, got:\n%s", string(envContents))
 	}
 }
-
 func TestRunQuickstartFirstRunInitPassesEnvValidationWindowsPath(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("windows path handling is only validated on windows")
 	}
-
 	tempDir := t.TempDir()
 	envPath := filepath.Join(tempDir, "config", ".env")
 	if err := os.MkdirAll(filepath.Dir(envPath), 0o755); err != nil {
 		t.Fatalf("mkdir env dir: %v", err)
 	}
 	composePath := filepath.Join(tempDir, "compose.yml")
-
 	if err := os.WriteFile(composePath, []byte("services: {}\n"), 0o644); err != nil {
 		t.Fatalf("write compose: %v", err)
 	}
-
 	originalDoctor := doctorRunner
 	originalOMERunner := omeRunner
 	originalMigrations := migrationsRunner
@@ -821,21 +777,18 @@ func TestRunQuickstartFirstRunInitPassesEnvValidationWindowsPath(t *testing.T) {
 		quickstartWaiter = originalWaiter
 		bootstrapAdminRunner = originalBootstrap
 	})
-
 	doctorRunner = func([]string) bool { return true }
 	omeRunner = func([]string) error { return nil }
 	migrationsRunner = func(string, string) error { return nil }
 	composeUpRunner = func([]string) error { return nil }
 	quickstartWaiter = func(map[string]string) error { return nil }
 	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
-
 	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
 		if strings.Contains(err.Error(), "BITRIVER_LIVE_MODE") {
 			t.Fatalf("did not expect BITRIVER_LIVE_MODE validation failure on first-run init+validate path, got %v", err)
 		}
 		t.Fatalf("quickstart failed on first run with windows path: %v", err)
 	}
-
 	envContents, err := os.ReadFile(envPath)
 	if err != nil {
 		t.Fatalf("read env file contents: %v", err)
@@ -844,15 +797,12 @@ func TestRunQuickstartFirstRunInitPassesEnvValidationWindowsPath(t *testing.T) {
 		t.Fatalf("expected generated .env to contain BITRIVER_LIVE_MODE=production, got:\n%s", string(envContents))
 	}
 }
-
 func TestRunQuickstartFirstRunInitValidateKeepsLoopbackChecksAsWarnings(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), ".env")
 	composePath := filepath.Join(t.TempDir(), "compose.yml")
-
 	if err := os.WriteFile(composePath, []byte("services: {}\n"), 0o644); err != nil {
 		t.Fatalf("write compose: %v", err)
 	}
-
 	originalDoctor := doctorRunner
 	originalEnvInit := envInitRunner
 	originalEnvValidate := envValidateRunner
@@ -871,7 +821,6 @@ func TestRunQuickstartFirstRunInitValidateKeepsLoopbackChecksAsWarnings(t *testi
 		quickstartWaiter = originalWaiter
 		bootstrapAdminRunner = originalBootstrap
 	})
-
 	doctorRunner = func([]string) bool { return true }
 	envInitRunner = runEnvInit
 	envValidateRunner = runEnvValidate
@@ -880,18 +829,15 @@ func TestRunQuickstartFirstRunInitValidateKeepsLoopbackChecksAsWarnings(t *testi
 	composeUpRunner = func([]string) error { return nil }
 	quickstartWaiter = func(map[string]string) error { return nil }
 	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
-
 	if _, err := os.Stat(envPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected first run to start without env file, got stat err=%v", err)
 	}
-
 	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
 		if strings.Contains(err.Error(), "BITRIVER_LIVE_MODE") {
 			t.Fatalf("did not expect BITRIVER_LIVE_MODE validation failure on first-run init+validate path, got %v", err)
 		}
 		t.Fatalf("quickstart failed on first run: %v", err)
 	}
-
 	values, err := loadEnvValues(envPath, false)
 	if err != nil {
 		t.Fatalf("read env file: %v", err)
@@ -899,7 +845,6 @@ func TestRunQuickstartFirstRunInitValidateKeepsLoopbackChecksAsWarnings(t *testi
 	if values["BITRIVER_LIVE_MODE"] != "production" {
 		t.Fatalf("expected generated .env to persist BITRIVER_LIVE_MODE=production, got %q", values["BITRIVER_LIVE_MODE"])
 	}
-
 	res := validateEnv(values)
 	if len(res.Errors) > 0 {
 		for _, envErr := range res.Errors {
@@ -909,65 +854,52 @@ func TestRunQuickstartFirstRunInitValidateKeepsLoopbackChecksAsWarnings(t *testi
 		}
 		t.Fatalf("expected quickstart-generated loopback defaults to stay warning-only, got errors %v", res.Errors)
 	}
-
 	warnings := strings.Join(res.Warnings, " ")
 	if !strings.Contains(warnings, "BITRIVER_OME_BIND") || !strings.Contains(warnings, "BITRIVER_OME_IP") {
 		t.Fatalf("expected loopback OME warnings from quickstart defaults, got %v", res.Warnings)
 	}
 }
-
 func renderOMEConfigLegacy(cfg omeRenderConfig) (string, error) {
 	data, err := os.ReadFile(cfg.TemplatePath)
 	if err != nil {
 		return "", fmt.Errorf("read template: %w", err)
 	}
-
 	text := string(data)
 	text = replaceLegacyBindAddressLegacy(text)
 	text = regexp.MustCompile(`<\s*Server\.bind\s*>`).ReplaceAllString(text, "<Bind>")
 	text = regexp.MustCompile(`</\s*Server\.bind\s*>`).ReplaceAllString(text, "</Bind>")
-
 	text, err = replaceRootBindingsLegacy(text, xmlEscape(cfg.Bind), xmlEscape(cfg.Port), xmlEscape(cfg.TLSPort))
 	if err != nil {
 		return "", err
 	}
-
 	text, err = replaceLLHLSPublisherPortsLegacy(text, xmlEscape(cfg.LLHLSPort), xmlEscape(cfg.LLHLSTLSPort))
 	if err != nil {
 		return "", err
 	}
-
 	text, err = replaceRootIPLegacy(text, xmlEscape(cfg.ServerIP))
 	if err != nil {
 		return "", err
 	}
-
 	text, err = scopedReplaceControlBindingsLegacy(text, xmlEscape(cfg.Bind))
 	if err != nil {
 		return "", err
 	}
-
 	text, err = ensureIceCandidatesTagLegacy(text, "TcpRelay", xmlEscape(cfg.TCPRelay), cfg.TemplatePath)
 	if err != nil {
 		return "", err
 	}
-
 	text, err = ensureIceCandidatesTagLegacy(text, "IceCandidate", xmlEscape(cfg.ICECandidate), cfg.TemplatePath)
 	if err != nil {
 		return "", err
 	}
-
 	text, err = replaceAccessTokenLegacy(text, cfg.AccessToken)
 	if err != nil {
 		return "", err
 	}
-
 	text = stampImageTag(text, cfg.ImageTag)
 	text = collapseBlankLines(text)
-
 	return text, nil
 }
-
 func replaceLegacyBindAddressLegacy(text string) string {
 	text, comments := stripXMLComments(text)
 	openLegacy := regexp.MustCompile(`<\s*Server\.bind\.Address\s*>`)
@@ -975,36 +907,29 @@ func replaceLegacyBindAddressLegacy(text string) string {
 	if !openLegacy.MatchString(text) && !closeLegacy.MatchString(text) {
 		return restoreXMLComments(text, comments)
 	}
-
 	if regexp.MustCompile(`<\s*Bind\s*>`).MatchString(text) || regexp.MustCompile(`<\s*Server\.bind\s*>`).MatchString(text) {
 		text = openLegacy.ReplaceAllString(text, "<IP>")
 		text = closeLegacy.ReplaceAllString(text, "</IP>")
 		return restoreXMLComments(text, comments)
 	}
-
 	text = openLegacy.ReplaceAllString(text, "<Bind><IP>")
 	text = closeLegacy.ReplaceAllString(text, "</IP></Bind>")
 	return restoreXMLComments(text, comments)
 }
-
 func replaceTagContentLegacy(data, tag, value string) (string, error) {
 	openTag := fmt.Sprintf("<%s>", tag)
 	closeTag := fmt.Sprintf("</%s>", tag)
-
 	start := strings.Index(data, openTag)
 	if start == -1 {
 		return "", fmt.Errorf("missing %s in template", openTag)
 	}
-
 	end := strings.Index(data[start:], closeTag)
 	if end == -1 {
 		return "", fmt.Errorf("missing %s in template", closeTag)
 	}
-
 	end += start
 	return data[:start+len(openTag)] + value + data[end:], nil
 }
-
 func replaceAllTagContentLegacy(data, tag, value string, required bool) (string, error) {
 	pattern := regexp.MustCompile(fmt.Sprintf(`(<%s>)([^<]*)(</%s>)`, tag, tag))
 	replaced := pattern.ReplaceAllString(data, fmt.Sprintf(`${1}%s${3}`, value))
@@ -1013,7 +938,6 @@ func replaceAllTagContentLegacy(data, tag, value string, required bool) (string,
 	}
 	return replaced, nil
 }
-
 func ensureIceCandidatesTagLegacy(text, tag, value, templatePath string) (string, error) {
 	iceRe := regexp.MustCompile(`(?s)<IceCandidates>(.*?)</IceCandidates>`)
 	matches := 0
@@ -1028,13 +952,11 @@ func ensureIceCandidatesTagLegacy(text, tag, value, templatePath string) (string
 			}
 			return replaced
 		}
-
 		closing := "</IceCandidates>"
 		insertPos := strings.LastIndex(section, closing)
 		if insertPos == -1 {
 			return section
 		}
-
 		indent := "    "
 		if indentMatch := regexp.MustCompile(`\n([ \t]*)</IceCandidates>`).FindStringSubmatch(section); indentMatch != nil {
 			indent = indentMatch[1]
@@ -1043,7 +965,6 @@ func ensureIceCandidatesTagLegacy(text, tag, value, templatePath string) (string
 		insertion := fmt.Sprintf("\n%s<%s>%s</%s>", childIndent, tag, value, tag)
 		return section[:insertPos] + insertion + section[insertPos:]
 	})
-
 	if rewriteErr != nil {
 		return "", rewriteErr
 	}
@@ -1052,7 +973,6 @@ func ensureIceCandidatesTagLegacy(text, tag, value, templatePath string) (string
 	}
 	return updated, nil
 }
-
 func replaceRootBindingsLegacy(text, address, port, tlsPort string) (string, error) {
 	text, comments := stripXMLComments(text)
 	serverRe := regexp.MustCompile(`(?s)<Server[^>]*>(.*)</Server>`)
@@ -1060,14 +980,12 @@ func replaceRootBindingsLegacy(text, address, port, tlsPort string) (string, err
 	if serverLoc == nil {
 		return "", errors.New("missing <Server> root element in template")
 	}
-
 	serverBody := text[serverLoc[2]:serverLoc[3]]
 	bindRe := regexp.MustCompile(`(?s)<Bind>(.*?)</Bind>`)
 	bindLoc := bindRe.FindStringSubmatchIndex(serverBody)
 	if bindLoc == nil {
 		return "", errors.New("missing <Bind> section under <Server> in template")
 	}
-
 	bindBody := serverBody[bindLoc[2]:bindLoc[3]]
 	var err error
 	if strings.Contains(bindBody, "<Address>") {
@@ -1082,7 +1000,6 @@ func replaceRootBindingsLegacy(text, address, port, tlsPort string) (string, err
 	if err != nil {
 		return "", err
 	}
-
 	signallingRe := regexp.MustCompile(`(?s)<Signalling>(.*?)</Signalling>`)
 	rewriteErr := error(nil)
 	signallingCount := 0
@@ -1105,7 +1022,6 @@ func replaceRootBindingsLegacy(text, address, port, tlsPort string) (string, err
 	if rewriteErr != nil {
 		return "", rewriteErr
 	}
-
 	if signallingCount == 0 {
 		bindBody, err = replaceTagContentLegacy(bindBody, "Port", port)
 		if err != nil {
@@ -1116,40 +1032,34 @@ func replaceRootBindingsLegacy(text, address, port, tlsPort string) (string, err
 			return "", err
 		}
 	}
-
 	serverBody = serverBody[:bindLoc[2]] + bindBody + serverBody[bindLoc[3]:]
 	output := text[:serverLoc[2]] + serverBody + text[serverLoc[3]:]
 	return restoreXMLComments(output, comments), nil
 }
-
 func replaceLLHLSPublisherPortsLegacy(text, port, tlsPort string) (string, error) {
 	serverRe := regexp.MustCompile(`(?s)<Server[^>]*>(.*)</Server>`)
 	serverLoc := serverRe.FindStringSubmatchIndex(text)
 	if serverLoc == nil {
 		return "", errors.New("missing <Server> root element in template")
 	}
-
 	serverBody := text[serverLoc[2]:serverLoc[3]]
 	bindRe := regexp.MustCompile(`(?s)<Bind>(.*?)</Bind>`)
 	bindLoc := bindRe.FindStringSubmatchIndex(serverBody)
 	if bindLoc == nil {
 		return "", errors.New("missing <Bind> section under <Server> in template")
 	}
-
 	bindBody := serverBody[bindLoc[2]:bindLoc[3]]
 	publishersRe := regexp.MustCompile(`(?s)<Publishers>(.*?)</Publishers>`)
 	publishersLoc := publishersRe.FindStringSubmatchIndex(bindBody)
 	if publishersLoc == nil {
 		return "", errors.New("missing <Publishers> section under <Bind> in template")
 	}
-
 	publishersBody := bindBody[publishersLoc[2]:publishersLoc[3]]
 	llhlsRe := regexp.MustCompile(`(?s)<LLHLS>(.*?)</LLHLS>`)
 	llhlsLoc := llhlsRe.FindStringSubmatchIndex(publishersBody)
 	if llhlsLoc == nil {
 		return "", errors.New("missing <LLHLS> section under <Publishers> in template")
 	}
-
 	llhlsBody := publishersBody[llhlsLoc[2]:llhlsLoc[3]]
 	updated, err := replaceTagContentLegacy(llhlsBody, "Port", port)
 	if err != nil {
@@ -1161,20 +1071,17 @@ func replaceLLHLSPublisherPortsLegacy(text, port, tlsPort string) (string, error
 			return "", err
 		}
 	}
-
 	publishersBody = publishersBody[:llhlsLoc[2]] + updated + publishersBody[llhlsLoc[3]:]
 	bindBody = bindBody[:publishersLoc[2]] + publishersBody + bindBody[publishersLoc[3]:]
 	serverBody = serverBody[:bindLoc[2]] + bindBody + serverBody[bindLoc[3]:]
 	return text[:serverLoc[2]] + serverBody + text[serverLoc[3]:], nil
 }
-
 func replaceRootIPLegacy(text, ip string) (string, error) {
 	serverRe := regexp.MustCompile(`(?s)<Server[^>]*>(.*)</Server>`)
 	serverLoc := serverRe.FindStringSubmatchIndex(text)
 	if serverLoc == nil {
 		return "", errors.New("missing <Server> root element in template")
 	}
-
 	serverBody := text[serverLoc[2]:serverLoc[3]]
 	ipRe := regexp.MustCompile(`(?s)<IP>(.*?)</IP>`)
 	matches := ipRe.FindAllStringSubmatchIndex(serverBody, -1)
@@ -1185,20 +1092,16 @@ func replaceRootIPLegacy(text, ip string) (string, error) {
 		if bindOpen != -1 && (bindClose == -1 || bindClose < bindOpen) {
 			continue
 		}
-
 		vhostOpen := strings.LastIndex(serverBody[:start], "<VirtualHosts>")
 		vhostClose := strings.LastIndex(serverBody[:start], "</VirtualHosts>")
 		if vhostOpen != -1 && (vhostClose == -1 || vhostClose < vhostOpen) {
 			continue
 		}
-
 		serverBody = serverBody[:start] + ip + serverBody[end:]
 		return text[:serverLoc[2]] + serverBody + text[serverLoc[3]:], nil
 	}
-
 	return text, nil
 }
-
 func scopedReplaceControlBindingsLegacy(text, bind string) (string, error) {
 	text, comments := stripXMLComments(text)
 	controlRe := regexp.MustCompile(`(?s)<Control>(.*?)</Control>`)
@@ -1206,19 +1109,16 @@ func scopedReplaceControlBindingsLegacy(text, bind string) (string, error) {
 	if controlLoc == nil {
 		return restoreXMLComments(text, comments), nil
 	}
-
 	controlBody := text[controlLoc[0]:controlLoc[1]]
 	serverRe := regexp.MustCompile(`(?s)<Server>(.*?)</Server>`)
 	serverLoc := serverRe.FindStringSubmatchIndex(controlBody)
 	if serverLoc == nil {
 		return restoreXMLComments(text, comments), nil
 	}
-
 	serverBody := controlBody[serverLoc[0]:serverLoc[1]]
 	inner := serverLoc[2] - serverLoc[0]
 	outer := serverLoc[3] - serverLoc[0]
 	content := serverBody[inner:outer]
-
 	var err error
 	if strings.Contains(content, "<Bind>") {
 		content, err = replaceAllTagContentLegacy(content, "Bind", bind, false)
@@ -1238,13 +1138,11 @@ func scopedReplaceControlBindingsLegacy(text, bind string) (string, error) {
 			return "", err
 		}
 	}
-
 	serverBody = serverBody[:inner] + content + serverBody[outer:]
 	controlBody = controlBody[:serverLoc[0]] + serverBody + controlBody[serverLoc[1]:]
 	output := text[:controlLoc[0]] + controlBody + text[controlLoc[1]:]
 	return restoreXMLComments(output, comments), nil
 }
-
 func replaceAccessTokenLegacy(text, token string) (string, error) {
 	token = xmlEscape(token)
 	if strings.Contains(text, "<AccessToken>") {
@@ -1254,6 +1152,5 @@ func replaceAccessTokenLegacy(text, token string) (string, error) {
 		}
 		return replaced, nil
 	}
-
 	return "", errors.New("missing <AccessToken> in template")
 }
