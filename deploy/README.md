@@ -31,7 +31,8 @@ Compose always re-renders `ome/Server.generated.xml` via the `ome-config` helper
 with your OME credentials first—`ome-test-*` defaults are rejected and will cause the render step to fail.
 Compose also renders `srs/conf/srs.generated.conf` via the `srs-config` helper, replacing `${BITRIVER_SRS_TOKEN}` from `.env`
 before starting SRS so the ingest hooks always share the same token as the API.
-The `srs-config` helper is invoked via `bash` to avoid Windows CRLF issues; keep shell scripts checked out with LF line endings
+The `srs-config` helper is invoked via `bash` and sanitized into `/workspace/.tmp/` to avoid Windows CRLF issues while
+preserving repo-relative path resolution used by the script; keep shell scripts checked out with LF line endings
 (`.gitattributes` enforces this for `*.sh` files).
 
 Viewer self-registration is disabled by default so only administrators can add users. Toggle `BITRIVER_LIVE_ALLOW_SELF_SIGNUP`
