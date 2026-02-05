@@ -99,8 +99,10 @@ type moderationAutoModResponse struct {
 }
 
 type moderationQueueResponse struct {
-	Queue   []moderationFlagResponse   `json:"queue"`
-	Actions []moderationActionResponse `json:"actions"`
+	Queue       []moderationFlagResponse   `json:"queue"`
+	Actions     []moderationActionResponse `json:"actions"`
+	QueueMeta   moderationPageInfo         `json:"queueMeta"`
+	ActionsMeta moderationPageInfo         `json:"actionsMeta"`
 }
 
 type chatRestrictionResponse struct {
@@ -149,6 +151,17 @@ type chatMessageResponse struct {
 	UserID    string `json:"userId"`
 	Content   string `json:"content"`
 	CreatedAt string `json:"createdAt"`
+}
+
+type moderationPageInfo struct {
+	NextCursor string `json:"nextCursor,omitempty"`
+	Limit      int    `json:"limit"`
+	HasMore    bool   `json:"hasMore"`
+}
+
+type moderationAutoModPageResponse struct {
+	Actions []moderationAutoModResponse `json:"actions"`
+	Meta    moderationPageInfo          `json:"meta"`
 }
 
 func newChatMessageResponse(message models.ChatMessage) chatMessageResponse {
@@ -640,7 +653,29 @@ func (h *Handler) ModerationQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload, err := h.moderationQueuePayload()
+	query := r.URL.Query()
+	queueCursor, err := parseModerationCursor(query.Get("cursor"))
+	if err != nil {
+		WriteRequestError(w, ValidationError("cursor must be RFC3339"))
+		return
+	}
+	queueLimit, err := parseModerationLimit(query.Get("limit"), 50)
+	if err != nil {
+		WriteRequestError(w, ValidationError("limit must be a positive integer"))
+		return
+	}
+	actionsCursor, err := parseModerationCursor(query.Get("actionsCursor"))
+	if err != nil {
+		WriteRequestError(w, ValidationError("actionsCursor must be RFC3339"))
+		return
+	}
+	actionsLimit, err := parseModerationLimit(query.Get("actionsLimit"), 20)
+	if err != nil {
+		WriteRequestError(w, ValidationError("actionsLimit must be a positive integer"))
+		return
+	}
+
+	payload, err := h.moderationQueuePayload(queueCursor, queueLimit, actionsCursor, actionsLimit)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err)
 		return
@@ -693,17 +728,19 @@ func (h *Handler) ModerationAutoMod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := 50
-	if value := strings.TrimSpace(r.URL.Query().Get("limit")); value != "" {
-		parsed, err := strconv.Atoi(value)
-		if err != nil || parsed < 1 {
-			WriteRequestError(w, ValidationError("limit must be a positive integer"))
-			return
-		}
-		limit = parsed
+	query := r.URL.Query()
+	cursor, err := parseModerationCursor(query.Get("cursor"))
+	if err != nil {
+		WriteRequestError(w, ValidationError("cursor must be RFC3339"))
+		return
+	}
+	limit, err := parseModerationLimit(query.Get("limit"), 50)
+	if err != nil {
+		WriteRequestError(w, ValidationError("limit must be a positive integer"))
+		return
 	}
 
-	payload, err := h.moderationAutoModPayload(limit)
+	payload, err := h.moderationAutoModPayload(cursor, limit)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err)
 		return
@@ -711,18 +748,68 @@ func (h *Handler) ModerationAutoMod(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, payload)
 }
 
-func (h *Handler) moderationQueuePayload() (moderationQueueResponse, error) {
+func parseModerationCursor(value string) (*time.Time, error) {
+	if strings.TrimSpace(value) == "" {
+		return nil, nil
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return nil, err
+	}
+	parsed = parsed.UTC()
+	return &parsed, nil
+}
+
+func parseModerationLimit(value string, defaultLimit int) (int, error) {
+	if strings.TrimSpace(value) == "" {
+		return defaultLimit, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 1 {
+		return 0, fmt.Errorf("invalid limit")
+	}
+	return parsed, nil
+}
+
+type moderationTimedItem[T any] struct {
+	payload T
+	created time.Time
+}
+
+func paginateModerationItems[T any](items []moderationTimedItem[T], cursor *time.Time, limit int) ([]T, moderationPageInfo) {
+	filtered := items
+	if cursor != nil {
+		filtered = make([]moderationTimedItem[T], 0, len(items))
+		for _, item := range items {
+			if item.created.Before(*cursor) {
+				filtered = append(filtered, item)
+			}
+		}
+	}
+	pageSize := limit
+	if pageSize > len(filtered) {
+		pageSize = len(filtered)
+	}
+	hasMore := len(filtered) > pageSize
+	result := make([]T, pageSize)
+	for i := 0; i < pageSize; i++ {
+		result[i] = filtered[i].payload
+	}
+	nextCursor := ""
+	if pageSize > 0 {
+		nextCursor = filtered[pageSize-1].created.Format(time.RFC3339Nano)
+	}
+	return result, moderationPageInfo{
+		NextCursor: nextCursor,
+		Limit:      limit,
+		HasMore:    hasMore,
+	}
+}
+
+func (h *Handler) moderationQueuePayload(queueCursor *time.Time, queueLimit int, actionsCursor *time.Time, actionsLimit int) (moderationQueueResponse, error) {
 	channels := h.Store.ListChannels("", "")
-	type flaggedItem struct {
-		payload moderationFlagResponse
-		created time.Time
-	}
-	type actionItem struct {
-		payload moderationActionResponse
-		created time.Time
-	}
-	flags := make([]flaggedItem, 0)
-	actions := make([]actionItem, 0)
+	flags := make([]moderationTimedItem[moderationFlagResponse], 0)
+	actions := make([]moderationTimedItem[moderationActionResponse], 0)
 	for _, channel := range channels {
 		reports, err := h.Store.ListChatReports(channel.ID, true)
 		if err != nil {
@@ -751,7 +838,7 @@ func (h *Handler) moderationQueuePayload() (moderationQueueResponse, error) {
 				flag.Target = &targetResp
 			}
 			if strings.EqualFold(report.Status, "open") {
-				flags = append(flags, flaggedItem{payload: flag, created: createdAt})
+				flags = append(flags, moderationTimedItem[moderationFlagResponse]{payload: flag, created: createdAt})
 				continue
 			}
 			if strings.EqualFold(report.Status, "resolved") {
@@ -775,42 +862,33 @@ func (h *Handler) moderationQueuePayload() (moderationQueueResponse, error) {
 					Moderator:    moderatorResp,
 					CreatedAt:    resolvedAt.Format(time.RFC3339Nano),
 				}
-				actions = append(actions, actionItem{payload: action, created: resolvedAt})
+				actions = append(actions, moderationTimedItem[moderationActionResponse]{payload: action, created: resolvedAt})
 			}
 		}
 	}
 	sort.Slice(flags, func(i, j int) bool {
 		return flags[i].created.After(flags[j].created)
 	})
-	queue := make([]moderationFlagResponse, len(flags))
-	for i, item := range flags {
-		queue[i] = item.payload
-	}
 	sort.Slice(actions, func(i, j int) bool {
 		return actions[i].created.After(actions[j].created)
 	})
-	limit := len(actions)
-	if limit > 20 {
-		limit = 20
-	}
-	resolved := make([]moderationActionResponse, limit)
-	for i := 0; i < limit; i++ {
-		resolved[i] = actions[i].payload
-	}
-	return moderationQueueResponse{Queue: queue, Actions: resolved}, nil
+	queue, queueMeta := paginateModerationItems(flags, queueCursor, queueLimit)
+	resolved, actionsMeta := paginateModerationItems(actions, actionsCursor, actionsLimit)
+	return moderationQueueResponse{
+		Queue:       queue,
+		Actions:     resolved,
+		QueueMeta:   queueMeta,
+		ActionsMeta: actionsMeta,
+	}, nil
 }
 
-func (h *Handler) moderationAutoModPayload(limit int) ([]moderationAutoModResponse, error) {
+func (h *Handler) moderationAutoModPayload(cursor *time.Time, limit int) (moderationAutoModPageResponse, error) {
 	channels := h.Store.ListChannels("", "")
-	type actionItem struct {
-		payload moderationAutoModResponse
-		created time.Time
-	}
-	actions := make([]actionItem, 0)
+	actions := make([]moderationTimedItem[moderationAutoModResponse], 0)
 	for _, channel := range channels {
 		items, err := h.Store.ListChatAutoModActions(channel.ID, 0)
 		if err != nil {
-			return nil, err
+			return moderationAutoModPageResponse{}, err
 		}
 		for _, item := range items {
 			createdAt := item.CreatedAt
@@ -830,18 +908,15 @@ func (h *Handler) moderationAutoModPayload(limit int) ([]moderationAutoModRespon
 				userResp := newModerationUser(user)
 				resp.User = &userResp
 			}
-			actions = append(actions, actionItem{payload: resp, created: createdAt})
+			actions = append(actions, moderationTimedItem[moderationAutoModResponse]{payload: resp, created: createdAt})
 		}
 	}
 	sort.Slice(actions, func(i, j int) bool {
 		return actions[i].created.After(actions[j].created)
 	})
-	if limit <= 0 || limit > len(actions) {
-		limit = len(actions)
-	}
-	output := make([]moderationAutoModResponse, limit)
-	for i := 0; i < limit; i++ {
-		output[i] = actions[i].payload
-	}
-	return output, nil
+	output, meta := paginateModerationItems(actions, cursor, limit)
+	return moderationAutoModPageResponse{
+		Actions: output,
+		Meta:    meta,
+	}, nil
 }

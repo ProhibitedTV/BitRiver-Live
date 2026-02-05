@@ -574,6 +574,33 @@ BitRiver Live exports Prometheus-compatible metrics and improved health reportin
 - **Monetization:** `bitriver_monetization_events_total{event}` counters and `bitriver_monetization_amount_sum{event}` tracking the aggregated decimal amount per tip/subscription type.
 - **Transcoder:** `bitriver_transcoder_jobs_total{kind,status}` counters and the `bitriver_transcoder_active_jobs` gauge for live/upload encoding work.
 
+## Moderation API pagination
+
+The moderation API endpoints accept pagination controls so operators can fetch moderation data incrementally:
+
+- `GET /api/moderation/queue`
+  - `limit` (default `50`): maximum number of open queue items to return.
+  - `cursor`: RFC3339 timestamp cursor returned by `queueMeta.nextCursor`, used to fetch the next (older) page.
+  - `actionsLimit` (default `20`): maximum number of resolved actions to return.
+  - `actionsCursor`: RFC3339 timestamp cursor returned by `actionsMeta.nextCursor`, used to fetch older resolved actions.
+- `GET /api/moderation/automod`
+  - `limit` (default `50`): maximum number of auto-moderation actions.
+  - `cursor`: RFC3339 timestamp cursor returned by `meta.nextCursor`, used to page older items.
+
+Each response includes pagination metadata to support incremental fetches:
+
+- `/api/moderation/queue` includes `queueMeta` and `actionsMeta` objects with `nextCursor`, `limit`, and `hasMore`.
+- `/api/moderation/automod` includes a `meta` object with the same fields.
+
+Example requests:
+
+```bash
+curl "$BITRIVER_BASE_URL/api/moderation/queue?limit=50&actionsLimit=20"
+curl "$BITRIVER_BASE_URL/api/moderation/queue?cursor=2024-02-01T12:00:00Z"
+curl "$BITRIVER_BASE_URL/api/moderation/automod?limit=50"
+curl "$BITRIVER_BASE_URL/api/moderation/automod?cursor=2024-02-01T12:00:00Z"
+```
+
 ### Prometheus scrape example
 
 Point Prometheus, Grafana Agent, or another scraper at `/metrics` to track latency and ingest health. The installer script and deployment assets configure the same endpoints automatically so home operators can wire them into dashboards with minimal effort.

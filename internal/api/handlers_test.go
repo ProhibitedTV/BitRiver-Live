@@ -3608,6 +3608,195 @@ func TestModerationQueueLifecycle(t *testing.T) {
 	}
 }
 
+func TestModerationQueuePagination(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	admin, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Admin",
+		Email:       "admin@example.com",
+		Roles:       []string{"admin"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser admin: %v", err)
+	}
+	reporter, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Reporter",
+		Email:       "reporter@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser reporter: %v", err)
+	}
+	target, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Target",
+		Email:       "target@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser target: %v", err)
+	}
+	channel, err := store.CreateChannel(admin.ID, "Studio", "", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	messageOne, err := store.CreateChatMessage(channel.ID, target.ID, "spam message one")
+	if err != nil {
+		t.Fatalf("CreateChatMessage: %v", err)
+	}
+	reportOne, err := store.CreateChatReport(channel.ID, reporter.ID, target.ID, "spam", messageOne.ID, "")
+	if err != nil {
+		t.Fatalf("CreateChatReport: %v", err)
+	}
+	time.Sleep(2 * time.Millisecond)
+	messageTwo, err := store.CreateChatMessage(channel.ID, target.ID, "spam message two")
+	if err != nil {
+		t.Fatalf("CreateChatMessage: %v", err)
+	}
+	reportTwo, err := store.CreateChatReport(channel.ID, reporter.ID, target.ID, "spam", messageTwo.ID, "")
+	if err != nil {
+		t.Fatalf("CreateChatReport: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/moderation/queue?limit=1", nil)
+	req = withUser(req, admin)
+	rec := httptest.NewRecorder()
+	handler.ModerationQueue(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected moderation queue status 200, got %d", rec.Code)
+	}
+	var firstPage moderationQueueResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &firstPage); err != nil {
+		t.Fatalf("decode moderation queue: %v", err)
+	}
+	if len(firstPage.Queue) != 1 {
+		t.Fatalf("expected one queued flag, got %d", len(firstPage.Queue))
+	}
+	if !firstPage.QueueMeta.HasMore {
+		t.Fatal("expected more queue pages")
+	}
+	if firstPage.QueueMeta.NextCursor == "" {
+		t.Fatal("expected queue nextCursor to be populated")
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/moderation/queue?limit=1&cursor="+firstPage.QueueMeta.NextCursor, nil)
+	req = withUser(req, admin)
+	rec = httptest.NewRecorder()
+	handler.ModerationQueue(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected moderation queue status 200, got %d", rec.Code)
+	}
+	var secondPage moderationQueueResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &secondPage); err != nil {
+		t.Fatalf("decode moderation queue: %v", err)
+	}
+	if len(secondPage.Queue) != 1 {
+		t.Fatalf("expected one queued flag, got %d", len(secondPage.Queue))
+	}
+	if secondPage.QueueMeta.HasMore {
+		t.Fatal("expected no further queue pages")
+	}
+	if secondPage.Queue[0].ID == firstPage.Queue[0].ID {
+		t.Fatalf("expected different queue item on page two")
+	}
+	if secondPage.Queue[0].ID != reportOne.ID && secondPage.Queue[0].ID != reportTwo.ID {
+		t.Fatalf("unexpected report id %s", secondPage.Queue[0].ID)
+	}
+}
+
+func TestModerationAutoModPagination(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	admin, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Admin",
+		Email:       "admin@example.com",
+		Roles:       []string{"admin"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser admin: %v", err)
+	}
+	user, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Viewer",
+		Email:       "viewer@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
+	channel, err := store.CreateChannel(admin.ID, "Studio", "", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	now := time.Now().UTC()
+	if err := store.ApplyChatEvent(chat.Event{
+		Type: chat.EventTypeAutoMod,
+		AutoMod: &chat.AutoModEvent{
+			ID:        "auto-1",
+			ChannelID: channel.ID,
+			UserID:    user.ID,
+			Message:   "spam link",
+			Action:    "blocked",
+			CreatedAt: now.Add(-2 * time.Minute),
+		},
+		OccurredAt: now.Add(-2 * time.Minute),
+	}); err != nil {
+		t.Fatalf("ApplyChatEvent auto-1: %v", err)
+	}
+	if err := store.ApplyChatEvent(chat.Event{
+		Type: chat.EventTypeAutoMod,
+		AutoMod: &chat.AutoModEvent{
+			ID:        "auto-2",
+			ChannelID: channel.ID,
+			UserID:    user.ID,
+			Message:   "spam mention",
+			Action:    "blocked",
+			CreatedAt: now.Add(-1 * time.Minute),
+		},
+		OccurredAt: now.Add(-1 * time.Minute),
+	}); err != nil {
+		t.Fatalf("ApplyChatEvent auto-2: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/moderation/automod?limit=1", nil)
+	req = withUser(req, admin)
+	rec := httptest.NewRecorder()
+	handler.ModerationAutoMod(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected moderation automod status 200, got %d", rec.Code)
+	}
+	var firstPage moderationAutoModPageResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &firstPage); err != nil {
+		t.Fatalf("decode moderation automod: %v", err)
+	}
+	if len(firstPage.Actions) != 1 {
+		t.Fatalf("expected one automod action, got %d", len(firstPage.Actions))
+	}
+	if !firstPage.Meta.HasMore {
+		t.Fatal("expected more automod pages")
+	}
+	if firstPage.Meta.NextCursor == "" {
+		t.Fatal("expected automod nextCursor to be populated")
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/moderation/automod?limit=1&cursor="+firstPage.Meta.NextCursor, nil)
+	req = withUser(req, admin)
+	rec = httptest.NewRecorder()
+	handler.ModerationAutoMod(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected moderation automod status 200, got %d", rec.Code)
+	}
+	var secondPage moderationAutoModPageResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &secondPage); err != nil {
+		t.Fatalf("decode moderation automod: %v", err)
+	}
+	if len(secondPage.Actions) != 1 {
+		t.Fatalf("expected one automod action, got %d", len(secondPage.Actions))
+	}
+	if secondPage.Meta.HasMore {
+		t.Fatal("expected no further automod pages")
+	}
+	if secondPage.Actions[0].ID == firstPage.Actions[0].ID {
+		t.Fatalf("expected different automod action on page two")
+	}
+}
+
 func TestAnalyticsOverview(t *testing.T) {
 	handler, store := newTestHandler(t)
 
