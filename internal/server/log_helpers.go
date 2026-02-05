@@ -30,6 +30,7 @@ func loggingWithRequest(base *slog.Logger, resolver *clientIPResolver, r *http.R
 	)
 }
 
+// loggerWithRequestContext performs logger with request context and propagates validation or dependency failures to the caller.
 func loggerWithRequestContext(ctx context.Context, logger *slog.Logger) *slog.Logger {
 	if ctxLogger := logging.LoggerFromContext(ctx); ctxLogger != nil {
 		return ctxLogger

@@ -35,6 +35,7 @@ type SetupManager interface {
 	ApplySetup(rctx context.Context, cfg SetupConfig) (SetupResult, error)
 }
 
+// SetupWizard parses and stores a flag assignment, returning an error when the format is invalid.
 func (h *Handler) SetupWizard(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
@@ -76,6 +77,7 @@ func (h *Handler) SetupWizard(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, result)
 }
 
+// validateSetupConfig validates setup config and reports an error when required invariants are not met.
 func validateSetupConfig(cfg SetupConfig) error {
 	if strings.TrimSpace(cfg.AdminEmail) == "" {
 		return fmt.Errorf("adminEmail is required")
@@ -122,6 +124,7 @@ func validateSetupConfig(cfg SetupConfig) error {
 	return nil
 }
 
+// parseURL parses url and returns an error when the input is malformed.
 func parseURL(raw string) (*url.URL, error) {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
@@ -133,6 +136,7 @@ func parseURL(raw string) (*url.URL, error) {
 	return parsed, nil
 }
 
+// normalizeSetupConfig performs normalize setup config and propagates validation or dependency failures to the caller.
 func normalizeSetupConfig(cfg SetupConfig) SetupConfig {
 	cfg.AdminEmail = strings.TrimSpace(cfg.AdminEmail)
 	cfg.AdminPassword = strings.TrimSpace(cfg.AdminPassword)

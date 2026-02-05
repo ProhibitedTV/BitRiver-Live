@@ -62,6 +62,7 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, payload)
 }
 
+// ingestStatusChecks performs ingest status checks and propagates validation or dependency failures to the caller.
 func (h *Handler) ingestStatusChecks(ctx context.Context, fallback time.Time) ([]statusCheck, time.Time) {
 	if h.Store == nil {
 		return nil, time.Time{}
@@ -89,6 +90,7 @@ func (h *Handler) ingestStatusChecks(ctx context.Context, fallback time.Time) ([
 	return checks, checkedAt
 }
 
+// componentStatusCheck performs component status check and propagates validation or dependency failures to the caller.
 func componentStatusCheck(component componentStatus, checkedAt time.Time) statusCheck {
 	return statusCheck{
 		Name:        component.Component,
@@ -100,6 +102,7 @@ func componentStatusCheck(component componentStatus, checkedAt time.Time) status
 	}
 }
 
+// normalizeStatus performs normalize status and propagates validation or dependency failures to the caller.
 func normalizeStatus(status, detail string) string {
 	switch strings.ToLower(status) {
 	case "ok", "ready":
@@ -119,6 +122,7 @@ func normalizeStatus(status, detail string) string {
 	}
 }
 
+// aggregateStatus performs aggregate status and propagates validation or dependency failures to the caller.
 func aggregateStatus(checks []statusCheck) string {
 	overall := "ready"
 	degraded := false
@@ -136,6 +140,7 @@ func aggregateStatus(checks []statusCheck) string {
 	return overall
 }
 
+// recentFailures performs recent failures and propagates validation or dependency failures to the caller.
 func recentFailures(checks []statusCheck) []statusCheck {
 	degraded := make([]statusCheck, 0)
 	for _, check := range checks {
@@ -146,6 +151,7 @@ func recentFailures(checks []statusCheck) []statusCheck {
 	return degraded
 }
 
+// remediationFor performs remediation for and propagates validation or dependency failures to the caller.
 func remediationFor(component string) string {
 	key := strings.ToLower(strings.TrimSpace(component))
 	switch key {
@@ -170,6 +176,7 @@ func remediationFor(component string) string {
 	}
 }
 
+// defaultLogHints returns the default log hints for the current runtime mode.
 func defaultLogHints() []logHint {
 	return []logHint{
 		{Label: "API server", Command: "docker compose logs -f server"},

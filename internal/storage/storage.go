@@ -23,6 +23,7 @@ func (s *Storage) Ping(context.Context) error {
 	return nil
 }
 
+// newDataset builds and returns dataset using the supplied dependencies.
 func newDataset() dataset {
 	ds := dataset{
 		Users:          make(map[string]models.User),
@@ -41,6 +42,7 @@ func newDataset() dataset {
 	return ds
 }
 
+// ensureDatasetInitializedLocked performs ensure dataset initialized locked and propagates validation or dependency failures to the caller.
 func (s *Storage) ensureDatasetInitializedLocked() {
 	if s.data.Users == nil {
 		s.data.Users = make(map[string]models.User)
@@ -81,6 +83,7 @@ func (s *Storage) ensureDatasetInitializedLocked() {
 	}
 }
 
+// buildObjectKey builds object key from runtime state used by downstream handlers.
 func buildObjectKey(parts ...string) string {
 	normalized := make([]string, 0, len(parts))
 	for _, part := range parts {
@@ -93,6 +96,7 @@ func buildObjectKey(parts ...string) string {
 	return strings.Join(normalized, "/")
 }
 
+// normalizeObjectComponent performs normalize object component and propagates validation or dependency failures to the caller.
 func normalizeObjectComponent(input string) string {
 	lowered := strings.ToLower(strings.TrimSpace(input))
 	if lowered == "" {
@@ -118,14 +122,17 @@ func normalizeObjectComponent(input string) string {
 	return normalized
 }
 
+// manifestMetadataKey performs manifest metadata key and propagates validation or dependency failures to the caller.
 func manifestMetadataKey(name string) string {
 	return metadataManifestPrefix + normalizeObjectComponent(name)
 }
 
+// thumbnailMetadataKey performs thumbnail metadata key and propagates validation or dependency failures to the caller.
 func thumbnailMetadataKey(id string) string {
 	return metadataThumbnailPrefix + id
 }
 
+// normalizeRoles performs normalize roles and propagates validation or dependency failures to the caller.
 func normalizeRoles(input []string) []string {
 	if len(input) == 0 {
 		return nil
@@ -151,12 +158,14 @@ func normalizeRoles(input []string) []string {
 	return roles
 }
 
+// oauthAccountKey performs oauth account key and propagates validation or dependency failures to the caller.
 func oauthAccountKey(provider, subject string) string {
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	subject = strings.TrimSpace(subject)
 	return provider + "|" + subject
 }
 
+// fallbackOAuthEmail performs fallback oauth email and propagates validation or dependency failures to the caller.
 func fallbackOAuthEmail(provider, subject string) string {
 	domain := strings.ToLower(strings.TrimSpace(provider))
 	if domain == "" {
@@ -168,6 +177,7 @@ func fallbackOAuthEmail(provider, subject string) string {
 	return fmt.Sprintf("%s@%s.oauth", local, domain)
 }
 
+// defaultOAuthDisplayName returns the default oauth display name for the current runtime mode.
 func defaultOAuthDisplayName(provider, email, subject string) string {
 	trimmedEmail := strings.TrimSpace(email)
 	if trimmedEmail != "" {
@@ -189,6 +199,7 @@ func defaultOAuthDisplayName(provider, email, subject string) string {
 	return capitalizeWord(provider) + " user"
 }
 
+// sanitizeOAuthComponent performs sanitize oauth component and propagates validation or dependency failures to the caller.
 func sanitizeOAuthComponent(input string) string {
 	lower := strings.ToLower(strings.TrimSpace(input))
 	if lower == "" {
@@ -210,6 +221,7 @@ func sanitizeOAuthComponent(input string) string {
 	return strings.TrimSpace(builder.String())
 }
 
+// capitalizeWord performs capitalize word and propagates validation or dependency failures to the caller.
 func capitalizeWord(input string) string {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {
@@ -219,6 +231,7 @@ func capitalizeWord(input string) string {
 	return strings.ToUpper(lower[:1]) + lower[1:]
 }
 
+// NewStorage constructs storage using the provided dependencies and returns an error when initialization fails.
 func NewStorage(path string, opts ...Option) (*Storage, error) {
 	store := &Storage{
 		filePath:            path,
@@ -258,6 +271,7 @@ func NewStorage(path string, opts ...Option) (*Storage, error) {
 	return store, nil
 }
 
+// load performs load and propagates validation or dependency failures to the caller.
 func (s *Storage) load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -291,10 +305,12 @@ func (s *Storage) load() error {
 	return nil
 }
 
+// persist performs persist and propagates validation or dependency failures to the caller.
 func (s *Storage) persist() error {
 	return s.persistDataset(s.data)
 }
 
+// persistDataset performs persist dataset and propagates validation or dependency failures to the caller.
 func (s *Storage) persistDataset(data dataset) error {
 	if s.persistOverride != nil {
 		if err := s.persistOverride(data); err != nil {
@@ -339,6 +355,7 @@ func (s *Storage) persistDataset(data dataset) error {
 	return nil
 }
 
+// cloneDataset performs clone dataset and propagates validation or dependency failures to the caller.
 func cloneDataset(src dataset) dataset {
 	clone := dataset{}
 
@@ -555,6 +572,7 @@ func (s *Storage) CreateUser(params CreateUserParams) (models.User, error) {
 	return user, nil
 }
 
+// ListUsers returns users from the configured backing services.
 func (s *Storage) ListUsers() []models.User {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -569,6 +587,7 @@ func (s *Storage) ListUsers() []models.User {
 	return users
 }
 
+// GetUser returns user from the configured backing services.
 func (s *Storage) GetUser(id string) (models.User, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -589,6 +608,7 @@ func (s *Storage) FindUserByEmail(email string) (models.User, bool) {
 	return models.User{}, false
 }
 
+// AuthenticateOAuth performs authenticate oauth and returns an error when dependent systems reject the operation.
 func (s *Storage) AuthenticateOAuth(params OAuthLoginParams) (models.User, error) {
 	provider := strings.ToLower(strings.TrimSpace(params.Provider))
 	subject := strings.TrimSpace(params.Subject)
@@ -803,6 +823,7 @@ type ProfileUpdate struct {
 	DonationAddresses *[]models.CryptoAddress
 }
 
+// UpsertProfile performs upsert profile and returns an error when dependent systems reject the operation.
 func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Profile, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -909,6 +930,7 @@ func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Pro
 	return profile, nil
 }
 
+// GetProfile returns profile from the configured backing services.
 func (s *Storage) GetProfile(userID string) (models.Profile, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -943,6 +965,7 @@ func (s *Storage) GetProfile(userID string) (models.Profile, bool) {
 	return profile, true
 }
 
+// ListProfiles returns profiles from the configured backing services.
 func (s *Storage) ListProfiles() []models.Profile {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -975,6 +998,7 @@ type ChannelUpdate struct {
 	LiveState *string
 }
 
+// CreateChannel creates channel and returns an error when persistence or validation fails.
 func (s *Storage) CreateChannel(ownerID, title, category string, tags []string) (models.Channel, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1017,6 +1041,7 @@ func (s *Storage) CreateChannel(ownerID, title, category string, tags []string) 
 	return channel, nil
 }
 
+// normalizeTags performs normalize tags and propagates validation or dependency failures to the caller.
 func normalizeTags(tags []string) []string {
 	if len(tags) == 0 {
 		return []string{}
@@ -1038,6 +1063,7 @@ func normalizeTags(tags []string) []string {
 	return normalized
 }
 
+// UpdateChannel updates channel and returns an error when persistence or validation fails.
 func (s *Storage) UpdateChannel(id string, update ChannelUpdate) (models.Channel, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1081,6 +1107,7 @@ func (s *Storage) UpdateChannel(id string, update ChannelUpdate) (models.Channel
 	return channel, nil
 }
 
+// RotateChannelStreamKey performs rotate channel stream key and returns an error when dependent systems reject the operation.
 func (s *Storage) RotateChannelStreamKey(id string) (models.Channel, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1110,6 +1137,7 @@ func (s *Storage) RotateChannelStreamKey(id string) (models.Channel, error) {
 	return channel, nil
 }
 
+// GetChannel returns channel from the configured backing services.
 func (s *Storage) GetChannel(id string) (models.Channel, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1136,6 +1164,7 @@ func (s *Storage) GetChannelByStreamKey(streamKey string) (models.Channel, bool)
 	return models.Channel{}, false
 }
 
+// ListChannels returns channels from the configured backing services.
 func (s *Storage) ListChannels(ownerID, query string) []models.Channel {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1163,6 +1192,7 @@ func (s *Storage) ListChannels(ownerID, query string) []models.Channel {
 	return channels
 }
 
+// channelMatchesQuery performs channel matches query and propagates validation or dependency failures to the caller.
 func channelMatchesQuery(channel models.Channel, owner models.User, normalizedQuery string) bool {
 	if normalizedQuery == "" {
 		return true
@@ -1497,6 +1527,7 @@ func (s *Storage) StartStream(channelID string, renditions []string) (models.Str
 	return session, nil
 }
 
+// StopStream stops stream and returns an error when cleanup operations fail.
 func (s *Storage) StopStream(channelID string, peakConcurrent int) (models.StreamSession, error) {
 	s.mu.Lock()
 	channel, ok := s.data.Channels[channelID]
@@ -1576,6 +1607,7 @@ func (s *Storage) StopStream(channelID string, peakConcurrent int) (models.Strea
 	return session, nil
 }
 
+// ListStreamSessions returns stream sessions from the configured backing services.
 func (s *Storage) ListStreamSessions(channelID string) ([]models.StreamSession, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1628,6 +1660,7 @@ func (s *Storage) IngestHealth(ctx context.Context) []ingest.HealthStatus {
 	return checks
 }
 
+// recordIngestHealth performs record ingest health and propagates validation or dependency failures to the caller.
 func (s *Storage) recordIngestHealth(statuses []ingest.HealthStatus) {
 	snapshot := append([]ingest.HealthStatus(nil), statuses...)
 	s.mu.Lock()

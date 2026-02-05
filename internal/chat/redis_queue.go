@@ -139,6 +139,7 @@ type backoff struct {
 	waitFn  func(time.Duration) <-chan time.Time
 }
 
+// newBackoff builds and returns backoff using the supplied dependencies.
 func newBackoff(base, max time.Duration) *backoff {
 	if base <= 0 {
 		base = 50 * time.Millisecond
@@ -160,6 +161,7 @@ func newBackoff(base, max time.Duration) *backoff {
 	}
 }
 
+// Sleep performs sleep and returns an error when dependent systems reject the operation.
 func (b *backoff) Sleep(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -182,10 +184,12 @@ func (b *backoff) Sleep(ctx context.Context) error {
 	}
 }
 
+// Reset performs reset and returns an error when dependent systems reject the operation.
 func (b *backoff) Reset() {
 	b.current = 0
 }
 
+// nextDelay performs next delay and propagates validation or dependency failures to the caller.
 func (b *backoff) nextDelay() time.Duration {
 	if b.current == 0 {
 		b.current = b.base
@@ -213,6 +217,7 @@ func (b *backoff) nextDelay() time.Duration {
 	return delay
 }
 
+// Publish performs publish and returns an error when dependent systems reject the operation.
 func (q *redisQueue) Publish(ctx context.Context, event Event) error {
 	if event.Type == "" {
 		return errors.New("event type is required")
@@ -228,6 +233,7 @@ func (q *redisQueue) Publish(ctx context.Context, event Event) error {
 	return err
 }
 
+// Subscribe performs subscribe and returns an error when dependent systems reject the operation.
 func (q *redisQueue) Subscribe() Subscription {
 	ctx, cancel := context.WithCancel(context.Background())
 	if err := q.ensureGroup(ctx); err != nil {
@@ -246,6 +252,7 @@ func (q *redisQueue) Subscribe() Subscription {
 	return sub
 }
 
+// ensureGroup performs ensure group and propagates validation or dependency failures to the caller.
 func (q *redisQueue) ensureGroup(ctx context.Context) error {
 	if q.groupReady.Load() {
 		return nil
@@ -267,6 +274,7 @@ func (q *redisQueue) ensureGroup(ctx context.Context) error {
 	return nil
 }
 
+// Ping performs ping and returns an error when dependent systems reject the operation.
 func (q *redisQueue) Ping(ctx context.Context) error {
 	if q == nil || q.client == nil {
 		return nil
@@ -294,10 +302,12 @@ type redisSubscription struct {
 	ch         chan Event
 }
 
+// Events performs events and returns an error when dependent systems reject the operation.
 func (s *redisSubscription) Events() <-chan Event {
 	return s.ch
 }
 
+// Close performs close and returns an error when dependent systems reject the operation.
 func (s *redisSubscription) Close() {
 	if s.cancel != nil {
 		s.cancelOnce.Do(func() {
@@ -307,6 +317,7 @@ func (s *redisSubscription) Close() {
 	s.wg.Wait()
 }
 
+// run performs run and propagates validation or dependency failures to the caller.
 func (s *redisSubscription) run(ctx context.Context) {
 	s.wg.Add(1)
 	defer close(s.ch)
@@ -369,6 +380,7 @@ func (s *redisSubscription) run(ctx context.Context) {
 	}
 }
 
+// ack performs ack and propagates validation or dependency failures to the caller.
 func (s *redisSubscription) ack(ctx context.Context, id string) {
 	if id == "" {
 		return
@@ -378,6 +390,7 @@ func (s *redisSubscription) ack(ctx context.Context, id string) {
 	}
 }
 
+// requeueEntry performs requeue entry and propagates validation or dependency failures to the caller.
 func (s *redisSubscription) requeueEntry(entry redisStreamEntry) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -416,6 +429,7 @@ type redisStreamEntry struct {
 	Payload []byte
 }
 
+// read performs read and propagates validation or dependency failures to the caller.
 func (s *redisSubscription) read(ctx context.Context) ([]redisStreamEntry, error) {
 	blockMs := int(math.Max(float64(s.queue.blockTimeout.Milliseconds()), 1))
 	reply, err := s.queue.client.Do(
@@ -466,6 +480,7 @@ func (s *redisSubscription) read(ctx context.Context) ([]redisStreamEntry, error
 	return entries, nil
 }
 
+// extractPayload performs extract payload and propagates validation or dependency failures to the caller.
 func extractPayload(fields []interface{}) []byte {
 	for i := 0; i < len(fields); i += 2 {
 		key, _ := asString(fields[i])
@@ -479,6 +494,7 @@ func extractPayload(fields []interface{}) []byte {
 	return nil
 }
 
+// asString performs as string and propagates validation or dependency failures to the caller.
 func asString(v interface{}) (string, bool) {
 	switch val := v.(type) {
 	case string:
@@ -490,6 +506,7 @@ func asString(v interface{}) (string, bool) {
 	}
 }
 
+// isBusyGroup reports whether busy group is satisfied for the current input.
 func isBusyGroup(err error) bool {
 	if err == nil {
 		return false
@@ -497,6 +514,7 @@ func isBusyGroup(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "busygrou")
 }
 
+// isNilReply reports whether nil reply is satisfied for the current input.
 func isNilReply(err error) bool {
 	if err == nil {
 		return false
@@ -505,6 +523,7 @@ func isNilReply(err error) bool {
 	return strings.Contains(msg, "nil reply") || strings.Contains(msg, "timeout")
 }
 
+// randomConsumerID performs random consumer id and propagates validation or dependency failures to the caller.
 func randomConsumerID() string {
 	buf := make([]byte, 8)
 	if _, err := cryptorand.Read(buf); err != nil {
@@ -513,6 +532,7 @@ func randomConsumerID() string {
 	return fmt.Sprintf("consumer-%s", hex.EncodeToString(buf))
 }
 
+// buildTLSConfig builds tlsconfig from runtime state used by downstream handlers.
 func buildTLSConfig(cfg RedisTLSConfig) (*tls.Config, error) {
 	if cfg.CAFile == "" && cfg.CertFile == "" && cfg.KeyFile == "" && !cfg.InsecureSkipVerify {
 		return nil, nil

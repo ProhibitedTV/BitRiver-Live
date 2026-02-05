@@ -21,6 +21,7 @@ type corsPolicy struct {
 	allowed map[string]struct{}
 }
 
+// newCORSPolicy builds and returns corspolicy using the supplied dependencies.
 func newCORSPolicy(cfg CORSConfig) (corsPolicy, error) {
 	policy := corsPolicy{allowed: make(map[string]struct{})}
 	origins := append([]string{}, cfg.AdminOrigins...)
@@ -37,6 +38,7 @@ func newCORSPolicy(cfg CORSConfig) (corsPolicy, error) {
 	return policy, nil
 }
 
+// normalizeOrigin performs normalize origin and propagates validation or dependency failures to the caller.
 func normalizeOrigin(origin string) (string, error) {
 	origin = strings.TrimSpace(origin)
 	if origin == "" {
@@ -52,6 +54,7 @@ func normalizeOrigin(origin string) (string, error) {
 	return fmt.Sprintf("%s://%s", strings.ToLower(parsed.Scheme), strings.ToLower(parsed.Host)), nil
 }
 
+// corsMiddleware performs cors middleware and propagates validation or dependency failures to the caller.
 func corsMiddleware(policy corsPolicy, logger *slog.Logger, resolver *clientIPResolver, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := strings.TrimSpace(r.Header.Get("Origin"))
@@ -95,6 +98,7 @@ func corsMiddleware(policy corsPolicy, logger *slog.Logger, resolver *clientIPRe
 	})
 }
 
+// allows performs allows and propagates validation or dependency failures to the caller.
 func (p corsPolicy) allows(origin string, requestOrigin string) bool {
 	normalizedOrigin, err := normalizeOrigin(origin)
 	if err != nil {
@@ -114,6 +118,7 @@ func (p corsPolicy) allows(origin string, requestOrigin string) bool {
 	return normalizedOrigin == requestOrigin
 }
 
+// originForRequest performs origin for request and propagates validation or dependency failures to the caller.
 func originForRequest(r *http.Request, resolver *clientIPResolver) string {
 	host := strings.ToLower(strings.TrimSpace(r.Host))
 	if host == "" {
@@ -128,6 +133,7 @@ func originForRequest(r *http.Request, resolver *clientIPResolver) string {
 	return fmt.Sprintf("%s://%s", scheme, host)
 }
 
+// requestScheme performs request scheme and propagates validation or dependency failures to the caller.
 func requestScheme(r *http.Request, resolver *clientIPResolver) string {
 	if resolver != nil && resolver.shouldTrust(r.RemoteAddr) {
 		if proto := forwardedProto(r); proto != "" {
@@ -140,6 +146,7 @@ func requestScheme(r *http.Request, resolver *clientIPResolver) string {
 	return "http"
 }
 
+// forwardedProto performs forwarded proto and propagates validation or dependency failures to the caller.
 func forwardedProto(r *http.Request) string {
 	if r == nil {
 		return ""
@@ -156,6 +163,7 @@ func forwardedProto(r *http.Request) string {
 	return ""
 }
 
+// headerForwardedProto performs header forwarded proto and propagates validation or dependency failures to the caller.
 func headerForwardedProto(header string) string {
 	if header == "" {
 		return ""
@@ -171,6 +179,7 @@ func headerForwardedProto(header string) string {
 	return ""
 }
 
+// forwardedProtoFromHeader performs forwarded proto from header and propagates validation or dependency failures to the caller.
 func forwardedProtoFromHeader(header string) string {
 	header = strings.TrimSpace(header)
 	if header == "" {

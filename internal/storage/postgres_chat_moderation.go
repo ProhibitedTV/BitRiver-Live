@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// CreateChatMessage creates chat message and returns an error when persistence or validation fails.
 func (r *postgresRepository) CreateChatMessage(channelID, userID, content string) (models.ChatMessage, error) {
 	if r == nil || r.pool == nil {
 		return models.ChatMessage{}, ErrPostgresUnavailable
@@ -97,6 +98,7 @@ func (r *postgresRepository) CreateChatMessage(channelID, userID, content string
 	return message, nil
 }
 
+// DeleteChatMessage deletes chat message and returns an error when persistence or validation fails.
 func (r *postgresRepository) DeleteChatMessage(channelID, messageID string) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -137,6 +139,7 @@ func (r *postgresRepository) DeleteChatMessage(channelID, messageID string) erro
 	return deleteErr
 }
 
+// ListChatMessages returns chat messages from the configured backing services.
 func (r *postgresRepository) ListChatMessages(channelID string, limit int) ([]models.ChatMessage, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
@@ -186,6 +189,7 @@ func (r *postgresRepository) ListChatMessages(channelID string, limit int) ([]mo
 	return messages, nil
 }
 
+// purgeExpiredChatMessages performs purge expired chat messages and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) purgeExpiredChatMessages(ctx context.Context, now time.Time) error {
 	retention := r.chatRetention.Messages
 	if retention <= 0 || r == nil || r.pool == nil {
@@ -198,6 +202,7 @@ func (r *postgresRepository) purgeExpiredChatMessages(ctx context.Context, now t
 	return nil
 }
 
+// ChatRestrictions performs chat restrictions and returns an error when dependent systems reject the operation.
 func (r *postgresRepository) ChatRestrictions() chat.RestrictionsSnapshot {
 	snapshot := chat.RestrictionsSnapshot{
 		Bans:            map[string]map[string]struct{}{},
@@ -289,6 +294,7 @@ func (r *postgresRepository) ChatRestrictions() chat.RestrictionsSnapshot {
 	return snapshot
 }
 
+// IsChatBanned reports whether chat banned is satisfied for the current input.
 func (r *postgresRepository) IsChatBanned(channelID, userID string) bool {
 	if r == nil || r.pool == nil {
 		return false
@@ -302,6 +308,7 @@ func (r *postgresRepository) IsChatBanned(channelID, userID string) bool {
 	return banned
 }
 
+// ChatTimeout performs chat timeout and returns an error when dependent systems reject the operation.
 func (r *postgresRepository) ChatTimeout(channelID, userID string) (time.Time, bool) {
 	if r == nil || r.pool == nil {
 		return time.Time{}, false
@@ -315,6 +322,7 @@ func (r *postgresRepository) ChatTimeout(channelID, userID string) (time.Time, b
 	return expires.UTC(), true
 }
 
+// ApplyChatEvent performs apply chat event and returns an error when dependent systems reject the operation.
 func (r *postgresRepository) ApplyChatEvent(evt chat.Event) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -431,6 +439,7 @@ func (r *postgresRepository) ApplyChatEvent(evt chat.Event) error {
 	})
 }
 
+// ListChatRestrictions returns chat restrictions from the configured backing services.
 func (r *postgresRepository) ListChatRestrictions(channelID string) []models.ChatRestriction {
 	if r == nil || r.pool == nil {
 		return nil
@@ -527,6 +536,8 @@ func (r *postgresRepository) ListChatRestrictions(channelID string) []models.Cha
 	})
 	return restrictions
 }
+
+// CreateChatReport creates chat report and returns an error when persistence or validation fails.
 func (r *postgresRepository) CreateChatReport(channelID, reporterID, targetID, reason, messageID, evidenceURL string) (models.ChatReport, error) {
 	if r == nil || r.pool == nil {
 		return models.ChatReport{}, ErrPostgresUnavailable
@@ -609,6 +620,7 @@ func (r *postgresRepository) CreateChatReport(channelID, reporterID, targetID, r
 	return report, nil
 }
 
+// ListChatReports returns chat reports from the configured backing services.
 func (r *postgresRepository) ListChatReports(channelID string, includeResolved bool) ([]models.ChatReport, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
@@ -685,6 +697,7 @@ func (r *postgresRepository) ListChatReports(channelID string, includeResolved b
 	return reports, nil
 }
 
+// purgeExpiredChatReports performs purge expired chat reports and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) purgeExpiredChatReports(ctx context.Context, now time.Time) error {
 	retention := r.chatRetention.ModerationLogs
 	if retention <= 0 || r == nil || r.pool == nil {
@@ -697,6 +710,7 @@ func (r *postgresRepository) purgeExpiredChatReports(ctx context.Context, now ti
 	return nil
 }
 
+// ResolveChatReport resolves chat report from flags and environment values, returning validation errors when incompatible settings are provided.
 func (r *postgresRepository) ResolveChatReport(reportID, resolverID, resolution string) (models.ChatReport, error) {
 	if r == nil || r.pool == nil {
 		return models.ChatReport{}, ErrPostgresUnavailable
@@ -803,6 +817,7 @@ func (r *postgresRepository) ResolveChatReport(reportID, resolverID, resolution 
 	return resolved, nil
 }
 
+// ListChatFilters returns chat filters from the configured backing services.
 func (r *postgresRepository) ListChatFilters(channelID string) ([]models.ChatFilter, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
@@ -842,6 +857,7 @@ func (r *postgresRepository) ListChatFilters(channelID string) ([]models.ChatFil
 	return filters, nil
 }
 
+// CreateChatFilter creates chat filter and returns an error when persistence or validation fails.
 func (r *postgresRepository) CreateChatFilter(channelID string, params ChatFilterParams) (models.ChatFilter, error) {
 	if r == nil || r.pool == nil {
 		return models.ChatFilter{}, ErrPostgresUnavailable
@@ -892,6 +908,7 @@ func (r *postgresRepository) CreateChatFilter(channelID string, params ChatFilte
 	return filter, nil
 }
 
+// UpdateChatFilter updates chat filter and returns an error when persistence or validation fails.
 func (r *postgresRepository) UpdateChatFilter(id string, update ChatFilterUpdate) (models.ChatFilter, error) {
 	if r == nil || r.pool == nil {
 		return models.ChatFilter{}, ErrPostgresUnavailable
@@ -952,6 +969,7 @@ func (r *postgresRepository) UpdateChatFilter(id string, update ChatFilterUpdate
 	return updated, nil
 }
 
+// DeleteChatFilter deletes chat filter and returns an error when persistence or validation fails.
 func (r *postgresRepository) DeleteChatFilter(id string) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -983,6 +1001,7 @@ func (r *postgresRepository) DeleteChatFilter(id string) error {
 	return deleteErr
 }
 
+// ListChatAutoModActions returns chat auto mod actions from the configured backing services.
 func (r *postgresRepository) ListChatAutoModActions(channelID string, limit int) ([]models.ChatAutoModAction, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
@@ -1035,6 +1054,7 @@ func (r *postgresRepository) ListChatAutoModActions(channelID string, limit int)
 	return actions, nil
 }
 
+// purgeExpiredChatAutoModActions performs purge expired chat auto mod actions and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) purgeExpiredChatAutoModActions(ctx context.Context, now time.Time) error {
 	retention := r.chatRetention.ModerationLogs
 	if retention <= 0 || r == nil || r.pool == nil {

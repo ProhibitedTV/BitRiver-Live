@@ -162,6 +162,7 @@ func Dial(ctx context.Context, rawURL string, header http.Header, tlsConfig *tls
 	}, nil
 }
 
+// headerContains performs header contains and propagates validation or dependency failures to the caller.
 func headerContains(header http.Header, name, expected string) bool {
 	values := header.Values(name)
 	for _, value := range values {
@@ -172,11 +173,13 @@ func headerContains(header http.Header, name, expected string) bool {
 	return false
 }
 
+// computeAcceptKey performs compute accept key and propagates validation or dependency failures to the caller.
 func computeAcceptKey(key string) string {
 	hash := sha1.Sum([]byte(key + wsGUID))
 	return base64.StdEncoding.EncodeToString(hash[:])
 }
 
+// generateKey performs generate key and propagates validation or dependency failures to the caller.
 func generateKey() string {
 	nonce := time.Now().UnixNano()
 	raw := fmt.Sprintf("%d", nonce)
@@ -234,6 +237,7 @@ func (c *Conn) Ping(payload []byte) error {
 	return c.writeFrame(opcodePing, payload)
 }
 
+// writeFrame writes frame to the active response or stream and surfaces encode or I/O failures.
 func (c *Conn) writeFrame(opcode byte, payload []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -286,6 +290,7 @@ const (
 	opcodePong   byte = 0xA
 )
 
+// readFrame reads frame from the underlying source and returns decode or I/O errors.
 func readFrame(reader *bufio.Reader) (frame, error) {
 	first, err := reader.ReadByte()
 	if err != nil {

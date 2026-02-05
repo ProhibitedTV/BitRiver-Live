@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// startEphemeralPostgres starts ephemeral postgres and returns an error when startup or dependency checks fail.
 func startEphemeralPostgres(t *testing.T) (string, func()) {
 	t.Helper()
 
@@ -97,6 +98,7 @@ func startEphemeralPostgres(t *testing.T) (string, func()) {
 	return dsn, cleanup
 }
 
+// postgresRepositoryFactory performs postgres repository factory and propagates validation or dependency failures to the caller.
 func postgresRepositoryFactory(t *testing.T, opts ...Option) (Repository, func(), error) {
 	t.Helper()
 
@@ -162,6 +164,7 @@ func postgresRepositoryFactory(t *testing.T, opts ...Option) (Repository, func()
 	return repo, cleanup, nil
 }
 
+// applyPostgresMigrationsForTest performs apply postgres migrations for test and propagates validation or dependency failures to the caller.
 func applyPostgresMigrationsForTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
 
@@ -202,6 +205,7 @@ func applyPostgresMigrationsForTest(t *testing.T, ctx context.Context, pool *pgx
 	}
 }
 
+// truncatePostgresTablesForTest performs truncate postgres tables for test and propagates validation or dependency failures to the caller.
 func truncatePostgresTablesForTest(ctx context.Context, pool *pgxpool.Pool) error {
 	tables, err := PostgresTablesForTest(ctx, pool)
 	if err != nil {
@@ -217,6 +221,7 @@ func truncatePostgresTablesForTest(ctx context.Context, pool *pgxpool.Pool) erro
 	return err
 }
 
+// splitSQLStatementsForTest splits and normalizes sqlstatements for test values for downstream validation.
 func splitSQLStatementsForTest(script string) []string {
 	parts := strings.Split(script, ";")
 	statements := make([]string, 0, len(parts))

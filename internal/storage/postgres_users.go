@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// CreateUser creates user and returns an error when persistence or validation fails.
 func (r *postgresRepository) CreateUser(params CreateUserParams) (models.User, error) {
 	if r == nil || r.pool == nil {
 		return models.User{}, ErrPostgresUnavailable
@@ -97,6 +98,7 @@ func (r *postgresRepository) CreateUser(params CreateUserParams) (models.User, e
 	}, nil
 }
 
+// AuthenticateUser performs authenticate user and returns an error when dependent systems reject the operation.
 func (r *postgresRepository) AuthenticateUser(email, password string) (models.User, error) {
 	if password == "" {
 		return models.User{}, fmt.Errorf("password is required")
@@ -134,6 +136,7 @@ func (r *postgresRepository) AuthenticateUser(email, password string) (models.Us
 	return user, nil
 }
 
+// ListUsers returns users from the configured backing services.
 func (r *postgresRepository) ListUsers() []models.User {
 	if r == nil || r.pool == nil {
 		return nil
@@ -162,6 +165,7 @@ func (r *postgresRepository) ListUsers() []models.User {
 	return users
 }
 
+// GetUser returns user from the configured backing services.
 func (r *postgresRepository) GetUser(id string) (models.User, bool) {
 	if r == nil || r.pool == nil {
 		return models.User{}, false
@@ -186,6 +190,7 @@ func (r *postgresRepository) GetUser(id string) (models.User, bool) {
 	return user, true
 }
 
+// UpdateUser updates user and returns an error when persistence or validation fails.
 func (r *postgresRepository) UpdateUser(id string, update UserUpdate) (models.User, error) {
 	if r == nil || r.pool == nil {
 		return models.User{}, ErrPostgresUnavailable
@@ -258,6 +263,7 @@ func (r *postgresRepository) UpdateUser(id string, update UserUpdate) (models.Us
 	return updated, nil
 }
 
+// SetUserPassword parses and stores a flag assignment, returning an error when the format is invalid.
 func (r *postgresRepository) SetUserPassword(id, password string) (models.User, error) {
 	if r == nil || r.pool == nil {
 		return models.User{}, ErrPostgresUnavailable
@@ -291,6 +297,7 @@ func (r *postgresRepository) SetUserPassword(id, password string) (models.User, 
 	return user, nil
 }
 
+// DeleteUser deletes user and returns an error when persistence or validation fails.
 func (r *postgresRepository) DeleteUser(id string) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -341,6 +348,7 @@ func (r *postgresRepository) DeleteUser(id string) error {
 	return nil
 }
 
+// scanUser scans user from database rows and returns an error when type conversion fails.
 func scanUser(row pgx.Row) (models.User, error) {
 	var (
 		id, displayName, email string
@@ -366,6 +374,7 @@ func scanUser(row pgx.Row) (models.User, error) {
 	return user, nil
 }
 
+// rolesFromDB performs roles from db and propagates validation or dependency failures to the caller.
 func rolesFromDB(roles []string) []string {
 	if len(roles) == 0 {
 		return nil

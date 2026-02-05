@@ -39,6 +39,7 @@ type redisStore struct {
 	timeout time.Duration
 }
 
+// newRedisStore builds and returns redis store using the supplied dependencies.
 func newRedisStore(cfg redisStoreConfig) (*redisStore, error) {
 	addrs := make([]string, 0, len(cfg.Addrs)+1)
 	for _, addr := range cfg.Addrs {
@@ -78,6 +79,7 @@ func newRedisStore(cfg redisStoreConfig) (*redisStore, error) {
 	return &redisStore{client: client, timeout: timeout}, nil
 }
 
+// Allow performs allow and returns an error when dependent systems reject the operation.
 func (s *redisStore) Allow(key string, limit int, window time.Duration) (bool, time.Duration, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
 	defer cancel()
@@ -115,6 +117,7 @@ func (s *redisStore) Allow(key string, limit int, window time.Duration) (bool, t
 	return false, time.Duration(ttl) * time.Second, nil
 }
 
+// Close performs close and returns an error when dependent systems reject the operation.
 func (s *redisStore) Close(context.Context) error {
 	if s == nil || s.client == nil {
 		return nil
@@ -122,6 +125,7 @@ func (s *redisStore) Close(context.Context) error {
 	return s.client.Close()
 }
 
+// Ping performs ping and returns an error when dependent systems reject the operation.
 func (s *redisStore) Ping(ctx context.Context) error {
 	if s == nil || s.client == nil {
 		return nil
@@ -139,6 +143,7 @@ func (s *redisStore) Ping(ctx context.Context) error {
 	return err
 }
 
+// toInt performs to int and propagates validation or dependency failures to the caller.
 func toInt(v interface{}) (int64, error) {
 	switch val := v.(type) {
 	case int64:
@@ -152,6 +157,7 @@ func toInt(v interface{}) (int64, error) {
 	}
 }
 
+// buildRedisTLSConfig builds redis tlsconfig from runtime state used by downstream handlers.
 func buildRedisTLSConfig(cfg RedisTLSConfig) (*tls.Config, error) {
 	if cfg.CAFile == "" && cfg.CertFile == "" && cfg.KeyFile == "" && !cfg.InsecureSkipVerify {
 		return nil, nil

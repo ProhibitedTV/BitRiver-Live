@@ -11,6 +11,7 @@ type componentStatus struct {
 	Error     string `json:"error,omitempty"`
 }
 
+// componentHealth performs component health and propagates validation or dependency failures to the caller.
 func (h *Handler) componentHealth(ctx context.Context) ([]componentStatus, string, int) {
 	overallStatus := "ok"
 	statusCode := http.StatusOK

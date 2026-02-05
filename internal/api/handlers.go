@@ -69,6 +69,7 @@ func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handle
 	}
 }
 
+// sessionManager performs session manager and propagates validation or dependency failures to the caller.
 func (h *Handler) sessionManager() *auth.SessionManager {
 	if h.Sessions == nil {
 		h.Sessions = auth.NewSessionManager(0)
@@ -76,6 +77,7 @@ func (h *Handler) sessionManager() *auth.SessionManager {
 	return h.Sessions
 }
 
+// mfaChallengeManager performs mfa challenge manager and propagates validation or dependency failures to the caller.
 func (h *Handler) mfaChallengeManager() *auth.MFAChallengeManager {
 	if h.MFAChallenges == nil {
 		h.MFAChallenges = auth.NewMFAChallengeManager(0)
@@ -83,6 +85,7 @@ func (h *Handler) mfaChallengeManager() *auth.MFAChallengeManager {
 	return h.MFAChallenges
 }
 
+// logger performs logger and propagates validation or dependency failures to the caller.
 func (h *Handler) logger() *slog.Logger {
 	if h.Logger == nil {
 		h.Logger = slog.Default()
@@ -90,6 +93,7 @@ func (h *Handler) logger() *slog.Logger {
 	return h.Logger
 }
 
+// tracer performs tracer and propagates validation or dependency failures to the caller.
 func (h *Handler) tracer() *tracing.Tracer {
 	if h.Tracer == nil {
 		h.Tracer = tracing.Default()
@@ -97,6 +101,7 @@ func (h *Handler) tracer() *tracing.Tracer {
 	return h.Tracer
 }
 
+// startSpan starts span and returns an error when startup or dependency checks fail.
 func (h *Handler) startSpan(r *http.Request, name string, attrs ...tracing.Attribute) (*http.Request, *tracing.Span) {
 	if r == nil {
 		return r, nil
@@ -105,6 +110,7 @@ func (h *Handler) startSpan(r *http.Request, name string, attrs ...tracing.Attri
 	return r.WithContext(ctx), span
 }
 
+// srsTracker performs srs tracker and propagates validation or dependency failures to the caller.
 func (h *Handler) srsTracker() *srsViewerTracker {
 	if h.srsViewers == nil {
 		h.srsViewers = newSRSViewerTracker()
@@ -112,6 +118,7 @@ func (h *Handler) srsTracker() *srsViewerTracker {
 	return h.srsViewers
 }
 
+// Health performs health and returns an error when dependent systems reject the operation.
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	r, span := h.startSpan(r, "api.health")
 	if span != nil {
@@ -175,6 +182,7 @@ type sessionResponse struct {
 	RenditionManifests []renditionManifestResponse `json:"renditionManifests,omitempty"`
 }
 
+// newSessionResponse builds and returns session response using the supplied dependencies.
 func newSessionResponse(session models.StreamSession) sessionResponse {
 	resp := sessionResponse{
 		ID:             session.ID,

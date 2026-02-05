@@ -164,6 +164,7 @@ type moderationAutoModPageResponse struct {
 	Meta    moderationPageInfo          `json:"meta"`
 }
 
+// newChatMessageResponse builds and returns chat message response using the supplied dependencies.
 func newChatMessageResponse(message models.ChatMessage) chatMessageResponse {
 	return chatMessageResponse{
 		ID:        message.ID,
@@ -174,6 +175,7 @@ func newChatMessageResponse(message models.ChatMessage) chatMessageResponse {
 	}
 }
 
+// newChatRestrictionResponse builds and returns chat restriction response using the supplied dependencies.
 func newChatRestrictionResponse(r models.ChatRestriction) chatRestrictionResponse {
 	resp := chatRestrictionResponse{
 		ID:       r.ID,
@@ -193,6 +195,7 @@ func newChatRestrictionResponse(r models.ChatRestriction) chatRestrictionRespons
 	return resp
 }
 
+// newChatFilterResponse builds and returns chat filter response using the supplied dependencies.
 func newChatFilterResponse(filter models.ChatFilter) chatFilterResponse {
 	return chatFilterResponse{
 		ID:        filter.ID,
@@ -205,6 +208,7 @@ func newChatFilterResponse(filter models.ChatFilter) chatFilterResponse {
 	}
 }
 
+// newChatReportResponse builds and returns chat report response using the supplied dependencies.
 func newChatReportResponse(report models.ChatReport) chatReportResponse {
 	resp := chatReportResponse{
 		ID:          report.ID,
@@ -226,6 +230,7 @@ func newChatReportResponse(report models.ChatReport) chatReportResponse {
 	return resp
 }
 
+// newModerationUser builds and returns moderation user using the supplied dependencies.
 func newModerationUser(user models.User) moderationUserResponse {
 	resp := moderationUserResponse{ID: user.ID}
 	if user.DisplayName != "" {
@@ -234,6 +239,7 @@ func newModerationUser(user models.User) moderationUserResponse {
 	return resp
 }
 
+// ChatWebsocket performs chat websocket and returns an error when dependent systems reject the operation.
 func (h *Handler) ChatWebsocket(w http.ResponseWriter, r *http.Request) {
 	if h.ChatGateway == nil {
 		WriteRequestError(w, ServiceUnavailableError("chat gateway unavailable"))
@@ -246,6 +252,7 @@ func (h *Handler) ChatWebsocket(w http.ResponseWriter, r *http.Request) {
 	h.ChatGateway.HandleConnection(w, r, user)
 }
 
+// handleChatRoutes routes and serves chat routes requests, writing HTTP errors for invalid input or backend failures.
 func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.ResponseWriter, r *http.Request) {
 	channel, exists := h.Store.GetChannel(channelID)
 	if !exists {
@@ -363,6 +370,7 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 	}
 }
 
+// handleChatModeration routes and serves chat moderation requests, writing HTTP errors for invalid input or backend failures.
 func (h *Handler) handleChatModeration(actor models.User, channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	if h.ChatGateway == nil {
 		WriteRequestError(w, ServiceUnavailableError("chat gateway unavailable"))
@@ -462,6 +470,7 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 	})
 }
 
+// handleChatFilters routes and serves chat filters requests, writing HTTP errors for invalid input or backend failures.
 func (h *Handler) handleChatFilters(actor models.User, channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 		WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
@@ -537,6 +546,7 @@ func (h *Handler) handleChatFilters(actor models.User, channel models.Channel, r
 	}
 }
 
+// handleChatReports routes and serves chat reports requests, writing HTTP errors for invalid input or backend failures.
 func (h *Handler) handleChatReports(actor models.User, channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	if len(remaining) > 0 && strings.TrimSpace(remaining[0]) != "" {
 		reportID := remaining[0]
@@ -643,6 +653,7 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 	}
 }
 
+// ModerationQueue performs moderation queue and returns an error when dependent systems reject the operation.
 func (h *Handler) ModerationQueue(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteMethodNotAllowed(w, r, http.MethodGet)
@@ -683,6 +694,7 @@ func (h *Handler) ModerationQueue(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, payload)
 }
 
+// ModerationQueueByID performs moderation queue by id and returns an error when dependent systems reject the operation.
 func (h *Handler) ModerationQueueByID(w http.ResponseWriter, r *http.Request) {
 	flagID := strings.TrimPrefix(r.URL.Path, "/api/moderation/queue/")
 	if flagID == "" {
@@ -718,6 +730,7 @@ func (h *Handler) ModerationQueueByID(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, newChatReportResponse(report))
 }
 
+// ModerationAutoMod performs moderation auto mod and returns an error when dependent systems reject the operation.
 func (h *Handler) ModerationAutoMod(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteMethodNotAllowed(w, r, http.MethodGet)
@@ -748,6 +761,7 @@ func (h *Handler) ModerationAutoMod(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, payload)
 }
 
+// parseModerationCursor parses moderation cursor and returns an error when the input is malformed.
 func parseModerationCursor(value string) (*time.Time, error) {
 	if strings.TrimSpace(value) == "" {
 		return nil, nil
@@ -760,6 +774,7 @@ func parseModerationCursor(value string) (*time.Time, error) {
 	return &parsed, nil
 }
 
+// parseModerationLimit parses moderation limit and returns an error when the input is malformed.
 func parseModerationLimit(value string, defaultLimit int) (int, error) {
 	if strings.TrimSpace(value) == "" {
 		return defaultLimit, nil
@@ -776,6 +791,8 @@ type moderationTimedItem[T any] struct {
 	created time.Time
 }
 
+// paginateModerationItems slices moderation items by cursor and limit while preserving descending timestamp order.
+// It returns page metadata that callers use to expose stable next-page cursors.
 func paginateModerationItems[T any](items []moderationTimedItem[T], cursor *time.Time, limit int) ([]T, moderationPageInfo) {
 	filtered := items
 	if cursor != nil {
@@ -806,6 +823,7 @@ func paginateModerationItems[T any](items []moderationTimedItem[T], cursor *time
 	}
 }
 
+// moderationQueuePayload performs moderation queue payload and propagates validation or dependency failures to the caller.
 func (h *Handler) moderationQueuePayload(queueCursor *time.Time, queueLimit int, actionsCursor *time.Time, actionsLimit int) (moderationQueueResponse, error) {
 	channels := h.Store.ListChannels("", "")
 	flags := make([]moderationTimedItem[moderationFlagResponse], 0)
@@ -882,6 +900,7 @@ func (h *Handler) moderationQueuePayload(queueCursor *time.Time, queueLimit int,
 	}, nil
 }
 
+// moderationAutoModPayload performs moderation auto mod payload and propagates validation or dependency failures to the caller.
 func (h *Handler) moderationAutoModPayload(cursor *time.Time, limit int) (moderationAutoModPageResponse, error) {
 	channels := h.Store.ListChannels("", "")
 	actions := make([]moderationTimedItem[moderationAutoModResponse], 0)

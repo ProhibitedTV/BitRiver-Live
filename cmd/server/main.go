@@ -38,6 +38,7 @@ import (
 // provided.
 type keyValueFlag map[string]string
 
+// String returns a stable string form for flag and log output.
 func (kv *keyValueFlag) String() string {
 	if kv == nil || len(*kv) == 0 {
 		return ""
@@ -50,6 +51,7 @@ func (kv *keyValueFlag) String() string {
 	return strings.Join(parts, ",")
 }
 
+// Set parses and stores a flag assignment, returning an error when the format is invalid.
 func (kv *keyValueFlag) Set(value string) error {
 	parts := strings.SplitN(value, "=", 2)
 	if len(parts) != 2 {
@@ -66,6 +68,7 @@ func (kv *keyValueFlag) Set(value string) error {
 	return nil
 }
 
+// main parses configuration, initializes runtime dependencies, and runs the process until shutdown.
 func main() {
 	addr := flag.String("addr", "", "HTTP listen address")
 	mode := flag.String("mode", "", "server runtime mode (development or production, required; production enforces /metrics protection)")
@@ -693,6 +696,7 @@ type startupSummary struct {
 	Ingest        map[string]any
 }
 
+// newStartupSummary builds and returns startup summary using the supplied dependencies.
 func newStartupSummary(in startupSummaryInput) startupSummary {
 	datastore := map[string]any{
 		"driver": in.StorageDriver,
@@ -796,6 +800,7 @@ func newStartupSummary(in startupSummaryInput) startupSummary {
 	}
 }
 
+// LogArgs logs args details for observability without mutating runtime state.
 func (s startupSummary) LogArgs() []any {
 	return []any{
 		"datastore", s.Datastore,
@@ -806,6 +811,7 @@ func (s startupSummary) LogArgs() []any {
 	}
 }
 
+// resolveSessionStoreConfig resolves session store config from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveSessionStoreConfig(flagDriver, envDriver, storageDriver, storageDSN, flagDSN, envDSN string, requirePostgres bool) (sessionStoreConfig, error) {
 	driver := strings.ToLower(strings.TrimSpace(flagDriver))
 	if driver == "" {
@@ -852,6 +858,7 @@ func resolveSessionStoreConfig(flagDriver, envDriver, storageDriver, storageDSN,
 	}
 }
 
+// configureChatQueue performs configure chat queue and propagates validation or dependency failures to the caller.
 func configureChatQueue(driver string, cfg chat.RedisQueueConfig, logger *slog.Logger) (chat.Queue, error) {
 	driver = strings.ToLower(strings.TrimSpace(driver))
 	switch driver {
@@ -872,6 +879,7 @@ func configureChatQueue(driver string, cfg chat.RedisQueueConfig, logger *slog.L
 	}
 }
 
+// resolveChatQueueDriver resolves chat queue driver from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveChatQueueDriver(flagValue, envValue string) string {
 	driver := strings.ToLower(strings.TrimSpace(flagValue))
 	if driver == "" {
@@ -883,6 +891,7 @@ func resolveChatQueueDriver(flagValue, envValue string) string {
 	return driver
 }
 
+// determineRateLimiterDriver performs determine rate limiter driver and propagates validation or dependency failures to the caller.
 func determineRateLimiterDriver(cfg server.RateLimitConfig) string {
 	if strings.TrimSpace(cfg.RedisAddr) != "" {
 		return "redis"
@@ -896,6 +905,7 @@ func determineRateLimiterDriver(cfg server.RateLimitConfig) string {
 	return "memory"
 }
 
+// redactDSN performs redact dsn and propagates validation or dependency failures to the caller.
 func redactDSN(dsn string) string {
 	dsn = strings.TrimSpace(dsn)
 	if dsn == "" {
@@ -934,6 +944,7 @@ func redactDSN(dsn string) string {
 	return strings.Join(parts, " ")
 }
 
+// resolveListenAddr resolves listen addr from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveListenAddr(flagValue, mode, envAddr string) string {
 	listenAddr := strings.TrimSpace(flagValue)
 	if listenAddr == "" {
@@ -945,6 +956,7 @@ func resolveListenAddr(flagValue, mode, envAddr string) string {
 	return listenAddr
 }
 
+// resolveMode resolves mode from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveMode(flagMode, envMode string) (string, error) {
 	mode := strings.ToLower(strings.TrimSpace(flagMode))
 	if mode == "" {
@@ -961,6 +973,7 @@ func resolveMode(flagMode, envMode string) (string, error) {
 	}
 }
 
+// resolveSessionCookieSecureMode resolves session cookie secure mode from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveSessionCookieSecureMode(mode string) api.SessionCookieSecureMode {
 	if strings.ToLower(strings.TrimSpace(mode)) == "production" {
 		return api.SessionCookieSecureAlways
@@ -968,6 +981,7 @@ func resolveSessionCookieSecureMode(mode string) api.SessionCookieSecureMode {
 	return api.SessionCookieSecureAuto
 }
 
+// resolveSampleRatio resolves sample ratio from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveSampleRatio(flagValue float64, envValue string, otelSamplerArg string, logger *slog.Logger) float64 {
 	value := flagValue
 	if envValue != "" {
@@ -995,14 +1009,17 @@ func resolveSampleRatio(flagValue float64, envValue string, otelSamplerArg strin
 	return value
 }
 
+// requiresMetricsProtection reports whether metrics protection is satisfied for the current input.
 func requiresMetricsProtection(mode string) bool {
 	return isProductionMode(mode)
 }
 
+// requiresLoginProtection reports whether login protection is satisfied for the current input.
 func requiresLoginProtection(mode string) bool {
 	return isProductionMode(mode)
 }
 
+// validateMetricsProtection validates metrics protection and reports an error when required invariants are not met.
 func validateMetricsProtection(mode string, cfg server.MetricsAccessConfig) error {
 	if requiresMetricsProtection(mode) && !server.MetricsAccessConfigured(cfg) {
 		return errors.New("production mode requires protecting /metrics with BITRIVER_LIVE_METRICS_TOKEN or BITRIVER_LIVE_METRICS_ALLOW_NETWORKS")
@@ -1011,6 +1028,7 @@ func validateMetricsProtection(mode string, cfg server.MetricsAccessConfig) erro
 	return nil
 }
 
+// defaultListenForMode returns the default listen for mode for the current runtime mode.
 func defaultListenForMode(mode string) string {
 	if isProductionMode(mode) {
 		return ":80"
@@ -1018,10 +1036,12 @@ func defaultListenForMode(mode string) string {
 	return ":8080"
 }
 
+// isProductionMode reports whether production mode is satisfied for the current input.
 func isProductionMode(mode string) bool {
 	return strings.EqualFold(strings.TrimSpace(mode), "production")
 }
 
+// resolveStorageDriver resolves storage driver from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveStorageDriver(flagValue, envValue, postgresDSN string) (string, bool, error) {
 	if driver := strings.ToLower(strings.TrimSpace(flagValue)); driver != "" {
 		return driver, true, nil
@@ -1035,6 +1055,7 @@ func resolveStorageDriver(flagValue, envValue, postgresDSN string) (string, bool
 	return "", false, fmt.Errorf("no datastore configured: provide --storage-driver json or configure Postgres via BITRIVER_LIVE_POSTGRES_DSN, DATABASE_URL, or --postgres-dsn")
 }
 
+// validateProductionDatastore validates production datastore and reports an error when required invariants are not met.
 func validateProductionDatastore(driver, resolvedPostgresDSN, envPostgresDSN string) error {
 	if driver != "postgres" {
 		if driver == "" {
@@ -1054,6 +1075,7 @@ func validateProductionDatastore(driver, resolvedPostgresDSN, envPostgresDSN str
 	return nil
 }
 
+// resolveDataPath resolves data path from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveDataPath(flagValue, envValue string) string {
 	if flagValue != "" {
 		return flagValue
@@ -1064,10 +1086,12 @@ func resolveDataPath(flagValue, envValue string) string {
 	return "data/store.json"
 }
 
+// resolvePostgresDSN resolves postgres dsn from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolvePostgresDSN(flagValue string) string {
 	return strings.TrimSpace(firstNonEmpty(flagValue, os.Getenv("BITRIVER_LIVE_POSTGRES_DSN"), os.Getenv("DATABASE_URL")))
 }
 
+// resolveViewerOrigin resolves viewer origin from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveViewerOrigin(flagValue, envValue string) (*url.URL, error) {
 	raw := strings.TrimSpace(flagValue)
 	if raw == "" {
@@ -1086,6 +1110,7 @@ func resolveViewerOrigin(flagValue, envValue string) (*url.URL, error) {
 	return parsed, nil
 }
 
+// firstNonEmpty returns the first non-empty value from the provided candidates.
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		trimmed := strings.TrimSpace(value)
@@ -1098,6 +1123,7 @@ func firstNonEmpty(values ...string) string {
 
 var sslModeDisablePattern = regexp.MustCompile(`(?i)(^|[?&\s;])sslmode=disable([&#;\s]|$)`)
 
+// validatePostgresTLS validates postgres tls and reports an error when required invariants are not met.
 func validatePostgresTLS(dsn, envVar string) error {
 	if dsn == "" {
 		return nil
@@ -1110,10 +1136,12 @@ func validatePostgresTLS(dsn, envVar string) error {
 	return nil
 }
 
+// postgresSSLModeDisable performs postgres sslmode disable and propagates validation or dependency failures to the caller.
 func postgresSSLModeDisable(dsn string) bool {
 	return sslModeDisablePattern.MatchString(dsn)
 }
 
+// isComposePostgresDSN reports whether compose postgres dsn is satisfied for the current input.
 func isComposePostgresDSN(dsn string) bool {
 	trimmed := strings.ToLower(strings.TrimSpace(dsn))
 	if trimmed == "" {
@@ -1131,6 +1159,7 @@ func isComposePostgresDSN(dsn string) bool {
 	return false
 }
 
+// splitAndTrim splits and normalizes and trim values for downstream validation.
 func splitAndTrim(raw string) []string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -1150,6 +1179,7 @@ func splitAndTrim(raw string) []string {
 	return out
 }
 
+// resolveFloat resolves float from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveFloat(flagValue float64, envKey string) float64 {
 	if flagValue > 0 {
 		return flagValue
@@ -1164,6 +1194,7 @@ func resolveFloat(flagValue float64, envKey string) float64 {
 
 const defaultLoginLimitNonProduction = 10
 
+// resolveLoginLimit resolves login limit from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveLoginLimit(mode string, flagValue int, envKey string) (int, error) {
 	limit := resolveInt(flagValue, envKey)
 	if requiresLoginProtection(mode) {
@@ -1178,6 +1209,7 @@ func resolveLoginLimit(mode string, flagValue int, envKey string) (int, error) {
 	return limit, nil
 }
 
+// resolveInt resolves int from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveInt(flagValue int, envKey string) int {
 	if flagValue > 0 {
 		return flagValue
@@ -1190,6 +1222,7 @@ func resolveInt(flagValue int, envKey string) int {
 	return 0
 }
 
+// ladderProfileNames performs ladder profile names and propagates validation or dependency failures to the caller.
 func ladderProfileNames(profiles []ingest.Rendition) []string {
 	names := make([]string, 0, len(profiles))
 	for _, profile := range profiles {
@@ -1203,6 +1236,7 @@ func ladderProfileNames(profiles []ingest.Rendition) []string {
 	return names
 }
 
+// logIngestConfigResult logs ingest config result details for observability without mutating runtime state.
 func logIngestConfigResult(logger *slog.Logger, loadErr error) bool {
 	if loadErr == nil {
 		return false
@@ -1223,6 +1257,7 @@ func logIngestConfigResult(logger *slog.Logger, loadErr error) bool {
 	return true
 }
 
+// resolveDuration resolves duration from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveDuration(flagValue time.Duration, envKey string, fallback time.Duration) time.Duration {
 	if flagValue > 0 {
 		return flagValue
@@ -1238,6 +1273,7 @@ func resolveDuration(flagValue time.Duration, envKey string, fallback time.Durat
 	return 0
 }
 
+// resolveBool resolves bool from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveBool(flagValue bool, envKey string) bool {
 	if flagValue {
 		return true
@@ -1250,6 +1286,7 @@ func resolveBool(flagValue bool, envKey string) bool {
 	return false
 }
 
+// resolveDurationSetting resolves duration setting from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveDurationSetting(flagValue string, envKey string) (time.Duration, bool, error) {
 	raw := strings.TrimSpace(flagValue)
 	if raw == "" {
@@ -1267,10 +1304,12 @@ func resolveDurationSetting(flagValue string, envKey string) (time.Duration, boo
 	return duration, true, nil
 }
 
+// parseFloat parses float and returns an error when the input is malformed.
 func parseFloat(value string) (float64, error) {
 	return strconv.ParseFloat(strings.TrimSpace(value), 64)
 }
 
+// parseInt parses int and returns an error when the input is malformed.
 func parseInt(value string) (int, error) {
 	v, err := strconv.Atoi(strings.TrimSpace(value))
 	if err != nil {

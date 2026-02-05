@@ -48,6 +48,7 @@ type mfaDisableRequest struct {
 	Code string `json:"code"`
 }
 
+// MFAStatus performs mfastatus and returns an error when dependent systems reject the operation.
 func (h *Handler) MFAStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteMethodNotAllowed(w, r, http.MethodGet)
@@ -65,6 +66,7 @@ func (h *Handler) MFAStatus(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, buildMFAStatus(settings, exists))
 }
 
+// MFAEnroll performs mfaenroll and returns an error when dependent systems reject the operation.
 func (h *Handler) MFAEnroll(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		WriteMethodNotAllowed(w, r, http.MethodPost)
@@ -104,6 +106,7 @@ func (h *Handler) MFAEnroll(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, enrollment)
 }
 
+// MFAVerify performs mfaverify and returns an error when dependent systems reject the operation.
 func (h *Handler) MFAVerify(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		WriteMethodNotAllowed(w, r, http.MethodPost)
@@ -190,6 +193,7 @@ func (h *Handler) MFAVerify(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, buildMFAStatus(updated, true))
 }
 
+// MFADisable performs mfadisable and returns an error when dependent systems reject the operation.
 func (h *Handler) MFADisable(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		WriteMethodNotAllowed(w, r, http.MethodPost)
@@ -241,6 +245,7 @@ func (h *Handler) MFADisable(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, mfaStatusResponse{Enabled: false, Pending: false})
 }
 
+// resolveMFAUser resolves mfauser from flags and environment values, returning validation errors when incompatible settings are provided.
 func (h *Handler) resolveMFAUser(token string, r *http.Request) (models.User, error) {
 	if strings.TrimSpace(token) != "" {
 		userID, _, ok, err := h.mfaChallengeManager().Validate(token)
@@ -263,6 +268,7 @@ func (h *Handler) resolveMFAUser(token string, r *http.Request) (models.User, er
 	return user, nil
 }
 
+// resolveMFAChallenge resolves mfachallenge from flags and environment values, returning validation errors when incompatible settings are provided.
 func (h *Handler) resolveMFAChallenge(token string, r *http.Request) (string, time.Time, bool, error) {
 	if strings.TrimSpace(token) != "" {
 		userID, expiresAt, ok, err := h.mfaChallengeManager().Validate(token)
@@ -281,6 +287,7 @@ func (h *Handler) resolveMFAChallenge(token string, r *http.Request) (string, ti
 	return user.ID, time.Time{}, false, nil
 }
 
+// prepareMFAEnrollment performs prepare mfaenrollment and propagates validation or dependency failures to the caller.
 func (h *Handler) prepareMFAEnrollment(user models.User) (mfaEnrollmentResponse, models.MFASettings, error) {
 	secret, err := auth.GenerateMFASecret()
 	if err != nil {
@@ -320,6 +327,7 @@ func (h *Handler) prepareMFAEnrollment(user models.User) (mfaEnrollmentResponse,
 	return enrollment, settings, nil
 }
 
+// buildMFAStatus builds mfastatus from runtime state used by downstream handlers.
 func buildMFAStatus(settings models.MFASettings, exists bool) mfaStatusResponse {
 	if !exists {
 		return mfaStatusResponse{Enabled: false, Pending: false}
@@ -340,6 +348,7 @@ func buildMFAStatus(settings models.MFASettings, exists bool) mfaStatusResponse 
 	return response
 }
 
+// mfaRequirement performs mfa requirement and propagates validation or dependency failures to the caller.
 func (h *Handler) mfaRequirement(user models.User) (models.MFASettings, bool, bool, error) {
 	settings, exists, err := h.Store.GetMFASettings(user.ID)
 	if err != nil {

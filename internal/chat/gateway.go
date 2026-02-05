@@ -141,6 +141,7 @@ func (g *Gateway) CreateMessage(ctx context.Context, author models.User, channel
 	return message, nil
 }
 
+// matchChatFilter performs match chat filter and propagates validation or dependency failures to the caller.
 func (g *Gateway) matchChatFilter(channelID, content string) (*models.ChatFilter, error) {
 	filters, err := g.store.ListChatFilters(channelID)
 	if err != nil {
@@ -180,6 +181,7 @@ func (g *Gateway) matchChatFilter(channelID, content string) (*models.ChatFilter
 	return nil, nil
 }
 
+// emitAutoMod performs emit auto mod and propagates validation or dependency failures to the caller.
 func (g *Gateway) emitAutoMod(ctx context.Context, author models.User, channelID, content string, filter models.ChatFilter) error {
 	id, err := generateID()
 	if err != nil {
@@ -267,6 +269,7 @@ func (g *Gateway) SubmitReport(ctx context.Context, reporter models.User, channe
 	return report, nil
 }
 
+// publish performs publish and propagates validation or dependency failures to the caller.
 func (g *Gateway) publish(ctx context.Context, event Event) {
 	if g.queue == nil {
 		return
@@ -276,6 +279,7 @@ func (g *Gateway) publish(ctx context.Context, event Event) {
 	}
 }
 
+// ensureChannelAccessible performs ensure channel accessible and propagates validation or dependency failures to the caller.
 func (g *Gateway) ensureChannelAccessible(channelID, userID string) error {
 	if g.store != nil {
 		if _, ok := g.store.GetChannel(channelID); !ok {
@@ -297,6 +301,7 @@ func (g *Gateway) ensureChannelAccessible(channelID, userID string) error {
 	return nil
 }
 
+// validateModeration validates moderation and reports an error when required invariants are not met.
 func (g *Gateway) validateModeration(actor models.User, evt ModerationEvent) error {
 	if evt.ChannelID == "" || evt.TargetID == "" {
 		return fmt.Errorf("channel and target are required")
@@ -320,6 +325,7 @@ func (g *Gateway) validateModeration(actor models.User, evt ModerationEvent) err
 	return nil
 }
 
+// broadcast performs broadcast and propagates validation or dependency failures to the caller.
 func (g *Gateway) broadcast(event Event) {
 	if event.Type == EventTypeModeration {
 		if event.Moderation != nil {
@@ -358,6 +364,7 @@ func (g *Gateway) broadcast(event Event) {
 	}
 }
 
+// applyModeration performs apply moderation and propagates validation or dependency failures to the caller.
 func (g *Gateway) applyModeration(evt ModerationEvent) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -391,6 +398,7 @@ func (g *Gateway) applyModeration(evt ModerationEvent) {
 	}
 }
 
+// isBanned reports whether banned is satisfied for the current input.
 func (g *Gateway) isBanned(channelID, userID string) bool {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -405,6 +413,7 @@ func (g *Gateway) isBanned(channelID, userID string) bool {
 	return false
 }
 
+// timeoutExpiry performs timeout expiry and propagates validation or dependency failures to the caller.
 func (g *Gateway) timeoutExpiry(channelID, userID string) (time.Time, bool) {
 	g.mu.RLock()
 	if timeouts := g.timeouts[channelID]; timeouts != nil {
@@ -420,6 +429,7 @@ func (g *Gateway) timeoutExpiry(channelID, userID string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+// clearTimeout performs clear timeout and propagates validation or dependency failures to the caller.
 func (g *Gateway) clearTimeout(channelID, userID string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -428,6 +438,7 @@ func (g *Gateway) clearTimeout(channelID, userID string) {
 	}
 }
 
+// generateID performs generate id and propagates validation or dependency failures to the caller.
 func generateID() (string, error) {
 	buf := make([]byte, 12)
 	if _, err := rand.Read(buf); err != nil {
@@ -464,6 +475,7 @@ type outboundMessage struct {
 	Raw   []byte `json:"-"`
 }
 
+// writeLoop writes loop to the active response or stream and surfaces encode or I/O failures.
 func (c *client) writeLoop() {
 	defer c.close()
 	for msg := range c.send {
@@ -481,6 +493,7 @@ func (c *client) writeLoop() {
 	}
 }
 
+// heartbeatLoop performs heartbeat loop and propagates validation or dependency failures to the caller.
 func (c *client) heartbeatLoop(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -497,6 +510,7 @@ func (c *client) heartbeatLoop(ctx context.Context, interval time.Duration) {
 	}
 }
 
+// readLoop reads loop from the underlying source and returns decode or I/O errors.
 func (c *client) readLoop(ctx context.Context) {
 	defer c.close()
 	for {
@@ -532,6 +546,7 @@ func (c *client) readLoop(ctx context.Context) {
 	}
 }
 
+// handleJoin routes and serves join requests, writing HTTP errors for invalid input or backend failures.
 func (c *client) handleJoin(channelID string) {
 	if channelID == "" {
 		c.sendError("channel required")
@@ -553,6 +568,7 @@ func (c *client) handleJoin(channelID string) {
 	c.send <- outboundMessage{Raw: payload}
 }
 
+// handleLeave routes and serves leave requests, writing HTTP errors for invalid input or backend failures.
 func (c *client) handleLeave(channelID string) {
 	if channelID == "" {
 		return
@@ -568,6 +584,7 @@ func (c *client) handleLeave(channelID string) {
 	delete(c.rooms, channelID)
 }
 
+// handleMessage routes and serves message requests, writing HTTP errors for invalid input or backend failures.
 func (c *client) handleMessage(ctx context.Context, msg inboundMessage) {
 	if msg.ChannelID == "" {
 		c.sendError("channel required")
@@ -587,6 +604,7 @@ func (c *client) handleMessage(ctx context.Context, msg inboundMessage) {
 	c.send <- outboundMessage{Raw: payload}
 }
 
+// handleModeration routes and serves moderation requests, writing HTTP errors for invalid input or backend failures.
 func (c *client) handleModeration(ctx context.Context, msg inboundMessage, action ModerationAction) {
 	if msg.ChannelID == "" || msg.TargetID == "" {
 		c.sendError("channel and target required")
@@ -617,6 +635,7 @@ func (c *client) handleModeration(ctx context.Context, msg inboundMessage, actio
 	}
 }
 
+// handleReport routes and serves report requests, writing HTTP errors for invalid input or backend failures.
 func (c *client) handleReport(ctx context.Context, msg inboundMessage) {
 	if msg.ChannelID == "" || msg.TargetID == "" {
 		c.sendError("channel and target required")
@@ -636,6 +655,7 @@ func (c *client) handleReport(ctx context.Context, msg inboundMessage) {
 	c.send <- outboundMessage{Raw: payload}
 }
 
+// sendError performs send error and propagates validation or dependency failures to the caller.
 func (c *client) sendError(message string) {
 	payload, _ := json.Marshal(outboundMessage{Type: "error", Error: message})
 	select {
@@ -644,6 +664,7 @@ func (c *client) sendError(message string) {
 	}
 }
 
+// close performs close and propagates validation or dependency failures to the caller.
 func (c *client) close() {
 	c.closed.Do(func() {
 		if c.cancel != nil {

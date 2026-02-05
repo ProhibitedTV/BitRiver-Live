@@ -91,6 +91,7 @@ func LoadSnapshotFromJSON(path string) (*Snapshot, error) {
 	return &snapshot, nil
 }
 
+// ensureInitialized performs ensure initialized and propagates validation or dependency failures to the caller.
 func (s *Snapshot) ensureInitialized() {
 	if s.Users == nil {
 		s.Users = make(map[string]models.User)

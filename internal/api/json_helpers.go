@@ -41,6 +41,7 @@ type RequestError struct {
 	Err     error
 }
 
+// Error performs error and returns an error when dependent systems reject the operation.
 func (e RequestError) Error() string {
 	if e.Message != "" {
 		return e.Message
@@ -72,6 +73,7 @@ func (e RequestError) StatusCode() int {
 	return http.StatusInternalServerError
 }
 
+// ClientMessage performs client message and returns an error when dependent systems reject the operation.
 func (e RequestError) ClientMessage() string {
 	if e.Message != "" {
 		return e.Message
@@ -126,6 +128,7 @@ func DecodeJSONAllowUnknown(r *http.Request, dest interface{}) error {
 	return decodeJSON(r, dest, false)
 }
 
+// decodeJSON performs decode json and propagates validation or dependency failures to the caller.
 func decodeJSON(r *http.Request, dest interface{}, disallowUnknown bool) error {
 	if r.Body == nil {
 		return RequestError{Status: http.StatusBadRequest, CodeVal: "validation_failed", Message: "request body is required"}
@@ -186,6 +189,7 @@ func DecodeAllowUnknownAndValidate(w http.ResponseWriter, r *http.Request, dest 
 	return true
 }
 
+// classifyDecodeError performs classify decode error and propagates validation or dependency failures to the caller.
 func classifyDecodeError(err error) error {
 	var syntaxErr *json.SyntaxError
 	var typeErr *json.UnmarshalTypeError
@@ -210,6 +214,7 @@ func classifyDecodeError(err error) error {
 	}
 }
 
+// errorCodeForStatus performs error code for status and propagates validation or dependency failures to the caller.
 func errorCodeForStatus(status int) string {
 	switch status {
 	case http.StatusBadRequest:
@@ -236,6 +241,7 @@ func errorCodeForStatus(status int) string {
 	}
 }
 
+// clientMessage performs client message and propagates validation or dependency failures to the caller.
 func clientMessage(status int, err error) string {
 	if msgErr, ok := err.(clientMessageError); ok {
 		if msg := msgErr.ClientMessage(); msg != "" {

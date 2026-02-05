@@ -66,6 +66,7 @@ type profileViewResponse struct {
 	UpdatedAt         string                  `json:"updatedAt"`
 }
 
+// Profiles performs profiles and returns an error when dependent systems reject the operation.
 func (h *Handler) Profiles(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -84,6 +85,7 @@ func (h *Handler) Profiles(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ProfileByID performs profile by id and returns an error when dependent systems reject the operation.
 func (h *Handler) ProfileByID(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/profiles/")
 	parts := strings.Split(path, "/")
@@ -111,6 +113,7 @@ func (h *Handler) ProfileByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleGetProfile routes and serves get profile requests, writing HTTP errors for invalid input or backend failures.
 func (h *Handler) handleGetProfile(userID string, w http.ResponseWriter, r *http.Request) {
 	user, ok := h.Store.GetUser(userID)
 	if !ok {
@@ -121,6 +124,7 @@ func (h *Handler) handleGetProfile(userID string, w http.ResponseWriter, r *http
 	WriteJSON(w, http.StatusOK, h.buildProfileViewResponse(user, profile))
 }
 
+// handleUpsertProfile routes and serves upsert profile requests, writing HTTP errors for invalid input or backend failures.
 func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *http.Request) {
 	var req upsertProfileRequest
 	if !DecodeAndValidate(w, r, &req) {
@@ -202,6 +206,7 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 	WriteJSON(w, http.StatusOK, h.buildProfileViewResponse(user, profile))
 }
 
+// buildProfileViewResponse builds profile view response from runtime state used by downstream handlers.
 func (h *Handler) buildProfileViewResponse(user models.User, profile models.Profile) profileViewResponse {
 	channels := h.Store.ListChannels(user.ID, "")
 	channelResponses := make([]channelPublicResponse, 0, len(channels))

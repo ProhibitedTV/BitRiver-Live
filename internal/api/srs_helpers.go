@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// constantTimeEqual performs constant time equal and propagates validation or dependency failures to the caller.
 func constantTimeEqual(expected, provided string) bool {
 	if expected == "" || provided == "" {
 		return false
@@ -16,6 +17,7 @@ func constantTimeEqual(expected, provided string) bool {
 	return subtle.ConstantTimeCompare([]byte(expected), []byte(provided)) == 1
 }
 
+// srsHookAuthorized performs srs hook authorized and propagates validation or dependency failures to the caller.
 func (h *Handler) srsHookAuthorized(r *http.Request) bool {
 	token := strings.TrimSpace(h.SRSHookToken)
 	if token == "" || r == nil {
@@ -39,6 +41,7 @@ func (h *Handler) srsHookAuthorized(r *http.Request) bool {
 	return false
 }
 
+// srsRenditions performs srs renditions and propagates validation or dependency failures to the caller.
 func (h *Handler) srsRenditions() []string {
 	if len(h.DefaultRenditions) == 0 {
 		return []string{"1080p", "720p", "480p"}

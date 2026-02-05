@@ -61,6 +61,7 @@ type createUploadRequest struct {
 	Metadata    map[string]string `json:"metadata"`
 }
 
+// newUploadResponse builds and returns upload response using the supplied dependencies.
 func newUploadResponse(upload models.Upload) uploadResponse {
 	resp := uploadResponse{
 		ID:        upload.ID,
@@ -99,6 +100,7 @@ func newUploadResponse(upload models.Upload) uploadResponse {
 	return resp
 }
 
+// cloneStringMap performs clone string map and propagates validation or dependency failures to the caller.
 func cloneStringMap(src map[string]string) map[string]string {
 	if len(src) == 0 {
 		return nil
@@ -110,6 +112,7 @@ func cloneStringMap(src map[string]string) map[string]string {
 	return dst
 }
 
+// Uploads performs uploads and returns an error when dependent systems reject the operation.
 func (h *Handler) Uploads(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -157,6 +160,7 @@ func (h *Handler) Uploads(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// UploadByID performs upload by id and returns an error when dependent systems reject the operation.
 func (h *Handler) UploadByID(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/uploads/")
 	if path == "" {
@@ -212,6 +216,7 @@ func (h *Handler) UploadByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// createUploadFromJSON creates upload from json and returns an error when validation or persistence fails.
 func (h *Handler) createUploadFromJSON(w http.ResponseWriter, r *http.Request, actor models.User) {
 	var req createUploadRequest
 	if !DecodeAndValidate(w, r, &req) {
@@ -225,6 +230,7 @@ func (h *Handler) createUploadFromJSON(w http.ResponseWriter, r *http.Request, a
 	WriteJSON(w, http.StatusCreated, newUploadResponse(upload))
 }
 
+// createUploadFromMultipart creates upload from multipart and returns an error when validation or persistence fails.
 func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Request, actor models.User) {
 	reader, err := r.MultipartReader()
 	if err != nil {
@@ -318,6 +324,7 @@ func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Reque
 	WriteJSON(w, http.StatusCreated, newUploadResponse(upload))
 }
 
+// createUploadEntry creates upload entry and returns an error when validation or persistence fails.
 func (h *Handler) createUploadEntry(r *http.Request, actor models.User, req createUploadRequest, media *uploadedMedia) (models.Upload, int, error) {
 	channelID := strings.TrimSpace(req.ChannelID)
 	if channelID == "" {
@@ -367,6 +374,7 @@ func (h *Handler) createUploadEntry(r *http.Request, actor models.User, req crea
 	return upload, 0, nil
 }
 
+// saveMultipartFile performs save multipart file and propagates validation or dependency failures to the caller.
 func (h *Handler) saveMultipartFile(part *multipart.Part) (*uploadedMedia, error) {
 	defer func() {
 		_ = part.Close()
@@ -392,6 +400,7 @@ func (h *Handler) saveMultipartFile(part *multipart.Part) (*uploadedMedia, error
 	}, nil
 }
 
+// attachMediaToUpload performs attach media to upload and propagates validation or dependency failures to the caller.
 func (h *Handler) attachMediaToUpload(r *http.Request, upload models.Upload, baseMetadata map[string]string, media *uploadedMedia) (models.Upload, error) {
 	if media == nil {
 		return upload, nil
@@ -426,6 +435,7 @@ func (h *Handler) attachMediaToUpload(r *http.Request, upload models.Upload, bas
 	return upload, nil
 }
 
+// persistUploadMedia performs persist upload media and propagates validation or dependency failures to the caller.
 func (h *Handler) persistUploadMedia(uploadID string, media *uploadedMedia) (string, error) {
 	if media == nil || media.tempPath == "" {
 		return "", fmt.Errorf("media payload missing")
@@ -450,6 +460,7 @@ func (h *Handler) persistUploadMedia(uploadID string, media *uploadedMedia) (str
 	return storedName, nil
 }
 
+// serveUploadMedia performs serve upload media and propagates validation or dependency failures to the caller.
 func (h *Handler) serveUploadMedia(w http.ResponseWriter, r *http.Request, upload models.Upload) {
 	if r.Method != http.MethodGet {
 		WriteMethodNotAllowed(w, r, http.MethodGet)
@@ -497,6 +508,7 @@ func (h *Handler) serveUploadMedia(w http.ResponseWriter, r *http.Request, uploa
 	http.ServeContent(w, r, upload.Metadata["uploadedFilename"], stat.ModTime(), file)
 }
 
+// deleteUploadMedia deletes upload media and returns an error when cleanup or persistence fails.
 func (h *Handler) deleteUploadMedia(upload models.Upload) {
 	if upload.Metadata == nil {
 		return
@@ -509,6 +521,7 @@ func (h *Handler) deleteUploadMedia(upload models.Upload) {
 	_ = os.Remove(fullPath)
 }
 
+// uploadMediaDir performs upload media dir and propagates validation or dependency failures to the caller.
 func (h *Handler) uploadMediaDir() string {
 	h.uploadDirOnce.Do(func() {
 		dir := strings.TrimSpace(h.UploadMediaDir)
@@ -528,6 +541,7 @@ func (h *Handler) uploadMediaDir() string {
 	return h.uploadDir
 }
 
+// uploadMediaURL performs upload media url and propagates validation or dependency failures to the caller.
 func (h *Handler) uploadMediaURL(r *http.Request, uploadID, token string) string {
 	if r == nil {
 		return ""
@@ -560,6 +574,7 @@ func (h *Handler) uploadMediaURL(r *http.Request, uploadID, token string) string
 	return mediaURL.String()
 }
 
+// forwardedHost performs forwarded host and propagates validation or dependency failures to the caller.
 func forwardedHost(r *http.Request) string {
 	if r == nil {
 		return ""
@@ -592,6 +607,7 @@ func forwardedHost(r *http.Request) string {
 	return ""
 }
 
+// firstForwardedValue returns the first non-empty value from the provided candidates.
 func firstForwardedValue(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -604,6 +620,7 @@ func firstForwardedValue(value string) string {
 	return strings.TrimSpace(parts[0])
 }
 
+// requestScheme performs request scheme and propagates validation or dependency failures to the caller.
 func requestScheme(r *http.Request, trustForwarded bool) string {
 	if r == nil {
 		return "http"
@@ -620,6 +637,7 @@ func requestScheme(r *http.Request, trustForwarded bool) string {
 	return "http"
 }
 
+// shouldTrustForwarded performs should trust forwarded and propagates validation or dependency failures to the caller.
 func (h *Handler) shouldTrustForwarded(r *http.Request) bool {
 	if h == nil || r == nil {
 		return false
@@ -657,6 +675,7 @@ func (h *Handler) shouldTrustForwarded(r *http.Request) bool {
 	return false
 }
 
+// parseTrustedProxyNetworks parses trusted proxy networks and returns an error when the input is malformed.
 func parseTrustedProxyNetworks(raw []string) ([]*net.IPNet, error) {
 	var networks []*net.IPNet
 	for _, value := range raw {
@@ -681,6 +700,7 @@ func parseTrustedProxyNetworks(raw []string) ([]*net.IPNet, error) {
 	return networks, nil
 }
 
+// clientIPFromRemoteAddr performs client ipfrom remote addr and propagates validation or dependency failures to the caller.
 func clientIPFromRemoteAddr(remoteAddr string) string {
 	if remoteAddr == "" {
 		return ""
@@ -692,6 +712,7 @@ func clientIPFromRemoteAddr(remoteAddr string) string {
 	return host
 }
 
+// generateUploadMediaToken performs generate upload media token and propagates validation or dependency failures to the caller.
 func generateUploadMediaToken() string {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {

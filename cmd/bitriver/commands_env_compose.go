@@ -33,12 +33,14 @@ func runVersion(args []string) {
 	printVersionInfo(os.Stdout)
 }
 
+// printVersionInfo performs print version info and propagates validation or dependency failures to the caller.
 func printVersionInfo(out io.Writer) {
 	fmt.Fprintf(out, "Version: %s\n", valueOrFallback(Version, "dev"))
 	fmt.Fprintf(out, "Commit: %s\n", valueOrFallback(Commit, "unknown"))
 	fmt.Fprintf(out, "Date: %s\n", valueOrFallback(Date, "unknown"))
 }
 
+// runDoctor runs doctor and exits when the work completes or a dependency fails.
 func runDoctor(args []string) bool {
 	fs := flag.NewFlagSet("doctor", flag.ExitOnError)
 	fs.Usage = func() {
@@ -83,6 +85,7 @@ func runDoctor(args []string) bool {
 	return true
 }
 
+// valueOrFallback performs value or fallback and propagates validation or dependency failures to the caller.
 func valueOrFallback(value, fallback string) string {
 	if strings.TrimSpace(value) == "" {
 		return fallback
@@ -90,6 +93,7 @@ func valueOrFallback(value, fallback string) string {
 	return value
 }
 
+// repoRoot performs repo root and propagates validation or dependency failures to the caller.
 func repoRoot() string {
 	if cachedRepoRoot != "" {
 		return cachedRepoRoot
@@ -116,14 +120,17 @@ func repoRoot() string {
 	}
 }
 
+// defaultEnvFile returns the default env file for the current runtime mode.
 func defaultEnvFile() string {
 	return filepath.Join(repoRoot(), ".env")
 }
 
+// defaultComposeFile returns the default compose file for the current runtime mode.
 func defaultComposeFile() string {
 	return filepath.Join(repoRoot(), "deploy", "docker-compose.yml")
 }
 
+// defaultExampleEnv returns the default example env for the current runtime mode.
 func defaultExampleEnv() string {
 	return filepath.Join(repoRoot(), "deploy", ".env.example")
 }
@@ -170,6 +177,7 @@ var (
 	sslModeDisablePattern = regexp.MustCompile(`(?i)(^|[?&\s;])sslmode=disable([&#;\s]|$)`)
 )
 
+// init performs init and propagates validation or dependency failures to the caller.
 func init() {
 	placeholders, err := loadSampleCredentialValues(defaultExampleEnv(), sampleCredentialKeys)
 	if err != nil {
@@ -179,6 +187,7 @@ func init() {
 	forbiddenPlaceholders = placeholders
 }
 
+// defaultForbiddenPlaceholders returns the default forbidden placeholders for the current runtime mode.
 func defaultForbiddenPlaceholders() map[string]string {
 	return map[string]string{
 		"BITRIVER_LIVE_METRICS_TOKEN":             "metrics-collector-token",
@@ -204,6 +213,7 @@ type envValidatorResult struct {
 	Warnings []string
 }
 
+// runEnv runs env and exits when the work completes or a dependency fails.
 func runEnv(args []string) error {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "Usage: env <init|validate> [flags]")
@@ -220,6 +230,7 @@ func runEnv(args []string) error {
 	}
 }
 
+// runEnvInit runs env init and exits when the work completes or a dependency fails.
 func runEnvInit(args []string) error {
 	fs := flag.NewFlagSet("env init", flag.ContinueOnError)
 	envPath := fs.String("env-file", defaultEnvFile(), "path to write the environment file")
@@ -250,6 +261,7 @@ func runEnvInit(args []string) error {
 	return nil
 }
 
+// runEnvValidate runs env validate and exits when the work completes or a dependency fails.
 func runEnvValidate(args []string) error {
 	fs := flag.NewFlagSet("env validate", flag.ContinueOnError)
 	envPath := fs.String("env-file", defaultEnvFile(), "path to validate")
@@ -291,6 +303,7 @@ func runEnvValidate(args []string) error {
 	return nil
 }
 
+// runCompose runs compose and exits when the work completes or a dependency fails.
 func runCompose(args []string) error {
 	if len(args) == 0 {
 		return errors.New("compose requires a subcommand (up/down)")
@@ -316,6 +329,7 @@ var envValidateRunner = runEnvValidate
 var omeRunner = runOME
 var doctorRunner = runDoctor
 
+// composeArgsWithEnv performs compose args with env and propagates validation or dependency failures to the caller.
 func composeArgsWithEnv(composeFile, envFile string) []string {
 	args := []string{"compose"}
 	if strings.TrimSpace(envFile) != "" {
@@ -329,6 +343,7 @@ func composeArgsWithEnv(composeFile, envFile string) []string {
 	return args
 }
 
+// runComposeUp runs compose up and exits when the work completes or a dependency fails.
 func runComposeUp(args []string) error {
 	fs := flag.NewFlagSet("compose up", flag.ContinueOnError)
 	composeFile := fs.String("file", defaultComposeFile(), "compose file to use")
@@ -354,6 +369,7 @@ func runComposeUp(args []string) error {
 	return commandRunner("docker", composeArgs...)
 }
 
+// runComposeDown runs compose down and exits when the work completes or a dependency fails.
 func runComposeDown(args []string) error {
 	fs := flag.NewFlagSet("compose down", flag.ContinueOnError)
 	composeFile := fs.String("file", defaultComposeFile(), "compose file to use")
@@ -374,6 +390,7 @@ func runComposeDown(args []string) error {
 	return commandRunner("docker", composeArgs...)
 }
 
+// runQuickstart runs quickstart and exits when the work completes or a dependency fails.
 func runQuickstart(args []string) error {
 	fs := flag.NewFlagSet("quickstart", flag.ContinueOnError)
 	composeFile := fs.String("compose-file", defaultComposeFile(), "compose file to use")
@@ -431,6 +448,7 @@ func runQuickstart(args []string) error {
 	return nil
 }
 
+// runMigrations runs migrations and exits when the work completes or a dependency fails.
 func runMigrations(composeFile, envFile string) error {
 	if _, err := executil.LookPath("docker"); err != nil {
 		return err
@@ -444,6 +462,7 @@ func runMigrations(composeFile, envFile string) error {
 	return commandRunner("docker", args...)
 }
 
+// waitForAPIReadiness performs wait for apireadiness and propagates validation or dependency failures to the caller.
 func waitForAPIReadiness(values map[string]string) error {
 	readyzURL := fmt.Sprintf("http://127.0.0.1:%s/readyz", resolveAPIPort(values))
 	fmt.Fprintf(os.Stdout, "Waiting for API readiness at %s...\n", readyzURL)
@@ -473,6 +492,7 @@ func waitForAPIReadiness(values map[string]string) error {
 	return errors.New("API did not become ready before timeout")
 }
 
+// resolveAPIPort resolves apiport from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveAPIPort(values map[string]string) string {
 	if port := strings.TrimSpace(values["BITRIVER_LIVE_PORT"]); port != "" {
 		return port
@@ -486,6 +506,7 @@ func resolveAPIPort(values map[string]string) string {
 	return "8080"
 }
 
+// runBootstrapAdmin runs bootstrap admin and exits when the work completes or a dependency fails.
 func runBootstrapAdmin(composeFile, envFile string, values map[string]string) error {
 	email := strings.TrimSpace(values["BITRIVER_LIVE_ADMIN_EMAIL"])
 	password := strings.TrimSpace(values["BITRIVER_LIVE_ADMIN_PASSWORD"])
@@ -525,6 +546,7 @@ func runBootstrapAdmin(composeFile, envFile string, values map[string]string) er
 	return nil
 }
 
+// buildPostgresDSN builds postgres dsn from runtime state used by downstream handlers.
 func buildPostgresDSN(values map[string]string) (string, error) {
 	if dsn := strings.TrimSpace(values["BITRIVER_LIVE_POSTGRES_DSN"]); dsn != "" {
 		return dsn, nil

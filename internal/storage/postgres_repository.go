@@ -40,6 +40,7 @@ type postgresRepository struct {
 	retentionNow        func() time.Time
 }
 
+// Close performs close and returns an error when dependent systems reject the operation.
 func (r *postgresRepository) Close(ctx context.Context) error {
 	if r == nil || r.pool == nil {
 		return nil
@@ -57,6 +58,7 @@ func (r *postgresRepository) Close(ctx context.Context) error {
 	}
 }
 
+// Ping performs ping and returns an error when dependent systems reject the operation.
 func (r *postgresRepository) Ping(ctx context.Context) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -141,6 +143,7 @@ func NewPostgresRepository(dsn string, opts ...Option) (Repository, error) {
 	return repo, nil
 }
 
+// pingPostgresPool performs ping postgres pool and propagates validation or dependency failures to the caller.
 func pingPostgresPool(ctx context.Context, pool *pgxpool.Pool) error {
 	if pool == nil {
 		return errors.New("postgres pool unavailable")
@@ -159,6 +162,7 @@ func pingPostgresPool(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
+// wrapPostgresUnavailable performs wrap postgres unavailable and propagates validation or dependency failures to the caller.
 func wrapPostgresUnavailable(err error) error {
 	if err == nil {
 		return ErrPostgresUnavailable
@@ -166,6 +170,7 @@ func wrapPostgresUnavailable(err error) error {
 	return fmt.Errorf("%w: %w", ErrPostgresUnavailable, err)
 }
 
+// IngestHealth performs ingest health and returns an error when dependent systems reject the operation.
 func (r *postgresRepository) IngestHealth(ctx context.Context) []ingest.HealthStatus {
 	controller := r.ingestController
 	var statuses []ingest.HealthStatus
@@ -187,6 +192,7 @@ func (r *postgresRepository) IngestHealth(ctx context.Context) []ingest.HealthSt
 	return snapshot
 }
 
+// LastIngestHealth performs last ingest health and returns an error when dependent systems reject the operation.
 func (r *postgresRepository) LastIngestHealth() ([]ingest.HealthStatus, time.Time) {
 	r.ingestHealthMu.RLock()
 	defer r.ingestHealthMu.RUnlock()
@@ -194,6 +200,7 @@ func (r *postgresRepository) LastIngestHealth() ([]ingest.HealthStatus, time.Tim
 	return clone, r.ingestHealthUpdated
 }
 
+// acquireContext performs acquire context and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) acquireContext() (context.Context, context.CancelFunc) {
 	if r == nil {
 		return context.Background(), func() {}
@@ -204,6 +211,7 @@ func (r *postgresRepository) acquireContext() (context.Context, context.CancelFu
 	return context.Background(), func() {}
 }
 
+// withConn performs with conn and propagates validation or dependency failures to the caller.
 func (r *postgresRepository) withConn(fn func(context.Context, *pgxpool.Conn) error) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
@@ -218,6 +226,7 @@ func (r *postgresRepository) withConn(fn func(context.Context, *pgxpool.Conn) er
 	return fn(ctx, conn)
 }
 
+// encodeDonationAddresses performs encode donation addresses and propagates validation or dependency failures to the caller.
 func encodeDonationAddresses(addresses []models.CryptoAddress) ([]byte, error) {
 	if addresses == nil {
 		addresses = []models.CryptoAddress{}
@@ -229,6 +238,7 @@ func encodeDonationAddresses(addresses []models.CryptoAddress) ([]byte, error) {
 	return data, nil
 }
 
+// decodeDonationAddresses performs decode donation addresses and propagates validation or dependency failures to the caller.
 func decodeDonationAddresses(data []byte) ([]models.CryptoAddress, error) {
 	if len(data) == 0 {
 		return []models.CryptoAddress{}, nil
@@ -243,6 +253,7 @@ func decodeDonationAddresses(data []byte) ([]models.CryptoAddress, error) {
 	return addresses, nil
 }
 
+// encodeSocialLinks performs encode social links and propagates validation or dependency failures to the caller.
 func encodeSocialLinks(links []models.SocialLink) ([]byte, error) {
 	if links == nil {
 		links = []models.SocialLink{}
@@ -254,6 +265,7 @@ func encodeSocialLinks(links []models.SocialLink) ([]byte, error) {
 	return data, nil
 }
 
+// decodeSocialLinks performs decode social links and propagates validation or dependency failures to the caller.
 func decodeSocialLinks(data []byte) ([]models.SocialLink, error) {
 	if len(data) == 0 {
 		return []models.SocialLink{}, nil
@@ -268,6 +280,7 @@ func decodeSocialLinks(data []byte) ([]models.SocialLink, error) {
 	return links, nil
 }
 
+// rollbackTx performs rollback tx and propagates validation or dependency failures to the caller.
 func rollbackTx(ctx context.Context, tx pgx.Tx) {
 	if tx == nil {
 		return
@@ -277,6 +290,7 @@ func rollbackTx(ctx context.Context, tx pgx.Tx) {
 	}
 }
 
+// ensureUserExists performs ensure user exists and propagates validation or dependency failures to the caller.
 func ensureUserExists(ctx context.Context, tx pgx.Tx, userID string) error {
 	var exists bool
 	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1)", userID).Scan(&exists); err != nil {
@@ -288,6 +302,7 @@ func ensureUserExists(ctx context.Context, tx pgx.Tx, userID string) error {
 	return nil
 }
 
+// ensureChannelExists performs ensure channel exists and propagates validation or dependency failures to the caller.
 func ensureChannelExists(ctx context.Context, tx pgx.Tx, channelID string) error {
 	var exists bool
 	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM channels WHERE id = $1)", channelID).Scan(&exists); err != nil {
@@ -299,6 +314,7 @@ func ensureChannelExists(ctx context.Context, tx pgx.Tx, channelID string) error
 	return nil
 }
 
+// UpsertProfile performs upsert profile and returns an error when dependent systems reject the operation.
 func (r *postgresRepository) UpsertProfile(userID string, update ProfileUpdate) (models.Profile, error) {
 	if r == nil || r.pool == nil {
 		return models.Profile{}, ErrPostgresUnavailable
@@ -540,6 +556,7 @@ RETURNING created_at, updated_at`,
 	return profile, nil
 }
 
+// GetProfile returns profile from the configured backing services.
 func (r *postgresRepository) GetProfile(userID string) (models.Profile, bool) {
 	if r == nil || r.pool == nil {
 		return models.Profile{}, false
@@ -651,6 +668,7 @@ func (r *postgresRepository) GetProfile(userID string) (models.Profile, bool) {
 	return profile, found
 }
 
+// ListProfiles returns profiles from the configured backing services.
 func (r *postgresRepository) ListProfiles() []models.Profile {
 	if r == nil || r.pool == nil {
 		return nil

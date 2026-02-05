@@ -49,6 +49,7 @@ func RepositoryUploadStore(repo storage.Repository) UploadStore {
 	return repositoryUploadStore{repo: repo}
 }
 
+// ListPendingUploads returns pending uploads from the configured backing services.
 func (s repositoryUploadStore) ListPendingUploads(ctx context.Context, limit int) ([]models.Upload, error) {
 	if s.repo == nil {
 		return nil, nil
@@ -91,6 +92,7 @@ func (s repositoryUploadStore) ListPendingUploads(ctx context.Context, limit int
 	return pending, firstErr
 }
 
+// GetUpload returns upload from the configured backing services.
 func (s repositoryUploadStore) GetUpload(ctx context.Context, id string) (models.Upload, bool) {
 	if s.repo == nil {
 		return models.Upload{}, false
@@ -104,6 +106,7 @@ func (s repositoryUploadStore) GetUpload(ctx context.Context, id string) (models
 	return s.repo.GetUpload(id)
 }
 
+// UpdateUpload updates upload and returns an error when persistence or validation fails.
 func (s repositoryUploadStore) UpdateUpload(ctx context.Context, id string, update storage.UploadUpdate) (models.Upload, error) {
 	if s.repo == nil {
 		return models.Upload{}, fmt.Errorf("upload store unavailable")
@@ -195,6 +198,7 @@ func NewUploadProcessor(cfg UploadProcessorConfig) *UploadProcessor {
 	return processor
 }
 
+// Start performs start and returns an error when dependent systems reject the operation.
 func (p *UploadProcessor) Start() {
 	if p == nil {
 		return
@@ -216,6 +220,7 @@ func (p *UploadProcessor) Start() {
 	go p.recoverPending()
 }
 
+// Shutdown performs shutdown and returns an error when dependent systems reject the operation.
 func (p *UploadProcessor) Shutdown(ctx context.Context) error {
 	if p == nil {
 		return nil
@@ -234,6 +239,7 @@ func (p *UploadProcessor) Shutdown(ctx context.Context) error {
 	}
 }
 
+// Enqueue performs enqueue and returns an error when dependent systems reject the operation.
 func (p *UploadProcessor) Enqueue(id string) {
 	if p == nil || strings.TrimSpace(id) == "" {
 		return
@@ -249,6 +255,7 @@ func (p *UploadProcessor) Enqueue(id string) {
 	}
 }
 
+// worker performs worker and propagates validation or dependency failures to the caller.
 func (p *UploadProcessor) worker() {
 	defer p.wg.Done()
 	for {
@@ -268,6 +275,7 @@ func (p *UploadProcessor) worker() {
 	}
 }
 
+// beginWork performs begin work and propagates validation or dependency failures to the caller.
 func (p *UploadProcessor) beginWork(id string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -278,12 +286,14 @@ func (p *UploadProcessor) beginWork(id string) bool {
 	return true
 }
 
+// finishWork performs finish work and propagates validation or dependency failures to the caller.
 func (p *UploadProcessor) finishWork(id string) {
 	p.mu.Lock()
 	delete(p.inFlight, id)
 	p.mu.Unlock()
 }
 
+// recoverPending performs recover pending and propagates validation or dependency failures to the caller.
 func (p *UploadProcessor) recoverPending() {
 	defer p.wg.Done()
 
@@ -304,6 +314,7 @@ func (p *UploadProcessor) recoverPending() {
 	}
 }
 
+// processUpload performs process upload and propagates validation or dependency failures to the caller.
 func (p *UploadProcessor) processUpload(id string) {
 	if p.store == nil {
 		return
@@ -404,6 +415,7 @@ func (p *UploadProcessor) processUpload(id string) {
 	p.logger.Info("upload transcoded", "upload_id", id, "channel_id", upload.ChannelID, "playback_url", playbackURL)
 }
 
+// scheduleRetry performs schedule retry and propagates validation or dependency failures to the caller.
 func (p *UploadProcessor) scheduleRetry(id string) {
 	if p == nil || strings.TrimSpace(id) == "" {
 		return
@@ -425,6 +437,7 @@ func (p *UploadProcessor) scheduleRetry(id string) {
 	}()
 }
 
+// failUpload performs fail upload and propagates validation or dependency failures to the caller.
 func (p *UploadProcessor) failUpload(id, source string, err error) {
 	if p.store == nil {
 		return
@@ -448,6 +461,7 @@ func (p *UploadProcessor) failUpload(id, source string, err error) {
 	p.logger.Error("upload transcode failed", "upload_id", id, "error", err)
 }
 
+// stringPtr returns a stable string form for flag and log output.
 func stringPtr(s string) *string {
 	return &s
 }

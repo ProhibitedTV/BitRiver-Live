@@ -20,22 +20,26 @@ type optionAdapter struct {
 	pg   func(*PostgresConfig)
 }
 
+// applyJSON performs apply json and propagates validation or dependency failures to the caller.
 func (o optionAdapter) applyJSON(store *Storage) {
 	if o.json != nil && store != nil {
 		o.json(store)
 	}
 }
 
+// applyPostgres performs apply postgres and propagates validation or dependency failures to the caller.
 func (o optionAdapter) applyPostgres(cfg *PostgresConfig) {
 	if o.pg != nil && cfg != nil {
 		o.pg(cfg)
 	}
 }
 
+// composeOption performs compose option and propagates validation or dependency failures to the caller.
 func composeOption(json func(*Storage), pg func(*PostgresConfig)) Option {
 	return optionAdapter{json: json, pg: pg}
 }
 
+// postgresOnlyOption performs postgres only option and propagates validation or dependency failures to the caller.
 func postgresOnlyOption(pg func(*PostgresConfig)) Option {
 	return optionAdapter{pg: pg}
 }

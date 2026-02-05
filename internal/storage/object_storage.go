@@ -14,6 +14,7 @@ import (
 	"time"
 )
 
+// applyObjectStorageDefaults performs apply object storage defaults and propagates validation or dependency failures to the caller.
 func applyObjectStorageDefaults(cfg ObjectStorageConfig) ObjectStorageConfig {
 	if cfg.RequestTimeout <= 0 {
 		cfg.RequestTimeout = defaultObjectStorageRequestTimeout
@@ -21,6 +22,7 @@ func applyObjectStorageDefaults(cfg ObjectStorageConfig) ObjectStorageConfig {
 	return cfg
 }
 
+// requestTimeout performs request timeout and propagates validation or dependency failures to the caller.
 func (cfg ObjectStorageConfig) requestTimeout() time.Duration {
 	if cfg.RequestTimeout <= 0 {
 		return defaultObjectStorageRequestTimeout
@@ -30,16 +32,20 @@ func (cfg ObjectStorageConfig) requestTimeout() time.Duration {
 
 type noopObjectStorageClient struct{}
 
+// Enabled performs enabled and returns an error when dependent systems reject the operation.
 func (noopObjectStorageClient) Enabled() bool { return false }
 
+// Upload performs upload and returns an error when dependent systems reject the operation.
 func (noopObjectStorageClient) Upload(ctx context.Context, key, contentType string, body []byte) (objectReference, error) {
 	return objectReference{}, nil
 }
 
+// Delete performs delete and returns an error when dependent systems reject the operation.
 func (noopObjectStorageClient) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+// newObjectStorageClient builds and returns object storage client using the supplied dependencies.
 func newObjectStorageClient(cfg ObjectStorageConfig) objectStorageClient {
 	cfg = applyObjectStorageDefaults(cfg)
 	trimmedBucket := strings.TrimSpace(cfg.Bucket)
@@ -77,8 +83,10 @@ type s3ObjectStorageClient struct {
 	httpClient *http.Client
 }
 
+// Enabled performs enabled and returns an error when dependent systems reject the operation.
 func (c *s3ObjectStorageClient) Enabled() bool { return true }
 
+// Upload performs upload and returns an error when dependent systems reject the operation.
 func (c *s3ObjectStorageClient) Upload(ctx context.Context, key, contentType string, body []byte) (objectReference, error) {
 	finalKey := c.applyPrefix(key)
 	target := c.objectURL(finalKey)
@@ -106,6 +114,7 @@ func (c *s3ObjectStorageClient) Upload(ctx context.Context, key, contentType str
 	return objectReference{Key: finalKey, URL: c.publicURL(finalKey)}, nil
 }
 
+// Delete performs delete and returns an error when dependent systems reject the operation.
 func (c *s3ObjectStorageClient) Delete(ctx context.Context, key string) error {
 	finalKey := c.applyPrefix(key)
 	target := c.objectURL(finalKey)
@@ -129,6 +138,7 @@ func (c *s3ObjectStorageClient) Delete(ctx context.Context, key string) error {
 	return fmt.Errorf("delete object %s: unexpected status %d", finalKey, response.StatusCode)
 }
 
+// applyPrefix performs apply prefix and propagates validation or dependency failures to the caller.
 func (c *s3ObjectStorageClient) applyPrefix(key string) string {
 	trimmed := strings.TrimLeft(strings.TrimSpace(key), "/")
 	prefix := strings.Trim(strings.TrimSpace(c.cfg.Prefix), "/")
@@ -144,6 +154,7 @@ func (c *s3ObjectStorageClient) applyPrefix(key string) string {
 	return prefix + "/" + trimmed
 }
 
+// objectURL performs object url and propagates validation or dependency failures to the caller.
 func (c *s3ObjectStorageClient) objectURL(finalKey string) *url.URL {
 	basePath := strings.TrimRight(c.endpoint.Path, "/")
 	path := "/" + strings.TrimLeft(c.cfg.Bucket, "/")
@@ -159,6 +170,7 @@ func (c *s3ObjectStorageClient) objectURL(finalKey string) *url.URL {
 	return &u
 }
 
+// publicURL performs public url and propagates validation or dependency failures to the caller.
 func (c *s3ObjectStorageClient) publicURL(key string) string {
 	base := strings.TrimSpace(c.cfg.PublicEndpoint)
 	if base == "" {
@@ -172,6 +184,7 @@ func (c *s3ObjectStorageClient) publicURL(key string) string {
 	return trimmedBase + "/" + trimmedKey
 }
 
+// signRequest performs sign request and propagates validation or dependency failures to the caller.
 func (c *s3ObjectStorageClient) signRequest(req *http.Request, payloadHash string) error {
 	req.Host = req.URL.Host
 	req.Header.Set("Host", req.URL.Host)
@@ -219,6 +232,7 @@ func (c *s3ObjectStorageClient) signRequest(req *http.Request, payloadHash strin
 	return nil
 }
 
+// canonicalizeHeaders performs canonicalize headers and propagates validation or dependency failures to the caller.
 func canonicalizeHeaders(req *http.Request) (string, string) {
 	headerMap := make(map[string][]string)
 	for key, values := range req.Header {
@@ -253,6 +267,7 @@ func canonicalizeHeaders(req *http.Request) (string, string) {
 	return builder.String(), strings.Join(signed, ";")
 }
 
+// canonicalURI performs canonical uri and propagates validation or dependency failures to the caller.
 func canonicalURI(u *url.URL) string {
 	if u == nil {
 		return "/"
@@ -267,6 +282,7 @@ func canonicalURI(u *url.URL) string {
 	return path
 }
 
+// canonicalQuery performs canonical query and propagates validation or dependency failures to the caller.
 func canonicalQuery(u *url.URL) string {
 	if u == nil {
 		return ""
@@ -298,6 +314,7 @@ func canonicalQuery(u *url.URL) string {
 	return builder.String()
 }
 
+// deriveSigningKey performs derive signing key and propagates validation or dependency failures to the caller.
 func deriveSigningKey(secret, dateStamp, region string) []byte {
 	kDate := hmacSHA256([]byte("AWS4"+secret), []byte(dateStamp))
 	kRegion := hmacSHA256(kDate, []byte(region))
@@ -305,12 +322,14 @@ func deriveSigningKey(secret, dateStamp, region string) []byte {
 	return hmacSHA256(kService, []byte("aws4_request"))
 }
 
+// hmacSHA256 performs hmac sha256 and propagates validation or dependency failures to the caller.
 func hmacSHA256(key []byte, data []byte) []byte {
 	mac := hmac.New(sha256.New, key)
 	mac.Write(data)
 	return mac.Sum(nil)
 }
 
+// hmacSHA256Hex performs hmac sha256 hex and propagates validation or dependency failures to the caller.
 func hmacSHA256Hex(key []byte, data string) string {
 	mac := hmac.New(sha256.New, key)
 	mac.Write([]byte(data))
@@ -319,6 +338,7 @@ func hmacSHA256Hex(key []byte, data string) string {
 
 var emptyPayloadHash = hashSHA256Hex(nil)
 
+// hashSHA256Hex performs hash sha256 hex and propagates validation or dependency failures to the caller.
 func hashSHA256Hex(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
