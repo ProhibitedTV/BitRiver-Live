@@ -144,16 +144,16 @@ func TestOmeConfigRenderingOmitsUnsupportedRootBindHostTags(t *testing.T) {
 	output := renderOMEConfig(t, repoRoot, envContents)
 
 	var parsed struct {
-		IP   string `xml:"IP"`
+		IP       string `xml:"IP"`
+		Managers struct {
+			API struct {
+				Port    string `xml:"Port"`
+				TLSPort string `xml:"TLSPort"`
+			} `xml:"API"`
+		} `xml:"Managers"`
 		Bind struct {
-			Address  string `xml:"Address"`
-			IP       string `xml:"IP"`
-			Managers struct {
-				API struct {
-					Port    string `xml:"Port"`
-					TLSPort string `xml:"TLSPort"`
-				} `xml:"API"`
-			} `xml:"Managers"`
+			Address string `xml:"Address"`
+			IP      string `xml:"IP"`
 		} `xml:"Bind"`
 	}
 
@@ -167,8 +167,8 @@ func TestOmeConfigRenderingOmitsUnsupportedRootBindHostTags(t *testing.T) {
 	if parsed.Bind.IP != "" || parsed.Bind.Address != "" {
 		t.Fatalf("expected root bind to omit host tags, got IP=%q Address=%q", parsed.Bind.IP, parsed.Bind.Address)
 	}
-	if parsed.Bind.Managers.API.Port != "8081" || parsed.Bind.Managers.API.TLSPort != "8082" {
-		t.Fatalf("expected API ports to be rewritten, got %s/%s", parsed.Bind.Managers.API.Port, parsed.Bind.Managers.API.TLSPort)
+	if parsed.Managers.API.Port != "8081" || parsed.Managers.API.TLSPort != "8082" {
+		t.Fatalf("expected API ports to be rewritten, got %s/%s", parsed.Managers.API.Port, parsed.Managers.API.TLSPort)
 	}
 }
 
@@ -203,7 +203,7 @@ func TestOmeConfigRenderingPreservesXmlComments(t *testing.T) {
 	}
 }
 
-func TestOmeConfigRenderingEscapesXml(t *testing.T) {
+func TestOmeConfigRenderingUsesCanonicalAPIAccessToken(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -214,9 +214,7 @@ func TestOmeConfigRenderingEscapesXml(t *testing.T) {
 		"BITRIVER_OME_IP=0.0.0.0",
 		"BITRIVER_OME_SERVER_PORT=9000",
 		"BITRIVER_OME_SERVER_TLS_PORT=9443",
-		"BITRIVER_OME_USERNAME=admin<&",
-		"BITRIVER_OME_PASSWORD=pass<&>'\"",
-		"BITRIVER_OME_API_TOKEN=token",
+		"BITRIVER_OME_API_TOKEN=token<&>'\"",
 		"BITRIVER_OME_TCP_RELAY=*:3478",
 		"BITRIVER_OME_ICE_CANDIDATE=*:10000-10009/udp",
 		"BITRIVER_OME_IMAGE_TAG=0.16.0",
@@ -224,21 +222,21 @@ func TestOmeConfigRenderingEscapesXml(t *testing.T) {
 	rendered := renderOMEConfig(t, repoRoot, envContents)
 
 	contents := string(rendered)
-	authBlock := extractSection(contents, "<Authentication>", "</Authentication>")
-	if authBlock == "" {
-		t.Fatalf("expected Authentication block in rendered output, got:\n%s", contents)
+	if strings.Contains(contents, "<AccessTokens>") {
+		t.Fatalf("expected canonical <AccessToken> without <AccessTokens> wrapper, got:\n%s", contents)
 	}
-	username := extractTagValue(t, authBlock, "ID")
-	password := extractTagValue(t, authBlock, "Password")
-
-	if username != "admin&lt;&amp;" {
-		t.Fatalf("expected username to be escaped, got %q", username)
+	if strings.Contains(contents, "<Authentication>") {
+		t.Fatalf("expected rendered config to omit unsupported API <Authentication> block, got:\n%s", contents)
 	}
-	if password != "pass&lt;&amp;&gt;&#39;&#34;" {
-		t.Fatalf("expected password to be escaped, got %q", password)
+	apiBlock := extractSection(contents, "<API>", "</API>")
+	if apiBlock == "" {
+		t.Fatalf("expected API block in rendered output, got:\n%s", contents)
+	}
+	accessToken := extractTagValue(t, apiBlock, "AccessToken")
+	if accessToken != "token&lt;&amp;&gt;&#39;&#34;" {
+		t.Fatalf("expected access token to be escaped, got %q", accessToken)
 	}
 }
-
 func renderOMEConfig(t *testing.T, repoRoot, envContents string) []byte {
 	t.Helper()
 

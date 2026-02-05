@@ -155,7 +155,7 @@ for line in env_path.read_text().splitlines():
     key, value = line.split("=", 1)
     env_values[key] = value
 
-required = ["BITRIVER_OME_USERNAME", "BITRIVER_OME_PASSWORD", "BITRIVER_OME_API_TOKEN"]
+required = ["BITRIVER_OME_API_TOKEN"]
 missing = [key for key in required if not env_values.get(key)]
 if missing:
     sys.exit(f"error: missing required OME credentials in {env_path}: {', '.join(missing)}")
@@ -174,33 +174,20 @@ if (root_bind_ip and root_bind_ip.strip()) or (legacy_root_bind_address and lega
     sys.exit("error: expected root <Bind> to omit unsupported host child tags (<IP>/<Address>)")
 root_port = root.findtext(".//Bind/Providers/WebRTC/Signalling/Port")
 root_tls_port = root.findtext(".//Bind/Providers/WebRTC/Signalling/TLSPort")
-api_access_token = root.findtext("./Bind/Managers/API/AccessTokens/AccessToken") or root.findtext("./Bind/Managers/API/AccessToken")
-bind = root.findtext(".//Control/Server/Listeners/TCP/Bind")
-ip = root.findtext(".//Control/Server/Listeners/TCP/IP")
-username = root.findtext(".//Control/Authentication/User/ID")
-password = root.findtext(".//Control/Authentication/User/Password")
+api_access_token = root.findtext("./Managers/API/AccessToken")
+legacy_access_tokens = root.find("./Managers/API/AccessTokens")
 
 values = {
     "RootBind": root_bind_ip,
     "RootPort": root_port,
     "RootTLSPort": root_tls_port,
     "AccessToken": api_access_token,
-    "Bind": bind,
-    "IP": ip,
-    "ID": username,
-    "Password": password,
 }
 
 empty = [tag for tag, value in values.items() if value is None or not value.strip()]
 if empty:
     sys.exit(
         "error: OME config is missing required tags: " + ", ".join(f"<{tag}>" for tag in empty)
-    )
-
-if bind != expected_bind or ip != expected_bind:
-    sys.exit(
-        "error: expected <Bind> and <IP> to match BITRIVER_OME_BIND="
-        f"{expected_bind}; got Bind='{bind}', IP='{ip}'"
     )
 
 if root_port != expected_port or root_tls_port != expected_tls_port:
@@ -210,11 +197,11 @@ if root_port != expected_port or root_tls_port != expected_tls_port:
         f"expected port={expected_port}, tlsPort={expected_tls_port}"
     )
 
-if username != env_values["BITRIVER_OME_USERNAME"] or password != env_values["BITRIVER_OME_PASSWORD"]:
-    sys.exit("error: rendered OME credentials do not match .env defaults")
+if legacy_access_tokens is not None:
+    sys.exit("error: rendered OME config still uses deprecated <AccessTokens> wrapper")
 
 if api_access_token != env_values["BITRIVER_OME_API_TOKEN"]:
-    sys.exit("error: rendered OME access token does not match .env defaults")
+    sys.exit("error: rendered OME API <AccessToken> does not match .env defaults")
 
 legacy_token = env_values.get("BITRIVER_OME_ACCESS_TOKEN")
 if legacy_token and legacy_token != env_values["BITRIVER_OME_API_TOKEN"]:
