@@ -80,6 +80,10 @@ if [[ ! -f "$TEMPLATE_FILE" ]]; then
   exit 1
 fi
 
+if [[ -d "$OUTPUT_FILE" ]]; then
+  rm -rf "$OUTPUT_FILE"
+fi
+
 set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
