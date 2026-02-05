@@ -714,6 +714,49 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	}
 }
 
+func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	composePath := filepath.Join(t.TempDir(), "compose.yml")
+
+	if err := os.WriteFile(composePath, []byte("services: {}\n"), 0o644); err != nil {
+		t.Fatalf("write compose: %v", err)
+	}
+
+	originalDoctor := doctorRunner
+	originalOMERunner := omeRunner
+	originalMigrations := migrationsRunner
+	originalCompose := composeUpRunner
+	originalWaiter := quickstartWaiter
+	originalBootstrap := bootstrapAdminRunner
+	t.Cleanup(func() {
+		doctorRunner = originalDoctor
+		omeRunner = originalOMERunner
+		migrationsRunner = originalMigrations
+		composeUpRunner = originalCompose
+		quickstartWaiter = originalWaiter
+		bootstrapAdminRunner = originalBootstrap
+	})
+
+	doctorRunner = func([]string) bool { return true }
+	omeRunner = func([]string) error { return nil }
+	migrationsRunner = func(string, string) error { return nil }
+	composeUpRunner = func([]string) error { return nil }
+	quickstartWaiter = func(map[string]string) error { return nil }
+	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
+
+	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
+		t.Fatalf("quickstart failed on first run: %v", err)
+	}
+
+	values, err := loadEnvValues(envPath, false)
+	if err != nil {
+		t.Fatalf("read env file: %v", err)
+	}
+	if values["BITRIVER_LIVE_MODE"] != "production" {
+		t.Fatalf("expected first-run quickstart env to persist production mode, got %q", values["BITRIVER_LIVE_MODE"])
+	}
+}
+
 func renderOMEConfigLegacy(cfg omeRenderConfig) (string, error) {
 	data, err := os.ReadFile(cfg.TemplatePath)
 	if err != nil {
