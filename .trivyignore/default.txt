@@ -1,0 +1,3 @@
+# Default Trivy ignore file.
+# Keep this file empty unless an exception applies broadly across multiple images.
+# Prefer image-specific files under .trivyignore/ for tightly scoped exceptions.
