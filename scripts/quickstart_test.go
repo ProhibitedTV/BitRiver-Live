@@ -144,16 +144,16 @@ func TestOmeConfigRenderingOmitsUnsupportedRootBindHostTags(t *testing.T) {
 	output := renderOMEConfig(t, repoRoot, envContents)
 
 	var parsed struct {
-		IP       string `xml:"IP"`
-		Managers struct {
-			API struct {
-				Port    string `xml:"Port"`
-				TLSPort string `xml:"TLSPort"`
-			} `xml:"API"`
-		} `xml:"Managers"`
+		IP   string `xml:"IP"`
 		Bind struct {
-			Address string `xml:"Address"`
-			IP      string `xml:"IP"`
+			Address  string `xml:"Address"`
+			IP       string `xml:"IP"`
+			Managers struct {
+				API struct {
+					Port    string `xml:"Port"`
+					TLSPort string `xml:"TLSPort"`
+				} `xml:"API"`
+			} `xml:"Managers"`
 		} `xml:"Bind"`
 	}
 
@@ -167,8 +167,8 @@ func TestOmeConfigRenderingOmitsUnsupportedRootBindHostTags(t *testing.T) {
 	if parsed.Bind.IP != "" || parsed.Bind.Address != "" {
 		t.Fatalf("expected root bind to omit host tags, got IP=%q Address=%q", parsed.Bind.IP, parsed.Bind.Address)
 	}
-	if parsed.Managers.API.Port != "8081" || parsed.Managers.API.TLSPort != "8082" {
-		t.Fatalf("expected API ports to be rewritten, got %s/%s", parsed.Managers.API.Port, parsed.Managers.API.TLSPort)
+	if parsed.Bind.Managers.API.Port != "8081" || parsed.Bind.Managers.API.TLSPort != "8082" {
+		t.Fatalf("expected API ports to be rewritten, got %s/%s", parsed.Bind.Managers.API.Port, parsed.Bind.Managers.API.TLSPort)
 	}
 }
 
