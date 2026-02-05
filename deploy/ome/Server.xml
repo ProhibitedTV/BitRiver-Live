@@ -111,34 +111,44 @@
                     <OutputProfiles>
                         <OutputProfile>
                             <Name>copy_passthrough</Name>
-                            <OutputStreams>
-                                <OutputStream>
-                                    <Name>copy</Name>
-                                    <Video>
-                                        <Codec>copy</Codec>
-                                    </Video>
-                                    <Audio>
-                                        <Codec>copy</Codec>
-                                    </Audio>
-                                </OutputStream>
-                            </OutputStreams>
-                            <!-- OutputStreams are required for the pinned 0.16.x schema. -->
+                            <OutputStreamName>${OriginStreamName}</OutputStreamName>
+                            <Encodes>
+                                <Video>
+                                    <Name>bypass_video</Name>
+                                    <Bypass>true</Bypass>
+                                </Video>
+                                <Audio>
+                                    <Name>bypass_audio</Name>
+                                    <Bypass>true</Bypass>
+                                </Audio>
+                            </Encodes>
                         </OutputProfile>
                     </OutputProfiles>
 
                     <Publishers>
+                        <AppWorkerCount>1</AppWorkerCount>
+                        <StreamWorkerCount>8</StreamWorkerCount>
                         <WebRTC>
-                            <Enable>true</Enable>
-                            <OutputProfile>copy_passthrough</OutputProfile>
+                            <Timeout>30000</Timeout>
+                            <Rtx>false</Rtx>
+                            <Ulpfec>false</Ulpfec>
+                            <JitterBuffer>false</JitterBuffer>
                         </WebRTC>
+                        <LLHLS>
+                            <ChunkDuration>0.5</ChunkDuration>
+                            <PartHoldBack>1.5</PartHoldBack>
+                            <SegmentDuration>6</SegmentDuration>
+                            <SegmentCount>10</SegmentCount>
+                        </LLHLS>
                     </Publishers>
 
                     <Providers>
-                        <RTMP>
-                            <Enable>true</Enable>
-                        </RTMP>
+                        <RTMP />
                         <WebRTC>
-                            <Enable>true</Enable>
+                            <Timeout>30000</Timeout>
+                            <CrossDomains>
+                                <Url>*</Url>
+                            </CrossDomains>
                         </WebRTC>
                     </Providers>
                 </Application>
