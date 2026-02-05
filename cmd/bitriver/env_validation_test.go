@@ -7,6 +7,18 @@ import (
 	"testing"
 )
 
+func TestEnvInitThenValidatePassesOnFreshRepo(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+
+	if err := runEnvInit([]string{"--env-file", envPath, "--example", defaultExampleEnv()}); err != nil {
+		t.Fatalf("env init failed: %v", err)
+	}
+
+	if err := runEnvValidate([]string{"--env-file", envPath}); err != nil {
+		t.Fatalf("expected env validate to pass immediately after env init, got %v", err)
+	}
+}
+
 func TestValidateEnvRequiresImageTags(t *testing.T) {
 	cert, key := tempTLSFiles(t)
 	values := map[string]string{
