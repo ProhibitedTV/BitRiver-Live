@@ -3,9 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -314,6 +317,171 @@ func TestRenderOMEConfigPreservesXmlComments(t *testing.T) {
 	}
 }
 
+func TestRenderOMEConfigMatchesLegacyOutput(t *testing.T) {
+	templatePath := filepath.Join(repoRoot(), "deploy", "ome", "Server.xml")
+	outputPath := filepath.Join(t.TempDir(), "Server.generated.xml")
+
+	cfg := omeRenderConfig{
+		TemplatePath: templatePath,
+		OutputPath:   outputPath,
+		Bind:         "10.0.0.10",
+		ServerIP:     "10.0.0.11",
+		Port:         "9000",
+		TLSPort:      "9443",
+		LLHLSPort:    "8080",
+		LLHLSTLSPort: "8443",
+		Username:     "ome-user",
+		Password:     "ome-pass",
+		APIToken:     "api-token",
+		AccessToken:  "access-token",
+		ImageTag:     "0.16.0",
+		TCPRelay:     "127.0.0.1:3478",
+		ICECandidate: "127.0.0.1:10000-10009/udp",
+	}
+
+	if err := renderOMEConfig(cfg); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+
+	newOutput, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+
+	legacyOutput, err := renderOMEConfigLegacy(cfg)
+	if err != nil {
+		t.Fatalf("legacy render: %v", err)
+	}
+
+	if string(newOutput) != legacyOutput {
+		t.Fatalf("expected new output to match legacy renderer")
+	}
+}
+
+func TestRenderOMEConfigFallbackAccessTokenAndIceCandidates(t *testing.T) {
+	templatePath := filepath.Join(t.TempDir(), "Server.xml")
+	outputPath := filepath.Join(t.TempDir(), "Server.generated.xml")
+	template := strings.Join([]string{
+		"<Server version=\"10\">",
+		"  <Bind>",
+		"    <Address>0.0.0.0</Address>",
+		"    <Port>9000</Port>",
+		"    <TLSPort>9443</TLSPort>",
+		"    <Publishers>",
+		"      <LLHLS>",
+		"        <Port>8080</Port>",
+		"      </LLHLS>",
+		"    </Publishers>",
+		"  </Bind>",
+		"  <Authentication>",
+		"    <ID>old</ID>",
+		"    <Password>old</Password>",
+		"  </Authentication>",
+		"  <AccessToken>old-token</AccessToken>",
+		"  <IceCandidates>",
+		"  </IceCandidates>",
+		"</Server>",
+	}, "\n")
+	if err := os.WriteFile(templatePath, []byte(template), 0o644); err != nil {
+		t.Fatalf("write template: %v", err)
+	}
+
+	cfg := omeRenderConfig{
+		TemplatePath: templatePath,
+		OutputPath:   outputPath,
+		Bind:         "10.10.0.1",
+		ServerIP:     "10.10.0.2",
+		Port:         "9001",
+		TLSPort:      "9444",
+		LLHLSPort:    "8081",
+		LLHLSTLSPort: "8444",
+		Username:     "ome-user",
+		Password:     "ome-pass",
+		APIToken:     "api-token",
+		AccessToken:  "access-token",
+		ImageTag:     "0.16.0",
+		TCPRelay:     "127.0.0.1:3478",
+		ICECandidate: "127.0.0.1:10000-10009/udp",
+	}
+
+	if err := renderOMEConfig(cfg); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+
+	output, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+
+	got := string(output)
+	if !strings.Contains(got, "<AccessToken>access-token</AccessToken>") {
+		t.Fatalf("expected access token replacement, got output:\n%s", got)
+	}
+	if !strings.Contains(got, "<TcpRelay>127.0.0.1:3478</TcpRelay>") {
+		t.Fatalf("expected TcpRelay insertion, got output:\n%s", got)
+	}
+	if !strings.Contains(got, "<IceCandidate>127.0.0.1:10000-10009/udp</IceCandidate>") {
+		t.Fatalf("expected IceCandidate insertion, got output:\n%s", got)
+	}
+}
+
+func BenchmarkRenderOMEConfig(b *testing.B) {
+	templatePath := filepath.Join(repoRoot(), "deploy", "ome", "Server.xml")
+	outputPath := filepath.Join(b.TempDir(), "Server.generated.xml")
+	cfg := omeRenderConfig{
+		TemplatePath: templatePath,
+		OutputPath:   outputPath,
+		Bind:         "10.0.0.10",
+		ServerIP:     "10.0.0.11",
+		Port:         "9000",
+		TLSPort:      "9443",
+		LLHLSPort:    "8080",
+		LLHLSTLSPort: "8443",
+		Username:     "ome-user",
+		Password:     "ome-pass",
+		APIToken:     "api-token",
+		AccessToken:  "access-token",
+		ImageTag:     "0.16.0",
+		TCPRelay:     "127.0.0.1:3478",
+		ICECandidate: "127.0.0.1:10000-10009/udp",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := renderOMEConfig(cfg); err != nil {
+			b.Fatalf("render: %v", err)
+		}
+	}
+}
+
+func BenchmarkRenderOMEConfigLegacy(b *testing.B) {
+	templatePath := filepath.Join(repoRoot(), "deploy", "ome", "Server.xml")
+	cfg := omeRenderConfig{
+		TemplatePath: templatePath,
+		OutputPath:   filepath.Join(b.TempDir(), "Server.generated.xml"),
+		Bind:         "10.0.0.10",
+		ServerIP:     "10.0.0.11",
+		Port:         "9000",
+		TLSPort:      "9443",
+		LLHLSPort:    "8080",
+		LLHLSTLSPort: "8443",
+		Username:     "ome-user",
+		Password:     "ome-pass",
+		APIToken:     "api-token",
+		AccessToken:  "access-token",
+		ImageTag:     "0.16.0",
+		TCPRelay:     "127.0.0.1:3478",
+		ICECandidate: "127.0.0.1:10000-10009/udp",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := renderOMEConfigLegacy(cfg); err != nil {
+			b.Fatalf("render legacy: %v", err)
+		}
+	}
+}
+
 func TestRunMigrationsAddsNoTTYForNonTerminalStdin(t *testing.T) {
 	tempDir := t.TempDir()
 	dockerName := "docker"
@@ -522,4 +690,379 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	if !reflect.DeepEqual(calls, expectedCalls) {
 		t.Fatalf("call order = %v, want %v", calls, expectedCalls)
 	}
+}
+
+func renderOMEConfigLegacy(cfg omeRenderConfig) (string, error) {
+	data, err := os.ReadFile(cfg.TemplatePath)
+	if err != nil {
+		return "", fmt.Errorf("read template: %w", err)
+	}
+
+	text := string(data)
+	text = replaceLegacyBindAddressLegacy(text)
+	text = regexp.MustCompile(`<\s*Server\.bind\s*>`).ReplaceAllString(text, "<Bind>")
+	text = regexp.MustCompile(`</\s*Server\.bind\s*>`).ReplaceAllString(text, "</Bind>")
+
+	text, err = replaceRootBindingsLegacy(text, xmlEscape(cfg.Bind), xmlEscape(cfg.Port), xmlEscape(cfg.TLSPort))
+	if err != nil {
+		return "", err
+	}
+
+	text, err = replaceLLHLSPublisherPortsLegacy(text, xmlEscape(cfg.LLHLSPort), xmlEscape(cfg.LLHLSTLSPort))
+	if err != nil {
+		return "", err
+	}
+
+	text, err = replaceRootIPLegacy(text, xmlEscape(cfg.ServerIP))
+	if err != nil {
+		return "", err
+	}
+
+	text, err = scopedReplaceControlBindingsLegacy(text, xmlEscape(cfg.Bind))
+	if err != nil {
+		return "", err
+	}
+
+	text, err = ensureIceCandidatesTagLegacy(text, "TcpRelay", xmlEscape(cfg.TCPRelay), cfg.TemplatePath)
+	if err != nil {
+		return "", err
+	}
+
+	text, err = ensureIceCandidatesTagLegacy(text, "IceCandidate", xmlEscape(cfg.ICECandidate), cfg.TemplatePath)
+	if err != nil {
+		return "", err
+	}
+
+	text, err = replaceAccessTokenLegacy(text, cfg.AccessToken)
+	if err != nil {
+		return "", err
+	}
+
+	text, err = replaceAuthenticationLegacy(text, cfg.Username, cfg.Password)
+	if err != nil {
+		return "", err
+	}
+
+	text = stampImageTag(text, cfg.ImageTag)
+	text = collapseBlankLines(text)
+
+	return text, nil
+}
+
+func replaceLegacyBindAddressLegacy(text string) string {
+	text, comments := stripXMLComments(text)
+	openLegacy := regexp.MustCompile(`<\s*Server\.bind\.Address\s*>`)
+	closeLegacy := regexp.MustCompile(`</\s*Server\.bind\.Address\s*>`)
+	if !openLegacy.MatchString(text) && !closeLegacy.MatchString(text) {
+		return restoreXMLComments(text, comments)
+	}
+
+	if regexp.MustCompile(`<\s*Bind\s*>`).MatchString(text) || regexp.MustCompile(`<\s*Server\.bind\s*>`).MatchString(text) {
+		text = openLegacy.ReplaceAllString(text, "<Address>")
+		text = closeLegacy.ReplaceAllString(text, "</Address>")
+		return restoreXMLComments(text, comments)
+	}
+
+	text = openLegacy.ReplaceAllString(text, "<Bind><Address>")
+	text = closeLegacy.ReplaceAllString(text, "</Address></Bind>")
+	return restoreXMLComments(text, comments)
+}
+
+func replaceTagContentLegacy(data, tag, value string) (string, error) {
+	openTag := fmt.Sprintf("<%s>", tag)
+	closeTag := fmt.Sprintf("</%s>", tag)
+
+	start := strings.Index(data, openTag)
+	if start == -1 {
+		return "", fmt.Errorf("missing %s in template", openTag)
+	}
+
+	end := strings.Index(data[start:], closeTag)
+	if end == -1 {
+		return "", fmt.Errorf("missing %s in template", closeTag)
+	}
+
+	end += start
+	return data[:start+len(openTag)] + value + data[end:], nil
+}
+
+func replaceAllTagContentLegacy(data, tag, value string, required bool) (string, error) {
+	pattern := regexp.MustCompile(fmt.Sprintf(`(<%s>)([^<]*)(</%s>)`, tag, tag))
+	replaced := pattern.ReplaceAllString(data, fmt.Sprintf(`${1}%s${3}`, value))
+	if required && replaced == data {
+		return "", fmt.Errorf("missing <%s> in template", tag)
+	}
+	return replaced, nil
+}
+
+func ensureIceCandidatesTagLegacy(text, tag, value, templatePath string) (string, error) {
+	iceRe := regexp.MustCompile(`(?s)<IceCandidates>(.*?)</IceCandidates>`)
+	matches := 0
+	rewriteErr := error(nil)
+	updated := iceRe.ReplaceAllStringFunc(text, func(section string) string {
+		matches++
+		if strings.Contains(section, "<"+tag+">") {
+			replaced, err := replaceAllTagContentLegacy(section, tag, value, false)
+			if err != nil {
+				rewriteErr = err
+				return section
+			}
+			return replaced
+		}
+
+		closing := "</IceCandidates>"
+		insertPos := strings.LastIndex(section, closing)
+		if insertPos == -1 {
+			return section
+		}
+
+		indent := "    "
+		if indentMatch := regexp.MustCompile(`\n([ \t]*)</IceCandidates>`).FindStringSubmatch(section); indentMatch != nil {
+			indent = indentMatch[1]
+		}
+		childIndent := indent + "    "
+		insertion := fmt.Sprintf("\n%s<%s>%s</%s>", childIndent, tag, value, tag)
+		return section[:insertPos] + insertion + section[insertPos:]
+	})
+
+	if rewriteErr != nil {
+		return "", rewriteErr
+	}
+	if matches == 0 {
+		return "", fmt.Errorf("OME template %s missing <%s> (expected under <IceCandidates>)", templatePath, tag)
+	}
+	return updated, nil
+}
+
+func replaceRootBindingsLegacy(text, address, port, tlsPort string) (string, error) {
+	text, comments := stripXMLComments(text)
+	serverRe := regexp.MustCompile(`(?s)<Server[^>]*>(.*)</Server>`)
+	serverLoc := serverRe.FindStringSubmatchIndex(text)
+	if serverLoc == nil {
+		return "", errors.New("missing <Server> root element in template")
+	}
+
+	serverBody := text[serverLoc[2]:serverLoc[3]]
+	bindRe := regexp.MustCompile(`(?s)<Bind>(.*?)</Bind>`)
+	bindLoc := bindRe.FindStringSubmatchIndex(serverBody)
+	if bindLoc == nil {
+		return "", errors.New("missing <Bind> section under <Server> in template")
+	}
+
+	bindBody := serverBody[bindLoc[2]:bindLoc[3]]
+	var err error
+	if strings.Contains(bindBody, "<Address>") {
+		bindBody, err = replaceTagContentLegacy(bindBody, "Address", address)
+	} else if strings.Contains(bindBody, "<IP>") {
+		bindBody, err = replaceTagContentLegacy(bindBody, "IP", address)
+	}
+	if err != nil {
+		return "", err
+	}
+
+	signallingRe := regexp.MustCompile(`(?s)<Signalling>(.*?)</Signalling>`)
+	rewriteErr := error(nil)
+	signallingCount := 0
+	bindBody = signallingRe.ReplaceAllStringFunc(bindBody, func(section string) string {
+		signallingCount++
+		match := signallingRe.FindStringSubmatch(section)
+		inner := match[1]
+		updated, errPort := replaceTagContentLegacy(inner, "Port", port)
+		if errPort != nil {
+			rewriteErr = errPort
+			return section
+		}
+		updated, errPort = replaceTagContentLegacy(updated, "TLSPort", tlsPort)
+		if errPort != nil {
+			rewriteErr = errPort
+			return section
+		}
+		return "<Signalling>" + updated + "</Signalling>"
+	})
+	if rewriteErr != nil {
+		return "", rewriteErr
+	}
+
+	if signallingCount == 0 {
+		bindBody, err = replaceTagContentLegacy(bindBody, "Port", port)
+		if err != nil {
+			return "", err
+		}
+		bindBody, err = replaceTagContentLegacy(bindBody, "TLSPort", tlsPort)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	serverBody = serverBody[:bindLoc[2]] + bindBody + serverBody[bindLoc[3]:]
+	output := text[:serverLoc[2]] + serverBody + text[serverLoc[3]:]
+	return restoreXMLComments(output, comments), nil
+}
+
+func replaceLLHLSPublisherPortsLegacy(text, port, tlsPort string) (string, error) {
+	serverRe := regexp.MustCompile(`(?s)<Server[^>]*>(.*)</Server>`)
+	serverLoc := serverRe.FindStringSubmatchIndex(text)
+	if serverLoc == nil {
+		return "", errors.New("missing <Server> root element in template")
+	}
+
+	serverBody := text[serverLoc[2]:serverLoc[3]]
+	bindRe := regexp.MustCompile(`(?s)<Bind>(.*?)</Bind>`)
+	bindLoc := bindRe.FindStringSubmatchIndex(serverBody)
+	if bindLoc == nil {
+		return "", errors.New("missing <Bind> section under <Server> in template")
+	}
+
+	bindBody := serverBody[bindLoc[2]:bindLoc[3]]
+	publishersRe := regexp.MustCompile(`(?s)<Publishers>(.*?)</Publishers>`)
+	publishersLoc := publishersRe.FindStringSubmatchIndex(bindBody)
+	if publishersLoc == nil {
+		return "", errors.New("missing <Publishers> section under <Bind> in template")
+	}
+
+	publishersBody := bindBody[publishersLoc[2]:publishersLoc[3]]
+	llhlsRe := regexp.MustCompile(`(?s)<LLHLS>(.*?)</LLHLS>`)
+	llhlsLoc := llhlsRe.FindStringSubmatchIndex(publishersBody)
+	if llhlsLoc == nil {
+		return "", errors.New("missing <LLHLS> section under <Publishers> in template")
+	}
+
+	llhlsBody := publishersBody[llhlsLoc[2]:llhlsLoc[3]]
+	updated, err := replaceTagContentLegacy(llhlsBody, "Port", port)
+	if err != nil {
+		return "", err
+	}
+	if strings.Contains(updated, "<TLSPort>") {
+		updated, err = replaceTagContentLegacy(updated, "TLSPort", tlsPort)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	publishersBody = publishersBody[:llhlsLoc[2]] + updated + publishersBody[llhlsLoc[3]:]
+	bindBody = bindBody[:publishersLoc[2]] + publishersBody + bindBody[publishersLoc[3]:]
+	serverBody = serverBody[:bindLoc[2]] + bindBody + serverBody[bindLoc[3]:]
+	return text[:serverLoc[2]] + serverBody + text[serverLoc[3]:], nil
+}
+
+func replaceRootIPLegacy(text, ip string) (string, error) {
+	serverRe := regexp.MustCompile(`(?s)<Server[^>]*>(.*)</Server>`)
+	serverLoc := serverRe.FindStringSubmatchIndex(text)
+	if serverLoc == nil {
+		return "", errors.New("missing <Server> root element in template")
+	}
+
+	serverBody := text[serverLoc[2]:serverLoc[3]]
+	ipRe := regexp.MustCompile(`(?s)<IP>(.*?)</IP>`)
+	matches := ipRe.FindAllStringSubmatchIndex(serverBody, -1)
+	for _, loc := range matches {
+		start, end := loc[2], loc[3]
+		bindOpen := strings.LastIndex(serverBody[:start], "<Bind>")
+		bindClose := strings.LastIndex(serverBody[:start], "</Bind>")
+		if bindOpen != -1 && (bindClose == -1 || bindClose < bindOpen) {
+			continue
+		}
+
+		vhostOpen := strings.LastIndex(serverBody[:start], "<VirtualHosts>")
+		vhostClose := strings.LastIndex(serverBody[:start], "</VirtualHosts>")
+		if vhostOpen != -1 && (vhostClose == -1 || vhostClose < vhostOpen) {
+			continue
+		}
+
+		serverBody = serverBody[:start] + ip + serverBody[end:]
+		return text[:serverLoc[2]] + serverBody + text[serverLoc[3]:], nil
+	}
+
+	return text, nil
+}
+
+func scopedReplaceControlBindingsLegacy(text, bind string) (string, error) {
+	text, comments := stripXMLComments(text)
+	controlRe := regexp.MustCompile(`(?s)<Control>(.*?)</Control>`)
+	controlLoc := controlRe.FindStringSubmatchIndex(text)
+	if controlLoc == nil {
+		return restoreXMLComments(text, comments), nil
+	}
+
+	controlBody := text[controlLoc[0]:controlLoc[1]]
+	serverRe := regexp.MustCompile(`(?s)<Server>(.*?)</Server>`)
+	serverLoc := serverRe.FindStringSubmatchIndex(controlBody)
+	if serverLoc == nil {
+		return restoreXMLComments(text, comments), nil
+	}
+
+	serverBody := controlBody[serverLoc[0]:serverLoc[1]]
+	inner := serverLoc[2] - serverLoc[0]
+	outer := serverLoc[3] - serverLoc[0]
+	content := serverBody[inner:outer]
+
+	var err error
+	if strings.Contains(content, "<Bind>") {
+		content, err = replaceAllTagContentLegacy(content, "Bind", bind, false)
+		if err != nil {
+			return "", err
+		}
+	}
+	if strings.Contains(content, "<IP>") {
+		content, err = replaceAllTagContentLegacy(content, "IP", bind, false)
+		if err != nil {
+			return "", err
+		}
+	}
+	if strings.Contains(content, "<Address>") {
+		content, err = replaceAllTagContentLegacy(content, "Address", bind, false)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	serverBody = serverBody[:inner] + content + serverBody[outer:]
+	controlBody = controlBody[:serverLoc[0]] + serverBody + controlBody[serverLoc[1]:]
+	output := text[:controlLoc[0]] + controlBody + text[controlLoc[1]:]
+	return restoreXMLComments(output, comments), nil
+}
+
+func replaceAccessTokenLegacy(text, token string) (string, error) {
+	token = xmlEscape(token)
+	accessTokensRe := regexp.MustCompile(`(?s)<AccessTokens>(.*?)</AccessTokens>`)
+	loc := accessTokensRe.FindStringSubmatchIndex(text)
+	if loc != nil {
+		inner := text[loc[2]:loc[3]]
+		replaced, err := replaceTagContentLegacy(inner, "AccessToken", token)
+		if err != nil {
+			return "", err
+		}
+		return text[:loc[2]] + replaced + text[loc[3]:], nil
+	}
+
+	if strings.Contains(text, "<AccessToken>") {
+		replaced, err := replaceTagContentLegacy(text, "AccessToken", token)
+		if err != nil {
+			return "", err
+		}
+		return replaced, nil
+	}
+
+	return "", errors.New("missing <AccessTokens> or <AccessToken> in template")
+}
+
+func replaceAuthenticationLegacy(text, username, password string) (string, error) {
+	authRe := regexp.MustCompile(`(?s)<Authentication>(.*?)</Authentication>`)
+	loc := authRe.FindStringSubmatchIndex(text)
+	if loc == nil {
+		return "", errors.New("missing <Authentication> block in template")
+	}
+
+	inner := text[loc[2]:loc[3]]
+	var err error
+	inner, err = replaceTagContentLegacy(inner, "ID", xmlEscape(username))
+	if err != nil {
+		return "", err
+	}
+	inner, err = replaceTagContentLegacy(inner, "Password", xmlEscape(password))
+	if err != nil {
+		return "", err
+	}
+
+	return text[:loc[2]] + inner + text[loc[3]:], nil
 }
