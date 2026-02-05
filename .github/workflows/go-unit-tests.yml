@@ -80,6 +80,6 @@ jobs:
       - name: Build bitriver binary
         run: go build ./cmd/bitriver
 
-      - name: Run govulncheck
+      - name: Run govulncheck (Go 1.21 policy)
         shell: bash
         run: ./scripts/run-govulncheck.sh
