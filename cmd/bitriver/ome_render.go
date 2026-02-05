@@ -907,10 +907,7 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 	if !llhlsFound {
 		return "", errors.New("missing <LLHLS> section under <Publishers> in template")
 	}
-	if !(info.rootBindHasAddress || info.rootBindHasIP) {
-		return "", errors.New("missing <IP> in template (root <Bind> may use legacy <Address>)")
-	}
-	if !rootBindIPReplaced {
+	if (info.rootBindHasAddress || info.rootBindHasIP) && !rootBindIPReplaced {
 		return "", errors.New("missing <IP> in template (root <Bind> may use legacy <Address>)")
 	}
 	if info.rootBindHasSignalling {
