@@ -114,6 +114,10 @@ func TestEnvInitWritesGeneratedValues(t *testing.T) {
 func TestGenerateEnvValuesDefaultsOMEAccessToken(t *testing.T) {
 	generated, _ := generateEnvValues(map[string]string{})
 
+	if generated["BITRIVER_LIVE_MODE"] != "production" {
+		t.Fatalf("expected BITRIVER_LIVE_MODE default to production, got %q", generated["BITRIVER_LIVE_MODE"])
+	}
+
 	apiToken := generated["BITRIVER_OME_API_TOKEN"]
 	accessToken := generated["BITRIVER_OME_ACCESS_TOKEN"]
 	if apiToken == "" {
@@ -124,6 +128,13 @@ func TestGenerateEnvValuesDefaultsOMEAccessToken(t *testing.T) {
 	}
 	if apiToken != accessToken {
 		t.Fatalf("expected OME access token to match API token, got %q and %q", accessToken, apiToken)
+	}
+}
+
+func TestGenerateEnvValuesPromotesDevelopmentModeToProduction(t *testing.T) {
+	generated, _ := generateEnvValues(map[string]string{"BITRIVER_LIVE_MODE": "development"})
+	if generated["BITRIVER_LIVE_MODE"] != "production" {
+		t.Fatalf("expected development mode to be rewritten to production, got %q", generated["BITRIVER_LIVE_MODE"])
 	}
 }
 
