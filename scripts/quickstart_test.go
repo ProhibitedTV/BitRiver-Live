@@ -146,6 +146,7 @@ func TestOmeConfigRenderingHandlesBindAsIp(t *testing.T) {
 	var parsed struct {
 		IP   string `xml:"IP"`
 		Bind struct {
+			IP       string `xml:"IP"`
 			Managers struct {
 				API struct {
 					Port    string `xml:"Port"`
@@ -161,6 +162,9 @@ func TestOmeConfigRenderingHandlesBindAsIp(t *testing.T) {
 
 	if parsed.IP != "0.0.0.0" {
 		t.Fatalf("expected root IP to be rendered, got %q", parsed.IP)
+	}
+	if parsed.Bind.IP != "0.0.0.0" {
+		t.Fatalf("expected root bind IP to be rendered, got %q", parsed.Bind.IP)
 	}
 	if parsed.Bind.Managers.API.Port != "8081" || parsed.Bind.Managers.API.TLSPort != "8082" {
 		t.Fatalf("expected API ports to be rewritten, got %s/%s", parsed.Bind.Managers.API.Port, parsed.Bind.Managers.API.TLSPort)
@@ -188,7 +192,7 @@ func TestOmeConfigRenderingPreservesXmlComments(t *testing.T) {
 	}, "\n")
 	output := renderOMEConfig(t, repoRoot, envContents)
 
-	comment := "<!-- Corrected: <Bind> replaces the deprecated <Server.bind.Address> container. -->"
+	comment := "<!-- Corrected: <Bind><IP> replaces the deprecated <Server.bind.Address> container. -->"
 	if !strings.Contains(string(output), comment) {
 		t.Fatalf("expected comment to be preserved, got:\n%s", string(output))
 	}
@@ -229,7 +233,7 @@ func TestOmeConfigRenderingEscapesXml(t *testing.T) {
 	if username != "admin&lt;&amp;" {
 		t.Fatalf("expected username to be escaped, got %q", username)
 	}
-	if password != "pass&lt;&amp;&gt;&#39;&quot;" {
+	if password != "pass&lt;&amp;&gt;&#39;&#34;" {
 		t.Fatalf("expected password to be escaped, got %q", password)
 	}
 }

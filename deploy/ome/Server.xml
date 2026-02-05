@@ -22,7 +22,7 @@
         </P2P>
     </Modules>
 
-    <!-- Corrected: <Bind> replaces the deprecated <Server.bind.Address> container. -->
+    <!-- Corrected: <Bind><IP> replaces the deprecated <Server.bind.Address> container. -->
     <Bind>
         <IP>0.0.0.0</IP>
 

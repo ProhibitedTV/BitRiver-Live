@@ -168,7 +168,11 @@ expected_tls_port = env_values.get("BITRIVER_OME_SERVER_TLS_PORT", "9443")
 tree = ET.parse(config_path)
 root = tree.getroot()
 
-root_bind_ip = root.findtext("./Bind/Address") or root.findtext("./Bind/IP")
+root_bind_ip = root.findtext("./Bind/IP")
+legacy_root_bind_address = root.findtext("./Bind/Address")
+if (root_bind_ip is None or not root_bind_ip.strip()) and legacy_root_bind_address and legacy_root_bind_address.strip():
+    print("warning: using legacy root <Bind><Address>; regenerate config to emit canonical <Bind><IP>", file=sys.stderr)
+    root_bind_ip = legacy_root_bind_address
 root_port = root.findtext(".//Bind/Providers/WebRTC/Signalling/Port")
 root_tls_port = root.findtext(".//Bind/Providers/WebRTC/Signalling/TLSPort")
 api_access_token = root.findtext("./Bind/Managers/API/AccessTokens/AccessToken") or root.findtext("./Bind/Managers/API/AccessToken")
@@ -203,8 +207,8 @@ if bind != expected_bind or ip != expected_bind:
 if root_bind_ip != expected_bind or root_port != expected_port or root_tls_port != expected_tls_port:
     sys.exit(
         "error: expected root <Bind> to match env values: "
-        f"address={root_bind_ip}, port={root_port}, tlsPort={root_tls_port}, "
-        f"expected address={expected_bind}, port={expected_port}, tlsPort={expected_tls_port}"
+        f"ip={root_bind_ip}, port={root_port}, tlsPort={root_tls_port}, "
+        f"expected ip={expected_bind}, port={expected_port}, tlsPort={expected_tls_port}"
     )
 
 if username != env_values["BITRIVER_OME_USERNAME"] or password != env_values["BITRIVER_OME_PASSWORD"]:

@@ -294,8 +294,11 @@ func TestRenderOMEConfigRewritesLegacyBindAddress(t *testing.T) {
 	if !strings.Contains(string(output), "<Bind>") {
 		t.Fatalf("expected output to include <Bind> block")
 	}
-	if !strings.Contains(string(output), "<Address>10.0.0.10</Address>") {
-		t.Fatalf("expected bind address to be updated, got output:\n%s", string(output))
+	if !strings.Contains(string(output), "<IP>10.0.0.10</IP>") {
+		t.Fatalf("expected root bind IP to be updated, got output:\n%s", string(output))
+	}
+	if strings.Contains(stripped, "<Address>10.0.0.10</Address>") {
+		t.Fatalf("expected root bind output to canonicalize <Address> to <IP>, got output:\n%s", string(output))
 	}
 }
 
@@ -306,7 +309,7 @@ func TestRenderOMEConfigPreservesXmlComments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read template: %v", err)
 	}
-	comment := "        <!-- legacy <Server.bind.Address> <Address>keep-me</Address> -->\n"
+	comment := "        <!-- legacy <Server.bind.Address> <IP>keep-me</IP> -->\n"
 	template := strings.Replace(string(templateBytes), "<Bind>\n", "<Bind>\n"+comment, 1)
 	if err := os.WriteFile(templatePath, []byte(template), 0o644); err != nil {
 		t.Fatalf("write template: %v", err)
@@ -443,6 +446,12 @@ func TestRenderOMEConfigFallbackAccessTokenAndIceCandidates(t *testing.T) {
 	}
 
 	got := string(output)
+	if !strings.Contains(got, "<IP>10.10.0.1</IP>") {
+		t.Fatalf("expected legacy <Address> root bind to migrate to <IP>, got output:\n%s", got)
+	}
+	if strings.Contains(got, "<Address>") {
+		t.Fatalf("expected canonical root bind output to avoid <Address>, got output:\n%s", got)
+	}
 	if !strings.Contains(got, "<AccessToken>access-token</AccessToken>") {
 		t.Fatalf("expected access token replacement, got output:\n%s", got)
 	}
@@ -966,13 +975,13 @@ func replaceLegacyBindAddressLegacy(text string) string {
 	}
 
 	if regexp.MustCompile(`<\s*Bind\s*>`).MatchString(text) || regexp.MustCompile(`<\s*Server\.bind\s*>`).MatchString(text) {
-		text = openLegacy.ReplaceAllString(text, "<Address>")
-		text = closeLegacy.ReplaceAllString(text, "</Address>")
+		text = openLegacy.ReplaceAllString(text, "<IP>")
+		text = closeLegacy.ReplaceAllString(text, "</IP>")
 		return restoreXMLComments(text, comments)
 	}
 
-	text = openLegacy.ReplaceAllString(text, "<Bind><Address>")
-	text = closeLegacy.ReplaceAllString(text, "</Address></Bind>")
+	text = openLegacy.ReplaceAllString(text, "<Bind><IP>")
+	text = closeLegacy.ReplaceAllString(text, "</IP></Bind>")
 	return restoreXMLComments(text, comments)
 }
 
@@ -1061,6 +1070,10 @@ func replaceRootBindingsLegacy(text, address, port, tlsPort string) (string, err
 	var err error
 	if strings.Contains(bindBody, "<Address>") {
 		bindBody, err = replaceTagContentLegacy(bindBody, "Address", address)
+		if err == nil {
+			bindBody = strings.Replace(bindBody, "<Address>", "<IP>", 1)
+			bindBody = strings.Replace(bindBody, "</Address>", "</IP>", 1)
+		}
 	} else if strings.Contains(bindBody, "<IP>") {
 		bindBody, err = replaceTagContentLegacy(bindBody, "IP", address)
 	}
