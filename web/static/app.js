@@ -17,7 +17,15 @@ const state = {
     selectedProfileId: null,
     currentUser: null,
     chatClient: null,
-    moderation: { queue: [], actions: [], automod: [], filters: {} },
+    moderation: {
+        queue: [],
+        actions: [],
+        automod: [],
+        filters: {},
+        queueMeta: null,
+        actionsMeta: null,
+        automodMeta: null,
+    },
     analytics: { summary: null, perChannel: [] },
     uploads: new Map(),
     statusReport: null,
@@ -26,6 +34,8 @@ const state = {
 
 let moderationLoaded = false;
 let analyticsLoaded = false;
+const moderationFilterCache = new Map();
+const moderationFilterInvalidations = new Set();
 
 function isCurrentUserAdmin() {
     const roles = state.currentUser?.roles;
@@ -191,6 +201,7 @@ async function createChatFilter(channelId, payload) {
         body: JSON.stringify(payload),
     });
     moderationLoaded = false;
+    moderationFilterInvalidations.add(channelId);
     await loadModeration(true);
 }
 
@@ -200,6 +211,7 @@ async function updateChatFilter(channelId, filterId, payload) {
         body: JSON.stringify(payload),
     });
     moderationLoaded = false;
+    moderationFilterInvalidations.add(channelId);
     await loadModeration(true);
 }
 
@@ -208,6 +220,7 @@ async function deleteChatFilter(channelId, filterId) {
         method: "DELETE",
     });
     moderationLoaded = false;
+    moderationFilterInvalidations.add(channelId);
     await loadModeration(true);
 }
 
@@ -2585,20 +2598,54 @@ async function loadModeration(force = false) {
         return;
     }
     try {
+        const queueParams = new URLSearchParams({ limit: "50", actionsLimit: "20" });
+        const automodParams = new URLSearchParams({ limit: "50" });
+        const shouldAppend = moderationLoaded && force;
+        if (shouldAppend && state.moderation.queueMeta?.nextCursor) {
+            queueParams.set("cursor", state.moderation.queueMeta.nextCursor);
+        }
+        if (shouldAppend && state.moderation.actionsMeta?.nextCursor) {
+            queueParams.set("actionsCursor", state.moderation.actionsMeta.nextCursor);
+        }
+        if (shouldAppend && state.moderation.automodMeta?.nextCursor) {
+            automodParams.set("cursor", state.moderation.automodMeta.nextCursor);
+        }
         const [queuePayload, automodPayload] = await Promise.all([
-            apiRequest("/api/moderation/queue"),
-            apiRequest("/api/moderation/automod?limit=50"),
+            apiRequest(`/api/moderation/queue?${queueParams.toString()}`),
+            apiRequest(`/api/moderation/automod?${automodParams.toString()}`),
         ]);
-        state.moderation.queue = Array.isArray(queuePayload?.queue) ? queuePayload.queue : [];
-        state.moderation.actions = Array.isArray(queuePayload?.actions) ? queuePayload.actions : [];
-        state.moderation.automod = Array.isArray(automodPayload) ? automodPayload : [];
+        const queue = Array.isArray(queuePayload?.queue) ? queuePayload.queue : [];
+        const actions = Array.isArray(queuePayload?.actions) ? queuePayload.actions : [];
+        const automod = Array.isArray(automodPayload?.actions) ? automodPayload.actions : [];
+        state.moderation.queue = shouldAppend && queueParams.has("cursor") ? state.moderation.queue.concat(queue) : queue;
+        state.moderation.actions =
+            shouldAppend && queueParams.has("actionsCursor") ? state.moderation.actions.concat(actions) : actions;
+        state.moderation.automod =
+            shouldAppend && automodParams.has("cursor") ? state.moderation.automod.concat(automod) : automod;
+        state.moderation.queueMeta = queuePayload?.queueMeta ?? null;
+        state.moderation.actionsMeta = queuePayload?.actionsMeta ?? null;
+        state.moderation.automodMeta = automodPayload?.meta ?? null;
         const filters = {};
         if (Array.isArray(state.channels) && state.channels.length) {
+            const channelIds = new Set(state.channels.map((channel) => channel.id));
+            for (const channelId of moderationFilterCache.keys()) {
+                if (!channelIds.has(channelId)) {
+                    moderationFilterCache.delete(channelId);
+                    moderationFilterInvalidations.delete(channelId);
+                }
+            }
             await Promise.all(
                 state.channels.map(async (channel) => {
                     try {
+                        if (moderationFilterCache.has(channel.id) && !moderationFilterInvalidations.has(channel.id)) {
+                            filters[channel.id] = moderationFilterCache.get(channel.id);
+                            return;
+                        }
                         const response = await apiRequest(`/api/channels/${channel.id}/chat/moderation/filters`);
-                        filters[channel.id] = Array.isArray(response) ? response : [];
+                        const entries = Array.isArray(response) ? response : [];
+                        moderationFilterCache.set(channel.id, entries);
+                        moderationFilterInvalidations.delete(channel.id);
+                        filters[channel.id] = entries;
                     } catch (error) {
                         console.warn("Failed to load filters", error);
                         filters[channel.id] = [];
@@ -2624,6 +2671,8 @@ async function resolveModerationFlag(flagId, resolution) {
     });
     showToast(resolution === "ban" ? "Viewer banned" : "Flag dismissed");
     moderationLoaded = false;
+    state.moderation.queueMeta = null;
+    state.moderation.actionsMeta = null;
     await loadModeration(true);
 }
 
@@ -3101,10 +3150,26 @@ async function initialize() {
     await refreshAll();
 }
 
-initialize().catch((error) => {
-    console.error(error);
-    if (error instanceof UnauthorizedError) {
-        return;
-    }
-    showToast(`Failed to initialize: ${error.message}`, "error");
-});
+if (!globalThis.__BR_SKIP_INIT__) {
+    initialize().catch((error) => {
+        console.error(error);
+        if (error instanceof UnauthorizedError) {
+            return;
+        }
+        showToast(`Failed to initialize: ${error.message}`, "error");
+    });
+}
+
+export function __setModerationStateForTest(partial) {
+    state.moderation = { ...state.moderation, ...partial };
+}
+
+export function __setChannelsForTest(channels) {
+    state.channels = Array.isArray(channels) ? channels : [];
+}
+
+export function __setCurrentUserForTest(user) {
+    state.currentUser = user;
+}
+
+export { renderModeration };
