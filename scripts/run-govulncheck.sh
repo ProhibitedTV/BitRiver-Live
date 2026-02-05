@@ -12,7 +12,7 @@ export GOTOOLCHAIN GOPROXY GOSUMDB
 
 if ! command -v govulncheck >/dev/null 2>&1; then
   echo "govulncheck not found in PATH." >&2
-  echo "Install it with: GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go install golang.org/x/vuln/cmd/govulncheck@latest" >&2
+  echo "Install it with: GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go install golang.org/x/vuln/cmd/govulncheck@v1.1.3" >&2
   exit 1
 fi
 
