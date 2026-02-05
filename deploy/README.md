@@ -37,6 +37,22 @@ The `srs-config` helper is invoked via `bash` to avoid Windows CRLF issues; keep
 Viewer self-registration is disabled by default so only administrators can add users. Toggle `BITRIVER_LIVE_ALLOW_SELF_SIGNUP`
 in `.env` and rerun `./deploy/check-env.sh` followed by `docker compose up -d` to reopen or close public signups.
 
+### Image tags and digests
+
+Compose reads all image tags from `.env` so you can update versions without editing `deploy/docker-compose.yml`. For
+production deployments, pin images to digests to guarantee the exact bytes you tested:
+
+```bash
+BITRIVER_LIVE_IMAGE_TAG=v1.2.3
+BITRIVER_LIVE_IMAGE_DIGEST=@sha256:...
+BITRIVER_VIEWER_IMAGE_TAG=v1.2.3
+BITRIVER_VIEWER_IMAGE_DIGEST=@sha256:...
+```
+
+Keep each digest paired with its matching tag (never mix a new tag with an old digest). When you need to override
+third-party images, use the corresponding `*_IMAGE_DIGEST` fields in `deploy/.env.example` and rerun
+`./deploy/check-env.sh` before restarting Compose.
+
 ### OME healthcheck
 
 The OME service in `deploy/docker-compose.yml` uses a `curl`-based healthcheck that hits the control API inside the container
