@@ -390,11 +390,12 @@ func TestRenderOMEConfigMatchesLegacyOutput(t *testing.T) {
 	}
 }
 
-func TestRenderOMEConfigFallbackAccessTokenAndIceCandidates(t *testing.T) {
+func TestRenderOMEConfigSkipsUnsupportedRootBindHostTagsAndFillsAccessTokenAndIceCandidates(t *testing.T) {
 	templatePath := filepath.Join(t.TempDir(), "Server.xml")
 	outputPath := filepath.Join(t.TempDir(), "Server.generated.xml")
 	template := strings.Join([]string{
 		"<Server version=\"10\">",
+		"  <IP>0.0.0.0</IP>",
 		"  <Bind>",
 		"    <Address>0.0.0.0</Address>",
 		"    <Port>9000</Port>",
@@ -446,11 +447,11 @@ func TestRenderOMEConfigFallbackAccessTokenAndIceCandidates(t *testing.T) {
 	}
 
 	got := string(output)
-	if !strings.Contains(got, "<IP>10.10.0.1</IP>") {
-		t.Fatalf("expected legacy <Address> root bind to migrate to <IP>, got output:\n%s", got)
+	if strings.Contains(got, "<Bind>\n    <IP>") || strings.Contains(got, "<Bind>\n    <Address>") {
+		t.Fatalf("expected root <Bind> to omit unsupported host tags, got output:\n%s", got)
 	}
-	if strings.Contains(got, "<Address>") {
-		t.Fatalf("expected canonical root bind output to avoid <Address>, got output:\n%s", got)
+	if !strings.Contains(got, "<IP>10.10.0.2</IP>") {
+		t.Fatalf("expected top-level <Server><IP> to be updated from BITRIVER_OME_IP, got output:\n%s", got)
 	}
 	if !strings.Contains(got, "<AccessToken>access-token</AccessToken>") {
 		t.Fatalf("expected access token replacement, got output:\n%s", got)

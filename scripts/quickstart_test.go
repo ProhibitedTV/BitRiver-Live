@@ -122,7 +122,7 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 	}
 }
 
-func TestOmeConfigRenderingHandlesBindAsIp(t *testing.T) {
+func TestOmeConfigRenderingOmitsUnsupportedRootBindHostTags(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -146,6 +146,7 @@ func TestOmeConfigRenderingHandlesBindAsIp(t *testing.T) {
 	var parsed struct {
 		IP   string `xml:"IP"`
 		Bind struct {
+			Address  string `xml:"Address"`
 			IP       string `xml:"IP"`
 			Managers struct {
 				API struct {
@@ -163,8 +164,8 @@ func TestOmeConfigRenderingHandlesBindAsIp(t *testing.T) {
 	if parsed.IP != "0.0.0.0" {
 		t.Fatalf("expected root IP to be rendered, got %q", parsed.IP)
 	}
-	if parsed.Bind.IP != "0.0.0.0" {
-		t.Fatalf("expected root bind IP to be rendered, got %q", parsed.Bind.IP)
+	if parsed.Bind.IP != "" || parsed.Bind.Address != "" {
+		t.Fatalf("expected root bind to omit host tags, got IP=%q Address=%q", parsed.Bind.IP, parsed.Bind.Address)
 	}
 	if parsed.Bind.Managers.API.Port != "8081" || parsed.Bind.Managers.API.TLSPort != "8082" {
 		t.Fatalf("expected API ports to be rewritten, got %s/%s", parsed.Bind.Managers.API.Port, parsed.Bind.Managers.API.TLSPort)
@@ -192,7 +193,7 @@ func TestOmeConfigRenderingPreservesXmlComments(t *testing.T) {
 	}, "\n")
 	output := renderOMEConfig(t, repoRoot, envContents)
 
-	comment := "<!-- Corrected: <Bind><IP> replaces the deprecated <Server.bind.Address> container. -->"
+	comment := "<!-- Root <IP> is the canonical bind host; keep protocol sections inside <Bind>. -->"
 	if !strings.Contains(string(output), comment) {
 		t.Fatalf("expected comment to be preserved, got:\n%s", string(output))
 	}
