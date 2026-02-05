@@ -1820,7 +1820,7 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 	generated := make(map[string]string)
 	newlyGenerated := make(map[string]string)
 
-	generated["BITRIVER_LIVE_MODE"] = firstNonEmpty(existing["BITRIVER_LIVE_MODE"], "development")
+	generated["BITRIVER_LIVE_MODE"] = productionSafeMode(existing["BITRIVER_LIVE_MODE"])
 	generated["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"] = defaultIfPlaceholder("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", existing, "http://localhost:9001/hls")
 	generated["NEXT_PUBLIC_VIEWER_URL"] = defaultIfPlaceholder("NEXT_PUBLIC_VIEWER_URL", existing, "http://localhost:8080/viewer")
 	accessTokenValue := strings.TrimSpace(existing["BITRIVER_OME_ACCESS_TOKEN"])
@@ -2290,4 +2290,12 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func productionSafeMode(value string) string {
+	mode := strings.ToLower(strings.TrimSpace(value))
+	if mode == "" || mode == "development" {
+		return "production"
+	}
+	return strings.TrimSpace(value)
 }
