@@ -279,8 +279,8 @@ func TestOmeConfigRenderingUsesCanonicalAPIAccessToken(t *testing.T) {
 	if parsed.Bind.Managers.API.AccessToken != "" {
 		t.Fatalf("expected <Bind><Managers><API> to omit auth-only <AccessToken>, got %q", parsed.Bind.Managers.API.AccessToken)
 	}
-	if parsed.Bind.Managers.API.Port != "9000" || parsed.Bind.Managers.API.TLSPort != "9443" || parsed.Bind.Managers.API.WorkerCount != "1" {
-		t.Fatalf("expected <Bind><Managers><API> listener fields to remain present, got port=%q tls=%q workers=%q", parsed.Bind.Managers.API.Port, parsed.Bind.Managers.API.TLSPort, parsed.Bind.Managers.API.WorkerCount)
+	if parsed.Bind.Managers.API.Port != "8081" || parsed.Bind.Managers.API.TLSPort != "8082" || parsed.Bind.Managers.API.WorkerCount != "1" {
+		t.Fatalf("expected <Bind><Managers><API> listener fields to follow BITRIVER_OME_HTTP_* defaults, got port=%q tls=%q workers=%q", parsed.Bind.Managers.API.Port, parsed.Bind.Managers.API.TLSPort, parsed.Bind.Managers.API.WorkerCount)
 	}
 }
 func renderOMEConfig(t *testing.T, repoRoot, envContents string) []byte {

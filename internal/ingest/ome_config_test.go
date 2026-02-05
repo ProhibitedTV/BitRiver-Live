@@ -374,3 +374,47 @@ func TestRenderOMEConfigRewritesLLHLSPorts(t *testing.T) {
 		t.Fatalf("expected LLHLS ports to be rewritten in rendered config, but did not find the expected block")
 	}
 }
+
+func TestRenderOMEConfigDefaultsAlignManagersAPIWithComposeHealthcheckPort(t *testing.T) {
+	repo := repoRoot(t)
+	envContents := strings.Join([]string{
+		"BITRIVER_OME_BIND=0.0.0.0",
+		"BITRIVER_OME_IP=0.0.0.0",
+		"BITRIVER_OME_SERVER_PORT=9000",
+		"BITRIVER_OME_SERVER_TLS_PORT=9443",
+		"BITRIVER_OME_USERNAME=admin",
+		"BITRIVER_OME_PASSWORD=password",
+		"BITRIVER_OME_API_TOKEN=token",
+		"BITRIVER_OME_ACCESS_TOKEN=health-token",
+		"BITRIVER_OME_IMAGE_TAG=0.16.0",
+		"BITRIVER_OME_TCP_RELAY=*:3478",
+		"BITRIVER_OME_ICE_CANDIDATE=example.com:10000-10009/udp",
+	}, "\n")
+
+	rendered := renderOMEConfig(t, repo, envContents)
+	var parsed struct {
+		Bind struct {
+			Managers struct {
+				API struct {
+					Port    string `xml:"Port"`
+					TLSPort string `xml:"TLSPort"`
+				} `xml:"API"`
+			} `xml:"Managers"`
+		} `xml:"Bind"`
+	}
+	if err := xml.Unmarshal(rendered, &parsed); err != nil {
+		t.Fatalf("parse rendered config: %v", err)
+	}
+
+	if parsed.Bind.Managers.API.Port != "8081" || parsed.Bind.Managers.API.TLSPort != "8082" {
+		t.Fatalf("expected default Managers API listener ports 8081/8082, got %q/%q", parsed.Bind.Managers.API.Port, parsed.Bind.Managers.API.TLSPort)
+	}
+	if strings.Contains(string(rendered), "<Bind><Managers><API><Port>9000</Port>") {
+		t.Fatalf("expected Managers API port to be distinct from signalling port in default render")
+	}
+
+	compose := string(readFile(t, filepath.Join(repo, "deploy", "docker-compose.yml")))
+	if !strings.Contains(compose, "http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health") {
+		t.Fatalf("expected compose healthcheck to use BITRIVER_OME_HTTP_PORT")
+	}
+}
