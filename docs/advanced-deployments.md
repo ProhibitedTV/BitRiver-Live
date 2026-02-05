@@ -441,7 +441,7 @@ BitRiver Live can orchestrate end-to-end ingest and transcode jobs by talking to
 | `BITRIVER_SRS_API` | Base URL (including port, e.g. `http://srs-controller:1985`) for the SRS management API proxy. |
 | `BITRIVER_SRS_TOKEN` | Bearer token used when creating/deleting SRS channels. |
 | `BITRIVER_OME_API` | Base URL for the OvenMediaEngine REST API (defaults to port `8081`). |
-| `BITRIVER_OME_BIND` | Address written to the control listener `<Bind>`/`<IP>` fields and the root `<Bind><IP>` field in `Server.xml` (defaults to `0.0.0.0`). |
+| `BITRIVER_OME_BIND` | Address written to the control listener `<Bind>`/`<IP>` fields in `Server.xml` (defaults to `0.0.0.0`). The top-level `<Server><IP>` remains the canonical server bind host field. |
 | `BITRIVER_OME_IP` | Public IP rendered into the `<Server><IP>` block for signalling (defaults to `BITRIVER_OME_BIND`). |
 | `BITRIVER_OME_SERVER_PORT` | Port rendered into the top-level `<Bind><Port>` entry for WebRTC signalling (defaults to `9000`). |
 | `BITRIVER_OME_SERVER_TLS_PORT` | Port rendered into `<Bind><TLSPort>` for TLS signalling (defaults to `9443`). |
@@ -470,7 +470,7 @@ Leaving all of the ingest variables empty disables the controller and produces a
 
 Open the management ports to the BitRiver Live API host and ensure the credentials map to accounts that can create/delete the corresponding resources. Set the optional `BITRIVER_INGEST_HEALTH` path if your services expose health checks somewhere other than `/healthz`.
 
-OvenMediaEngine's control server enforces authentication on `/healthz`; the compose bundle mounts `deploy/ome/Server.generated.xml` (rendered from `deploy/ome/Server.xml`) and forwards the same `BITRIVER_OME_API_TOKEN` header (with optional basic auth from `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD`) to the probe so a 401 will mark the container unhealthy. Keep `.env` aligned with that rendered configuration if you edit the template. The template rewrites the control listener `<Bind>`/`<IP>` values from `BITRIVER_OME_BIND` and stamps the root `<Bind>` block with `<IP>`, `<Port>`, and `<TLSPort>` derived from `BITRIVER_OME_BIND`, `BITRIVER_OME_SERVER_PORT`, and `BITRIVER_OME_SERVER_TLS_PORT` so the bind configuration stays consistent across restarts.
+OvenMediaEngine's control server enforces authentication on `/healthz`; the compose bundle mounts `deploy/ome/Server.generated.xml` (rendered from `deploy/ome/Server.xml`) and forwards the same `BITRIVER_OME_API_TOKEN` header (with optional basic auth from `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD`) to the probe so a 401 will mark the container unhealthy. Keep `.env` aligned with that rendered configuration if you edit the template. The template rewrites the control listener `<Bind>`/`<IP>` values from `BITRIVER_OME_BIND`, keeps the root `<Bind>` focused on protocol sections (`<Managers>`, `<Providers>`, `<Publishers>`), and uses top-level `<Server><IP>` (derived from `BITRIVER_OME_IP`) as the canonical server bind host field.
 
 When enabling WebRTC playback, forward the relay paths end users will hit:
 

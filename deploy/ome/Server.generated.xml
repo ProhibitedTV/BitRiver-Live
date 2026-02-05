@@ -23,10 +23,8 @@
         </P2P>
     </Modules>
 
-    <!-- Corrected: <Bind> replaces the deprecated <Server.bind.Address> container. -->
+    <!-- Root <IP> is the canonical bind host; keep protocol sections inside <Bind>. -->
     <Bind>
-        <IP>0.0.0.0</IP>
-
         <Managers>
             <API>
                 <Port>8081</Port>

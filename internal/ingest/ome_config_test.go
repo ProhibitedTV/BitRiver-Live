@@ -290,12 +290,16 @@ func TestRenderOMEConfigRewritesLLHLSPorts(t *testing.T) {
 	}, "\n")
 
 	data := renderOMEConfig(t, repoRoot, envContents)
-	rootBindIPPattern := regexp.MustCompile(`(?s)<Bind>\s*<IP>0\.0\.0\.0</IP>`)
-	if !rootBindIPPattern.Match(data) {
-		t.Fatalf("expected rendered config to include canonical root <Bind><IP>, but it was missing")
+	rootBindPattern := regexp.MustCompile(`(?s)<Bind>\s*<Managers>.*?</Managers>\s*<Providers>.*?</Providers>\s*<Publishers>`)
+	if !rootBindPattern.Match(data) {
+		t.Fatalf("expected rendered config root <Bind> to contain Managers/Providers/Publishers sections")
 	}
-	if bytes.Contains(data, []byte("<Bind>\n    <Address>")) {
-		t.Fatalf("expected rendered config to avoid root <Bind><Address> output")
+	if bytes.Contains(data, []byte("<Bind>\n        <IP>")) || bytes.Contains(data, []byte("<Bind>\n        <Address>")) {
+		t.Fatalf("expected rendered config to avoid root <Bind><IP>/<Address> output")
+	}
+	serverIPPattern := regexp.MustCompile(`(?s)<Server\b[^>]*>.*?<IP>0\.0\.0\.0</IP>`)
+	if !serverIPPattern.Match(data) {
+		t.Fatalf("expected rendered config to keep top-level <Server><IP>")
 	}
 	llhlsPattern := regexp.MustCompile(`(?s)<Publishers>.*?<LLHLS>.*?<Port>8099</Port>.*?<TLSPort>9444</TLSPort>.*?</LLHLS>.*?</Publishers>`)
 	if !llhlsPattern.Match(data) {

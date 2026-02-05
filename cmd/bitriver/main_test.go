@@ -294,11 +294,11 @@ func TestRenderOMEConfigRewritesLegacyBindAddress(t *testing.T) {
 	if !strings.Contains(string(output), "<Bind>") {
 		t.Fatalf("expected output to include <Bind> block")
 	}
-	if !strings.Contains(string(output), "<IP>10.0.0.10</IP>") {
-		t.Fatalf("expected root bind IP to be updated, got output:\n%s", string(output))
+	if strings.Contains(stripped, "<Bind>\n        <IP>") || strings.Contains(stripped, "<Bind>\n        <Address>") {
+		t.Fatalf("expected root bind block to omit host binding fields, got output:\n%s", string(output))
 	}
-	if strings.Contains(stripped, "<Address>10.0.0.10</Address>") {
-		t.Fatalf("expected root bind output to canonicalize <Address> to <IP>, got output:\n%s", string(output))
+	if !strings.Contains(string(output), "<IP>10.0.0.11</IP>") {
+		t.Fatalf("expected top-level server IP to be updated, got output:\n%s", string(output))
 	}
 }
 

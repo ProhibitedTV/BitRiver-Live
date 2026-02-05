@@ -466,8 +466,11 @@ func TestRenderOMEConfigFromEnv(t *testing.T) {
 	}
 
 	data := readFile(t, out)
-	if !strings.Contains(data, "10.1.2.3") {
-		t.Fatalf("expected bind address in output, got %q", data)
+	if strings.Contains(data, "<Bind>\n        <IP>") || strings.Contains(data, "<Bind>\n        <Address>") {
+		t.Fatalf("expected root <Bind> to omit host binding fields, got %q", data)
+	}
+	if !strings.Contains(data, "<IP>10.1.2.4</IP>") {
+		t.Fatalf("expected top-level server IP in output, got %q", data)
 	}
 	if !strings.Contains(data, "accesstoken") {
 		t.Fatalf("expected access token in output")
