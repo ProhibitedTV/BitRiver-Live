@@ -303,6 +303,7 @@ services:
       BITRIVER_OME_PASSWORD: ${BITRIVER_OME_PASSWORD:?set via .env}
       BITRIVER_OME_ACCESS_TOKEN: ${BITRIVER_OME_ACCESS_TOKEN:-}
       BITRIVER_OME_API_TOKEN: ${BITRIVER_OME_API_TOKEN:?set via .env}
+      BITRIVER_OME_HEALTHCHECK_AUTH_MODE: ${BITRIVER_OME_HEALTHCHECK_AUTH_MODE:-token-only}
     networks:
       default:
         aliases:
@@ -330,27 +331,33 @@ services:
             token="$$BITRIVER_OME_API_TOKEN"
           fi
 
+          mode="$$BITRIVER_OME_HEALTHCHECK_AUTH_MODE"
+          if [ -z "$$mode" ]; then
+            mode="token-only"
+          fi
+
           probe_with_args() {
             # Pass credentials as literal argv entries so shell metacharacters are not re-interpreted.
             curl -fsS --connect-timeout 2 --max-time 4 "$$@" "$$health_url" || curl -fsS --connect-timeout 2 --max-time 4 "$$@" "$$healthz_url"
           }
 
-          # Attempt 1: AccessToken + HTTP basic auth (BITRIVER_OME_USERNAME / BITRIVER_OME_PASSWORD).
-          if [ -n "$$token" ] && [ -n "$$BITRIVER_OME_USERNAME" ] && [ -n "$$BITRIVER_OME_PASSWORD" ] && probe_with_args -H "AccessToken: $$token" -u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD"; then
-            exit 0
-          fi
-
-          # Attempt 2: AccessToken header only (BITRIVER_OME_ACCESS_TOKEN or BITRIVER_OME_API_TOKEN).
-          if [ -n "$$token" ] && probe_with_args -H "AccessToken: $$token"; then
-            exit 0
-          fi
-
-          # Attempt 3: unauthenticated fallback, but only when no token is configured by intent.
-          if [ -z "$$BITRIVER_OME_ACCESS_TOKEN" ] && [ -z "$$BITRIVER_OME_API_TOKEN" ] && probe_with_args; then
-            exit 0
-          fi
-
-          exit 1
+          case "$$mode" in
+            token+basic)
+              # AccessToken + HTTP basic auth only.
+              [ -n "$$token" ] && [ -n "$$BITRIVER_OME_USERNAME" ] && [ -n "$$BITRIVER_OME_PASSWORD" ] && probe_with_args -H "AccessToken: $$token" -u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD"
+              ;;
+            token-only)
+              # AccessToken header only.
+              [ -n "$$token" ] && probe_with_args -H "AccessToken: $$token"
+              ;;
+            none)
+              # Explicit local unsecured mode.
+              probe_with_args
+              ;;
+            *)
+              exit 1
+              ;;
+          esac
       interval: 30s
       timeout: 5s
       retries: 5
