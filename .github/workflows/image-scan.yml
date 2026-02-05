@@ -66,6 +66,10 @@ jobs:
             | tar -xz
           sudo install trivy /usr/local/bin/trivy
 
+      - name: Verify ome-config has no OS-package CVEs
+        run: |
+          trivy image --scanners vuln --pkg-types os --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 --no-progress bitriver-live/ome-config:local
+
       - name: Scan images for critical vulnerabilities
         run: |
           set -euo pipefail

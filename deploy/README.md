@@ -28,7 +28,9 @@ docker compose up --build
 ```
 
 Compose always re-renders `ome/Server.generated.xml` via the `ome-config` helper before starting OvenMediaEngine. Update `.env`
-with your OME credentials first—`ome-test-*` defaults are rejected and will cause the render step to fail.
+with your OME credentials first—`ome-test-*` defaults are rejected and will cause the render step to fail. The `ome-config`
+container runtime is now `scratch`, so the helper image only contains the statically linked `/usr/local/bin/bitriver`
+entrypoint (no shell or Debian userland packages).
 Compose also renders `srs/conf/srs.generated.conf` via the `srs-config` helper, replacing `${BITRIVER_SRS_TOKEN}` from `.env`
 before starting SRS so the ingest hooks always share the same token as the API.
 The `srs-config` helper is invoked via `bash` and sanitized into `/workspace/.tmp/` to avoid Windows CRLF issues while
