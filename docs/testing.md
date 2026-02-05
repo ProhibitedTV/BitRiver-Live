@@ -109,11 +109,24 @@ CI (`v1.1.3`, matching `.github/workflows/go-unit-tests.yml`) instead of
 `govulncheck` release.
 
 `./scripts/run-govulncheck.sh` enforces the current vulnerability policy for the
-pinned Go 1.21 toolchain:
+pinned Go 1.21 toolchain and now writes structured artifacts under
+`.artifacts/govulncheck/<timestamp>/`:
 
-- Reachable vulnerabilities in **non-stdlib modules** fail the run.
+- `raw/*.jsonl`: full per-scan govulncheck JSON output for audit/history.
+- `findings.json`: normalized findings with module + scan + platform metadata.
+- `new-findings.json`: only new disallowed findings (compared to baseline).
+- `summary.json`: counts plus categorized finding lists.
+
+Execution policy:
+
+- Reachable vulnerabilities in **non-stdlib modules** are disallowed, but only
+  fail the run when they are **not** listed in
+  `scripts/govulncheck-baseline.json`.
 - Reachable vulnerabilities that affect only the Go `stdlib` are logged as
   informational while the repository remains on Go 1.21.
+- Baseline matching includes platform (`goos`/`goarch`) so OS-specific
+  advisories (for example Windows-only findings) report meaningful matrix
+  deltas.
 - Once the toolchain target in `go.mod` is raised beyond 1.21, stdlib findings
   return to fail-closed behavior automatically.
 
@@ -123,6 +136,25 @@ third-party module:
 ```bash
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go install golang.org/x/vuln/cmd/govulncheck@v1.1.3
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off ./scripts/run-govulncheck.sh
+```
+
+Baseline entries are managed in `scripts/govulncheck-baseline.json` and support
+wildcards (`"*"`) per field. Each entry can scope by advisory ID, affected
+module, scan label, and platform:
+
+```json
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "GO-0000-0000",
+      "module": "example.com/module",
+      "scan": "root module",
+      "goos": "windows",
+      "goarch": "amd64"
+    }
+  ]
+}
 ```
 
 ## Container image vulnerability scan exceptions (Trivy)
