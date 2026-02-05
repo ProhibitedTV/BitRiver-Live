@@ -409,6 +409,25 @@ func TestValidateEnvAcceptsFreshInitDefaults(t *testing.T) {
 	}
 }
 
+func TestValidateEnvAcceptsFreshInitDefaultsWithPlaceholderMode(t *testing.T) {
+	generated, _ := generateEnvValues(map[string]string{"BITRIVER_LIVE_MODE": "development"})
+	values := baseEnvValues("", "")
+
+	for key, value := range generated {
+		values[key] = value
+	}
+
+	res := validateEnv(values)
+	for _, err := range res.Errors {
+		if strings.Contains(err, "BITRIVER_LIVE_MODE") {
+			t.Fatalf("did not expect placeholder mode defaults to fail mode validation, got %v", res.Errors)
+		}
+	}
+	if values["BITRIVER_LIVE_MODE"] != "production" {
+		t.Fatalf("expected placeholder mode defaults to set BITRIVER_LIVE_MODE=production, got %q", values["BITRIVER_LIVE_MODE"])
+	}
+}
+
 func TestRenderOMEConfigFromEnv(t *testing.T) {
 	env := map[string]string{
 		"BITRIVER_OME_BIND":            "10.1.2.3",

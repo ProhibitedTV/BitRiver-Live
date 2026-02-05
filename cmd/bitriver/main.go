@@ -259,6 +259,7 @@ func defaultForbiddenPlaceholders() map[string]string {
 		"BITRIVER_REDIS_PASSWORD":                 "R3dis-Example!",
 		"BITRIVER_LIVE_ADMIN_EMAIL":               "admin@stream.example.com",
 		"BITRIVER_LIVE_ADMIN_PASSWORD":            "Sup3rSecureAdmin!",
+		"BITRIVER_LIVE_MODE":                      "development",
 		"BITRIVER_SRS_TOKEN":                      "srs-secure-token-example",
 		"BITRIVER_OME_USERNAME":                   "ome-operator",
 		"BITRIVER_OME_PASSWORD":                   "OME-Example-Pass!",
@@ -2303,7 +2304,7 @@ func firstNonEmpty(values ...string) string {
 
 func productionSafeMode(value string) string {
 	mode := strings.ToLower(strings.TrimSpace(value))
-	if mode == "" || mode == "development" {
+	if mode == "" || mode == "development" || mode == "placeholder" || mode == "example" || mode == "changeme" || isForbiddenValue("BITRIVER_LIVE_MODE", mode) {
 		return "production"
 	}
 	return strings.TrimSpace(value)
