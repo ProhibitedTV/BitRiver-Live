@@ -829,6 +829,77 @@ func TestRunQuickstartFirstRunInitPassesEnvValidationWindowsPath(t *testing.T) {
 	}
 }
 
+func TestRunQuickstartFirstRunInitValidateKeepsLoopbackChecksAsWarnings(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	composePath := filepath.Join(t.TempDir(), "compose.yml")
+
+	if err := os.WriteFile(composePath, []byte("services: {}\n"), 0o644); err != nil {
+		t.Fatalf("write compose: %v", err)
+	}
+
+	originalDoctor := doctorRunner
+	originalEnvInit := envInitRunner
+	originalEnvValidate := envValidateRunner
+	originalOMERunner := omeRunner
+	originalMigrations := migrationsRunner
+	originalCompose := composeUpRunner
+	originalWaiter := quickstartWaiter
+	originalBootstrap := bootstrapAdminRunner
+	t.Cleanup(func() {
+		doctorRunner = originalDoctor
+		envInitRunner = originalEnvInit
+		envValidateRunner = originalEnvValidate
+		omeRunner = originalOMERunner
+		migrationsRunner = originalMigrations
+		composeUpRunner = originalCompose
+		quickstartWaiter = originalWaiter
+		bootstrapAdminRunner = originalBootstrap
+	})
+
+	doctorRunner = func([]string) bool { return true }
+	envInitRunner = runEnvInit
+	envValidateRunner = runEnvValidate
+	omeRunner = func([]string) error { return nil }
+	migrationsRunner = func(string, string) error { return nil }
+	composeUpRunner = func([]string) error { return nil }
+	quickstartWaiter = func(map[string]string) error { return nil }
+	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
+
+	if _, err := os.Stat(envPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected first run to start without env file, got stat err=%v", err)
+	}
+
+	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
+		if strings.Contains(err.Error(), "BITRIVER_LIVE_MODE") {
+			t.Fatalf("did not expect BITRIVER_LIVE_MODE validation failure on first-run init+validate path, got %v", err)
+		}
+		t.Fatalf("quickstart failed on first run: %v", err)
+	}
+
+	values, err := loadEnvValues(envPath, false)
+	if err != nil {
+		t.Fatalf("read env file: %v", err)
+	}
+	if values["BITRIVER_LIVE_MODE"] != "production" {
+		t.Fatalf("expected generated .env to persist BITRIVER_LIVE_MODE=production, got %q", values["BITRIVER_LIVE_MODE"])
+	}
+
+	res := validateEnv(values)
+	if len(res.Errors) > 0 {
+		for _, envErr := range res.Errors {
+			if strings.Contains(envErr, "BITRIVER_LIVE_MODE") {
+				t.Fatalf("did not expect BITRIVER_LIVE_MODE validation error after quickstart init+validate, got %v", res.Errors)
+			}
+		}
+		t.Fatalf("expected quickstart-generated loopback defaults to stay warning-only, got errors %v", res.Errors)
+	}
+
+	warnings := strings.Join(res.Warnings, " ")
+	if !strings.Contains(warnings, "BITRIVER_OME_BIND") || !strings.Contains(warnings, "BITRIVER_OME_IP") {
+		t.Fatalf("expected loopback OME warnings from quickstart defaults, got %v", res.Warnings)
+	}
+}
+
 func renderOMEConfigLegacy(cfg omeRenderConfig) (string, error) {
 	data, err := os.ReadFile(cfg.TemplatePath)
 	if err != nil {
