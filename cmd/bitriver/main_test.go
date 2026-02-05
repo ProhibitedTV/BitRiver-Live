@@ -406,10 +406,6 @@ func TestRenderOMEConfigSkipsUnsupportedRootBindHostTagsAndFillsAccessTokenAndIc
 		"      </LLHLS>",
 		"    </Publishers>",
 		"  </Bind>",
-		"  <Authentication>",
-		"    <ID>old</ID>",
-		"    <Password>old</Password>",
-		"  </Authentication>",
 		"  <AccessToken>old-token</AccessToken>",
 		"  <IceCandidates>",
 		"  </IceCandidates>",
@@ -956,11 +952,6 @@ func renderOMEConfigLegacy(cfg omeRenderConfig) (string, error) {
 		return "", err
 	}
 
-	text, err = replaceAuthenticationLegacy(text, cfg.Username, cfg.Password)
-	if err != nil {
-		return "", err
-	}
-
 	text = stampImageTag(text, cfg.ImageTag)
 	text = collapseBlankLines(text)
 
@@ -1246,17 +1237,6 @@ func scopedReplaceControlBindingsLegacy(text, bind string) (string, error) {
 
 func replaceAccessTokenLegacy(text, token string) (string, error) {
 	token = xmlEscape(token)
-	accessTokensRe := regexp.MustCompile(`(?s)<AccessTokens>(.*?)</AccessTokens>`)
-	loc := accessTokensRe.FindStringSubmatchIndex(text)
-	if loc != nil {
-		inner := text[loc[2]:loc[3]]
-		replaced, err := replaceTagContentLegacy(inner, "AccessToken", token)
-		if err != nil {
-			return "", err
-		}
-		return text[:loc[2]] + replaced + text[loc[3]:], nil
-	}
-
 	if strings.Contains(text, "<AccessToken>") {
 		replaced, err := replaceTagContentLegacy(text, "AccessToken", token)
 		if err != nil {
@@ -1265,26 +1245,5 @@ func replaceAccessTokenLegacy(text, token string) (string, error) {
 		return replaced, nil
 	}
 
-	return "", errors.New("missing <AccessTokens> or <AccessToken> in template")
-}
-
-func replaceAuthenticationLegacy(text, username, password string) (string, error) {
-	authRe := regexp.MustCompile(`(?s)<Authentication>(.*?)</Authentication>`)
-	loc := authRe.FindStringSubmatchIndex(text)
-	if loc == nil {
-		return "", errors.New("missing <Authentication> block in template")
-	}
-
-	inner := text[loc[2]:loc[3]]
-	var err error
-	inner, err = replaceTagContentLegacy(inner, "ID", xmlEscape(username))
-	if err != nil {
-		return "", err
-	}
-	inner, err = replaceTagContentLegacy(inner, "Password", xmlEscape(password))
-	if err != nil {
-		return "", err
-	}
-
-	return text[:loc[2]] + inner + text[loc[3]:], nil
+	return "", errors.New("missing <AccessToken> in template")
 }

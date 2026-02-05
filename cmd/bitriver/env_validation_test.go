@@ -573,7 +573,7 @@ func TestRenderOMEConfigFromEnvWritesSecrets(t *testing.T) {
 	}
 
 	data := readFile(t, filepath.Join(workspace, "deploy", "ome", "Server.generated.xml"))
-	for _, expected := range []string{"operator-user", "operator-pass", "operator-access-token", "<!-- Rendered for BITRIVER_OME_IMAGE_TAG=0.17.1 -->"} {
+	for _, expected := range []string{"operator-access-token", "<!-- Rendered for BITRIVER_OME_IMAGE_TAG=0.17.1 -->"} {
 		if !strings.Contains(data, expected) {
 			t.Fatalf("expected %q in generated config, got %q", expected, data)
 		}

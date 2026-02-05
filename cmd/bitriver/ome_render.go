@@ -122,8 +122,6 @@ type omeRenderConfig struct {
 }
 
 var omeTestDefaults = map[string]string{
-	"BITRIVER_OME_USERNAME":  "ome-test-user",
-	"BITRIVER_OME_PASSWORD":  "ome-test-pass",
 	"BITRIVER_OME_API_TOKEN": "ome-test-access-token",
 	// BITRIVER_OME_ACCESS_TOKEN falls back to BITRIVER_OME_API_TOKEN when unset.
 	"BITRIVER_OME_ACCESS_TOKEN": "ome-test-access-token",
@@ -151,8 +149,6 @@ func buildOMERenderConfig(values map[string]string, templatePath, outputPath str
 		iceCandidate = fmt.Sprintf("*:%s/udp", icePortRange)
 	}
 
-	username := strings.TrimSpace(values["BITRIVER_OME_USERNAME"])
-	password := strings.TrimSpace(values["BITRIVER_OME_PASSWORD"])
 	apiToken := strings.TrimSpace(values["BITRIVER_OME_API_TOKEN"])
 	accessToken := strings.TrimSpace(values["BITRIVER_OME_ACCESS_TOKEN"])
 	if accessToken == "" {
@@ -161,8 +157,6 @@ func buildOMERenderConfig(values map[string]string, templatePath, outputPath str
 
 	missing := make([]string, 0)
 	for key, value := range map[string]string{
-		"BITRIVER_OME_USERNAME":        username,
-		"BITRIVER_OME_PASSWORD":        password,
 		"BITRIVER_OME_API_TOKEN":       apiToken,
 		"BITRIVER_OME_SERVER_PORT":     port,
 		"BITRIVER_OME_SERVER_TLS_PORT": tlsPort,
@@ -197,8 +191,6 @@ func buildOMERenderConfig(values map[string]string, templatePath, outputPath str
 		TLSPort:      tlsPort,
 		LLHLSPort:    llhlsPort,
 		LLHLSTLSPort: llhlsTLSPort,
-		Username:     username,
-		Password:     password,
 		APIToken:     apiToken,
 		AccessToken:  accessToken,
 		ImageTag:     imageTag,
@@ -237,7 +229,6 @@ func renderOMEConfig(cfg omeRenderConfig) error {
 type omeTemplateInfo struct {
 	hasBindTag            bool
 	rootBindHasSignalling bool
-	hasAccessTokens       bool
 }
 
 type xmlTokenKind int
@@ -432,9 +423,6 @@ func scanOMETemplateInfo(text string) (omeTemplateInfo, error) {
 			if name == "Bind" || name == "Server.bind" {
 				info.hasBindTag = true
 			}
-			if name == "AccessTokens" {
-				info.hasAccessTokens = true
-			}
 			if name == "Control" {
 				controlDepth = len(stack) + 1
 			}
@@ -516,8 +504,6 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 	controlServerDepth := -1
 	virtualHostsDepth := -1
 	publishersDepth := -1
-	accessTokensDepth := -1
-	authenticationDepth := -1
 
 	var signallingStack []signallingState
 	var llhlsStack []llhlsState
@@ -529,9 +515,6 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 	llhlsFound := false
 	iceCandidatesFound := 0
 	accessTokenReplaced := false
-	authIDReplaced := false
-	authPasswordReplaced := false
-	authBlockSeen := false
 	rootBindPortReplaced := false
 	rootBindTLSPortReplaced := false
 	rootServerIPReplaced := false
@@ -545,8 +528,6 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 	tcpRelayValue := xmlEscape(cfg.TCPRelay)
 	iceCandidateValue := xmlEscape(cfg.ICECandidate)
 	accessTokenValue := xmlEscape(cfg.AccessToken)
-	usernameValue := xmlEscape(cfg.Username)
-	passwordValue := xmlEscape(cfg.Password)
 
 	replacement := replaceState{}
 
@@ -628,20 +609,11 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 				iceCandidatesStack = append(iceCandidatesStack, iceCandidatesState{depth: iceCandidatesDepth})
 				iceCandidatesFound++
 			}
-			if name == "AccessTokens" {
-				accessTokensDepth = len(stack) + 1
-			}
-			if name == "Authentication" {
-				authenticationDepth = len(stack) + 1
-				authBlockSeen = true
-			}
 
 			inControlServer := controlServerDepth != -1 && len(stack) >= controlServerDepth
 			inRootServer := rootServerDepth != -1 && len(stack) >= rootServerDepth && controlDepth == -1
 			inRootBind := rootBindDepth != -1 && len(stack) >= rootBindDepth
 			inVirtualHosts := virtualHostsDepth != -1 && len(stack) >= virtualHostsDepth
-			inAccessTokens := accessTokensDepth != -1 && len(stack) >= accessTokensDepth
-			inAuthentication := authenticationDepth != -1 && len(stack) >= authenticationDepth
 
 			if inRootBind && (name == "Address" || name == "IP" || name == "Server.bind.Address") {
 				if token.selfClosing {
@@ -744,29 +716,12 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 				continue
 			}
 
-			if name == "AccessToken" && !accessTokenReplaced && (!info.hasAccessTokens || inAccessTokens) {
+			if name == "AccessToken" && !accessTokenReplaced {
 				replacement = replaceState{active: true, tagName: name, depth: 1}
 				write(raw)
 				write(accessTokenValue)
 				accessTokenReplaced = true
 				continue
-			}
-
-			if inAuthentication {
-				if name == "ID" && !authIDReplaced {
-					replacement = replaceState{active: true, tagName: name, depth: 1}
-					write(raw)
-					write(usernameValue)
-					authIDReplaced = true
-					continue
-				}
-				if name == "Password" && !authPasswordReplaced {
-					replacement = replaceState{active: true, tagName: name, depth: 1}
-					write(raw)
-					write(passwordValue)
-					authPasswordReplaced = true
-					continue
-				}
 			}
 
 			write(raw)
@@ -828,12 +783,6 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 			if virtualHostsDepth != -1 && len(stack) < virtualHostsDepth {
 				virtualHostsDepth = -1
 			}
-			if accessTokensDepth != -1 && len(stack) < accessTokensDepth {
-				accessTokensDepth = -1
-			}
-			if authenticationDepth != -1 && len(stack) < authenticationDepth {
-				authenticationDepth = -1
-			}
 			if len(signallingStack) > 0 && len(stack) < signallingStack[len(signallingStack)-1].depth {
 				state := signallingStack[len(signallingStack)-1]
 				if !state.portReplaced {
@@ -886,20 +835,8 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 			return "", errors.New("missing <TLSPort> in template")
 		}
 	}
-	if info.hasAccessTokens && !accessTokenReplaced {
+	if !accessTokenReplaced {
 		return "", errors.New("missing <AccessToken> in template")
-	}
-	if !info.hasAccessTokens && !accessTokenReplaced {
-		return "", errors.New("missing <AccessTokens> or <AccessToken> in template")
-	}
-	if !authBlockSeen {
-		return "", errors.New("missing <Authentication> block in template")
-	}
-	if !authIDReplaced {
-		return "", errors.New("missing <ID> in template")
-	}
-	if !authPasswordReplaced {
-		return "", errors.New("missing <Password> in template")
 	}
 	if iceCandidatesFound == 0 {
 		return "", fmt.Errorf("OME template %s missing <%s> (expected under <IceCandidates>)", cfg.TemplatePath, "TcpRelay")

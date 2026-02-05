@@ -152,7 +152,7 @@ func omeImageFromCompose(t *testing.T, composePath string) string {
 //
 //	airensoft/ovenmediaengine:0.16.0
 func normalizeComposeImageRef(image string) string {
-	re := regexp.MustCompile(`\$\{[^:}]+:-([^}]+)\}`)
+	re := regexp.MustCompile(`\$\{[^:}]+:-([^}]*)\}`)
 	return re.ReplaceAllString(image, "$1")
 }
 
@@ -252,14 +252,15 @@ func TestRenderOMEConfigRequiresManagersAuth(t *testing.T) {
 		"BITRIVER_OME_ICE_CANDIDATE=example.com:10000-10009/udp",
 	}, "\n")
 	data := renderOMEConfig(t, repoRoot, envContents)
-	hasAccessTokens := bytes.Contains(data, []byte("<AccessTokens>"))
+	hasAccessToken := regexp.MustCompile(`(?s)<Managers>\s*<API>.*?<AccessToken>health-token</AccessToken>.*?</API>\s*</Managers>`).Match(data)
+	hasLegacyAccessTokens := bytes.Contains(data, []byte("<AccessTokens>"))
 	hasAuthentication := bytes.Contains(data, []byte("<Authentication>"))
 	hasOutputs := bytes.Contains(data, []byte("<Outputs>"))
 	hasOutputStreams := bytes.Contains(data, []byte("<OutputStreams>"))
-	summary := fmt.Sprintf("AccessTokens=%t Authentication=%t", hasAccessTokens, hasAuthentication)
+	summary := fmt.Sprintf("AccessToken=%t AccessTokens=%t Authentication=%t", hasAccessToken, hasLegacyAccessTokens, hasAuthentication)
 
-	if !hasAccessTokens || !hasAuthentication {
-		t.Fatalf("expected managers auth for rendered config, but missing nodes: %s", summary)
+	if !hasAccessToken || hasLegacyAccessTokens || hasAuthentication {
+		t.Fatalf("expected canonical managers API auth in rendered config, got: %s", summary)
 	}
 
 	if !hasOutputs {
@@ -290,9 +291,9 @@ func TestRenderOMEConfigRewritesLLHLSPorts(t *testing.T) {
 	}, "\n")
 
 	data := renderOMEConfig(t, repoRoot, envContents)
-	rootBindPattern := regexp.MustCompile(`(?s)<Bind>\s*<Managers>.*?</Managers>\s*<Providers>.*?</Providers>\s*<Publishers>`)
+	rootBindPattern := regexp.MustCompile(`(?s)<Bind>\s*<Providers>.*?</Providers>\s*<Publishers>`)
 	if !rootBindPattern.Match(data) {
-		t.Fatalf("expected rendered config root <Bind> to contain Managers/Providers/Publishers sections")
+		t.Fatalf("expected rendered config root <Bind> to contain Providers/Publishers sections")
 	}
 	if bytes.Contains(data, []byte("<Bind>\n        <IP>")) || bytes.Contains(data, []byte("<Bind>\n        <Address>")) {
 		t.Fatalf("expected rendered config to avoid root <Bind><IP>/<Address> output")
