@@ -222,6 +222,9 @@ func TestOmeConfigRenderingUsesCanonicalAPIAccessToken(t *testing.T) {
 	rendered := renderOMEConfig(t, repoRoot, envContents)
 
 	contents := string(rendered)
+	if !strings.Contains(contents, "<Managers>") || !strings.Contains(contents, "<API>") {
+		t.Fatalf("expected rendered config to include top-level <Managers><API> auth block, got:\n%s", contents)
+	}
 	if strings.Contains(contents, "<AccessTokens>") {
 		t.Fatalf("expected canonical <AccessToken> without <AccessTokens> wrapper, got:\n%s", contents)
 	}

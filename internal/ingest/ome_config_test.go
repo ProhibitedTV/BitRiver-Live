@@ -253,13 +253,14 @@ func TestRenderOMEConfigRequiresManagersAuth(t *testing.T) {
 	}, "\n")
 	data := renderOMEConfig(t, repoRoot, envContents)
 	hasAccessToken := regexp.MustCompile(`(?s)<Managers>\s*<API>.*?<AccessToken>health-token</AccessToken>.*?</API>\s*</Managers>`).Match(data)
+	hasTopLevelManagers := regexp.MustCompile(`(?s)<Server\b[^>]*>.*?<Managers>\s*<API>.*?</API>\s*</Managers>`).Match(data)
 	hasLegacyAccessTokens := bytes.Contains(data, []byte("<AccessTokens>"))
 	hasAuthentication := bytes.Contains(data, []byte("<Authentication>"))
 	hasOutputs := bytes.Contains(data, []byte("<Outputs>"))
 	hasOutputStreams := bytes.Contains(data, []byte("<OutputStreams>"))
-	summary := fmt.Sprintf("AccessToken=%t AccessTokens=%t Authentication=%t", hasAccessToken, hasLegacyAccessTokens, hasAuthentication)
+	summary := fmt.Sprintf("TopLevelManagers=%t AccessToken=%t AccessTokens=%t Authentication=%t", hasTopLevelManagers, hasAccessToken, hasLegacyAccessTokens, hasAuthentication)
 
-	if !hasAccessToken || hasLegacyAccessTokens || hasAuthentication {
+	if !hasTopLevelManagers || !hasAccessToken || hasLegacyAccessTokens || hasAuthentication {
 		t.Fatalf("expected canonical managers API auth in rendered config, got: %s", summary)
 	}
 

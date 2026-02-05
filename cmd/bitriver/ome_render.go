@@ -502,6 +502,8 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 	rootBindDepth := -1
 	controlDepth := -1
 	controlServerDepth := -1
+	managersDepth := -1
+	managersAPIDepth := -1
 	virtualHostsDepth := -1
 	publishersDepth := -1
 
@@ -518,6 +520,7 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 	rootBindPortReplaced := false
 	rootBindTLSPortReplaced := false
 	rootServerIPReplaced := false
+	managersAPIFound := false
 
 	bindValue := xmlEscape(cfg.Bind)
 	portValue := xmlEscape(cfg.Port)
@@ -584,6 +587,13 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 			if name == "Server" && controlDepth != -1 && controlServerDepth == -1 {
 				controlServerDepth = len(stack) + 1
 			}
+			if name == "Managers" && rootServerDepth != -1 && len(stack) >= rootServerDepth && controlDepth == -1 {
+				managersDepth = len(stack) + 1
+			}
+			if name == "API" && managersDepth != -1 && len(stack) >= managersDepth {
+				managersAPIDepth = len(stack) + 1
+				managersAPIFound = true
+			}
 			if name == "VirtualHosts" && rootServerDepth != -1 && len(stack) >= rootServerDepth && controlDepth == -1 {
 				virtualHostsDepth = len(stack) + 1
 			}
@@ -611,6 +621,7 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 			}
 
 			inControlServer := controlServerDepth != -1 && len(stack) >= controlServerDepth
+			inManagersAPI := managersAPIDepth != -1 && len(stack) >= managersAPIDepth
 			inRootServer := rootServerDepth != -1 && len(stack) >= rootServerDepth && controlDepth == -1
 			inRootBind := rootBindDepth != -1 && len(stack) >= rootBindDepth
 			inVirtualHosts := virtualHostsDepth != -1 && len(stack) >= virtualHostsDepth
@@ -716,7 +727,7 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 				continue
 			}
 
-			if name == "AccessToken" && !accessTokenReplaced {
+			if inManagersAPI && name == "AccessToken" && !accessTokenReplaced {
 				replacement = replaceState{active: true, tagName: name, depth: 1}
 				write(raw)
 				write(accessTokenValue)
@@ -771,6 +782,12 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 				controlDepth = -1
 				controlServerDepth = -1
 			}
+			if managersDepth != -1 && len(stack) < managersDepth {
+				managersDepth = -1
+			}
+			if managersAPIDepth != -1 && len(stack) < managersAPIDepth {
+				managersAPIDepth = -1
+			}
 			if controlServerDepth != -1 && len(stack) < controlServerDepth {
 				controlServerDepth = -1
 			}
@@ -818,6 +835,9 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 	if !llhlsFound {
 		return "", errors.New("missing <LLHLS> section under <Publishers> in template")
 	}
+	if !managersAPIFound {
+		return "", errors.New("missing <Managers><API> section in template")
+	}
 	if info.rootBindHasSignalling {
 		for _, state := range signallingStack {
 			if !state.portReplaced {
@@ -836,7 +856,7 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 		}
 	}
 	if !accessTokenReplaced {
-		return "", errors.New("missing <AccessToken> in template")
+		return "", errors.New("missing <AccessToken> under <Managers><API> in template")
 	}
 	if iceCandidatesFound == 0 {
 		return "", fmt.Errorf("OME template %s missing <%s> (expected under <IceCandidates>)", cfg.TemplatePath, "TcpRelay")
@@ -885,6 +905,12 @@ func validateOMEGeneratedConfig(path string) error {
 		if strings.Contains(contents, forbidden) {
 			return fmt.Errorf("%s still set to ome-test-* default in %s", key, path)
 		}
+	}
+	if !regexp.MustCompile(`(?s)<Managers>\s*<API>.*?<AccessToken>\s*[^<\s].*?</AccessToken>.*?</API>\s*</Managers>`).MatchString(contents) {
+		return fmt.Errorf("missing canonical <Managers><API><AccessToken> in %s", path)
+	}
+	if regexp.MustCompile(`<\s*AccessTokens\b`).MatchString(contents) {
+		return fmt.Errorf("deprecated <AccessTokens> found in %s; use singular <Managers><API><AccessToken> instead", path)
 	}
 
 	return nil
