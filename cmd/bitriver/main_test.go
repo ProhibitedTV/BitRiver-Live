@@ -762,6 +762,68 @@ func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 	if values["BITRIVER_LIVE_MODE"] != "production" {
 		t.Fatalf("expected first-run quickstart env to persist production mode, got %q", values["BITRIVER_LIVE_MODE"])
 	}
+
+	envContents, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatalf("read env file contents: %v", err)
+	}
+	if !strings.Contains(string(envContents), "BITRIVER_LIVE_MODE=production") {
+		t.Fatalf("expected generated .env to contain BITRIVER_LIVE_MODE=production, got:\n%s", string(envContents))
+	}
+}
+
+func TestRunQuickstartFirstRunInitPassesEnvValidationWindowsPath(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("windows path handling is only validated on windows")
+	}
+
+	tempDir := t.TempDir()
+	envPath := filepath.Join(tempDir, "config", ".env")
+	if err := os.MkdirAll(filepath.Dir(envPath), 0o755); err != nil {
+		t.Fatalf("mkdir env dir: %v", err)
+	}
+	composePath := filepath.Join(tempDir, "compose.yml")
+
+	if err := os.WriteFile(composePath, []byte("services: {}\n"), 0o644); err != nil {
+		t.Fatalf("write compose: %v", err)
+	}
+
+	originalDoctor := doctorRunner
+	originalOMERunner := omeRunner
+	originalMigrations := migrationsRunner
+	originalCompose := composeUpRunner
+	originalWaiter := quickstartWaiter
+	originalBootstrap := bootstrapAdminRunner
+	t.Cleanup(func() {
+		doctorRunner = originalDoctor
+		omeRunner = originalOMERunner
+		migrationsRunner = originalMigrations
+		composeUpRunner = originalCompose
+		quickstartWaiter = originalWaiter
+		bootstrapAdminRunner = originalBootstrap
+	})
+
+	doctorRunner = func([]string) bool { return true }
+	omeRunner = func([]string) error { return nil }
+	migrationsRunner = func(string, string) error { return nil }
+	composeUpRunner = func([]string) error { return nil }
+	quickstartWaiter = func(map[string]string) error { return nil }
+	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
+
+	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
+		if strings.Contains(err.Error(), "BITRIVER_LIVE_MODE") {
+			t.Fatalf("did not expect BITRIVER_LIVE_MODE validation failure on first-run init+validate path, got %v", err)
+		}
+		t.Fatalf("quickstart failed on first run with windows path: %v", err)
+	}
+
+	envContents, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatalf("read env file contents: %v", err)
+	}
+	if !strings.Contains(string(envContents), "BITRIVER_LIVE_MODE=production") {
+		t.Fatalf("expected generated .env to contain BITRIVER_LIVE_MODE=production, got:\n%s", string(envContents))
+	}
 }
 
 func renderOMEConfigLegacy(cfg omeRenderConfig) (string, error) {
