@@ -111,6 +111,8 @@ type omeRenderConfig struct {
 	ServerIP     string
 	Port         string
 	TLSPort      string
+	HTTPPort     string
+	HTTPTLSPort  string
 	LLHLSPort    string
 	LLHLSTLSPort string
 	Username     string
@@ -136,6 +138,8 @@ func buildOMERenderConfig(values map[string]string, templatePath, outputPath str
 	bind := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_BIND"]), "0.0.0.0")
 	port := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_SERVER_PORT"]), "9000")
 	tlsPort := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_SERVER_TLS_PORT"]), "9443")
+	httpPort := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_HTTP_PORT"]), "8081")
+	httpTLSPort := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_HTTP_TLS_PORT"]), "8082")
 	llhlsPort := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_LLHLS_PORT"]), "8080")
 	llhlsTLSPort := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_LLHLS_TLS_PORT"]), "8443")
 	ip := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_IP"]), bind)
@@ -190,6 +194,8 @@ func buildOMERenderConfig(values map[string]string, templatePath, outputPath str
 		ServerIP:     ip,
 		Port:         port,
 		TLSPort:      tlsPort,
+		HTTPPort:     httpPort,
+		HTTPTLSPort:  httpTLSPort,
 		LLHLSPort:    llhlsPort,
 		LLHLSTLSPort: llhlsTLSPort,
 		APIToken:     apiToken,
@@ -484,7 +490,7 @@ type replaceState struct {
 	dropEnd     bool
 }
 
-func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (string, error) {
+func rewriteOMEConfig(text string, cfg omeRenderConfig, _ omeTemplateInfo) (string, error) {
 	scanner := newXMLScanner(text)
 	var out strings.Builder
 	lineTail := ""
@@ -501,6 +507,7 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 	topLevelManagersAPIDepth := -1
 	bindManagersDepth := -1
 	bindManagersAPIDepth := -1
+	signallingDepth := -1
 	virtualHostsDepth := -1
 	publishersDepth := -1
 
@@ -520,8 +527,10 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 	bindManagersAPIFound := false
 
 	bindValue := xmlEscape(cfg.Bind)
-	portValue := xmlEscape(cfg.Port)
-	tlsPortValue := xmlEscape(cfg.TLSPort)
+	signallingPortValue := xmlEscape(cfg.Port)
+	signallingTLSPortValue := xmlEscape(cfg.TLSPort)
+	httpPortValue := xmlEscape(firstNonEmpty(cfg.HTTPPort, "8081"))
+	httpTLSPortValue := xmlEscape(firstNonEmpty(cfg.HTTPTLSPort, "8082"))
 	llhlsPortValue := xmlEscape(cfg.LLHLSPort)
 	llhlsTLSPortValue := xmlEscape(cfg.LLHLSTLSPort)
 	serverIPValue := xmlEscape(cfg.ServerIP)
@@ -601,6 +610,9 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 					bindManagersAPIFound = true
 				}
 			}
+			if name == "Signalling" && rootBindDepth != -1 && len(stack) >= rootBindDepth {
+				signallingDepth = len(stack) + 1
+			}
 			if name == "VirtualHosts" && rootServerDepth != -1 && len(stack) >= rootServerDepth && controlDepth == -1 {
 				virtualHostsDepth = len(stack) + 1
 			}
@@ -626,6 +638,7 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 			inControlServer := controlServerDepth != -1 && len(stack) >= controlServerDepth
 			inTopLevelManagersAPI := topLevelManagersAPIDepth != -1 && len(stack) >= topLevelManagersAPIDepth
 			inBindManagersAPI := bindManagersAPIDepth != -1 && len(stack) >= bindManagersAPIDepth
+			inSignalling := signallingDepth != -1 && len(stack) >= signallingDepth
 			inRootServer := rootServerDepth != -1 && len(stack) >= rootServerDepth && controlDepth == -1
 			inRootBind := rootBindDepth != -1 && len(stack) >= rootBindDepth
 			inVirtualHosts := virtualHostsDepth != -1 && len(stack) >= virtualHostsDepth
@@ -673,18 +686,33 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 				}
 			}
 
+			if inSignalling {
+				if name == "Port" {
+					replacement = replaceState{active: true, tagName: name, depth: 1}
+					write(raw)
+					write(signallingPortValue)
+					continue
+				}
+				if name == "TLSPort" {
+					replacement = replaceState{active: true, tagName: name, depth: 1}
+					write(raw)
+					write(signallingTLSPortValue)
+					continue
+				}
+			}
+
 			if inBindManagersAPI {
 				if name == "Port" && !bindManagersPortReplaced {
 					replacement = replaceState{active: true, tagName: name, depth: 1}
 					write(raw)
-					write(portValue)
+					write(httpPortValue)
 					bindManagersPortReplaced = true
 					continue
 				}
 				if name == "TLSPort" && !bindManagersTLSPortReplaced {
 					replacement = replaceState{active: true, tagName: name, depth: 1}
 					write(raw)
-					write(tlsPortValue)
+					write(httpTLSPortValue)
 					bindManagersTLSPortReplaced = true
 					continue
 				}
@@ -773,6 +801,9 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, info omeTemplateInfo) (s
 			}
 			if bindManagersAPIDepth != -1 && len(stack) < bindManagersAPIDepth {
 				bindManagersAPIDepth = -1
+			}
+			if signallingDepth != -1 && len(stack) < signallingDepth {
+				signallingDepth = -1
 			}
 			if controlServerDepth != -1 && len(stack) < controlServerDepth {
 				controlServerDepth = -1

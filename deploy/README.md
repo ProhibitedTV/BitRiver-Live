@@ -59,17 +59,19 @@ third-party images, use the corresponding `*_IMAGE_DIGEST` fields in `deploy/.en
 ### OME healthcheck
 
 The OME service in `deploy/docker-compose.yml` uses a `curl`-based healthcheck that hits the control API inside the container
-(`http://localhost:8081/v1/health` with a fallback to `/healthz`), optionally adding the `AccessToken` header and basic auth
+(`http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health` with a fallback to `/healthz`), optionally adding the `AccessToken` header and basic auth
 based on `BITRIVER_OME_ACCESS_TOKEN` (falling back to `BITRIVER_OME_API_TOKEN` when the access token is unset) and
 `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD`. To run the same probe manually,
 execute it inside the container so it reuses the environment variables already injected by Compose:
 
 ```bash
-docker compose exec ome sh -c 'curl -fsS http://localhost:8081/v1/health || curl -fsS http://localhost:8081/healthz'
-docker compose exec ome sh -c 'curl -fsS -H "AccessToken: $BITRIVER_OME_ACCESS_TOKEN" -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" http://localhost:8081/v1/health'
+docker compose exec ome sh -c 'curl -fsS "http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health" || curl -fsS "http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/healthz"'
+docker compose exec ome sh -c 'curl -fsS -H "AccessToken: $BITRIVER_OME_ACCESS_TOKEN" -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" "http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health"'
 ```
 
 If either command returns 401, re-check the credentials rendered into `ome/Server.generated.xml` and the values in `.env`.
+
+`BITRIVER_OME_HTTP_PORT`/`BITRIVER_OME_HTTP_TLS_PORT` control `<Bind><Managers><API><Port>/<TLSPort>` in the rendered OME config (and the in-container health target), while `BITRIVER_OME_SERVER_PORT`/`BITRIVER_OME_SERVER_TLS_PORT` remain dedicated to WebRTC signalling listeners.
 The canonical OME auth element is top-level `<Managers><API><AccessToken>` in the rendered `Server.xml`; the quickstart renderer rejects deprecated `<AccessTokens>` wrappers. The renderer also enforces direct `<Application><OutputProfiles>` blocks and rejects deprecated `<Application><Outputs>` wrappers.
 
 ## Systemd installs
