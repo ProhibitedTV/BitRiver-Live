@@ -71,3 +71,26 @@ The Playwright config builds the app and starts `npm run start:test` on port
 already running viewer instance. The specs stub API calls (including
 `tests/stream-playback.spec.ts`, which seeds playback metadata and chat
 transcripts) so you do not need a live backend to exercise UI flows.
+
+## Dependency upgrade cadence
+
+Plan a monthly dependency review (for example, during the first week of each
+month) so runtime and tooling updates stay predictable.
+
+Baseline upgrade steps:
+
+1. From `web/viewer`, install dependencies:
+   ```bash
+   npm install
+   ```
+2. Bump `next`, `eslint-config-next`, and `typescript` together to keep the
+   Next.js toolchain in sync:
+   ```bash
+   npm install next@latest eslint-config-next@latest typescript@latest
+   ```
+3. Verify the viewer suites after upgrading:
+   ```bash
+   npm run lint
+   npm run test
+   npm run test:playwright
+   ```
