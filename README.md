@@ -89,7 +89,7 @@ Set-Location BitRiver-Live
 go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml
 ```
 
-The CLI checks Docker/Compose, generates `.env` from `deploy/.env.example` with strong credentials when the file is missing, renders `deploy/ome/Server.generated.xml` via the Go binary (no Python dependency), builds API/viewer/SRS controller/transcoder images, runs migrations, and prints the seeded admin login. The `.env` file is gitignored; `go run ./cmd/bitriver env init` and the quickstart scripts will create it and mint fresh credentials the first time you run them so new clones never share secrets. Re-run the commands any time `.env` or templates change; they are idempotent.
+The CLI checks Docker/Compose, generates `.env` from `deploy/.env.example` with strong credentials when the file is missing, persists `BITRIVER_LIVE_MODE=production` in that file, renders `deploy/ome/Server.generated.xml` via the Go binary (no Python dependency), builds API/viewer/SRS controller/transcoder images, runs migrations, and prints the seeded admin login. The `.env` file is gitignored; `go run ./cmd/bitriver env init` and the quickstart scripts will create it and mint fresh credentials the first time you run them so new clones never share secrets. Re-run the commands any time `.env` or templates change; they are idempotent.
 
 ### Step 3 – Use the running stack
 
