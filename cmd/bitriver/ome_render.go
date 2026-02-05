@@ -953,6 +953,14 @@ func validateOMEGeneratedConfig(path string) error {
 	if strings.TrimSpace(parsed.Bind.Managers.API.Port) == "" || strings.TrimSpace(parsed.Bind.Managers.API.TLSPort) == "" || strings.TrimSpace(parsed.Bind.Managers.API.WorkerCount) == "" {
 		return fmt.Errorf("missing <Server><Bind><Managers><API> listener block with <Port>/<TLSPort>/<WorkerCount> in %s", path)
 	}
+	expectedHealthcheckPort := strings.TrimSpace(os.Getenv("BITRIVER_OME_HTTP_PORT"))
+	if expectedHealthcheckPort == "" {
+		expectedHealthcheckPort = "8081"
+	}
+	renderedManagersAPIPort := strings.TrimSpace(parsed.Bind.Managers.API.Port)
+	if renderedManagersAPIPort != expectedHealthcheckPort {
+		return fmt.Errorf("healthcheck contract mismatch in %s: rendered <Server><Bind><Managers><API><Port> is %q but deploy/docker-compose.yml healthcheck expects BITRIVER_OME_HTTP_PORT=%q; update BITRIVER_OME_HTTP_PORT (and BITRIVER_OME_API if overridden) or regenerate deploy/ome/Server.generated.xml so both values match", path, renderedManagersAPIPort, expectedHealthcheckPort)
+	}
 	if strings.TrimSpace(parsed.Bind.Managers.API.AccessToken) != "" {
 		return fmt.Errorf("invalid <AccessToken> found under <Server><Bind><Managers><API> in %s; keep auth token only under top-level <Server><Managers><API>", path)
 	}
