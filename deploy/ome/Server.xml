@@ -108,34 +108,32 @@
                     <Name>live</Name>
                     <Type>live</Type>
 
-                    <Outputs>
-                        <OutputProfiles>
-                            <OutputProfile>
-                                <Name>copy_passthrough</Name>
-                                <OutputStreams>
-                                    <OutputStream>
-                                        <Name>copy</Name>
-                                        <Video>
-                                            <Codec>copy</Codec>
-                                        </Video>
-                                        <Audio>
-                                            <Codec>copy</Codec>
-                                        </Audio>
-                                    </OutputStream>
-                                </OutputStreams>
-                                <!-- OutputStreams are required for the pinned 0.16.x schema. -->
-                            </OutputProfile>
-                        </OutputProfiles>
+                    <OutputProfiles>
+                        <OutputProfile>
+                            <Name>copy_passthrough</Name>
+                            <OutputStreams>
+                                <OutputStream>
+                                    <Name>copy</Name>
+                                    <Video>
+                                        <Codec>copy</Codec>
+                                    </Video>
+                                    <Audio>
+                                        <Codec>copy</Codec>
+                                    </Audio>
+                                </OutputStream>
+                            </OutputStreams>
+                            <!-- OutputStreams are required for the pinned 0.16.x schema. -->
+                        </OutputProfile>
+                    </OutputProfiles>
 
-                        <LLHLS>
-                            <SegmentDuration>6</SegmentDuration>
-                            <PartDuration>1</PartDuration>
-                            <SegmentCount>5</SegmentCount>
-                            <PartCount>3</PartCount>
-                            <PreloadHint>true</PreloadHint>
-                            <AdditionalPlaylist>true</AdditionalPlaylist>
-                        </LLHLS>
-                    </Outputs>
+                    <LLHLS>
+                        <SegmentDuration>6</SegmentDuration>
+                        <PartDuration>1</PartDuration>
+                        <SegmentCount>5</SegmentCount>
+                        <PartCount>3</PartCount>
+                        <PreloadHint>true</PreloadHint>
+                        <AdditionalPlaylist>true</AdditionalPlaylist>
+                    </LLHLS>
 
                     <Publishers>
                         <WebRTC>
