@@ -19,6 +19,50 @@ timeout locally to avoid flakes on slower machines:
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
 ```
 
+
+Function comment coverage is enforced in CI with a lightweight guard script:
+
+```bash
+./scripts/check-function-comments.py --strict-unexported
+```
+
+The checker scans non-test Go files and requires immediate comments above `func`
+declarations. It ignores generated files (`// Code generated ... DO NOT EDIT.`),
+`vendor/`, `third_party/`, and `_test.go` files by default.
+
+Coverage policy:
+
+- **Exported functions:** must always have comments (100% required).
+- **Unexported functions in `cmd/` and `internal/`:** use strict mode for 100%,
+  or set a threshold when iterating locally:
+
+```bash
+./scripts/check-function-comments.py --unexported-threshold 90
+```
+
+CI runs in regression mode against changed files so existing historical debt can
+be paid down incrementally without allowing new gaps:
+
+```bash
+./scripts/check-function-comments.py --strict-unexported --git-base origin/main
+```
+
+Acceptable comment examples:
+
+```go
+// Start launches the API server and blocks until shutdown is requested.
+func Start(ctx context.Context) error { ... }
+
+// normalizeTags trims whitespace and removes duplicate tag values.
+func normalizeTags(tags []string) []string { ... }
+```
+
+Exceptions:
+
+- Generated files are excluded automatically.
+- `_test.go` helpers are excluded automatically.
+- `vendor/` and `third_party/` are excluded automatically.
+
 Authentication/session lifecycle coverage lives in
 `internal/api/auth_integration_test.go`. These integration-style handlers use
 `internal/testsupport.SessionStoreStub` to validate cookie issuance, refresh,
