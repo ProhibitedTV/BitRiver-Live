@@ -126,15 +126,6 @@
                         </OutputProfile>
                     </OutputProfiles>
 
-                    <LLHLS>
-                        <SegmentDuration>6</SegmentDuration>
-                        <PartDuration>1</PartDuration>
-                        <SegmentCount>5</SegmentCount>
-                        <PartCount>3</PartCount>
-                        <PreloadHint>true</PreloadHint>
-                        <AdditionalPlaylist>true</AdditionalPlaylist>
-                    </LLHLS>
-
                     <Publishers>
                         <WebRTC>
                             <Enable>true</Enable>
