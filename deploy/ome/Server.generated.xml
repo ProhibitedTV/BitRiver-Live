@@ -30,7 +30,7 @@
               want to protect API access, or leave the placeholder for
               open/local use.
             -->
-            <AccessToken>OME-Example-Access-Token</AccessToken>
+            <AccessToken>OME-Safe-Token-2026</AccessToken>
         </API>
     </Managers>
 
@@ -39,8 +39,8 @@
 
         <Managers>
             <API>
-                <Port>9000</Port>
-                <TLSPort>9443</TLSPort>
+                <Port>8081</Port>
+                <TLSPort>8082</TLSPort>
                 <WorkerCount>1</WorkerCount>
             </API>
         </Managers>
