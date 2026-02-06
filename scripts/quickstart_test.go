@@ -211,7 +211,7 @@ exit 0
 	}
 }
 
-func TestQuickstartFailsOmeAuthPreflightWhenTokensMismatch(t *testing.T) {
+func TestQuickstartAllowsMismatchedAccessAndAPITokensWhenCanonicalTokenIsProvided(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -250,9 +250,12 @@ func TestQuickstartFailsOmeAuthPreflightWhenTokensMismatch(t *testing.T) {
 	}
 	goStub := `#!/usr/bin/env bash
 set -euo pipefail
+if [ "$1" = "run" ] && [ "$2" = "./cmd/bitriver" ] && [ "${3:-}" = "ome" ] && [ "${4:-}" = "render" ]; then
+  exit 0
+fi
 if [ "$1" = "run" ] && [ "$2" = "./cmd/bitriver" ] && [ "${3:-}" = "quickstart" ]; then
-  echo "quickstart must not run when preflight fails" >&2
-  exit 91
+  echo "quickstart invoked"
+  exit 0
 fi
 exit 0
 `
@@ -264,9 +267,19 @@ exit 0
 	envContents := strings.Join([]string{
 		"BITRIVER_OME_API_TOKEN=api-token",
 		"BITRIVER_OME_ACCESS_TOKEN=access-token",
+		"BITRIVER_OME_HEALTHCHECK_TOKEN=healthcheck-token",
 	}, "\n") + "\n"
 	if err := os.WriteFile(envPath, []byte(envContents), 0o644); err != nil {
 		t.Fatalf("write env: %v", err)
+	}
+
+	configDir := filepath.Join(tempDir, "deploy", "ome")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("create config dir: %v", err)
+	}
+	configContents := `<Server><Managers><API><AccessToken>healthcheck-token</AccessToken></API></Managers></Server>`
+	if err := os.WriteFile(filepath.Join(configDir, "Server.generated.xml"), []byte(configContents), 0o644); err != nil {
+		t.Fatalf("write generated config: %v", err)
 	}
 
 	cmd := exec.Command("bash", quickstartDst)
@@ -281,20 +294,12 @@ exit 0
 	cmd.Stderr = &stdout
 
 	err = cmd.Run()
-	if err == nil {
-		t.Fatalf("expected quickstart to fail when OME tokens mismatch")
-	}
-	if exitErr := (&exec.ExitError{}); errors.As(err, &exitErr) {
-		if exitErr.ExitCode() == 91 {
-			t.Fatalf("quickstart CLI path executed despite failed preflight:\n%s", stdout.String())
-		}
+	if err != nil {
+		t.Fatalf("expected quickstart to proceed with canonical token, got error: %v\n%s", err, stdout.String())
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "OME auth preflight failed: token mismatch detected") {
-		t.Fatalf("expected mismatch preflight error, got:\n%s", out)
-	}
-	if !strings.Contains(out, "BITRIVER_OME_ACCESS_TOKEN") || !strings.Contains(out, "BITRIVER_OME_API_TOKEN") {
-		t.Fatalf("expected canonical token variable names in mismatch output, got:\n%s", out)
+	if !strings.Contains(out, "quickstart invoked") {
+		t.Fatalf("expected quickstart command to run after preflight, got:\n%s", out)
 	}
 }
 

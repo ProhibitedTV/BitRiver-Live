@@ -105,15 +105,6 @@ EOF
     return 1
   fi
 
-  if [[ -n "$access_token" && "$access_token" != "$api_token" ]]; then
-    cat >&2 <<EOF
-OME auth preflight failed: token mismatch detected in $ENV_FILE_PATH.
-BITRIVER_OME_ACCESS_TOKEN and BITRIVER_OME_API_TOKEN must match for quickstart health probes.
-Set BITRIVER_OME_ACCESS_TOKEN=$api_token (or clear BITRIVER_OME_ACCESS_TOKEN to fall back to BITRIVER_OME_API_TOKEN).
-EOF
-    return 1
-  fi
-
   echo "Running OME auth preflight: rendering config and validating token consistency ..."
   run_cli ome render --force --env-file "$ENV_FILE_PATH"
   "$VERIFY_OME_TOKEN_SCRIPT" --env-file "$ENV_FILE_PATH" --config "$CODE_ROOT/deploy/ome/Server.generated.xml"
