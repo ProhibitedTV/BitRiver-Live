@@ -257,6 +257,7 @@ export function ChatPanel({
 
   return (
     <section className="chat-panel" aria-live="polite">
+      {/* Header actions open the pop-out dialog and toggle the local settings modal state. */}
       <header className="chat-panel__header">
         <div className="chat-panel__title">
           <h3>Live chat</h3>
@@ -301,6 +302,7 @@ export function ChatPanel({
           </button>
         </div>
       </header>
+      {/* Gate the thread UI behind loading skeletons, retry errors, and auth-required sign-in prompts. */}
       {loading && renderSkeletons()}
       {error && (
         <div className="surface" role="alert">
@@ -311,6 +313,7 @@ export function ChatPanel({
         <div
           className="chat-panel__body"
           role="log"
+          // Screen readers should announce only newly added chat entries as they stream in.
           aria-relevant="additions"
           aria-live="polite"
         >
@@ -331,6 +334,7 @@ export function ChatPanel({
               </p>
             </div>
           ) : (
+            // Render author/time-window groups with avatar fallbacks and optional per-message timestamps.
             <ul className="chat-thread">
               {groupedMessages.map((group) => (
                 <li key={group.id} className="chat-message chat-message--group">
