@@ -163,7 +163,7 @@ Update the entries for:
 - `BITRIVER_LIVE_IMAGE_TAG`, `BITRIVER_VIEWER_IMAGE_TAG`, `BITRIVER_SRS_CONTROLLER_IMAGE_TAG`, and `BITRIVER_TRANSCODER_IMAGE_TAG` (set all four to the release tag you extracted in [Step 4](#4-download-bitriver-live-release-assets) so every container runs the same build)
 - `BITRIVER_SRS_IMAGE_TAG` (defaults to `v5.0.185` so Compose matches the systemd units; bump it only after testing a newer SRS release and update both deployments together)
 
-If OME logs show `Empty <AccessToken> is not allowed`, the renderer detected an empty or missing token in `${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}` from `.env` (Compose will usually flag `bitriver-ome` as unhealthy at the same time). The compose healthcheck first tries `AccessToken: <token>`, then automatically tries `Authorization: Bearer <token>`. Basic auth remains opt-in via `BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true`. Set a non-empty token value, run `./scripts/render-ome-config.sh --force`, and restart with `docker compose up -d` so `deploy/ome/Server.generated.xml` picks up the same `<Managers><API><AccessToken>` value.
+If OME logs show `Empty <AccessToken> is not allowed`, the renderer detected an empty or missing token in `${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}` from `.env` (Compose will usually flag `bitriver-ome` as unhealthy at the same time). The compose healthcheck first tries `AccessToken: <token>`, then automatically tries `Authorization: Bearer <token>`. Compose now attempts basic auth automatically when `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD` are set, then falls back to Bearer auth. Set a non-empty token value, run `./scripts/render-ome-config.sh --force`, and restart with `docker compose up -d` so `deploy/ome/Server.generated.xml` picks up the same `<Managers><API><AccessToken>` value.
 
 The `.env` guardrails shipped with the release bundle intentionally block the original `bitriver`/`changeme` samples. [`deploy/.env.example`](../deploy/.env.example) documents every variable, while [`deploy/check-env.sh`](../deploy/check-env.sh) refuses to continue until each credential changes and `BITRIVER_LIVE_POSTGRES_DSN` matches the database user/password you selected earlier. Rerun the script after every edit so Compose and the systemd units pick up consistent DSNs.
 
@@ -387,7 +387,7 @@ BITRIVER_OME_PASSWORD=REPLACE_ME
 BITRIVER_OME_API_TOKEN=REPLACE_ME
 # Optional: override OME API AccessToken used by health probes; defaults to BITRIVER_OME_API_TOKEN when empty.
 BITRIVER_OME_ACCESS_TOKEN=
-# Optional: set true to enable legacy OME healthcheck fallbacks (Authorization Bearer + basic auth).
+
 BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=false
 BITRIVER_TRANSCODER_TOKEN=REPLACE_ME
 BITRIVER_TRANSCODER_PUBLIC_BASE_URL=https://cdn.example.com/hls

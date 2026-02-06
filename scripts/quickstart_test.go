@@ -368,9 +368,9 @@ func TestComposeOMEHealthcheckUsesCanonicalAccessTokenHeader(t *testing.T) {
 	if accessProbe == -1 || bearerProbe == -1 || bearerProbe <= accessProbe {
 		t.Fatalf("expected Authorization Bearer probe to run after AccessToken probe")
 	}
-	legacyGate := strings.Index(compose, `if [ "$${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}" = "true" ]; then`)
-	if legacyGate == -1 || legacyGate <= bearerProbe {
-		t.Fatalf("expected basic auth legacy gate to remain after Bearer probe")
+	basicProbe := strings.Index(compose, `if probe_with_args -u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD"; then`)
+	if basicProbe == -1 || basicProbe <= accessProbe || basicProbe >= bearerProbe {
+		t.Fatalf("expected basic auth probe between AccessToken and Authorization Bearer probes")
 	}
 	if !strings.Contains(compose, "attempted auth modes:") {
 		t.Fatalf("expected OME healthcheck failure logs to include attempted auth mode summary")

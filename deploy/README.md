@@ -65,9 +65,9 @@ Header/credential fallback sequence is exact and ordered:
 
 1. Resolve canonical probe token in this order: `${BITRIVER_OME_HEALTHCHECK_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}}`.
 2. Try `AccessToken: <token>`.
-3. Then try `Authorization: Bearer <token>`.
-4. Only when `BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true`, if both `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD` are non-empty, try HTTP basic auth.
-5. Mark container unhealthy with an explicit attempted-auth summary if all enabled modes fail.
+3. Then try HTTP basic auth when both `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD` are non-empty.
+4. Then try `Authorization: Bearer <token>`.
+5. Mark container unhealthy with an explicit attempted-auth summary if all probes fail.
 
 Expected 401 signatures during auth mismatches:
 
@@ -110,13 +110,10 @@ docker compose exec ome sh -lc '
   }
 
   probe_with_args -H "AccessToken: $token" && exit 0
-  probe_with_args -H "Authorization: Bearer $token" && exit 0
-
-  if [ "${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}" = "true" ]; then
-    if [ -n "${BITRIVER_OME_USERNAME:-}" ] && [ -n "${BITRIVER_OME_PASSWORD:-}" ]; then
-      probe_with_args -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" && exit 0
-    fi
+  if [ -n "${BITRIVER_OME_USERNAME:-}" ] && [ -n "${BITRIVER_OME_PASSWORD:-}" ]; then
+    probe_with_args -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" && exit 0
   fi
+  probe_with_args -H "Authorization: Bearer $token" && exit 0
 
   exit 1
 '
