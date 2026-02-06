@@ -317,12 +317,43 @@ services:
     container_name: bitriver-ome
     hostname: ome
     restart: unless-stopped
+    entrypoint:
+      - sh
+      - -ec
+    command:
+      - |
+        token="$${BITRIVER_OME_HEALTHCHECK_TOKEN:-}"
+        if [ -z "$$token" ]; then token="$${BITRIVER_OME_ACCESS_TOKEN:-}"; fi
+        if [ -z "$$token" ]; then token="$${BITRIVER_OME_API_TOKEN:-}"; fi
+
+        if [ -z "$$token" ]; then
+          echo "bitriver-ome startup failed: canonical token is empty (BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN)" >&2
+          exit 1
+        fi
+
+        if [ -n "$${BITRIVER_OME_HEALTHCHECK_TOKEN:-}" ] && [ -n "$${BITRIVER_OME_ACCESS_TOKEN:-}" ] && [ "$${BITRIVER_OME_HEALTHCHECK_TOKEN}" != "$${BITRIVER_OME_ACCESS_TOKEN}" ]; then
+          echo "bitriver-ome startup failed: BITRIVER_OME_HEALTHCHECK_TOKEN and BITRIVER_OME_ACCESS_TOKEN must match when both are set" >&2
+          exit 1
+        fi
+
+        if [ -n "$${BITRIVER_OME_HEALTHCHECK_TOKEN:-}" ] && [ -n "$${BITRIVER_OME_API_TOKEN:-}" ] && [ "$${BITRIVER_OME_HEALTHCHECK_TOKEN}" != "$${BITRIVER_OME_API_TOKEN}" ]; then
+          echo "bitriver-ome startup failed: BITRIVER_OME_HEALTHCHECK_TOKEN and BITRIVER_OME_API_TOKEN must match when both are set" >&2
+          exit 1
+        fi
+
+        if [ -n "$${BITRIVER_OME_ACCESS_TOKEN:-}" ] && [ -n "$${BITRIVER_OME_API_TOKEN:-}" ] && [ "$${BITRIVER_OME_ACCESS_TOKEN}" != "$${BITRIVER_OME_API_TOKEN}" ]; then
+          echo "bitriver-ome startup failed: BITRIVER_OME_ACCESS_TOKEN and BITRIVER_OME_API_TOKEN must match when both are set" >&2
+          exit 1
+        fi
+
+        exec /opt/ovenmediaengine/bin/OvenMediaEngine -c origin_conf
     volumes:
       - ./ome/Server.generated.xml:/opt/ovenmediaengine/bin/origin_conf/Server.xml:ro
       - ./ome/Server.generated.xml:/opt/ovenmediaengine/bin/edge_conf/Server.xml:ro
     environment:
       BITRIVER_OME_USERNAME: ${BITRIVER_OME_USERNAME:?set via .env}
       BITRIVER_OME_PASSWORD: ${BITRIVER_OME_PASSWORD:?set via .env}
+      BITRIVER_OME_HEALTHCHECK_TOKEN: ${BITRIVER_OME_HEALTHCHECK_TOKEN:-}
       BITRIVER_OME_ACCESS_TOKEN: ${BITRIVER_OME_ACCESS_TOKEN:-}
       BITRIVER_OME_API_TOKEN: ${BITRIVER_OME_API_TOKEN:?set via .env}
       BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH: ${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}
@@ -347,14 +378,17 @@ services:
           health_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health"
           healthz_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/healthz"
 
-          token="$$BITRIVER_OME_ACCESS_TOKEN"
-          # AccessToken header source: prefer BITRIVER_OME_ACCESS_TOKEN, then BITRIVER_OME_API_TOKEN.
+          token="$$BITRIVER_OME_HEALTHCHECK_TOKEN"
+          # Canonical AccessToken source: BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN.
+          if [ -z "$$token" ] && [ -n "$$BITRIVER_OME_ACCESS_TOKEN" ]; then
+            token="$$BITRIVER_OME_ACCESS_TOKEN"
+          fi
           if [ -z "$$token" ] && [ -n "$$BITRIVER_OME_API_TOKEN" ]; then
             token="$$BITRIVER_OME_API_TOKEN"
           fi
 
           if [ -z "$$token" ]; then
-            echo "OME healthcheck misconfigured: both BITRIVER_OME_ACCESS_TOKEN and BITRIVER_OME_API_TOKEN are empty inside the container; compare .env with 'docker compose config' output." >&2
+            echo "OME healthcheck misconfigured: BITRIVER_OME_HEALTHCHECK_TOKEN, BITRIVER_OME_ACCESS_TOKEN, and BITRIVER_OME_API_TOKEN are all empty inside the container; compare .env with 'docker compose config' output." >&2
             exit 1
           fi
 

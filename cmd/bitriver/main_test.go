@@ -334,8 +334,8 @@ func TestValidateOMEGeneratedConfigRejectsMismatchedHealthcheckAccessToken(t *te
 	if err == nil {
 		t.Fatal("expected validation to fail for mismatched healthcheck access token")
 	}
-	if !strings.Contains(err.Error(), "BITRIVER_OME_ACCESS_TOKEN") || !strings.Contains(err.Error(), "BITRIVER_OME_API_TOKEN") {
-		t.Fatalf("expected mismatch error to mention BITRIVER_OME_ACCESS_TOKEN and BITRIVER_OME_API_TOKEN, got %v", err)
+	if !strings.Contains(err.Error(), "BITRIVER_OME_HEALTHCHECK_TOKEN") || !strings.Contains(err.Error(), "BITRIVER_OME_ACCESS_TOKEN") || !strings.Contains(err.Error(), "BITRIVER_OME_API_TOKEN") {
+		t.Fatalf("expected mismatch error to mention canonical token precedence variables, got %v", err)
 	}
 }
 

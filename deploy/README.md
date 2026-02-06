@@ -63,7 +63,7 @@ The OME service in `deploy/docker-compose.yml` uses a `curl`-based healthcheck a
 
 Header/credential fallback sequence is exact and ordered:
 
-1. Resolve probe token as `${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}`.
+1. Resolve canonical probe token in this order: `${BITRIVER_OME_HEALTHCHECK_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}}`.
 2. Try `AccessToken: <token>`.
 3. Only when `BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true`, try `Authorization: Bearer <token>`.
 4. Still only in legacy mode, if both `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD` are non-empty, try HTTP basic auth.
@@ -78,7 +78,7 @@ Expected 401 signatures during auth mismatches:
 
 If you see `Authorization header is required`, treat it as a header/token drift issue first:
 
-1. Confirm `.env` token values (`BITRIVER_OME_API_TOKEN`, optional `BITRIVER_OME_ACCESS_TOKEN`).
+1. Confirm `.env` token values (`BITRIVER_OME_API_TOKEN`, optional `BITRIVER_OME_ACCESS_TOKEN`, optional `BITRIVER_OME_HEALTHCHECK_TOKEN`) and keep them identical when multiple are set.
 2. Confirm `deploy/ome/Server.generated.xml` has the same `<Managers><API><AccessToken>` value.
 3. Confirm `deploy/docker-compose.yml` has the expected `ome` environment injection and healthcheck mode order.
 4. Re-render and restart: `./scripts/render-ome-config.sh --force && docker compose up -d ome`.
@@ -91,7 +91,10 @@ docker compose exec ome sh -lc '
   health_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health"
   healthz_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/healthz"
 
-  token="${BITRIVER_OME_ACCESS_TOKEN:-}"
+  token="${BITRIVER_OME_HEALTHCHECK_TOKEN:-}"
+  if [ -z "$token" ] && [ -n "${BITRIVER_OME_ACCESS_TOKEN:-}" ]; then
+    token="$BITRIVER_OME_ACCESS_TOKEN"
+  fi
   if [ -z "$token" ] && [ -n "${BITRIVER_OME_API_TOKEN:-}" ]; then
     token="$BITRIVER_OME_API_TOKEN"
   fi
@@ -121,6 +124,15 @@ docker compose exec ome sh -lc '
 ```
 
 `BITRIVER_OME_HTTP_PORT`/`BITRIVER_OME_HTTP_TLS_PORT` control `<Bind><Managers><API><Port>/<TLSPort>` in the rendered OME config (and the in-container health target), while `BITRIVER_OME_SERVER_PORT`/`BITRIVER_OME_SERVER_TLS_PORT` remain dedicated to WebRTC signalling listeners.
+
+Example precedence resolution:
+
+- `BITRIVER_OME_API_TOKEN=api-prod-token`
+- `BITRIVER_OME_ACCESS_TOKEN=api-prod-token`
+- `BITRIVER_OME_HEALTHCHECK_TOKEN=` (unset)
+
+Result: render + `ome-health-token-check` + OME container startup + OME healthcheck all use `api-prod-token`.
+
 The canonical OME auth element is top-level `<Managers><API><AccessToken>` in the rendered `Server.xml`; the quickstart renderer rejects deprecated `<AccessTokens>` wrappers. The renderer also enforces direct `<Application><OutputProfiles>` blocks and rejects deprecated `<Application><Outputs>` wrappers.
 
 ## Systemd installs

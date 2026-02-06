@@ -103,7 +103,7 @@ When any dependency falters, start with the API health surfaces. `/readyz` retur
 - **What degrades:** Live playback drops because the origin is unreachable; ingest bootstraps fail when the controller cannot create an OME application and roll back SRS provisioning. `/healthz` reports the `ovenmediaengine` component as `error` while `/readyz` remains healthy if Postgres and chat are online.【F:internal/ingest/http_controller.go†L308-L401】【F:internal/ingest/http_controller.go†L120-L195】
 - **API/reactive response:** Existing VOD assets remain playable from object storage/CDN, but new live sessions cannot start until OME accepts control-plane requests.【F:docs/advanced-deployments.md†L166-L205】
   - **Recovery checklist:**
-    1. Confirm the control credentials and bind config (`BITRIVER_OME_API`, `BITRIVER_OME_API_TOKEN`, `BITRIVER_OME_BIND`, `BITRIVER_OME_SERVER_PORT`, `BITRIVER_OME_SERVER_TLS_PORT`) match the running OME instance. Keep `BITRIVER_OME_ACCESS_TOKEN` aligned with `BITRIVER_OME_API_TOKEN` unless you intentionally need a distinct health probe header.【F:deploy/.env.example†L53-L57】【F:deploy/.env.example†L85-L90】
+    1. Confirm the control credentials and bind config (`BITRIVER_OME_API`, `BITRIVER_OME_API_TOKEN`, `BITRIVER_OME_BIND`, `BITRIVER_OME_SERVER_PORT`, `BITRIVER_OME_SERVER_TLS_PORT`) match the running OME instance. Keep `BITRIVER_OME_HEALTHCHECK_TOKEN`, `BITRIVER_OME_ACCESS_TOKEN`, and `BITRIVER_OME_API_TOKEN` aligned when more than one is set.【F:deploy/.env.example†L53-L57】【F:deploy/.env.example†L85-L90】
   2. Restart OME, watch its health endpoint, then re-run `/healthz` on the API to ensure the component returns to `ok`.
   3. Retry ingest start; the controller will reprovision the application and transcoder jobs once OME responds.
 
@@ -449,7 +449,7 @@ BitRiver Live can orchestrate end-to-end ingest and transcode jobs by talking to
 | `BITRIVER_OME_TCP_RELAY` | Address advertised in `<TcpRelay>` for TURN/TCP candidates (defaults to `*:3478`; set to the externally reachable host/port when NATting). |
 | `BITRIVER_OME_ICE_PORT_RANGE` | Host-facing UDP range published for media relays (defaults to `10000-10009`). |
 | `BITRIVER_OME_ICE_CANDIDATE` | ICE candidate advertised to browsers (defaults to `*:10000-10009/udp`; replace with public IP/port range when NATting or port-forwarding). |
-| `BITRIVER_OME_API_TOKEN` | Control-plane API token for OvenMediaEngine. `BITRIVER_OME_ACCESS_TOKEN` mirrors the API token for the health probe header unless you override it. |
+| `BITRIVER_OME_API_TOKEN` | Control-plane API token for OvenMediaEngine. Canonical OME token precedence is `BITRIVER_OME_HEALTHCHECK_TOKEN` → `BITRIVER_OME_ACCESS_TOKEN` → `BITRIVER_OME_API_TOKEN`. |
 | `BITRIVER_TRANSCODER_API` | Base URL for the FFmpeg job runner (e.g. a lightweight controller on port `9000`). |
 | `BITRIVER_TRANSCODER_TOKEN` | Bearer token for FFmpeg job APIs. |
 | `BITRIVER_TRANSCODE_LADDER` | Optional ladder definition (`1080p:6000,720p:4000,480p:2500`). |
@@ -465,12 +465,12 @@ Leaving all of the ingest variables empty disables the controller and produces a
 
 - An **SRS API proxy** (the `srs-controller` service) reachable on port `1985` (or your custom management port). The proxy validates `BITRIVER_SRS_TOKEN` on every request and forwards authenticated calls to the upstream SRS raw API.
 - An **SRS** instance the proxy can reach on port `1985` (or your custom management port) with `raw_api` enabled.
-- An **OvenMediaEngine** API listener (default `8081`) with an account that has permission to create and delete applications. Provide the API token through `BITRIVER_OME_API_TOKEN`. Override `BITRIVER_OME_ACCESS_TOKEN` only if your deployment needs a distinct health probe header.
+- An **OvenMediaEngine** API listener (default `8081`) with an account that has permission to create and delete applications. Provide the API token through `BITRIVER_OME_API_TOKEN`. If you set `BITRIVER_OME_HEALTHCHECK_TOKEN` or `BITRIVER_OME_ACCESS_TOKEN`, keep them equal to `BITRIVER_OME_API_TOKEN` so rendered config and probes remain identical.
 - A **transcoder job controller** (such as an FFmpeg fleet manager) exposed over HTTP—commonly on port `9000`—secured with a bearer token supplied in `BITRIVER_TRANSCODER_TOKEN`.
 
 Open the management ports to the BitRiver Live API host and ensure the credentials map to accounts that can create/delete the corresponding resources. Set the optional `BITRIVER_INGEST_HEALTH` path if your services expose health checks somewhere other than `/healthz`.
 
-OvenMediaEngine's control server enforces authentication on `/healthz`; the compose bundle mounts `deploy/ome/Server.generated.xml` (rendered from `deploy/ome/Server.xml`) and probes with an ordered auth fallback: `AccessToken: ${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}`, then `Authorization: Bearer ...`, then basic auth (`BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD`) when available. Any resulting 401 marks the container unhealthy. Keep `.env` aligned with that rendered configuration if you edit the template. The template writes API auth to top-level `<Managers><API><AccessToken>`, rewrites control-listener bind values from `BITRIVER_OME_BIND`, keeps root `<Bind>` focused on protocol sections (`<Providers>`, `<Publishers>`), omits unsupported root bind host child tags, and uses top-level `<Server><IP>` (derived from `BITRIVER_OME_IP`) as the canonical server bind host field. Application output profiles must remain direct children of `<Application><OutputProfiles>` to stay schema-compatible; avoid deprecated `<Application><Outputs>` wrappers. Keep LL-HLS in `<Bind><Publishers><LLHLS>` only and do not add `<Application><LLHLS>`.
+OvenMediaEngine's control server enforces authentication on `/healthz`; the compose bundle mounts `deploy/ome/Server.generated.xml` (rendered from `deploy/ome/Server.xml`) and probes with an ordered auth fallback: `AccessToken: ${BITRIVER_OME_HEALTHCHECK_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}}`, then `Authorization: Bearer ...`, then basic auth (`BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD`) when available. Any resulting 401 marks the container unhealthy. Keep `.env` aligned with that rendered configuration if you edit the template. The template writes API auth to top-level `<Managers><API><AccessToken>`, rewrites control-listener bind values from `BITRIVER_OME_BIND`, keeps root `<Bind>` focused on protocol sections (`<Providers>`, `<Publishers>`), omits unsupported root bind host child tags, and uses top-level `<Server><IP>` (derived from `BITRIVER_OME_IP`) as the canonical server bind host field. Application output profiles must remain direct children of `<Application><OutputProfiles>` to stay schema-compatible; avoid deprecated `<Application><Outputs>` wrappers. Keep LL-HLS in `<Bind><Publishers><LLHLS>` only and do not add `<Application><LLHLS>`.
 
 When enabling WebRTC playback, forward the relay paths end users will hit:
 
@@ -531,7 +531,9 @@ Operators can use the manifests under `deploy/` as a reference architecture for 
 
 | `BITRIVER_OME_IMAGE_TAG` | `BITRIVER_OME_API_TOKEN` expectation | Rendering behaviour |
 | --- | --- | --- |
-| `0.16.0+` (default) | Must be non-empty. `BITRIVER_OME_ACCESS_TOKEN` mirrors it for health probes unless you intentionally override it. | The renderer injects `<Managers><API><AccessToken>` with the provided token, stamps the render marker, and preserves the modern output schema. |
+| `0.16.0+` (default) | Must be non-empty. Canonical precedence is `BITRIVER_OME_HEALTHCHECK_TOKEN` → `BITRIVER_OME_ACCESS_TOKEN` → `BITRIVER_OME_API_TOKEN`, and startup checks fail when multiple values disagree. | The renderer injects `<Managers><API><AccessToken>` with the canonical token, stamps the render marker, and preserves the modern output schema. |
+
+Example: set `BITRIVER_OME_API_TOKEN=shared-token`, leave `BITRIVER_OME_HEALTHCHECK_TOKEN` unset, and optionally set `BITRIVER_OME_ACCESS_TOKEN=shared-token`; render/validation/healthchecks all resolve `shared-token`.
 3. **Configure secrets securely.**
    - Generate an SRS management token and set it via `BITRIVER_SRS_TOKEN`.
    - Issue a bearer token for the FFmpeg job controller and inject it with `BITRIVER_TRANSCODER_TOKEN`.

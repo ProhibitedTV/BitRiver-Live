@@ -145,6 +145,13 @@ func TestComposeOMEHealthcheckUsesCanonicalAccessTokenHeader(t *testing.T) {
 	if !strings.Contains(compose, "AccessToken: $$token") {
 		t.Fatalf("expected OME healthcheck to probe using AccessToken header")
 	}
+
+	if !strings.Contains(compose, "BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN") {
+		t.Fatalf("expected OME healthcheck to use canonical token precedence")
+	}
+	if !strings.Contains(compose, "bitriver-ome startup failed") {
+		t.Fatalf("expected OME startup to fail fast when canonical token inputs are empty or mismatched")
+	}
 	if !strings.Contains(compose, `if [ "$${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}" = "true" ]; then`) {
 		t.Fatalf("expected legacy auth fallback to be guarded behind BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH")
 	}
