@@ -363,14 +363,14 @@ func TestComposeOMEHealthcheckUsesCanonicalAccessTokenHeader(t *testing.T) {
 	if !strings.Contains(compose, "bitriver-ome startup failed") {
 		t.Fatalf("expected OME startup to fail fast when canonical token inputs are empty or mismatched")
 	}
-	if !strings.Contains(compose, `if [ "$${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}" = "true" ]; then`) {
-		t.Fatalf("expected legacy auth fallback to be guarded behind BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH")
-	}
-
-	legacyGate := strings.Index(compose, `if [ "$${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}" = "true" ]; then`)
 	bearerProbe := strings.Index(compose, "Authorization: Bearer $$token")
-	if legacyGate == -1 || bearerProbe == -1 || bearerProbe <= legacyGate {
-		t.Fatalf("expected Authorization Bearer probe to remain behind the legacy auth gate")
+	accessProbe := strings.Index(compose, "AccessToken: $$token")
+	if accessProbe == -1 || bearerProbe == -1 || bearerProbe <= accessProbe {
+		t.Fatalf("expected Authorization Bearer probe to run after AccessToken probe")
+	}
+	legacyGate := strings.Index(compose, `if [ "$${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}" = "true" ]; then`)
+	if legacyGate == -1 || legacyGate <= bearerProbe {
+		t.Fatalf("expected basic auth legacy gate to remain after Bearer probe")
 	}
 	if !strings.Contains(compose, "attempted auth modes:") {
 		t.Fatalf("expected OME healthcheck failure logs to include attempted auth mode summary")
