@@ -8,6 +8,16 @@ jest.mock("../hooks/useAuth");
 const fetchProfileMock = viewerApiMocks.fetchProfile;
 const updateProfileMock = viewerApiMocks.updateProfile;
 
+const flushMicrotasks = async () => {
+  await Promise.resolve();
+  await Promise.resolve();
+};
+
+const submitProfileForm = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(screen.getByRole("button", { name: /save profile/i }));
+  await flushMicrotasks();
+};
+
 const profileFixture = {
   userId: "viewer-1",
   displayName: "Viewer One",
@@ -27,7 +37,10 @@ describe("ProfilePage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     fetchProfileMock.mockResolvedValue(profileFixture as any);
-    updateProfileMock.mockResolvedValue(profileFixture as any);
+    updateProfileMock.mockImplementation(async () => {
+      await Promise.resolve();
+      return profileFixture as any;
+    });
   });
 
   test("prompts unauthenticated viewers to sign in", () => {
@@ -70,7 +83,7 @@ describe("ProfilePage", () => {
     await user.type(screen.getByLabelText("Bio"), "New bio for my streams");
     await user.clear(screen.getByLabelText("Avatar URL"));
     await user.type(screen.getByLabelText("Avatar URL"), "https://new.example.com/me.png");
-    await user.click(screen.getByRole("button", { name: /save profile/i }));
+    await submitProfileForm(user);
 
     await waitFor(() => expect(updateProfileMock).toHaveBeenCalledTimes(1));
     expect(updateProfileMock).toHaveBeenCalledWith("viewer-1", {
@@ -83,6 +96,9 @@ describe("ProfilePage", () => {
     });
 
     expect(await screen.findByText(/profile saved/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /save profile/i })).toBeEnabled();
+    });
   });
 
   test("surfaces errors when the profile fails to load", async () => {
