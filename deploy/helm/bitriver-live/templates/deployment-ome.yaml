@@ -36,6 +36,11 @@ spec:
                 secretKeyRef:
                   name: {{ include "bitriver-live.fullname" . }}-secrets
                   key: BITRIVER_OME_ACCESS_TOKEN
+            - name: BITRIVER_OME_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bitriver-live.fullname" . }}-secrets
+                  key: BITRIVER_OME_API_TOKEN
           ports:
             - name: api
               containerPort: 8081
@@ -64,14 +69,47 @@ spec:
                 - sh
                 - -c
                 - |
-                  curl_cmd="curl -fsS"
-                  if [ -n "$BITRIVER_OME_ACCESS_TOKEN" ]; then
-                    curl_cmd="$curl_cmd -H \"AccessToken: $BITRIVER_OME_ACCESS_TOKEN\""
+                  health_url="http://localhost:8081/v1/health"
+                  healthz_url="http://localhost:8081/healthz"
+
+                  token="$BITRIVER_OME_ACCESS_TOKEN"
+                  if [ -z "$token" ] && [ -n "$BITRIVER_OME_API_TOKEN" ]; then
+                    token="$BITRIVER_OME_API_TOKEN"
                   fi
+
+                  if [ -z "$token" ]; then
+                    echo "OME healthcheck misconfigured: both BITRIVER_OME_ACCESS_TOKEN and BITRIVER_OME_API_TOKEN are empty inside the container" >&2
+                    exit 1
+                  fi
+
+                  probe_with_args() {
+                    curl -fsS --connect-timeout 2 --max-time 4 "$@" "$health_url" || curl -fsS --connect-timeout 2 --max-time 4 "$@" "$healthz_url"
+                  }
+
+                  failed_modes=""
+
+                  try_mode() {
+                    mode_name="$1"
+                    shift
+                    if probe_with_args "$@"; then
+                      echo "OME healthcheck succeeded with $mode_name"
+                      exit 0
+                    fi
+                    echo "OME healthcheck failed with $mode_name" >&2
+                    failed_modes="$failed_modes $mode_name"
+                  }
+
+                  try_mode "AccessToken header" -H "AccessToken: $token"
+                  try_mode "Authorization Bearer header" -H "Authorization: Bearer $token"
+
                   if [ -n "$BITRIVER_OME_USERNAME" ] && [ -n "$BITRIVER_OME_PASSWORD" ]; then
-                    curl_cmd="$curl_cmd -u \"$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD\""
+                    try_mode "basic auth" -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD"
+                  else
+                    echo "OME healthcheck skipped basic auth: BITRIVER_OME_USERNAME/BITRIVER_OME_PASSWORD missing or empty" >&2
                   fi
-                  sh -c "$curl_cmd http://localhost:8081/v1/health" || sh -c "$curl_cmd http://localhost:8081/healthz"
+
+                  echo "OME healthcheck failed: all auth modes exhausted ($failed_modes )" >&2
+                  exit 1
             initialDelaySeconds: 20
             periodSeconds: 30
             timeoutSeconds: 5
@@ -82,14 +120,47 @@ spec:
                 - sh
                 - -c
                 - |
-                  curl_cmd="curl -fsS"
-                  if [ -n "$BITRIVER_OME_ACCESS_TOKEN" ]; then
-                    curl_cmd="$curl_cmd -H \"AccessToken: $BITRIVER_OME_ACCESS_TOKEN\""
+                  health_url="http://localhost:8081/v1/health"
+                  healthz_url="http://localhost:8081/healthz"
+
+                  token="$BITRIVER_OME_ACCESS_TOKEN"
+                  if [ -z "$token" ] && [ -n "$BITRIVER_OME_API_TOKEN" ]; then
+                    token="$BITRIVER_OME_API_TOKEN"
                   fi
+
+                  if [ -z "$token" ]; then
+                    echo "OME healthcheck misconfigured: both BITRIVER_OME_ACCESS_TOKEN and BITRIVER_OME_API_TOKEN are empty inside the container" >&2
+                    exit 1
+                  fi
+
+                  probe_with_args() {
+                    curl -fsS --connect-timeout 2 --max-time 4 "$@" "$health_url" || curl -fsS --connect-timeout 2 --max-time 4 "$@" "$healthz_url"
+                  }
+
+                  failed_modes=""
+
+                  try_mode() {
+                    mode_name="$1"
+                    shift
+                    if probe_with_args "$@"; then
+                      echo "OME healthcheck succeeded with $mode_name"
+                      exit 0
+                    fi
+                    echo "OME healthcheck failed with $mode_name" >&2
+                    failed_modes="$failed_modes $mode_name"
+                  }
+
+                  try_mode "AccessToken header" -H "AccessToken: $token"
+                  try_mode "Authorization Bearer header" -H "Authorization: Bearer $token"
+
                   if [ -n "$BITRIVER_OME_USERNAME" ] && [ -n "$BITRIVER_OME_PASSWORD" ]; then
-                    curl_cmd="$curl_cmd -u \"$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD\""
+                    try_mode "basic auth" -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD"
+                  else
+                    echo "OME healthcheck skipped basic auth: BITRIVER_OME_USERNAME/BITRIVER_OME_PASSWORD missing or empty" >&2
                   fi
-                  sh -c "$curl_cmd http://localhost:8081/v1/health" || sh -c "$curl_cmd http://localhost:8081/healthz"
+
+                  echo "OME healthcheck failed: all auth modes exhausted ($failed_modes )" >&2
+                  exit 1
             initialDelaySeconds: 20
             periodSeconds: 15
             timeoutSeconds: 5
