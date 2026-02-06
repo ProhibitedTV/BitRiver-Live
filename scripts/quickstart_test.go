@@ -128,6 +128,28 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 	}
 }
 
+func TestComposeOMEHealthcheckUsesCanonicalAccessTokenHeader(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	composePath := filepath.Join(repoRoot, "deploy", "docker-compose.yml")
+	content, err := os.ReadFile(composePath)
+	if err != nil {
+		t.Fatalf("read compose: %v", err)
+	}
+
+	compose := string(content)
+	if !strings.Contains(compose, "AccessToken: $$token") {
+		t.Fatalf("expected OME healthcheck to probe using AccessToken header")
+	}
+	if !strings.Contains(compose, "BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH") {
+		t.Fatalf("expected legacy auth fallback to be guarded behind BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH")
+	}
+}
+
 func TestOmeConfigRenderingOmitsUnsupportedRootBindHostTags(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
