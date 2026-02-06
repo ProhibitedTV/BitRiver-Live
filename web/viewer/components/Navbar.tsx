@@ -186,9 +186,11 @@ export function Navbar() {
     if (typeof window === "undefined") {
       return;
     }
-    // Normalize configured signup targets (absolute or relative) against the current origin.
+    // Contract: treat env-configured signup targets as either absolute or relative URLs,
+    // and normalize them against the current origin before mutating query params.
     const url = new URL(signupUrl, window.location.origin);
-    // Preserve explicit `next` values from config, otherwise carry the current viewer location forward.
+    // Contract: preserve an explicitly configured `next`; only synthesize one from the
+    // current pathname/search/hash when config does not provide it.
     if (!url.searchParams.has("next")) {
       url.searchParams.set("next", buildRedirectTarget());
     }
@@ -198,9 +200,9 @@ export function Navbar() {
   const handleSearch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmed = searchQuery.trim();
-    // Empty submissions intentionally land on browse root; non-empty queries stay encoded in `q`.
+    // Contract: empty search maps to `/browse`; non-empty searches remain encoded in `q`.
     await router.push(trimmed ? `/browse?q=${encodeURIComponent(trimmed)}` : "/browse");
-    // Close the drawer only after navigation request so mobile users return to content context.
+    // Contract: close menu only after issuing navigation so mobile drawer state follows route intent.
     closeMenu();
   };
 
@@ -214,7 +216,7 @@ export function Navbar() {
   return (
     <header className="navbar">
       <div className="navbar-inner">
-        {/* Left rail: persistent brand + primary route tabs; remains visible on desktop and feeds drawer parity on mobile. */}
+        {/* navbar-left contract: anchor brand + primary destinations; desktop keeps this always visible while mobile mirrors links in drawer. */}
         <div className="navbar-left" aria-hidden={menuOpen}>
           <Link href="/" aria-label="BitRiver Live home" className="navbar-logo" onClick={closeMenu}>
             <span className="navbar-logo__icon" aria-hidden>
@@ -249,7 +251,7 @@ export function Navbar() {
         >
           <span aria-hidden>{menuOpen ? "✕" : "☰"}</span>
         </button>
-        {/* Center rail: shared search UX used both inline and in the drawer so query behavior stays consistent. */}
+        {/* navbar-center contract: shared search state/submit behavior between inline and drawer forms for responsive parity. */}
         <div className="navbar-center">
           <form className="nav-search nav-search--inline" role="search" onSubmit={handleSearch}>
             <label className="sr-only" htmlFor="navbar-search">
@@ -268,7 +270,7 @@ export function Navbar() {
             </button>
           </form>
         </div>
-        {/* Right rail: contextual actions (creator, theme, auth/account) that pivot based on signed-in role state. */}
+        {/* navbar-right contract: render role/user-aware actions (creator CTA, theme, auth/account) without diverging desktop/mobile behavior. */}
         <div className="navbar-right">
           {canAccessCreatorTools && managedChannelId && (
             <Link href={`/creator/live/${managedChannelId}`} className="nav-cta" onClick={closeMenu}>
