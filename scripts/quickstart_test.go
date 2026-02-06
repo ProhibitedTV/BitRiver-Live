@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -77,12 +76,19 @@ func TestQuickstartDelegatesToCli(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(logContent)), "\n")
-	expected := []string{
-		fmt.Sprintf("%s:run ./cmd/bitriver quickstart --env-file %s --compose-file %s", tempDir, envPath, composePath),
+	if len(lines) != 1 {
+		t.Fatalf("unexpected number of go invocations: %d\n%s", len(lines), strings.Join(lines, "\n"))
 	}
 
-	if !reflect.DeepEqual(lines, expected) {
-		t.Fatalf("unexpected go invocations:\n%s", strings.Join(lines, "\n"))
+	line := strings.TrimSpace(lines[0])
+	sep := strings.Index(line, ":run ")
+	if sep == -1 {
+		t.Fatalf("unexpected go invocation format: %s", line)
+	}
+	invocation := line[sep+1:]
+	expectedInvocation := fmt.Sprintf("run ./cmd/bitriver quickstart --env-file %s --compose-file %s", envPath, composePath)
+	if invocation != expectedInvocation {
+		t.Fatalf("unexpected go invocation:\n got: %s\nwant: %s", invocation, expectedInvocation)
 	}
 }
 

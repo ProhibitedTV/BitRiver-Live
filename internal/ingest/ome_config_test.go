@@ -127,18 +127,19 @@ func omeImageFromCompose(t *testing.T, composePath string) string {
 	t.Helper()
 
 	data := readFile(t, composePath)
+	text := strings.ReplaceAll(string(data), "\r\n", "\n")
 
 	// Match:
 	//   ome:
 	//     image: airensoft/ovenmediaengine:0.16.0
 	// including optional extra lines between ome: and image:.
 	re := regexp.MustCompile(`(?m)^  ome:\n(?:^[ \t]+.*\n)*?^[ \t]+image:\s*([^\s#]+)`) //nolint:revive
-	matches := re.FindSubmatch(data)
+	matches := re.FindStringSubmatch(text)
 	if len(matches) < 2 {
 		t.Fatalf("failed to locate ome image in %s", composePath)
 	}
 
-	return normalizeComposeImageRef(string(matches[1]))
+	return normalizeComposeImageRef(matches[1])
 }
 
 // normalizeComposeImageRef simplifies docker-compose image references that use
