@@ -58,18 +58,63 @@ third-party images, use the corresponding `*_IMAGE_DIGEST` fields in `deploy/.en
 
 ### OME healthcheck
 
-The OME service in `deploy/docker-compose.yml` uses a `curl`-based healthcheck that hits the control API inside the container
-(`http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health` with a fallback to `/healthz`), optionally adding the `AccessToken` header and basic auth
-based on `BITRIVER_OME_ACCESS_TOKEN` (falling back to `BITRIVER_OME_API_TOKEN` when the access token is unset) and
-`BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD`. To run the same probe manually,
-execute it inside the container so it reuses the environment variables already injected by Compose:
+The OME service in `deploy/docker-compose.yml` uses a `curl`-based healthcheck against the control API inside the container
+(`http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health`, fallback `.../healthz`).
+
+Header/credential fallback sequence is exact and ordered:
+
+1. Resolve probe token as `${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}`.
+2. Try `AccessToken: <token>`.
+3. If still failing, try `Authorization: Bearer <token>`.
+4. If still failing and both `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD` are non-empty, try HTTP basic auth.
+5. Mark container unhealthy if all modes fail.
+
+Expected 401 signatures during auth mismatches:
+
+- `AccessToken`/Bearer header missing or empty token: `401` with `Authorization header is required`.
+- Token present but does not match `<Managers><API><AccessToken>` in `ome/Server.generated.xml`: `401 Unauthorized` (often still logged with auth-required messaging, depending on OME version).
+- Basic auth fallback credentials mismatch: `401 Unauthorized` from the control endpoint.
+
+If you see `Authorization header is required`, treat it as a header/token drift issue first:
+
+1. Confirm `.env` token values (`BITRIVER_OME_API_TOKEN`, optional `BITRIVER_OME_ACCESS_TOKEN`).
+2. Confirm `deploy/ome/Server.generated.xml` has the same `<Managers><API><AccessToken>` value.
+3. Confirm `deploy/docker-compose.yml` has the expected `ome` environment injection and healthcheck mode order.
+4. Re-render and restart: `./scripts/render-ome-config.sh --force && docker compose up -d ome`.
+
+Copy/paste manual probe block (matches the in-container healthcheck logic):
 
 ```bash
-docker compose exec ome sh -c 'curl -fsS "http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health" || curl -fsS "http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/healthz"'
-docker compose exec ome sh -c 'curl -fsS -H "AccessToken: $BITRIVER_OME_ACCESS_TOKEN" -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" "http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health"'
-```
+docker compose exec ome sh -lc '
+  set -eu
+  health_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health"
+  healthz_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/healthz"
 
-If either command returns 401, re-check the credentials rendered into `ome/Server.generated.xml` and the values in `.env`.
+  token="${BITRIVER_OME_ACCESS_TOKEN:-}"
+  if [ -z "$token" ] && [ -n "${BITRIVER_OME_API_TOKEN:-}" ]; then
+    token="$BITRIVER_OME_API_TOKEN"
+  fi
+
+  if [ -z "$token" ]; then
+    echo "missing token: set BITRIVER_OME_ACCESS_TOKEN or BITRIVER_OME_API_TOKEN" >&2
+    exit 1
+  fi
+
+  probe_with_args() {
+    curl -fsS --connect-timeout 2 --max-time 4 "$@" "$health_url" || \
+      curl -fsS --connect-timeout 2 --max-time 4 "$@" "$healthz_url"
+  }
+
+  probe_with_args -H "AccessToken: $token" && exit 0
+  probe_with_args -H "Authorization: Bearer $token" && exit 0
+
+  if [ -n "${BITRIVER_OME_USERNAME:-}" ] && [ -n "${BITRIVER_OME_PASSWORD:-}" ]; then
+    probe_with_args -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" && exit 0
+  fi
+
+  exit 1
+'
+```
 
 `BITRIVER_OME_HTTP_PORT`/`BITRIVER_OME_HTTP_TLS_PORT` control `<Bind><Managers><API><Port>/<TLSPort>` in the rendered OME config (and the in-container health target), while `BITRIVER_OME_SERVER_PORT`/`BITRIVER_OME_SERVER_TLS_PORT` remain dedicated to WebRTC signalling listeners.
 The canonical OME auth element is top-level `<Managers><API><AccessToken>` in the rendered `Server.xml`; the quickstart renderer rejects deprecated `<AccessTokens>` wrappers. The renderer also enforces direct `<Application><OutputProfiles>` blocks and rejects deprecated `<Application><Outputs>` wrappers.
