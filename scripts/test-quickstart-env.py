@@ -12,6 +12,7 @@ from typing import Dict, Iterable, List, Tuple
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 CI_SCRIPT_PATH = REPO_ROOT / "scripts" / "test-quickstart.sh"
+QUICKSTART_SCRIPT_PATH = REPO_ROOT / "scripts" / "quickstart.sh"
 BITRIVER_CMD_DIR = REPO_ROOT / "cmd" / "bitriver"
 
 # CI seeds some values to keep docker-compose smoke tests deterministic. These
@@ -43,6 +44,13 @@ CI_ONLY_KEYS = {
     "BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD",
 }
 
+LEGACY_DEFAULTS_START_MARKER = "cat >\"$ENV_FILE\" <<'ENV'"
+LEGACY_DEFAULTS_END_MARKER = "ENV"
+
+
+class ExtractionError(RuntimeError):
+    """Raised when env defaults cannot be extracted from known sources."""
+
 
 def _extract_block(lines: List[str], start_marker: str, end_marker: str) -> List[str]:
     collecting = False
@@ -59,7 +67,7 @@ def _extract_block(lines: List[str], start_marker: str, end_marker: str) -> List
     return block
 
 
-def parse_env_defaults(_: Iterable[str]) -> Dict[str, str]:
+def parse_env_defaults_from_go_source() -> Dict[str, str]:
     helper_name = "quickstart_env_defaults_extractor_tmp.go"
     helper_path = BITRIVER_CMD_DIR / helper_name
     helper_source = textwrap.dedent(
@@ -123,6 +131,47 @@ def parse_env_defaults(_: Iterable[str]) -> Dict[str, str]:
     return json.loads(proc.stdout)
 
 
+def parse_env_defaults_from_legacy_shell(lines: Iterable[str]) -> Dict[str, str]:
+    block = _extract_block(list(lines), LEGACY_DEFAULTS_START_MARKER, LEGACY_DEFAULTS_END_MARKER)
+    env: Dict[str, str] = {}
+    for line in block:
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            raise ValueError(f"Unexpected env line in legacy quickstart defaults: {line}")
+        key, value = line.split("=", 1)
+        env[key] = value
+    return env
+
+
+def parse_env_defaults(quickstart_lines: Iterable[str]) -> Dict[str, str]:
+    quickstart_line_list = list(quickstart_lines)
+    has_legacy_markers = any(
+        line.strip() == LEGACY_DEFAULTS_START_MARKER for line in quickstart_line_list
+    )
+
+    legacy_error: Exception | None = None
+    if has_legacy_markers:
+        try:
+            return parse_env_defaults_from_legacy_shell(quickstart_line_list)
+        except ValueError as err:
+            legacy_error = err
+
+    try:
+        return parse_env_defaults_from_go_source()
+    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError) as err:
+        detail: List[str] = [
+            "Unable to extract quickstart env defaults from known sources.",
+            f"Expected either legacy shell defaults in {QUICKSTART_SCRIPT_PATH} "
+            f"or Go defaults from {BITRIVER_CMD_DIR}.",
+            "If quickstart defaults moved, update extraction logic in scripts/test-quickstart-env.py.",
+        ]
+        if legacy_error is not None:
+            detail.append(f"Legacy parser error: {legacy_error}")
+        detail.append(f"Go-source parser error: {err}")
+        raise ExtractionError("\n".join(detail)) from err
+
+
 def parse_required_keys(lines: Iterable[str]) -> List[str]:
     seeded_keys = list(parse_seed_env(lines).keys())
     return [key for key in seeded_keys if key not in CI_ONLY_KEYS]
@@ -160,11 +209,16 @@ def diff_values(defaults: Dict[str, str], seed_env: Dict[str, str], keys: Iterab
 
 
 def main() -> int:
+    quickstart_lines = QUICKSTART_SCRIPT_PATH.read_text().splitlines()
     ci_script_lines = CI_SCRIPT_PATH.read_text().splitlines()
 
-    env_defaults = parse_env_defaults(ci_script_lines)
-    required_keys = parse_required_keys(ci_script_lines)
-    seed_env = parse_seed_env(ci_script_lines)
+    try:
+        env_defaults = parse_env_defaults(quickstart_lines)
+        required_keys = parse_required_keys(ci_script_lines)
+        seed_env = parse_seed_env(ci_script_lines)
+    except (ExtractionError, ValueError, subprocess.CalledProcessError) as err:
+        print(f"quickstart env extraction failed: {err}", file=sys.stderr)
+        return 1
 
     mismatches = diff_values(env_defaults, seed_env, required_keys)
 
