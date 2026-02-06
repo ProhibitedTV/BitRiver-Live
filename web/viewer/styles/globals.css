@@ -578,8 +578,8 @@ button {
 }
 
 .badge--live {
-  background: rgba(248, 113, 113, 0.9);
-  color: #fff;
+  background: #b91c1c;
+  color: #ffffff;
 }
 
 .badge--muted {
@@ -601,8 +601,8 @@ button {
 }
 
 .pill--tag {
-  background: rgba(79, 209, 197, 0.2);
-  color: var(--accent);
+  background: #115e59;
+  color: #ecfeff;
 }
 
 .pill--frost {
@@ -636,9 +636,9 @@ button {
 }
 
 .meta-chip--pill {
-  background: rgba(79, 209, 197, 0.08);
-  color: var(--accent);
-  border-color: rgba(79, 209, 197, 0.3);
+  background: #164e63;
+  color: #cffafe;
+  border-color: #0e7490;
 }
 
 .browse-controls {
