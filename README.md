@@ -49,7 +49,7 @@ The panel polls `docker compose ps` to show service state + health, tails recent
 
 ## Advanced quickstart: Go CLI from source
 
-Prefer the source-based workflow when developing features or rebuilding images locally. The Go CLI in `cmd/bitriver` handles environment generation, Docker Compose orchestration, and health checks. Use it directly or fall back to `scripts/quickstart.sh` / `scripts/quickstart.ps1` if your shell cannot run Go.
+Use a single deployment path across all platforms: the Go CLI in `cmd/bitriver`. It handles environment generation, Docker Compose orchestration, and health checks.
 
 ### Prerequisites at a glance
 
@@ -62,7 +62,7 @@ Prefer the source-based workflow when developing features or rebuilding images l
 Install Go 1.21+ if you plan to run the source-based quickstart (`go run ./cmd/bitriver quickstart`) or any of the CLI helper
 commands. The installer-backed launcher bundles everything it needs and does not require Go.
 
-Both `go run ./cmd/bitriver quickstart` and `./scripts/quickstart.sh` start by running the built-in doctor checks. If Docker is missing from your `PATH`, the command prints a `BitRiver Live doctor` block that includes `Docker: not found` and exits with `Error: doctor checks failed` so you can fix the prerequisite before it touches Compose.
+`go run ./cmd/bitriver quickstart` starts by running the built-in doctor checks. If Docker is missing from your `PATH`, the command prints a `BitRiver Live doctor` block that includes `Docker: not found` and exits with `Error: doctor checks failed` so you can fix the prerequisite before it touches Compose.
 
 ### macOS (Docker Desktop, zsh/bash)
 

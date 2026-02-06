@@ -1,55 +1,15 @@
 #!/usr/bin/env python3
-"""Check quickstart env defaults align with CI .env seeding."""
+"""Validate CI quickstart smoke env fixture satisfies deployment requirements."""
 from __future__ import annotations
 
-import json
-import os
 import pathlib
-import subprocess
+import re
 import sys
-import textwrap
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Set
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 CI_SCRIPT_PATH = REPO_ROOT / "scripts" / "test-quickstart.sh"
-QUICKSTART_SCRIPT_PATH = REPO_ROOT / "scripts" / "quickstart.sh"
-BITRIVER_CMD_DIR = REPO_ROOT / "cmd" / "bitriver"
-
-# CI seeds some values to keep docker-compose smoke tests deterministic. These
-# are intentionally not sourced from env init defaults (for example, generated
-# secrets and release image tags).
-CI_ONLY_KEYS = {
-    "BITRIVER_LIVE_IMAGE_TAG",
-    "BITRIVER_VIEWER_IMAGE_TAG",
-    "BITRIVER_SRS_CONTROLLER_IMAGE_TAG",
-    "BITRIVER_TRANSCODER_IMAGE_TAG",
-    "BITRIVER_LIVE_MODE",
-    "BITRIVER_LIVE_POSTGRES_DSN",
-    "BITRIVER_POSTGRES_DB",
-    "BITRIVER_POSTGRES_USER",
-    "BITRIVER_POSTGRES_PASSWORD",
-    "BITRIVER_REDIS_PASSWORD",
-    "BITRIVER_REDIS_PORT",
-    "BITRIVER_SRS_API_PORT",
-    "BITRIVER_TRANSCODER_PUBLIC_BASE_URL",
-    "BITRIVER_SRS_RTMP_PORT",
-    "BITRIVER_LIVE_ADMIN_EMAIL",
-    "BITRIVER_LIVE_ADMIN_PASSWORD",
-    "BITRIVER_SRS_TOKEN",
-    "BITRIVER_OME_USERNAME",
-    "BITRIVER_OME_PASSWORD",
-    "BITRIVER_OME_API_TOKEN",
-    "BITRIVER_OME_ACCESS_TOKEN",
-    "BITRIVER_TRANSCODER_TOKEN",
-    "BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD",
-}
-
-LEGACY_DEFAULTS_START_MARKER = "cat >\"$ENV_FILE\" <<'ENV'"
-LEGACY_DEFAULTS_END_MARKER = "ENV"
-
-
-class ExtractionError(RuntimeError):
-    """Raised when env defaults cannot be extracted from known sources."""
+COMPOSE_PATH = REPO_ROOT / "deploy" / "docker-compose.yml"
 
 
 def _extract_block(lines: List[str], start_marker: str, end_marker: str) -> List[str]:
@@ -67,116 +27,6 @@ def _extract_block(lines: List[str], start_marker: str, end_marker: str) -> List
     return block
 
 
-def parse_env_defaults_from_go_source() -> Dict[str, str]:
-    helper_name = "quickstart_env_defaults_extractor_tmp.go"
-    helper_path = BITRIVER_CMD_DIR / helper_name
-    helper_source = textwrap.dedent(
-        """
-        package main
-
-        import (
-            "encoding/json"
-            "fmt"
-            "os"
-            "strings"
-        )
-
-        func init() {
-            templateLines, err := readEnvTemplate(defaultExampleEnv())
-            if err != nil {
-                fmt.Fprintf(os.Stderr, "read env template: %v\\n", err)
-                os.Exit(1)
-            }
-
-            generated, _ := generateEnvValues(map[string]string{})
-            merged := mergeEnv(templateLines, map[string]string{}, generated)
-
-            values := map[string]string{}
-            for _, line := range strings.Split(merged, "\\n") {
-                line = strings.TrimSpace(line)
-                if line == "" || strings.HasPrefix(line, "#") || !strings.Contains(line, "=") {
-                    continue
-                }
-                key, value, _ := strings.Cut(line, "=")
-                values[key] = value
-            }
-
-            if err := json.NewEncoder(os.Stdout).Encode(values); err != nil {
-                fmt.Fprintf(os.Stderr, "encode defaults: %v\\n", err)
-                os.Exit(1)
-            }
-            os.Exit(0)
-        }
-        """
-    ).strip()
-
-    helper_path.write_text(helper_source + "\n")
-    try:
-        proc = subprocess.run(
-            ["go", "run", "./cmd/bitriver"],
-            cwd=REPO_ROOT,
-            check=True,
-            capture_output=True,
-            text=True,
-            env={
-                **dict(os.environ),
-                "GOTOOLCHAIN": "local",
-                "GOPROXY": "off",
-                "GOSUMDB": "off",
-            },
-        )
-    finally:
-        helper_path.unlink(missing_ok=True)
-
-    return json.loads(proc.stdout)
-
-
-def parse_env_defaults_from_legacy_shell(lines: Iterable[str]) -> Dict[str, str]:
-    block = _extract_block(list(lines), LEGACY_DEFAULTS_START_MARKER, LEGACY_DEFAULTS_END_MARKER)
-    env: Dict[str, str] = {}
-    for line in block:
-        if not line or line.startswith("#"):
-            continue
-        if "=" not in line:
-            raise ValueError(f"Unexpected env line in legacy quickstart defaults: {line}")
-        key, value = line.split("=", 1)
-        env[key] = value
-    return env
-
-
-def parse_env_defaults(quickstart_lines: Iterable[str]) -> Dict[str, str]:
-    quickstart_line_list = list(quickstart_lines)
-    has_legacy_markers = any(
-        line.strip() == LEGACY_DEFAULTS_START_MARKER for line in quickstart_line_list
-    )
-
-    legacy_error: Exception | None = None
-    if has_legacy_markers:
-        try:
-            return parse_env_defaults_from_legacy_shell(quickstart_line_list)
-        except ValueError as err:
-            legacy_error = err
-
-    try:
-        return parse_env_defaults_from_go_source()
-    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError) as err:
-        detail: List[str] = [
-            "Unable to extract quickstart env defaults from known sources.",
-            f"Expected either legacy shell defaults in {QUICKSTART_SCRIPT_PATH} "
-            f"or Go defaults from {BITRIVER_CMD_DIR}.",
-            "If quickstart defaults moved, update extraction logic in scripts/test-quickstart-env.py.",
-        ]
-        if legacy_error is not None:
-            detail.append(f"Legacy parser error: {legacy_error}")
-        detail.append(f"Go-source parser error: {err}")
-        raise ExtractionError("\n".join(detail)) from err
-
-
-def parse_required_keys(lines: Iterable[str]) -> List[str]:
-    seeded_keys = list(parse_seed_env(lines).keys())
-    return [key for key in seeded_keys if key not in CI_ONLY_KEYS]
-
-
 def parse_seed_env(lines: Iterable[str]) -> Dict[str, str]:
     start = "cat >\"$ENV_FILE\" <<'ENV'"
     end = "ENV"
@@ -192,40 +42,60 @@ def parse_seed_env(lines: Iterable[str]) -> Dict[str, str]:
     return env
 
 
-def diff_values(defaults: Dict[str, str], seed_env: Dict[str, str], keys: Iterable[str]) -> List[Tuple[str, str, str]]:
-    mismatches: List[Tuple[str, str, str]] = []
-    for key in keys:
-        default_val = defaults.get(key)
-        seed_val = seed_env.get(key)
-        if default_val is None:
-            mismatches.append((key, "<missing in env_defaults>", seed_val or ""))
+def parse_required_credentials(lines: Iterable[str]) -> Set[str]:
+    required: Set[str] = set()
+    pattern = re.compile(r"^\s{2}([A-Z0-9_]+):\s+\$\{[^}]*\?set via \.env}\s*$")
+
+    in_anchor = False
+    for raw in lines:
+        line = raw.rstrip("\n")
+        if line.startswith("x-required-credentials:"):
+            in_anchor = True
             continue
-        if seed_val is None:
-            mismatches.append((key, default_val, "<missing in test-quickstart .env>"))
+        if in_anchor and line and not line.startswith(" "):
+            break
+        if not in_anchor:
             continue
-        if default_val != seed_val:
-            mismatches.append((key, default_val, seed_val))
-    return mismatches
+        match = pattern.match(line)
+        if match:
+            required.add(match.group(1))
+
+    if not required:
+        raise ValueError("Unable to parse required credentials from deploy/docker-compose.yml")
+    return required
 
 
 def main() -> int:
-    quickstart_lines = QUICKSTART_SCRIPT_PATH.read_text().splitlines()
     ci_script_lines = CI_SCRIPT_PATH.read_text().splitlines()
+    compose_lines = COMPOSE_PATH.read_text().splitlines()
 
-    try:
-        env_defaults = parse_env_defaults(quickstart_lines)
-        required_keys = parse_required_keys(ci_script_lines)
-        seed_env = parse_seed_env(ci_script_lines)
-    except (ExtractionError, ValueError, subprocess.CalledProcessError) as err:
-        print(f"quickstart env extraction failed: {err}", file=sys.stderr)
+    seed_env = parse_seed_env(ci_script_lines)
+    required_keys = parse_required_credentials(compose_lines)
+
+    missing = sorted(key for key in required_keys if not seed_env.get(key, "").strip())
+    if missing:
+        print("quickstart smoke env fixture is missing required deployment credentials:", file=sys.stderr)
+        for key in missing:
+            print(f"  {key}", file=sys.stderr)
         return 1
 
-    mismatches = diff_values(env_defaults, seed_env, required_keys)
+    api_token = seed_env.get("BITRIVER_OME_API_TOKEN", "").strip()
+    access_token = seed_env.get("BITRIVER_OME_ACCESS_TOKEN", "").strip()
+    if not api_token:
+        print("quickstart smoke env fixture must set BITRIVER_OME_API_TOKEN", file=sys.stderr)
+        return 1
+    if access_token and access_token != api_token:
+        print(
+            "quickstart smoke env fixture sets BITRIVER_OME_ACCESS_TOKEN, but it does not match BITRIVER_OME_API_TOKEN",
+            file=sys.stderr,
+        )
+        return 1
 
-    if mismatches:
-        print("quickstart env defaults diverged from test-quickstart.sh:", file=sys.stderr)
-        for key, default_val, seed_val in mismatches:
-            print(f"  {key}: quickstart='{default_val}' test-quickstart='{seed_val}'", file=sys.stderr)
+    if "BITRIVER_OME_ACCESS_TOKEN" not in seed_env:
+        print(
+            "quickstart smoke env fixture should set BITRIVER_OME_ACCESS_TOKEN explicitly to avoid platform-dependent fallback behavior",
+            file=sys.stderr,
+        )
         return 1
 
     return 0
