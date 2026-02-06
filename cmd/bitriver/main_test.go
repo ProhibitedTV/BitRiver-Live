@@ -461,8 +461,13 @@ func TestRenderOMEConfigPreservesXmlComments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read template: %v", err)
 	}
-	comment := "        <!-- legacy <Server.bind.Address> <IP>keep-me</IP> -->\n"
-	template := strings.Replace(string(templateBytes), "<Bind>\n", "<Bind>\n"+comment, 1)
+	comment := "        <!-- legacy <Server.bind.Address> <IP>keep-me</IP> -->"
+	template := string(templateBytes)
+	if strings.Contains(template, "<Bind>\r\n") {
+		template = strings.Replace(template, "<Bind>\r\n", "<Bind>\r\n"+comment+"\r\n", 1)
+	} else {
+		template = strings.Replace(template, "<Bind>\n", "<Bind>\n"+comment+"\n", 1)
+	}
 	if err := os.WriteFile(templatePath, []byte(template), 0o644); err != nil {
 		t.Fatalf("write template: %v", err)
 	}
