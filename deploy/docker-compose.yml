@@ -388,17 +388,15 @@ services:
           fi
 
           attempted_modes="AccessToken header"
-          echo "OME healthcheck warning: AccessToken probe failed" >&2
+          echo "OME healthcheck warning: AccessToken probe failed; attempting Authorization Bearer header" >&2
+          if probe_with_args -H "Authorization: Bearer $$token"; then
+            echo "OME healthcheck succeeded with Authorization Bearer header"
+            exit 0
+          fi
+          attempted_modes="$$attempted_modes, Authorization Bearer header"
 
-          # Legacy fallback modes are opt-in only for backward compatibility.
+          # Keep basic auth fallback opt-in only for older OME deployments.
           if [ "$${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}" = "true" ]; then
-            echo "OME healthcheck warning: legacy fallback enabled; attempting Authorization Bearer header (legacy mode)" >&2
-            if probe_with_args -H "Authorization: Bearer $$token"; then
-              echo "OME healthcheck succeeded with Authorization Bearer header (legacy mode)"
-              exit 0
-            fi
-            attempted_modes="$$attempted_modes, Authorization Bearer header (legacy mode)"
-
             echo "OME healthcheck warning: Authorization Bearer probe failed; attempting basic auth (legacy mode)" >&2
 
             if [ -n "$$BITRIVER_OME_USERNAME" ] && [ -n "$$BITRIVER_OME_PASSWORD" ]; then
@@ -412,7 +410,7 @@ services:
               echo "OME healthcheck skipped basic auth fallback: BITRIVER_OME_USERNAME/BITRIVER_OME_PASSWORD missing or empty" >&2
             fi
           else
-            echo "OME healthcheck warning: legacy fallback disabled (set BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true to enable)" >&2
+            echo "OME healthcheck warning: basic auth legacy fallback disabled (set BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true to enable)" >&2
           fi
 
           echo "OME healthcheck failed for $$health_url and $$healthz_url; attempted auth modes: $$attempted_modes" >&2

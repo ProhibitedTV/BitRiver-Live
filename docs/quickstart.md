@@ -239,7 +239,7 @@ If OME health checks start failing with `Authorization header is required`, temp
   #default#live application, so it was not created` simply reflect the `<Publishers>`/`<Providers>` switches in your
   `<Application>` block being set to `Off`; toggle them to match whether BitRiver Live should push or pull streams via WebRTC,
   LLHLS, and related outputs.
-- **OME health check fails** – The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the container name. Compose now runs two pre-start checks before OME launches: `ome-config` regenerates `deploy/ome/Server.generated.xml`, then `ome-health-token-check` runs `./scripts/verify-ome-health-token.sh` to confirm `<Managers><API><AccessToken>` matches `${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}` from the same `.env` file. If `bitriver-ome` falls into healthcheck restarts, inspect the helper first:
+- **OME health check fails** – The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the container name. Compose now runs two pre-start checks before OME launches: `ome-config` regenerates `deploy/ome/Server.generated.xml`, then `ome-health-token-check` runs `./scripts/verify-ome-health-token.sh` to confirm `<Managers><API><AccessToken>` matches `${BITRIVER_OME_HEALTHCHECK_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}}` from the same `.env` file. If `bitriver-ome` falls into healthcheck restarts, inspect the helper first:
 
   ```bash
   docker compose logs ome-health-token-check
@@ -249,10 +249,10 @@ If OME health checks start failing with `Authorization header is required`, temp
 
   Healthcheck auth fallback order (exact):
 
-  1. Resolve token as `${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}`.
+  1. Resolve token as `${BITRIVER_OME_HEALTHCHECK_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}}`.
   2. Probe with `AccessToken: <token>`.
   3. If still failing, probe with `Authorization: Bearer <token>`.
-  4. If still failing and `BITRIVER_OME_USERNAME` + `BITRIVER_OME_PASSWORD` are set, probe with basic auth.
+  4. If still failing and `BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true` with `BITRIVER_OME_USERNAME` + `BITRIVER_OME_PASSWORD` set, probe with basic auth.
   5. Fail container health if all modes fail.
 
   Expected 401 signatures:
@@ -263,17 +263,13 @@ If OME health checks start failing with `Authorization header is required`, temp
 
   If you see **`Authorization header is required`**:
 
-  1. Set `BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true` in `.env` as a temporary compatibility fallback.
-  2. Redeploy OME so health checks retry with legacy auth headers:
-     ```bash
-     docker compose up -d ome
-     ```
-  3. Align your OME auth configuration and token/header behavior (`BITRIVER_OME_API_TOKEN`, `BITRIVER_OME_ACCESS_TOKEN`, and `<Managers><API><AccessToken>` in `deploy/ome/Server.generated.xml`).
-  4. Revert `BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=false` once header behavior is aligned, then redeploy again:
+  1. Align token values first (`BITRIVER_OME_HEALTHCHECK_TOKEN`, `BITRIVER_OME_ACCESS_TOKEN`, `BITRIVER_OME_API_TOKEN`) and re-render `deploy/ome/Server.generated.xml`.
+  2. Redeploy OME so health checks retry with both header modes by default:
      ```bash
      ./scripts/render-ome-config.sh --force
      docker compose up -d ome
      ```
+  3. Use `BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true` only as a temporary fallback for basic auth on older deployments, then set it back to `false`.
 
   Run the same verification manually when troubleshooting auth drift:
   ```bash

@@ -439,14 +439,14 @@ func TestRenderOMEConfigDefaultsAlignManagersAPIWithComposeHealthcheckPort(t *te
 	if accessIdx == -1 {
 		t.Fatalf("expected compose healthcheck to probe AccessToken header")
 	}
-	if legacyIdx == -1 || legacyIdx <= accessIdx {
-		t.Fatalf("expected compose healthcheck legacy gate after AccessToken probe")
+	if bearerIdx == -1 || bearerIdx <= accessIdx {
+		t.Fatalf("expected Authorization Bearer probe after AccessToken probe")
 	}
-	if bearerIdx == -1 || bearerIdx <= legacyIdx {
-		t.Fatalf("expected Authorization Bearer probe to remain behind legacy auth gate")
+	if legacyIdx == -1 || legacyIdx <= bearerIdx {
+		t.Fatalf("expected compose healthcheck legacy gate to guard basic auth after Bearer probe")
 	}
-	if legacyBasicIdx == -1 || legacyBasicIdx <= bearerIdx {
-		t.Fatalf("expected compose healthcheck basic auth probe to remain behind legacy auth gate after Bearer probe")
+	if legacyBasicIdx == -1 || legacyBasicIdx <= legacyIdx {
+		t.Fatalf("expected compose healthcheck basic auth probe to remain behind legacy auth gate")
 	}
 
 	if !strings.Contains(compose, "attempted auth modes:") {
