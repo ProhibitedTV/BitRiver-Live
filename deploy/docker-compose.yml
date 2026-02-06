@@ -362,8 +362,30 @@ services:
             curl -fsS --connect-timeout 2 --max-time 4 "$$@" "$$health_url" || curl -fsS --connect-timeout 2 --max-time 4 "$$@" "$$healthz_url"
           }
 
-          # Single auth mode: AccessToken header only.
-          [ -n "$$token" ] && probe_with_args -H "AccessToken: $$token"
+          failed_modes=""
+
+          try_mode() {
+            mode_name="$$1"
+            shift
+            if probe_with_args "$$@"; then
+              echo "OME healthcheck succeeded with $$mode_name"
+              exit 0
+            fi
+            echo "OME healthcheck failed with $$mode_name" >&2
+            failed_modes="$$failed_modes $$mode_name"
+          }
+
+          try_mode "AccessToken header" -H "AccessToken: $$token"
+          try_mode "Authorization Bearer header" -H "Authorization: Bearer $$token"
+
+          if [ -n "$$BITRIVER_OME_USERNAME" ] && [ -n "$$BITRIVER_OME_PASSWORD" ]; then
+            try_mode "basic auth" -u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD"
+          else
+            echo "OME healthcheck skipped basic auth: BITRIVER_OME_USERNAME/BITRIVER_OME_PASSWORD missing or empty" >&2
+          fi
+
+          echo "OME healthcheck failed: all auth modes exhausted ($$failed_modes )" >&2
+          exit 1
       interval: 30s
       timeout: 5s
       retries: 5
