@@ -125,12 +125,8 @@ test.describe("channel route", () => {
       walletAddress?: string;
       message?: string;
     };
-    let tipCalls = 0;
-    let lastTipPayload: TipPayload | undefined;
     await page.route("**/api/channels/chan-42/monetization/tips", async (route) => {
-      tipCalls += 1;
       const body = route.request().postDataJSON() as TipPayload;
-      lastTipPayload = body;
       await route.fulfill({
         status: 201,
         contentType: "application/json",
@@ -181,10 +177,20 @@ test.describe("channel route", () => {
     await tipDialog.getByLabel("Currency").selectOption({ label: "BTC" });
     await tipDialog.getByLabel("Wallet reference").fill("txn-77");
     await tipDialog.getByLabel("Message (optional)").fill("Great vibes!");
-    await tipDialog.getByRole("button", { name: /send tip/i }).click();
+    await expect(tipDialog.getByRole("alert")).toHaveCount(0);
 
-    await expect.poll(() => tipCalls).toBeGreaterThan(0);
-    await expect.poll(() => lastTipPayload?.currency).toBe("BTC");
+    const [tipRequest] = await Promise.all([
+      page.waitForRequest((request) => {
+        return request.method() === "POST" && request.url().includes("/api/channels/chan-42/monetization/tips");
+      }),
+      tipDialog.getByRole("button", { name: /send tip/i }).click()
+    ]);
+
+    const tipPayload = tipRequest.postDataJSON() as TipPayload;
+    expect(tipPayload.currency).toBe("BTC");
+    expect(tipPayload.amount).toBe(0.0005);
+    expect(tipPayload.reference).toBe("txn-77");
+
     await tipDialog.waitFor({ state: "detached" });
     await expect(page.getByText(/thanks for supporting deep space beats/i)).toBeVisible();
   });
