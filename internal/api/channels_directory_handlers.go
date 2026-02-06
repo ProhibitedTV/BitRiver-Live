@@ -553,6 +553,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 	if len(parts) >= 2 {
 		switch parts[1] {
 		case "playback":
+			// Public playback metadata is intentionally readable without channel ownership checks so viewers can bootstrap players from a single response.
 			channel, ok := h.Store.GetChannel(channelID)
 			if !ok {
 				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
@@ -622,6 +623,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				protocol := "ll-hls"
 				player := "hls.js"
 				latency := "low-latency"
+				// Prefix-based transport hints keep legacy ingest URLs working while signaling clients to switch between broader-compat LL-HLS and ultra-low-latency WebRTC paths.
 				url := strings.ToLower(playback.PlaybackURL)
 				if strings.HasPrefix(url, "webrtc") || strings.HasPrefix(url, "wss") {
 					protocol = "webrtc"
@@ -644,6 +646,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			h.handleStreamRoutes(channel, parts[2:], w, r)
 			return
 		case "sessions":
+			// Session history is owner-only telemetry; callers must be authorized and receive the full stream timeline for control-plane tooling.
 			channel, ok := h.Store.GetChannel(channelID)
 			if !ok {
 				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
@@ -668,6 +671,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			WriteJSON(w, http.StatusOK, response)
 			return
 		case "follow":
+			// Follow mutations are per-user state transitions that require auth and always return the post-operation aggregate + viewer-specific follow snapshot.
 			if len(parts) > 2 {
 				WriteError(w, http.StatusNotFound, fmt.Errorf("unknown channel path"))
 				return
@@ -702,6 +706,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			WriteJSON(w, http.StatusOK, state)
 			return
 		case "subscribe":
+			// Subscription state is queryable publicly, but create/cancel remains authenticated and always responds with current entitlement state for UI reconciliation.
 			if len(parts) > 2 {
 				WriteError(w, http.StatusNotFound, fmt.Errorf("unknown channel path"))
 				return
@@ -740,6 +745,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 						break
 					}
 				}
+				// Treat POST as idempotent: we reuse an active subscription when present so retried client requests do not duplicate billing records or metrics.
 				if !alreadySubscribed {
 					params := storage.CreateSubscriptionParams{
 						ChannelID: channel.ID,
