@@ -143,7 +143,7 @@ The quickstart keeps retention settings unset, so the API and transcoder apply t
 The health payload still expects the ingest services to be reachable from the API container:
 
 - **SRS controller:** `BITRIVER_SRS_API` defaults to `http://srs-controller:1985` inside the Compose network. If you move SRS elsewhere, point this URL at a reachable host and keep the API token aligned with the controller's configuration. To expose the SRS HTTP API on the host for debugging, enable the `srs-api` profile (`docker compose --profile srs-api up -d`) so `BITRIVER_SRS_API_PORT` is published—leave it disabled in production and never expose the port publicly. The SRS webhook callbacks in `deploy/srs/conf/srs.conf` always read their token from `BITRIVER_SRS_TOKEN` in `.env`, so update the environment file instead of hardcoding query strings. The Compose stack runs the `srs-config` helper to render `deploy/srs/conf/srs.generated.conf` before SRS starts; if you operate SRS outside Compose or rotate `BITRIVER_SRS_TOKEN`, rerun `./scripts/render-srs-config.sh --force --env-file ./.env` so the mounted config stays current.
-- **OvenMediaEngine:** `BITRIVER_OME_API` defaults to `http://ome:8081` and expects `BITRIVER_OME_API_TOKEN` from `.env` (the health probe forwards `BITRIVER_OME_ACCESS_TOKEN`, which defaults to the same value). A short-lived `ome-config` helper in the compose file renders `deploy/ome/Server.generated.xml` from `deploy/ome/Server.xml` before OME starts, keeping the API token aligned with `.env` so a 401 surfaces as `unhealthy` instead of silently failing. When running OME outside Compose, keep this URL reachable from the API container so `/healthz` reports the correct status even though the HTTP status code remains 200 during degraded states, and mirror the same credentials in your OME configuration. The template writes API auth to top-level `<Managers><API><AccessToken>`, rewrites control-listener bind fields from `BITRIVER_OME_BIND` (default `0.0.0.0`), maps `<Bind><Managers><API><Port>/<TLSPort>` from `BITRIVER_OME_HTTP_PORT` / `BITRIVER_OME_HTTP_TLS_PORT`, maps WebRTC signalling `<Port>/<TLSPort>` from `BITRIVER_OME_SERVER_PORT` / `BITRIVER_OME_SERVER_TLS_PORT`, keeps the root `<Bind>` container focused on provider/publisher protocol sections (`<Providers>`, `<Publishers>`), omits unsupported root `<Bind><IP>`/`<Bind><Address>` host tags, and fills top-level `<Server><IP>` with `BITRIVER_OME_IP` (defaulting to `BITRIVER_OME_BIND`) as the canonical server bind host field—update both the template and `BITRIVER_OME_API` together if you customize the control API port. The healthcheck always sends only an `AccessToken` header, choosing `BITRIVER_OME_ACCESS_TOKEN` when non-empty and otherwise using `BITRIVER_OME_API_TOKEN`. Render-time validation fails fast when that resolved token does not match the rendered top-level `<Managers><API><AccessToken>` value. For OME application outputs, keep profiles directly under `<Application><OutputProfiles>`; do not wrap them in deprecated `<Application><Outputs>`. Keep LL-HLS configuration at publisher scope (`<Bind><Publishers><LLHLS>`) only and avoid defining `<Application><LLHLS>`. Leave `BITRIVER_OME_SIGNALLING_PORT` empty to reuse `BITRIVER_OME_SERVER_PORT` for the host binding; set it explicitly only when the host-facing WebRTC port must differ from the value rendered into `Server.xml` so the API and browsers connect to the expected port.
+- **OvenMediaEngine:** `BITRIVER_OME_API` defaults to `http://ome:8081` and expects `BITRIVER_OME_API_TOKEN` from `.env` (the health probe forwards `BITRIVER_OME_ACCESS_TOKEN`, which defaults to the same value). A short-lived `ome-config` helper in the compose file renders `deploy/ome/Server.generated.xml` from `deploy/ome/Server.xml` before OME starts, keeping the API token aligned with `.env` so a 401 surfaces as `unhealthy` instead of silently failing. When running OME outside Compose, keep this URL reachable from the API container so `/healthz` reports the correct status even though the HTTP status code remains 200 during degraded states, and mirror the same credentials in your OME configuration. The template writes API auth to top-level `<Managers><API><AccessToken>`, rewrites control-listener bind fields from `BITRIVER_OME_BIND` (default `0.0.0.0`), maps `<Bind><Managers><API><Port>/<TLSPort>` from `BITRIVER_OME_HTTP_PORT` / `BITRIVER_OME_HTTP_TLS_PORT`, maps WebRTC signalling `<Port>/<TLSPort>` from `BITRIVER_OME_SERVER_PORT` / `BITRIVER_OME_SERVER_TLS_PORT`, keeps the root `<Bind>` container focused on provider/publisher protocol sections (`<Providers>`, `<Publishers>`), omits unsupported root `<Bind><IP>`/`<Bind><Address>` host tags, and fills top-level `<Server><IP>` with `BITRIVER_OME_IP` (defaulting to `BITRIVER_OME_BIND`) as the canonical server bind host field—update both the template and `BITRIVER_OME_API` together if you customize the control API port. The healthcheck resolves `${BITRIVER_OME_HEALTHCHECK_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}}` and probes in this order: `AccessToken`, basic auth when `BITRIVER_OME_USERNAME` + `BITRIVER_OME_PASSWORD` are set, then `Authorization: Bearer`. Render-time validation fails fast when that resolved token does not match the rendered top-level `<Managers><API><AccessToken>` value. For OME application outputs, keep profiles directly under `<Application><OutputProfiles>`; do not wrap them in deprecated `<Application><Outputs>`. Keep LL-HLS configuration at publisher scope (`<Bind><Publishers><LLHLS>`) only and avoid defining `<Application><LLHLS>`. Leave `BITRIVER_OME_SIGNALLING_PORT` empty to reuse `BITRIVER_OME_SERVER_PORT` for the host binding; set it explicitly only when the host-facing WebRTC port must differ from the value rendered into `Server.xml` so the API and browsers connect to the expected port.
   Edit `BITRIVER_OME_API_TOKEN`, `BITRIVER_OME_BIND`, `BITRIVER_OME_IP`, `BITRIVER_OME_HTTP_PORT`, `BITRIVER_OME_HTTP_TLS_PORT`, `BITRIVER_OME_SERVER_PORT`, or `BITRIVER_OME_SERVER_TLS_PORT` in `.env`? Re-render `deploy/ome/Server.generated.xml` with `go run ./cmd/bitriver ome render --force --env-file ./.env` (or the `./scripts/render-ome-config.sh` wrapper) before running `docker compose up -d` when you operate OME outside Compose so the API access token and canonical server host settings stay aligned with the health check. Override `BITRIVER_OME_ACCESS_TOKEN` only if your deployment needs a different health probe token; by default it mirrors `BITRIVER_OME_API_TOKEN`. The quickstart helper reruns the Go renderer automatically so template changes picked up via `git pull` land in the generated config before Compose starts.
 - **Transcoder:** `BITRIVER_TRANSCODER_API` defaults to `http://transcoder:9000`; ensure the host and port resolve from the API container and that the token matches `BITRIVER_TRANSCODER_TOKEN`.
 
@@ -251,8 +251,8 @@ If OME health checks start failing with `Authorization header is required`, temp
 
   1. Resolve token as `${BITRIVER_OME_HEALTHCHECK_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}}`.
   2. Probe with `AccessToken: <token>`.
-  3. If still failing, probe with `Authorization: Bearer <token>`.
-  4. If still failing and `BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true` with `BITRIVER_OME_USERNAME` + `BITRIVER_OME_PASSWORD` set, probe with basic auth.
+  3. If still failing and `BITRIVER_OME_USERNAME` + `BITRIVER_OME_PASSWORD` are set, probe with basic auth.
+  4. If still failing, probe with `Authorization: Bearer <token>`.
   5. Fail container health if all modes fail.
 
   Expected 401 signatures:
@@ -269,8 +269,7 @@ If OME health checks start failing with `Authorization header is required`, temp
      ./scripts/render-ome-config.sh --force
      docker compose up -d ome
      ```
-  3. Use `BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true` only as a temporary fallback for basic auth on older deployments, then set it back to `false`.
-
+  
   Run the same verification manually when troubleshooting auth drift:
   ```bash
   ./scripts/verify-ome-health-token.sh --env-file ./.env --config ./deploy/ome/Server.generated.xml
@@ -284,13 +283,16 @@ If OME health checks start failing with `Authorization header is required`, temp
     health_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health"
     healthz_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/healthz"
 
-    token="${BITRIVER_OME_ACCESS_TOKEN:-}"
+    token="${BITRIVER_OME_HEALTHCHECK_TOKEN:-}"
+    if [ -z "$token" ] && [ -n "${BITRIVER_OME_ACCESS_TOKEN:-}" ]; then
+      token="$BITRIVER_OME_ACCESS_TOKEN"
+    fi
     if [ -z "$token" ] && [ -n "${BITRIVER_OME_API_TOKEN:-}" ]; then
       token="$BITRIVER_OME_API_TOKEN"
     fi
 
     if [ -z "$token" ]; then
-      echo "missing token: set BITRIVER_OME_ACCESS_TOKEN or BITRIVER_OME_API_TOKEN" >&2
+      echo "missing token: set BITRIVER_OME_HEALTHCHECK_TOKEN, BITRIVER_OME_ACCESS_TOKEN, or BITRIVER_OME_API_TOKEN" >&2
       exit 1
     fi
 
@@ -300,11 +302,12 @@ If OME health checks start failing with `Authorization header is required`, temp
     }
 
     probe_with_args -H "AccessToken: $token" && exit 0
-    probe_with_args -H "Authorization: Bearer $token" && exit 0
 
     if [ -n "${BITRIVER_OME_USERNAME:-}" ] && [ -n "${BITRIVER_OME_PASSWORD:-}" ]; then
       probe_with_args -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" && exit 0
     fi
+
+    probe_with_args -H "Authorization: Bearer $token" && exit 0
 
     exit 1
   '
