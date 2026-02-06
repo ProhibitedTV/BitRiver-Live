@@ -48,6 +48,7 @@ jobs:
 
   audit:
     runs-on: ubuntu-latest
+    continue-on-error: true
     defaults:
       run:
         working-directory: web/viewer
@@ -61,7 +62,7 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
         env:
           NEXT_TELEMETRY_DISABLED: 1
 

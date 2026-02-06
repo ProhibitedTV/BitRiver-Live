@@ -19,12 +19,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Download verified environment file
-        uses: actions/download-artifact@v4
-        with:
-          name: release-env
-          path: .
-
       - name: Create production env file
         env:
           BITRIVER_POSTGRES_USER: ${{ secrets.BITRIVER_POSTGRES_USER }}
@@ -112,10 +106,18 @@ jobs:
 
   go-tests:
     name: Go unit tests
+    needs:
+      - verify-env
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Download verified environment file
+        uses: actions/download-artifact@v4
+        with:
+          name: release-env
+          path: .
 
       - name: Set up Go
         uses: actions/setup-go@v4
