@@ -418,4 +418,29 @@ func TestRenderOMEConfigDefaultsAlignManagersAPIWithComposeHealthcheckPort(t *te
 	if !strings.Contains(compose, "http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health") {
 		t.Fatalf("expected compose healthcheck to use BITRIVER_OME_HTTP_PORT")
 	}
+
+	accessProbe := `if probe_with_args -H "AccessToken: $$token"; then`
+	bearerProbe := `if probe_with_args -H "Authorization: Bearer $$token"; then`
+	legacyGate := `if [ "$${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}" = "true" ]; then`
+	legacyBasic := `if probe_with_args -u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD"; then`
+
+	accessIdx := strings.Index(compose, accessProbe)
+	bearerIdx := strings.Index(compose, bearerProbe)
+	if accessIdx == -1 || bearerIdx == -1 || bearerIdx <= accessIdx {
+		t.Fatalf("expected compose healthcheck to probe AccessToken header then Authorization Bearer header")
+	}
+
+	legacyIdx := strings.Index(compose, legacyGate)
+	if legacyIdx == -1 || legacyIdx <= bearerIdx {
+		t.Fatalf("expected compose healthcheck legacy gate after AccessToken and Authorization Bearer probes")
+	}
+
+	legacyBasicIdx := strings.Index(compose, legacyBasic)
+	if legacyBasicIdx == -1 || legacyBasicIdx <= legacyIdx {
+		t.Fatalf("expected compose healthcheck basic auth probe to remain behind legacy auth gate")
+	}
+
+	if !strings.Contains(compose, "OME healthcheck failed: AccessToken and Authorization Bearer header probes failed") {
+		t.Fatalf("expected compose healthcheck diagnostics to mention both header probes")
+	}
 }
