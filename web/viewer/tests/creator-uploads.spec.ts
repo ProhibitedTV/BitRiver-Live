@@ -102,13 +102,26 @@ test.describe("creator uploads", () => {
       await route.fulfill({ status: 404 });
     });
 
+    const initialUploadsRequest = page.waitForResponse((response) => {
+      const request = response.request();
+      return (
+        request.method() === "GET" &&
+        response.status() === 500 &&
+        response.url().includes(`/api/uploads?channelId=${channelId}`)
+      );
+    });
+
     await page.goto(`/creator/uploads/${channelId}`);
+    await initialUploadsRequest;
 
     await expect(page.getByRole("heading", { level: 2, name: /manage uploads for uploads dashboard/i })).toBeVisible();
-    await expect(page.getByText(/upload api unavailable/i)).toBeVisible();
+    const uploadActions = page.locator(".upload-actions");
+    const uploadError = uploadActions.locator(".error");
+    await expect(uploadError).toBeVisible();
+    await expect(uploadError).toContainText(/upload api unavailable/i);
 
     await page.getByRole("button", { name: /refresh/i }).click();
-    await expect(page.getByText(/upload api unavailable/i)).toBeHidden();
+    await expect(uploadError).toBeHidden();
     await expect(page.getByText(/no uploads yet/i)).toBeVisible();
 
     await page.getByLabel("Playback URL (optional)").fill("https://cdn.example.com/recap.m3u8");
@@ -118,9 +131,11 @@ test.describe("creator uploads", () => {
 
     await page.getByRole("button", { name: /add metadata/i }).click();
     const metadataRows = page.getByPlaceholder("Key");
-    await metadataRows.nth(metadataRows.count() - 1).fill("fileLastModified");
+    const metadataRowCount = await metadataRows.count();
+    await metadataRows.nth(metadataRowCount - 1).fill("fileLastModified");
     const metadataValues = page.getByPlaceholder("Value");
-    await metadataValues.nth(metadataValues.count() - 1).fill(new Date("2024-06-01T11:00:00Z").toISOString());
+    const metadataValueCount = await metadataValues.count();
+    await metadataValues.nth(metadataValueCount - 1).fill(new Date("2024-06-01T11:00:00Z").toISOString());
 
     await page.getByRole("button", { name: /register upload/i }).click();
 
