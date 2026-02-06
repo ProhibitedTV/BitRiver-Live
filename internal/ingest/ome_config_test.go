@@ -426,21 +426,23 @@ func TestRenderOMEConfigDefaultsAlignManagersAPIWithComposeHealthcheckPort(t *te
 
 	accessIdx := strings.Index(compose, accessProbe)
 	bearerIdx := strings.Index(compose, bearerProbe)
-	if accessIdx == -1 || bearerIdx == -1 || bearerIdx <= accessIdx {
-		t.Fatalf("expected compose healthcheck to probe AccessToken header then Authorization Bearer header")
-	}
-
 	legacyIdx := strings.Index(compose, legacyGate)
-	if legacyIdx == -1 || legacyIdx <= bearerIdx {
-		t.Fatalf("expected compose healthcheck legacy gate after AccessToken and Authorization Bearer probes")
-	}
-
 	legacyBasicIdx := strings.Index(compose, legacyBasic)
-	if legacyBasicIdx == -1 || legacyBasicIdx <= legacyIdx {
-		t.Fatalf("expected compose healthcheck basic auth probe to remain behind legacy auth gate")
+
+	if accessIdx == -1 {
+		t.Fatalf("expected compose healthcheck to probe AccessToken header")
+	}
+	if legacyIdx == -1 || legacyIdx <= accessIdx {
+		t.Fatalf("expected compose healthcheck legacy gate after AccessToken probe")
+	}
+	if bearerIdx == -1 || bearerIdx <= legacyIdx {
+		t.Fatalf("expected Authorization Bearer probe to remain behind legacy auth gate")
+	}
+	if legacyBasicIdx == -1 || legacyBasicIdx <= bearerIdx {
+		t.Fatalf("expected compose healthcheck basic auth probe to remain behind legacy auth gate after Bearer probe")
 	}
 
-	if !strings.Contains(compose, "OME healthcheck failed: AccessToken and Authorization Bearer header probes failed") {
-		t.Fatalf("expected compose healthcheck diagnostics to mention both header probes")
+	if !strings.Contains(compose, "attempted auth modes:") {
+		t.Fatalf("expected compose healthcheck diagnostics to include attempted auth modes summary")
 	}
 }

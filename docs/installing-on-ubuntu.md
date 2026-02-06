@@ -385,8 +385,10 @@ BITRIVER_SRS_TOKEN=REPLACE_ME
 BITRIVER_OME_USERNAME=REPLACE_ME
 BITRIVER_OME_PASSWORD=REPLACE_ME
 BITRIVER_OME_API_TOKEN=REPLACE_ME
-# Optional: legacy health probe header for OME; leave empty to disable it.
+# Optional: override OME API AccessToken used by health probes; defaults to BITRIVER_OME_API_TOKEN when empty.
 BITRIVER_OME_ACCESS_TOKEN=
+# Optional: set true to enable legacy OME healthcheck fallbacks (Authorization Bearer + basic auth).
+BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=false
 BITRIVER_TRANSCODER_TOKEN=REPLACE_ME
 BITRIVER_TRANSCODER_PUBLIC_BASE_URL=https://cdn.example.com/hls
 BITRIVER_TRANSCODER_PUBLIC_DIR=/var/lib/bitriver-transcoder/public

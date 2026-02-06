@@ -65,13 +65,14 @@ Header/credential fallback sequence is exact and ordered:
 
 1. Resolve probe token as `${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}`.
 2. Try `AccessToken: <token>`.
-3. If still failing, try `Authorization: Bearer <token>`.
-4. If still failing and both `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD` are non-empty, try HTTP basic auth.
-5. Mark container unhealthy if all modes fail.
+3. Only when `BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true`, try `Authorization: Bearer <token>`.
+4. Still only in legacy mode, if both `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD` are non-empty, try HTTP basic auth.
+5. Mark container unhealthy with an explicit attempted-auth summary if all enabled modes fail.
 
 Expected 401 signatures during auth mismatches:
 
-- `AccessToken`/Bearer header missing or empty token: `401` with `Authorization header is required`.
+- `AccessToken` header missing or empty token: `401` with `Authorization header is required`.
+- Legacy Bearer fallback mismatch (when enabled): `401` with `Authorization header is required` or `401 Unauthorized`, depending on OME version.
 - Token present but does not match `<Managers><API><AccessToken>` in `ome/Server.generated.xml`: `401 Unauthorized` (often still logged with auth-required messaging, depending on OME version).
 - Basic auth fallback credentials mismatch: `401 Unauthorized` from the control endpoint.
 
@@ -106,10 +107,13 @@ docker compose exec ome sh -lc '
   }
 
   probe_with_args -H "AccessToken: $token" && exit 0
-  probe_with_args -H "Authorization: Bearer $token" && exit 0
 
-  if [ -n "${BITRIVER_OME_USERNAME:-}" ] && [ -n "${BITRIVER_OME_PASSWORD:-}" ]; then
-    probe_with_args -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" && exit 0
+  if [ "${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}" = "true" ]; then
+    probe_with_args -H "Authorization: Bearer $token" && exit 0
+
+    if [ -n "${BITRIVER_OME_USERNAME:-}" ] && [ -n "${BITRIVER_OME_PASSWORD:-}" ]; then
+      probe_with_args -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" && exit 0
+    fi
   fi
 
   exit 1

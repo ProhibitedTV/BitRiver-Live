@@ -368,14 +368,17 @@ services:
             exit 0
           fi
 
-          echo "OME healthcheck warning: AccessToken probe failed; attempting Authorization Bearer header" >&2
-          if probe_with_args -H "Authorization: Bearer $$token"; then
-            echo "OME healthcheck succeeded with Authorization Bearer header"
-            exit 0
-          fi
+          attempted_modes="AccessToken header"
 
           # Legacy fallback modes are opt-in only for backward compatibility.
           if [ "$${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}" = "true" ]; then
+            echo "OME healthcheck warning: AccessToken probe failed; attempting opt-in legacy Authorization Bearer header" >&2
+            if probe_with_args -H "Authorization: Bearer $$token"; then
+              echo "OME healthcheck succeeded with Authorization Bearer header (legacy mode)"
+              exit 0
+            fi
+            attempted_modes="$$attempted_modes, Authorization Bearer header (legacy mode)"
+
             echo "OME healthcheck warning: AccessToken and Authorization Bearer probes failed; attempting opt-in legacy basic auth fallback" >&2
 
             if [ -n "$$BITRIVER_OME_USERNAME" ] && [ -n "$$BITRIVER_OME_PASSWORD" ]; then
@@ -383,12 +386,16 @@ services:
                 echo "OME healthcheck succeeded with basic auth (legacy mode)"
                 exit 0
               fi
+              attempted_modes="$$attempted_modes, basic auth (legacy mode)"
             else
+              attempted_modes="$$attempted_modes, basic auth skipped (legacy mode; missing username/password)"
               echo "OME healthcheck skipped basic auth fallback: BITRIVER_OME_USERNAME/BITRIVER_OME_PASSWORD missing or empty" >&2
             fi
+          else
+            attempted_modes="$$attempted_modes; legacy Authorization Bearer/basic auth disabled (set BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true to enable)"
           fi
 
-          echo "OME healthcheck failed: AccessToken and Authorization Bearer header probes failed for $$health_url and $$healthz_url" >&2
+          echo "OME healthcheck failed for $$health_url and $$healthz_url; attempted auth modes: $$attempted_modes" >&2
           exit 1
       interval: 30s
       timeout: 5s

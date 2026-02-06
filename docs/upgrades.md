@@ -21,7 +21,7 @@ Use this section as the concise checklist when you need to ensure schema, enviro
 
 ### `.env` changes
 
-> **Upgrade callout (OME healthcheck auth contract):** The OME healthcheck sends `AccessToken: <token>` only, where `<token>` resolves from `${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}`. Keep `<Managers><API><AccessToken>` in `deploy/ome/Server.generated.xml` aligned with that value after any token change. Legacy fallback probes (`Authorization: Bearer` and basic auth) are disabled by default and run only when `BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true` is explicitly set for backward compatibility.
+> **Upgrade callout (OME healthcheck auth contract):** The OME healthcheck in both Compose and Helm sends `AccessToken: <token>` by default, where `<token>` resolves from `${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}`. Keep `<Managers><API><AccessToken>` in `deploy/ome/Server.generated.xml` aligned with that value after any token change. Legacy fallback probes (`Authorization: Bearer` and basic auth) are disabled by default and run only when `BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true` is explicitly set for backward compatibility.
 
 - Compare your existing `.env` against `deploy/.env.example` whenever you upgrade, then add new keys or defaults before restarting.
 - Run `deploy/check-env.sh` to confirm there are no sample credentials or missing required variables.

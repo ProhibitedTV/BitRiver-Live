@@ -145,8 +145,17 @@ func TestComposeOMEHealthcheckUsesCanonicalAccessTokenHeader(t *testing.T) {
 	if !strings.Contains(compose, "AccessToken: $$token") {
 		t.Fatalf("expected OME healthcheck to probe using AccessToken header")
 	}
-	if !strings.Contains(compose, "BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH") {
+	if !strings.Contains(compose, `if [ "$${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}" = "true" ]; then`) {
 		t.Fatalf("expected legacy auth fallback to be guarded behind BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH")
+	}
+
+	legacyGate := strings.Index(compose, `if [ "$${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}" = "true" ]; then`)
+	bearerProbe := strings.Index(compose, "Authorization: Bearer $$token")
+	if legacyGate == -1 || bearerProbe == -1 || bearerProbe <= legacyGate {
+		t.Fatalf("expected Authorization Bearer probe to remain behind the legacy auth gate")
+	}
+	if !strings.Contains(compose, "attempted auth modes:") {
+		t.Fatalf("expected OME healthcheck failure logs to include attempted auth mode summary")
 	}
 }
 
