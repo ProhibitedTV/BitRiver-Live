@@ -227,7 +227,13 @@ If Docker Desktop fails to accept Compose traffic from WSL, you may see `http2: 
   #default#live application, so it was not created` simply reflect the `<Publishers>`/`<Providers>` switches in your
   `<Application>` block being set to `Off`; toggle them to match whether BitRiver Live should push or pull streams via WebRTC,
   LLHLS, and related outputs.
-- **OME health check fails** – The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the container name. The health probe always sends one `AccessToken` header value: `BITRIVER_OME_ACCESS_TOKEN` when set, otherwise `BITRIVER_OME_API_TOKEN`. A 401 response (`Authorization header is required`) will mark the container as unhealthy. Compose now runs two pre-start checks before OME launches: `ome-config` regenerates `deploy/ome/Server.generated.xml`, then `ome-health-token-check` runs `./scripts/verify-ome-health-token.sh` to confirm `<Managers><API><AccessToken>` matches `${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}` from the same `.env` file.
+- **OME health check fails** – The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the container name. The health probe always sends one `AccessToken` header value: `BITRIVER_OME_ACCESS_TOKEN` when set, otherwise `BITRIVER_OME_API_TOKEN`. A 401 response (`Authorization header is required`) will mark the container as unhealthy. Compose now runs two pre-start checks before OME launches: `ome-config` regenerates `deploy/ome/Server.generated.xml`, then `ome-health-token-check` runs `./scripts/verify-ome-health-token.sh` to confirm `<Managers><API><AccessToken>` matches `${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}` from the same `.env` file. If `bitriver-ome` falls into healthcheck restarts, inspect the helper first:
+
+  ```bash
+  docker compose logs ome-health-token-check
+  ```
+
+  The helper runs with shell tracing and prints a short hint when verification fails so you can resolve token/config drift before chasing the OME container loop.
 
   Run the same verification manually when troubleshooting auth drift:
   ```bash
