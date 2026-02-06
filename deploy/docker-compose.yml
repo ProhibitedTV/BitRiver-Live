@@ -344,6 +344,11 @@ services:
             token="$$BITRIVER_OME_API_TOKEN"
           fi
 
+          if [ -z "$$token" ]; then
+            echo "OME healthcheck misconfigured: both BITRIVER_OME_ACCESS_TOKEN and BITRIVER_OME_API_TOKEN are empty inside the container; compare .env with 'docker compose config' output." >&2
+            exit 1
+          fi
+
           probe_with_args() {
             # Pass credentials as literal argv entries so shell metacharacters are not re-interpreted.
             curl -fsS --connect-timeout 2 --max-time 4 "$$@" "$$health_url" || curl -fsS --connect-timeout 2 --max-time 4 "$$@" "$$healthz_url"
