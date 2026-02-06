@@ -86,15 +86,34 @@ read_env_value() {
 }
 
 rendered_token=$(awk '
-  /<Managers>/ { in_managers = 1 }
-  in_managers && /<API>/ { in_api = 1 }
-  in_managers && in_api && match($0, /<AccessToken>[[:space:]]*([^<[:space:]][^<]*)[[:space:]]*<\/AccessToken>/, m) {
-    token = m[1]
+  BEGIN {
+    in_managers = 0
+    in_api = 0
+    seen_managers = 0
+    seen_api = 0
+  }
+  /<Managers>/ {
+    if (seen_managers == 0 && in_managers == 0) {
+      in_managers = 1
+      seen_managers = 1
+    }
+  }
+  in_managers && /<API>/ {
+    if (seen_api == 0 && in_api == 0) {
+      in_api = 1
+      seen_api = 1
+    }
+  }
+  in_managers && in_api && /<AccessToken>/ {
+    token = $0
+    sub(/^.*<AccessToken>[[:space:]]*/, "", token)
+    sub(/[[:space:]]*<\/AccessToken>.*$/, "", token)
+    gsub(/^[[:space:]]+|[[:space:]]+$/, "", token)
     print token
     exit
   }
-  /<\/API>/ && in_api { in_api = 0 }
-  /<\/Managers>/ && in_managers { in_managers = 0 }
+  in_api && /<\/API>/ { in_api = 0 }
+  in_managers && /<\/Managers>/ { in_managers = 0 }
 ' "$CONFIG_FILE")
 
 access_token=$(read_env_value "BITRIVER_OME_ACCESS_TOKEN" || true)
