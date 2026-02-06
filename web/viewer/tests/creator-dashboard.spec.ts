@@ -117,6 +117,9 @@ test.describe("creator dashboard", () => {
     await expect(page.getByRole("heading", { level: 2, name: /manage uploads/i })).toBeVisible();
     await expect(page.getByText(/upload manager/i)).toBeVisible();
 
+    const uploadManager = page.getByRole("heading", { level: 3, name: /upload manager/i }).locator("xpath=ancestor::section[1]");
+    const submitButton = uploadManager.getByRole("button", { name: /register upload|submitting…/i });
+
     await page.getByLabel("Title").fill("Post-show recap");
     await page.getByLabel("Filename").fill("recap.mp4");
     await page.getByLabel("Playback URL (optional)").fill("https://cdn.example.com/recap.m3u8");
@@ -128,10 +131,19 @@ test.describe("creator dashboard", () => {
     const valueInputs = page.getByPlaceholder("Value");
     await valueInputs.nth(1).fill("2");
 
-    await page.getByRole("button", { name: /register upload/i }).click();
-    await expect(page.getByText(/unable to create upload/i)).toBeVisible();
+    const firstSubmitResponse = page.waitForResponse(
+      (response) => response.request().method() === "POST" && response.url().includes("/api/uploads") && response.status() === 500,
+    );
+    await Promise.all([
+      firstSubmitResponse,
+      submitButton.click(),
+    ]);
 
-    await page.getByRole("button", { name: /register upload/i }).click();
+    await expect(submitButton).toHaveText("Submitting…");
+    await expect(submitButton).toHaveText("Register upload");
+    await expect(uploadManager.getByText(/unable to create upload/i)).toBeVisible();
+
+    await submitButton.click();
 
     await expect.poll(() => uploadItems.length).toBeGreaterThan(0);
     await expect(page.getByText(/processing · 12%/i)).toBeVisible();
