@@ -130,6 +130,14 @@ var omeTestDefaults = map[string]string{
 	"BITRIVER_OME_ACCESS_TOKEN": "ome-test-access-token",
 }
 
+func resolveOMECanonicalAccessToken(values map[string]string) string {
+	return firstNonEmpty(
+		strings.TrimSpace(values["BITRIVER_OME_HEALTHCHECK_TOKEN"]),
+		strings.TrimSpace(values["BITRIVER_OME_ACCESS_TOKEN"]),
+		strings.TrimSpace(values["BITRIVER_OME_API_TOKEN"]),
+	)
+}
+
 func buildOMERenderConfig(values map[string]string, templatePath, outputPath string) (omeRenderConfig, error) {
 	if _, err := os.Stat(templatePath); err != nil {
 		return omeRenderConfig{}, fmt.Errorf("OME template missing at %s: %w", templatePath, err)
@@ -155,10 +163,7 @@ func buildOMERenderConfig(values map[string]string, templatePath, outputPath str
 	}
 
 	apiToken := strings.TrimSpace(values["BITRIVER_OME_API_TOKEN"])
-	accessToken := strings.TrimSpace(values["BITRIVER_OME_ACCESS_TOKEN"])
-	if accessToken == "" {
-		accessToken = apiToken
-	}
+	accessToken := resolveOMECanonicalAccessToken(values)
 
 	missing := make([]string, 0)
 	for key, value := range map[string]string{
@@ -961,13 +966,14 @@ func validateOMEGeneratedConfig(path string) error {
 	if renderedManagersAPIPort != expectedHealthcheckPort {
 		return fmt.Errorf("healthcheck contract mismatch in %s: rendered <Server><Bind><Managers><API><Port> is %q but deploy/docker-compose.yml healthcheck expects BITRIVER_OME_HTTP_PORT=%q; update BITRIVER_OME_HTTP_PORT (and BITRIVER_OME_API if overridden) or regenerate deploy/ome/Server.generated.xml so both values match", path, renderedManagersAPIPort, expectedHealthcheckPort)
 	}
-	expectedHealthcheckToken := strings.TrimSpace(os.Getenv("BITRIVER_OME_ACCESS_TOKEN"))
-	if expectedHealthcheckToken == "" {
-		expectedHealthcheckToken = strings.TrimSpace(os.Getenv("BITRIVER_OME_API_TOKEN"))
-	}
+	expectedHealthcheckToken := resolveOMECanonicalAccessToken(map[string]string{
+		"BITRIVER_OME_HEALTHCHECK_TOKEN": os.Getenv("BITRIVER_OME_HEALTHCHECK_TOKEN"),
+		"BITRIVER_OME_ACCESS_TOKEN":      os.Getenv("BITRIVER_OME_ACCESS_TOKEN"),
+		"BITRIVER_OME_API_TOKEN":         os.Getenv("BITRIVER_OME_API_TOKEN"),
+	})
 	renderedAccessToken := strings.TrimSpace(parsed.Managers.API.AccessToken)
 	if expectedHealthcheckToken != "" && renderedAccessToken != expectedHealthcheckToken {
-		return fmt.Errorf("healthcheck auth mismatch in %s: rendered <Server><Managers><API><AccessToken> is %q but docker-compose healthcheck sends BITRIVER_OME_ACCESS_TOKEN (falling back to BITRIVER_OME_API_TOKEN when access token is empty) as %q; align BITRIVER_OME_ACCESS_TOKEN/BITRIVER_OME_API_TOKEN with the rendered token and regenerate deploy/ome/Server.generated.xml", path, renderedAccessToken, expectedHealthcheckToken)
+		return fmt.Errorf("healthcheck auth mismatch in %s: rendered <Server><Managers><API><AccessToken> is %q but docker-compose healthcheck canonical token (BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN) resolves to %q; align those variables with the rendered token and regenerate deploy/ome/Server.generated.xml", path, renderedAccessToken, expectedHealthcheckToken)
 	}
 	if strings.TrimSpace(parsed.Bind.Managers.API.AccessToken) != "" {
 		return fmt.Errorf("invalid <AccessToken> found under <Server><Bind><Managers><API> in %s; keep auth token only under top-level <Server><Managers><API>", path)

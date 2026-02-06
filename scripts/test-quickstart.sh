@@ -123,6 +123,7 @@ grep_healthcheck "bitriver-live" "http://localhost:8080/healthz"
 grep_healthcheck "srs-controller" "http://localhost:1985/healthz"
 grep_healthcheck "srs" "http://localhost:1985/healthz"
 grep_healthcheck "ome" "AccessToken: local-dev-access-token"
+grep_healthcheck "ome" "BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN"
 grep_healthcheck "ome" "BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH"
 grep_healthcheck "ome" "if [ "$${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}" = "true" ]; then"
 grep_healthcheck "ome" "Authorization: Bearer \$\$token"
@@ -243,10 +244,20 @@ if misplaced_auth_listener:
 if api_access_token != env_values["BITRIVER_OME_API_TOKEN"]:
     sys.exit("error: rendered OME API <AccessToken> does not match .env defaults")
 
+healthcheck_token = env_values.get("BITRIVER_OME_HEALTHCHECK_TOKEN")
 legacy_token = env_values.get("BITRIVER_OME_ACCESS_TOKEN")
-if legacy_token and legacy_token != env_values["BITRIVER_OME_API_TOKEN"]:
+api_token = env_values["BITRIVER_OME_API_TOKEN"]
+if healthcheck_token and healthcheck_token != api_token:
+    sys.exit(
+        "error: BITRIVER_OME_HEALTHCHECK_TOKEN should match BITRIVER_OME_API_TOKEN for health checks"
+    )
+if legacy_token and legacy_token != api_token:
     sys.exit(
         "error: BITRIVER_OME_ACCESS_TOKEN should match BITRIVER_OME_API_TOKEN for health checks"
+    )
+if healthcheck_token and legacy_token and healthcheck_token != legacy_token:
+    sys.exit(
+        "error: BITRIVER_OME_HEALTHCHECK_TOKEN should match BITRIVER_OME_ACCESS_TOKEN for health checks"
     )
 
 print("OME config validation passed.")

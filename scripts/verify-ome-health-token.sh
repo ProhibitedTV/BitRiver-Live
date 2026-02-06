@@ -12,8 +12,9 @@ Usage: scripts/verify-ome-health-token.sh [--env-file PATH] [--config PATH]
 
 Checks that deploy/ome/Server.generated.xml contains a non-empty
 <Managers><API><AccessToken> value and that it matches the runtime
-health token source ${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}
-resolved from the same .env file Docker Compose uses.
+health token source resolved with canonical precedence:
+BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN
+from the same .env file Docker Compose uses.
 USAGE
 }
 
@@ -116,9 +117,13 @@ rendered_token=$(awk '
   in_managers && /<\/Managers>/ { in_managers = 0 }
 ' "$CONFIG_FILE")
 
+healthcheck_token=$(read_env_value "BITRIVER_OME_HEALTHCHECK_TOKEN" || true)
 access_token=$(read_env_value "BITRIVER_OME_ACCESS_TOKEN" || true)
 api_token=$(read_env_value "BITRIVER_OME_API_TOKEN" || true)
-expected_token="$access_token"
+expected_token="$healthcheck_token"
+if [ -z "$expected_token" ]; then
+  expected_token="$access_token"
+fi
 if [ -z "$expected_token" ]; then
   expected_token="$api_token"
 fi
@@ -129,7 +134,7 @@ fi
 }
 
 [ -n "$expected_token" ] || {
-  echo "OME token verification failed: resolved runtime token from \${BITRIVER_OME_ACCESS_TOKEN:-\$BITRIVER_OME_API_TOKEN} is empty in $ENV_FILE" >&2
+  echo "OME token verification failed: resolved runtime token from canonical precedence BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN is empty in $ENV_FILE" >&2
   exit 1
 }
 
@@ -137,7 +142,7 @@ if [ "$rendered_token" != "$expected_token" ]; then
   cat >&2 <<EOF_MSG
 OME token verification failed: rendered and runtime tokens differ.
   rendered (<Managers><API><AccessToken>): $rendered_token
-  expected (\${BITRIVER_OME_ACCESS_TOKEN:-\$BITRIVER_OME_API_TOKEN}): $expected_token
+  expected (BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN): $expected_token
 Fix by updating $ENV_FILE and re-rendering with:
   go run ./cmd/bitriver ome render --force --env-file $ENV_FILE
 EOF_MSG

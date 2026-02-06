@@ -419,6 +419,13 @@ func TestRenderOMEConfigDefaultsAlignManagersAPIWithComposeHealthcheckPort(t *te
 		t.Fatalf("expected compose healthcheck to use BITRIVER_OME_HTTP_PORT")
 	}
 
+	if !strings.Contains(compose, "BITRIVER_OME_HEALTHCHECK_TOKEN") {
+		t.Fatalf("expected compose OME service to expose BITRIVER_OME_HEALTHCHECK_TOKEN")
+	}
+	if !strings.Contains(compose, "BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN") {
+		t.Fatalf("expected compose healthcheck to document canonical token precedence")
+	}
+
 	accessProbe := `if probe_with_args -H "AccessToken: $$token"; then`
 	bearerProbe := `if probe_with_args -H "Authorization: Bearer $$token"; then`
 	legacyGate := `if [ "$${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}" = "true" ]; then`

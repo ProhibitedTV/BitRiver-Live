@@ -9,6 +9,9 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/render-ome-config.sh [--check] [--force] [--env-file PATH] [--quiet]
 
+Canonical OME AccessToken precedence during render/validation/healthcheck:
+  BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN
+
 Options:
   --check       Only verify that deploy/ome/Server.generated.xml exists.
   --force       Re-render even if the generated file already exists.
