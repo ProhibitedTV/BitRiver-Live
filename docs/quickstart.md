@@ -52,6 +52,16 @@ pwsh -c "go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.y
 
 The Go CLI renders `deploy/ome/Server.generated.xml` directly (no Python dependency) before launching Compose. The quickstart waits for the API `/readyz` probe to succeed before seeding the admin user via the bundled `bootstrap-admin` binary, then prints a "Generated credentials" block for any secrets it auto-created so you can store them securely before logging in.
 
+### OME auth preflight
+
+Before `docker compose up -d` runs, quickstart now performs an OME auth preflight to avoid long healthcheck retry loops:
+
+- Confirms `.env` contains a non-empty `BITRIVER_OME_API_TOKEN`.
+- Validates `BITRIVER_OME_ACCESS_TOKEN` when set, and fails fast if it does not match `BITRIVER_OME_API_TOKEN`.
+- Re-renders `deploy/ome/Server.generated.xml` and verifies `<Managers><API><AccessToken>` matches the runtime token source used by health checks.
+
+If preflight fails, quickstart exits immediately with actionable guidance that names the exact variable to fix.
+
 When stdin is not attached to a terminal (for example in CI, scripted deployments, or some Windows shells), the quickstart runs database migrations with `docker compose run -T` to disable TTY allocation and avoid interactive console errors.
 
 Want a shim to handle shell-specific permissions? Use `./scripts/quickstart.sh` from POSIX shells or `./scripts/quickstart.ps1` from PowerShell—they call the same Go quickstart and keep the `COMPOSE_FILE` defaulted to `deploy/docker-compose.yml`.
