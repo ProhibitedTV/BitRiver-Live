@@ -206,6 +206,8 @@ If Docker Desktop fails to accept Compose traffic from WSL, you may see `http2: 
 1. Restart Docker Desktop to reset the engine and pipe.
 2. Confirm the WSL 2 backend is healthy (`wsl --status`, and verify the `docker-desktop` distro is running).
 3. Re-run `docker compose up -d` from the repository root (or re-run `bitriver-live` / `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml`).
+
+If OME health checks start failing with `Authorization header is required`, temporarily set `BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true` in `.env`, redeploy, and then set it back to `false` after you confirm the modern header/token configuration is aligned.
 - **Port already in use** – Stop or reconfigure any services that currently bind to ports 5432, 6379, 8080, 8081, 8083, 8443, 9000, 9001, or 1935 (plus 1985 when the `srs-api` profile is enabled). Alternatively edit the corresponding `*_PORT` values in `.env` (for example, `BITRIVER_LIVE_PORT=9090` or `BITRIVER_OME_LLHLS_HOST_PORT=8083`) and rerun `docker compose up -d`.
 - **`Empty <AccessToken> is not allowed`** – The OvenMediaEngine template detected a missing `BITRIVER_OME_API_TOKEN` in `.env`. Set a non-empty value in `.env`, mirror it into `BITRIVER_OME_ACCESS_TOKEN` if you want the health probe to use a distinct header, rerun `go run ./cmd/bitriver ome render --force --env-file ./.env` (or `./scripts/render-ome-config.sh --force`), and restart the stack with `docker compose up -d` so `deploy/ome/Server.generated.xml` is regenerated with the token.
 - **Still seeing OME API auth errors after rendering?** – Verify the stamp and contents of the generated config before restarting OME:
@@ -251,10 +253,13 @@ If Docker Desktop fails to accept Compose traffic from WSL, you may see `http2: 
 
   If you see **`Authorization header is required`**:
 
-  1. Check token values in `.env` (`BITRIVER_OME_API_TOKEN`, and `BITRIVER_OME_ACCESS_TOKEN` if set).
-  2. Check rendered token in `deploy/ome/Server.generated.xml` under `<Managers><API><AccessToken>`.
-  3. Check `deploy/docker-compose.yml` still injects those env vars into `ome` and still uses the documented mode order.
-  4. Re-render + restart OME:
+  1. Set `BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true` in `.env` as a temporary compatibility fallback.
+  2. Redeploy OME so health checks retry with legacy auth headers:
+     ```bash
+     docker compose up -d ome
+     ```
+  3. Align your OME auth configuration and token/header behavior (`BITRIVER_OME_API_TOKEN`, `BITRIVER_OME_ACCESS_TOKEN`, and `<Managers><API><AccessToken>` in `deploy/ome/Server.generated.xml`).
+  4. Revert `BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=false` once header behavior is aligned, then redeploy again:
      ```bash
      ./scripts/render-ome-config.sh --force
      docker compose up -d ome
