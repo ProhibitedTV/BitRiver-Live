@@ -37,6 +37,16 @@ func TestQuickstartDelegatesToCli(t *testing.T) {
 		t.Fatalf("write quickstart: %v", err)
 	}
 
+	verifySrc := filepath.Join(repoRoot, "scripts", "verify-ome-health-token.sh")
+	verifyDst := filepath.Join(scriptDir, "verify-ome-health-token.sh")
+	verifyBytes, err := os.ReadFile(verifySrc)
+	if err != nil {
+		t.Fatalf("read verify script: %v", err)
+	}
+	if err := os.WriteFile(verifyDst, verifyBytes, 0o755); err != nil {
+		t.Fatalf("write verify script: %v", err)
+	}
+
 	logPath := filepath.Join(tempDir, "go-log.txt")
 	stubBin := filepath.Join(tempDir, "bin")
 	if err := os.MkdirAll(stubBin, 0o755); err != nil {
@@ -48,6 +58,21 @@ func TestQuickstartDelegatesToCli(t *testing.T) {
 	}
 
 	envPath := filepath.Join(tempDir, "custom.env")
+	envContents := strings.Join([]string{
+		"BITRIVER_OME_API_TOKEN=token",
+		"BITRIVER_OME_ACCESS_TOKEN=token",
+	}, "\n") + "\n"
+	if err := os.WriteFile(envPath, []byte(envContents), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+	generatedConfigPath := filepath.Join(tempDir, "deploy", "ome", "Server.generated.xml")
+	if err := os.MkdirAll(filepath.Dir(generatedConfigPath), 0o755); err != nil {
+		t.Fatalf("create generated config dir: %v", err)
+	}
+	generatedConfig := `<Server><Managers><API><AccessToken>token</AccessToken></API></Managers></Server>`
+	if err := os.WriteFile(generatedConfigPath, []byte(generatedConfig), 0o644); err != nil {
+		t.Fatalf("write generated config: %v", err)
+	}
 	composePath := filepath.Join(tempDir, "deploy", "custom-compose.yml")
 	if err := os.MkdirAll(filepath.Dir(composePath), 0o755); err != nil {
 		t.Fatalf("create compose dir: %v", err)
@@ -76,19 +101,200 @@ func TestQuickstartDelegatesToCli(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(logContent)), "\n")
-	if len(lines) != 1 {
+	if len(lines) != 2 {
 		t.Fatalf("unexpected number of go invocations: %d\n%s", len(lines), strings.Join(lines, "\n"))
 	}
 
-	line := strings.TrimSpace(lines[0])
-	sep := strings.Index(line, ":run ")
-	if sep == -1 {
-		t.Fatalf("unexpected go invocation format: %s", line)
+	line1 := strings.TrimSpace(lines[0])
+	sep1 := strings.Index(line1, ":run ")
+	if sep1 == -1 {
+		t.Fatalf("unexpected go invocation format: %s", line1)
 	}
-	invocation := line[sep+1:]
-	expectedInvocation := fmt.Sprintf("run ./cmd/bitriver quickstart --env-file %s --compose-file %s", envPath, composePath)
-	if invocation != expectedInvocation {
-		t.Fatalf("unexpected go invocation:\n got: %s\nwant: %s", invocation, expectedInvocation)
+	invocation1 := line1[sep1+1:]
+	expectedInvocation1 := fmt.Sprintf("run ./cmd/bitriver ome render --force --env-file %s", envPath)
+	if invocation1 != expectedInvocation1 {
+		t.Fatalf("unexpected preflight invocation:\n got: %s\nwant: %s", invocation1, expectedInvocation1)
+	}
+
+	line2 := strings.TrimSpace(lines[1])
+	sep2 := strings.Index(line2, ":run ")
+	if sep2 == -1 {
+		t.Fatalf("unexpected go invocation format: %s", line2)
+	}
+	invocation2 := line2[sep2+1:]
+	expectedInvocation2 := fmt.Sprintf("run ./cmd/bitriver quickstart --env-file %s --compose-file %s", envPath, composePath)
+	if invocation2 != expectedInvocation2 {
+		t.Fatalf("unexpected quickstart invocation:\n got: %s\nwant: %s", invocation2, expectedInvocation2)
+	}
+}
+
+func TestQuickstartFailsOmeAuthPreflightWhenTokensMissing(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	tempDir := t.TempDir()
+	scriptDir := filepath.Join(tempDir, "scripts")
+	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
+		t.Fatalf("create script dir: %v", err)
+	}
+
+	quickstartSrc := filepath.Join(repoRoot, "scripts", "quickstart.sh")
+	quickstartDst := filepath.Join(scriptDir, "quickstart.sh")
+	scriptBytes, err := os.ReadFile(quickstartSrc)
+	if err != nil {
+		t.Fatalf("read quickstart: %v", err)
+	}
+	if err := os.WriteFile(quickstartDst, scriptBytes, 0o755); err != nil {
+		t.Fatalf("write quickstart: %v", err)
+	}
+
+	verifySrc := filepath.Join(repoRoot, "scripts", "verify-ome-health-token.sh")
+	verifyDst := filepath.Join(scriptDir, "verify-ome-health-token.sh")
+	verifyBytes, err := os.ReadFile(verifySrc)
+	if err != nil {
+		t.Fatalf("read verify script: %v", err)
+	}
+	if err := os.WriteFile(verifyDst, verifyBytes, 0o755); err != nil {
+		t.Fatalf("write verify script: %v", err)
+	}
+
+	stubBin := filepath.Join(tempDir, "bin")
+	if err := os.MkdirAll(stubBin, 0o755); err != nil {
+		t.Fatalf("create stub bin: %v", err)
+	}
+	goStub := `#!/usr/bin/env bash
+set -euo pipefail
+if [ "$1" = "run" ] && [ "$2" = "./cmd/bitriver" ] && [ "${3:-}" = "quickstart" ]; then
+  echo "quickstart must not run when preflight fails" >&2
+  exit 91
+fi
+exit 0
+`
+	if err := os.WriteFile(filepath.Join(stubBin, "go"), []byte(goStub), 0o755); err != nil {
+		t.Fatalf("write go stub: %v", err)
+	}
+
+	envPath := filepath.Join(tempDir, ".env")
+	if err := os.WriteFile(envPath, []byte("# intentionally empty\n"), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	cmd := exec.Command("bash", quickstartDst)
+	cmd.Dir = tempDir
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("PATH=%s:%s", stubBin, os.Getenv("PATH")),
+		fmt.Sprintf("BITRIVER_QUICKSTART_REPO_ROOT=%s", tempDir),
+		fmt.Sprintf("ENV_FILE=%s", envPath),
+	)
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stdout
+
+	err = cmd.Run()
+	if err == nil {
+		t.Fatalf("expected quickstart to fail when OME tokens are missing")
+	}
+	if exitErr := (&exec.ExitError{}); errors.As(err, &exitErr) {
+		if exitErr.ExitCode() == 91 {
+			t.Fatalf("quickstart CLI path executed despite failed preflight:\n%s", stdout.String())
+		}
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "OME auth preflight failed: missing required token values") {
+		t.Fatalf("expected missing token preflight error, got:\n%s", out)
+	}
+	if !strings.Contains(out, "BITRIVER_OME_API_TOKEN") || !strings.Contains(out, "BITRIVER_OME_ACCESS_TOKEN") {
+		t.Fatalf("expected canonical token variable names in output, got:\n%s", out)
+	}
+}
+
+func TestQuickstartFailsOmeAuthPreflightWhenTokensMismatch(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	tempDir := t.TempDir()
+	scriptDir := filepath.Join(tempDir, "scripts")
+	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
+		t.Fatalf("create script dir: %v", err)
+	}
+
+	quickstartSrc := filepath.Join(repoRoot, "scripts", "quickstart.sh")
+	quickstartDst := filepath.Join(scriptDir, "quickstart.sh")
+	scriptBytes, err := os.ReadFile(quickstartSrc)
+	if err != nil {
+		t.Fatalf("read quickstart: %v", err)
+	}
+	if err := os.WriteFile(quickstartDst, scriptBytes, 0o755); err != nil {
+		t.Fatalf("write quickstart: %v", err)
+	}
+
+	verifySrc := filepath.Join(repoRoot, "scripts", "verify-ome-health-token.sh")
+	verifyDst := filepath.Join(scriptDir, "verify-ome-health-token.sh")
+	verifyBytes, err := os.ReadFile(verifySrc)
+	if err != nil {
+		t.Fatalf("read verify script: %v", err)
+	}
+	if err := os.WriteFile(verifyDst, verifyBytes, 0o755); err != nil {
+		t.Fatalf("write verify script: %v", err)
+	}
+
+	stubBin := filepath.Join(tempDir, "bin")
+	if err := os.MkdirAll(stubBin, 0o755); err != nil {
+		t.Fatalf("create stub bin: %v", err)
+	}
+	goStub := `#!/usr/bin/env bash
+set -euo pipefail
+if [ "$1" = "run" ] && [ "$2" = "./cmd/bitriver" ] && [ "${3:-}" = "quickstart" ]; then
+  echo "quickstart must not run when preflight fails" >&2
+  exit 91
+fi
+exit 0
+`
+	if err := os.WriteFile(filepath.Join(stubBin, "go"), []byte(goStub), 0o755); err != nil {
+		t.Fatalf("write go stub: %v", err)
+	}
+
+	envPath := filepath.Join(tempDir, ".env")
+	envContents := strings.Join([]string{
+		"BITRIVER_OME_API_TOKEN=api-token",
+		"BITRIVER_OME_ACCESS_TOKEN=access-token",
+	}, "\n") + "\n"
+	if err := os.WriteFile(envPath, []byte(envContents), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	cmd := exec.Command("bash", quickstartDst)
+	cmd.Dir = tempDir
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("PATH=%s:%s", stubBin, os.Getenv("PATH")),
+		fmt.Sprintf("BITRIVER_QUICKSTART_REPO_ROOT=%s", tempDir),
+		fmt.Sprintf("ENV_FILE=%s", envPath),
+	)
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stdout
+
+	err = cmd.Run()
+	if err == nil {
+		t.Fatalf("expected quickstart to fail when OME tokens mismatch")
+	}
+	if exitErr := (&exec.ExitError{}); errors.As(err, &exitErr) {
+		if exitErr.ExitCode() == 91 {
+			t.Fatalf("quickstart CLI path executed despite failed preflight:\n%s", stdout.String())
+		}
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "OME auth preflight failed: token mismatch detected") {
+		t.Fatalf("expected mismatch preflight error, got:\n%s", out)
+	}
+	if !strings.Contains(out, "BITRIVER_OME_ACCESS_TOKEN") || !strings.Contains(out, "BITRIVER_OME_API_TOKEN") {
+		t.Fatalf("expected canonical token variable names in mismatch output, got:\n%s", out)
 	}
 }
 
