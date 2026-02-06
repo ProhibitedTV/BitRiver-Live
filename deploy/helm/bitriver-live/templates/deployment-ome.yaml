@@ -41,6 +41,8 @@ spec:
                 secretKeyRef:
                   name: {{ include "bitriver-live.fullname" . }}-secrets
                   key: BITRIVER_OME_API_TOKEN
+            - name: BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH
+              value: {{ default "false" .Values.env.BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH | quote }}
           ports:
             - name: api
               containerPort: 8081
@@ -86,29 +88,36 @@ spec:
                     curl -fsS --connect-timeout 2 --max-time 4 "$@" "$health_url" || curl -fsS --connect-timeout 2 --max-time 4 "$@" "$healthz_url"
                   }
 
-                  failed_modes=""
-
-                  try_mode() {
-                    mode_name="$1"
-                    shift
-                    if probe_with_args "$@"; then
-                      echo "OME healthcheck succeeded with $mode_name"
-                      exit 0
-                    fi
-                    echo "OME healthcheck failed with $mode_name" >&2
-                    failed_modes="$failed_modes $mode_name"
-                  }
-
-                  try_mode "AccessToken header" -H "AccessToken: $token"
-                  try_mode "Authorization Bearer header" -H "Authorization: Bearer $token"
-
-                  if [ -n "$BITRIVER_OME_USERNAME" ] && [ -n "$BITRIVER_OME_PASSWORD" ]; then
-                    try_mode "basic auth" -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD"
-                  else
-                    echo "OME healthcheck skipped basic auth: BITRIVER_OME_USERNAME/BITRIVER_OME_PASSWORD missing or empty" >&2
+                  if probe_with_args -H "AccessToken: $token"; then
+                    echo "OME healthcheck succeeded with AccessToken header"
+                    exit 0
                   fi
 
-                  echo "OME healthcheck failed: all auth modes exhausted ($failed_modes )" >&2
+                  attempted_modes="AccessToken header"
+                  if [ "${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}" = "true" ]; then
+                    echo "OME healthcheck warning: AccessToken probe failed; attempting opt-in legacy Authorization Bearer header" >&2
+                    if probe_with_args -H "Authorization: Bearer $token"; then
+                      echo "OME healthcheck succeeded with Authorization Bearer header (legacy mode)"
+                      exit 0
+                    fi
+                    attempted_modes="$attempted_modes, Authorization Bearer header (legacy mode)"
+
+                    echo "OME healthcheck warning: AccessToken and Authorization Bearer probes failed; attempting opt-in legacy basic auth fallback" >&2
+                    if [ -n "$BITRIVER_OME_USERNAME" ] && [ -n "$BITRIVER_OME_PASSWORD" ]; then
+                      if probe_with_args -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD"; then
+                        echo "OME healthcheck succeeded with basic auth (legacy mode)"
+                        exit 0
+                      fi
+                      attempted_modes="$attempted_modes, basic auth (legacy mode)"
+                    else
+                      attempted_modes="$attempted_modes, basic auth skipped (legacy mode; missing username/password)"
+                      echo "OME healthcheck skipped basic auth fallback: BITRIVER_OME_USERNAME/BITRIVER_OME_PASSWORD missing or empty" >&2
+                    fi
+                  else
+                    attempted_modes="$attempted_modes; legacy Authorization Bearer/basic auth disabled (set BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true to enable)"
+                  fi
+
+                  echo "OME healthcheck failed for $health_url and $healthz_url; attempted auth modes: $attempted_modes" >&2
                   exit 1
             initialDelaySeconds: 20
             periodSeconds: 30
@@ -137,29 +146,36 @@ spec:
                     curl -fsS --connect-timeout 2 --max-time 4 "$@" "$health_url" || curl -fsS --connect-timeout 2 --max-time 4 "$@" "$healthz_url"
                   }
 
-                  failed_modes=""
-
-                  try_mode() {
-                    mode_name="$1"
-                    shift
-                    if probe_with_args "$@"; then
-                      echo "OME healthcheck succeeded with $mode_name"
-                      exit 0
-                    fi
-                    echo "OME healthcheck failed with $mode_name" >&2
-                    failed_modes="$failed_modes $mode_name"
-                  }
-
-                  try_mode "AccessToken header" -H "AccessToken: $token"
-                  try_mode "Authorization Bearer header" -H "Authorization: Bearer $token"
-
-                  if [ -n "$BITRIVER_OME_USERNAME" ] && [ -n "$BITRIVER_OME_PASSWORD" ]; then
-                    try_mode "basic auth" -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD"
-                  else
-                    echo "OME healthcheck skipped basic auth: BITRIVER_OME_USERNAME/BITRIVER_OME_PASSWORD missing or empty" >&2
+                  if probe_with_args -H "AccessToken: $token"; then
+                    echo "OME healthcheck succeeded with AccessToken header"
+                    exit 0
                   fi
 
-                  echo "OME healthcheck failed: all auth modes exhausted ($failed_modes )" >&2
+                  attempted_modes="AccessToken header"
+                  if [ "${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}" = "true" ]; then
+                    echo "OME healthcheck warning: AccessToken probe failed; attempting opt-in legacy Authorization Bearer header" >&2
+                    if probe_with_args -H "Authorization: Bearer $token"; then
+                      echo "OME healthcheck succeeded with Authorization Bearer header (legacy mode)"
+                      exit 0
+                    fi
+                    attempted_modes="$attempted_modes, Authorization Bearer header (legacy mode)"
+
+                    echo "OME healthcheck warning: AccessToken and Authorization Bearer probes failed; attempting opt-in legacy basic auth fallback" >&2
+                    if [ -n "$BITRIVER_OME_USERNAME" ] && [ -n "$BITRIVER_OME_PASSWORD" ]; then
+                      if probe_with_args -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD"; then
+                        echo "OME healthcheck succeeded with basic auth (legacy mode)"
+                        exit 0
+                      fi
+                      attempted_modes="$attempted_modes, basic auth (legacy mode)"
+                    else
+                      attempted_modes="$attempted_modes, basic auth skipped (legacy mode; missing username/password)"
+                      echo "OME healthcheck skipped basic auth fallback: BITRIVER_OME_USERNAME/BITRIVER_OME_PASSWORD missing or empty" >&2
+                    fi
+                  else
+                    attempted_modes="$attempted_modes; legacy Authorization Bearer/basic auth disabled (set BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH=true to enable)"
+                  fi
+
+                  echo "OME healthcheck failed for $health_url and $healthz_url; attempted auth modes: $attempted_modes" >&2
                   exit 1
             initialDelaySeconds: 20
             periodSeconds: 15
