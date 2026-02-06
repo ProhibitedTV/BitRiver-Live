@@ -181,7 +181,7 @@ All commands assume you are still in the repository root (where `.env` lives) so
   ```bash
   go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml
   ```
-  The Go command reuses your existing `.env` and Docker volumes, so configuration, database data, and media files persist across updates. Prefer this entry point even on Windows (with `pwsh -c`), and fall back to `./scripts/quickstart.sh` or `./scripts/quickstart.ps1` only when your shell cannot run `go` directly.
+  The Go command reuses your existing `.env` and Docker volumes, so configuration, database data, and media files persist across updates. This is the canonical deployment path on Linux, macOS, and Windows.
 `docker compose up` (including the quickstart wrapper) reruns the `ome-config` helper so OME consumes the credentials from `.env`, the current control-listener bind value from `BITRIVER_OME_BIND`, and the top-level `<Server><IP>` host from `BITRIVER_OME_IP` without requiring an extra compose override.
 - Running `git pull` followed by the quickstart keeps OME in a predictable state:
   - The helper preserves your `.env` while backfilling any new variables introduced upstream so you avoid silent crashes from missing credentials, including the OME managers token.
