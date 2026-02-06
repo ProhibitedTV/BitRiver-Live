@@ -2,14 +2,46 @@
 """Check quickstart env defaults align with CI .env seeding."""
 from __future__ import annotations
 
+import json
+import os
 import pathlib
-import re
+import subprocess
 import sys
+import textwrap
 from typing import Dict, Iterable, List, Tuple
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
-QUICKSTART_PATH = REPO_ROOT / "scripts" / "quickstart.sh"
 CI_SCRIPT_PATH = REPO_ROOT / "scripts" / "test-quickstart.sh"
+BITRIVER_CMD_DIR = REPO_ROOT / "cmd" / "bitriver"
+
+# CI seeds some values to keep docker-compose smoke tests deterministic. These
+# are intentionally not sourced from env init defaults (for example, generated
+# secrets and release image tags).
+CI_ONLY_KEYS = {
+    "BITRIVER_LIVE_IMAGE_TAG",
+    "BITRIVER_VIEWER_IMAGE_TAG",
+    "BITRIVER_SRS_CONTROLLER_IMAGE_TAG",
+    "BITRIVER_TRANSCODER_IMAGE_TAG",
+    "BITRIVER_LIVE_MODE",
+    "BITRIVER_LIVE_POSTGRES_DSN",
+    "BITRIVER_POSTGRES_DB",
+    "BITRIVER_POSTGRES_USER",
+    "BITRIVER_POSTGRES_PASSWORD",
+    "BITRIVER_REDIS_PASSWORD",
+    "BITRIVER_REDIS_PORT",
+    "BITRIVER_SRS_API_PORT",
+    "BITRIVER_TRANSCODER_PUBLIC_BASE_URL",
+    "BITRIVER_SRS_RTMP_PORT",
+    "BITRIVER_LIVE_ADMIN_EMAIL",
+    "BITRIVER_LIVE_ADMIN_PASSWORD",
+    "BITRIVER_SRS_TOKEN",
+    "BITRIVER_OME_USERNAME",
+    "BITRIVER_OME_PASSWORD",
+    "BITRIVER_OME_API_TOKEN",
+    "BITRIVER_OME_ACCESS_TOKEN",
+    "BITRIVER_TRANSCODER_TOKEN",
+    "BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD",
+}
 
 
 def _extract_block(lines: List[str], start_marker: str, end_marker: str) -> List[str]:
@@ -27,35 +59,73 @@ def _extract_block(lines: List[str], start_marker: str, end_marker: str) -> List
     return block
 
 
-def parse_env_defaults(lines: Iterable[str]) -> Dict[str, str]:
-    defaults: Dict[str, str] = {}
-    start = "declare -A env_defaults=("
-    end = ")"
-    block = _extract_block(list(lines), start, end)
-    pattern = re.compile(r"\[([^\]]+)\]='(.*)'")
-    for entry in block:
-        entry = entry.strip()
-        if not entry or entry.startswith("#"):
-            continue
-        match = pattern.fullmatch(entry)
-        if not match:
-            raise ValueError(f"Unexpected env_defaults line: {entry}")
-        key, value = match.groups()
-        defaults[key] = value
-    return defaults
+def parse_env_defaults(_: Iterable[str]) -> Dict[str, str]:
+    helper_name = "quickstart_env_defaults_extractor_tmp.go"
+    helper_path = BITRIVER_CMD_DIR / helper_name
+    helper_source = textwrap.dedent(
+        """
+        package main
+
+        import (
+            "encoding/json"
+            "fmt"
+            "os"
+            "strings"
+        )
+
+        func init() {
+            templateLines, err := readEnvTemplate(defaultExampleEnv())
+            if err != nil {
+                fmt.Fprintf(os.Stderr, "read env template: %v\\n", err)
+                os.Exit(1)
+            }
+
+            generated, _ := generateEnvValues(map[string]string{})
+            merged := mergeEnv(templateLines, map[string]string{}, generated)
+
+            values := map[string]string{}
+            for _, line := range strings.Split(merged, "\\n") {
+                line = strings.TrimSpace(line)
+                if line == "" || strings.HasPrefix(line, "#") || !strings.Contains(line, "=") {
+                    continue
+                }
+                key, value, _ := strings.Cut(line, "=")
+                values[key] = value
+            }
+
+            if err := json.NewEncoder(os.Stdout).Encode(values); err != nil {
+                fmt.Fprintf(os.Stderr, "encode defaults: %v\\n", err)
+                os.Exit(1)
+            }
+            os.Exit(0)
+        }
+        """
+    ).strip()
+
+    helper_path.write_text(helper_source + "\n")
+    try:
+        proc = subprocess.run(
+            ["go", "run", "./cmd/bitriver"],
+            cwd=REPO_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            env={
+                **dict(os.environ),
+                "GOTOOLCHAIN": "local",
+                "GOPROXY": "off",
+                "GOSUMDB": "off",
+            },
+        )
+    finally:
+        helper_path.unlink(missing_ok=True)
+
+    return json.loads(proc.stdout)
 
 
 def parse_required_keys(lines: Iterable[str]) -> List[str]:
-    start = "required_env_keys=("
-    end = ")"
-    block = _extract_block(list(lines), start, end)
-    keys: List[str] = []
-    for entry in block:
-        entry = entry.strip()
-        if not entry or entry.startswith("#"):
-            continue
-        keys.append(entry)
-    return keys
+    seeded_keys = list(parse_seed_env(lines).keys())
+    return [key for key in seeded_keys if key not in CI_ONLY_KEYS]
 
 
 def parse_seed_env(lines: Iterable[str]) -> Dict[str, str]:
@@ -90,11 +160,10 @@ def diff_values(defaults: Dict[str, str], seed_env: Dict[str, str], keys: Iterab
 
 
 def main() -> int:
-    quickstart_lines = QUICKSTART_PATH.read_text().splitlines()
     ci_script_lines = CI_SCRIPT_PATH.read_text().splitlines()
 
-    env_defaults = parse_env_defaults(quickstart_lines)
-    required_keys = parse_required_keys(quickstart_lines)
+    env_defaults = parse_env_defaults(ci_script_lines)
+    required_keys = parse_required_keys(ci_script_lines)
     seed_env = parse_seed_env(ci_script_lines)
 
     mismatches = diff_values(env_defaults, seed_env, required_keys)
