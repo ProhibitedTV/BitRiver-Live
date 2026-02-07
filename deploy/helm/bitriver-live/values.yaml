@@ -128,6 +128,7 @@ env:
   NEXT_VIEWER_BASE_PATH: /viewer
   NEXT_PUBLIC_VIEWER_URL: https://stream.example.com/viewer
   BITRIVER_LIVE_METRICS_ALLOW_NETWORKS: ""
+  BITRIVER_OME_HEALTHCHECK_AUTH_MODE: accesstoken
 
 ome:
   bindAddress: 0.0.0.0
@@ -149,6 +150,7 @@ secrets:
   BITRIVER_OME_PASSWORD: OME-Example-Pass!
   BITRIVER_OME_API_TOKEN: OME-Example-Access-Token
   BITRIVER_OME_ACCESS_TOKEN: OME-Example-Access-Token
+  BITRIVER_OME_HEALTHCHECK_TOKEN: OME-Example-Access-Token
   BITRIVER_TRANSCODER_TOKEN: transcoder-secure-token-example
   BITRIVER_REDIS_PASSWORD: R3dis-Example!
   BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD: R3dis-Example!

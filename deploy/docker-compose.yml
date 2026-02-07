@@ -338,6 +338,7 @@ services:
     environment:
       BITRIVER_OME_USERNAME: ${BITRIVER_OME_USERNAME:?set via .env}
       BITRIVER_OME_PASSWORD: ${BITRIVER_OME_PASSWORD:?set via .env}
+      BITRIVER_OME_HEALTHCHECK_AUTH_MODE: ${BITRIVER_OME_HEALTHCHECK_AUTH_MODE:-accesstoken}
       BITRIVER_OME_HEALTHCHECK_TOKEN: ${BITRIVER_OME_HEALTHCHECK_TOKEN:-}
       BITRIVER_OME_ACCESS_TOKEN: ${BITRIVER_OME_ACCESS_TOKEN:-}
       BITRIVER_OME_API_TOKEN: ${BITRIVER_OME_API_TOKEN:?set via .env}
@@ -359,8 +360,20 @@ services:
       test:
         - "CMD-SHELL"
         - |
+          probe_source="bitriver-ome"
+          probe_config="deploy/docker-compose.yml"
           health_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health"
           healthz_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/healthz"
+          auth_mode="$$BITRIVER_OME_HEALTHCHECK_AUTH_MODE"
+
+          if [ -z "$$auth_mode" ]; then
+            auth_mode="accesstoken"
+          fi
+
+          if [ "$$auth_mode" != "accesstoken" ]; then
+            echo "[$$probe_source] OME healthcheck misconfigured in $$probe_config: unsupported BITRIVER_OME_HEALTHCHECK_AUTH_MODE=$$auth_mode (expected accesstoken)" >&2
+            exit 1
+          fi
 
           token="$$BITRIVER_OME_HEALTHCHECK_TOKEN"
           # Canonical AccessToken source: BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN.
@@ -372,21 +385,30 @@ services:
           fi
 
           if [ -z "$$token" ]; then
-            echo "OME healthcheck misconfigured: BITRIVER_OME_HEALTHCHECK_TOKEN, BITRIVER_OME_ACCESS_TOKEN, and BITRIVER_OME_API_TOKEN are all empty inside the container; compare .env with 'docker compose config' output." >&2
+            echo "[$$probe_source] OME healthcheck misconfigured in $$probe_config: BITRIVER_OME_HEALTHCHECK_TOKEN, BITRIVER_OME_ACCESS_TOKEN, and BITRIVER_OME_API_TOKEN are all empty inside the container; compare .env with 'docker compose config' output." >&2
             exit 1
           fi
 
-          probe_with_args() {
+          case "$$token" in
+            [Bb][Ee][Aa][Rr][Ee][Rr]\ *)
+              echo "[$$probe_source] OME healthcheck auth mismatch in $$probe_config: auth_mode=$$auth_mode expects a raw AccessToken value, but token is Bearer-prefixed" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "[$$probe_source] OME healthcheck configured from $$probe_config with auth_mode=$$auth_mode"
+
+          probe_access_token() {
             # Pass credentials as literal argv entries so shell metacharacters are not re-interpreted.
-            curl -fsS --connect-timeout 2 --max-time 4 "$$@" "$$health_url" || curl -fsS --connect-timeout 2 --max-time 4 "$$@" "$$healthz_url"
+            curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $$token" "$$health_url" || curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $$token" "$$healthz_url"
           }
 
-          if probe_with_args -H "AccessToken: $$token"; then
-            echo "OME healthcheck succeeded with AccessToken header"
+          if probe_access_token; then
+            echo "[$$probe_source] OME healthcheck succeeded with auth_mode=$$auth_mode"
             exit 0
           fi
 
-          echo "OME healthcheck failed for $$health_url and $$healthz_url using AccessToken header auth" >&2
+          echo "[$$probe_source] OME healthcheck failed for $$health_url and $$healthz_url using auth_mode=$$auth_mode from $$probe_config" >&2
           exit 1
       interval: 30s
       timeout: 5s
