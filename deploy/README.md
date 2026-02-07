@@ -59,14 +59,14 @@ third-party images, use the corresponding `*_IMAGE_DIGEST` fields in `deploy/.en
 ### OME healthcheck
 
 The OME service in `deploy/docker-compose.yml` uses a `curl`-based healthcheck against the control API inside the container
-(`http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health`, fallback `.../healthz`).
+(`http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health`).
 
 Probe/auth sequence is exact and ordered:
 
 1. Resolve the probe auth mode from `BITRIVER_OME_HEALTHCHECK_AUTH_MODE` (default `accesstoken`).
 2. In `accesstoken` mode, resolve the token with canonical precedence `BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN`.
-3. Reject Bearer-prefixed tokens in `accesstoken` mode, then probe `/v1/health` (fallback `/healthz`) with `AccessToken: <token>`.
-4. Optional `basic` mode requires non-empty `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD` and probes the same endpoints with HTTP basic auth.
+3. Reject Bearer-prefixed tokens in `accesstoken` mode, then probe `/v1/health` with the exact header format `AccessToken: <token>`.
+4. Optional `basic` mode requires non-empty `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD` and probes the same endpoint with HTTP basic auth.
 
 Startup/debug logs now include a redacted line showing `auth_mode`, `credential_type`, and token source (for token mode) so mismatched credential wiring is visible.
 
@@ -83,7 +83,6 @@ Copy/paste manual probe block (matches the in-container healthcheck logic):
 docker compose exec ome sh -lc '
   set -eu
   health_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health"
-  healthz_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/healthz"
 
   auth_mode="${BITRIVER_OME_HEALTHCHECK_AUTH_MODE:-accesstoken}"
   token="${BITRIVER_OME_HEALTHCHECK_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-${BITRIVER_OME_API_TOKEN:-}}}"
@@ -91,12 +90,10 @@ docker compose exec ome sh -lc '
   if [ "$auth_mode" = "accesstoken" ]; then
     [ -n "$token" ] || { echo "missing token chain: set BITRIVER_OME_HEALTHCHECK_TOKEN/ACCESS_TOKEN/API_TOKEN" >&2; exit 1; }
     printf '%s' "$token" | grep -Eq '^[[:space:]]*Bearer[[:space:]]+' && { echo "token must be raw AccessToken (not Bearer-prefixed)" >&2; exit 1; }
-    curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $token" "$health_url" || \
-      curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $token" "$healthz_url"
+    curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $token" "$health_url"
   elif [ "$auth_mode" = "basic" ]; then
     [ -n "${BITRIVER_OME_USERNAME:-}" ] && [ -n "${BITRIVER_OME_PASSWORD:-}" ] || { echo "missing basic-auth credentials" >&2; exit 1; }
-    curl -fsS --connect-timeout 2 --max-time 4 -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" "$health_url" || \
-      curl -fsS --connect-timeout 2 --max-time 4 -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" "$healthz_url"
+    curl -fsS --connect-timeout 2 --max-time 4 -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" "$health_url"
   else
     echo "unsupported auth_mode=$auth_mode" >&2
     exit 1
