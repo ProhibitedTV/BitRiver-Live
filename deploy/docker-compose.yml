@@ -322,13 +322,37 @@ services:
       - -ec
     command:
       - |
+        auth_mode="$${BITRIVER_OME_HEALTHCHECK_AUTH_MODE:-accesstoken}"
         token="$${BITRIVER_OME_HEALTHCHECK_TOKEN:-}"
         if [ -z "$$token" ]; then token="$${BITRIVER_OME_ACCESS_TOKEN:-}"; fi
         if [ -z "$$token" ]; then token="$${BITRIVER_OME_API_TOKEN:-}"; fi
 
-        if [ -z "$$token" ]; then
-          echo "bitriver-ome startup failed: canonical token is empty (BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN)" >&2
-          exit 1
+        case "$$auth_mode" in
+          accesstoken)
+            if [ -z "$$token" ]; then
+              echo "bitriver-ome startup failed: canonical token is empty (BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN)" >&2
+              exit 1
+            fi
+            ;;
+          basic)
+            if [ -z "$${BITRIVER_OME_USERNAME:-}" ] || [ -z "$${BITRIVER_OME_PASSWORD:-}" ]; then
+              echo "bitriver-ome startup failed: basic auth mode requires BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD" >&2
+              exit 1
+            fi
+            ;;
+          *)
+            echo "bitriver-ome startup failed: unsupported BITRIVER_OME_HEALTHCHECK_AUTH_MODE=$$auth_mode (expected accesstoken or basic)" >&2
+            exit 1
+            ;;
+        esac
+
+        if [ "$$auth_mode" = "accesstoken" ]; then
+          token_source="BITRIVER_OME_HEALTHCHECK_TOKEN"
+          if [ -z "$${BITRIVER_OME_HEALTHCHECK_TOKEN:-}" ]; then token_source="BITRIVER_OME_ACCESS_TOKEN"; fi
+          if [ -z "$${BITRIVER_OME_HEALTHCHECK_TOKEN:-}" ] && [ -z "$${BITRIVER_OME_ACCESS_TOKEN:-}" ]; then token_source="BITRIVER_OME_API_TOKEN"; fi
+          echo "[bitriver-ome] healthcheck startup auth_mode=$$auth_mode credential_type=access_token source=$$token_source value=<redacted>" >&2
+        else
+          echo "[bitriver-ome] healthcheck startup auth_mode=$$auth_mode credential_type=username_password username=<redacted> password=<redacted>" >&2
         fi
 
         exec /opt/ovenmediaengine/bin/OvenMediaEngine -c origin_conf
@@ -338,7 +362,7 @@ services:
     environment:
       BITRIVER_OME_USERNAME: ${BITRIVER_OME_USERNAME:?set via .env}
       BITRIVER_OME_PASSWORD: ${BITRIVER_OME_PASSWORD:?set via .env}
-      BITRIVER_OME_HEALTHCHECK_AUTH_MODE: ${BITRIVER_OME_HEALTHCHECK_AUTH_MODE:-basic}
+      BITRIVER_OME_HEALTHCHECK_AUTH_MODE: ${BITRIVER_OME_HEALTHCHECK_AUTH_MODE:-accesstoken}
       BITRIVER_OME_HEALTHCHECK_TOKEN: ${BITRIVER_OME_HEALTHCHECK_TOKEN:-}
       BITRIVER_OME_ACCESS_TOKEN: ${BITRIVER_OME_ACCESS_TOKEN:-}
       BITRIVER_OME_API_TOKEN: ${BITRIVER_OME_API_TOKEN:?set via .env}
@@ -367,27 +391,55 @@ services:
           auth_mode="$$BITRIVER_OME_HEALTHCHECK_AUTH_MODE"
 
           if [ -z "$$auth_mode" ]; then
-            auth_mode="basic"
+            auth_mode="accesstoken"
           fi
 
-          if [ "$$auth_mode" != "basic" ]; then
-            echo "[$$probe_source] OME healthcheck misconfigured in $$probe_config: unsupported BITRIVER_OME_HEALTHCHECK_AUTH_MODE=$$auth_mode (expected basic for OME 0.16)" >&2
-            exit 1
+          token="$$BITRIVER_OME_HEALTHCHECK_TOKEN"
+          token_source="BITRIVER_OME_HEALTHCHECK_TOKEN"
+          if [ -z "$$token" ]; then
+            token="$$BITRIVER_OME_ACCESS_TOKEN"
+            token_source="BITRIVER_OME_ACCESS_TOKEN"
+          fi
+          if [ -z "$$token" ]; then
+            token="$$BITRIVER_OME_API_TOKEN"
+            token_source="BITRIVER_OME_API_TOKEN"
           fi
 
-          if [ -z "$$BITRIVER_OME_USERNAME" ] || [ -z "$$BITRIVER_OME_PASSWORD" ]; then
-            echo "[$$probe_source] OME healthcheck misconfigured in $$probe_config: BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD must both be set for basic auth mode" >&2
-            exit 1
-          fi
-
-          echo "[$$probe_source] OME healthcheck configured from $$probe_config with auth_mode=$$auth_mode"
+          probe_access_token() {
+            curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $$token" "$$health_url" || curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $$token" "$$healthz_url"
+          }
 
           probe_basic_auth() {
             # Pass credentials as literal argv entries so shell metacharacters are not re-interpreted.
             curl -fsS --connect-timeout 2 --max-time 4 -u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD" "$$health_url" || curl -fsS --connect-timeout 2 --max-time 4 -u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD" "$$healthz_url"
           }
 
-          if probe_basic_auth; then
+          case "$$auth_mode" in
+            accesstoken)
+              if [ -z "$$token" ]; then
+                echo "[$$probe_source] OME healthcheck misconfigured in $$probe_config: BITRIVER_OME_HEALTHCHECK_TOKEN, BITRIVER_OME_ACCESS_TOKEN, and BITRIVER_OME_API_TOKEN are all empty inside the container" >&2
+                exit 1
+              fi
+              if printf '%s' "$$token" | grep -Eq '^[[:space:]]*Bearer[[:space:]]+'; then
+                echo "[$$probe_source] OME healthcheck auth mismatch in $$probe_config: auth_mode=$$auth_mode expects raw AccessToken value, but token is Bearer-prefixed" >&2
+                exit 1
+              fi
+              echo "[$$probe_source] OME healthcheck startup auth_mode=$$auth_mode credential_type=access_token source=$$token_source value=<redacted>"
+              ;;
+            basic)
+              if [ -z "$$BITRIVER_OME_USERNAME" ] || [ -z "$$BITRIVER_OME_PASSWORD" ]; then
+                echo "[$$probe_source] OME healthcheck misconfigured in $$probe_config: BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD must both be set for basic auth mode" >&2
+                exit 1
+              fi
+              echo "[$$probe_source] OME healthcheck startup auth_mode=$$auth_mode credential_type=username_password username=<redacted> password=<redacted>"
+              ;;
+            *)
+              echo "[$$probe_source] OME healthcheck misconfigured in $$probe_config: unsupported BITRIVER_OME_HEALTHCHECK_AUTH_MODE=$$auth_mode (expected accesstoken or basic)" >&2
+              exit 1
+              ;;
+          esac
+
+          if { [ "$$auth_mode" = "accesstoken" ] && probe_access_token; } || { [ "$$auth_mode" = "basic" ] && probe_basic_auth; }; then
             echo "[$$probe_source] OME healthcheck succeeded with auth_mode=$$auth_mode"
             exit 0
           fi

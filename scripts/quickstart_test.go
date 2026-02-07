@@ -353,8 +353,8 @@ func TestComposeOMEHealthcheckUsesCanonicalAccessTokenHeader(t *testing.T) {
 	}
 
 	compose := string(content)
-	if !strings.Contains(compose, `-u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD"`) {
-		t.Fatalf("expected OME healthcheck to probe using basic auth for OME 0.16")
+	if !strings.Contains(compose, `AccessToken: $$token`) {
+		t.Fatalf("expected OME healthcheck to probe using AccessToken header by default")
 	}
 	if !strings.Contains(compose, "BITRIVER_OME_HEALTHCHECK_AUTH_MODE") {
 		t.Fatalf("expected OME healthcheck to declare BITRIVER_OME_HEALTHCHECK_AUTH_MODE")
@@ -369,11 +369,11 @@ func TestComposeOMEHealthcheckUsesCanonicalAccessTokenHeader(t *testing.T) {
 	if strings.Contains(compose, "Authorization: Bearer $$token") {
 		t.Fatalf("expected OME healthcheck to avoid Authorization Bearer fallback")
 	}
-	if strings.Contains(compose, "AccessToken: $$token") {
-		t.Fatalf("expected OME healthcheck to avoid AccessToken header probing for OME 0.16")
+	if !strings.Contains(compose, "credential_type=access_token") {
+		t.Fatalf("expected OME healthcheck startup logs to declare access_token credential type")
 	}
 	if !strings.Contains(compose, "auth_mode=$$auth_mode") {
-		t.Fatalf("expected OME healthcheck logs to mention auth_mode=basic")
+		t.Fatalf("expected OME healthcheck logs to mention auth_mode selection")
 	}
 }
 

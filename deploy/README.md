@@ -63,21 +63,18 @@ The OME service in `deploy/docker-compose.yml` uses a `curl`-based healthcheck a
 
 Probe/auth sequence is exact and ordered:
 
-1. Resolve the probe auth mode from `BITRIVER_OME_HEALTHCHECK_AUTH_MODE` (default `basic` for OME 0.16).
-2. Require `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD` to be non-empty.
-3. Probe `/v1/health` (fallback `/healthz`) with HTTP basic auth (`-u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD"`).
-4. Fail fast when probe credentials are missing instead of retrying incompatible auth schemes.
+1. Resolve the probe auth mode from `BITRIVER_OME_HEALTHCHECK_AUTH_MODE` (default `accesstoken`).
+2. In `accesstoken` mode, resolve the token with canonical precedence `BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN`.
+3. Reject Bearer-prefixed tokens in `accesstoken` mode, then probe `/v1/health` (fallback `/healthz`) with `AccessToken: <token>`.
+4. Optional `basic` mode requires non-empty `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD` and probes the same endpoints with HTTP basic auth.
 
-Expected 401 signatures during auth mismatches:
+Startup/debug logs now include a redacted line showing `auth_mode`, `credential_type`, and token source (for token mode) so mismatched credential wiring is visible.
 
-- Missing/empty basic-auth credentials: `401` with `Authorization header is required`.
-- Basic credentials accepted but token drift in `deploy/ome/Server.generated.xml` causes other control API calls to fail auth.
+If you see 401s, confirm the selected mode/credential source from probe logs first, then re-render and restart:
 
-If you see `Authorization header is required`, treat it as basic-credential drift first:
-
-1. Confirm `.env` contains non-empty `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD`.
-2. Confirm `deploy/docker-compose.yml` has the expected `ome` environment injection and healthcheck mode order (`BITRIVER_OME_HEALTHCHECK_AUTH_MODE=basic`).
-3. Check probe-source logs (for example `[bitriver-ome] ... from deploy/docker-compose.yml ... auth_mode=basic`) to verify which config emitted the probe.
+1. Check probe-source logs (for example `[bitriver-ome] ... auth_mode=accesstoken credential_type=access_token source=BITRIVER_OME_ACCESS_TOKEN ...`).
+2. Confirm `.env` contains the expected token chain (`BITRIVER_OME_HEALTHCHECK_TOKEN`, `BITRIVER_OME_ACCESS_TOKEN`, `BITRIVER_OME_API_TOKEN`) and optional basic credentials when basic mode is selected.
+3. Confirm `deploy/docker-compose.yml` keeps `BITRIVER_OME_HEALTHCHECK_AUTH_MODE=accesstoken` unless you intentionally switch to `basic`.
 4. Re-render and restart: `./scripts/render-ome-config.sh --force && docker compose up -d ome`.
 
 Copy/paste manual probe block (matches the in-container healthcheck logic):
@@ -88,16 +85,22 @@ docker compose exec ome sh -lc '
   health_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health"
   healthz_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/healthz"
 
-  auth_mode="${BITRIVER_OME_HEALTHCHECK_AUTH_MODE:-basic}"
-  [ "$auth_mode" = "basic" ] || { echo "unsupported auth_mode=$auth_mode" >&2; exit 1; }
+  auth_mode="${BITRIVER_OME_HEALTHCHECK_AUTH_MODE:-accesstoken}"
+  token="${BITRIVER_OME_HEALTHCHECK_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-${BITRIVER_OME_API_TOKEN:-}}}"
 
-  if [ -z "${BITRIVER_OME_USERNAME:-}" ] || [ -z "${BITRIVER_OME_PASSWORD:-}" ]; then
-    echo "missing basic-auth credentials: set BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD" >&2
+  if [ "$auth_mode" = "accesstoken" ]; then
+    [ -n "$token" ] || { echo "missing token chain: set BITRIVER_OME_HEALTHCHECK_TOKEN/ACCESS_TOKEN/API_TOKEN" >&2; exit 1; }
+    printf '%s' "$token" | grep -Eq '^[[:space:]]*Bearer[[:space:]]+' && { echo "token must be raw AccessToken (not Bearer-prefixed)" >&2; exit 1; }
+    curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $token" "$health_url" || \
+      curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $token" "$healthz_url"
+  elif [ "$auth_mode" = "basic" ]; then
+    [ -n "${BITRIVER_OME_USERNAME:-}" ] && [ -n "${BITRIVER_OME_PASSWORD:-}" ] || { echo "missing basic-auth credentials" >&2; exit 1; }
+    curl -fsS --connect-timeout 2 --max-time 4 -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" "$health_url" || \
+      curl -fsS --connect-timeout 2 --max-time 4 -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" "$healthz_url"
+  else
+    echo "unsupported auth_mode=$auth_mode" >&2
     exit 1
   fi
-
-  curl -fsS --connect-timeout 2 --max-time 4 -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" "$health_url" || \
-    curl -fsS --connect-timeout 2 --max-time 4 -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" "$healthz_url"
 '
 ```
 
