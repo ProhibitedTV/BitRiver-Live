@@ -375,6 +375,12 @@ func TestComposeOMEHealthcheckUsesCanonicalAccessTokenHeader(t *testing.T) {
 	if !strings.Contains(compose, "auth_mode=$$auth_mode") {
 		t.Fatalf("expected OME healthcheck logs to mention auth_mode selection")
 	}
+	if !strings.Contains(compose, `/v1/health`) {
+		t.Fatalf("expected OME healthcheck to probe the canonical /v1/health endpoint")
+	}
+	if strings.Contains(compose, `healthz_url=`) {
+		t.Fatalf("expected OME healthcheck not to fall back to /healthz")
+	}
 }
 
 func TestOmeConfigRenderingOmitsUnsupportedRootBindHostTags(t *testing.T) {

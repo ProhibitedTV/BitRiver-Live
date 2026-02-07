@@ -128,7 +128,7 @@ go run ./cmd/bitriver ome render --force --env-file ./.env
 If ports are already in use, edit the matching values in `.env` (for example `BITRIVER_LIVE_PORT=9090`), save the file, and rerun
 `docker compose up -d`. See [`docs/quickstart.md`](docs/quickstart.md) for extra tips, common errors, and guidance on updating
 the generated environment file before inviting real users. For OME-specific healthcheck troubleshooting (including the
-`/v1/health` probe that Compose runs), jump to the [`Troubleshooting`](docs/quickstart.md#troubleshooting) section and the
+canonical `/v1/health` readiness probe that Compose runs with `AccessToken: <token>` auth), jump to the [`Troubleshooting`](docs/quickstart.md#troubleshooting) section and the
 [`OME healthcheck`](deploy/README.md#ome-healthcheck) note under the deployment docs.
 
 ### Key environment variables at a glance

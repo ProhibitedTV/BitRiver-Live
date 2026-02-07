@@ -387,7 +387,6 @@ services:
           probe_source="bitriver-ome"
           probe_config="deploy/docker-compose.yml"
           health_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health"
-          healthz_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/healthz"
           auth_mode="$$BITRIVER_OME_HEALTHCHECK_AUTH_MODE"
 
           if [ -z "$$auth_mode" ]; then
@@ -406,12 +405,12 @@ services:
           fi
 
           probe_access_token() {
-            curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $$token" "$$health_url" || curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $$token" "$$healthz_url"
+            curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $$token" "$$health_url"
           }
 
           probe_basic_auth() {
             # Pass credentials as literal argv entries so shell metacharacters are not re-interpreted.
-            curl -fsS --connect-timeout 2 --max-time 4 -u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD" "$$health_url" || curl -fsS --connect-timeout 2 --max-time 4 -u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD" "$$healthz_url"
+            curl -fsS --connect-timeout 2 --max-time 4 -u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD" "$$health_url"
           }
 
           case "$$auth_mode" in
@@ -444,7 +443,7 @@ services:
             exit 0
           fi
 
-          echo "[$$probe_source] OME healthcheck failed for $$health_url and $$healthz_url using auth_mode=$$auth_mode from $$probe_config" >&2
+          echo "[$$probe_source] OME healthcheck failed for $$health_url using auth_mode=$$auth_mode from $$probe_config" >&2
           exit 1
       interval: 30s
       timeout: 5s
