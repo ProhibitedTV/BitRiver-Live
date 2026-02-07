@@ -341,7 +341,6 @@ services:
       BITRIVER_OME_HEALTHCHECK_TOKEN: ${BITRIVER_OME_HEALTHCHECK_TOKEN:-}
       BITRIVER_OME_ACCESS_TOKEN: ${BITRIVER_OME_ACCESS_TOKEN:-}
       BITRIVER_OME_API_TOKEN: ${BITRIVER_OME_API_TOKEN:?set via .env}
-      BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH: ${BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH:-false}
     networks:
       default:
         aliases:
@@ -387,27 +386,7 @@ services:
             exit 0
           fi
 
-          attempted_modes="AccessToken header"
-          if [ -n "$$BITRIVER_OME_USERNAME" ] && [ -n "$$BITRIVER_OME_PASSWORD" ]; then
-            echo "OME healthcheck warning: AccessToken probe failed; attempting basic auth" >&2
-            if probe_with_args -u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD"; then
-              echo "OME healthcheck succeeded with basic auth"
-              exit 0
-            fi
-            attempted_modes="$$attempted_modes, basic auth"
-          else
-            attempted_modes="$$attempted_modes, basic auth skipped (missing username/password)"
-            echo "OME healthcheck skipped basic auth probe: BITRIVER_OME_USERNAME/BITRIVER_OME_PASSWORD missing or empty" >&2
-          fi
-
-          echo "OME healthcheck warning: basic auth probe failed; attempting Authorization Bearer header" >&2
-          if probe_with_args -H "Authorization: Bearer $$token"; then
-            echo "OME healthcheck succeeded with Authorization Bearer header"
-            exit 0
-          fi
-          attempted_modes="$$attempted_modes, Authorization Bearer header"
-
-          echo "OME healthcheck failed for $$health_url and $$healthz_url; attempted auth modes: $$attempted_modes" >&2
+          echo "OME healthcheck failed for $$health_url and $$healthz_url using AccessToken header auth" >&2
           exit 1
       interval: 30s
       timeout: 5s

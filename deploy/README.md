@@ -61,20 +61,16 @@ third-party images, use the corresponding `*_IMAGE_DIGEST` fields in `deploy/.en
 The OME service in `deploy/docker-compose.yml` uses a `curl`-based healthcheck against the control API inside the container
 (`http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health`, fallback `.../healthz`).
 
-Header/credential fallback sequence is exact and ordered:
+Probe/auth sequence is exact and ordered:
 
 1. Resolve canonical probe token in this order: `${BITRIVER_OME_HEALTHCHECK_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}}`.
-2. Try `AccessToken: <token>`.
-3. Then try HTTP basic auth when both `BITRIVER_OME_USERNAME`/`BITRIVER_OME_PASSWORD` are non-empty.
-4. Then try `Authorization: Bearer <token>`.
-5. Mark container unhealthy with an explicit attempted-auth summary if all probes fail.
+2. Probe `/v1/health` (fallback `/healthz`) with `AccessToken: <token>`.
+3. Mark the container unhealthy if that single auth strategy fails.
 
 Expected 401 signatures during auth mismatches:
 
 - `AccessToken` header missing or empty token: `401` with `Authorization header is required`.
-- Legacy Bearer fallback mismatch (when enabled): `401` with `Authorization header is required` or `401 Unauthorized`, depending on OME version.
 - Token present but does not match `<Managers><API><AccessToken>` in `ome/Server.generated.xml`: `401 Unauthorized` (often still logged with auth-required messaging, depending on OME version).
-- Basic auth fallback credentials mismatch: `401 Unauthorized` from the control endpoint.
 
 If you see `Authorization header is required`, treat it as a header/token drift issue first:
 
@@ -110,10 +106,6 @@ docker compose exec ome sh -lc '
   }
 
   probe_with_args -H "AccessToken: $token" && exit 0
-  if [ -n "${BITRIVER_OME_USERNAME:-}" ] && [ -n "${BITRIVER_OME_PASSWORD:-}" ]; then
-    probe_with_args -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" && exit 0
-  fi
-  probe_with_args -H "Authorization: Bearer $token" && exit 0
 
   exit 1
 '
