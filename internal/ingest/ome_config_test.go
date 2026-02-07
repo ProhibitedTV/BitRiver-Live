@@ -427,24 +427,17 @@ func TestRenderOMEConfigDefaultsAlignManagersAPIWithComposeHealthcheckPort(t *te
 	}
 
 	accessProbe := `if probe_with_args -H "AccessToken: $$token"; then`
-	bearerProbe := `if probe_with_args -H "Authorization: Bearer $$token"; then`
-	basicProbe := `if probe_with_args -u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD"; then`
 
-	accessIdx := strings.Index(compose, accessProbe)
-	bearerIdx := strings.Index(compose, bearerProbe)
-	basicIdx := strings.Index(compose, basicProbe)
-
-	if accessIdx == -1 {
+	if !strings.Contains(compose, accessProbe) {
 		t.Fatalf("expected compose healthcheck to probe AccessToken header")
 	}
-	if bearerIdx == -1 || bearerIdx <= accessIdx {
-		t.Fatalf("expected Authorization Bearer probe after AccessToken probe")
+	if strings.Contains(compose, `Authorization: Bearer $$token`) {
+		t.Fatalf("expected compose healthcheck to avoid Authorization Bearer fallback")
 	}
-	if basicIdx == -1 || basicIdx <= accessIdx || basicIdx >= bearerIdx {
-		t.Fatalf("expected compose healthcheck basic auth probe between AccessToken and Authorization Bearer probes")
+	if strings.Contains(compose, `-u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD"`) {
+		t.Fatalf("expected compose healthcheck to avoid basic-auth fallback")
 	}
-
-	if !strings.Contains(compose, "attempted auth modes:") {
-		t.Fatalf("expected compose healthcheck diagnostics to include attempted auth modes summary")
+	if !strings.Contains(compose, "using AccessToken header auth") {
+		t.Fatalf("expected compose healthcheck diagnostics to mention AccessToken header auth")
 	}
 }

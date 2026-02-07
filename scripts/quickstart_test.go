@@ -363,17 +363,14 @@ func TestComposeOMEHealthcheckUsesCanonicalAccessTokenHeader(t *testing.T) {
 	if !strings.Contains(compose, "bitriver-ome startup failed") {
 		t.Fatalf("expected OME startup to fail fast when canonical token inputs are empty or mismatched")
 	}
-	bearerProbe := strings.Index(compose, "Authorization: Bearer $$token")
-	accessProbe := strings.Index(compose, "AccessToken: $$token")
-	if accessProbe == -1 || bearerProbe == -1 || bearerProbe <= accessProbe {
-		t.Fatalf("expected Authorization Bearer probe to run after AccessToken probe")
+	if strings.Contains(compose, "Authorization: Bearer $$token") {
+		t.Fatalf("expected OME healthcheck to avoid Authorization Bearer fallback")
 	}
-	basicProbe := strings.Index(compose, `if probe_with_args -u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD"; then`)
-	if basicProbe == -1 || basicProbe <= accessProbe || basicProbe >= bearerProbe {
-		t.Fatalf("expected basic auth probe between AccessToken and Authorization Bearer probes")
+	if strings.Contains(compose, `if probe_with_args -u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD"; then`) {
+		t.Fatalf("expected OME healthcheck to avoid basic-auth fallback")
 	}
-	if !strings.Contains(compose, "attempted auth modes:") {
-		t.Fatalf("expected OME healthcheck failure logs to include attempted auth mode summary")
+	if !strings.Contains(compose, "using AccessToken header auth") {
+		t.Fatalf("expected OME healthcheck failure logs to mention AccessToken header auth")
 	}
 }
 

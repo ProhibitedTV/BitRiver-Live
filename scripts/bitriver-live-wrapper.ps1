@@ -148,27 +148,6 @@ function Bring-Up {
   Invoke-Compose up -d
 }
 
-function Show-OmeLegacyAuthHint {
-  $legacyToggle = Get-EnvValue -Path $envFilePath -Key 'BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH'
-  if (-not [string]::IsNullOrWhiteSpace($legacyToggle)) {
-    return
-  }
-
-  Write-Warning "OME auth fallback hint: BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH is unset. Keep it false by default; if OME logs show 'Authorization header is required', set it to true temporarily, redeploy, then revert to false once headers are aligned."
-}
-
-function Warn-OnOmeAuthMismatch {
-  $legacyToggle = Get-EnvValue -Path $envFilePath -Key 'BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH'
-  if (-not [string]::IsNullOrWhiteSpace($legacyToggle)) {
-    return
-  }
-
-  $omeLogs = Invoke-Compose logs --no-color --tail 200 ome 2>$null | Out-String
-  if ($omeLogs -match 'Authorization header is required') {
-    Write-Warning "Detected OME auth failures ('Authorization header is required') while BITRIVER_OME_HEALTHCHECK_ENABLE_LEGACY_AUTH is unset. Set it to true temporarily in $envFilePath, redeploy, then revert to false after auth headers are aligned."
-  }
-}
-
 function Stop-Stack {
   Write-Host 'Stopping BitRiver Live stack...'
   Invoke-Compose stop
@@ -210,10 +189,8 @@ switch ($Command.ToLowerInvariant()) {
         Write-Warning "bitriver doctor reported issues; continuing because Docker is available. $_"
       }
     }
-    Show-OmeLegacyAuthHint
     Pull-Images
     Bring-Up
-    Warn-OnOmeAuthMismatch
     Write-Host "BitRiver Live is starting. Use '.\\bitriver-live-wrapper.ps1 -Command logs' to follow logs or '.\\bitriver-live-wrapper.ps1 -Command ui' to keep the control panel in your tray."
   }
   'stop' {
