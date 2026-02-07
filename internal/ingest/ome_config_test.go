@@ -422,11 +422,14 @@ func TestRenderOMEConfigDefaultsAlignManagersAPIWithComposeHealthcheckPort(t *te
 	if !strings.Contains(compose, "BITRIVER_OME_HEALTHCHECK_TOKEN") {
 		t.Fatalf("expected compose OME service to expose BITRIVER_OME_HEALTHCHECK_TOKEN")
 	}
+	if !strings.Contains(compose, "BITRIVER_OME_HEALTHCHECK_AUTH_MODE") {
+		t.Fatalf("expected compose OME service to expose BITRIVER_OME_HEALTHCHECK_AUTH_MODE")
+	}
 	if !strings.Contains(compose, "BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN") {
 		t.Fatalf("expected compose healthcheck to document canonical token precedence")
 	}
 
-	accessProbe := `if probe_with_args -H "AccessToken: $$token"; then`
+	accessProbe := `if probe_access_token; then`
 
 	if !strings.Contains(compose, accessProbe) {
 		t.Fatalf("expected compose healthcheck to probe AccessToken header")
@@ -437,7 +440,7 @@ func TestRenderOMEConfigDefaultsAlignManagersAPIWithComposeHealthcheckPort(t *te
 	if strings.Contains(compose, `-u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD"`) {
 		t.Fatalf("expected compose healthcheck to avoid basic-auth fallback")
 	}
-	if !strings.Contains(compose, "using AccessToken header auth") {
-		t.Fatalf("expected compose healthcheck diagnostics to mention AccessToken header auth")
+	if !strings.Contains(compose, "auth_mode=$$auth_mode") {
+		t.Fatalf("expected compose healthcheck diagnostics to mention auth_mode=accesstoken")
 	}
 }

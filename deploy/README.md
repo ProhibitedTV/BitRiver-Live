@@ -63,9 +63,10 @@ The OME service in `deploy/docker-compose.yml` uses a `curl`-based healthcheck a
 
 Probe/auth sequence is exact and ordered:
 
-1. Resolve canonical probe token in this order: `${BITRIVER_OME_HEALTHCHECK_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}}`.
-2. Probe `/v1/health` (fallback `/healthz`) with `AccessToken: <token>`.
-3. Mark the container unhealthy if that single auth strategy fails.
+1. Resolve the probe auth mode from `BITRIVER_OME_HEALTHCHECK_AUTH_MODE` (default `accesstoken`).
+2. Resolve canonical probe token in this order: `${BITRIVER_OME_HEALTHCHECK_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}}`.
+3. Probe `/v1/health` (fallback `/healthz`) with `AccessToken: <token>`.
+4. Fail fast on auth mismatch (for example a Bearer-prefixed token while `accesstoken` mode is configured) instead of retrying incompatible credential schemes.
 
 Expected 401 signatures during auth mismatches:
 
@@ -76,8 +77,9 @@ If you see `Authorization header is required`, treat it as a header/token drift 
 
 1. Confirm `.env` token values (`BITRIVER_OME_API_TOKEN`, optional `BITRIVER_OME_ACCESS_TOKEN`, optional `BITRIVER_OME_HEALTHCHECK_TOKEN`) and keep them identical when multiple are set.
 2. Confirm `deploy/ome/Server.generated.xml` has the same `<Managers><API><AccessToken>` value.
-3. Confirm `deploy/docker-compose.yml` has the expected `ome` environment injection and healthcheck mode order.
-4. Re-render and restart: `./scripts/render-ome-config.sh --force && docker compose up -d ome`.
+3. Confirm `deploy/docker-compose.yml` has the expected `ome` environment injection and healthcheck mode order (`BITRIVER_OME_HEALTHCHECK_AUTH_MODE=accesstoken`).
+4. Check probe-source logs (for example `[bitriver-ome] ... from deploy/docker-compose.yml ... auth_mode=accesstoken`) to verify which config emitted the probe.
+5. Re-render and restart: `./scripts/render-ome-config.sh --force && docker compose up -d ome`.
 
 Copy/paste manual probe block (matches the in-container healthcheck logic):
 
@@ -86,6 +88,9 @@ docker compose exec ome sh -lc '
   set -eu
   health_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health"
   healthz_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/healthz"
+
+  auth_mode="${BITRIVER_OME_HEALTHCHECK_AUTH_MODE:-accesstoken}"
+  [ "$auth_mode" = "accesstoken" ] || { echo "unsupported auth_mode=$auth_mode" >&2; exit 1; }
 
   token="${BITRIVER_OME_HEALTHCHECK_TOKEN:-}"
   if [ -z "$token" ] && [ -n "${BITRIVER_OME_ACCESS_TOKEN:-}" ]; then
@@ -100,12 +105,10 @@ docker compose exec ome sh -lc '
     exit 1
   fi
 
-  probe_with_args() {
-    curl -fsS --connect-timeout 2 --max-time 4 "$@" "$health_url" || \
-      curl -fsS --connect-timeout 2 --max-time 4 "$@" "$healthz_url"
-  }
+  case "$token" in [Bb][Ee][Aa][Rr][Ee][Rr]\ *) echo "auth mismatch: token is Bearer-prefixed for accesstoken mode" >&2; exit 1;; esac
 
-  probe_with_args -H "AccessToken: $token" && exit 0
+  curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $token" "$health_url" || \
+    curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $token" "$healthz_url"
 
   exit 1
 '

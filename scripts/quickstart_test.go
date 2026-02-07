@@ -356,6 +356,9 @@ func TestComposeOMEHealthcheckUsesCanonicalAccessTokenHeader(t *testing.T) {
 	if !strings.Contains(compose, "AccessToken: $$token") {
 		t.Fatalf("expected OME healthcheck to probe using AccessToken header")
 	}
+	if !strings.Contains(compose, "BITRIVER_OME_HEALTHCHECK_AUTH_MODE") {
+		t.Fatalf("expected OME healthcheck to declare BITRIVER_OME_HEALTHCHECK_AUTH_MODE")
+	}
 
 	if !strings.Contains(compose, "BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN") {
 		t.Fatalf("expected OME healthcheck to use canonical token precedence")
@@ -369,8 +372,8 @@ func TestComposeOMEHealthcheckUsesCanonicalAccessTokenHeader(t *testing.T) {
 	if strings.Contains(compose, `if probe_with_args -u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD"; then`) {
 		t.Fatalf("expected OME healthcheck to avoid basic-auth fallback")
 	}
-	if !strings.Contains(compose, "using AccessToken header auth") {
-		t.Fatalf("expected OME healthcheck failure logs to mention AccessToken header auth")
+	if !strings.Contains(compose, "auth_mode=$$auth_mode") {
+		t.Fatalf("expected OME healthcheck logs to mention auth_mode=accesstoken")
 	}
 }
 
