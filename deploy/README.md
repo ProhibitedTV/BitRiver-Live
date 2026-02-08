@@ -63,10 +63,10 @@ The OME service in `deploy/docker-compose.yml` uses a `curl`-based healthcheck a
 
 Probe/auth sequence is exact and ordered:
 
-1. Resolve the probe auth mode from `BITRIVER_OME_HEALTHCHECK_AUTH_MODE` (default `accesstoken`).
+1. Resolve the probe auth mode from `BITRIVER_OME_HEALTHCHECK_AUTH_MODE` (default `accesstoken`; supported values are only `accesstoken` or `basic`).
 2. In `accesstoken` mode, resolve the token with canonical precedence `BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN`.
 3. Reject Bearer-prefixed tokens in `accesstoken` mode, then probe `/v1/health` with the exact header format `AccessToken: <token>`.
-4. Optional `basic` mode requires non-empty `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD` and probes the same endpoint with HTTP basic auth.
+4. Optional `basic` mode requires non-empty `BITRIVER_OME_USERNAME` and `BITRIVER_OME_PASSWORD` and probes the same endpoint with HTTP basic auth (pick this only when your OME control API expects username/password credentials).
 
 Startup/debug logs now include a redacted line showing `auth_mode`, `credential_type`, and token source (for token mode) so mismatched credential wiring is visible.
 
