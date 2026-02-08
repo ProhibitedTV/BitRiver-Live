@@ -128,7 +128,7 @@ func TestQuickstartDelegatesToCli(t *testing.T) {
 	}
 }
 
-func TestQuickstartFailsOmeAuthPreflightWhenTokensMissing(t *testing.T) {
+func TestQuickstartFailsOmeAuthPreflightWhenAPITokenMissing(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -195,7 +195,7 @@ exit 0
 
 	err = cmd.Run()
 	if err == nil {
-		t.Fatalf("expected quickstart to fail when OME tokens are missing")
+		t.Fatalf("expected quickstart to fail when BITRIVER_OME_API_TOKEN is missing")
 	}
 	if exitErr := (&exec.ExitError{}); errors.As(err, &exitErr) {
 		if exitErr.ExitCode() == 91 {
@@ -203,11 +203,136 @@ exit 0
 		}
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "OME auth preflight failed: missing required token values") {
-		t.Fatalf("expected missing token preflight error, got:\n%s", out)
+	if !strings.Contains(out, "OME auth preflight failed: BITRIVER_OME_API_TOKEN is empty") {
+		t.Fatalf("expected missing BITRIVER_OME_API_TOKEN preflight error, got:\n%s", out)
 	}
-	if !strings.Contains(out, "BITRIVER_OME_API_TOKEN") || !strings.Contains(out, "BITRIVER_OME_ACCESS_TOKEN") {
-		t.Fatalf("expected canonical token variable names in output, got:\n%s", out)
+	if !strings.Contains(out, "BITRIVER_OME_API_TOKEN") {
+		t.Fatalf("expected BITRIVER_OME_API_TOKEN guidance in output, got:\n%s", out)
+	}
+}
+
+func TestQuickstartFailsOmeAuthPreflightWhenAuthModeInvalid(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	tempDir := t.TempDir()
+	scriptDir := filepath.Join(tempDir, "scripts")
+	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
+		t.Fatalf("create script dir: %v", err)
+	}
+
+	quickstartSrc := filepath.Join(repoRoot, "scripts", "quickstart.sh")
+	quickstartDst := filepath.Join(scriptDir, "quickstart.sh")
+	scriptBytes, err := os.ReadFile(quickstartSrc)
+	if err != nil {
+		t.Fatalf("read quickstart: %v", err)
+	}
+	if err := os.WriteFile(quickstartDst, scriptBytes, 0o755); err != nil {
+		t.Fatalf("write quickstart: %v", err)
+	}
+
+	verifySrc := filepath.Join(repoRoot, "scripts", "verify-ome-health-token.sh")
+	verifyDst := filepath.Join(scriptDir, "verify-ome-health-token.sh")
+	verifyBytes, err := os.ReadFile(verifySrc)
+	if err != nil {
+		t.Fatalf("read verify script: %v", err)
+	}
+	if err := os.WriteFile(verifyDst, verifyBytes, 0o755); err != nil {
+		t.Fatalf("write verify script: %v", err)
+	}
+
+	envPath := filepath.Join(tempDir, ".env")
+	envContents := strings.Join([]string{
+		"BITRIVER_OME_HEALTHCHECK_AUTH_MODE=digest",
+		"BITRIVER_OME_API_TOKEN=token",
+	}, "\n") + "\n"
+	if err := os.WriteFile(envPath, []byte(envContents), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	cmd := exec.Command("bash", quickstartDst)
+	cmd.Dir = tempDir
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("BITRIVER_QUICKSTART_REPO_ROOT=%s", tempDir),
+		fmt.Sprintf("ENV_FILE=%s", envPath),
+	)
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stdout
+
+	err = cmd.Run()
+	if err == nil {
+		t.Fatalf("expected quickstart to fail for unsupported auth mode")
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be accesstoken or basic") {
+		t.Fatalf("expected auth mode validation error, got:\n%s", out)
+	}
+}
+
+func TestQuickstartFailsOmeAuthPreflightWhenBasicAuthMissingCredentials(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	tempDir := t.TempDir()
+	scriptDir := filepath.Join(tempDir, "scripts")
+	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
+		t.Fatalf("create script dir: %v", err)
+	}
+
+	quickstartSrc := filepath.Join(repoRoot, "scripts", "quickstart.sh")
+	quickstartDst := filepath.Join(scriptDir, "quickstart.sh")
+	scriptBytes, err := os.ReadFile(quickstartSrc)
+	if err != nil {
+		t.Fatalf("read quickstart: %v", err)
+	}
+	if err := os.WriteFile(quickstartDst, scriptBytes, 0o755); err != nil {
+		t.Fatalf("write quickstart: %v", err)
+	}
+
+	verifySrc := filepath.Join(repoRoot, "scripts", "verify-ome-health-token.sh")
+	verifyDst := filepath.Join(scriptDir, "verify-ome-health-token.sh")
+	verifyBytes, err := os.ReadFile(verifySrc)
+	if err != nil {
+		t.Fatalf("read verify script: %v", err)
+	}
+	if err := os.WriteFile(verifyDst, verifyBytes, 0o755); err != nil {
+		t.Fatalf("write verify script: %v", err)
+	}
+
+	envPath := filepath.Join(tempDir, ".env")
+	envContents := strings.Join([]string{
+		"BITRIVER_OME_HEALTHCHECK_AUTH_MODE=basic",
+		"BITRIVER_OME_API_TOKEN=token",
+		"BITRIVER_OME_USERNAME=ome-user",
+	}, "\n") + "\n"
+	if err := os.WriteFile(envPath, []byte(envContents), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	cmd := exec.Command("bash", quickstartDst)
+	cmd.Dir = tempDir
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("BITRIVER_QUICKSTART_REPO_ROOT=%s", tempDir),
+		fmt.Sprintf("ENV_FILE=%s", envPath),
+	)
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stdout
+
+	err = cmd.Run()
+	if err == nil {
+		t.Fatalf("expected quickstart to fail when basic auth credentials are incomplete")
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "BITRIVER_OME_HEALTHCHECK_AUTH_MODE=basic requires BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD") {
+		t.Fatalf("expected basic credential validation error, got:\n%s", out)
 	}
 }
 

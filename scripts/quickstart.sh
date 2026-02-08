@@ -84,18 +84,38 @@ run_ome_auth_preflight() {
     return 1
   fi
 
-  local api_token access_token
+  local auth_mode raw_auth_mode shell_auth_mode
+  raw_auth_mode="$(read_env_value BITRIVER_OME_HEALTHCHECK_AUTH_MODE || true)"
+  auth_mode="${raw_auth_mode,,}"
+  if [[ -z "$auth_mode" ]]; then
+    auth_mode="accesstoken"
+  fi
+
+  case "$auth_mode" in
+    accesstoken|basic)
+      ;;
+    *)
+      cat >&2 <<EOF
+OME auth preflight failed: BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be accesstoken or basic (current: ${raw_auth_mode:-<empty>}).
+Set BITRIVER_OME_HEALTHCHECK_AUTH_MODE=accesstoken for token probes, or:
+  BITRIVER_OME_HEALTHCHECK_AUTH_MODE=basic
+  BITRIVER_OME_USERNAME=ome-operator
+  BITRIVER_OME_PASSWORD=replace-with-strong-password
+in $ENV_FILE_PATH before running scripts/quickstart.sh.
+EOF
+      return 1
+      ;;
+  esac
+
+  shell_auth_mode="${BITRIVER_OME_HEALTHCHECK_AUTH_MODE:-}"
+  if [[ -n "$shell_auth_mode" && "${shell_auth_mode,,}" != "$auth_mode" ]]; then
+    echo "OME auth preflight notice: shell BITRIVER_OME_HEALTHCHECK_AUTH_MODE=$shell_auth_mode differs from $ENV_FILE_PATH ($raw_auth_mode); using env-file value for validation." >&2
+  fi
+
+  local api_token access_token healthcheck_token
   api_token="$(read_env_value BITRIVER_OME_API_TOKEN || true)"
   access_token="$(read_env_value BITRIVER_OME_ACCESS_TOKEN || true)"
-
-  if [[ -z "$api_token" && -z "$access_token" ]]; then
-    cat >&2 <<EOF
-OME auth preflight failed: missing required token values.
-Expected BITRIVER_OME_API_TOKEN=<non-empty token> in $ENV_FILE_PATH.
-Optional override: BITRIVER_OME_ACCESS_TOKEN=<same token used by OME health probes>.
-EOF
-    return 1
-  fi
+  healthcheck_token="$(read_env_value BITRIVER_OME_HEALTHCHECK_TOKEN || true)"
 
   if [[ -z "$api_token" ]]; then
     cat >&2 <<EOF
@@ -103,6 +123,36 @@ OME auth preflight failed: BITRIVER_OME_API_TOKEN is empty in $ENV_FILE_PATH.
 Expected BITRIVER_OME_API_TOKEN=<non-empty token> so OME render can populate <Managers><API><AccessToken>.
 EOF
     return 1
+  fi
+
+  if [[ "$auth_mode" == "basic" ]]; then
+    local ome_username ome_password
+    ome_username="$(read_env_value BITRIVER_OME_USERNAME || true)"
+    ome_password="$(read_env_value BITRIVER_OME_PASSWORD || true)"
+    if [[ -z "$ome_username" || -z "$ome_password" ]]; then
+      cat >&2 <<EOF
+OME auth preflight failed: BITRIVER_OME_HEALTHCHECK_AUTH_MODE=basic requires BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD in $ENV_FILE_PATH.
+Example:
+  BITRIVER_OME_HEALTHCHECK_AUTH_MODE=basic
+  BITRIVER_OME_USERNAME=ome-operator
+  BITRIVER_OME_PASSWORD=replace-with-strong-password
+EOF
+      return 1
+    fi
+  else
+    if [[ -z "$healthcheck_token" && -z "$access_token" && -z "$api_token" ]]; then
+      cat >&2 <<EOF
+OME auth preflight failed: BITRIVER_OME_HEALTHCHECK_AUTH_MODE=accesstoken requires a non-empty token in canonical order:
+  BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN
+Example:
+  BITRIVER_OME_HEALTHCHECK_AUTH_MODE=accesstoken
+  BITRIVER_OME_API_TOKEN=replace-with-non-empty-token
+  # Optional overrides:
+  # BITRIVER_OME_ACCESS_TOKEN=replace-with-probe-token
+  # BITRIVER_OME_HEALTHCHECK_TOKEN=replace-with-healthcheck-token
+EOF
+      return 1
+    fi
   fi
 
   echo "Running OME auth preflight: rendering config and validating token consistency ..."
