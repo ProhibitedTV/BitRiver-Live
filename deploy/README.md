@@ -59,7 +59,8 @@ third-party images, use the corresponding `*_IMAGE_DIGEST` fields in `deploy/.en
 ### OME healthcheck
 
 The OME service in `deploy/docker-compose.yml` uses a `curl`-based healthcheck against the control API inside the container
-(`http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health`).
+(`http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health`). Helm now mirrors the same probe authentication logic in
+`deploy/helm/bitriver-live/templates/deployment-ome.yaml`, including `accesstoken` token precedence and optional `basic` mode.
 
 Probe/auth sequence is exact and ordered:
 
