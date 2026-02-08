@@ -959,6 +959,79 @@ func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 		t.Fatalf("expected generated .env to avoid persisting development mode, got:\n%s", string(envContents))
 	}
 }
+
+func TestRunQuickstartRejectsInvalidOMEHealthcheckAuthModeBeforeInit(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	composePath := filepath.Join(t.TempDir(), "compose.yml")
+	envContent := strings.Join([]string{
+		"BITRIVER_OME_HEALTHCHECK_AUTH_MODE=token+digest",
+		"BITRIVER_LIVE_ADMIN_EMAIL=admin@example.com",
+		"BITRIVER_LIVE_ADMIN_PASSWORD=supersecret",
+	}, "\n") + "\n"
+	if err := os.WriteFile(envPath, []byte(envContent), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	originalDoctor := doctorRunner
+	originalEnvInit := envInitRunner
+	originalEnvValidate := envValidateRunner
+	originalOMERunner := omeRunner
+	originalMigrations := migrationsRunner
+	originalCompose := composeUpRunner
+	originalWaiter := quickstartWaiter
+	originalBootstrap := bootstrapAdminRunner
+	t.Cleanup(func() {
+		doctorRunner = originalDoctor
+		envInitRunner = originalEnvInit
+		envValidateRunner = originalEnvValidate
+		omeRunner = originalOMERunner
+		migrationsRunner = originalMigrations
+		composeUpRunner = originalCompose
+		quickstartWaiter = originalWaiter
+		bootstrapAdminRunner = originalBootstrap
+	})
+
+	doctorRunner = func([]string) bool { return true }
+	envInitRunner = func([]string) error {
+		t.Fatal("env init should not run when OME auth mode is invalid")
+		return nil
+	}
+	envValidateRunner = func([]string) error {
+		t.Fatal("env validate should not run when OME auth mode is invalid")
+		return nil
+	}
+	omeRunner = func([]string) error {
+		t.Fatal("OME render should not run when OME auth mode is invalid")
+		return nil
+	}
+	migrationsRunner = func(string, string) error {
+		t.Fatal("migrations should not run when OME auth mode is invalid")
+		return nil
+	}
+	composeUpRunner = func([]string) error {
+		t.Fatal("compose up should not run when OME auth mode is invalid")
+		return nil
+	}
+	quickstartWaiter = func(map[string]string) error {
+		t.Fatal("waiter should not run when OME auth mode is invalid")
+		return nil
+	}
+	bootstrapAdminRunner = func(string, string, map[string]string) error {
+		t.Fatal("bootstrap should not run when OME auth mode is invalid")
+		return nil
+	}
+
+	err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath})
+	if err == nil {
+		t.Fatal("expected quickstart to fail for invalid OME auth mode")
+	}
+	if !strings.Contains(err.Error(), "BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be one of [accesstoken, basic]") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "token+digest") {
+		t.Fatalf("expected current value in error, got: %v", err)
+	}
+}
 func TestRunQuickstartFirstRunInitPassesEnvValidationWindowsPath(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("windows path handling is only validated on windows")
