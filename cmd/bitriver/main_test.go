@@ -130,6 +130,29 @@ func TestGenerateEnvValuesPromotesDevelopmentModeToProduction(t *testing.T) {
 		t.Fatalf("expected development mode to be rewritten to production, got %q", generated["BITRIVER_LIVE_MODE"])
 	}
 }
+
+func TestGenerateEnvValuesNormalizesOMEHealthcheckAuthMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "empty defaults to access token", input: "", expected: "accesstoken"},
+		{name: "token maps to access token", input: "token", expected: "accesstoken"},
+		{name: "token basic maps to basic", input: "token+basic", expected: "basic"},
+		{name: "basic stays basic", input: "basic", expected: "basic"},
+		{name: "accesstoken stays accesstoken", input: "accesstoken", expected: "accesstoken"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			generated, _ := generateEnvValues(map[string]string{"BITRIVER_OME_HEALTHCHECK_AUTH_MODE": tc.input})
+			if generated["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"] != tc.expected {
+				t.Fatalf("expected auth mode %q, got %q", tc.expected, generated["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"])
+			}
+		})
+	}
+}
 func TestGenerateEnvValuesPlaceholderModeDefaultsToProduction(t *testing.T) {
 	generated, _ := generateEnvValues(map[string]string{"BITRIVER_LIVE_MODE": "placeholder"})
 	if generated["BITRIVER_LIVE_MODE"] != "production" {

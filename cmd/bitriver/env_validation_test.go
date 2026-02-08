@@ -214,6 +214,31 @@ func TestValidateEnvRejectsUnreadableTLSCert(t *testing.T) {
 	}
 }
 
+func TestValidateEnvRejectsUnsupportedOMEHealthcheckAuthMode(t *testing.T) {
+	cert, key := tempTLSFiles(t)
+	values := baseEnvValues(cert, key)
+	values["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"] = "token+digest"
+
+	res := validateEnv(values)
+	if !containsString(res.Errors, "BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be accesstoken or basic") {
+		t.Fatalf("expected unsupported auth mode error, got %v", res.Errors)
+	}
+}
+
+func TestValidateEnvWarnsOnDeprecatedOMEHealthcheckAuthMode(t *testing.T) {
+	cert, key := tempTLSFiles(t)
+	values := baseEnvValues(cert, key)
+	values["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"] = "token+basic"
+
+	res := validateEnv(values)
+	if !containsString(res.Warnings, "deprecated") {
+		t.Fatalf("expected deprecated auth mode warning, got %v", res.Warnings)
+	}
+	if len(res.Errors) > 0 {
+		t.Fatalf("did not expect errors for deprecated auth mode alias, got %v", res.Errors)
+	}
+}
+
 func TestValidateEnvAllowsLoopbackOMEWhenComposeAPI(t *testing.T) {
 	values := map[string]string{
 		"BITRIVER_POSTGRES_USER":                  "brlive_app",
