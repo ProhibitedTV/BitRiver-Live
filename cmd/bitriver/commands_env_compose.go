@@ -278,7 +278,7 @@ func runEnvValidate(args []string) error {
 		return err
 	}
 
-	result := validateEnv(values)
+	result := validateEnvironmentValues(values)
 	for _, w := range result.Warnings {
 		fmt.Fprintf(os.Stderr, "Warning: %s\n", w)
 	}
@@ -305,6 +305,10 @@ func runEnvValidate(args []string) error {
 
 	fmt.Fprintf(os.Stdout, "Environment file %s looks ready.\n", *envPath)
 	return nil
+}
+
+func validateEnvironmentValues(values map[string]string) envValidatorResult {
+	return validateEnv(values)
 }
 
 // runCompose runs compose and exits when the work completes or a dependency fails.
@@ -358,6 +362,10 @@ func runComposeUp(args []string) error {
 		return err
 	}
 
+	if err := validateComposeEffectiveEnvironment(*envFile); err != nil {
+		return err
+	}
+
 	if _, err := executil.LookPath("docker"); err != nil {
 		return err
 	}
@@ -371,6 +379,58 @@ func runComposeUp(args []string) error {
 	}
 
 	return commandRunner("docker", composeArgs...)
+}
+
+func validateComposeEffectiveEnvironment(envFile string) error {
+	resolvedEnvFile := strings.TrimSpace(envFile)
+	if resolvedEnvFile == "" {
+		resolvedEnvFile = defaultEnvFile()
+	}
+
+	fileValues, err := loadEnvValues(resolvedEnvFile, true)
+	if err != nil {
+		return fmt.Errorf("load env values: %w", err)
+	}
+
+	effectiveValues := copyEnvValues(fileValues)
+	overrides := make(map[string][2]string)
+	for _, entry := range os.Environ() {
+		parts := strings.SplitN(entry, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		if !strings.HasPrefix(key, "BITRIVER_") {
+			continue
+		}
+		value := parts[1]
+		if fileValue, ok := fileValues[key]; ok && fileValue != value {
+			overrides[key] = [2]string{fileValue, value}
+		}
+		effectiveValues[key] = value
+	}
+
+	baseResult := validateEnvironmentValues(fileValues)
+	effectiveResult := validateEnvironmentValues(effectiveValues)
+	baseAuthErr := validateQuickstartOMEHealthcheckAuthMode(fileValues["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"])
+	effectiveAuthErr := validateQuickstartOMEHealthcheckAuthMode(effectiveValues["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"])
+
+	baseInvalid := len(baseResult.Errors) > 0 || len(baseResult.Missing) > 0 || len(baseResult.Blocked) > 0 || baseAuthErr != nil
+	effectiveInvalid := len(effectiveResult.Errors) > 0 || len(effectiveResult.Missing) > 0 || len(effectiveResult.Blocked) > 0 || effectiveAuthErr != nil
+	if !baseInvalid && effectiveInvalid && len(overrides) > 0 {
+		for _, entry := range os.Environ() {
+			parts := strings.SplitN(entry, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(parts[0])
+			if _, ok := overrides[key]; ok {
+				return fmt.Errorf("environment override %s from the current shell conflicts with %s; unset %s and retry", key, resolvedEnvFile, key)
+			}
+		}
+	}
+
+	return nil
 }
 
 // runComposeDown runs compose down and exits when the work completes or a dependency fails.
