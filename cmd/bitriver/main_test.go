@@ -806,6 +806,31 @@ func TestComposeRejectsUnknownSubcommand(t *testing.T) {
 		t.Fatal("expected compose to error on unknown subcommand")
 	}
 }
+
+func TestValidateComposeEffectiveEnvironmentRejectsInvalidOverride(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	values := buildValidProductionEnv(t)
+	values["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"] = "basic"
+	var lines []string
+	for key, value := range values {
+		lines = append(lines, fmt.Sprintf("%s=%s", key, value))
+	}
+	if err := os.WriteFile(envPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+	t.Setenv("BITRIVER_OME_HEALTHCHECK_AUTH_MODE", "token+digest")
+
+	err := validateComposeEffectiveEnvironment(envPath)
+	if err == nil {
+		t.Fatal("expected validation to fail when shell env override makes values invalid")
+	}
+	if !strings.Contains(err.Error(), "BITRIVER_OME_HEALTHCHECK_AUTH_MODE") {
+		t.Fatalf("expected error to mention override key, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "unset BITRIVER_OME_HEALTHCHECK_AUTH_MODE") {
+		t.Fatalf("expected error to suggest unsetting override, got %v", err)
+	}
+}
 func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), ".env")
 	composePath := filepath.Join(t.TempDir(), "compose.yml")
