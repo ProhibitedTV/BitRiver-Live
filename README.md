@@ -129,7 +129,7 @@ If ports are already in use, edit the matching values in `.env` (for example `BI
 `docker compose up -d`. See [`docs/quickstart.md`](docs/quickstart.md) for extra tips, common errors, and guidance on updating
 the generated environment file before inviting real users. For OME-specific healthcheck troubleshooting (including the
 canonical `/v1/health` readiness probe that Compose runs with `AccessToken: <token>` auth), jump to the [`Troubleshooting`](docs/quickstart.md#troubleshooting) section and the
-[`OME healthcheck`](deploy/README.md#ome-healthcheck) note under the deployment docs.
+[`OME healthcheck`](deploy/README.md#ome-healthcheck) note under the deployment docs. `BITRIVER_OME_HEALTHCHECK_AUTH_MODE` only supports `accesstoken` (default, for AccessToken header auth) or `basic` (for username/password auth).
 
 ### Key environment variables at a glance
 
