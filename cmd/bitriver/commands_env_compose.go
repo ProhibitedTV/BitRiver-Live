@@ -416,6 +416,10 @@ func runQuickstart(args []string) error {
 	preExistingCopy := copyEnvValues(preExisting)
 	_, generatedSecrets := generateEnvValues(preExistingCopy)
 
+	if err := validateQuickstartOMEHealthcheckAuthMode(preExisting["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"]); err != nil {
+		return err
+	}
+
 	if err := envInitRunner([]string{"--env-file", *envFile}); err != nil {
 		return fmt.Errorf("env init: %w", err)
 	}
@@ -450,6 +454,15 @@ func runQuickstart(args []string) error {
 
 	printGeneratedSecrets(generatedSecrets)
 	return nil
+}
+
+func validateQuickstartOMEHealthcheckAuthMode(raw string) error {
+	mode := strings.ToLower(strings.TrimSpace(raw))
+	if mode == "" || mode == "accesstoken" || mode == "basic" {
+		return nil
+	}
+
+	return fmt.Errorf("BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be one of [accesstoken, basic] before quickstart can continue (current: %s)", strings.TrimSpace(raw))
 }
 
 // runMigrations runs migrations and exits when the work completes or a dependency fails.
