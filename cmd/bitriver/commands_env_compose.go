@@ -249,6 +249,10 @@ func runEnvInit(args []string) error {
 		return err
 	}
 
+	if warning := omeHealthcheckAuthModeDeprecationWarning(existingValues["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"]); warning != "" {
+		fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
+	}
+
 	promptForAdminEmail(existingValues)
 
 	generated, _ := generateEnvValues(existingValues)

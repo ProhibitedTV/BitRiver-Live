@@ -194,6 +194,8 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 
 	generated["BITRIVER_LIVE_MODE"] = productionSafeMode(existing["BITRIVER_LIVE_MODE"])
 	existing["BITRIVER_LIVE_MODE"] = generated["BITRIVER_LIVE_MODE"]
+	generated["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"] = normalizedOMEHealthcheckAuthMode(existing["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"])
+	existing["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"] = generated["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"]
 	generated["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"] = defaultIfPlaceholder("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", existing, "http://localhost:9001/hls")
 	generated["NEXT_PUBLIC_VIEWER_URL"] = defaultIfPlaceholder("NEXT_PUBLIC_VIEWER_URL", existing, "http://localhost:8080/viewer")
 	accessTokenValue := strings.TrimSpace(existing["BITRIVER_OME_ACCESS_TOKEN"])
@@ -259,6 +261,29 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 	}
 
 	return generated, newlyGenerated
+}
+
+func normalizedOMEHealthcheckAuthMode(raw string) string {
+	mode := strings.ToLower(strings.TrimSpace(raw))
+	switch mode {
+	case "", "accesstoken", "token":
+		return "accesstoken"
+	case "basic", "token+basic":
+		return "basic"
+	default:
+		return strings.TrimSpace(raw)
+	}
+}
+
+func omeHealthcheckAuthModeDeprecationWarning(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	mode := strings.ToLower(trimmed)
+	if mode != "token" && mode != "token+basic" {
+		return ""
+	}
+
+	normalized := normalizedOMEHealthcheckAuthMode(trimmed)
+	return fmt.Sprintf("BITRIVER_OME_HEALTHCHECK_AUTH_MODE=%s is deprecated; rewriting to %s. Supported values are accesstoken or basic.", trimmed, normalized)
 }
 
 func promptForAdminEmail(existing map[string]string) {
@@ -535,6 +560,15 @@ func validateEnv(values map[string]string) envValidatorResult {
 				}
 			}
 		}
+	}
+
+	if warning := omeHealthcheckAuthModeDeprecationWarning(values["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"]); warning != "" {
+		res.Warnings = append(res.Warnings, warning)
+	}
+
+	authMode := normalizedOMEHealthcheckAuthMode(values["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"])
+	if authMode != "accesstoken" && authMode != "basic" {
+		res.Errors = append(res.Errors, fmt.Sprintf("BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be accesstoken or basic (current: %s)", strings.TrimSpace(values["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"])))
 	}
 
 	if val := strings.TrimSpace(values["BITRIVER_SRS_IMAGE_TAG"]); val != "" && val != "v5.0.185" {
