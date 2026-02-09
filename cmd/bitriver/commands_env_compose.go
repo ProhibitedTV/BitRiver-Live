@@ -529,7 +529,7 @@ func runQuickstart(args []string) error {
 		return fmt.Errorf("docker compose up: %w", err)
 	}
 
-	if err := quickstartWaiter(envValues); err != nil {
+	if err := quickstartWaiter(envValues, *composeFile, *envFile); err != nil {
 		return fmt.Errorf("wait for API readiness: %w", err)
 	}
 
@@ -569,11 +569,16 @@ func runMigrations(composeFile, envFile string) error {
 }
 
 // waitForAPIReadiness performs wait for apireadiness and propagates validation or dependency failures to the caller.
-func waitForAPIReadiness(values map[string]string) error {
+var readinessWaitTimeout = 2 * time.Minute
+var readinessPollInterval = 3 * time.Second
+var readinessDiagnosticsRunner = gatherReadinessDiagnostics
+var dockerComposeCommandRunner = runDockerComposeCommand
+
+func waitForAPIReadiness(values map[string]string, composeFile, envFile string) error {
 	readyzURL := fmt.Sprintf("http://127.0.0.1:%s/readyz", resolveAPIPort(values))
 	fmt.Fprintf(os.Stdout, "Waiting for API readiness at %s...\n", readyzURL)
 
-	deadline := time.Now().Add(2 * time.Minute)
+	deadline := time.Now().Add(readinessWaitTimeout)
 	for time.Now().Before(deadline) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, readyzURL, nil)
@@ -592,10 +597,86 @@ func waitForAPIReadiness(values map[string]string) error {
 			}
 		}
 
-		time.Sleep(3 * time.Second)
+		time.Sleep(readinessPollInterval)
 	}
 
-	return errors.New("API did not become ready before timeout")
+	diagnostics := strings.TrimSpace(readinessDiagnosticsRunner(composeFile, envFile))
+	if diagnostics == "" {
+		return errors.New("API did not become ready before timeout; run `docker compose ps` and `docker compose logs --tail=80 bitriver-live` for diagnostics")
+	}
+
+	return fmt.Errorf("API did not become ready before timeout.\n%s", diagnostics)
+}
+
+func gatherReadinessDiagnostics(composeFile, envFile string) string {
+	var sections []string
+
+	psOutput, psErr := dockerComposeCommandRunner(composeFile, envFile, "ps")
+	if psErr != nil {
+		sections = append(sections, fmt.Sprintf("docker compose ps failed: %v", psErr))
+	} else if trimmed := strings.TrimSpace(psOutput); trimmed != "" {
+		sections = append(sections, "docker compose ps:\n"+trimmed)
+	}
+
+	logsOutput, logsErr := dockerComposeCommandRunner(composeFile, envFile, "logs", "--tail=80", "bitriver-live")
+	if logsErr != nil {
+		sections = append(sections, fmt.Sprintf("docker compose logs --tail=80 bitriver-live failed: %v", logsErr))
+	} else {
+		keyLines := extractKeyLogLines(logsOutput)
+		if len(keyLines) > 0 {
+			sections = append(sections, "bitriver-live key log lines:\n"+strings.Join(keyLines, "\n"))
+		}
+		if hint := detectPostgresStubHint(logsOutput); hint != "" {
+			sections = append(sections, hint)
+		}
+	}
+
+	return strings.Join(sections, "\n\n")
+}
+
+func runDockerComposeCommand(composeFile, envFile string, extraArgs ...string) (string, error) {
+	args := append(composeArgsWithEnv(composeFile, envFile), extraArgs...)
+	cmd := exec.Command("docker", args...)
+	output, err := cmd.CombinedOutput()
+	trimmed := strings.TrimSpace(string(output))
+	if err != nil {
+		if trimmed != "" {
+			return "", fmt.Errorf("%w: %s", err, trimmed)
+		}
+		return "", err
+	}
+	return trimmed, nil
+}
+
+func extractKeyLogLines(logs string) []string {
+	keywords := []string{"error", "fatal", "panic", "postgres repository unavailable", "pgx driver stubbed in this build"}
+	lines := strings.Split(logs, "\n")
+	var keyLines []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		lower := strings.ToLower(trimmed)
+		for _, keyword := range keywords {
+			if strings.Contains(lower, keyword) {
+				keyLines = append(keyLines, trimmed)
+				break
+			}
+		}
+		if len(keyLines) >= 12 {
+			break
+		}
+	}
+	return keyLines
+}
+
+func detectPostgresStubHint(logs string) string {
+	lower := strings.ToLower(logs)
+	if strings.Contains(lower, "pgx driver stubbed in this build") || strings.Contains(lower, "postgres repository unavailable") {
+		return "Hint: bitriver-live appears to be running without the Postgres module wired in. Rebuild the image/binary with the real pgx-backed storage implementation included and verify module wiring in go.mod/build tags."
+	}
+	return ""
 }
 
 type quickstartComposeServiceStatus struct {

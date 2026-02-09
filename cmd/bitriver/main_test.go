@@ -957,7 +957,7 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 		}
 		return nil
 	}
-	quickstartWaiter = func(values map[string]string) error {
+	quickstartWaiter = func(values map[string]string, composeFile, envFile string) error {
 		calls = append(calls, "wait")
 		if values["BITRIVER_LIVE_PORT"] != "18080" {
 			t.Fatalf("expected env values to be passed to waiter, got %v", values["BITRIVER_LIVE_PORT"])
@@ -1119,7 +1119,7 @@ func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 	omeRunner = func([]string) error { return nil }
 	migrationsRunner = func(string, string) error { return nil }
 	composeUpRunner = func([]string) error { return nil }
-	quickstartWaiter = func(map[string]string) error { return nil }
+	quickstartWaiter = func(map[string]string, string, string) error { return nil }
 	quickstartComposeHealthWaiter = func(string, string) error { return nil }
 	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
 	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
@@ -1206,7 +1206,7 @@ func TestRunQuickstartAllowsDeprecatedOMEHealthcheckAuthModes(t *testing.T) {
 			omeRunner = func([]string) error { return nil }
 			migrationsRunner = func(string, string) error { return nil }
 			composeUpRunner = func([]string) error { return nil }
-			quickstartWaiter = func(map[string]string) error { return nil }
+			quickstartWaiter = func(map[string]string, string, string) error { return nil }
 			quickstartComposeHealthWaiter = func(string, string) error { return nil }
 			bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
 
@@ -1271,7 +1271,7 @@ func TestRunQuickstartRejectsInvalidOMEHealthcheckAuthModeBeforeInit(t *testing.
 		t.Fatal("compose up should not run when OME auth mode is invalid")
 		return nil
 	}
-	quickstartWaiter = func(map[string]string) error {
+	quickstartWaiter = func(map[string]string, string, string) error {
 		t.Fatal("waiter should not run when OME auth mode is invalid")
 		return nil
 	}
@@ -1328,7 +1328,7 @@ func TestRunQuickstartFirstRunInitPassesEnvValidationWindowsPath(t *testing.T) {
 	omeRunner = func([]string) error { return nil }
 	migrationsRunner = func(string, string) error { return nil }
 	composeUpRunner = func([]string) error { return nil }
-	quickstartWaiter = func(map[string]string) error { return nil }
+	quickstartWaiter = func(map[string]string, string, string) error { return nil }
 	quickstartComposeHealthWaiter = func(string, string) error { return nil }
 	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
 	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
@@ -1377,7 +1377,7 @@ func TestRunQuickstartFirstRunInitValidateKeepsLoopbackChecksAsWarnings(t *testi
 	omeRunner = func([]string) error { return nil }
 	migrationsRunner = func(string, string) error { return nil }
 	composeUpRunner = func([]string) error { return nil }
-	quickstartWaiter = func(map[string]string) error { return nil }
+	quickstartWaiter = func(map[string]string, string, string) error { return nil }
 	quickstartComposeHealthWaiter = func(string, string) error { return nil }
 	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
 	if _, err := os.Stat(envPath); !errors.Is(err, os.ErrNotExist) {
@@ -1729,5 +1729,85 @@ func TestBuildOMERenderConfigSeparatesManagersAPIFromSignallingPorts(t *testing.
 	}
 	if cfg.HTTPPort != "18081" || cfg.HTTPTLSPort != "18082" {
 		t.Fatalf("expected Managers API ports from BITRIVER_OME_HTTP_* vars, got %q/%q", cfg.HTTPPort, cfg.HTTPTLSPort)
+	}
+}
+
+func TestWaitForAPIReadinessTimeoutIncludesDiagnostics(t *testing.T) {
+	originalTimeout := readinessWaitTimeout
+	originalPoll := readinessPollInterval
+	originalDiagnostics := readinessDiagnosticsRunner
+	t.Cleanup(func() {
+		readinessWaitTimeout = originalTimeout
+		readinessPollInterval = originalPoll
+		readinessDiagnosticsRunner = originalDiagnostics
+	})
+
+	readinessWaitTimeout = 15 * time.Millisecond
+	readinessPollInterval = time.Millisecond
+	readinessDiagnosticsRunner = func(composeFile, envFile string) string {
+		if composeFile != "deploy/docker-compose.yml" {
+			t.Fatalf("compose file = %q, want %q", composeFile, "deploy/docker-compose.yml")
+		}
+		if envFile != ".env" {
+			t.Fatalf("env file = %q, want %q", envFile, ".env")
+		}
+		return strings.Join([]string{
+			"docker compose ps:",
+			"bitriver-live  Exit 1",
+			"bitriver-live key log lines:",
+			"bitriver-live | fatal: postgres repository unavailable",
+		}, "\n")
+	}
+
+	err := waitForAPIReadiness(map[string]string{"BITRIVER_LIVE_PORT": "1"}, "deploy/docker-compose.yml", ".env")
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if !strings.Contains(err.Error(), "API did not become ready before timeout") {
+		t.Fatalf("expected timeout in error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "docker compose ps") {
+		t.Fatalf("expected compose diagnostics in error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "postgres repository unavailable") {
+		t.Fatalf("expected key error line in diagnostics, got %v", err)
+	}
+}
+
+func TestGatherReadinessDiagnosticsIncludesStubbedPostgresHint(t *testing.T) {
+	originalRunner := dockerComposeCommandRunner
+	t.Cleanup(func() {
+		dockerComposeCommandRunner = originalRunner
+	})
+
+	dockerComposeCommandRunner = func(composeFile, envFile string, extraArgs ...string) (string, error) {
+		if composeFile != "deploy/docker-compose.yml" || envFile != ".env" {
+			t.Fatalf("unexpected compose/env files: %q %q", composeFile, envFile)
+		}
+		joined := strings.Join(extraArgs, " ")
+		switch joined {
+		case "ps":
+			return "NAME                STATUS\nbitriver-live       exited", nil
+		case "logs --tail=80 bitriver-live":
+			return strings.Join([]string{
+				"bitriver-live | info: booting",
+				"bitriver-live | fatal: pgx driver stubbed in this build",
+				"bitriver-live | error: postgres repository unavailable",
+			}, "\n"), nil
+		default:
+			t.Fatalf("unexpected compose args: %v", extraArgs)
+			return "", nil
+		}
+	}
+
+	diagnostics := gatherReadinessDiagnostics("deploy/docker-compose.yml", ".env")
+	if !strings.Contains(diagnostics, "docker compose ps:") {
+		t.Fatalf("expected ps output in diagnostics, got %q", diagnostics)
+	}
+	if !strings.Contains(diagnostics, "pgx driver stubbed in this build") {
+		t.Fatalf("expected stubbed pgx line in diagnostics, got %q", diagnostics)
+	}
+	if !strings.Contains(diagnostics, "Hint: bitriver-live appears to be running without the Postgres module wired in") {
+		t.Fatalf("expected postgres wiring remediation hint, got %q", diagnostics)
 	}
 }
