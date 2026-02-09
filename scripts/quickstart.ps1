@@ -235,10 +235,6 @@ function Invoke-OmeAuthPreflight {
         Write-Error "OME auth preflight failed: env file not found at $EnvFilePath"
     }
 
-    if (-not (Test-Path -LiteralPath $VerifyScriptPath -PathType Leaf)) {
-        Write-Error "OME auth preflight failed: helper script is missing or not executable at $VerifyScriptPath"
-    }
-
     $rawAuthMode = Get-EnvValue -FilePath $EnvFilePath -Key 'BITRIVER_OME_HEALTHCHECK_AUTH_MODE'
     $authMode = if ($rawAuthMode) { $rawAuthMode.ToLowerInvariant() } else { 'accesstoken' }
 
@@ -305,7 +301,7 @@ Example:
 
     $configPath = Join-Path $CodeRootPath 'deploy/ome/Server.generated.xml'
     $bash = Get-Command bash -ErrorAction SilentlyContinue
-    if ($bash) {
+    if ($bash -and (Test-Path -LiteralPath $VerifyScriptPath -PathType Leaf)) {
         & $bash.Source $VerifyScriptPath '--env-file' $EnvFilePath '--config' $configPath
         return
     }
