@@ -332,6 +332,8 @@ var composeUpRunner = runComposeUp
 var envInitRunner = runEnvInit
 var envValidateRunner = runEnvValidate
 var omeRunner = runOME
+var omeVerifyHealthTokenRunner = runOMEVerifyHealthToken
+var quickstartOMEAuthPreflightRunner = runQuickstartOMEAuthPreflight
 var doctorRunner = runDoctor
 
 // composeArgsWithEnv performs compose args with env and propagates validation or dependency failures to the caller.
@@ -490,8 +492,7 @@ func runQuickstart(args []string) error {
 	}
 	preExistingCopy := copyEnvValues(preExisting)
 	_, generatedSecrets := generateEnvValues(preExistingCopy)
-
-	if err := validateQuickstartOMEHealthcheckAuthMode(preExisting["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"]); err != nil {
+	if err := validateQuickstartOMEAuthMode(preExisting["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"], *envFile); err != nil {
 		return err
 	}
 
@@ -507,8 +508,8 @@ func runQuickstart(args []string) error {
 		return fmt.Errorf("read env file: %w", err)
 	}
 
-	if err := omeRunner([]string{"render", "--env-file", *envFile, "--force"}); err != nil {
-		return fmt.Errorf("render OME config: %w", err)
+	if err := quickstartOMEAuthPreflightRunner(*envFile, envValues); err != nil {
+		return err
 	}
 
 	if err := validateComposeEffectiveEnvironment(*envFile); err != nil {
@@ -539,13 +540,75 @@ func runQuickstart(args []string) error {
 	return nil
 }
 
-func validateQuickstartOMEHealthcheckAuthMode(raw string) error {
-	mode := strings.ToLower(strings.TrimSpace(raw))
-	if mode == "" || mode == "accesstoken" || mode == "basic" || mode == "token" || mode == "token+basic" {
-		return nil
+func validateQuickstartOMEAuthMode(rawAuthMode, envFile string) error {
+	rawAuthMode = strings.TrimSpace(rawAuthMode)
+	authMode := strings.ToLower(rawAuthMode)
+	if authMode == "" {
+		authMode = "accesstoken"
 	}
 
-	return fmt.Errorf("BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be one of [accesstoken, basic] before quickstart can continue (current: %s)", strings.TrimSpace(raw))
+	if authMode == "token" {
+		authMode = "accesstoken"
+	}
+	if authMode == "token+basic" {
+		authMode = "basic"
+	}
+
+	switch authMode {
+	case "accesstoken", "basic", "none", "off", "disabled":
+		return nil
+	default:
+		return fmt.Errorf("OME auth preflight failed: BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be accesstoken, basic, or none/off/disabled (current: %s).\nSet BITRIVER_OME_HEALTHCHECK_AUTH_MODE=accesstoken for token probes, or:\n  BITRIVER_OME_HEALTHCHECK_AUTH_MODE=basic\n  BITRIVER_OME_USERNAME=ome-operator\n  BITRIVER_OME_PASSWORD=replace-with-strong-password\nin %s before running quickstart", valueOrDefault(rawAuthMode, "<empty>"), envFile)
+	}
+}
+
+func runQuickstartOMEAuthPreflight(envFile string, values map[string]string) error {
+	rawAuthMode := strings.TrimSpace(values["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"])
+	authMode := strings.ToLower(rawAuthMode)
+	if authMode == "" {
+		authMode = "accesstoken"
+	}
+
+	if authMode == "token" {
+		authMode = "accesstoken"
+	}
+	if authMode == "token+basic" {
+		authMode = "basic"
+	}
+
+	if err := validateQuickstartOMEAuthMode(rawAuthMode, envFile); err != nil {
+		return err
+	}
+
+	if strings.TrimSpace(values["BITRIVER_OME_API_TOKEN"]) == "" {
+		return fmt.Errorf("OME auth preflight failed: BITRIVER_OME_API_TOKEN is empty in %s.\nExpected BITRIVER_OME_API_TOKEN=<non-empty token> so OME render can populate <Managers><API><AccessToken>", envFile)
+	}
+
+	if authMode == "basic" {
+		if strings.TrimSpace(values["BITRIVER_OME_USERNAME"]) == "" || strings.TrimSpace(values["BITRIVER_OME_PASSWORD"]) == "" {
+			return fmt.Errorf("OME auth preflight failed: BITRIVER_OME_HEALTHCHECK_AUTH_MODE=basic requires BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD in %s.\nExample:\n  BITRIVER_OME_HEALTHCHECK_AUTH_MODE=basic\n  BITRIVER_OME_USERNAME=ome-operator\n  BITRIVER_OME_PASSWORD=replace-with-strong-password", envFile)
+		}
+	}
+
+	fmt.Fprintln(os.Stdout, "Running OME auth preflight: rendering config and validating token consistency ...")
+	if err := omeRunner([]string{"render", "--env-file", envFile, "--force"}); err != nil {
+		return fmt.Errorf("render OME config: %w", err)
+	}
+
+	configPath := filepath.Join(repoRoot(), "deploy", "ome", "Server.generated.xml")
+	if err := omeVerifyHealthTokenRunner([]string{"--env-file", envFile, "--config", configPath}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func valueOrDefault(value, fallback string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return fallback
+	}
+	return trimmed
 }
 
 // runMigrations runs migrations and exits when the work completes or a dependency fails.

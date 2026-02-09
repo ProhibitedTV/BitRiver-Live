@@ -898,6 +898,7 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	originalCompose := composeUpRunner
 	originalWaiter := quickstartWaiter
 	originalComposeHealthWaiter := quickstartComposeHealthWaiter
+	originalOMEPreflight := quickstartOMEAuthPreflightRunner
 	originalBootstrap := bootstrapAdminRunner
 	t.Cleanup(func() {
 		doctorRunner = originalDoctor
@@ -908,6 +909,7 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 		composeUpRunner = originalCompose
 		quickstartWaiter = originalWaiter
 		quickstartComposeHealthWaiter = originalComposeHealthWaiter
+		quickstartOMEAuthPreflightRunner = originalOMEPreflight
 		bootstrapAdminRunner = originalBootstrap
 	})
 	var calls []string
@@ -974,6 +976,7 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 		}
 		return nil
 	}
+	quickstartOMEAuthPreflightRunner = func(string, map[string]string) error { return nil }
 	bootstrapAdminRunner = func(composeFile, envFile string, values map[string]string) error {
 		calls = append(calls, "bootstrap")
 		if composeFile != composePath {
@@ -990,7 +993,7 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
 		t.Fatalf("quickstart failed: %v", err)
 	}
-	expectedCalls := []string{"doctor", "env-init", "env-validate", "ome", "migrations", "compose-up", "wait", "health", "bootstrap"}
+	expectedCalls := []string{"doctor", "env-init", "env-validate", "migrations", "compose-up", "wait", "health", "bootstrap"}
 	if !reflect.DeepEqual(calls, expectedCalls) {
 		t.Fatalf("call order = %v, want %v", calls, expectedCalls)
 	}
@@ -1105,6 +1108,7 @@ func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 	originalCompose := composeUpRunner
 	originalWaiter := quickstartWaiter
 	originalComposeHealthWaiter := quickstartComposeHealthWaiter
+	originalOMEPreflight := quickstartOMEAuthPreflightRunner
 	originalBootstrap := bootstrapAdminRunner
 	t.Cleanup(func() {
 		doctorRunner = originalDoctor
@@ -1113,6 +1117,7 @@ func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 		composeUpRunner = originalCompose
 		quickstartWaiter = originalWaiter
 		quickstartComposeHealthWaiter = originalComposeHealthWaiter
+		quickstartOMEAuthPreflightRunner = originalOMEPreflight
 		bootstrapAdminRunner = originalBootstrap
 	})
 	doctorRunner = func([]string) bool { return true }
@@ -1121,6 +1126,7 @@ func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 	composeUpRunner = func([]string) error { return nil }
 	quickstartWaiter = func(map[string]string, string, string) error { return nil }
 	quickstartComposeHealthWaiter = func(string, string) error { return nil }
+	quickstartOMEAuthPreflightRunner = func(string, map[string]string) error { return nil }
 	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
 	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
 		t.Fatalf("quickstart failed on first run: %v", err)
@@ -1187,6 +1193,7 @@ func TestRunQuickstartAllowsDeprecatedOMEHealthcheckAuthModes(t *testing.T) {
 			originalCompose := composeUpRunner
 			originalWaiter := quickstartWaiter
 			originalComposeHealthWaiter := quickstartComposeHealthWaiter
+			originalOMEPreflight := quickstartOMEAuthPreflightRunner
 			originalBootstrap := bootstrapAdminRunner
 			t.Cleanup(func() {
 				doctorRunner = originalDoctor
@@ -1197,6 +1204,7 @@ func TestRunQuickstartAllowsDeprecatedOMEHealthcheckAuthModes(t *testing.T) {
 				composeUpRunner = originalCompose
 				quickstartWaiter = originalWaiter
 				quickstartComposeHealthWaiter = originalComposeHealthWaiter
+				quickstartOMEAuthPreflightRunner = originalOMEPreflight
 				bootstrapAdminRunner = originalBootstrap
 			})
 
@@ -1208,6 +1216,7 @@ func TestRunQuickstartAllowsDeprecatedOMEHealthcheckAuthModes(t *testing.T) {
 			composeUpRunner = func([]string) error { return nil }
 			quickstartWaiter = func(map[string]string, string, string) error { return nil }
 			quickstartComposeHealthWaiter = func(string, string) error { return nil }
+			quickstartOMEAuthPreflightRunner = func(string, map[string]string) error { return nil }
 			bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
 
 			if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
@@ -1237,6 +1246,7 @@ func TestRunQuickstartRejectsInvalidOMEHealthcheckAuthModeBeforeInit(t *testing.
 	originalCompose := composeUpRunner
 	originalWaiter := quickstartWaiter
 	originalComposeHealthWaiter := quickstartComposeHealthWaiter
+	originalOMEPreflight := quickstartOMEAuthPreflightRunner
 	originalBootstrap := bootstrapAdminRunner
 	t.Cleanup(func() {
 		doctorRunner = originalDoctor
@@ -1247,6 +1257,7 @@ func TestRunQuickstartRejectsInvalidOMEHealthcheckAuthModeBeforeInit(t *testing.
 		composeUpRunner = originalCompose
 		quickstartWaiter = originalWaiter
 		quickstartComposeHealthWaiter = originalComposeHealthWaiter
+		quickstartOMEAuthPreflightRunner = originalOMEPreflight
 		bootstrapAdminRunner = originalBootstrap
 	})
 
@@ -1279,6 +1290,10 @@ func TestRunQuickstartRejectsInvalidOMEHealthcheckAuthModeBeforeInit(t *testing.
 		t.Fatal("health waiter should not run when OME auth mode is invalid")
 		return nil
 	}
+	quickstartOMEAuthPreflightRunner = func(string, map[string]string) error {
+		t.Fatal("OME auth preflight should not run when OME auth mode is invalid")
+		return nil
+	}
 	bootstrapAdminRunner = func(string, string, map[string]string) error {
 		t.Fatal("bootstrap should not run when OME auth mode is invalid")
 		return nil
@@ -1288,7 +1303,7 @@ func TestRunQuickstartRejectsInvalidOMEHealthcheckAuthModeBeforeInit(t *testing.
 	if err == nil {
 		t.Fatal("expected quickstart to fail for invalid OME auth mode")
 	}
-	if !strings.Contains(err.Error(), "BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be one of [accesstoken, basic]") {
+	if !strings.Contains(err.Error(), "OME auth preflight failed: BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be accesstoken, basic, or none/off/disabled") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(err.Error(), "token+digest") {
@@ -1314,6 +1329,7 @@ func TestRunQuickstartFirstRunInitPassesEnvValidationWindowsPath(t *testing.T) {
 	originalCompose := composeUpRunner
 	originalWaiter := quickstartWaiter
 	originalComposeHealthWaiter := quickstartComposeHealthWaiter
+	originalOMEPreflight := quickstartOMEAuthPreflightRunner
 	originalBootstrap := bootstrapAdminRunner
 	t.Cleanup(func() {
 		doctorRunner = originalDoctor
@@ -1322,6 +1338,7 @@ func TestRunQuickstartFirstRunInitPassesEnvValidationWindowsPath(t *testing.T) {
 		composeUpRunner = originalCompose
 		quickstartWaiter = originalWaiter
 		quickstartComposeHealthWaiter = originalComposeHealthWaiter
+		quickstartOMEAuthPreflightRunner = originalOMEPreflight
 		bootstrapAdminRunner = originalBootstrap
 	})
 	doctorRunner = func([]string) bool { return true }
@@ -1330,6 +1347,7 @@ func TestRunQuickstartFirstRunInitPassesEnvValidationWindowsPath(t *testing.T) {
 	composeUpRunner = func([]string) error { return nil }
 	quickstartWaiter = func(map[string]string, string, string) error { return nil }
 	quickstartComposeHealthWaiter = func(string, string) error { return nil }
+	quickstartOMEAuthPreflightRunner = func(string, map[string]string) error { return nil }
 	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
 	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
 		if strings.Contains(err.Error(), "BITRIVER_LIVE_MODE") {
@@ -1359,6 +1377,7 @@ func TestRunQuickstartFirstRunInitValidateKeepsLoopbackChecksAsWarnings(t *testi
 	originalCompose := composeUpRunner
 	originalWaiter := quickstartWaiter
 	originalComposeHealthWaiter := quickstartComposeHealthWaiter
+	originalOMEPreflight := quickstartOMEAuthPreflightRunner
 	originalBootstrap := bootstrapAdminRunner
 	t.Cleanup(func() {
 		doctorRunner = originalDoctor
@@ -1369,6 +1388,7 @@ func TestRunQuickstartFirstRunInitValidateKeepsLoopbackChecksAsWarnings(t *testi
 		composeUpRunner = originalCompose
 		quickstartWaiter = originalWaiter
 		quickstartComposeHealthWaiter = originalComposeHealthWaiter
+		quickstartOMEAuthPreflightRunner = originalOMEPreflight
 		bootstrapAdminRunner = originalBootstrap
 	})
 	doctorRunner = func([]string) bool { return true }
@@ -1379,6 +1399,7 @@ func TestRunQuickstartFirstRunInitValidateKeepsLoopbackChecksAsWarnings(t *testi
 	composeUpRunner = func([]string) error { return nil }
 	quickstartWaiter = func(map[string]string, string, string) error { return nil }
 	quickstartComposeHealthWaiter = func(string, string) error { return nil }
+	quickstartOMEAuthPreflightRunner = func(string, map[string]string) error { return nil }
 	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
 	if _, err := os.Stat(envPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected first run to start without env file, got stat err=%v", err)
