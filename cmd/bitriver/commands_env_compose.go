@@ -278,7 +278,7 @@ func runEnvValidate(args []string) error {
 		return err
 	}
 
-	result := validateEnvironmentValues(values)
+	result := validateEnv(values)
 	for _, w := range result.Warnings {
 		fmt.Fprintf(os.Stderr, "Warning: %s\n", w)
 	}
@@ -305,10 +305,6 @@ func runEnvValidate(args []string) error {
 
 	fmt.Fprintf(os.Stdout, "Environment file %s looks ready.\n", *envPath)
 	return nil
-}
-
-func validateEnvironmentValues(values map[string]string) envValidatorResult {
-	return validateEnv(values)
 }
 
 // runCompose runs compose and exits when the work completes or a dependency fails.
@@ -417,7 +413,7 @@ func validateComposeEffectiveEnvironment(envFile string) error {
 		}
 	}
 
-	result := validateEnvironmentValues(effectiveValues)
+	result := validateEnv(effectiveValues)
 	if len(result.Errors) > 0 || len(result.Missing) > 0 || len(result.Blocked) > 0 {
 		for _, key := range criticalDeployEnvironmentKeys() {
 			if _, ok := overrides[key]; ok {
