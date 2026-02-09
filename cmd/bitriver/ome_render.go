@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"bitriver-live/internal/stringsutil"
 )
 
 // OME rendering is isolated in this file because it is the most implementation-
@@ -131,7 +133,7 @@ var omeTestDefaults = map[string]string{
 }
 
 func resolveOMECanonicalAccessToken(values map[string]string) string {
-	return firstNonEmpty(
+	return stringsutil.FirstNonEmpty(
 		strings.TrimSpace(values["BITRIVER_OME_HEALTHCHECK_TOKEN"]),
 		strings.TrimSpace(values["BITRIVER_OME_ACCESS_TOKEN"]),
 		strings.TrimSpace(values["BITRIVER_OME_API_TOKEN"]),
@@ -143,17 +145,17 @@ func buildOMERenderConfig(values map[string]string, templatePath, outputPath str
 		return omeRenderConfig{}, fmt.Errorf("OME template missing at %s: %w", templatePath, err)
 	}
 
-	bind := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_BIND"]), "0.0.0.0")
-	port := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_SERVER_PORT"]), "9000")
-	tlsPort := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_SERVER_TLS_PORT"]), "9443")
-	httpPort := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_HTTP_PORT"]), "8081")
-	httpTLSPort := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_HTTP_TLS_PORT"]), "8082")
-	llhlsPort := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_LLHLS_PORT"]), "8080")
-	llhlsTLSPort := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_LLHLS_TLS_PORT"]), "8443")
-	ip := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_IP"]), bind)
-	imageTag := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_IMAGE_TAG"]), "0.16.0")
-	icePortRange := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_ICE_PORT_RANGE"]), "10000-10009")
-	tcpRelay := firstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_TCP_RELAY"]), strings.TrimSpace(values["BITRIVER_OME_RELAY_PORT"]), "3478")
+	bind := stringsutil.FirstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_BIND"]), "0.0.0.0")
+	port := stringsutil.FirstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_SERVER_PORT"]), "9000")
+	tlsPort := stringsutil.FirstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_SERVER_TLS_PORT"]), "9443")
+	httpPort := stringsutil.FirstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_HTTP_PORT"]), "8081")
+	httpTLSPort := stringsutil.FirstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_HTTP_TLS_PORT"]), "8082")
+	llhlsPort := stringsutil.FirstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_LLHLS_PORT"]), "8080")
+	llhlsTLSPort := stringsutil.FirstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_LLHLS_TLS_PORT"]), "8443")
+	ip := stringsutil.FirstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_IP"]), bind)
+	imageTag := stringsutil.FirstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_IMAGE_TAG"]), "0.16.0")
+	icePortRange := stringsutil.FirstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_ICE_PORT_RANGE"]), "10000-10009")
+	tcpRelay := stringsutil.FirstNonEmpty(strings.TrimSpace(values["BITRIVER_OME_TCP_RELAY"]), strings.TrimSpace(values["BITRIVER_OME_RELAY_PORT"]), "3478")
 	if !strings.Contains(tcpRelay, ":") {
 		tcpRelay = "*:" + strings.Trim(tcpRelay, "*:")
 	}
@@ -534,8 +536,8 @@ func rewriteOMEConfig(text string, cfg omeRenderConfig, _ omeTemplateInfo) (stri
 	bindValue := xmlEscape(cfg.Bind)
 	signallingPortValue := xmlEscape(cfg.Port)
 	signallingTLSPortValue := xmlEscape(cfg.TLSPort)
-	httpPortValue := xmlEscape(firstNonEmpty(cfg.HTTPPort, "8081"))
-	httpTLSPortValue := xmlEscape(firstNonEmpty(cfg.HTTPTLSPort, "8082"))
+	httpPortValue := xmlEscape(stringsutil.FirstNonEmpty(cfg.HTTPPort, "8081"))
+	httpTLSPortValue := xmlEscape(stringsutil.FirstNonEmpty(cfg.HTTPTLSPort, "8082"))
 	llhlsPortValue := xmlEscape(cfg.LLHLSPort)
 	llhlsTLSPortValue := xmlEscape(cfg.LLHLSTLSPort)
 	serverIPValue := xmlEscape(cfg.ServerIP)

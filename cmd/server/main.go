@@ -30,6 +30,7 @@ import (
 	"bitriver-live/internal/observability/tracing"
 	"bitriver-live/internal/server"
 	"bitriver-live/internal/storage"
+	"bitriver-live/internal/stringsutil"
 )
 
 // keyValueFlag captures key=value flag inputs for per-provider OAuth overrides.
@@ -171,7 +172,7 @@ func main() {
 	flag.Var(&oauthRedirects, "oauth-redirect-url", "override OAuth redirect URL (provider=value)")
 	flag.Parse()
 
-	logger := logging.Init(logging.Config{Level: firstNonEmpty(*logLevel, os.Getenv("BITRIVER_LIVE_LOG_LEVEL")), Format: string(logging.FormatJSON)})
+	logger := logging.Init(logging.Config{Level: stringsutil.FirstNonEmpty(*logLevel, os.Getenv("BITRIVER_LIVE_LOG_LEVEL")), Format: string(logging.FormatJSON)})
 	auditLogger := logging.WithComponent(logger, "audit")
 	registry := metrics.NewRegistry()
 	recorder := registry.Recorder
@@ -202,9 +203,9 @@ func main() {
 		logger.Error("invalid server mode", "error", err)
 		os.Exit(2)
 	}
-	otelEndpointValue := firstNonEmpty(*otelEndpoint, os.Getenv("BITRIVER_LIVE_OTEL_EXPORTER_OTLP_ENDPOINT"), os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	otelEndpointValue := stringsutil.FirstNonEmpty(*otelEndpoint, os.Getenv("BITRIVER_LIVE_OTEL_EXPORTER_OTLP_ENDPOINT"), os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
 	otelSampleRatioValue := resolveSampleRatio(*otelSampleRatio, os.Getenv("BITRIVER_LIVE_OTEL_SAMPLE_RATIO"), os.Getenv("OTEL_TRACES_SAMPLER_ARG"), logger)
-	environmentValue := firstNonEmpty(os.Getenv("BITRIVER_LIVE_ENVIRONMENT"), string(serverMode))
+	environmentValue := stringsutil.FirstNonEmpty(os.Getenv("BITRIVER_LIVE_ENVIRONMENT"), string(serverMode))
 	tracingProvider := tracing.NewProvider(tracing.Config{
 		ServiceName: "bitriver-live-api",
 		Environment: environmentValue,
@@ -228,10 +229,10 @@ func main() {
 	sessionCookieCrossSiteValue := resolveBool(*sessionCookieCrossSite, "BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE")
 	sessionCookieSecureMode := resolveSessionCookieSecureMode(serverMode)
 	listenAddr := resolveListenAddr(*addr, serverMode, os.Getenv("BITRIVER_LIVE_ADDR"))
-	envFilePath := strings.TrimSpace(firstNonEmpty(*envFile, os.Getenv("BITRIVER_LIVE_ENV_FILE")))
+	envFilePath := strings.TrimSpace(stringsutil.FirstNonEmpty(*envFile, os.Getenv("BITRIVER_LIVE_ENV_FILE")))
 
-	tlsCertPath := firstNonEmpty(*tlsCert, os.Getenv("BITRIVER_LIVE_TLS_CERT"))
-	tlsKeyPath := firstNonEmpty(*tlsKey, os.Getenv("BITRIVER_LIVE_TLS_KEY"))
+	tlsCertPath := stringsutil.FirstNonEmpty(*tlsCert, os.Getenv("BITRIVER_LIVE_TLS_CERT"))
+	tlsKeyPath := stringsutil.FirstNonEmpty(*tlsKey, os.Getenv("BITRIVER_LIVE_TLS_KEY"))
 
 	viewerURL, err := resolveViewerOrigin(*viewerOrigin, os.Getenv("BITRIVER_VIEWER_ORIGIN"))
 	if err != nil {
@@ -240,17 +241,17 @@ func main() {
 	}
 
 	corsConfig := server.CORSConfig{
-		AdminOrigins:  splitAndTrim(firstNonEmpty(*adminCORSOrigins, os.Getenv("BITRIVER_LIVE_ADMIN_CORS_ORIGINS"))),
-		ViewerOrigins: splitAndTrim(firstNonEmpty(*viewerCORSOrigins, os.Getenv("BITRIVER_LIVE_VIEWER_CORS_ORIGINS"))),
+		AdminOrigins:  splitAndTrim(stringsutil.FirstNonEmpty(*adminCORSOrigins, os.Getenv("BITRIVER_LIVE_ADMIN_CORS_ORIGINS"))),
+		ViewerOrigins: splitAndTrim(stringsutil.FirstNonEmpty(*viewerCORSOrigins, os.Getenv("BITRIVER_LIVE_VIEWER_CORS_ORIGINS"))),
 	}
 
 	securityCfg := server.SecurityConfig{
-		ContentSecurityPolicy: firstNonEmpty(*securityCSP, os.Getenv("BITRIVER_LIVE_SECURITY_CSP")),
-		FrameAncestors:        firstNonEmpty(*securityFrameAncestors, os.Getenv("BITRIVER_LIVE_SECURITY_FRAME_ANCESTORS")),
-		FrameOptions:          firstNonEmpty(*securityFrameOptions, os.Getenv("BITRIVER_LIVE_SECURITY_FRAME_OPTIONS")),
-		ReferrerPolicy:        firstNonEmpty(*securityReferrerPolicy, os.Getenv("BITRIVER_LIVE_SECURITY_REFERRER_POLICY")),
-		PermissionsPolicy:     firstNonEmpty(*securityPermissionsPolicy, os.Getenv("BITRIVER_LIVE_SECURITY_PERMISSIONS_POLICY")),
-		ContentTypeOptions:    firstNonEmpty(*securityContentTypeOptions, os.Getenv("BITRIVER_LIVE_SECURITY_CONTENT_TYPE_OPTIONS")),
+		ContentSecurityPolicy: stringsutil.FirstNonEmpty(*securityCSP, os.Getenv("BITRIVER_LIVE_SECURITY_CSP")),
+		FrameAncestors:        stringsutil.FirstNonEmpty(*securityFrameAncestors, os.Getenv("BITRIVER_LIVE_SECURITY_FRAME_ANCESTORS")),
+		FrameOptions:          stringsutil.FirstNonEmpty(*securityFrameOptions, os.Getenv("BITRIVER_LIVE_SECURITY_FRAME_OPTIONS")),
+		ReferrerPolicy:        stringsutil.FirstNonEmpty(*securityReferrerPolicy, os.Getenv("BITRIVER_LIVE_SECURITY_REFERRER_POLICY")),
+		PermissionsPolicy:     stringsutil.FirstNonEmpty(*securityPermissionsPolicy, os.Getenv("BITRIVER_LIVE_SECURITY_PERMISSIONS_POLICY")),
+		ContentTypeOptions:    stringsutil.FirstNonEmpty(*securityContentTypeOptions, os.Getenv("BITRIVER_LIVE_SECURITY_CONTENT_TYPE_OPTIONS")),
 	}
 
 	ingestConfig, ingestErr := ingest.LoadConfigFromEnv()
@@ -319,14 +320,14 @@ func main() {
 	}
 
 	objectCfg := storage.ObjectStorageConfig{
-		Endpoint:       firstNonEmpty(*objectEndpoint, os.Getenv("BITRIVER_LIVE_OBJECT_ENDPOINT")),
-		Region:         firstNonEmpty(*objectRegion, os.Getenv("BITRIVER_LIVE_OBJECT_REGION")),
-		AccessKey:      firstNonEmpty(*objectAccessKey, os.Getenv("BITRIVER_LIVE_OBJECT_ACCESS_KEY")),
-		SecretKey:      firstNonEmpty(*objectSecretKey, os.Getenv("BITRIVER_LIVE_OBJECT_SECRET_KEY")),
-		Bucket:         firstNonEmpty(*objectBucket, os.Getenv("BITRIVER_LIVE_OBJECT_BUCKET")),
+		Endpoint:       stringsutil.FirstNonEmpty(*objectEndpoint, os.Getenv("BITRIVER_LIVE_OBJECT_ENDPOINT")),
+		Region:         stringsutil.FirstNonEmpty(*objectRegion, os.Getenv("BITRIVER_LIVE_OBJECT_REGION")),
+		AccessKey:      stringsutil.FirstNonEmpty(*objectAccessKey, os.Getenv("BITRIVER_LIVE_OBJECT_ACCESS_KEY")),
+		SecretKey:      stringsutil.FirstNonEmpty(*objectSecretKey, os.Getenv("BITRIVER_LIVE_OBJECT_SECRET_KEY")),
+		Bucket:         stringsutil.FirstNonEmpty(*objectBucket, os.Getenv("BITRIVER_LIVE_OBJECT_BUCKET")),
 		UseSSL:         resolveBool(*objectUseSSL, "BITRIVER_LIVE_OBJECT_USE_SSL"),
-		Prefix:         strings.TrimSpace(firstNonEmpty(*objectPrefix, os.Getenv("BITRIVER_LIVE_OBJECT_PREFIX"))),
-		PublicEndpoint: firstNonEmpty(*objectPublicEndpoint, os.Getenv("BITRIVER_LIVE_OBJECT_PUBLIC_ENDPOINT")),
+		Prefix:         strings.TrimSpace(stringsutil.FirstNonEmpty(*objectPrefix, os.Getenv("BITRIVER_LIVE_OBJECT_PREFIX"))),
+		PublicEndpoint: stringsutil.FirstNonEmpty(*objectPublicEndpoint, os.Getenv("BITRIVER_LIVE_OBJECT_PUBLIC_ENDPOINT")),
 		LifecycleDays:  resolveInt(*objectLifecycleDays, "BITRIVER_LIVE_OBJECT_LIFECYCLE_DAYS"),
 	}
 	if objectCfg.Endpoint != "" || objectCfg.Bucket != "" || objectCfg.PublicEndpoint != "" || objectCfg.Prefix != "" || objectCfg.Region != "" || objectCfg.AccessKey != "" || objectCfg.SecretKey != "" || objectCfg.LifecycleDays > 0 || objectCfg.UseSSL {
@@ -378,7 +379,7 @@ func main() {
 		if acquireTimeout > 0 {
 			pgOptions = append(pgOptions, storage.WithPostgresAcquireTimeout(acquireTimeout))
 		}
-		appName := firstNonEmpty(*postgresAppName, os.Getenv("BITRIVER_LIVE_POSTGRES_APP_NAME"))
+		appName := stringsutil.FirstNonEmpty(*postgresAppName, os.Getenv("BITRIVER_LIVE_POSTGRES_APP_NAME"))
 		if appName != "" {
 			pgOptions = append(pgOptions, storage.WithPostgresApplicationName(appName))
 		}
@@ -449,19 +450,19 @@ func main() {
 	sessions := auth.NewSessionManager(sessionAbsoluteTTL, sessionOptions...)
 	mfaChallenges := auth.NewMFAChallengeManager(0, auth.WithMFAChallengeStore(mfaChallengeStore))
 	chatQueueCfg := chat.RedisQueueConfig{
-		Addr:       firstNonEmpty(*chatRedisAddr, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR")),
-		Addrs:      splitAndTrim(firstNonEmpty(*chatRedisAddrs, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDRS"))),
-		Username:   firstNonEmpty(*chatRedisUsername, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_USERNAME")),
-		Password:   firstNonEmpty(*chatRedisPassword, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD")),
-		Stream:     firstNonEmpty(*chatRedisStream, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_STREAM")),
-		Group:      firstNonEmpty(*chatRedisGroup, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_GROUP")),
-		MasterName: firstNonEmpty(*chatRedisMasterName, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_SENTINEL_MASTER")),
+		Addr:       stringsutil.FirstNonEmpty(*chatRedisAddr, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR")),
+		Addrs:      splitAndTrim(stringsutil.FirstNonEmpty(*chatRedisAddrs, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDRS"))),
+		Username:   stringsutil.FirstNonEmpty(*chatRedisUsername, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_USERNAME")),
+		Password:   stringsutil.FirstNonEmpty(*chatRedisPassword, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD")),
+		Stream:     stringsutil.FirstNonEmpty(*chatRedisStream, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_STREAM")),
+		Group:      stringsutil.FirstNonEmpty(*chatRedisGroup, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_GROUP")),
+		MasterName: stringsutil.FirstNonEmpty(*chatRedisMasterName, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_SENTINEL_MASTER")),
 		PoolSize:   resolveInt(*chatRedisPoolSize, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_POOL_SIZE"),
 		TLS: chat.RedisTLSConfig{
-			CAFile:             firstNonEmpty(*chatRedisTLSCA, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_CA")),
-			CertFile:           firstNonEmpty(*chatRedisTLSCert, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_CERT")),
-			KeyFile:            firstNonEmpty(*chatRedisTLSKey, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_KEY")),
-			ServerName:         firstNonEmpty(*chatRedisTLSServerName, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_SERVER_NAME")),
+			CAFile:             stringsutil.FirstNonEmpty(*chatRedisTLSCA, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_CA")),
+			CertFile:           stringsutil.FirstNonEmpty(*chatRedisTLSCert, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_CERT")),
+			KeyFile:            stringsutil.FirstNonEmpty(*chatRedisTLSKey, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_KEY")),
+			ServerName:         stringsutil.FirstNonEmpty(*chatRedisTLSServerName, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_SERVER_NAME")),
 			InsecureSkipVerify: resolveBool(*chatRedisTLSSkipVerify, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_SKIP_VERIFY"),
 		},
 	}
@@ -512,27 +513,27 @@ func main() {
 		LoginWindow:            resolveDuration(*loginWindow, "BITRIVER_LIVE_RATE_LOGIN_WINDOW", time.Minute),
 		RequireLoginProtection: requiresLoginProtection(serverMode),
 		TrustForwardedHeaders:  resolveBool(*trustForwarded, "BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS"),
-		TrustedProxies:         splitAndTrim(firstNonEmpty(*trustedProxies, os.Getenv("BITRIVER_LIVE_RATE_TRUSTED_PROXIES"))),
-		RedisAddr:              firstNonEmpty(*redisAddr, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDR")),
-		RedisAddrs:             splitAndTrim(firstNonEmpty(*redisAddrs, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDRS"))),
-		RedisUsername:          firstNonEmpty(*redisUsername, os.Getenv("BITRIVER_LIVE_RATE_REDIS_USERNAME")),
-		RedisPassword:          firstNonEmpty(*redisPassword, os.Getenv("BITRIVER_LIVE_RATE_REDIS_PASSWORD")),
-		RedisMasterName:        firstNonEmpty(*redisMasterName, os.Getenv("BITRIVER_LIVE_RATE_REDIS_MASTER_NAME")),
+		TrustedProxies:         splitAndTrim(stringsutil.FirstNonEmpty(*trustedProxies, os.Getenv("BITRIVER_LIVE_RATE_TRUSTED_PROXIES"))),
+		RedisAddr:              stringsutil.FirstNonEmpty(*redisAddr, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDR")),
+		RedisAddrs:             splitAndTrim(stringsutil.FirstNonEmpty(*redisAddrs, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDRS"))),
+		RedisUsername:          stringsutil.FirstNonEmpty(*redisUsername, os.Getenv("BITRIVER_LIVE_RATE_REDIS_USERNAME")),
+		RedisPassword:          stringsutil.FirstNonEmpty(*redisPassword, os.Getenv("BITRIVER_LIVE_RATE_REDIS_PASSWORD")),
+		RedisMasterName:        stringsutil.FirstNonEmpty(*redisMasterName, os.Getenv("BITRIVER_LIVE_RATE_REDIS_MASTER_NAME")),
 		RedisTimeout:           resolveDuration(*redisTimeout, "BITRIVER_LIVE_RATE_REDIS_TIMEOUT", 2*time.Second),
 		RedisPoolSize:          resolveInt(*redisPoolSize, "BITRIVER_LIVE_RATE_REDIS_POOL_SIZE"),
 		RedisTLS: server.RedisTLSConfig{
-			CAFile:             firstNonEmpty(*redisTLSCA, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_CA")),
-			CertFile:           firstNonEmpty(*redisTLSCert, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_CERT")),
-			KeyFile:            firstNonEmpty(*redisTLSKey, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_KEY")),
-			ServerName:         firstNonEmpty(*redisTLSServerName, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_SERVER_NAME")),
+			CAFile:             stringsutil.FirstNonEmpty(*redisTLSCA, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_CA")),
+			CertFile:           stringsutil.FirstNonEmpty(*redisTLSCert, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_CERT")),
+			KeyFile:            stringsutil.FirstNonEmpty(*redisTLSKey, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_KEY")),
+			ServerName:         stringsutil.FirstNonEmpty(*redisTLSServerName, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_SERVER_NAME")),
 			InsecureSkipVerify: resolveBool(*redisTLSSkipVerify, "BITRIVER_LIVE_RATE_REDIS_TLS_SKIP_VERIFY"),
 		},
 	}
 	handler.TrustedProxies = rateCfg.TrustedProxies
 
 	metricsAccessCfg := server.MetricsAccessConfig{
-		Token:           firstNonEmpty(*metricsToken, os.Getenv("BITRIVER_LIVE_METRICS_TOKEN")),
-		AllowedNetworks: splitAndTrim(firstNonEmpty(*metricsAllowNetworks, os.Getenv("BITRIVER_LIVE_METRICS_ALLOW_NETWORKS"))),
+		Token:           stringsutil.FirstNonEmpty(*metricsToken, os.Getenv("BITRIVER_LIVE_METRICS_TOKEN")),
+		AllowedNetworks: splitAndTrim(stringsutil.FirstNonEmpty(*metricsAllowNetworks, os.Getenv("BITRIVER_LIVE_METRICS_ALLOW_NETWORKS"))),
 	}
 
 	requireMetricsProtection := requiresMetricsProtection(serverMode)
@@ -818,7 +819,7 @@ func resolveSessionStoreConfig(flagDriver, envDriver, storageDriver, storageDSN,
 		driver = strings.ToLower(strings.TrimSpace(envDriver))
 	}
 
-	sessionDSN := strings.TrimSpace(firstNonEmpty(flagDSN, envDSN))
+	sessionDSN := strings.TrimSpace(stringsutil.FirstNonEmpty(flagDSN, envDSN))
 	if driver == "" {
 		switch {
 		case sessionDSN != "":
@@ -1088,7 +1089,7 @@ func resolveDataPath(flagValue, envValue string) string {
 
 // resolvePostgresDSN resolves postgres dsn from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolvePostgresDSN(flagValue string) string {
-	return strings.TrimSpace(firstNonEmpty(flagValue, os.Getenv("BITRIVER_LIVE_POSTGRES_DSN"), os.Getenv("DATABASE_URL")))
+	return strings.TrimSpace(stringsutil.FirstNonEmpty(flagValue, os.Getenv("BITRIVER_LIVE_POSTGRES_DSN"), os.Getenv("DATABASE_URL")))
 }
 
 // resolveViewerOrigin resolves viewer origin from flags and environment values, returning validation errors when incompatible settings are provided.
@@ -1108,17 +1109,6 @@ func resolveViewerOrigin(flagValue, envValue string) (*url.URL, error) {
 		return nil, fmt.Errorf("viewer origin must include scheme and host")
 	}
 	return parsed, nil
-}
-
-// firstNonEmpty returns the first non-empty value from the provided candidates.
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		trimmed := strings.TrimSpace(value)
-		if trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }
 
 var sslModeDisablePattern = regexp.MustCompile(`(?i)(^|[?&\s;])sslmode=disable([&#;\s]|$)`)

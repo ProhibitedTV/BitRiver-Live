@@ -30,6 +30,7 @@ import (
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/observability/tracing"
 	"bitriver-live/internal/serverutil"
+	"bitriver-live/internal/stringsutil"
 )
 
 type rendition struct {
@@ -242,7 +243,7 @@ func main() {
 	token := strings.TrimSpace(os.Getenv("JOB_CONTROLLER_TOKEN"))
 	logger := logging.WithComponent(logging.Init(logging.Config{Format: string(logging.FormatJSON)}), "transcoder")
 	registry := metrics.NewRegistry()
-	otelEndpoint := firstNonEmpty(
+	otelEndpoint := stringsutil.FirstNonEmpty(
 		os.Getenv("BITRIVER_LIVE_OTEL_EXPORTER_OTLP_ENDPOINT"),
 		os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 	)
@@ -1837,16 +1838,6 @@ func envOrDefault(key, fallback string) string {
 		return val
 	}
 	return fallback
-}
-
-// firstNonEmpty returns the first non-empty value from the provided candidates.
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }
 
 // parseSampleRatio parses sample ratio and returns an error when the input is malformed.

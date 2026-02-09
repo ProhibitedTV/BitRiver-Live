@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"bitriver-live/internal/envutil"
+	"bitriver-live/internal/stringsutil"
 )
 
 // This file contains environment template helpers, secret generation, and
@@ -244,7 +245,7 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 	}
 
 	if val := existing["BITRIVER_REDIS_PASSWORD"]; val != "" && !isForbiddenValue("BITRIVER_REDIS_PASSWORD", val) {
-		generated["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"] = firstNonEmpty(existing["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"], val)
+		generated["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"] = stringsutil.FirstNonEmpty(existing["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"], val)
 		delete(newlyGenerated, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD")
 	} else {
 		generated["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"] = generated["BITRIVER_REDIS_PASSWORD"]
@@ -696,15 +697,6 @@ func validatePort(value, name string) string {
 		return fmt.Sprintf("%s must be a valid TCP port number (current: %s)", name, value)
 	}
 
-	return ""
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
 	return ""
 }
 
