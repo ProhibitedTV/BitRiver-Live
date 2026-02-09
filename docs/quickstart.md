@@ -230,7 +230,7 @@ If Docker Desktop fails to accept Compose traffic from WSL, you may see `http2: 
      grep -n "BITRIVER_OME_IMAGE_TAG" deploy/ome/Server.generated.xml
      rg --heading "AccessToken" deploy/ome/Server.generated.xml
      ```
-     Only restart `docker compose up -d bitriver-ome` after both checks pass.
+     Only restart `docker compose up -d ome` after both checks pass (Compose service name is `ome`; `bitriver-ome` is the container name).
 - **Reading OME startup logs after template fixes** – Quickstart reruns should show the standard OME banner, FFmpeg and version
   lines, STUN public IP resolution, a burst of ICE candidate logs, and the `All modules are initialized successfully` marker
   followed by `Create HostMetrics...` and `Create ApplicationMetrics(#default#live...)`. You should no longer see
