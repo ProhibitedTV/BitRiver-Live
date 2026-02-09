@@ -1144,6 +1144,79 @@ func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 	}
 }
 
+func TestRunQuickstartAllowsDeprecatedOMEHealthcheckAuthModes(t *testing.T) {
+	restored := map[string]string{}
+	for _, entry := range os.Environ() {
+		parts := strings.SplitN(entry, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		if !strings.HasPrefix(key, "BITRIVER_") {
+			continue
+		}
+		restored[key] = parts[1]
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatalf("unset %s: %v", key, err)
+		}
+	}
+	t.Cleanup(func() {
+		for key, value := range restored {
+			_ = os.Setenv(key, value)
+		}
+	})
+
+	for _, mode := range []string{"token", "token+basic"} {
+		t.Run(mode, func(t *testing.T) {
+			envPath := filepath.Join(t.TempDir(), ".env")
+			composePath := filepath.Join(t.TempDir(), "compose.yml")
+			envContent := strings.Join([]string{
+				"BITRIVER_OME_HEALTHCHECK_AUTH_MODE=" + mode,
+				"BITRIVER_LIVE_ADMIN_EMAIL=admin@example.com",
+				"BITRIVER_LIVE_ADMIN_PASSWORD=supersecret",
+			}, "\n") + "\n"
+			if err := os.WriteFile(envPath, []byte(envContent), 0o644); err != nil {
+				t.Fatalf("write env: %v", err)
+			}
+
+			originalDoctor := doctorRunner
+			originalEnvInit := envInitRunner
+			originalEnvValidate := envValidateRunner
+			originalOMERunner := omeRunner
+			originalMigrations := migrationsRunner
+			originalCompose := composeUpRunner
+			originalWaiter := quickstartWaiter
+			originalComposeHealthWaiter := quickstartComposeHealthWaiter
+			originalBootstrap := bootstrapAdminRunner
+			t.Cleanup(func() {
+				doctorRunner = originalDoctor
+				envInitRunner = originalEnvInit
+				envValidateRunner = originalEnvValidate
+				omeRunner = originalOMERunner
+				migrationsRunner = originalMigrations
+				composeUpRunner = originalCompose
+				quickstartWaiter = originalWaiter
+				quickstartComposeHealthWaiter = originalComposeHealthWaiter
+				bootstrapAdminRunner = originalBootstrap
+			})
+
+			doctorRunner = func([]string) bool { return true }
+			envInitRunner = runEnvInit
+			envValidateRunner = runEnvValidate
+			omeRunner = func([]string) error { return nil }
+			migrationsRunner = func(string, string) error { return nil }
+			composeUpRunner = func([]string) error { return nil }
+			quickstartWaiter = func(map[string]string) error { return nil }
+			quickstartComposeHealthWaiter = func(string, string) error { return nil }
+			bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
+
+			if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
+				t.Fatalf("expected quickstart to allow deprecated mode %q, got %v", mode, err)
+			}
+		})
+	}
+}
+
 func TestRunQuickstartRejectsInvalidOMEHealthcheckAuthModeBeforeInit(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), ".env")
 	composePath := filepath.Join(t.TempDir(), "compose.yml")

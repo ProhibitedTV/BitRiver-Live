@@ -1,7 +1,7 @@
 #!/bin/sh
-set -euo pipefail
+set -eu
 
-script_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd -P)
+script_dir=$(CDPATH=; cd -- "$(dirname "$0")" && pwd -P)
 assets_default="$script_dir/../share/bitriver-live"
 assets_dir=${BITRIVER_LAUNCHER_ROOT:-$assets_default}
 compose_file="$assets_dir/deploy/docker-compose.yml"

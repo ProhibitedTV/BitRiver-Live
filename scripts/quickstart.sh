@@ -28,7 +28,6 @@ while (($# > 0)); do
       exit 1
       ;;
   esac
-  shift
 done
 
 if ! command -v go >/dev/null 2>&1; then
