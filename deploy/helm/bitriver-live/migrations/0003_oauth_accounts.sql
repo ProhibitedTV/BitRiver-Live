@@ -1,3 +1,7 @@
+-- GENERATED FILE: DO NOT EDIT DIRECTLY
+-- Canonical source: deploy/migrations/0003_oauth_accounts.sql
+-- Regenerate with: ./scripts/sync-helm-deploy-assets.sh
+
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS oauth_accounts (

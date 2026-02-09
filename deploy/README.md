@@ -9,6 +9,7 @@ This directory contains everything used to start BitRiver Live locally (Docker C
 - `ome/Server.xml` – Source OvenMediaEngine config template. `./scripts/quickstart.sh` renders it into `ome/Server.generated.xml`; edit the template, not the generated file.
 - `srs/` – Stock SRS configuration template plus the generated file rendered from `.env` for Compose/systemd.
 - `migrations/` – Canonical SQL migrations for the API database.
+- `helm/bitriver-live/files/srs.conf` and `helm/bitriver-live/migrations/*.sql` – Generated Helm copies synced from canonical `deploy/srs/conf/srs.conf` and `deploy/migrations/` via `./scripts/sync-helm-deploy-assets.sh` (do not edit generated files directly).
 - `install/` – Interactive installer and automation helpers for systemd deployments (see below).
 - `systemd/` – Unit files for running the services outside of Docker; see `systemd/README.md` for installation steps.
 
@@ -39,6 +40,26 @@ preserving repo-relative path resolution used by the script; keep shell scripts 
 
 Viewer self-registration is disabled by default so only administrators can add users. Toggle `BITRIVER_LIVE_ALLOW_SELF_SIGNUP`
 in `.env` and rerun `./deploy/check-env.sh` followed by `docker compose up -d` to reopen or close public signups.
+
+## Syncing canonical deploy assets into Helm
+Helm keeps generated copies of selected deploy artifacts so charts can be packaged self-contained, but the authoritative sources live outside the chart:
+
+- `deploy/srs/conf/srs.conf`
+- `deploy/migrations/*.sql`
+
+To refresh generated Helm copies after editing canonical files, run:
+
+```bash
+./scripts/sync-helm-deploy-assets.sh
+```
+
+To enforce drift detection in CI (or locally before commits), run:
+
+```bash
+./scripts/check-helm-deploy-assets-drift.sh
+```
+
+If drift is reported, re-run the sync command and commit the regenerated Helm files. Do not hand-edit `deploy/helm/bitriver-live/files/srs.conf` or `deploy/helm/bitriver-live/migrations/*.sql`.
 
 ### Image tags and digests
 

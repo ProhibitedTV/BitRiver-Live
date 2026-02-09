@@ -1,3 +1,7 @@
+-- GENERATED FILE: DO NOT EDIT DIRECTLY
+-- Canonical source: deploy/migrations/0001_initial.sql
+-- Regenerate with: ./scripts/sync-helm-deploy-assets.sh
+
 -- 0001_initial.sql
 --
 -- Establishes the relational schema that mirrors the entities defined in

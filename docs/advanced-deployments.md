@@ -63,7 +63,21 @@ The Helm chart under `deploy/helm/bitriver-live` mirrors the Compose stack (API,
    kubectl get pods
    ```
 
-The chart renders `Server.xml` for OME from `values.secrets`/`values.ome`, and it runs Postgres migrations as a pre-install/upgrade hook using the SQL files vendored under `deploy/helm/bitriver-live/migrations`. Keep those migrations in sync with `deploy/migrations` whenever schema changes land.
+The chart renders `Server.xml` for OME from `values.secrets`/`values.ome`, and it runs Postgres migrations as a pre-install/upgrade hook using generated SQL copies under `deploy/helm/bitriver-live/migrations`. Canonical migration sources remain in `deploy/migrations`, and canonical SRS config remains in `deploy/srs/conf/srs.conf`.
+
+After changing either canonical source set, run:
+
+```bash
+./scripts/sync-helm-deploy-assets.sh
+```
+
+Then validate there is no drift before shipping:
+
+```bash
+./scripts/check-helm-deploy-assets-drift.sh
+```
+
+Do not edit generated Helm files directly (`deploy/helm/bitriver-live/migrations/*.sql` and `deploy/helm/bitriver-live/files/srs.conf`); the sync step rewrites them and adds provenance headers automatically.
 
 Persistent volumes mirror Compose mounts: the API stores state under `/var/lib/bitriver-live`, Redis under `/data`, Postgres under `/var/lib/postgresql/data`, and the transcoder workspace under `/work`. Adjust `values.persistence.*` sizes and storage classes for your cluster.
 

@@ -1,3 +1,7 @@
+-- GENERATED FILE: DO NOT EDIT DIRECTLY
+-- Canonical source: deploy/migrations/0002_chat_filters.sql
+-- Regenerate with: ./scripts/sync-helm-deploy-assets.sh
+
 CREATE TABLE IF NOT EXISTS chat_filters (
     id TEXT PRIMARY KEY,
     channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
