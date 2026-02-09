@@ -26,6 +26,62 @@ on:
       - .github/workflows/quickstart-smoke.yml
 
 jobs:
+  quickstart-entrypoints:
+    name: Quickstart entrypoint sanity (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate quickstart.sh help and static checks
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          bash -n scripts/quickstart.sh
+          ./scripts/quickstart.sh --help
+          if ./scripts/quickstart.sh --definitely-not-a-real-flag; then
+            echo "Expected unknown-flag invocation to fail" >&2
+            exit 1
+          fi
+
+      - name: Run shellcheck for quickstart.sh
+        if: runner.os != 'Windows'
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: scripts
+          check_together: 'yes'
+          ignore_names: |
+            *.md
+
+      - name: Validate quickstart.ps1 help output
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: pwsh -File scripts/quickstart.ps1 -help
+
+      - name: Static validation for quickstart.ps1 helper usage
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $scriptText = Get-Content -Path scripts/quickstart.ps1 -Raw
+          $requiredSnippets = @(
+            'Ensure-Go',
+            'Ensure-DockerDesktopRunning',
+            'Invoke-Cli',
+            "Join-Path $CodeRoot 'deploy/docker-compose.yml'",
+            "quickstart', '--env-file', $EnvFile, '--compose-file', $ComposeFile"
+          )
+
+          foreach ($snippet in $requiredSnippets) {
+            if (-not $scriptText.Contains($snippet)) {
+              Write-Error "Missing expected quickstart.ps1 snippet: $snippet"
+            }
+          }
+
   quickstart-smoke:
     runs-on: ubuntu-latest
     steps:
