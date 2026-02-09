@@ -539,8 +539,8 @@ func runQuickstart(args []string) error {
 }
 
 func validateQuickstartOMEHealthcheckAuthMode(raw string) error {
-	mode := strings.ToLower(strings.TrimSpace(raw))
-	if mode == "" || mode == "accesstoken" || mode == "basic" {
+	mode := normalizedOMEHealthcheckAuthMode(raw)
+	if mode == "accesstoken" || mode == "basic" {
 		return nil
 	}
 

@@ -1030,6 +1030,56 @@ func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 	}
 }
 
+func TestRunQuickstartAcceptsDeprecatedOMEHealthcheckAuthModeAndPersistsNormalizedValue(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	composePath := filepath.Join(t.TempDir(), "compose.yml")
+	envContent := strings.Join([]string{
+		"BITRIVER_OME_HEALTHCHECK_AUTH_MODE=token+basic",
+		"BITRIVER_LIVE_ADMIN_EMAIL=admin@example.com",
+		"BITRIVER_LIVE_ADMIN_PASSWORD=supersecret",
+	}, "\n") + "\n"
+	if err := os.WriteFile(envPath, []byte(envContent), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+	if err := os.WriteFile(composePath, []byte("services: {}\n"), 0o644); err != nil {
+		t.Fatalf("write compose: %v", err)
+	}
+
+	originalDoctor := doctorRunner
+	originalOMERunner := omeRunner
+	originalMigrations := migrationsRunner
+	originalCompose := composeUpRunner
+	originalWaiter := quickstartWaiter
+	originalBootstrap := bootstrapAdminRunner
+	t.Cleanup(func() {
+		doctorRunner = originalDoctor
+		omeRunner = originalOMERunner
+		migrationsRunner = originalMigrations
+		composeUpRunner = originalCompose
+		quickstartWaiter = originalWaiter
+		bootstrapAdminRunner = originalBootstrap
+	})
+
+	doctorRunner = func([]string) bool { return true }
+	omeRunner = func([]string) error { return nil }
+	migrationsRunner = func(string, string) error { return nil }
+	composeUpRunner = func([]string) error { return nil }
+	quickstartWaiter = func(map[string]string) error { return nil }
+	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
+
+	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
+		t.Fatalf("quickstart failed: %v", err)
+	}
+
+	values, err := loadEnvValues(envPath, false)
+	if err != nil {
+		t.Fatalf("read env file: %v", err)
+	}
+	if values["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"] != "basic" {
+		t.Fatalf("expected normalized OME auth mode to persist as basic, got %q", values["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"])
+	}
+}
+
 func TestRunQuickstartRejectsInvalidOMEHealthcheckAuthModeBeforeInit(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), ".env")
 	composePath := filepath.Join(t.TempDir(), "compose.yml")
