@@ -1,21 +1,11 @@
 package api
 
 import (
-	"crypto/subtle"
 	"net/http"
 	"strings"
-)
 
-// constantTimeEqual performs constant time equal and propagates validation or dependency failures to the caller.
-func constantTimeEqual(expected, provided string) bool {
-	if expected == "" || provided == "" {
-		return false
-	}
-	if len(expected) != len(provided) {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(expected), []byte(provided)) == 1
-}
+	"bitriver-live/internal/security/tokenauth"
+)
 
 // srsHookAuthorized performs srs hook authorized and propagates validation or dependency failures to the caller.
 func (h *Handler) srsHookAuthorized(r *http.Request) bool {
@@ -24,16 +14,14 @@ func (h *Handler) srsHookAuthorized(r *http.Request) bool {
 		return false
 	}
 
-	if authHeader := strings.TrimSpace(r.Header.Get("Authorization")); authHeader != "" {
-		if parts := strings.SplitN(authHeader, " ", 2); len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
-			if constantTimeEqual(token, strings.TrimSpace(parts[1])) {
-				return true
-			}
+	if bearerToken, status := tokenauth.ParseBearerHeader(r.Header.Get("Authorization")); status == tokenauth.BearerHeaderValid {
+		if tokenauth.ConstantTimeEqual(token, bearerToken) {
+			return true
 		}
 	}
 
-	if queryToken := strings.TrimSpace(r.URL.Query().Get("token")); queryToken != "" {
-		if constantTimeEqual(token, queryToken) {
+	if queryToken, ok := tokenauth.QueryToken(r, "token"); ok {
+		if tokenauth.ConstantTimeEqual(token, queryToken) {
 			return true
 		}
 	}
