@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+SCRIPT_DIR=$(CDPATH=; cd -- "$(dirname -- "$0")" && pwd)
+REPO_ROOT=$(CDPATH=; cd -- "$SCRIPT_DIR/.." && pwd)
 ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env}"
 CONFIG_FILE="${CONFIG_FILE:-$REPO_ROOT/deploy/ome/Server.generated.xml}"
 

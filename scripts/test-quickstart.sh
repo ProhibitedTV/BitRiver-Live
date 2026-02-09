@@ -266,8 +266,8 @@ PY
 echo "Starting docker compose stack..."
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d
 
-# shellcheck disable=SC1090
 set -a
+# shellcheck disable=SC1090
 . "$ENV_FILE"
 set +a
 

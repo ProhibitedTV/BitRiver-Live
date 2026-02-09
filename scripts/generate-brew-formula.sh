@@ -1,5 +1,5 @@
 #!/bin/sh
-set -euo pipefail
+set -eu
 
 version="$1"
 arm_url="$2"
@@ -32,7 +32,7 @@ class BitriverLive < Formula
 
   def caveats
     <<~EOS
-      BitRiver Live launcher installs Docker Compose assets under \n#{share}\nUse `bitriver-live` to pull images and start the stack.
+      BitRiver Live launcher installs Docker Compose assets under \n#{share}\nUse bitriver-live to pull images and start the stack.
     EOS
   end
 end

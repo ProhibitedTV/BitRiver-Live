@@ -98,7 +98,7 @@ fi
 rendered="$(<"$TEMPLATE_FILE")"
 rendered="${rendered//\$\{BITRIVER_SRS_TOKEN\}/${BITRIVER_SRS_TOKEN}}"
 
-if [[ "$rendered" == *'${BITRIVER_SRS_TOKEN}'* ]]; then
+if [[ "$rendered" == *\$\{BITRIVER_SRS_TOKEN\}* ]]; then
   echo "Failed to render BITRIVER_SRS_TOKEN in $TEMPLATE_FILE" >&2
   exit 1
 fi
