@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -329,6 +331,7 @@ func runCompose(args []string) error {
 
 var commandRunner = executil.Run
 var quickstartWaiter = waitForAPIReadiness
+var quickstartComposeHealthWaiter = waitForComposeServiceHealth
 var bootstrapAdminRunner = runBootstrapAdmin
 var migrationsRunner = runMigrations
 var composeUpRunner = runComposeUp
@@ -530,6 +533,10 @@ func runQuickstart(args []string) error {
 		return fmt.Errorf("wait for API readiness: %w", err)
 	}
 
+	if err := quickstartComposeHealthWaiter(*composeFile, *envFile); err != nil {
+		return fmt.Errorf("wait for critical service health: %w", err)
+	}
+
 	if err := bootstrapAdminRunner(*composeFile, *envFile, envValues); err != nil {
 		return fmt.Errorf("bootstrap admin: %w", err)
 	}
@@ -589,6 +596,122 @@ func waitForAPIReadiness(values map[string]string) error {
 	}
 
 	return errors.New("API did not become ready before timeout")
+}
+
+type quickstartComposeServiceStatus struct {
+	Service string `json:"Service"`
+	Name    string `json:"Name"`
+	State   string `json:"State"`
+	Status  string `json:"Status"`
+	Health  string `json:"Health"`
+}
+
+var criticalComposeServices = []string{"bitriver-live", "ome", "srs", "srs-controller", "transcoder", "postgres", "redis"}
+
+var composePSRunner = runComposePS
+var composeHealthWaitTimeout = 2 * time.Minute
+var composeHealthPollInterval = 3 * time.Second
+
+func runComposePS(composeFile, envFile string) ([]byte, error) {
+	args := append(composeArgsWithEnv(composeFile, envFile), "ps", "--format", "json")
+	cmd := exec.Command("docker", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		trimmed := strings.TrimSpace(string(output))
+		if trimmed != "" {
+			return nil, fmt.Errorf("docker compose ps failed: %w: %s", err, trimmed)
+		}
+		return nil, fmt.Errorf("docker compose ps failed: %w", err)
+	}
+	return output, nil
+}
+
+func waitForComposeServiceHealth(composeFile, envFile string) error {
+	fmt.Fprintln(os.Stdout, "Waiting for critical Docker Compose services to report healthy...")
+	deadline := time.Now().Add(composeHealthWaitTimeout)
+	lastSummary := map[string]string{}
+
+	for time.Now().Before(deadline) {
+		output, err := composePSRunner(composeFile, envFile)
+		if err != nil {
+			return err
+		}
+
+		serviceStates, err := parseComposeServiceStates(output)
+		if err != nil {
+			return fmt.Errorf("parse docker compose ps output: %w", err)
+		}
+
+		allHealthy := true
+		for _, svc := range criticalComposeServices {
+			state, ok := serviceStates[svc]
+			if !ok {
+				allHealthy = false
+				lastSummary[svc] = "missing"
+				continue
+			}
+
+			health := strings.ToLower(strings.TrimSpace(state.Health))
+			currentState := strings.ToLower(strings.TrimSpace(state.State))
+			currentStatus := strings.TrimSpace(state.Status)
+			if currentStatus == "" {
+				currentStatus = currentState
+			}
+			lastSummary[svc] = currentStatus
+
+			if health == "unhealthy" || currentState == "exited" || currentState == "dead" {
+				return fmt.Errorf("critical service %q is %s (state=%s, health=%s); run `docker compose logs %s` for details", svc, currentStatus, currentState, health, svc)
+			}
+
+			if health != "healthy" {
+				allHealthy = false
+			}
+		}
+
+		if allHealthy {
+			fmt.Fprintln(os.Stdout, "Critical services are healthy.")
+			return nil
+		}
+
+		time.Sleep(composeHealthPollInterval)
+	}
+
+	var statusParts []string
+	for _, svc := range criticalComposeServices {
+		status := lastSummary[svc]
+		if status == "" {
+			status = "unknown"
+		}
+		statusParts = append(statusParts, fmt.Sprintf("%s=%s", svc, status))
+	}
+
+	return fmt.Errorf("critical services did not become healthy before timeout; last known states: %s", strings.Join(statusParts, ", "))
+}
+
+func parseComposeServiceStates(raw []byte) (map[string]quickstartComposeServiceStatus, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" {
+		return nil, errors.New("empty JSON payload")
+	}
+
+	var services []quickstartComposeServiceStatus
+	if err := json.Unmarshal([]byte(trimmed), &services); err != nil {
+		return nil, err
+	}
+
+	states := make(map[string]quickstartComposeServiceStatus, len(services))
+	for _, svc := range services {
+		key := strings.ToLower(strings.TrimSpace(svc.Service))
+		if key == "" {
+			key = strings.ToLower(strings.TrimSpace(svc.Name))
+		}
+		if key == "" {
+			continue
+		}
+		states[key] = svc
+	}
+
+	return states, nil
 }
 
 // resolveAPIPort resolves apiport from flags and environment values, returning validation errors when incompatible settings are provided.

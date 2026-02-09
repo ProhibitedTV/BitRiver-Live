@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func containsString(values []string, target string) bool {
@@ -896,6 +897,7 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	originalMigrations := migrationsRunner
 	originalCompose := composeUpRunner
 	originalWaiter := quickstartWaiter
+	originalComposeHealthWaiter := quickstartComposeHealthWaiter
 	originalBootstrap := bootstrapAdminRunner
 	t.Cleanup(func() {
 		doctorRunner = originalDoctor
@@ -905,6 +907,7 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 		migrationsRunner = originalMigrations
 		composeUpRunner = originalCompose
 		quickstartWaiter = originalWaiter
+		quickstartComposeHealthWaiter = originalComposeHealthWaiter
 		bootstrapAdminRunner = originalBootstrap
 	})
 	var calls []string
@@ -961,6 +964,16 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 		}
 		return nil
 	}
+	quickstartComposeHealthWaiter = func(composeFile, envFile string) error {
+		calls = append(calls, "health")
+		if composeFile != composePath {
+			t.Fatalf("health compose file = %s, want %s", composeFile, composePath)
+		}
+		if envFile != envPath {
+			t.Fatalf("health env file = %s, want %s", envFile, envPath)
+		}
+		return nil
+	}
 	bootstrapAdminRunner = func(composeFile, envFile string, values map[string]string) error {
 		calls = append(calls, "bootstrap")
 		if composeFile != composePath {
@@ -977,9 +990,107 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
 		t.Fatalf("quickstart failed: %v", err)
 	}
-	expectedCalls := []string{"doctor", "env-init", "env-validate", "ome", "migrations", "compose-up", "wait", "bootstrap"}
+	expectedCalls := []string{"doctor", "env-init", "env-validate", "ome", "migrations", "compose-up", "wait", "health", "bootstrap"}
 	if !reflect.DeepEqual(calls, expectedCalls) {
 		t.Fatalf("call order = %v, want %v", calls, expectedCalls)
+	}
+}
+
+func TestWaitForComposeServiceHealthHealthy(t *testing.T) {
+	originalRunner := composePSRunner
+	originalTimeout := composeHealthWaitTimeout
+	originalPollInterval := composeHealthPollInterval
+	t.Cleanup(func() {
+		composePSRunner = originalRunner
+		composeHealthWaitTimeout = originalTimeout
+		composeHealthPollInterval = originalPollInterval
+	})
+
+	composeHealthWaitTimeout = 100 * time.Millisecond
+	composeHealthPollInterval = time.Millisecond
+	composePSRunner = func(composeFile, envFile string) ([]byte, error) {
+		return []byte(`[
+			{"Service":"bitriver-live","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"ome","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"srs","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"srs-controller","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"transcoder","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"postgres","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"redis","State":"running","Health":"healthy","Status":"Up (healthy)"}
+		]`), nil
+	}
+
+	if err := waitForComposeServiceHealth("compose.yml", ".env"); err != nil {
+		t.Fatalf("waitForComposeServiceHealth failed: %v", err)
+	}
+}
+
+func TestWaitForComposeServiceHealthFailsOnUnhealthyService(t *testing.T) {
+	originalRunner := composePSRunner
+	originalTimeout := composeHealthWaitTimeout
+	originalPollInterval := composeHealthPollInterval
+	t.Cleanup(func() {
+		composePSRunner = originalRunner
+		composeHealthWaitTimeout = originalTimeout
+		composeHealthPollInterval = originalPollInterval
+	})
+
+	composeHealthWaitTimeout = 100 * time.Millisecond
+	composeHealthPollInterval = time.Millisecond
+	composePSRunner = func(composeFile, envFile string) ([]byte, error) {
+		return []byte(`[
+			{"Service":"bitriver-live","State":"running","Health":"unhealthy","Status":"Up (unhealthy)"},
+			{"Service":"ome","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"srs","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"srs-controller","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"transcoder","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"postgres","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"redis","State":"running","Health":"healthy","Status":"Up (healthy)"}
+		]`), nil
+	}
+
+	err := waitForComposeServiceHealth("compose.yml", ".env")
+	if err == nil {
+		t.Fatal("expected waitForComposeServiceHealth to fail for unhealthy service")
+	}
+	if !strings.Contains(err.Error(), "bitriver-live") {
+		t.Fatalf("expected error to mention unhealthy service, got %v", err)
+	}
+}
+
+func TestWaitForComposeServiceHealthTimesOutWithSummary(t *testing.T) {
+	originalRunner := composePSRunner
+	originalTimeout := composeHealthWaitTimeout
+	originalPollInterval := composeHealthPollInterval
+	t.Cleanup(func() {
+		composePSRunner = originalRunner
+		composeHealthWaitTimeout = originalTimeout
+		composeHealthPollInterval = originalPollInterval
+	})
+
+	composeHealthWaitTimeout = 15 * time.Millisecond
+	composeHealthPollInterval = time.Millisecond
+	composePSRunner = func(composeFile, envFile string) ([]byte, error) {
+		return []byte(`[
+			{"Service":"bitriver-live","State":"running","Health":"starting","Status":"Up (health: starting)"},
+			{"Service":"ome","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"srs","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"srs-controller","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"transcoder","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"postgres","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"redis","State":"running","Health":"healthy","Status":"Up (healthy)"}
+		]`), nil
+	}
+
+	err := waitForComposeServiceHealth("compose.yml", ".env")
+	if err == nil {
+		t.Fatal("expected waitForComposeServiceHealth to timeout")
+	}
+	if !strings.Contains(err.Error(), "did not become healthy before timeout") {
+		t.Fatalf("expected timeout message, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "bitriver-live=Up (health: starting)") {
+		t.Fatalf("expected last-known state summary in error, got %v", err)
 	}
 }
 func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
@@ -993,6 +1104,7 @@ func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 	originalMigrations := migrationsRunner
 	originalCompose := composeUpRunner
 	originalWaiter := quickstartWaiter
+	originalComposeHealthWaiter := quickstartComposeHealthWaiter
 	originalBootstrap := bootstrapAdminRunner
 	t.Cleanup(func() {
 		doctorRunner = originalDoctor
@@ -1000,6 +1112,7 @@ func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 		migrationsRunner = originalMigrations
 		composeUpRunner = originalCompose
 		quickstartWaiter = originalWaiter
+		quickstartComposeHealthWaiter = originalComposeHealthWaiter
 		bootstrapAdminRunner = originalBootstrap
 	})
 	doctorRunner = func([]string) bool { return true }
@@ -1007,6 +1120,7 @@ func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 	migrationsRunner = func(string, string) error { return nil }
 	composeUpRunner = func([]string) error { return nil }
 	quickstartWaiter = func(map[string]string) error { return nil }
+	quickstartComposeHealthWaiter = func(string, string) error { return nil }
 	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
 	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
 		t.Fatalf("quickstart failed on first run: %v", err)
@@ -1049,6 +1163,7 @@ func TestRunQuickstartRejectsInvalidOMEHealthcheckAuthModeBeforeInit(t *testing.
 	originalMigrations := migrationsRunner
 	originalCompose := composeUpRunner
 	originalWaiter := quickstartWaiter
+	originalComposeHealthWaiter := quickstartComposeHealthWaiter
 	originalBootstrap := bootstrapAdminRunner
 	t.Cleanup(func() {
 		doctorRunner = originalDoctor
@@ -1058,6 +1173,7 @@ func TestRunQuickstartRejectsInvalidOMEHealthcheckAuthModeBeforeInit(t *testing.
 		migrationsRunner = originalMigrations
 		composeUpRunner = originalCompose
 		quickstartWaiter = originalWaiter
+		quickstartComposeHealthWaiter = originalComposeHealthWaiter
 		bootstrapAdminRunner = originalBootstrap
 	})
 
@@ -1084,6 +1200,10 @@ func TestRunQuickstartRejectsInvalidOMEHealthcheckAuthModeBeforeInit(t *testing.
 	}
 	quickstartWaiter = func(map[string]string) error {
 		t.Fatal("waiter should not run when OME auth mode is invalid")
+		return nil
+	}
+	quickstartComposeHealthWaiter = func(string, string) error {
+		t.Fatal("health waiter should not run when OME auth mode is invalid")
 		return nil
 	}
 	bootstrapAdminRunner = func(string, string, map[string]string) error {
@@ -1120,6 +1240,7 @@ func TestRunQuickstartFirstRunInitPassesEnvValidationWindowsPath(t *testing.T) {
 	originalMigrations := migrationsRunner
 	originalCompose := composeUpRunner
 	originalWaiter := quickstartWaiter
+	originalComposeHealthWaiter := quickstartComposeHealthWaiter
 	originalBootstrap := bootstrapAdminRunner
 	t.Cleanup(func() {
 		doctorRunner = originalDoctor
@@ -1127,6 +1248,7 @@ func TestRunQuickstartFirstRunInitPassesEnvValidationWindowsPath(t *testing.T) {
 		migrationsRunner = originalMigrations
 		composeUpRunner = originalCompose
 		quickstartWaiter = originalWaiter
+		quickstartComposeHealthWaiter = originalComposeHealthWaiter
 		bootstrapAdminRunner = originalBootstrap
 	})
 	doctorRunner = func([]string) bool { return true }
@@ -1134,6 +1256,7 @@ func TestRunQuickstartFirstRunInitPassesEnvValidationWindowsPath(t *testing.T) {
 	migrationsRunner = func(string, string) error { return nil }
 	composeUpRunner = func([]string) error { return nil }
 	quickstartWaiter = func(map[string]string) error { return nil }
+	quickstartComposeHealthWaiter = func(string, string) error { return nil }
 	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
 	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
 		if strings.Contains(err.Error(), "BITRIVER_LIVE_MODE") {
@@ -1162,6 +1285,7 @@ func TestRunQuickstartFirstRunInitValidateKeepsLoopbackChecksAsWarnings(t *testi
 	originalMigrations := migrationsRunner
 	originalCompose := composeUpRunner
 	originalWaiter := quickstartWaiter
+	originalComposeHealthWaiter := quickstartComposeHealthWaiter
 	originalBootstrap := bootstrapAdminRunner
 	t.Cleanup(func() {
 		doctorRunner = originalDoctor
@@ -1171,6 +1295,7 @@ func TestRunQuickstartFirstRunInitValidateKeepsLoopbackChecksAsWarnings(t *testi
 		migrationsRunner = originalMigrations
 		composeUpRunner = originalCompose
 		quickstartWaiter = originalWaiter
+		quickstartComposeHealthWaiter = originalComposeHealthWaiter
 		bootstrapAdminRunner = originalBootstrap
 	})
 	doctorRunner = func([]string) bool { return true }
@@ -1180,6 +1305,7 @@ func TestRunQuickstartFirstRunInitValidateKeepsLoopbackChecksAsWarnings(t *testi
 	migrationsRunner = func(string, string) error { return nil }
 	composeUpRunner = func([]string) error { return nil }
 	quickstartWaiter = func(map[string]string) error { return nil }
+	quickstartComposeHealthWaiter = func(string, string) error { return nil }
 	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
 	if _, err := os.Stat(envPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected first run to start without env file, got stat err=%v", err)
