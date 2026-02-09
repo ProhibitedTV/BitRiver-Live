@@ -1,12 +1,15 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestProxyRequestForwardsToUpstream(t *testing.T) {
@@ -121,4 +124,105 @@ func TestResolveTargetPreservesQuery(t *testing.T) {
 	if target.String() != "http://example.com/api/v1/channels/123?expand=true" {
 		t.Fatalf("unexpected target: %s", target)
 	}
+}
+
+func TestHealthzColdStartUpstreamUnreachable(t *testing.T) {
+	upstreamURL, err := url.Parse("http://127.0.0.1:1/api/")
+	if err != nil {
+		t.Fatalf("parse upstream: %v", err)
+	}
+	ctrl := &controller{client: &http.Client{}, baseURL: upstreamURL}
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rr := httptest.NewRecorder()
+	ctrl.healthz(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", rr.Code)
+	}
+	payload := decodeHealthPayload(t, rr.Body.Bytes())
+	if payload["status"] != "degraded" {
+		t.Fatalf("expected degraded status, got %v", payload["status"])
+	}
+	if payload["upstreamError"] == nil {
+		t.Fatalf("expected upstreamError in payload")
+	}
+}
+
+func TestHealthzUpstreamReachable(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/versions" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	upstreamURL, err := url.Parse(upstream.URL + "/api/")
+	if err != nil {
+		t.Fatalf("parse upstream: %v", err)
+	}
+
+	ctrl := &controller{client: upstream.Client(), baseURL: upstreamURL}
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rr := httptest.NewRecorder()
+	ctrl.healthz(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	payload := decodeHealthPayload(t, rr.Body.Bytes())
+	if payload["status"] != "ok" {
+		t.Fatalf("expected ok status, got %v", payload["status"])
+	}
+}
+
+func TestHealthzTransientFailureRecovery(t *testing.T) {
+	var mode atomic.Int32
+	mode.Store(1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if mode.Load() == 0 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	upstreamURL, err := url.Parse(upstream.URL + "/api/")
+	if err != nil {
+		t.Fatalf("parse upstream: %v", err)
+	}
+	ctrl := &controller{client: upstream.Client(), baseURL: upstreamURL}
+
+	mode.Store(0)
+	first := httptest.NewRecorder()
+	ctrl.healthz(first, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if first.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected first probe 503, got %d", first.Code)
+	}
+
+	mode.Store(1)
+	ctrl.mu.Lock()
+	ctrl.lastProbeTime = time.Time{}
+	ctrl.mu.Unlock()
+
+	second := httptest.NewRecorder()
+	ctrl.healthz(second, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if second.Code != http.StatusOK {
+		t.Fatalf("expected recovered probe 200, got %d", second.Code)
+	}
+	payload := decodeHealthPayload(t, second.Body.Bytes())
+	if payload["status"] != "ok" {
+		t.Fatalf("expected ok status after recovery, got %v", payload["status"])
+	}
+}
+
+func decodeHealthPayload(t *testing.T, body []byte) map[string]any {
+	t.Helper()
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	return payload
 }

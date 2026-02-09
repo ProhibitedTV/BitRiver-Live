@@ -26,6 +26,7 @@ import (
 const (
 	defaultBind     = ":1985"
 	defaultUpstream = "http://localhost:1985/api/"
+	healthProbePath = "v1/versions"
 )
 
 type controller struct {
@@ -38,6 +39,8 @@ type controller struct {
 	lastUpstreamErr  error
 	lastUpstreamTime time.Time
 	lastSuccessTime  time.Time
+	lastProbeErr     error
+	lastProbeTime    time.Time
 }
 
 func main() {
@@ -202,29 +205,82 @@ func (c *controller) recordSuccess() {
 	c.lastSuccessTime = time.Now()
 }
 
-func (c *controller) healthz(w http.ResponseWriter, _ *http.Request) {
+func (c *controller) healthz(w http.ResponseWriter, r *http.Request) {
+	const (
+		probeTimeout  = 2 * time.Second
+		probeCacheTTL = 1 * time.Second
+	)
+
+	now := time.Now()
 	c.mu.Lock()
-	lastErr := c.lastUpstreamErr
-	errTime := c.lastUpstreamTime
+	probeErr := c.lastProbeErr
+	probeTime := c.lastProbeTime
+	lastProxyErr := c.lastUpstreamErr
+	lastProxyErrTime := c.lastUpstreamTime
 	lastSuccess := c.lastSuccessTime
 	c.mu.Unlock()
 
+	if probeTime.IsZero() || now.Sub(probeTime) > probeCacheTTL {
+		ctx, cancel := context.WithTimeout(r.Context(), probeTimeout)
+		probeErr = c.probeUpstream(ctx)
+		cancel()
+
+		c.mu.Lock()
+		c.lastProbeErr = probeErr
+		c.lastProbeTime = time.Now()
+		probeTime = c.lastProbeTime
+		if probeErr == nil {
+			c.lastSuccessTime = probeTime
+		}
+		lastProxyErr = c.lastUpstreamErr
+		lastProxyErrTime = c.lastUpstreamTime
+		lastSuccess = c.lastSuccessTime
+		c.mu.Unlock()
+	}
+
 	status := http.StatusOK
 	payload := map[string]any{
-		"status":      "ok",
-		"lastSuccess": lastSuccess,
+		"status":         "ok",
+		"lastSuccess":    lastSuccess,
+		"probeCheckedAt": probeTime,
 	}
-	if lastErr != nil {
+	if probeErr != nil {
 		status = http.StatusServiceUnavailable
 		payload["status"] = "degraded"
-		payload["upstreamError"] = lastErr.Error()
-		payload["upstreamErrorAt"] = errTime
+		payload["upstreamError"] = probeErr.Error()
+		payload["upstreamErrorAt"] = probeTime
+	}
+	if lastProxyErr != nil {
+		payload["lastProxyError"] = lastProxyErr.Error()
+		payload["lastProxyErrorAt"] = lastProxyErrTime
 	}
 
 	buf, _ := json.Marshal(payload)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_, _ = w.Write(buf)
+}
+
+func (c *controller) probeUpstream(ctx context.Context) error {
+	target := c.baseURL.ResolveReference(&url.URL{Path: healthProbePath})
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
+	if err != nil {
+		return fmt.Errorf("build probe request: %w", err)
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("probe upstream %s: %w", target.String(), err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("probe upstream %s: status %d", target.String(), resp.StatusCode)
+	}
+
+	return nil
 }
 
 func readBody(rc io.ReadCloser) ([]byte, error) {
