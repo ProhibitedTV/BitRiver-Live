@@ -101,7 +101,7 @@ func TestQuickstartDelegatesToCli(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(logContent)), "\n")
-	if len(lines) != 2 {
+	if len(lines) != 3 {
 		t.Fatalf("unexpected number of go invocations: %d\n%s", len(lines), strings.Join(lines, "\n"))
 	}
 
@@ -122,9 +122,20 @@ func TestQuickstartDelegatesToCli(t *testing.T) {
 		t.Fatalf("unexpected go invocation format: %s", line2)
 	}
 	invocation2 := line2[sep2+1:]
-	expectedInvocation2 := fmt.Sprintf("run ./cmd/bitriver quickstart --env-file %s --compose-file %s", envPath, composePath)
+	expectedInvocation2 := fmt.Sprintf("run ./cmd/bitriver ome verify-health-token --env-file %s --config %s", envPath, generatedConfigPath)
 	if invocation2 != expectedInvocation2 {
-		t.Fatalf("unexpected quickstart invocation:\n got: %s\nwant: %s", invocation2, expectedInvocation2)
+		t.Fatalf("unexpected token verification invocation:\n got: %s\nwant: %s", invocation2, expectedInvocation2)
+	}
+
+	line3 := strings.TrimSpace(lines[2])
+	sep3 := strings.Index(line3, ":run ")
+	if sep3 == -1 {
+		t.Fatalf("unexpected go invocation format: %s", line3)
+	}
+	invocation3 := line3[sep3+1:]
+	expectedInvocation3 := fmt.Sprintf("run ./cmd/bitriver quickstart --env-file %s --compose-file %s", envPath, composePath)
+	if invocation3 != expectedInvocation3 {
+		t.Fatalf("unexpected quickstart invocation:\n got: %s\nwant: %s", invocation3, expectedInvocation3)
 	}
 }
 

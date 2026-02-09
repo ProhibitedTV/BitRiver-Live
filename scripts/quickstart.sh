@@ -74,6 +74,10 @@ read_env_value() {
   ' "$ENV_FILE_PATH"
 }
 
+run_cli() {
+  (cd "$CODE_ROOT" && GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run ./cmd/bitriver "$@")
+}
+
 run_ome_auth_preflight() {
   if [[ ! -f "$ENV_FILE_PATH" ]]; then
     echo "OME auth preflight failed: env file not found at $ENV_FILE_PATH" >&2
@@ -112,11 +116,8 @@ EOF
     echo "OME auth preflight notice: shell BITRIVER_OME_HEALTHCHECK_AUTH_MODE=$shell_auth_mode differs from $ENV_FILE_PATH ($raw_auth_mode); using env-file value for validation." >&2
   fi
 
-  local api_token access_token healthcheck_token
+  local api_token
   api_token="$(read_env_value BITRIVER_OME_API_TOKEN || true)"
-  access_token="$(read_env_value BITRIVER_OME_ACCESS_TOKEN || true)"
-  healthcheck_token="$(read_env_value BITRIVER_OME_HEALTHCHECK_TOKEN || true)"
-
   if [[ -z "$api_token" ]]; then
     cat >&2 <<EOF
 OME auth preflight failed: BITRIVER_OME_API_TOKEN is empty in $ENV_FILE_PATH.
@@ -139,29 +140,11 @@ Example:
 EOF
       return 1
     fi
-  elif [[ "$auth_mode" == "accesstoken" ]]; then
-    if [[ -z "$healthcheck_token" && -z "$access_token" && -z "$api_token" ]]; then
-      cat >&2 <<EOF
-OME auth preflight failed: BITRIVER_OME_HEALTHCHECK_AUTH_MODE=accesstoken requires a non-empty token in canonical order:
-  BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN
-Example:
-  BITRIVER_OME_HEALTHCHECK_AUTH_MODE=accesstoken
-  BITRIVER_OME_API_TOKEN=replace-with-non-empty-token
-  # Optional overrides:
-  # BITRIVER_OME_ACCESS_TOKEN=replace-with-probe-token
-  # BITRIVER_OME_HEALTHCHECK_TOKEN=replace-with-healthcheck-token
-EOF
-      return 1
-    fi
   fi
 
   echo "Running OME auth preflight: rendering config and validating token consistency ..."
   run_cli ome render --force --env-file "$ENV_FILE_PATH"
   "$VERIFY_OME_TOKEN_SCRIPT" --env-file "$ENV_FILE_PATH" --config "$CODE_ROOT/deploy/ome/Server.generated.xml"
-}
-
-run_cli() {
-  (cd "$CODE_ROOT" && GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run ./cmd/bitriver "$@")
 }
 
 quickstart_args=("--env-file" "$ENV_FILE_PATH" "--compose-file" "$COMPOSE_FILE_PATH")
