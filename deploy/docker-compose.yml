@@ -291,18 +291,10 @@ services:
     restart: "no"
 
   ome-health-token-check:
-    image: debian:12-slim${BITRIVER_DEBIAN_IMAGE_DIGEST:-}
+    image: bitriver-live/ome-config:local
     container_name: bitriver-ome-health-token-check
     working_dir: /workspace
-    command:
-      - sh
-      - -c
-      - |
-        set -eux
-        if ! ./scripts/verify-ome-health-token.sh --env-file /workspace/.env --config /workspace/deploy/ome/Server.generated.xml; then
-          echo "ome-health-token-check failed: inspect '.env' token values and /workspace/deploy/ome/Server.generated.xml AccessToken before restarting bitriver-ome" >&2
-          exit 1
-        fi
+    command: ["ome", "verify-health-token", "--env-file", "/workspace/.env", "--config", "/workspace/deploy/ome/Server.generated.xml"]
     volumes:
       - ..:/workspace
     env_file:

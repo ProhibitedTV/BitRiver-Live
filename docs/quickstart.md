@@ -238,13 +238,13 @@ If Docker Desktop fails to accept Compose traffic from WSL, you may see `http2: 
   #default#live application, so it was not created` simply reflect the `<Publishers>`/`<Providers>` switches in your
   `<Application>` block being set to `Off`; toggle them to match whether BitRiver Live should push or pull streams via WebRTC,
   LLHLS, and related outputs.
-- **OME health check fails** – The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the container name. Compose now runs two pre-start checks before OME launches: `ome-config` regenerates `deploy/ome/Server.generated.xml`, then `ome-health-token-check` runs `./scripts/verify-ome-health-token.sh` to confirm `<Managers><API><AccessToken>` matches `${BITRIVER_OME_HEALTHCHECK_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}}` from the same `.env` file. If `bitriver-ome` falls into healthcheck restarts, inspect the helper first:
+- **OME health check fails** – The compose service pins the hostname to `ome` so the default `BITRIVER_OME_API=http://ome:8081` resolves correctly; keep that alias if you customize the container name. Compose now runs two pre-start checks before OME launches: `ome-config` regenerates `deploy/ome/Server.generated.xml`, then `ome-health-token-check` runs `ome verify-health-token` to confirm `<Managers><API><AccessToken>` matches `${BITRIVER_OME_HEALTHCHECK_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}}` from the same `.env` file. If `bitriver-ome` falls into healthcheck restarts, inspect the helper first:
 
   ```bash
   docker compose logs ome-health-token-check
   ```
 
-  The helper runs with shell tracing and prints a short hint when verification fails so you can resolve token/config drift before chasing the OME container loop.
+  The helper fails fast with the verification error so you can resolve token/config drift before chasing the OME container loop.
 
   Healthcheck behavior for OME 0.16 (exact):
 
