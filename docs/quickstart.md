@@ -8,7 +8,7 @@
 | Linux | Install the `.deb` or `.rpm` from the latest release then run `bitriver-live` (desktop shortcut: **Start BitRiver Live**) | `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` |
 | Windows | Install `bitriver-live-<version>.msi` and launch **Start BitRiver Live** from the Start menu/desktop | `pwsh -c "go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml"` |
 
-Use the installer-backed launcher when you want a zero-build setup that checks Docker/Compose, copies `deploy/.env.example` into place, pulls release images, and starts the stack. The Go-based quickstart remains the canonical contributor path because it builds local images and runs migrations from source.
+Use the installer-backed launcher when you want a zero-build setup that checks Docker/Compose, copies `deploy/.env.example` into place, pulls release images, and starts the stack. Installers are available today for Windows (MSI), Linux (Deb/RPM), and macOS (Homebrew launcher formula). The Go-based quickstart remains the canonical contributor path because it builds local images and runs migrations from source.
 
 
 ## Platform prerequisites
