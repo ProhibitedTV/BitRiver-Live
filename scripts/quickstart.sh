@@ -6,9 +6,10 @@ usage() {
 Usage: scripts/quickstart.sh [-h|--help]
 
 Runs the Go-based BitRiver Live CLI quickstart command to run doctor, initialize
-the environment, render OME configuration, start Docker Compose, wait for the
-API readiness probe, and seed the admin user. Override ENV_FILE or COMPOSE_FILE
-to point at custom locations.
+the environment, render OME configuration, start Docker Compose (including
+waiting for dependency health checks such as srs-controller/transcoder), wait
+for the API readiness probe, and seed the admin user. Override ENV_FILE or
+COMPOSE_FILE to point at custom locations.
 
 Options:
   -h, --help   Show this help message.

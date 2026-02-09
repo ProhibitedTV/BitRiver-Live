@@ -77,11 +77,11 @@ services:
       redis:
         condition: service_healthy
       srs-controller:
-        condition: service_started
+        condition: service_healthy
       ome:
         condition: service_healthy
       transcoder:
-        condition: service_started
+        condition: service_healthy
 
   viewer:
     image: ghcr.io/bitriver-live/bitriver-viewer:${BITRIVER_VIEWER_IMAGE_TAG:?set via .env}${BITRIVER_VIEWER_IMAGE_DIGEST:-}
