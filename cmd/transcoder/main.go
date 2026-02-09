@@ -4,7 +4,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +28,7 @@ import (
 	"bitriver-live/internal/observability/logging"
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/observability/tracing"
+	"bitriver-live/internal/security/tokenauth"
 	"bitriver-live/internal/serverutil"
 	"bitriver-live/internal/stringsutil"
 )
@@ -135,17 +135,6 @@ func (s *server) uploadLogger(jobID string, meta *uploadJob) *slog.Logger {
 		}
 	}
 	return logger
-}
-
-// constantTimeEqual performs constant time equal and propagates validation or dependency failures to the caller.
-func constantTimeEqual(expected, provided string) bool {
-	if expected == "" || provided == "" {
-		return false
-	}
-	if len(expected) != len(provided) {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(expected), []byte(provided)) == 1
 }
 
 // logAuthFailure logs auth failure details for observability without mutating runtime state.
@@ -582,22 +571,28 @@ func (s *server) restoreActiveProcesses() {
 
 // authorize performs authorize and propagates validation or dependency failures to the caller.
 func (s *server) authorize(r *http.Request) bool {
-	header := strings.TrimSpace(r.Header.Get("Authorization"))
-	if header == "" {
+	header := r.Header.Get("Authorization")
+	token, status := tokenauth.ParseBearerHeader(header)
+	switch status {
+	case tokenauth.BearerHeaderMissing:
 		logAuthFailure(s.logger, r, "missing_authorization")
 		return false
-	}
-	parts := strings.SplitN(header, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
+	case tokenauth.BearerHeaderInvalid:
+		logAuthFailure(s.logger, r, "invalid_scheme")
+		return false
+	case tokenauth.BearerHeaderTokenMissing:
+		logAuthFailure(s.logger, r, "invalid_token")
+		return false
+	case tokenauth.BearerHeaderValid:
+		if tokenauth.ConstantTimeEqual(s.token, token) {
+			return true
+		}
+		logAuthFailure(s.logger, r, "invalid_token")
+		return false
+	default:
 		logAuthFailure(s.logger, r, "invalid_scheme")
 		return false
 	}
-	token := strings.TrimSpace(parts[1])
-	if constantTimeEqual(s.token, token) {
-		return true
-	}
-	logAuthFailure(s.logger, r, "invalid_token")
-	return false
 }
 
 // handleHealthz routes and serves healthz requests, writing HTTP errors for invalid input or backend failures.

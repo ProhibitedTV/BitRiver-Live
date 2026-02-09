@@ -4,7 +4,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +19,7 @@ import (
 
 	"bitriver-live/internal/observability/logging"
 	"bitriver-live/internal/observability/metrics"
+	"bitriver-live/internal/security/tokenauth"
 	"bitriver-live/internal/serverutil"
 )
 
@@ -112,7 +112,7 @@ func (c *controller) proxyRequest(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if !c.authorized(r.Header.Get("Authorization")) {
+	if !c.authorized(r) {
 		if c.logger != nil {
 			c.logger.Warn("unauthorized request rejected", "path", r.URL.Path, "remote_addr", r.RemoteAddr)
 		}
@@ -167,22 +167,12 @@ func (c *controller) proxyRequest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (c *controller) authorized(header string) bool {
-	if header == "" {
+func (c *controller) authorized(r *http.Request) bool {
+	token, status := tokenauth.ParseBearerHeader(r.Header.Get("Authorization"))
+	if status != tokenauth.BearerHeaderValid {
 		return false
 	}
-	const prefix = "Bearer "
-	if !strings.HasPrefix(header, prefix) {
-		return false
-	}
-	token := strings.TrimSpace(header[len(prefix):])
-	if token == "" {
-		return false
-	}
-	if subtle.ConstantTimeCompare([]byte(token), []byte(c.token)) != 1 {
-		return false
-	}
-	return true
+	return tokenauth.ConstantTimeEqual(c.token, token)
 }
 
 func (c *controller) resolveTarget(r *http.Request) *url.URL {

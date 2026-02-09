@@ -2,7 +2,6 @@ package api
 
 import (
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -18,6 +17,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/models"
+	"bitriver-live/internal/security/tokenauth"
 	"bitriver-live/internal/storage"
 )
 
@@ -470,9 +470,9 @@ func (h *Handler) serveUploadMedia(w http.ResponseWriter, r *http.Request, uploa
 		WriteError(w, http.StatusNotFound, fmt.Errorf("media not found"))
 		return
 	}
-	token := strings.TrimSpace(r.URL.Query().Get("token"))
+	token, ok := tokenauth.QueryToken(r, "token")
 	expected := strings.TrimSpace(upload.Metadata["mediaToken"])
-	if token == "" || expected == "" || subtle.ConstantTimeCompare([]byte(token), []byte(expected)) != 1 {
+	if !ok || !tokenauth.ConstantTimeEqual(expected, token) {
 		WriteError(w, http.StatusForbidden, fmt.Errorf("invalid token"))
 		return
 	}

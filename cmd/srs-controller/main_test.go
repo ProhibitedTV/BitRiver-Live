@@ -106,7 +106,9 @@ func TestAuthorizedChecksBearerPrefix(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := ctrl.authorized(tc.header); got != tc.ok {
+			req := httptest.NewRequest(http.MethodGet, "/v1/channels", nil)
+			req.Header.Set("Authorization", tc.header)
+			if got := ctrl.authorized(req); got != tc.ok {
 				t.Fatalf("authorized(%q)=%v, want %v", tc.header, got, tc.ok)
 			}
 		})
