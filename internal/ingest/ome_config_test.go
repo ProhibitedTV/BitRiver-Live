@@ -415,7 +415,7 @@ func TestRenderOMEConfigDefaultsAlignManagersAPIWithComposeHealthcheckPort(t *te
 	}
 
 	compose := string(readFile(t, filepath.Join(repo, "deploy", "docker-compose.yml")))
-	if !strings.Contains(compose, "http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health") {
+	if !strings.Contains(compose, "http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/") {
 		t.Fatalf("expected compose healthcheck to use BITRIVER_OME_HTTP_PORT")
 	}
 
@@ -429,18 +429,16 @@ func TestRenderOMEConfigDefaultsAlignManagersAPIWithComposeHealthcheckPort(t *te
 		t.Fatalf("expected compose healthcheck to document canonical token precedence")
 	}
 
-	accessTokenProbe := `if { [ "$$auth_mode" = "accesstoken" ] && probe_access_token; } || { [ "$$auth_mode" = "basic" ] && probe_basic_auth; } || { [ "$$auth_mode" = "none" ] && probe_unauthenticated; } || { [ "$$auth_mode" = "off" ] && probe_unauthenticated; } || { [ "$$auth_mode" = "disabled" ] && probe_unauthenticated; }; then`
-
-	if !strings.Contains(compose, accessTokenProbe) {
-		t.Fatalf("expected compose healthcheck to probe with configured auth mode logic")
+	if !strings.Contains(compose, `OME healthcheck succeeded with unauthenticated endpoint`) {
+		t.Fatalf("expected compose healthcheck to probe the unauthenticated endpoint")
 	}
-	if !strings.Contains(compose, `Authorization: Bearer $$token`) {
-		t.Fatalf("expected compose healthcheck to send Authorization Bearer header in accesstoken mode")
+	if strings.Contains(compose, `Authorization: Bearer $$token`) {
+		t.Fatalf("expected compose healthcheck to avoid Authorization headers")
 	}
-	if !strings.Contains(compose, `-u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD"`) {
-		t.Fatalf("expected compose healthcheck to use basic auth credentials")
+	if strings.Contains(compose, `-u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD"`) {
+		t.Fatalf("expected compose healthcheck to avoid basic auth credentials")
 	}
-	if !strings.Contains(compose, "credential_type=access_token") {
-		t.Fatalf("expected compose healthcheck diagnostics to mention access_token credential type")
+	if !strings.Contains(compose, "credential_type=none") {
+		t.Fatalf("expected compose startup diagnostics to mention credential_type=none for unauthenticated probing")
 	}
 }
