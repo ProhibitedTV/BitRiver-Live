@@ -464,7 +464,7 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 	}
 }
 
-func TestComposeOMEHealthcheckUsesAuthorizationBearerHeader(t *testing.T) {
+func TestComposeOMEHealthcheckUsesUnauthenticatedRootEndpoint(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -478,36 +478,14 @@ func TestComposeOMEHealthcheckUsesAuthorizationBearerHeader(t *testing.T) {
 	}
 
 	compose := string(content)
-	if !strings.Contains(compose, `Authorization: Bearer $$token`) {
-		t.Fatalf("expected OME healthcheck to probe using Authorization Bearer header by default")
+	if !strings.Contains(compose, `http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/`) {
+		t.Fatalf("expected OME healthcheck to probe unauthenticated root endpoint")
 	}
-	if !strings.Contains(compose, "BITRIVER_OME_HEALTHCHECK_AUTH_MODE") {
-		t.Fatalf("expected OME healthcheck to declare BITRIVER_OME_HEALTHCHECK_AUTH_MODE")
+	if strings.Contains(compose, `/v1/health`) {
+		t.Fatalf("expected OME healthcheck not to probe authenticated /v1/health endpoint")
 	}
-
-	if !strings.Contains(compose, "BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN") {
-		t.Fatalf("expected OME healthcheck to use canonical token precedence")
-	}
-	if !strings.Contains(compose, "bitriver-ome startup failed") {
-		t.Fatalf("expected OME startup to fail fast when canonical token inputs are empty or mismatched")
-	}
-	if strings.Contains(compose, "AccessToken: $$token") {
-		t.Fatalf("expected OME healthcheck to avoid deprecated AccessToken header")
-	}
-	if !strings.Contains(compose, "credential_type=access_token") {
-		t.Fatalf("expected OME healthcheck startup logs to declare access_token credential type")
-	}
-	if !strings.Contains(compose, "http_status=$${http_status:-unknown}") {
-		t.Fatalf("expected OME healthcheck logs to include HTTP status")
-	}
-	if !strings.Contains(compose, "auth_mode=$$auth_mode") {
-		t.Fatalf("expected OME healthcheck logs to mention auth_mode selection")
-	}
-	if !strings.Contains(compose, `/v1/health`) {
-		t.Fatalf("expected OME healthcheck to probe the canonical /v1/health endpoint")
-	}
-	if strings.Contains(compose, `healthz_url=`) {
-		t.Fatalf("expected OME healthcheck not to fall back to /healthz")
+	if strings.Contains(compose, `Authorization: Bearer $$token`) {
+		t.Fatalf("expected OME healthcheck to avoid auth headers when using public liveness endpoint")
 	}
 }
 

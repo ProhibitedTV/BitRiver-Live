@@ -390,74 +390,15 @@ services:
         - |
           probe_source="bitriver-ome"
           probe_config="deploy/docker-compose.yml"
-          health_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health"
-          auth_mode="$$BITRIVER_OME_HEALTHCHECK_AUTH_MODE"
+          health_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/"
+          http_status="$$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 4 "$$health_url")"
 
-          if [ -z "$$auth_mode" ]; then
-            auth_mode="accesstoken"
-          fi
-
-          token="$$BITRIVER_OME_HEALTHCHECK_TOKEN"
-          token_source="BITRIVER_OME_HEALTHCHECK_TOKEN"
-          if [ -z "$$token" ]; then
-            token="$$BITRIVER_OME_ACCESS_TOKEN"
-            token_source="BITRIVER_OME_ACCESS_TOKEN"
-          fi
-          if [ -z "$$token" ]; then
-            token="$$BITRIVER_OME_API_TOKEN"
-            token_source="BITRIVER_OME_API_TOKEN"
-          fi
-
-          probe_access_token() {
-            http_status="$$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 4 -H "Authorization: Bearer $$token" "$$health_url")"
-            [ "$$http_status" = "200" ]
-          }
-
-          probe_basic_auth() {
-            # Pass credentials as literal argv entries so shell metacharacters are not re-interpreted.
-            http_status="$$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 4 -u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD" "$$health_url")"
-            [ "$$http_status" = "200" ]
-          }
-
-          probe_unauthenticated() {
-            http_status="$$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 4 "$$health_url")"
-            [ "$$http_status" = "200" ]
-          }
-
-          case "$$auth_mode" in
-            accesstoken)
-              if [ -z "$$token" ]; then
-                echo "[$$probe_source] OME healthcheck misconfigured in $$probe_config: BITRIVER_OME_HEALTHCHECK_TOKEN, BITRIVER_OME_ACCESS_TOKEN, and BITRIVER_OME_API_TOKEN are all empty inside the container" >&2
-                exit 1
-              fi
-              if printf '%s' "$$token" | grep -Eq '^[[:space:]]*Bearer[[:space:]]+'; then
-                echo "[$$probe_source] OME healthcheck auth mismatch in $$probe_config: auth_mode=$$auth_mode expects raw token values because probe adds Authorization: Bearer" >&2
-                exit 1
-              fi
-              echo "[$$probe_source] OME healthcheck startup auth_mode=$$auth_mode credential_type=access_token source=$$token_source value=<redacted>"
-              ;;
-            basic)
-              if [ -z "$$BITRIVER_OME_USERNAME" ] || [ -z "$$BITRIVER_OME_PASSWORD" ]; then
-                echo "[$$probe_source] OME healthcheck misconfigured in $$probe_config: BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD must both be set for basic auth mode" >&2
-                exit 1
-              fi
-              echo "[$$probe_source] OME healthcheck startup auth_mode=$$auth_mode credential_type=username_password username=<redacted> password=<redacted>"
-              ;;
-            none|disabled|off)
-              echo "[$$probe_source] OME healthcheck startup auth_mode=$$auth_mode credential_type=none"
-              ;;
-            *)
-              echo "[$$probe_source] OME healthcheck misconfigured in $$probe_config: unsupported BITRIVER_OME_HEALTHCHECK_AUTH_MODE=$$auth_mode (expected accesstoken, basic, or none/off/disabled)" >&2
-              exit 1
-              ;;
-          esac
-
-          if { [ "$$auth_mode" = "accesstoken" ] && probe_access_token; } || { [ "$$auth_mode" = "basic" ] && probe_basic_auth; } || { [ "$$auth_mode" = "none" ] && probe_unauthenticated; } || { [ "$$auth_mode" = "off" ] && probe_unauthenticated; } || { [ "$$auth_mode" = "disabled" ] && probe_unauthenticated; }; then
-            echo "[$$probe_source] OME healthcheck succeeded with auth_mode=$$auth_mode http_status=$${http_status:-unknown}"
+          if [ -n "$$http_status" ] && [ "$$http_status" != "000" ] && [ "$$http_status" -lt 500 ]; then
+            echo "[$$probe_source] OME healthcheck succeeded with unauthenticated endpoint $$health_url http_status=$$http_status"
             exit 0
           fi
 
-          echo "[$$probe_source] OME healthcheck failed for $$health_url using auth_mode=$$auth_mode from $$probe_config" >&2
+          echo "[$$probe_source] OME healthcheck failed for $$health_url from $$probe_config http_status=$${http_status:-unknown}" >&2
           exit 1
       interval: 30s
       timeout: 5s

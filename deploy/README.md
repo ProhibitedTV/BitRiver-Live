@@ -58,49 +58,25 @@ third-party images, use the corresponding `*_IMAGE_DIGEST` fields in `deploy/.en
 
 ### OME healthcheck
 
-The OME service in `deploy/docker-compose.yml` uses a `curl`-based healthcheck against the control API inside the container
-(`http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health`). Helm now mirrors the same probe authentication logic in
-`deploy/helm/bitriver-live/templates/deployment-ome.yaml`, including `accesstoken` token precedence and optional `basic` mode.
+The OME service in `deploy/docker-compose.yml` and the Helm deployment now use an unauthenticated, stable liveness/readiness probe against the local root endpoint (`http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/` for Compose and `http://localhost:8081/` in Helm templates).
 
-Probe/auth sequence is exact and ordered:
+Probe sequence is intentionally simple to avoid auth drift breaking container health:
 
-1. Resolve the probe auth mode from `BITRIVER_OME_HEALTHCHECK_AUTH_MODE` (default `accesstoken`; supported values are `accesstoken`, `basic`, or unauthenticated `none`/`off`/`disabled`).
-2. In `accesstoken` mode, resolve the token with canonical precedence `BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN`.
-3. Reject Bearer-prefixed tokens in `accesstoken` mode, then probe `/v1/health` with the exact header format `Authorization: Bearer <token>`.
-4. Optional `basic` mode requires non-empty `BITRIVER_OME_USERNAME` **and** `BITRIVER_OME_PASSWORD` and probes the same endpoint with HTTP basic auth (pick this only when your OME control API expects username/password credentials).
+1. Call the local root endpoint without auth headers.
+2. Treat any non-`000` status below `500` as healthy (so auth redirects/`401`/`404` from public endpoints do not cause restart loops).
+3. Fail only on transport errors or server-side `5xx` responses.
 
-This contract is intentionally identical across deployment modes: `deploy/docker-compose.yml`, `deploy/helm/bitriver-live/templates/deployment-ome.yaml`, and Helm defaults in `deploy/helm/bitriver-live/values.yaml` all use the same auth mode enum and credential requirements.
-
-Startup/debug logs now include a redacted line showing `auth_mode`, `credential_type`, and token source (for token mode) so mismatched credential wiring is visible.
-
-If you see 401s, confirm the selected mode/credential source from probe logs first, then re-render and restart:
-
-1. Check probe-source logs (for example `[bitriver-ome] ... auth_mode=accesstoken credential_type=access_token source=BITRIVER_OME_ACCESS_TOKEN ...`).
-2. Confirm `.env` contains the expected token chain (`BITRIVER_OME_HEALTHCHECK_TOKEN`, `BITRIVER_OME_ACCESS_TOKEN`, `BITRIVER_OME_API_TOKEN`) and optional basic credentials when basic mode is selected.
-3. Confirm `deploy/docker-compose.yml` keeps `BITRIVER_OME_HEALTHCHECK_AUTH_MODE=accesstoken` unless you intentionally switch to `basic`.
-4. Re-render and restart: `./scripts/render-ome-config.sh --force && docker compose up -d ome`.
+OME control-plane credentials (`BITRIVER_OME_HEALTHCHECK_TOKEN`, `BITRIVER_OME_ACCESS_TOKEN`, `BITRIVER_OME_API_TOKEN`, optional basic credentials) are still required for API calls and config rendering, but they are no longer part of the liveness/readiness probe contract.
+Re-render and restart OME after credential/config changes: `./scripts/render-ome-config.sh --force && docker compose up -d ome`.
 
 Copy/paste manual probe block (matches the in-container healthcheck logic):
 
 ```bash
 docker compose exec ome sh -lc '
   set -eu
-  health_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/v1/health"
-
-  auth_mode="${BITRIVER_OME_HEALTHCHECK_AUTH_MODE:-accesstoken}"
-  token="${BITRIVER_OME_HEALTHCHECK_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-${BITRIVER_OME_API_TOKEN:-}}}"
-
-  if [ "$auth_mode" = "accesstoken" ]; then
-    [ -n "$token" ] || { echo "missing token chain: set BITRIVER_OME_HEALTHCHECK_TOKEN/ACCESS_TOKEN/API_TOKEN" >&2; exit 1; }
-    printf '%s' "$token" | grep -Eq '^[[:space:]]*Bearer[[:space:]]+' && { echo "token must be raw token value (probe adds Authorization: Bearer)" >&2; exit 1; }
-    curl -fsS --connect-timeout 2 --max-time 4 -H "Authorization: Bearer $token" "$health_url"
-  elif [ "$auth_mode" = "basic" ]; then
-    [ -n "${BITRIVER_OME_USERNAME:-}" ] && [ -n "${BITRIVER_OME_PASSWORD:-}" ] || { echo "missing basic-auth credentials" >&2; exit 1; }
-    curl -fsS --connect-timeout 2 --max-time 4 -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" "$health_url"
-  else
-    echo "unsupported auth_mode=$auth_mode" >&2
-    exit 1
-  fi
+  health_url="http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/"
+  http_status="$(curl -sS -o /dev/null -w "%{http_code}" --connect-timeout 2 --max-time 4 "$health_url")"
+  [ -n "$http_status" ] && [ "$http_status" != "000" ] && [ "$http_status" -lt 500 ]
 '
 ```
 
@@ -112,7 +88,7 @@ Example precedence resolution:
 - `BITRIVER_OME_ACCESS_TOKEN=api-prod-token`
 - `BITRIVER_OME_HEALTHCHECK_TOKEN=` (unset)
 
-Result: render + `ome-health-token-check` + OME container startup + OME healthcheck all use `api-prod-token`.
+Result: render + `ome-health-token-check` + OME container startup all use `api-prod-token` for control-plane auth, while liveness/readiness stays on the unauthenticated root probe.
 
 The canonical OME auth element is top-level `<Managers><API><AccessToken>` in the rendered `Server.xml`; the quickstart renderer rejects deprecated `<AccessTokens>` wrappers. The renderer also enforces direct `<Application><OutputProfiles>` blocks and rejects deprecated `<Application><Outputs>` wrappers.
 
