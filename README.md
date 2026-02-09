@@ -299,6 +299,14 @@ flowchart LR
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
 ```
 
+
+## Dependency source of truth
+
+Offline Go dependency resolution is pinned through `go.mod` `replace`
+directives that target local modules under `third_party/`. The repository does
+not use `vendor/` as a parallel dependency tree. Run
+`./scripts/check-dependency-source.sh` to fail fast if duplicate copies appear.
+
 See [`docs/testing.md`](docs/testing.md) for suite-specific instructions and
 [`docs/testing-status.md`](docs/testing-status.md) for the latest reliability
 notes.
@@ -309,8 +317,7 @@ Need Postgres-backed tests? Use the helper:
 ./scripts/test-postgres.sh ./internal/storage/...
 ```
 
-The script keeps module access offline (`GOPROXY=off GOSUMDB=off` with
-`-mod=vendor`) to preserve vendored replacements and avoid touching
-`go.mod`/`go.sum`.
+The script keeps module access offline (`GOPROXY=off GOSUMDB=off`) and relies on
+local `replace` targets under `third_party/` so `go.mod`/`go.sum` stay untouched.
 
 Questions or improvements? Open an issue or explore `internal/api/handlers.go` to start extending the platform.

@@ -11,7 +11,7 @@ on:
       - '**/*.go'
       - go.mod
       - go.sum
-      - vendor/**
+      - third_party/**
       - scripts/**
       - deploy/**
       - .github/workflows/go-unit-tests.yml
@@ -21,7 +21,7 @@ on:
       - '**/*.go'
       - go.mod
       - go.sum
-      - vendor/**
+      - third_party/**
       - scripts/**
       - deploy/**
       - .github/workflows/go-unit-tests.yml
@@ -42,7 +42,6 @@ jobs:
       GOTOOLCHAIN: local
       GOPROXY: off
       GOSUMDB: off
-      GOFLAGS: -mod=vendor
       GOVULNCHECK_VERSION: v1.1.3
 
     steps:
@@ -66,6 +65,10 @@ jobs:
 
       - name: Run unit tests
         run: go test ./...
+
+      - name: Verify dependency source of truth
+        shell: bash
+        run: ./scripts/check-dependency-source.sh
 
       - name: Check Go function comment coverage
         shell: bash
