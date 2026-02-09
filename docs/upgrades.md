@@ -21,7 +21,7 @@ Use this section as the concise checklist when you need to ensure schema, enviro
 
 ### `.env` changes
 
-> **Upgrade callout (OME healthcheck auth contract):** The OME healthcheck in both Compose and Helm uses only `AccessToken: <token>` (token `${BITRIVER_OME_HEALTHCHECK_TOKEN:-${BITRIVER_OME_ACCESS_TOKEN:-$BITRIVER_OME_API_TOKEN}}`). Keep `<Managers><API><AccessToken>` in `deploy/ome/Server.generated.xml` aligned with that value after any token change so probes do not fail with repeated auth mismatches.
+> **Upgrade callout (OME healthcheck contract):** The OME healthcheck in both Compose and Helm now probes the unauthenticated local root endpoint (`http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/` in Compose, `http://localhost:8081/` in Helm) and treats non-`000` statuses below `500` as healthy. Keep `<Managers><API><AccessToken>` aligned with your token env values for API operations, but liveness no longer depends on probe auth headers.
 
 - Compare your existing `.env` against `deploy/.env.example` whenever you upgrade, then add new keys or defaults before restarting.
 - Run `deploy/check-env.sh` to confirm there are no sample credentials or missing required variables.
