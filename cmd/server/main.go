@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,6 +23,7 @@ import (
 	"bitriver-live/internal/auth"
 	"bitriver-live/internal/auth/oauth"
 	"bitriver-live/internal/chat"
+	"bitriver-live/internal/envutil/pgdsn"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/observability/logging"
 	"bitriver-live/internal/observability/metrics"
@@ -1111,42 +1111,9 @@ func resolveViewerOrigin(flagValue, envValue string) (*url.URL, error) {
 	return parsed, nil
 }
 
-var sslModeDisablePattern = regexp.MustCompile(`(?i)(^|[?&\s;])sslmode=disable([&#;\s]|$)`)
-
 // validatePostgresTLS validates postgres tls and reports an error when required invariants are not met.
 func validatePostgresTLS(dsn, envVar string) error {
-	if dsn == "" {
-		return nil
-	}
-	if postgresSSLModeDisable(dsn) {
-		if !isComposePostgresDSN(dsn) {
-			return fmt.Errorf("%s must enable TLS (set sslmode=require or provide a CA with verify-full); sslmode=disable is only allowed for the local Compose postgres service", envVar)
-		}
-	}
-	return nil
-}
-
-// postgresSSLModeDisable performs postgres sslmode disable and propagates validation or dependency failures to the caller.
-func postgresSSLModeDisable(dsn string) bool {
-	return sslModeDisablePattern.MatchString(dsn)
-}
-
-// isComposePostgresDSN reports whether compose postgres dsn is satisfied for the current input.
-func isComposePostgresDSN(dsn string) bool {
-	trimmed := strings.ToLower(strings.TrimSpace(dsn))
-	if trimmed == "" {
-		return false
-	}
-	if strings.Contains(trimmed, "host=postgres") {
-		return true
-	}
-	if strings.HasPrefix(trimmed, "postgres://") || strings.HasPrefix(trimmed, "postgresql://") {
-		parsed, err := url.Parse(trimmed)
-		if err == nil && strings.EqualFold(parsed.Hostname(), "postgres") {
-			return true
-		}
-	}
-	return false
+	return pgdsn.ValidateTLSPolicy(dsn, envVar)
 }
 
 // splitAndTrim splits and normalizes and trim values for downstream validation.
