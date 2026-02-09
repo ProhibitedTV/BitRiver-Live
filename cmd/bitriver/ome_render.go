@@ -27,6 +27,8 @@ func runOME(args []string) error {
 	switch args[0] {
 	case "render":
 		return runOMERender(args[1:])
+	case "verify-health-token":
+		return runOMEVerifyHealthToken(args[1:])
 	default:
 		return fmt.Errorf("unknown ome subcommand: %s", args[0])
 	}
