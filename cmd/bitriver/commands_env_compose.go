@@ -410,27 +410,38 @@ func validateComposeEffectiveEnvironment(envFile string) error {
 		effectiveValues[key] = value
 	}
 
-	baseResult := validateEnvironmentValues(fileValues)
-	effectiveResult := validateEnvironmentValues(effectiveValues)
-	baseAuthErr := validateQuickstartOMEHealthcheckAuthMode(fileValues["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"])
-	effectiveAuthErr := validateQuickstartOMEHealthcheckAuthMode(effectiveValues["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"])
-
-	baseInvalid := len(baseResult.Errors) > 0 || len(baseResult.Missing) > 0 || len(baseResult.Blocked) > 0 || baseAuthErr != nil
-	effectiveInvalid := len(effectiveResult.Errors) > 0 || len(effectiveResult.Missing) > 0 || len(effectiveResult.Blocked) > 0 || effectiveAuthErr != nil
-	if !baseInvalid && effectiveInvalid && len(overrides) > 0 {
-		for _, entry := range os.Environ() {
-			parts := strings.SplitN(entry, "=", 2)
-			if len(parts) != 2 {
-				continue
-			}
-			key := strings.TrimSpace(parts[0])
-			if _, ok := overrides[key]; ok {
-				return fmt.Errorf("environment override %s from the current shell conflicts with %s; unset %s and retry", key, resolvedEnvFile, key)
-			}
+	for _, key := range criticalDeployEnvironmentKeys() {
+		if _, ok := overrides[key]; ok {
+			return composeEnvOverrideError(resolvedEnvFile, key)
 		}
 	}
 
+	effectiveAuthErr := validateQuickstartOMEHealthcheckAuthMode(effectiveValues["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"])
+	if effectiveAuthErr != nil {
+		if _, ok := overrides["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"]; ok {
+			return composeEnvOverrideError(resolvedEnvFile, "BITRIVER_OME_HEALTHCHECK_AUTH_MODE")
+		}
+		return effectiveAuthErr
+	}
+
 	return nil
+}
+
+func criticalDeployEnvironmentKeys() []string {
+	return []string{
+		"BITRIVER_OME_HEALTHCHECK_AUTH_MODE",
+		"BITRIVER_LIVE_ADMIN_EMAIL",
+		"BITRIVER_LIVE_ADMIN_PASSWORD",
+		"BITRIVER_POSTGRES_DB",
+		"BITRIVER_POSTGRES_USER",
+		"BITRIVER_POSTGRES_PASSWORD",
+		"BITRIVER_REDIS_PASSWORD",
+		"BITRIVER_LIVE_STORAGE_DRIVER",
+	}
+}
+
+func composeEnvOverrideError(envFile, key string) error {
+	return fmt.Errorf("%s from the current process overrides %s and is not allowed for critical deploy settings; run `unset %s` (bash/zsh) or `Remove-Item Env:%s` (PowerShell), then retry", key, envFile, key, key)
 }
 
 // runComposeDown runs compose down and exits when the work completes or a dependency fails.
@@ -494,6 +505,10 @@ func runQuickstart(args []string) error {
 
 	if err := omeRunner([]string{"render", "--env-file", *envFile, "--force"}); err != nil {
 		return fmt.Errorf("render OME config: %w", err)
+	}
+
+	if err := validateComposeEffectiveEnvironment(*envFile); err != nil {
+		return err
 	}
 
 	if err := migrationsRunner(*composeFile, *envFile); err != nil {
