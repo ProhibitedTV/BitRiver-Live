@@ -831,6 +831,32 @@ func TestValidateComposeEffectiveEnvironmentRejectsInvalidOverride(t *testing.T)
 		t.Fatalf("expected error to suggest unsetting override, got %v", err)
 	}
 }
+
+func TestValidateComposeEffectiveEnvironmentRejectsCriticalOverrideEvenWhenValid(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	values := buildValidProductionEnv(t)
+	values["BITRIVER_REDIS_PASSWORD"] = "from-env-file"
+	var lines []string
+	for key, value := range values {
+		lines = append(lines, fmt.Sprintf("%s=%s", key, value))
+	}
+	if err := os.WriteFile(envPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+	t.Setenv("BITRIVER_REDIS_PASSWORD", "from-process")
+
+	err := validateComposeEffectiveEnvironment(envPath)
+	if err == nil {
+		t.Fatal("expected validation to fail when critical key is overridden by process env")
+	}
+	if !strings.Contains(err.Error(), "BITRIVER_REDIS_PASSWORD") {
+		t.Fatalf("expected error to mention override key, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "Remove-Item Env:BITRIVER_REDIS_PASSWORD") {
+		t.Fatalf("expected PowerShell unset guidance, got %v", err)
+	}
+}
+
 func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), ".env")
 	composePath := filepath.Join(t.TempDir(), "compose.yml")
