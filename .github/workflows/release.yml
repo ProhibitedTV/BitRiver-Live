@@ -227,7 +227,7 @@ jobs:
 
       - name: Run postgres-tagged storage tests
         env:
-          # GitHub Actions service containers are reached via the job host's forwarded ports, not service DNS.
+          # GitHub Actions service containers are accessed from the host runner via published ports.
           BITRIVER_TEST_POSTGRES_DSN: postgres://bitriver:bitriver@127.0.0.1:54329/bitriver_test?sslmode=disable
         run: ./scripts/test-postgres.sh
 
