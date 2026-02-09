@@ -1,3 +1,7 @@
+-- GENERATED FILE: DO NOT EDIT DIRECTLY
+-- Canonical source: deploy/migrations/0007_auth_mfa.sql
+-- Regenerate with: ./scripts/sync-helm-deploy-assets.sh
+
 CREATE TABLE IF NOT EXISTS auth_mfa (
     user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     secret TEXT NOT NULL,
