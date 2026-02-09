@@ -111,6 +111,208 @@ function Ensure-DockerDesktopRunning {
     }
 }
 
+function Get-EnvValue {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [Parameter(Mandatory = $true)][string]$Key
+    )
+
+    if (-not (Test-Path -LiteralPath $FilePath -PathType Leaf)) {
+        return ''
+    }
+
+    $result = ''
+    foreach ($line in Get-Content -LiteralPath $FilePath) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith('#')) {
+            continue
+        }
+
+        $working = $trimmed
+        if ($working -match '^export\s+') {
+            $working = $working -replace '^export\s+', ''
+        }
+
+        $eqIndex = $working.IndexOf('=')
+        if ($eqIndex -lt 0) {
+            continue
+        }
+
+        $name = $working.Substring(0, $eqIndex).Trim()
+        if ($name -ne $Key) {
+            continue
+        }
+
+        $value = $working.Substring($eqIndex + 1).Trim()
+        if (
+            ($value.Length -ge 2) -and
+            (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'")))
+        ) {
+            $value = $value.Substring(1, $value.Length - 2)
+        }
+
+        if ($value) {
+            $result = $value
+        }
+    }
+
+    return $result
+}
+
+function Get-RenderedAccessToken {
+    param([Parameter(Mandatory = $true)][string]$ConfigPath)
+
+    if (-not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) {
+        return ''
+    }
+
+    $content = Get-Content -LiteralPath $ConfigPath -Raw
+    $match = [regex]::Match($content, '<Managers>.*?<API>.*?<AccessToken>\s*(.*?)\s*</AccessToken>.*?</API>.*?</Managers>', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+    if (-not $match.Success) {
+        return ''
+    }
+
+    return $match.Groups[1].Value.Trim()
+}
+
+function Invoke-NativeOmeTokenVerification {
+    param(
+        [Parameter(Mandatory = $true)][string]$EnvFile,
+        [Parameter(Mandatory = $true)][string]$ConfigFile
+    )
+
+    if (-not (Test-Path -LiteralPath $EnvFile -PathType Leaf)) {
+        Write-Error "OME token verification failed: env file not found at $EnvFile"
+    }
+
+    if (-not (Test-Path -LiteralPath $ConfigFile -PathType Leaf)) {
+        Write-Error "OME token verification failed: generated config not found at $ConfigFile"
+    }
+
+    $renderedToken = Get-RenderedAccessToken -ConfigPath $ConfigFile
+    $healthcheckToken = Get-EnvValue -FilePath $EnvFile -Key 'BITRIVER_OME_HEALTHCHECK_TOKEN'
+    $accessToken = Get-EnvValue -FilePath $EnvFile -Key 'BITRIVER_OME_ACCESS_TOKEN'
+    $apiToken = Get-EnvValue -FilePath $EnvFile -Key 'BITRIVER_OME_API_TOKEN'
+
+    $expectedToken = $healthcheckToken
+    if (-not $expectedToken) {
+        $expectedToken = $accessToken
+    }
+    if (-not $expectedToken) {
+        $expectedToken = $apiToken
+    }
+
+    if (-not $renderedToken) {
+        Write-Error "OME token verification failed: <Managers><API><AccessToken> is empty in $ConfigFile"
+    }
+
+    if (-not $expectedToken) {
+        Write-Error "OME token verification failed: resolved runtime token from canonical precedence BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN is empty in $EnvFile"
+    }
+
+    if ($renderedToken -ne $expectedToken) {
+        $message = @"
+OME token verification failed: rendered and runtime tokens differ.
+  rendered (<Managers><API><AccessToken>): $renderedToken
+  expected (BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN): $expectedToken
+Fix by updating $EnvFile and re-rendering with:
+  go run ./cmd/bitriver ome render --force --env-file $EnvFile
+"@
+        Write-Error $message
+    }
+
+    Write-Output 'OME token verification passed: rendered AccessToken matches compose runtime health token source.'
+}
+
+function Invoke-OmeAuthPreflight {
+    param(
+        [Parameter(Mandatory = $true)][string]$EnvFilePath,
+        [Parameter(Mandatory = $true)][string]$CodeRootPath,
+        [Parameter(Mandatory = $true)][string]$VerifyScriptPath
+    )
+
+    if (-not (Test-Path -LiteralPath $EnvFilePath -PathType Leaf)) {
+        Write-Error "OME auth preflight failed: env file not found at $EnvFilePath"
+    }
+
+    if (-not (Test-Path -LiteralPath $VerifyScriptPath -PathType Leaf)) {
+        Write-Error "OME auth preflight failed: helper script is missing or not executable at $VerifyScriptPath"
+    }
+
+    $rawAuthMode = Get-EnvValue -FilePath $EnvFilePath -Key 'BITRIVER_OME_HEALTHCHECK_AUTH_MODE'
+    $authMode = if ($rawAuthMode) { $rawAuthMode.ToLowerInvariant() } else { 'accesstoken' }
+
+    if ($authMode -ne 'accesstoken' -and $authMode -ne 'basic') {
+        $message = @"
+OME auth preflight failed: BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be accesstoken or basic (current: $(if ($rawAuthMode) { $rawAuthMode } else { '<empty>' })).
+Set BITRIVER_OME_HEALTHCHECK_AUTH_MODE=accesstoken for token probes, or:
+  BITRIVER_OME_HEALTHCHECK_AUTH_MODE=basic
+  BITRIVER_OME_USERNAME=ome-operator
+  BITRIVER_OME_PASSWORD=replace-with-strong-password
+in $EnvFilePath before running scripts/quickstart.sh.
+"@
+        Write-Error $message
+    }
+
+    $shellAuthMode = $Env:BITRIVER_OME_HEALTHCHECK_AUTH_MODE
+    if ($shellAuthMode -and ($shellAuthMode.ToLowerInvariant() -ne $authMode)) {
+        Write-Warning "OME auth preflight notice: shell BITRIVER_OME_HEALTHCHECK_AUTH_MODE=$shellAuthMode differs from $EnvFilePath ($rawAuthMode); using env-file value for validation."
+    }
+
+    $apiToken = Get-EnvValue -FilePath $EnvFilePath -Key 'BITRIVER_OME_API_TOKEN'
+    $accessToken = Get-EnvValue -FilePath $EnvFilePath -Key 'BITRIVER_OME_ACCESS_TOKEN'
+    $healthcheckToken = Get-EnvValue -FilePath $EnvFilePath -Key 'BITRIVER_OME_HEALTHCHECK_TOKEN'
+
+    if (-not $apiToken) {
+        $message = @"
+OME auth preflight failed: BITRIVER_OME_API_TOKEN is empty in $EnvFilePath.
+Expected BITRIVER_OME_API_TOKEN=<non-empty token> so OME render can populate <Managers><API><AccessToken>.
+"@
+        Write-Error $message
+    }
+
+    if ($authMode -eq 'basic') {
+        $omeUsername = Get-EnvValue -FilePath $EnvFilePath -Key 'BITRIVER_OME_USERNAME'
+        $omePassword = Get-EnvValue -FilePath $EnvFilePath -Key 'BITRIVER_OME_PASSWORD'
+        if (-not $omeUsername -or -not $omePassword) {
+            $message = @"
+OME auth preflight failed: BITRIVER_OME_HEALTHCHECK_AUTH_MODE=basic requires BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD in $EnvFilePath.
+Example:
+  BITRIVER_OME_HEALTHCHECK_AUTH_MODE=basic
+  BITRIVER_OME_USERNAME=ome-operator
+  BITRIVER_OME_PASSWORD=replace-with-strong-password
+"@
+            Write-Error $message
+        }
+    } else {
+        if (-not $healthcheckToken -and -not $accessToken -and -not $apiToken) {
+            $message = @"
+OME auth preflight failed: BITRIVER_OME_HEALTHCHECK_AUTH_MODE=accesstoken requires a non-empty token in canonical order:
+  BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN
+Example:
+  BITRIVER_OME_HEALTHCHECK_AUTH_MODE=accesstoken
+  BITRIVER_OME_API_TOKEN=replace-with-non-empty-token
+  # Optional overrides:
+  # BITRIVER_OME_ACCESS_TOKEN=replace-with-probe-token
+  # BITRIVER_OME_HEALTHCHECK_TOKEN=replace-with-healthcheck-token
+"@
+            Write-Error $message
+        }
+    }
+
+    Write-Output 'Running OME auth preflight: rendering config and validating token consistency ...'
+    Invoke-Cli -CliArgs @('ome', 'render', '--force', '--env-file', $EnvFilePath)
+
+    $configPath = Join-Path $CodeRootPath 'deploy/ome/Server.generated.xml'
+    $bash = Get-Command bash -ErrorAction SilentlyContinue
+    if ($bash) {
+        & $bash.Source $VerifyScriptPath '--env-file' $EnvFilePath '--config' $configPath
+        return
+    }
+
+    Invoke-NativeOmeTokenVerification -EnvFile $EnvFilePath -ConfigFile $configPath
+}
+
 if ($h -or $help) {
     Show-Usage
     exit 0
@@ -142,8 +344,10 @@ $DefaultEnvFile = Join-Path $CodeRoot '.env'
 $DefaultComposeFile = Join-Path $CodeRoot 'deploy/docker-compose.yml'
 $EnvFile = if ($Env:ENV_FILE) { $Env:ENV_FILE } else { $DefaultEnvFile }
 $ComposeFile = if ($Env:COMPOSE_FILE) { $Env:COMPOSE_FILE } else { $DefaultComposeFile }
+$VerifyOmeTokenScript = Join-Path $CodeRoot 'scripts/verify-ome-health-token.sh'
 
 $quickstartArgs = @('quickstart', '--env-file', $EnvFile, '--compose-file', $ComposeFile)
 
 Write-Output 'Running BitRiver Live quickstart ...'
+Invoke-OmeAuthPreflight -EnvFilePath $EnvFile -CodeRootPath $CodeRoot -VerifyScriptPath $VerifyOmeTokenScript
 Invoke-Cli -CliArgs $quickstartArgs
