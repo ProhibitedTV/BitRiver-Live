@@ -10,10 +10,9 @@ ENV GOPROXY=$GOPROXY \
     GOSUMDB=$GOSUMDB \
     GOTOOLCHAIN=local \
     CGO_ENABLED=0 \
-    GOFLAGS="-buildvcs=false -mod=vendor"
+    GOFLAGS="-buildvcs=false"
 
 COPY go.mod go.sum ./
-COPY vendor ./vendor
 COPY cmd ./cmd
 COPY internal ./internal
 COPY third_party ./third_party

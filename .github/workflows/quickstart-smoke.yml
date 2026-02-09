@@ -11,7 +11,7 @@ on:
       - '**/*.go'
       - go.mod
       - go.sum
-      - vendor/**
+      - third_party/**
       - scripts/**
       - deploy/**
       - .github/workflows/quickstart-smoke.yml
@@ -20,7 +20,7 @@ on:
       - '**/*.go'
       - go.mod
       - go.sum
-      - vendor/**
+      - third_party/**
       - scripts/**
       - deploy/**
       - .github/workflows/quickstart-smoke.yml

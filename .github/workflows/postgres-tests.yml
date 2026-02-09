@@ -11,7 +11,7 @@ on:
       - '**/*.go'
       - go.mod
       - go.sum
-      - vendor/**
+      - third_party/**
       - scripts/**
       - deploy/**
       - .github/workflows/postgres-tests.yml
@@ -20,7 +20,7 @@ on:
       - '**/*.go'
       - go.mod
       - go.sum
-      - vendor/**
+      - third_party/**
       - scripts/**
       - deploy/**
       - .github/workflows/postgres-tests.yml
@@ -49,10 +49,6 @@ jobs:
           go-version: '1.21'
           cache: true
 
-      - name: Ensure vendored modules are available
-        run: |
-          test -d vendor
-          test -f vendor/modules.txt
       - name: Wait for Postgres service
         run: |
           container_id="$(docker ps --filter "name=postgres" --format "{{.ID}}" | head -n1)"

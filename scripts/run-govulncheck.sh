@@ -70,7 +70,7 @@ run_govulncheck_scan() {
   return 0
 }
 
-run_govulncheck_scan "root module" "-mod=vendor" ./...
+run_govulncheck_scan "root module" "" ./...
 
 replace_dirs=$(awk '
   /^replace \(/ {inblock=1; next}

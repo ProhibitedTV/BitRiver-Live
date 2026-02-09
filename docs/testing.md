@@ -5,6 +5,15 @@ run the same suites locally before opening a pull request. See
 `docs/testing-status.md` for a living summary of flaky suites and gaps that need
 coverage.
 
+
+## Dependency source of truth
+
+Offline Go builds in this repository use `go.mod` `replace` directives that point
+at checked-in modules under `third_party/`. Do **not** use `vendor/` as a second
+copy of the same modules. Keep `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off` for
+offline runs, and use `./scripts/check-dependency-source.sh` to verify the tree
+contains no duplicate third-party modules across `third_party/` and `vendor/`.
+
 ## Go API
 
 Run the fast unit suite (JSON datastore, REST handlers, chat flows) from the
@@ -102,8 +111,8 @@ GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ingest -count=1 -ru
 ```
 
 Security scanning uses `govulncheck` with the same offline Go settings and
-vendor mode to ensure the results track the pinned `third_party/` replacements
-that are mirrored into `vendor/`. Install the same pinned tool version used in
+the default module mode so the results track the pinned `third_party/`
+replacements declared in `go.mod`. Install the same pinned tool version used in
 CI (`v1.1.3`, matching `.github/workflows/go-unit-tests.yml`) instead of
 `@latest`; pinning is required so CI's Go 1.21 runners always use a compatible
 `govulncheck` release.
@@ -243,8 +252,8 @@ connectivity/permissions preflight and verifies the schema is present; set
 directly to that database when needed. If Docker is unavailable and
 `BITRIVER_TEST_POSTGRES_DSN` is also unset, the harness exits with an error
 explaining how to proceed. The script forces an offline module mode
-(`GOPROXY=off GOSUMDB=off GOFLAGS=-mod=vendor`) so vendored replacements stay
-intact and `go.mod`/`go.sum` remain untouched:
+(`GOPROXY=off GOSUMDB=off`) so local `third_party/` replacements stay intact and
+`go.mod`/`go.sum` remain untouched:
 
 ```bash
 ./scripts/test-postgres.sh

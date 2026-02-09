@@ -158,17 +158,12 @@ jobs:
             fi
           fi
 
-      - name: Ensure vendored modules are available
-        run: |
-          test -d vendor
-          test -f vendor/modules.txt
 
       - name: Run unit tests
         env:
           GOTOOLCHAIN: local
           GOPROXY: off
           GOSUMDB: off
-          GOFLAGS: -mod=vendor
         run: go test ./... -count=1 -timeout=120s
 
   postgres-tests:
@@ -198,10 +193,6 @@ jobs:
           go-version: '1.21'
           cache: true
 
-      - name: Ensure vendored modules are available
-        run: |
-          test -d vendor
-          test -f vendor/modules.txt
 
       - name: Wait for Postgres service
         run: |
@@ -257,7 +248,6 @@ jobs:
       GOTOOLCHAIN: local
       GOPROXY: off
       GOSUMDB: off
-      GOFLAGS: -mod=vendor
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -355,7 +345,6 @@ jobs:
       GOTOOLCHAIN: local
       GOPROXY: off
       GOSUMDB: off
-      GOFLAGS: -mod=vendor
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -434,7 +423,6 @@ jobs:
       GOTOOLCHAIN: local
       GOPROXY: off
       GOSUMDB: off
-      GOFLAGS: -mod=vendor
       COSIGN_EXPERIMENTAL: "true"
     steps:
       - name: Check out repository
@@ -723,7 +711,6 @@ jobs:
       GOTOOLCHAIN: local
       GOPROXY: off
       GOSUMDB: off
-      GOFLAGS: -mod=vendor
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

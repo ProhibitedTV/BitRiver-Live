@@ -5,7 +5,7 @@
 - **Service story:** The README promises a one-command (`./scripts/quickstart.sh`) deployment that boots `cmd/server`, the proxied viewer, RTMP ingest, the transcoder, chat, Postgres, and Redis together. Keep these flows working so contributors can keep following the documented quickstart and architecture guarantees.
 
 ## Toolchain + dependency policy
-- Go code targets Go 1.21. Always set `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off` so builds never touch the network, and run `gofmt` plus `go mod tidy` before committing. When editing vendored replacements under `third_party/`, keep them in sync with `go.mod` and avoid external fetches.
+- Go code targets Go 1.21. Always set `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off` so builds never touch the network, and run `gofmt` plus `go mod tidy` before committing. `third_party/` is the sole offline dependency source of truth (wired via `go.mod` `replace` directives); do not reintroduce `vendor/` copies. When editing vendored replacements under `third_party/`, keep them in sync with `go.mod` and avoid external fetches.
 - Canonical Go test command (from `docs/testing.md`):
   ```bash
   GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
