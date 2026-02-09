@@ -79,25 +79,30 @@ spec:
                   probe_source="bitriver-ome"
                   probe_config="deploy/helm/bitriver-live/templates/deployment-ome.yaml"
                   health_url="http://localhost:8081/v1/health"
-                  healthz_url="http://localhost:8081/healthz"
-                  auth_mode="${BITRIVER_OME_HEALTHCHECK_AUTH_MODE:-accesstoken}"
-                  token="${BITRIVER_OME_HEALTHCHECK_TOKEN:-}"
+                  auth_mode="$BITRIVER_OME_HEALTHCHECK_AUTH_MODE"
+
+                  if [ -z "$auth_mode" ]; then
+                    auth_mode="accesstoken"
+                  fi
+
+                  token="$BITRIVER_OME_HEALTHCHECK_TOKEN"
                   token_source="BITRIVER_OME_HEALTHCHECK_TOKEN"
-                  if [ -z "$token" ] && [ -n "$BITRIVER_OME_ACCESS_TOKEN" ]; then
+                  if [ -z "$token" ]; then
                     token="$BITRIVER_OME_ACCESS_TOKEN"
                     token_source="BITRIVER_OME_ACCESS_TOKEN"
                   fi
-                  if [ -z "$token" ] && [ -n "$BITRIVER_OME_API_TOKEN" ]; then
+                  if [ -z "$token" ]; then
                     token="$BITRIVER_OME_API_TOKEN"
                     token_source="BITRIVER_OME_API_TOKEN"
                   fi
 
                   probe_access_token() {
-                    curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $token" "$health_url" || curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $token" "$healthz_url"
+                    curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $token" "$health_url"
                   }
 
                   probe_basic_auth() {
-                    curl -fsS --connect-timeout 2 --max-time 4 -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" "$health_url" || curl -fsS --connect-timeout 2 --max-time 4 -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" "$healthz_url"
+                    # Pass credentials as literal argv entries so shell metacharacters are not re-interpreted.
+                    curl -fsS --connect-timeout 2 --max-time 4 -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" "$health_url"
                   }
 
                   case "$auth_mode" in
@@ -107,14 +112,12 @@ spec:
                         exit 1
                       fi
 
-                      case "$token" in
-                        [Bb][Ee][Aa][Rr][Ee][Rr]\ *)
-                          echo "[$probe_source] OME healthcheck auth mismatch in $probe_config: auth_mode=$auth_mode expects a raw AccessToken value, but token is Bearer-prefixed" >&2
-                          exit 1
-                          ;;
-                      esac
+                      if printf '%s' "$token" | grep -Eq '^[[:space:]]*Bearer[[:space:]]+'; then
+                        echo "[$probe_source] OME healthcheck auth mismatch in $probe_config: auth_mode=$auth_mode expects raw AccessToken value, but token is Bearer-prefixed" >&2
+                        exit 1
+                      fi
 
-                      echo "[$probe_source] OME healthcheck configured from $probe_config with auth_mode=$auth_mode credential_type=access_token source=$token_source value=<redacted>"
+                      echo "[$probe_source] OME healthcheck startup auth_mode=$auth_mode credential_type=access_token source=$token_source value=<redacted>"
                       ;;
                     basic)
                       if [ -z "${BITRIVER_OME_USERNAME:-}" ] || [ -z "${BITRIVER_OME_PASSWORD:-}" ]; then
@@ -122,7 +125,7 @@ spec:
                         exit 1
                       fi
 
-                      echo "[$probe_source] OME healthcheck configured from $probe_config with auth_mode=$auth_mode credential_type=username_password username=<redacted> password=<redacted>"
+                      echo "[$probe_source] OME healthcheck startup auth_mode=$auth_mode credential_type=username_password username=<redacted> password=<redacted>"
                       ;;
                     *)
                       echo "[$probe_source] OME healthcheck misconfigured in $probe_config: unsupported BITRIVER_OME_HEALTHCHECK_AUTH_MODE=$auth_mode (expected accesstoken or basic)" >&2
@@ -135,7 +138,7 @@ spec:
                     exit 0
                   fi
 
-                  echo "[$probe_source] OME healthcheck failed for $health_url and $healthz_url using auth_mode=$auth_mode from $probe_config" >&2
+                  echo "[$probe_source] OME healthcheck failed for $health_url using auth_mode=$auth_mode from $probe_config" >&2
                   exit 1
             initialDelaySeconds: 20
             periodSeconds: 30
@@ -150,25 +153,30 @@ spec:
                   probe_source="bitriver-ome"
                   probe_config="deploy/helm/bitriver-live/templates/deployment-ome.yaml"
                   health_url="http://localhost:8081/v1/health"
-                  healthz_url="http://localhost:8081/healthz"
-                  auth_mode="${BITRIVER_OME_HEALTHCHECK_AUTH_MODE:-accesstoken}"
-                  token="${BITRIVER_OME_HEALTHCHECK_TOKEN:-}"
+                  auth_mode="$BITRIVER_OME_HEALTHCHECK_AUTH_MODE"
+
+                  if [ -z "$auth_mode" ]; then
+                    auth_mode="accesstoken"
+                  fi
+
+                  token="$BITRIVER_OME_HEALTHCHECK_TOKEN"
                   token_source="BITRIVER_OME_HEALTHCHECK_TOKEN"
-                  if [ -z "$token" ] && [ -n "$BITRIVER_OME_ACCESS_TOKEN" ]; then
+                  if [ -z "$token" ]; then
                     token="$BITRIVER_OME_ACCESS_TOKEN"
                     token_source="BITRIVER_OME_ACCESS_TOKEN"
                   fi
-                  if [ -z "$token" ] && [ -n "$BITRIVER_OME_API_TOKEN" ]; then
+                  if [ -z "$token" ]; then
                     token="$BITRIVER_OME_API_TOKEN"
                     token_source="BITRIVER_OME_API_TOKEN"
                   fi
 
                   probe_access_token() {
-                    curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $token" "$health_url" || curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $token" "$healthz_url"
+                    curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $token" "$health_url"
                   }
 
                   probe_basic_auth() {
-                    curl -fsS --connect-timeout 2 --max-time 4 -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" "$health_url" || curl -fsS --connect-timeout 2 --max-time 4 -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" "$healthz_url"
+                    # Pass credentials as literal argv entries so shell metacharacters are not re-interpreted.
+                    curl -fsS --connect-timeout 2 --max-time 4 -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" "$health_url"
                   }
 
                   case "$auth_mode" in
@@ -178,14 +186,12 @@ spec:
                         exit 1
                       fi
 
-                      case "$token" in
-                        [Bb][Ee][Aa][Rr][Ee][Rr]\ *)
-                          echo "[$probe_source] OME healthcheck auth mismatch in $probe_config: auth_mode=$auth_mode expects a raw AccessToken value, but token is Bearer-prefixed" >&2
-                          exit 1
-                          ;;
-                      esac
+                      if printf '%s' "$token" | grep -Eq '^[[:space:]]*Bearer[[:space:]]+'; then
+                        echo "[$probe_source] OME healthcheck auth mismatch in $probe_config: auth_mode=$auth_mode expects raw AccessToken value, but token is Bearer-prefixed" >&2
+                        exit 1
+                      fi
 
-                      echo "[$probe_source] OME healthcheck configured from $probe_config with auth_mode=$auth_mode credential_type=access_token source=$token_source value=<redacted>"
+                      echo "[$probe_source] OME healthcheck startup auth_mode=$auth_mode credential_type=access_token source=$token_source value=<redacted>"
                       ;;
                     basic)
                       if [ -z "${BITRIVER_OME_USERNAME:-}" ] || [ -z "${BITRIVER_OME_PASSWORD:-}" ]; then
@@ -193,7 +199,7 @@ spec:
                         exit 1
                       fi
 
-                      echo "[$probe_source] OME healthcheck configured from $probe_config with auth_mode=$auth_mode credential_type=username_password username=<redacted> password=<redacted>"
+                      echo "[$probe_source] OME healthcheck startup auth_mode=$auth_mode credential_type=username_password username=<redacted> password=<redacted>"
                       ;;
                     *)
                       echo "[$probe_source] OME healthcheck misconfigured in $probe_config: unsupported BITRIVER_OME_HEALTHCHECK_AUTH_MODE=$auth_mode (expected accesstoken or basic)" >&2
@@ -206,7 +212,7 @@ spec:
                     exit 0
                   fi
 
-                  echo "[$probe_source] OME healthcheck failed for $health_url and $healthz_url using auth_mode=$auth_mode from $probe_config" >&2
+                  echo "[$probe_source] OME healthcheck failed for $health_url using auth_mode=$auth_mode from $probe_config" >&2
                   exit 1
             initialDelaySeconds: 20
             periodSeconds: 15
