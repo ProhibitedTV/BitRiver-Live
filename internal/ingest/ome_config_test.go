@@ -429,13 +429,13 @@ func TestRenderOMEConfigDefaultsAlignManagersAPIWithComposeHealthcheckPort(t *te
 		t.Fatalf("expected compose healthcheck to document canonical token precedence")
 	}
 
-	accessTokenProbe := `if { [ "$$auth_mode" = "accesstoken" ] && probe_access_token; } || { [ "$$auth_mode" = "basic" ] && probe_basic_auth; }; then`
+	accessTokenProbe := `if { [ "$$auth_mode" = "accesstoken" ] && probe_access_token; } || { [ "$$auth_mode" = "basic" ] && probe_basic_auth; } || { [ "$$auth_mode" = "none" ] && probe_unauthenticated; } || { [ "$$auth_mode" = "off" ] && probe_unauthenticated; } || { [ "$$auth_mode" = "disabled" ] && probe_unauthenticated; }; then`
 
 	if !strings.Contains(compose, accessTokenProbe) {
-		t.Fatalf("expected compose healthcheck to probe with access token mode by default")
+		t.Fatalf("expected compose healthcheck to probe with configured auth mode logic")
 	}
-	if strings.Contains(compose, `Authorization: Bearer $$token`) {
-		t.Fatalf("expected compose healthcheck to avoid Authorization Bearer fallback")
+	if !strings.Contains(compose, `Authorization: Bearer $$token`) {
+		t.Fatalf("expected compose healthcheck to send Authorization Bearer header in accesstoken mode")
 	}
 	if !strings.Contains(compose, `-u "$$BITRIVER_OME_USERNAME:$$BITRIVER_OME_PASSWORD"`) {
 		t.Fatalf("expected compose healthcheck to use basic auth credentials")

@@ -268,7 +268,7 @@ func TestQuickstartFailsOmeAuthPreflightWhenAuthModeInvalid(t *testing.T) {
 		t.Fatalf("expected quickstart to fail for unsupported auth mode")
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be accesstoken or basic") {
+	if !strings.Contains(out, "BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be accesstoken, basic, or none/off/disabled") {
 		t.Fatalf("expected auth mode validation error, got:\n%s", out)
 	}
 }
@@ -464,7 +464,7 @@ func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 	}
 }
 
-func TestComposeOMEHealthcheckUsesCanonicalAccessTokenHeader(t *testing.T) {
+func TestComposeOMEHealthcheckUsesAuthorizationBearerHeader(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -478,8 +478,8 @@ func TestComposeOMEHealthcheckUsesCanonicalAccessTokenHeader(t *testing.T) {
 	}
 
 	compose := string(content)
-	if !strings.Contains(compose, `AccessToken: $$token`) {
-		t.Fatalf("expected OME healthcheck to probe using AccessToken header by default")
+	if !strings.Contains(compose, `Authorization: Bearer $$token`) {
+		t.Fatalf("expected OME healthcheck to probe using Authorization Bearer header by default")
 	}
 	if !strings.Contains(compose, "BITRIVER_OME_HEALTHCHECK_AUTH_MODE") {
 		t.Fatalf("expected OME healthcheck to declare BITRIVER_OME_HEALTHCHECK_AUTH_MODE")
@@ -491,11 +491,14 @@ func TestComposeOMEHealthcheckUsesCanonicalAccessTokenHeader(t *testing.T) {
 	if !strings.Contains(compose, "bitriver-ome startup failed") {
 		t.Fatalf("expected OME startup to fail fast when canonical token inputs are empty or mismatched")
 	}
-	if strings.Contains(compose, "Authorization: Bearer $$token") {
-		t.Fatalf("expected OME healthcheck to avoid Authorization Bearer fallback")
+	if strings.Contains(compose, "AccessToken: $$token") {
+		t.Fatalf("expected OME healthcheck to avoid deprecated AccessToken header")
 	}
 	if !strings.Contains(compose, "credential_type=access_token") {
 		t.Fatalf("expected OME healthcheck startup logs to declare access_token credential type")
+	}
+	if !strings.Contains(compose, "http_status=$${http_status:-unknown}") {
+		t.Fatalf("expected OME healthcheck logs to include HTTP status")
 	}
 	if !strings.Contains(compose, "auth_mode=$$auth_mode") {
 		t.Fatalf("expected OME healthcheck logs to mention auth_mode selection")

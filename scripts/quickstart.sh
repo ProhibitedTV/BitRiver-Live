@@ -92,11 +92,11 @@ run_ome_auth_preflight() {
   fi
 
   case "$auth_mode" in
-    accesstoken|basic)
+    accesstoken|basic|none|off|disabled)
       ;;
     *)
       cat >&2 <<EOF
-OME auth preflight failed: BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be accesstoken or basic (current: ${raw_auth_mode:-<empty>}).
+OME auth preflight failed: BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be accesstoken, basic, or none/off/disabled (current: ${raw_auth_mode:-<empty>}).
 Set BITRIVER_OME_HEALTHCHECK_AUTH_MODE=accesstoken for token probes, or:
   BITRIVER_OME_HEALTHCHECK_AUTH_MODE=basic
   BITRIVER_OME_USERNAME=ome-operator
@@ -139,7 +139,7 @@ Example:
 EOF
       return 1
     fi
-  else
+  elif [[ "$auth_mode" == "accesstoken" ]]; then
     if [[ -z "$healthcheck_token" && -z "$access_token" && -z "$api_token" ]]; then
       cat >&2 <<EOF
 OME auth preflight failed: BITRIVER_OME_HEALTHCHECK_AUTH_MODE=accesstoken requires a non-empty token in canonical order:
