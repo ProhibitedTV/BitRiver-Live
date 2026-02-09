@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -176,7 +175,6 @@ var (
 
 	forbiddenPlaceholders = defaultForbiddenPlaceholders()
 	placeholderLoadErr    error
-	sslModeDisablePattern = regexp.MustCompile(`(?i)(^|[?&\s;])sslmode=disable([&#;\s]|$)`)
 )
 
 // init performs init and propagates validation or dependency failures to the caller.

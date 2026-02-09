@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -15,6 +14,7 @@ import (
 	"strings"
 
 	"bitriver-live/internal/envutil"
+	"bitriver-live/internal/envutil/pgdsn"
 	"bitriver-live/internal/stringsutil"
 )
 
@@ -377,27 +377,6 @@ func randomSuffix() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-func postgresSSLModeDisable(dsn string) bool {
-	return sslModeDisablePattern.MatchString(dsn)
-}
-
-func isComposePostgresDSN(dsn string) bool {
-	trimmed := strings.ToLower(strings.TrimSpace(dsn))
-	if trimmed == "" {
-		return false
-	}
-	if strings.Contains(trimmed, "host=postgres") {
-		return true
-	}
-	if strings.HasPrefix(trimmed, "postgres://") || strings.HasPrefix(trimmed, "postgresql://") {
-		parsed, err := url.Parse(trimmed)
-		if err == nil && strings.EqualFold(parsed.Hostname(), "postgres") {
-			return true
-		}
-	}
-	return false
-}
-
 func validateEnv(values map[string]string) envValidatorResult {
 	requiredVars := []string{
 		"BITRIVER_POSTGRES_USER",
@@ -530,7 +509,7 @@ func validateEnv(values map[string]string) envValidatorResult {
 	}
 
 	for _, key := range []string{"BITRIVER_LIVE_POSTGRES_DSN", "BITRIVER_LIVE_SESSION_POSTGRES_DSN"} {
-		if val := strings.TrimSpace(values[key]); val != "" && postgresSSLModeDisable(val) && !isComposePostgresDSN(val) {
+		if val := strings.TrimSpace(values[key]); val != "" && pgdsn.SSLModeDisable(val) && !pgdsn.IsComposePostgresDSN(val) {
 			message := fmt.Sprintf("%s disables TLS. Use sslmode=require or verify-full for external Postgres; sslmode=disable is only allowed for the local Compose postgres service.", key)
 			if production {
 				res.Errors = append(res.Errors, message)
