@@ -64,9 +64,9 @@ The OME service in `deploy/docker-compose.yml` uses a `curl`-based healthcheck a
 
 Probe/auth sequence is exact and ordered:
 
-1. Resolve the probe auth mode from `BITRIVER_OME_HEALTHCHECK_AUTH_MODE` (default `accesstoken`; supported values are only `accesstoken` or `basic`).
+1. Resolve the probe auth mode from `BITRIVER_OME_HEALTHCHECK_AUTH_MODE` (default `accesstoken`; supported values are `accesstoken`, `basic`, or unauthenticated `none`/`off`/`disabled`).
 2. In `accesstoken` mode, resolve the token with canonical precedence `BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN`.
-3. Reject Bearer-prefixed tokens in `accesstoken` mode, then probe `/v1/health` with the exact header format `AccessToken: <token>`.
+3. Reject Bearer-prefixed tokens in `accesstoken` mode, then probe `/v1/health` with the exact header format `Authorization: Bearer <token>`.
 4. Optional `basic` mode requires non-empty `BITRIVER_OME_USERNAME` **and** `BITRIVER_OME_PASSWORD` and probes the same endpoint with HTTP basic auth (pick this only when your OME control API expects username/password credentials).
 
 This contract is intentionally identical across deployment modes: `deploy/docker-compose.yml`, `deploy/helm/bitriver-live/templates/deployment-ome.yaml`, and Helm defaults in `deploy/helm/bitriver-live/values.yaml` all use the same auth mode enum and credential requirements.
@@ -92,8 +92,8 @@ docker compose exec ome sh -lc '
 
   if [ "$auth_mode" = "accesstoken" ]; then
     [ -n "$token" ] || { echo "missing token chain: set BITRIVER_OME_HEALTHCHECK_TOKEN/ACCESS_TOKEN/API_TOKEN" >&2; exit 1; }
-    printf '%s' "$token" | grep -Eq '^[[:space:]]*Bearer[[:space:]]+' && { echo "token must be raw AccessToken (not Bearer-prefixed)" >&2; exit 1; }
-    curl -fsS --connect-timeout 2 --max-time 4 -H "AccessToken: $token" "$health_url"
+    printf '%s' "$token" | grep -Eq '^[[:space:]]*Bearer[[:space:]]+' && { echo "token must be raw token value (probe adds Authorization: Bearer)" >&2; exit 1; }
+    curl -fsS --connect-timeout 2 --max-time 4 -H "Authorization: Bearer $token" "$health_url"
   elif [ "$auth_mode" = "basic" ]; then
     [ -n "${BITRIVER_OME_USERNAME:-}" ] && [ -n "${BITRIVER_OME_PASSWORD:-}" ] || { echo "missing basic-auth credentials" >&2; exit 1; }
     curl -fsS --connect-timeout 2 --max-time 4 -u "$BITRIVER_OME_USERNAME:$BITRIVER_OME_PASSWORD" "$health_url"

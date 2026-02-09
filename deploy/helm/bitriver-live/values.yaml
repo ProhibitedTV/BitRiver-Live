@@ -128,7 +128,7 @@ env:
   NEXT_VIEWER_BASE_PATH: /viewer
   NEXT_PUBLIC_VIEWER_URL: https://stream.example.com/viewer
   BITRIVER_LIVE_METRICS_ALLOW_NETWORKS: ""
-  # Mirrors deploy/docker-compose.yml probe auth modes. Supported values: accesstoken (default) or basic.
+  # Mirrors deploy/docker-compose.yml probe auth modes. Supported values: accesstoken (default), basic, or none/off/disabled.
   # accesstoken uses token precedence BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN.
   # basic requires BOTH BITRIVER_OME_USERNAME and BITRIVER_OME_PASSWORD.
   BITRIVER_OME_HEALTHCHECK_AUTH_MODE: accesstoken

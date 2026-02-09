@@ -240,9 +240,9 @@ function Invoke-OmeAuthPreflight {
     $rawAuthMode = Get-EnvValue -FilePath $EnvFilePath -Key 'BITRIVER_OME_HEALTHCHECK_AUTH_MODE'
     $authMode = if ($rawAuthMode) { $rawAuthMode.ToLowerInvariant() } else { 'accesstoken' }
 
-    if ($authMode -ne 'accesstoken' -and $authMode -ne 'basic') {
+    if ($authMode -ne 'accesstoken' -and $authMode -ne 'basic' -and $authMode -ne 'none' -and $authMode -ne 'off' -and $authMode -ne 'disabled') {
         $message = @"
-OME auth preflight failed: BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be accesstoken or basic (current: $(if ($rawAuthMode) { $rawAuthMode } else { '<empty>' })).
+OME auth preflight failed: BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be accesstoken, basic, or none/off/disabled (current: $(if ($rawAuthMode) { $rawAuthMode } else { '<empty>' })).
 Set BITRIVER_OME_HEALTHCHECK_AUTH_MODE=accesstoken for token probes, or:
   BITRIVER_OME_HEALTHCHECK_AUTH_MODE=basic
   BITRIVER_OME_USERNAME=ome-operator
@@ -282,7 +282,7 @@ Example:
 "@
             Write-Error $message
         }
-    } else {
+    } elseif ($authMode -eq 'accesstoken') {
         if (-not $healthcheckToken -and -not $accessToken -and -not $apiToken) {
             $message = @"
 OME auth preflight failed: BITRIVER_OME_HEALTHCHECK_AUTH_MODE=accesstoken requires a non-empty token in canonical order:
