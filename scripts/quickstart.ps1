@@ -6,7 +6,8 @@
 
 param(
     [switch]$h,
-    [switch]$help
+    [switch]$help,
+    [switch]$ValidateOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,7 +15,7 @@ Set-StrictMode -Version Latest
 
 function Show-Usage {
     @'
-Usage: scripts/quickstart.ps1 [-h|--help]
+Usage: scripts/quickstart.ps1 [-h|--help] [-ValidateOnly]
 
 Runs the Go-based BitRiver Live CLI quickstart command to run doctor, initialize
 the environment, render OME configuration, start Docker Compose, wait for the
@@ -22,7 +23,8 @@ API readiness probe, and seed the admin user. Override ENV_FILE or COMPOSE_FILE
 to point at custom locations.
 
 Options:
-  -h, --help    Show this help message.
+  -h, --help      Show this help message.
+  -ValidateOnly   Validate script entrypoint wiring without Docker Desktop orchestration.
 '@
 }
 
@@ -313,14 +315,6 @@ Example:
     Invoke-NativeOmeTokenVerification -EnvFile $EnvFilePath -ConfigFile $configPath
 }
 
-if ($h -or $help) {
-    Show-Usage
-    exit 0
-}
-
-Ensure-Go
-Ensure-DockerDesktopRunning
-
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $RepoRoot = Resolve-Path "$ScriptDir/.."
 $CodeRoot = if ($Env:BITRIVER_QUICKSTART_REPO_ROOT) { Resolve-Path $Env:BITRIVER_QUICKSTART_REPO_ROOT } else { $RepoRoot }
@@ -345,6 +339,22 @@ $DefaultComposeFile = Join-Path $CodeRoot 'deploy/docker-compose.yml'
 $EnvFile = if ($Env:ENV_FILE) { $Env:ENV_FILE } else { $DefaultEnvFile }
 $ComposeFile = if ($Env:COMPOSE_FILE) { $Env:COMPOSE_FILE } else { $DefaultComposeFile }
 $VerifyOmeTokenScript = Join-Path $CodeRoot 'scripts/verify-ome-health-token.sh'
+
+
+if ($h -or $help) {
+    Show-Usage
+    exit 0
+}
+
+Ensure-Go
+
+if ($ValidateOnly) {
+    Write-Output 'Running BitRiver Live quickstart entrypoint validation (no Docker orchestration) ...'
+    Invoke-Cli -CliArgs @('quickstart', '--help')
+    exit 0
+}
+
+Ensure-DockerDesktopRunning
 
 $quickstartArgs = @('quickstart', '--env-file', $EnvFile, '--compose-file', $ComposeFile)
 

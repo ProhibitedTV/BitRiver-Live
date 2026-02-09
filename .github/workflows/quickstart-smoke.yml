@@ -63,6 +63,11 @@ jobs:
         shell: pwsh
         run: pwsh -File scripts/quickstart.ps1 -help
 
+      - name: Validate quickstart.ps1 no-op entrypoint path
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: pwsh -File scripts/quickstart.ps1 -ValidateOnly
+
       - name: Static validation for quickstart.ps1 helper usage
         if: runner.os == 'Windows'
         shell: pwsh
@@ -73,7 +78,9 @@ jobs:
             'Ensure-DockerDesktopRunning',
             'Invoke-Cli',
             "Join-Path $CodeRoot 'deploy/docker-compose.yml'",
-            "quickstart', '--env-file', $EnvFile, '--compose-file', $ComposeFile"
+            "quickstart', '--env-file', $EnvFile, '--compose-file', $ComposeFile",
+            "if ($ValidateOnly)",
+            "Invoke-Cli -CliArgs @('quickstart', '--help')"
           )
 
           foreach ($snippet in $requiredSnippets) {
