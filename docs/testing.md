@@ -205,6 +205,17 @@ When no `.env` exists in the repository root, the helper seeds one with the same
 
 CI enforces the same guardrails in [`.github/workflows/quickstart-smoke.yml`](../.github/workflows/quickstart-smoke.yml): keep both the `quickstart-entrypoints` matrix job (Ubuntu/macOS shell usage + static checks, Windows PowerShell help + `-ValidateOnly` no-op path) and the Ubuntu `quickstart-smoke` compose job enabled as required pull-request checks so script drift is blocked before merge.
 
+
+## Docs installer consistency
+
+Run the installer-language guard to keep shipped milestones consistent across release and deployment docs:
+
+```bash
+./scripts/check-doc-installer-language.sh
+```
+
+CI enforces the same check in [`.github/workflows/docs-consistency.yml`](../.github/workflows/docs-consistency.yml).
+
 ## Postgres storage layer
 
 Storage integration tests live behind the `postgres` build tag. They expect an

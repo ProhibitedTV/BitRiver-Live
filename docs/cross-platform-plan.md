@@ -1,6 +1,6 @@
 # Cross-platform plan
 
-This document inventories the platform-specific assumptions in BitRiver Live today and outlines how we will converge on a single cross-platform control plane without changing behaviour yet.
+This document inventories the platform-specific assumptions in BitRiver Live today and tracks the shipped milestones for the cross-platform control plane.
 
 ## Platform-specific assumptions in the current repo
 
@@ -29,7 +29,7 @@ Adopt a Go-based control plane CLI (`cmd/bitriver`) that mirrors the current beh
 
 - **Compose orchestration:** Wrap `deploy/docker-compose.yml` bring-up/teardown, Docker root discovery, and disk space checks without relying on Bash or PowerShell.
 - **Config rendering and validation:** Keep the Go OME renderer and `deploy/check-env.sh` logic aligned so `.env` validation, template rendering, and secret generation work uniformly on Windows, macOS, and Linux, with shell scripts acting as thin delegates.
-- **Installer flows:** Replace `deploy/install/ubuntu.sh` and `deploy/install/wizard.sh` with CLI subcommands that stage binaries/configs under user-selected paths and emit OS-specific service definitions (systemd on Linux; launchd/Windows Service templates later).
+- **Installer flows (shipped):** `cmd/bitriver` now provides `install systemd`, `install launchd`, and `install windows-service` subcommands so operators can stage binaries/configs under user-selected paths and emit OS-specific service definitions without relying on shell-specific installers.
 - **Gradual deprecation of shell wrappers:** Keep `scripts/quickstart.sh` and `scripts/quickstart.ps1` as thin shims that call the Go CLI, preserving current entrypoints while steering users to the cross-platform binary.
 
 You can exercise the initial CLI scaffold today with:
@@ -47,11 +47,19 @@ go run ./cmd/bitriver doctor
   Compose file and `.env` guardrails as source-of-truth inputs so the production pipeline stays identical on Windows, macOS,
   and Linux.
 
+## Current release outputs
+
+The release workflow (`.github/workflows/release.yml`) currently publishes:
+
+- **Windows installer:** `bitriver-live-<version>.msi`.
+- **Launcher bundles:** `bitriver-launcher-<os>-<arch>.tar.gz` (Linux/macOS) and `.zip` (Windows), plus Linux `.deb`/`.rpm` packages.
+- **Release archives:** `bitriver-live-<os>-<arch>` server/tool archives and `bitriver-<os>-<arch>` CLI archives.
+
 ## Migration checklist and milestones
 
 1. **Codify support tiers in docs:** Publish this plan and reference it from the root README to set expectations for Tier 1 vs. Tier 2 platforms.
 2. **Scaffold the Go control plane:** Create `cmd/bitriver` with subcommands that replicate quickstart (Compose up/down, env generation) without changing defaults; reuse existing `cmd` packages where possible.
 3. **Port env validation and template rendering:** Ensure `deploy/check-env.sh` and the Go OME renderer stay in sync, keeping the shell scripts as delegates while the CLI stabilises.
-4. **Add cross-platform installers:** Implement CLI subcommands to stage binaries, viewer assets, and ingest configs to configurable paths, then emit service definitions for systemd and placeholders for launchd/Windows Service.
+4. **Add cross-platform installers (completed):** `cmd/bitriver install systemd`, `cmd/bitriver install launchd`, and `cmd/bitriver install windows-service` stage binaries, viewer assets, and ingest configs to configurable paths while generating OS-native service definitions.
 5. **Document and deprecate:** Update `README.md`, `docs/quickstart.md`, and platform guides to recommend the Go CLI first, marking Bash/systemd helpers as legacy once feature parity is confirmed.
-6. **Release artifacts:** Ship signed CLI binaries for Windows/macOS/Linux alongside Docker images so users can adopt the control plane without building from source.
+6. **Release artifacts (completed):** Tagged releases now ship Windows MSI installers, Linux/macOS launcher bundles, signed CLI archives, and release archives alongside Docker images so users can adopt the control plane without building from source.

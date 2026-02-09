@@ -1,0 +1,25 @@
+name: Docs consistency
+
+on:
+  push:
+    paths:
+      - 'README.md'
+      - 'docs/**/*.md'
+      - 'scripts/check-doc-installer-language.sh'
+      - '.github/workflows/docs-consistency.yml'
+  pull_request:
+    paths:
+      - 'README.md'
+      - 'docs/**/*.md'
+      - 'scripts/check-doc-installer-language.sh'
+      - '.github/workflows/docs-consistency.yml'
+
+jobs:
+  installer-wording:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check installer milestone wording
+        run: ./scripts/check-doc-installer-language.sh
