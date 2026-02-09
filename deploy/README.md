@@ -20,6 +20,12 @@ The Compose stack provides a one-command bootstrap for development and demos:
 ./scripts/quickstart.sh
 ```
 
+`./scripts/quickstart.sh` is a thin wrapper around `go run ./cmd/bitriver quickstart`, so source checkouts require Go 1.21+
+available on `PATH` (it does not provide a pure-Docker startup path with no local Go toolchain).
+
+If you're operating from an installed package rather than a source checkout, use the installed `bitriver-live` launcher flow in
+[`docs/quickstart.md`](../docs/quickstart.md) instead of invoking the repository wrapper script directly.
+
 If you invoke Compose directly, set the Compose file path and ensure `.env` is populated:
 
 ```bash
