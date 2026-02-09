@@ -416,12 +416,14 @@ func validateComposeEffectiveEnvironment(envFile string) error {
 		}
 	}
 
-	effectiveAuthErr := validateQuickstartOMEHealthcheckAuthMode(effectiveValues["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"])
-	if effectiveAuthErr != nil {
-		if _, ok := overrides["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"]; ok {
-			return composeEnvOverrideError(resolvedEnvFile, "BITRIVER_OME_HEALTHCHECK_AUTH_MODE")
+	result := validateEnvironmentValues(effectiveValues)
+	if len(result.Errors) > 0 || len(result.Missing) > 0 || len(result.Blocked) > 0 {
+		for _, key := range criticalDeployEnvironmentKeys() {
+			if _, ok := overrides[key]; ok {
+				return composeEnvOverrideError(resolvedEnvFile, key)
+			}
 		}
-		return effectiveAuthErr
+		return errors.New("effective environment validation failed after applying process environment overrides")
 	}
 
 	return nil
@@ -430,6 +432,11 @@ func validateComposeEffectiveEnvironment(envFile string) error {
 func criticalDeployEnvironmentKeys() []string {
 	return []string{
 		"BITRIVER_OME_HEALTHCHECK_AUTH_MODE",
+		"BITRIVER_OME_USERNAME",
+		"BITRIVER_OME_PASSWORD",
+		"BITRIVER_OME_API_TOKEN",
+		"BITRIVER_OME_ACCESS_TOKEN",
+		"BITRIVER_OME_HEALTHCHECK_TOKEN",
 		"BITRIVER_LIVE_ADMIN_EMAIL",
 		"BITRIVER_LIVE_ADMIN_PASSWORD",
 		"BITRIVER_POSTGRES_DB",

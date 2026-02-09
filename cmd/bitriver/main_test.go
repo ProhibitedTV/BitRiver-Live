@@ -857,17 +857,36 @@ func TestValidateComposeEffectiveEnvironmentRejectsCriticalOverrideEvenWhenValid
 	}
 }
 
+func TestValidateComposeEffectiveEnvironmentAllowsMatchingHostOverride(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	values := buildValidProductionEnv(t)
+	values["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"] = "basic"
+	var lines []string
+	for key, value := range values {
+		lines = append(lines, fmt.Sprintf("%s=%s", key, value))
+	}
+	if err := os.WriteFile(envPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+	t.Setenv("BITRIVER_OME_HEALTHCHECK_AUTH_MODE", "basic")
+
+	if err := validateComposeEffectiveEnvironment(envPath); err != nil {
+		t.Fatalf("expected matching host override to pass, got %v", err)
+	}
+}
+
 func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), ".env")
 	composePath := filepath.Join(t.TempDir(), "compose.yml")
-	envContent := strings.Join([]string{
-		"BITRIVER_LIVE_ADMIN_EMAIL=admin@example.com",
-		"BITRIVER_LIVE_ADMIN_PASSWORD=supersecret",
-		"BITRIVER_LIVE_PORT=18080",
-		"BITRIVER_POSTGRES_USER=brlive_app",
-		"BITRIVER_POSTGRES_PASSWORD=testpass",
-	}, "\n") + "\n"
-	if err := os.WriteFile(envPath, []byte(envContent), 0o644); err != nil {
+	values := buildValidProductionEnv(t)
+	values["BITRIVER_LIVE_ADMIN_EMAIL"] = "admin@example.com"
+	values["BITRIVER_LIVE_ADMIN_PASSWORD"] = "supersecret"
+	values["BITRIVER_LIVE_PORT"] = "18080"
+	var lines []string
+	for key, value := range values {
+		lines = append(lines, fmt.Sprintf("%s=%s", key, value))
+	}
+	if err := os.WriteFile(envPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
 		t.Fatalf("write env: %v", err)
 	}
 	originalDoctor := doctorRunner
