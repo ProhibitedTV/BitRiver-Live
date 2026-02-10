@@ -24,12 +24,9 @@ func main() {
 }
 
 // resolveExpectedDriver returns the normalized storage driver from the flag,
-// then BITRIVER_LIVE_STORAGE_DRIVER, defaulting to postgres when unset.
+// defaulting to postgres when unset.
 func resolveExpectedDriver(flagValue string) string {
 	driver := strings.ToLower(strings.TrimSpace(flagValue))
-	if driver == "" {
-		driver = strings.ToLower(strings.TrimSpace(os.Getenv("BITRIVER_LIVE_STORAGE_DRIVER")))
-	}
 	if driver == "" {
 		driver = "postgres"
 	}
