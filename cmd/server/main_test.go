@@ -159,15 +159,17 @@ func TestValidateMetricsProtection(t *testing.T) {
 	}
 }
 
-func TestResolveStorageDriverMissingConfigFails(t *testing.T) {
-	if _, _, err := resolveStorageDriver("", "", ""); err == nil {
-		t.Fatal("resolveStorageDriver expected error when no configuration provided")
+func TestResolveStorageDriverRejectsNonPostgres(t *testing.T) {
+	if _, explicit, err := resolveStorageDriver("json", "", "postgres://example"); err == nil {
+		t.Fatal("expected error for non-postgres storage driver")
+	} else if !explicit {
+		t.Fatal("expected explicit=true when flag provided")
 	}
 }
 
-func TestValidateProductionDatastoreRejectsNonPostgres(t *testing.T) {
-	if err := validateProductionDatastore("json", "postgres://example", "postgres://env"); err == nil {
-		t.Fatal("expected error when production mode uses non-postgres driver")
+func TestResolveStorageDriverMissingConfigFails(t *testing.T) {
+	if _, _, err := resolveStorageDriver("", "", ""); err == nil {
+		t.Fatal("resolveStorageDriver expected error when no configuration provided")
 	}
 }
 
@@ -245,7 +247,7 @@ func TestResolveSessionStoreConfig(t *testing.T) {
 		},
 		{
 			name:          "DefaultsToPostgresWhenSessionDSNProvided",
-			storageDriver: "json",
+			storageDriver: "postgres",
 			envDSN:        "postgres://sessions",
 			want:          sessionStoreConfig{Driver: "postgres", DSN: "postgres://sessions"},
 		},
@@ -257,14 +259,9 @@ func TestResolveSessionStoreConfig(t *testing.T) {
 			want:          sessionStoreConfig{Driver: "memory"},
 		},
 		{
-			name:          "DefaultsToMemoryWithoutHints",
-			storageDriver: "json",
-			want:          sessionStoreConfig{Driver: "memory"},
-		},
-		{
 			name:          "ErrorsWhenPostgresSelectedWithoutDSN",
 			flagDriver:    "postgres",
-			storageDriver: "json",
+			storageDriver: "postgres",
 			wantErr:       true,
 		},
 		{
@@ -284,7 +281,7 @@ func TestResolveSessionStoreConfig(t *testing.T) {
 		},
 		{
 			name:            "ProductionRejectsImplicitMemory",
-			storageDriver:   "json",
+			storageDriver:   "postgres",
 			requirePostgres: true,
 			wantErr:         true,
 		},
@@ -389,44 +386,6 @@ func TestStartupSummaryPostgresRedis(t *testing.T) {
 		if _, ok := ingestSummary[key]; !ok {
 			t.Fatalf("expected ingest summary to include %s", key)
 		}
-	}
-}
-
-func TestStartupSummaryMemoryDefaults(t *testing.T) {
-	summary := newStartupSummary(startupSummaryInput{
-		StorageDriver: "json",
-		StoragePath:   "/tmp/data.json",
-		SessionConfig: sessionStoreConfig{Driver: "memory"},
-		ChatDriver:    "memory",
-		RateLimit:     server.RateLimitConfig{},
-	})
-	args := summary.LogArgs()
-	mapped := summaryArgsToMap(t, args)
-	datastore := mappedValueAsMap(t, mapped, "datastore")
-	if datastore["driver"] != "json" {
-		t.Fatalf("expected datastore driver json, got %v", datastore["driver"])
-	}
-	if datastore["path"] != "/tmp/data.json" {
-		t.Fatalf("expected datastore path to be recorded, got %v", datastore["path"])
-	}
-	session := mappedValueAsMap(t, mapped, "session_store")
-	if session["driver"] != "memory" {
-		t.Fatalf("expected session driver memory, got %v", session["driver"])
-	}
-	if _, ok := session["dsn"]; ok {
-		t.Fatalf("did not expect session DSN for memory driver")
-	}
-	login := mappedValueAsMap(t, mapped, "login_throttle")
-	if login["driver"] != "memory" {
-		t.Fatalf("expected login throttle driver memory, got %v", login["driver"])
-	}
-	chatSummary := mappedValueAsMap(t, mapped, "chat_queue")
-	if chatSummary["driver"] != "memory" {
-		t.Fatalf("expected chat queue driver memory, got %v", chatSummary["driver"])
-	}
-	ingestSummary := mappedValueAsMap(t, mapped, "ingest")
-	if ingestSummary["enabled"] != false {
-		t.Fatalf("expected ingest to be disabled, got %v", ingestSummary["enabled"])
 	}
 }
 

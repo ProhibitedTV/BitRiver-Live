@@ -1,6 +1,6 @@
 # Advanced deployments
 
-Power users who want managed databases, object storage, or automated ingest can dip into the sections below. Postgres is now the standard datastore for every environment; the JSON file backend remains available for quick prototypes when invoked with `--storage-driver json`.
+Power users who want managed databases, object storage, or automated ingest can dip into the sections below. Postgres is the only supported runtime datastore for every environment.
 
 ## Ingest → transcode → playback lifecycle
 
@@ -403,7 +403,7 @@ Stopping a stream now generates a recording entry that captures the session meta
 | `BITRIVER_LIVE_RECORDING_RETENTION_PUBLISHED` | Duration (e.g. `720h`) that published VODs should be retained before being purged. Use `0` to keep them indefinitely. |
 | `BITRIVER_LIVE_RECORDING_RETENTION_UNPUBLISHED` | Duration that drafts stay on disk; `0` disables automatic removal before publication. |
 
-Flags with the same names (see `--object-endpoint`, `--object-bucket`, `--recording-retention-published`, etc.) override the environment variables when provided. The server keeps recordings in the JSON datastore until the retention window elapses and mirrors the policy into object storage lifecycle configuration.
+Flags with the same names (see `--object-endpoint`, `--object-bucket`, `--recording-retention-published`, etc.) override the environment variables when provided. The server keeps recording metadata in Postgres until the retention window elapses and mirrors the policy into object storage lifecycle configuration.
 
 ### Object storage lifecycle for VODs and thumbnails
 
@@ -444,7 +444,7 @@ curl -s --request POST http://localhost:8080/api/channels/CHANNEL_ID/stream/star
 
 If you do not have [`jq`](https://stedolan.github.io/jq/) installed, run the login request separately and paste the `token` value into the `SESSION_TOKEN` environment variable manually.
 
-Troubleshooting: a `403 Forbidden` response means the token is missing admin privileges or the `Authorization` header was omitted. Double-check that your user has the `admin` role in `data/store.json`, sign back in to mint a new token, and retry the request.
+Troubleshooting: a `403 Forbidden` response means the token is missing admin privileges or the `Authorization` header was omitted. Double-check that your user has the `admin` role in Postgres, sign back in to mint a new token, and retry the request.
 
 ## Configure ingest orchestration
 

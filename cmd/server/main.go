@@ -85,9 +85,8 @@ func main() {
 	securityPermissionsPolicy := flag.String("security-permissions-policy", "", "Permissions-Policy header value")
 	securityContentTypeOptions := flag.String("security-content-type-options", "", "X-Content-Type-Options header value")
 
-	// Storage flags (env: BITRIVER_LIVE_STORAGE_DRIVER, BITRIVER_LIVE_DATA, BITRIVER_LIVE_POSTGRES_DSN, DATABASE_URL, BITRIVER_LIVE_POSTGRES_*).
-	dataPath := flag.String("data", "", "path to JSON datastore")
-	storageDriver := flag.String("storage-driver", "", "datastore driver (json or postgres)")
+	// Storage flags (env: BITRIVER_LIVE_STORAGE_DRIVER, BITRIVER_LIVE_POSTGRES_DSN, DATABASE_URL, BITRIVER_LIVE_POSTGRES_*).
+	storageDriver := flag.String("storage-driver", "", "datastore driver (postgres only)")
 	postgresDSN := flag.String("postgres-dsn", "", "Postgres connection string")
 	postgresMaxConns := flag.Int("postgres-max-conns", 0, "maximum connections in the Postgres pool")
 	postgresMinConns := flag.Int("postgres-min-conns", 0, "minimum idle connections maintained by the Postgres pool")
@@ -350,12 +349,8 @@ func main() {
 		store                   storage.Repository
 		storagePostgresDSN      string
 		datastoreAcquireTimeout time.Duration
-		dataFile                string
 	)
 	switch driver {
-	case "json":
-		dataFile = resolveDataPath(*dataPath, os.Getenv("BITRIVER_LIVE_DATA"))
-		store, err = storage.NewJSONRepository(dataFile, options...)
 	case "postgres":
 		storagePostgresDSN = postgresDefaultDSN
 		if storagePostgresDSN == "" {
@@ -573,7 +568,6 @@ func main() {
 	summary := newStartupSummary(startupSummaryInput{
 		StorageDriver:          driver,
 		StorageDSN:             storagePostgresDSN,
-		StoragePath:            dataFile,
 		SessionConfig:          sessionConfig,
 		RateLimit:              rateCfg,
 		ChatDriver:             chatDriver,
@@ -680,7 +674,6 @@ type sessionStoreConfig struct {
 type startupSummaryInput struct {
 	StorageDriver          string
 	StorageDSN             string
-	StoragePath            string
 	SessionConfig          sessionStoreConfig
 	RateLimit              server.RateLimitConfig
 	ChatDriver             string
@@ -706,10 +699,6 @@ func newStartupSummary(in startupSummaryInput) startupSummary {
 	case "postgres":
 		if in.StorageDSN != "" {
 			datastore["dsn"] = redactDSN(in.StorageDSN)
-		}
-	case "json":
-		if in.StoragePath != "" {
-			datastore["path"] = in.StoragePath
 		}
 	}
 
@@ -1045,15 +1034,21 @@ func isProductionMode(mode string) bool {
 // resolveStorageDriver resolves storage driver from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveStorageDriver(flagValue, envValue, postgresDSN string) (string, bool, error) {
 	if driver := strings.ToLower(strings.TrimSpace(flagValue)); driver != "" {
+		if driver != "postgres" {
+			return "", true, fmt.Errorf("unsupported datastore driver %q: only postgres is supported", driver)
+		}
 		return driver, true, nil
 	}
 	if driver := strings.ToLower(strings.TrimSpace(envValue)); driver != "" {
+		if driver != "postgres" {
+			return "", true, fmt.Errorf("unsupported datastore driver %q: only postgres is supported", driver)
+		}
 		return driver, true, nil
 	}
 	if strings.TrimSpace(postgresDSN) != "" {
 		return "postgres", false, nil
 	}
-	return "", false, fmt.Errorf("no datastore configured: provide --storage-driver json or configure Postgres via BITRIVER_LIVE_POSTGRES_DSN, DATABASE_URL, or --postgres-dsn")
+	return "", false, fmt.Errorf("no datastore configured: configure Postgres via BITRIVER_LIVE_POSTGRES_DSN, DATABASE_URL, or --postgres-dsn")
 }
 
 // validateProductionDatastore validates production datastore and reports an error when required invariants are not met.
@@ -1074,17 +1069,6 @@ func validateProductionDatastore(driver, resolvedPostgresDSN, envPostgresDSN str
 		return err
 	}
 	return nil
-}
-
-// resolveDataPath resolves data path from flags and environment values, returning validation errors when incompatible settings are provided.
-func resolveDataPath(flagValue, envValue string) string {
-	if flagValue != "" {
-		return flagValue
-	}
-	if env := strings.TrimSpace(envValue); env != "" {
-		return env
-	}
-	return "data/store.json"
 }
 
 // resolvePostgresDSN resolves postgres dsn from flags and environment values, returning validation errors when incompatible settings are provided.

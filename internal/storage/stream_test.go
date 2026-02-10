@@ -461,10 +461,6 @@ func TestStopStreamInvokesShutdown(t *testing.T) {
 	}
 }
 
-func TestStorageIngestHealthSnapshots(t *testing.T) {
-	RunRepositoryIngestHealthSnapshots(t, jsonRepositoryFactory)
-}
-
 func TestDeleteChannelRemovesArtifacts(t *testing.T) {
 	store := newTestStore(t)
 	owner, err := store.CreateUser(CreateUserParams{

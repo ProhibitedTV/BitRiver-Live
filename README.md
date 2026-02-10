@@ -200,27 +200,7 @@ The dashboard’s **System status** card is the primary health check for operato
 
 You only need the steps below if you want to hack on the Go code without Docker Compose.
 
-### Option A – JSON datastore (fastest, single process)
-
-```bash
-mkdir -p data
-BITRIVER_LIVE_MODE=development \
-  go run -tags postgres ./cmd/server \
-    --storage-driver json \
-    --data data/store.json
-```
-
-Keep the server running, open [http://localhost:8080](http://localhost:8080), and seed an admin with:
-
-```bash
-go run -tags postgres ./cmd/tools/bootstrap-admin \
-  --json data/store.json \
-  --email you@example.com \
-  --name "Your Name" \
-  --password "temporary-password"
-```
-
-### Option B – Local Postgres + Redis
+### Local Postgres + Redis
 
 ```bash
 # Start databases

@@ -359,27 +359,3 @@ func TestDeleteClipArtifactsHonorsTimeout(t *testing.T) {
 		t.Fatalf("expected delete to honor timeout, took %v", elapsed)
 	}
 }
-
-func TestRepositoryStreamKeyRotation(t *testing.T) {
-	RunRepositoryStreamKeyRotation(t, jsonRepositoryFactory)
-}
-
-func TestRepositoryStreamLifecycleWithoutIngest(t *testing.T) {
-	RunRepositoryStreamLifecycleWithoutIngest(t, jsonRepositoryFactory)
-}
-
-func TestRepositoryStreamTimeouts(t *testing.T) {
-	RunRepositoryStreamTimeouts(t, jsonRepositoryFactory)
-}
-
-func TestRecordingRetentionPurgesExpired(t *testing.T) {
-	RunRepositoryRecordingRetention(t, jsonRepositoryFactory)
-}
-
-func TestRecordingRetentionDeleteFailures(t *testing.T) {
-	RunRepositoryRecordingRetentionFailures(t, jsonRepositoryFactory)
-}
-
-func TestClipExportTitleValidation(t *testing.T) {
-	RunRepositoryClipExportTitleValidation(t, jsonRepositoryFactory)
-}

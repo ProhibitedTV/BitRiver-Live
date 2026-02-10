@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	expectedDriver := flag.String("expected-storage-driver", "", "storage driver expected by this build (json or postgres)")
+	expectedDriver := flag.String("expected-storage-driver", "", "storage driver expected by this build (postgres only)")
 	flag.Parse()
 
 	driver := resolveExpectedDriver(*expectedDriver)
@@ -25,14 +25,14 @@ func main() {
 }
 
 // resolveExpectedDriver returns the normalized storage driver from the flag,
-// then BITRIVER_LIVE_STORAGE_DRIVER, defaulting to json when unset.
+// then BITRIVER_LIVE_STORAGE_DRIVER, defaulting to postgres when unset.
 func resolveExpectedDriver(flagValue string) string {
 	driver := strings.ToLower(strings.TrimSpace(flagValue))
 	if driver == "" {
 		driver = strings.ToLower(strings.TrimSpace(os.Getenv("BITRIVER_LIVE_STORAGE_DRIVER")))
 	}
 	if driver == "" {
-		driver = "json"
+		driver = "postgres"
 	}
 	return driver
 }
@@ -41,9 +41,9 @@ func resolveExpectedDriver(flagValue string) string {
 // postgres builds do not link against the stub pgx module.
 func validateDriver(driver string, isStub bool) error {
 	switch driver {
-	case "json", "postgres":
+	case "postgres":
 	default:
-		return fmt.Errorf("expected storage driver must be json or postgres (got %q)", driver)
+		return fmt.Errorf("expected storage driver must be postgres (got %q)", driver)
 	}
 
 	if driver == "postgres" && isStub {

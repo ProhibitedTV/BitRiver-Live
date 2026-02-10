@@ -9,7 +9,6 @@ func TestValidateDriver(t *testing.T) {
 		isStub  bool
 		wantErr bool
 	}{
-		{name: "json stub allowed", driver: "json", isStub: true, wantErr: false},
 		{name: "postgres real allowed", driver: "postgres", isStub: false, wantErr: false},
 		{name: "postgres stub rejected", driver: "postgres", isStub: true, wantErr: true},
 		{name: "invalid driver rejected", driver: "sqlite", isStub: false, wantErr: true},

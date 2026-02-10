@@ -51,10 +51,6 @@ func TestApplyChatEventPersistsMessage(t *testing.T) {
 	}
 }
 
-func TestChatRestrictionsReflectModeration(t *testing.T) {
-	RunRepositoryChatRestrictionsLifecycle(t, jsonRepositoryFactory)
-}
-
 func TestApplyChatEventPersistsReport(t *testing.T) {
 	store := newTestStore(t)
 	owner, err := store.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Roles: []string{"creator"}})

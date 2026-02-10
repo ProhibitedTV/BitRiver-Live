@@ -244,7 +244,7 @@ func newJSONRepository(t *testing.T) (storage.Repository, ingest.BootResult) {
 		JobIDs: []string{"job-live"},
 	}
 	controller := ingestStub{boot: boot}
-	repo, err := storage.NewJSONRepository(path, storage.WithIngestController(controller))
+	repo, err := storage.NewStorage(path, storage.WithIngestController(controller))
 	if err != nil {
 		t.Fatalf("new json repository: %v", err)
 	}
