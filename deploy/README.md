@@ -47,6 +47,19 @@ preserving repo-relative path resolution used by the script; keep shell scripts 
 Viewer self-registration is disabled by default so only administrators can add users. Toggle `BITRIVER_LIVE_ALLOW_SELF_SIGNUP`
 in `.env` and rerun `./deploy/check-env.sh` followed by `docker compose up -d` to reopen or close public signups.
 
+
+## Release note: removed legacy OME custom compose override
+
+`deploy/docker-compose.ome-custom.yml` has been removed because the base `deploy/docker-compose.yml` already mounts the generated OME config and is the only supported Compose path.
+
+If you have local automation that still references the removed file or `BITRIVER_OME_CUSTOM_CONFIG`, update it to run the standard flow instead:
+
+```bash
+export COMPOSE_FILE=deploy/docker-compose.yml
+./deploy/check-env.sh
+docker compose up --build
+```
+
 ## Syncing canonical deploy assets into Helm
 Helm keeps generated copies of selected deploy artifacts so charts can be packaged self-contained, but the authoritative sources live outside the chart:
 

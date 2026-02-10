@@ -1,9 +1,0 @@
-# Optional override retained for backwards compatibility; the base compose
-# file already mounts Server.generated.xml. Enable this when you want to
-# supply your own rendered Server.xml via scripts/quickstart.sh and an
-# explicit BITRIVER_OME_CUSTOM_CONFIG=1 toggle.
-services:
-  ome:
-    volumes:
-      - ./ome/Server.generated.xml:/opt/ovenmediaengine/bin/origin_conf/Server.xml:ro
-      - ./ome/Server.generated.xml:/opt/ovenmediaengine/bin/edge_conf/Server.xml:ro
