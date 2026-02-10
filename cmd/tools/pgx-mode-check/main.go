@@ -24,6 +24,8 @@ func main() {
 	}
 }
 
+// resolveExpectedDriver returns the normalized storage driver from the flag,
+// then BITRIVER_LIVE_STORAGE_DRIVER, defaulting to json when unset.
 func resolveExpectedDriver(flagValue string) string {
 	driver := strings.ToLower(strings.TrimSpace(flagValue))
 	if driver == "" {
@@ -35,6 +37,8 @@ func resolveExpectedDriver(flagValue string) string {
 	return driver
 }
 
+// validateDriver enforces supported storage driver values and verifies that
+// postgres builds do not link against the stub pgx module.
 func validateDriver(driver string, isStub bool) error {
 	switch driver {
 	case "json", "postgres":
