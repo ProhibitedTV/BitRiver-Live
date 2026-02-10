@@ -20,6 +20,8 @@ The Compose stack provides a one-command bootstrap for development and demos:
 ./scripts/quickstart.sh
 ```
 
+> ⚠️ Postgres-backed deployments require a Postgres-capable BitRiver Live build (compiled with the `postgres` build tag and non-stub pgx driver). Do not deploy stub-only development artifacts when `BITRIVER_LIVE_POSTGRES_DSN`/Postgres storage is enabled; use release-verified artifacts and provenance checks from [`docs/production-release.md`](../docs/production-release.md).
+
 If you invoke Compose directly, set the Compose file path and ensure `.env` is populated:
 
 ```bash

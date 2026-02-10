@@ -538,6 +538,10 @@ Local and single-node installs can rely on the `transcoder-public` Nginx sidecar
 
 ## Operations runbook
 
+### Troubleshooting
+
+- **`postgres repository unavailable: pgx driver stubbed in this build`** – This indicates a stub-only API binary/image was deployed without Postgres support linked in. Follow one action path only: rebuild and redeploy from artifacts that are verified to include the `postgres` build tag and the non-stub pgx driver, then roll the deployment forward with those artifacts. Validate artifact provenance (tag + digest/workflow outputs) using the release checks in [`docs/production-release.md`](production-release.md).
+
 Operators can use the manifests under `deploy/` as a reference architecture for production or staging clusters. For host-managed installs, the BitRiver CLI ships installers today for systemd (Linux), launchd (macOS), and Windows Service definitions alongside the [Installing BitRiver Live on Ubuntu guide](installing-on-ubuntu.md).
 
 1. **Provision ingest dependencies first.** Bring up SRS, the SRS controller proxy, OvenMediaEngine (OME), and the FFmpeg job controller before starting the BitRiver Live API. The compose file at `deploy/docker-compose.yml` defines the services as `srs`, `srs-controller`, `ome`, and `transcoder` respectively. Each service exposes an HTTP health probe so you can validate readiness with `docker compose ps` or an external probe before the API starts (`/healthz` for BitRiver API, SRS controller, SRS proxy, and transcoder; `http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/` for OME with no auth header, where any non-`000` and `<500` status is healthy).
