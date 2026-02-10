@@ -14,6 +14,21 @@ copy of the same modules. Keep `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off` for
 offline runs, and use `./scripts/check-dependency-source.sh` to verify the tree
 contains no duplicate third-party modules across `third_party/` and `vendor/`.
 
+## pgx sourcing modes
+
+BitRiver Live now treats pgx wiring as an explicit two-mode contract:
+
+- **Stub mode (`stub`)**: default local/offline mode using `third_party/github.com/jackc/pgx/v5`. This keeps unit and JSON-driver workflows reproducible without reaching external module sources.
+- **Release mode (`real`)**: required for Postgres-capable binaries/images. Release/build jobs must point `github.com/jackc/pgx/v5` at a non-stub module source before compiling Postgres artifacts (for example, a maintained vendored real pgx mirror under `third_party/` or a controlled CI-only replace strategy).
+
+Use the guard below whenever `BITRIVER_LIVE_STORAGE_DRIVER=postgres` is expected:
+
+```bash
+./scripts/check-postgres-pgx.sh postgres
+```
+
+The check fails if `pgx.IsStub` is `true`, which prevents publishing binaries/images that would boot with Postgres configured but only have stubbed driver wiring.
+
 ## Go API
 
 Run the fast unit suite (JSON datastore, REST handlers, chat flows) from the

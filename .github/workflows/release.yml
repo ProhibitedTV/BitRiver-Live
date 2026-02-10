@@ -258,6 +258,9 @@ jobs:
           go-version: '1.21'
           cache: true
 
+      - name: Verify pgx mode for postgres artifacts
+        run: ./scripts/check-postgres-pgx.sh postgres
+
       - name: Build binaries
         shell: bash
         env:
@@ -634,6 +637,10 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify pgx mode for API image
+        if: matrix.component == 'api'
+        run: ./scripts/check-postgres-pgx.sh postgres
 
       - name: Build and push ${{ matrix.component }} image
         id: build

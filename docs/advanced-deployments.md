@@ -301,7 +301,7 @@ psql "postgres://bitriver:bitriver@localhost:5432/bitriver?sslmode=disable" \
 
 The local Compose Postgres container does not ship with TLS certificates, so `sslmode=disable` is acceptable for `localhost` or the Compose service. When you target an external or managed database, require TLS by switching to `sslmode=require` or `sslmode=verify-full` and supply `sslrootcert=/certs/postgres-ca.pem` (or another mounted CA path) in the DSN.
 
-With the migrations applied and a Postgres driver such as `pgxpool` available, start the API and point it at the relational database. When compiling from source, always pass the `postgres` build tag so the real driver is linked instead of the lightweight stubs used for JSON-only development:
+With the migrations applied and a Postgres driver such as `pgxpool` available, start the API and point it at the relational database. The repository has an explicit pgx switch point: local/offline builds default to the checked-in stub module, while release builds that expect `BITRIVER_LIVE_STORAGE_DRIVER=postgres` must switch to a non-stub pgx source before compiling. Validate the switch with `./scripts/check-postgres-pgx.sh postgres`, then compile with the `postgres` build tag so the Postgres-capable driver wiring is linked:
 
 ```bash
 go run -tags postgres ./cmd/server \

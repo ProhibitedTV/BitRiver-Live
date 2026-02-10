@@ -65,6 +65,16 @@ npm run lint
 npm run test:integration
 ```
 
+### Postgres artifact pgx guard
+
+Before producing release binaries or container images that expect `BITRIVER_LIVE_STORAGE_DRIVER=postgres`, run the pgx guard to verify the build is not linking the stubbed `third_party` pgx module:
+
+```bash
+./scripts/check-postgres-pgx.sh postgres
+```
+
+If this fails with `pgx.IsStub=true`, switch the build job to the approved non-stub pgx source path (vendored real module mirror or controlled replace strategy) before publishing artifacts.
+
 ## 2. Tag the release and trigger the workflow
 
 1. Ensure `CHANGELOG.md` (when present) and version references are up to date.
