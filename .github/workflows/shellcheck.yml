@@ -21,4 +21,8 @@ jobs:
       - name: Run shellcheck
         uses: ludeeus/action-shellcheck@2.0.0
         with:
-          args: deploy/install/ubuntu.sh scripts/test-postgres.sh scripts/test-wizard-release.sh
+          severity: error
+          additional_files: |
+            deploy/install/ubuntu.sh
+            scripts/test-postgres.sh
+            scripts/test-wizard-release.sh
