@@ -297,6 +297,12 @@ jobs:
             ["server"]="bitriver-live"
           )
 
+          declare -A build_tags=(
+            ["server"]="postgres"
+            ["tools/bootstrap-admin"]="postgres"
+            ["tools/migrate-json-to-postgres"]="postgres"
+          )
+
           for target in "${targets[@]}"; do
             bin_name="$(basename "$target")"
             if [[ -n ${bin_names[$target]+x} ]]; then
@@ -304,8 +310,36 @@ jobs:
             fi
 
             output_path="$out_dir/$bin_name$bin_ext"
-            go build -o "$output_path" "./cmd/$target"
+            tags="${build_tags[$target]-}"
+            if [[ -n "$tags" ]]; then
+              go build -tags "$tags" -o "$output_path" "./cmd/$target"
+            else
+              go build -o "$output_path" "./cmd/$target"
+            fi
           done
+
+          if [[ "$GOOS" == "linux" && "$GOARCH" == "amd64" ]]; then
+            smoke_log="$out_dir/postgres-smoke.log"
+            set +e
+            BITRIVER_LIVE_STORAGE_DRIVER=postgres \
+              "$out_dir/bitriver-live" \
+              -storage-driver postgres \
+              -postgres-dsn 'postgres://bitriver:bitriver@127.0.0.1:1/bitriver?sslmode=disable' \
+              >"$smoke_log" 2>&1
+            smoke_status=$?
+            set -e
+
+            if grep -qi 'pgx driver stubbed in this build' "$smoke_log"; then
+              echo "bitriver-live postgres smoke check detected a stubbed pgx build" >&2
+              cat "$smoke_log" >&2
+              exit 1
+            fi
+            if [[ $smoke_status -eq 0 ]]; then
+              echo "bitriver-live postgres smoke check unexpectedly succeeded; expected connection failure against localhost:1" >&2
+              cat "$smoke_log" >&2
+              exit 1
+            fi
+          fi
 
           archive_base="bitriver-live-${GOOS}-${GOARCH}"
           if [ "$GOOS" = "windows" ]; then

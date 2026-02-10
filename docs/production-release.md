@@ -78,6 +78,15 @@ npm run test:integration
    bundle, and publishes the artefacts to the GitHub Release. Monitor the
    workflow until every job completes successfully.
 
+The release workflow's `Build binaries` step must compile Postgres-aware
+targets with `-tags postgres` (`cmd/server`,
+`cmd/tools/bootstrap-admin`, and `cmd/tools/migrate-json-to-postgres`) so the
+published binaries include the real pgx-backed repository implementation. The
+same step also runs a Linux `amd64` smoke check that starts `bitriver-live`
+with Postgres storage flags and fails if output contains `pgx driver stubbed in
+this build`, preventing future workflow edits from regressing to stubbed
+storage builds.
+
 ### Repository secrets for the release workflow
 
 The `verify-env` job in the release workflow renders a production-ready `.env`
