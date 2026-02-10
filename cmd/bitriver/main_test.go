@@ -877,6 +877,7 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	originalWaiter := quickstartWaiter
 	originalComposeHealthWaiter := quickstartComposeHealthWaiter
 	originalOMEPreflight := quickstartOMEAuthPreflightRunner
+	originalImagePreflight := deployImageSourcePreflightRunner
 	originalBootstrap := bootstrapAdminRunner
 	t.Cleanup(func() {
 		doctorRunner = originalDoctor
@@ -888,6 +889,7 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 		quickstartWaiter = originalWaiter
 		quickstartComposeHealthWaiter = originalComposeHealthWaiter
 		quickstartOMEAuthPreflightRunner = originalOMEPreflight
+		deployImageSourcePreflightRunner = originalImagePreflight
 		bootstrapAdminRunner = originalBootstrap
 	})
 	var calls []string
@@ -931,7 +933,7 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	}
 	composeUpRunner = func(args []string) error {
 		calls = append(calls, "compose-up")
-		expected := []string{"--file", composePath, "--env-file", envPath}
+		expected := []string{"--file", composePath, "--env-file", envPath, "--image-source", deployImageSourcePull}
 		if !reflect.DeepEqual(args, expected) {
 			t.Fatalf("compose args = %v, want %v", args, expected)
 		}
@@ -955,6 +957,13 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 		return nil
 	}
 	quickstartOMEAuthPreflightRunner = func(string, map[string]string) error { return nil }
+	deployImageSourcePreflightRunner = func(mode string, values map[string]string, envFile string) error {
+		calls = append(calls, "image-preflight")
+		if mode != deployImageSourcePull {
+			t.Fatalf("expected default image mode pull, got %s", mode)
+		}
+		return nil
+	}
 	bootstrapAdminRunner = func(composeFile, envFile string, values map[string]string) error {
 		calls = append(calls, "bootstrap")
 		if composeFile != composePath {
@@ -971,7 +980,7 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
 		t.Fatalf("quickstart failed: %v", err)
 	}
-	expectedCalls := []string{"doctor", "env-init", "env-validate", "migrations", "compose-up", "wait", "health", "bootstrap"}
+	expectedCalls := []string{"doctor", "env-init", "env-validate", "image-preflight", "migrations", "compose-up", "wait", "health", "bootstrap"}
 	if !reflect.DeepEqual(calls, expectedCalls) {
 		t.Fatalf("call order = %v, want %v", calls, expectedCalls)
 	}
@@ -1809,5 +1818,105 @@ func TestGatherReadinessDiagnosticsIncludesStubbedPostgresHint(t *testing.T) {
 	}
 	if !strings.Contains(diagnostics, "Hint: bitriver-live appears to be running without the Postgres module wired in") {
 		t.Fatalf("expected postgres wiring remediation hint, got %q", diagnostics)
+	}
+}
+
+func TestResolveDeployImageSourceDefaultsToPull(t *testing.T) {
+	cfg, err := resolveDeployImageSource("", map[string]string{})
+	if err != nil {
+		t.Fatalf("resolveDeployImageSource returned error: %v", err)
+	}
+	if cfg.mode != deployImageSourcePull {
+		t.Fatalf("mode = %q, want %q", cfg.mode, deployImageSourcePull)
+	}
+}
+
+func TestResolveDeployImageSourceRejectsInvalidValue(t *testing.T) {
+	if _, err := resolveDeployImageSource("invalid", map[string]string{}); err == nil {
+		t.Fatal("expected invalid image source to fail")
+	}
+}
+
+func TestRunPullImagePreflightReturnsAccessDeniedMessage(t *testing.T) {
+	originalManifest := manifestInspectRunner
+	t.Cleanup(func() {
+		manifestInspectRunner = originalManifest
+	})
+
+	manifestInspectRunner = func(string) error {
+		return errors.New("denied: requested access to the resource is denied")
+	}
+
+	err := runPullImagePreflight(map[string]string{
+		"BITRIVER_LIVE_IMAGE_TAG":           "v1.2.3",
+		"BITRIVER_VIEWER_IMAGE_TAG":         "v1.2.3",
+		"BITRIVER_SRS_CONTROLLER_IMAGE_TAG": "v1.2.3",
+		"BITRIVER_TRANSCODER_IMAGE_TAG":     "v1.2.3",
+	})
+	if err == nil {
+		t.Fatal("expected pull preflight to fail")
+	}
+	if !strings.Contains(err.Error(), "docker login ghcr.io") {
+		t.Fatalf("expected docker login guidance, got %v", err)
+	}
+}
+
+func TestRunComposeUpBuildModeAddsBuildFlags(t *testing.T) {
+	originalRunner := commandRunner
+	originalManifest := manifestInspectRunner
+	originalPreflight := deployImageSourcePreflightRunner
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		manifestInspectRunner = originalManifest
+		deployImageSourcePreflightRunner = originalPreflight
+	})
+
+	t.Setenv("BITRIVER_DEPLOY_IMAGE_SOURCE", "build")
+	fakeBin := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(fakeBin, 0o755); err != nil {
+		t.Fatalf("mkdir fake bin: %v", err)
+	}
+	dockerPath := filepath.Join(fakeBin, "docker")
+	if err := os.WriteFile(dockerPath, []byte(`#!/usr/bin/env sh
+exit 0
+`), 0o755); err != nil {
+		t.Fatalf("write fake docker: %v", err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	deployImageSourcePreflightRunner = func(mode string, values map[string]string, envFile string) error {
+		if mode != deployImageSourceBuild {
+			t.Fatalf("mode = %q, want %q", mode, deployImageSourceBuild)
+		}
+		return nil
+	}
+
+	var got []string
+	commandRunner = func(cmd string, args ...string) error {
+		if cmd != "docker" {
+			t.Fatalf("cmd = %q, want docker", cmd)
+		}
+		got = append([]string{}, args...)
+		return nil
+	}
+
+	envPath := filepath.Join(t.TempDir(), ".env")
+	values := buildValidProductionEnv(t)
+	values["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"] = "accesstoken"
+	var lines []string
+	for key, value := range values {
+		lines = append(lines, fmt.Sprintf("%s=%s", key, value))
+	}
+	if err := os.WriteFile(envPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	err := runComposeUp([]string{"--file", "deploy/docker-compose.yml", "--env-file", envPath})
+	if err != nil {
+		t.Fatalf("runComposeUp failed: %v", err)
+	}
+
+	joined := strings.Join(got, " ")
+	if !strings.Contains(joined, "up --build --pull never -d") {
+		t.Fatalf("expected build mode compose args, got %v", got)
 	}
 }

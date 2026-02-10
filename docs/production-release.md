@@ -159,6 +159,11 @@ Capture any third-party image digests (`redis`, `postgres`, `ossrs/srs`,
 alongside the release so operators can mirror the same verified set in their
 `.env` files.
 
+For production Compose rollouts, keep `BITRIVER_DEPLOY_IMAGE_SOURCE=pull` and
+preconfigure GHCR credentials (`docker login ghcr.io`) on every host before the
+maintenance window. This keeps deploys pull-only, enables preflight manifest
+checks, and avoids accidental source builds on production nodes.
+
 ## 3. Rotate credentials and validate environment files
 
 Every deployment environment must own unique secrets. Before rolling the new

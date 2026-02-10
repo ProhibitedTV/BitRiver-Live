@@ -10,6 +10,8 @@ x-required-credentials: &required_credentials
   BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD: ${BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD:?set via .env}
 
 services:
+  # Compose keeps both image + build directives; cmd/bitriver selects pull-only
+  # or build mode via BITRIVER_DEPLOY_IMAGE_SOURCE (or --image-source).
   bitriver-live:
     image: ghcr.io/bitriver-live/bitriver-live:${BITRIVER_LIVE_IMAGE_TAG:?set via .env}${BITRIVER_LIVE_IMAGE_DIGEST:-}
     build:

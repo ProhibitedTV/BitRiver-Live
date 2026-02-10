@@ -317,6 +317,8 @@ func runCompose(args []string) error {
 }
 
 var commandRunner = executil.Run
+var manifestInspectRunner = runDockerManifestInspect
+var deployImageSourcePreflightRunner = runDeployImageSourcePreflight
 var quickstartWaiter = waitForAPIReadiness
 var quickstartComposeHealthWaiter = waitForComposeServiceHealth
 var bootstrapAdminRunner = runBootstrapAdmin
@@ -328,6 +330,17 @@ var omeRunner = runOME
 var omeVerifyHealthTokenRunner = runOMEVerifyHealthToken
 var quickstartOMEAuthPreflightRunner = runQuickstartOMEAuthPreflight
 var doctorRunner = runDoctor
+
+const (
+	deployImageSourcePull  = "pull"
+	deployImageSourceBuild = "build"
+)
+
+type deployImageSourceConfig struct {
+	mode        string
+	composeArgs []string
+	description string
+}
 
 // composeArgsWithEnv performs compose args with env and propagates validation or dependency failures to the caller.
 func composeArgsWithEnv(composeFile, envFile string) []string {
@@ -350,8 +363,27 @@ func runComposeUp(args []string) error {
 	envFile := fs.String("env-file", "", "env file to use for compose interpolation")
 	detach := fs.Bool("detached", true, "run docker compose in detached mode")
 	build := fs.Bool("build", false, "build images before starting")
+	imageSource := fs.String("image-source", "", "image source mode: pull (default) or build")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+
+	resolvedEnvFile := strings.TrimSpace(*envFile)
+	if resolvedEnvFile == "" {
+		resolvedEnvFile = defaultEnvFile()
+	}
+
+	envValues, err := loadEnvValues(resolvedEnvFile, true)
+	if err != nil {
+		return fmt.Errorf("load env values: %w", err)
+	}
+
+	modeCfg, err := resolveDeployImageSource(*imageSource, envValues)
+	if err != nil {
+		return err
+	}
+	if *build && modeCfg.mode == deployImageSourcePull {
+		return errors.New("conflicting compose options: --build cannot be used with image source mode 'pull'; set BITRIVER_DEPLOY_IMAGE_SOURCE=build or pass --image-source build")
 	}
 
 	if err := validateComposeEffectiveEnvironment(*envFile); err != nil {
@@ -362,8 +394,13 @@ func runComposeUp(args []string) error {
 		return err
 	}
 
+	if err := deployImageSourcePreflightRunner(modeCfg.mode, envValues, resolvedEnvFile); err != nil {
+		return err
+	}
+
 	composeArgs := append(composeArgsWithEnv(*composeFile, *envFile), "up")
-	if *build {
+	composeArgs = append(composeArgs, modeCfg.composeArgs...)
+	if *build && modeCfg.mode == deployImageSourceBuild {
 		composeArgs = append(composeArgs, "--build")
 	}
 	if *detach {
@@ -469,6 +506,7 @@ func runQuickstart(args []string) error {
 	composeFile := fs.String("compose-file", defaultComposeFile(), "compose file to use")
 	envFile := fs.String("env-file", defaultEnvFile(), "environment file path")
 	build := fs.Bool("build", false, "build images from the local source tree before starting")
+	imageSource := fs.String("image-source", "", "image source mode: pull (default) or build")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -497,6 +535,14 @@ func runQuickstart(args []string) error {
 		return fmt.Errorf("read env file: %w", err)
 	}
 
+	modeCfg, err := resolveDeployImageSource(*imageSource, envValues)
+	if err != nil {
+		return err
+	}
+	if *build && modeCfg.mode == deployImageSourcePull {
+		return errors.New("conflicting quickstart options: --build cannot be used with image source mode 'pull'; set BITRIVER_DEPLOY_IMAGE_SOURCE=build or pass --image-source build")
+	}
+
 	if err := validateQuickstartProductionRequirements(*envFile, envValues); err != nil {
 		return err
 	}
@@ -513,12 +559,17 @@ func runQuickstart(args []string) error {
 		return err
 	}
 
+	if err := deployImageSourcePreflightRunner(modeCfg.mode, envValues, *envFile); err != nil {
+		return err
+	}
+
 	if err := migrationsRunner(*composeFile, *envFile); err != nil {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
 	composeUpArgs := []string{"--file", *composeFile, "--env-file", *envFile}
-	if *build {
+	composeUpArgs = append(composeUpArgs, "--image-source", modeCfg.mode)
+	if *build && modeCfg.mode == deployImageSourceBuild {
 		composeUpArgs = append(composeUpArgs, "--build")
 	}
 
@@ -539,6 +590,120 @@ func runQuickstart(args []string) error {
 	}
 
 	printGeneratedSecrets(generatedSecrets)
+	return nil
+}
+
+func resolveDeployImageSource(explicitMode string, envValues map[string]string) (deployImageSourceConfig, error) {
+	mode := strings.ToLower(strings.TrimSpace(explicitMode))
+	if mode == "" {
+		mode = strings.ToLower(strings.TrimSpace(os.Getenv("BITRIVER_DEPLOY_IMAGE_SOURCE")))
+	}
+	if mode == "" {
+		mode = strings.ToLower(strings.TrimSpace(envValues["BITRIVER_DEPLOY_IMAGE_SOURCE"]))
+	}
+	if mode == "" {
+		mode = deployImageSourcePull
+	}
+
+	switch mode {
+	case deployImageSourcePull:
+		return deployImageSourceConfig{mode: mode, composeArgs: []string{"--pull", "always", "--no-build"}, description: "registry pulls only"}, nil
+	case deployImageSourceBuild:
+		return deployImageSourceConfig{mode: mode, composeArgs: []string{"--build", "--pull", "never"}, description: "local source builds"}, nil
+	default:
+		return deployImageSourceConfig{}, fmt.Errorf("invalid BITRIVER_DEPLOY_IMAGE_SOURCE value %q (expected pull or build)", mode)
+	}
+}
+
+func runDeployImageSourcePreflight(mode string, envValues map[string]string, envFile string) error {
+	switch mode {
+	case deployImageSourcePull:
+		return runPullImagePreflight(envValues)
+	case deployImageSourceBuild:
+		return runBuildImagePreflight(envFile)
+	default:
+		return fmt.Errorf("unsupported deploy image source mode %q", mode)
+	}
+}
+
+func runPullImagePreflight(envValues map[string]string) error {
+	imageRefs, err := requiredGHCRImageRefs(envValues)
+	if err != nil {
+		return err
+	}
+	for _, imageRef := range imageRefs {
+		if err := manifestInspectRunner(imageRef); err != nil {
+			msg := strings.ToLower(err.Error())
+			if strings.Contains(msg, "denied") || strings.Contains(msg, "unauthorized") || strings.Contains(msg, "forbidden") {
+				return fmt.Errorf("GHCR pull preflight failed for %s: access denied.\nRun `docker login ghcr.io` with a token that has read access to the package, then retry", imageRef)
+			}
+			if strings.Contains(msg, "no such manifest") || strings.Contains(msg, "manifest unknown") || strings.Contains(msg, "not found") {
+				return fmt.Errorf("GHCR pull preflight failed for %s: manifest not found.\nVerify tag/digest values in BITRIVER_*_IMAGE_TAG and BITRIVER_*_IMAGE_DIGEST", imageRef)
+			}
+			return fmt.Errorf("GHCR pull preflight failed for %s: %w", imageRef, err)
+		}
+	}
+	fmt.Fprintf(os.Stdout, "Image preflight ok: verified %d GHCR manifests for pull mode.\n", len(imageRefs))
+	return nil
+}
+
+func requiredGHCRImageRefs(values map[string]string) ([]string, error) {
+	refs := []struct {
+		name      string
+		tagKey    string
+		digestKey string
+	}{
+		{name: "ghcr.io/bitriver-live/bitriver-live", tagKey: "BITRIVER_LIVE_IMAGE_TAG", digestKey: "BITRIVER_LIVE_IMAGE_DIGEST"},
+		{name: "ghcr.io/bitriver-live/bitriver-viewer", tagKey: "BITRIVER_VIEWER_IMAGE_TAG", digestKey: "BITRIVER_VIEWER_IMAGE_DIGEST"},
+		{name: "ghcr.io/bitriver-live/bitriver-srs-controller", tagKey: "BITRIVER_SRS_CONTROLLER_IMAGE_TAG", digestKey: "BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST"},
+		{name: "ghcr.io/bitriver-live/bitriver-transcoder", tagKey: "BITRIVER_TRANSCODER_IMAGE_TAG", digestKey: "BITRIVER_TRANSCODER_IMAGE_DIGEST"},
+	}
+
+	resolved := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		tag := strings.TrimSpace(values[ref.tagKey])
+		if tag == "" {
+			return nil, fmt.Errorf("GHCR preflight requires %s to be set", ref.tagKey)
+		}
+		digest := strings.TrimSpace(values[ref.digestKey])
+		if digest != "" && !strings.HasPrefix(digest, "@") {
+			return nil, fmt.Errorf("%s must start with @ when set (current: %s)", ref.digestKey, digest)
+		}
+		resolved = append(resolved, fmt.Sprintf("%s:%s%s", ref.name, tag, digest))
+	}
+	return resolved, nil
+}
+
+func runDockerManifestInspect(imageRef string) error {
+	cmd := exec.Command("docker", "manifest", "inspect", imageRef)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		trimmed := strings.TrimSpace(string(output))
+		if trimmed == "" {
+			return err
+		}
+		return errors.New(trimmed)
+	}
+	return nil
+}
+
+func runBuildImagePreflight(envFile string) error {
+	paths := []string{
+		filepath.Join(repoRoot(), "Dockerfile"),
+		filepath.Join(repoRoot(), "web", "viewer", "Dockerfile"),
+		filepath.Join(repoRoot(), "cmd", "srs-controller", "Dockerfile"),
+		filepath.Join(repoRoot(), "cmd", "transcoder", "Dockerfile"),
+		filepath.Join(repoRoot(), "deploy", "ome-config", "Dockerfile"),
+	}
+	for _, path := range paths {
+		if _, err := os.Stat(path); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("build preflight failed: required local source file is missing: %s", path)
+			}
+			return fmt.Errorf("build preflight failed while checking %s: %w", path, err)
+		}
+	}
+	fmt.Fprintf(os.Stdout, "Image preflight ok: local build prerequisites found for build mode (env: %s).\n", envFile)
 	return nil
 }
 
