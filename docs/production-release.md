@@ -73,7 +73,7 @@ Before producing release binaries or container images that expect `BITRIVER_LIVE
 ./scripts/check-postgres-pgx.sh postgres
 ```
 
-If this fails with `pgx.IsStub=true`, switch the build job to the approved non-stub pgx source path (vendored real module mirror or controlled replace strategy) before publishing artifacts.
+If this fails with `pgx.IsStub=true`, switch the build job to the approved non-stub pgx source path (vendored real module mirror or controlled replace strategy) before publishing artifacts. In Docker release mode (`BITRIVER_PGX_MODE=real`), also drop stubbed transitive replacements (for example `golang.org/x/text`) before `go mod download` so pgx dependencies like `secure/precis` resolve from full upstream modules.
 
 ## 2. Tag the release and trigger the workflow
 
