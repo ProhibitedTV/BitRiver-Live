@@ -58,6 +58,27 @@ pwsh -c "go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.y
 
 The Go CLI renders `deploy/ome/Server.generated.xml` directly (no Python dependency) before launching Compose. The quickstart waits for the API `/readyz` probe to succeed before seeding the admin user via the bundled `bootstrap-admin` binary, then prints a "Generated credentials" block for any secrets it auto-created so you can store them securely before logging in.
 
+### Deployment image source mode (`BITRIVER_DEPLOY_IMAGE_SOURCE`)
+
+Compose/quickstart now supports an explicit image-source switch:
+
+- `BITRIVER_DEPLOY_IMAGE_SOURCE=pull` (default and recommended for production):
+  - Runs a GHCR preflight before `docker compose up`.
+  - Validates each required BitRiver image tag/digest exists (`docker manifest inspect`).
+  - Fails early with precise guidance when registry access is denied (for example, missing `docker login ghcr.io`).
+  - Enforces pull-only startup (`docker compose up --pull always --no-build`).
+- `BITRIVER_DEPLOY_IMAGE_SOURCE=build`:
+  - Skips GHCR manifest/auth preflight.
+  - Requires local source build prerequisites and checks Dockerfiles before startup.
+  - Runs compose in intentional build mode (`docker compose up --build --pull never`).
+
+You can set the mode in `.env`, export it in the shell, or override per-run:
+
+```bash
+go run ./cmd/bitriver quickstart --image-source pull
+go run ./cmd/bitriver compose up --image-source build --file deploy/docker-compose.yml
+```
+
 ### OME auth preflight
 
 Before `docker compose up -d` runs, quickstart now performs an OME auth preflight to avoid long healthcheck retry loops:
