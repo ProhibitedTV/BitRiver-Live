@@ -160,8 +160,10 @@ stage_tls_files() {
 
         sudo install -d -m 0755 -o "$SERVICE_USER" -g "$SERVICE_USER" "$dest_dir"
 
-        local cert_target="$dest_dir/$(basename "$cert_path")"
-        local key_target="$dest_dir/$(basename "$key_path")"
+        local cert_target
+        local key_target
+        cert_target="$dest_dir/$(basename "$cert_path")"
+        key_target="$dest_dir/$(basename "$key_path")"
 
         sudo install -m 0600 -o "$SERVICE_USER" -g "$SERVICE_USER" "$cert_path" "$cert_target"
         sudo install -m 0600 -o "$SERVICE_USER" -g "$SERVICE_USER" "$key_path" "$key_target"

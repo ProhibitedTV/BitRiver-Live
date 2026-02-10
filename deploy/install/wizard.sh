@@ -8,11 +8,12 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 INSTALLER="$SCRIPT_DIR/ubuntu.sh"
+INSTALLER_CMD=()
 
 if [[ ! -x $INSTALLER ]]; then
-        INSTALLER=(bash "$INSTALLER")
+        INSTALLER_CMD=(bash "$INSTALLER")
 else
-        INSTALLER=("$INSTALLER")
+        INSTALLER_CMD=("$INSTALLER")
 fi
 
 BUILD_FROM_SOURCE=false
@@ -215,7 +216,7 @@ if prompt_yes_no "Seed an administrator account now" "y"; then
 fi
 
 args=()
-args+=("${INSTALLER[@]}")
+args+=("${INSTALLER_CMD[@]}")
 args+=("--install-dir" "$INSTALL_DIR")
 args+=("--data-dir" "$DATA_DIR")
 args+=("--service-user" "$SERVICE_USER")
