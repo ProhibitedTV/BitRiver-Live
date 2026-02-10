@@ -22,7 +22,9 @@ COPY cmd ./cmd
 COPY internal ./internal
 COPY web ./web
 COPY deploy/migrations ./deploy/migrations
+COPY scripts/check-postgres-pgx.sh ./scripts/check-postgres-pgx.sh
 
+RUN ./scripts/check-postgres-pgx.sh postgres
 RUN go build -tags postgres -o /out/bitriver-live ./cmd/server
 RUN go build -tags postgres -o /out/bootstrap-admin ./cmd/tools/bootstrap-admin
 
