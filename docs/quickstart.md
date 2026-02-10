@@ -187,16 +187,17 @@ All commands assume you are still in the repository root (where `.env` lives) so
   ```bash
   git pull --ff-only
   ```
-- Re-run the quickstart to rebuild images when Dockerfiles or dependencies change and to ensure services restart with the latest code and environment values:
+- Re-run the quickstart to apply env/template changes and restart services with the latest configuration. Add `--build` when Dockerfiles or local source changes require a rebuild:
   ```bash
   go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml
+  go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml --build
   ```
   The Go command reuses your existing `.env` and Docker volumes, so configuration, database data, and media files persist across updates. This is the canonical deployment path on Linux, macOS, and Windows.
 `docker compose up` (including the quickstart wrapper) reruns the `ome-config` helper so OME consumes the credentials from `.env`, the current control-listener bind value from `BITRIVER_OME_BIND`, and the top-level `<Server><IP>` host from `BITRIVER_OME_IP` without requiring an extra compose override.
 - Running `git pull` followed by the quickstart keeps OME in a predictable state:
   - The helper preserves your `.env` while backfilling any new variables introduced upstream so you avoid silent crashes from missing credentials, including the OME managers token.
   - `deploy/ome/Server.generated.xml` is always re-rendered from `deploy/ome/Server.xml` and the refreshed `.env`, eliminating drift between the template and the live config mounted into the container.
-  - Docker images rebuild and database migrations run automatically before the stack restarts, giving you a clean, rerun-safe deploy loop whenever templates or env keys change.
+  - Database migrations run automatically before the stack restarts, giving you a clean, rerun-safe deploy loop whenever templates or env keys change. Add `--build` when you also need fresh local images.
 - Codex CLI users: follow the [Codex CLI guide](codex-cli.md) for installation, authentication, and edit workflows tailored to this repository. Rerun `docker compose up -d` after applying Codex patches so containers reload configuration and binaries.
 - Need a safer, step-by-step upgrade flow? Use the upgrade runbook in [`docs/upgrades.md`](upgrades.md#upgrade-essentials-migrations-env-updates-and-ome-re-render) for Compose stop/start sequencing, migration timing, and `.env`/OME template handling.
 
