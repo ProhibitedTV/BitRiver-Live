@@ -19,7 +19,7 @@ contains no duplicate third-party modules across `third_party/` and `vendor/`.
 BitRiver Live now treats pgx wiring as an explicit two-mode contract:
 
 - **Stub mode (`stub`)**: default local/offline mode using `third_party/github.com/jackc/pgx/v5`. This keeps unit and JSON-driver workflows reproducible without reaching external module sources.
-- **Release mode (`real`)**: required for Postgres-capable binaries/images. Release/build jobs must point `github.com/jackc/pgx/v5` at a non-stub module source before compiling Postgres artifacts (for example, a maintained vendored real pgx mirror under `third_party/` or a controlled CI-only replace strategy).
+- **Release mode (`real`)**: required for Postgres-capable binaries/images. Release/build jobs must point `github.com/jackc/pgx/v5` at a non-stub module source before compiling Postgres artifacts (for example, a maintained vendored real pgx mirror under `third_party/` or a controlled CI-only replace strategy), and must also unpin stubbed transitive replacements (for example `golang.org/x/text`) before running `go mod download`.
 
 Use the guard below whenever `BITRIVER_LIVE_STORAGE_DRIVER=postgres` is expected:
 
