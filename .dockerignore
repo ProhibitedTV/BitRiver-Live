@@ -16,6 +16,9 @@ tmp/
 data/
 node_modules/
 scripts/
+!scripts/
+scripts/*
+!scripts/check-postgres-pgx.sh
 docs/
 deploy/data/
 deploy/ome/
