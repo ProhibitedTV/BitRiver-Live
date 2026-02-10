@@ -15,5 +15,9 @@ export function DirectorySearchBar({ defaultValue }: { defaultValue?: string }) 
     router.push(queryString ? `/?${queryString}` : "/");
   };
 
-  return <SearchBar onSearch={handleSearch} defaultValue={defaultValue} />;
+  const handleClear = () => {
+    router.push("/");
+  };
+
+  return <SearchBar onSearch={handleSearch} defaultValue={defaultValue} submitLabel="Apply" onClear={handleClear} />;
 }

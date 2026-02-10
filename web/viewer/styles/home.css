@@ -65,6 +65,25 @@
   align-items: center;
 }
 
+
+.home-hero__quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
+}
+
+.home-hero__quick-links a {
+  text-decoration: none;
+}
+
+.home-hero__quick-links a:hover,
+.home-hero__quick-links a:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent-soft);
+  outline: none;
+}
+
 .home-hero__search {
   padding: var(--space-md);
   background: var(--surface);

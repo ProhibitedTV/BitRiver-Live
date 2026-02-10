@@ -4,10 +4,14 @@ import { FormEvent, useEffect, useState } from "react";
 
 export function SearchBar({
   onSearch,
-  defaultValue
+  defaultValue,
+  submitLabel = "Search",
+  onClear,
 }: {
   onSearch: (query: string) => void;
   defaultValue?: string;
+  submitLabel?: string;
+  onClear?: () => void;
 }) {
   const [value, setValue] = useState<string>(defaultValue ?? "");
 
@@ -18,6 +22,11 @@ export function SearchBar({
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     onSearch(value);
+  };
+
+  const handleClear = () => {
+    setValue("");
+    onClear?.();
   };
 
   return (
@@ -31,10 +40,21 @@ export function SearchBar({
         placeholder="Search by channel, creator, or tag"
         value={value}
         onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && value.length > 0) {
+            event.preventDefault();
+            handleClear();
+          }
+        }}
         aria-label="Search channels"
       />
+      {value.length > 0 && (
+        <button type="button" className="secondary-button" onClick={handleClear}>
+          Clear
+        </button>
+      )}
       <button type="submit" className="secondary-button">
-        Search
+        {submitLabel}
       </button>
     </form>
   );
