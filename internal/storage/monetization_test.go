@@ -8,10 +8,6 @@ import (
 	"bitriver-live/internal/models"
 )
 
-func TestCreateTipAndList(t *testing.T) {
-	RunRepositoryTipsLifecycle(t, jsonRepositoryFactory)
-}
-
 func TestStorageTipReferenceUniqueness(t *testing.T) {
 	store := newTestStore(t)
 
@@ -43,10 +39,6 @@ func TestStorageTipReferenceUniqueness(t *testing.T) {
 	} else if err.Error() != duplicateTipReferenceError {
 		t.Fatalf("unexpected duplicate error: %v", err)
 	}
-}
-
-func TestCreateSubscriptionAndCancel(t *testing.T) {
-	RunRepositorySubscriptionsLifecycle(t, jsonRepositoryFactory)
 }
 
 func TestSubscriptionReferenceUniquenessJSON(t *testing.T) {
@@ -85,10 +77,6 @@ func TestSubscriptionReferenceUniquenessJSON(t *testing.T) {
 	if got, want := err.Error(), "subscription reference stripe/dup-sub already exists"; got != want {
 		t.Fatalf("unexpected error: got %q want %q", got, want)
 	}
-}
-
-func TestRepositoryMonetizationPrecision(t *testing.T) {
-	RunRepositoryMonetizationPrecision(t, jsonRepositoryFactory)
 }
 
 func TestUpsertProfileCreatesProfile(t *testing.T) {

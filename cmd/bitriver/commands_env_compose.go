@@ -881,27 +881,16 @@ func runBootstrapAdmin(composeFile, envFile string, values map[string]string) er
 	}
 
 	storageDriver := strings.ToLower(strings.TrimSpace(values["BITRIVER_LIVE_STORAGE_DRIVER"]))
-	if storageDriver == "" {
-		storageDriver = "postgres"
+	if storageDriver != "" && storageDriver != "postgres" {
+		return fmt.Errorf("unsupported storage driver %q for bootstrap-admin", storageDriver)
 	}
 
 	args := append(composeArgsWithEnv(composeFile, envFile), "exec", "-T", "bitriver-live", "/app/bootstrap-admin")
-	switch storageDriver {
-	case "postgres":
-		dsn, err := buildPostgresDSN(values)
-		if err != nil {
-			return err
-		}
-		args = append(args, "--postgres-dsn", dsn)
-	case "json":
-		dataPath := strings.TrimSpace(values["BITRIVER_LIVE_DATA"])
-		if dataPath == "" {
-			dataPath = "/var/lib/bitriver-live/store.json"
-		}
-		args = append(args, "--json", dataPath)
-	default:
-		return fmt.Errorf("unsupported storage driver %q for bootstrap-admin", storageDriver)
+	dsn, err := buildPostgresDSN(values)
+	if err != nil {
+		return err
 	}
+	args = append(args, "--postgres-dsn", dsn)
 
 	args = append(args, "--email", email, "--password", password)
 

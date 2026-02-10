@@ -16,25 +16,20 @@ import (
 
 func main() {
 	var (
-		jsonPath    string
 		postgresDSN string
 		email       string
 		displayName string
 		password    string
 	)
 
-	flag.StringVar(&jsonPath, "json", "", "Path to the JSON datastore (store.json)")
 	flag.StringVar(&postgresDSN, "postgres-dsn", "", "Postgres connection string")
 	flag.StringVar(&email, "email", "", "Email address for the admin account")
 	flag.StringVar(&displayName, "name", "Administrator", "Display name for the admin account")
 	flag.StringVar(&password, "password", "", "Password for the admin account")
 	flag.Parse()
 
-	if jsonPath == "" && postgresDSN == "" {
-		fatalf("either --json or --postgres-dsn must be provided")
-	}
-	if jsonPath != "" && postgresDSN != "" {
-		fatalf("only one datastore option may be provided")
+	if postgresDSN == "" {
+		fatalf("--postgres-dsn is required")
 	}
 	if strings.TrimSpace(email) == "" {
 		fatalf("--email is required")
@@ -46,7 +41,7 @@ func main() {
 		fatalf("--name cannot be empty")
 	}
 
-	repo, err := openRepository(jsonPath, postgresDSN)
+	repo, err := openRepository(postgresDSN)
 	if err != nil {
 		fatalf("open datastore: %v", err)
 	}
@@ -73,10 +68,7 @@ func fatalf(format string, args ...any) {
 	os.Exit(1)
 }
 
-func openRepository(jsonPath, postgresDSN string) (storage.Repository, error) {
-	if jsonPath != "" {
-		return storage.NewJSONRepository(jsonPath)
-	}
+func openRepository(postgresDSN string) (storage.Repository, error) {
 	return storage.NewPostgresRepository(postgresDSN)
 }
 

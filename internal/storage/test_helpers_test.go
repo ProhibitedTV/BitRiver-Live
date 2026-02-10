@@ -28,19 +28,6 @@ func newTestStoreWithController(t *testing.T, controller ingest.Controller, extr
 	return store
 }
 
-func jsonRepositoryFactory(t *testing.T, opts ...Option) (Repository, func(), error) {
-	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "store.json")
-	defaults := []Option{WithIngestController(ingest.NoopController{}), WithIngestRetries(1, 0)}
-	opts = append(defaults, opts...)
-	store, err := NewStorage(path, opts...)
-	if err != nil {
-		return nil, nil, err
-	}
-	return store, func() {}, nil
-}
-
 func firstRecordingID(store *Storage) string {
 	store.mu.RLock()
 	defer store.mu.RUnlock()

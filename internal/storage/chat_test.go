@@ -246,22 +246,6 @@ func TestExpiredTimeoutsClearedAndPersisted(t *testing.T) {
 	}
 }
 
-func TestChatReportsLifecycle(t *testing.T) {
-	RunRepositoryChatReportsLifecycle(t, jsonRepositoryFactory)
-}
-
-func TestChatRetention(t *testing.T) {
-	RunRepositoryChatRetention(t, jsonRepositoryFactory)
-}
-
-func TestRepositoryChannelSearch(t *testing.T) {
-	RunRepositoryChannelSearch(t, jsonRepositoryFactory)
-}
-
-func TestRepositoryChannelLookupByStreamKey(t *testing.T) {
-	RunRepositoryChannelLookupByStreamKey(t, jsonRepositoryFactory)
-}
-
 func TestCloneDatasetCopiesModerationMetadata(t *testing.T) {
 	now := time.Now().UTC()
 	resolvedAt := now

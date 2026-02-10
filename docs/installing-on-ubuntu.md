@@ -323,13 +323,13 @@ The command writes `.env` plus a `bitriver-live.service` unit into `--install-di
 
 [`deploy/install/ubuntu.sh`](../deploy/install/ubuntu.sh) remains available for automation that depends on the original Bash workflow. Run it from the release root when you need the historical behaviour; new deployments should prefer the CLI installers above.
 
-The script builds the API binary, writes `$INSTALL_DIR/.env`, copies TLS certificate/key pairs into `$INSTALL_DIR/certs`, configures optional viewer/API domains plus rate-limiting variables, and registers a `bitriver-live.service` systemd unit. Review the generated `.env` file to ensure storage selections (JSON or Postgres), database DSNs, session-store driver settings, TLS paths, and Redis credentials are present before starting traffic.
+The script builds the API binary, writes `$INSTALL_DIR/.env`, copies TLS certificate/key pairs into `$INSTALL_DIR/certs`, configures optional viewer/API domains plus rate-limiting variables, and registers a `bitriver-live.service` systemd unit. Review the generated `.env` file to ensure storage selections (Postgres), database DSNs, session-store driver settings, TLS paths, and Redis credentials are present before starting traffic.
 
 Viewer self-registration is disabled by default in the generated configuration so that only administrators can create accounts. Re-enable open signups later with `--allow-self-signup` or by setting `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true` in the environment file.
 
 When the listen address resolves to a privileged port (<1024) the installer injects `AmbientCapabilities=CAP_NET_BIND_SERVICE`/`CapabilityBoundingSet=CAP_NET_BIND_SERVICE` into the systemd unit and runs `sudo setcap 'cap_net_bind_service=+ep' "$INSTALL_DIR/bitriver-live"` so manual restarts keep the binding. Operators fronting the service with Nginx, Caddy, or another reverse proxy should set `--addr :8080` (or a similar high port) and forward 80/443 from the proxy to avoid capabilities altogether.
 
-Provide `--bootstrap-admin-email` (optionally pairing it with `--bootstrap-admin-password`) to seed the first control-center account automatically. When you skip the password flag the installer now generates a strong random secret, records it in `$INSTALL_DIR/.env`, and prints it exactly once so you can capture it before leaving the terminal. The installer runs the `bootstrap-admin` helper after copying the binaries so the JSON datastore or Postgres database already contains an administrator when systemd starts the service. Rotate the password from the control center after your first login.
+Provide `--bootstrap-admin-email` (optionally pairing it with `--bootstrap-admin-password`) to seed the first control-center account automatically. When you skip the password flag the installer now generates a strong random secret, records it in `$INSTALL_DIR/.env`, and prints it exactly once so you can capture it before leaving the terminal. The installer runs the `bootstrap-admin` helper after copying the binaries so the Postgres database already contains an administrator when systemd starts the service. Rotate the password from the control center after your first login.
 
 Environment variable equivalents:
 
@@ -404,7 +404,7 @@ After=network-online.target postgresql.service redis-server.service
 User=bitriver
 Group=bitriver
 EnvironmentFile=/etc/bitriver-live/bitriver-live.env
-ExecStart=/opt/bitriver-live/bin/bitriver-live --data /var/lib/bitriver-live/store.json
+ExecStart=/opt/bitriver-live/bin/bitriver-live
 Restart=on-failure
 RestartSec=5s
 LimitNOFILE=65535

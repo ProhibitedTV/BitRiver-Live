@@ -31,7 +31,7 @@ The check fails if `pgx.IsStub` is `true`, which prevents publishing binaries/im
 
 ## Go API
 
-Run the fast unit suite (JSON datastore, REST handlers, chat flows) from the
+Run the fast unit suite (storage unit tests, REST handlers, chat flows) from the
 repository root with the same environment guardrails CI enforces. Setting
 `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off` ensures the local Go toolchain is
 used without reaching out to the network, which keeps results reproducible and
