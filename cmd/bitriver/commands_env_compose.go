@@ -296,6 +296,14 @@ func runEnvValidate(args []string) error {
 		return errors.New("environment validation failed")
 	}
 
+	modeCfg, err := resolveDeployImageSource("", values)
+	if err != nil {
+		return err
+	}
+	if err := validateProductionDeploymentContract(*envPath, values, modeCfg.mode); err != nil {
+		return err
+	}
+
 	fmt.Fprintf(os.Stdout, "Environment file %s looks ready.\n", *envPath)
 	return nil
 }
@@ -362,8 +370,8 @@ func runComposeUp(args []string) error {
 	composeFile := fs.String("file", defaultComposeFile(), "compose file to use")
 	envFile := fs.String("env-file", "", "env file to use for compose interpolation")
 	detach := fs.Bool("detached", true, "run docker compose in detached mode")
-	build := fs.Bool("build", false, "build images before starting")
-	imageSource := fs.String("image-source", "", "image source mode: pull (default) or build")
+	build := fs.Bool("build", false, "build images before starting (development-only; rejected in production mode)")
+	imageSource := fs.String("image-source", "", "image source mode: pull (default, production) or build (development-only)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -387,6 +395,10 @@ func runComposeUp(args []string) error {
 	}
 
 	if err := validateComposeEffectiveEnvironment(*envFile); err != nil {
+		return err
+	}
+
+	if err := validateProductionDeploymentContract(resolvedEnvFile, envValues, modeCfg.mode); err != nil {
 		return err
 	}
 
@@ -505,8 +517,8 @@ func runQuickstart(args []string) error {
 	fs := flag.NewFlagSet("quickstart", flag.ContinueOnError)
 	composeFile := fs.String("compose-file", defaultComposeFile(), "compose file to use")
 	envFile := fs.String("env-file", defaultEnvFile(), "environment file path")
-	build := fs.Bool("build", false, "build images from the local source tree before starting")
-	imageSource := fs.String("image-source", "", "image source mode: pull (default) or build")
+	build := fs.Bool("build", false, "build images from the local source tree before starting (development-only; rejected in production mode)")
+	imageSource := fs.String("image-source", "", "image source mode: pull (default, production) or build (development-only)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -543,7 +555,7 @@ func runQuickstart(args []string) error {
 		return errors.New("conflicting quickstart options: --build cannot be used with image source mode 'pull'; set BITRIVER_DEPLOY_IMAGE_SOURCE=build or pass --image-source build")
 	}
 
-	if err := validateQuickstartProductionRequirements(*envFile, envValues); err != nil {
+	if err := validateProductionDeploymentContract(*envFile, envValues, modeCfg.mode); err != nil {
 		return err
 	}
 
@@ -704,6 +716,57 @@ func runBuildImagePreflight(envFile string) error {
 		}
 	}
 	fmt.Fprintf(os.Stdout, "Image preflight ok: local build prerequisites found for build mode (env: %s).\n", envFile)
+	return nil
+}
+
+func validateProductionDeploymentContract(envFile string, values map[string]string, imageSourceMode string) error {
+	if !strings.EqualFold(strings.TrimSpace(values["BITRIVER_LIVE_MODE"]), "production") {
+		return nil
+	}
+
+	if !strings.EqualFold(strings.TrimSpace(values["BITRIVER_LIVE_STORAGE_DRIVER"]), "postgres") {
+		return fmt.Errorf("production deployment contract failed for %s: BITRIVER_LIVE_STORAGE_DRIVER must be postgres", envFile)
+	}
+
+	if imageSourceMode != deployImageSourcePull {
+		return fmt.Errorf("production deployment contract failed for %s: image source mode must be %q (current: %q)", envFile, deployImageSourcePull, imageSourceMode)
+	}
+
+	if err := validateQuickstartProductionRequirements(envFile, values); err != nil {
+		return err
+	}
+
+	if err := validatePinnedGHCRImageDigests(values); err != nil {
+		return fmt.Errorf("production deployment contract failed for %s: %w", envFile, err)
+	}
+
+	return nil
+}
+
+func validatePinnedGHCRImageDigests(values map[string]string) error {
+	refs := []string{
+		"BITRIVER_LIVE_IMAGE_DIGEST",
+		"BITRIVER_VIEWER_IMAGE_DIGEST",
+		"BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST",
+		"BITRIVER_TRANSCODER_IMAGE_DIGEST",
+	}
+
+	missing := make([]string, 0, len(refs))
+	for _, key := range refs {
+		digest := strings.TrimSpace(values[key])
+		if digest == "" {
+			missing = append(missing, key)
+			continue
+		}
+		if !strings.HasPrefix(digest, "@") {
+			return fmt.Errorf("%s must start with @ when set (current: %s)", key, digest)
+		}
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("pinned image digests are required in production; set %s", strings.Join(missing, ", "))
+	}
+
 	return nil
 }
 

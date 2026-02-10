@@ -27,9 +27,13 @@ func buildValidProductionEnv(t *testing.T) map[string]string {
 	t.Helper()
 	return map[string]string{
 		"BITRIVER_LIVE_IMAGE_TAG":                 "1.0.0",
+		"BITRIVER_LIVE_IMAGE_DIGEST":              "@sha256:1111111111111111111111111111111111111111111111111111111111111111",
 		"BITRIVER_VIEWER_IMAGE_TAG":               "1.0.0",
+		"BITRIVER_VIEWER_IMAGE_DIGEST":            "@sha256:2222222222222222222222222222222222222222222222222222222222222222",
 		"BITRIVER_SRS_CONTROLLER_IMAGE_TAG":       "1.0.0",
+		"BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST":    "@sha256:3333333333333333333333333333333333333333333333333333333333333333",
 		"BITRIVER_TRANSCODER_IMAGE_TAG":           "1.0.0",
+		"BITRIVER_TRANSCODER_IMAGE_DIGEST":        "@sha256:4444444444444444444444444444444444444444444444444444444444444444",
 		"BITRIVER_SRS_IMAGE_TAG":                  "v5.0.185",
 		"BITRIVER_OME_IMAGE_TAG":                  "0.16.0",
 		"BITRIVER_POSTGRES_USER":                  "brlive_app",
@@ -55,6 +59,7 @@ func buildValidProductionEnv(t *testing.T) map[string]string {
 		"NEXT_PUBLIC_VIEWER_URL":                  "http://viewer.internal/viewer",
 		"NEXT_PUBLIC_API_BASE_URL":                "http://api.internal",
 		"BITRIVER_LIVE_MODE":                      "production",
+		"BITRIVER_LIVE_STORAGE_DRIVER":            "postgres",
 		"BITRIVER_LIVE_METRICS_TOKEN":             "metrics-token",
 		"BITRIVER_LIVE_RATE_LOGIN_LIMIT":          "10",
 	}
@@ -1861,44 +1866,8 @@ func TestRunPullImagePreflightReturnsAccessDeniedMessage(t *testing.T) {
 	}
 }
 
-func TestRunComposeUpBuildModeAddsBuildFlags(t *testing.T) {
-	originalRunner := commandRunner
-	originalManifest := manifestInspectRunner
-	originalPreflight := deployImageSourcePreflightRunner
-	t.Cleanup(func() {
-		commandRunner = originalRunner
-		manifestInspectRunner = originalManifest
-		deployImageSourcePreflightRunner = originalPreflight
-	})
-
+func TestRunComposeUpRejectsBuildModeInProduction(t *testing.T) {
 	t.Setenv("BITRIVER_DEPLOY_IMAGE_SOURCE", "build")
-	fakeBin := filepath.Join(t.TempDir(), "bin")
-	if err := os.MkdirAll(fakeBin, 0o755); err != nil {
-		t.Fatalf("mkdir fake bin: %v", err)
-	}
-	dockerPath := filepath.Join(fakeBin, "docker")
-	if err := os.WriteFile(dockerPath, []byte(`#!/usr/bin/env sh
-exit 0
-`), 0o755); err != nil {
-		t.Fatalf("write fake docker: %v", err)
-	}
-	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	deployImageSourcePreflightRunner = func(mode string, values map[string]string, envFile string) error {
-		if mode != deployImageSourceBuild {
-			t.Fatalf("mode = %q, want %q", mode, deployImageSourceBuild)
-		}
-		return nil
-	}
-
-	var got []string
-	commandRunner = func(cmd string, args ...string) error {
-		if cmd != "docker" {
-			t.Fatalf("cmd = %q, want docker", cmd)
-		}
-		got = append([]string{}, args...)
-		return nil
-	}
-
 	envPath := filepath.Join(t.TempDir(), ".env")
 	values := buildValidProductionEnv(t)
 	values["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"] = "accesstoken"
@@ -1911,12 +1880,10 @@ exit 0
 	}
 
 	err := runComposeUp([]string{"--file", "deploy/docker-compose.yml", "--env-file", envPath})
-	if err != nil {
-		t.Fatalf("runComposeUp failed: %v", err)
+	if err == nil {
+		t.Fatal("expected production contract failure for build mode")
 	}
-
-	joined := strings.Join(got, " ")
-	if !strings.Contains(joined, "up --build --pull never -d") {
-		t.Fatalf("expected build mode compose args, got %v", got)
+	if !strings.Contains(err.Error(), "image source mode must be \"pull\"") {
+		t.Fatalf("expected pull-mode contract error, got %v", err)
 	}
 }
