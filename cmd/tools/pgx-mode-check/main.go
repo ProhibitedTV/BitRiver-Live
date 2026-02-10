@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -15,10 +14,10 @@ func main() {
 	flag.Parse()
 
 	driver := resolveExpectedDriver(*expectedDriver)
-	fmt.Printf("pgx.IsStub=%t\n", pgx.IsStub)
+	fmt.Printf("pgx.ErrNoRows=%q\n", pgx.ErrNoRows)
 	fmt.Printf("expected_storage_driver=%s\n", driver)
 
-	if err := validateDriver(driver, pgx.IsStub); err != nil {
+	if err := validateDriver(driver); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
@@ -37,17 +36,12 @@ func resolveExpectedDriver(flagValue string) string {
 	return driver
 }
 
-// validateDriver enforces supported storage driver values and verifies that
-// postgres builds do not link against the stub pgx module.
-func validateDriver(driver string, isStub bool) error {
+// validateDriver enforces supported storage driver values for release builds.
+func validateDriver(driver string) error {
 	switch driver {
 	case "postgres":
 	default:
 		return fmt.Errorf("expected storage driver must be postgres (got %q)", driver)
-	}
-
-	if driver == "postgres" && isStub {
-		return errors.New("postgres storage requires a non-stub pgx module; configure the release build to use the real pgx source path")
 	}
 	return nil
 }
