@@ -11,6 +11,12 @@
 Use the installer-backed launcher when you want a zero-build setup that checks Docker/Compose, copies `deploy/.env.example` into place, pulls release images, and starts the stack. Installers are available today for Windows (MSI), Linux (Deb/RPM), and macOS (Homebrew launcher formula). The Go-based quickstart remains the canonical contributor path because it builds local images and runs migrations from source.
 
 
+## Release note: legacy OME custom compose override removed
+
+BitRiver Live no longer ships `deploy/docker-compose.ome-custom.yml`, and `BITRIVER_OME_CUSTOM_CONFIG` is no longer used. The default quickstart/Compose flow already renders and mounts `deploy/ome/Server.generated.xml` automatically.
+
+If your local scripts still include that override filename or env toggle, remove them and use only `deploy/docker-compose.yml`.
+
 ## Platform prerequisites
 
 | Platform | Docker runtime | Notes |
