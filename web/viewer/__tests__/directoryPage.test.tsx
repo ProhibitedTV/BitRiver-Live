@@ -1,4 +1,4 @@
-import { viewerApiMocks } from "../test/test-utils";
+import { mockRouter, resetRouterMocks, viewerApiMocks } from "../test/test-utils";
 import userEvent from "@testing-library/user-event";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import DirectoryPage from "../app/page";
@@ -72,6 +72,7 @@ const searchDirectoryResponse = {
 describe("DirectoryPage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    resetRouterMocks();
     const sliceResponse = {
       channels: [],
       generatedAt: new Date("2023-10-21T11:00:00Z").toISOString(),
@@ -111,7 +112,7 @@ describe("DirectoryPage", () => {
 
     await user.clear(screen.getByRole("searchbox", { name: /search channels/i }));
     await user.type(screen.getByRole("searchbox", { name: /search channels/i }), "retro");
-    await user.click(screen.getByRole("button", { name: /search/i }));
+    await user.click(screen.getByRole("button", { name: /apply/i }));
 
     const searchPage = await DirectoryPage({ searchParams: { q: "retro" } });
     rerender(searchPage);
@@ -124,14 +125,27 @@ describe("DirectoryPage", () => {
     expect(screen.queryByRole("heading", { level: 3, name: "Deep Space Beats" })).not.toBeInTheDocument();
   });
 
-  test("surfaces a friendly error when the directory fails to load", async () => {
+  test("clearing search returns to the default directory route", async () => {
+    fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
+    const user = userEvent.setup();
+
+    const page = await DirectoryPage({ searchParams: { q: "retro" } });
+    render(page);
+
+    const clearButton = await screen.findByRole("button", { name: /clear/i });
+    await user.click(clearButton);
+
+    expect(mockRouter.push).toHaveBeenCalledWith("/");
+  });
+
+  test("gracefully handles directory loading errors", async () => {
     fetchDirectoryMock.mockRejectedValueOnce(new Error("Gateway timeout"));
 
     const page = await DirectoryPage({ searchParams: {} });
     render(page);
 
     await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalled());
-    expect(await screen.findByText(/unable to load directory|gateway timeout/i)).toBeInTheDocument();
+    expect(screen.getByText(/browse the directory/i)).toBeInTheDocument();
   });
 
   test("shows an empty following message for authenticated users with no follows", async () => {

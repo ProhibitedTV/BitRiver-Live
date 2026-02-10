@@ -67,6 +67,14 @@ export function HomePageView({
               <a href="#live-now" className="primary-button">
                 Start watching
               </a>
+              <a href="#directory" className="secondary-button">
+                Browse all channels
+              </a>
+            </div>
+            <div className="home-hero__quick-links" aria-label="Quick jump links">
+              <a href="#top-categories" className="pill pill--tag">Top categories</a>
+              <a href="#trending-now" className="pill pill--tag">Trending now</a>
+              <a href="#live-now" className="pill pill--tag">Live now</a>
             </div>
             <div className="home-hero__search">
               <DirectorySearchBar defaultValue={query} />
@@ -88,7 +96,7 @@ export function HomePageView({
         <ChannelRail title="Channels We Think You’ll Like" channels={recommended} loading={homeLoading} />
 
         <div className="content-rail__grid">
-          <section className="stack">
+          <section className="stack" id="top-categories">
             <div className="section-heading">
               <div>
                 <h2>Top categories</h2>
@@ -99,7 +107,7 @@ export function HomePageView({
             <CategoryRail categories={categories} loading={homeLoading} />
           </section>
 
-          <section className="stack">
+          <section className="stack" id="trending-now">
             <div className="section-heading">
               <div>
                 <h2>Trending now</h2>
