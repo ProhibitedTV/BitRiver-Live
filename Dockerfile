@@ -7,6 +7,7 @@ ARG TARGETOS=linux
 ARG TARGETARCH
 ARG GOPROXY=off
 ARG GOSUMDB=off
+ARG BITRIVER_PGX_MODE=real
 
 ENV CGO_ENABLED=0 GOFLAGS="-buildvcs=false -mod=mod"
 ENV GOPROXY=$GOPROXY GOSUMDB=$GOSUMDB
@@ -16,6 +17,9 @@ ENV GOARCH=$TARGETARCH
 
 COPY go.mod go.sum ./
 COPY third_party ./third_party
+RUN if [ "$BITRIVER_PGX_MODE" = "real" ]; then \
+      go mod edit -dropreplace=github.com/jackc/pgx/v5; \
+    fi
 RUN GOPROXY=$GOPROXY GOSUMDB=$GOSUMDB go mod download
 
 COPY cmd ./cmd
