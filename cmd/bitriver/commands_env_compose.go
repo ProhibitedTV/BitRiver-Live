@@ -356,7 +356,7 @@ func runComposeUp(args []string) error {
 	composeFile := fs.String("file", defaultComposeFile(), "compose file to use")
 	envFile := fs.String("env-file", "", "env file to use for compose interpolation")
 	detach := fs.Bool("detached", true, "run docker compose in detached mode")
-	build := fs.Bool("build", true, "build images before starting")
+	build := fs.Bool("build", false, "build images before starting")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -476,6 +476,7 @@ func runQuickstart(args []string) error {
 	fs := flag.NewFlagSet("quickstart", flag.ContinueOnError)
 	composeFile := fs.String("compose-file", defaultComposeFile(), "compose file to use")
 	envFile := fs.String("env-file", defaultEnvFile(), "environment file path")
+	build := fs.Bool("build", false, "build images from the local source tree before starting")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -520,7 +521,12 @@ func runQuickstart(args []string) error {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
-	if err := composeUpRunner([]string{"--file", *composeFile, "--env-file", *envFile}); err != nil {
+	composeUpArgs := []string{"--file", *composeFile, "--env-file", *envFile}
+	if *build {
+		composeUpArgs = append(composeUpArgs, "--build")
+	}
+
+	if err := composeUpRunner(composeUpArgs); err != nil {
 		return fmt.Errorf("docker compose up: %w", err)
 	}
 
