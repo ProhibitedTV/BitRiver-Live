@@ -317,13 +317,12 @@ services:
       - |
         auth_mode="$${BITRIVER_OME_HEALTHCHECK_AUTH_MODE:-accesstoken}"
         token="$${BITRIVER_OME_HEALTHCHECK_TOKEN:-}"
-        if [ -z "$$token" ]; then token="$${BITRIVER_OME_ACCESS_TOKEN:-}"; fi
         if [ -z "$$token" ]; then token="$${BITRIVER_OME_API_TOKEN:-}"; fi
 
         case "$$auth_mode" in
           accesstoken)
             if [ -z "$$token" ]; then
-              echo "bitriver-ome startup failed: canonical token is empty (BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN)" >&2
+              echo "bitriver-ome startup failed: canonical token is empty (BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_API_TOKEN)" >&2
               exit 1
             fi
             ;;
@@ -343,8 +342,7 @@ services:
 
         if [ "$$auth_mode" = "accesstoken" ]; then
           token_source="BITRIVER_OME_HEALTHCHECK_TOKEN"
-          if [ -z "$${BITRIVER_OME_HEALTHCHECK_TOKEN:-}" ]; then token_source="BITRIVER_OME_ACCESS_TOKEN"; fi
-          if [ -z "$${BITRIVER_OME_HEALTHCHECK_TOKEN:-}" ] && [ -z "$${BITRIVER_OME_ACCESS_TOKEN:-}" ]; then token_source="BITRIVER_OME_API_TOKEN"; fi
+          if [ -z "$${BITRIVER_OME_HEALTHCHECK_TOKEN:-}" ]; then token_source="BITRIVER_OME_API_TOKEN"; fi
           echo "[bitriver-ome] healthcheck startup auth_mode=$$auth_mode credential_type=access_token source=$$token_source value=<redacted>" >&2
         elif [ "$$auth_mode" = "basic" ]; then
           echo "[bitriver-ome] healthcheck startup auth_mode=$$auth_mode credential_type=username_password username=<redacted> password=<redacted>" >&2
@@ -361,7 +359,6 @@ services:
       BITRIVER_OME_PASSWORD: ${BITRIVER_OME_PASSWORD:?set via .env}
       BITRIVER_OME_HEALTHCHECK_AUTH_MODE: ${BITRIVER_OME_HEALTHCHECK_AUTH_MODE:-accesstoken}
       BITRIVER_OME_HEALTHCHECK_TOKEN: ${BITRIVER_OME_HEALTHCHECK_TOKEN:-}
-      BITRIVER_OME_ACCESS_TOKEN: ${BITRIVER_OME_ACCESS_TOKEN:-}
       BITRIVER_OME_API_TOKEN: ${BITRIVER_OME_API_TOKEN:?set via .env}
     networks:
       default:

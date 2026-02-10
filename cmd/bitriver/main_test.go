@@ -95,28 +95,18 @@ func TestEnvInitWritesGeneratedValues(t *testing.T) {
 	if values["BITRIVER_OME_API_TOKEN"] == "" {
 		t.Fatalf("expected OME API token to be generated, got empty value")
 	}
-	if values["BITRIVER_OME_ACCESS_TOKEN"] != values["BITRIVER_OME_API_TOKEN"] {
-		t.Fatalf("expected OME access token to match API token, got %q vs %q", values["BITRIVER_OME_ACCESS_TOKEN"], values["BITRIVER_OME_API_TOKEN"])
-	}
 	if values["BITRIVER_LIVE_MODE"] != "production" {
 		t.Fatalf("expected generated .env to persist BITRIVER_LIVE_MODE=production, got %q", values["BITRIVER_LIVE_MODE"])
 	}
 }
-func TestGenerateEnvValuesDefaultsOMEAccessToken(t *testing.T) {
+func TestGenerateEnvValuesGeneratesOMEAPIToken(t *testing.T) {
 	generated, _ := generateEnvValues(map[string]string{})
 	if generated["BITRIVER_LIVE_MODE"] != "production" {
 		t.Fatalf("expected BITRIVER_LIVE_MODE default to production, got %q", generated["BITRIVER_LIVE_MODE"])
 	}
 	apiToken := generated["BITRIVER_OME_API_TOKEN"]
-	accessToken := generated["BITRIVER_OME_ACCESS_TOKEN"]
 	if apiToken == "" {
 		t.Fatal("expected OME API token to be generated")
-	}
-	if accessToken == "" {
-		t.Fatal("expected OME access token to be generated")
-	}
-	if apiToken != accessToken {
-		t.Fatalf("expected OME access token to match API token, got %q and %q", accessToken, apiToken)
 	}
 }
 func TestGenerateEnvValuesEmptyModeDefaultsToProduction(t *testing.T) {
@@ -139,8 +129,6 @@ func TestGenerateEnvValuesNormalizesOMEHealthcheckAuthMode(t *testing.T) {
 		expected string
 	}{
 		{name: "empty defaults to access token", input: "", expected: "accesstoken"},
-		{name: "token maps to access token", input: "token", expected: "accesstoken"},
-		{name: "token basic maps to basic", input: "token+basic", expected: "basic"},
 		{name: "basic stays basic", input: "basic", expected: "basic"},
 		{name: "accesstoken stays accesstoken", input: "accesstoken", expected: "accesstoken"},
 	}
@@ -277,20 +265,11 @@ func TestValidateOMEGeneratedConfigAcceptsMatchingHealthcheckAccessToken(t *test
 		t.Fatalf("write config: %v", err)
 	}
 
-	originalAccessToken := os.Getenv("BITRIVER_OME_ACCESS_TOKEN")
 	originalAPIToken := os.Getenv("BITRIVER_OME_API_TOKEN")
-	if err := os.Setenv("BITRIVER_OME_ACCESS_TOKEN", "token"); err != nil {
-		t.Fatalf("set env: %v", err)
-	}
 	if err := os.Setenv("BITRIVER_OME_API_TOKEN", "token"); err != nil {
 		t.Fatalf("set env: %v", err)
 	}
 	t.Cleanup(func() {
-		if originalAccessToken == "" {
-			_ = os.Unsetenv("BITRIVER_OME_ACCESS_TOKEN")
-		} else {
-			_ = os.Setenv("BITRIVER_OME_ACCESS_TOKEN", originalAccessToken)
-		}
 		if originalAPIToken == "" {
 			_ = os.Unsetenv("BITRIVER_OME_API_TOKEN")
 		} else {
@@ -299,7 +278,7 @@ func TestValidateOMEGeneratedConfigAcceptsMatchingHealthcheckAccessToken(t *test
 	})
 
 	if err := validateOMEGeneratedConfig(path); err != nil {
-		t.Fatalf("expected matching BITRIVER_OME_ACCESS_TOKEN/BITRIVER_OME_API_TOKEN to pass validation, got %v", err)
+		t.Fatalf("expected matching BITRIVER_OME_API_TOKEN to pass validation, got %v", err)
 	}
 }
 
@@ -315,11 +294,11 @@ func TestValidateOMEGeneratedConfigRejectsMismatchedHealthcheckAccessToken(t *te
 		t.Fatalf("write config: %v", err)
 	}
 
-	originalAccessToken := os.Getenv("BITRIVER_OME_ACCESS_TOKEN")
 	originalAPIToken := os.Getenv("BITRIVER_OME_API_TOKEN")
+	originalHealthcheckToken := os.Getenv("BITRIVER_OME_HEALTHCHECK_TOKEN")
 	originalUsername := os.Getenv("BITRIVER_OME_USERNAME")
 	originalPassword := os.Getenv("BITRIVER_OME_PASSWORD")
-	if err := os.Setenv("BITRIVER_OME_ACCESS_TOKEN", "different-healthcheck-token"); err != nil {
+	if err := os.Setenv("BITRIVER_OME_HEALTHCHECK_TOKEN", "different-healthcheck-token"); err != nil {
 		t.Fatalf("set env: %v", err)
 	}
 	if err := os.Unsetenv("BITRIVER_OME_API_TOKEN"); err != nil {
@@ -332,15 +311,15 @@ func TestValidateOMEGeneratedConfigRejectsMismatchedHealthcheckAccessToken(t *te
 		t.Fatalf("unset env: %v", err)
 	}
 	t.Cleanup(func() {
-		if originalAccessToken == "" {
-			_ = os.Unsetenv("BITRIVER_OME_ACCESS_TOKEN")
-		} else {
-			_ = os.Setenv("BITRIVER_OME_ACCESS_TOKEN", originalAccessToken)
-		}
 		if originalAPIToken == "" {
 			_ = os.Unsetenv("BITRIVER_OME_API_TOKEN")
 		} else {
 			_ = os.Setenv("BITRIVER_OME_API_TOKEN", originalAPIToken)
+		}
+		if originalHealthcheckToken == "" {
+			_ = os.Unsetenv("BITRIVER_OME_HEALTHCHECK_TOKEN")
+		} else {
+			_ = os.Setenv("BITRIVER_OME_HEALTHCHECK_TOKEN", originalHealthcheckToken)
 		}
 		if originalUsername == "" {
 			_ = os.Unsetenv("BITRIVER_OME_USERNAME")
@@ -358,7 +337,7 @@ func TestValidateOMEGeneratedConfigRejectsMismatchedHealthcheckAccessToken(t *te
 	if err == nil {
 		t.Fatal("expected validation to fail for mismatched healthcheck access token")
 	}
-	if !strings.Contains(err.Error(), "BITRIVER_OME_HEALTHCHECK_TOKEN") || !strings.Contains(err.Error(), "BITRIVER_OME_ACCESS_TOKEN") || !strings.Contains(err.Error(), "BITRIVER_OME_API_TOKEN") {
+	if !strings.Contains(err.Error(), "BITRIVER_OME_HEALTHCHECK_TOKEN") || !strings.Contains(err.Error(), "BITRIVER_OME_API_TOKEN") {
 		t.Fatalf("expected mismatch error to mention canonical token precedence variables, got %v", err)
 	}
 }
@@ -375,7 +354,6 @@ func TestRunOMERenderFailsWhenBindManagersAPIPortMismatchesComposeHealthcheckCon
 		"BITRIVER_OME_LLHLS_PORT=8080",
 		"BITRIVER_OME_LLHLS_TLS_PORT=8443",
 		"BITRIVER_OME_API_TOKEN=operator-api-token",
-		"BITRIVER_OME_ACCESS_TOKEN=operator-access-token",
 	}, "\n") + "\n"
 	if err := os.WriteFile(envPath, []byte(env), 0o600); err != nil {
 		t.Fatalf("write env: %v", err)
@@ -1150,7 +1128,7 @@ func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 	}
 }
 
-func TestRunQuickstartAllowsDeprecatedOMEHealthcheckAuthModes(t *testing.T) {
+func TestRunQuickstartRejectsDeprecatedOMEHealthcheckAuthModes(t *testing.T) {
 	restored := map[string]string{}
 	for _, entry := range os.Environ() {
 		parts := strings.SplitN(entry, "=", 2)
@@ -1219,8 +1197,8 @@ func TestRunQuickstartAllowsDeprecatedOMEHealthcheckAuthModes(t *testing.T) {
 			quickstartOMEAuthPreflightRunner = func(string, map[string]string) error { return nil }
 			bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
 
-			if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
-				t.Fatalf("expected quickstart to allow deprecated mode %q, got %v", mode, err)
+			if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err == nil {
+				t.Fatalf("expected quickstart to reject deprecated mode %q", mode)
 			}
 		})
 	}

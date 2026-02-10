@@ -199,8 +199,6 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 	existing["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"] = generated["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"]
 	generated["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"] = defaultIfPlaceholder("BITRIVER_TRANSCODER_PUBLIC_BASE_URL", existing, "http://localhost:9001/hls")
 	generated["NEXT_PUBLIC_VIEWER_URL"] = defaultIfPlaceholder("NEXT_PUBLIC_VIEWER_URL", existing, "http://localhost:8080/viewer")
-	accessTokenValue := strings.TrimSpace(existing["BITRIVER_OME_ACCESS_TOKEN"])
-	accessTokenProvided := accessTokenValue != "" && !isForbiddenValue("BITRIVER_OME_ACCESS_TOKEN", accessTokenValue)
 
 	for key := range defaultEnvSecrets.secrets {
 		current := strings.TrimSpace(existing[key])
@@ -229,21 +227,6 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 		existing["BITRIVER_OME_USERNAME"] = ""
 	}
 
-	if !accessTokenProvided {
-		apiToken := strings.TrimSpace(existing["BITRIVER_OME_API_TOKEN"])
-		if apiToken == "" {
-			apiToken = generated["BITRIVER_OME_API_TOKEN"]
-		}
-		if apiToken != "" {
-			generated["BITRIVER_OME_ACCESS_TOKEN"] = apiToken
-			if _, ok := newlyGenerated["BITRIVER_OME_API_TOKEN"]; ok {
-				newlyGenerated["BITRIVER_OME_ACCESS_TOKEN"] = apiToken
-			} else {
-				delete(newlyGenerated, "BITRIVER_OME_ACCESS_TOKEN")
-			}
-		}
-	}
-
 	if val := existing["BITRIVER_REDIS_PASSWORD"]; val != "" && !isForbiddenValue("BITRIVER_REDIS_PASSWORD", val) {
 		generated["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"] = stringsutil.FirstNonEmpty(existing["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"], val)
 		delete(newlyGenerated, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD")
@@ -267,24 +250,13 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 func normalizedOMEHealthcheckAuthMode(raw string) string {
 	mode := strings.ToLower(strings.TrimSpace(raw))
 	switch mode {
-	case "", "accesstoken", "token":
+	case "", "accesstoken":
 		return "accesstoken"
-	case "basic", "token+basic":
+	case "basic":
 		return "basic"
 	default:
 		return strings.TrimSpace(raw)
 	}
-}
-
-func omeHealthcheckAuthModeDeprecationWarning(raw string) string {
-	trimmed := strings.TrimSpace(raw)
-	mode := strings.ToLower(trimmed)
-	if mode != "token" && mode != "token+basic" {
-		return ""
-	}
-
-	normalized := normalizedOMEHealthcheckAuthMode(trimmed)
-	return fmt.Sprintf("BITRIVER_OME_HEALTHCHECK_AUTH_MODE=%s is deprecated; rewriting to %s. Supported values are accesstoken or basic.", trimmed, normalized)
 }
 
 func promptForAdminEmail(existing map[string]string) {
@@ -395,7 +367,6 @@ func validateEnv(values map[string]string) envValidatorResult {
 		"BITRIVER_OME_USERNAME",
 		"BITRIVER_OME_PASSWORD",
 		"BITRIVER_OME_API_TOKEN",
-		"BITRIVER_OME_ACCESS_TOKEN",
 		"BITRIVER_TRANSCODER_TOKEN",
 		"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD",
 		"BITRIVER_TRANSCODER_PUBLIC_BASE_URL",
@@ -540,10 +511,6 @@ func validateEnv(values map[string]string) envValidatorResult {
 				}
 			}
 		}
-	}
-
-	if warning := omeHealthcheckAuthModeDeprecationWarning(values["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"]); warning != "" {
-		res.Warnings = append(res.Warnings, warning)
 	}
 
 	authMode := normalizedOMEHealthcheckAuthMode(values["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"])
