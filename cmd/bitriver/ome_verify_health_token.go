@@ -44,11 +44,11 @@ func runOMEVerifyHealthToken(args []string) error {
 
 	expectedToken := resolveOMECanonicalAccessToken(values)
 	if expectedToken == "" {
-		return fmt.Errorf("OME token verification failed: resolved runtime token from canonical precedence BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN is empty in %s", *envPath)
+		return fmt.Errorf("OME token verification failed: resolved runtime token from canonical precedence BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_API_TOKEN is empty in %s", *envPath)
 	}
 
 	if renderedToken != expectedToken {
-		return fmt.Errorf("OME token verification failed: rendered and runtime tokens differ.\n  rendered (<Managers><API><AccessToken>): %s\n  expected (BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN): %s\nFix by updating %s and re-rendering with:\n  go run ./cmd/bitriver ome render --force --env-file %s", renderedToken, expectedToken, *envPath, *envPath)
+		return fmt.Errorf("OME token verification failed: rendered and runtime tokens differ.\n  rendered (<Managers><API><AccessToken>): %s\n  expected (BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_API_TOKEN): %s\nFix by updating %s and re-rendering with:\n  go run ./cmd/bitriver ome render --force --env-file %s", renderedToken, expectedToken, *envPath, *envPath)
 	}
 
 	fmt.Fprintln(os.Stdout, "OME token verification passed: rendered AccessToken matches compose runtime health token source.")

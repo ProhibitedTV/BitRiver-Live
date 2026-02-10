@@ -151,7 +151,6 @@ var defaultEnvSecrets = envSecrets{
 		"BITRIVER_SRS_TOKEN":                      "",
 		"BITRIVER_OME_PASSWORD":                   "",
 		"BITRIVER_OME_API_TOKEN":                  "",
-		"BITRIVER_OME_ACCESS_TOKEN":               "",
 		"BITRIVER_TRANSCODER_TOKEN":               "",
 		"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD": "",
 	},
@@ -168,7 +167,6 @@ var (
 		"BITRIVER_OME_USERNAME",
 		"BITRIVER_OME_PASSWORD",
 		"BITRIVER_OME_API_TOKEN",
-		"BITRIVER_OME_ACCESS_TOKEN",
 		"BITRIVER_TRANSCODER_TOKEN",
 		"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD",
 	}
@@ -200,7 +198,6 @@ func defaultForbiddenPlaceholders() map[string]string {
 		"BITRIVER_OME_USERNAME":                   "ome-operator",
 		"BITRIVER_OME_PASSWORD":                   "OME-Example-Pass!",
 		"BITRIVER_OME_API_TOKEN":                  "OME-Example-Access-Token",
-		"BITRIVER_OME_ACCESS_TOKEN":               "OME-Example-Access-Token",
 		"BITRIVER_TRANSCODER_TOKEN":               "transcoder-secure-token-example",
 		"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD": "R3dis-Example!",
 	}
@@ -247,10 +244,6 @@ func runEnvInit(args []string) error {
 	existingValues, err := loadEnvValues(*envPath, true)
 	if err != nil {
 		return err
-	}
-
-	if warning := omeHealthcheckAuthModeDeprecationWarning(existingValues["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"]); warning != "" {
-		fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
 	}
 
 	promptForAdminEmail(existingValues)
@@ -434,7 +427,6 @@ func criticalDeployEnvironmentKeys() []string {
 		"BITRIVER_OME_USERNAME",
 		"BITRIVER_OME_PASSWORD",
 		"BITRIVER_OME_API_TOKEN",
-		"BITRIVER_OME_ACCESS_TOKEN",
 		"BITRIVER_OME_HEALTHCHECK_TOKEN",
 		"BITRIVER_LIVE_ADMIN_EMAIL",
 		"BITRIVER_LIVE_ADMIN_PASSWORD",
@@ -553,13 +545,6 @@ func validateQuickstartOMEAuthMode(rawAuthMode, envFile string) error {
 		authMode = "accesstoken"
 	}
 
-	if authMode == "token" {
-		authMode = "accesstoken"
-	}
-	if authMode == "token+basic" {
-		authMode = "basic"
-	}
-
 	switch authMode {
 	case "accesstoken", "basic", "none", "off", "disabled":
 		return nil
@@ -575,19 +560,12 @@ func runQuickstartOMEAuthPreflight(envFile string, values map[string]string) err
 		authMode = "accesstoken"
 	}
 
-	if authMode == "token" {
-		authMode = "accesstoken"
-	}
-	if authMode == "token+basic" {
-		authMode = "basic"
-	}
-
 	if err := validateQuickstartOMEAuthMode(rawAuthMode, envFile); err != nil {
 		return err
 	}
 
 	if strings.TrimSpace(values["BITRIVER_OME_API_TOKEN"]) == "" {
-		return fmt.Errorf("OME auth preflight failed: BITRIVER_OME_API_TOKEN is empty in %s.\nExpected BITRIVER_OME_API_TOKEN=<non-empty token> so OME render can populate <Managers><API><AccessToken>", envFile)
+		return fmt.Errorf("OME auth preflight failed: BITRIVER_OME_API_TOKEN is empty in %s.\nExpected BITRIVER_OME_API_TOKEN=<non-empty token> so OME render and healthchecks share one canonical token contract", envFile)
 	}
 
 	if authMode == "basic" {

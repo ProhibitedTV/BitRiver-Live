@@ -225,17 +225,14 @@ func TestValidateEnvRejectsUnsupportedOMEHealthcheckAuthMode(t *testing.T) {
 	}
 }
 
-func TestValidateEnvWarnsOnDeprecatedOMEHealthcheckAuthMode(t *testing.T) {
+func TestValidateEnvRejectsDeprecatedOMEHealthcheckAuthMode(t *testing.T) {
 	cert, key := tempTLSFiles(t)
 	values := baseEnvValues(cert, key)
 	values["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"] = "token+basic"
 
 	res := validateEnv(values)
-	if !containsString(res.Warnings, "deprecated") {
-		t.Fatalf("expected deprecated auth mode warning, got %v", res.Warnings)
-	}
-	if len(res.Errors) > 0 {
-		t.Fatalf("did not expect errors for deprecated auth mode alias, got %v", res.Errors)
+	if !containsString(res.Errors, "BITRIVER_OME_HEALTHCHECK_AUTH_MODE must be accesstoken or basic") {
+		t.Fatalf("expected deprecated alias to be rejected, got errors=%v warnings=%v", res.Errors, res.Warnings)
 	}
 }
 
@@ -473,7 +470,6 @@ func TestRenderOMEConfigFromEnv(t *testing.T) {
 		"BITRIVER_OME_USERNAME":        "omeuser",
 		"BITRIVER_OME_PASSWORD":        "omepass",
 		"BITRIVER_OME_API_TOKEN":       "apitoken",
-		"BITRIVER_OME_ACCESS_TOKEN":    "accesstoken",
 		"BITRIVER_OME_IP":              "10.1.2.4",
 		"BITRIVER_OME_ICE_PORT_RANGE":  "20000-20009",
 		"BITRIVER_OME_TCP_RELAY":       "25000",
@@ -497,8 +493,8 @@ func TestRenderOMEConfigFromEnv(t *testing.T) {
 	if !strings.Contains(data, "<IP>10.1.2.4</IP>") {
 		t.Fatalf("expected top-level server IP in output, got %q", data)
 	}
-	if !strings.Contains(data, "accesstoken") {
-		t.Fatalf("expected access token in output")
+	if !strings.Contains(data, "apitoken") {
+		t.Fatalf("expected API token in output")
 	}
 	if !strings.Contains(data, "<!-- Rendered for BITRIVER_OME_IMAGE_TAG=0.16.0 -->") {
 		t.Fatalf("expected image tag marker in output")
@@ -598,7 +594,7 @@ func TestRenderOMEConfigFromEnvWritesSecrets(t *testing.T) {
 	}
 
 	data := readFile(t, filepath.Join(workspace, "deploy", "ome", "Server.generated.xml"))
-	for _, expected := range []string{"operator-access-token", "<!-- Rendered for BITRIVER_OME_IMAGE_TAG=0.17.1 -->"} {
+	for _, expected := range []string{"operator-api-token", "<!-- Rendered for BITRIVER_OME_IMAGE_TAG=0.17.1 -->"} {
 		if !strings.Contains(data, expected) {
 			t.Fatalf("expected %q in generated config, got %q", expected, data)
 		}

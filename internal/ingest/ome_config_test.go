@@ -247,7 +247,7 @@ func TestRenderOMEConfigRequiresManagersAuth(t *testing.T) {
 		"BITRIVER_OME_USERNAME=admin",
 		"BITRIVER_OME_PASSWORD=password",
 		"BITRIVER_OME_API_TOKEN=token",
-		"BITRIVER_OME_ACCESS_TOKEN=health-token",
+		"BITRIVER_OME_HEALTHCHECK_TOKEN=health-token",
 		"BITRIVER_OME_IMAGE_TAG=0.16.0",
 		"BITRIVER_OME_TCP_RELAY=*:3478",
 		"BITRIVER_OME_ICE_CANDIDATE=example.com:10000-10009/udp",
@@ -347,7 +347,7 @@ func TestRenderOMEConfigRewritesLLHLSPorts(t *testing.T) {
 		"BITRIVER_OME_USERNAME=admin",
 		"BITRIVER_OME_PASSWORD=password",
 		"BITRIVER_OME_API_TOKEN=token",
-		"BITRIVER_OME_ACCESS_TOKEN=health-token",
+		"BITRIVER_OME_HEALTHCHECK_TOKEN=health-token",
 		"BITRIVER_OME_IMAGE_TAG=0.16.0",
 		"BITRIVER_OME_TCP_RELAY=*:3478",
 		"BITRIVER_OME_ICE_CANDIDATE=example.com:10000-10009/udp",
@@ -386,7 +386,7 @@ func TestRenderOMEConfigDefaultsAlignManagersAPIWithComposeHealthcheckPort(t *te
 		"BITRIVER_OME_USERNAME=admin",
 		"BITRIVER_OME_PASSWORD=password",
 		"BITRIVER_OME_API_TOKEN=token",
-		"BITRIVER_OME_ACCESS_TOKEN=health-token",
+		"BITRIVER_OME_HEALTHCHECK_TOKEN=health-token",
 		"BITRIVER_OME_IMAGE_TAG=0.16.0",
 		"BITRIVER_OME_TCP_RELAY=*:3478",
 		"BITRIVER_OME_ICE_CANDIDATE=example.com:10000-10009/udp",
@@ -425,7 +425,7 @@ func TestRenderOMEConfigDefaultsAlignManagersAPIWithComposeHealthcheckPort(t *te
 	if !strings.Contains(compose, "BITRIVER_OME_HEALTHCHECK_AUTH_MODE") {
 		t.Fatalf("expected compose OME service to expose BITRIVER_OME_HEALTHCHECK_AUTH_MODE")
 	}
-	if !strings.Contains(compose, "BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN") {
+	if !strings.Contains(compose, "BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_API_TOKEN") {
 		t.Fatalf("expected compose healthcheck to document canonical token precedence")
 	}
 

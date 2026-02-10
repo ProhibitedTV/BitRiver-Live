@@ -14,7 +14,6 @@ func TestOMEVerifyHealthTokenPassesWithCanonicalHealthcheckToken(t *testing.T) {
 
 	envContents := strings.Join([]string{
 		"BITRIVER_OME_API_TOKEN=api-token",
-		"BITRIVER_OME_ACCESS_TOKEN=access-token",
 		"BITRIVER_OME_HEALTHCHECK_TOKEN=healthcheck-token",
 	}, "\n") + "\n"
 	if err := os.WriteFile(envPath, []byte(envContents), 0o644); err != nil {
@@ -52,7 +51,7 @@ func TestOMEVerifyHealthTokenFailsOnMismatch(t *testing.T) {
 	if !strings.Contains(err.Error(), "rendered and runtime tokens differ") {
 		t.Fatalf("expected mismatch detail, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_ACCESS_TOKEN -> BITRIVER_OME_API_TOKEN") {
+	if !strings.Contains(err.Error(), "BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_API_TOKEN") {
 		t.Fatalf("expected canonical precedence guidance, got %v", err)
 	}
 }
