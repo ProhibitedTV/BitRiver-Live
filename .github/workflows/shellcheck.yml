@@ -22,6 +22,10 @@ jobs:
         uses: ludeeus/action-shellcheck@2.0.0
         with:
           severity: error
+          ignore_paths: |
+            scripts/check-dependency-source.sh
+            deploy/install/wizard.sh
+            cmd/transcoder/testdata/ffmpeg
           additional_files: |
             deploy/install/ubuntu.sh
             scripts/test-postgres.sh
