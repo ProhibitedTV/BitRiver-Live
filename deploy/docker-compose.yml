@@ -18,6 +18,7 @@ services:
       args:
         GOPROXY: ${GOPROXY:-direct}
         GOSUMDB: ${GOSUMDB:-off}
+        BITRIVER_LIVE_ALLOW_STUB_PGX_FOR_POSTGRES: ${BITRIVER_LIVE_ALLOW_STUB_PGX_FOR_POSTGRES:-true}
     container_name: bitriver-live
     restart: unless-stopped
     env_file:

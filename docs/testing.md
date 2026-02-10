@@ -29,6 +29,8 @@ Use the guard below whenever `BITRIVER_LIVE_STORAGE_DRIVER=postgres` is expected
 
 The check fails if `pgx.IsStub` is `true`, which prevents publishing binaries/images that would boot with Postgres configured but only have stubbed driver wiring.
 
+For local source-driven Compose builds, set `BITRIVER_LIVE_ALLOW_STUB_PGX_FOR_POSTGRES=true` (defaulted in `deploy/docker-compose.yml`) so image builds can proceed in offline/stub mode while still printing a warning. Keep this override **disabled** for release artifacts.
+
 ## Go API
 
 Run the fast unit suite (JSON datastore, REST handlers, chat flows) from the

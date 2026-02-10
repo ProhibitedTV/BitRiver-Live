@@ -12,4 +12,8 @@ case "$expected_driver" in
     ;;
 esac
 
-exec go run ./cmd/tools/pgx-mode-check --expected-storage-driver "$expected_driver"
+allow_stub_for_postgres="${BITRIVER_LIVE_ALLOW_STUB_PGX_FOR_POSTGRES:-false}"
+
+exec go run ./cmd/tools/pgx-mode-check \
+  --expected-storage-driver "$expected_driver" \
+  --allow-stub-for-postgres="$allow_stub_for_postgres"
