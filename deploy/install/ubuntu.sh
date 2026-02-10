@@ -464,6 +464,7 @@ if [[ $BUILD_FROM_SOURCE == true ]]; then
                 exit 1
         fi
 
+        ./scripts/check-postgres-pgx.sh postgres
         GOFLAGS="-trimpath" go build -tags postgres -o bitriver-live ./cmd/server
         GOFLAGS="-trimpath" go build -tags postgres -o bootstrap-admin ./cmd/tools/bootstrap-admin
         sudo install -m 0755 bitriver-live "$INSTALL_DIR/bitriver-live"
