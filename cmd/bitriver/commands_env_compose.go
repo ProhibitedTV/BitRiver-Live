@@ -492,13 +492,17 @@ func runQuickstart(args []string) error {
 	if err := envInitRunner([]string{"--env-file", *envFile}); err != nil {
 		return fmt.Errorf("env init: %w", err)
 	}
-	if err := envValidateRunner([]string{"--env-file", *envFile}); err != nil {
-		return fmt.Errorf("env validate: %w", err)
-	}
-
 	envValues, err := loadEnvValues(*envFile, false)
 	if err != nil {
 		return fmt.Errorf("read env file: %w", err)
+	}
+
+	if err := validateQuickstartProductionRequirements(*envFile, envValues); err != nil {
+		return err
+	}
+
+	if err := envValidateRunner([]string{"--env-file", *envFile}); err != nil {
+		return fmt.Errorf("env validate: %w", err)
 	}
 
 	if err := quickstartOMEAuthPreflightRunner(*envFile, envValues); err != nil {
@@ -536,6 +540,48 @@ func runQuickstart(args []string) error {
 
 	printGeneratedSecrets(generatedSecrets)
 	return nil
+}
+
+func validateQuickstartProductionRequirements(envFile string, values map[string]string) error {
+	if !strings.EqualFold(strings.TrimSpace(values["BITRIVER_LIVE_MODE"]), "production") {
+		return nil
+	}
+
+	issues := []string{}
+	loopbackURL := func(value string) bool {
+		lower := strings.ToLower(strings.TrimSpace(value))
+		return strings.HasPrefix(lower, "http://localhost") ||
+			strings.HasPrefix(lower, "https://localhost") ||
+			strings.HasPrefix(lower, "http://127.") ||
+			strings.HasPrefix(lower, "https://127.") ||
+			strings.HasPrefix(lower, "http://0.0.0.0") ||
+			strings.HasPrefix(lower, "https://0.0.0.0") ||
+			strings.HasPrefix(lower, "http://[::1]") ||
+			strings.HasPrefix(lower, "https://[::1]")
+	}
+	loopbackHost := func(value string) bool {
+		trimmed := strings.ToLower(strings.TrimSpace(value))
+		return trimmed == "localhost" || trimmed == "0.0.0.0" || trimmed == "::" || trimmed == "::1" || strings.HasPrefix(trimmed, "127.")
+	}
+
+	if val := strings.TrimSpace(values["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"]); val == "" || loopbackURL(val) {
+		issues = append(issues, fmt.Sprintf("- BITRIVER_TRANSCODER_PUBLIC_BASE_URL=%q must be a public/routable URL (example: https://cdn.example.com/hls)", valueOrDefault(val, "<empty>")))
+	}
+	if val := strings.TrimSpace(values["NEXT_PUBLIC_VIEWER_URL"]); val == "" || loopbackURL(val) {
+		issues = append(issues, fmt.Sprintf("- NEXT_PUBLIC_VIEWER_URL=%q must be a public/routable viewer URL (example: https://viewer.example.com)", valueOrDefault(val, "<empty>")))
+	}
+	if val := strings.TrimSpace(values["BITRIVER_OME_BIND"]); val == "" || loopbackHost(val) {
+		issues = append(issues, fmt.Sprintf("- BITRIVER_OME_BIND=%q must be a routable bind/interface value for production", valueOrDefault(val, "<empty>")))
+	}
+	if val := strings.TrimSpace(values["BITRIVER_OME_IP"]); val == "" || loopbackHost(val) {
+		issues = append(issues, fmt.Sprintf("- BITRIVER_OME_IP=%q must be the public/routable OME host or IP", valueOrDefault(val, "<empty>")))
+	}
+
+	if len(issues) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf("quickstart-prod validation failed for %s:\nBITRIVER_LIVE_MODE=production requires explicit production values.\nFix these entries, then rerun go run ./cmd/bitriver quickstart ...\n%s", envFile, strings.Join(issues, "\n"))
 }
 
 func validateQuickstartOMEAuthMode(rawAuthMode, envFile string) error {

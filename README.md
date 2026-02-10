@@ -89,7 +89,12 @@ Set-Location BitRiver-Live
 go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml
 ```
 
-The CLI checks Docker/Compose, generates `.env` from `deploy/.env.example` with strong credentials when the file is missing, persists `BITRIVER_LIVE_MODE=production` in that file, renders `deploy/ome/Server.generated.xml` via the Go binary (no Python dependency), runs migrations, starts the compose stack, and prints the seeded admin login. Pass `--build` when you want the quickstart to rebuild API/viewer/SRS controller/transcoder images from local source before startup. The `.env` file is gitignored; `go run ./cmd/bitriver env init` and the quickstart scripts will create it and mint fresh credentials the first time you run them so new clones never share secrets, and `go run ./cmd/bitriver env validate` now succeeds immediately after that first init without hand-editing `.env`. Re-run the commands any time `.env` or templates change; they are idempotent.
+The CLI checks Docker/Compose, generates `.env` from `deploy/.env.example` with strong credentials when the file is missing, persists `BITRIVER_LIVE_MODE=production` in that file, renders `deploy/ome/Server.generated.xml` via the Go binary (no Python dependency), runs migrations, starts the compose stack, and prints the seeded admin login. Pass `--build` when you want the quickstart to rebuild API/viewer/SRS controller/transcoder images from local source before startup. The `.env` file is gitignored; `go run ./cmd/bitriver env init` and the quickstart scripts will create it and mint fresh credentials the first time you run them so new clones never share secrets. Production quickstart now fails fast until you replace local/demo defaults with routable values for `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`, `BITRIVER_OME_BIND`, `BITRIVER_OME_IP`, and `NEXT_PUBLIC_VIEWER_URL`.
+
+### Quickstart profiles
+
+- **quickstart-dev (demo/local):** use one-off shell overrides when you intentionally want localhost values for a local demo. Example: `BITRIVER_LIVE_MODE=development go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml`.
+- **quickstart-prod (strict):** keep `BITRIVER_LIVE_MODE=production` in `.env` and set explicit routable/public values for viewer/transcoder/OME networking. `go run ./cmd/bitriver quickstart ...` now exits with a single actionable error block when those values are still localhost/`0.0.0.0`/empty.
 
 ### Step 3 – Use the running stack
 

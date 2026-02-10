@@ -1074,7 +1074,7 @@ func TestWaitForComposeServiceHealthTimesOutWithSummary(t *testing.T) {
 		t.Fatalf("expected last-known state summary in error, got %v", err)
 	}
 }
-func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
+func TestRunQuickstartFirstRunFailsUntilProductionOverridesAreSet(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), ".env")
 	composePath := filepath.Join(t.TempDir(), "compose.yml")
 	if err := os.WriteFile(composePath, []byte("services: {}\n"), 0o644); err != nil {
@@ -1106,8 +1106,12 @@ func TestRunQuickstartFirstRunInitPassesEnvValidation(t *testing.T) {
 	quickstartComposeHealthWaiter = func(string, string) error { return nil }
 	quickstartOMEAuthPreflightRunner = func(string, map[string]string) error { return nil }
 	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
-	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
-		t.Fatalf("quickstart failed on first run: %v", err)
+	err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath})
+	if err == nil {
+		t.Fatal("expected quickstart to fail until production-safe overrides are configured")
+	}
+	if !strings.Contains(err.Error(), "quickstart-prod validation failed") {
+		t.Fatalf("expected quickstart-prod actionable block, got %v", err)
 	}
 	values, err := loadEnvValues(envPath, false)
 	if err != nil {
@@ -1327,11 +1331,12 @@ func TestRunQuickstartFirstRunInitPassesEnvValidationWindowsPath(t *testing.T) {
 	quickstartComposeHealthWaiter = func(string, string) error { return nil }
 	quickstartOMEAuthPreflightRunner = func(string, map[string]string) error { return nil }
 	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
-	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
-		if strings.Contains(err.Error(), "BITRIVER_LIVE_MODE") {
-			t.Fatalf("did not expect BITRIVER_LIVE_MODE validation failure on first-run init+validate path, got %v", err)
-		}
-		t.Fatalf("quickstart failed on first run with windows path: %v", err)
+	err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath})
+	if err == nil {
+		t.Fatal("expected quickstart to fail with production defaults on first run with windows path")
+	}
+	if !strings.Contains(err.Error(), "quickstart-prod validation failed") {
+		t.Fatalf("expected quickstart-prod actionable block on windows path flow, got %v", err)
 	}
 	envContents, err := os.ReadFile(envPath)
 	if err != nil {
@@ -1341,7 +1346,7 @@ func TestRunQuickstartFirstRunInitPassesEnvValidationWindowsPath(t *testing.T) {
 		t.Fatalf("expected generated .env to contain BITRIVER_LIVE_MODE=production, got:\n%s", string(envContents))
 	}
 }
-func TestRunQuickstartFirstRunInitValidateKeepsLoopbackChecksAsWarnings(t *testing.T) {
+func TestRunQuickstartFirstRunInitValidateFailsFastWithActionableProductionBlock(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), ".env")
 	composePath := filepath.Join(t.TempDir(), "compose.yml")
 	if err := os.WriteFile(composePath, []byte("services: {}\n"), 0o644); err != nil {
@@ -1382,11 +1387,12 @@ func TestRunQuickstartFirstRunInitValidateKeepsLoopbackChecksAsWarnings(t *testi
 	if _, err := os.Stat(envPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected first run to start without env file, got stat err=%v", err)
 	}
-	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
-		if strings.Contains(err.Error(), "BITRIVER_LIVE_MODE") {
-			t.Fatalf("did not expect BITRIVER_LIVE_MODE validation failure on first-run init+validate path, got %v", err)
-		}
-		t.Fatalf("quickstart failed on first run: %v", err)
+	err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath})
+	if err == nil {
+		t.Fatal("expected quickstart to fail fast with production defaults on first run")
+	}
+	if !strings.Contains(err.Error(), "quickstart-prod validation failed") {
+		t.Fatalf("expected quickstart-prod actionable error block, got %v", err)
 	}
 	values, err := loadEnvValues(envPath, false)
 	if err != nil {
@@ -1396,17 +1402,12 @@ func TestRunQuickstartFirstRunInitValidateKeepsLoopbackChecksAsWarnings(t *testi
 		t.Fatalf("expected generated .env to persist BITRIVER_LIVE_MODE=production, got %q", values["BITRIVER_LIVE_MODE"])
 	}
 	res := validateEnv(values)
-	if len(res.Errors) > 0 {
-		for _, envErr := range res.Errors {
-			if strings.Contains(envErr, "BITRIVER_LIVE_MODE") {
-				t.Fatalf("did not expect BITRIVER_LIVE_MODE validation error after quickstart init+validate, got %v", res.Errors)
-			}
-		}
-		t.Fatalf("expected quickstart-generated loopback defaults to stay warning-only, got errors %v", res.Errors)
-	}
-	warnings := strings.Join(res.Warnings, " ")
-	if !strings.Contains(warnings, "BITRIVER_OME_BIND") || !strings.Contains(warnings, "BITRIVER_OME_IP") {
-		t.Fatalf("expected loopback OME warnings from quickstart defaults, got %v", res.Warnings)
+	joinedErrors := strings.Join(res.Errors, " ")
+	if !strings.Contains(joinedErrors, "BITRIVER_TRANSCODER_PUBLIC_BASE_URL") ||
+		!strings.Contains(joinedErrors, "NEXT_PUBLIC_VIEWER_URL") ||
+		!strings.Contains(joinedErrors, "BITRIVER_OME_BIND") ||
+		!strings.Contains(joinedErrors, "BITRIVER_OME_IP") {
+		t.Fatalf("expected strict production errors after first-run env init, got errors=%v warnings=%v", res.Errors, res.Warnings)
 	}
 }
 func renderOMEConfigLegacy(cfg omeRenderConfig) (string, error) {
