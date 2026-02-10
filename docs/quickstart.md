@@ -208,6 +208,7 @@ All commands assume you are still in the repository root (where `.env` lives) so
 - **`Error: Docker Compose V2 is required`** – Install the compose plugin or upgrade Docker Desktop/Engine so the `docker compose`
   sub-command is available for the Go quickstart across all platforms.
 - **`permission denied while trying to connect to the Docker daemon socket`** – Add your account to the `docker` group with `sudo usermod -aG docker $USER` followed by `newgrp docker` (or log out and back in), then rerun the quickstart without `sudo`. You can run `sudo go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` or the shell/PowerShell shims in a pinch, but expect root-owned files like `.env` until you fix the group membership.
+- **`postgres repository unavailable: pgx driver stubbed in this build`** – The running binary/artifact was built without Postgres support (stub-only pgx path). Use one remediation path: rebuild and redeploy from release artifacts that are verified to include the `postgres` build tag and the non-stub pgx driver, then restart the stack with those artifacts. Use the provenance checks in [`docs/production-release.md`](production-release.md) to confirm the image/tag/digest set before redeploying.
 
 ### Windows troubleshooting (Docker Desktop + WSL 2)
 
