@@ -7,15 +7,16 @@ import (
 	"testing"
 )
 
-func TestEnvInitThenValidatePassesOnFreshRepo(t *testing.T) {
+func TestEnvInitThenValidateRequiresProductionRoutableOverridesOnFreshRepo(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), ".env")
 
 	if err := runEnvInit([]string{"--env-file", envPath, "--example", defaultExampleEnv()}); err != nil {
 		t.Fatalf("env init failed: %v", err)
 	}
 
-	if err := runEnvValidate([]string{"--env-file", envPath}); err != nil {
-		t.Fatalf("expected env validate to pass immediately after env init, got %v", err)
+	err := runEnvValidate([]string{"--env-file", envPath})
+	if err == nil {
+		t.Fatal("expected env validate to fail until production-safe routable values are set")
 	}
 }
 
@@ -236,7 +237,7 @@ func TestValidateEnvRejectsDeprecatedOMEHealthcheckAuthMode(t *testing.T) {
 	}
 }
 
-func TestValidateEnvAllowsLoopbackOMEWhenComposeAPI(t *testing.T) {
+func TestValidateEnvRejectsLoopbackOMEWhenComposeAPIInProduction(t *testing.T) {
 	values := map[string]string{
 		"BITRIVER_POSTGRES_USER":                  "brlive_app",
 		"BITRIVER_POSTGRES_PASSWORD":              "secret",
@@ -271,14 +272,9 @@ func TestValidateEnvAllowsLoopbackOMEWhenComposeAPI(t *testing.T) {
 	}
 
 	res := validateEnv(values)
-	for _, err := range res.Errors {
-		if strings.Contains(err, "BITRIVER_OME_BIND") || strings.Contains(err, "BITRIVER_OME_IP") {
-			t.Fatalf("did not expect loopback bind/ip errors for compose OME API, got %v", res.Errors)
-		}
-	}
-	warnings := strings.Join(res.Warnings, " ")
-	if !strings.Contains(warnings, "BITRIVER_OME_BIND") || !strings.Contains(warnings, "BITRIVER_OME_IP") {
-		t.Fatalf("expected loopback bind/ip warnings for compose OME API, got %v", res.Warnings)
+	joinedErrors := strings.Join(res.Errors, " ")
+	if !strings.Contains(joinedErrors, "BITRIVER_OME_BIND") || !strings.Contains(joinedErrors, "BITRIVER_OME_IP") {
+		t.Fatalf("expected loopback bind/ip errors for compose OME API in production, got %v", res.Errors)
 	}
 }
 
@@ -312,7 +308,7 @@ func TestLoadEnvValuesPreservesQuotedValues(t *testing.T) {
 	}
 }
 
-func TestValidateEnvWarnsLoopbackOMEOnQuickstart(t *testing.T) {
+func TestValidateEnvRejectsLoopbackQuickstartDefaultsInProduction(t *testing.T) {
 	values := map[string]string{
 		"BITRIVER_POSTGRES_USER":                  "brlive_app",
 		"BITRIVER_POSTGRES_PASSWORD":              "secret",
@@ -347,23 +343,15 @@ func TestValidateEnvWarnsLoopbackOMEOnQuickstart(t *testing.T) {
 	}
 
 	res := validateEnv(values)
-	joinedWarnings := strings.Join(res.Warnings, " ")
-	for _, err := range res.Errors {
-		if strings.Contains(err, "loopback") {
-			t.Fatalf("did not expect loopback errors for quickstart defaults, got %v", res.Errors)
-		}
-		if strings.Contains(err, "BITRIVER_OME_BIND") || strings.Contains(err, "BITRIVER_OME_IP") {
-			t.Fatalf("did not expect loopback bind/ip errors for quickstart, got %v", res.Errors)
-		}
+	joinedErrors := strings.Join(res.Errors, " ")
+	if !strings.Contains(joinedErrors, "BITRIVER_TRANSCODER_PUBLIC_BASE_URL") ||
+		!strings.Contains(joinedErrors, "NEXT_PUBLIC_VIEWER_URL") ||
+		!strings.Contains(joinedErrors, "BITRIVER_OME_BIND") ||
+		!strings.Contains(joinedErrors, "BITRIVER_OME_IP") {
+		t.Fatalf("expected production errors for loopback quickstart defaults, got errors=%v warnings=%v", res.Errors, res.Warnings)
 	}
-	if !strings.Contains(joinedWarnings, "BITRIVER_OME_BIND") || !strings.Contains(joinedWarnings, "BITRIVER_OME_IP") {
-		t.Fatalf("expected loopback bind/ip warnings for quickstart, got %v", res.Warnings)
-	}
-	if !strings.Contains(joinedWarnings, "expected for first-run Docker Desktop quickstart demos") {
-		t.Fatalf("expected quickstart warning guidance, got %v", res.Warnings)
-	}
-	if !strings.Contains(joinedWarnings, "must replace it with a public/routable value") {
-		t.Fatalf("expected production replacement guidance in warnings, got %v", res.Warnings)
+	if strings.Contains(strings.Join(res.Warnings, " "), "first-run Docker Desktop quickstart demos") {
+		t.Fatalf("did not expect demo-only warning text in production, got %v", res.Warnings)
 	}
 }
 
