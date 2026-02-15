@@ -98,6 +98,14 @@ def main() -> int:
         )
         return 1
 
+    mode = seed_env.get("BITRIVER_LIVE_MODE", "").strip().lower()
+    if mode != "production":
+        print(
+            "quickstart smoke env fixture must set BITRIVER_LIVE_MODE=production to match deploy/check-env.sh validation",
+            file=sys.stderr,
+        )
+        return 1
+
     return 0
 
 
