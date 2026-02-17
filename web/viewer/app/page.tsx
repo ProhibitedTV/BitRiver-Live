@@ -7,15 +7,14 @@ import {
 } from "./directory-view";
 import type { CategorySummary, DirectoryChannel } from "../lib/viewer-api";
 import {
-  fetchDirectory,
   fetchFeaturedChannels,
   fetchFollowingChannels,
   fetchLiveNowChannels,
   fetchRecommendedChannels,
   fetchTopCategories,
   fetchTrendingChannels,
-  searchDirectory,
 } from "../lib/viewer-api";
+import { loadDirectoryChannels, mapDirectoryError, normalizeDirectoryQuery } from "../lib/directory-state";
 
 function isUnauthorizedFollowingResponse(reason: unknown) {
   const status = typeof reason === "object" && reason !== null && "status" in reason
@@ -90,12 +89,12 @@ async function loadHomeData(): Promise<HomeData> {
 
 async function loadDirectoryData(query: string): Promise<DirectoryData> {
   try {
-    const response = query.trim().length > 0 ? await searchDirectory(query) : await fetchDirectory();
+    const response = await loadDirectoryChannels(query);
     return { channels: response.channels };
   } catch (error) {
     return {
       channels: [],
-      error: error instanceof Error ? error.message : "Unable to load directory",
+      error: mapDirectoryError(error),
     };
   }
 }
@@ -119,7 +118,7 @@ type PageProps = {
 };
 
 export default async function DirectoryPage({ searchParams }: PageProps) {
-  const query = typeof searchParams?.q === "string" ? searchParams.q : "";
+  const query = normalizeDirectoryQuery(typeof searchParams?.q === "string" ? searchParams.q : "");
   const [homeData, directoryData] = await Promise.all([
     loadHomeData(),
     loadDirectoryData(query),

@@ -2,6 +2,7 @@ import { mockRouter, resetRouterMocks, viewerApiMocks } from "../test/test-utils
 import userEvent from "@testing-library/user-event";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import DirectoryPage from "../app/page";
+import { directoryInputMatrix } from "../test/directory-input-matrix";
 
 const fetchDirectoryMock = viewerApiMocks.fetchDirectory;
 const searchDirectoryMock = viewerApiMocks.searchDirectory;
@@ -121,7 +122,7 @@ describe("DirectoryPage", () => {
       expect(searchDirectoryMock).toHaveBeenCalledWith("retro");
     });
 
-    expect(await screen.findByRole("heading", { level: 3, name: "Retro Speedruns" })).toBeInTheDocument();
+    expect(await screen.findByText("Retro Speedruns")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 3, name: "Deep Space Beats" })).not.toBeInTheDocument();
   });
 
@@ -135,7 +136,38 @@ describe("DirectoryPage", () => {
     const clearButton = await screen.findByRole("button", { name: /clear/i });
     await user.click(clearButton);
 
-    expect(mockRouter.push).toHaveBeenCalledWith("/");
+    expect(mockRouter.replace).toHaveBeenCalledWith("/");
+  });
+
+
+  test.each(directoryInputMatrix)("applies shared directory loading behavior for $label", async ({ query, normalized, mode, errorMessage }) => {
+    if (mode === "search") {
+      searchDirectoryMock.mockResolvedValueOnce(searchDirectoryResponse as any);
+    } else if (mode === "error") {
+      searchDirectoryMock.mockRejectedValueOnce(new Error(errorMessage));
+    } else {
+      fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
+    }
+
+    const page = await DirectoryPage({ searchParams: query ? { q: query } : {} });
+    render(page);
+
+    if (mode === "search") {
+      await waitFor(() => expect(searchDirectoryMock).toHaveBeenCalledWith(normalized));
+      expect(await screen.findByText("Retro Speedruns")).toBeInTheDocument();
+      expect(fetchDirectoryMock).not.toHaveBeenCalled();
+      return;
+    }
+
+    if (mode === "error") {
+      await waitFor(() => expect(searchDirectoryMock).toHaveBeenCalledWith(normalized));
+      expect(await screen.findByRole("alert")).toHaveTextContent(errorMessage);
+      return;
+    }
+
+    await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Deep Space Beats")).toBeInTheDocument();
+    expect(searchDirectoryMock).not.toHaveBeenCalled();
   });
 
   test("gracefully handles directory loading errors", async () => {

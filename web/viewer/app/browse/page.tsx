@@ -1,18 +1,19 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DirectoryGrid } from "../../components/DirectoryGrid";
 import { SearchBar } from "../../components/SearchBar";
 import type { DirectoryChannel } from "../../lib/viewer-api";
-import { fetchDirectory, searchDirectory } from "../../lib/viewer-api";
+import { loadDirectoryChannels, mapDirectoryError } from "../../lib/directory-state";
+import { useDirectorySearch } from "../../hooks/useDirectorySearch";
 
 type SortKey = "live" | "trending" | "new";
 type FilterKey = string | null;
 
 export default function BrowsePage() {
-  const searchParams = useSearchParams();
-  const searchParamQuery = useMemo(() => searchParams.get("q")?.trim() ?? "", [searchParams]);
+  const { queryFromParams: searchParamQuery, lastQueryFromParams, navigateWithQuery } = useDirectorySearch({
+    fallbackPathname: "/browse",
+  });
   const [channels, setChannels] = useState<DirectoryChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
@@ -20,21 +21,15 @@ export default function BrowsePage() {
   const [sort, setSort] = useState<SortKey>("live");
   const [filter, setFilter] = useState<FilterKey>(null);
   const [queryHydrated, setQueryHydrated] = useState(false);
-  const lastQueryFromParams = useRef(searchParamQuery);
-  const router = useRouter();
-  const pathname = usePathname();
-
   const loadChannels = useCallback(
     async (search?: string) => {
       try {
         setLoading(true);
         setError(undefined);
-        const response = search?.trim().length
-          ? await searchDirectory(search)
-          : await fetchDirectory();
+        const response = await loadDirectoryChannels(search);
         setChannels(response.channels);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to load directory");
+        setError(mapDirectoryError(err));
       } finally {
         setLoading(false);
       }
@@ -57,7 +52,7 @@ export default function BrowsePage() {
       setQuery(searchParamQuery);
       setQueryHydrated(true);
     }
-  }, [queryHydrated, searchParamQuery]);
+  }, [lastQueryFromParams, queryHydrated, searchParamQuery]);
 
   const categoryFilters = useMemo(() => {
     const filters = new Set<string>();
@@ -107,41 +102,16 @@ export default function BrowsePage() {
     return sortedChannels.slice(0, 3);
   }, [sortedChannels]);
 
-  const updateSearchParam = useCallback(
-    (value: string) => {
-      const params = new URLSearchParams(searchParams.toString());
-      const trimmedValue = value.trim();
-
-      if (trimmedValue.length > 0) {
-        params.set("q", trimmedValue);
-      } else {
-        params.delete("q");
-      }
-
-      const queryString = params.toString();
-      const url = queryString ? `${pathname}?${queryString}` : pathname;
-      const shouldReplace = trimmedValue.length === 0 || trimmedValue === lastQueryFromParams.current;
-      lastQueryFromParams.current = trimmedValue;
-
-      if (shouldReplace) {
-        router.replace(url);
-      } else {
-        router.push(url);
-      }
-    },
-    [pathname, router, searchParams]
-  );
-
   const handleSearch = (value: string) => {
-    const trimmedValue = value.trim();
-    setQuery(trimmedValue);
+    const normalizedQuery = navigateWithQuery(value);
+    setQuery(normalizedQuery);
     setFilter(null);
-    updateSearchParam(trimmedValue);
   };
 
   const handleReset = () => {
+    const normalized = navigateWithQuery("");
     setFilter(null);
-    void loadChannels(query);
+    setQuery(normalized);
   };
 
   const showEmpty = !loading && !error && sortedChannels.length === 0;
@@ -160,7 +130,7 @@ export default function BrowsePage() {
           </div>
 
           <div className="browse-hero__actions">
-            <SearchBar onSearch={handleSearch} defaultValue={query} />
+            <SearchBar onSearch={handleSearch} defaultValue={query} onClear={handleReset} />
             <div className="browse-hero__stats">
               <div className="stat-pill">
                 <span className="stat-pill__label">Live now</span>
