@@ -1,5 +1,6 @@
-import { mockUseAuth, renderWithProviders, signedInAuthState, viewerApiMocks } from "../test/test-utils";
 import { screen, waitFor } from "@testing-library/react";
+import { FOLLOWING_COPY } from "../components/following/FollowingState";
+import { mockUseAuth, renderWithProviders, signedInAuthState, viewerApiMocks } from "../test/test-utils";
 import { FollowingSidebar } from "../components/FollowingSidebar";
 
 jest.mock("../hooks/useAuth");
@@ -17,19 +18,19 @@ describe("FollowingSidebar", () => {
 
     renderWithProviders(<FollowingSidebar />);
 
-    expect(screen.getByText(/checking which creators are live/i)).toBeInTheDocument();
+    expect(screen.getAllByText(FOLLOWING_COPY.loading).length).toBeGreaterThan(0);
   });
 
-  it("renders a compact empty message when no channels are followed", async () => {
+  it("renders the shared empty message when no channels are followed", async () => {
     fetchFollowingMock.mockResolvedValue({
       channels: [],
-      generatedAt: new Date().toISOString()
+      generatedAt: new Date().toISOString(),
     });
 
     renderWithProviders(<FollowingSidebar />);
 
     await waitFor(() => {
-      expect(screen.getByText(/you['’]re not following any channels yet/i)).toBeInTheDocument();
+      expect(screen.getByText(FOLLOWING_COPY.empty)).toBeInTheDocument();
     });
   });
 });

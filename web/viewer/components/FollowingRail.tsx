@@ -1,5 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
+import { FollowingList } from "./following/FollowingList";
+import {
+  FollowingEmptyPrompt,
+  FollowingLoadingBlock,
+  FollowingStatus,
+  FollowingUnauthenticatedPrompt,
+} from "./following/FollowingState";
 import type { DirectoryChannel } from "../lib/viewer-api";
 
 interface FollowingRailProps {
@@ -9,6 +16,8 @@ interface FollowingRailProps {
 }
 
 export function FollowingRail({ channels, loading = false, isAuthenticated = false }: FollowingRailProps) {
+  const status: FollowingStatus = loading ? "loading" : !isAuthenticated ? "unauthenticated" : channels.length === 0 ? "empty" : "ready";
+
   return (
     <section className="following-rail surface">
       <header className="following-rail__header">
@@ -16,32 +25,25 @@ export function FollowingRail({ channels, loading = false, isAuthenticated = fal
           <span className="following-rail__eyebrow muted">Following</span>
           <h3>Catch up with your creators</h3>
         </div>
-        {channels.length > 0 && !loading && <span className="muted">{channels.length} online</span>}
+        {status === "ready" && <span className="muted">{channels.length} online</span>}
       </header>
-      {loading ? (
-        <p className="muted">Checking who is live…</p>
-      ) : channels.length === 0 ? (
-        isAuthenticated ? (
-          <p className="muted">
-            You&rsquo;re not following any channels yet. Follow a broadcaster to see their stream here the moment they go live.
-          </p>
-        ) : (
-          <div className="stack">
-            <p className="muted">Sign in to see channels you follow.</p>
-            <div>
-              <Link href="/login" className="primary-button">
-                Sign in
-              </Link>
-            </div>
-          </div>
-        )
+      {status === "loading" ? (
+        <FollowingLoadingBlock className="muted" />
+      ) : status === "unauthenticated" ? (
+        <FollowingUnauthenticatedPrompt className="stack" />
+      ) : status === "empty" ? (
+        <FollowingEmptyPrompt className="muted" />
       ) : (
-        <div className="following-rail__scroller" role="list">
-          {channels.map((entry) => {
+        <FollowingList
+          channels={channels}
+          className="following-rail__scroller"
+          role="list"
+          itemRole="listitem"
+          renderItem={(entry) => {
             const avatar = entry.profile.avatarUrl ?? entry.profile.bannerUrl;
             const ownerInitial = entry.owner.displayName.charAt(0).toUpperCase() || "B";
             return (
-              <Link key={entry.channel.id} href={`/channels/${entry.channel.id}`} className="following-card" role="listitem">
+              <Link href={`/channels/${entry.channel.id}`} className="following-card">
                 <div className="following-card__avatar">
                   {avatar ? (
                     <Image
@@ -68,8 +70,8 @@ export function FollowingRail({ channels, loading = false, isAuthenticated = fal
                 </div>
               </Link>
             );
-          })}
-        </div>
+          }}
+        />
       )}
     </section>
   );

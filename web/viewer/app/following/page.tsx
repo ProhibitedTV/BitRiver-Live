@@ -1,61 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { DirectoryGrid } from "../../components/DirectoryGrid";
+import {
+  FollowingEmptyPrompt,
+  FollowingErrorBlock,
+  FollowingLoadingBlock,
+  FollowingUnauthenticatedPrompt,
+} from "../../components/following/FollowingState";
+import { useFollowingChannels } from "../../components/following/useFollowingChannels";
 import { useAuth } from "../../hooks/useAuth";
-import type { DirectoryChannel } from "../../lib/viewer-api";
-import { fetchFollowingChannels } from "../../lib/viewer-api";
 
 export default function FollowingPage() {
-  const { user, loading: authLoading, signIn } = useAuth();
-  const [channels, setChannels] = useState<DirectoryChannel[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | undefined>();
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (authLoading) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    if (!user) {
-      setChannels([]);
-      setError(undefined);
-      setLoading(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(undefined);
-        const response = await fetchFollowingChannels();
-        if (!cancelled) {
-          setChannels(response.channels);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Unable to load followed channels");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, user]);
+  const { user, loading: authLoading } = useAuth();
+  const { channels, status, reload, error } = useFollowingChannels({
+    isAuthenticated: Boolean(user),
+    authLoading,
+  });
 
   return (
     <div className="container stack">
@@ -64,36 +25,34 @@ export default function FollowingPage() {
         <p className="muted">Catch live broadcasts from creators you follow.</p>
       </header>
 
-      {authLoading ? (
+      {status === "loading" ? (
         <div className="surface" role="status">
-          Checking your session…
+          <FollowingLoadingBlock />
         </div>
-      ) : !user ? (
+      ) : status === "unauthenticated" ? (
         <div className="surface stack" role="status">
-          <p className="muted">Sign in to see channels you follow.</p>
+          <FollowingUnauthenticatedPrompt className="stack" />
           <p className="muted">Browse the directory to find creators and follow them from their channel pages.</p>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button type="button" className="primary-button" onClick={() => void signIn()}>
-              Sign in
-            </button>
-            <Link href="/browse" className="secondary-button" prefetch>
-              Browse channels
-            </Link>
-          </div>
+          <Link href="/browse" className="secondary-button" prefetch>
+            Browse channels
+          </Link>
         </div>
       ) : (
         <>
-          {error ? (
+          {status === "error" ? (
             <div className="surface" role="alert">
-              We couldn&apos;t load your followed channels. {error}
+              <FollowingErrorBlock
+                onRetry={() => {
+                  void reload();
+                }}
+              />
+              {error ? <p className="muted">{error}</p> : null}
             </div>
           ) : null}
 
-          {loading ? (
-            <div className="surface">Checking who is live…</div>
-          ) : channels.length === 0 ? (
+          {status === "empty" ? (
             <div className="surface stack">
-              <p className="muted">You&rsquo;re not following any channels yet.</p>
+              <FollowingEmptyPrompt className="muted" />
               <p className="muted">
                 Browse the directory to discover creators and follow them to see their streams here.
               </p>
@@ -101,7 +60,7 @@ export default function FollowingPage() {
                 Browse channels
               </Link>
             </div>
-          ) : (
+          ) : status === "ready" ? (
             <section className="stack">
               <div className="section-heading">
                 <div>
@@ -112,7 +71,7 @@ export default function FollowingPage() {
               </div>
               <DirectoryGrid channels={channels} />
             </section>
-          )}
+          ) : null}
         </>
       )}
     </div>
