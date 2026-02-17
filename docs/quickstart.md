@@ -2,13 +2,30 @@
 
 ## TL;DR
 
-| Platform | Recommended launcher | Advanced (Go from source) |
-| --- | --- | --- |
-| macOS | `brew install --formula https://github.com/bitriver-live/bitriver-live/releases/latest/download/bitriver-live.rb && bitriver-live` | `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` |
-| Linux | Install the `.deb` or `.rpm` from the latest release then run `bitriver-live` (desktop shortcut: **Start BitRiver Live**) | `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` |
-| Windows | Install `bitriver-live-<version>.msi` and launch **Start BitRiver Live** from the Start menu/desktop | `pwsh -c "go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml"` |
+### Platform entry command (syntax only)
 
-Use the installer-backed launcher when you want a zero-build setup that checks Docker/Compose, bootstraps `<launcher-root>/.env` from `deploy/.env.example`, pulls release images, and starts the stack. Installers are available today for Windows (MSI), Linux (Deb/RPM), and macOS (Homebrew launcher formula). The Go-based quickstart remains the canonical contributor path because it builds local images and runs migrations from source.
+| Platform | Entry command |
+| --- | --- |
+| macOS | `brew install --formula https://github.com/bitriver-live/bitriver-live/releases/latest/download/bitriver-live.rb && bitriver-live` |
+| Linux | Install the `.deb` or `.rpm` from the latest release, then run `bitriver-live` (desktop shortcut: **Start BitRiver Live**). |
+| Windows | Install `bitriver-live-<version>.msi`, then launch **Start BitRiver Live** or run `bitriver-live.ps1`. |
+| Source checkout (any shell) | `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` (PowerShell: `pwsh -c "go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml"`) |
+
+### Shared backend pipeline (all launchers)
+
+All entrypoints above execute one canonical deployment contract: `deploy/docker-compose.yml` + the root `.env`.
+
+| Stage | What runs |
+| --- | --- |
+| Doctor | Verify Docker + Compose prerequisites before mutating deployment state. |
+| Env | Create/bootstrap root `.env` from `deploy/.env.example` when missing and validate required production settings. |
+| Render | Generate `deploy/ome/Server.generated.xml` from template + `.env`. |
+| Migrations | Apply database migrations via the same control-plane flow. |
+| Compose up | Start services with `deploy/docker-compose.yml`. |
+| Readiness | Poll `/readyz` until core services are healthy. |
+| Bootstrap | Seed/print admin credentials when required. |
+
+Installer and source quickstarts are different launch surfaces for the same operational pipeline; choose based on packaging preference, not deployment behaviour.
 
 
 ## Release note: legacy OME custom compose override removed
@@ -31,7 +48,7 @@ launchers ship a bundled CLI and do not require Go on the host.
 
 ### Tier 1 coverage
 
-The Go-based quickstart is the canonical entry point across the Tier 1 platforms—Windows 10/11 with Docker Desktop, macOS with Docker Desktop, and Ubuntu/Debian with Docker Engine plus the Compose plugin. The shell and PowerShell shims stay in place for compatibility but only forward to the same Go command. See [`docs/cross-platform-plan.md`](cross-platform-plan.md) for the full support matrix.
+The Go-based quickstart defines the canonical deployment contract across Tier 1 platforms—Windows 10/11 with Docker Desktop, macOS with Docker Desktop, and Ubuntu/Debian with Docker Engine plus the Compose plugin. Launcher wrappers and installers remain compatibility entrypoints that forward into the same Compose + `.env` pipeline. See [`docs/cross-platform-plan.md`](cross-platform-plan.md#canonical-production-deployment-path) for the contract and support matrix.
 
 ## Run the quickstart command
 

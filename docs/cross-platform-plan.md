@@ -40,6 +40,8 @@ go run ./cmd/bitriver doctor
 
 ## Canonical production deployment path
 
+This contract matches the architecture guardrails in [`docs/architecture.md`](architecture.md#deployment-contract-canonical): every launcher must execute one shared deployment pipeline instead of introducing platform-specific operations.
+
 - Production deployments continue to flow through `deploy/docker-compose.yml` with configuration sourced from the repo-root
   `.env` (generated from `deploy/.env.example`, validated by `deploy/check-env.sh`, and rendered into
   `deploy/ome/Server.generated.xml` via `go run ./cmd/bitriver ome render` or `scripts/render-ome-config.sh`).

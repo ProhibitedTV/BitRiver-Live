@@ -28,6 +28,9 @@ Twitch-style experience on hardware you control.
 
 Use the packaged launcher (`bitriver-live`) if you just want to bring the stack up with Docker Compose. It bundles the compose file, creates `<launcher-root>/.env` from `deploy/.env.example` on the first run, checks Docker/Compose, pulls release images, and starts the stack without requiring Go or Node.
 
+> **Single deployment pipeline**
+> Every launcher (`bitriver-live`, `go run ./cmd/bitriver quickstart`, `scripts/quickstart.sh`, and `scripts/quickstart.ps1`) executes the same deployment contract: `deploy/docker-compose.yml` + one root `.env` file. Platform differences only change how you invoke the launcher command.
+
 - **macOS (Homebrew):**
   ```bash
   brew install --formula https://github.com/bitriver-live/bitriver-live/releases/latest/download/bitriver-live.rb
@@ -51,6 +54,9 @@ The panel polls `docker compose ps` to show service state + health, tails recent
 
 Use a single deployment path across all platforms: the Go CLI in `cmd/bitriver`. It handles environment generation, Docker Compose orchestration, and health checks.
 
+> **Single deployment pipeline**
+> Source and installer entrypoints run the same backend sequence against `deploy/docker-compose.yml` and the root `.env`: doctor checks, env init/validation, OME render, migrations, `docker compose up`, readiness checks, and admin bootstrap.
+
 ### Prerequisites at a glance
 
 | Platform | Docker runtime | Notes |
@@ -59,8 +65,7 @@ Use a single deployment path across all platforms: the Go CLI in `cmd/bitriver`.
 | Ubuntu 22.04+ / other Linux | Docker Engine + Compose plugin | Add your user to the `docker` group (or prefix commands with `sudo`) and confirm `docker compose` works without root. |
 | Windows 10/11 | Docker Desktop (WSL 2 backend) | Enable the WSL 2 backend, start Docker Desktop, and ensure the `docker-desktop` data disk has 15GB free. |
 
-Install Go 1.21+ if you plan to run the source-based quickstart (`go run ./cmd/bitriver quickstart`) or any of the CLI helper
-commands. The installer-backed launcher bundles everything it needs and does not require Go.
+Install Go 1.21+ only when you plan to run `go run ./cmd/bitriver ...` from source. The packaged launcher already bundles the CLI and still runs the same deployment pipeline.
 
 `go run ./cmd/bitriver quickstart` starts by running the built-in doctor checks. If Docker is missing from your `PATH`, the command prints a `BitRiver Live doctor` block that includes `Docker: not found` and exits with `Error: doctor checks failed` so you can fix the prerequisite before it touches Compose.
 
