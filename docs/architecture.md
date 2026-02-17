@@ -32,6 +32,10 @@ Rules:
 7. Infrastructure packages must not import `internal/api` or `cmd/*`.
 8. `internal/service` and `internal/domain` must not depend on concrete transport types (HTTP request/response structs), CLI flags, or Docker-specific runtime types.
 
+## Deployment contract (canonical)
+
+BitRiver Live has one deployment pipeline regardless of launcher: `deploy/docker-compose.yml` orchestrated with the repository-root `.env` lifecycle (generate/validate/render/bootstrap). Platform-specific launchers only change command syntax; they must not introduce a second operational runbook. See [`docs/quickstart.md`](quickstart.md#shared-backend-pipeline-all-launchers) for the shared stage sequence and [`docs/cross-platform-plan.md`](cross-platform-plan.md#canonical-production-deployment-path) for cross-platform rollout constraints.
+
 ## Frontend boundary (Next.js viewer)
 
 - `web/viewer` is an independent UI delivery layer.
