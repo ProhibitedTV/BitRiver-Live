@@ -26,6 +26,10 @@ const state = {
         actionsMeta: null,
         automodMeta: null,
     },
+    legal: {
+        dmca: [],
+        dataSubject: [],
+    },
     analytics: { summary: null, perChannel: [] },
     uploads: new Map(),
     statusReport: null,
@@ -319,6 +323,8 @@ heroNavButtons.forEach((btn) => {
             void loadModeration();
         } else if (view === "analytics") {
             void loadAnalytics();
+        } else if (view === "legal") {
+            void loadLegal();
         }
     });
 });
@@ -397,6 +403,11 @@ function renderAccountStatus() {
         accountActions.hidden = true;
         if (accountName) {
             accountName.textContent = "";
+        }
+    }
+    for (const button of heroNavButtons) {
+        if (button.dataset.adminOnly === "true") {
+            button.hidden = !isCurrentUserAdmin();
         }
     }
 }
@@ -3135,6 +3146,72 @@ function attachActions() {
     document.getElementById("download-snapshot").addEventListener("click", exportSnapshot);
     if (signOutButton) {
         signOutButton.addEventListener("click", handleSignOut);
+    }
+}
+
+async function loadLegal() {
+    if (!isCurrentUserAdmin()) {
+        return;
+    }
+    const [dmca, dsr] = await Promise.all([
+        apiRequest("/api/legal/dmca"),
+        apiRequest("/api/legal/data-subject"),
+    ]);
+    state.legal.dmca = Array.isArray(dmca) ? dmca : [];
+    state.legal.dataSubject = Array.isArray(dsr) ? dsr : [];
+    renderLegal();
+}
+
+function renderLegal() {
+    const dmcaContainer = document.getElementById("legal-dmca-list");
+    const dsrContainer = document.getElementById("legal-dsr-list");
+    if (!dmcaContainer || !dsrContainer) {
+        return;
+    }
+    clearElement(dmcaContainer);
+    clearElement(dsrContainer);
+    if (!isCurrentUserAdmin()) {
+        dmcaContainer.appendChild(createElement("p", { className: "empty", textContent: "Administrator access required." }));
+        dsrContainer.appendChild(createElement("p", { className: "empty", textContent: "Administrator access required." }));
+        return;
+    }
+    for (const item of state.legal.dmca) {
+        const card = createElement("article", { className: "card" });
+        card.append(createElement("h4", { textContent: item.contentUrl }), createElement("p", { className: "card__meta", textContent: `Status: ${item.status}` }));
+        const select = document.createElement("select");
+        ["open", "actioned", "restored", "rejected"].forEach((status) => {
+            const option = document.createElement("option");
+            option.value = status;
+            option.textContent = status;
+            option.selected = status === item.status;
+            select.appendChild(option);
+        });
+        const btn = createElement("button", { className: "secondary", textContent: "Update" });
+        btn.addEventListener("click", async () => {
+            await apiRequest(`/api/legal/dmca/${item.id}`, { method: "PATCH", body: JSON.stringify({ status: select.value, notes: "updated from control centre" }) });
+            await loadLegal();
+        });
+        card.append(select, btn);
+        dmcaContainer.appendChild(card);
+    }
+    for (const item of state.legal.dataSubject) {
+        const card = createElement("article", { className: "card" });
+        card.append(createElement("h4", { textContent: `${item.subjectEmail} (${item.requestType})` }), createElement("p", { className: "card__meta", textContent: `Status: ${item.status}` }));
+        const select = document.createElement("select");
+        ["open", "actioned", "rejected"].forEach((status) => {
+            const option = document.createElement("option");
+            option.value = status;
+            option.textContent = status;
+            option.selected = status === item.status;
+            select.appendChild(option);
+        });
+        const btn = createElement("button", { className: "secondary", textContent: "Update" });
+        btn.addEventListener("click", async () => {
+            await apiRequest(`/api/legal/data-subject/${item.id}`, { method: "PATCH", body: JSON.stringify({ status: select.value, notes: "updated from control centre" }) });
+            await loadLegal();
+        });
+        card.append(select, btn);
+        dsrContainer.appendChild(card);
     }
 }
 

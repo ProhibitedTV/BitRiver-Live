@@ -16,6 +16,7 @@ import (
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/observability/tracing"
+	"bitriver-live/internal/service"
 	"bitriver-live/internal/storage"
 )
 
@@ -29,6 +30,7 @@ type Handler struct {
 	ChatGateway           *chat.Gateway
 	OAuth                 oauth.Service
 	UploadProcessor       *UploadProcessor
+	LegalService          *service.LegalService
 	Setup                 SetupManager
 	DefaultRenditions     []string
 	SRSHookToken          string
@@ -65,6 +67,7 @@ func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handle
 		DefaultRenditions:   []string{"1080p", "720p", "480p"},
 		AllowSelfSignup:     true,
 		SessionCookiePolicy: DefaultSessionCookiePolicy(),
+		LegalService:        service.NewLegalService(store),
 		Logger:              slog.Default(),
 	}
 }

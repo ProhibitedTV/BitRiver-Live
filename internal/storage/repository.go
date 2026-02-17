@@ -90,6 +90,19 @@ type Repository interface {
 	ListSubscriptions(channelID string, includeInactive bool) ([]models.Subscription, error)
 	GetSubscription(id string) (models.Subscription, bool)
 	CancelSubscription(id, cancelledBy, reason string) (models.Subscription, error)
+
+	CreateDMCACase(params CreateDMCACaseParams) (models.DMCACase, error)
+	ListDMCACases() ([]models.DMCACase, error)
+	GetDMCACase(id string) (models.DMCACase, bool)
+	UpdateDMCACase(id string, update DMCACaseUpdate, actorUserID string) (models.DMCACase, error)
+
+	CreateDataSubjectRequest(params CreateDataSubjectRequestParams) (models.DataSubjectRequest, error)
+	ListDataSubjectRequests() ([]models.DataSubjectRequest, error)
+	GetDataSubjectRequest(id string) (models.DataSubjectRequest, bool)
+	UpdateDataSubjectRequest(id string, update DataSubjectRequestUpdate, actorUserID string) (models.DataSubjectRequest, error)
+	AddDataSubjectAuditEvent(requestID string, params CreateDataSubjectAuditEventParams) (models.DataSubjectAuditEvent, error)
+	ListDataSubjectAuditEvents(requestID string) ([]models.DataSubjectAuditEvent, error)
+	ListLegalStateHistory(entityType, entityID string) ([]models.LegalStateHistory, error)
 }
 
 var _ Repository = (*Storage)(nil)

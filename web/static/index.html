@@ -19,6 +19,7 @@
             <button data-view="stream">Go Live</button>
             <button data-view="chat">Chat</button>
             <button data-view="moderation">Moderation</button>
+            <button data-view="legal" data-admin-only="true">Legal</button>
             <button data-view="profiles">Profiles</button>
             <button data-view="sessions">Sessions</button>
             <button data-view="uploads">Uploads</button>
@@ -140,6 +141,29 @@
                         <p class="section-subtitle">Messages blocked by automated filters.</p>
                     </div>
                     <div id="moderation-automod" class="card-column"></div>
+                </section>
+            </div>
+        </section>
+
+
+        <section id="legal" class="panel">
+            <header class="panel__header">
+                <div>
+                    <h2>Legal operations</h2>
+                    <p>Manage DMCA takedowns and data subject requests with audit history.</p>
+                </div>
+                <div class="panel__actions">
+                    <button id="refresh-legal" class="secondary">Refresh</button>
+                </div>
+            </header>
+            <div class="grid">
+                <section>
+                    <h3>DMCA cases</h3>
+                    <div id="legal-dmca-list" class="card-column"></div>
+                </section>
+                <section>
+                    <h3>Data subject requests</h3>
+                    <div id="legal-dsr-list" class="card-column"></div>
                 </section>
             </div>
         </section>

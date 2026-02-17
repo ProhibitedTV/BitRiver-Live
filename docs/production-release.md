@@ -75,6 +75,15 @@ Before producing release binaries or container images that expect `BITRIVER_LIVE
 
 If this fails with `pgx.IsStub=true`, switch the build job to the approved non-stub pgx source path (vendored real module mirror or controlled replace strategy) before publishing artifacts. In Docker release mode (`BITRIVER_PGX_MODE=real`), also drop stubbed transitive replacements (for example `golang.org/x/text`) before `go mod download` so pgx dependencies like `secure/precis` resolve from full upstream modules.
 
+### Legal publication checks
+
+Before cutting a release candidate:
+
+- Confirm policy documents are published and versioned: `docs/legal/terms.md`, `docs/legal/privacy.md`, `docs/legal/dmca.md`, and `docs/legal/age-policy.md`.
+- Verify the current policy version/date is exposed in your public release notes or site footer.
+- Verify DMCA contact metadata (designated agent name, email, and mailing address) is present in published operator docs and matches the values used in support workflows.
+- Run a dry-run DMCA intake (`POST /api/legal/dmca`) and admin triage flow in staging.
+
 ## 2. Tag the release and trigger the workflow
 
 1. Ensure `CHANGELOG.md` (when present) and version references are up to date.

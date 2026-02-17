@@ -260,6 +260,66 @@ type Upload struct {
 	CompletedAt *time.Time        `json:"completedAt,omitempty"`
 }
 
+const (
+	DMCACaseStatusOpen     = "open"
+	DMCACaseStatusActioned = "actioned"
+	DMCACaseStatusRestored = "restored"
+	DMCACaseStatusRejected = "rejected"
+
+	DataSubjectRequestTypeExport = "export"
+	DataSubjectRequestTypeDelete = "delete"
+
+	DataSubjectRequestStatusOpen     = "open"
+	DataSubjectRequestStatusActioned = "actioned"
+	DataSubjectRequestStatusRejected = "rejected"
+)
+
+type DMCACase struct {
+	ID            string     `json:"id"`
+	ReporterName  string     `json:"reporterName"`
+	ReporterEmail string     `json:"reporterEmail"`
+	ContentURL    string     `json:"contentUrl"`
+	Description   string     `json:"description"`
+	Status        string     `json:"status"`
+	Notes         string     `json:"notes,omitempty"`
+	ActionedAt    *time.Time `json:"actionedAt,omitempty"`
+	RestoredAt    *time.Time `json:"restoredAt,omitempty"`
+	RejectedAt    *time.Time `json:"rejectedAt,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+}
+
+type LegalStateHistory struct {
+	ID          string    `json:"id"`
+	EntityType  string    `json:"entityType"`
+	EntityID    string    `json:"entityId"`
+	FromState   string    `json:"fromState,omitempty"`
+	ToState     string    `json:"toState"`
+	ActorUserID string    `json:"actorUserId,omitempty"`
+	Reason      string    `json:"reason,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+type DataSubjectRequest struct {
+	ID           string    `json:"id"`
+	SubjectEmail string    `json:"subjectEmail"`
+	RequestType  string    `json:"requestType"`
+	Status       string    `json:"status"`
+	Notes        string    `json:"notes,omitempty"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+type DataSubjectAuditEvent struct {
+	ID            string    `json:"id"`
+	RequestID     string    `json:"requestId"`
+	ActorUserID   string    `json:"actorUserId,omitempty"`
+	Action        string    `json:"action"`
+	Details       string    `json:"details,omitempty"`
+	EvidenceRef   string    `json:"evidenceRef,omitempty"`
+	OccurredAtUTC time.Time `json:"occurredAt"`
+}
+
 type ClipExport struct {
 	ID            string     `json:"id"`
 	RecordingID   string     `json:"recordingId"`
