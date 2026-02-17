@@ -200,6 +200,10 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	mux.HandleFunc("/api/analytics/overview", handler.AnalyticsOverview)
 	mux.HandleFunc("/api/metrics/qoe", handler.ViewerQoE)
 	mux.HandleFunc("/api/setup", handler.SetupWizard)
+	mux.HandleFunc("/api/legal/dmca", handler.LegalDMCA)
+	mux.HandleFunc("/api/legal/dmca/", handler.LegalDMCAByID)
+	mux.HandleFunc("/api/legal/data-subject", handler.LegalDataSubject)
+	mux.HandleFunc("/api/legal/data-subject/", handler.LegalDataSubjectByID)
 	mux.HandleFunc("/api/ingest/srs-hook", handler.SRSHook)
 
 	staticFS, err := web.Static()
@@ -615,7 +619,7 @@ func clientIP(remoteAddr string) string {
 func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		if path == "/healthz" || path == "/metrics" || path == "/api/ingest/srs-hook" || path == "/api/metrics/qoe" || strings.HasPrefix(path, "/api/auth/") || !strings.HasPrefix(path, "/api/") {
+		if path == "/healthz" || path == "/metrics" || path == "/api/ingest/srs-hook" || path == "/api/metrics/qoe" || strings.HasPrefix(path, "/api/auth/") || (path == "/api/legal/dmca" && r.Method == http.MethodPost) || !strings.HasPrefix(path, "/api/") {
 			next.ServeHTTP(w, r)
 			return
 		}

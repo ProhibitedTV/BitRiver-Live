@@ -15,29 +15,33 @@ import (
 // datastore, grouping each model collection by its primary identifier so it can
 // be persisted and later replayed into another backing store.
 type Snapshot struct {
-	Users               map[string]models.User              `json:"users"`
-	MFASettings         map[string]models.MFASettings       `json:"mfaSettings"`
-	OAuthAccounts       map[string]models.OAuthAccount      `json:"oauthAccounts"`
-	Channels            map[string]models.Channel           `json:"channels"`
-	StreamSessions      map[string]models.StreamSession     `json:"streamSessions"`
-	ChatMessages        map[string]models.ChatMessage       `json:"chatMessages"`
-	ChatBans            map[string]map[string]time.Time     `json:"chatBans"`
-	ChatTimeouts        map[string]map[string]time.Time     `json:"chatTimeouts"`
-	ChatBanActors       map[string]map[string]string        `json:"chatBanActors"`
-	ChatBanReasons      map[string]map[string]string        `json:"chatBanReasons"`
-	ChatTimeoutActors   map[string]map[string]string        `json:"chatTimeoutActors"`
-	ChatTimeoutReasons  map[string]map[string]string        `json:"chatTimeoutReasons"`
-	ChatTimeoutIssuedAt map[string]map[string]time.Time     `json:"chatTimeoutIssuedAt"`
-	ChatReports         map[string]models.ChatReport        `json:"chatReports"`
-	ChatFilters         map[string]models.ChatFilter        `json:"chatFilters"`
-	ChatAutoModActions  map[string]models.ChatAutoModAction `json:"chatAutoModActions"`
-	Tips                map[string]models.Tip               `json:"tips"`
-	Subscriptions       map[string]models.Subscription      `json:"subscriptions"`
-	Profiles            map[string]models.Profile           `json:"profiles"`
-	Follows             map[string]map[string]time.Time     `json:"follows"`
-	Recordings          map[string]models.Recording         `json:"recordings"`
-	Uploads             map[string]models.Upload            `json:"uploads"`
-	ClipExports         map[string]models.ClipExport        `json:"clipExports"`
+	Users               map[string]models.User                    `json:"users"`
+	MFASettings         map[string]models.MFASettings             `json:"mfaSettings"`
+	OAuthAccounts       map[string]models.OAuthAccount            `json:"oauthAccounts"`
+	Channels            map[string]models.Channel                 `json:"channels"`
+	StreamSessions      map[string]models.StreamSession           `json:"streamSessions"`
+	ChatMessages        map[string]models.ChatMessage             `json:"chatMessages"`
+	ChatBans            map[string]map[string]time.Time           `json:"chatBans"`
+	ChatTimeouts        map[string]map[string]time.Time           `json:"chatTimeouts"`
+	ChatBanActors       map[string]map[string]string              `json:"chatBanActors"`
+	ChatBanReasons      map[string]map[string]string              `json:"chatBanReasons"`
+	ChatTimeoutActors   map[string]map[string]string              `json:"chatTimeoutActors"`
+	ChatTimeoutReasons  map[string]map[string]string              `json:"chatTimeoutReasons"`
+	ChatTimeoutIssuedAt map[string]map[string]time.Time           `json:"chatTimeoutIssuedAt"`
+	ChatReports         map[string]models.ChatReport              `json:"chatReports"`
+	ChatFilters         map[string]models.ChatFilter              `json:"chatFilters"`
+	ChatAutoModActions  map[string]models.ChatAutoModAction       `json:"chatAutoModActions"`
+	Tips                map[string]models.Tip                     `json:"tips"`
+	Subscriptions       map[string]models.Subscription            `json:"subscriptions"`
+	Profiles            map[string]models.Profile                 `json:"profiles"`
+	Follows             map[string]map[string]time.Time           `json:"follows"`
+	Recordings          map[string]models.Recording               `json:"recordings"`
+	Uploads             map[string]models.Upload                  `json:"uploads"`
+	ClipExports         map[string]models.ClipExport              `json:"clipExports"`
+	DMCACases           map[string]models.DMCACase                `json:"dmcaCases"`
+	DataSubjectRequests map[string]models.DataSubjectRequest      `json:"dataSubjectRequests"`
+	DataSubjectAudit    map[string][]models.DataSubjectAuditEvent `json:"dataSubjectAudit"`
+	LegalStateHistory   []models.LegalStateHistory                `json:"legalStateHistory"`
 }
 
 // SnapshotCounts summarises the size of each collection stored in a Snapshot to
@@ -64,6 +68,10 @@ type SnapshotCounts struct {
 	RecordingThumbnails    int
 	Uploads                int
 	ClipExports            int
+	DMCACases              int
+	DataSubjectRequests    int
+	DataSubjectAuditEvents int
+	LegalStateHistory      int
 }
 
 // LoadSnapshotFromJSON reads a previously exported Snapshot from disk,
@@ -162,6 +170,18 @@ func (s *Snapshot) ensureInitialized() {
 	if s.ClipExports == nil {
 		s.ClipExports = make(map[string]models.ClipExport)
 	}
+	if s.DMCACases == nil {
+		s.DMCACases = make(map[string]models.DMCACase)
+	}
+	if s.DataSubjectRequests == nil {
+		s.DataSubjectRequests = make(map[string]models.DataSubjectRequest)
+	}
+	if s.DataSubjectAudit == nil {
+		s.DataSubjectAudit = make(map[string][]models.DataSubjectAuditEvent)
+	}
+	if s.LegalStateHistory == nil {
+		s.LegalStateHistory = []models.LegalStateHistory{}
+	}
 }
 
 // Counts walks a Snapshot and returns the SnapshotCounts summary reflecting
@@ -171,21 +191,27 @@ func (s *Snapshot) Counts() SnapshotCounts {
 		return SnapshotCounts{}
 	}
 	counts := SnapshotCounts{
-		Users:              len(s.Users),
-		MFASettings:        len(s.MFASettings),
-		OAuthAccounts:      len(s.OAuthAccounts),
-		Channels:           len(s.Channels),
-		StreamSessions:     len(s.StreamSessions),
-		ChatMessages:       len(s.ChatMessages),
-		ChatReports:        len(s.ChatReports),
-		ChatFilters:        len(s.ChatFilters),
-		ChatAutoModActions: len(s.ChatAutoModActions),
-		Tips:               len(s.Tips),
-		Subscriptions:      len(s.Subscriptions),
-		Profiles:           len(s.Profiles),
-		Recordings:         len(s.Recordings),
-		Uploads:            len(s.Uploads),
-		ClipExports:        len(s.ClipExports),
+		Users:               len(s.Users),
+		MFASettings:         len(s.MFASettings),
+		OAuthAccounts:       len(s.OAuthAccounts),
+		Channels:            len(s.Channels),
+		StreamSessions:      len(s.StreamSessions),
+		ChatMessages:        len(s.ChatMessages),
+		ChatReports:         len(s.ChatReports),
+		ChatFilters:         len(s.ChatFilters),
+		ChatAutoModActions:  len(s.ChatAutoModActions),
+		Tips:                len(s.Tips),
+		Subscriptions:       len(s.Subscriptions),
+		Profiles:            len(s.Profiles),
+		Recordings:          len(s.Recordings),
+		Uploads:             len(s.Uploads),
+		ClipExports:         len(s.ClipExports),
+		DMCACases:           len(s.DMCACases),
+		DataSubjectRequests: len(s.DataSubjectRequests),
+		LegalStateHistory:   len(s.LegalStateHistory),
+	}
+	for _, entries := range s.DataSubjectAudit {
+		counts.DataSubjectAuditEvents += len(entries)
 	}
 	for _, follows := range s.Follows {
 		counts.Follows += len(follows)

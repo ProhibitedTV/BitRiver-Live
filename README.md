@@ -205,6 +205,7 @@ The dashboard’s **System status** card is the primary health check for operato
 - **Follow package boundaries:** Use [`docs/architecture.md`](docs/architecture.md) as the rigid layering and dependency-direction contract before refactors or new feature work.
 - **Plan for portability:** Review [`docs/cross-platform-plan.md`](docs/cross-platform-plan.md) for the current platform
   assumptions, shipped installer milestones, and the remaining control-plane roadmap.
+- **Legal policy publication:** Review and publish [`docs/legal/terms.md`](docs/legal/terms.md), [`docs/legal/privacy.md`](docs/legal/privacy.md), [`docs/legal/dmca.md`](docs/legal/dmca.md), and [`docs/legal/age-policy.md`](docs/legal/age-policy.md) before launch.
 - **AI-assisted edits:** Use the [Codex CLI guide](docs/codex-cli.md) to install the CLI, authenticate, and point it at this repository.
 
 ## Manual development workflow (optional)

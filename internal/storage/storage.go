@@ -92,6 +92,18 @@ func (s *Storage) ensureDatasetInitializedLocked() {
 	if s.data.ClipExports == nil {
 		s.data.ClipExports = make(map[string]models.ClipExport)
 	}
+	if s.data.DMCACases == nil {
+		s.data.DMCACases = make(map[string]models.DMCACase)
+	}
+	if s.data.DataSubjectRequests == nil {
+		s.data.DataSubjectRequests = make(map[string]models.DataSubjectRequest)
+	}
+	if s.data.DataSubjectAudit == nil {
+		s.data.DataSubjectAudit = make(map[string][]models.DataSubjectAuditEvent)
+	}
+	if s.data.LegalStateHistory == nil {
+		s.data.LegalStateHistory = []models.LegalStateHistory{}
+	}
 }
 
 // buildObjectKey executes buildObjectKey.
@@ -582,6 +594,30 @@ func cloneDataset(src dataset) dataset {
 		}
 	}
 
+	if src.DMCACases != nil {
+		clone.DMCACases = make(map[string]models.DMCACase, len(src.DMCACases))
+		for id, rec := range src.DMCACases {
+			clone.DMCACases[id] = rec
+		}
+	}
+
+	if src.DataSubjectRequests != nil {
+		clone.DataSubjectRequests = make(map[string]models.DataSubjectRequest, len(src.DataSubjectRequests))
+		for id, rec := range src.DataSubjectRequests {
+			clone.DataSubjectRequests[id] = rec
+		}
+	}
+
+	if src.DataSubjectAudit != nil {
+		clone.DataSubjectAudit = make(map[string][]models.DataSubjectAuditEvent, len(src.DataSubjectAudit))
+		for requestID, entries := range src.DataSubjectAudit {
+			clone.DataSubjectAudit[requestID] = append([]models.DataSubjectAuditEvent(nil), entries...)
+		}
+	}
+
+	if src.LegalStateHistory != nil {
+		clone.LegalStateHistory = append([]models.LegalStateHistory(nil), src.LegalStateHistory...)
+	}
 	if src.Follows != nil {
 		clone.Follows = make(map[string]map[string]time.Time, len(src.Follows))
 		for userID, channels := range src.Follows {
