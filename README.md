@@ -197,6 +197,7 @@ The dashboard’s **System status** card is the primary health check for operato
 - **Plan upgrades:** Follow [`docs/upgrades.md`](docs/upgrades.md#upgrade-essentials-migrations-env-updates-and-ome-re-render) for the safe Compose upgrade flow, migration timing, and `.env`/OME template handling.
 - **Understand every service:** Read [`docs/production-release.md`](docs/production-release.md) and the release notes under
   `docs/releases/` when preparing a launch.
+- **Follow package boundaries:** Use [`docs/architecture.md`](docs/architecture.md) as the rigid layering and dependency-direction contract before refactors or new feature work.
 - **Plan for portability:** Review [`docs/cross-platform-plan.md`](docs/cross-platform-plan.md) for the current platform
   assumptions, shipped installer milestones, and the remaining control-plane roadmap.
 - **AI-assisted edits:** Use the [Codex CLI guide](docs/codex-cli.md) to install the CLI, authenticate, and point it at this repository.
