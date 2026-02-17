@@ -48,18 +48,17 @@ check_prereqs() {
   fi
 }
 
-pull_images() {
-  echo "Pulling BitRiver Live images..."
-  docker compose -f "$compose_file" --env-file "$env_file" pull
-}
-
 compose_cmd() {
   docker compose -f "$compose_file" --env-file "$env_file" "$@"
 }
 
-bring_up() {
+run_quickstart() {
+  if [ ! -x "$binary_path" ]; then
+    fatal "bitriver binary not found at $binary_path; reinstall or rebuild the launcher"
+  fi
+
   echo "Starting BitRiver Live stack..."
-  compose_cmd up -d
+  "$binary_path" quickstart --compose-file "$compose_file" --env-file "$env_file"
 }
 
 stop_stack() {
@@ -111,8 +110,7 @@ main() {
           echo "warning: bitriver doctor reported issues; continuing because Docker is available" >&2
         fi
       fi
-      pull_images
-      bring_up
+      run_quickstart
       echo "BitRiver Live is starting. Use '$(basename "$0") logs' to follow logs or '$(basename "$0") ui' for the tray."
       ;;
     stop)

@@ -126,6 +126,50 @@ func TestQuickstartOmeRenderingRunsByDefault(t *testing.T) {
 	}
 }
 
+func TestUnixWrapperStartUsesCliQuickstart(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	wrapperPath := filepath.Join(repoRoot, "scripts", "bitriver-live-wrapper.sh")
+	content, err := os.ReadFile(wrapperPath)
+	if err != nil {
+		t.Fatalf("read wrapper: %v", err)
+	}
+
+	wrapper := string(content)
+	if !strings.Contains(wrapper, `"$binary_path" quickstart --compose-file "$compose_file" --env-file "$env_file"`) {
+		t.Fatalf("expected unix wrapper to invoke CLI quickstart with compose/env files")
+	}
+	if strings.Contains(wrapper, "compose_cmd up -d") {
+		t.Fatalf("expected unix wrapper start path not to call docker compose up directly")
+	}
+}
+
+func TestPowerShellWrapperStartUsesCliQuickstart(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	wrapperPath := filepath.Join(repoRoot, "scripts", "bitriver-live-wrapper.ps1")
+	content, err := os.ReadFile(wrapperPath)
+	if err != nil {
+		t.Fatalf("read wrapper: %v", err)
+	}
+
+	wrapper := string(content)
+	if !strings.Contains(wrapper, "& $binary quickstart --compose-file $composeFile --env-file $envFilePath") {
+		t.Fatalf("expected PowerShell wrapper to invoke CLI quickstart with compose/env files")
+	}
+	if strings.Contains(wrapper, "Invoke-Compose up -d") {
+		t.Fatalf("expected PowerShell wrapper start path not to call docker compose up directly")
+	}
+}
+
 func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
