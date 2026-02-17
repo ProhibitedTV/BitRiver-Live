@@ -4,6 +4,13 @@
 - **Stack:** Go 1.21 backend (see `go.mod`) plus a Next.js 13 viewer under `web/viewer`. Commands under `cmd/` (API server, transcoder, RTMP controller, tools) share packages under `internal/`, rely on vendored helpers in `third_party/`, and bundle static assets from `web/static`. Docker, Compose, and scripts in `deploy/` and `scripts/` orchestrate the complete stack described in the README.
 - **Service story:** The README promises a one-command (`./scripts/quickstart.sh`) deployment that boots `cmd/server`, the proxied viewer, RTMP ingest, the transcoder, chat, Postgres, and Redis together. Keep these flows working so contributors can keep following the documented quickstart and architecture guarantees.
 
+## Rigid architecture contract (must enforce)
+- Treat `docs/architecture.md` as the source of truth for backend layering and dependency direction.
+- Keep dependency flow one-way: `cmd` → `internal/app` → `internal/{api,service,domain}` → `internal/{storage,ingest,chat,auth,observability}`. Never introduce reverse imports.
+- Keep orchestration in `internal/app` and transport glue in `internal/api`; business rules must live in `internal/service` + `internal/domain` so they are reusable and testable without HTTP or CLI wiring.
+- Keep infrastructure adapters (database, Redis, FFmpeg/transcoder, RTMP/SRS/OME integrations) behind interfaces owned by service/domain packages.
+- Any architecture change must update `docs/architecture.md` and call out the rationale in the PR description.
+
 ## Toolchain + dependency policy
 - Go code targets Go 1.21. Always set `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off` so builds never touch the network, and run `gofmt` plus `go mod tidy` before committing. `third_party/` is the sole offline dependency source of truth (wired via `go.mod` `replace` directives); do not reintroduce `vendor/` copies. When editing vendored replacements under `third_party/`, keep them in sync with `go.mod` and avoid external fetches.
 - Canonical Go test command (from `docs/testing.md`):
