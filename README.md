@@ -26,7 +26,7 @@ Twitch-style experience on hardware you control.
 
 ## Quickstart: installer-first (recommended)
 
-Use the packaged launcher (`bitriver-live`) if you just want to bring the stack up with Docker Compose. It bundles the compose file, copies `deploy/.env.example` into place on the first run, checks Docker/Compose, pulls release images, and starts the stack without requiring Go or Node.
+Use the packaged launcher (`bitriver-live`) if you just want to bring the stack up with Docker Compose. It bundles the compose file, creates `<launcher-root>/.env` from `deploy/.env.example` on the first run, checks Docker/Compose, pulls release images, and starts the stack without requiring Go or Node.
 
 - **macOS (Homebrew):**
   ```bash

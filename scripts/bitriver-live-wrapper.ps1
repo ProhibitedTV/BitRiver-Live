@@ -19,7 +19,7 @@ $assetsDefault = Join-Path (Split-Path -Parent $scriptDir) 'share/bitriver-live'
 $assetsDir = if ($LauncherRoot) { $LauncherRoot } elseif ($env:BITRIVER_LAUNCHER_ROOT) { $env:BITRIVER_LAUNCHER_ROOT } else { $assetsDefault }
 $composeFile = Join-Path $assetsDir 'deploy/docker-compose.yml'
 $exampleEnv = Join-Path $assetsDir 'deploy/.env.example'
-$envFilePath = if ($EnvFile) { $EnvFile } elseif ($env:BITRIVER_ENV_FILE) { $env:BITRIVER_ENV_FILE } else { Join-Path $assetsDir 'deploy/.env' }
+$envFilePath = if ($EnvFile) { $EnvFile } elseif ($env:BITRIVER_ENV_FILE) { $env:BITRIVER_ENV_FILE } else { Join-Path $assetsDir '.env' }
 $binary = if ($BinaryPath) { $BinaryPath } elseif ($env:BITRIVER_BINARY) { $env:BITRIVER_BINARY } else { Join-Path $scriptDir 'bitriver.exe' }
 
 function Require-Command {

@@ -8,7 +8,7 @@
 | Linux | Install the `.deb` or `.rpm` from the latest release then run `bitriver-live` (desktop shortcut: **Start BitRiver Live**) | `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` |
 | Windows | Install `bitriver-live-<version>.msi` and launch **Start BitRiver Live** from the Start menu/desktop | `pwsh -c "go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml"` |
 
-Use the installer-backed launcher when you want a zero-build setup that checks Docker/Compose, copies `deploy/.env.example` into place, pulls release images, and starts the stack. Installers are available today for Windows (MSI), Linux (Deb/RPM), and macOS (Homebrew launcher formula). The Go-based quickstart remains the canonical contributor path because it builds local images and runs migrations from source.
+Use the installer-backed launcher when you want a zero-build setup that checks Docker/Compose, bootstraps `<launcher-root>/.env` from `deploy/.env.example`, pulls release images, and starts the stack. Installers are available today for Windows (MSI), Linux (Deb/RPM), and macOS (Homebrew launcher formula). The Go-based quickstart remains the canonical contributor path because it builds local images and runs migrations from source.
 
 
 ## Release note: legacy OME custom compose override removed
@@ -41,7 +41,7 @@ Installer path (recommended for operators):
 bitriver-live
 ```
 
-The launcher keeps its assets under `/usr/local/share/bitriver-live` (macOS/Linux) or `Program Files\BitRiver Live` (Windows) and reuses `deploy/.env.example` from the installer bundle. On first run, the Windows launcher fills in `BITRIVER_REDIS_PASSWORD` (and keeps `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD` in sync) if the file still uses the sample placeholder so Docker Compose can interpolate the Redis credentials.
+The launcher keeps its assets under `/usr/local/share/bitriver-live` (macOS/Linux) or `Program Files\BitRiver Live` (Windows), stores runtime settings in `<launcher-root>/.env`, and bootstraps that file from `deploy/.env.example` on first run. On first run, the Windows launcher fills in `BITRIVER_REDIS_PASSWORD` (and keeps `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD` in sync) if the file still uses the sample placeholder so Docker Compose can interpolate the Redis credentials.
 
 ### Desktop/system-tray control panel
 
