@@ -1,5 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
+import { ChannelAvatar } from "./channel/ChannelAvatar";
+import { ChannelCardShell } from "./channel/ChannelCardShell";
+import { ChannelMetaChips } from "./channel/ChannelMetaChips";
+import { ChannelStatusBadge } from "./channel/ChannelStatusBadge";
+import { formatFollowerLabel, formatViewerLabel, getChannelAvatarImage, getChannelPreviewImage } from "../lib/channel-presenters";
 import type { DirectoryChannel } from "../lib/viewer-api";
 
 export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
@@ -18,15 +23,13 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
     <section className="grid directory-grid">
       {channels.map((entry) => {
         const createdAt = new Date(entry.channel.createdAt).toLocaleDateString();
-        const previewImage = entry.profile.bannerUrl ?? entry.profile.avatarUrl;
-        const followerCountLabel = entry.followerCount.toLocaleString();
-        const followerLabel = `${followerCountLabel} follower${entry.followerCount === 1 ? "" : "s"}`;
-        const viewerCount = entry.viewerCount ?? 0;
-        const viewerOverlayLabel = `${viewerCount.toLocaleString()} viewer${viewerCount === 1 ? "" : "s"}`;
+        const previewImage = getChannelPreviewImage(entry);
+        const followerLabel = formatFollowerLabel(entry.followerCount);
+        const viewerOverlayLabel = formatViewerLabel(entry.viewerCount ?? 0);
         const isLive = entry.live;
 
         return (
-          <article key={entry.channel.id} className="directory-card">
+          <ChannelCardShell key={entry.channel.id} className="directory-card">
             <Link href={`/channels/${entry.channel.id}`} className="directory-card__link">
               <div className="directory-card__preview">
                 {previewImage ? (
@@ -43,31 +46,14 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
                 )}
                 <div className="overlay overlay--top overlay--scrim overlay--glow">
                   <div className="overlay__status">
-                    {isLive ? (
-                      <span className="badge badge--live">Live</span>
-                    ) : (
-                      <span className="badge badge--muted">Offline</span>
-                    )}
+                    <ChannelStatusBadge live={isLive} />
                     <span className="overlay__meta">{isLive ? viewerOverlayLabel : followerLabel}</span>
                   </div>
                   {entry.channel.category && <span className="pill pill--frost">{entry.channel.category}</span>}
                 </div>
                 <div className="overlay overlay--bottom overlay--scrim overlay--frost">
                   <div className="overlay__identity">
-                    <div className="overlay__avatar" aria-hidden="true">
-                      {entry.owner.avatarUrl ? (
-                        <Image
-                          src={entry.owner.avatarUrl}
-                          alt=""
-                          width={44}
-                          height={44}
-                          sizes="44px"
-                          className="overlay__avatar-image"
-                        />
-                      ) : (
-                        <span>{entry.owner.displayName.charAt(0).toUpperCase()}</span>
-                      )}
-                    </div>
+                    <ChannelAvatar displayName={entry.owner.displayName} avatarUrl={getChannelAvatarImage(entry)} />
                   </div>
                   <div className="overlay__tags">
                     {entry.channel.tags.slice(0, 2).map((tag) => (
@@ -80,10 +66,15 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
               </div>
               <div className="directory-card__content">
                 <div className="directory-card__meta-row">
-                  {isLive ? <span className="badge badge--live">Live</span> : <span className="badge badge--muted">Offline</span>}
-                  <span className="meta-chip">{isLive ? viewerOverlayLabel : followerLabel}</span>
-                  <span className="meta-chip meta-chip--muted">Followers: {followerLabel}</span>
-                  <span className="meta-chip meta-chip--pill">{entry.channel.category ?? "Streaming"}</span>
+                  <ChannelStatusBadge live={isLive} />
+                  <ChannelMetaChips
+                    live={isLive}
+                    viewerCount={entry.viewerCount}
+                    followerCount={entry.followerCount}
+                    showFollowerSummary
+                    followerSummaryPrefix="Followers: "
+                    category={entry.channel.category ?? "Streaming"}
+                  />
                 </div>
 
                 <div className="directory-card__header">
@@ -109,7 +100,7 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
                 View channel
               </Link>
             </footer>
-          </article>
+          </ChannelCardShell>
         );
       })}
     </section>
