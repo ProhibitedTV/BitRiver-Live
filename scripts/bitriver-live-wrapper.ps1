@@ -138,14 +138,13 @@ function Invoke-Compose {
   & docker compose -f $composeFile --env-file $envFilePath @Args
 }
 
-function Pull-Images {
-  Write-Host 'Pulling BitRiver Live images...'
-  Invoke-Compose pull
-}
+function Run-Quickstart {
+  if (-not (Test-Path -LiteralPath $binary)) {
+    throw "bitriver binary not found at $binary. Reinstall the launcher or set BITRIVER_BINARY."
+  }
 
-function Bring-Up {
   Write-Host 'Starting BitRiver Live stack...'
-  Invoke-Compose up -d
+  & $binary quickstart --compose-file $composeFile --env-file $envFilePath
 }
 
 function Stop-Stack {
@@ -189,8 +188,7 @@ switch ($Command.ToLowerInvariant()) {
         Write-Warning "bitriver doctor reported issues; continuing because Docker is available. $_"
       }
     }
-    Pull-Images
-    Bring-Up
+    Run-Quickstart
     Write-Host "BitRiver Live is starting. Use '.\\bitriver-live-wrapper.ps1 -Command logs' to follow logs or '.\\bitriver-live-wrapper.ps1 -Command ui' to keep the control panel in your tray."
   }
   'stop' {
