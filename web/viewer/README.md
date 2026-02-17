@@ -54,6 +54,24 @@ The viewer runs on [http://localhost:3000](http://localhost:3000) with hot reloa
 
 Set `BITRIVER_VIEWER_ORIGIN` on the Go API (for example, `http://127.0.0.1:3000`) so `/viewer` requests proxy to the running Next.js server.
 
+
+## Navigation contract
+
+`components/Navbar.tsx` now reads all route tabs and drawer quick links from
+`lib/navigation.ts`.
+
+When adding or changing viewer routes in the navbar:
+
+1. Update `CANONICAL_NAV_ITEMS` for primary desktop + drawer links.
+2. Update `CANONICAL_QUICK_LINK_ITEMS` for secondary drawer shortcuts.
+3. Use `visibleTo` and `getNavigationAudience` to define role visibility for
+   `guest`, `member`, `creator`, and `admin` personas.
+4. Keep `npm run test -- navigation.test.ts` green to verify the visibility
+   matrix and duplicate-link guard rails.
+
+This keeps route definitions and role policy in one shared module so desktop
+and mobile navigation stay consistent.
+
 ## Testing
 
 Run the lint, unit, and Playwright suites from the viewer directory:
