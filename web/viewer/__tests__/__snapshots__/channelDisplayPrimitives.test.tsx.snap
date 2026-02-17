@@ -1,0 +1,648 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`channel display primitives renders consistent badge and count labels in directory and featured layouts 1`] = `
+<DocumentFragment>
+  <section
+    class="grid directory-grid"
+  >
+    <article
+      class="directory-card"
+    >
+      <a
+        class="directory-card__link"
+        href="/channels/chan-live"
+      >
+        <div
+          class="directory-card__preview"
+        >
+          <div
+            aria-hidden="true"
+            class="directory-card__preview-fallback"
+          />
+          <div
+            class="overlay overlay--top overlay--scrim overlay--glow"
+          >
+            <div
+              class="overlay__status"
+            >
+              <span
+                class="badge badge--live"
+              >
+                Live
+              </span>
+              <span
+                class="overlay__meta"
+              >
+                27 viewers
+              </span>
+            </div>
+            <span
+              class="pill pill--frost"
+            >
+              Music
+            </span>
+          </div>
+          <div
+            class="overlay overlay--bottom overlay--scrim overlay--frost"
+          >
+            <div
+              class="overlay__identity"
+            >
+              <div
+                aria-hidden="true"
+                class="overlay__avatar"
+              >
+                <span>
+                  D
+                </span>
+              </div>
+            </div>
+            <div
+              class="overlay__tags"
+            >
+              <span
+                class="pill pill--tag"
+              >
+                #synthwave
+              </span>
+              <span
+                class="pill pill--tag"
+              >
+                #retro
+              </span>
+            </div>
+          </div>
+        </div>
+        <div
+          class="directory-card__content"
+        >
+          <div
+            class="directory-card__meta-row"
+          >
+            <span
+              class="badge badge--live"
+            >
+              Live
+            </span>
+            <span
+              class="meta-chip"
+            >
+              27 viewers
+            </span>
+            <span
+              class="meta-chip meta-chip--muted"
+            >
+              Followers: 1 follower
+            </span>
+            <span
+              class="meta-chip meta-chip--pill"
+            >
+              Music
+            </span>
+          </div>
+          <div
+            class="directory-card__header"
+          >
+            <h3
+              class="directory-card__title"
+            >
+              Neon Nights
+            </h3>
+            <span
+              class="directory-card__subtitle muted"
+            >
+              DJ Nova
+            </span>
+          </div>
+          <p
+            class="directory-card__description muted"
+          >
+            Late-night electronic set.
+          </p>
+          <div
+            class="directory-card__tags-row"
+          >
+            <span
+              class="pill pill--tag"
+            >
+              #synthwave
+            </span>
+            <span
+              class="pill pill--tag"
+            >
+              #retro
+            </span>
+          </div>
+        </div>
+      </a>
+      <footer
+        class="directory-card__footer"
+      >
+        <span
+          class="muted"
+        >
+          Created 1/1/2024
+        </span>
+        <a
+          class="secondary-button"
+          href="/channels/chan-live"
+        >
+          View channel
+        </a>
+      </footer>
+    </article>
+    <article
+      class="directory-card"
+    >
+      <a
+        class="directory-card__link"
+        href="/channels/chan-offline"
+      >
+        <div
+          class="directory-card__preview"
+        >
+          <div
+            aria-hidden="true"
+            class="directory-card__preview-fallback"
+          />
+          <div
+            class="overlay overlay--top overlay--scrim overlay--glow"
+          >
+            <div
+              class="overlay__status"
+            >
+              <span
+                class="badge badge--muted"
+              >
+                Offline
+              </span>
+              <span
+                class="overlay__meta"
+              >
+                2 followers
+              </span>
+            </div>
+            <span
+              class="pill pill--frost"
+            >
+              Music
+            </span>
+          </div>
+          <div
+            class="overlay overlay--bottom overlay--scrim overlay--frost"
+          >
+            <div
+              class="overlay__identity"
+            >
+              <div
+                aria-hidden="true"
+                class="overlay__avatar"
+              >
+                <span>
+                  D
+                </span>
+              </div>
+            </div>
+            <div
+              class="overlay__tags"
+            >
+              <span
+                class="pill pill--tag"
+              >
+                #synthwave
+              </span>
+              <span
+                class="pill pill--tag"
+              >
+                #retro
+              </span>
+            </div>
+          </div>
+        </div>
+        <div
+          class="directory-card__content"
+        >
+          <div
+            class="directory-card__meta-row"
+          >
+            <span
+              class="badge badge--muted"
+            >
+              Offline
+            </span>
+            <span
+              class="meta-chip"
+            >
+              2 followers
+            </span>
+            <span
+              class="meta-chip meta-chip--muted"
+            >
+              Followers: 2 followers
+            </span>
+            <span
+              class="meta-chip meta-chip--pill"
+            >
+              Music
+            </span>
+          </div>
+          <div
+            class="directory-card__header"
+          >
+            <h3
+              class="directory-card__title"
+            >
+              Archive Sessions
+            </h3>
+            <span
+              class="directory-card__subtitle muted"
+            >
+              DJ Nova
+            </span>
+          </div>
+          <p
+            class="directory-card__description muted"
+          >
+            Late-night electronic set.
+          </p>
+          <div
+            class="directory-card__tags-row"
+          >
+            <span
+              class="pill pill--tag"
+            >
+              #synthwave
+            </span>
+            <span
+              class="pill pill--tag"
+            >
+              #retro
+            </span>
+          </div>
+        </div>
+      </a>
+      <footer
+        class="directory-card__footer"
+      >
+        <span
+          class="muted"
+        >
+          Created 1/1/2024
+        </span>
+        <a
+          class="secondary-button"
+          href="/channels/chan-offline"
+        >
+          View channel
+        </a>
+      </footer>
+    </article>
+  </section>
+</DocumentFragment>
+`;
+
+exports[`channel display primitives uses shared badge copy in rails and featured cards 1`] = `
+<DocumentFragment>
+  <section
+    class="content-rail stack"
+  >
+    <header
+      class="content-rail__header"
+    >
+      <div
+        class="stack"
+      >
+        <h2>
+          Live right now
+        </h2>
+      </div>
+      <span
+        class="muted"
+      >
+        1 channels
+      </span>
+    </header>
+    <div
+      class="content-rail__scroller"
+      role="list"
+    >
+      <a
+        class="rail-card rail-card--default"
+        href="/channels/chan-live"
+      >
+        <div
+          class="rail-card__media"
+        >
+          <div
+            aria-hidden="true"
+            class="rail-card__media-fallback"
+          />
+          <div
+            class="overlay overlay--top overlay--scrim"
+          >
+            <span
+              class="badge badge--live"
+            >
+              Live
+            </span>
+            <span
+              class="overlay__meta"
+            >
+              Music
+            </span>
+          </div>
+        </div>
+        <div
+          class="rail-card__body"
+        >
+          <p
+            class="rail-card__meta muted"
+          >
+            DJ Nova
+          </p>
+          <h3
+            class="rail-card__title"
+          >
+            Neon Nights
+          </h3>
+          <p
+            class="rail-card__description muted"
+          >
+            Late-night electronic set.
+          </p>
+          <div
+            class="tag-list"
+          >
+            <span
+              class="tag"
+            >
+              Music
+            </span>
+            <span
+              class="tag"
+            >
+              #synthwave
+            </span>
+            <span
+              class="tag"
+            >
+              #retro
+            </span>
+          </div>
+        </div>
+      </a>
+    </div>
+  </section>
+</DocumentFragment>
+`;
+
+exports[`channel display primitives uses shared badge copy in rails and featured cards 2`] = `
+<DocumentFragment>
+  <section
+    aria-label="Featured channels carousel"
+    aria-live="polite"
+    aria-roledescription="carousel"
+    class="featured-channel surface"
+    role="region"
+  >
+    <div
+      class="featured-channel__canvas"
+    >
+      <div
+        aria-hidden="true"
+        class="featured-channel__backdrop"
+      >
+        <div
+          class="featured-channel__backdrop-layer"
+        />
+      </div>
+      <article
+        aria-label="Slide 1 of 1"
+        class="featured-channel__slide"
+      >
+        <div
+          class="featured-channel__media"
+        >
+          <div
+            aria-hidden="true"
+            class="featured-channel__media-fallback"
+          />
+          <div
+            class="overlay overlay--top overlay--scrim"
+          >
+            <span
+              class="badge "
+            >
+              Offline
+            </span>
+            <span
+              class="overlay__meta"
+            >
+              2 followers
+            </span>
+          </div>
+        </div>
+        <div
+          class="featured-channel__content"
+        >
+          <span
+            class="featured-channel__eyebrow muted"
+          >
+            Featured
+          </span>
+          <h2
+            class="featured-channel__title"
+          >
+            Archive Sessions
+          </h2>
+          <p
+            class="featured-channel__subtitle muted"
+          >
+            DJ Nova
+          </p>
+          <p
+            class="muted"
+          >
+            Late-night electronic set.
+          </p>
+          <div
+            class="tag-list"
+          >
+            <span
+              class="tag"
+            >
+              Music
+            </span>
+            <span
+              class="tag"
+            >
+              #synthwave
+            </span>
+            <span
+              class="tag"
+            >
+              #retro
+            </span>
+          </div>
+          <div
+            class="featured-channel__actions"
+          >
+            <a
+              aria-label="Watch featured channel"
+              class="primary-button"
+              href="/channels/chan-offline"
+            >
+              Watch now
+            </a>
+            <a
+              aria-label="View channel details"
+              class="secondary-button"
+              href="/channels/chan-offline"
+            >
+              View channel
+            </a>
+          </div>
+        </div>
+      </article>
+    </div>
+    <footer
+      aria-label="Featured channel controls"
+      class="featured-channel__footer"
+    >
+      <div
+        aria-label="Featured channel pagination"
+        class="featured-channel__pagination"
+        role="group"
+      >
+        <button
+          aria-label="Show featured channel Archive Sessions"
+          aria-pressed="true"
+          class="featured-channel__dot featured-channel__dot--active"
+          type="button"
+        />
+      </div>
+      <div
+        aria-label="Carousel navigation"
+        class="featured-channel__controls"
+        role="group"
+      >
+        <button
+          aria-label="Previous featured channel"
+          class="secondary-button"
+          disabled=""
+          type="button"
+        >
+          Previous
+        </button>
+        <button
+          aria-label="Next featured channel"
+          class="secondary-button"
+          disabled=""
+          type="button"
+        >
+          Next
+        </button>
+        <button
+          aria-label="Resume autoplay"
+          class="secondary-button"
+          type="button"
+        >
+          Play
+        </button>
+      </div>
+    </footer>
+  </section>
+</DocumentFragment>
+`;
+
+exports[`channel display primitives uses shared viewer labels in live grids 1`] = `
+<DocumentFragment>
+  <div
+    class="grid live-now-grid"
+  >
+    <a
+      class="live-card"
+      href="/channels/chan-live"
+    >
+      <div
+        class="live-card__media"
+      >
+        <div
+          aria-hidden="true"
+          class="live-card__media-fallback"
+        />
+        <div
+          class="overlay overlay--top overlay--scrim overlay--glow"
+        >
+          <div
+            class="overlay__status"
+          >
+            <span
+              class="badge badge--live"
+            >
+              Live
+            </span>
+            <span
+              class="overlay__meta"
+            >
+              27 viewers
+            </span>
+          </div>
+          <span
+            class="pill pill--frost"
+          >
+            Music
+          </span>
+        </div>
+        <div
+          class="overlay overlay--bottom overlay--scrim overlay--frost"
+        >
+          <div
+            class="overlay__identity"
+          >
+            <div
+              aria-hidden="true"
+              class="overlay__avatar"
+            >
+              <span>
+                D
+              </span>
+            </div>
+            <div
+              class="overlay__byline"
+            >
+              <span
+                class="overlay__name"
+              >
+                DJ Nova
+              </span>
+              <span
+                class="overlay__meta overlay__meta--muted"
+              >
+                #synthwave
+              </span>
+            </div>
+          </div>
+          <span
+            class="pill pill--tag"
+          >
+            #retro
+          </span>
+        </div>
+      </div>
+      <div
+        class="live-card__body"
+      >
+        <h3>
+          Neon Nights
+        </h3>
+        <p
+          class="muted"
+        >
+          DJ Nova
+        </p>
+      </div>
+    </a>
+  </div>
+</DocumentFragment>
+`;

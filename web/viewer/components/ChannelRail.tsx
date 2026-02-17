@@ -1,5 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
+import { ChannelStatusBadge } from "./channel/ChannelStatusBadge";
+import { getChannelPreviewImage } from "../lib/channel-presenters";
 import type { DirectoryChannel } from "../lib/viewer-api";
 
 interface ChannelRailProps {
@@ -12,7 +14,7 @@ interface ChannelRailProps {
 }
 
 function RailCard({ entry, density = "default" }: { entry: DirectoryChannel; density?: "default" | "compact" }) {
-  const previewImage = entry.profile.bannerUrl ?? entry.profile.avatarUrl;
+  const previewImage = getChannelPreviewImage(entry);
   const category = entry.channel.category ?? "Streaming";
 
   return (
@@ -31,7 +33,7 @@ function RailCard({ entry, density = "default" }: { entry: DirectoryChannel; den
           <div className="rail-card__media-fallback" aria-hidden="true" />
         )}
         <div className="overlay overlay--top overlay--scrim">
-          {entry.live && <span className="badge badge--live">Live</span>}
+          {entry.live && <ChannelStatusBadge live={entry.live} />}
           <span className="overlay__meta">{category}</span>
         </div>
       </div>

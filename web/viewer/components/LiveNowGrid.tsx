@@ -1,5 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
+import { ChannelAvatar } from "./channel/ChannelAvatar";
+import { ChannelStatusBadge } from "./channel/ChannelStatusBadge";
+import { formatViewerLabel, getChannelAvatarImage, getChannelPreviewImage } from "../lib/channel-presenters";
 import type { DirectoryChannel } from "../lib/viewer-api";
 
 interface LiveNowGridProps {
@@ -24,8 +27,7 @@ export function LiveNowGrid({ channels, loading = false }: LiveNowGridProps) {
   return (
     <div className="grid live-now-grid">
       {channels.map((entry) => {
-        const previewImage = entry.profile.bannerUrl ?? entry.profile.avatarUrl;
-        const viewerCount = entry.viewerCount ?? 0;
+        const previewImage = getChannelPreviewImage(entry);
         return (
           <Link key={entry.channel.id} className="live-card" href={`/channels/${entry.channel.id}`}>
             <div className="live-card__media">
@@ -43,27 +45,14 @@ export function LiveNowGrid({ channels, loading = false }: LiveNowGridProps) {
               )}
               <div className="overlay overlay--top overlay--scrim overlay--glow">
                 <div className="overlay__status">
-                  <span className="badge badge--live">Live</span>
-                  <span className="overlay__meta">{`${viewerCount.toLocaleString()} viewers`}</span>
+                  <ChannelStatusBadge live />
+                  <span className="overlay__meta">{formatViewerLabel(entry.viewerCount ?? 0)}</span>
                 </div>
                 {entry.channel.category && <span className="pill pill--frost">{entry.channel.category}</span>}
               </div>
               <div className="overlay overlay--bottom overlay--scrim overlay--frost">
                 <div className="overlay__identity">
-                  <div className="overlay__avatar" aria-hidden="true">
-                    {entry.owner.avatarUrl ? (
-                      <Image
-                        src={entry.owner.avatarUrl}
-                        alt=""
-                        width={44}
-                        height={44}
-                        sizes="44px"
-                        className="overlay__avatar-image"
-                      />
-                    ) : (
-                      <span>{entry.owner.displayName.charAt(0).toUpperCase()}</span>
-                    )}
-                  </div>
+                  <ChannelAvatar displayName={entry.owner.displayName} avatarUrl={getChannelAvatarImage(entry)} />
                   <div className="overlay__byline">
                     <span className="overlay__name">{entry.owner.displayName}</span>
                     <span className="overlay__meta overlay__meta--muted">{entry.channel.tags[0] ? `#${entry.channel.tags[0]}` : "Live"}</span>

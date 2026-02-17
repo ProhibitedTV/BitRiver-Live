@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { ChannelStatusBadge } from "./channel/ChannelStatusBadge";
+import { formatFollowerLabel, getChannelPreviewImage } from "../lib/channel-presenters";
 import type { DirectoryChannel } from "../lib/viewer-api";
 
 interface FeaturedChannelProps {
@@ -65,10 +67,7 @@ export function FeaturedChannel({
   }
 
   const activeChannel = slides[activeIndex];
-  const previewImage = activeChannel.profile.bannerUrl ?? activeChannel.profile.avatarUrl;
-  const followerLabel = `${activeChannel.followerCount.toLocaleString()} follower${
-    activeChannel.followerCount === 1 ? "" : "s"
-  }`;
+  const previewImage = getChannelPreviewImage(activeChannel);
 
   return (
     <section
@@ -104,8 +103,8 @@ export function FeaturedChannel({
               <div className="featured-channel__media-fallback" aria-hidden="true" />
             )}
             <div className="overlay overlay--top overlay--scrim">
-              {activeChannel.live ? <span className="badge badge--live">Live</span> : <span className="badge">Offline</span>}
-              <span className="overlay__meta">{followerLabel}</span>
+              <ChannelStatusBadge live={activeChannel.live} offlineClassName="" />
+              <span className="overlay__meta">{formatFollowerLabel(activeChannel.followerCount)}</span>
             </div>
           </div>
           <div className="featured-channel__content">
