@@ -104,6 +104,32 @@ describe("Navbar", () => {
     expect(screen.queryByRole("link", { name: /dashboard/i })).not.toBeInTheDocument();
   });
 
+
+  test("renders desktop tabs and drawer links from the same primary nav list", async () => {
+    mockAuthenticatedUser(adminUser);
+
+    const user = userEvent.setup();
+
+    renderWithProviders(<Navbar />);
+
+    const desktopNav = screen.getByRole("group", { name: /viewer navigation/i });
+    const desktopLabels = within(desktopNav)
+      .getAllByRole("link")
+      .map((link) => link.textContent?.trim());
+
+    const toggleButton = screen.getByRole("button", { name: /open navigation menu/i });
+    await act(async () => {
+      await user.click(toggleButton);
+    });
+
+    const drawerNav = screen.getByRole("group", { name: /viewer navigation mobile/i });
+    const drawerLabels = within(drawerNav)
+      .getAllByRole("link")
+      .map((link) => link.textContent?.trim());
+
+    expect(drawerLabels).toEqual(desktopLabels);
+  });
+
   test("closes the mobile menu after visiting the dashboard link", async () => {
     mockAuthenticatedUser(adminUser);
 

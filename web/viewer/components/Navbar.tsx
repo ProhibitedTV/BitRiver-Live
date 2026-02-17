@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
+import { deriveQuickLinks, getNavigationAudience, getVisibleNavigationItems } from "../lib/navigation";
 import { fetchManagedChannels } from "../lib/viewer-api";
 
 export function Navbar() {
@@ -32,16 +33,11 @@ export function Navbar() {
     return current;
   })();
   const canonicalPath = normalizedPathname.startsWith("/") ? normalizedPathname : `/${normalizedPathname}`;
-  const navItems = useMemo(
-    () => [
-      { label: "Home", href: "/" },
-      { label: "Following", href: "/following" },
-      { label: "Browse", href: "/browse" },
-      ...(isAdmin ? [{ label: "Dashboard", href: "/dashboard" }] : []),
-      ...(canAccessCreatorTools ? [{ label: "Creator", href: "/creator" }] : []),
-    ],
-    [canAccessCreatorTools, isAdmin],
+  const navigationAudience = useMemo(
+    () => getNavigationAudience({ isAuthenticated: Boolean(user), roles: user?.roles }),
+    [user],
   );
+  const navItems = useMemo(() => getVisibleNavigationItems(navigationAudience), [navigationAudience]);
   const configuredSignupUrl = process.env.NEXT_PUBLIC_SIGNUP_URL?.trim();
   const signupUrl = useMemo(() => {
     if (configuredSignupUrl !== undefined) {
@@ -52,11 +48,7 @@ export function Navbar() {
     }
     return "/signup";
   }, [configuredSignupUrl]);
-  const navItemHrefs = useMemo(() => new Set(navItems.map((item) => item.href)), [navItems]);
-  const quickLinks = [
-    { label: "Categories", href: "/browse" },
-    { label: "Following", href: "/following" },
-  ].filter((item) => !navItemHrefs.has(item.href));
+  const quickLinks = useMemo(() => deriveQuickLinks(navigationAudience, navItems), [navigationAudience, navItems]);
   const isRouteActive = (href: string) => {
     if (href === "/") {
       return canonicalPath === "/";
