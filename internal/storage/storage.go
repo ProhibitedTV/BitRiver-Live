@@ -31,17 +31,18 @@ func (s *Storage) Ping(context.Context) error {
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func newDataset() dataset {
 	ds := dataset{
-		Users:          make(map[string]models.User),
-		MFASettings:    make(map[string]models.MFASettings),
-		OAuthAccounts:  make(map[string]models.OAuthAccount),
-		Channels:       make(map[string]models.Channel),
-		StreamSessions: make(map[string]models.StreamSession),
-		Tips:           make(map[string]models.Tip),
-		Subscriptions:  make(map[string]models.Subscription),
-		Profiles:       make(map[string]models.Profile),
-		Follows:        make(map[string]map[string]time.Time),
-		Recordings:     make(map[string]models.Recording),
-		ClipExports:    make(map[string]models.ClipExport),
+		Users:               make(map[string]models.User),
+		MFASettings:         make(map[string]models.MFASettings),
+		OAuthAccounts:       make(map[string]models.OAuthAccount),
+		Channels:            make(map[string]models.Channel),
+		StreamSessions:      make(map[string]models.StreamSession),
+		Tips:                make(map[string]models.Tip),
+		Subscriptions:       make(map[string]models.Subscription),
+		PaymentTransactions: make(map[string]models.PaymentTransaction),
+		Profiles:            make(map[string]models.Profile),
+		Follows:             make(map[string]map[string]time.Time),
+		Recordings:          make(map[string]models.Recording),
+		ClipExports:         make(map[string]models.ClipExport),
 	}
 	initChatDataset(&ds)
 	return ds
@@ -76,6 +77,9 @@ func (s *Storage) ensureDatasetInitializedLocked() {
 	}
 	if s.data.Subscriptions == nil {
 		s.data.Subscriptions = make(map[string]models.Subscription)
+	}
+	if s.data.PaymentTransactions == nil {
+		s.data.PaymentTransactions = make(map[string]models.PaymentTransaction)
 	}
 	if s.data.Profiles == nil {
 		s.data.Profiles = make(map[string]models.Profile)

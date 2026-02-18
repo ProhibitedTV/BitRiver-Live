@@ -1,8 +1,12 @@
 package api
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,6 +14,7 @@ import (
 
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/observability/metrics"
+	"bitriver-live/internal/service"
 	"bitriver-live/internal/storage"
 )
 
@@ -23,16 +28,18 @@ type createTipRequest struct {
 }
 
 type tipResponse struct {
-	ID            string       `json:"id"`
-	ChannelID     string       `json:"channelId"`
-	FromUserID    string       `json:"fromUserId"`
-	Amount        models.Money `json:"amount"`
-	Currency      string       `json:"currency"`
-	Provider      string       `json:"provider"`
-	Reference     string       `json:"reference"`
-	WalletAddress string       `json:"walletAddress,omitempty"`
-	Message       string       `json:"message,omitempty"`
-	CreatedAt     string       `json:"createdAt"`
+	ID             string       `json:"id"`
+	ChannelID      string       `json:"channelId"`
+	FromUserID     string       `json:"fromUserId"`
+	Amount         models.Money `json:"amount"`
+	Currency       string       `json:"currency"`
+	Provider       string       `json:"provider"`
+	Reference      string       `json:"reference"`
+	WalletAddress  string       `json:"walletAddress,omitempty"`
+	Message        string       `json:"message,omitempty"`
+	Status         string       `json:"status"`
+	IdempotencyKey string       `json:"idempotencyKey,omitempty"`
+	CreatedAt      string       `json:"createdAt"`
 }
 
 type createSubscriptionRequest struct {
@@ -63,6 +70,7 @@ type subscriptionResponse struct {
 	CancelledBy       string       `json:"cancelledBy,omitempty"`
 	CancelledReason   string       `json:"cancelledReason,omitempty"`
 	CancelledAt       *string      `json:"cancelledAt,omitempty"`
+	IdempotencyKey    string       `json:"idempotencyKey,omitempty"`
 }
 
 // parseMoneyNumber parses money number and returns an error when the input is malformed.
@@ -81,16 +89,18 @@ func parseMoneyNumber(number json.Number, field string) (models.Money, error) {
 // newTipResponse builds and returns tip response using the supplied dependencies.
 func newTipResponse(tip models.Tip) tipResponse {
 	return tipResponse{
-		ID:            tip.ID,
-		ChannelID:     tip.ChannelID,
-		FromUserID:    tip.FromUserID,
-		Amount:        tip.Amount,
-		Currency:      tip.Currency,
-		Provider:      tip.Provider,
-		Reference:     tip.Reference,
-		WalletAddress: tip.WalletAddress,
-		Message:       tip.Message,
-		CreatedAt:     tip.CreatedAt.Format(time.RFC3339Nano),
+		ID:             tip.ID,
+		ChannelID:      tip.ChannelID,
+		FromUserID:     tip.FromUserID,
+		Amount:         tip.Amount,
+		Currency:       tip.Currency,
+		Provider:       tip.Provider,
+		Reference:      tip.Reference,
+		WalletAddress:  tip.WalletAddress,
+		Message:        tip.Message,
+		Status:         tip.Status,
+		IdempotencyKey: tip.IdempotencyKey,
+		CreatedAt:      tip.CreatedAt.Format(time.RFC3339Nano),
 	}
 }
 
@@ -112,6 +122,7 @@ func newSubscriptionResponse(sub models.Subscription) subscriptionResponse {
 		Status:            sub.Status,
 		CancelledBy:       sub.CancelledBy,
 		CancelledReason:   sub.CancelledReason,
+		IdempotencyKey:    sub.IdempotencyKey,
 	}
 	if sub.CancelledAt != nil {
 		cancelled := sub.CancelledAt.Format(time.RFC3339Nano)
@@ -178,22 +189,27 @@ func (h *Handler) handleTipsRoutes(channel models.Channel, remaining []string, w
 			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
-		params := storage.CreateTipParams{
-			ChannelID:     channel.ID,
-			FromUserID:    actor.ID,
-			Amount:        amount,
-			Currency:      req.Currency,
-			Provider:      req.Provider,
-			Reference:     req.Reference,
-			WalletAddress: req.WalletAddress,
-			Message:       req.Message,
+		idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+		if idempotencyKey == "" {
+			idempotencyKey = service.BuildIdempotencyKey(actor.ID, req.Reference)
 		}
-		tip, err := h.Store.CreateTip(params)
+		params := storage.CreateTipParams{
+			ChannelID:      channel.ID,
+			FromUserID:     actor.ID,
+			Amount:         amount,
+			Currency:       req.Currency,
+			Provider:       req.Provider,
+			Reference:      req.Reference,
+			WalletAddress:  req.WalletAddress,
+			Message:        req.Message,
+			IdempotencyKey: idempotencyKey,
+		}
+		tip, err := h.PaymentService.CreatePendingTip(params)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
-		metrics.Default().ObserveMonetization("tip", tip.Amount)
+		metrics.Default().ObserveMonetization("tip_pending", tip.Amount)
 		WriteJSON(w, http.StatusCreated, newTipResponse(tip))
 	default:
 		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPost)
@@ -271,6 +287,10 @@ func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []
 			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
+		idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+		if idempotencyKey == "" {
+			idempotencyKey = service.BuildIdempotencyKey(actor.ID, req.Reference)
+		}
 		params := storage.CreateSubscriptionParams{
 			ChannelID:         channel.ID,
 			UserID:            actor.ID,
@@ -282,15 +302,72 @@ func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []
 			Duration:          time.Duration(durationDays) * 24 * time.Hour,
 			AutoRenew:         req.AutoRenew,
 			ExternalReference: req.ExternalReference,
+			IdempotencyKey:    idempotencyKey,
 		}
-		sub, err := h.Store.CreateSubscription(params)
+		sub, err := h.PaymentService.CreatePendingSubscription(params)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
-		metrics.Default().ObserveMonetization("subscription", sub.Amount)
+		metrics.Default().ObserveMonetization("subscription_pending", sub.Amount)
 		WriteJSON(w, http.StatusCreated, newSubscriptionResponse(sub))
 	default:
 		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPost, http.MethodDelete)
 	}
+}
+
+type paymentWebhookRequest struct {
+	EventID        string `json:"eventId"`
+	EntityType     string `json:"entityType"`
+	Reference      string `json:"reference"`
+	Status         string `json:"status"`
+	IdempotencyKey string `json:"idempotencyKey,omitempty"`
+}
+
+func (h *Handler) PaymentWebhook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		WriteMethodNotAllowed(w, r, http.MethodPost)
+		return
+	}
+	provider := strings.TrimPrefix(r.URL.Path, "/api/payments/webhooks/")
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	secret := strings.TrimSpace(h.WebhookSecrets[provider])
+	if provider == "" || secret == "" {
+		WriteError(w, http.StatusNotFound, fmt.Errorf("unsupported provider"))
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, fmt.Errorf("read webhook body: %w", err))
+		return
+	}
+	sig := strings.TrimSpace(r.Header.Get("X-Bitriver-Signature"))
+	if !verifyWebhookSignature(secret, body, sig) {
+		WriteError(w, http.StatusUnauthorized, fmt.Errorf("invalid webhook signature"))
+		return
+	}
+	var req paymentWebhookRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		WriteError(w, http.StatusBadRequest, fmt.Errorf("decode webhook body: %w", err))
+		return
+	}
+	tx, err := h.PaymentService.ProcessWebhook(provider, storage.ProcessPaymentWebhookParams{
+		EventID: req.EventID, EntityType: req.EntityType, Reference: req.Reference, Status: req.Status, IdempotencyKey: req.IdempotencyKey,
+	})
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, tx)
+}
+
+func verifyWebhookSignature(secret string, body []byte, provided string) bool {
+	provided = strings.TrimSpace(strings.ToLower(strings.TrimPrefix(provided, "sha256=")))
+	if provided == "" {
+		return false
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write(body)
+	expected := hex.EncodeToString(mac.Sum(nil))
+	return hmac.Equal([]byte(expected), []byte(provided))
 }

@@ -426,16 +426,18 @@ type ChatAutoModAction struct {
 // precision Money type (1e-8 minor units) while the public JSON API continues to
 // expose human-readable decimal values.
 type Tip struct {
-	ID            string    `json:"id"`
-	ChannelID     string    `json:"channelId"`
-	FromUserID    string    `json:"fromUserId"`
-	Amount        Money     `json:"amount"`
-	Currency      string    `json:"currency"`
-	Provider      string    `json:"provider"`
-	Reference     string    `json:"reference"`
-	WalletAddress string    `json:"walletAddress,omitempty"`
-	Message       string    `json:"message,omitempty"`
-	CreatedAt     time.Time `json:"createdAt"`
+	ID             string    `json:"id"`
+	ChannelID      string    `json:"channelId"`
+	FromUserID     string    `json:"fromUserId"`
+	Amount         Money     `json:"amount"`
+	Currency       string    `json:"currency"`
+	Provider       string    `json:"provider"`
+	Reference      string    `json:"reference"`
+	WalletAddress  string    `json:"walletAddress,omitempty"`
+	Message        string    `json:"message,omitempty"`
+	Status         string    `json:"status"`
+	IdempotencyKey string    `json:"idempotencyKey,omitempty"`
+	CreatedAt      time.Time `json:"createdAt"`
 }
 
 // Subscription represents a recurring or fixed-term monetization commitment.
@@ -458,6 +460,26 @@ type Subscription struct {
 	CancelledReason   string     `json:"cancelledReason,omitempty"`
 	CancelledAt       *time.Time `json:"cancelledAt,omitempty"`
 	ExternalReference string     `json:"externalReference,omitempty"`
+	IdempotencyKey    string     `json:"idempotencyKey,omitempty"`
+}
+
+const (
+	PaymentStatePending   = "pending"
+	PaymentStateConfirmed = "confirmed"
+	PaymentStateFailed    = "failed"
+	PaymentStateRefunded  = "refunded"
+)
+
+type PaymentTransaction struct {
+	ID             string    `json:"id"`
+	Provider       string    `json:"provider"`
+	EventID        string    `json:"eventId"`
+	EntityType     string    `json:"entityType"`
+	EntityID       string    `json:"entityId"`
+	Reference      string    `json:"reference"`
+	Status         string    `json:"status"`
+	IdempotencyKey string    `json:"idempotencyKey,omitempty"`
+	CreatedAt      time.Time `json:"createdAt"`
 }
 
 type CryptoAddress struct {

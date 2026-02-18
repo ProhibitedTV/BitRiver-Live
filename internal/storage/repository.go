@@ -91,6 +91,7 @@ type Repository interface {
 	ListTips(channelID string, limit int) ([]models.Tip, error)
 
 	CreateSubscription(params CreateSubscriptionParams) (models.Subscription, error)
+	ProcessPaymentWebhook(params ProcessPaymentWebhookParams) (models.PaymentTransaction, error)
 	ListSubscriptions(channelID string, includeInactive bool) ([]models.Subscription, error)
 	GetSubscription(id string) (models.Subscription, bool)
 	CancelSubscription(id, cancelledBy, reason string) (models.Subscription, error)

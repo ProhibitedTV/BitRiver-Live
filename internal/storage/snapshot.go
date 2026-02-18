@@ -35,6 +35,7 @@ type Snapshot struct {
 	ChatAutoModActions  map[string]models.ChatAutoModAction       `json:"chatAutoModActions"`
 	Tips                map[string]models.Tip                     `json:"tips"`
 	Subscriptions       map[string]models.Subscription            `json:"subscriptions"`
+	PaymentTransactions map[string]models.PaymentTransaction      `json:"paymentTransactions"`
 	Profiles            map[string]models.Profile                 `json:"profiles"`
 	Follows             map[string]map[string]time.Time           `json:"follows"`
 	Recordings          map[string]models.Recording               `json:"recordings"`
@@ -65,6 +66,7 @@ type SnapshotCounts struct {
 	ChatAutoModActions     int
 	Tips                   int
 	Subscriptions          int
+	PaymentTransactions    int
 	Profiles               int
 	Follows                int
 	Recordings             int
@@ -165,6 +167,9 @@ func (s *Snapshot) ensureInitialized() {
 	if s.Subscriptions == nil {
 		s.Subscriptions = make(map[string]models.Subscription)
 	}
+	if s.PaymentTransactions == nil {
+		s.PaymentTransactions = make(map[string]models.PaymentTransaction)
+	}
 	if s.Profiles == nil {
 		s.Profiles = make(map[string]models.Profile)
 	}
@@ -213,6 +218,7 @@ func (s *Snapshot) Counts() SnapshotCounts {
 		ChatAutoModActions:  len(s.ChatAutoModActions),
 		Tips:                len(s.Tips),
 		Subscriptions:       len(s.Subscriptions),
+		PaymentTransactions: len(s.PaymentTransactions),
 		Profiles:            len(s.Profiles),
 		Recordings:          len(s.Recordings),
 		Uploads:             len(s.Uploads),

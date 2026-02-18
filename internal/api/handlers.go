@@ -31,6 +31,8 @@ type Handler struct {
 	OAuth                 oauth.Service
 	UploadProcessor       *UploadProcessor
 	LegalService          *service.LegalService
+	PaymentService        *service.PaymentService
+	WebhookSecrets        map[string]string
 	Setup                 SetupManager
 	DefaultRenditions     []string
 	SRSHookToken          string
@@ -68,6 +70,8 @@ func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handle
 		AllowSelfSignup:     true,
 		SessionCookiePolicy: DefaultSessionCookiePolicy(),
 		LegalService:        service.NewLegalService(store),
+		PaymentService:      service.NewPaymentService(store, slog.Default()),
+		WebhookSecrets:      map[string]string{},
 		Logger:              slog.Default(),
 	}
 }
