@@ -25,6 +25,13 @@ GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run ./cmd/bitriver quickstart --com
 ## Required checks before merging
 Run from repo root unless noted.
 
+Default local gate (recommended):
+```bash
+./scripts/verify.sh
+```
+
+Equivalent manual sequence:
+
 1. Go tests:
 ```bash
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
