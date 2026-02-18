@@ -9,7 +9,7 @@
 | macOS | `brew install --formula https://github.com/bitriver-live/bitriver-live/releases/latest/download/bitriver-live.rb && bitriver-live` |
 | Linux | Install the `.deb` or `.rpm` from the latest release, then run `bitriver-live` (desktop shortcut: **Start BitRiver Live**). |
 | Windows | Install `bitriver-live-<version>.msi`, then launch **Start BitRiver Live** or run `bitriver-live.ps1`. |
-| Source checkout (any shell) | `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` (PowerShell: `pwsh -c "go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml"`) |
+| Source checkout (any shell) | `go run ./cmd/bitriver quickstart` (PowerShell: `pwsh -c "go run ./cmd/bitriver quickstart"`) |
 
 ### Shared backend pipeline (all launchers)
 
@@ -67,10 +67,10 @@ Run `bitriver-live ui` (or `./scripts/bitriver-live-wrapper.sh ui` / `./scripts/
 
 ```bash
 # macOS, Linux, or Windows via WSL/bash
-go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml
+go run ./cmd/bitriver quickstart
 
 # Windows PowerShell (same CLI, different shell)
-pwsh -c "go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml"
+pwsh -c "go run ./cmd/bitriver quickstart"
 ```
 
 The Go CLI renders `deploy/ome/Server.generated.xml` directly (no Python dependency) before launching Compose. The quickstart waits for the API `/readyz` probe to succeed before seeding the admin user via the bundled `bootstrap-admin` binary, then prints a "Generated credentials" block for any secrets it auto-created so you can store them securely before logging in.
@@ -108,7 +108,7 @@ If preflight fails, quickstart exits immediately with actionable guidance that n
 
 When stdin is not attached to a terminal (for example in CI, scripted deployments, or some Windows shells), the quickstart runs database migrations with `docker compose run -T` to disable TTY allocation and avoid interactive console errors.
 
-Want a shim to handle shell-specific permissions? Use `./scripts/quickstart.sh` from POSIX shells or `./scripts/quickstart.ps1` from PowerShell—they call the same Go quickstart entrypoint, and all OME auth/env validation now lives inside the Go CLI.
+Want a shim to handle shell-specific permissions? Use `./scripts/quickstart.sh` from POSIX shells or `./scripts/quickstart.ps1` from PowerShell. Both scripts are thin wrappers around `go run ./cmd/bitriver quickstart`, and all OME auth/env validation lives inside the Go CLI.
 
 ### Quickstart profiles
 
@@ -263,7 +263,7 @@ All commands assume you are still in the repository root (where `.env` lives) so
 
 ## Troubleshooting
 
-- **`Error: doctor checks failed` with `Docker: not found` in the doctor output** – The quickstart starts with the BitRiver Live doctor check and exits early when the `docker` binary is not on your `PATH`. Install Docker Engine or Docker Desktop, reopen your shell so `docker` is discoverable, and rerun `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` or `./scripts/quickstart.sh`.
+- **`Error: doctor checks failed` with `Docker: not found` in the doctor output** – The quickstart starts with the BitRiver Live doctor check and exits early when the `docker` binary is not on your `PATH`. Install Docker Engine or Docker Desktop, reopen your shell so `docker` is discoverable, and rerun `go run ./cmd/bitriver quickstart`, `./scripts/quickstart.sh`, or `./scripts/quickstart.ps1`.
 - **`Error: Docker is required`** – Install Docker Engine from [docs.docker.com/engine/install](https://docs.docker.com/engine/install/)
   and re-run `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` (or the shim for your shell).
 - **`Error: Docker Compose V2 is required`** – Install the compose plugin or upgrade Docker Desktop/Engine so the `docker compose`

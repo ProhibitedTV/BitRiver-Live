@@ -81,13 +81,14 @@ What happens:
 ### Option B: from source checkout
 
 ```bash
-go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml
+go run ./cmd/bitriver quickstart
 ```
 
-Wrapper equivalent:
+Wrapper equivalents (scripts are thin shims around the same CLI command):
 
 ```bash
 ./scripts/quickstart.sh
+./scripts/quickstart.ps1
 ```
 
 ### First login / verification
