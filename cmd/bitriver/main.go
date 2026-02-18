@@ -33,6 +33,11 @@ func main() {
 		if !runDoctor(os.Args[2:]) {
 			os.Exit(1)
 		}
+	case "smoke":
+		if err := runSmoke(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 	case "env":
 		if err := runEnv(os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -77,6 +82,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "Commands:")
 	fmt.Fprintln(os.Stderr, "  version   Show BitRiver Live version information")
 	fmt.Fprintln(os.Stderr, "  doctor    Check local environment for BitRiver Live")
+	fmt.Fprintln(os.Stderr, "  smoke     Run fast post-install smoke checks against Docker Compose")
 	fmt.Fprintln(os.Stderr, "  env       Initialize or validate environment files")
 	fmt.Fprintln(os.Stderr, "  compose   Run docker compose up/down with defaults")
 	fmt.Fprintln(os.Stderr, "  desktop   Launch the Docker Compose control panel with tray shortcuts")
