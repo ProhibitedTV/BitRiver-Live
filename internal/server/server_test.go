@@ -23,6 +23,7 @@ import (
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/observability/metrics"
+	"bitriver-live/internal/service"
 	"bitriver-live/internal/storage"
 	"bitriver-live/web"
 )
@@ -63,7 +64,8 @@ func newTestHandler(t *testing.T) (*api.Handler, *storage.Storage) {
 		t.Fatalf("NewStorage error: %v", err)
 	}
 	sessions := auth.NewSessionManager(time.Hour)
-	return api.NewHandler(store, sessions), store
+	useCases := service.NewStoreUseCases(store)
+	return api.NewHandler(api.Dependencies{Sessions: sessions, AuthUsersService: useCases, ChannelsService: useCases, UploadsService: useCases, RecordingsService: useCases, ChatModerationService: useCases, LegalService: service.NewLegalService(store), StreamsService: useCases, ProfilesService: useCases, AnalyticsService: useCases, SystemService: useCases, MonetizationService: useCases, PaymentService: service.NewPaymentService(store, nil)}), store
 }
 
 func findSessionCookie(t *testing.T, cookies []*http.Cookie) *http.Cookie {

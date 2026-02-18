@@ -8,7 +8,6 @@ import (
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/server"
 	"bitriver-live/internal/service"
-	"bitriver-live/internal/storage"
 )
 
 type healthPinger interface {
@@ -17,7 +16,6 @@ type healthPinger interface {
 
 // HandlerConfig collects runtime dependencies for constructing api.Handler.
 type HandlerConfig struct {
-	Store                 storage.Repository
 	Sessions              *auth.SessionManager
 	MFAChallenges         *auth.MFAChallengeManager
 	AllowSelfSignup       bool
