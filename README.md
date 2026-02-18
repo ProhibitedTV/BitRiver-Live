@@ -1,338 +1,236 @@
 # BitRiver Live
 
-BitRiver Live is a self-hosted streaming stack built with Go on the backend and Next.js on the frontend. One Docker command
-starts the API, control centre, public viewer, RTMP ingest, transcoder, chat, analytics, Postgres, and Redis so you can run a
-Twitch-style experience on hardware you control.
+BitRiver Live is a self-hosted live-streaming stack.
 
-## Supported versions
+It runs a Go control-plane API, a Next.js viewer, ingest/transcoding services, and stateful data services with one Docker Compose deployment (`deploy/docker-compose.yml`) driven by a single root `.env` file.
 
-- **Viewer:** Next.js 13.5.x with Node.js LTS (validated on Node 18/20; Next 13.5 requires Node 16.14+). Aligns with the pins
-  in `web/viewer/package.json`.
-- **Postgres:** pgx v5.7.x (via `github.com/jackc/pgx/v5`) supports PostgreSQL 10–16; the bundled Compose stack runs Postgres
-  15 by default.
-- **Redis:** go-redis v9.5.x targets Redis 6+; Docker Compose ships Redis 7-alpine.
+## 1) What this project is
 
-## What you get out of the box
+### Mental model
 
-- **Control centre + API** – `cmd/server` serves the admin UI, chat, analytics, webhooks, and REST endpoints under one binary.
-- **Public viewer** – `web/viewer` is a Next.js app (proxied through the Go API by default) so fans can browse channels and
-  watch streams.
-- **Streaming pipeline** – Docker Compose wires SRS (RTMP ingest), OvenMediaEngine (HLS/DASH playback), and the FFmpeg-based
-  transcoder in `cmd/transcoder` for adaptive bitrates.
-- **Stateful storage** – Postgres stores users and channels, Redis handles chat fan-out and rate limiting, and local volumes keep
-  recordings and transcoder data.
-- **Ready-to-run tooling** – `cmd/bitriver` builds images, seeds the admin account, and keeps all configuration in a
-  single `.env` file (wrappers live under `scripts/`).
+Think of BitRiver Live as **one deployment bundle** with multiple entrypoints:
 
-## Quickstart: installer-first (recommended)
+- Installer launcher (`bitriver-live`)
+- Source launcher (`go run ./cmd/bitriver quickstart`)
+- Shell wrappers (`scripts/quickstart.sh`, `scripts/quickstart.ps1`)
 
-Use the packaged launcher (`bitriver-live`) if you just want to bring the stack up with Docker Compose. It bundles the compose file, creates `<launcher-root>/.env` from `deploy/.env.example` on the first run, checks Docker/Compose, pulls release images, and starts the stack without requiring Go or Node.
+All of them execute the same backend pipeline:
 
-> **Single deployment pipeline**
-> Every launcher (`bitriver-live`, `go run ./cmd/bitriver quickstart`, `scripts/quickstart.sh`, and `scripts/quickstart.ps1`) executes the same deployment contract: `deploy/docker-compose.yml` + one root `.env` file. Platform differences only change how you invoke the launcher command.
+1. Doctor checks
+2. `.env` bootstrap/validation
+3. OvenMediaEngine config render
+4. Postgres migrations
+5. `docker compose up`
+6. readiness checks
+7. admin bootstrap
 
-- **macOS (Homebrew):**
-  ```bash
-  brew install --formula https://github.com/bitriver-live/bitriver-live/releases/latest/download/bitriver-live.rb
-  bitriver-live
-  ```
-- **Linux (Deb/RPM):** Download the `.deb` or `.rpm` from the latest [releases](https://github.com/bitriver-live/bitriver-live/releases), install it with `sudo dpkg -i` or `sudo rpm -i`, then run `bitriver-live` from your shell or the desktop shortcut named **Start BitRiver Live**.
-- **Windows:** Install the MSI from the latest release. The installer drops `bitriver.exe` and `bitriver-live.ps1` into `Program Files\BitRiver Live` and adds **Start BitRiver Live** shortcuts to the Start menu and desktop.
+### What it is not
 
-The launcher keeps using the Compose bundle under `/usr/local/share/bitriver-live` (macOS/Linux) or `Program Files\BitRiver Live` (Windows). Edit the generated `.env` there before restarting the service.
+- Not a managed SaaS service.
+- Not a single-process binary without external services.
+- Not a Kubernetes-first deployment (Compose is the canonical path in this repo).
 
-### Desktop control panel (default for operators)
+## 2) Current status
 
-The installer now ships a lightweight desktop/tray control panel so non-developers can manage Docker Compose without memorising commands. Launch it from the Start menu/Applications folder or from the shell:
+### Works today
 
-- **macOS/Linux:** `bitriver-live ui` (or `./scripts/bitriver-live-wrapper.sh ui` if you are running from a cloned repo)
-- **Windows:** `bitriver-live.ps1 -Command ui`
+- Single-host Docker Compose deployment of:
+  - API/control centre (`cmd/server`)
+  - Viewer (`web/viewer`)
+  - SRS ingest + controller
+  - OvenMediaEngine playback
+  - FFmpeg transcoder (`cmd/transcoder`)
+  - Postgres + Redis
+- Installer and source launchers that converge on the same Compose contract.
+- Admin bootstrap and health endpoints (`/readyz`, `/healthz`, `/api/status`).
 
-The panel polls `docker compose ps` to show service state + health, tails recent logs, and exposes Start/Stop/Restart/Refresh logs buttons that shell out to Compose. Use the **Open health dashboard** link to jump back into the control centre overview when troubleshooting. Contributors can still call the CLI directly (`bitriver-live start`, `bitriver-live stop`, or `go run ./cmd/bitriver desktop --compose-file deploy/docker-compose.yml`) when they prefer the terminal.
+### Partial / needs operator judgment
 
-## Advanced quickstart: Go CLI from source
+- Advanced topologies (reverse proxies, scaling patterns, object-storage-heavy retention) are documented, but require manual infrastructure work.
+- Cross-platform UX wrappers exist, but operational behavior is still defined by the shared Compose pipeline.
 
-Use a single deployment path across all platforms: the Go CLI in `cmd/bitriver`. It handles environment generation, Docker Compose orchestration, and health checks.
+### Known sharp edges (documentation honesty)
 
-> **Single deployment pipeline**
-> Source and installer entrypoints run the same backend sequence against `deploy/docker-compose.yml` and the root `.env`: doctor checks, env init/validation, OME render, migrations, `docker compose up`, readiness checks, and admin bootstrap.
+- This repository contains roadmap/planning docs (`docs/product-roadmap.md`, `docs/cross-platform-plan.md`) alongside production runbooks. Treat roadmap items as non-binding.
+- First-time operators still need to validate host-level Docker capacity and networking; quickstart cannot fix host misconfiguration automatically.
 
-### Prerequisites at a glance
+## 3) Quick start (real)
 
-| Platform | Docker runtime | Notes |
-| --- | --- | --- |
-| macOS 12+ | Docker Desktop with Compose V2 enabled | Start Docker Desktop first and keep at least 15GB free on Docker's data root. |
-| Ubuntu 22.04+ / other Linux | Docker Engine + Compose plugin | Add your user to the `docker` group (or prefix commands with `sudo`) and confirm `docker compose` works without root. |
-| Windows 10/11 | Docker Desktop (WSL 2 backend) | Enable the WSL 2 backend, start Docker Desktop, and ensure the `docker-desktop` data disk has 15GB free. |
+Use this if you want the fastest path to a running stack.
 
-Install Go 1.21+ only when you plan to run `go run ./cmd/bitriver ...` from source. The packaged launcher already bundles the CLI and still runs the same deployment pipeline.
+### Assumptions
 
-`go run ./cmd/bitriver quickstart` starts by running the built-in doctor checks. If Docker is missing from your `PATH`, the command prints a `BitRiver Live doctor` block that includes `Docker: not found` and exits with `Error: doctor checks failed` so you can fix the prerequisite before it touches Compose.
+- Docker with Compose V2 is installed and running.
+- You have enough disk for images/volumes (15GB+ is a practical minimum from project docs).
+- You are running from either:
+  - an installed launcher package, or
+  - a cloned repository root.
 
-### macOS (Docker Desktop, zsh/bash)
+### Option A: packaged launcher (recommended for operators)
 
 ```bash
-cd BitRiver-Live
+bitriver-live
+```
+
+What happens:
+
+- Creates `<launcher-root>/.env` from `deploy/.env.example` if missing.
+- Runs the canonical deployment pipeline above.
+- Starts services from `deploy/docker-compose.yml`.
+
+### Option B: from source checkout
+
+```bash
 go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml
 ```
 
-### Ubuntu 22.04+ (Docker Engine + Compose plugin)
+Wrapper equivalent:
 
 ```bash
-cd BitRiver-Live
-go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml
+./scripts/quickstart.sh
 ```
 
-Add `sudo` if your user is not in the `docker` group. The CLI will confirm prerequisites before touching Docker.
+### First login / verification
 
-### Windows 10/11 (Docker Desktop + PowerShell)
+- Open the control centre URL shown by quickstart.
+- Use generated/admin credentials from quickstart output.
+- Confirm health in the Overview dashboard (or query `/api/status`).
 
-Run from a PowerShell prompt with Docker Desktop running and the WSL 2 backend enabled:
-
-```powershell
-Set-Location BitRiver-Live
-go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml
-```
-
-The CLI checks Docker/Compose, generates `.env` from `deploy/.env.example` with strong credentials when the file is missing, persists `BITRIVER_LIVE_MODE=production` in that file, renders `deploy/ome/Server.generated.xml` via the Go binary (no Python dependency), runs migrations, starts the compose stack, and prints the seeded admin login. Image sourcing is now explicit via `BITRIVER_DEPLOY_IMAGE_SOURCE=pull|build` (default `pull`): pull mode runs GHCR auth/manifest preflight checks and starts Compose with pull-only semantics, while build mode intentionally skips registry preflight and builds local sources. Pass `--build` only with build mode when you want quickstart to rebuild API/viewer/SRS controller/transcoder images from local source before startup. The `.env` file is gitignored; `go run ./cmd/bitriver env init` and the quickstart scripts will create it and mint fresh credentials the first time you run them so new clones never share secrets. Production quickstart now fails fast until you replace local/demo defaults with routable values for `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`, `BITRIVER_OME_BIND`, `BITRIVER_OME_IP`, and `NEXT_PUBLIC_VIEWER_URL`.
-
-### Quickstart profiles
-
-- **quickstart-dev (demo/local):** use one-off shell overrides when you intentionally want localhost values for a local demo. Example: `BITRIVER_LIVE_MODE=development go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml`.
-- **quickstart-prod (strict):** keep `BITRIVER_LIVE_MODE=production` in `.env` and set explicit routable/public values for viewer/transcoder/OME networking. `go run ./cmd/bitriver quickstart ...` now exits with a single actionable error block when those values are still localhost/`0.0.0.0`/empty.
-
-### Step 3 – Use the running stack
-
-1. Open [http://localhost:8080/signup](http://localhost:8080/signup) in your browser and sign in with the admin credentials
-   printed by the CLI, then change the password under **Settings → Security**.
-2. Check the **System status** card on the control centre overview at [http://localhost:8080](http://localhost:8080). It pulls
-   from `/api/status` to merge readiness, database/Redis checks, and ingest probes (SRS/OME/transcoder) with remediation tips
-   and copy-to-clipboard log commands—no `curl` required.
-3. Visit [http://localhost:8080/viewer](http://localhost:8080/viewer) in another tab to see the public viewer that proxies
-   through the API.
-4. Point OBS or any RTMP encoder at `rtmp://localhost:1935/live` with the stream key shown in the control centre and watch the
-   broadcast arrive in the viewer within seconds.
-
-### Step 4 – Start, stop, and troubleshoot
-
-Run these commands from the repository root (where `.env` lives). The Go CLI wraps Docker Compose so you do not need to export `COMPOSE_FILE`:
+### Useful day-2 commands
 
 ```bash
-# Show container status
-go run ./cmd/bitriver compose up --file deploy/docker-compose.yml
-docker compose ps
+# service status
+docker compose -f deploy/docker-compose.yml ps
 
-# Follow logs for everything
-docker compose logs -f
+# logs
+docker compose -f deploy/docker-compose.yml logs -f
 
-# Stop the stack but keep data
+# stop without deleting data
 go run ./cmd/bitriver compose down --file deploy/docker-compose.yml
 
-# Restart after editing .env
+# restart after .env changes
 go run ./cmd/bitriver compose up --file deploy/docker-compose.yml
+```
 
-# Refresh the OME config when .env changes
+## 4) Core workflows
+
+### A) Deploy/upgrade the stack
+
+**Input:** `deploy/docker-compose.yml` + root `.env`  
+**Action:** run quickstart or compose wrapper  
+**Output:** running containers, migrated database, rendered OME config (`deploy/ome/Server.generated.xml`)
+
+Primary files:
+
+- `cmd/bitriver/*` (deployment orchestration)
+- `deploy/docker-compose.yml`
+- `deploy/.env.example`
+- `scripts/quickstart.sh`
+
+### B) Stream ingest to viewer playback
+
+**Input:** stream pushed to SRS RTMP endpoint (`BITRIVER_SRS_RTMP_PORT`)  
+**Action:** SRS ingest → transcoder outputs → OME playback orchestration  
+**Output:** viewer can load playback URLs/pages via API + viewer app
+
+Primary files/services:
+
+- `deploy/srs/` and `cmd/srs-controller`
+- `cmd/transcoder`
+- `deploy/ome/`
+- `web/viewer`
+
+### C) Operator/admin management
+
+**Input:** admin credentials + control centre UI/API  
+**Action:** authenticate, manage channels/users/settings  
+**Output:** persisted state in Postgres/Redis and updated API responses
+
+Primary code areas:
+
+- `cmd/server`
+- `internal/api`
+- `internal/service`
+- `internal/storage`
+
+## 5) Configuration (minimal)
+
+Start with defaults from `deploy/.env.example`.
+
+Change values only when needed:
+
+- `BITRIVER_LIVE_PORT`: move API/control-centre host port.
+- `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_VIEWER_URL`, `BITRIVER_VIEWER_ORIGIN`: required when using real domains or reverse proxies.
+- `BITRIVER_LIVE_ADMIN_EMAIL`, `BITRIVER_LIVE_ADMIN_PASSWORD`: production-safe admin credentials.
+- `BITRIVER_POSTGRES_*`, `BITRIVER_REDIS_PASSWORD`: database/cache credentials.
+- `BITRIVER_DEPLOY_IMAGE_SOURCE`: choose image source mode (`pull` recommended for production deployments).
+
+If you edit OME-related env keys, re-render config before restarting:
+
+```bash
 go run ./cmd/bitriver ome render --force --env-file ./.env
 ```
 
-If ports are already in use, edit the matching values in `.env` (for example `BITRIVER_LIVE_PORT=9090`), save the file, and rerun
-`docker compose up -d`. See [`docs/quickstart.md`](docs/quickstart.md) for extra tips, common errors, and guidance on updating
-the generated environment file before inviting real users. For OME-specific healthcheck troubleshooting (including the
-unauthenticated local root (`/`) liveness probe that Compose/Helm run without auth headers), jump to the [`Troubleshooting`](docs/quickstart.md#troubleshooting) section and the
-[`OME healthcheck`](deploy/README.md#ome-healthcheck) note under the deployment docs. OME API auth env vars are still required for control-plane calls, but liveness no longer depends on probe auth mode/header wiring.
+## 6) Failure modes and gotchas
 
-### Key environment variables at a glance
+- **Docker not available**  
+  Symptom: quickstart doctor fails early.  
+  Fix: start Docker Desktop or Docker Engine; confirm `docker compose` works.
 
-Set `BITRIVER_LIVE_MODE=production` in `.env` (the default). `deploy/check-env.sh` now fails fast when the mode is empty, left at the example placeholder, or still set to `development` so the server always boots with production guardrails. For local HTTP-only demos, leave `.env` at production and override the variable inline (for example, `BITRIVER_LIVE_MODE=development docker compose --env-file ./.env -f deploy/docker-compose.yml up -d`) instead of committing the change to your deployment file.
+- **Default/sample secrets left in `.env`**  
+  Symptom: env validation/deploy checks fail or insecure deployment.  
+  Fix: rotate required credentials and rerun quickstart.
 
-The CLI pre-populates `.env` so Docker Compose can bind each service to predictable ports. Edit the values below to match your host and network before rerunning `docker compose up -d`.
+- **OME config drift after env edits**  
+  Symptom: ingest/playback auth mismatch or OME startup failures.  
+  Fix: rerender `deploy/ome/Server.generated.xml` then restart Compose.
 
-| Variable | Default | What it controls |
-| --- | --- | --- |
-| `BITRIVER_LIVE_MODE` | `production` | Required runtime mode (`production` for deployments; override inline for one-off local demos). `deploy/check-env.sh` fails when this is unset, left at the example placeholder, or set to `development` so `/metrics` protection and production hardening are never skipped by accident. |
-| `BITRIVER_LIVE_PORT` | `8080` | Host port for the Go API and proxied viewer (`deploy/docker-compose.yml` maps host `8080` to container `8080`). |
-| `BITRIVER_SRS_RTMP_PORT` | `1935` | Host RTMP ingest port forwarded to the SRS container (`1935`). |
-| `BITRIVER_SRS_API_PORT` | `1985` | Host port for the SRS HTTP API when the optional `srs-api` Compose profile is enabled (not exposed by default). |
-| `BITRIVER_SRS_CONTROLLER_PORT` | `1986` | Host port for the SRS controller’s HTTP API (container listens on `1985`). |
-| `BITRIVER_OME_HTTP_PORT` | `8081` | Host port for the OvenMediaEngine control plane and health checks. |
-| `BITRIVER_OME_SIGNALLING_PORT` | `9000` | Host port for OME WebRTC signalling; defaults to `BITRIVER_OME_SERVER_PORT` when left unset so host/container bindings stay aligned. |
-| `BITRIVER_OME_SERVER_PORT` | `9000` | OME WebRTC signalling port rendered into `Server.xml`; Docker maps `BITRIVER_OME_SIGNALLING_PORT` on the host to this container port. |
-| `BITRIVER_OME_SERVER_TLS_PORT` | `9443` | OME TLS signalling port rendered into `Server.xml` and exposed on the same host/container port. |
-| `BITRIVER_OME_BIND` | `0.0.0.0` | Listener address injected into the generated OME `Server.xml` control listener `<Bind>`/`<IP>` fields and the root `<Bind><Address>` entry. |
-| `BITRIVER_OME_IP` | `0.0.0.0` | Public IP advertised in the top-level `<Server><IP>` block (defaults to `BITRIVER_OME_BIND`). |
-| `BITRIVER_LIVE_POSTGRES_DSN` | `postgres://bitriver:bitriver@postgres:5432/bitriver?sslmode=disable` | Connection string the API uses for its primary database. Combine with `BITRIVER_POSTGRES_HOST_PORT` (default `5432`, profile `postgres-host`) to publish Postgres to the host. |
-| `BITRIVER_LIVE_METRICS_TOKEN` | `metrics-collector-token` | Bearer token required to scrape `/metrics`; production mode refuses to start without this or `BITRIVER_LIVE_METRICS_ALLOW_NETWORKS`. Pair with `BITRIVER_LIVE_METRICS_ALLOW_NETWORKS` (comma-separated CIDRs/IPs) to restrict scrapes to trusted networks. |
-| `BITRIVER_LIVE_RATE_LOGIN_LIMIT` | `10` | Required in production. Caps login attempts per IP within the configured window; raise cautiously. Override `BITRIVER_LIVE_RATE_LOGIN_WINDOW` (default `1m`) to stretch the window if you need fewer attempts over more time. |
-| `BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS` | `false` | Keeps rate-limit IP detection on the direct remote address by default. Only enable when every upstream reverse proxy is explicitly pinned in `BITRIVER_LIVE_RATE_TRUSTED_PROXIES`. |
-| `BITRIVER_LIVE_RATE_TRUSTED_PROXIES` | *(empty)* | Comma-separated trusted proxy CIDRs/IPs allowed to supply `X-Forwarded-*`/`Forwarded` client metadata. Use concrete source ranges (for example Cloudflare egress blocks plus your Nginx Proxy Manager subnet), not `0.0.0.0/0`. |
-| `BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS` | `false` | Controls whether upload media URLs trust forwarded `Host`/`Proto` headers. Keep disabled unless your proxy chain is pinned and sanitizes forwarded headers. |
-| `BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR` | `redis:6379` | Redis endpoint for chat fan-out; update alongside `BITRIVER_REDIS_PASSWORD` if you run Redis outside Compose. |
+- **Host port conflicts (5432/6379/8080/1935/etc.)**  
+  Symptom: Compose service start failures.  
+  Fix: change `*_PORT` values in `.env` or free occupied ports.
 
-The bundled Compose Postgres defaults to `sslmode=disable` because the container does not ship with TLS certificates. For external or managed databases, require TLS by setting `sslmode=require` or `sslmode=verify-full` on `BITRIVER_LIVE_POSTGRES_DSN` and `BITRIVER_LIVE_SESSION_POSTGRES_DSN`. When Postgres uses a private CA, mount the certificate into the Compose bundle (for example, `./certs/postgres-ca.pem`) and append `sslrootcert=/certs/postgres-ca.pem` to the DSNs; the validators refuse `sslmode=disable` unless the DSN points at the local Compose `postgres` service.
+- **Reverse proxy websocket/CORS mistakes**  
+  Symptom: viewer/chat/login failures behind external domains.  
+  Fix: follow `docs/reverse-proxy-npm-cloudflare.md` and `docs/advanced-deployments.md` exactly.
 
-In production mode you must set `BITRIVER_LIVE_METRICS_TOKEN` or
-`BITRIVER_LIVE_METRICS_ALLOW_NETWORKS` to keep the `/metrics` endpoint
-protected; the server will fail fast when both are empty. Production also
-requires non-zero login throttling via `BITRIVER_LIVE_RATE_LOGIN_LIMIT`
-so password spray protection is never skipped.
+- **Unsupported expectation: “no Docker dependencies”**  
+  Current design intentionally centers on Docker Compose; bare-metal custom layouts require manual adaptation.
 
-Common tweaks:
+## 7) Design notes (brief)
 
-Reverse-proxy trust guardrails:
+- Backend architecture is intentionally layered (`cmd -> internal/app -> internal/{api,service,domain} -> adapters`) to keep business rules reusable and testable. See `docs/architecture.md`.
+- Deployment is intentionally standardized to **one Compose + one `.env` contract** to avoid divergent runbooks across platforms.
+- Operational tradeoff: easier onboarding and repeatability, but less flexibility than fully custom multi-cluster setups.
 
-- Keep `BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS=false` and `BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS=false` unless you can pin proxy CIDRs/IPs in `BITRIVER_LIVE_RATE_TRUSTED_PROXIES`.
-- Enabling trust broadly (especially with `BITRIVER_LIVE_RATE_TRUSTED_PROXIES=0.0.0.0/0`) makes `X-Forwarded-*` headers spoofable and can let attackers bypass per-IP throttling or poison generated upload URLs.
+## Additional documentation
 
-Practical proxy examples:
+- Quickstart details: [`docs/quickstart.md`](docs/quickstart.md)
+- Advanced deployments and reverse proxies: [`docs/advanced-deployments.md`](docs/advanced-deployments.md), [`docs/reverse-proxy-npm-cloudflare.md`](docs/reverse-proxy-npm-cloudflare.md)
+- Operations/backups/restores: [`docs/operations.md`](docs/operations.md)
+- Upgrades: [`docs/upgrades.md`](docs/upgrades.md)
+- Testing: [`docs/testing.md`](docs/testing.md), [`docs/testing-status.md`](docs/testing-status.md)
+- Architecture contract: [`docs/architecture.md`](docs/architecture.md)
+- Production release process: [`docs/production-release.md`](docs/production-release.md)
+- Manual frontend QA checklist: [`web/manual-qa.md`](web/manual-qa.md)
 
-- **Single reverse proxy in front of the API:**
-  ```dotenv
-  BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS=true
-  BITRIVER_LIVE_RATE_TRUSTED_PROXIES=10.0.10.5/32
-  BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS=true
-  ```
-- **Cloudflare + Nginx Proxy Manager chain:** trust both Cloudflare source ranges and the NPM private address/CIDR so only known hops can set forwarded headers.
-  ```dotenv
-  BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS=true
-  BITRIVER_LIVE_RATE_TRUSTED_PROXIES=173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,10.0.10.5/32
-  BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS=true
-  ```
+## Development and test commands
 
-- **Change host ports:** Adjust the `*_PORT` values above (for example, move the API to `BITRIVER_LIVE_PORT=9090` or RTMP ingest to `BITRIVER_SRS_RTMP_PORT=1936`) and rerun `docker compose up -d`. Leave `BITRIVER_OME_SIGNALLING_PORT` empty when you want the host binding to track `BITRIVER_OME_SERVER_PORT`; set it explicitly only when the host port must differ from the value baked into `Server.xml`.
-- **Expose the SRS HTTP API for debugging:** Run `docker compose --profile srs-api up -d` (or `BITRIVER_COMPOSE_PROFILES=srs-api docker compose up -d`) to publish `BITRIVER_SRS_API_PORT` on the host. Keep the profile disabled in production and never expose the port to the public internet.
-- **Enable TLS on the API/viewer:** The setup wizard and installers now stage certificates automatically. Provide your certificate and key paths and they will be copied into `deploy/certs/` (Compose) or `<install-dir>/certs` (systemd), update `BITRIVER_LIVE_TLS_CERT`/`BITRIVER_LIVE_TLS_KEY` in `.env`, and restart the service so the API listens with HTTPS.
-- **Lock down viewer origins:** Point `BITRIVER_VIEWER_ORIGIN` and `NEXT_PUBLIC_VIEWER_URL` at your public domain or reverse proxy to align CORS and cookie scope.
-- **Control session lifetimes:** Set `BITRIVER_LIVE_SESSION_TTL` in `.env` to cap absolute session length (for example, `168h` for seven days) and optionally add `BITRIVER_LIVE_SESSION_IDLE_TIMEOUT` to expire idle sessions sooner. Rerun `docker compose up -d` so the API picks up the new values.
-- **Keep OvenMediaEngine credentials in sync:** Whenever you edit `BITRIVER_OME_USERNAME`, `BITRIVER_OME_PASSWORD`, `BITRIVER_OME_API_TOKEN`, `BITRIVER_OME_BIND`, or `BITRIVER_OME_IP` in `.env`, rerun `go run ./cmd/bitriver ome render --force --env-file ./.env` (or the `./scripts/render-ome-config.sh` wrapper) to regenerate `deploy/ome/Server.generated.xml`. The Go renderer overwrites the generated file on every invocation, and the CLI calls it automatically so template changes from `git pull` land before Compose starts. The pinned OME tag (default `0.16.0`) expects a non-empty managers API token; `BITRIVER_OME_API_TOKEN` is the authoritative value for render/runtime auth, and `BITRIVER_OME_HEALTHCHECK_TOKEN` is an optional override for short-lived operational exceptions. The compose bundle still runs a lightweight `ome-config` preflight before starting `ome`; it will fail fast if the generated file is missing, so fix and re-render before retrying `docker compose up -d`.
-
-Find deeper explanations and additional variables (rate limiting, transcoder public URLs, external Redis/Postgres) in [`docs/quickstart.md`](docs/quickstart.md).
-
-### Appendix: Health endpoints (advanced)
-
-The dashboard’s **System status** card is the primary health check for operators. For automation or low-level debugging:
-
-- `/api/status` returns the aggregated health payload used by the dashboard, including remediation hints and log suggestions.
-- `/readyz` reports core dependency readiness (database, session store, rate limiting) for load balancers.
-- `/healthz` adds ingest details to `/readyz` but keeps HTTP 200 unless core dependencies are down.
-
-## Need more control?
-
-- **Tweak settings:** Edit `.env` to change domain names, exposed ports, Redis/Postgres credentials, or viewer origins, then run
-  `docker compose up -d` again to apply the changes.
-- **Install TLS / go beyond one host:** Follow [`docs/advanced-deployments.md`](docs/advanced-deployments.md). For Cloudflare + Nginx Proxy Manager routing, use [`docs/reverse-proxy-npm-cloudflare.md`](docs/reverse-proxy-npm-cloudflare.md).
-- **Run backups + restores:** Use the operations runbook in [`docs/operations.md`](docs/operations.md) for Postgres, Redis,
-  and transcoder/recordings data.
-- **Plan upgrades:** Follow [`docs/upgrades.md`](docs/upgrades.md#upgrade-essentials-migrations-env-updates-and-ome-re-render) for the safe Compose upgrade flow, migration timing, and `.env`/OME template handling.
-- **Understand every service:** Read [`docs/production-release.md`](docs/production-release.md) and the release notes under
-  `docs/releases/` when preparing a launch.
-- **Follow package boundaries:** Use [`docs/architecture.md`](docs/architecture.md) as the rigid layering and dependency-direction contract before refactors or new feature work.
-- **Plan for portability:** Review [`docs/cross-platform-plan.md`](docs/cross-platform-plan.md) for the current platform
-  assumptions, shipped installer milestones, and the remaining control-plane roadmap.
-- **Legal policy publication:** Review and publish [`docs/legal/terms.md`](docs/legal/terms.md), [`docs/legal/privacy.md`](docs/legal/privacy.md), [`docs/legal/dmca.md`](docs/legal/dmca.md), and [`docs/legal/age-policy.md`](docs/legal/age-policy.md) before launch.
-- **AI-assisted edits:** Use the [Codex CLI guide](docs/codex-cli.md) to install the CLI, authenticate, and point it at this repository.
-
-## Manual development workflow (optional)
-
-You only need the steps below if you want to hack on the Go code without Docker Compose.
-
-### Local Postgres + Redis
-
-```bash
-# Start databases
-docker run --rm --name bitriver-postgres \
-  -e POSTGRES_PASSWORD=bitriver \
-  -e POSTGRES_USER=bitriver \
-  -e POSTGRES_DB=bitriver_live \
-  -p 5432:5432 postgres:15-alpine &
-
-docker run --rm --name bitriver-redis -p 6379:6379 redis:7-alpine &
-
-# Apply migrations
-for file in deploy/migrations/*.sql; do \
-  psql "postgres://bitriver:bitriver@127.0.0.1:5432/bitriver_live?sslmode=disable" -f "$file"; \
-done
-
-# Run the API
-BITRIVER_LIVE_MODE=development \
-BITRIVER_LIVE_POSTGRES_DSN="postgres://bitriver:bitriver@127.0.0.1:5432/bitriver_live?sslmode=disable" \
-BITRIVER_LIVE_SESSION_STORE=postgres \
-BITRIVER_LIVE_SESSION_POSTGRES_DSN="postgres://bitriver:bitriver@127.0.0.1:5432/bitriver_live?sslmode=disable" \
-go run -tags postgres ./cmd/server \
-  --mode development \
-  --chat-queue-driver redis \
-  --chat-queue-redis-addr 127.0.0.1:6379
-```
-
-Seed an admin via Postgres:
-
-```bash
-go run -tags postgres ./cmd/tools/bootstrap-admin \
-  --postgres-dsn "postgres://bitriver:bitriver@127.0.0.1:5432/bitriver_live?sslmode=disable" \
-  --email you@example.com \
-  --name "Your Name" \
-  --password "temporary-password"
-```
-
-Session tokens stored via the Postgres session backend are hashed (SHA-256) on
-write so bearer tokens are not exposed to database operators. Apply the latest
-`deploy/migrations` SQL files (including
-`0004_auth_session_hashes.sql`) before booting the API to ensure the hashed
-column exists.
-
-## Architecture at a glance
-
-```mermaid
-flowchart LR
-    Creator((OBS / Encoder)) -->|RTMP| SRS
-    SRS -->|live media| Transcoder
-    Transcoder -->|HLS segments| OME[OvenMediaEngine]
-    Viewer[Next.js Viewer] -->|HTTPS /viewer| API
-    Admin[Control Centre SPA] -->|HTTPS| API
-    API[(Go API)] -->|REST| Postgres
-    API -->|chat + sessions| Redis
-    API -->|stream control| SRS
-    API -->|packaging control| OME
-    API -->|jobs| Transcoder
-```
-
-## Repository layout
-
-| Path | Purpose |
-| --- | --- |
-| `cmd/server` | Go HTTP API and control centre binary |
-| `cmd/transcoder` | FFmpeg job controller used by Docker and advanced deployments |
-| `cmd/tools` | Helper CLIs (for example, `bootstrap-admin`) |
-| [`deploy/`](deploy/README.md) | Docker Compose stack, systemd units, and SQL migrations |
-| `docs/` | Guides for installs, scaling, releases, and troubleshooting |
-| `internal/` | API handlers, chat, ingest orchestration, storage, auth |
-| `web/static` | Embedded admin UI assets served by the Go binary |
-| `web/viewer` | Public Next.js viewer |
-
-## Tests
+Go (offline module policy in this repository):
 
 ```bash
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
 ```
 
-
-## Dependency source of truth
-
-Offline Go dependency resolution is pinned through `go.mod` `replace`
-directives that target local modules under `third_party/`. The repository does
-not use `vendor/` as a parallel dependency tree. Run
-`./scripts/check-dependency-source.sh` to fail fast if duplicate copies appear.
-
-See [`docs/testing.md`](docs/testing.md) for suite-specific instructions and
-[`docs/testing-status.md`](docs/testing-status.md) for the latest reliability
-notes.
-
-Need Postgres-backed tests? Use the helper:
+Viewer:
 
 ```bash
-./scripts/test-postgres.sh ./internal/storage/...
+cd web/viewer
+npm install
+npm run lint
+npm run test
+npm run test:playwright
 ```
 
-The script keeps module access offline (`GOPROXY=off GOSUMDB=off`) and relies on
-local `replace` targets under `third_party/` so `go.mod`/`go.sum` stay untouched.
+## NOTE
 
-Questions or improvements? Open an issue or explore `internal/api/handlers.go` to start extending the platform.
+If you find behavior in code that conflicts with docs, treat code as the immediate source of truth for runtime behavior and open a docs follow-up issue/PR. This repository has both operational docs and planning docs; when in doubt, use the operational runbooks under `docs/` that reference the current Compose pipeline.
