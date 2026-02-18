@@ -30,6 +30,10 @@ type Handler struct {
 	ChatGateway           *chat.Gateway
 	OAuth                 oauth.Service
 	UploadProcessor       *UploadProcessor
+	AuthUsersService      service.AuthUsersUseCase
+	ChannelsService       service.ChannelsDirectoryUseCase
+	UploadsService        service.UploadsUseCase
+	RecordingsService     service.RecordingsVODUseCase
 	LegalService          *service.LegalService
 	PaymentService        *service.PaymentService
 	WebhookSecrets        map[string]string
@@ -69,6 +73,10 @@ func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handle
 		DefaultRenditions:   []string{"1080p", "720p", "480p"},
 		AllowSelfSignup:     true,
 		SessionCookiePolicy: DefaultSessionCookiePolicy(),
+		AuthUsersService:    service.NewStoreUseCases(store),
+		ChannelsService:     service.NewStoreUseCases(store),
+		UploadsService:      service.NewStoreUseCases(store),
+		RecordingsService:   service.NewStoreUseCases(store),
 		LegalService:        service.NewLegalService(store),
 		PaymentService:      service.NewPaymentService(store, slog.Default()),
 		WebhookSecrets:      map[string]string{},
@@ -77,6 +85,35 @@ func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handle
 }
 
 // sessionManager performs session manager and propagates validation or dependency failures to the caller.
+
+func (h *Handler) authUsersService() service.AuthUsersUseCase {
+	if h.AuthUsersService == nil {
+		h.AuthUsersService = service.NewStoreUseCases(h.Store)
+	}
+	return h.AuthUsersService
+}
+
+func (h *Handler) channelsService() service.ChannelsDirectoryUseCase {
+	if h.ChannelsService == nil {
+		h.ChannelsService = service.NewStoreUseCases(h.Store)
+	}
+	return h.ChannelsService
+}
+
+func (h *Handler) uploadsService() service.UploadsUseCase {
+	if h.UploadsService == nil {
+		h.UploadsService = service.NewStoreUseCases(h.Store)
+	}
+	return h.UploadsService
+}
+
+func (h *Handler) recordingsService() service.RecordingsVODUseCase {
+	if h.RecordingsService == nil {
+		h.RecordingsService = service.NewStoreUseCases(h.Store)
+	}
+	return h.RecordingsService
+}
+
 func (h *Handler) sessionManager() *auth.SessionManager {
 	if h.Sessions == nil {
 		h.Sessions = auth.NewSessionManager(0)

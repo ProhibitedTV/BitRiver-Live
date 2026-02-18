@@ -137,7 +137,7 @@ func (h *Handler) Directory(w http.ResponseWriter, r *http.Request) {
 	if r.URL != nil {
 		query = strings.TrimSpace(r.URL.Query().Get("q"))
 	}
-	channels := h.Store.ListChannels("", query)
+	channels := h.channelsService().ListChannels("", query)
 	h.writeDirectoryResponse(w, channels)
 }
 
@@ -148,7 +148,7 @@ func (h *Handler) DirectoryFeatured(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	profiles := h.Store.ListProfiles()
+	profiles := h.channelsService().ListProfiles()
 	channelIDs := make(map[string]struct{}, len(profiles))
 	for _, profile := range profiles {
 		if profile.FeaturedChannelID == nil {
@@ -163,7 +163,7 @@ func (h *Handler) DirectoryFeatured(w http.ResponseWriter, r *http.Request) {
 
 	channels := make([]models.Channel, 0, len(channelIDs))
 	for id := range channelIDs {
-		if channel, ok := h.Store.GetChannel(id); ok {
+		if channel, ok := h.channelsService().GetChannel(id); ok {
 			channels = append(channels, channel)
 		}
 	}
@@ -178,7 +178,7 @@ func (h *Handler) DirectoryRecommended(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	channels := h.Store.ListChannels("", "")
+	channels := h.channelsService().ListChannels("", "")
 	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, false))
 }
 
@@ -189,7 +189,7 @@ func (h *Handler) DirectoryLive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	channels := h.Store.ListChannels("", "")
+	channels := h.channelsService().ListChannels("", "")
 	channels = filterLiveChannels(channels)
 	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, true))
 }
@@ -201,7 +201,7 @@ func (h *Handler) DirectoryTrending(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	channels := filterLiveChannels(h.Store.ListChannels("", ""))
+	channels := filterLiveChannels(h.channelsService().ListChannels("", ""))
 	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, true))
 }
 
@@ -212,7 +212,7 @@ func (h *Handler) DirectoryCategories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	channels := filterLiveChannels(h.Store.ListChannels("", ""))
+	channels := filterLiveChannels(h.channelsService().ListChannels("", ""))
 	counts := make(map[string]int)
 	for _, channel := range channels {
 		category := strings.TrimSpace(channel.Category)
@@ -252,7 +252,7 @@ func filterLiveChannels(channels []models.Channel) []models.Channel {
 func (h *Handler) sortChannelsByFollowers(channels []models.Channel, liveFirst bool) []models.Channel {
 	followers := make(map[string]int, len(channels))
 	for _, channel := range channels {
-		followers[channel.ID] = h.Store.CountFollowers(channel.ID)
+		followers[channel.ID] = h.channelsService().CountFollowers(channel.ID)
 	}
 	sort.Slice(channels, func(i, j int) bool {
 		if liveFirst {
@@ -282,10 +282,10 @@ func (h *Handler) DirectoryFollowing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	channelIDs := h.Store.ListFollowedChannelIDs(viewer.ID)
+	channelIDs := h.channelsService().ListFollowedChannelIDs(viewer.ID)
 	channels := make([]models.Channel, 0, len(channelIDs))
 	for _, id := range channelIDs {
-		channel, exists := h.Store.GetChannel(id)
+		channel, exists := h.channelsService().GetChannel(id)
 		if !exists {
 			continue
 		}
@@ -302,12 +302,12 @@ func (h *Handler) DirectoryFollowing(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) writeDirectoryResponse(w http.ResponseWriter, channels []models.Channel) {
 	response := make([]directoryChannelResponse, 0, len(channels))
 	for _, channel := range channels {
-		owner, exists := h.Store.GetUser(channel.OwnerID)
+		owner, exists := h.channelsService().GetUser(channel.OwnerID)
 		if !exists {
 			continue
 		}
-		profile, _ := h.Store.GetProfile(owner.ID)
-		followerCount := h.Store.CountFollowers(channel.ID)
+		profile, _ := h.channelsService().GetProfile(owner.ID)
+		followerCount := h.channelsService().CountFollowers(channel.ID)
 		response = append(response, directoryChannelResponse{
 			Channel:       newChannelPublicResponse(channel),
 			Owner:         newOwnerResponse(owner, profile),
@@ -391,7 +391,7 @@ func newProfileSummaryResponse(profile models.Profile) profileSummaryResponse {
 
 // subscriptionState performs subscription state and propagates validation or dependency failures to the caller.
 func (h *Handler) subscriptionState(channelID string, actor *models.User) (subscriptionStateResponse, error) {
-	subs, err := h.Store.ListSubscriptions(channelID, false)
+	subs, err := h.channelsService().ListSubscriptions(channelID, false)
 	if err != nil {
 		return subscriptionStateResponse{}, err
 	}
@@ -432,7 +432,7 @@ func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		channels := h.Store.ListChannels(ownerID, "")
+		channels := h.channelsService().ListChannels(ownerID, "")
 		if ownerID == actor.ID || actor.HasRole(roleAdmin) {
 			response := make([]channelResponse, 0, len(channels))
 			for _, channel := range channels {
@@ -463,7 +463,7 @@ func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
-		channel, err := h.Store.CreateChannel(req.OwnerID, req.Title, req.Category, req.Tags)
+		channel, err := h.channelsService().CreateChannel(req.OwnerID, req.Title, req.Category, req.Tags)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
@@ -490,7 +490,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 1 {
 		switch r.Method {
 		case http.MethodGet:
-			channel, ok := h.Store.GetChannel(channelID)
+			channel, ok := h.channelsService().GetChannel(channelID)
 			if !ok {
 				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
@@ -501,7 +501,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			}
 			WriteJSON(w, http.StatusOK, newChannelPublicResponse(channel))
 		case http.MethodPatch:
-			channel, ok := h.Store.GetChannel(channelID)
+			channel, ok := h.channelsService().GetChannel(channelID)
 			if !ok {
 				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
@@ -524,14 +524,14 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				tagsCopy := append([]string{}, (*req.Tags)...)
 				update.Tags = &tagsCopy
 			}
-			channel, err := h.Store.UpdateChannel(channelID, update)
+			channel, err := h.channelsService().UpdateChannel(channelID, update)
 			if err != nil {
 				WriteError(w, http.StatusBadRequest, err)
 				return
 			}
 			WriteJSON(w, http.StatusOK, newChannelResponse(channel))
 		case http.MethodDelete:
-			channel, ok := h.Store.GetChannel(channelID)
+			channel, ok := h.channelsService().GetChannel(channelID)
 			if !ok {
 				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
@@ -539,7 +539,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			if _, ok := h.ensureChannelAccess(w, r, channel); !ok {
 				return
 			}
-			if err := h.Store.DeleteChannel(channelID); err != nil {
+			if err := h.channelsService().DeleteChannel(channelID); err != nil {
 				WriteError(w, http.StatusBadRequest, err)
 				return
 			}
@@ -554,7 +554,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 		switch parts[1] {
 		case "playback":
 			// Public playback metadata is intentionally readable without channel ownership checks so viewers can bootstrap players from a single response.
-			channel, ok := h.Store.GetChannel(channelID)
+			channel, ok := h.channelsService().GetChannel(channelID)
 			if !ok {
 				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
@@ -563,16 +563,16 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				WriteMethodNotAllowed(w, r, http.MethodGet)
 				return
 			}
-			owner, exists := h.Store.GetUser(channel.OwnerID)
+			owner, exists := h.channelsService().GetUser(channel.OwnerID)
 			if !exists {
 				WriteError(w, http.StatusInternalServerError, fmt.Errorf("channel owner %s not found", channel.OwnerID))
 				return
 			}
-			profile, _ := h.Store.GetProfile(owner.ID)
-			follow := followStateResponse{Followers: h.Store.CountFollowers(channel.ID)}
+			profile, _ := h.channelsService().GetProfile(owner.ID)
+			follow := followStateResponse{Followers: h.channelsService().CountFollowers(channel.ID)}
 			var viewer *models.User
 			if actor, ok := UserFromContext(r.Context()); ok {
-				follow.Following = h.Store.IsFollowingChannel(actor.ID, channel.ID)
+				follow.Following = h.channelsService().IsFollowingChannel(actor.ID, channel.ID)
 				viewer = &actor
 			}
 			donations := make([]cryptoAddressResponse, 0, len(profile.DonationAddresses))
@@ -598,7 +598,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				WriteError(w, http.StatusInternalServerError, err)
 				return
 			}
-			if session, live := h.Store.CurrentStreamSession(channel.ID); live {
+			if session, live := h.channelsService().CurrentStreamSession(channel.ID); live {
 				playback := playbackStreamResponse{
 					SessionID: session.ID,
 					StartedAt: session.StartedAt.Format(time.RFC3339Nano),
@@ -638,7 +638,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			WriteJSON(w, http.StatusOK, response)
 			return
 		case "stream":
-			channel, ok := h.Store.GetChannel(channelID)
+			channel, ok := h.channelsService().GetChannel(channelID)
 			if !ok {
 				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
@@ -647,7 +647,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			return
 		case "sessions":
 			// Session history is owner-only telemetry; callers must be authorized and receive the full stream timeline for control-plane tooling.
-			channel, ok := h.Store.GetChannel(channelID)
+			channel, ok := h.channelsService().GetChannel(channelID)
 			if !ok {
 				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
@@ -659,7 +659,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				WriteMethodNotAllowed(w, r, http.MethodGet)
 				return
 			}
-			sessions, err := h.Store.ListStreamSessions(channelID)
+			sessions, err := h.channelsService().ListStreamSessions(channelID)
 			if err != nil {
 				WriteError(w, http.StatusBadRequest, err)
 				return
@@ -676,7 +676,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				WriteError(w, http.StatusNotFound, fmt.Errorf("unknown channel path"))
 				return
 			}
-			if _, ok := h.Store.GetChannel(channelID); !ok {
+			if _, ok := h.channelsService().GetChannel(channelID); !ok {
 				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
 			}
@@ -686,12 +686,12 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			}
 			switch r.Method {
 			case http.MethodPost:
-				if err := h.Store.FollowChannel(actor.ID, channelID); err != nil {
+				if err := h.channelsService().FollowChannel(actor.ID, channelID); err != nil {
 					WriteError(w, http.StatusBadRequest, err)
 					return
 				}
 			case http.MethodDelete:
-				if err := h.Store.UnfollowChannel(actor.ID, channelID); err != nil {
+				if err := h.channelsService().UnfollowChannel(actor.ID, channelID); err != nil {
 					WriteError(w, http.StatusBadRequest, err)
 					return
 				}
@@ -700,8 +700,8 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			state := followStateResponse{
-				Followers: h.Store.CountFollowers(channelID),
-				Following: h.Store.IsFollowingChannel(actor.ID, channelID),
+				Followers: h.channelsService().CountFollowers(channelID),
+				Following: h.channelsService().IsFollowingChannel(actor.ID, channelID),
 			}
 			WriteJSON(w, http.StatusOK, state)
 			return
@@ -711,7 +711,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				WriteError(w, http.StatusNotFound, fmt.Errorf("unknown channel path"))
 				return
 			}
-			channel, ok := h.Store.GetChannel(channelID)
+			channel, ok := h.channelsService().GetChannel(channelID)
 			if !ok {
 				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
@@ -733,7 +733,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				if !ok {
 					return
 				}
-				subs, err := h.Store.ListSubscriptions(channel.ID, false)
+				subs, err := h.channelsService().ListSubscriptions(channel.ID, false)
 				if err != nil {
 					WriteError(w, http.StatusBadRequest, err)
 					return
@@ -757,7 +757,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 						Duration:  30 * 24 * time.Hour,
 						AutoRenew: true,
 					}
-					sub, err := h.Store.CreateSubscription(params)
+					sub, err := h.channelsService().CreateSubscription(params)
 					if err != nil {
 						WriteError(w, http.StatusBadRequest, err)
 						return
@@ -775,7 +775,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				if !ok {
 					return
 				}
-				subs, err := h.Store.ListSubscriptions(channel.ID, false)
+				subs, err := h.channelsService().ListSubscriptions(channel.ID, false)
 				if err != nil {
 					WriteError(w, http.StatusBadRequest, err)
 					return
@@ -788,7 +788,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 				if subscriptionID != "" {
-					if _, err := h.Store.CancelSubscription(subscriptionID, actor.ID, ""); err != nil {
+					if _, err := h.channelsService().CancelSubscription(subscriptionID, actor.ID, ""); err != nil {
 						WriteError(w, http.StatusBadRequest, err)
 						return
 					}
@@ -812,12 +812,12 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				WriteMethodNotAllowed(w, r, http.MethodGet)
 				return
 			}
-			channel, ok := h.Store.GetChannel(channelID)
+			channel, ok := h.channelsService().GetChannel(channelID)
 			if !ok {
 				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return
 			}
-			uploads, err := h.Store.ListUploads(channelID)
+			uploads, err := h.channelsService().ListUploads(channelID)
 			if err != nil {
 				WriteError(w, http.StatusBadRequest, err)
 				return
@@ -827,7 +827,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				if upload.RecordingID == nil {
 					continue
 				}
-				recording, ok := h.Store.GetRecording(*upload.RecordingID)
+				recording, ok := h.channelsService().GetRecording(*upload.RecordingID)
 				if !ok {
 					continue
 				}
@@ -847,7 +847,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			h.handleChatRoutes(channelID, parts[2:], w, r)
 			return
 		case "monetization":
-			channel, ok := h.Store.GetChannel(channelID)
+			channel, ok := h.channelsService().GetChannel(channelID)
 			if !ok {
 				WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 				return

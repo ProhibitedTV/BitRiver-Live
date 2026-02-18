@@ -25,7 +25,7 @@ Rules:
 
 1. `cmd/*` contains process entrypoints only (flags, config loading, startup/shutdown wiring). `cmd/server` must delegate dependency composition to `internal/app.NewServerRuntime`.
 2. `internal/app` orchestrates composition and lifecycle management; it can wire concrete adapters to interfaces.
-3. `internal/api` contains transport handlers and request/response translation only.
+3. `internal/api` contains transport handlers and request/response translation only. Handlers must depend on use-case interfaces (owned by `internal/service` or `internal/domain`) and must not call `storage.Repository` directly for business operations.
 4. `internal/service` contains use-case/application logic.
 5. `internal/domain` contains core domain models, invariants, and domain-level interfaces.
 6. `internal/storage`, `internal/ingest`, `internal/chat`, `internal/auth`, and `internal/observability` are infrastructure and integration adapters.

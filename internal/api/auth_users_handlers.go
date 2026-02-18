@@ -35,7 +35,7 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.Store.CreateUser(storage.CreateUserParams{
+	user, err := h.authUsersService().CreateUser(storage.CreateUserParams{
 		DisplayName: req.DisplayName,
 		Email:       req.Email,
 		Password:    req.Password,
@@ -69,7 +69,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.Store.AuthenticateUser(req.Email, req.Password)
+	user, err := h.authUsersService().AuthenticateUser(req.Email, req.Password)
 	if err != nil {
 		WriteRequestError(w, RequestError{Status: http.StatusUnauthorized, CodeVal: "invalid_credentials", Message: "invalid credentials", Err: err})
 		return
@@ -93,7 +93,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 				WriteError(w, http.StatusInternalServerError, err)
 				return
 			}
-			if _, err := h.Store.UpsertMFASettings(updated); err != nil {
+			if _, err := h.authUsersService().UpsertMFASettings(updated); err != nil {
 				WriteError(w, http.StatusInternalServerError, err)
 				return
 			}
@@ -223,7 +223,7 @@ func (h *Handler) oauthCallback(w http.ResponseWriter, r *http.Request, provider
 		return
 	}
 
-	user, err := h.Store.AuthenticateOAuth(storage.OAuthLoginParams{
+	user, err := h.authUsersService().AuthenticateOAuth(storage.OAuthLoginParams{
 		Provider:    completion.Profile.Provider,
 		Subject:     completion.Profile.Subject,
 		Email:       completion.Profile.Email,
@@ -347,7 +347,7 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusUnauthorized, fmt.Errorf("invalid or expired session"))
 			return
 		}
-		user, exists := h.Store.GetUser(userID)
+		user, exists := h.authUsersService().GetUser(userID)
 		if !exists {
 			WriteError(w, http.StatusUnauthorized, fmt.Errorf("account not found"))
 			return
@@ -457,7 +457,7 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 		if _, ok := h.requireRole(w, r, roleAdmin); !ok {
 			return
 		}
-		users := h.Store.ListUsers()
+		users := h.authUsersService().ListUsers()
 		response := make([]userResponse, 0, len(users))
 		for _, user := range users {
 			response = append(response, newUserResponse(user))
@@ -471,7 +471,7 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
-		user, err := h.Store.CreateUser(storage.CreateUserParams{
+		user, err := h.authUsersService().CreateUser(storage.CreateUserParams{
 			DisplayName: req.DisplayName,
 			Email:       req.Email,
 			Roles:       req.Roles,
@@ -505,7 +505,7 @@ func (h *Handler) UserByID(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
-		user, ok := h.Store.GetUser(id)
+		user, ok := h.authUsersService().GetUser(id)
 		if !ok {
 			WriteError(w, http.StatusNotFound, fmt.Errorf("user %s not found", id))
 			return
@@ -530,7 +530,7 @@ func (h *Handler) UserByID(w http.ResponseWriter, r *http.Request) {
 			rolesCopy := append([]string{}, (*req.Roles)...)
 			update.Roles = &rolesCopy
 		}
-		user, err := h.Store.UpdateUser(id, update)
+		user, err := h.authUsersService().UpdateUser(id, update)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
@@ -540,7 +540,7 @@ func (h *Handler) UserByID(w http.ResponseWriter, r *http.Request) {
 		if _, ok := h.requireRole(w, r, roleAdmin); !ok {
 			return
 		}
-		if err := h.Store.DeleteUser(id); err != nil {
+		if err := h.authUsersService().DeleteUser(id); err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
