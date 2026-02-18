@@ -60,7 +60,7 @@ func (h *Handler) AuthenticateRequest(r *http.Request) (models.User, time.Time, 
 		return models.User{}, time.Time{}, fmt.Errorf("invalid or expired session")
 	}
 
-	user, exists := h.Store.GetUser(userID)
+	user, exists := h.authUsersService().GetUser(userID)
 	if !exists {
 		return models.User{}, time.Time{}, fmt.Errorf("account not found")
 	}

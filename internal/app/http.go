@@ -7,6 +7,7 @@ import (
 	"bitriver-live/internal/auth"
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/server"
+	"bitriver-live/internal/service"
 	"bitriver-live/internal/storage"
 )
 
@@ -26,12 +27,23 @@ type HandlerConfig struct {
 	SRSHookToken          string
 	TrustForwardedHeaders bool
 	ChatQueue             healthPinger
+	AuthUsersService      service.AuthUsersUseCase
+	ChannelsService       service.ChannelsDirectoryUseCase
+	UploadsService        service.UploadsUseCase
+	RecordingsService     service.RecordingsVODUseCase
+	ChatModerationService service.ChatModerationUseCase
+	LegalService          service.LegalComplianceUseCase
+	StreamsService        service.StreamsUseCase
+	ProfilesService       service.ProfilesUseCase
+	AnalyticsService      service.AnalyticsUseCase
+	SystemService         service.SystemHealthUseCase
+	MonetizationService   service.MonetizationUseCase
+	PaymentService        *service.PaymentService
 }
 
 // NewHandler composes API transport with services and infrastructure adapters.
 func NewHandler(cfg HandlerConfig) *api.Handler {
-	handler := api.NewHandler(cfg.Store, cfg.Sessions)
-	handler.MFAChallenges = cfg.MFAChallenges
+	handler := api.NewHandler(api.Dependencies{Sessions: cfg.Sessions, MFAChallenges: cfg.MFAChallenges, AuthUsersService: cfg.AuthUsersService, ChannelsService: cfg.ChannelsService, UploadsService: cfg.UploadsService, RecordingsService: cfg.RecordingsService, ChatModerationService: cfg.ChatModerationService, LegalService: cfg.LegalService, StreamsService: cfg.StreamsService, ProfilesService: cfg.ProfilesService, AnalyticsService: cfg.AnalyticsService, SystemService: cfg.SystemService, MonetizationService: cfg.MonetizationService, PaymentService: cfg.PaymentService})
 	handler.AllowSelfSignup = cfg.AllowSelfSignup
 	handler.ChatGateway = cfg.ChatGateway
 	handler.Setup = cfg.Setup

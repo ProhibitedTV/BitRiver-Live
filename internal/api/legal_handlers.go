@@ -45,7 +45,7 @@ func (h *Handler) LegalDMCA(w http.ResponseWriter, r *http.Request) {
 		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
-		rec, err := h.LegalService.CreateDMCACase(domain.DMCACaseCreateParams{ReporterName: req.ReporterName, ReporterEmail: req.ReporterEmail, ContentURL: req.ContentURL, Description: req.Description})
+		rec, err := h.legalService().CreateDMCACase(domain.DMCACaseCreateParams{ReporterName: req.ReporterName, ReporterEmail: req.ReporterEmail, ContentURL: req.ContentURL, Description: req.Description})
 		if err != nil {
 			WriteRequestError(w, err)
 			return
@@ -55,7 +55,7 @@ func (h *Handler) LegalDMCA(w http.ResponseWriter, r *http.Request) {
 		if _, ok := h.requireRole(w, r, roleAdmin); !ok {
 			return
 		}
-		rows, err := h.Store.ListDMCACases()
+		rows, err := h.legalService().ListDMCACases()
 		if err != nil {
 			WriteError(w, http.StatusInternalServerError, err)
 			return
@@ -82,19 +82,19 @@ func (h *Handler) LegalDMCAByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		actor, _ := h.requireAuthenticatedUser(w, r)
-		rec, err := h.LegalService.UpdateDMCACase(id, req.Status, req.Notes, actor.ID)
+		rec, err := h.legalService().UpdateDMCACase(id, req.Status, req.Notes, actor.ID)
 		if err != nil {
 			WriteRequestError(w, err)
 			return
 		}
 		WriteJSON(w, http.StatusOK, rec)
 	case http.MethodGet:
-		rec, ok := h.Store.GetDMCACase(id)
+		rec, ok := h.legalService().GetDMCACase(id)
 		if !ok {
 			WriteError(w, http.StatusNotFound, errNotFound("dmca"))
 			return
 		}
-		history, _ := h.Store.ListLegalStateHistory("dmca", id)
+		history, _ := h.legalService().ListLegalStateHistory("dmca", id)
 		WriteJSON(w, http.StatusOK, map[string]any{"case": rec, "history": history})
 	default:
 		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPatch)
@@ -111,14 +111,14 @@ func (h *Handler) LegalDataSubject(w http.ResponseWriter, r *http.Request) {
 		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
-		rec, err := h.LegalService.CreateDataSubjectRequest(domain.DataSubjectRequestCreateParams{SubjectEmail: req.SubjectEmail, RequestType: req.RequestType, Notes: req.Notes})
+		rec, err := h.legalService().CreateDataSubjectRequest(domain.DataSubjectRequestCreateParams{SubjectEmail: req.SubjectEmail, RequestType: req.RequestType, Notes: req.Notes})
 		if err != nil {
 			WriteRequestError(w, err)
 			return
 		}
 		WriteJSON(w, http.StatusCreated, rec)
 	case http.MethodGet:
-		rows, err := h.Store.ListDataSubjectRequests()
+		rows, err := h.legalService().ListDataSubjectRequests()
 		if err != nil {
 			WriteError(w, http.StatusInternalServerError, err)
 			return
@@ -147,7 +147,7 @@ func (h *Handler) LegalDataSubjectByID(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			actor, _ := h.requireAuthenticatedUser(w, r)
-			evt, err := h.Store.AddDataSubjectAuditEvent(requestID, storage.CreateDataSubjectAuditEventParams{ActorUserID: actor.ID, Action: req.Action, Details: req.Details, EvidenceRef: req.EvidenceRef})
+			evt, err := h.legalService().AddDataSubjectAuditEvent(requestID, storage.CreateDataSubjectAuditEventParams{ActorUserID: actor.ID, Action: req.Action, Details: req.Details, EvidenceRef: req.EvidenceRef})
 			if err != nil {
 				WriteRequestError(w, err)
 				return
@@ -156,7 +156,7 @@ func (h *Handler) LegalDataSubjectByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.Method == http.MethodGet {
-			events, err := h.Store.ListDataSubjectAuditEvents(requestID)
+			events, err := h.legalService().ListDataSubjectAuditEvents(requestID)
 			if err != nil {
 				WriteError(w, http.StatusInternalServerError, err)
 				return
@@ -172,20 +172,20 @@ func (h *Handler) LegalDataSubjectByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		actor, _ := h.requireAuthenticatedUser(w, r)
-		rec, err := h.LegalService.UpdateDataSubjectRequest(id, req.Status, req.Notes, actor.ID)
+		rec, err := h.legalService().UpdateDataSubjectRequest(id, req.Status, req.Notes, actor.ID)
 		if err != nil {
 			WriteRequestError(w, err)
 			return
 		}
 		WriteJSON(w, http.StatusOK, rec)
 	case http.MethodGet:
-		rec, ok := h.Store.GetDataSubjectRequest(id)
+		rec, ok := h.legalService().GetDataSubjectRequest(id)
 		if !ok {
 			WriteError(w, http.StatusNotFound, errNotFound("request"))
 			return
 		}
-		history, _ := h.Store.ListLegalStateHistory("data_subject", id)
-		audit, _ := h.Store.ListDataSubjectAuditEvents(id)
+		history, _ := h.legalService().ListLegalStateHistory("data_subject", id)
+		audit, _ := h.legalService().ListDataSubjectAuditEvents(id)
 		WriteJSON(w, http.StatusOK, map[string]any{"request": rec, "history": history, "audit": audit})
 	default:
 		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPatch)

@@ -24,10 +24,10 @@ func normalizeSRSAction(action string) string {
 // channelForStream performs channel for stream and propagates validation or dependency failures to the caller.
 func (h *Handler) channelForStream(stream string) (models.Channel, bool) {
 	trimmed := strings.TrimSpace(stream)
-	if trimmed == "" || h.Store == nil {
+	if trimmed == "" || h.streamsService() == nil {
 		return models.Channel{}, false
 	}
-	channels := h.Store.ListChannels("", "")
+	channels := h.streamsService().ListChannels("", "")
 	for _, channel := range channels {
 		if channel.StreamKey == trimmed || channel.ID == trimmed {
 			return channel, true
@@ -173,12 +173,12 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 
 // handleSRSPublish routes and serves srspublish requests, writing HTTP errors for invalid input or backend failures.
 func (h *Handler) handleSRSPublish(channel models.Channel, w http.ResponseWriter, r *http.Request) {
-	if current, ok := h.Store.CurrentStreamSession(channel.ID); ok {
+	if current, ok := h.streamsService().CurrentStreamSession(channel.ID); ok {
 		WriteJSON(w, http.StatusOK, srsHookResponse{Status: "ok", Action: "on_publish", ChannelID: channel.ID, SessionID: current.ID})
 		return
 	}
 
-	session, err := h.Store.StartStream(channel.ID, h.srsRenditions())
+	session, err := h.streamsService().StartStream(channel.ID, h.srsRenditions())
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, storage.ErrIngestControllerUnavailable) {
@@ -193,8 +193,8 @@ func (h *Handler) handleSRSPublish(channel models.Channel, w http.ResponseWriter
 
 // handleSRSUnpublish routes and serves srsunpublish requests, writing HTTP errors for invalid input or backend failures.
 func (h *Handler) handleSRSUnpublish(channel models.Channel, peak int, tracker *srsViewerTracker, w http.ResponseWriter) {
-	if _, ok := h.Store.CurrentStreamSession(channel.ID); ok {
-		session, err := h.Store.StopStream(channel.ID, peak)
+	if _, ok := h.streamsService().CurrentStreamSession(channel.ID); ok {
+		session, err := h.streamsService().StopStream(channel.ID, peak)
 		if err != nil {
 			status := http.StatusBadRequest
 			if errors.Is(err, storage.ErrIngestControllerUnavailable) {
@@ -216,7 +216,7 @@ func (h *Handler) handleSRSUnpublish(channel models.Channel, peak int, tracker *
 	}
 
 	offline := "offline"
-	if _, err := h.Store.UpdateChannel(channel.ID, storage.ChannelUpdate{LiveState: &offline}); err != nil {
+	if _, err := h.streamsService().UpdateChannel(channel.ID, storage.ChannelUpdate{LiveState: &offline}); err != nil {
 		WriteError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -264,7 +264,7 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
-		session, err := h.Store.StartStream(channel.ID, req.Renditions)
+		session, err := h.streamsService().StartStream(channel.ID, req.Renditions)
 		if err != nil {
 			status := http.StatusBadRequest
 			if errors.Is(err, storage.ErrIngestControllerUnavailable) {
@@ -284,7 +284,7 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
-		session, err := h.Store.StopStream(channel.ID, req.PeakConcurrent)
+		session, err := h.streamsService().StopStream(channel.ID, req.PeakConcurrent)
 		if err != nil {
 			status := http.StatusBadRequest
 			if errors.Is(err, storage.ErrIngestControllerUnavailable) {
@@ -300,7 +300,7 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 			WriteMethodNotAllowed(w, r, http.MethodPost)
 			return
 		}
-		updated, err := h.Store.RotateChannelStreamKey(channel.ID)
+		updated, err := h.streamsService().RotateChannelStreamKey(channel.ID)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return

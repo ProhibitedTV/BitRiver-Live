@@ -169,7 +169,7 @@ func (h *Handler) handleTipsRoutes(channel models.Channel, remaining []string, w
 				limit = value
 			}
 		}
-		tips, err := h.Store.ListTips(channel.ID, limit)
+		tips, err := h.monetizationService().ListTips(channel.ID, limit)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
@@ -229,7 +229,7 @@ func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []
 				WriteMethodNotAllowed(w, r, http.MethodDelete)
 				return
 			}
-			sub, ok := h.Store.GetSubscription(subscriptionID)
+			sub, ok := h.monetizationService().GetSubscription(subscriptionID)
 			if !ok {
 				WriteError(w, http.StatusNotFound, fmt.Errorf("subscription %s not found", subscriptionID))
 				return
@@ -239,7 +239,7 @@ func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []
 				return
 			}
 			reason := strings.TrimSpace(r.URL.Query().Get("reason"))
-			updated, err := h.Store.CancelSubscription(subscriptionID, actor.ID, reason)
+			updated, err := h.monetizationService().CancelSubscription(subscriptionID, actor.ID, reason)
 			if err != nil {
 				WriteError(w, http.StatusBadRequest, err)
 				return
@@ -262,7 +262,7 @@ func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []
 		if status == "all" || status == "inactive" {
 			includeInactive = true
 		}
-		subs, err := h.Store.ListSubscriptions(channel.ID, includeInactive)
+		subs, err := h.monetizationService().ListSubscriptions(channel.ID, includeInactive)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return

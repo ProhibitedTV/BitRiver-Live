@@ -34,7 +34,13 @@ type Handler struct {
 	ChannelsService       service.ChannelsDirectoryUseCase
 	UploadsService        service.UploadsUseCase
 	RecordingsService     service.RecordingsVODUseCase
-	LegalService          *service.LegalService
+	ChatModerationService service.ChatModerationUseCase
+	LegalService          service.LegalComplianceUseCase
+	StreamsService        service.StreamsUseCase
+	ProfilesService       service.ProfilesUseCase
+	AnalyticsService      service.AnalyticsUseCase
+	SystemService         service.SystemHealthUseCase
+	MonetizationService   service.MonetizationUseCase
 	PaymentService        *service.PaymentService
 	WebhookSecrets        map[string]string
 	Setup                 SetupManager
@@ -62,25 +68,78 @@ type healthPinger interface {
 
 // NewHandler wires the core API dependencies together, ensuring a session
 // manager is available by creating a default manager when none is provided.
-func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handler {
-	if sessions == nil {
-		sessions = auth.NewSessionManager(0)
+type Dependencies struct {
+	Store                 storage.Repository
+	Sessions              *auth.SessionManager
+	MFAChallenges         *auth.MFAChallengeManager
+	AuthUsersService      service.AuthUsersUseCase
+	ChannelsService       service.ChannelsDirectoryUseCase
+	UploadsService        service.UploadsUseCase
+	RecordingsService     service.RecordingsVODUseCase
+	ChatModerationService service.ChatModerationUseCase
+	LegalService          service.LegalComplianceUseCase
+	StreamsService        service.StreamsUseCase
+	ProfilesService       service.ProfilesUseCase
+	AnalyticsService      service.AnalyticsUseCase
+	SystemService         service.SystemHealthUseCase
+	MonetizationService   service.MonetizationUseCase
+	PaymentService        *service.PaymentService
+}
+
+func NewHandler(arg interface{}, sessions ...*auth.SessionManager) *Handler {
+	deps := Dependencies{}
+	switch v := arg.(type) {
+	case Dependencies:
+		deps = v
+	case storage.Repository:
+		deps.Store = v
+		deps.AuthUsersService = deps.Store
+		deps.ChannelsService = deps.Store
+		deps.UploadsService = deps.Store
+		deps.RecordingsService = deps.Store
+		deps.ChatModerationService = deps.Store
+		deps.StreamsService = deps.Store
+		deps.ProfilesService = deps.Store
+		deps.AnalyticsService = deps.Store
+		deps.SystemService = deps.Store
+		deps.MonetizationService = deps.Store
+		deps.LegalService = service.NewLegalService(v)
+		deps.PaymentService = service.NewPaymentService(v, slog.Default())
+		if len(sessions) > 0 {
+			deps.Sessions = sessions[0]
+		}
+	default:
+		if len(sessions) > 0 {
+			deps.Sessions = sessions[0]
+		}
+	}
+	if deps.Sessions == nil {
+		deps.Sessions = auth.NewSessionManager(0)
+	}
+	if deps.MFAChallenges == nil {
+		deps.MFAChallenges = auth.NewMFAChallengeManager(0)
 	}
 	return &Handler{
-		Store:               store,
-		Sessions:            sessions,
-		MFAChallenges:       auth.NewMFAChallengeManager(0),
-		DefaultRenditions:   []string{"1080p", "720p", "480p"},
-		AllowSelfSignup:     true,
-		SessionCookiePolicy: DefaultSessionCookiePolicy(),
-		AuthUsersService:    service.NewStoreUseCases(store),
-		ChannelsService:     service.NewStoreUseCases(store),
-		UploadsService:      service.NewStoreUseCases(store),
-		RecordingsService:   service.NewStoreUseCases(store),
-		LegalService:        service.NewLegalService(store),
-		PaymentService:      service.NewPaymentService(store, slog.Default()),
-		WebhookSecrets:      map[string]string{},
-		Logger:              slog.Default(),
+		Store:                 deps.Store,
+		Sessions:              deps.Sessions,
+		MFAChallenges:         deps.MFAChallenges,
+		DefaultRenditions:     []string{"1080p", "720p", "480p"},
+		AllowSelfSignup:       true,
+		SessionCookiePolicy:   DefaultSessionCookiePolicy(),
+		AuthUsersService:      deps.AuthUsersService,
+		ChannelsService:       deps.ChannelsService,
+		UploadsService:        deps.UploadsService,
+		RecordingsService:     deps.RecordingsService,
+		ChatModerationService: deps.ChatModerationService,
+		LegalService:          deps.LegalService,
+		StreamsService:        deps.StreamsService,
+		ProfilesService:       deps.ProfilesService,
+		AnalyticsService:      deps.AnalyticsService,
+		SystemService:         deps.SystemService,
+		MonetizationService:   deps.MonetizationService,
+		PaymentService:        deps.PaymentService,
+		WebhookSecrets:        map[string]string{},
+		Logger:                slog.Default(),
 	}
 }
 
@@ -88,30 +147,79 @@ func NewHandler(store storage.Repository, sessions *auth.SessionManager) *Handle
 
 func (h *Handler) authUsersService() service.AuthUsersUseCase {
 	if h.AuthUsersService == nil {
-		h.AuthUsersService = service.NewStoreUseCases(h.Store)
+		h.AuthUsersService = h.Store
 	}
 	return h.AuthUsersService
 }
 
 func (h *Handler) channelsService() service.ChannelsDirectoryUseCase {
 	if h.ChannelsService == nil {
-		h.ChannelsService = service.NewStoreUseCases(h.Store)
+		h.ChannelsService = h.Store
 	}
 	return h.ChannelsService
 }
 
 func (h *Handler) uploadsService() service.UploadsUseCase {
 	if h.UploadsService == nil {
-		h.UploadsService = service.NewStoreUseCases(h.Store)
+		h.UploadsService = h.Store
 	}
 	return h.UploadsService
 }
 
 func (h *Handler) recordingsService() service.RecordingsVODUseCase {
 	if h.RecordingsService == nil {
-		h.RecordingsService = service.NewStoreUseCases(h.Store)
+		h.RecordingsService = h.Store
 	}
 	return h.RecordingsService
+}
+
+func (h *Handler) chatModerationService() service.ChatModerationUseCase {
+	if h.Store != nil {
+		return service.NewStoreUseCases(h.Store)
+	}
+	return h.ChatModerationService
+}
+
+func (h *Handler) legalService() service.LegalComplianceUseCase {
+	if h.Store != nil {
+		return service.NewLegalService(h.Store)
+	}
+	return h.LegalService
+}
+
+func (h *Handler) streamsService() service.StreamsUseCase {
+	if h.Store != nil {
+		return service.NewStoreUseCases(h.Store)
+	}
+	return h.StreamsService
+}
+
+func (h *Handler) profilesService() service.ProfilesUseCase {
+	if h.Store != nil {
+		return service.NewStoreUseCases(h.Store)
+	}
+	return h.ProfilesService
+}
+
+func (h *Handler) analyticsService() service.AnalyticsUseCase {
+	if h.Store != nil {
+		return service.NewStoreUseCases(h.Store)
+	}
+	return h.AnalyticsService
+}
+
+func (h *Handler) systemService() service.SystemHealthUseCase {
+	if h.Store != nil {
+		return service.NewStoreUseCases(h.Store)
+	}
+	return h.SystemService
+}
+
+func (h *Handler) monetizationService() service.MonetizationUseCase {
+	if h.Store != nil {
+		return service.NewStoreUseCases(h.Store)
+	}
+	return h.MonetizationService
 }
 
 func (h *Handler) sessionManager() *auth.SessionManager {
@@ -172,8 +280,8 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 
 	components, overallStatus, statusCode := h.componentHealth(ctx)
 	checks := []ingest.HealthStatus{}
-	if h.Store != nil {
-		checks = h.Store.IngestHealth(ctx)
+	if svc := h.systemService(); svc != nil {
+		checks = svc.IngestHealth(ctx)
 	}
 
 	for _, check := range checks {
