@@ -166,6 +166,13 @@ jobs:
           GOSUMDB: off
         run: go test ./... -count=1 -timeout=120s
 
+      - name: Validate architecture import direction
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+        run: ./scripts/check-architecture-deps.sh
+
   postgres-tests:
     name: Postgres storage tests
     runs-on: ubuntu-latest

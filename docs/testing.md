@@ -43,6 +43,12 @@ timeout locally to avoid flakes on slower machines:
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
 ```
 
+Validate architecture-layer import direction (as defined in
+`docs/architecture.md`) with:
+
+```bash
+./scripts/check-architecture-deps.sh
+```
 
 
 Monitoring config syntax is validated in CI before release packaging. Run the same guard locally after editing
