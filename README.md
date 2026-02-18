@@ -196,7 +196,7 @@ The dashboard’s **System status** card is the primary health check for operato
 
 - **Tweak settings:** Edit `.env` to change domain names, exposed ports, Redis/Postgres credentials, or viewer origins, then run
   `docker compose up -d` again to apply the changes.
-- **Install TLS / go beyond one host:** Follow [`docs/advanced-deployments.md`](docs/advanced-deployments.md).
+- **Install TLS / go beyond one host:** Follow [`docs/advanced-deployments.md`](docs/advanced-deployments.md). For Cloudflare + Nginx Proxy Manager routing, use [`docs/reverse-proxy-npm-cloudflare.md`](docs/reverse-proxy-npm-cloudflare.md).
 - **Run backups + restores:** Use the operations runbook in [`docs/operations.md`](docs/operations.md) for Postgres, Redis,
   and transcoder/recordings data.
 - **Plan upgrades:** Follow [`docs/upgrades.md`](docs/upgrades.md#upgrade-essentials-migrations-env-updates-and-ome-re-render) for the safe Compose upgrade flow, migration timing, and `.env`/OME template handling.
