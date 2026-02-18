@@ -33,6 +33,17 @@ For the upgrade mechanics around schema migrations, safe Compose sequencing, `.e
 Run every test suite locally (or on a staging CI run) so the GitHub release
 workflow does not discover failures after the tag is pushed.
 
+### GitHub Actions supply-chain pinning
+
+All workflow `uses:` references must pin to immutable commit SHAs rather than
+floating major tags. Keep a trailing comment beside each `uses:` entry that
+records the human-readable upstream release tag (`# v4`, `# v5`, etc.) so
+reviewers can still audit intent quickly.
+
+Dependabot (`.github/dependabot.yml`) is the approved mechanism for bumping
+these SHAs. Review and merge its GitHub Actions update PRs routinely so
+security patches from upstream actions are not delayed.
+
 ### Go unit tests
 
 ```bash
