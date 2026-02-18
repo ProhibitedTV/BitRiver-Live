@@ -18,12 +18,44 @@ map_layer() {
     echo "internal/api"
     return
   fi
+  if [[ "$rel_path" == internal/server* ]]; then
+    echo "internal/api"
+    return
+  fi
   if [[ "$rel_path" == internal/service* ]]; then
     echo "internal/service"
     return
   fi
   if [[ "$rel_path" == internal/domain* ]]; then
     echo "internal/domain"
+    return
+  fi
+  if [[ "$rel_path" == internal/models* ]]; then
+    echo "internal/domain"
+    return
+  fi
+  if [[ "$rel_path" == internal/config* ]]; then
+    echo "internal/foundation"
+    return
+  fi
+  if [[ "$rel_path" == internal/envutil* ]]; then
+    echo "internal/foundation"
+    return
+  fi
+  if [[ "$rel_path" == internal/executil* ]]; then
+    echo "internal/foundation"
+    return
+  fi
+  if [[ "$rel_path" == internal/platformutil* ]]; then
+    echo "internal/foundation"
+    return
+  fi
+  if [[ "$rel_path" == internal/serverutil* ]]; then
+    echo "internal/foundation"
+    return
+  fi
+  if [[ "$rel_path" == internal/stringsutil* ]]; then
+    echo "internal/foundation"
     return
   fi
   if [[ "$rel_path" == internal/storage* ]]; then
@@ -42,12 +74,30 @@ map_layer() {
     echo "internal/auth"
     return
   fi
+  if [[ "$rel_path" == internal/security* ]]; then
+    echo "internal/security"
+    return
+  fi
   if [[ "$rel_path" == internal/observability* ]]; then
     echo "internal/observability"
     return
   fi
 
   echo ""
+}
+
+
+allow_legacy_dependency() {
+  local from_rel="$1"
+  local to_rel="$2"
+
+  case "$from_rel -> $to_rel" in
+    internal/storage*\ -\>\ internal/service/uploads*)
+      return 0
+      ;;
+  esac
+
+  return 1
 }
 
 is_forbidden() {
@@ -65,6 +115,20 @@ is_forbidden() {
     internal/storage|internal/ingest|internal/chat|internal/auth|internal/observability)
       case "$to_layer" in
         cmd|internal/app|internal/api|internal/service)
+          return 0
+          ;;
+      esac
+      ;;
+    internal/security)
+      case "$to_layer" in
+        cmd|internal/app|internal/api|internal/service|internal/domain)
+          return 0
+          ;;
+      esac
+      ;;
+    internal/foundation)
+      case "$to_layer" in
+        cmd|internal/app|internal/api|internal/service|internal/domain|internal/storage|internal/ingest|internal/chat|internal/auth|internal/security|internal/observability)
           return 0
           ;;
       esac
@@ -92,6 +156,10 @@ while IFS='|' read -r pkg imports; do
     to_rel="${imp#${MODULE_PATH}/}"
     to_layer="$(map_layer "$to_rel")"
     [[ -z "$to_layer" ]] && continue
+
+    if allow_legacy_dependency "$from_rel" "$to_rel"; then
+      continue
+    fi
 
     if is_forbidden "$from_layer" "$to_layer"; then
       violations+=("$pkg -> $imp (layer violation: $from_layer must not import $to_layer)")

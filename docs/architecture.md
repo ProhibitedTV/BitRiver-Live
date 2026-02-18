@@ -18,7 +18,9 @@ cmd/*
     -> internal/api
     -> internal/service
     -> internal/domain
+    -> internal/foundation
     -> internal/storage, internal/ingest, internal/chat, internal/auth, internal/observability
+    -> internal/security
 ```
 
 Rules:
@@ -28,9 +30,12 @@ Rules:
 3. `internal/api` contains transport handlers and request/response translation only. Handlers must depend on use-case interfaces (owned by `internal/service` or `internal/domain`) and must not call `storage.Repository` directly for business operations.
 4. `internal/service` contains use-case/application logic.
 5. `internal/domain` contains core domain models, invariants, and domain-level interfaces.
-6. `internal/storage`, `internal/ingest`, `internal/chat`, `internal/auth`, and `internal/observability` are infrastructure and integration adapters.
-7. Infrastructure packages must not import `internal/api` or `cmd/*`.
-8. `internal/service` and `internal/domain` must not depend on concrete transport types (HTTP request/response structs), CLI flags, or Docker-specific runtime types.
+6. `internal/domain` currently includes the compatibility `internal/models` package during migration; new business logic should prefer domain-owned types, while `internal/models` remains a legacy boundary kept stable for incremental migration.
+7. `internal/config`, `internal/envutil`, `internal/executil`, `internal/platformutil`, `internal/serverutil`, and `internal/stringsutil` form a shared foundation/utilities layer used by top-level wiring and adapters. Keep these packages dependency-light: they must not import higher-level application, domain, or adapter layers.
+8. `internal/storage`, `internal/ingest`, `internal/chat`, `internal/auth`, `internal/security`, and `internal/observability` are infrastructure and integration adapters.
+9. `internal/service/uploads` currently defines the upload-processing contract used by storage-backed implementations; `internal/storage` may import this package until that contract is relocated to a neutral domain-owned package.
+10. Infrastructure packages must not import `internal/api` or `cmd/*` (except for the `internal/storage -> internal/service/uploads` migration compatibility edge above).
+11. `internal/service` and `internal/domain` must not depend on concrete transport types (HTTP request/response structs), CLI flags, or Docker-specific runtime types.
 
 ## Deployment contract (canonical)
 
