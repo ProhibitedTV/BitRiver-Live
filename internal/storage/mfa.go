@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"bitriver-live/internal/models"
+	models "bitriver-live/internal/domain"
 )
 
 // GetMFASettings returns stored MFA settings for the provided user.

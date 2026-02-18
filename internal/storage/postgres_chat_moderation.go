@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"bitriver-live/internal/chat"
-	"bitriver-live/internal/models"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,26 +23,26 @@ import (
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) CreateChatMessage(channelID, userID, content string) (models.ChatMessage, error) {
+func (r *postgresRepository) CreateChatMessage(channelID, userID, content string) (domain.ChatMessage, error) {
 	if r == nil || r.pool == nil {
-		return models.ChatMessage{}, ErrPostgresUnavailable
+		return domain.ChatMessage{}, ErrPostgresUnavailable
 	}
 
 	trimmed := strings.TrimSpace(content)
 	if trimmed == "" {
-		return models.ChatMessage{}, errors.New("message content cannot be empty")
+		return domain.ChatMessage{}, errors.New("message content cannot be empty")
 	}
 	if len([]rune(trimmed)) > 500 {
-		return models.ChatMessage{}, errors.New("message content exceeds 500 characters")
+		return domain.ChatMessage{}, errors.New("message content exceeds 500 characters")
 	}
 
 	id, err := generateID()
 	if err != nil {
-		return models.ChatMessage{}, err
+		return domain.ChatMessage{}, err
 	}
 
 	createdAt := time.Now().UTC()
-	message := models.ChatMessage{}
+	message := domain.ChatMessage{}
 	saveErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -89,7 +88,7 @@ func (r *postgresRepository) CreateChatMessage(channelID, userID, content string
 			return fmt.Errorf("commit chat message: %w", err)
 		}
 
-		message = models.ChatMessage{
+		message = domain.ChatMessage{
 			ID:        id,
 			ChannelID: channelID,
 			UserID:    userID,
@@ -100,7 +99,7 @@ func (r *postgresRepository) CreateChatMessage(channelID, userID, content string
 		return nil
 	})
 	if saveErr != nil {
-		return models.ChatMessage{}, saveErr
+		return domain.ChatMessage{}, saveErr
 	}
 
 	return message, nil
@@ -163,7 +162,7 @@ func (r *postgresRepository) DeleteChatMessage(channelID, messageID string) erro
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (r *postgresRepository) ListChatMessages(channelID string, limit int) ([]models.ChatMessage, error) {
+func (r *postgresRepository) ListChatMessages(channelID string, limit int) ([]domain.ChatMessage, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
 	}
@@ -195,9 +194,9 @@ func (r *postgresRepository) ListChatMessages(channelID string, limit int) ([]mo
 	}
 	defer rows.Close()
 
-	messages := make([]models.ChatMessage, 0)
+	messages := make([]domain.ChatMessage, 0)
 	for rows.Next() {
-		var msg models.ChatMessage
+		var msg domain.ChatMessage
 		var createdAt time.Time
 		if err := rows.Scan(&msg.ID, &msg.ChannelID, &msg.UserID, &msg.Content, &createdAt); err != nil {
 			return nil, fmt.Errorf("scan chat message: %w", err)
@@ -503,11 +502,11 @@ func (r *postgresRepository) ApplyChatEvent(evt chat.Event) error {
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (r *postgresRepository) ListChatRestrictions(channelID string) []models.ChatRestriction {
+func (r *postgresRepository) ListChatRestrictions(channelID string) []domain.ChatRestriction {
 	if r == nil || r.pool == nil {
 		return nil
 	}
-	restrictions := make([]models.ChatRestriction, 0)
+	restrictions := make([]domain.ChatRestriction, 0)
 	aborted := false
 	now := time.Now().UTC()
 	if err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
@@ -525,7 +524,7 @@ func (r *postgresRepository) ListChatRestrictions(channelID string) []models.Cha
 					aborted = true
 					return nil
 				}
-				restriction := models.ChatRestriction{
+				restriction := domain.ChatRestriction{
 					ID:        fmt.Sprintf("ban:%s:%s", channelID, userID),
 					Type:      "ban",
 					ChannelID: channelID,
@@ -566,7 +565,7 @@ func (r *postgresRepository) ListChatRestrictions(channelID string) []models.Cha
 				return nil
 			}
 			expiry := expires.UTC()
-			restriction := models.ChatRestriction{
+			restriction := domain.ChatRestriction{
 				ID:        fmt.Sprintf("timeout:%s:%s", channelID, userID),
 				Type:      "timeout",
 				ChannelID: channelID,
@@ -608,25 +607,25 @@ func (r *postgresRepository) ListChatRestrictions(channelID string) []models.Cha
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) CreateChatReport(channelID, reporterID, targetID, reason, messageID, evidenceURL string) (models.ChatReport, error) {
+func (r *postgresRepository) CreateChatReport(channelID, reporterID, targetID, reason, messageID, evidenceURL string) (domain.ChatReport, error) {
 	if r == nil || r.pool == nil {
-		return models.ChatReport{}, ErrPostgresUnavailable
+		return domain.ChatReport{}, ErrPostgresUnavailable
 	}
 
 	trimmedReason := strings.TrimSpace(reason)
 	if trimmedReason == "" {
-		return models.ChatReport{}, fmt.Errorf("reason is required")
+		return domain.ChatReport{}, fmt.Errorf("reason is required")
 	}
 
 	id, err := generateID()
 	if err != nil {
-		return models.ChatReport{}, err
+		return domain.ChatReport{}, err
 	}
 
 	trimmedMessageID := strings.TrimSpace(messageID)
 	trimmedEvidence := strings.TrimSpace(evidenceURL)
 	now := time.Now().UTC()
-	report := models.ChatReport{}
+	report := domain.ChatReport{}
 
 	createErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
@@ -669,7 +668,7 @@ func (r *postgresRepository) CreateChatReport(channelID, reporterID, targetID, r
 			return fmt.Errorf("commit chat report: %w", err)
 		}
 
-		report = models.ChatReport{
+		report = domain.ChatReport{
 			ID:          id,
 			ChannelID:   channelID,
 			ReporterID:  reporterID,
@@ -685,7 +684,7 @@ func (r *postgresRepository) CreateChatReport(channelID, reporterID, targetID, r
 		return nil
 	})
 	if createErr != nil {
-		return models.ChatReport{}, createErr
+		return domain.ChatReport{}, createErr
 	}
 	return report, nil
 }
@@ -699,11 +698,11 @@ func (r *postgresRepository) CreateChatReport(channelID, reporterID, targetID, r
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (r *postgresRepository) ListChatReports(channelID string, includeResolved bool) ([]models.ChatReport, error) {
+func (r *postgresRepository) ListChatReports(channelID string, includeResolved bool) ([]domain.ChatReport, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
 	}
-	reports := make([]models.ChatReport, 0)
+	reports := make([]domain.ChatReport, 0)
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		var exists bool
 		if err := conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM channels WHERE id = $1)", channelID).Scan(&exists); err != nil {
@@ -732,7 +731,7 @@ func (r *postgresRepository) ListChatReports(channelID string, includeResolved b
 
 		for rows.Next() {
 			var (
-				report      models.ChatReport
+				report      domain.ChatReport
 				messageID   pgtype.Text
 				evidenceURL pgtype.Text
 				status      string
@@ -803,12 +802,12 @@ func (r *postgresRepository) purgeExpiredChatReports(ctx context.Context, now ti
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) ResolveChatReport(reportID, resolverID, resolution string) (models.ChatReport, error) {
+func (r *postgresRepository) ResolveChatReport(reportID, resolverID, resolution string) (domain.ChatReport, error) {
 	if r == nil || r.pool == nil {
-		return models.ChatReport{}, ErrPostgresUnavailable
+		return domain.ChatReport{}, ErrPostgresUnavailable
 	}
 
-	resolved := models.ChatReport{}
+	resolved := domain.ChatReport{}
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -904,29 +903,29 @@ func (r *postgresRepository) ResolveChatReport(reportID, resolverID, resolution 
 		return nil
 	})
 	if err != nil {
-		return models.ChatReport{}, err
+		return domain.ChatReport{}, err
 	}
 	return resolved, nil
 }
 
 // CreateAppeal executes CreateAppeal.
-func (r *postgresRepository) CreateAppeal(reportID, reporterID, reason string) (models.Appeal, error) {
+func (r *postgresRepository) CreateAppeal(reportID, reporterID, reason string) (domain.Appeal, error) {
 	if r == nil || r.pool == nil {
-		return models.Appeal{}, ErrPostgresUnavailable
+		return domain.Appeal{}, ErrPostgresUnavailable
 	}
 	trimmedReason := strings.TrimSpace(reason)
 	if trimmedReason == "" {
-		return models.Appeal{}, fmt.Errorf("reason is required")
+		return domain.Appeal{}, fmt.Errorf("reason is required")
 	}
 	appealID, err := generateID()
 	if err != nil {
-		return models.Appeal{}, err
+		return domain.Appeal{}, err
 	}
 	eventID, err := generateID()
 	if err != nil {
-		return models.Appeal{}, err
+		return domain.Appeal{}, err
 	}
-	appeal := models.Appeal{}
+	appeal := domain.Appeal{}
 	now := time.Now().UTC()
 	err = r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
@@ -956,22 +955,22 @@ func (r *postgresRepository) CreateAppeal(reportID, reporterID, reason string) (
 		if err := tx.Commit(ctx); err != nil {
 			return fmt.Errorf("commit create appeal: %w", err)
 		}
-		appeal = models.Appeal{ID: appealID, ReportID: reportID, ChannelID: channelID, ReporterID: reporterID, Reason: trimmedReason, Status: AppealStatusOpen, CreatedAt: now,
-			Events: []models.AppealEvent{{ID: eventID, AppealID: appealID, ActorID: reporterID, Action: "submitted", Note: trimmedReason, CreatedAt: now}}}
+		appeal = domain.Appeal{ID: appealID, ReportID: reportID, ChannelID: channelID, ReporterID: reporterID, Reason: trimmedReason, Status: AppealStatusOpen, CreatedAt: now,
+			Events: []domain.AppealEvent{{ID: eventID, AppealID: appealID, ActorID: reporterID, Action: "submitted", Note: trimmedReason, CreatedAt: now}}}
 		return nil
 	})
 	if err != nil {
-		return models.Appeal{}, err
+		return domain.Appeal{}, err
 	}
 	return appeal, nil
 }
 
 // ListAppeals executes ListAppeals.
-func (r *postgresRepository) ListAppeals(channelID, requesterID string, includeClosed bool) ([]models.Appeal, error) {
+func (r *postgresRepository) ListAppeals(channelID, requesterID string, includeClosed bool) ([]domain.Appeal, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
 	}
-	appeals := make([]models.Appeal, 0)
+	appeals := make([]domain.Appeal, 0)
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		var exists bool
 		if err := conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM channels WHERE id = $1)", channelID).Scan(&exists); err != nil {
@@ -996,7 +995,7 @@ func (r *postgresRepository) ListAppeals(channelID, requesterID string, includeC
 		}
 		defer rows.Close()
 		for rows.Next() {
-			var a models.Appeal
+			var a domain.Appeal
 			var resolution, resolver pgtype.Text
 			var resolved pgtype.Timestamptz
 			if err := rows.Scan(&a.ID, &a.ReportID, &a.ChannelID, &a.ReporterID, &a.Reason, &a.Status, &resolution, &resolver, &a.CreatedAt, &resolved); err != nil {
@@ -1026,15 +1025,15 @@ func (r *postgresRepository) ListAppeals(channelID, requesterID string, includeC
 	return appeals, err
 }
 
-func (r *postgresRepository) listAppealEventsTx(ctx context.Context, conn *pgxpool.Conn, appealID string) ([]models.AppealEvent, error) {
+func (r *postgresRepository) listAppealEventsTx(ctx context.Context, conn *pgxpool.Conn, appealID string) ([]domain.AppealEvent, error) {
 	rows, err := conn.Query(ctx, "SELECT id, appeal_id, actor_id, action, note, created_at FROM appeal_events WHERE appeal_id = $1 ORDER BY created_at ASC, id ASC", appealID)
 	if err != nil {
 		return nil, fmt.Errorf("list appeal events: %w", err)
 	}
 	defer rows.Close()
-	events := make([]models.AppealEvent, 0)
+	events := make([]domain.AppealEvent, 0)
 	for rows.Next() {
-		var e models.AppealEvent
+		var e domain.AppealEvent
 		var note pgtype.Text
 		if err := rows.Scan(&e.ID, &e.AppealID, &e.ActorID, &e.Action, &note, &e.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan appeal event: %w", err)
@@ -1049,9 +1048,9 @@ func (r *postgresRepository) listAppealEventsTx(ctx context.Context, conn *pgxpo
 }
 
 // ResolveAppeal executes ResolveAppeal.
-func (r *postgresRepository) ResolveAppeal(appealID, resolverID, resolution string) (models.Appeal, error) {
+func (r *postgresRepository) ResolveAppeal(appealID, resolverID, resolution string) (domain.Appeal, error) {
 	if r == nil || r.pool == nil {
-		return models.Appeal{}, ErrPostgresUnavailable
+		return domain.Appeal{}, ErrPostgresUnavailable
 	}
 	trimmed := strings.TrimSpace(resolution)
 	if trimmed == "" {
@@ -1061,15 +1060,15 @@ func (r *postgresRepository) ResolveAppeal(appealID, resolverID, resolution stri
 }
 
 // ReopenAppeal executes ReopenAppeal.
-func (r *postgresRepository) ReopenAppeal(appealID, actorID, note string) (models.Appeal, error) {
+func (r *postgresRepository) ReopenAppeal(appealID, actorID, note string) (domain.Appeal, error) {
 	return r.updateAppealStatus(appealID, actorID, AppealStatusOpen, strings.TrimSpace(note), "reopened")
 }
 
-func (r *postgresRepository) updateAppealStatus(appealID, actorID, status, note, action string) (models.Appeal, error) {
+func (r *postgresRepository) updateAppealStatus(appealID, actorID, status, note, action string) (domain.Appeal, error) {
 	if r == nil || r.pool == nil {
-		return models.Appeal{}, ErrPostgresUnavailable
+		return domain.Appeal{}, ErrPostgresUnavailable
 	}
-	appeal := models.Appeal{}
+	appeal := domain.Appeal{}
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -1125,7 +1124,7 @@ func (r *postgresRepository) updateAppealStatus(appealID, actorID, status, note,
 		return nil
 	})
 	if err != nil {
-		return models.Appeal{}, err
+		return domain.Appeal{}, err
 	}
 	return appeal, nil
 }
@@ -1139,7 +1138,7 @@ func (r *postgresRepository) updateAppealStatus(appealID, actorID, status, note,
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (r *postgresRepository) ListChatFilters(channelID string) ([]models.ChatFilter, error) {
+func (r *postgresRepository) ListChatFilters(channelID string) ([]domain.ChatFilter, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
 	}
@@ -1160,9 +1159,9 @@ func (r *postgresRepository) ListChatFilters(channelID string) ([]models.ChatFil
 	}
 	defer rows.Close()
 
-	filters := make([]models.ChatFilter, 0)
+	filters := make([]domain.ChatFilter, 0)
 	for rows.Next() {
-		var filter models.ChatFilter
+		var filter domain.ChatFilter
 		var createdAt time.Time
 		var updatedAt time.Time
 		if err := rows.Scan(&filter.ID, &filter.ChannelID, &filter.Kind, &filter.Pattern, &filter.Enabled, &createdAt, &updatedAt); err != nil {
@@ -1186,21 +1185,21 @@ func (r *postgresRepository) ListChatFilters(channelID string) ([]models.ChatFil
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) CreateChatFilter(channelID string, params domain.ChatFilterCreateParams) (models.ChatFilter, error) {
+func (r *postgresRepository) CreateChatFilter(channelID string, params domain.ChatFilterCreateParams) (domain.ChatFilter, error) {
 	if r == nil || r.pool == nil {
-		return models.ChatFilter{}, ErrPostgresUnavailable
+		return domain.ChatFilter{}, ErrPostgresUnavailable
 	}
 	storageParams := chatFilterParams{Kind: params.Kind, Pattern: params.Pattern, Enabled: params.Enabled}
 	kind, pattern, err := normalizeChatFilter(storageParams.Kind, storageParams.Pattern)
 	if err != nil {
-		return models.ChatFilter{}, err
+		return domain.ChatFilter{}, err
 	}
 	id, err := generateID()
 	if err != nil {
-		return models.ChatFilter{}, err
+		return domain.ChatFilter{}, err
 	}
 	now := time.Now().UTC()
-	filter := models.ChatFilter{}
+	filter := domain.ChatFilter{}
 	saveErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -1220,7 +1219,7 @@ func (r *postgresRepository) CreateChatFilter(channelID string, params domain.Ch
 			return fmt.Errorf("commit chat filter: %w", err)
 		}
 
-		filter = models.ChatFilter{
+		filter = domain.ChatFilter{
 			ID:        id,
 			ChannelID: channelID,
 			Kind:      kind,
@@ -1232,7 +1231,7 @@ func (r *postgresRepository) CreateChatFilter(channelID string, params domain.Ch
 		return nil
 	})
 	if saveErr != nil {
-		return models.ChatFilter{}, saveErr
+		return domain.ChatFilter{}, saveErr
 	}
 	return filter, nil
 }
@@ -1245,12 +1244,12 @@ func (r *postgresRepository) CreateChatFilter(channelID string, params domain.Ch
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) UpdateChatFilter(id string, update domain.ChatFilterUpdate) (models.ChatFilter, error) {
+func (r *postgresRepository) UpdateChatFilter(id string, update domain.ChatFilterUpdate) (domain.ChatFilter, error) {
 	if r == nil || r.pool == nil {
-		return models.ChatFilter{}, ErrPostgresUnavailable
+		return domain.ChatFilter{}, ErrPostgresUnavailable
 	}
 	storageUpdate := chatFilterUpdate{Kind: update.Kind, Pattern: update.Pattern, Enabled: update.Enabled}
-	updated := models.ChatFilter{}
+	updated := domain.ChatFilter{}
 	updateErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -1258,7 +1257,7 @@ func (r *postgresRepository) UpdateChatFilter(id string, update domain.ChatFilte
 		}
 		defer rollbackTx(ctx, tx)
 
-		var existing models.ChatFilter
+		var existing domain.ChatFilter
 		var createdAt time.Time
 		var updatedAt time.Time
 		row := tx.QueryRow(ctx, "SELECT id, channel_id, kind, pattern, enabled, created_at, updated_at FROM chat_filters WHERE id = $1", id)
@@ -1301,7 +1300,7 @@ func (r *postgresRepository) UpdateChatFilter(id string, update domain.ChatFilte
 		return nil
 	})
 	if updateErr != nil {
-		return models.ChatFilter{}, updateErr
+		return domain.ChatFilter{}, updateErr
 	}
 	return updated, nil
 }
@@ -1354,7 +1353,7 @@ func (r *postgresRepository) DeleteChatFilter(id string) error {
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (r *postgresRepository) ListChatAutoModActions(channelID string, limit int) ([]models.ChatAutoModAction, error) {
+func (r *postgresRepository) ListChatAutoModActions(channelID string, limit int) ([]domain.ChatAutoModAction, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
 	}
@@ -1386,9 +1385,9 @@ func (r *postgresRepository) ListChatAutoModActions(channelID string, limit int)
 	}
 	defer rows.Close()
 
-	actions := make([]models.ChatAutoModAction, 0)
+	actions := make([]domain.ChatAutoModAction, 0)
 	for rows.Next() {
-		var action models.ChatAutoModAction
+		var action domain.ChatAutoModAction
 		var filterID pgtype.Text
 		var createdAt time.Time
 		if err := rows.Scan(&action.ID, &action.ChannelID, &action.UserID, &filterID, &action.FilterKind, &action.FilterPattern, &action.Message, &action.Action, &createdAt); err != nil {

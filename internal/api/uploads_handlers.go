@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"bitriver-live/internal/domain"
-	"bitriver-live/internal/models"
 	"bitriver-live/internal/security/tokenauth"
 )
 
@@ -62,7 +61,7 @@ type createUploadRequest struct {
 }
 
 // newUploadResponse builds and returns upload response using the supplied dependencies.
-func newUploadResponse(upload models.Upload) uploadResponse {
+func newUploadResponse(upload domain.Upload) uploadResponse {
 	resp := uploadResponse{
 		ID:        upload.ID,
 		ChannelID: upload.ChannelID,
@@ -217,7 +216,7 @@ func (h *Handler) UploadByID(w http.ResponseWriter, r *http.Request) {
 }
 
 // createUploadFromJSON creates upload from json and returns an error when validation or persistence fails.
-func (h *Handler) createUploadFromJSON(w http.ResponseWriter, r *http.Request, actor models.User) {
+func (h *Handler) createUploadFromJSON(w http.ResponseWriter, r *http.Request, actor domain.User) {
 	var req createUploadRequest
 	if !DecodeAndValidate(w, r, &req) {
 		return
@@ -231,7 +230,7 @@ func (h *Handler) createUploadFromJSON(w http.ResponseWriter, r *http.Request, a
 }
 
 // createUploadFromMultipart creates upload from multipart and returns an error when validation or persistence fails.
-func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Request, actor models.User) {
+func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Request, actor domain.User) {
 	reader, err := r.MultipartReader()
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, fmt.Errorf("invalid multipart payload"))
@@ -325,17 +324,17 @@ func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Reque
 }
 
 // createUploadEntry creates upload entry and returns an error when validation or persistence fails.
-func (h *Handler) createUploadEntry(r *http.Request, actor models.User, req createUploadRequest, media *uploadedMedia) (models.Upload, int, error) {
+func (h *Handler) createUploadEntry(r *http.Request, actor domain.User, req createUploadRequest, media *uploadedMedia) (domain.Upload, int, error) {
 	channelID := strings.TrimSpace(req.ChannelID)
 	if channelID == "" {
-		return models.Upload{}, http.StatusBadRequest, fmt.Errorf("channelId is required")
+		return domain.Upload{}, http.StatusBadRequest, fmt.Errorf("channelId is required")
 	}
 	channel, exists := h.uploadsService().GetChannel(channelID)
 	if !exists {
-		return models.Upload{}, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID)
+		return domain.Upload{}, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID)
 	}
 	if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
-		return models.Upload{}, http.StatusForbidden, fmt.Errorf("forbidden")
+		return domain.Upload{}, http.StatusForbidden, fmt.Errorf("forbidden")
 	}
 	metadata := cloneStringMap(req.Metadata)
 	playbackURL := strings.TrimSpace(req.PlaybackURL)
@@ -359,12 +358,12 @@ func (h *Handler) createUploadEntry(r *http.Request, actor models.User, req crea
 	}
 	upload, err := h.uploadsService().CreateUpload(params)
 	if err != nil {
-		return models.Upload{}, http.StatusBadRequest, err
+		return domain.Upload{}, http.StatusBadRequest, err
 	}
 	if media != nil {
 		updated, attachErr := h.attachMediaToUpload(r, upload, metadata, media)
 		if attachErr != nil {
-			return models.Upload{}, http.StatusInternalServerError, attachErr
+			return domain.Upload{}, http.StatusInternalServerError, attachErr
 		}
 		upload = updated
 	}
@@ -401,14 +400,14 @@ func (h *Handler) saveMultipartFile(part *multipart.Part) (*uploadedMedia, error
 }
 
 // attachMediaToUpload performs attach media to upload and propagates validation or dependency failures to the caller.
-func (h *Handler) attachMediaToUpload(r *http.Request, upload models.Upload, baseMetadata map[string]string, media *uploadedMedia) (models.Upload, error) {
+func (h *Handler) attachMediaToUpload(r *http.Request, upload domain.Upload, baseMetadata map[string]string, media *uploadedMedia) (domain.Upload, error) {
 	if media == nil {
 		return upload, nil
 	}
 	storedName, err := h.persistUploadMedia(upload.ID, media)
 	if err != nil {
 		_ = h.uploadsService().DeleteUpload(upload.ID)
-		return models.Upload{}, err
+		return domain.Upload{}, err
 	}
 	metadata := cloneStringMap(baseMetadata)
 	if metadata == nil {
@@ -429,7 +428,7 @@ func (h *Handler) attachMediaToUpload(r *http.Request, upload models.Upload, bas
 	if _, err := h.uploadsService().UpdateUpload(upload.ID, update); err != nil {
 		_ = os.Remove(filepath.Join(h.uploadMediaDir(), storedName))
 		_ = h.uploadsService().DeleteUpload(upload.ID)
-		return models.Upload{}, err
+		return domain.Upload{}, err
 	}
 	upload.Metadata = metadata
 	return upload, nil
@@ -461,7 +460,7 @@ func (h *Handler) persistUploadMedia(uploadID string, media *uploadedMedia) (str
 }
 
 // serveUploadMedia performs serve upload media and propagates validation or dependency failures to the caller.
-func (h *Handler) serveUploadMedia(w http.ResponseWriter, r *http.Request, upload models.Upload) {
+func (h *Handler) serveUploadMedia(w http.ResponseWriter, r *http.Request, upload domain.Upload) {
 	if r.Method != http.MethodGet {
 		WriteMethodNotAllowed(w, r, http.MethodGet)
 		return
@@ -509,7 +508,7 @@ func (h *Handler) serveUploadMedia(w http.ResponseWriter, r *http.Request, uploa
 }
 
 // deleteUploadMedia deletes upload media and returns an error when cleanup or persistence fails.
-func (h *Handler) deleteUploadMedia(upload models.Upload) {
+func (h *Handler) deleteUploadMedia(upload domain.Upload) {
 	if upload.Metadata == nil {
 		return
 	}

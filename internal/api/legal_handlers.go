@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"bitriver-live/internal/domain"
-	"bitriver-live/internal/models"
 )
 
 type dmcaCaseRequest struct {
@@ -195,4 +194,4 @@ func errNotFound(resource string) error {
 	return &RequestError{Status: http.StatusNotFound, Message: resource + " not found"}
 }
 
-var _ = models.DMCACase{}
+var _ = domain.DMCACase{}

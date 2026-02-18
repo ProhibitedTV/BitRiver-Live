@@ -9,13 +9,11 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"bitriver-live/internal/models"
 )
 
 // initChatDataset performs init chat dataset and propagates validation or dependency failures to the caller.
 func initChatDataset(ds *dataset) {
-	ds.ChatMessages = make(map[string]models.ChatMessage)
+	ds.ChatMessages = make(map[string]domain.ChatMessage)
 	ds.ChatBans = make(map[string]map[string]time.Time)
 	ds.ChatTimeouts = make(map[string]map[string]time.Time)
 	ds.ChatBanActors = make(map[string]map[string]string)
@@ -23,17 +21,17 @@ func initChatDataset(ds *dataset) {
 	ds.ChatTimeoutActors = make(map[string]map[string]string)
 	ds.ChatTimeoutReasons = make(map[string]map[string]string)
 	ds.ChatTimeoutIssuedAt = make(map[string]map[string]time.Time)
-	ds.ChatReports = make(map[string]models.ChatReport)
-	ds.Appeals = make(map[string]models.Appeal)
-	ds.AppealEvents = make(map[string][]models.AppealEvent)
-	ds.ChatFilters = make(map[string]models.ChatFilter)
-	ds.ChatAutoModActions = make(map[string]models.ChatAutoModAction)
+	ds.ChatReports = make(map[string]domain.ChatReport)
+	ds.Appeals = make(map[string]domain.Appeal)
+	ds.AppealEvents = make(map[string][]domain.AppealEvent)
+	ds.ChatFilters = make(map[string]domain.ChatFilter)
+	ds.ChatAutoModActions = make(map[string]domain.ChatAutoModAction)
 }
 
 // ensureChatDatasetInitializedLocked performs ensure chat dataset initialized locked and propagates validation or dependency failures to the caller.
 func (s *Storage) ensureChatDatasetInitializedLocked() {
 	if s.data.ChatMessages == nil {
-		s.data.ChatMessages = make(map[string]models.ChatMessage)
+		s.data.ChatMessages = make(map[string]domain.ChatMessage)
 	}
 	if s.data.ChatBans == nil {
 		s.data.ChatBans = make(map[string]map[string]time.Time)
@@ -57,26 +55,26 @@ func (s *Storage) ensureChatDatasetInitializedLocked() {
 		s.data.ChatTimeoutIssuedAt = make(map[string]map[string]time.Time)
 	}
 	if s.data.ChatReports == nil {
-		s.data.ChatReports = make(map[string]models.ChatReport)
+		s.data.ChatReports = make(map[string]domain.ChatReport)
 	}
 	if s.data.Appeals == nil {
-		s.data.Appeals = make(map[string]models.Appeal)
+		s.data.Appeals = make(map[string]domain.Appeal)
 	}
 	if s.data.AppealEvents == nil {
-		s.data.AppealEvents = make(map[string][]models.AppealEvent)
+		s.data.AppealEvents = make(map[string][]domain.AppealEvent)
 	}
 	if s.data.ChatFilters == nil {
-		s.data.ChatFilters = make(map[string]models.ChatFilter)
+		s.data.ChatFilters = make(map[string]domain.ChatFilter)
 	}
 	if s.data.ChatAutoModActions == nil {
-		s.data.ChatAutoModActions = make(map[string]models.ChatAutoModAction)
+		s.data.ChatAutoModActions = make(map[string]domain.ChatAutoModAction)
 	}
 }
 
 // cloneChatData performs clone chat data and propagates validation or dependency failures to the caller.
 func cloneChatData(src dataset, clone *dataset) {
 	if src.ChatMessages != nil {
-		clone.ChatMessages = make(map[string]models.ChatMessage, len(src.ChatMessages))
+		clone.ChatMessages = make(map[string]domain.ChatMessage, len(src.ChatMessages))
 		for id, message := range src.ChatMessages {
 			clone.ChatMessages[id] = message
 		}
@@ -188,7 +186,7 @@ func cloneChatData(src dataset, clone *dataset) {
 	}
 
 	if src.ChatReports != nil {
-		clone.ChatReports = make(map[string]models.ChatReport, len(src.ChatReports))
+		clone.ChatReports = make(map[string]domain.ChatReport, len(src.ChatReports))
 		for id, report := range src.ChatReports {
 			cloned := report
 			if report.ResolvedAt != nil {
@@ -200,14 +198,14 @@ func cloneChatData(src dataset, clone *dataset) {
 	}
 
 	if src.ChatFilters != nil {
-		clone.ChatFilters = make(map[string]models.ChatFilter, len(src.ChatFilters))
+		clone.ChatFilters = make(map[string]domain.ChatFilter, len(src.ChatFilters))
 		for id, filter := range src.ChatFilters {
 			clone.ChatFilters[id] = filter
 		}
 	}
 
 	if src.ChatAutoModActions != nil {
-		clone.ChatAutoModActions = make(map[string]models.ChatAutoModAction, len(src.ChatAutoModActions))
+		clone.ChatAutoModActions = make(map[string]domain.ChatAutoModAction, len(src.ChatAutoModActions))
 		for id, action := range src.ChatAutoModActions {
 			clone.ChatAutoModActions[id] = action
 		}
@@ -274,35 +272,35 @@ func normalizeChatFilter(kind, pattern string) (string, string, error) {
 
 // Chat operations
 
-func (s *Storage) CreateChatMessage(channelID, userID, content string) (models.ChatMessage, error) {
+func (s *Storage) CreateChatMessage(channelID, userID, content string) (domain.ChatMessage, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if _, ok := s.data.Channels[channelID]; !ok {
-		return models.ChatMessage{}, fmt.Errorf("channel %s not found", channelID)
+		return domain.ChatMessage{}, fmt.Errorf("channel %s not found", channelID)
 	}
 	if _, ok := s.data.Users[userID]; !ok {
-		return models.ChatMessage{}, fmt.Errorf("user %s not found", userID)
+		return domain.ChatMessage{}, fmt.Errorf("user %s not found", userID)
 	}
 
 	if err := s.ensureChatAccessLocked(channelID, userID); err != nil {
-		return models.ChatMessage{}, err
+		return domain.ChatMessage{}, err
 	}
 
 	trimmed := strings.TrimSpace(content)
 	if trimmed == "" {
-		return models.ChatMessage{}, errors.New("message content cannot be empty")
+		return domain.ChatMessage{}, errors.New("message content cannot be empty")
 	}
 	if len([]rune(trimmed)) > MaxChatMessageLength {
-		return models.ChatMessage{}, fmt.Errorf("message content exceeds %d characters", MaxChatMessageLength)
+		return domain.ChatMessage{}, fmt.Errorf("message content exceeds %d characters", MaxChatMessageLength)
 	}
 
 	id, err := generateID()
 	if err != nil {
-		return models.ChatMessage{}, err
+		return domain.ChatMessage{}, err
 	}
 
-	message := models.ChatMessage{
+	message := domain.ChatMessage{
 		ID:        id,
 		ChannelID: channelID,
 		UserID:    userID,
@@ -313,7 +311,7 @@ func (s *Storage) CreateChatMessage(channelID, userID, content string) (models.C
 	s.data.ChatMessages[id] = message
 	if err := s.persist(); err != nil {
 		delete(s.data.ChatMessages, id)
-		return models.ChatMessage{}, err
+		return domain.ChatMessage{}, err
 	}
 
 	return message, nil
@@ -543,7 +541,7 @@ func (s *Storage) purgeExpiredChatAutoModActionsLocked(now time.Time) (bool, dat
 }
 
 // ListChatMessages returns chat messages from the configured backing services.
-func (s *Storage) ListChatMessages(channelID string, limit int) ([]models.ChatMessage, error) {
+func (s *Storage) ListChatMessages(channelID string, limit int) ([]domain.ChatMessage, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -563,7 +561,7 @@ func (s *Storage) ListChatMessages(channelID string, limit int) ([]models.ChatMe
 		}
 	}
 
-	messages := make([]models.ChatMessage, 0)
+	messages := make([]domain.ChatMessage, 0)
 	for _, message := range s.data.ChatMessages {
 		if message.ChannelID == channelID {
 			messages = append(messages, message)
@@ -644,17 +642,17 @@ func (s *Storage) pruneExpiredTimeoutsLocked(channelID string, now time.Time) bo
 }
 
 // ListChatRestrictions returns the current bans and timeouts for a channel.
-func (s *Storage) ListChatRestrictions(channelID string) []models.ChatRestriction {
+func (s *Storage) ListChatRestrictions(channelID string) []domain.ChatRestriction {
 	now := time.Now().UTC()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	pruned := s.pruneExpiredTimeoutsLocked(channelID, now)
-	restrictions := make([]models.ChatRestriction, 0)
+	restrictions := make([]domain.ChatRestriction, 0)
 	if bans := s.data.ChatBans[channelID]; bans != nil {
 		for userID, issued := range bans {
-			restriction := models.ChatRestriction{
+			restriction := domain.ChatRestriction{
 				ID:        fmt.Sprintf("ban:%s:%s", channelID, userID),
 				Type:      "ban",
 				ChannelID: channelID,
@@ -674,7 +672,7 @@ func (s *Storage) ListChatRestrictions(channelID string) []models.ChatRestrictio
 			expiryUTC := expiry.UTC()
 			issued := s.lookupTimeoutIssuedAt(channelID, userID, expiryUTC)
 			expCopy := expiryUTC
-			restriction := models.ChatRestriction{
+			restriction := domain.ChatRestriction{
 				ID:        fmt.Sprintf("timeout:%s:%s", channelID, userID),
 				Type:      "timeout",
 				ChannelID: channelID,
@@ -744,29 +742,29 @@ func (s *Storage) lookupTimeoutIssuedAt(channelID, userID string, fallback time.
 }
 
 // CreateChatReport persists a moderation report filed by a viewer.
-func (s *Storage) CreateChatReport(channelID, reporterID, targetID, reason, messageID, evidenceURL string) (models.ChatReport, error) {
+func (s *Storage) CreateChatReport(channelID, reporterID, targetID, reason, messageID, evidenceURL string) (domain.ChatReport, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if _, ok := s.data.Channels[channelID]; !ok {
-		return models.ChatReport{}, fmt.Errorf("channel %s not found", channelID)
+		return domain.ChatReport{}, fmt.Errorf("channel %s not found", channelID)
 	}
 	if _, ok := s.data.Users[reporterID]; !ok {
-		return models.ChatReport{}, fmt.Errorf("reporter %s not found", reporterID)
+		return domain.ChatReport{}, fmt.Errorf("reporter %s not found", reporterID)
 	}
 	if _, ok := s.data.Users[targetID]; !ok {
-		return models.ChatReport{}, fmt.Errorf("target %s not found", targetID)
+		return domain.ChatReport{}, fmt.Errorf("target %s not found", targetID)
 	}
 	trimmedReason := strings.TrimSpace(reason)
 	if trimmedReason == "" {
-		return models.ChatReport{}, fmt.Errorf("reason is required")
+		return domain.ChatReport{}, fmt.Errorf("reason is required")
 	}
 	id, err := generateID()
 	if err != nil {
-		return models.ChatReport{}, err
+		return domain.ChatReport{}, err
 	}
 	now := time.Now().UTC()
-	report := models.ChatReport{
+	report := domain.ChatReport{
 		ID:          id,
 		ChannelID:   channelID,
 		ReporterID:  reporterID,
@@ -778,18 +776,18 @@ func (s *Storage) CreateChatReport(channelID, reporterID, targetID, reason, mess
 		CreatedAt:   now,
 	}
 	if s.data.ChatReports == nil {
-		s.data.ChatReports = make(map[string]models.ChatReport)
+		s.data.ChatReports = make(map[string]domain.ChatReport)
 	}
 	s.data.ChatReports[id] = report
 	if err := s.persist(); err != nil {
 		delete(s.data.ChatReports, id)
-		return models.ChatReport{}, err
+		return domain.ChatReport{}, err
 	}
 	return report, nil
 }
 
 // ListChatReports lists reports for a channel.
-func (s *Storage) ListChatReports(channelID string, includeResolved bool) ([]models.ChatReport, error) {
+func (s *Storage) ListChatReports(channelID string, includeResolved bool) ([]domain.ChatReport, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -809,7 +807,7 @@ func (s *Storage) ListChatReports(channelID string, includeResolved bool) ([]mod
 		}
 	}
 
-	reports := make([]models.ChatReport, 0)
+	reports := make([]domain.ChatReport, 0)
 	for _, report := range s.data.ChatReports {
 		if report.ChannelID != channelID {
 			continue
@@ -829,16 +827,16 @@ func (s *Storage) ListChatReports(channelID string, includeResolved bool) ([]mod
 }
 
 // ResolveChatReport marks a report as addressed.
-func (s *Storage) ResolveChatReport(reportID, resolverID, resolution string) (models.ChatReport, error) {
+func (s *Storage) ResolveChatReport(reportID, resolverID, resolution string) (domain.ChatReport, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	report, ok := s.data.ChatReports[reportID]
 	if !ok {
-		return models.ChatReport{}, fmt.Errorf("report %s not found", reportID)
+		return domain.ChatReport{}, fmt.Errorf("report %s not found", reportID)
 	}
 	if _, ok := s.data.Users[resolverID]; !ok {
-		return models.ChatReport{}, fmt.Errorf("resolver %s not found", resolverID)
+		return domain.ChatReport{}, fmt.Errorf("resolver %s not found", resolverID)
 	}
 	if strings.EqualFold(report.Status, ChatReportStatusResolved) {
 		return report, nil
@@ -854,7 +852,7 @@ func (s *Storage) ResolveChatReport(reportID, resolverID, resolution string) (mo
 	report.ResolvedAt = &now
 	s.data.ChatReports[reportID] = report
 	if err := s.persist(); err != nil {
-		return models.ChatReport{}, err
+		return domain.ChatReport{}, err
 	}
 	return report, nil
 }
@@ -864,7 +862,7 @@ func (s *Storage) appendAppealEventLocked(appealID, actorID, action, note string
 	if err != nil {
 		return err
 	}
-	evt := models.AppealEvent{ID: eventID, AppealID: appealID, ActorID: actorID, Action: action, Note: strings.TrimSpace(note), CreatedAt: createdAt}
+	evt := domain.AppealEvent{ID: eventID, AppealID: appealID, ActorID: actorID, Action: action, Note: strings.TrimSpace(note), CreatedAt: createdAt}
 	s.data.AppealEvents[appealID] = append(s.data.AppealEvents[appealID], evt)
 	appeal := s.data.Appeals[appealID]
 	appeal.Events = append(appeal.Events, evt)
@@ -872,54 +870,54 @@ func (s *Storage) appendAppealEventLocked(appealID, actorID, action, note string
 	return nil
 }
 
-func (s *Storage) CreateAppeal(reportID, reporterID, reason string) (models.Appeal, error) {
+func (s *Storage) CreateAppeal(reportID, reporterID, reason string) (domain.Appeal, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	report, ok := s.data.ChatReports[reportID]
 	if !ok {
-		return models.Appeal{}, fmt.Errorf("report %s not found", reportID)
+		return domain.Appeal{}, fmt.Errorf("report %s not found", reportID)
 	}
 	if _, ok := s.data.Users[reporterID]; !ok {
-		return models.Appeal{}, fmt.Errorf("reporter %s not found", reporterID)
+		return domain.Appeal{}, fmt.Errorf("reporter %s not found", reporterID)
 	}
 	if report.ReporterID != reporterID {
-		return models.Appeal{}, fmt.Errorf("forbidden")
+		return domain.Appeal{}, fmt.Errorf("forbidden")
 	}
 	trimmedReason := strings.TrimSpace(reason)
 	if trimmedReason == "" {
-		return models.Appeal{}, fmt.Errorf("reason is required")
+		return domain.Appeal{}, fmt.Errorf("reason is required")
 	}
 	id, err := generateID()
 	if err != nil {
-		return models.Appeal{}, err
+		return domain.Appeal{}, err
 	}
 	now := time.Now().UTC()
-	appeal := models.Appeal{ID: id, ReportID: reportID, ChannelID: report.ChannelID, ReporterID: reporterID, Reason: trimmedReason, Status: AppealStatusOpen, CreatedAt: now}
+	appeal := domain.Appeal{ID: id, ReportID: reportID, ChannelID: report.ChannelID, ReporterID: reporterID, Reason: trimmedReason, Status: AppealStatusOpen, CreatedAt: now}
 	if s.data.Appeals == nil {
-		s.data.Appeals = make(map[string]models.Appeal)
+		s.data.Appeals = make(map[string]domain.Appeal)
 	}
 	if s.data.AppealEvents == nil {
-		s.data.AppealEvents = make(map[string][]models.AppealEvent)
+		s.data.AppealEvents = make(map[string][]domain.AppealEvent)
 	}
 	s.data.Appeals[id] = appeal
 	if err := s.appendAppealEventLocked(id, reporterID, "submitted", trimmedReason, now); err != nil {
-		return models.Appeal{}, err
+		return domain.Appeal{}, err
 	}
 	if err := s.persist(); err != nil {
 		delete(s.data.Appeals, id)
 		delete(s.data.AppealEvents, id)
-		return models.Appeal{}, err
+		return domain.Appeal{}, err
 	}
 	return s.data.Appeals[id], nil
 }
 
-func (s *Storage) ListAppeals(channelID, requesterID string, includeClosed bool) ([]models.Appeal, error) {
+func (s *Storage) ListAppeals(channelID, requesterID string, includeClosed bool) ([]domain.Appeal, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if _, ok := s.data.Channels[channelID]; !ok {
 		return nil, fmt.Errorf("channel %s not found", channelID)
 	}
-	appeals := make([]models.Appeal, 0)
+	appeals := make([]domain.Appeal, 0)
 	for _, appeal := range s.data.Appeals {
 		if appeal.ChannelID != channelID {
 			continue
@@ -930,7 +928,7 @@ func (s *Storage) ListAppeals(channelID, requesterID string, includeClosed bool)
 		if !includeClosed && strings.EqualFold(appeal.Status, AppealStatusResolved) {
 			continue
 		}
-		appeal.Events = append([]models.AppealEvent(nil), s.data.AppealEvents[appeal.ID]...)
+		appeal.Events = append([]domain.AppealEvent(nil), s.data.AppealEvents[appeal.ID]...)
 		appeals = append(appeals, appeal)
 	}
 	sort.Slice(appeals, func(i, j int) bool {
@@ -942,15 +940,15 @@ func (s *Storage) ListAppeals(channelID, requesterID string, includeClosed bool)
 	return appeals, nil
 }
 
-func (s *Storage) ResolveAppeal(appealID, resolverID, resolution string) (models.Appeal, error) {
+func (s *Storage) ResolveAppeal(appealID, resolverID, resolution string) (domain.Appeal, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	appeal, ok := s.data.Appeals[appealID]
 	if !ok {
-		return models.Appeal{}, fmt.Errorf("appeal %s not found", appealID)
+		return domain.Appeal{}, fmt.Errorf("appeal %s not found", appealID)
 	}
 	if _, ok := s.data.Users[resolverID]; !ok {
-		return models.Appeal{}, fmt.Errorf("resolver %s not found", resolverID)
+		return domain.Appeal{}, fmt.Errorf("resolver %s not found", resolverID)
 	}
 	trimmed := strings.TrimSpace(resolution)
 	if trimmed == "" {
@@ -963,24 +961,24 @@ func (s *Storage) ResolveAppeal(appealID, resolverID, resolution string) (models
 	appeal.ResolvedAt = &now
 	s.data.Appeals[appealID] = appeal
 	if err := s.appendAppealEventLocked(appealID, resolverID, "resolved", trimmed, now); err != nil {
-		return models.Appeal{}, err
+		return domain.Appeal{}, err
 	}
 	if err := s.persist(); err != nil {
-		return models.Appeal{}, err
+		return domain.Appeal{}, err
 	}
-	appeal.Events = append([]models.AppealEvent(nil), s.data.AppealEvents[appealID]...)
+	appeal.Events = append([]domain.AppealEvent(nil), s.data.AppealEvents[appealID]...)
 	return appeal, nil
 }
 
-func (s *Storage) ReopenAppeal(appealID, actorID, note string) (models.Appeal, error) {
+func (s *Storage) ReopenAppeal(appealID, actorID, note string) (domain.Appeal, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	appeal, ok := s.data.Appeals[appealID]
 	if !ok {
-		return models.Appeal{}, fmt.Errorf("appeal %s not found", appealID)
+		return domain.Appeal{}, fmt.Errorf("appeal %s not found", appealID)
 	}
 	if _, ok := s.data.Users[actorID]; !ok {
-		return models.Appeal{}, fmt.Errorf("actor %s not found", actorID)
+		return domain.Appeal{}, fmt.Errorf("actor %s not found", actorID)
 	}
 	now := time.Now().UTC()
 	appeal.Status = AppealStatusOpen
@@ -989,17 +987,17 @@ func (s *Storage) ReopenAppeal(appealID, actorID, note string) (models.Appeal, e
 	appeal.ResolvedAt = nil
 	s.data.Appeals[appealID] = appeal
 	if err := s.appendAppealEventLocked(appealID, actorID, "reopened", note, now); err != nil {
-		return models.Appeal{}, err
+		return domain.Appeal{}, err
 	}
 	if err := s.persist(); err != nil {
-		return models.Appeal{}, err
+		return domain.Appeal{}, err
 	}
-	appeal.Events = append([]models.AppealEvent(nil), s.data.AppealEvents[appealID]...)
+	appeal.Events = append([]domain.AppealEvent(nil), s.data.AppealEvents[appealID]...)
 	return appeal, nil
 }
 
 // ListChatFilters returns the configured auto-moderation filters for a channel.
-func (s *Storage) ListChatFilters(channelID string) ([]models.ChatFilter, error) {
+func (s *Storage) ListChatFilters(channelID string) ([]domain.ChatFilter, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1007,7 +1005,7 @@ func (s *Storage) ListChatFilters(channelID string) ([]models.ChatFilter, error)
 		return nil, fmt.Errorf("channel %s not found", channelID)
 	}
 
-	filters := make([]models.ChatFilter, 0)
+	filters := make([]domain.ChatFilter, 0)
 	for _, filter := range s.data.ChatFilters {
 		if filter.ChannelID != channelID {
 			continue
@@ -1024,7 +1022,7 @@ func (s *Storage) ListChatFilters(channelID string) ([]models.ChatFilter, error)
 }
 
 // CreateChatFilter registers a new auto-moderation filter for a channel.
-func (s *Storage) CreateChatFilter(channelID string, params domain.ChatFilterCreateParams) (models.ChatFilter, error) {
+func (s *Storage) CreateChatFilter(channelID string, params domain.ChatFilterCreateParams) (domain.ChatFilter, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1035,18 +1033,18 @@ func (s *Storage) CreateChatFilter(channelID string, params domain.ChatFilterCre
 	}
 
 	if _, ok := s.data.Channels[channelID]; !ok {
-		return models.ChatFilter{}, fmt.Errorf("channel %s not found", channelID)
+		return domain.ChatFilter{}, fmt.Errorf("channel %s not found", channelID)
 	}
 	kind, pattern, err := normalizeChatFilter(storageParams.Kind, storageParams.Pattern)
 	if err != nil {
-		return models.ChatFilter{}, err
+		return domain.ChatFilter{}, err
 	}
 	id, err := generateID()
 	if err != nil {
-		return models.ChatFilter{}, err
+		return domain.ChatFilter{}, err
 	}
 	now := time.Now().UTC()
-	filter := models.ChatFilter{
+	filter := domain.ChatFilter{
 		ID:        id,
 		ChannelID: channelID,
 		Kind:      kind,
@@ -1056,18 +1054,18 @@ func (s *Storage) CreateChatFilter(channelID string, params domain.ChatFilterCre
 		UpdatedAt: now,
 	}
 	if s.data.ChatFilters == nil {
-		s.data.ChatFilters = make(map[string]models.ChatFilter)
+		s.data.ChatFilters = make(map[string]domain.ChatFilter)
 	}
 	s.data.ChatFilters[id] = filter
 	if err := s.persist(); err != nil {
 		delete(s.data.ChatFilters, id)
-		return models.ChatFilter{}, err
+		return domain.ChatFilter{}, err
 	}
 	return filter, nil
 }
 
 // UpdateChatFilter updates an existing auto-moderation filter.
-func (s *Storage) UpdateChatFilter(id string, update domain.ChatFilterUpdate) (models.ChatFilter, error) {
+func (s *Storage) UpdateChatFilter(id string, update domain.ChatFilterUpdate) (domain.ChatFilter, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1079,7 +1077,7 @@ func (s *Storage) UpdateChatFilter(id string, update domain.ChatFilterUpdate) (m
 
 	filter, ok := s.data.ChatFilters[id]
 	if !ok {
-		return models.ChatFilter{}, fmt.Errorf("filter %s not found", id)
+		return domain.ChatFilter{}, fmt.Errorf("filter %s not found", id)
 	}
 	kind := filter.Kind
 	pattern := filter.Pattern
@@ -1094,14 +1092,14 @@ func (s *Storage) UpdateChatFilter(id string, update domain.ChatFilterUpdate) (m
 	}
 	normalizedKind, normalizedPattern, err := normalizeChatFilter(kind, pattern)
 	if err != nil {
-		return models.ChatFilter{}, err
+		return domain.ChatFilter{}, err
 	}
 	filter.Kind = normalizedKind
 	filter.Pattern = normalizedPattern
 	filter.UpdatedAt = time.Now().UTC()
 	s.data.ChatFilters[id] = filter
 	if err := s.persist(); err != nil {
-		return models.ChatFilter{}, err
+		return domain.ChatFilter{}, err
 	}
 	return filter, nil
 }
@@ -1124,7 +1122,7 @@ func (s *Storage) DeleteChatFilter(id string) error {
 }
 
 // ListChatAutoModActions returns recent auto-moderation actions for a channel.
-func (s *Storage) ListChatAutoModActions(channelID string, limit int) ([]models.ChatAutoModAction, error) {
+func (s *Storage) ListChatAutoModActions(channelID string, limit int) ([]domain.ChatAutoModAction, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1143,7 +1141,7 @@ func (s *Storage) ListChatAutoModActions(channelID string, limit int) ([]models.
 		}
 	}
 
-	actions := make([]models.ChatAutoModAction, 0)
+	actions := make([]domain.ChatAutoModAction, 0)
 	for _, action := range s.data.ChatAutoModActions {
 		if action.ChannelID != channelID {
 			continue

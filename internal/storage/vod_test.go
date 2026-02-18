@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	models "bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
-	"bitriver-live/internal/models"
 )
 
 func TestStopStreamUploadsRecordingArtifacts(t *testing.T) {

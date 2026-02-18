@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"bitriver-live/internal/domain"
-	"bitriver-live/internal/models"
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/service"
 )
@@ -31,7 +30,7 @@ type tipResponse struct {
 	ID             string       `json:"id"`
 	ChannelID      string       `json:"channelId"`
 	FromUserID     string       `json:"fromUserId"`
-	Amount         models.Money `json:"amount"`
+	Amount         domain.Money `json:"amount"`
 	Currency       string       `json:"currency"`
 	Provider       string       `json:"provider"`
 	Reference      string       `json:"reference"`
@@ -61,7 +60,7 @@ type subscriptionResponse struct {
 	Provider          string       `json:"provider"`
 	Reference         string       `json:"reference"`
 	ExternalReference string       `json:"externalReference,omitempty"`
-	Amount            models.Money `json:"amount"`
+	Amount            domain.Money `json:"amount"`
 	Currency          string       `json:"currency"`
 	StartedAt         string       `json:"startedAt"`
 	ExpiresAt         string       `json:"expiresAt"`
@@ -74,20 +73,20 @@ type subscriptionResponse struct {
 }
 
 // parseMoneyNumber parses money number and returns an error when the input is malformed.
-func parseMoneyNumber(number json.Number, field string) (models.Money, error) {
+func parseMoneyNumber(number json.Number, field string) (domain.Money, error) {
 	raw := strings.TrimSpace(number.String())
 	if raw == "" {
-		return models.Money{}, fmt.Errorf("%s is required", field)
+		return domain.Money{}, fmt.Errorf("%s is required", field)
 	}
-	money, err := models.ParseMoney(raw)
+	money, err := domain.ParseMoney(raw)
 	if err != nil {
-		return models.Money{}, fmt.Errorf("invalid %s: %w", field, err)
+		return domain.Money{}, fmt.Errorf("invalid %s: %w", field, err)
 	}
 	return money, nil
 }
 
 // newTipResponse builds and returns tip response using the supplied dependencies.
-func newTipResponse(tip models.Tip) tipResponse {
+func newTipResponse(tip domain.Tip) tipResponse {
 	return tipResponse{
 		ID:             tip.ID,
 		ChannelID:      tip.ChannelID,
@@ -105,7 +104,7 @@ func newTipResponse(tip models.Tip) tipResponse {
 }
 
 // newSubscriptionResponse builds and returns subscription response using the supplied dependencies.
-func newSubscriptionResponse(sub models.Subscription) subscriptionResponse {
+func newSubscriptionResponse(sub domain.Subscription) subscriptionResponse {
 	resp := subscriptionResponse{
 		ID:                sub.ID,
 		ChannelID:         sub.ChannelID,
@@ -132,7 +131,7 @@ func newSubscriptionResponse(sub models.Subscription) subscriptionResponse {
 }
 
 // handleMonetizationRoutes routes and serves monetization routes requests, writing HTTP errors for invalid input or backend failures.
-func (h *Handler) handleMonetizationRoutes(channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleMonetizationRoutes(channel domain.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	if len(remaining) == 0 {
 		WriteError(w, http.StatusNotFound, fmt.Errorf("unknown monetization path"))
 		return
@@ -148,7 +147,7 @@ func (h *Handler) handleMonetizationRoutes(channel models.Channel, remaining []s
 }
 
 // handleTipsRoutes routes and serves tips routes requests, writing HTTP errors for invalid input or backend failures.
-func (h *Handler) handleTipsRoutes(channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleTipsRoutes(channel domain.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	actor, ok := h.requireAuthenticatedUser(w, r)
 	if !ok {
 		return
@@ -217,7 +216,7 @@ func (h *Handler) handleTipsRoutes(channel models.Channel, remaining []string, w
 }
 
 // handleSubscriptionsRoutes routes and serves subscriptions routes requests, writing HTTP errors for invalid input or backend failures.
-func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleSubscriptionsRoutes(channel domain.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	actor, ok := h.requireAuthenticatedUser(w, r)
 	if !ok {
 		return

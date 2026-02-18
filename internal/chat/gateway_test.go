@@ -11,7 +11,6 @@ import (
 
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/domain"
-	"bitriver-live/internal/models"
 	"bitriver-live/internal/storage"
 )
 
@@ -185,7 +184,7 @@ func TestGatewayAutoModBlocksMessage(t *testing.T) {
 
 func TestGatewayApplyModerationWithoutStore(t *testing.T) {
 	gateway := chat.NewGateway(chat.GatewayConfig{})
-	actor := models.User{ID: "moderator", Roles: []string{"admin"}}
+	actor := domain.User{ID: "moderator", Roles: []string{"admin"}}
 	expiresAt := time.Now().Add(time.Minute)
 	err := gateway.ApplyModeration(context.Background(), actor, chat.ModerationEvent{
 		ChannelID: "missing-channel",
@@ -211,7 +210,7 @@ func newTestStorage(t *testing.T) *storage.Storage {
 	return store
 }
 
-func mustCreateUser(t *testing.T, store *storage.Storage, params storage.CreateUserParams) models.User {
+func mustCreateUser(t *testing.T, store *storage.Storage, params storage.CreateUserParams) domain.User {
 	t.Helper()
 	user, err := store.CreateUser(params)
 	if err != nil {
@@ -220,7 +219,7 @@ func mustCreateUser(t *testing.T, store *storage.Storage, params storage.CreateU
 	return user
 }
 
-func mustCreateChannel(t *testing.T, store *storage.Storage, ownerID, title string) models.Channel {
+func mustCreateChannel(t *testing.T, store *storage.Storage, ownerID, title string) domain.Channel {
 	t.Helper()
 	channel, err := store.CreateChannel(ownerID, title, "gaming", nil)
 	if err != nil {

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"bitriver-live/internal/chat"
+	models "bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
-	"bitriver-live/internal/models"
 )
 
 // RepositoryFactory constructs a repository backed by either the JSON store or

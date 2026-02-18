@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/auth"
-	"bitriver-live/internal/models"
+	models "bitriver-live/internal/domain"
 )
 
 const (

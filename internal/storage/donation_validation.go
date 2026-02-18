@@ -6,7 +6,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"bitriver-live/internal/models"
+	models "bitriver-live/internal/domain"
 )
 
 const (

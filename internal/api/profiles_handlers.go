@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"bitriver-live/internal/domain"
-	"bitriver-live/internal/models"
 )
 
 type cryptoAddressPayload struct {
@@ -164,9 +163,9 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 		update.BannerURL = req.BannerURL
 	}
 	if req.SocialLinks != nil {
-		links := make([]models.SocialLink, 0, len(*req.SocialLinks))
+		links := make([]domain.SocialLink, 0, len(*req.SocialLinks))
 		for _, link := range *req.SocialLinks {
-			links = append(links, models.SocialLink{
+			links = append(links, domain.SocialLink{
 				Platform: link.Platform,
 				URL:      link.URL,
 			})
@@ -181,9 +180,9 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 		update.TopFriends = &friendsCopy
 	}
 	if req.DonationAddresses != nil {
-		addresses := make([]models.CryptoAddress, 0, len(*req.DonationAddresses))
+		addresses := make([]domain.CryptoAddress, 0, len(*req.DonationAddresses))
 		for _, addr := range *req.DonationAddresses {
-			normalized, err := domain.NormalizeDonationAddress(models.CryptoAddress{
+			normalized, err := domain.NormalizeDonationAddress(domain.CryptoAddress{
 				Currency: addr.Currency,
 				Address:  addr.Address,
 				Note:     addr.Note,
@@ -207,7 +206,7 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 }
 
 // buildProfileViewResponse builds profile view response from runtime state used by downstream handlers.
-func (h *Handler) buildProfileViewResponse(user models.User, profile models.Profile) profileViewResponse {
+func (h *Handler) buildProfileViewResponse(user domain.User, profile domain.Profile) profileViewResponse {
 	channels := h.profilesService().ListChannels(user.ID, "")
 	channelResponses := make([]channelPublicResponse, 0, len(channels))
 	liveResponses := make([]channelPublicResponse, 0)

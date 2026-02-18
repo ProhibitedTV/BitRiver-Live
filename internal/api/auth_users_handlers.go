@@ -11,7 +11,6 @@ import (
 
 	"bitriver-live/internal/auth/oauth"
 	"bitriver-live/internal/domain"
-	"bitriver-live/internal/models"
 )
 
 // Signup performs signup and returns an error when dependent systems reject the operation.
@@ -428,7 +427,7 @@ type userResponse struct {
 }
 
 // newUserResponse builds and returns user response using the supplied dependencies.
-func newUserResponse(user models.User) userResponse {
+func newUserResponse(user domain.User) userResponse {
 	return userResponse{
 		ID:          user.ID,
 		DisplayName: user.DisplayName,
@@ -441,7 +440,7 @@ func newUserResponse(user models.User) userResponse {
 }
 
 // newAuthResponse builds and returns auth response using the supplied dependencies.
-func newAuthResponse(user models.User, expires time.Time) authResponse {
+func newAuthResponse(user domain.User, expires time.Time) authResponse {
 	return authResponse{
 		ExpiresAt: expires.UTC().Format(time.RFC3339Nano),
 		User:      newUserResponse(user),

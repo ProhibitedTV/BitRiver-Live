@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
+	models "bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
-	"bitriver-live/internal/models"
 )
 
 func TestListChatMessagesOrdering(t *testing.T) {

@@ -3,7 +3,7 @@ package storage
 import (
 	"testing"
 
-	"bitriver-live/internal/models"
+	models "bitriver-live/internal/domain"
 )
 
 func TestNormalizeSocialLinks(t *testing.T) {

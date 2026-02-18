@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"bitriver-live/internal/domain"
-	"bitriver-live/internal/models"
 	"bitriver-live/internal/observability/metrics"
 )
 
@@ -161,7 +160,7 @@ func (h *Handler) DirectoryFeatured(w http.ResponseWriter, r *http.Request) {
 		channelIDs[id] = struct{}{}
 	}
 
-	channels := make([]models.Channel, 0, len(channelIDs))
+	channels := make([]domain.Channel, 0, len(channelIDs))
 	for id := range channelIDs {
 		if channel, ok := h.channelsService().GetChannel(id); ok {
 			channels = append(channels, channel)
@@ -238,8 +237,8 @@ func (h *Handler) DirectoryCategories(w http.ResponseWriter, r *http.Request) {
 }
 
 // filterLiveChannels performs filter live channels and propagates validation or dependency failures to the caller.
-func filterLiveChannels(channels []models.Channel) []models.Channel {
-	live := make([]models.Channel, 0, len(channels))
+func filterLiveChannels(channels []domain.Channel) []domain.Channel {
+	live := make([]domain.Channel, 0, len(channels))
 	for _, channel := range channels {
 		if channel.LiveState == "live" || channel.LiveState == "starting" {
 			live = append(live, channel)
@@ -249,7 +248,7 @@ func filterLiveChannels(channels []models.Channel) []models.Channel {
 }
 
 // sortChannelsByFollowers performs sort channels by followers and propagates validation or dependency failures to the caller.
-func (h *Handler) sortChannelsByFollowers(channels []models.Channel, liveFirst bool) []models.Channel {
+func (h *Handler) sortChannelsByFollowers(channels []domain.Channel, liveFirst bool) []domain.Channel {
 	followers := make(map[string]int, len(channels))
 	for _, channel := range channels {
 		followers[channel.ID] = h.channelsService().CountFollowers(channel.ID)
@@ -283,7 +282,7 @@ func (h *Handler) DirectoryFollowing(w http.ResponseWriter, r *http.Request) {
 	}
 
 	channelIDs := h.channelsService().ListFollowedChannelIDs(viewer.ID)
-	channels := make([]models.Channel, 0, len(channelIDs))
+	channels := make([]domain.Channel, 0, len(channelIDs))
 	for _, id := range channelIDs {
 		channel, exists := h.channelsService().GetChannel(id)
 		if !exists {
@@ -299,7 +298,7 @@ func (h *Handler) DirectoryFollowing(w http.ResponseWriter, r *http.Request) {
 }
 
 // writeDirectoryResponse writes directory response to the active response or stream and surfaces encode or I/O failures.
-func (h *Handler) writeDirectoryResponse(w http.ResponseWriter, channels []models.Channel) {
+func (h *Handler) writeDirectoryResponse(w http.ResponseWriter, channels []domain.Channel) {
 	response := make([]directoryChannelResponse, 0, len(channels))
 	for _, channel := range channels {
 		owner, exists := h.channelsService().GetUser(channel.OwnerID)
@@ -325,7 +324,7 @@ func (h *Handler) writeDirectoryResponse(w http.ResponseWriter, channels []model
 }
 
 // buildChannelResponse builds channel response from runtime state used by downstream handlers.
-func buildChannelResponse(channel models.Channel, includeStreamKey bool) channelResponse {
+func buildChannelResponse(channel domain.Channel, includeStreamKey bool) channelResponse {
 	resp := channelResponse{
 		channelPublicResponse: channelPublicResponse{
 			ID:        channel.ID,
@@ -349,17 +348,17 @@ func buildChannelResponse(channel models.Channel, includeStreamKey bool) channel
 }
 
 // newChannelResponse builds and returns channel response using the supplied dependencies.
-func newChannelResponse(channel models.Channel) channelResponse {
+func newChannelResponse(channel domain.Channel) channelResponse {
 	return buildChannelResponse(channel, true)
 }
 
 // newChannelPublicResponse builds and returns channel public response using the supplied dependencies.
-func newChannelPublicResponse(channel models.Channel) channelPublicResponse {
+func newChannelPublicResponse(channel domain.Channel) channelPublicResponse {
 	return buildChannelResponse(channel, false).channelPublicResponse
 }
 
 // newOwnerResponse builds and returns owner response using the supplied dependencies.
-func newOwnerResponse(user models.User, profile models.Profile) channelOwnerResponse {
+func newOwnerResponse(user domain.User, profile domain.Profile) channelOwnerResponse {
 	owner := channelOwnerResponse{ID: user.ID, DisplayName: user.DisplayName}
 	if profile.AvatarURL != "" {
 		owner.AvatarURL = profile.AvatarURL
@@ -368,7 +367,7 @@ func newOwnerResponse(user models.User, profile models.Profile) channelOwnerResp
 }
 
 // newProfileSummaryResponse builds and returns profile summary response using the supplied dependencies.
-func newProfileSummaryResponse(profile models.Profile) profileSummaryResponse {
+func newProfileSummaryResponse(profile domain.Profile) profileSummaryResponse {
 	summary := profileSummaryResponse{}
 	if profile.Bio != "" {
 		summary.Bio = profile.Bio
@@ -390,7 +389,7 @@ func newProfileSummaryResponse(profile models.Profile) profileSummaryResponse {
 }
 
 // subscriptionState performs subscription state and propagates validation or dependency failures to the caller.
-func (h *Handler) subscriptionState(channelID string, actor *models.User) (subscriptionStateResponse, error) {
+func (h *Handler) subscriptionState(channelID string, actor *domain.User) (subscriptionStateResponse, error) {
 	subs, err := h.channelsService().ListSubscriptions(channelID, false)
 	if err != nil {
 		return subscriptionStateResponse{}, err
@@ -570,7 +569,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			}
 			profile, _ := h.channelsService().GetProfile(owner.ID)
 			follow := followStateResponse{Followers: h.channelsService().CountFollowers(channel.ID)}
-			var viewer *models.User
+			var viewer *domain.User
 			if actor, ok := UserFromContext(r.Context()); ok {
 				follow.Following = h.channelsService().IsFollowingChannel(actor.ID, channel.ID)
 				viewer = &actor
@@ -718,7 +717,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			}
 			switch r.Method {
 			case http.MethodGet:
-				var viewer *models.User
+				var viewer *domain.User
 				if actor, ok := UserFromContext(r.Context()); ok {
 					viewer = &actor
 				}
@@ -752,7 +751,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 						UserID:    actor.ID,
 						Tier:      "supporter",
 						Provider:  "internal",
-						Amount:    models.NewMoneyFromMinorUnits(0),
+						Amount:    domain.NewMoneyFromMinorUnits(0),
 						Currency:  "USD",
 						Duration:  30 * 24 * time.Hour,
 						AutoRenew: true,

@@ -16,7 +16,6 @@ import (
 
 	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
-	"bitriver-live/internal/models"
 )
 
 // Ping always reports success for the JSON-backed repository.
@@ -32,18 +31,18 @@ func (s *Storage) Ping(context.Context) error {
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func newDataset() dataset {
 	ds := dataset{
-		Users:               make(map[string]models.User),
-		MFASettings:         make(map[string]models.MFASettings),
-		OAuthAccounts:       make(map[string]models.OAuthAccount),
-		Channels:            make(map[string]models.Channel),
-		StreamSessions:      make(map[string]models.StreamSession),
-		Tips:                make(map[string]models.Tip),
-		Subscriptions:       make(map[string]models.Subscription),
-		PaymentTransactions: make(map[string]models.PaymentTransaction),
-		Profiles:            make(map[string]models.Profile),
+		Users:               make(map[string]domain.User),
+		MFASettings:         make(map[string]domain.MFASettings),
+		OAuthAccounts:       make(map[string]domain.OAuthAccount),
+		Channels:            make(map[string]domain.Channel),
+		StreamSessions:      make(map[string]domain.StreamSession),
+		Tips:                make(map[string]domain.Tip),
+		Subscriptions:       make(map[string]domain.Subscription),
+		PaymentTransactions: make(map[string]domain.PaymentTransaction),
+		Profiles:            make(map[string]domain.Profile),
 		Follows:             make(map[string]map[string]time.Time),
-		Recordings:          make(map[string]models.Recording),
-		ClipExports:         make(map[string]models.ClipExport),
+		Recordings:          make(map[string]domain.Recording),
+		ClipExports:         make(map[string]domain.ClipExport),
 	}
 	initChatDataset(&ds)
 	return ds
@@ -58,56 +57,56 @@ func newDataset() dataset {
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (s *Storage) ensureDatasetInitializedLocked() {
 	if s.data.Users == nil {
-		s.data.Users = make(map[string]models.User)
+		s.data.Users = make(map[string]domain.User)
 	}
 	if s.data.MFASettings == nil {
-		s.data.MFASettings = make(map[string]models.MFASettings)
+		s.data.MFASettings = make(map[string]domain.MFASettings)
 	}
 	if s.data.OAuthAccounts == nil {
-		s.data.OAuthAccounts = make(map[string]models.OAuthAccount)
+		s.data.OAuthAccounts = make(map[string]domain.OAuthAccount)
 	}
 	if s.data.Channels == nil {
-		s.data.Channels = make(map[string]models.Channel)
+		s.data.Channels = make(map[string]domain.Channel)
 	}
 	if s.data.StreamSessions == nil {
-		s.data.StreamSessions = make(map[string]models.StreamSession)
+		s.data.StreamSessions = make(map[string]domain.StreamSession)
 	}
 	s.ensureChatDatasetInitializedLocked()
 	if s.data.Tips == nil {
-		s.data.Tips = make(map[string]models.Tip)
+		s.data.Tips = make(map[string]domain.Tip)
 	}
 	if s.data.Subscriptions == nil {
-		s.data.Subscriptions = make(map[string]models.Subscription)
+		s.data.Subscriptions = make(map[string]domain.Subscription)
 	}
 	if s.data.PaymentTransactions == nil {
-		s.data.PaymentTransactions = make(map[string]models.PaymentTransaction)
+		s.data.PaymentTransactions = make(map[string]domain.PaymentTransaction)
 	}
 	if s.data.Profiles == nil {
-		s.data.Profiles = make(map[string]models.Profile)
+		s.data.Profiles = make(map[string]domain.Profile)
 	}
 	if s.data.Follows == nil {
 		s.data.Follows = make(map[string]map[string]time.Time)
 	}
 	if s.data.Recordings == nil {
-		s.data.Recordings = make(map[string]models.Recording)
+		s.data.Recordings = make(map[string]domain.Recording)
 	}
 	if s.data.Uploads == nil {
-		s.data.Uploads = make(map[string]models.Upload)
+		s.data.Uploads = make(map[string]domain.Upload)
 	}
 	if s.data.ClipExports == nil {
-		s.data.ClipExports = make(map[string]models.ClipExport)
+		s.data.ClipExports = make(map[string]domain.ClipExport)
 	}
 	if s.data.DMCACases == nil {
-		s.data.DMCACases = make(map[string]models.DMCACase)
+		s.data.DMCACases = make(map[string]domain.DMCACase)
 	}
 	if s.data.DataSubjectRequests == nil {
-		s.data.DataSubjectRequests = make(map[string]models.DataSubjectRequest)
+		s.data.DataSubjectRequests = make(map[string]domain.DataSubjectRequest)
 	}
 	if s.data.DataSubjectAudit == nil {
-		s.data.DataSubjectAudit = make(map[string][]models.DataSubjectAuditEvent)
+		s.data.DataSubjectAudit = make(map[string][]domain.DataSubjectAuditEvent)
 	}
 	if s.data.LegalStateHistory == nil {
-		s.data.LegalStateHistory = []models.LegalStateHistory{}
+		s.data.LegalStateHistory = []domain.LegalStateHistory{}
 	}
 }
 
@@ -470,7 +469,7 @@ func cloneDataset(src dataset) dataset {
 	clone := dataset{}
 
 	if src.Users != nil {
-		clone.Users = make(map[string]models.User, len(src.Users))
+		clone.Users = make(map[string]domain.User, len(src.Users))
 		for id, user := range src.Users {
 			cloned := user
 			if user.Roles != nil {
@@ -481,7 +480,7 @@ func cloneDataset(src dataset) dataset {
 	}
 
 	if src.MFASettings != nil {
-		clone.MFASettings = make(map[string]models.MFASettings, len(src.MFASettings))
+		clone.MFASettings = make(map[string]domain.MFASettings, len(src.MFASettings))
 		for userID, settings := range src.MFASettings {
 			cloned := settings
 			if settings.RecoveryCodes != nil {
@@ -500,14 +499,14 @@ func cloneDataset(src dataset) dataset {
 	}
 
 	if src.OAuthAccounts != nil {
-		clone.OAuthAccounts = make(map[string]models.OAuthAccount, len(src.OAuthAccounts))
+		clone.OAuthAccounts = make(map[string]domain.OAuthAccount, len(src.OAuthAccounts))
 		for key, account := range src.OAuthAccounts {
 			clone.OAuthAccounts[key] = account
 		}
 	}
 
 	if src.Channels != nil {
-		clone.Channels = make(map[string]models.Channel, len(src.Channels))
+		clone.Channels = make(map[string]domain.Channel, len(src.Channels))
 		for id, channel := range src.Channels {
 			cloned := channel
 			if channel.Tags != nil {
@@ -522,7 +521,7 @@ func cloneDataset(src dataset) dataset {
 	}
 
 	if src.StreamSessions != nil {
-		clone.StreamSessions = make(map[string]models.StreamSession, len(src.StreamSessions))
+		clone.StreamSessions = make(map[string]domain.StreamSession, len(src.StreamSessions))
 		for id, session := range src.StreamSessions {
 			cloned := session
 			if session.Renditions != nil {
@@ -539,14 +538,14 @@ func cloneDataset(src dataset) dataset {
 	cloneChatData(src, &clone)
 
 	if src.Tips != nil {
-		clone.Tips = make(map[string]models.Tip, len(src.Tips))
+		clone.Tips = make(map[string]domain.Tip, len(src.Tips))
 		for id, tip := range src.Tips {
 			clone.Tips[id] = tip
 		}
 	}
 
 	if src.Subscriptions != nil {
-		clone.Subscriptions = make(map[string]models.Subscription, len(src.Subscriptions))
+		clone.Subscriptions = make(map[string]domain.Subscription, len(src.Subscriptions))
 		for id, subscription := range src.Subscriptions {
 			cloned := subscription
 			if subscription.CancelledAt != nil {
@@ -558,38 +557,38 @@ func cloneDataset(src dataset) dataset {
 	}
 
 	if src.Recordings != nil {
-		clone.Recordings = make(map[string]models.Recording, len(src.Recordings))
+		clone.Recordings = make(map[string]domain.Recording, len(src.Recordings))
 		for id, recording := range src.Recordings {
 			clone.Recordings[id] = cloneRecording(recording)
 		}
 	}
 
 	if src.Uploads != nil {
-		clone.Uploads = make(map[string]models.Upload, len(src.Uploads))
+		clone.Uploads = make(map[string]domain.Upload, len(src.Uploads))
 		for id, upload := range src.Uploads {
 			clone.Uploads[id] = cloneUpload(upload)
 		}
 	}
 
 	if src.ClipExports != nil {
-		clone.ClipExports = make(map[string]models.ClipExport, len(src.ClipExports))
+		clone.ClipExports = make(map[string]domain.ClipExport, len(src.ClipExports))
 		for id, clip := range src.ClipExports {
 			clone.ClipExports[id] = cloneClipExport(clip)
 		}
 	}
 
 	if src.Profiles != nil {
-		clone.Profiles = make(map[string]models.Profile, len(src.Profiles))
+		clone.Profiles = make(map[string]domain.Profile, len(src.Profiles))
 		for id, profile := range src.Profiles {
 			cloned := profile
 			if profile.SocialLinks != nil {
-				cloned.SocialLinks = append([]models.SocialLink(nil), profile.SocialLinks...)
+				cloned.SocialLinks = append([]domain.SocialLink(nil), profile.SocialLinks...)
 			}
 			if profile.TopFriends != nil {
 				cloned.TopFriends = append([]string(nil), profile.TopFriends...)
 			}
 			if profile.DonationAddresses != nil {
-				cloned.DonationAddresses = append([]models.CryptoAddress(nil), profile.DonationAddresses...)
+				cloned.DonationAddresses = append([]domain.CryptoAddress(nil), profile.DonationAddresses...)
 			}
 			if profile.FeaturedChannelID != nil {
 				featured := *profile.FeaturedChannelID
@@ -600,28 +599,28 @@ func cloneDataset(src dataset) dataset {
 	}
 
 	if src.DMCACases != nil {
-		clone.DMCACases = make(map[string]models.DMCACase, len(src.DMCACases))
+		clone.DMCACases = make(map[string]domain.DMCACase, len(src.DMCACases))
 		for id, rec := range src.DMCACases {
 			clone.DMCACases[id] = rec
 		}
 	}
 
 	if src.DataSubjectRequests != nil {
-		clone.DataSubjectRequests = make(map[string]models.DataSubjectRequest, len(src.DataSubjectRequests))
+		clone.DataSubjectRequests = make(map[string]domain.DataSubjectRequest, len(src.DataSubjectRequests))
 		for id, rec := range src.DataSubjectRequests {
 			clone.DataSubjectRequests[id] = rec
 		}
 	}
 
 	if src.DataSubjectAudit != nil {
-		clone.DataSubjectAudit = make(map[string][]models.DataSubjectAuditEvent, len(src.DataSubjectAudit))
+		clone.DataSubjectAudit = make(map[string][]domain.DataSubjectAuditEvent, len(src.DataSubjectAudit))
 		for requestID, entries := range src.DataSubjectAudit {
-			clone.DataSubjectAudit[requestID] = append([]models.DataSubjectAuditEvent(nil), entries...)
+			clone.DataSubjectAudit[requestID] = append([]domain.DataSubjectAuditEvent(nil), entries...)
 		}
 	}
 
 	if src.LegalStateHistory != nil {
-		clone.LegalStateHistory = append([]models.LegalStateHistory(nil), src.LegalStateHistory...)
+		clone.LegalStateHistory = append([]domain.LegalStateHistory(nil), src.LegalStateHistory...)
 	}
 	if src.Follows != nil {
 		clone.Follows = make(map[string]map[string]time.Time, len(src.Follows))
@@ -643,29 +642,29 @@ func cloneDataset(src dataset) dataset {
 
 // User operations
 
-func (s *Storage) CreateUser(params CreateUserParams) (models.User, error) {
+func (s *Storage) CreateUser(params CreateUserParams) (domain.User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	normalizedEmail := strings.TrimSpace(strings.ToLower(params.Email))
 	if normalizedEmail == "" {
-		return models.User{}, errors.New("email is required")
+		return domain.User{}, errors.New("email is required")
 	}
 	for _, user := range s.data.Users {
 		if user.Email == normalizedEmail {
-			return models.User{}, fmt.Errorf("email %s already in use", params.Email)
+			return domain.User{}, fmt.Errorf("email %s already in use", params.Email)
 		}
 	}
 
 	displayName := strings.TrimSpace(params.DisplayName)
 	if displayName == "" {
-		return models.User{}, errors.New("displayName is required")
+		return domain.User{}, errors.New("displayName is required")
 	}
 
 	roles := normalizeRoles(params.Roles)
 	if params.SelfSignup {
 		if params.Password == "" {
-			return models.User{}, errors.New("password is required for self-service signup")
+			return domain.User{}, errors.New("password is required for self-service signup")
 		}
 		if len(roles) == 0 {
 			roles = []string{"viewer"}
@@ -674,20 +673,20 @@ func (s *Storage) CreateUser(params CreateUserParams) (models.User, error) {
 
 	id, err := generateID()
 	if err != nil {
-		return models.User{}, err
+		return domain.User{}, err
 	}
 
 	var passwordHash string
 	if params.Password != "" {
 		hashed, hashErr := hashPassword(params.Password)
 		if hashErr != nil {
-			return models.User{}, fmt.Errorf("hash password: %w", hashErr)
+			return domain.User{}, fmt.Errorf("hash password: %w", hashErr)
 		}
 		passwordHash = hashed
 	}
 
 	now := time.Now().UTC()
-	user := models.User{
+	user := domain.User{
 		ID:           id,
 		DisplayName:  displayName,
 		Email:        normalizedEmail,
@@ -700,7 +699,7 @@ func (s *Storage) CreateUser(params CreateUserParams) (models.User, error) {
 	s.data.Users[id] = user
 	if err := s.persist(); err != nil {
 		delete(s.data.Users, id)
-		return models.User{}, err
+		return domain.User{}, err
 	}
 
 	return user, nil
@@ -714,11 +713,11 @@ func (s *Storage) CreateUser(params CreateUserParams) (models.User, error) {
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (s *Storage) ListUsers() []models.User {
+func (s *Storage) ListUsers() []domain.User {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	users := make([]models.User, 0, len(s.data.Users))
+	users := make([]domain.User, 0, len(s.data.Users))
 	for _, user := range s.data.Users {
 		users = append(users, user)
 	}
@@ -736,7 +735,7 @@ func (s *Storage) ListUsers() []models.User {
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) GetUser(id string) (models.User, bool) {
+func (s *Storage) GetUser(id string) (domain.User, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	user, ok := s.data.Users[id]
@@ -744,7 +743,7 @@ func (s *Storage) GetUser(id string) (models.User, bool) {
 }
 
 // FindUserByEmail looks up a user by their normalized email address.
-func (s *Storage) FindUserByEmail(email string) (models.User, bool) {
+func (s *Storage) FindUserByEmail(email string) (domain.User, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	normalizedEmail := strings.TrimSpace(strings.ToLower(email))
@@ -753,7 +752,7 @@ func (s *Storage) FindUserByEmail(email string) (models.User, bool) {
 			return user, true
 		}
 	}
-	return models.User{}, false
+	return domain.User{}, false
 }
 
 // AuthenticateOAuth executes AuthenticateOAuth.
@@ -764,14 +763,14 @@ func (s *Storage) FindUserByEmail(email string) (models.User, bool) {
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) AuthenticateOAuth(params OAuthLoginParams) (models.User, error) {
+func (s *Storage) AuthenticateOAuth(params OAuthLoginParams) (domain.User, error) {
 	provider := strings.ToLower(strings.TrimSpace(params.Provider))
 	subject := strings.TrimSpace(params.Subject)
 	if provider == "" {
-		return models.User{}, errors.New("provider is required")
+		return domain.User{}, errors.New("provider is required")
 	}
 	if subject == "" {
-		return models.User{}, errors.New("subject is required")
+		return domain.User{}, errors.New("subject is required")
 	}
 
 	normalizedEmail := strings.TrimSpace(strings.ToLower(params.Email))
@@ -789,7 +788,7 @@ func (s *Storage) AuthenticateOAuth(params OAuthLoginParams) (models.User, error
 	s.ensureDatasetInitializedLocked()
 
 	if s.data.OAuthAccounts == nil {
-		s.data.OAuthAccounts = make(map[string]models.OAuthAccount)
+		s.data.OAuthAccounts = make(map[string]domain.OAuthAccount)
 	}
 
 	key := oauthAccountKey(provider, subject)
@@ -801,7 +800,7 @@ func (s *Storage) AuthenticateOAuth(params OAuthLoginParams) (models.User, error
 	}
 
 	var (
-		user   models.User
+		user   domain.User
 		exists bool
 	)
 	for _, existing := range s.data.Users {
@@ -816,9 +815,9 @@ func (s *Storage) AuthenticateOAuth(params OAuthLoginParams) (models.User, error
 	if !exists {
 		id, err := generateID()
 		if err != nil {
-			return models.User{}, err
+			return domain.User{}, err
 		}
-		user = models.User{
+		user = domain.User{
 			ID:          id,
 			DisplayName: displayName,
 			Email:       normalizedEmail,
@@ -833,7 +832,7 @@ func (s *Storage) AuthenticateOAuth(params OAuthLoginParams) (models.User, error
 	}
 
 	s.data.Users[user.ID] = user
-	s.data.OAuthAccounts[key] = models.OAuthAccount{
+	s.data.OAuthAccounts[key] = domain.OAuthAccount{
 		Provider:    provider,
 		Subject:     subject,
 		UserID:      user.ID,
@@ -849,7 +848,7 @@ func (s *Storage) AuthenticateOAuth(params OAuthLoginParams) (models.User, error
 			s.data.Users[user.ID] = user
 		}
 		delete(s.data.OAuthAccounts, key)
-		return models.User{}, err
+		return domain.User{}, err
 	}
 
 	return user, nil
@@ -858,7 +857,7 @@ func (s *Storage) AuthenticateOAuth(params OAuthLoginParams) (models.User, error
 type UserUpdate = domain.UserUpdate
 
 // UpdateUser mutates user metadata while enforcing uniqueness constraints.
-func (s *Storage) UpdateUser(id string, update UserUpdate) (models.User, error) {
+func (s *Storage) UpdateUser(id string, update UserUpdate) (domain.User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -866,13 +865,13 @@ func (s *Storage) UpdateUser(id string, update UserUpdate) (models.User, error) 
 
 	user, ok := updatedData.Users[id]
 	if !ok {
-		return models.User{}, fmt.Errorf("user %s not found", id)
+		return domain.User{}, fmt.Errorf("user %s not found", id)
 	}
 
 	if update.DisplayName != nil {
 		name := strings.TrimSpace(*update.DisplayName)
 		if name == "" {
-			return models.User{}, errors.New("displayName cannot be empty")
+			return domain.User{}, errors.New("displayName cannot be empty")
 		}
 		user.DisplayName = name
 	}
@@ -880,14 +879,14 @@ func (s *Storage) UpdateUser(id string, update UserUpdate) (models.User, error) 
 	if update.Email != nil {
 		email := strings.TrimSpace(strings.ToLower(*update.Email))
 		if email == "" {
-			return models.User{}, errors.New("email cannot be empty")
+			return domain.User{}, errors.New("email cannot be empty")
 		}
 		for existingID, existing := range updatedData.Users {
 			if existingID == user.ID {
 				continue
 			}
 			if existing.Email == email {
-				return models.User{}, fmt.Errorf("email %s already in use", email)
+				return domain.User{}, fmt.Errorf("email %s already in use", email)
 			}
 		}
 		user.Email = email
@@ -899,7 +898,7 @@ func (s *Storage) UpdateUser(id string, update UserUpdate) (models.User, error) 
 
 	updatedData.Users[id] = user
 	if err := s.persistDataset(updatedData); err != nil {
-		return models.User{}, err
+		return domain.User{}, err
 	}
 
 	s.data = updatedData
@@ -973,24 +972,24 @@ type ProfileUpdate = domain.ProfileUpdate
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Profile, error) {
+func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (domain.Profile, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	updatedData := cloneDataset(s.data)
 
 	if _, ok := updatedData.Users[userID]; !ok {
-		return models.Profile{}, fmt.Errorf("user %s not found", userID)
+		return domain.Profile{}, fmt.Errorf("user %s not found", userID)
 	}
 
 	profile, exists := updatedData.Profiles[userID]
 	now := time.Now().UTC()
 	if !exists {
-		profile = models.Profile{
+		profile = domain.Profile{
 			UserID:            userID,
-			SocialLinks:       []models.SocialLink{},
+			SocialLinks:       []domain.SocialLink{},
 			TopFriends:        []string{},
-			DonationAddresses: []models.CryptoAddress{},
+			DonationAddresses: []domain.CryptoAddress{},
 			CreatedAt:         now,
 		}
 	}
@@ -1007,7 +1006,7 @@ func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Pro
 	if update.SocialLinks != nil {
 		normalized, err := NormalizeSocialLinks(*update.SocialLinks)
 		if err != nil {
-			return models.Profile{}, err
+			return domain.Profile{}, err
 		}
 		profile.SocialLinks = normalized
 	}
@@ -1018,10 +1017,10 @@ func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Pro
 		} else {
 			channel, ok := updatedData.Channels[trimmed]
 			if !ok {
-				return models.Profile{}, fmt.Errorf("featured channel %s not found", trimmed)
+				return domain.Profile{}, fmt.Errorf("featured channel %s not found", trimmed)
 			}
 			if channel.OwnerID != userID {
-				return models.Profile{}, errors.New("featured channel must belong to profile owner")
+				return domain.Profile{}, errors.New("featured channel must belong to profile owner")
 			}
 			id := channel.ID
 			profile.FeaturedChannelID = &id
@@ -1029,23 +1028,23 @@ func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Pro
 	}
 	if update.TopFriends != nil {
 		if len(*update.TopFriends) > 8 {
-			return models.Profile{}, errors.New("top friends cannot exceed eight entries")
+			return domain.Profile{}, errors.New("top friends cannot exceed eight entries")
 		}
 		seen := make(map[string]struct{})
 		ordered := make([]string, 0, len(*update.TopFriends))
 		for _, friendID := range *update.TopFriends {
 			trimmed := strings.TrimSpace(friendID)
 			if trimmed == "" {
-				return models.Profile{}, errors.New("top friends must reference valid users")
+				return domain.Profile{}, errors.New("top friends must reference valid users")
 			}
 			if trimmed == userID {
-				return models.Profile{}, errors.New("cannot add profile owner as a top friend")
+				return domain.Profile{}, errors.New("cannot add profile owner as a top friend")
 			}
 			if _, friendExists := updatedData.Users[trimmed]; !friendExists {
-				return models.Profile{}, fmt.Errorf("top friend %s not found", trimmed)
+				return domain.Profile{}, fmt.Errorf("top friend %s not found", trimmed)
 			}
 			if _, duplicate := seen[trimmed]; duplicate {
-				return models.Profile{}, errors.New("duplicate user in top friends list")
+				return domain.Profile{}, errors.New("duplicate user in top friends list")
 			}
 			seen[trimmed] = struct{}{}
 			ordered = append(ordered, trimmed)
@@ -1053,11 +1052,11 @@ func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Pro
 		profile.TopFriends = ordered
 	}
 	if update.DonationAddresses != nil {
-		addresses := make([]models.CryptoAddress, 0, len(*update.DonationAddresses))
+		addresses := make([]domain.CryptoAddress, 0, len(*update.DonationAddresses))
 		for _, addr := range *update.DonationAddresses {
 			normalized, err := NormalizeDonationAddress(addr)
 			if err != nil {
-				return models.Profile{}, err
+				return domain.Profile{}, err
 			}
 			addresses = append(addresses, normalized)
 		}
@@ -1071,7 +1070,7 @@ func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Pro
 
 	updatedData.Profiles[userID] = profile
 	if err := s.persistDataset(updatedData); err != nil {
-		return models.Profile{}, err
+		return domain.Profile{}, err
 	}
 
 	s.data = updatedData
@@ -1087,7 +1086,7 @@ func (s *Storage) UpsertProfile(userID string, update ProfileUpdate) (models.Pro
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) GetProfile(userID string) (models.Profile, bool) {
+func (s *Storage) GetProfile(userID string) (domain.Profile, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1095,13 +1094,13 @@ func (s *Storage) GetProfile(userID string) (models.Profile, bool) {
 	if !ok {
 		user, userExists := s.data.Users[userID]
 		if !userExists {
-			return models.Profile{}, false
+			return domain.Profile{}, false
 		}
-		profile = models.Profile{
+		profile = domain.Profile{
 			UserID:            userID,
-			SocialLinks:       []models.SocialLink{},
+			SocialLinks:       []domain.SocialLink{},
 			TopFriends:        []string{},
-			DonationAddresses: []models.CryptoAddress{},
+			DonationAddresses: []domain.CryptoAddress{},
 			CreatedAt:         user.CreatedAt,
 			UpdatedAt:         user.CreatedAt,
 		}
@@ -1109,13 +1108,13 @@ func (s *Storage) GetProfile(userID string) (models.Profile, bool) {
 	}
 
 	if profile.SocialLinks == nil {
-		profile.SocialLinks = []models.SocialLink{}
+		profile.SocialLinks = []domain.SocialLink{}
 	}
 	if profile.TopFriends == nil {
 		profile.TopFriends = []string{}
 	}
 	if profile.DonationAddresses == nil {
-		profile.DonationAddresses = []models.CryptoAddress{}
+		profile.DonationAddresses = []domain.CryptoAddress{}
 	}
 
 	return profile, true
@@ -1129,20 +1128,20 @@ func (s *Storage) GetProfile(userID string) (models.Profile, bool) {
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (s *Storage) ListProfiles() []models.Profile {
+func (s *Storage) ListProfiles() []domain.Profile {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	profiles := make([]models.Profile, 0, len(s.data.Profiles))
+	profiles := make([]domain.Profile, 0, len(s.data.Profiles))
 	for _, profile := range s.data.Profiles {
 		if profile.SocialLinks == nil {
-			profile.SocialLinks = []models.SocialLink{}
+			profile.SocialLinks = []domain.SocialLink{}
 		}
 		if profile.TopFriends == nil {
 			profile.TopFriends = []string{}
 		}
 		if profile.DonationAddresses == nil {
-			profile.DonationAddresses = []models.CryptoAddress{}
+			profile.DonationAddresses = []domain.CryptoAddress{}
 		}
 		profiles = append(profiles, profile)
 	}
@@ -1164,28 +1163,28 @@ type ChannelUpdate = domain.ChannelUpdate
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) CreateChannel(ownerID, title, category string, tags []string) (models.Channel, error) {
+func (s *Storage) CreateChannel(ownerID, title, category string, tags []string) (domain.Channel, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if _, ok := s.data.Users[ownerID]; !ok {
-		return models.Channel{}, fmt.Errorf("owner %s not found", ownerID)
+		return domain.Channel{}, fmt.Errorf("owner %s not found", ownerID)
 	}
 	if title = strings.TrimSpace(title); title == "" {
-		return models.Channel{}, errors.New("title is required")
+		return domain.Channel{}, errors.New("title is required")
 	}
 
 	id, err := generateID()
 	if err != nil {
-		return models.Channel{}, err
+		return domain.Channel{}, err
 	}
 	streamKey, err := generateStreamKey()
 	if err != nil {
-		return models.Channel{}, err
+		return domain.Channel{}, err
 	}
 
 	now := time.Now().UTC()
-	channel := models.Channel{
+	channel := domain.Channel{
 		ID:        id,
 		OwnerID:   ownerID,
 		StreamKey: streamKey,
@@ -1200,7 +1199,7 @@ func (s *Storage) CreateChannel(ownerID, title, category string, tags []string) 
 	s.data.Channels[id] = channel
 	if err := s.persist(); err != nil {
 		delete(s.data.Channels, id)
-		return models.Channel{}, err
+		return domain.Channel{}, err
 	}
 
 	return channel, nil
@@ -1241,7 +1240,7 @@ func normalizeTags(tags []string) []string {
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) UpdateChannel(id string, update ChannelUpdate) (models.Channel, error) {
+func (s *Storage) UpdateChannel(id string, update ChannelUpdate) (domain.Channel, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1249,14 +1248,14 @@ func (s *Storage) UpdateChannel(id string, update ChannelUpdate) (models.Channel
 
 	channel, ok := updatedData.Channels[id]
 	if !ok {
-		return models.Channel{}, fmt.Errorf("channel %s not found", id)
+		return domain.Channel{}, fmt.Errorf("channel %s not found", id)
 	}
 
 	if update.Title != nil {
 		if title := strings.TrimSpace(*update.Title); title != "" {
 			channel.Title = title
 		} else {
-			return models.Channel{}, errors.New("title cannot be empty")
+			return domain.Channel{}, errors.New("title cannot be empty")
 		}
 	}
 	if update.Category != nil {
@@ -1268,7 +1267,7 @@ func (s *Storage) UpdateChannel(id string, update ChannelUpdate) (models.Channel
 	if update.LiveState != nil {
 		state := strings.ToLower(strings.TrimSpace(*update.LiveState))
 		if state != "offline" && state != "live" && state != "starting" && state != "ended" {
-			return models.Channel{}, fmt.Errorf("invalid liveState %s", state)
+			return domain.Channel{}, fmt.Errorf("invalid liveState %s", state)
 		}
 		channel.LiveState = state
 	}
@@ -1276,7 +1275,7 @@ func (s *Storage) UpdateChannel(id string, update ChannelUpdate) (models.Channel
 	channel.UpdatedAt = time.Now().UTC()
 	updatedData.Channels[id] = channel
 	if err := s.persistDataset(updatedData); err != nil {
-		return models.Channel{}, err
+		return domain.Channel{}, err
 	}
 
 	s.data = updatedData
@@ -1292,7 +1291,7 @@ func (s *Storage) UpdateChannel(id string, update ChannelUpdate) (models.Channel
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) RotateChannelStreamKey(id string) (models.Channel, error) {
+func (s *Storage) RotateChannelStreamKey(id string) (domain.Channel, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1300,12 +1299,12 @@ func (s *Storage) RotateChannelStreamKey(id string) (models.Channel, error) {
 
 	channel, ok := updatedData.Channels[id]
 	if !ok {
-		return models.Channel{}, fmt.Errorf("channel %s not found", id)
+		return domain.Channel{}, fmt.Errorf("channel %s not found", id)
 	}
 
 	streamKey, err := generateStreamKey()
 	if err != nil {
-		return models.Channel{}, err
+		return domain.Channel{}, err
 	}
 
 	channel.StreamKey = streamKey
@@ -1313,7 +1312,7 @@ func (s *Storage) RotateChannelStreamKey(id string) (models.Channel, error) {
 	updatedData.Channels[id] = channel
 
 	if err := s.persistDataset(updatedData); err != nil {
-		return models.Channel{}, err
+		return domain.Channel{}, err
 	}
 
 	s.data = updatedData
@@ -1329,7 +1328,7 @@ func (s *Storage) RotateChannelStreamKey(id string) (models.Channel, error) {
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) GetChannel(id string) (models.Channel, bool) {
+func (s *Storage) GetChannel(id string) (domain.Channel, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	channel, ok := s.data.Channels[id]
@@ -1337,13 +1336,13 @@ func (s *Storage) GetChannel(id string) (models.Channel, bool) {
 }
 
 // GetChannelByStreamKey looks up a channel by its stream key.
-func (s *Storage) GetChannelByStreamKey(streamKey string) (models.Channel, bool) {
+func (s *Storage) GetChannelByStreamKey(streamKey string) (domain.Channel, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	key := strings.TrimSpace(streamKey)
 	if key == "" {
-		return models.Channel{}, false
+		return domain.Channel{}, false
 	}
 
 	for _, channel := range s.data.Channels {
@@ -1352,7 +1351,7 @@ func (s *Storage) GetChannelByStreamKey(streamKey string) (models.Channel, bool)
 		}
 	}
 
-	return models.Channel{}, false
+	return domain.Channel{}, false
 }
 
 // ListChannels executes ListChannels.
@@ -1363,12 +1362,12 @@ func (s *Storage) GetChannelByStreamKey(streamKey string) (models.Channel, bool)
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (s *Storage) ListChannels(ownerID, query string) []models.Channel {
+func (s *Storage) ListChannels(ownerID, query string) []domain.Channel {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
-	channels := make([]models.Channel, 0, len(s.data.Channels))
+	channels := make([]domain.Channel, 0, len(s.data.Channels))
 	for _, channel := range s.data.Channels {
 		if ownerID != "" && channel.OwnerID != ownerID {
 			continue
@@ -1396,7 +1395,7 @@ func (s *Storage) ListChannels(ownerID, query string) []models.Channel {
 // Errors: this helper does not return `error`; failures are handled by callers.
 // Transactions/connections: no transaction/connection contract applies for this pure helper.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func channelMatchesQuery(channel models.Channel, owner models.User, normalizedQuery string) bool {
+func channelMatchesQuery(channel domain.Channel, owner domain.User, normalizedQuery string) bool {
 	if normalizedQuery == "" {
 		return true
 	}
@@ -1603,22 +1602,22 @@ func (s *Storage) DeleteChannel(id string) error {
 
 // Streaming operations
 
-func (s *Storage) StartStream(channelID string, renditions []string) (models.StreamSession, error) {
+func (s *Storage) StartStream(channelID string, renditions []string) (domain.StreamSession, error) {
 	s.mu.Lock()
 	channel, ok := s.data.Channels[channelID]
 	if !ok {
 		s.mu.Unlock()
-		return models.StreamSession{}, fmt.Errorf("channel %s not found", channelID)
+		return domain.StreamSession{}, fmt.Errorf("channel %s not found", channelID)
 	}
 	if channel.CurrentSessionID != nil {
 		s.mu.Unlock()
-		return models.StreamSession{}, errors.New("channel already live")
+		return domain.StreamSession{}, errors.New("channel already live")
 	}
 
 	sessionID, err := generateID()
 	if err != nil {
 		s.mu.Unlock()
-		return models.StreamSession{}, err
+		return domain.StreamSession{}, err
 	}
 
 	channel.CurrentSessionID = &sessionID
@@ -1635,7 +1634,7 @@ func (s *Storage) StartStream(channelID string, renditions []string) (models.Str
 			s.data.Channels[channelID] = updated
 		}
 		s.mu.Unlock()
-		return models.StreamSession{}, ErrIngestControllerUnavailable
+		return domain.StreamSession{}, ErrIngestControllerUnavailable
 	}
 
 	attempts := s.ingestMaxAttempts
@@ -1669,11 +1668,11 @@ func (s *Storage) StartStream(channelID string, renditions []string) (models.Str
 			s.data.Channels[channelID] = updated
 		}
 		s.mu.Unlock()
-		return models.StreamSession{}, fmt.Errorf("boot ingest: %w", bootErr)
+		return domain.StreamSession{}, fmt.Errorf("boot ingest: %w", bootErr)
 	}
 
 	now := time.Now().UTC()
-	session := models.StreamSession{
+	session := domain.StreamSession{
 		ID:             sessionID,
 		ChannelID:      channelID,
 		StartedAt:      now,
@@ -1694,9 +1693,9 @@ func (s *Storage) StartStream(channelID string, renditions []string) (models.Str
 		session.IngestEndpoints = ingestEndpoints
 	}
 	if len(boot.Renditions) > 0 {
-		manifests := make([]models.RenditionManifest, 0, len(boot.Renditions))
+		manifests := make([]domain.RenditionManifest, 0, len(boot.Renditions))
 		for _, rendition := range boot.Renditions {
-			manifests = append(manifests, models.RenditionManifest{
+			manifests = append(manifests, domain.RenditionManifest{
 				Name:        rendition.Name,
 				ManifestURL: rendition.ManifestURL,
 				Bitrate:     rendition.Bitrate,
@@ -1723,7 +1722,7 @@ func (s *Storage) StartStream(channelID string, renditions []string) (models.Str
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		_ = controller.ShutdownStream(ctx, channelID, sessionID, jobIDs)
 		cancel()
-		return models.StreamSession{}, err
+		return domain.StreamSession{}, err
 	}
 	s.mu.Unlock()
 
@@ -1738,23 +1737,23 @@ func (s *Storage) StartStream(channelID string, renditions []string) (models.Str
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) StopStream(channelID string, peakConcurrent int) (models.StreamSession, error) {
+func (s *Storage) StopStream(channelID string, peakConcurrent int) (domain.StreamSession, error) {
 	s.mu.Lock()
 	channel, ok := s.data.Channels[channelID]
 	if !ok {
 		s.mu.Unlock()
-		return models.StreamSession{}, fmt.Errorf("channel %s not found", channelID)
+		return domain.StreamSession{}, fmt.Errorf("channel %s not found", channelID)
 	}
 	if channel.CurrentSessionID == nil {
 		s.mu.Unlock()
-		return models.StreamSession{}, errors.New("channel is not live")
+		return domain.StreamSession{}, errors.New("channel is not live")
 	}
 
 	sessionID := *channel.CurrentSessionID
 	session, ok := s.data.StreamSessions[sessionID]
 	if !ok {
 		s.mu.Unlock()
-		return models.StreamSession{}, fmt.Errorf("session %s missing", sessionID)
+		return domain.StreamSession{}, fmt.Errorf("session %s missing", sessionID)
 	}
 
 	originalChannel := channel
@@ -1764,14 +1763,14 @@ func (s *Storage) StopStream(channelID string, peakConcurrent int) (models.Strea
 
 	controller := s.ingestController
 	if controller == nil {
-		return models.StreamSession{}, ErrIngestControllerUnavailable
+		return domain.StreamSession{}, ErrIngestControllerUnavailable
 	}
 
 	timeout := normalizeIngestTimeout(s.ingestTimeout)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	if err := controller.ShutdownStream(ctx, channelID, sessionID, jobIDs); err != nil {
-		return models.StreamSession{}, fmt.Errorf("shutdown ingest: %w", err)
+		return domain.StreamSession{}, fmt.Errorf("shutdown ingest: %w", err)
 	}
 
 	now := time.Now().UTC()
@@ -1784,7 +1783,7 @@ func (s *Storage) StopStream(channelID string, peakConcurrent int) (models.Strea
 	channel, ok = s.data.Channels[channelID]
 	if !ok {
 		s.mu.Unlock()
-		return models.StreamSession{}, fmt.Errorf("channel %s not found", channelID)
+		return domain.StreamSession{}, fmt.Errorf("channel %s not found", channelID)
 	}
 	s.data.StreamSessions[sessionID] = session
 	channel.CurrentSessionID = nil
@@ -1797,7 +1796,7 @@ func (s *Storage) StopStream(channelID string, peakConcurrent int) (models.Strea
 		s.data.StreamSessions[sessionID] = originalSession
 		s.data.Channels[channelID] = originalChannel
 		s.mu.Unlock()
-		return models.StreamSession{}, recErr
+		return domain.StreamSession{}, recErr
 	}
 	if recording.ID != "" {
 		s.data.Recordings[recording.ID] = recording
@@ -1810,7 +1809,7 @@ func (s *Storage) StopStream(channelID string, peakConcurrent int) (models.Strea
 			delete(s.data.Recordings, recording.ID)
 		}
 		s.mu.Unlock()
-		return models.StreamSession{}, err
+		return domain.StreamSession{}, err
 	}
 	s.mu.Unlock()
 
@@ -1826,7 +1825,7 @@ func (s *Storage) StopStream(channelID string, peakConcurrent int) (models.Strea
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (s *Storage) ListStreamSessions(channelID string) ([]models.StreamSession, error) {
+func (s *Storage) ListStreamSessions(channelID string) ([]domain.StreamSession, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1834,7 +1833,7 @@ func (s *Storage) ListStreamSessions(channelID string) ([]models.StreamSession, 
 		return nil, fmt.Errorf("channel %s not found", channelID)
 	}
 
-	sessions := make([]models.StreamSession, 0)
+	sessions := make([]domain.StreamSession, 0)
 	for _, session := range s.data.StreamSessions {
 		if session.ChannelID == channelID {
 			sessions = append(sessions, session)
@@ -1847,17 +1846,17 @@ func (s *Storage) ListStreamSessions(channelID string) ([]models.StreamSession, 
 }
 
 // CurrentStreamSession returns the active stream session for the channel if present.
-func (s *Storage) CurrentStreamSession(channelID string) (models.StreamSession, bool) {
+func (s *Storage) CurrentStreamSession(channelID string) (domain.StreamSession, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	channel, ok := s.data.Channels[channelID]
 	if !ok || channel.CurrentSessionID == nil {
-		return models.StreamSession{}, false
+		return domain.StreamSession{}, false
 	}
 	session, exists := s.data.StreamSessions[*channel.CurrentSessionID]
 	if !exists {
-		return models.StreamSession{}, false
+		return domain.StreamSession{}, false
 	}
 	return session, true
 }

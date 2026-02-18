@@ -21,7 +21,7 @@ import (
 	"bitriver-live/internal/api"
 	"bitriver-live/internal/auth"
 	"bitriver-live/internal/chat"
-	"bitriver-live/internal/models"
+	models "bitriver-live/internal/domain"
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/service"
 	"bitriver-live/internal/storage"
