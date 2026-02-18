@@ -1,4 +1,4 @@
-package api
+package uploads
 
 import (
 	"context"
@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
-	"bitriver-live/internal/storage"
 )
 
 func TestUploadProcessorStartShutdown(t *testing.T) {
@@ -307,7 +307,7 @@ func (f *fakeUploadStore) updatesFor(id string) <-chan models.Upload {
 	return ch
 }
 
-func (f *fakeUploadStore) UpdateUpload(ctx context.Context, id string, update storage.UploadUpdate) (models.Upload, error) {
+func (f *fakeUploadStore) UpdateUpload(ctx context.Context, id string, update domain.UploadUpdate) (models.Upload, error) {
 	select {
 	case <-ctx.Done():
 		return models.Upload{}, ctx.Err()
@@ -386,7 +386,7 @@ func cloneUpload(upload models.Upload) models.Upload {
 	return upload
 }
 
-var _ UploadStore = (*fakeUploadStore)(nil)
+var _ Store = (*fakeUploadStore)(nil)
 
 type fakeIngest struct {
 	mu        sync.Mutex
@@ -484,7 +484,7 @@ func (f *fakeIngest) TranscodeUpload(ctx context.Context, params ingest.UploadTr
 	return ingest.UploadTranscodeResult{PlaybackURL: params.SourceURL}, nil
 }
 
-var _ UploadIngestClient = (*fakeIngest)(nil)
+var _ IngestClient = (*fakeIngest)(nil)
 
 func waitForCompletion(t *testing.T, done <-chan struct{}, id string, timeout time.Duration) {
 	t.Helper()

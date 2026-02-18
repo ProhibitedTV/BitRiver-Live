@@ -4123,3 +4123,7 @@ func TestSRSHookRejectsUnknownStream(t *testing.T) {
 		t.Fatalf("expected status 404, got %d", rec.Code)
 	}
 }
+
+func stringPtr(s string) *string {
+	return &s
+}

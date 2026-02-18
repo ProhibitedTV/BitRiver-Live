@@ -1,4 +1,4 @@
-package api
+package uploads
 
 import (
 	"context"
@@ -11,131 +11,29 @@ import (
 
 	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
-	"bitriver-live/internal/models"
 )
 
 // UploadStore exposes only the upload-related persistence operations required
 // by UploadProcessor. It intentionally omits unrelated repository methods so
 // that upload processing stays decoupled from broader storage concerns.
-type UploadStore interface {
-	ListPendingUploads(ctx context.Context, limit int) ([]models.Upload, error)
-	GetUpload(ctx context.Context, id string) (models.Upload, bool)
-	UpdateUpload(ctx context.Context, id string, update domain.UploadUpdate) (models.Upload, error)
+type Store interface {
+	ListPendingUploads(ctx context.Context, limit int) ([]domain.Upload, error)
+	GetUpload(ctx context.Context, id string) (domain.Upload, bool)
+	UpdateUpload(ctx context.Context, id string, update domain.UploadUpdate) (domain.Upload, error)
 }
 
 // UploadIngestClient captures the ingest functionality needed to process
 // uploads.
-type UploadIngestClient interface {
+type IngestClient interface {
 	TranscodeUpload(ctx context.Context, params ingest.UploadTranscodeParams) (ingest.UploadTranscodeResult, error)
-}
-
-var (
-	_ UploadStore        = (*repositoryUploadStore)(nil)
-	_ UploadIngestClient = (ingest.Controller)(nil)
-)
-
-// repositoryUploadStore is an adapter that satisfies UploadStore using the
-// broader storage.Repository interface. It filters pending/processing uploads
-// to match UploadProcessor expectations without introducing new storage
-// behavior.
-type repositoryUploadStore struct {
-	repo interface {
-		ListChannels(ownerID, query string) []domain.Channel
-		ListUploads(channelID string) ([]domain.Upload, error)
-		GetUpload(id string) (domain.Upload, bool)
-		UpdateUpload(id string, update domain.UploadUpdate) (domain.Upload, error)
-	}
-}
-
-// RepositoryUploadStore adapts a repository-capable use case to the narrower UploadStore
-// interface used by UploadProcessor, allowing call sites to supply broader
-// services without re-implementing upload-specific plumbing.
-func RepositoryUploadStore(repo interface {
-	ListChannels(ownerID, query string) []domain.Channel
-	ListUploads(channelID string) ([]domain.Upload, error)
-	GetUpload(id string) (domain.Upload, bool)
-	UpdateUpload(id string, update domain.UploadUpdate) (domain.Upload, error)
-}) UploadStore {
-	return repositoryUploadStore{repo: repo}
-}
-
-// ListPendingUploads returns pending uploads from the configured backing services.
-func (s repositoryUploadStore) ListPendingUploads(ctx context.Context, limit int) ([]models.Upload, error) {
-	if s.repo == nil {
-		return nil, nil
-	}
-
-	var (
-		pending  []models.Upload
-		firstErr error
-	)
-
-	for _, channel := range s.repo.ListChannels("", "") {
-		if limit > 0 && len(pending) >= limit {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			return pending, ctx.Err()
-		default:
-		}
-
-		uploads, err := s.repo.ListUploads(channel.ID)
-		if err != nil {
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		for _, upload := range uploads {
-			status := strings.ToLower(strings.TrimSpace(upload.Status))
-			if status != "pending" && status != "processing" {
-				continue
-			}
-			pending = append(pending, upload)
-			if limit > 0 && len(pending) >= limit {
-				break
-			}
-		}
-	}
-
-	return pending, firstErr
-}
-
-// GetUpload returns upload from the configured backing services.
-func (s repositoryUploadStore) GetUpload(ctx context.Context, id string) (models.Upload, bool) {
-	if s.repo == nil {
-		return models.Upload{}, false
-	}
-	select {
-	case <-ctx.Done():
-		return models.Upload{}, false
-	default:
-	}
-
-	return s.repo.GetUpload(id)
-}
-
-// UpdateUpload updates upload and returns an error when persistence or validation fails.
-func (s repositoryUploadStore) UpdateUpload(ctx context.Context, id string, update domain.UploadUpdate) (models.Upload, error) {
-	if s.repo == nil {
-		return models.Upload{}, fmt.Errorf("upload store unavailable")
-	}
-	select {
-	case <-ctx.Done():
-		return models.Upload{}, ctx.Err()
-	default:
-	}
-
-	return s.repo.UpdateUpload(id, update)
 }
 
 // UploadProcessorConfig describes the collaborators and tunable settings used
 // to process archived uploads, including storage, ingest coordination, worker
 // concurrency, and back pressure limits.
 type UploadProcessorConfig struct {
-	Store      UploadStore
-	Ingest     UploadIngestClient
+	Store      Store
+	Ingest     IngestClient
 	Renditions []ingest.Rendition
 	Workers    int
 	QueueSize  int
@@ -147,8 +45,8 @@ type UploadProcessorConfig struct {
 // coordinating persistence, ingest, and rendition generation while honoring
 // queue limits and cancellation.
 type UploadProcessor struct {
-	store      UploadStore
-	ingest     UploadIngestClient
+	store      Store
+	ingest     IngestClient
 	renditions []ingest.Rendition
 	workers    int
 	timeout    time.Duration
@@ -163,6 +61,11 @@ type UploadProcessor struct {
 	mu       sync.Mutex
 	inFlight map[string]struct{}
 	started  bool
+}
+
+// Enqueuer captures the queue interaction the API layer needs to trigger upload processing.
+type Enqueuer interface {
+	Enqueue(id string)
 }
 
 const (
