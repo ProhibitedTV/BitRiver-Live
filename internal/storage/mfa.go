@@ -5,33 +5,33 @@ import (
 	"strings"
 	"time"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 )
 
 // GetMFASettings returns stored MFA settings for the provided user.
-func (s *Storage) GetMFASettings(userID string) (models.MFASettings, bool, error) {
+func (s *Storage) GetMFASettings(userID string) (domain.MFASettings, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	settings, ok := s.data.MFASettings[userID]
 	if !ok {
-		return models.MFASettings{}, false, nil
+		return domain.MFASettings{}, false, nil
 	}
 	return settings, true, nil
 }
 
 // UpsertMFASettings creates or updates MFA settings for the provided user.
-func (s *Storage) UpsertMFASettings(settings models.MFASettings) (models.MFASettings, error) {
+func (s *Storage) UpsertMFASettings(settings domain.MFASettings) (domain.MFASettings, error) {
 	userID := strings.TrimSpace(settings.UserID)
 	if userID == "" {
-		return models.MFASettings{}, fmt.Errorf("userID is required")
+		return domain.MFASettings{}, fmt.Errorf("userID is required")
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if _, ok := s.data.Users[userID]; !ok {
-		return models.MFASettings{}, fmt.Errorf("user %s not found", userID)
+		return domain.MFASettings{}, fmt.Errorf("user %s not found", userID)
 	}
 
 	updatedData := cloneDataset(s.data)
@@ -48,7 +48,7 @@ func (s *Storage) UpsertMFASettings(settings models.MFASettings) (models.MFASett
 	updatedData.MFASettings[userID] = settings
 
 	if err := s.persistDataset(updatedData); err != nil {
-		return models.MFASettings{}, err
+		return domain.MFASettings{}, err
 	}
 
 	s.data = updatedData

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
 )
 
@@ -267,13 +267,13 @@ func TestCloneDatasetCopiesModerationMetadata(t *testing.T) {
 		ChatTimeoutIssuedAt: map[string]map[string]time.Time{
 			"chan": {"user": now},
 		},
-		ChatReports: map[string]models.ChatReport{
+		ChatReports: map[string]domain.ChatReport{
 			"rep": {ID: "rep", ResolvedAt: &resolvedAt},
 		},
-		Tips: map[string]models.Tip{
+		Tips: map[string]domain.Tip{
 			"tip": {ID: "tip", ChannelID: "chan", FromUserID: "supporter", CreatedAt: now},
 		},
-		Subscriptions: map[string]models.Subscription{
+		Subscriptions: map[string]domain.Subscription{
 			"sub": {ID: "sub", ChannelID: "chan", UserID: "viewer", StartedAt: now, ExpiresAt: now.Add(time.Hour), Status: "active", CancelledAt: &cancelledAt},
 		},
 	}

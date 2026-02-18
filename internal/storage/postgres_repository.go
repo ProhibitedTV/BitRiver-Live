@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -287,9 +287,9 @@ func (r *postgresRepository) withConn(fn func(context.Context, *pgxpool.Conn) er
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func encodeDonationAddresses(addresses []models.CryptoAddress) ([]byte, error) {
+func encodeDonationAddresses(addresses []domain.CryptoAddress) ([]byte, error) {
 	if addresses == nil {
-		addresses = []models.CryptoAddress{}
+		addresses = []domain.CryptoAddress{}
 	}
 	data, err := json.Marshal(addresses)
 	if err != nil {
@@ -306,16 +306,16 @@ func encodeDonationAddresses(addresses []models.CryptoAddress) ([]byte, error) {
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func decodeDonationAddresses(data []byte) ([]models.CryptoAddress, error) {
+func decodeDonationAddresses(data []byte) ([]domain.CryptoAddress, error) {
 	if len(data) == 0 {
-		return []models.CryptoAddress{}, nil
+		return []domain.CryptoAddress{}, nil
 	}
-	var addresses []models.CryptoAddress
+	var addresses []domain.CryptoAddress
 	if err := json.Unmarshal(data, &addresses); err != nil {
 		return nil, fmt.Errorf("decode donation addresses: %w", err)
 	}
 	if addresses == nil {
-		addresses = []models.CryptoAddress{}
+		addresses = []domain.CryptoAddress{}
 	}
 	return addresses, nil
 }
@@ -328,9 +328,9 @@ func decodeDonationAddresses(data []byte) ([]models.CryptoAddress, error) {
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func encodeSocialLinks(links []models.SocialLink) ([]byte, error) {
+func encodeSocialLinks(links []domain.SocialLink) ([]byte, error) {
 	if links == nil {
-		links = []models.SocialLink{}
+		links = []domain.SocialLink{}
 	}
 	data, err := json.Marshal(links)
 	if err != nil {
@@ -347,16 +347,16 @@ func encodeSocialLinks(links []models.SocialLink) ([]byte, error) {
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func decodeSocialLinks(data []byte) ([]models.SocialLink, error) {
+func decodeSocialLinks(data []byte) ([]domain.SocialLink, error) {
 	if len(data) == 0 {
-		return []models.SocialLink{}, nil
+		return []domain.SocialLink{}, nil
 	}
-	var links []models.SocialLink
+	var links []domain.SocialLink
 	if err := json.Unmarshal(data, &links); err != nil {
 		return nil, fmt.Errorf("decode social links: %w", err)
 	}
 	if links == nil {
-		links = []models.SocialLink{}
+		links = []domain.SocialLink{}
 	}
 	return links, nil
 }
@@ -423,11 +423,11 @@ func ensureChannelExists(ctx context.Context, tx pgx.Tx, channelID string) error
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) UpsertProfile(userID string, update ProfileUpdate) (models.Profile, error) {
+func (r *postgresRepository) UpsertProfile(userID string, update ProfileUpdate) (domain.Profile, error) {
 	if r == nil || r.pool == nil {
-		return models.Profile{}, ErrPostgresUnavailable
+		return domain.Profile{}, ErrPostgresUnavailable
 	}
-	profile := models.Profile{}
+	profile := domain.Profile{}
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -443,12 +443,12 @@ func (r *postgresRepository) UpsertProfile(userID string, update ProfileUpdate) 
 			return fmt.Errorf("load user %s: %w", userID, err)
 		}
 
-		profile = models.Profile{
+		profile = domain.Profile{
 			UserID:            userID,
 			Bio:               "",
-			SocialLinks:       []models.SocialLink{},
+			SocialLinks:       []domain.SocialLink{},
 			TopFriends:        []string{},
-			DonationAddresses: []models.CryptoAddress{},
+			DonationAddresses: []domain.CryptoAddress{},
 			CreatedAt:         userCreatedAt.UTC(),
 			UpdatedAt:         userCreatedAt.UTC(),
 		}
@@ -582,7 +582,7 @@ func (r *postgresRepository) UpsertProfile(userID string, update ProfileUpdate) 
 			profile.TopFriends = ordered
 		}
 		if update.DonationAddresses != nil {
-			addresses := make([]models.CryptoAddress, 0, len(*update.DonationAddresses))
+			addresses := make([]domain.CryptoAddress, 0, len(*update.DonationAddresses))
 			for _, addr := range *update.DonationAddresses {
 				normalized, err := NormalizeDonationAddress(addr)
 				if err != nil {
@@ -654,12 +654,12 @@ RETURNING created_at, updated_at`,
 			profile.TopFriends = []string{}
 		}
 		if profile.DonationAddresses == nil {
-			profile.DonationAddresses = []models.CryptoAddress{}
+			profile.DonationAddresses = []domain.CryptoAddress{}
 		}
 		return nil
 	})
 	if err != nil {
-		return models.Profile{}, err
+		return domain.Profile{}, err
 	}
 	return profile, nil
 }
@@ -672,12 +672,12 @@ RETURNING created_at, updated_at`,
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) GetProfile(userID string) (models.Profile, bool) {
+func (r *postgresRepository) GetProfile(userID string) (domain.Profile, bool) {
 	if r == nil || r.pool == nil {
-		return models.Profile{}, false
+		return domain.Profile{}, false
 	}
 	var (
-		profile models.Profile
+		profile domain.Profile
 		found   bool
 		ok      bool
 		loadErr error
@@ -700,14 +700,14 @@ func (r *postgresRepository) GetProfile(userID string) (models.Profile, bool) {
 				loadErr = err
 				return nil
 			}
-			profile = models.Profile{
+			profile = domain.Profile{
 				UserID:            userID,
 				Bio:               "",
-				SocialLinks:       []models.SocialLink{},
+				SocialLinks:       []domain.SocialLink{},
 				AvatarURL:         "",
 				BannerURL:         "",
 				TopFriends:        []string{},
-				DonationAddresses: []models.CryptoAddress{},
+				DonationAddresses: []domain.CryptoAddress{},
 				CreatedAt:         userCreatedAt.UTC(),
 				UpdatedAt:         userCreatedAt.UTC(),
 			}
@@ -718,13 +718,13 @@ func (r *postgresRepository) GetProfile(userID string) (models.Profile, bool) {
 			loadErr = err
 			return nil
 		default:
-			profile = models.Profile{
+			profile = domain.Profile{
 				UserID:      userID,
 				Bio:         bio,
 				CreatedAt:   createdAt.UTC(),
 				UpdatedAt:   updatedAt.UTC(),
 				TopFriends:  []string{},
-				SocialLinks: []models.SocialLink{},
+				SocialLinks: []domain.SocialLink{},
 			}
 			if avatar.Valid {
 				profile.AvatarURL = avatar.String
@@ -755,7 +755,7 @@ func (r *postgresRepository) GetProfile(userID string) (models.Profile, bool) {
 				}
 				profile.DonationAddresses = addresses
 			} else {
-				profile.DonationAddresses = []models.CryptoAddress{}
+				profile.DonationAddresses = []domain.CryptoAddress{}
 			}
 			if profile.TopFriends == nil {
 				profile.TopFriends = []string{}
@@ -766,19 +766,19 @@ func (r *postgresRepository) GetProfile(userID string) (models.Profile, bool) {
 		}
 	})
 	if err != nil {
-		return models.Profile{}, false
+		return domain.Profile{}, false
 	}
 	if loadErr != nil || !ok {
-		return models.Profile{}, false
+		return domain.Profile{}, false
 	}
 	if profile.SocialLinks == nil {
-		profile.SocialLinks = []models.SocialLink{}
+		profile.SocialLinks = []domain.SocialLink{}
 	}
 	if profile.TopFriends == nil {
 		profile.TopFriends = []string{}
 	}
 	if profile.DonationAddresses == nil {
-		profile.DonationAddresses = []models.CryptoAddress{}
+		profile.DonationAddresses = []domain.CryptoAddress{}
 	}
 	return profile, found
 }
@@ -791,11 +791,11 @@ func (r *postgresRepository) GetProfile(userID string) (models.Profile, bool) {
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (r *postgresRepository) ListProfiles() []models.Profile {
+func (r *postgresRepository) ListProfiles() []domain.Profile {
 	if r == nil || r.pool == nil {
 		return nil
 	}
-	profiles := make([]models.Profile, 0)
+	profiles := make([]domain.Profile, 0)
 	var queryErr error
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		rows, err := conn.Query(ctx, "SELECT user_id, bio, avatar_url, banner_url, featured_channel_id, top_friends, social_links, donation_addresses, created_at, updated_at FROM profiles ORDER BY created_at ASC")
@@ -819,13 +819,13 @@ func (r *postgresRepository) ListProfiles() []models.Profile {
 				queryErr = err
 				return nil
 			}
-			profile := models.Profile{
+			profile := domain.Profile{
 				UserID:      userID,
 				Bio:         bio,
 				CreatedAt:   createdAt.UTC(),
 				UpdatedAt:   updatedAt.UTC(),
 				TopFriends:  []string{},
-				SocialLinks: []models.SocialLink{},
+				SocialLinks: []domain.SocialLink{},
 			}
 			if avatar.Valid {
 				profile.AvatarURL = avatar.String
@@ -856,10 +856,10 @@ func (r *postgresRepository) ListProfiles() []models.Profile {
 				}
 				profile.DonationAddresses = addresses
 			} else {
-				profile.DonationAddresses = []models.CryptoAddress{}
+				profile.DonationAddresses = []domain.CryptoAddress{}
 			}
 			if profile.SocialLinks == nil {
-				profile.SocialLinks = []models.SocialLink{}
+				profile.SocialLinks = []domain.SocialLink{}
 			}
 			if profile.TopFriends == nil {
 				profile.TopFriends = []string{}

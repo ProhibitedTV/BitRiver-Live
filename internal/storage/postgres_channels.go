@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -26,9 +26,9 @@ import (
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) loadStreamSession(ctx context.Context, id string) (models.StreamSession, bool) {
+func (r *postgresRepository) loadStreamSession(ctx context.Context, id string) (domain.StreamSession, bool) {
 	if strings.TrimSpace(id) == "" {
-		return models.StreamSession{}, false
+		return domain.StreamSession{}, false
 	}
 	var (
 		channelID       string
@@ -44,30 +44,30 @@ func (r *postgresRepository) loadStreamSession(ctx context.Context, id string) (
 	err := r.pool.QueryRow(ctx, "SELECT channel_id, started_at, ended_at, renditions, peak_concurrent, origin_url, playback_url, ingest_endpoints, ingest_job_ids FROM stream_sessions WHERE id = $1", id).
 		Scan(&channelID, &startedAt, &endedAt, &renditions, &peak, &originURL, &playbackURL, &ingestEndpoints, &ingestJobIDs)
 	if err != nil {
-		return models.StreamSession{}, false
+		return domain.StreamSession{}, false
 	}
 	manifestsRows, err := r.pool.Query(ctx, "SELECT name, manifest_url, bitrate FROM stream_session_manifests WHERE session_id = $1", id)
 	if err != nil {
-		return models.StreamSession{}, false
+		return domain.StreamSession{}, false
 	}
 	defer manifestsRows.Close()
-	manifests := make([]models.RenditionManifest, 0)
+	manifests := make([]domain.RenditionManifest, 0)
 	for manifestsRows.Next() {
 		var name, url string
 		var bitrate pgtype.Int4
 		if err := manifestsRows.Scan(&name, &url, &bitrate); err != nil {
-			return models.StreamSession{}, false
+			return domain.StreamSession{}, false
 		}
-		entry := models.RenditionManifest{Name: name, ManifestURL: url}
+		entry := domain.RenditionManifest{Name: name, ManifestURL: url}
 		if bitrate.Valid {
 			entry.Bitrate = int(bitrate.Int32)
 		}
 		manifests = append(manifests, entry)
 	}
 	if err := manifestsRows.Err(); err != nil {
-		return models.StreamSession{}, false
+		return domain.StreamSession{}, false
 	}
-	session := models.StreamSession{
+	session := domain.StreamSession{
 		ID:                 id,
 		ChannelID:          channelID,
 		StartedAt:          startedAt.UTC(),
@@ -87,7 +87,7 @@ func (r *postgresRepository) loadStreamSession(ctx context.Context, id string) (
 		session.Renditions = []string{}
 	}
 	if session.RenditionManifests == nil {
-		session.RenditionManifests = []models.RenditionManifest{}
+		session.RenditionManifests = []domain.RenditionManifest{}
 	}
 	if session.IngestEndpoints == nil {
 		session.IngestEndpoints = []string{}
@@ -127,10 +127,10 @@ func (r *postgresRepository) recordingDeadline(now time.Time, published bool) *t
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) createRecording(session models.StreamSession, channel models.Channel, ended time.Time) (models.Recording, error) {
+func (r *postgresRepository) createRecording(session domain.StreamSession, channel domain.Channel, ended time.Time) (domain.Recording, error) {
 	recordingID, err := generateID()
 	if err != nil {
-		return models.Recording{}, err
+		return domain.Recording{}, err
 	}
 	duration := int(ended.Sub(session.StartedAt).Round(time.Second).Seconds())
 	if duration < 0 {
@@ -150,7 +150,7 @@ func (r *postgresRepository) createRecording(session models.StreamSession, chann
 	if session.PeakConcurrent > 0 {
 		metadata["peakConcurrent"] = strconv.Itoa(session.PeakConcurrent)
 	}
-	recording := models.Recording{
+	recording := domain.Recording{
 		ID:              recordingID,
 		ChannelID:       channel.ID,
 		SessionID:       session.ID,
@@ -164,14 +164,14 @@ func (r *postgresRepository) createRecording(session models.StreamSession, chann
 		recording.RetainUntil = deadline
 	}
 	if len(session.RenditionManifests) > 0 {
-		renditions := make([]models.RecordingRendition, 0, len(session.RenditionManifests))
+		renditions := make([]domain.RecordingRendition, 0, len(session.RenditionManifests))
 		for _, manifest := range session.RenditionManifests {
-			renditions = append(renditions, models.RecordingRendition(manifest))
+			renditions = append(renditions, domain.RecordingRendition(manifest))
 		}
 		recording.Renditions = renditions
 	}
 	if err := r.populateRecordingArtifacts(&recording, session); err != nil {
-		return models.Recording{}, err
+		return domain.Recording{}, err
 	}
 	return recording, nil
 }
@@ -184,7 +184,7 @@ func (r *postgresRepository) createRecording(session models.StreamSession, chann
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) populateRecordingArtifacts(recording *models.Recording, session models.StreamSession) error {
+func (r *postgresRepository) populateRecordingArtifacts(recording *domain.Recording, session domain.StreamSession) error {
 	client := r.objectClient
 	if client == nil || !client.Enabled() {
 		return nil
@@ -249,7 +249,7 @@ func (r *postgresRepository) populateRecordingArtifacts(recording *models.Record
 	if ref.Key != "" {
 		recording.Metadata[thumbnailMetadataKey(thumbID)] = ref.Key
 	}
-	thumbnail := models.RecordingThumbnail{
+	thumbnail := domain.RecordingThumbnail{
 		ID:          thumbID,
 		RecordingID: recording.ID,
 		URL:         ref.URL,
@@ -267,7 +267,7 @@ func (r *postgresRepository) populateRecordingArtifacts(recording *models.Record
 // Transactions/connections: requires an already-open pgx transaction supplied by the caller;
 // it does not commit/rollback and does not retry automatically.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) insertRecording(ctx context.Context, tx pgx.Tx, recording models.Recording) error {
+func (r *postgresRepository) insertRecording(ctx context.Context, tx pgx.Tx, recording domain.Recording) error {
 	metadata := recording.Metadata
 	if metadata == nil {
 		metadata = make(map[string]string)
@@ -320,7 +320,7 @@ func (r *postgresRepository) insertRecording(ctx context.Context, tx pgx.Tx, rec
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) deleteRecordingArtifacts(recording models.Recording) error {
+func (r *postgresRepository) deleteRecordingArtifacts(recording domain.Recording) error {
 	client := r.objectClient
 	if client == nil || !client.Enabled() {
 		return nil
@@ -359,7 +359,7 @@ func (r *postgresRepository) deleteRecordingArtifacts(recording models.Recording
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) deleteClipArtifacts(clip models.ClipExport) error {
+func (r *postgresRepository) deleteClipArtifacts(clip domain.ClipExport) error {
 	client := r.objectClient
 	if client == nil || !client.Enabled() {
 		return nil
@@ -420,7 +420,7 @@ func (r *postgresRepository) purgeExpiredRecordings(ctx context.Context, now tim
 	}
 	defer rows.Close()
 	ids := make([]string, 0)
-	recordings := make(map[string]models.Recording)
+	recordings := make(map[string]domain.Recording)
 	for rows.Next() {
 		var id string
 		var metadataBytes []byte
@@ -433,7 +433,7 @@ func (r *postgresRepository) purgeExpiredRecordings(ctx context.Context, now tim
 				return fmt.Errorf("decode recording metadata: %w", err)
 			}
 		}
-		recordings[id] = models.Recording{ID: id, Metadata: meta}
+		recordings[id] = domain.Recording{ID: id, Metadata: meta}
 		ids = append(ids, id)
 	}
 	if err := rows.Err(); err != nil {
@@ -449,9 +449,9 @@ func (r *postgresRepository) purgeExpiredRecordings(ctx context.Context, now tim
 		if err != nil {
 			return fmt.Errorf("load clip exports for recording %s: %w", id, err)
 		}
-		clips := make([]models.ClipExport, 0)
+		clips := make([]domain.ClipExport, 0)
 		for clipRows.Next() {
-			var clip models.ClipExport
+			var clip domain.ClipExport
 			var storageObject pgtype.Text
 			if err := clipRows.Scan(&clip.ID, &storageObject); err != nil {
 				clipRows.Close()
@@ -491,7 +491,7 @@ func (r *postgresRepository) purgeExpiredRecordings(ctx context.Context, now tim
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) loadRecording(ctx context.Context, id string) (models.Recording, bool, error) {
+func (r *postgresRepository) loadRecording(ctx context.Context, id string) (domain.Recording, bool, error) {
 	var (
 		channelID       string
 		sessionID       string
@@ -506,18 +506,18 @@ func (r *postgresRepository) loadRecording(ctx context.Context, id string) (mode
 	err := r.pool.QueryRow(ctx, "SELECT channel_id, session_id, title, duration_seconds, playback_base_url, metadata, published_at, created_at, retain_until FROM recordings WHERE id = $1", id).
 		Scan(&channelID, &sessionID, &title, &duration, &playbackBaseURL, &metadataBytes, &publishedAt, &createdAt, &retainUntil)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return models.Recording{}, false, nil
+		return domain.Recording{}, false, nil
 	}
 	if err != nil {
-		return models.Recording{}, false, err
+		return domain.Recording{}, false, err
 	}
 	metadata := make(map[string]string)
 	if len(metadataBytes) > 0 {
 		if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
-			return models.Recording{}, false, fmt.Errorf("decode recording metadata: %w", err)
+			return domain.Recording{}, false, fmt.Errorf("decode recording metadata: %w", err)
 		}
 	}
-	recording := models.Recording{
+	recording := domain.Recording{
 		ID:              id,
 		ChannelID:       channelID,
 		SessionID:       sessionID,
@@ -537,17 +537,17 @@ func (r *postgresRepository) loadRecording(ctx context.Context, id string) (mode
 	}
 	renditionsRows, err := r.pool.Query(ctx, "SELECT name, manifest_url, bitrate FROM recording_renditions WHERE recording_id = $1", id)
 	if err != nil {
-		return models.Recording{}, false, fmt.Errorf("load recording renditions: %w", err)
+		return domain.Recording{}, false, fmt.Errorf("load recording renditions: %w", err)
 	}
-	renditions := make([]models.RecordingRendition, 0)
+	renditions := make([]domain.RecordingRendition, 0)
 	for renditionsRows.Next() {
 		var name, url string
 		var bitrate pgtype.Int4
 		if err := renditionsRows.Scan(&name, &url, &bitrate); err != nil {
 			renditionsRows.Close()
-			return models.Recording{}, false, fmt.Errorf("scan recording rendition: %w", err)
+			return domain.Recording{}, false, fmt.Errorf("scan recording rendition: %w", err)
 		}
-		entry := models.RecordingRendition{Name: name, ManifestURL: url}
+		entry := domain.RecordingRendition{Name: name, ManifestURL: url}
 		if bitrate.Valid {
 			entry.Bitrate = int(bitrate.Int32)
 		}
@@ -555,46 +555,46 @@ func (r *postgresRepository) loadRecording(ctx context.Context, id string) (mode
 	}
 	renditionsRows.Close()
 	if err := renditionsRows.Err(); err != nil {
-		return models.Recording{}, false, fmt.Errorf("read recording renditions: %w", err)
+		return domain.Recording{}, false, fmt.Errorf("read recording renditions: %w", err)
 	}
 	recording.Renditions = renditions
 
 	thumbRows, err := r.pool.Query(ctx, "SELECT id, url, width, height, created_at FROM recording_thumbnails WHERE recording_id = $1", id)
 	if err != nil {
-		return models.Recording{}, false, fmt.Errorf("load recording thumbnails: %w", err)
+		return domain.Recording{}, false, fmt.Errorf("load recording thumbnails: %w", err)
 	}
-	thumbnails := make([]models.RecordingThumbnail, 0)
+	thumbnails := make([]domain.RecordingThumbnail, 0)
 	for thumbRows.Next() {
-		var thumb models.RecordingThumbnail
+		var thumb domain.RecordingThumbnail
 		thumb.RecordingID = id
 		if err := thumbRows.Scan(&thumb.ID, &thumb.URL, &thumb.Width, &thumb.Height, &thumb.CreatedAt); err != nil {
 			thumbRows.Close()
-			return models.Recording{}, false, fmt.Errorf("scan recording thumbnail: %w", err)
+			return domain.Recording{}, false, fmt.Errorf("scan recording thumbnail: %w", err)
 		}
 		thumbnails = append(thumbnails, thumb)
 	}
 	thumbRows.Close()
 	if err := thumbRows.Err(); err != nil {
-		return models.Recording{}, false, fmt.Errorf("read recording thumbnails: %w", err)
+		return domain.Recording{}, false, fmt.Errorf("read recording thumbnails: %w", err)
 	}
 	recording.Thumbnails = thumbnails
 
 	clipRows, err := r.pool.Query(ctx, "SELECT id, title, start_seconds, end_seconds, status FROM clip_exports WHERE recording_id = $1", id)
 	if err != nil {
-		return models.Recording{}, false, fmt.Errorf("load clip exports: %w", err)
+		return domain.Recording{}, false, fmt.Errorf("load clip exports: %w", err)
 	}
-	clips := make([]models.ClipExportSummary, 0)
+	clips := make([]domain.ClipExportSummary, 0)
 	for clipRows.Next() {
-		var clip models.ClipExportSummary
+		var clip domain.ClipExportSummary
 		if err := clipRows.Scan(&clip.ID, &clip.Title, &clip.StartSeconds, &clip.EndSeconds, &clip.Status); err != nil {
 			clipRows.Close()
-			return models.Recording{}, false, fmt.Errorf("scan clip export: %w", err)
+			return domain.Recording{}, false, fmt.Errorf("scan clip export: %w", err)
 		}
 		clips = append(clips, clip)
 	}
 	clipRows.Close()
 	if err := clipRows.Err(); err != nil {
-		return models.Recording{}, false, fmt.Errorf("read clip exports: %w", err)
+		return domain.Recording{}, false, fmt.Errorf("read clip exports: %w", err)
 	}
 	if len(clips) > 0 {
 		sort.Slice(clips, func(i, j int) bool {
@@ -616,7 +616,7 @@ func (r *postgresRepository) loadRecording(ctx context.Context, id string) (mode
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) loadUpload(ctx context.Context, id string) (models.Upload, bool, error) {
+func (r *postgresRepository) loadUpload(ctx context.Context, id string) (domain.Upload, bool, error) {
 	var (
 		channelID     string
 		title         string
@@ -635,18 +635,18 @@ func (r *postgresRepository) loadUpload(ctx context.Context, id string) (models.
 	err := r.pool.QueryRow(ctx, "SELECT channel_id, title, filename, size_bytes, status, progress, recording_id, playback_url, metadata, error, created_at, updated_at, completed_at FROM uploads WHERE id = $1", id).
 		Scan(&channelID, &title, &filename, &sizeBytes, &status, &progress, &recordingID, &playbackURL, &metadataBytes, &errorText, &createdAt, &updatedAt, &completedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return models.Upload{}, false, nil
+		return domain.Upload{}, false, nil
 	}
 	if err != nil {
-		return models.Upload{}, false, err
+		return domain.Upload{}, false, err
 	}
 	metadata := make(map[string]string)
 	if len(metadataBytes) > 0 {
 		if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
-			return models.Upload{}, false, fmt.Errorf("decode upload metadata: %w", err)
+			return domain.Upload{}, false, fmt.Errorf("decode upload metadata: %w", err)
 		}
 	}
-	upload := models.Upload{
+	upload := domain.Upload{
 		ID:        id,
 		ChannelID: channelID,
 		Title:     title,
@@ -685,20 +685,20 @@ func (r *postgresRepository) loadUpload(ctx context.Context, id string) (models.
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) CreateChannel(ownerID, title, category string, tags []string) (models.Channel, error) {
+func (r *postgresRepository) CreateChannel(ownerID, title, category string, tags []string) (domain.Channel, error) {
 	if r == nil || r.pool == nil {
-		return models.Channel{}, ErrPostgresUnavailable
+		return domain.Channel{}, ErrPostgresUnavailable
 	}
 	if strings.TrimSpace(ownerID) == "" {
-		return models.Channel{}, fmt.Errorf("owner %s not found", ownerID)
+		return domain.Channel{}, fmt.Errorf("owner %s not found", ownerID)
 	}
 	trimmedTitle := strings.TrimSpace(title)
 	if trimmedTitle == "" {
-		return models.Channel{}, errors.New("title is required")
+		return domain.Channel{}, errors.New("title is required")
 	}
 
 	var (
-		channel           models.Channel
+		channel           domain.Channel
 		insertedCreatedAt time.Time
 		insertedUpdatedAt time.Time
 		streamKey         string
@@ -752,10 +752,10 @@ func (r *postgresRepository) CreateChannel(ownerID, title, category string, tags
 		return nil
 	})
 	if err != nil {
-		return models.Channel{}, err
+		return domain.Channel{}, err
 	}
 
-	channel = models.Channel{
+	channel = domain.Channel{
 		ID:        id,
 		OwnerID:   ownerID,
 		StreamKey: streamKey,
@@ -777,11 +777,11 @@ func (r *postgresRepository) CreateChannel(ownerID, title, category string, tags
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) UpdateChannel(id string, update ChannelUpdate) (models.Channel, error) {
+func (r *postgresRepository) UpdateChannel(id string, update ChannelUpdate) (domain.Channel, error) {
 	if r == nil || r.pool == nil {
-		return models.Channel{}, ErrPostgresUnavailable
+		return domain.Channel{}, ErrPostgresUnavailable
 	}
-	var channel models.Channel
+	var channel domain.Channel
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -805,7 +805,7 @@ func (r *postgresRepository) UpdateChannel(id string, update ChannelUpdate) (mod
 			return fmt.Errorf("load channel %s: %w", id, err)
 		}
 
-		channel = models.Channel{
+		channel = domain.Channel{
 			ID:        channelID,
 			OwnerID:   ownerID,
 			StreamKey: streamKey,
@@ -864,7 +864,7 @@ func (r *postgresRepository) UpdateChannel(id string, update ChannelUpdate) (mod
 		return nil
 	})
 	if err != nil {
-		return models.Channel{}, err
+		return domain.Channel{}, err
 	}
 	if channel.Tags == nil {
 		channel.Tags = []string{}
@@ -880,11 +880,11 @@ func (r *postgresRepository) UpdateChannel(id string, update ChannelUpdate) (mod
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) RotateChannelStreamKey(id string) (models.Channel, error) {
+func (r *postgresRepository) RotateChannelStreamKey(id string) (domain.Channel, error) {
 	if r == nil || r.pool == nil {
-		return models.Channel{}, ErrPostgresUnavailable
+		return domain.Channel{}, ErrPostgresUnavailable
 	}
-	var channel models.Channel
+	var channel domain.Channel
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -920,7 +920,7 @@ func (r *postgresRepository) RotateChannelStreamKey(id string) (models.Channel, 
 			return fmt.Errorf("commit rotate stream key: %w", err)
 		}
 
-		channel = models.Channel{
+		channel = domain.Channel{
 			ID:        channelID,
 			OwnerID:   ownerID,
 			StreamKey: newKey,
@@ -940,7 +940,7 @@ func (r *postgresRepository) RotateChannelStreamKey(id string) (models.Channel, 
 		return nil
 	})
 	if err != nil {
-		return models.Channel{}, err
+		return domain.Channel{}, err
 	}
 	if channel.Tags == nil {
 		channel.Tags = []string{}
@@ -999,11 +999,11 @@ func (r *postgresRepository) DeleteChannel(id string) error {
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) GetChannel(id string) (models.Channel, bool) {
+func (r *postgresRepository) GetChannel(id string) (domain.Channel, bool) {
 	if r == nil || r.pool == nil {
-		return models.Channel{}, false
+		return domain.Channel{}, false
 	}
-	var channel models.Channel
+	var channel domain.Channel
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		var (
 			channelID, ownerID, streamKey, title string
@@ -1018,7 +1018,7 @@ func (r *postgresRepository) GetChannel(id string) (models.Channel, bool) {
 		if err != nil {
 			return err
 		}
-		channel = models.Channel{
+		channel = domain.Channel{
 			ID:        channelID,
 			OwnerID:   ownerID,
 			StreamKey: streamKey,
@@ -1038,7 +1038,7 @@ func (r *postgresRepository) GetChannel(id string) (models.Channel, bool) {
 		return nil
 	})
 	if errors.Is(err, pgx.ErrNoRows) || err != nil {
-		return models.Channel{}, false
+		return domain.Channel{}, false
 	}
 	if channel.Tags == nil {
 		channel.Tags = []string{}
@@ -1054,16 +1054,16 @@ func (r *postgresRepository) GetChannel(id string) (models.Channel, bool) {
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) GetChannelByStreamKey(streamKey string) (models.Channel, bool) {
+func (r *postgresRepository) GetChannelByStreamKey(streamKey string) (domain.Channel, bool) {
 	if r == nil || r.pool == nil {
-		return models.Channel{}, false
+		return domain.Channel{}, false
 	}
 	key := strings.TrimSpace(streamKey)
 	if key == "" {
-		return models.Channel{}, false
+		return domain.Channel{}, false
 	}
 
-	var channel models.Channel
+	var channel domain.Channel
 	found := false
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		var (
@@ -1094,7 +1094,7 @@ func (r *postgresRepository) GetChannelByStreamKey(streamKey string) (models.Cha
 		return nil
 	})
 	if err != nil || !found {
-		return models.Channel{}, false
+		return domain.Channel{}, false
 	}
 	return channel, true
 }
@@ -1107,7 +1107,7 @@ func (r *postgresRepository) GetChannelByStreamKey(streamKey string) (models.Cha
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (r *postgresRepository) ListChannels(ownerID, query string) []models.Channel {
+func (r *postgresRepository) ListChannels(ownerID, query string) []domain.Channel {
 	if r == nil || r.pool == nil {
 		return nil
 	}
@@ -1139,7 +1139,7 @@ func (r *postgresRepository) ListChannels(ownerID, query string) []models.Channe
 	}
 	defer rows.Close()
 
-	channels := make([]models.Channel, 0)
+	channels := make([]domain.Channel, 0)
 	for rows.Next() {
 		var (
 			channelID, ownerIDVal, streamKey, title string
@@ -1152,7 +1152,7 @@ func (r *postgresRepository) ListChannels(ownerID, query string) []models.Channe
 		if err := rows.Scan(&channelID, &ownerIDVal, &streamKey, &title, &category, &tags, &liveState, &currentSession, &createdAt, &updatedAt); err != nil {
 			return nil
 		}
-		channel := models.Channel{
+		channel := domain.Channel{
 			ID:        channelID,
 			OwnerID:   ownerIDVal,
 			StreamKey: streamKey,
@@ -1337,9 +1337,9 @@ func (r *postgresRepository) ListFollowedChannelIDs(userID string) []string {
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) StartStream(channelID string, renditions []string) (models.StreamSession, error) {
+func (r *postgresRepository) StartStream(channelID string, renditions []string) (domain.StreamSession, error) {
 	if r == nil || r.pool == nil {
-		return models.StreamSession{}, ErrPostgresUnavailable
+		return domain.StreamSession{}, ErrPostgresUnavailable
 	}
 	var (
 		streamKey      string
@@ -1383,7 +1383,7 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 		return nil
 	})
 	if err != nil {
-		return models.StreamSession{}, err
+		return domain.StreamSession{}, err
 	}
 
 	attempts := r.ingestMaxAttempts
@@ -1396,7 +1396,7 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 			_, err := conn.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
 			return err
 		})
-		return models.StreamSession{}, ErrIngestControllerUnavailable
+		return domain.StreamSession{}, ErrIngestControllerUnavailable
 	}
 	deadline := normalizeIngestTimeout(r.ingestTimeout)
 	var boot ingest.BootResult
@@ -1422,10 +1422,10 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 			_, err := conn.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
 			return err
 		})
-		return models.StreamSession{}, fmt.Errorf("boot ingest: %w", bootErr)
+		return domain.StreamSession{}, fmt.Errorf("boot ingest: %w", bootErr)
 	}
 
-	session := models.StreamSession{
+	session := domain.StreamSession{
 		ID:             sessionID,
 		ChannelID:      channelID,
 		StartedAt:      startedAt,
@@ -1444,9 +1444,9 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 	}
 	session.IngestEndpoints = ingestEndpoints
 	if len(boot.Renditions) > 0 {
-		manifests := make([]models.RenditionManifest, 0, len(boot.Renditions))
+		manifests := make([]domain.RenditionManifest, 0, len(boot.Renditions))
 		for _, rendition := range boot.Renditions {
-			manifests = append(manifests, models.RenditionManifest{
+			manifests = append(manifests, domain.RenditionManifest{
 				Name:        rendition.Name,
 				ManifestURL: rendition.ManifestURL,
 				Bitrate:     rendition.Bitrate,
@@ -1502,7 +1502,7 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 	})
 	if persistErr != nil {
 		shutdownIngest()
-		return models.StreamSession{}, persistErr
+		return domain.StreamSession{}, persistErr
 	}
 
 	return session, nil
@@ -1516,9 +1516,9 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (session models.StreamSession, err error) {
+func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (session domain.StreamSession, err error) {
 	if r == nil || r.pool == nil {
-		return models.StreamSession{}, ErrPostgresUnavailable
+		return domain.StreamSession{}, ErrPostgresUnavailable
 	}
 
 	var (
@@ -1591,7 +1591,7 @@ func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (s
 		if err != nil {
 			return fmt.Errorf("load session manifests: %w", err)
 		}
-		manifests := make([]models.RenditionManifest, 0)
+		manifests := make([]domain.RenditionManifest, 0)
 		for manifestsRows.Next() {
 			var name, url string
 			var bitrate pgtype.Int4
@@ -1599,7 +1599,7 @@ func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (s
 				manifestsRows.Close()
 				return fmt.Errorf("scan session manifest: %w", err)
 			}
-			entry := models.RenditionManifest{Name: name, ManifestURL: url}
+			entry := domain.RenditionManifest{Name: name, ManifestURL: url}
 			if bitrate.Valid {
 				entry.Bitrate = int(bitrate.Int32)
 			}
@@ -1613,7 +1613,7 @@ func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (s
 			return fmt.Errorf("commit load session: %w", err)
 		}
 
-		session = models.StreamSession{
+		session = domain.StreamSession{
 			ID:                 sessionID,
 			ChannelID:          channelID,
 			StartedAt:          startedAt.UTC(),
@@ -1623,7 +1623,7 @@ func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (s
 			PlaybackURL:        playbackURL,
 			IngestEndpoints:    append([]string{}, ingestEndpoints...),
 			IngestJobIDs:       append([]string{}, ingestJobIDs...),
-			RenditionManifests: append([]models.RenditionManifest{}, manifests...),
+			RenditionManifests: append([]domain.RenditionManifest{}, manifests...),
 		}
 		if endedAt.Valid {
 			ts := endedAt.Time.UTC()
@@ -1632,19 +1632,19 @@ func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (s
 		return nil
 	})
 	if err != nil {
-		return models.StreamSession{}, err
+		return domain.StreamSession{}, err
 	}
 
 	deadline := normalizeIngestTimeout(r.ingestTimeout)
 	controller := r.ingestController
 	if controller == nil {
-		return models.StreamSession{}, ErrIngestControllerUnavailable
+		return domain.StreamSession{}, ErrIngestControllerUnavailable
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), deadline)
 	defer cancel()
 	if err := controller.ShutdownStream(shutdownCtx, channelID, session.ID, append([]string{}, session.IngestJobIDs...)); err != nil {
-		return models.StreamSession{}, fmt.Errorf("shutdown ingest: %w", err)
+		return domain.StreamSession{}, fmt.Errorf("shutdown ingest: %w", err)
 	}
 	cleanupAfterShutdown = true
 
@@ -1654,7 +1654,7 @@ func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (s
 		session.PeakConcurrent = peakConcurrent
 	}
 
-	channel := models.Channel{ID: channelID, Title: channelTitle}
+	channel := domain.Channel{ID: channelID, Title: channelTitle}
 	if channelCategory.Valid {
 		channel.Category = channelCategory.String
 	}
@@ -1664,7 +1664,7 @@ func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (s
 
 	recording, recErr := r.createRecording(session, channel, stopTimestamp)
 	if recErr != nil {
-		return models.StreamSession{}, recErr
+		return domain.StreamSession{}, recErr
 	}
 
 	err = r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
@@ -1691,7 +1691,7 @@ func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (s
 		return nil
 	})
 	if err != nil {
-		return models.StreamSession{}, err
+		return domain.StreamSession{}, err
 	}
 
 	return session, nil
@@ -1705,24 +1705,24 @@ func (r *postgresRepository) StopStream(channelID string, peakConcurrent int) (s
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) CurrentStreamSession(channelID string) (models.StreamSession, bool) {
+func (r *postgresRepository) CurrentStreamSession(channelID string) (domain.StreamSession, bool) {
 	if r == nil || r.pool == nil {
-		return models.StreamSession{}, false
+		return domain.StreamSession{}, false
 	}
 	var current pgtype.Text
 	if err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		return conn.QueryRow(ctx, "SELECT current_session_id FROM channels WHERE id = $1", channelID).Scan(&current)
 	}); err != nil {
-		return models.StreamSession{}, false
+		return domain.StreamSession{}, false
 	}
 	if !current.Valid {
-		return models.StreamSession{}, false
+		return domain.StreamSession{}, false
 	}
 	loadCtx, cancel := r.acquireContext()
 	defer cancel()
 	session, ok := r.loadStreamSession(loadCtx, current.String)
 	if !ok {
-		return models.StreamSession{}, false
+		return domain.StreamSession{}, false
 	}
 	return session, true
 }
@@ -1736,7 +1736,7 @@ func (r *postgresRepository) CurrentStreamSession(channelID string) (models.Stre
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (r *postgresRepository) ListStreamSessions(channelID string) ([]models.StreamSession, error) {
+func (r *postgresRepository) ListStreamSessions(channelID string) ([]domain.StreamSession, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
 	}
@@ -1767,7 +1767,7 @@ func (r *postgresRepository) ListStreamSessions(channelID string) ([]models.Stre
 		return nil, err
 	}
 
-	sessions := make([]models.StreamSession, 0, len(ids))
+	sessions := make([]domain.StreamSession, 0, len(ids))
 	for _, id := range ids {
 		loadCtx, cancel := r.acquireContext()
 		session, ok := r.loadStreamSession(loadCtx, id)
@@ -1789,7 +1789,7 @@ func (r *postgresRepository) ListStreamSessions(channelID string) ([]models.Stre
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (r *postgresRepository) ListRecordings(channelID string, includeUnpublished bool) ([]models.Recording, error) {
+func (r *postgresRepository) ListRecordings(channelID string, includeUnpublished bool) ([]domain.Recording, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
 	}
@@ -1828,7 +1828,7 @@ func (r *postgresRepository) ListRecordings(channelID string, includeUnpublished
 		return nil, err
 	}
 
-	recordings := make([]models.Recording, 0, len(ids))
+	recordings := make([]domain.Recording, 0, len(ids))
 	for _, id := range ids {
 		loadCtx, cancel := r.acquireContext()
 		recording, ok, loadErr := r.loadRecording(loadCtx, id)
@@ -1852,13 +1852,13 @@ func (r *postgresRepository) ListRecordings(channelID string, includeUnpublished
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) CreateUpload(params CreateUploadParams) (models.Upload, error) {
+func (r *postgresRepository) CreateUpload(params CreateUploadParams) (domain.Upload, error) {
 	if r == nil || r.pool == nil {
-		return models.Upload{}, ErrPostgresUnavailable
+		return domain.Upload{}, ErrPostgresUnavailable
 	}
 	channelID := strings.TrimSpace(params.ChannelID)
 	if channelID == "" {
-		return models.Upload{}, fmt.Errorf("channelId is required")
+		return domain.Upload{}, fmt.Errorf("channelId is required")
 	}
 	title := strings.TrimSpace(params.Title)
 	if title == "" {
@@ -1877,11 +1877,11 @@ func (r *postgresRepository) CreateUpload(params CreateUploadParams) (models.Upl
 	}
 	metadataJSON, err := json.Marshal(metadata)
 	if err != nil {
-		return models.Upload{}, fmt.Errorf("encode metadata: %w", err)
+		return domain.Upload{}, fmt.Errorf("encode metadata: %w", err)
 	}
 	playbackURL := strings.TrimSpace(params.PlaybackURL)
 
-	upload := models.Upload{}
+	upload := domain.Upload{}
 	err = r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		var exists bool
 		if err := conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM channels WHERE id = $1)", channelID).Scan(&exists); err != nil {
@@ -1909,7 +1909,7 @@ func (r *postgresRepository) CreateUpload(params CreateUploadParams) (models.Upl
 		); err != nil {
 			return fmt.Errorf("insert upload: %w", err)
 		}
-		upload = models.Upload{
+		upload = domain.Upload{
 			ID:          id,
 			ChannelID:   channelID,
 			Title:       title,
@@ -1925,7 +1925,7 @@ func (r *postgresRepository) CreateUpload(params CreateUploadParams) (models.Upl
 		return nil
 	})
 	if err != nil {
-		return models.Upload{}, err
+		return domain.Upload{}, err
 	}
 	return upload, nil
 }
@@ -1939,7 +1939,7 @@ func (r *postgresRepository) CreateUpload(params CreateUploadParams) (models.Upl
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (r *postgresRepository) ListUploads(channelID string) ([]models.Upload, error) {
+func (r *postgresRepository) ListUploads(channelID string) ([]domain.Upload, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
 	}
@@ -1970,7 +1970,7 @@ func (r *postgresRepository) ListUploads(channelID string) ([]models.Upload, err
 		return nil, err
 	}
 
-	uploads := make([]models.Upload, 0, len(ids))
+	uploads := make([]domain.Upload, 0, len(ids))
 	for _, id := range ids {
 		loadCtx, cancel := r.acquireContext()
 		upload, ok, loadErr := r.loadUpload(loadCtx, id)
@@ -1994,15 +1994,15 @@ func (r *postgresRepository) ListUploads(channelID string) ([]models.Upload, err
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) GetUpload(id string) (models.Upload, bool) {
+func (r *postgresRepository) GetUpload(id string) (domain.Upload, bool) {
 	if r == nil || r.pool == nil {
-		return models.Upload{}, false
+		return domain.Upload{}, false
 	}
 	ctx, cancel := r.acquireContext()
 	upload, ok, err := r.loadUpload(ctx, id)
 	cancel()
 	if err != nil || !ok {
-		return models.Upload{}, false
+		return domain.Upload{}, false
 	}
 	return upload, true
 }
@@ -2015,11 +2015,11 @@ func (r *postgresRepository) GetUpload(id string) (models.Upload, bool) {
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) UpdateUpload(id string, update UploadUpdate) (models.Upload, error) {
+func (r *postgresRepository) UpdateUpload(id string, update UploadUpdate) (domain.Upload, error) {
 	if r == nil || r.pool == nil {
-		return models.Upload{}, ErrPostgresUnavailable
+		return domain.Upload{}, ErrPostgresUnavailable
 	}
-	var result models.Upload
+	var result domain.Upload
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -2126,7 +2126,7 @@ func (r *postgresRepository) UpdateUpload(id string, update UploadUpdate) (model
 		return nil
 	})
 	if err != nil {
-		return models.Upload{}, err
+		return domain.Upload{}, err
 	}
 	return result, nil
 }
@@ -2163,9 +2163,9 @@ func (r *postgresRepository) DeleteUpload(id string) error {
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) GetRecording(id string) (models.Recording, bool) {
+func (r *postgresRepository) GetRecording(id string) (domain.Recording, bool) {
 	if r == nil || r.pool == nil {
-		return models.Recording{}, false
+		return domain.Recording{}, false
 	}
 	ctx, cancel := r.acquireContext()
 	if err := r.purgeExpiredRecordings(ctx, r.retentionTime()); err != nil {
@@ -2174,7 +2174,7 @@ func (r *postgresRepository) GetRecording(id string) (models.Recording, bool) {
 	recording, ok, err := r.loadRecording(ctx, id)
 	cancel()
 	if err != nil || !ok {
-		return models.Recording{}, false
+		return domain.Recording{}, false
 	}
 	return recording, true
 }
@@ -2187,12 +2187,12 @@ func (r *postgresRepository) GetRecording(id string) (models.Recording, bool) {
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) PublishRecording(id string) (models.Recording, error) {
+func (r *postgresRepository) PublishRecording(id string) (domain.Recording, error) {
 	if r == nil || r.pool == nil {
-		return models.Recording{}, ErrPostgresUnavailable
+		return domain.Recording{}, ErrPostgresUnavailable
 	}
 
-	var recording models.Recording
+	var recording domain.Recording
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -2250,7 +2250,7 @@ func (r *postgresRepository) PublishRecording(id string) (models.Recording, erro
 		return nil
 	})
 	if err != nil {
-		return models.Recording{}, err
+		return domain.Recording{}, err
 	}
 	return recording, nil
 }
@@ -2286,9 +2286,9 @@ func (r *postgresRepository) DeleteRecording(id string) error {
 		cancel()
 		return fmt.Errorf("load clip exports: %w", err)
 	}
-	clips := make([]models.ClipExport, 0)
+	clips := make([]domain.ClipExport, 0)
 	for clipRows.Next() {
-		var clip models.ClipExport
+		var clip domain.ClipExport
 		var storageObject pgtype.Text
 		if err := clipRows.Scan(&clip.ID, &storageObject); err != nil {
 			clipRows.Close()
@@ -2322,18 +2322,18 @@ func (r *postgresRepository) DeleteRecording(id string) error {
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) CreateClipExport(recordingID string, params ClipExportParams) (models.ClipExport, error) {
+func (r *postgresRepository) CreateClipExport(recordingID string, params ClipExportParams) (domain.ClipExport, error) {
 	if r == nil || r.pool == nil {
-		return models.ClipExport{}, ErrPostgresUnavailable
+		return domain.ClipExport{}, ErrPostgresUnavailable
 	}
 	if strings.TrimSpace(recordingID) == "" {
-		return models.ClipExport{}, fmt.Errorf("recording id is required")
+		return domain.ClipExport{}, fmt.Errorf("recording id is required")
 	}
 	title := strings.TrimSpace(params.Title)
 	if title == "" {
-		return models.ClipExport{}, fmt.Errorf("title is required")
+		return domain.ClipExport{}, fmt.Errorf("title is required")
 	}
-	clip := models.ClipExport{}
+	clip := domain.ClipExport{}
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		var (
 			channelID string
@@ -2361,7 +2361,7 @@ func (r *postgresRepository) CreateClipExport(recordingID string, params ClipExp
 			return err
 		}
 		now := time.Now().UTC()
-		newClip := models.ClipExport{
+		newClip := domain.ClipExport{
 			ID:           id,
 			RecordingID:  recordingID,
 			ChannelID:    channelID,
@@ -2389,7 +2389,7 @@ func (r *postgresRepository) CreateClipExport(recordingID string, params ClipExp
 		return nil
 	})
 	if err != nil {
-		return models.ClipExport{}, err
+		return domain.ClipExport{}, err
 	}
 	return clip, nil
 }
@@ -2403,14 +2403,14 @@ func (r *postgresRepository) CreateClipExport(recordingID string, params ClipExp
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (r *postgresRepository) ListClipExports(recordingID string) ([]models.ClipExport, error) {
+func (r *postgresRepository) ListClipExports(recordingID string) ([]domain.ClipExport, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
 	}
 	if strings.TrimSpace(recordingID) == "" {
 		return nil, fmt.Errorf("recording id is required")
 	}
-	clips := make([]models.ClipExport, 0)
+	clips := make([]domain.ClipExport, 0)
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		var exists bool
 		if err := conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM recordings WHERE id = $1)", recordingID).Scan(&exists); err != nil {
@@ -2425,7 +2425,7 @@ func (r *postgresRepository) ListClipExports(recordingID string) ([]models.ClipE
 		}
 		defer rows.Close()
 		for rows.Next() {
-			var clip models.ClipExport
+			var clip domain.ClipExport
 			var completedAt pgtype.Timestamptz
 			var playbackURL pgtype.Text
 			var storageObject pgtype.Text

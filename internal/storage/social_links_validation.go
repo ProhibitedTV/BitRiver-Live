@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 )
 
 const (
@@ -17,12 +17,12 @@ const (
 
 // NormalizeSocialLinks trims and validates a slice of social links, ensuring each
 // entry contains a platform label and a valid HTTP(S) URL.
-func NormalizeSocialLinks(links []models.SocialLink) ([]models.SocialLink, error) {
+func NormalizeSocialLinks(links []domain.SocialLink) ([]domain.SocialLink, error) {
 	if len(links) > maxSocialLinks {
 		return nil, fmt.Errorf("social links cannot exceed %d entries", maxSocialLinks)
 	}
 
-	normalized := make([]models.SocialLink, 0, len(links))
+	normalized := make([]domain.SocialLink, 0, len(links))
 	seen := make(map[string]struct{}, len(links))
 
 	for _, link := range links {
@@ -57,7 +57,7 @@ func NormalizeSocialLinks(links []models.SocialLink) ([]models.SocialLink, error
 		}
 		seen[key] = struct{}{}
 
-		normalized = append(normalized, models.SocialLink{Platform: platform, URL: normalizedURL})
+		normalized = append(normalized, domain.SocialLink{Platform: platform, URL: normalizedURL})
 	}
 
 	return normalized, nil

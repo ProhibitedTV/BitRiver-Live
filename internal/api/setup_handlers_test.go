@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 )
 
 type setupStub struct {
@@ -42,7 +42,7 @@ func TestSetupWizardBlocksNonAdmins(t *testing.T) {
 	handler, _ := newTestHandler(t)
 	handler.Setup = &setupStub{result: SetupResult{RestartScheduled: true}}
 
-	user := models.User{ID: "viewer-1", DisplayName: "Viewer", Roles: []string{"viewer"}}
+	user := domain.User{ID: "viewer-1", DisplayName: "Viewer", Roles: []string{"viewer"}}
 	req := withUser(httptest.NewRequest(http.MethodPost, "/api/setup", bytes.NewBufferString("{}")), user)
 	rr := httptest.NewRecorder()
 
@@ -57,7 +57,7 @@ func TestSetupWizardValidatesPayload(t *testing.T) {
 	handler, _ := newTestHandler(t)
 	handler.Setup = &setupStub{result: SetupResult{RestartScheduled: true}}
 
-	user := models.User{ID: "admin-1", DisplayName: "Admin", Roles: []string{"admin"}}
+	user := domain.User{ID: "admin-1", DisplayName: "Admin", Roles: []string{"admin"}}
 	body := map[string]any{
 		"adminEmail":       "not-an-email",
 		"viewerUrl":        "https://viewer.example.com",
@@ -85,7 +85,7 @@ func TestSetupWizardSuccess(t *testing.T) {
 	stub := &setupStub{result: SetupResult{RestartScheduled: true}}
 	handler.Setup = stub
 
-	user := models.User{ID: "admin-1", DisplayName: "Admin", Roles: []string{"admin"}}
+	user := domain.User{ID: "admin-1", DisplayName: "Admin", Roles: []string{"admin"}}
 	body := map[string]any{
 		"adminEmail":       "admin@example.com",
 		"viewerUrl":        "https://viewer.example.com",
@@ -121,7 +121,7 @@ func TestSetupWizardSuccess(t *testing.T) {
 
 func TestSetupWizardMissingManager(t *testing.T) {
 	handler, _ := newTestHandler(t)
-	user := models.User{ID: "admin-1", DisplayName: "Admin", Roles: []string{"admin"}}
+	user := domain.User{ID: "admin-1", DisplayName: "Admin", Roles: []string{"admin"}}
 	body := map[string]any{
 		"adminEmail":       "admin@example.com",
 		"viewerUrl":        "https://viewer.example.com",

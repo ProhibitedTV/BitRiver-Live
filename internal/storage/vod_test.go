@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
 )
 
@@ -54,7 +54,7 @@ func TestStopStreamUploadsRecordingArtifacts(t *testing.T) {
 	if len(store.data.Recordings) != 1 {
 		t.Fatalf("expected a single recording, got %d", len(store.data.Recordings))
 	}
-	var recording models.Recording
+	var recording domain.Recording
 	for _, rec := range store.data.Recordings {
 		recording = rec
 	}
@@ -105,17 +105,17 @@ func TestPopulateRecordingArtifactsTimeout(t *testing.T) {
 		RequestTimeout: timeout,
 	}))
 
-	recording := models.Recording{
+	recording := domain.Recording{
 		ID:        "rec-timeout",
 		SessionID: "session-timeout",
 		CreatedAt: time.Now(),
-		Renditions: []models.RecordingRendition{{
+		Renditions: []domain.RecordingRendition{{
 			Name: "source",
 		}},
 	}
-	session := models.StreamSession{
+	session := domain.StreamSession{
 		ID: "session-timeout",
-		RenditionManifests: []models.RenditionManifest{{
+		RenditionManifests: []domain.RenditionManifest{{
 			Name:        "source",
 			ManifestURL: "https://example.com/source.m3u8",
 		}},
@@ -155,7 +155,7 @@ func TestDeleteRecordingArtifactsTimeout(t *testing.T) {
 		RequestTimeout: timeout,
 	}))
 
-	recording := models.Recording{
+	recording := domain.Recording{
 		Metadata: map[string]string{
 			manifestMetadataKey("source"): "recordings/rec-timeout/manifests/source.json",
 		},
@@ -342,7 +342,7 @@ func TestDeleteClipArtifactsHonorsTimeout(t *testing.T) {
 	store.objectStorage.RequestTimeout = 10 * time.Millisecond
 	store.objectClient = &hangingDeleteObjectStorage{}
 
-	clip := models.ClipExport{ID: "clip-123", StorageObject: "clips/clip-123.mp4"}
+	clip := domain.ClipExport{ID: "clip-123", StorageObject: "clips/clip-123.mp4"}
 
 	store.mu.Lock()
 	start := time.Now()

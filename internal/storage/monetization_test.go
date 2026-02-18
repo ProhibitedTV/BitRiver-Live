@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 )
 
 func TestStorageTipReferenceUniqueness(t *testing.T) {
@@ -26,7 +26,7 @@ func TestStorageTipReferenceUniqueness(t *testing.T) {
 	params := CreateTipParams{
 		ChannelID:  channel.ID,
 		FromUserID: supporter.ID,
-		Amount:     models.MustParseMoney("5"),
+		Amount:     domain.MustParseMoney("5"),
 		Currency:   "usd",
 		Provider:   "stripe",
 		Reference:  "dup-ref",
@@ -63,7 +63,7 @@ func TestSubscriptionReferenceUniquenessJSON(t *testing.T) {
 		Tier:      "tier1",
 		Provider:  "stripe",
 		Reference: "dup-sub",
-		Amount:    models.MustParseMoney("4.99"),
+		Amount:    domain.MustParseMoney("4.99"),
 		Currency:  "usd",
 		Duration:  time.Hour,
 	}
@@ -106,7 +106,7 @@ func TestUpsertProfileCreatesProfile(t *testing.T) {
 	banner := "https://cdn.example.com/banner.png"
 	featured := channel.ID
 	topFriends := []string{friend.ID}
-	donation := []models.CryptoAddress{{Currency: "eth", Address: "0xabc", Note: "Primary"}}
+	donation := []domain.CryptoAddress{{Currency: "eth", Address: "0xabc", Note: "Primary"}}
 
 	profile, err := store.UpsertProfile(owner.ID, ProfileUpdate{
 		Bio:               &bio,
@@ -149,7 +149,7 @@ func TestUpsertProfileCreatesProfile(t *testing.T) {
 
 	// second update clears top friends and replaces donation details
 	topFriends = []string{}
-	donation = []models.CryptoAddress{{Currency: "btc", Address: "bc1xyz"}}
+	donation = []domain.CryptoAddress{{Currency: "btc", Address: "bc1xyz"}}
 	updated, err := store.UpsertProfile(owner.ID, ProfileUpdate{
 		TopFriends:        &topFriends,
 		DonationAddresses: &donation,
@@ -181,26 +181,26 @@ func TestUpsertProfileDonationValidation(t *testing.T) {
 		t.Fatalf("CreateUser owner: %v", err)
 	}
 
-	valid := []models.CryptoAddress{{Currency: "eth", Address: "0xabc123"}}
+	valid := []domain.CryptoAddress{{Currency: "eth", Address: "0xabc123"}}
 	if _, err := store.UpsertProfile(owner.ID, ProfileUpdate{DonationAddresses: &valid}); err != nil {
 		t.Fatalf("expected valid donation addresses to succeed: %v", err)
 	}
 
 	testCases := []struct {
 		name     string
-		donation []models.CryptoAddress
+		donation []domain.CryptoAddress
 	}{
 		{
 			name:     "invalid currency",
-			donation: []models.CryptoAddress{{Currency: "et1", Address: "0xabc123"}},
+			donation: []domain.CryptoAddress{{Currency: "et1", Address: "0xabc123"}},
 		},
 		{
 			name:     "too short",
-			donation: []models.CryptoAddress{{Currency: "ETH", Address: "abc"}},
+			donation: []domain.CryptoAddress{{Currency: "ETH", Address: "abc"}},
 		},
 		{
 			name:     "invalid characters",
-			donation: []models.CryptoAddress{{Currency: "ETH", Address: "bad address"}},
+			donation: []domain.CryptoAddress{{Currency: "ETH", Address: "bad address"}},
 		},
 	}
 

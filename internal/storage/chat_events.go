@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/chat"
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 )
 
 // ApplyChatEvent mutates the in-memory dataset based on the supplied chat
@@ -25,7 +25,7 @@ func (s *Storage) ApplyChatEvent(evt chat.Event) error {
 		if evt.Message == nil {
 			return fmt.Errorf("message payload missing")
 		}
-		message := models.ChatMessage{
+		message := domain.ChatMessage{
 			ID:        evt.Message.ID,
 			ChannelID: evt.Message.ChannelID,
 			UserID:    evt.Message.UserID,
@@ -152,9 +152,9 @@ func (s *Storage) applyReportLocked(evt chat.ReportEvent) error {
 		return fmt.Errorf("report id missing")
 	}
 	if s.data.ChatReports == nil {
-		s.data.ChatReports = make(map[string]models.ChatReport)
+		s.data.ChatReports = make(map[string]domain.ChatReport)
 	}
-	report := models.ChatReport{
+	report := domain.ChatReport{
 		ID:          evt.ID,
 		ChannelID:   evt.ChannelID,
 		ReporterID:  evt.ReporterID,
@@ -178,9 +178,9 @@ func (s *Storage) applyAutoModLocked(evt chat.AutoModEvent) error {
 		return fmt.Errorf("automod action id missing")
 	}
 	if s.data.ChatAutoModActions == nil {
-		s.data.ChatAutoModActions = make(map[string]models.ChatAutoModAction)
+		s.data.ChatAutoModActions = make(map[string]domain.ChatAutoModAction)
 	}
-	action := models.ChatAutoModAction{
+	action := domain.ChatAutoModAction{
 		ID:            evt.ID,
 		ChannelID:     evt.ChannelID,
 		UserID:        evt.UserID,

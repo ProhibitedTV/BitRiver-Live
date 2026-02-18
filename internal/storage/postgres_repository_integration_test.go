@@ -18,7 +18,7 @@ import (
 	"unsafe"
 
 	"bitriver-live/internal/chat"
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/storage"
 	"github.com/jackc/pgx/v5"
@@ -356,7 +356,7 @@ func TestPostgresProfileSocialLinksPersistence(t *testing.T) {
 		t.Fatalf("create owner: %v", err)
 	}
 
-	socialLinks := []models.SocialLink{
+	socialLinks := []domain.SocialLink{
 		{Platform: " Twitch ", URL: " https://twitch.example.com/creator \\t"},
 		{Platform: "Twitter", URL: "https://twitter.com/creator"},
 	}
@@ -365,7 +365,7 @@ func TestPostgresProfileSocialLinksPersistence(t *testing.T) {
 		t.Fatalf("upsert profile: %v", err)
 	}
 
-	expected := []models.SocialLink{
+	expected := []domain.SocialLink{
 		{Platform: "Twitch", URL: "https://twitch.example.com/creator"},
 		{Platform: "Twitter", URL: "https://twitter.com/creator"},
 	}
@@ -386,7 +386,7 @@ func TestPostgresProfileSocialLinksPersistence(t *testing.T) {
 	if err := pool.QueryRow(context.Background(), "SELECT social_links FROM profiles WHERE user_id = $1", owner.ID).Scan(&stored); err != nil {
 		t.Fatalf("load persisted social links: %v", err)
 	}
-	var payload []models.SocialLink
+	var payload []domain.SocialLink
 	if err := json.Unmarshal(stored, &payload); err != nil {
 		t.Fatalf("decode persisted social links: %v", err)
 	}
@@ -394,9 +394,9 @@ func TestPostgresProfileSocialLinksPersistence(t *testing.T) {
 		t.Fatalf("expected social links JSONB round-trip, got %+v", payload)
 	}
 
-	tooMany := make([]models.SocialLink, 9)
+	tooMany := make([]domain.SocialLink, 9)
 	for i := range tooMany {
-		tooMany[i] = models.SocialLink{Platform: fmt.Sprintf("Link %d", i), URL: "https://example.com/profile"}
+		tooMany[i] = domain.SocialLink{Platform: fmt.Sprintf("Link %d", i), URL: "https://example.com/profile"}
 	}
 	if _, err := repo.UpsertProfile(owner.ID, storage.ProfileUpdate{SocialLinks: &tooMany}); err == nil {
 		t.Fatal("expected error when exceeding maximum social links")
@@ -1119,7 +1119,7 @@ func TestPostgresTipReferenceUniqueness(t *testing.T) {
 	_, err = repo.CreateTip(storage.CreateTipParams{
 		ChannelID:  channel.ID,
 		FromUserID: supporter.ID,
-		Amount:     models.MustParseMoney("5"),
+		Amount:     domain.MustParseMoney("5"),
 		Currency:   "usd",
 		Provider:   "stripe",
 		Reference:  "dup-ref",
@@ -1131,7 +1131,7 @@ func TestPostgresTipReferenceUniqueness(t *testing.T) {
 	_, err = repo.CreateTip(storage.CreateTipParams{
 		ChannelID:  channel.ID,
 		FromUserID: supporter.ID,
-		Amount:     models.MustParseMoney("5"),
+		Amount:     domain.MustParseMoney("5"),
 		Currency:   "usd",
 		Provider:   "stripe",
 		Reference:  "dup-ref",
@@ -1171,7 +1171,7 @@ func TestPostgresSubscriptionReferenceUniqueness(t *testing.T) {
 		Tier:      "tier1",
 		Provider:  "stripe",
 		Reference: "dup-sub",
-		Amount:    models.MustParseMoney("4.99"),
+		Amount:    domain.MustParseMoney("4.99"),
 		Currency:  "usd",
 		Duration:  time.Hour,
 	})
@@ -1185,7 +1185,7 @@ func TestPostgresSubscriptionReferenceUniqueness(t *testing.T) {
 		Tier:      "tier1",
 		Provider:  "stripe",
 		Reference: "dup-sub",
-		Amount:    models.MustParseMoney("4.99"),
+		Amount:    domain.MustParseMoney("4.99"),
 		Currency:  "usd",
 		Duration:  time.Hour,
 	})
@@ -1216,7 +1216,7 @@ func TestPostgresSubscriptionCancellationMetadata(t *testing.T) {
 		Tier:      "tier1",
 		Provider:  "stripe",
 		Reference: "cancel-me",
-		Amount:    models.MustParseMoney("4.99"),
+		Amount:    domain.MustParseMoney("4.99"),
 		Currency:  "usd",
 		Duration:  time.Hour,
 		AutoRenew: true,

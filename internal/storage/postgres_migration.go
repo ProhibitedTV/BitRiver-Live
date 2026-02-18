@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -86,7 +86,7 @@ func (r *postgresRepository) importSnapshot(ctx context.Context, snapshot *Snaps
 }
 
 // importSnapshotUsers performs import snapshot users and propagates validation or dependency failures to the caller.
-func (r *postgresRepository) importSnapshotUsers(ctx context.Context, tx pgx.Tx, users map[string]models.User) error {
+func (r *postgresRepository) importSnapshotUsers(ctx context.Context, tx pgx.Tx, users map[string]domain.User) error {
 	if len(users) == 0 {
 		return nil
 	}
@@ -120,7 +120,7 @@ func (r *postgresRepository) importSnapshotUsers(ctx context.Context, tx pgx.Tx,
 }
 
 // importSnapshotMFA performs import snapshot mfa and propagates validation or dependency failures to the caller.
-func (r *postgresRepository) importSnapshotMFA(ctx context.Context, tx pgx.Tx, settings map[string]models.MFASettings) error {
+func (r *postgresRepository) importSnapshotMFA(ctx context.Context, tx pgx.Tx, settings map[string]domain.MFASettings) error {
 	if len(settings) == 0 {
 		return nil
 	}
@@ -172,7 +172,7 @@ ON CONFLICT (user_id) DO NOTHING
 }
 
 // importSnapshotProfiles performs import snapshot profiles and propagates validation or dependency failures to the caller.
-func (r *postgresRepository) importSnapshotProfiles(ctx context.Context, tx pgx.Tx, profiles map[string]models.Profile) error {
+func (r *postgresRepository) importSnapshotProfiles(ctx context.Context, tx pgx.Tx, profiles map[string]domain.Profile) error {
 	if len(profiles) == 0 {
 		return nil
 	}
@@ -220,7 +220,7 @@ func (r *postgresRepository) importSnapshotProfiles(ctx context.Context, tx pgx.
 }
 
 // importSnapshotChannels performs import snapshot channels and propagates validation or dependency failures to the caller.
-func (r *postgresRepository) importSnapshotChannels(ctx context.Context, tx pgx.Tx, channels map[string]models.Channel) error {
+func (r *postgresRepository) importSnapshotChannels(ctx context.Context, tx pgx.Tx, channels map[string]domain.Channel) error {
 	if len(channels) == 0 {
 		return nil
 	}
@@ -277,7 +277,7 @@ func (r *postgresRepository) importSnapshotFollows(ctx context.Context, tx pgx.T
 }
 
 // importSnapshotStreamSessions performs import snapshot stream sessions and propagates validation or dependency failures to the caller.
-func (r *postgresRepository) importSnapshotStreamSessions(ctx context.Context, tx pgx.Tx, sessions map[string]models.StreamSession) error {
+func (r *postgresRepository) importSnapshotStreamSessions(ctx context.Context, tx pgx.Tx, sessions map[string]domain.StreamSession) error {
 	if len(sessions) == 0 {
 		return nil
 	}
@@ -329,7 +329,7 @@ func (r *postgresRepository) importSnapshotStreamSessions(ctx context.Context, t
 }
 
 // importSnapshotRecordings performs import snapshot recordings and propagates validation or dependency failures to the caller.
-func (r *postgresRepository) importSnapshotRecordings(ctx context.Context, tx pgx.Tx, recordings map[string]models.Recording) error {
+func (r *postgresRepository) importSnapshotRecordings(ctx context.Context, tx pgx.Tx, recordings map[string]domain.Recording) error {
 	if len(recordings) == 0 {
 		return nil
 	}
@@ -363,7 +363,7 @@ func (r *postgresRepository) importSnapshotRecordings(ctx context.Context, tx pg
 }
 
 // importSnapshotUploads performs import snapshot uploads and propagates validation or dependency failures to the caller.
-func (r *postgresRepository) importSnapshotUploads(ctx context.Context, tx pgx.Tx, uploads map[string]models.Upload) error {
+func (r *postgresRepository) importSnapshotUploads(ctx context.Context, tx pgx.Tx, uploads map[string]domain.Upload) error {
 	if len(uploads) == 0 {
 		return nil
 	}
@@ -415,7 +415,7 @@ func (r *postgresRepository) importSnapshotUploads(ctx context.Context, tx pgx.T
 }
 
 // importSnapshotClipExports performs import snapshot clip exports and propagates validation or dependency failures to the caller.
-func (r *postgresRepository) importSnapshotClipExports(ctx context.Context, tx pgx.Tx, clips map[string]models.ClipExport) error {
+func (r *postgresRepository) importSnapshotClipExports(ctx context.Context, tx pgx.Tx, clips map[string]domain.ClipExport) error {
 	if len(clips) == 0 {
 		return nil
 	}
@@ -451,7 +451,7 @@ func (r *postgresRepository) importSnapshotClipExports(ctx context.Context, tx p
 }
 
 // importSnapshotChatMessages performs import snapshot chat messages and propagates validation or dependency failures to the caller.
-func (r *postgresRepository) importSnapshotChatMessages(ctx context.Context, tx pgx.Tx, messages map[string]models.ChatMessage) error {
+func (r *postgresRepository) importSnapshotChatMessages(ctx context.Context, tx pgx.Tx, messages map[string]domain.ChatMessage) error {
 	if len(messages) == 0 {
 		return nil
 	}
@@ -516,7 +516,7 @@ func (r *postgresRepository) importSnapshotChatModeration(ctx context.Context, t
 }
 
 // importSnapshotChatFilters performs import snapshot chat filters and propagates validation or dependency failures to the caller.
-func (r *postgresRepository) importSnapshotChatFilters(ctx context.Context, tx pgx.Tx, filters map[string]models.ChatFilter) error {
+func (r *postgresRepository) importSnapshotChatFilters(ctx context.Context, tx pgx.Tx, filters map[string]domain.ChatFilter) error {
 	if len(filters) == 0 {
 		return nil
 	}
@@ -548,7 +548,7 @@ func (r *postgresRepository) importSnapshotChatFilters(ctx context.Context, tx p
 }
 
 // importSnapshotChatReports performs import snapshot chat reports and propagates validation or dependency failures to the caller.
-func (r *postgresRepository) importSnapshotChatReports(ctx context.Context, tx pgx.Tx, reports map[string]models.ChatReport) error {
+func (r *postgresRepository) importSnapshotChatReports(ctx context.Context, tx pgx.Tx, reports map[string]domain.ChatReport) error {
 	if len(reports) == 0 {
 		return nil
 	}
@@ -592,7 +592,7 @@ func (r *postgresRepository) importSnapshotChatReports(ctx context.Context, tx p
 }
 
 // importSnapshotChatAutoModActions performs import snapshot chat auto mod actions and propagates validation or dependency failures to the caller.
-func (r *postgresRepository) importSnapshotChatAutoModActions(ctx context.Context, tx pgx.Tx, actions map[string]models.ChatAutoModAction) error {
+func (r *postgresRepository) importSnapshotChatAutoModActions(ctx context.Context, tx pgx.Tx, actions map[string]domain.ChatAutoModAction) error {
 	if len(actions) == 0 {
 		return nil
 	}
@@ -624,7 +624,7 @@ func (r *postgresRepository) importSnapshotChatAutoModActions(ctx context.Contex
 }
 
 // importSnapshotTips performs import snapshot tips and propagates validation or dependency failures to the caller.
-func (r *postgresRepository) importSnapshotTips(ctx context.Context, tx pgx.Tx, tips map[string]models.Tip) error {
+func (r *postgresRepository) importSnapshotTips(ctx context.Context, tx pgx.Tx, tips map[string]domain.Tip) error {
 	if len(tips) == 0 {
 		return nil
 	}
@@ -660,7 +660,7 @@ func (r *postgresRepository) importSnapshotTips(ctx context.Context, tx pgx.Tx, 
 }
 
 // importSnapshotSubscriptions performs import snapshot subscriptions and propagates validation or dependency failures to the caller.
-func (r *postgresRepository) importSnapshotSubscriptions(ctx context.Context, tx pgx.Tx, subs map[string]models.Subscription) error {
+func (r *postgresRepository) importSnapshotSubscriptions(ctx context.Context, tx pgx.Tx, subs map[string]domain.Subscription) error {
 	if len(subs) == 0 {
 		return nil
 	}
@@ -708,7 +708,7 @@ func (r *postgresRepository) importSnapshotSubscriptions(ctx context.Context, tx
 }
 
 // importSnapshotOAuthAccounts performs import snapshot oauth accounts and propagates validation or dependency failures to the caller.
-func (r *postgresRepository) importSnapshotOAuthAccounts(ctx context.Context, tx pgx.Tx, accounts map[string]models.OAuthAccount) error {
+func (r *postgresRepository) importSnapshotOAuthAccounts(ctx context.Context, tx pgx.Tx, accounts map[string]domain.OAuthAccount) error {
 	if len(accounts) == 0 {
 		return nil
 	}

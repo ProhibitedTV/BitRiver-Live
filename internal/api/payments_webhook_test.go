@@ -10,7 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/storage"
 )
 
@@ -27,12 +27,12 @@ func TestPaymentWebhookVerifiesSignatureAndAppliesState(t *testing.T) {
 	owner, _ := store.CreateUser(storage.CreateUserParams{DisplayName: "owner", Email: "owner@example.com", Password: "password123"})
 	viewer, _ := store.CreateUser(storage.CreateUserParams{DisplayName: "viewer", Email: "viewer@example.com", Password: "password123"})
 	channel, _ := store.CreateChannel(owner.ID, "Live", "gaming", nil)
-	_, err := store.CreateTip(storage.CreateTipParams{ChannelID: channel.ID, FromUserID: viewer.ID, Amount: models.MustParseMoney("1"), Currency: "USD", Provider: "stripe", Reference: "tip-ref-1", IdempotencyKey: "key-1"})
+	_, err := store.CreateTip(storage.CreateTipParams{ChannelID: channel.ID, FromUserID: viewer.ID, Amount: domain.MustParseMoney("1"), Currency: "USD", Provider: "stripe", Reference: "tip-ref-1", IdempotencyKey: "key-1"})
 	if err != nil {
 		t.Fatalf("CreateTip: %v", err)
 	}
 
-	payload := map[string]string{"eventId": "evt_1", "entityType": "tip", "reference": "tip-ref-1", "status": models.PaymentStateConfirmed, "idempotencyKey": "key-1"}
+	payload := map[string]string{"eventId": "evt_1", "entityType": "tip", "reference": "tip-ref-1", "status": domain.PaymentStateConfirmed, "idempotencyKey": "key-1"}
 	body, _ := json.Marshal(payload)
 	req := httptest.NewRequest(http.MethodPost, "/api/payments/webhooks/stripe", bytes.NewReader(body))
 	req.Header.Set("X-Bitriver-Signature", sign("top-secret", body))
@@ -46,7 +46,7 @@ func TestPaymentWebhookVerifiesSignatureAndAppliesState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTips: %v", err)
 	}
-	if len(tips) != 1 || tips[0].Status != models.PaymentStateConfirmed {
+	if len(tips) != 1 || tips[0].Status != domain.PaymentStateConfirmed {
 		t.Fatalf("expected confirmed tip, got %+v", tips)
 	}
 }
