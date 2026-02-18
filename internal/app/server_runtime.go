@@ -20,6 +20,7 @@ import (
 	"bitriver-live/internal/observability/tracing"
 	"bitriver-live/internal/server"
 	"bitriver-live/internal/service"
+	serviceuploads "bitriver-live/internal/service/uploads"
 	"bitriver-live/internal/storage"
 )
 
@@ -114,7 +115,7 @@ type ServerRuntime struct {
 	listenAddr       string
 	mode             string
 	tlsCfg           server.TLSConfig
-	uploadProcessor  *api.UploadProcessor
+	uploadProcessor  *serviceuploads.UploadProcessor
 	store            storage.Repository
 	sessionStore     auth.SessionStore
 	mfaStore         auth.MFAChallengeStore
@@ -235,9 +236,9 @@ func NewServerRuntime(in ServerRuntimeInput) (*ServerRuntime, error) {
 	useCases := service.NewStoreUseCases(store)
 	handler := NewHandler(HandlerConfig{Sessions: sessions, MFAChallenges: mfaChallenges, AllowSelfSignup: in.AllowSelfSignup, ChatGateway: gateway, Setup: in.SetupManager, DefaultRenditions: ladderProfileNames(in.IngestConfig.LadderProfiles), SRSHookToken: in.IngestConfig.SRSToken, TrustForwardedHeaders: in.UploadsTrustForwarded, ChatQueue: chatQueuePinger, AuthUsersService: useCases, ChannelsService: useCases, UploadsService: useCases, RecordingsService: useCases, ChatModerationService: useCases, LegalService: service.NewLegalService(store), StreamsService: useCases, ProfilesService: useCases, AnalyticsService: useCases, SystemService: useCases, MonetizationService: useCases, PaymentService: service.NewPaymentService(store, in.Logger)})
 
-	var uploadProcessor *api.UploadProcessor
+	var uploadProcessor *serviceuploads.UploadProcessor
 	if ingestController != nil {
-		uploadProcessor = api.NewUploadProcessor(api.UploadProcessorConfig{Store: api.RepositoryUploadStore(store), Ingest: ingestController, Renditions: in.IngestConfig.LadderProfiles, Logger: logging.WithComponent(in.Logger, "uploads")})
+		uploadProcessor = serviceuploads.NewUploadProcessor(serviceuploads.UploadProcessorConfig{Store: storage.NewUploadProcessingStore(store), Ingest: ingestController, Renditions: in.IngestConfig.LadderProfiles, Logger: logging.WithComponent(in.Logger, "uploads")})
 		uploadProcessor.Start()
 		handler.UploadProcessor = uploadProcessor
 	}

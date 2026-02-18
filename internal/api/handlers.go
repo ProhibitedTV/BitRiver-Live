@@ -17,6 +17,7 @@ import (
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/observability/tracing"
 	"bitriver-live/internal/service"
+	serviceuploads "bitriver-live/internal/service/uploads"
 )
 
 // Handler aggregates the HTTP endpoints exposed by the BitRiver API along with
@@ -27,7 +28,7 @@ type Handler struct {
 	MFAChallenges         *auth.MFAChallengeManager
 	ChatGateway           *chat.Gateway
 	OAuth                 oauth.Service
-	UploadProcessor       *UploadProcessor
+	UploadProcessor       serviceuploads.Enqueuer
 	AuthUsersService      service.AuthUsersUseCase
 	ChannelsService       service.ChannelsDirectoryUseCase
 	UploadsService        service.UploadsUseCase
