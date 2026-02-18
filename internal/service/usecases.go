@@ -2,10 +2,13 @@ package service
 
 import (
 	"context"
+	"sort"
+	"strings"
 	"time"
 
 	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
+	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/storage"
 )
 
@@ -105,6 +108,31 @@ type ProfilesUseCase interface {
 }
 
 type AnalyticsUseCase interface {
+	ComputeAnalyticsOverview(now time.Time) (AnalyticsOverview, error)
+}
+
+type AnalyticsSummary struct {
+	LiveViewers      int
+	StreamsLive      int
+	WatchTimeMinutes float64
+	ChatMessages     int
+}
+
+type AnalyticsChannelOverview struct {
+	ChannelID       string
+	Title           string
+	LiveViewers     int
+	Followers       int
+	AvgWatchMinutes float64
+	ChatMessages    int
+}
+
+type AnalyticsOverview struct {
+	Summary    *AnalyticsSummary
+	PerChannel []AnalyticsChannelOverview
+}
+
+type analyticsOverviewStore interface {
 	ListChannels(ownerID, query string) []domain.Channel
 	CountFollowers(channelID string) int
 	CurrentStreamSession(channelID string) (domain.StreamSession, bool)
@@ -297,6 +325,80 @@ func (s *storeUseCases) CurrentStreamSession(channelID string) (domain.StreamSes
 func (s *storeUseCases) ListStreamSessions(channelID string) ([]domain.StreamSession, error) {
 	return s.store.ListStreamSessions(channelID)
 }
+func (s *storeUseCases) ComputeAnalyticsOverview(now time.Time) (AnalyticsOverview, error) {
+	return computeAnalyticsOverview(s.store, now)
+}
+
+func computeAnalyticsOverview(store analyticsOverviewStore, now time.Time) (AnalyticsOverview, error) {
+	channels := store.ListChannels("", "")
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	windowStart := now.Add(-24 * time.Hour)
+	summary := AnalyticsSummary{}
+	perChannel := make([]AnalyticsChannelOverview, 0, len(channels))
+	for _, channel := range channels {
+		entry := AnalyticsChannelOverview{
+			ChannelID: channel.ID,
+			Title:     channel.Title,
+			Followers: store.CountFollowers(channel.ID),
+		}
+		if current, ok := store.CurrentStreamSession(channel.ID); ok {
+			entry.LiveViewers = current.PeakConcurrent
+		}
+		sessions, err := store.ListStreamSessions(channel.ID)
+		if err != nil {
+			return AnalyticsOverview{}, err
+		}
+		if len(sessions) > 0 {
+			totalMinutes := 0.0
+			for _, session := range sessions {
+				totalMinutes += sessionDurationMinutes(session, now)
+				summary.WatchTimeMinutes += streamWatchOverlapMinutes(session, windowStart, now)
+			}
+			entry.AvgWatchMinutes = totalMinutes / float64(len(sessions))
+		}
+		messages, err := store.ListChatMessages(channel.ID, 0)
+		if err != nil {
+			return AnalyticsOverview{}, err
+		}
+		today := 0
+		for _, message := range messages {
+			if message.CreatedAt.Before(startOfDay) {
+				break
+			}
+			today++
+		}
+		entry.ChatMessages = today
+		summary.ChatMessages += today
+		summary.LiveViewers += entry.LiveViewers
+		perChannel = append(perChannel, entry)
+	}
+	streamsLive := int(metrics.Default().ActiveStreams())
+	if streamsLive <= 0 {
+		count := 0
+		for _, channel := range channels {
+			state := strings.ToLower(strings.TrimSpace(channel.LiveState))
+			if state == "live" || state == "starting" {
+				count++
+			}
+		}
+		streamsLive = count
+	}
+	summary.StreamsLive = streamsLive
+	sort.Slice(perChannel, func(i, j int) bool {
+		if perChannel[i].LiveViewers != perChannel[j].LiveViewers {
+			return perChannel[i].LiveViewers > perChannel[j].LiveViewers
+		}
+		if perChannel[i].Followers != perChannel[j].Followers {
+			return perChannel[i].Followers > perChannel[j].Followers
+		}
+		return perChannel[i].Title < perChannel[j].Title
+	})
+	resp := AnalyticsOverview{PerChannel: perChannel}
+	if len(perChannel) > 0 || summary.LiveViewers > 0 || summary.StreamsLive > 0 || summary.WatchTimeMinutes > 0 || summary.ChatMessages > 0 {
+		resp.Summary = &summary
+	}
+	return resp, nil
+}
 func (s *storeUseCases) FollowChannel(userID, channelID string) error {
 	return s.store.FollowChannel(userID, channelID)
 }
@@ -411,6 +513,38 @@ func (s *storeUseCases) UpsertProfile(userID string, update domain.ProfileUpdate
 
 func (s *storeUseCases) ListTips(channelID string, limit int) ([]domain.Tip, error) {
 	return s.store.ListTips(channelID, limit)
+}
+
+func sessionDurationMinutes(session domain.StreamSession, now time.Time) float64 {
+	end := now
+	if session.EndedAt != nil && session.EndedAt.Before(end) {
+		end = *session.EndedAt
+	}
+	if end.Before(session.StartedAt) {
+		return 0
+	}
+	return end.Sub(session.StartedAt).Minutes()
+}
+
+func streamWatchOverlapMinutes(session domain.StreamSession, windowStart, windowEnd time.Time) float64 {
+	start := session.StartedAt
+	if start.Before(windowStart) {
+		start = windowStart
+	}
+	end := windowEnd
+	if session.EndedAt != nil && session.EndedAt.Before(end) {
+		end = *session.EndedAt
+	}
+	if end.Before(windowStart) {
+		return 0
+	}
+	if end.After(windowEnd) {
+		end = windowEnd
+	}
+	if !end.After(start) {
+		return 0
+	}
+	return end.Sub(start).Minutes()
 }
 func (s *storeUseCases) GetSubscription(id string) (domain.Subscription, bool) {
 	return s.store.GetSubscription(id)
