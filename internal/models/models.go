@@ -366,6 +366,29 @@ type ChatReport struct {
 	ResolvedAt  *time.Time `json:"resolvedAt,omitempty"`
 }
 
+type Appeal struct {
+	ID         string        `json:"id"`
+	ReportID   string        `json:"reportId"`
+	ChannelID  string        `json:"channelId"`
+	ReporterID string        `json:"reporterId"`
+	Reason     string        `json:"reason"`
+	Status     string        `json:"status"`
+	Resolution string        `json:"resolution,omitempty"`
+	ResolverID string        `json:"resolverId,omitempty"`
+	CreatedAt  time.Time     `json:"createdAt"`
+	ResolvedAt *time.Time    `json:"resolvedAt,omitempty"`
+	Events     []AppealEvent `json:"events,omitempty"`
+}
+
+type AppealEvent struct {
+	ID        string    `json:"id"`
+	AppealID  string    `json:"appealId"`
+	ActorID   string    `json:"actorId"`
+	Action    string    `json:"action"`
+	Note      string    `json:"note,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
 type ChatRestriction struct {
 	ID        string     `json:"id"`
 	Type      string     `json:"type"`

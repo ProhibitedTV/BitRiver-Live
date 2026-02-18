@@ -908,6 +908,227 @@ func (r *postgresRepository) ResolveChatReport(reportID, resolverID, resolution 
 	return resolved, nil
 }
 
+// CreateAppeal executes CreateAppeal.
+func (r *postgresRepository) CreateAppeal(reportID, reporterID, reason string) (models.Appeal, error) {
+	if r == nil || r.pool == nil {
+		return models.Appeal{}, ErrPostgresUnavailable
+	}
+	trimmedReason := strings.TrimSpace(reason)
+	if trimmedReason == "" {
+		return models.Appeal{}, fmt.Errorf("reason is required")
+	}
+	appealID, err := generateID()
+	if err != nil {
+		return models.Appeal{}, err
+	}
+	eventID, err := generateID()
+	if err != nil {
+		return models.Appeal{}, err
+	}
+	appeal := models.Appeal{}
+	now := time.Now().UTC()
+	err = r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("begin create appeal tx: %w", err)
+		}
+		defer rollbackTx(ctx, tx)
+		var channelID, reportReporter string
+		if err := tx.QueryRow(ctx, "SELECT channel_id, reporter_id FROM chat_reports WHERE id = $1", reportID).Scan(&channelID, &reportReporter); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("report %s not found", reportID)
+			}
+			return fmt.Errorf("load report %s: %w", reportID, err)
+		}
+		if reportReporter != reporterID {
+			return fmt.Errorf("forbidden")
+		}
+		if err := ensureUserExists(ctx, tx, reporterID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, "INSERT INTO appeals (id, report_id, channel_id, reporter_id, reason, status, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)", appealID, reportID, channelID, reporterID, trimmedReason, AppealStatusOpen, now); err != nil {
+			return fmt.Errorf("insert appeal: %w", err)
+		}
+		if _, err := tx.Exec(ctx, "INSERT INTO appeal_events (id, appeal_id, actor_id, action, note, created_at) VALUES ($1,$2,$3,$4,$5,$6)", eventID, appealID, reporterID, "submitted", trimmedReason, now); err != nil {
+			return fmt.Errorf("insert appeal event: %w", err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit create appeal: %w", err)
+		}
+		appeal = models.Appeal{ID: appealID, ReportID: reportID, ChannelID: channelID, ReporterID: reporterID, Reason: trimmedReason, Status: AppealStatusOpen, CreatedAt: now,
+			Events: []models.AppealEvent{{ID: eventID, AppealID: appealID, ActorID: reporterID, Action: "submitted", Note: trimmedReason, CreatedAt: now}}}
+		return nil
+	})
+	if err != nil {
+		return models.Appeal{}, err
+	}
+	return appeal, nil
+}
+
+// ListAppeals executes ListAppeals.
+func (r *postgresRepository) ListAppeals(channelID, requesterID string, includeClosed bool) ([]models.Appeal, error) {
+	if r == nil || r.pool == nil {
+		return nil, ErrPostgresUnavailable
+	}
+	appeals := make([]models.Appeal, 0)
+	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		var exists bool
+		if err := conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM channels WHERE id = $1)", channelID).Scan(&exists); err != nil {
+			return fmt.Errorf("check channel %s: %w", channelID, err)
+		}
+		if !exists {
+			return fmt.Errorf("channel %s not found", channelID)
+		}
+		query := "SELECT id, report_id, channel_id, reporter_id, reason, status, resolution, resolver_id, created_at, resolved_at FROM appeals WHERE channel_id = $1"
+		args := []any{channelID}
+		if strings.TrimSpace(requesterID) != "" {
+			query += " AND reporter_id = $2"
+			args = append(args, requesterID)
+		}
+		if !includeClosed {
+			query += " AND LOWER(status) <> 'resolved'"
+		}
+		query += " ORDER BY created_at DESC, id ASC"
+		rows, err := conn.Query(ctx, query, args...)
+		if err != nil {
+			return fmt.Errorf("list appeals: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var a models.Appeal
+			var resolution, resolver pgtype.Text
+			var resolved pgtype.Timestamptz
+			if err := rows.Scan(&a.ID, &a.ReportID, &a.ChannelID, &a.ReporterID, &a.Reason, &a.Status, &resolution, &resolver, &a.CreatedAt, &resolved); err != nil {
+				return fmt.Errorf("scan appeal: %w", err)
+			}
+			if resolution.Valid {
+				a.Resolution = resolution.String
+			}
+			if resolver.Valid {
+				a.ResolverID = resolver.String
+			}
+			if resolved.Valid {
+				ts := resolved.Time.UTC()
+				a.ResolvedAt = &ts
+			}
+			a.CreatedAt = a.CreatedAt.UTC()
+			a.Status = strings.ToLower(a.Status)
+			events, err := r.listAppealEventsTx(ctx, conn, a.ID)
+			if err != nil {
+				return err
+			}
+			a.Events = events
+			appeals = append(appeals, a)
+		}
+		return rows.Err()
+	})
+	return appeals, err
+}
+
+func (r *postgresRepository) listAppealEventsTx(ctx context.Context, conn *pgxpool.Conn, appealID string) ([]models.AppealEvent, error) {
+	rows, err := conn.Query(ctx, "SELECT id, appeal_id, actor_id, action, note, created_at FROM appeal_events WHERE appeal_id = $1 ORDER BY created_at ASC, id ASC", appealID)
+	if err != nil {
+		return nil, fmt.Errorf("list appeal events: %w", err)
+	}
+	defer rows.Close()
+	events := make([]models.AppealEvent, 0)
+	for rows.Next() {
+		var e models.AppealEvent
+		var note pgtype.Text
+		if err := rows.Scan(&e.ID, &e.AppealID, &e.ActorID, &e.Action, &note, &e.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan appeal event: %w", err)
+		}
+		if note.Valid {
+			e.Note = note.String
+		}
+		e.CreatedAt = e.CreatedAt.UTC()
+		events = append(events, e)
+	}
+	return events, rows.Err()
+}
+
+// ResolveAppeal executes ResolveAppeal.
+func (r *postgresRepository) ResolveAppeal(appealID, resolverID, resolution string) (models.Appeal, error) {
+	if r == nil || r.pool == nil {
+		return models.Appeal{}, ErrPostgresUnavailable
+	}
+	trimmed := strings.TrimSpace(resolution)
+	if trimmed == "" {
+		trimmed = AppealStatusResolved
+	}
+	return r.updateAppealStatus(appealID, resolverID, AppealStatusResolved, trimmed, "resolved")
+}
+
+// ReopenAppeal executes ReopenAppeal.
+func (r *postgresRepository) ReopenAppeal(appealID, actorID, note string) (models.Appeal, error) {
+	return r.updateAppealStatus(appealID, actorID, AppealStatusOpen, strings.TrimSpace(note), "reopened")
+}
+
+func (r *postgresRepository) updateAppealStatus(appealID, actorID, status, note, action string) (models.Appeal, error) {
+	if r == nil || r.pool == nil {
+		return models.Appeal{}, ErrPostgresUnavailable
+	}
+	appeal := models.Appeal{}
+	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("begin update appeal tx: %w", err)
+		}
+		defer rollbackTx(ctx, tx)
+		if err := ensureUserExists(ctx, tx, actorID); err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		eventID, err := generateID()
+		if err != nil {
+			return err
+		}
+		query := "UPDATE appeals SET status=$1, resolution=$2, resolver_id=$3, resolved_at=$4 WHERE id=$5 RETURNING id, report_id, channel_id, reporter_id, reason, status, resolution, resolver_id, created_at, resolved_at"
+		var resolutionT, resolver pgtype.Text
+		var resolved pgtype.Timestamptz
+		var resolvedAt any = now
+		var resolverAny any = actorID
+		if status == AppealStatusOpen {
+			resolvedAt = nil
+			resolverAny = nil
+		}
+		if err := tx.QueryRow(ctx, query, status, note, resolverAny, resolvedAt, appealID).Scan(&appeal.ID, &appeal.ReportID, &appeal.ChannelID, &appeal.ReporterID, &appeal.Reason, &appeal.Status, &resolutionT, &resolver, &appeal.CreatedAt, &resolved); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("appeal %s not found", appealID)
+			}
+			return fmt.Errorf("update appeal %s: %w", appealID, err)
+		}
+		if _, err := tx.Exec(ctx, "INSERT INTO appeal_events (id, appeal_id, actor_id, action, note, created_at) VALUES ($1,$2,$3,$4,$5,$6)", eventID, appealID, actorID, action, note, now); err != nil {
+			return fmt.Errorf("insert appeal event: %w", err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit update appeal: %w", err)
+		}
+		if resolutionT.Valid {
+			appeal.Resolution = resolutionT.String
+		}
+		if resolver.Valid {
+			appeal.ResolverID = resolver.String
+		}
+		if resolved.Valid {
+			ts := resolved.Time.UTC()
+			appeal.ResolvedAt = &ts
+		}
+		events, err := r.listAppealEventsTx(ctx, conn, appeal.ID)
+		if err != nil {
+			return err
+		}
+		appeal.Events = events
+		appeal.CreatedAt = appeal.CreatedAt.UTC()
+		appeal.Status = strings.ToLower(appeal.Status)
+		return nil
+	})
+	if err != nil {
+		return models.Appeal{}, err
+	}
+	return appeal, nil
+}
+
 // ListChatFilters executes ListChatFilters.
 // Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
 // this function still normalizes/trims where needed and rejects empty required fields.

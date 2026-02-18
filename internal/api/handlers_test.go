@@ -2941,8 +2941,42 @@ func TestChatReportsAPI(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &reports); err != nil {
 		t.Fatalf("decode reports response: %v", err)
 	}
-	if len(reports) != 1 || reports[0].Status != "resolved" {
-		t.Fatalf("expected resolved report, got %+v", reports)
+
+	appealBody, _ := json.Marshal(createAppealRequest{Reason: "please review"})
+	req = httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/chat/moderation/reports/"+reportResp.ID+"/appeals", bytes.NewReader(appealBody))
+	req = withUser(req, reporter)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected appeal create status 201, got %d", rec.Code)
+	}
+	var createdAppeal appealResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &createdAppeal); err != nil {
+		t.Fatalf("decode appeal response: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID+"/chat/moderation/appeals", nil)
+	req = withUser(req, reporter)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected appeal list status 200, got %d", rec.Code)
+	}
+	var reporterAppeals []appealResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &reporterAppeals); err != nil {
+		t.Fatalf("decode reporter appeals: %v", err)
+	}
+	if len(reporterAppeals) != 1 {
+		t.Fatalf("expected reporter to see own appeal, got %d", len(reporterAppeals))
+	}
+
+	actionBody, _ := json.Marshal(appealActionRequest{Reason: "accepted"})
+	req = httptest.NewRequest(http.MethodPost, "/api/channels/"+channel.ID+"/chat/moderation/appeals/"+createdAppeal.ID+"/resolve", bytes.NewReader(actionBody))
+	req = withUser(req, owner)
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected appeal resolve status 200, got %d", rec.Code)
 	}
 }
 

@@ -23,6 +23,8 @@ func initChatDataset(ds *dataset) {
 	ds.ChatTimeoutReasons = make(map[string]map[string]string)
 	ds.ChatTimeoutIssuedAt = make(map[string]map[string]time.Time)
 	ds.ChatReports = make(map[string]models.ChatReport)
+	ds.Appeals = make(map[string]models.Appeal)
+	ds.AppealEvents = make(map[string][]models.AppealEvent)
 	ds.ChatFilters = make(map[string]models.ChatFilter)
 	ds.ChatAutoModActions = make(map[string]models.ChatAutoModAction)
 }
@@ -55,6 +57,12 @@ func (s *Storage) ensureChatDatasetInitializedLocked() {
 	}
 	if s.data.ChatReports == nil {
 		s.data.ChatReports = make(map[string]models.ChatReport)
+	}
+	if s.data.Appeals == nil {
+		s.data.Appeals = make(map[string]models.Appeal)
+	}
+	if s.data.AppealEvents == nil {
+		s.data.AppealEvents = make(map[string][]models.AppealEvent)
 	}
 	if s.data.ChatFilters == nil {
 		s.data.ChatFilters = make(map[string]models.ChatFilter)
@@ -848,6 +856,145 @@ func (s *Storage) ResolveChatReport(reportID, resolverID, resolution string) (mo
 		return models.ChatReport{}, err
 	}
 	return report, nil
+}
+
+func (s *Storage) appendAppealEventLocked(appealID, actorID, action, note string, createdAt time.Time) error {
+	eventID, err := generateID()
+	if err != nil {
+		return err
+	}
+	evt := models.AppealEvent{ID: eventID, AppealID: appealID, ActorID: actorID, Action: action, Note: strings.TrimSpace(note), CreatedAt: createdAt}
+	s.data.AppealEvents[appealID] = append(s.data.AppealEvents[appealID], evt)
+	appeal := s.data.Appeals[appealID]
+	appeal.Events = append(appeal.Events, evt)
+	s.data.Appeals[appealID] = appeal
+	return nil
+}
+
+func (s *Storage) CreateAppeal(reportID, reporterID, reason string) (models.Appeal, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	report, ok := s.data.ChatReports[reportID]
+	if !ok {
+		return models.Appeal{}, fmt.Errorf("report %s not found", reportID)
+	}
+	if _, ok := s.data.Users[reporterID]; !ok {
+		return models.Appeal{}, fmt.Errorf("reporter %s not found", reporterID)
+	}
+	if report.ReporterID != reporterID {
+		return models.Appeal{}, fmt.Errorf("forbidden")
+	}
+	trimmedReason := strings.TrimSpace(reason)
+	if trimmedReason == "" {
+		return models.Appeal{}, fmt.Errorf("reason is required")
+	}
+	id, err := generateID()
+	if err != nil {
+		return models.Appeal{}, err
+	}
+	now := time.Now().UTC()
+	appeal := models.Appeal{ID: id, ReportID: reportID, ChannelID: report.ChannelID, ReporterID: reporterID, Reason: trimmedReason, Status: AppealStatusOpen, CreatedAt: now}
+	if s.data.Appeals == nil {
+		s.data.Appeals = make(map[string]models.Appeal)
+	}
+	if s.data.AppealEvents == nil {
+		s.data.AppealEvents = make(map[string][]models.AppealEvent)
+	}
+	s.data.Appeals[id] = appeal
+	if err := s.appendAppealEventLocked(id, reporterID, "submitted", trimmedReason, now); err != nil {
+		return models.Appeal{}, err
+	}
+	if err := s.persist(); err != nil {
+		delete(s.data.Appeals, id)
+		delete(s.data.AppealEvents, id)
+		return models.Appeal{}, err
+	}
+	return s.data.Appeals[id], nil
+}
+
+func (s *Storage) ListAppeals(channelID, requesterID string, includeClosed bool) ([]models.Appeal, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if _, ok := s.data.Channels[channelID]; !ok {
+		return nil, fmt.Errorf("channel %s not found", channelID)
+	}
+	appeals := make([]models.Appeal, 0)
+	for _, appeal := range s.data.Appeals {
+		if appeal.ChannelID != channelID {
+			continue
+		}
+		if requesterID != "" && appeal.ReporterID != requesterID {
+			continue
+		}
+		if !includeClosed && strings.EqualFold(appeal.Status, AppealStatusResolved) {
+			continue
+		}
+		appeal.Events = append([]models.AppealEvent(nil), s.data.AppealEvents[appeal.ID]...)
+		appeals = append(appeals, appeal)
+	}
+	sort.Slice(appeals, func(i, j int) bool {
+		if appeals[i].CreatedAt.Equal(appeals[j].CreatedAt) {
+			return appeals[i].ID < appeals[j].ID
+		}
+		return appeals[i].CreatedAt.After(appeals[j].CreatedAt)
+	})
+	return appeals, nil
+}
+
+func (s *Storage) ResolveAppeal(appealID, resolverID, resolution string) (models.Appeal, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	appeal, ok := s.data.Appeals[appealID]
+	if !ok {
+		return models.Appeal{}, fmt.Errorf("appeal %s not found", appealID)
+	}
+	if _, ok := s.data.Users[resolverID]; !ok {
+		return models.Appeal{}, fmt.Errorf("resolver %s not found", resolverID)
+	}
+	trimmed := strings.TrimSpace(resolution)
+	if trimmed == "" {
+		trimmed = AppealStatusResolved
+	}
+	now := time.Now().UTC()
+	appeal.Status = AppealStatusResolved
+	appeal.Resolution = trimmed
+	appeal.ResolverID = resolverID
+	appeal.ResolvedAt = &now
+	s.data.Appeals[appealID] = appeal
+	if err := s.appendAppealEventLocked(appealID, resolverID, "resolved", trimmed, now); err != nil {
+		return models.Appeal{}, err
+	}
+	if err := s.persist(); err != nil {
+		return models.Appeal{}, err
+	}
+	appeal.Events = append([]models.AppealEvent(nil), s.data.AppealEvents[appealID]...)
+	return appeal, nil
+}
+
+func (s *Storage) ReopenAppeal(appealID, actorID, note string) (models.Appeal, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	appeal, ok := s.data.Appeals[appealID]
+	if !ok {
+		return models.Appeal{}, fmt.Errorf("appeal %s not found", appealID)
+	}
+	if _, ok := s.data.Users[actorID]; !ok {
+		return models.Appeal{}, fmt.Errorf("actor %s not found", actorID)
+	}
+	now := time.Now().UTC()
+	appeal.Status = AppealStatusOpen
+	appeal.Resolution = ""
+	appeal.ResolverID = ""
+	appeal.ResolvedAt = nil
+	s.data.Appeals[appealID] = appeal
+	if err := s.appendAppealEventLocked(appealID, actorID, "reopened", note, now); err != nil {
+		return models.Appeal{}, err
+	}
+	if err := s.persist(); err != nil {
+		return models.Appeal{}, err
+	}
+	appeal.Events = append([]models.AppealEvent(nil), s.data.AppealEvents[appealID]...)
+	return appeal, nil
 }
 
 // ListChatFilters returns the configured auto-moderation filters for a channel.

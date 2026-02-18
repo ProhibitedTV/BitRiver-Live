@@ -121,6 +121,9 @@ test("renderModeration handles partial data payloads", async () => {
             },
         ],
         actions: [],
+        appeals: [
+            { id: "appeal-1", reason: "please review", status: "open", createdAt: new Date().toISOString() },
+        ],
         automod: [
             {
                 id: "auto-1",
@@ -149,6 +152,7 @@ test("renderModeration handles partial data payloads", async () => {
 
     assert.ok(elements.get("moderation-queue").children.length > 0);
     assert.ok(elements.get("moderation-history").children.length > 0);
+    assert.ok(elements.get("moderation-appeals").children.length > 0);
     assert.ok(elements.get("moderation-automod").children.length > 0);
     assert.ok(elements.get("moderation-filters").children.length > 0);
 });

@@ -180,6 +180,7 @@ func TestPostgresChatRestrictionsLifecycle(t *testing.T) {
 
 func TestPostgresChatReportsLifecycle(t *testing.T) {
 	storage.RunRepositoryChatReportsLifecycle(t, postgresRepositoryFactory)
+	storage.RunRepositoryAppealsLifecycle(t, postgresRepositoryFactory)
 }
 
 func TestPostgresChatRetention(t *testing.T) {
