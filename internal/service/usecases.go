@@ -9,7 +9,6 @@ import (
 	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/observability/metrics"
-	"bitriver-live/internal/storage"
 )
 
 // AuthUsersUseCase encapsulates user and authentication persistence operations
@@ -42,8 +41,8 @@ type ChatModerationUseCase interface {
 	ResolveAppeal(appealID, resolverID, resolution string) (domain.Appeal, error)
 	ReopenAppeal(appealID, actorID, note string) (domain.Appeal, error)
 	ListChatFilters(channelID string) ([]domain.ChatFilter, error)
-	CreateChatFilter(channelID string, params storage.ChatFilterParams) (domain.ChatFilter, error)
-	UpdateChatFilter(id string, update storage.ChatFilterUpdate) (domain.ChatFilter, error)
+	CreateChatFilter(channelID string, params domain.ChatFilterCreateParams) (domain.ChatFilter, error)
+	UpdateChatFilter(id string, update domain.ChatFilterUpdate) (domain.ChatFilter, error)
 	DeleteChatFilter(id string) error
 	ListChannels(ownerID, query string) []domain.Channel
 	ListChatAutoModActions(channelID string, limit int) ([]domain.ChatAutoModAction, error)
@@ -209,8 +208,8 @@ type storeUseCases struct {
 		ResolveAppeal(appealID, resolverID, resolution string) (domain.Appeal, error)
 		ReopenAppeal(appealID, actorID, note string) (domain.Appeal, error)
 		ListChatFilters(channelID string) ([]domain.ChatFilter, error)
-		CreateChatFilter(channelID string, params storage.ChatFilterParams) (domain.ChatFilter, error)
-		UpdateChatFilter(id string, update storage.ChatFilterUpdate) (domain.ChatFilter, error)
+		CreateChatFilter(channelID string, params domain.ChatFilterCreateParams) (domain.ChatFilter, error)
+		UpdateChatFilter(id string, update domain.ChatFilterUpdate) (domain.ChatFilter, error)
 		DeleteChatFilter(id string) error
 		ListChatAutoModActions(channelID string, limit int) ([]domain.ChatAutoModAction, error)
 		GetMFASettings(userID string) (domain.MFASettings, bool, error)
@@ -249,8 +248,8 @@ func NewStoreUseCases(store interface {
 	ResolveAppeal(appealID, resolverID, resolution string) (domain.Appeal, error)
 	ReopenAppeal(appealID, actorID, note string) (domain.Appeal, error)
 	ListChatFilters(channelID string) ([]domain.ChatFilter, error)
-	CreateChatFilter(channelID string, params storage.ChatFilterParams) (domain.ChatFilter, error)
-	UpdateChatFilter(id string, update storage.ChatFilterUpdate) (domain.ChatFilter, error)
+	CreateChatFilter(channelID string, params domain.ChatFilterCreateParams) (domain.ChatFilter, error)
+	UpdateChatFilter(id string, update domain.ChatFilterUpdate) (domain.ChatFilter, error)
 	DeleteChatFilter(id string) error
 	ListChatAutoModActions(channelID string, limit int) ([]domain.ChatAutoModAction, error)
 	GetMFASettings(userID string) (domain.MFASettings, bool, error)
@@ -486,10 +485,10 @@ func (s *storeUseCases) ReopenAppeal(appealID, actorID, note string) (domain.App
 func (s *storeUseCases) ListChatFilters(channelID string) ([]domain.ChatFilter, error) {
 	return s.store.ListChatFilters(channelID)
 }
-func (s *storeUseCases) CreateChatFilter(channelID string, params storage.ChatFilterParams) (domain.ChatFilter, error) {
+func (s *storeUseCases) CreateChatFilter(channelID string, params domain.ChatFilterCreateParams) (domain.ChatFilter, error) {
 	return s.store.CreateChatFilter(channelID, params)
 }
-func (s *storeUseCases) UpdateChatFilter(id string, update storage.ChatFilterUpdate) (domain.ChatFilter, error) {
+func (s *storeUseCases) UpdateChatFilter(id string, update domain.ChatFilterUpdate) (domain.ChatFilter, error) {
 	return s.store.UpdateChatFilter(id, update)
 }
 func (s *storeUseCases) DeleteChatFilter(id string) error { return s.store.DeleteChatFilter(id) }

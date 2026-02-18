@@ -51,8 +51,8 @@ type Repository interface {
 	ResolveAppeal(appealID, resolverID, resolution string) (domain.Appeal, error)
 	ReopenAppeal(appealID, actorID, note string) (domain.Appeal, error)
 	ListChatFilters(channelID string) ([]domain.ChatFilter, error)
-	CreateChatFilter(channelID string, params ChatFilterParams) (domain.ChatFilter, error)
-	UpdateChatFilter(id string, update ChatFilterUpdate) (domain.ChatFilter, error)
+	CreateChatFilter(channelID string, params domain.ChatFilterCreateParams) (domain.ChatFilter, error)
+	UpdateChatFilter(id string, update domain.ChatFilterUpdate) (domain.ChatFilter, error)
 	DeleteChatFilter(id string) error
 	ListChatAutoModActions(channelID string, limit int) ([]domain.ChatAutoModAction, error)
 
