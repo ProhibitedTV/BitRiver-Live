@@ -23,7 +23,7 @@ cmd/*
 
 Rules:
 
-1. `cmd/*` contains process entrypoints only (flags, config loading, startup/shutdown wiring).
+1. `cmd/*` contains process entrypoints only (flags, config loading, startup/shutdown wiring). `cmd/server` must delegate dependency composition to `internal/app.NewServerRuntime`.
 2. `internal/app` orchestrates composition and lifecycle management; it can wire concrete adapters to interfaces.
 3. `internal/api` contains transport handlers and request/response translation only.
 4. `internal/service` contains use-case/application logic.
