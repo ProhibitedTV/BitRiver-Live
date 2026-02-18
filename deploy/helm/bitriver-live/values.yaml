@@ -166,3 +166,18 @@ secrets:
   BITRIVER_LIVE_RATE_LOGIN_LIMIT: "10"
   BITRIVER_LIVE_RATE_LOGIN_WINDOW: 1m
   BITRIVER_LIVE_POSTGRES_DSN: ""
+
+backups:
+  enabled: false
+  # UTC cron expression for scheduled Postgres backups.
+  schedule: "0 2 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  objectStorage:
+    enabled: false
+    bucket: ""
+    prefix: bitriver-live/postgres
+    region: us-east-1
+    endpoint: ""
+    accessKeyId: ""
+    secretAccessKey: ""

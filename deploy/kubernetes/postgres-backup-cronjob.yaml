@@ -1,0 +1,131 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bitriver-postgres-backup
+spec:
+  schedule: "0 2 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: postgres:15-alpine
+              env:
+                - name: BITRIVER_BACKUP_POSTGRES_HOST
+                  value: bitriver-live-postgres
+                - name: BITRIVER_BACKUP_POSTGRES_PORT
+                  value: "5432"
+                - name: BITRIVER_BACKUP_POSTGRES_DB
+                  valueFrom:
+                    configMapKeyRef:
+                      name: bitriver-live-config
+                      key: BITRIVER_POSTGRES_DB
+                - name: BITRIVER_BACKUP_POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: bitriver-live-secrets
+                      key: BITRIVER_POSTGRES_USER
+                - name: BITRIVER_BACKUP_POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: bitriver-live-secrets
+                      key: BITRIVER_POSTGRES_PASSWORD
+                - name: BITRIVER_BACKUP_UPLOAD_ENABLED
+                  value: "1"
+                - name: BITRIVER_BACKUP_UPLOAD_PROVIDER
+                  value: s3
+                - name: BITRIVER_BACKUP_UPLOAD_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: bitriver-backup-secrets
+                      key: bucket
+                - name: BITRIVER_BACKUP_UPLOAD_PREFIX
+                  value: bitriver-live/postgres
+                - name: BITRIVER_BACKUP_UPLOAD_REGION
+                  value: us-east-1
+                - name: BITRIVER_BACKUP_UPLOAD_ENDPOINT
+                  valueFrom:
+                    secretKeyRef:
+                      name: bitriver-backup-secrets
+                      key: endpoint
+                      optional: true
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: bitriver-backup-secrets
+                      key: accessKey
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: bitriver-backup-secrets
+                      key: secretKey
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  apk add --no-cache bash coreutils postgresql-client aws-cli
+                  /scripts/backup-postgres.sh
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: backups
+                  mountPath: /var/backups/bitriver-live/postgres
+          volumes:
+            - name: scripts
+              configMap:
+                name: bitriver-backup-scripts
+                defaultMode: 0755
+            - name: backups
+              persistentVolumeClaim:
+                claimName: bitriver-postgres-backups
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bitriver-postgres-backup-prune
+spec:
+  schedule: "30 2 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: prune
+              image: postgres:15-alpine
+              env:
+                - name: BITRIVER_BACKUP_DIR
+                  value: /var/backups/bitriver-live/postgres
+                - name: BITRIVER_BACKUP_RETENTION_DAYS
+                  value: "14"
+                - name: BITRIVER_BACKUP_KEEP_MIN
+                  value: "3"
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  apk add --no-cache bash coreutils
+                  /scripts/prune-backups.sh
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: backups
+                  mountPath: /var/backups/bitriver-live/postgres
+          volumes:
+            - name: scripts
+              configMap:
+                name: bitriver-backup-scripts
+                defaultMode: 0755
+            - name: backups
+              persistentVolumeClaim:
+                claimName: bitriver-postgres-backups

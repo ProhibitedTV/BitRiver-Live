@@ -84,6 +84,17 @@ Before cutting a release candidate:
 - Verify DMCA contact metadata (designated agent name, email, and mailing address) is present in published operator docs and matches the values used in support workflows.
 - Run a dry-run DMCA intake (`POST /api/legal/dmca`) and admin triage flow in staging.
 
+### Backup and restore release gates
+
+Before tagging production releases, prove backup/restore readiness:
+
+- Confirm at least one **successful backup in the last 24 hours** (from scheduler logs, object storage object timestamp, or job history).
+- Confirm the latest backup has both archive and checksum (`.sha256`) artefacts.
+- Provide **restore rehearsal evidence within the last 30 days** using `./scripts/restore-postgres.sh` (or equivalent staged workflow) including smoke query output.
+- If the release includes schema-heavy changes, run an extra restore rehearsal after migrations are validated in staging.
+
+Keep this evidence attached to the release ticket/change request before maintenance begins.
+
 ## 2. Tag the release and trigger the workflow
 
 1. Ensure `CHANGELOG.md` (when present) and version references are up to date.

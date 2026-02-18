@@ -1,0 +1,45 @@
+# Optional Compose override showing scheduled PostgreSQL backups.
+# Usage:
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.backups.yml up -d backup-cron
+services:
+  backup-cron:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      BITRIVER_BACKUP_POSTGRES_HOST: postgres
+      BITRIVER_BACKUP_POSTGRES_PORT: 5432
+      BITRIVER_BACKUP_POSTGRES_DB: ${BITRIVER_POSTGRES_DB:-bitriver}
+      BITRIVER_BACKUP_POSTGRES_USER: ${BITRIVER_POSTGRES_USER}
+      BITRIVER_BACKUP_POSTGRES_PASSWORD: ${BITRIVER_POSTGRES_PASSWORD}
+      BITRIVER_BACKUP_DIR: /var/backups/bitriver-live/postgres
+      BITRIVER_BACKUP_RETENTION_DAYS: ${BITRIVER_BACKUP_RETENTION_DAYS:-14}
+      BITRIVER_BACKUP_KEEP_MIN: ${BITRIVER_BACKUP_KEEP_MIN:-3}
+      BITRIVER_BACKUP_UPLOAD_ENABLED: ${BITRIVER_BACKUP_UPLOAD_ENABLED:-0}
+      BITRIVER_BACKUP_UPLOAD_PROVIDER: ${BITRIVER_BACKUP_UPLOAD_PROVIDER:-s3}
+      BITRIVER_BACKUP_UPLOAD_BUCKET: ${BITRIVER_BACKUP_UPLOAD_BUCKET:-}
+      BITRIVER_BACKUP_UPLOAD_PREFIX: ${BITRIVER_BACKUP_UPLOAD_PREFIX:-bitriver-live/postgres}
+      BITRIVER_BACKUP_UPLOAD_REGION: ${BITRIVER_BACKUP_UPLOAD_REGION:-us-east-1}
+      BITRIVER_BACKUP_UPLOAD_ENDPOINT: ${BITRIVER_BACKUP_UPLOAD_ENDPOINT:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+    volumes:
+      - postgres-backups:/var/backups/bitriver-live/postgres
+      - ../scripts:/opt/bitriver/scripts:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      set -eu
+      apk add --no-cache bash coreutils postgresql-client aws-cli >/dev/null
+      cat >/etc/crontabs/root <<'CRON'
+      0 2 * * * /opt/bitriver/scripts/backup-postgres.sh >>/var/log/backup.log 2>&1
+      30 2 * * * /opt/bitriver/scripts/prune-backups.sh >>/var/log/backup.log 2>&1
+      CRON
+      exec crond -f -l 8
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-backups:

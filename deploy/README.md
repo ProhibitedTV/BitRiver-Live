@@ -80,6 +80,17 @@ To enforce drift detection in CI (or locally before commits), run:
 
 If drift is reported, re-run the sync command and commit the regenerated Helm files. Do not hand-edit `deploy/helm/bitriver-live/files/srs.conf` or `deploy/helm/bitriver-live/migrations/*.sql`.
 
+## Backup scheduling examples
+
+Backup automation examples are provided for operators who want scheduled Postgres dumps and retention pruning:
+
+- `deploy/docker-compose.backups.yml` – Compose override with a cron sidecar that executes `scripts/backup-postgres.sh` and `scripts/prune-backups.sh`.
+- `deploy/kubernetes/postgres-backup-cronjob.yaml` – Kubernetes CronJob examples for backup + prune workflows.
+- `deploy/helm/bitriver-live/templates/cronjob-postgres-backup.yaml` + `deploy/helm/bitriver-live/values.yaml` (`backups.*`) – Helm-native backup scheduling hook.
+
+These are opt-in examples; validate credentials, object-storage lifecycle, and retention against your compliance policy before enabling them in production.
+
+
 ### Image tags and digests
 
 Compose reads all image tags from `.env` so you can update versions without editing `deploy/docker-compose.yml`. For
