@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"bitriver-live/internal/config"
 	"bitriver-live/internal/storage"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -20,12 +21,10 @@ func main() {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
+	envCfg := config.LoadJSONToPostgresMigrationFromEnv(config.LoadEnvironment())
 	dsn := strings.TrimSpace(*postgresDSN)
 	if dsn == "" {
-		dsn = strings.TrimSpace(os.Getenv("BITRIVER_LIVE_POSTGRES_DSN"))
-	}
-	if dsn == "" {
-		dsn = strings.TrimSpace(os.Getenv("DATABASE_URL"))
+		dsn = envCfg.PostgresDSN
 	}
 	if dsn == "" {
 		logger.Error("postgres DSN required", "hint", "set --postgres-dsn, BITRIVER_LIVE_POSTGRES_DSN, or DATABASE_URL")

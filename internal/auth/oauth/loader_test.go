@@ -2,13 +2,11 @@ package oauth
 
 import (
 	"testing"
+
+	"bitriver-live/internal/config"
 )
 
 func TestLoadFromFlagsAndEnv(t *testing.T) {
-	lookup := func(values map[string]string) func(string) string {
-		return func(key string) string { return values[key] }
-	}
-
 	env := map[string]string{
 		"BITRIVER_LIVE_OAUTH_CONFIG": `[{
                         "name": "github",
@@ -50,7 +48,7 @@ func TestLoadFromFlagsAndEnv(t *testing.T) {
 		ClientIDs:     map[string]string{"github": "cli-override-id"},
 		ClientSecrets: map[string]string{"github": "cli-override-secret"},
 		RedirectURLs:  map[string]string{"github": "https://cli/override"},
-		LookupEnv:     lookup(env),
+		Env:           config.NewEnvironmentFromMap(env),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -96,7 +94,7 @@ func TestLoadFromFlagsAndEnvSanitizesProviderNames(t *testing.T) {
                         "redirectURL": "https://cli/redirect",
                         "profile": {"idField": "id", "emailField": "email", "nameField": "name"}
                 }]`,
-		LookupEnv: func(key string) string { return env[key] },
+		Env: config.NewEnvironmentFromMap(env),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"bitriver-live/internal/config"
 	"bitriver-live/internal/executil"
 )
 
@@ -296,7 +297,7 @@ func runEnvValidate(args []string) error {
 		return errors.New("environment validation failed")
 	}
 
-	modeCfg, err := resolveDeployImageSource("", values)
+	modeCfg, err := resolveDeployImageSource("", values, config.LoadEnvironment())
 	if err != nil {
 		return err
 	}
@@ -386,7 +387,7 @@ func runComposeUp(args []string) error {
 		return fmt.Errorf("load env values: %w", err)
 	}
 
-	modeCfg, err := resolveDeployImageSource(*imageSource, envValues)
+	modeCfg, err := resolveDeployImageSource(*imageSource, envValues, config.LoadEnvironment())
 	if err != nil {
 		return err
 	}
@@ -547,7 +548,7 @@ func runQuickstart(args []string) error {
 		return fmt.Errorf("read env file: %w", err)
 	}
 
-	modeCfg, err := resolveDeployImageSource(*imageSource, envValues)
+	modeCfg, err := resolveDeployImageSource(*imageSource, envValues, config.LoadEnvironment())
 	if err != nil {
 		return err
 	}
@@ -605,10 +606,10 @@ func runQuickstart(args []string) error {
 	return nil
 }
 
-func resolveDeployImageSource(explicitMode string, envValues map[string]string) (deployImageSourceConfig, error) {
+func resolveDeployImageSource(explicitMode string, envValues map[string]string, runtimeEnv config.Environment) (deployImageSourceConfig, error) {
 	mode := strings.ToLower(strings.TrimSpace(explicitMode))
 	if mode == "" {
-		mode = strings.ToLower(strings.TrimSpace(os.Getenv("BITRIVER_DEPLOY_IMAGE_SOURCE")))
+		mode = config.LoadDeployImageSourceFromEnv(runtimeEnv).Mode
 	}
 	if mode == "" {
 		mode = strings.ToLower(strings.TrimSpace(envValues["BITRIVER_DEPLOY_IMAGE_SOURCE"]))
