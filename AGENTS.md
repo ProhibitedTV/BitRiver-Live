@@ -56,7 +56,7 @@ docker compose -f deploy/docker-compose.yml config
 ## Repo zones
 ### Product
 - Runtime code and user-facing behavior: `cmd/`, `internal/`, `web/viewer/`, `deploy/`.
-- Source-of-truth docs for shipped behavior: `README.md`, `docs/quickstart.md`, `docs/contract.md`, `docs/architecture.md`.
+- Source-of-truth docs for shipped behavior: `README.md`, `docs/quickstart.md`, `docs/contract.md`, `docs/architecture.md`, `docs/code-placement.md`.
 
 ### Ops / runbooks
 - Operational and release guidance: `docs/operations.md`, `docs/advanced-deployments.md`, `docs/production-release.md`, `docs/testing.md`.
