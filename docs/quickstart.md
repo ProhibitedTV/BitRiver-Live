@@ -48,7 +48,7 @@ launchers ship a bundled CLI and do not require Go on the host.
 
 ### Tier 1 coverage
 
-The Go-based quickstart defines the canonical deployment contract across Tier 1 platforms—Windows 10/11 with Docker Desktop, macOS with Docker Desktop, and Ubuntu/Debian with Docker Engine plus the Compose plugin. Launcher wrappers and installers remain compatibility entrypoints that forward into the same Compose + `.env` pipeline. See [`docs/cross-platform-plan.md`](cross-platform-plan.md#canonical-production-deployment-path) for the contract and support matrix.
+The Go-based quickstart defines the canonical deployment contract across Tier 1 platforms—Windows 10/11 with Docker Desktop, macOS with Docker Desktop, and Ubuntu/Debian with Docker Engine plus the Compose plugin. Launcher wrappers and installers remain compatibility entrypoints that forward into the same Compose + `.env` pipeline. See [`docs/cross-platform-plan.md`](labs/cross-platform-plan.md#canonical-production-deployment-path) for the contract and support matrix.
 
 ## Run the quickstart command
 

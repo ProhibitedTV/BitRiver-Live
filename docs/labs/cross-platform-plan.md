@@ -1,3 +1,5 @@
+> **Planning / Non-binding:** This document captures cross-platform rollout intent and experiments. It does **not** define shipped operational guarantees.
+
 # Cross-platform plan
 
 This document inventories the platform-specific assumptions in BitRiver Live today and tracks the shipped milestones for the cross-platform control plane.
@@ -40,7 +42,7 @@ go run ./cmd/bitriver doctor
 
 ## Canonical production deployment path
 
-This contract matches the architecture guardrails in [`docs/architecture.md`](architecture.md#deployment-contract-canonical): every launcher must execute one shared deployment pipeline instead of introducing platform-specific operations.
+This contract matches the architecture guardrails in [`docs/architecture.md`](../architecture.md#deployment-contract-canonical): every launcher must execute one shared deployment pipeline instead of introducing platform-specific operations.
 
 - Production deployments continue to flow through `deploy/docker-compose.yml` with configuration sourced from the repo-root
   `.env` (generated from `deploy/.env.example`, validated by `deploy/check-env.sh`, and rendered into
