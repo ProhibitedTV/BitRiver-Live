@@ -216,6 +216,10 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.tls.yml -f 
 
 If you prefer not to manage another override file, enforce the same restrictions with host firewall rules or security groups so only ports 80/443 (plus your ingest ports) are reachable.
 
+## Cloudflare + Nginx Proxy Manager routing
+
+If you are fronting BitRiver Live with Cloudflare and Nginx Proxy Manager (NPM), use the dedicated runbook at [`docs/reverse-proxy-npm-cloudflare.md`](reverse-proxy-npm-cloudflare.md). It documents the required `.env` keys (`NEXT_PUBLIC_VIEWER_URL`, `BITRIVER_VIEWER_ORIGIN`, CORS allowlists, and `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`), recommended Cloudflare TLS posture (`orange-cloud` + `Full (strict)`), NPM websocket/path forwarding for `/`, `/api`, and `/viewer`, plus an end-to-end validation checklist.
+
 ## Resource limits + ulimits override
 
 For production-ish deployments, add the optional Compose override `deploy/docker-compose.resources.yml`. It sets higher `nofile` limits and CPU/memory reservations for the ingest trio (SRS, OME, and transcoder) while keeping the quickstart path unchanged.

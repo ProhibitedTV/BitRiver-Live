@@ -347,4 +347,4 @@ If Docker Desktop fails to accept Compose traffic from WSL, you may see `http2: 
 - **Environment tweaks** – Edit `.env` and rerun `docker compose up -d` to apply changes. The compose stack automatically loads
   the file so you never need to touch `deploy/docker-compose.yml` directly.
 
-For more advanced tuning (TLS, Redis-backed rate limiting, scaling) continue with [`docs/advanced-deployments.md`](advanced-deployments.md).
+For more advanced tuning (TLS, Redis-backed rate limiting, scaling) continue with [`docs/advanced-deployments.md`](advanced-deployments.md). If you are deploying behind Cloudflare + Nginx Proxy Manager, follow the dedicated guide at [`docs/reverse-proxy-npm-cloudflare.md`](reverse-proxy-npm-cloudflare.md).
