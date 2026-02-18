@@ -404,8 +404,9 @@ func rateLimitMiddleware(rl *rateLimiter, resolver *clientIPResolver, logger *sl
 		}
 		if shouldRateLimitAuthRequest(r) {
 			ip, _ := resolveClientIP(r, resolver)
+			key := authRateLimitKey(r, ip)
 			requestLogger := loggingWithRequest(logger, resolver, r)
-			allowed, retryAfter, err := rl.AllowLogin(ip)
+			allowed, retryAfter, err := rl.AllowLogin(key)
 			if err != nil {
 				if requestLogger != nil {
 					requestLogger.Error("rate limiter failure", "error", err)
@@ -436,6 +437,8 @@ func shouldRateLimitAuthRequest(r *http.Request) bool {
 	switch r.URL.Path {
 	case "/api/auth/login", "/api/auth/signup":
 		return r.Method == http.MethodPost
+	case "/api/auth/mfa/verify", "/api/auth/mfa/enroll":
+		return r.Method == http.MethodPost
 	case "/api/auth/session":
 		return r.Method == http.MethodGet || r.Method == http.MethodDelete
 	}
@@ -455,6 +458,25 @@ func shouldRateLimitAuthRequest(r *http.Request) bool {
 	}
 
 	return false
+}
+
+const mfaChallengeRateLimitCookie = "bitriver_mfa_challenge"
+
+// authRateLimitKey performs auth rate limit key and propagates validation or dependency failures to the caller.
+func authRateLimitKey(r *http.Request, clientIP string) string {
+	if r == nil || r.URL == nil {
+		return clientIP
+	}
+
+	if r.URL.Path == "/api/auth/mfa/verify" {
+		if cookie, err := r.Cookie(mfaChallengeRateLimitCookie); err == nil {
+			if challengeID := strings.TrimSpace(cookie.Value); challengeID != "" {
+				return fmt.Sprintf("%s|challenge:%s", clientIP, challengeID)
+			}
+		}
+	}
+
+	return clientIP
 }
 
 // auditMiddleware performs audit middleware and propagates validation or dependency failures to the caller.
