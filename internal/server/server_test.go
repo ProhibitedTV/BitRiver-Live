@@ -640,6 +640,8 @@ func TestRateLimitMiddlewareAuthPaths(t *testing.T) {
 		{name: "session delete", method: http.MethodDelete, path: "/api/auth/session"},
 		{name: "oauth start", method: http.MethodPost, path: "/api/auth/oauth/provider/start"},
 		{name: "oauth callback", method: http.MethodGet, path: "/api/auth/oauth/provider/callback"},
+		{name: "mfa enroll", method: http.MethodPost, path: "/api/auth/mfa/enroll"},
+		{name: "mfa verify", method: http.MethodPost, path: "/api/auth/mfa/verify"},
 	}
 
 	for _, tc := range testCases {
@@ -692,6 +694,55 @@ func TestRateLimitMiddlewareAuthPaths(t *testing.T) {
 				t.Fatalf("expected next handler to not be called after rate limiting, got %d", nextCalls)
 			}
 		})
+	}
+}
+
+func TestRateLimitMiddlewareMFAChallengeKeyIsolation(t *testing.T) {
+	t.Parallel()
+
+	rl, err := newRateLimiter(RateLimitConfig{LoginLimit: 1, LoginWindow: time.Minute})
+	if err != nil {
+		t.Fatalf("newRateLimiter error: %v", err)
+	}
+
+	nextCalls := 0
+	handler := rateLimitMiddleware(rl, nil, nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nextCalls++
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	base := func(challenge string) *http.Request {
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/mfa/verify", nil)
+		req.RemoteAddr = "1.2.3.4:1234"
+		if challenge != "" {
+			req.AddCookie(&http.Cookie{Name: mfaChallengeRateLimitCookie, Value: challenge})
+		}
+		return req
+	}
+
+	first := httptest.NewRecorder()
+	handler.ServeHTTP(first, base("challenge-a"))
+	if first.Code != http.StatusOK {
+		t.Fatalf("expected first challenge request to succeed, got %d", first.Code)
+	}
+
+	second := httptest.NewRecorder()
+	handler.ServeHTTP(second, base("challenge-a"))
+	if second.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected second request for same challenge to be rate limited, got %d", second.Code)
+	}
+	if retryAfter := second.Header().Get("Retry-After"); retryAfter != "1" {
+		t.Fatalf("expected Retry-After header to be set for MFA challenge throttling, got %q", retryAfter)
+	}
+
+	third := httptest.NewRecorder()
+	handler.ServeHTTP(third, base("challenge-b"))
+	if third.Code != http.StatusOK {
+		t.Fatalf("expected request for different challenge to use isolated key, got %d", third.Code)
+	}
+
+	if nextCalls != 2 {
+		t.Fatalf("expected two successful requests to reach next handler, got %d", nextCalls)
 	}
 }
 
