@@ -5,13 +5,17 @@ on:
     paths:
       - 'README.md'
       - 'docs/**/*.md'
+      - 'deploy/.env.example'
       - 'scripts/check-doc-installer-language.sh'
+      - 'scripts/generate-contract-doc.sh'
       - '.github/workflows/docs-consistency.yml'
   pull_request:
     paths:
       - 'README.md'
       - 'docs/**/*.md'
+      - 'deploy/.env.example'
       - 'scripts/check-doc-installer-language.sh'
+      - 'scripts/generate-contract-doc.sh'
       - '.github/workflows/docs-consistency.yml'
 
 jobs:
@@ -23,3 +27,6 @@ jobs:
 
       - name: Check installer milestone wording
         run: ./scripts/check-doc-installer-language.sh
+
+      - name: Check generated contract env docs are fresh
+        run: ./scripts/generate-contract-doc.sh --check
