@@ -128,7 +128,7 @@ END {
 }
 ' "$env_file" > "$generated_block_file"
 
-if ! rg -F "$begin_marker" "$doc_file" >/dev/null; then
+if ! grep -Fq "$begin_marker" "$doc_file"; then
   cat >> "$doc_file" <<DOCBLOCK
 
 ## Generated environment variable index
