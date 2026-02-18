@@ -227,6 +227,7 @@ func main() {
 	sessionCookieCrossSiteValue := resolveBool(*sessionCookieCrossSite, "BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE")
 	listenAddr := resolveListenAddr(*addr, serverMode, envGet("BITRIVER_LIVE_ADDR"))
 	envFilePath := strings.TrimSpace(stringsutil.FirstNonEmpty(*envFile, envGet("BITRIVER_LIVE_ENV_FILE")))
+	datastoreConfig := config.ResolveServerDatastoreConfig(*postgresDSN, *sessionPostgresDSN, processEnv)
 
 	tlsCertPath := stringsutil.FirstNonEmpty(*tlsCert, envGet("BITRIVER_LIVE_TLS_CERT"))
 	tlsKeyPath := stringsutil.FirstNonEmpty(*tlsKey, envGet("BITRIVER_LIVE_TLS_KEY"))
@@ -292,7 +293,7 @@ func main() {
 		SessionCookieCrossSite:        sessionCookieCrossSiteValue,
 		TLS:                           server.TLSConfig{CertFile: tlsCertPath, KeyFile: tlsKeyPath},
 		StorageDriverFlag:             *storageDriver,
-		PostgresDSNFlag:               *postgresDSN,
+		PostgresDSN:                   datastoreConfig.PostgresDSN,
 		PostgresMaxConns:              *postgresMaxConns,
 		PostgresMinConns:              *postgresMinConns,
 		PostgresMaxConnLifetime:       *postgresMaxConnLifetime,
@@ -301,7 +302,7 @@ func main() {
 		PostgresAcquireTimeout:        *postgresAcquireTimeout,
 		PostgresAppName:               *postgresAppName,
 		SessionStoreDriverFlag:        *sessionStoreDriver,
-		SessionPostgresDSNFlag:        *sessionPostgresDSN,
+		SessionPostgresDSN:            datastoreConfig.SessionPostgresDSN,
 		SessionTTL:                    resolveDuration(*sessionTTL, "BITRIVER_LIVE_SESSION_TTL", 0),
 		SessionIdleTimeout:            resolveDuration(*sessionIdleTimeout, "BITRIVER_LIVE_SESSION_IDLE_TIMEOUT", 0),
 		ObjectEndpoint:                stringsutil.FirstNonEmpty(*objectEndpoint, envGet("BITRIVER_LIVE_OBJECT_ENDPOINT")),
@@ -504,7 +505,7 @@ func validateProductionDatastore(driver, resolvedPostgresDSN, envPostgresDSN str
 
 // resolvePostgresDSN resolves postgres dsn from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolvePostgresDSN(flagValue string) string {
-	return strings.TrimSpace(stringsutil.FirstNonEmpty(flagValue, envGet("BITRIVER_LIVE_POSTGRES_DSN"), envGet("DATABASE_URL")))
+	return strings.TrimSpace(config.ResolveServerDatastoreConfig(flagValue, "", processEnv).PostgresDSN)
 }
 
 // resolveViewerOrigin resolves viewer origin from flags and environment values, returning validation errors when incompatible settings are provided.
