@@ -10,6 +10,15 @@ type Environment struct {
 	values map[string]string
 }
 
+// NewEnvironmentFromMap builds an immutable environment snapshot from the provided map.
+func NewEnvironmentFromMap(values map[string]string) Environment {
+	cloned := make(map[string]string, len(values))
+	for k, v := range values {
+		cloned[k] = v
+	}
+	return Environment{values: cloned}
+}
+
 // LoadEnvironment snapshots the current process environment.
 func LoadEnvironment() Environment {
 	values := make(map[string]string)

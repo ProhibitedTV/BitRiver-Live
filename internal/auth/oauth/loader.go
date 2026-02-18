@@ -2,8 +2,9 @@ package oauth
 
 import (
 	"fmt"
-	"os"
 	"strings"
+
+	"bitriver-live/internal/config"
 )
 
 // LoadInput describes how to load OAuth provider configuration from flag values and
@@ -17,29 +18,20 @@ type LoadInput struct {
 	ClientSecrets map[string]string
 	// RedirectURLs holds flag-provided per-provider redirect URLs.
 	RedirectURLs map[string]string
-	// LookupEnv overrides environment lookup for testing.
-	LookupEnv func(string) string
+	// Env snapshots environment variables for OAuth source/override resolution.
+	Env config.Environment
 }
 
 // LoadFromFlagsAndEnv resolves provider configuration from the provided flag values
 // and environment variables. It returns the resolved provider list and an OAuth
 // manager constructed from that configuration.
 func LoadFromFlagsAndEnv(input LoadInput) ([]ProviderConfig, Service, error) {
-	lookupEnv := input.LookupEnv
-	if lookupEnv == nil {
-		lookupEnv = os.Getenv
-	}
-
-	var sources []string
+	envCfg := config.LoadOAuthFromEnv(input.Env)
+	sources := make([]string, 0, len(envCfg.Sources)+1)
 	if source := strings.TrimSpace(input.Source); source != "" {
 		sources = append(sources, source)
 	}
-	if envSource := strings.TrimSpace(lookupEnv("BITRIVER_LIVE_OAUTH_CONFIG")); envSource != "" {
-		sources = append(sources, envSource)
-	}
-	if envSource := strings.TrimSpace(lookupEnv("BITRIVER_LIVE_OAUTH_PROVIDERS")); envSource != "" {
-		sources = append(sources, envSource)
-	}
+	sources = append(sources, envCfg.Sources...)
 
 	providers, err := ResolveConfigSources(sources...)
 	if err != nil {
@@ -51,7 +43,7 @@ func LoadFromFlagsAndEnv(input LoadInput) ([]ProviderConfig, Service, error) {
 	}
 
 	providers = OverrideCredentials(providers, input.ClientIDs, input.ClientSecrets, input.RedirectURLs)
-	providers = applyEnvOverrides(providers, lookupEnv)
+	providers = applyEnvOverrides(providers, input.Env)
 	providers = resolveProviderSet(providers)
 	if len(providers) == 0 {
 		return nil, nil, nil
@@ -65,43 +57,17 @@ func LoadFromFlagsAndEnv(input LoadInput) ([]ProviderConfig, Service, error) {
 	return providers, manager, nil
 }
 
-func applyEnvOverrides(configs []ProviderConfig, lookupEnv func(string) string) []ProviderConfig {
+func applyEnvOverrides(configs []ProviderConfig, env config.Environment) []ProviderConfig {
 	if len(configs) == 0 {
 		return configs
 	}
 
-	ids := make(map[string]string)
-	secrets := make(map[string]string)
-	redirects := make(map[string]string)
+	names := make([]string, 0, len(configs))
 	for _, cfg := range configs {
-		normalized := sanitizeEnvName(cfg.Name)
-		if v := strings.TrimSpace(lookupEnv(fmt.Sprintf("BITRIVER_LIVE_OAUTH_%s_CLIENT_ID", normalized))); v != "" {
-			ids[strings.ToLower(cfg.Name)] = v
-		}
-		if v := strings.TrimSpace(lookupEnv(fmt.Sprintf("BITRIVER_LIVE_OAUTH_%s_CLIENT_SECRET", normalized))); v != "" {
-			secrets[strings.ToLower(cfg.Name)] = v
-		}
-		if v := strings.TrimSpace(lookupEnv(fmt.Sprintf("BITRIVER_LIVE_OAUTH_%s_REDIRECT_URL", normalized))); v != "" {
-			redirects[strings.ToLower(cfg.Name)] = v
-		}
+		names = append(names, cfg.Name)
 	}
-	return OverrideCredentials(configs, ids, secrets, redirects)
-}
-
-func sanitizeEnvName(name string) string {
-	upper := strings.ToUpper(name)
-	var builder strings.Builder
-	for _, r := range upper {
-		switch {
-		case r >= 'A' && r <= 'Z':
-			builder.WriteRune(r)
-		case r >= '0' && r <= '9':
-			builder.WriteRune(r)
-		default:
-			builder.WriteRune('_')
-		}
-	}
-	return builder.String()
+	overrides := config.LoadOAuthProviderOverridesFromEnv(env, names)
+	return OverrideCredentials(configs, overrides.ClientIDs, overrides.ClientSecrets, overrides.RedirectURLs)
 }
 
 func resolveProviderSet(configs []ProviderConfig) []ProviderConfig {

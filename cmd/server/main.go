@@ -189,6 +189,7 @@ func main() {
 		ClientIDs:     oauthClientIDs,
 		ClientSecrets: oauthClientSecrets,
 		RedirectURLs:  oauthRedirects,
+		Env:           processEnv,
 	})
 	if err != nil {
 		logger.Error("failed to configure oauth", "error", err)

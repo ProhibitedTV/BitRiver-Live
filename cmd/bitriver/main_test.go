@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bitriver-live/internal/config"
 	"bytes"
 	"encoding/xml"
 	"errors"
@@ -222,7 +223,7 @@ func TestValidateOMEGeneratedConfigRejectsDeprecatedBindAddress(t *testing.T) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	err := validateOMEGeneratedConfig(path)
+	err := validateOMEGeneratedConfig(path, config.NewEnvironmentFromMap(map[string]string{}))
 	if err == nil {
 		t.Fatal("expected validation to fail for deprecated Server.bind.Address")
 	}
@@ -249,7 +250,7 @@ func TestValidateOMEGeneratedConfigRejectsApplicationOutputsWrapper(t *testing.T
 		t.Fatalf("write config: %v", err)
 	}
 
-	err := validateOMEGeneratedConfig(path)
+	err := validateOMEGeneratedConfig(path, config.NewEnvironmentFromMap(map[string]string{}))
 	if err == nil {
 		t.Fatal("expected validation to fail for deprecated <Application><Outputs>")
 	}
@@ -282,7 +283,7 @@ func TestValidateOMEGeneratedConfigAcceptsMatchingHealthcheckAccessToken(t *test
 		}
 	})
 
-	if err := validateOMEGeneratedConfig(path); err != nil {
+	if err := validateOMEGeneratedConfig(path, config.NewEnvironmentFromMap(map[string]string{"BITRIVER_OME_API_TOKEN": "token"})); err != nil {
 		t.Fatalf("expected matching BITRIVER_OME_API_TOKEN to pass validation, got %v", err)
 	}
 }
@@ -338,7 +339,7 @@ func TestValidateOMEGeneratedConfigRejectsMismatchedHealthcheckAccessToken(t *te
 		}
 	})
 
-	err := validateOMEGeneratedConfig(path)
+	err := validateOMEGeneratedConfig(path, config.NewEnvironmentFromMap(map[string]string{"BITRIVER_OME_HEALTHCHECK_TOKEN": "different-healthcheck-token"}))
 	if err == nil {
 		t.Fatal("expected validation to fail for mismatched healthcheck access token")
 	}
@@ -404,7 +405,7 @@ func TestValidateOMEGeneratedConfigRejectsApplicationLLHLS(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	err := validateOMEGeneratedConfig(path)
+	err := validateOMEGeneratedConfig(path, config.NewEnvironmentFromMap(map[string]string{}))
 	if err == nil {
 		t.Fatal("expected validation to fail for deprecated <Application><LLHLS>")
 	}
@@ -531,7 +532,7 @@ func TestRenderOMEConfigDiffersFromLegacyWhenUsingSplitAPIContexts(t *testing.T)
 	if err := renderOMEConfig(cfg); err != nil {
 		t.Fatalf("render: %v", err)
 	}
-	if err := validateOMEGeneratedConfig(outputPath); err != nil {
+	if err := validateOMEGeneratedConfig(outputPath, config.NewEnvironmentFromMap(map[string]string{})); err != nil {
 		t.Fatalf("expected generated output to pass split-context validation: %v", err)
 	}
 }
@@ -1827,7 +1828,7 @@ func TestGatherReadinessDiagnosticsIncludesStubbedPostgresHint(t *testing.T) {
 }
 
 func TestResolveDeployImageSourceDefaultsToPull(t *testing.T) {
-	cfg, err := resolveDeployImageSource("", map[string]string{})
+	cfg, err := resolveDeployImageSource("", map[string]string{}, config.NewEnvironmentFromMap(map[string]string{}))
 	if err != nil {
 		t.Fatalf("resolveDeployImageSource returned error: %v", err)
 	}
@@ -1837,7 +1838,7 @@ func TestResolveDeployImageSourceDefaultsToPull(t *testing.T) {
 }
 
 func TestResolveDeployImageSourceRejectsInvalidValue(t *testing.T) {
-	if _, err := resolveDeployImageSource("invalid", map[string]string{}); err == nil {
+	if _, err := resolveDeployImageSource("invalid", map[string]string{}, config.NewEnvironmentFromMap(map[string]string{})); err == nil {
 		t.Fatal("expected invalid image source to fail")
 	}
 }
@@ -1867,7 +1868,6 @@ func TestRunPullImagePreflightReturnsAccessDeniedMessage(t *testing.T) {
 }
 
 func TestRunComposeUpRejectsBuildModeInProduction(t *testing.T) {
-	t.Setenv("BITRIVER_DEPLOY_IMAGE_SOURCE", "build")
 	envPath := filepath.Join(t.TempDir(), ".env")
 	values := buildValidProductionEnv(t)
 	values["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"] = "accesstoken"
@@ -1879,7 +1879,7 @@ func TestRunComposeUpRejectsBuildModeInProduction(t *testing.T) {
 		t.Fatalf("write env: %v", err)
 	}
 
-	err := runComposeUp([]string{"--file", "deploy/docker-compose.yml", "--env-file", envPath})
+	err := runComposeUp([]string{"--file", "deploy/docker-compose.yml", "--env-file", envPath, "--image-source", "build"})
 	if err == nil {
 		t.Fatal("expected production contract failure for build mode")
 	}

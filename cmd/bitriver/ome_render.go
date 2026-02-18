@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 
+	"bitriver-live/internal/config"
 	"bitriver-live/internal/stringsutil"
 )
 
@@ -52,7 +53,7 @@ func renderOMEFromEnv(envPath string, force, checkOnly, quiet bool) error {
 	outputPath := filepath.Join(repoRoot(), "deploy", "ome", "Server.generated.xml")
 
 	if checkOnly {
-		if err := validateOMEGeneratedConfig(outputPath); err != nil {
+		if err := validateOMEGeneratedConfig(outputPath, config.LoadEnvironment()); err != nil {
 			return err
 		}
 		if !quiet {
@@ -73,7 +74,7 @@ func renderOMEFromEnv(envPath string, force, checkOnly, quiet bool) error {
 
 	if !force {
 		if _, err := os.Stat(outputPath); err == nil {
-			if err := validateOMEGeneratedConfig(outputPath); err != nil {
+			if err := validateOMEGeneratedConfig(outputPath, config.LoadEnvironment()); err != nil {
 				return fmt.Errorf("invalid OME config at %s (re-render with --force): %w", outputPath, err)
 			}
 			if !quiet {
@@ -97,7 +98,7 @@ func renderOMEFromEnv(envPath string, force, checkOnly, quiet bool) error {
 		return fmt.Errorf("render deploy/ome/Server.generated.xml: %w", err)
 	}
 
-	if err := validateOMEGeneratedConfig(outputPath); err != nil {
+	if err := validateOMEGeneratedConfig(outputPath, config.LoadEnvironment()); err != nil {
 		return fmt.Errorf("validate generated OME config: %w", err)
 	}
 
@@ -888,7 +889,7 @@ func updateLineTail(tail, addition string) string {
 	return tail + addition
 }
 
-func validateOMEGeneratedConfig(path string) error {
+func validateOMEGeneratedConfig(path string, runtimeEnv config.Environment) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("OME config missing at %s: %w", path, err)
@@ -952,18 +953,13 @@ func validateOMEGeneratedConfig(path string) error {
 	if strings.TrimSpace(parsed.Bind.Managers.API.Port) == "" || strings.TrimSpace(parsed.Bind.Managers.API.TLSPort) == "" || strings.TrimSpace(parsed.Bind.Managers.API.WorkerCount) == "" {
 		return fmt.Errorf("missing <Server><Bind><Managers><API> listener block with <Port>/<TLSPort>/<WorkerCount> in %s", path)
 	}
-	expectedHealthcheckPort := strings.TrimSpace(os.Getenv("BITRIVER_OME_HTTP_PORT"))
-	if expectedHealthcheckPort == "" {
-		expectedHealthcheckPort = "8081"
-	}
+	contract := config.LoadOMEHealthcheckContractFromEnv(runtimeEnv)
+	expectedHealthcheckPort := contract.HTTPPort
 	renderedManagersAPIPort := strings.TrimSpace(parsed.Bind.Managers.API.Port)
 	if renderedManagersAPIPort != expectedHealthcheckPort {
 		return fmt.Errorf("healthcheck contract mismatch in %s: rendered <Server><Bind><Managers><API><Port> is %q but deploy/docker-compose.yml healthcheck expects BITRIVER_OME_HTTP_PORT=%q; update BITRIVER_OME_HTTP_PORT (and BITRIVER_OME_API if overridden) or regenerate deploy/ome/Server.generated.xml so both values match", path, renderedManagersAPIPort, expectedHealthcheckPort)
 	}
-	expectedHealthcheckToken := resolveOMECanonicalAccessToken(map[string]string{
-		"BITRIVER_OME_HEALTHCHECK_TOKEN": os.Getenv("BITRIVER_OME_HEALTHCHECK_TOKEN"),
-		"BITRIVER_OME_API_TOKEN":         os.Getenv("BITRIVER_OME_API_TOKEN"),
-	})
+	expectedHealthcheckToken := contract.HealthcheckToken
 	renderedAccessToken := strings.TrimSpace(parsed.Managers.API.AccessToken)
 	if expectedHealthcheckToken != "" && renderedAccessToken != expectedHealthcheckToken {
 		return fmt.Errorf("healthcheck auth mismatch in %s: rendered <Server><Managers><API><AccessToken> is %q but docker-compose healthcheck canonical token (BITRIVER_OME_HEALTHCHECK_TOKEN -> BITRIVER_OME_API_TOKEN) resolves to %q; align those variables with the rendered token and regenerate deploy/ome/Server.generated.xml", path, renderedAccessToken, expectedHealthcheckToken)
