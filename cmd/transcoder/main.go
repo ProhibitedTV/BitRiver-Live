@@ -25,12 +25,12 @@ import (
 	"syscall"
 	"time"
 
+	"bitriver-live/internal/config"
 	"bitriver-live/internal/observability/logging"
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/observability/tracing"
 	"bitriver-live/internal/security/tokenauth"
 	"bitriver-live/internal/serverutil"
-	"bitriver-live/internal/stringsutil"
 )
 
 type rendition struct {
@@ -228,22 +228,25 @@ const (
 
 // main parses configuration, initializes runtime dependencies, and runs the process until shutdown.
 func main() {
-	bind := envOrDefault("JOB_CONTROLLER_BIND", ":9000")
-	token := strings.TrimSpace(os.Getenv("JOB_CONTROLLER_TOKEN"))
+	env := config.LoadEnvironment()
+	runtimeCfg, err := config.LoadTranscoderFromEnv(env)
+	if err != nil {
+		logger := logging.WithComponent(logging.Init(logging.Config{Format: string(logging.FormatJSON)}), "transcoder")
+		logger.Error(err.Error())
+		os.Exit(1)
+	}
+	bind := runtimeCfg.Bind
 	logger := logging.WithComponent(logging.Init(logging.Config{Format: string(logging.FormatJSON)}), "transcoder")
 	registry := metrics.NewRegistry()
-	otelEndpoint := stringsutil.FirstNonEmpty(
-		os.Getenv("BITRIVER_LIVE_OTEL_EXPORTER_OTLP_ENDPOINT"),
-		os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
-	)
+	otelEndpoint := runtimeCfg.OTELEndpoint
 	otelSampleRatio := parseSampleRatio(
-		os.Getenv("BITRIVER_LIVE_OTEL_SAMPLE_RATIO"),
-		os.Getenv("OTEL_TRACES_SAMPLER_ARG"),
+		runtimeCfg.OTELSampleRatio,
+		runtimeCfg.OTELSamplerArg,
 		logger,
 	)
 	tracingProvider := tracing.NewProvider(tracing.Config{
 		ServiceName: "bitriver-transcoder",
-		Environment: os.Getenv("BITRIVER_LIVE_ENVIRONMENT"),
+		Environment: runtimeCfg.Environment,
 		Endpoint:    otelEndpoint,
 		SampleRatio: otelSampleRatio,
 		Logger:      logger,
@@ -256,29 +259,11 @@ func main() {
 			logger.Warn("trace exporter shutdown failed", "error", err)
 		}
 	}()
-	if token == "" {
-		logger.Error("JOB_CONTROLLER_TOKEN must be configured before starting the transcoder")
-		os.Exit(1)
-	}
-	liveRetention, err := parseDurationEnv("BITRIVER_TRANSCODER_RETENTION_LIVE")
-	if err != nil {
-		logger.Error("invalid BITRIVER_TRANSCODER_RETENTION_LIVE", "error", err)
-		os.Exit(1)
-	}
-	uploadRetention, err := parseDurationEnv("BITRIVER_TRANSCODER_RETENTION_UPLOADS")
-	if err != nil {
-		logger.Error("invalid BITRIVER_TRANSCODER_RETENTION_UPLOADS", "error", err)
-		os.Exit(1)
-	}
-	outputRoot := envOrDefault("JOB_CONTROLLER_OUTPUT_ROOT", "./work")
-
-	srv, err := newServer(token, outputRoot, logger, registry)
+	srv, err := newServerFromConfig(runtimeCfg, logger, registry)
 	if err != nil {
 		logger.Error("initialise server", "error", err)
 		os.Exit(1)
 	}
-	srv.liveRetention = liveRetention
-	srv.uploadRetention = uploadRetention
 
 	httpServer := &http.Server{
 		Addr:              bind,
@@ -305,7 +290,21 @@ func main() {
 
 // newServer builds and returns server using the supplied dependencies.
 func newServer(token, outputRoot string, logger *slog.Logger, registry *metrics.Registry) (*server, error) {
-	store, err := newMetadataStore(outputRoot)
+	env := config.LoadEnvironment()
+	publicBase := strings.TrimSpace(env.Get("BITRIVER_TRANSCODER_PUBLIC_BASE_URL"))
+	if publicBase == "" {
+		return nil, fmt.Errorf("BITRIVER_TRANSCODER_PUBLIC_BASE_URL must be configured before starting the transcoder")
+	}
+	publicDir := strings.TrimSpace(env.Get("BITRIVER_TRANSCODER_PUBLIC_DIR"))
+	if publicDir == "" {
+		publicDir = filepath.Join(outputRoot, "public")
+	}
+	cfg := config.TranscoderConfig{Token: token, OutputRoot: outputRoot, PublicBaseURL: publicBase, PublicDir: publicDir}
+	return newServerFromConfig(cfg, logger, registry)
+}
+
+func newServerFromConfig(cfg config.TranscoderConfig, logger *slog.Logger, registry *metrics.Registry) (*server, error) {
+	store, err := newMetadataStore(cfg.OutputRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -319,15 +318,7 @@ func newServer(token, outputRoot string, logger *slog.Logger, registry *metrics.
 	if err != nil {
 		return nil, err
 	}
-	publicBase := strings.TrimSpace(os.Getenv("BITRIVER_TRANSCODER_PUBLIC_BASE_URL"))
-	if publicBase == "" {
-		return nil, fmt.Errorf("BITRIVER_TRANSCODER_PUBLIC_BASE_URL must be configured before starting the transcoder")
-	}
-	mirrorRoot := strings.TrimSpace(os.Getenv("BITRIVER_TRANSCODER_PUBLIC_DIR"))
-	if mirrorRoot == "" {
-		mirrorRoot = filepath.Join(store.root, "public")
-	}
-	absMirror, err := filepath.Abs(mirrorRoot)
+	absMirror, err := filepath.Abs(cfg.PublicDir)
 	if err != nil {
 		return nil, fmt.Errorf("resolve public mirror: %w", err)
 	}
@@ -340,17 +331,19 @@ func newServer(token, outputRoot string, logger *slog.Logger, registry *metrics.
 		}
 	}
 	srv := &server{
-		token:      token,
-		outputRoot: store.root,
-		publicBase: publicBase,
-		publicRoot: absMirror,
-		jobs:       jobs,
-		uploads:    uploads,
-		processes:  make(map[string]*processState),
-		store:      store,
-		logger:     logger,
-		metrics:    registry,
-		components: make(map[string]*componentState),
+		token:           cfg.Token,
+		outputRoot:      store.root,
+		publicBase:      cfg.PublicBaseURL,
+		publicRoot:      absMirror,
+		liveRetention:   cfg.LiveRetention,
+		uploadRetention: cfg.UploadRetention,
+		jobs:            jobs,
+		uploads:         uploads,
+		processes:       make(map[string]*processState),
+		store:           store,
+		logger:          logger,
+		metrics:         registry,
+		components:      make(map[string]*componentState),
 	}
 	srv.launchProcess = srv.startFFmpeg
 	srv.updateComponent(componentFFmpeg, nil)
@@ -1827,14 +1820,6 @@ func newID(prefix string) string {
 	return fmt.Sprintf("%s-%d", prefix, idRand.Int63())
 }
 
-// envOrDefault performs env or default and propagates validation or dependency failures to the caller.
-func envOrDefault(key, fallback string) string {
-	if val := strings.TrimSpace(os.Getenv(key)); val != "" {
-		return val
-	}
-	return fallback
-}
-
 // parseSampleRatio parses sample ratio and returns an error when the input is malformed.
 func parseSampleRatio(value string, otelSamplerArg string, logger *slog.Logger) float64 {
 	raw := strings.TrimSpace(value)
@@ -1875,15 +1860,6 @@ func renditionsLabel(renditions []rendition) string {
 		}
 	}
 	return strings.Join(names, ",")
-}
-
-// parseDurationEnv parses duration env and returns an error when the input is malformed.
-func parseDurationEnv(key string) (time.Duration, error) {
-	raw := strings.TrimSpace(os.Getenv(key))
-	if raw == "" {
-		return 0, nil
-	}
-	return time.ParseDuration(raw)
 }
 
 var (

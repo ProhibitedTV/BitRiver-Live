@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"bitriver-live/internal/auth"
 	"bitriver-live/internal/auth/oauth"
 	"bitriver-live/internal/chat"
+	"bitriver-live/internal/config"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/observability/logging"
 	"bitriver-live/internal/observability/metrics"
@@ -289,15 +291,37 @@ func ResolveSessionCookieSecureMode(mode string) api.SessionCookieSecureMode {
 }
 
 func LoadIngestConfig(logger *slog.Logger) (ingest.Config, error) {
-	cfg, err := ingest.LoadConfigFromEnv()
+	parsed, err := config.LoadIngestFromEnv(config.LoadEnvironment())
+	cfg := ingest.Config{
+		SRSBaseURL:        parsed.SRSBaseURL,
+		SRSToken:          parsed.SRSToken,
+		OMEBaseURL:        parsed.OMEBaseURL,
+		OMEUsername:       parsed.OMEUsername,
+		OMEPassword:       parsed.OMEPassword,
+		JobBaseURL:        parsed.JobBaseURL,
+		JobToken:          parsed.JobToken,
+		HealthEndpoint:    parsed.HealthEndpoint,
+		HealthTimeout:     parsed.HealthTimeout,
+		MaxBootAttempts:   parsed.MaxBootAttempts,
+		RetryInterval:     parsed.RetryInterval,
+		HTTPMaxAttempts:   parsed.HTTPMaxAttempts,
+		HTTPRetryInterval: parsed.HTTPRetryInterval,
+	}
+	for _, profile := range parsed.LadderProfiles {
+		cfg.LadderProfiles = append(cfg.LadderProfiles, ingest.Rendition{Name: profile.Name, Bitrate: profile.Bitrate})
+	}
 	if err == nil {
 		return cfg, nil
 	}
-	if err == ingest.ErrConfigDisabled {
+	if err == config.ErrIngestConfigDisabled {
 		if logger != nil {
 			logger.Warn("ingest control integration disabled; uploads will skip SRS checks unless BITRIVER_SRS_API and BITRIVER_SRS_TOKEN are set")
 		}
 		return cfg, nil
+	}
+	var missing config.MissingIngestConfigError
+	if errors.As(err, &missing) {
+		return cfg, ingest.MissingConfigError{Missing: missing.Missing}
 	}
 	return cfg, err
 }
