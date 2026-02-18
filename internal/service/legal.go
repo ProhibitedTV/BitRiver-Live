@@ -5,18 +5,17 @@ import (
 	"strings"
 
 	"bitriver-live/internal/domain"
-	"bitriver-live/internal/storage"
 )
 
 type LegalService struct {
-	repo storage.Repository
+	repo domain.LegalRepository
 }
 
-func NewLegalService(repo storage.Repository) *LegalService {
+func NewLegalService(repo domain.LegalRepository) *LegalService {
 	return &LegalService{repo: repo}
 }
 
-func (s *LegalService) CreateDMCACase(params storage.CreateDMCACaseParams) (domain.DMCACase, error) {
+func (s *LegalService) CreateDMCACase(params domain.DMCACaseCreateParams) (domain.DMCACase, error) {
 	if s == nil || s.repo == nil {
 		return domain.DMCACase{}, fmt.Errorf("legal service unavailable")
 	}
@@ -35,10 +34,10 @@ func (s *LegalService) UpdateDMCACase(id, status, notes, actorUserID string) (do
 	if !validDMCAStateTransition(existing.Status, status) {
 		return domain.DMCACase{}, fmt.Errorf("invalid dmca status transition from %s to %s", existing.Status, status)
 	}
-	return s.repo.UpdateDMCACase(id, storage.DMCACaseUpdate{Status: &status, Notes: &notes}, actorUserID)
+	return s.repo.UpdateDMCACase(id, domain.DMCACaseUpdate{Status: &status, Notes: &notes}, actorUserID)
 }
 
-func (s *LegalService) CreateDataSubjectRequest(params storage.CreateDataSubjectRequestParams) (domain.DataSubjectRequest, error) {
+func (s *LegalService) CreateDataSubjectRequest(params domain.DataSubjectRequestCreateParams) (domain.DataSubjectRequest, error) {
 	if s == nil || s.repo == nil {
 		return domain.DataSubjectRequest{}, fmt.Errorf("legal service unavailable")
 	}
@@ -57,7 +56,7 @@ func (s *LegalService) UpdateDataSubjectRequest(id, status, notes, actorUserID s
 	if !validDataSubjectTransition(existing.Status, status) {
 		return domain.DataSubjectRequest{}, fmt.Errorf("invalid request status transition from %s to %s", existing.Status, status)
 	}
-	return s.repo.UpdateDataSubjectRequest(id, storage.DataSubjectRequestUpdate{Status: &status, Notes: &notes}, actorUserID)
+	return s.repo.UpdateDataSubjectRequest(id, domain.DataSubjectRequestUpdate{Status: &status, Notes: &notes}, actorUserID)
 }
 
 func validDMCAStateTransition(from, to string) bool {

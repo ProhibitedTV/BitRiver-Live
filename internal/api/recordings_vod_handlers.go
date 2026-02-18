@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/models"
-	"bitriver-live/internal/storage"
 )
 
 type clipExportRequest struct {
@@ -313,7 +313,7 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 					WriteError(w, http.StatusBadRequest, fmt.Errorf("title is required"))
 					return
 				}
-				clip, err := h.recordingsService().CreateClipExport(recordingID, storage.ClipExportParams{
+				clip, err := h.recordingsService().CreateClipExport(recordingID, domain.ClipExportParams{
 					Title:        title,
 					StartSeconds: req.StartSeconds,
 					EndSeconds:   req.EndSeconds,
