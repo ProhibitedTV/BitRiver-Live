@@ -27,20 +27,19 @@ permissions:
 jobs:
   ingest-e2e:
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+      GOPROXY: off
+      GOSUMDB: off
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           cache: true
 
-
       - name: Run ingest pipeline integration test
-        env:
-          GOTOOLCHAIN: local
-          GOPROXY: off
-          GOSUMDB: off
         run: ./scripts/test-ingest-e2e.sh

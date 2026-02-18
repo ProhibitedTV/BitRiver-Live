@@ -109,6 +109,10 @@ jobs:
     needs:
       - verify-env
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+      GOPROXY: off
+      GOSUMDB: off
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -120,9 +124,9 @@ jobs:
           path: .
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: 'go.mod'
           cache: true
 
       - name: Verify OvenMediaEngine config freshness
@@ -160,22 +164,18 @@ jobs:
 
 
       - name: Run unit tests
-        env:
-          GOTOOLCHAIN: local
-          GOPROXY: off
-          GOSUMDB: off
         run: go test ./... -count=1 -timeout=120s
 
       - name: Validate architecture import direction
-        env:
-          GOTOOLCHAIN: local
-          GOPROXY: off
-          GOSUMDB: off
         run: ./scripts/check-architecture-deps.sh
 
   postgres-tests:
     name: Postgres storage tests
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+      GOPROXY: off
+      GOSUMDB: off
     services:
       postgres:
         image: postgres:15-alpine
@@ -195,9 +195,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: 'go.mod'
           cache: true
 
 
@@ -260,9 +260,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: 'go.mod'
           cache: true
 
       - name: Verify pgx mode for postgres artifacts
@@ -394,9 +394,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: 'go.mod'
           cache: true
 
       - name: Build bitriver binary
@@ -473,9 +473,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: 'go.mod'
           cache: true
 
       - name: Install cosign
@@ -764,9 +764,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: 'go.mod'
           cache: true
 
       - name: Build MSI
