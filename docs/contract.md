@@ -160,3 +160,117 @@ The canonical contract does **not** guarantee equivalence for:
 - `docs/testing.md` — test commands expected before release.
 - `deploy/README.md` — deployment asset map and environment notes.
 - `deploy/check-env.sh` — wrapper invoking `cmd/bitriver env validate`.
+
+## Generated environment variable index
+
+<!-- BEGIN GENERATED ENV -->
+
+_This section is generated from `deploy/.env.example` by `scripts/generate-contract-doc.sh`. Do not edit by hand._
+
+### `BITRIVER_*`
+
+| Variable | Default |
+| --- | --- |
+| `BITRIVER_DEPLOY_IMAGE_SOURCE` | `pull` |
+| `BITRIVER_LIVE_IMAGE_TAG` | `v1.2.3` |
+| `BITRIVER_VIEWER_IMAGE_TAG` | `v1.2.3` |
+| `BITRIVER_SRS_CONTROLLER_IMAGE_TAG` | `v1.2.3` |
+| `BITRIVER_TRANSCODER_IMAGE_TAG` | `v1.2.3` |
+| `BITRIVER_SRS_IMAGE_TAG` | `v5.0.185` |
+| `BITRIVER_OME_IMAGE_TAG` | `0.16.0` |
+| `BITRIVER_LIVE_IMAGE_DIGEST` | _(empty)_ |
+| `BITRIVER_VIEWER_IMAGE_DIGEST` | _(empty)_ |
+| `BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST` | _(empty)_ |
+| `BITRIVER_TRANSCODER_IMAGE_DIGEST` | _(empty)_ |
+| `BITRIVER_SRS_IMAGE_DIGEST` | _(empty)_ |
+| `BITRIVER_OME_IMAGE_DIGEST` | _(empty)_ |
+| `BITRIVER_REDIS_IMAGE_DIGEST` | _(empty)_ |
+| `BITRIVER_POSTGRES_IMAGE_DIGEST` | _(empty)_ |
+| `BITRIVER_NGINX_IMAGE_DIGEST` | _(empty)_ |
+| `BITRIVER_ALPINE_3_IMAGE_DIGEST` | _(empty)_ |
+| `BITRIVER_ALPINE_3_19_IMAGE_DIGEST` | _(empty)_ |
+| `BITRIVER_DEBIAN_IMAGE_DIGEST` | _(empty)_ |
+| `BITRIVER_LIVE_PORT` | `8080` |
+| `BITRIVER_LIVE_STORAGE_DRIVER` | `postgres` |
+| `BITRIVER_PGX_MODE` | `real` |
+| `BITRIVER_LIVE_MODE` | `production` |
+| `BITRIVER_LIVE_ADDR` | `:8080` |
+| `BITRIVER_LIVE_ALLOW_SELF_SIGNUP` | `false` |
+| `BITRIVER_LIVE_METRICS_TOKEN` | `metrics-collector-token` |
+| `BITRIVER_LIVE_RATE_LOGIN_LIMIT` | `10` |
+| `BITRIVER_LIVE_RATE_LOGIN_WINDOW` | `1m` |
+| `BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS` | `false` |
+| `BITRIVER_LIVE_RATE_TRUSTED_PROXIES` | _(empty)_ |
+| `BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS` | `false` |
+| `BITRIVER_POSTGRES_DB` | `brlive_app` |
+| `BITRIVER_POSTGRES_USER` | `brlive_app` |
+| `BITRIVER_POSTGRES_PASSWORD` | `P0stgres-Example!` |
+| `BITRIVER_REDIS_PASSWORD` | `R3dis-Example!` |
+| `BITRIVER_LIVE_POSTGRES_MAX_CONNS` | `15` |
+| `BITRIVER_LIVE_POSTGRES_MIN_CONNS` | `5` |
+| `BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT` | `5s` |
+| `BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME` | `30m` |
+| `BITRIVER_LIVE_SESSION_STORE` | `postgres` |
+| `BITRIVER_LIVE_SESSION_TTL` | `168h` |
+| `BITRIVER_LIVE_CHAT_QUEUE_DRIVER` | `redis` |
+| `BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR` | `redis:6379` |
+| `BITRIVER_LIVE_CHAT_QUEUE_REDIS_STREAM` | `bitriver-live-chat` |
+| `BITRIVER_LIVE_CHAT_QUEUE_REDIS_GROUP` | `bitriver-live-api` |
+| `BITRIVER_POSTGRES_HOST_PORT` | `5432` |
+| `BITRIVER_VIEWER_ORIGIN` | `http://viewer:3000` |
+| `BITRIVER_SRS_API` | `http://srs-controller:1985` |
+| `BITRIVER_OME_API` | `http://ome:8081` |
+| `BITRIVER_OME_BIND` | `0.0.0.0` |
+| `BITRIVER_OME_HTTP_PORT` | `8081` |
+| `BITRIVER_OME_HTTP_TLS_PORT` | `8082` |
+| `BITRIVER_OME_IP` | `0.0.0.0` |
+| `BITRIVER_OME_SIGNALLING_PORT` | `9000` |
+| `BITRIVER_OME_SERVER_PORT` | `9000` |
+| `BITRIVER_OME_SERVER_TLS_PORT` | `9443` |
+| `BITRIVER_OME_LLHLS_PORT` | `8080` |
+| `BITRIVER_OME_LLHLS_TLS_PORT` | `8443` |
+| `BITRIVER_OME_LLHLS_HOST_PORT` | `8083` |
+| `BITRIVER_OME_RELAY_PORT` | `3478` |
+| `BITRIVER_OME_RELAY_PROTOCOL` | `tcp` |
+| `BITRIVER_OME_TCP_RELAY` | `*:3478` |
+| `BITRIVER_OME_ICE_PORT_RANGE` | `10000-10009` |
+| `BITRIVER_OME_ICE_CANDIDATE` | `*:10000-10009/udp` |
+| `BITRIVER_TRANSCODER_API` | `http://transcoder:9000` |
+| `BITRIVER_TRANSCODER_PUBLIC_BASE_URL` | `https://cdn.example.com/hls` |
+| `BITRIVER_TRANSCODER_HOST_PORT` | `9001` |
+| `BITRIVER_INGEST_HEALTH` | `/healthz` |
+| `BITRIVER_SRS_CONTROLLER_PORT` | `1986` |
+| `BITRIVER_LIVE_ADMIN_CORS_ORIGINS` | `https://admin.example.com` |
+| `BITRIVER_LIVE_VIEWER_CORS_ORIGINS` | `https://watch.example.com` |
+| `BITRIVER_PUBLIC_DOMAIN` | `stream.example.com` |
+| `BITRIVER_TLS_EMAIL` | `admin@stream.example.com` |
+| `BITRIVER_LIVE_ADMIN_EMAIL` | `admin@stream.example.com` |
+| `BITRIVER_LIVE_ADMIN_PASSWORD` | `Sup3rSecureAdmin!` |
+| `BITRIVER_SRS_TOKEN` | `srs-secure-token-example` |
+| `BITRIVER_OME_USERNAME` | `ome-operator` |
+| `BITRIVER_OME_PASSWORD` | `OME-Example-Pass!` |
+| `BITRIVER_OME_API_TOKEN` | `OME-Example-Access-Token` |
+| `BITRIVER_OME_HEALTHCHECK_AUTH_MODE` | `accesstoken` |
+| `BITRIVER_TRANSCODER_TOKEN` | `transcoder-secure-token-example` |
+| `BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD` | `R3dis-Example!` |
+
+### `SRS_*`
+
+| Variable | Default |
+| --- | --- |
+| `SRS_CONTROLLER_UPSTREAM` | `http://srs:1985/api/` |
+
+### `NEXT_PUBLIC_*`
+
+| Variable | Default |
+| --- | --- |
+| `NEXT_PUBLIC_API_BASE_URL` | _(empty)_ |
+| `NEXT_PUBLIC_VIEWER_URL` | `https://stream.example.com/viewer` |
+
+### `NEXT_*`
+
+| Variable | Default |
+| --- | --- |
+| `NEXT_VIEWER_BASE_PATH` | `/viewer` |
+
+<!-- END GENERATED ENV -->
