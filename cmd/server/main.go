@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/api"
+	"bitriver-live/internal/app"
 	"bitriver-live/internal/auth"
 	"bitriver-live/internal/auth/oauth"
 	"bitriver-live/internal/chat"
@@ -473,17 +474,22 @@ func main() {
 		Logger: logging.WithComponent(logger, "chat"),
 	})
 	restartChan := make(chan struct{}, 1)
-	handler := api.NewHandler(store, sessions)
-	handler.MFAChallenges = mfaChallenges
-	handler.AllowSelfSignup = allowSelfSignupValue
-	handler.ChatGateway = gateway
-	handler.Setup = newSetupManager(envFilePath, restartChan)
-	handler.DefaultRenditions = ladderProfileNames(ingestConfig.LadderProfiles)
-	handler.SRSHookToken = ingestConfig.SRSToken
-	handler.TrustForwardedHeaders = resolveBool(*uploadsTrustForwarded, "BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS")
+	var chatQueuePinger interface{ Ping(context.Context) error }
 	if pingable, ok := queue.(interface{ Ping(context.Context) error }); ok {
-		handler.ChatQueue = pingable
+		chatQueuePinger = pingable
 	}
+	handler := app.NewHandler(app.HandlerConfig{
+		Store:                 store,
+		Sessions:              sessions,
+		MFAChallenges:         mfaChallenges,
+		AllowSelfSignup:       allowSelfSignupValue,
+		ChatGateway:           gateway,
+		Setup:                 newSetupManager(envFilePath, restartChan),
+		DefaultRenditions:     ladderProfileNames(ingestConfig.LadderProfiles),
+		SRSHookToken:          ingestConfig.SRSToken,
+		TrustForwardedHeaders: resolveBool(*uploadsTrustForwarded, "BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS"),
+		ChatQueue:             chatQueuePinger,
+	})
 	var uploadProcessor *api.UploadProcessor
 	if ingestController != nil {
 		uploadProcessor = api.NewUploadProcessor(api.UploadProcessorConfig{
@@ -542,7 +548,7 @@ func main() {
 		KeyFile:  tlsKeyPath,
 	}
 
-	srv, err := server.New(handler, server.Config{
+	srv, err := app.NewHTTPServer(handler, server.Config{
 		Addr:                     listenAddr,
 		TLS:                      tlsCfg,
 		RateLimit:                rateCfg,

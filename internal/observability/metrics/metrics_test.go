@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"bitriver-live/internal/models"
+	"bitriver-live/internal/domain"
 )
 
 func TestObserveRequestAndNormalizePath(t *testing.T) {
@@ -184,9 +184,9 @@ func TestWriteAndHandlerOutput(t *testing.T) {
 	recorder.ObserveChatEvent("message")
 	recorder.ObserveChatEvent("message")
 
-	recorder.ObserveMonetization("tip", models.MustParseMoney("1.5"))
-	recorder.ObserveMonetization("tip", models.MustParseMoney("0.25"))
-	recorder.ObserveMonetization("subscription", models.MustParseMoney("10"))
+	recorder.ObserveMonetization("tip", domain.MustParseMoney("1.5"))
+	recorder.ObserveMonetization("tip", domain.MustParseMoney("0.25"))
+	recorder.ObserveMonetization("subscription", domain.MustParseMoney("10"))
 	recorder.ObserveViewerQoE(ViewerQoELabel{
 		Event:       "play",
 		Player:      "hls",
