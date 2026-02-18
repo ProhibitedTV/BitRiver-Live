@@ -18,6 +18,7 @@ import (
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/observability/tracing"
 	"bitriver-live/internal/server"
+	"bitriver-live/internal/service"
 	"bitriver-live/internal/storage"
 	"bitriver-live/internal/stringsutil"
 )
@@ -231,7 +232,8 @@ func NewServerRuntime(in ServerRuntimeInput) (*ServerRuntime, error) {
 	if pingable, ok := queue.(interface{ Ping(context.Context) error }); ok {
 		chatQueuePinger = pingable
 	}
-	handler := NewHandler(HandlerConfig{Store: store, Sessions: sessions, MFAChallenges: mfaChallenges, AllowSelfSignup: in.AllowSelfSignup, ChatGateway: gateway, Setup: in.SetupManager, DefaultRenditions: ladderProfileNames(in.IngestConfig.LadderProfiles), SRSHookToken: in.IngestConfig.SRSToken, TrustForwardedHeaders: in.UploadsTrustForwarded, ChatQueue: chatQueuePinger})
+	useCases := service.NewStoreUseCases(store)
+	handler := NewHandler(HandlerConfig{Store: store, Sessions: sessions, MFAChallenges: mfaChallenges, AllowSelfSignup: in.AllowSelfSignup, ChatGateway: gateway, Setup: in.SetupManager, DefaultRenditions: ladderProfileNames(in.IngestConfig.LadderProfiles), SRSHookToken: in.IngestConfig.SRSToken, TrustForwardedHeaders: in.UploadsTrustForwarded, ChatQueue: chatQueuePinger, AuthUsersService: useCases, ChannelsService: useCases, UploadsService: useCases, RecordingsService: useCases, ChatModerationService: useCases, LegalService: service.NewLegalService(store), StreamsService: useCases, ProfilesService: useCases, AnalyticsService: useCases, SystemService: useCases, MonetizationService: useCases, PaymentService: service.NewPaymentService(store, in.Logger)})
 
 	var uploadProcessor *api.UploadProcessor
 	if ingestController != nil {

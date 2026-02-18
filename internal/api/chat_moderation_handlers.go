@@ -304,7 +304,7 @@ func (h *Handler) ChatWebsocket(w http.ResponseWriter, r *http.Request) {
 
 // handleChatRoutes routes and serves chat routes requests, writing HTTP errors for invalid input or backend failures.
 func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.ResponseWriter, r *http.Request) {
-	channel, exists := h.Store.GetChannel(channelID)
+	channel, exists := h.chatModerationService().GetChannel(channelID)
 	if !exists {
 		WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 		return
@@ -344,7 +344,7 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 				WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 				return
 			}
-			if err := h.Store.DeleteChatMessage(channelID, messageID); err != nil {
+			if err := h.chatModerationService().DeleteChatMessage(channelID, messageID); err != nil {
 				WriteError(w, http.StatusBadRequest, err)
 				return
 			}
@@ -365,7 +365,7 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 			}
 			limit = parsed
 		}
-		messages, err := h.Store.ListChatMessages(channelID, limit)
+		messages, err := h.chatModerationService().ListChatMessages(channelID, limit)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
@@ -389,7 +389,7 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 			return
 		}
 		if h.ChatGateway != nil {
-			author, ok := h.Store.GetUser(req.UserID)
+			author, ok := h.chatModerationService().GetUser(req.UserID)
 			if !ok {
 				WriteRequestError(w, ValidationError(fmt.Sprintf("user %s not found", req.UserID)))
 				return
@@ -409,7 +409,7 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 			WriteJSON(w, http.StatusCreated, newChatMessageResponse(chatMessage))
 			return
 		}
-		message, err := h.Store.CreateChatMessage(channelID, req.UserID, req.Content)
+		message, err := h.chatModerationService().CreateChatMessage(channelID, req.UserID, req.Content)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
@@ -437,7 +437,7 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 				WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 				return
 			}
-			restrictions := h.Store.ListChatRestrictions(channel.ID)
+			restrictions := h.chatModerationService().ListChatRestrictions(channel.ID)
 			response := make([]chatRestrictionResponse, 0, len(restrictions))
 			for _, restriction := range restrictions {
 				response = append(response, newChatRestrictionResponse(restriction))
@@ -475,7 +475,7 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 		WriteRequestError(w, ValidationError("targetId is required"))
 		return
 	}
-	if _, ok := h.Store.GetUser(req.TargetID); !ok {
+	if _, ok := h.chatModerationService().GetUser(req.TargetID); !ok {
 		WriteRequestError(w, ValidationError(fmt.Sprintf("user %s not found", req.TargetID)))
 		return
 	}
@@ -547,7 +547,7 @@ func (h *Handler) handleChatFilters(actor models.User, channel models.Channel, r
 				Pattern: req.Pattern,
 				Enabled: req.Enabled,
 			}
-			filter, err := h.Store.UpdateChatFilter(filterID, update)
+			filter, err := h.chatModerationService().UpdateChatFilter(filterID, update)
 			if err != nil {
 				WriteError(w, http.StatusBadRequest, err)
 				return
@@ -555,7 +555,7 @@ func (h *Handler) handleChatFilters(actor models.User, channel models.Channel, r
 			WriteJSON(w, http.StatusOK, newChatFilterResponse(filter))
 			return
 		case http.MethodDelete:
-			if err := h.Store.DeleteChatFilter(filterID); err != nil {
+			if err := h.chatModerationService().DeleteChatFilter(filterID); err != nil {
 				WriteError(w, http.StatusBadRequest, err)
 				return
 			}
@@ -569,7 +569,7 @@ func (h *Handler) handleChatFilters(actor models.User, channel models.Channel, r
 
 	switch r.Method {
 	case http.MethodGet:
-		filters, err := h.Store.ListChatFilters(channel.ID)
+		filters, err := h.chatModerationService().ListChatFilters(channel.ID)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
@@ -584,7 +584,7 @@ func (h *Handler) handleChatFilters(actor models.User, channel models.Channel, r
 		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
-		filter, err := h.Store.CreateChatFilter(channel.ID, storage.ChatFilterParams{
+		filter, err := h.chatModerationService().CreateChatFilter(channel.ID, storage.ChatFilterParams{
 			Kind:    req.Kind,
 			Pattern: req.Pattern,
 			Enabled: req.Enabled,
@@ -612,7 +612,7 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 			if !DecodeAndValidate(w, r, &req) {
 				return
 			}
-			appeal, err := h.Store.CreateAppeal(reportID, actor.ID, req.Reason)
+			appeal, err := h.chatModerationService().CreateAppeal(reportID, actor.ID, req.Reason)
 			if err != nil {
 				WriteError(w, http.StatusBadRequest, err)
 				return
@@ -633,7 +633,7 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 			if !DecodeAndValidate(w, r, &req) {
 				return
 			}
-			report, err := h.Store.ResolveChatReport(reportID, actor.ID, req.Resolution)
+			report, err := h.chatModerationService().ResolveChatReport(reportID, actor.ID, req.Resolution)
 			if err != nil {
 				WriteError(w, http.StatusBadRequest, err)
 				return
@@ -656,7 +656,7 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 		if status == "all" || status == "resolved" {
 			includeResolved = true
 		}
-		reports, err := h.Store.ListChatReports(channel.ID, includeResolved)
+		reports, err := h.chatModerationService().ListChatReports(channel.ID, includeResolved)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
@@ -676,7 +676,7 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 			WriteRequestError(w, ValidationError("targetId is required"))
 			return
 		}
-		if _, ok := h.Store.GetUser(targetID); !ok {
+		if _, ok := h.chatModerationService().GetUser(targetID); !ok {
 			WriteRequestError(w, ValidationError(fmt.Sprintf("user %s not found", targetID)))
 			return
 		}
@@ -688,7 +688,7 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 		messageID := strings.TrimSpace(req.MessageID)
 		evidence := strings.TrimSpace(req.EvidenceURL)
 		if h.ChatGateway != nil {
-			reporter, ok := h.Store.GetUser(actor.ID)
+			reporter, ok := h.chatModerationService().GetUser(actor.ID)
 			if !ok {
 				WriteError(w, http.StatusInternalServerError, fmt.Errorf("reporter %s not found", actor.ID))
 				return
@@ -712,7 +712,7 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 			WriteJSON(w, http.StatusAccepted, newChatReportResponse(report))
 			return
 		}
-		report, err := h.Store.CreateChatReport(channel.ID, actor.ID, targetID, reason, messageID, evidence)
+		report, err := h.chatModerationService().CreateChatReport(channel.ID, actor.ID, targetID, reason, messageID, evidence)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
@@ -745,11 +745,11 @@ func (h *Handler) handleChatAppeals(actor models.User, channel models.Channel, r
 			)
 			switch remaining[1] {
 			case "resolve":
-				appeal, err = h.Store.ResolveAppeal(appealID, actor.ID, req.Reason)
+				appeal, err = h.chatModerationService().ResolveAppeal(appealID, actor.ID, req.Reason)
 			case "deny":
-				appeal, err = h.Store.ResolveAppeal(appealID, actor.ID, "denied")
+				appeal, err = h.chatModerationService().ResolveAppeal(appealID, actor.ID, "denied")
 			case "reopen":
-				appeal, err = h.Store.ReopenAppeal(appealID, actor.ID, req.Reason)
+				appeal, err = h.chatModerationService().ReopenAppeal(appealID, actor.ID, req.Reason)
 			}
 			if err != nil {
 				WriteError(w, http.StatusBadRequest, err)
@@ -770,7 +770,7 @@ func (h *Handler) handleChatAppeals(actor models.User, channel models.Channel, r
 		requester = actor.ID
 	}
 	includeClosed := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("status")), "all")
-	appeals, err := h.Store.ListAppeals(channel.ID, requester, includeClosed)
+	appeals, err := h.chatModerationService().ListAppeals(channel.ID, requester, includeClosed)
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, err)
 		return
@@ -851,7 +851,7 @@ func (h *Handler) ModerationQueueByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	report, err := h.Store.ResolveChatReport(flagID, actor.ID, resolution)
+	report, err := h.chatModerationService().ResolveChatReport(flagID, actor.ID, resolution)
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, err)
 		return
@@ -954,17 +954,17 @@ func paginateModerationItems[T any](items []moderationTimedItem[T], cursor *time
 
 // moderationQueuePayload performs moderation queue payload and propagates validation or dependency failures to the caller.
 func (h *Handler) moderationQueuePayload(queueCursor *time.Time, queueLimit int, actionsCursor *time.Time, actionsLimit int) (moderationQueueResponse, error) {
-	channels := h.Store.ListChannels("", "")
+	channels := h.chatModerationService().ListChannels("", "")
 	flags := make([]moderationTimedItem[moderationFlagResponse], 0)
 	actions := make([]moderationTimedItem[moderationActionResponse], 0)
 	for _, channel := range channels {
-		reports, err := h.Store.ListChatReports(channel.ID, true)
+		reports, err := h.chatModerationService().ListChatReports(channel.ID, true)
 		if err != nil {
 			return moderationQueueResponse{}, err
 		}
 		for _, report := range reports {
-			reporter, hasReporter := h.Store.GetUser(report.ReporterID)
-			target, hasTarget := h.Store.GetUser(report.TargetID)
+			reporter, hasReporter := h.chatModerationService().GetUser(report.ReporterID)
+			target, hasTarget := h.chatModerationService().GetUser(report.TargetID)
 			createdAt := report.CreatedAt
 			flag := moderationFlagResponse{
 				ID:           report.ID,
@@ -995,7 +995,7 @@ func (h *Handler) moderationQueuePayload(queueCursor *time.Time, queueLimit int,
 				}
 				moderatorResp := (*moderationUserResponse)(nil)
 				if resolverID := strings.TrimSpace(report.ResolverID); resolverID != "" {
-					if moderator, exists := h.Store.GetUser(resolverID); exists {
+					if moderator, exists := h.chatModerationService().GetUser(resolverID); exists {
 						value := newModerationUser(moderator)
 						moderatorResp = &value
 					}
@@ -1031,10 +1031,10 @@ func (h *Handler) moderationQueuePayload(queueCursor *time.Time, queueLimit int,
 
 // moderationAutoModPayload performs moderation auto mod payload and propagates validation or dependency failures to the caller.
 func (h *Handler) moderationAutoModPayload(cursor *time.Time, limit int) (moderationAutoModPageResponse, error) {
-	channels := h.Store.ListChannels("", "")
+	channels := h.chatModerationService().ListChannels("", "")
 	actions := make([]moderationTimedItem[moderationAutoModResponse], 0)
 	for _, channel := range channels {
-		items, err := h.Store.ListChatAutoModActions(channel.ID, 0)
+		items, err := h.chatModerationService().ListChatAutoModActions(channel.ID, 0)
 		if err != nil {
 			return moderationAutoModPageResponse{}, err
 		}
@@ -1052,7 +1052,7 @@ func (h *Handler) moderationAutoModPayload(cursor *time.Time, limit int) (modera
 				Action:        item.Action,
 				CreatedAt:     createdAt.Format(time.RFC3339Nano),
 			}
-			if user, ok := h.Store.GetUser(item.UserID); ok {
+			if user, ok := h.chatModerationService().GetUser(item.UserID); ok {
 				userResp := newModerationUser(user)
 				resp.User = &userResp
 			}

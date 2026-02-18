@@ -64,12 +64,12 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 
 // ingestStatusChecks performs ingest status checks and propagates validation or dependency failures to the caller.
 func (h *Handler) ingestStatusChecks(ctx context.Context, fallback time.Time) ([]statusCheck, time.Time) {
-	if h.Store == nil {
+	if h.systemService() == nil {
 		return nil, time.Time{}
 	}
 
-	snapshot := h.Store.IngestHealth(ctx)
-	_, recordedAt := h.Store.LastIngestHealth()
+	snapshot := h.systemService().IngestHealth(ctx)
+	_, recordedAt := h.systemService().LastIngestHealth()
 	checkedAt := fallback
 	if !recordedAt.IsZero() {
 		checkedAt = recordedAt

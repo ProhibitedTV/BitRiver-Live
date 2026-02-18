@@ -70,10 +70,10 @@ type profileViewResponse struct {
 func (h *Handler) Profiles(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		profiles := h.Store.ListProfiles()
+		profiles := h.profilesService().ListProfiles()
 		response := make([]profileViewResponse, 0, len(profiles))
 		for _, profile := range profiles {
-			user, ok := h.Store.GetUser(profile.UserID)
+			user, ok := h.profilesService().GetUser(profile.UserID)
 			if !ok {
 				continue
 			}
@@ -115,12 +115,12 @@ func (h *Handler) ProfileByID(w http.ResponseWriter, r *http.Request) {
 
 // handleGetProfile routes and serves get profile requests, writing HTTP errors for invalid input or backend failures.
 func (h *Handler) handleGetProfile(userID string, w http.ResponseWriter, r *http.Request) {
-	user, ok := h.Store.GetUser(userID)
+	user, ok := h.profilesService().GetUser(userID)
 	if !ok {
 		WriteError(w, http.StatusNotFound, fmt.Errorf("user %s not found", userID))
 		return
 	}
-	profile, _ := h.Store.GetProfile(userID)
+	profile, _ := h.profilesService().GetProfile(userID)
 	WriteJSON(w, http.StatusOK, h.buildProfileViewResponse(user, profile))
 }
 
@@ -131,7 +131,7 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 		return
 	}
 
-	user, ok := h.Store.GetUser(userID)
+	user, ok := h.profilesService().GetUser(userID)
 	if !ok {
 		WriteError(w, http.StatusNotFound, fmt.Errorf("user %s not found", userID))
 		return
@@ -145,7 +145,7 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 		userUpdate.Email = req.Email
 	}
 	if userUpdate.DisplayName != nil || userUpdate.Email != nil {
-		updatedUser, err := h.Store.UpdateUser(userID, userUpdate)
+		updatedUser, err := h.profilesService().UpdateUser(userID, userUpdate)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
@@ -197,7 +197,7 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 		update.DonationAddresses = &addresses
 	}
 
-	profile, err := h.Store.UpsertProfile(userID, update)
+	profile, err := h.profilesService().UpsertProfile(userID, update)
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, err)
 		return
@@ -208,7 +208,7 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 
 // buildProfileViewResponse builds profile view response from runtime state used by downstream handlers.
 func (h *Handler) buildProfileViewResponse(user models.User, profile models.Profile) profileViewResponse {
-	channels := h.Store.ListChannels(user.ID, "")
+	channels := h.profilesService().ListChannels(user.ID, "")
 	channelResponses := make([]channelPublicResponse, 0, len(channels))
 	liveResponses := make([]channelPublicResponse, 0)
 	for _, channel := range channels {
@@ -221,11 +221,11 @@ func (h *Handler) buildProfileViewResponse(user models.User, profile models.Prof
 
 	friends := make([]friendSummaryResponse, 0, len(profile.TopFriends))
 	for _, friendID := range profile.TopFriends {
-		friendUser, ok := h.Store.GetUser(friendID)
+		friendUser, ok := h.profilesService().GetUser(friendID)
 		if !ok {
 			continue
 		}
-		friendProfile, _ := h.Store.GetProfile(friendID)
+		friendProfile, _ := h.profilesService().GetProfile(friendID)
 		friends = append(friends, friendSummaryResponse{
 			UserID:      friendUser.ID,
 			DisplayName: friendUser.DisplayName,

@@ -50,7 +50,7 @@ func (h *Handler) AnalyticsOverview(w http.ResponseWriter, r *http.Request) {
 
 // computeAnalyticsOverview performs compute analytics overview and propagates validation or dependency failures to the caller.
 func (h *Handler) computeAnalyticsOverview(now time.Time) (analyticsOverviewResponse, error) {
-	channels := h.Store.ListChannels("", "")
+	channels := h.analyticsService().ListChannels("", "")
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	windowStart := now.Add(-24 * time.Hour)
 	summary := analyticsSummaryResponse{}
@@ -59,12 +59,12 @@ func (h *Handler) computeAnalyticsOverview(now time.Time) (analyticsOverviewResp
 		entry := analyticsChannelResponse{
 			ChannelID: channel.ID,
 			Title:     channel.Title,
-			Followers: h.Store.CountFollowers(channel.ID),
+			Followers: h.analyticsService().CountFollowers(channel.ID),
 		}
-		if current, ok := h.Store.CurrentStreamSession(channel.ID); ok {
+		if current, ok := h.analyticsService().CurrentStreamSession(channel.ID); ok {
 			entry.LiveViewers = current.PeakConcurrent
 		}
-		sessions, err := h.Store.ListStreamSessions(channel.ID)
+		sessions, err := h.analyticsService().ListStreamSessions(channel.ID)
 		if err != nil {
 			return analyticsOverviewResponse{}, err
 		}
@@ -76,7 +76,7 @@ func (h *Handler) computeAnalyticsOverview(now time.Time) (analyticsOverviewResp
 			}
 			entry.AvgWatchMinutes = totalMinutes / float64(len(sessions))
 		}
-		messages, err := h.Store.ListChatMessages(channel.ID, 0)
+		messages, err := h.analyticsService().ListChatMessages(channel.ID, 0)
 		if err != nil {
 			return analyticsOverviewResponse{}, err
 		}

@@ -1,7 +1,12 @@
 package service
 
 import (
+	"context"
+	"time"
+
 	"bitriver-live/internal/domain"
+	"bitriver-live/internal/ingest"
+	"bitriver-live/internal/storage"
 )
 
 // AuthUsersUseCase encapsulates user and authentication persistence operations
@@ -15,6 +20,30 @@ type AuthUsersUseCase interface {
 	UpdateUser(id string, update domain.UserUpdate) (domain.User, error)
 	DeleteUser(id string) error
 	UpsertMFASettings(settings domain.MFASettings) (domain.MFASettings, error)
+	GetMFASettings(userID string) (domain.MFASettings, bool, error)
+	DeleteMFASettings(userID string) error
+}
+
+type ChatModerationUseCase interface {
+	GetChannel(id string) (domain.Channel, bool)
+	GetUser(id string) (domain.User, bool)
+	DeleteChatMessage(channelID, messageID string) error
+	ListChatMessages(channelID string, limit int) ([]domain.ChatMessage, error)
+	CreateChatMessage(channelID, userID, content string) (domain.ChatMessage, error)
+	ListChatRestrictions(channelID string) []domain.ChatRestriction
+	CreateChatReport(channelID, reporterID, targetID, reason, messageID, evidenceURL string) (domain.ChatReport, error)
+	ListChatReports(channelID string, includeResolved bool) ([]domain.ChatReport, error)
+	ResolveChatReport(reportID, resolverID, resolution string) (domain.ChatReport, error)
+	CreateAppeal(reportID, reporterID, reason string) (domain.Appeal, error)
+	ListAppeals(channelID, requesterID string, includeClosed bool) ([]domain.Appeal, error)
+	ResolveAppeal(appealID, resolverID, resolution string) (domain.Appeal, error)
+	ReopenAppeal(appealID, actorID, note string) (domain.Appeal, error)
+	ListChatFilters(channelID string) ([]domain.ChatFilter, error)
+	CreateChatFilter(channelID string, params storage.ChatFilterParams) (domain.ChatFilter, error)
+	UpdateChatFilter(id string, update storage.ChatFilterUpdate) (domain.ChatFilter, error)
+	DeleteChatFilter(id string) error
+	ListChannels(ownerID, query string) []domain.Channel
+	ListChatAutoModActions(channelID string, limit int) ([]domain.ChatAutoModAction, error)
 }
 
 // ChannelsDirectoryUseCase encapsulates channel directory, follow,
@@ -41,6 +70,73 @@ type ChannelsDirectoryUseCase interface {
 	CancelSubscription(id, cancelledBy, reason string) (domain.Subscription, error)
 	ListUploads(channelID string) ([]domain.Upload, error)
 	GetRecording(id string) (domain.Recording, bool)
+}
+
+type LegalComplianceUseCase interface {
+	CreateDMCACase(params domain.DMCACaseCreateParams) (domain.DMCACase, error)
+	UpdateDMCACase(id, status, notes, actorUserID string) (domain.DMCACase, error)
+	ListDMCACases() ([]domain.DMCACase, error)
+	GetDMCACase(id string) (domain.DMCACase, bool)
+	CreateDataSubjectRequest(params domain.DataSubjectRequestCreateParams) (domain.DataSubjectRequest, error)
+	UpdateDataSubjectRequest(id, status, notes, actorUserID string) (domain.DataSubjectRequest, error)
+	ListDataSubjectRequests() ([]domain.DataSubjectRequest, error)
+	GetDataSubjectRequest(id string) (domain.DataSubjectRequest, bool)
+	AddDataSubjectAuditEvent(requestID string, params domain.DataSubjectAuditEventCreateParams) (domain.DataSubjectAuditEvent, error)
+	ListDataSubjectAuditEvents(requestID string) ([]domain.DataSubjectAuditEvent, error)
+	ListLegalStateHistory(entityType, entityID string) ([]domain.LegalStateHistory, error)
+}
+
+type StreamsUseCase interface {
+	ListChannels(ownerID, query string) []domain.Channel
+	CurrentStreamSession(channelID string) (domain.StreamSession, bool)
+	StartStream(channelID string, renditions []string) (domain.StreamSession, error)
+	StopStream(channelID string, peakConcurrent int) (domain.StreamSession, error)
+	UpdateChannel(id string, update domain.ChannelUpdate) (domain.Channel, error)
+	RotateChannelStreamKey(id string) (domain.Channel, error)
+}
+
+type ProfilesUseCase interface {
+	ListProfiles() []domain.Profile
+	GetUser(id string) (domain.User, bool)
+	GetProfile(userID string) (domain.Profile, bool)
+	UpdateUser(id string, update domain.UserUpdate) (domain.User, error)
+	UpsertProfile(userID string, update domain.ProfileUpdate) (domain.Profile, error)
+	ListChannels(ownerID, query string) []domain.Channel
+}
+
+type AnalyticsUseCase interface {
+	ListChannels(ownerID, query string) []domain.Channel
+	CountFollowers(channelID string) int
+	CurrentStreamSession(channelID string) (domain.StreamSession, bool)
+	ListStreamSessions(channelID string) ([]domain.StreamSession, error)
+	ListChatMessages(channelID string, limit int) ([]domain.ChatMessage, error)
+}
+
+type SystemHealthUseCase interface {
+	Ping(ctx context.Context) error
+	IngestHealth(ctx context.Context) []ingest.HealthStatus
+	LastIngestHealth() ([]ingest.HealthStatus, time.Time)
+}
+
+type MonetizationUseCase interface {
+	ListTips(channelID string, limit int) ([]domain.Tip, error)
+	GetSubscription(id string) (domain.Subscription, bool)
+	CancelSubscription(id, cancelledBy, reason string) (domain.Subscription, error)
+	ListSubscriptions(channelID string, includeInactive bool) ([]domain.Subscription, error)
+}
+
+type APIStoreUseCase interface {
+	AuthUsersUseCase
+	ChannelsDirectoryUseCase
+	UploadsUseCase
+	RecordingsVODUseCase
+	ChatModerationUseCase
+	LegalComplianceUseCase
+	StreamsUseCase
+	ProfilesUseCase
+	AnalyticsUseCase
+	SystemHealthUseCase
+	MonetizationUseCase
 }
 
 // UploadsUseCase encapsulates upload lifecycle operations.
@@ -70,6 +166,38 @@ type storeUseCases struct {
 		domain.ChannelsRepository
 		domain.UploadsRepository
 		domain.RecordingsRepository
+		domain.PaymentsRepository
+		domain.LegalRepository
+		SystemHealthUseCase
+		DeleteChatMessage(channelID, messageID string) error
+		ListChatMessages(channelID string, limit int) ([]domain.ChatMessage, error)
+		CreateChatMessage(channelID, userID, content string) (domain.ChatMessage, error)
+		ListChatRestrictions(channelID string) []domain.ChatRestriction
+		CreateChatReport(channelID, reporterID, targetID, reason, messageID, evidenceURL string) (domain.ChatReport, error)
+		ListChatReports(channelID string, includeResolved bool) ([]domain.ChatReport, error)
+		ResolveChatReport(reportID, resolverID, resolution string) (domain.ChatReport, error)
+		CreateAppeal(reportID, reporterID, reason string) (domain.Appeal, error)
+		ListAppeals(channelID, requesterID string, includeClosed bool) ([]domain.Appeal, error)
+		ResolveAppeal(appealID, resolverID, resolution string) (domain.Appeal, error)
+		ReopenAppeal(appealID, actorID, note string) (domain.Appeal, error)
+		ListChatFilters(channelID string) ([]domain.ChatFilter, error)
+		CreateChatFilter(channelID string, params storage.ChatFilterParams) (domain.ChatFilter, error)
+		UpdateChatFilter(id string, update storage.ChatFilterUpdate) (domain.ChatFilter, error)
+		DeleteChatFilter(id string) error
+		ListChatAutoModActions(channelID string, limit int) ([]domain.ChatAutoModAction, error)
+		GetMFASettings(userID string) (domain.MFASettings, bool, error)
+		DeleteMFASettings(userID string) error
+		StartStream(channelID string, renditions []string) (domain.StreamSession, error)
+		StopStream(channelID string, peakConcurrent int) (domain.StreamSession, error)
+		RotateChannelStreamKey(id string) (domain.Channel, error)
+		UpsertProfile(userID string, update domain.ProfileUpdate) (domain.Profile, error)
+		ListTips(channelID string, limit int) ([]domain.Tip, error)
+		GetSubscription(id string) (domain.Subscription, bool)
+		ListDMCACases() ([]domain.DMCACase, error)
+		ListDataSubjectRequests() ([]domain.DataSubjectRequest, error)
+		AddDataSubjectAuditEvent(requestID string, params domain.DataSubjectAuditEventCreateParams) (domain.DataSubjectAuditEvent, error)
+		ListDataSubjectAuditEvents(requestID string) ([]domain.DataSubjectAuditEvent, error)
+		ListLegalStateHistory(entityType, entityID string) ([]domain.LegalStateHistory, error)
 	}
 }
 
@@ -78,6 +206,38 @@ func NewStoreUseCases(store interface {
 	domain.ChannelsRepository
 	domain.UploadsRepository
 	domain.RecordingsRepository
+	domain.PaymentsRepository
+	domain.LegalRepository
+	SystemHealthUseCase
+	DeleteChatMessage(channelID, messageID string) error
+	ListChatMessages(channelID string, limit int) ([]domain.ChatMessage, error)
+	CreateChatMessage(channelID, userID, content string) (domain.ChatMessage, error)
+	ListChatRestrictions(channelID string) []domain.ChatRestriction
+	CreateChatReport(channelID, reporterID, targetID, reason, messageID, evidenceURL string) (domain.ChatReport, error)
+	ListChatReports(channelID string, includeResolved bool) ([]domain.ChatReport, error)
+	ResolveChatReport(reportID, resolverID, resolution string) (domain.ChatReport, error)
+	CreateAppeal(reportID, reporterID, reason string) (domain.Appeal, error)
+	ListAppeals(channelID, requesterID string, includeClosed bool) ([]domain.Appeal, error)
+	ResolveAppeal(appealID, resolverID, resolution string) (domain.Appeal, error)
+	ReopenAppeal(appealID, actorID, note string) (domain.Appeal, error)
+	ListChatFilters(channelID string) ([]domain.ChatFilter, error)
+	CreateChatFilter(channelID string, params storage.ChatFilterParams) (domain.ChatFilter, error)
+	UpdateChatFilter(id string, update storage.ChatFilterUpdate) (domain.ChatFilter, error)
+	DeleteChatFilter(id string) error
+	ListChatAutoModActions(channelID string, limit int) ([]domain.ChatAutoModAction, error)
+	GetMFASettings(userID string) (domain.MFASettings, bool, error)
+	DeleteMFASettings(userID string) error
+	StartStream(channelID string, renditions []string) (domain.StreamSession, error)
+	StopStream(channelID string, peakConcurrent int) (domain.StreamSession, error)
+	RotateChannelStreamKey(id string) (domain.Channel, error)
+	UpsertProfile(userID string, update domain.ProfileUpdate) (domain.Profile, error)
+	ListTips(channelID string, limit int) ([]domain.Tip, error)
+	GetSubscription(id string) (domain.Subscription, bool)
+	ListDMCACases() ([]domain.DMCACase, error)
+	ListDataSubjectRequests() ([]domain.DataSubjectRequest, error)
+	AddDataSubjectAuditEvent(requestID string, params domain.DataSubjectAuditEventCreateParams) (domain.DataSubjectAuditEvent, error)
+	ListDataSubjectAuditEvents(requestID string) ([]domain.DataSubjectAuditEvent, error)
+	ListLegalStateHistory(entityType, entityID string) ([]domain.LegalStateHistory, error)
 }) *storeUseCases {
 	return &storeUseCases{store: store}
 }
@@ -100,14 +260,18 @@ func (s *storeUseCases) DeleteUser(id string) error { return s.store.DeleteUser(
 func (s *storeUseCases) UpsertMFASettings(settings domain.MFASettings) (domain.MFASettings, error) {
 	return s.store.UpsertMFASettings(settings)
 }
+func (s *storeUseCases) GetMFASettings(userID string) (domain.MFASettings, bool, error) {
+	return s.store.GetMFASettings(userID)
+}
+func (s *storeUseCases) DeleteMFASettings(userID string) error {
+	return s.store.DeleteMFASettings(userID)
+}
 
 func (s *storeUseCases) ListChannels(ownerID, query string) []domain.Channel {
 	return s.store.ListChannels(ownerID, query)
 }
-func (s *storeUseCases) ListProfiles() []domain.Profile { return s.store.ListProfiles() }
-func (s *storeUseCases) GetChannel(id string) (domain.Channel, bool) {
-	return s.store.GetChannel(id)
-}
+func (s *storeUseCases) ListProfiles() []domain.Profile              { return s.store.ListProfiles() }
+func (s *storeUseCases) GetChannel(id string) (domain.Channel, bool) { return s.store.GetChannel(id) }
 func (s *storeUseCases) GetProfile(userID string) (domain.Profile, bool) {
 	return s.store.GetProfile(userID)
 }
@@ -176,9 +340,126 @@ func (s *storeUseCases) CreateClipExport(recordingID string, params domain.ClipE
 }
 func (s *storeUseCases) DeleteRecording(id string) error { return s.store.DeleteRecording(id) }
 
+func (s *storeUseCases) Ping(ctx context.Context) error { return s.store.Ping(ctx) }
+func (s *storeUseCases) IngestHealth(ctx context.Context) []ingest.HealthStatus {
+	return s.store.IngestHealth(ctx)
+}
+func (s *storeUseCases) LastIngestHealth() ([]ingest.HealthStatus, time.Time) {
+	return s.store.LastIngestHealth()
+}
+
+func (s *storeUseCases) DeleteChatMessage(channelID, messageID string) error {
+	return s.store.DeleteChatMessage(channelID, messageID)
+}
+func (s *storeUseCases) ListChatMessages(channelID string, limit int) ([]domain.ChatMessage, error) {
+	return s.store.ListChatMessages(channelID, limit)
+}
+func (s *storeUseCases) CreateChatMessage(channelID, userID, content string) (domain.ChatMessage, error) {
+	return s.store.CreateChatMessage(channelID, userID, content)
+}
+func (s *storeUseCases) ListChatRestrictions(channelID string) []domain.ChatRestriction {
+	return s.store.ListChatRestrictions(channelID)
+}
+func (s *storeUseCases) CreateChatReport(channelID, reporterID, targetID, reason, messageID, evidenceURL string) (domain.ChatReport, error) {
+	return s.store.CreateChatReport(channelID, reporterID, targetID, reason, messageID, evidenceURL)
+}
+func (s *storeUseCases) ListChatReports(channelID string, includeResolved bool) ([]domain.ChatReport, error) {
+	return s.store.ListChatReports(channelID, includeResolved)
+}
+func (s *storeUseCases) ResolveChatReport(reportID, resolverID, resolution string) (domain.ChatReport, error) {
+	return s.store.ResolveChatReport(reportID, resolverID, resolution)
+}
+func (s *storeUseCases) CreateAppeal(reportID, reporterID, reason string) (domain.Appeal, error) {
+	return s.store.CreateAppeal(reportID, reporterID, reason)
+}
+func (s *storeUseCases) ListAppeals(channelID, requesterID string, includeClosed bool) ([]domain.Appeal, error) {
+	return s.store.ListAppeals(channelID, requesterID, includeClosed)
+}
+func (s *storeUseCases) ResolveAppeal(appealID, resolverID, resolution string) (domain.Appeal, error) {
+	return s.store.ResolveAppeal(appealID, resolverID, resolution)
+}
+func (s *storeUseCases) ReopenAppeal(appealID, actorID, note string) (domain.Appeal, error) {
+	return s.store.ReopenAppeal(appealID, actorID, note)
+}
+func (s *storeUseCases) ListChatFilters(channelID string) ([]domain.ChatFilter, error) {
+	return s.store.ListChatFilters(channelID)
+}
+func (s *storeUseCases) CreateChatFilter(channelID string, params storage.ChatFilterParams) (domain.ChatFilter, error) {
+	return s.store.CreateChatFilter(channelID, params)
+}
+func (s *storeUseCases) UpdateChatFilter(id string, update storage.ChatFilterUpdate) (domain.ChatFilter, error) {
+	return s.store.UpdateChatFilter(id, update)
+}
+func (s *storeUseCases) DeleteChatFilter(id string) error { return s.store.DeleteChatFilter(id) }
+func (s *storeUseCases) ListChatAutoModActions(channelID string, limit int) ([]domain.ChatAutoModAction, error) {
+	return s.store.ListChatAutoModActions(channelID, limit)
+}
+
+func (s *storeUseCases) StartStream(channelID string, renditions []string) (domain.StreamSession, error) {
+	return s.store.StartStream(channelID, renditions)
+}
+func (s *storeUseCases) StopStream(channelID string, peakConcurrent int) (domain.StreamSession, error) {
+	return s.store.StopStream(channelID, peakConcurrent)
+}
+func (s *storeUseCases) RotateChannelStreamKey(id string) (domain.Channel, error) {
+	return s.store.RotateChannelStreamKey(id)
+}
+
+func (s *storeUseCases) UpsertProfile(userID string, update domain.ProfileUpdate) (domain.Profile, error) {
+	return s.store.UpsertProfile(userID, update)
+}
+
+func (s *storeUseCases) ListTips(channelID string, limit int) ([]domain.Tip, error) {
+	return s.store.ListTips(channelID, limit)
+}
+func (s *storeUseCases) GetSubscription(id string) (domain.Subscription, bool) {
+	return s.store.GetSubscription(id)
+}
+
+func (s *storeUseCases) ListDMCACases() ([]domain.DMCACase, error) { return s.store.ListDMCACases() }
+
+func (s *storeUseCases) GetDMCACase(id string) (domain.DMCACase, bool) {
+	return s.store.GetDMCACase(id)
+}
+func (s *storeUseCases) GetDataSubjectRequest(id string) (domain.DataSubjectRequest, bool) {
+	return s.store.GetDataSubjectRequest(id)
+}
+func (s *storeUseCases) ListDataSubjectRequests() ([]domain.DataSubjectRequest, error) {
+	return s.store.ListDataSubjectRequests()
+}
+func (s *storeUseCases) AddDataSubjectAuditEvent(requestID string, params domain.DataSubjectAuditEventCreateParams) (domain.DataSubjectAuditEvent, error) {
+	return s.store.AddDataSubjectAuditEvent(requestID, params)
+}
+func (s *storeUseCases) ListDataSubjectAuditEvents(requestID string) ([]domain.DataSubjectAuditEvent, error) {
+	return s.store.ListDataSubjectAuditEvents(requestID)
+}
+func (s *storeUseCases) ListLegalStateHistory(entityType, entityID string) ([]domain.LegalStateHistory, error) {
+	return s.store.ListLegalStateHistory(entityType, entityID)
+}
+
+func (s *storeUseCases) CreateDMCACase(params domain.DMCACaseCreateParams) (domain.DMCACase, error) {
+	return s.store.CreateDMCACase(params)
+}
+func (s *storeUseCases) UpdateDMCACase(id, status, notes, actorUserID string) (domain.DMCACase, error) {
+	return s.store.UpdateDMCACase(id, domain.DMCACaseUpdate{Status: &status, Notes: &notes}, actorUserID)
+}
+func (s *storeUseCases) CreateDataSubjectRequest(params domain.DataSubjectRequestCreateParams) (domain.DataSubjectRequest, error) {
+	return s.store.CreateDataSubjectRequest(params)
+}
+func (s *storeUseCases) UpdateDataSubjectRequest(id, status, notes, actorUserID string) (domain.DataSubjectRequest, error) {
+	return s.store.UpdateDataSubjectRequest(id, domain.DataSubjectRequestUpdate{Status: &status, Notes: &notes}, actorUserID)
+}
+
 var (
 	_ AuthUsersUseCase         = (*storeUseCases)(nil)
 	_ ChannelsDirectoryUseCase = (*storeUseCases)(nil)
 	_ UploadsUseCase           = (*storeUseCases)(nil)
 	_ RecordingsVODUseCase     = (*storeUseCases)(nil)
+	_ ChatModerationUseCase    = (*storeUseCases)(nil)
+	_ StreamsUseCase           = (*storeUseCases)(nil)
+	_ ProfilesUseCase          = (*storeUseCases)(nil)
+	_ AnalyticsUseCase         = (*storeUseCases)(nil)
+	_ SystemHealthUseCase      = (*storeUseCases)(nil)
+	_ MonetizationUseCase      = (*storeUseCases)(nil)
+	_ APIStoreUseCase          = (*storeUseCases)(nil)
 )

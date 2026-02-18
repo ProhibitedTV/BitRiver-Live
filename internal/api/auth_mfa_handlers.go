@@ -58,7 +58,7 @@ func (h *Handler) MFAStatus(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	settings, exists, err := h.Store.GetMFASettings(user.ID)
+	settings, exists, err := h.authUsersService().GetMFASettings(user.ID)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err)
 		return
@@ -83,7 +83,7 @@ func (h *Handler) MFAEnroll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	settings, exists, err := h.Store.GetMFASettings(user.ID)
+	settings, exists, err := h.authUsersService().GetMFASettings(user.ID)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err)
 		return
@@ -99,7 +99,7 @@ func (h *Handler) MFAEnroll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.Store.UpsertMFASettings(updated); err != nil {
+	if _, err := h.authUsersService().UpsertMFASettings(updated); err != nil {
 		WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -127,7 +127,7 @@ func (h *Handler) MFAVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	settings, exists, err := h.Store.GetMFASettings(userID)
+	settings, exists, err := h.authUsersService().GetMFASettings(userID)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err)
 		return
@@ -164,7 +164,7 @@ func (h *Handler) MFAVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	settings.LastUsedAt = &now
 
-	updated, err := h.Store.UpsertMFASettings(settings)
+	updated, err := h.authUsersService().UpsertMFASettings(settings)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err)
 		return
@@ -180,7 +180,7 @@ func (h *Handler) MFAVerify(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusInternalServerError, err)
 			return
 		}
-		user, ok := h.Store.GetUser(userID)
+		user, ok := h.authUsersService().GetUser(userID)
 		if !ok {
 			WriteError(w, http.StatusUnauthorized, fmt.Errorf("account not found"))
 			return
@@ -208,7 +208,7 @@ func (h *Handler) MFADisable(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	settings, exists, err := h.Store.GetMFASettings(user.ID)
+	settings, exists, err := h.authUsersService().GetMFASettings(user.ID)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err)
 		return
@@ -239,7 +239,7 @@ func (h *Handler) MFADisable(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := h.Store.DeleteMFASettings(user.ID); err != nil {
+	if err := h.authUsersService().DeleteMFASettings(user.ID); err != nil {
 		WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -257,7 +257,7 @@ func (h *Handler) resolveMFAUser(token string, r *http.Request) (models.User, er
 		if !ok {
 			return models.User{}, auth.ErrInvalidMFAChallenge
 		}
-		user, ok := h.Store.GetUser(userID)
+		user, ok := h.authUsersService().GetUser(userID)
 		if !ok {
 			return models.User{}, fmt.Errorf("account not found")
 		}
@@ -353,7 +353,7 @@ func buildMFAStatus(settings models.MFASettings, exists bool) mfaStatusResponse 
 
 // mfaRequirement performs mfa requirement and propagates validation or dependency failures to the caller.
 func (h *Handler) mfaRequirement(user models.User) (models.MFASettings, bool, bool, error) {
-	settings, exists, err := h.Store.GetMFASettings(user.ID)
+	settings, exists, err := h.authUsersService().GetMFASettings(user.ID)
 	if err != nil {
 		return models.MFASettings{}, false, false, err
 	}

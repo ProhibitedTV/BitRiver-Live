@@ -28,8 +28,8 @@ func (h *Handler) componentHealth(ctx context.Context) ([]componentStatus, strin
 	}
 
 	components := make([]componentStatus, 0, 4)
-	if h.Store != nil {
-		components = append(components, recordComponent("datastore", h.Store.Ping(ctx)))
+	if h.systemService() != nil {
+		components = append(components, recordComponent("datastore", h.systemService().Ping(ctx)))
 	}
 
 	components = append(components, recordComponent("sessions", h.sessionManager().Ping(ctx)))

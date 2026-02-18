@@ -7,11 +7,20 @@ import (
 	"bitriver-live/internal/domain"
 )
 
-type LegalService struct {
-	repo domain.LegalRepository
+type legalRepository interface {
+	domain.LegalRepository
+	ListDMCACases() ([]domain.DMCACase, error)
+	ListDataSubjectRequests() ([]domain.DataSubjectRequest, error)
+	AddDataSubjectAuditEvent(requestID string, params domain.DataSubjectAuditEventCreateParams) (domain.DataSubjectAuditEvent, error)
+	ListDataSubjectAuditEvents(requestID string) ([]domain.DataSubjectAuditEvent, error)
+	ListLegalStateHistory(entityType, entityID string) ([]domain.LegalStateHistory, error)
 }
 
-func NewLegalService(repo domain.LegalRepository) *LegalService {
+type LegalService struct {
+	repo legalRepository
+}
+
+func NewLegalService(repo legalRepository) *LegalService {
 	return &LegalService{repo: repo}
 }
 
@@ -57,6 +66,55 @@ func (s *LegalService) UpdateDataSubjectRequest(id, status, notes, actorUserID s
 		return domain.DataSubjectRequest{}, fmt.Errorf("invalid request status transition from %s to %s", existing.Status, status)
 	}
 	return s.repo.UpdateDataSubjectRequest(id, domain.DataSubjectRequestUpdate{Status: &status, Notes: &notes}, actorUserID)
+}
+
+func (s *LegalService) ListDMCACases() ([]domain.DMCACase, error) {
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("legal service unavailable")
+	}
+	return s.repo.ListDMCACases()
+}
+
+func (s *LegalService) GetDMCACase(id string) (domain.DMCACase, bool) {
+	if s == nil || s.repo == nil {
+		return domain.DMCACase{}, false
+	}
+	return s.repo.GetDMCACase(id)
+}
+
+func (s *LegalService) ListDataSubjectRequests() ([]domain.DataSubjectRequest, error) {
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("legal service unavailable")
+	}
+	return s.repo.ListDataSubjectRequests()
+}
+
+func (s *LegalService) GetDataSubjectRequest(id string) (domain.DataSubjectRequest, bool) {
+	if s == nil || s.repo == nil {
+		return domain.DataSubjectRequest{}, false
+	}
+	return s.repo.GetDataSubjectRequest(id)
+}
+
+func (s *LegalService) AddDataSubjectAuditEvent(requestID string, params domain.DataSubjectAuditEventCreateParams) (domain.DataSubjectAuditEvent, error) {
+	if s == nil || s.repo == nil {
+		return domain.DataSubjectAuditEvent{}, fmt.Errorf("legal service unavailable")
+	}
+	return s.repo.AddDataSubjectAuditEvent(requestID, params)
+}
+
+func (s *LegalService) ListDataSubjectAuditEvents(requestID string) ([]domain.DataSubjectAuditEvent, error) {
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("legal service unavailable")
+	}
+	return s.repo.ListDataSubjectAuditEvents(requestID)
+}
+
+func (s *LegalService) ListLegalStateHistory(entityType, entityID string) ([]domain.LegalStateHistory, error) {
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("legal service unavailable")
+	}
+	return s.repo.ListLegalStateHistory(entityType, entityID)
 }
 
 func validDMCAStateTransition(from, to string) bool {
