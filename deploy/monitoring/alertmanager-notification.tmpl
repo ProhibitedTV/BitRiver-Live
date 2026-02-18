@@ -1,0 +1,10 @@
+{{ define "bitriver.default.title" }}[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}{{ end }}
+{{ define "bitriver.default.body" }}
+Status: {{ .Status }}
+Alert: {{ .CommonLabels.alertname }}
+Service: {{ .CommonLabels.service }}
+Severity: {{ .CommonLabels.severity }}
+{{ if .CommonAnnotations.summary }}Summary: {{ .CommonAnnotations.summary }}{{ end }}
+{{ if .CommonAnnotations.description }}Description: {{ .CommonAnnotations.description }}{{ end }}
+{{ if .CommonAnnotations.runbook }}Runbook: {{ .CommonAnnotations.runbook }}{{ end }}
+{{ end }}

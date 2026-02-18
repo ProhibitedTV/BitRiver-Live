@@ -1,1 +1,3 @@
 metrics.token
+alertmanager.env
+alertmanager.yml

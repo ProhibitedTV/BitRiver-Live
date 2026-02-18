@@ -1,0 +1,136 @@
+groups:
+  - name: bitriver-api-probes
+    rules:
+      - alert: BitRiverReadyzUnavailable
+        expr: |
+          sum by (job) (
+            increase(bitriver_http_requests_total{path="/readyz",status!~"2.."}[5m])
+          ) > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: api
+        annotations:
+          summary: "/readyz is returning non-2xx responses"
+          description: "The readiness endpoint has returned at least one non-2xx response in the last 5m for {{ $labels.job }}."
+          runbook: "docs/operations.md#alert-runbook-map"
+      - alert: BitRiverHealthzCoreUnavailable
+        expr: |
+          sum by (job) (
+            increase(bitriver_http_requests_total{path="/healthz",status="503"}[5m])
+          ) > 0
+        for: 3m
+        labels:
+          severity: critical
+          service: api
+        annotations:
+          summary: "/healthz is returning 503"
+          description: "Core dependencies reported by /healthz are failing for {{ $labels.job }}."
+          runbook: "docs/operations.md#alert-runbook-map"
+      - alert: BitRiverHealthComponentDegraded
+        expr: |
+          max by (service) (bitriver_ingest_health{status="degraded"}) < 0
+        for: 3m
+        labels:
+          severity: warning
+          service: ingest
+        annotations:
+          summary: "An ingest component is degraded"
+          description: "Ingest dependency {{ $labels.service }} is degraded according to bitriver_ingest_health."
+          runbook: "docs/operations.md#alert-runbook-map"
+
+  - name: bitriver-auth-and-chat
+    rules:
+      - alert: BitRiverAuthFailureSpike
+        expr: |
+          (
+            sum(rate(bitriver_http_requests_total{path=~"/api/auth/.*",status=~"401|403|429"}[10m]))
+            /
+            clamp_min(sum(rate(bitriver_http_requests_total{path=~"/api/auth/.*"}[10m])), 1)
+          ) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+          service: auth
+        annotations:
+          summary: "Authentication failures are spiking"
+          description: "Auth endpoints are returning 401/403/429 at a ratio above 20% for 10m."
+          runbook: "docs/operations.md#alert-runbook-map"
+      - alert: BitRiverChatQueueLagHigh
+        expr: |
+          max_over_time(redis_stream_consumer_lag{stream=~"bitriver.*chat.*"}[10m]) > 1000
+        for: 10m
+        labels:
+          severity: warning
+          service: chat
+        annotations:
+          summary: "Chat queue lag is elevated"
+          description: "Redis stream consumer lag for chat exceeded 1000 messages for 10m."
+          runbook: "docs/operations.md#alert-runbook-map"
+
+  - name: bitriver-capacity-and-ingest
+    rules:
+      - alert: BitRiverDiskUsageHigh
+        expr: |
+          (
+            1 - (
+              node_filesystem_avail_bytes{mountpoint=~".*/transcoder-data$",fstype!="tmpfs"}
+              /
+              node_filesystem_size_bytes{mountpoint=~".*/transcoder-data$",fstype!="tmpfs"}
+            )
+          ) > 0.85
+        for: 15m
+        labels:
+          severity: warning
+          service: storage
+        annotations:
+          summary: "transcoder-data disk usage is high"
+          description: "The /transcoder-data mount is above 85% utilization."
+          runbook: "docs/operations.md#alert-runbook-map"
+      - alert: BitRiverDiskUsageCritical
+        expr: |
+          (
+            1 - (
+              node_filesystem_avail_bytes{mountpoint=~".*/transcoder-data$",fstype!="tmpfs"}
+              /
+              node_filesystem_size_bytes{mountpoint=~".*/transcoder-data$",fstype!="tmpfs"}
+            )
+          ) > 0.92
+        for: 10m
+        labels:
+          severity: critical
+          service: storage
+        annotations:
+          summary: "transcoder-data disk usage is critical"
+          description: "The /transcoder-data mount is above 92% utilization."
+          runbook: "docs/operations.md#alert-runbook-map"
+      - alert: BitRiverIngestFailureRateHigh
+        expr: |
+          (
+            sum(rate(bitriver_ingest_failures_total[10m]))
+            /
+            clamp_min(sum(rate(bitriver_ingest_attempts_total[10m])), 1)
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          service: ingest
+        annotations:
+          summary: "Ingest operation failures are elevated"
+          description: "More than 5% of ingest operations are failing over the last 10m."
+          runbook: "docs/operations.md#alert-runbook-map"
+      - alert: BitRiverTranscoderFailuresHigh
+        expr: |
+          (
+            sum(rate(bitriver_transcoder_jobs_total{status="fail"}[10m]))
+            /
+            clamp_min(sum(rate(bitriver_transcoder_jobs_total{status=~"start|complete|fail"}[10m])), 1)
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+          service: transcoder
+        annotations:
+          summary: "Transcoder job failures are elevated"
+          description: "Transcoder fail ratio exceeded 5% for the last 10m."
+          runbook: "docs/operations.md#alert-runbook-map"

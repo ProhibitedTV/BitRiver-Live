@@ -1,0 +1,32 @@
+name: Monitoring config checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/monitoring/**'
+      - 'deploy/docker-compose.monitoring.yml'
+      - 'scripts/check-monitoring-config.sh'
+      - 'scripts/render-alertmanager-config.sh'
+      - '.github/workflows/monitoring-config.yml'
+  pull_request:
+    paths:
+      - 'deploy/monitoring/**'
+      - 'deploy/docker-compose.monitoring.yml'
+      - 'scripts/check-monitoring-config.sh'
+      - 'scripts/render-alertmanager-config.sh'
+      - '.github/workflows/monitoring-config.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate Prometheus + Alertmanager configs
+        shell: bash
+        run: ./scripts/check-monitoring-config.sh

@@ -80,9 +80,9 @@ Tune to your traffic profile, but the defaults below are a good starting point f
 - **Chat backlog:** Redis stream length grows continuously for 10 minutes or consumer lag > 1000 messages (warning).
 - **Storage:** `./transcoder-data` > 80% full (warning), > 90% (critical).
 
-### Monitoring stack (Prometheus + Grafana)
+### Monitoring stack (Prometheus + Alertmanager + Grafana)
 
-The monitoring profile adds Prometheus and Grafana alongside the default Compose stack.
+The monitoring profile adds Prometheus, Alertmanager, node-exporter, redis-exporter, and Grafana alongside the default Compose stack.
 
 1. Set the API metrics token in `.env` (required in production mode):
    ```bash
@@ -93,19 +93,45 @@ The monitoring profile adds Prometheus and Grafana alongside the default Compose
    cp deploy/monitoring/metrics.token.example deploy/monitoring/metrics.token
    ```
    Edit `deploy/monitoring/metrics.token` so it contains the same value as `BITRIVER_LIVE_METRICS_TOKEN` (single line).
-3. Start the monitoring profile:
+3. Create Alertmanager receiver secrets and render the runtime config:
+   ```bash
+   cp deploy/monitoring/alertmanager.env.example deploy/monitoring/alertmanager.env
+   ./scripts/render-alertmanager-config.sh
+   ```
+4. Validate monitoring configs before deployment:
+   ```bash
+   ./scripts/check-monitoring-config.sh
+   ```
+5. Start the monitoring profile:
    ```bash
    docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.monitoring.yml --profile monitoring up -d
    ```
 
-Prometheus listens on `http://localhost:9090` and Grafana listens on `http://localhost:3001` (default credentials are
-`admin` / `admin`, override with `BITRIVER_GRAFANA_ADMIN_USER` and `BITRIVER_GRAFANA_ADMIN_PASSWORD` in `.env`).
+Prometheus listens on `http://localhost:9090`, Alertmanager on `http://localhost:9093`, and Grafana on
+`http://localhost:3001` (default credentials are `admin` / `admin`, override with `BITRIVER_GRAFANA_ADMIN_USER`
+and `BITRIVER_GRAFANA_ADMIN_PASSWORD` in `.env`).
 
 **Import the dashboard:**
 
 1. Sign into Grafana and add a Prometheus data source pointing at `http://prometheus:9090`.
 2. From **Dashboards → New → Import**, upload `deploy/monitoring/bitriver-live-dashboard.json` and select the Prometheus data
    source when prompted.
+
+### Alert runbook map
+
+Each alert in `deploy/monitoring/prometheus-alerts.yml` should page to the remediation below.
+
+| Alert name | Trigger | Triage steps | Expected remediation |
+| --- | --- | --- | --- |
+| `BitRiverReadyzUnavailable` | `/readyz` returns non-2xx for 2 minutes. | Check `docker compose ps`; inspect API/Postgres/Redis logs with `docker compose logs -f bitriver-live postgres redis`; confirm `.env` DSN and Redis credentials. | Restore DB/Redis connectivity, restart failed dependency containers, then verify `/readyz` returns `200`. |
+| `BitRiverHealthzCoreUnavailable` | `/healthz` returns HTTP 503 for 3 minutes. | Compare `/readyz` and `/healthz`; if both fail, treat as core outage; if only `/healthz` fails, inspect ingest services (`srs`, `ome`, `transcoder`, `srs-controller`). | Recover failing core or ingest dependency, then confirm `/healthz` JSON reports healthy core checks. |
+| `BitRiverHealthComponentDegraded` | Any `bitriver_ingest_health{status="degraded"}` stays degraded for 3 minutes. | Use `/api/status` to identify degraded service and remediation hints; inspect targeted logs for SRS/OME/transcoder and health endpoint auth tokens. | Fix endpoint reachability, rotate bad ingest credentials, or restart degraded ingest service. |
+| `BitRiverAuthFailureSpike` | 401/403/429 ratio on `/api/auth/*` exceeds 20% for 10 minutes. | Check whether failures map to one source IP/user agent; inspect audit/auth logs for brute-force patterns; verify MFA/session expiry settings. | Block abusive IPs at proxy/WAF, rotate exposed credentials, tune rate limits, and communicate user-impacting auth incidents. |
+| `BitRiverChatQueueLagHigh` | `redis_stream_consumer_lag` on chat stream exceeds 1000 for 10 minutes. | Query Redis stream/group lag (`XINFO STREAM` / `XINFO GROUPS`); inspect API latency and chat consumer logs; confirm Redis CPU/memory headroom. | Scale chat consumers/API replicas, reduce downstream bottlenecks, or recover stalled consumers and replay pending entries. |
+| `BitRiverDiskUsageHigh` | `transcoder-data` filesystem usage exceeds 85% for 15 minutes. | Validate mount utilization on host and inspect `./transcoder-data` growth (recordings, orphaned HLS artifacts). | Prune expired recordings, archive media, or expand storage before transcoder writes fail. |
+| `BitRiverDiskUsageCritical` | `transcoder-data` usage exceeds 92% for 10 minutes. | Perform urgent capacity check and identify largest directories/files under `./transcoder-data`. | Emergency cleanup/archive, then add durable capacity and retention policies. |
+| `BitRiverIngestFailureRateHigh` | Ingest failure ratio exceeds 5% for 10 minutes. | Compare `bitriver_ingest_failures_total` by operation; inspect recent ingest API calls and dependency health in `/api/status`. | Repair failing operation path (credentials/network), retry failed ingest workflows, and confirm failure ratio drops. |
+| `BitRiverTranscoderFailuresHigh` | Transcoder fail ratio exceeds 5% for 10 minutes. | Inspect transcoder logs for ffmpeg exits, missing inputs, or permission issues; verify CPU/memory and `./transcoder-data` free space. | Restart/recover transcoder workers, fix input or codec config issues, and rebalance workload/capacity. |
 
 ## Resource sizing + kernel tuning
 
