@@ -1,0 +1,64 @@
+{{- if .Values.backups.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "bitriver-live.fullname" . }}-postgres-backup
+  labels:
+    {{- include "bitriver-live.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.backups.schedule | quote }}
+  successfulJobsHistoryLimit: {{ .Values.backups.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.backups.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "bitriver-live.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: postgres-backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: postgres-backup
+              image: {{ .Values.images.postgres }}:{{ .Values.tags.postgres }}
+              imagePullPolicy: {{ .Values.imagePullPolicy }}
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "bitriver-live.fullname" . }}-secrets
+                      key: BITRIVER_POSTGRES_PASSWORD
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "bitriver-live.fullname" . }}-secrets
+                      key: BITRIVER_POSTGRES_USER
+                - name: POSTGRES_DB
+                  value: {{ .Values.env.BITRIVER_POSTGRES_DB | quote }}
+                - name: AWS_ACCESS_KEY_ID
+                  value: {{ .Values.backups.objectStorage.accessKeyId | quote }}
+                - name: AWS_SECRET_ACCESS_KEY
+                  value: {{ .Values.backups.objectStorage.secretAccessKey | quote }}
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  apk add --no-cache coreutils gzip aws-cli >/dev/null
+                  ts="$(date -u +%Y%m%dT%H%M%SZ)"
+                  file="/tmp/bitriver-postgres-${ts}.sql.gz"
+                  pg_dump -h {{ include "bitriver-live.fullname" . }}-postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner --no-privileges | gzip -c > "$file"
+                  sha256sum "$file" > "$file.sha256"
+
+                  if [ "{{ .Values.backups.objectStorage.enabled }}" = "true" ]; then
+                    endpoint="{{ .Values.backups.objectStorage.endpoint }}"
+                    args="--region {{ .Values.backups.objectStorage.region }}"
+                    if [ -n "$endpoint" ]; then
+                      args="$args --endpoint-url $endpoint"
+                    fi
+                    # shellcheck disable=SC2086
+                    aws s3 cp "$file" "s3://{{ .Values.backups.objectStorage.bucket }}/{{ .Values.backups.objectStorage.prefix }}/$(basename "$file")" $args
+                    # shellcheck disable=SC2086
+                    aws s3 cp "$file.sha256" "s3://{{ .Values.backups.objectStorage.bucket }}/{{ .Values.backups.objectStorage.prefix }}/$(basename "$file").sha256" $args
+                  fi
+{{- end }}

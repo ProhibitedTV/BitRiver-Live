@@ -222,57 +222,66 @@ Postgres is the system of record for channels, users, recordings metadata, and a
 `postgres`, and the bundled `.env` defines `BITRIVER_POSTGRES_DB`, `BITRIVER_POSTGRES_USER`, and
 `BITRIVER_POSTGRES_PASSWORD`.
 
-### Backup with `pg_dump`
+### Recovery targets and drill cadence
 
-1. Ensure the stack is running so `postgres` is healthy.
-2. Run `pg_dump` inside the container and copy the archive to the host:
+Use these defaults unless compliance or customer SLAs demand stricter controls:
 
-```bash
-mkdir -p ./backups
+- **RPO target:** 24 hours (nightly logical backup).
+- **RTO target:** 2 hours (restore latest backup, run smoke checks, re-point API).
+- **Restore drill cadence:** at least once every 30 days and after any schema-heavy release.
 
-docker compose exec -T postgres \
-  pg_dump -U "$BITRIVER_POSTGRES_USER" \
-  -d "$BITRIVER_POSTGRES_DB" \
-  -F c \
-  -f /tmp/bitriver-live.backup
+Record each drill with backup timestamp, restore timestamp, smoke query results, and operator sign-off.
 
-docker compose cp postgres:/tmp/bitriver-live.backup \
-  ./backups/bitriver-live-$(date +%F).backup
-```
+### Scheduled backup, pruning, and object upload scripts
 
-If you prefer to run `pg_dump` from a workstation or a job runner, point it at the same DSN the API uses (`postgres:5432`
-inside Compose, or the host port if you enable the `postgres-host` profile with
-`docker compose --profile postgres-host up -d`).
+The repository includes operator scripts under `scripts/`:
 
-### Restore with `pg_restore`
+- `./scripts/backup-postgres.sh`: creates a gzip-compressed logical backup (`pg_dump`), writes a SHA256 checksum, and can upload to S3-compatible object storage.
+- `./scripts/prune-backups.sh`: prunes local backup files older than the configured retention window while preserving a minimum backup count.
+- `./scripts/restore-postgres.sh`: restore rehearsal helper that loads a backup into an isolated database and runs smoke queries.
 
-1. Stop the API so it does not write to Postgres during the restore:
+Common environment variables:
 
-```bash
-docker compose stop bitriver-live
-```
+- `BITRIVER_BACKUP_DIR` (default `./data/backups/postgres`)
+- `BITRIVER_BACKUP_RETENTION_DAYS` (default `14`)
+- `BITRIVER_BACKUP_KEEP_MIN` (default `3`)
+- `BITRIVER_BACKUP_UPLOAD_ENABLED` (`1` to enable upload)
+- `BITRIVER_BACKUP_UPLOAD_BUCKET`, `BITRIVER_BACKUP_UPLOAD_PREFIX`, `BITRIVER_BACKUP_UPLOAD_REGION`, `BITRIVER_BACKUP_UPLOAD_ENDPOINT`
 
-2. Copy the backup archive into the `postgres` container and restore it:
+### Run backup and prune manually
 
 ```bash
-docker compose cp ./backups/bitriver-live-2024-01-01.backup postgres:/tmp/bitriver-live.backup
+BITRIVER_BACKUP_POSTGRES_HOST=postgres \
+BITRIVER_BACKUP_POSTGRES_USER="$BITRIVER_POSTGRES_USER" \
+BITRIVER_BACKUP_POSTGRES_PASSWORD="$BITRIVER_POSTGRES_PASSWORD" \
+BITRIVER_BACKUP_POSTGRES_DB="$BITRIVER_POSTGRES_DB" \
+./scripts/backup-postgres.sh
 
-docker compose exec -T postgres \
-  pg_restore --clean --if-exists --create \
-  -U "$BITRIVER_POSTGRES_USER" \
-  -d postgres \
-  /tmp/bitriver-live.backup
+./scripts/prune-backups.sh
 ```
 
-3. Start the API again and confirm it reconnects:
+### Restore rehearsal (isolated DB + smoke queries)
+
+Use the latest backup in `BITRIVER_BACKUP_DIR`:
 
 ```bash
-docker compose start bitriver-live
+BITRIVER_BACKUP_POSTGRES_HOST=postgres \
+BITRIVER_BACKUP_POSTGRES_USER="$BITRIVER_POSTGRES_USER" \
+BITRIVER_BACKUP_POSTGRES_PASSWORD="$BITRIVER_POSTGRES_PASSWORD" \
+./scripts/restore-postgres.sh
 ```
 
-If you restore into a new database name or host, update `BITRIVER_LIVE_POSTGRES_DSN` in `.env` before restarting the stack.
-Re-run the `postgres-migrations` helper if you restore into an empty database without schema (the helper is wired into
-Compose and will apply `deploy/migrations/*.sql` on the next `docker compose up -d`).
+Or pass an explicit archive path:
+
+```bash
+./scripts/restore-postgres.sh ./data/backups/postgres/bitriver-postgres-20240101T020000Z.sql.gz
+```
+
+### Scheduling examples (Compose + Kubernetes + Helm)
+
+- Compose cron override example: `deploy/docker-compose.backups.yml`
+- Kubernetes CronJob examples: `deploy/kubernetes/postgres-backup-cronjob.yaml`
+- Helm scheduling hooks: set `backups.enabled=true` and configure `backups.schedule` / `backups.objectStorage.*` in `deploy/helm/bitriver-live/values.yaml`
 
 ## Redis persistence and recovery
 
