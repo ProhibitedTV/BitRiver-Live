@@ -163,6 +163,9 @@ The CLI pre-populates `.env` so Docker Compose can bind each service to predicta
 | `BITRIVER_LIVE_POSTGRES_DSN` | `postgres://bitriver:bitriver@postgres:5432/bitriver?sslmode=disable` | Connection string the API uses for its primary database. Combine with `BITRIVER_POSTGRES_HOST_PORT` (default `5432`, profile `postgres-host`) to publish Postgres to the host. |
 | `BITRIVER_LIVE_METRICS_TOKEN` | `metrics-collector-token` | Bearer token required to scrape `/metrics`; production mode refuses to start without this or `BITRIVER_LIVE_METRICS_ALLOW_NETWORKS`. Pair with `BITRIVER_LIVE_METRICS_ALLOW_NETWORKS` (comma-separated CIDRs/IPs) to restrict scrapes to trusted networks. |
 | `BITRIVER_LIVE_RATE_LOGIN_LIMIT` | `10` | Required in production. Caps login attempts per IP within the configured window; raise cautiously. Override `BITRIVER_LIVE_RATE_LOGIN_WINDOW` (default `1m`) to stretch the window if you need fewer attempts over more time. |
+| `BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS` | `false` | Keeps rate-limit IP detection on the direct remote address by default. Only enable when every upstream reverse proxy is explicitly pinned in `BITRIVER_LIVE_RATE_TRUSTED_PROXIES`. |
+| `BITRIVER_LIVE_RATE_TRUSTED_PROXIES` | *(empty)* | Comma-separated trusted proxy CIDRs/IPs allowed to supply `X-Forwarded-*`/`Forwarded` client metadata. Use concrete source ranges (for example Cloudflare egress blocks plus your Nginx Proxy Manager subnet), not `0.0.0.0/0`. |
+| `BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS` | `false` | Controls whether upload media URLs trust forwarded `Host`/`Proto` headers. Keep disabled unless your proxy chain is pinned and sanitizes forwarded headers. |
 | `BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR` | `redis:6379` | Redis endpoint for chat fan-out; update alongside `BITRIVER_REDIS_PASSWORD` if you run Redis outside Compose. |
 
 The bundled Compose Postgres defaults to `sslmode=disable` because the container does not ship with TLS certificates. For external or managed databases, require TLS by setting `sslmode=require` or `sslmode=verify-full` on `BITRIVER_LIVE_POSTGRES_DSN` and `BITRIVER_LIVE_SESSION_POSTGRES_DSN`. When Postgres uses a private CA, mount the certificate into the Compose bundle (for example, `./certs/postgres-ca.pem`) and append `sslrootcert=/certs/postgres-ca.pem` to the DSNs; the validators refuse `sslmode=disable` unless the DSN points at the local Compose `postgres` service.
@@ -174,6 +177,26 @@ requires non-zero login throttling via `BITRIVER_LIVE_RATE_LOGIN_LIMIT`
 so password spray protection is never skipped.
 
 Common tweaks:
+
+Reverse-proxy trust guardrails:
+
+- Keep `BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS=false` and `BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS=false` unless you can pin proxy CIDRs/IPs in `BITRIVER_LIVE_RATE_TRUSTED_PROXIES`.
+- Enabling trust broadly (especially with `BITRIVER_LIVE_RATE_TRUSTED_PROXIES=0.0.0.0/0`) makes `X-Forwarded-*` headers spoofable and can let attackers bypass per-IP throttling or poison generated upload URLs.
+
+Practical proxy examples:
+
+- **Single reverse proxy in front of the API:**
+  ```dotenv
+  BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS=true
+  BITRIVER_LIVE_RATE_TRUSTED_PROXIES=10.0.10.5/32
+  BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS=true
+  ```
+- **Cloudflare + Nginx Proxy Manager chain:** trust both Cloudflare source ranges and the NPM private address/CIDR so only known hops can set forwarded headers.
+  ```dotenv
+  BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS=true
+  BITRIVER_LIVE_RATE_TRUSTED_PROXIES=173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,10.0.10.5/32
+  BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS=true
+  ```
 
 - **Change host ports:** Adjust the `*_PORT` values above (for example, move the API to `BITRIVER_LIVE_PORT=9090` or RTMP ingest to `BITRIVER_SRS_RTMP_PORT=1936`) and rerun `docker compose up -d`. Leave `BITRIVER_OME_SIGNALLING_PORT` empty when you want the host binding to track `BITRIVER_OME_SERVER_PORT`; set it explicitly only when the host port must differ from the value baked into `Server.xml`.
 - **Expose the SRS HTTP API for debugging:** Run `docker compose --profile srs-api up -d` (or `BITRIVER_COMPOSE_PROFILES=srs-api docker compose up -d`) to publish `BITRIVER_SRS_API_PORT` on the host. Keep the profile disabled in production and never expose the port to the public internet.

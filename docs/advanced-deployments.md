@@ -577,9 +577,34 @@ The HTTP server now enforces an optional global rate limit along with per-IP thr
 | `BITRIVER_LIVE_RATE_GLOBAL_BURST` | Optional burst size for the global limiter. |
 | `BITRIVER_LIVE_RATE_LOGIN_LIMIT` | Maximum login attempts per IP within the configured window. |
 | `BITRIVER_LIVE_RATE_LOGIN_WINDOW` | Rolling window (e.g. `2m`) for counting login attempts. |
+| `BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS` | Defaults to `false`. When enabled, login throttling can use forwarded client-IP headers (only from `BITRIVER_LIVE_RATE_TRUSTED_PROXIES`). |
+| `BITRIVER_LIVE_RATE_TRUSTED_PROXIES` | Comma-separated trusted proxy CIDRs/IPs allowed to supply `X-Forwarded-*`/`Forwarded` data for rate-limit IP resolution. |
+| `BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS` | Defaults to `false`. Controls whether upload URL generation trusts forwarded `Host`/`Proto` headers from trusted proxy hops. |
 | `BITRIVER_LIVE_RATE_REDIS_ADDR` | Redis address used to coordinate login throttling across replicas. |
 | `BITRIVER_LIVE_RATE_REDIS_PASSWORD` | Password for the Redis instance if required. |
 | `BITRIVER_LIVE_RATE_REDIS_TIMEOUT` | Timeout for Redis operations (`2s` by default). |
+
+Safe usage guidance:
+
+- Keep forwarded-header trust disabled unless you have pinned proxy CIDRs/IPs in `BITRIVER_LIVE_RATE_TRUSTED_PROXIES`.
+- For Cloudflare + Nginx Proxy Manager deployments, include both Cloudflare source ranges and your NPM private source CIDR/IP so only known hops are trusted.
+- Never trust broad ranges such as `0.0.0.0/0` or `::/0`; that makes `X-Forwarded-*` headers spoofable and weakens per-IP controls.
+
+Practical examples:
+
+- **Single reverse proxy (one Nginx/Traefik hop):**
+  ```dotenv
+  BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS=true
+  BITRIVER_LIVE_RATE_TRUSTED_PROXIES=10.0.10.5/32
+  BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS=true
+  ```
+
+- **Cloudflare + NPM chained proxies:**
+  ```dotenv
+  BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS=true
+  BITRIVER_LIVE_RATE_TRUSTED_PROXIES=173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,10.0.10.5/32
+  BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS=true
+  ```
 
 All state-changing API calls emit structured audit logs containing the authenticated user (when available), path, status code, and remote IP so you can feed them into `journalctl` or your preferred log pipeline.
 
