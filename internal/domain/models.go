@@ -122,6 +122,18 @@ type ClipExportParams struct {
 	EndSeconds   int
 }
 
+type ChatFilterCreateParams struct {
+	Kind    string
+	Pattern string
+	Enabled bool
+}
+
+type ChatFilterUpdate struct {
+	Kind    *string
+	Pattern *string
+	Enabled *bool
+}
+
 type TipCreateParams struct {
 	ChannelID      string
 	FromUserID     string

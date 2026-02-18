@@ -117,15 +117,13 @@ type ChatRetentionPolicy struct {
 	ModerationLogs time.Duration
 }
 
-// ChatFilterParams describes a moderation filter to enforce on chat messages.
-type ChatFilterParams struct {
+type chatFilterParams struct {
 	Kind    string
 	Pattern string
 	Enabled bool
 }
 
-// ChatFilterUpdate allows partial updates for existing chat filters.
-type ChatFilterUpdate struct {
+type chatFilterUpdate struct {
 	Kind    *string
 	Pattern *string
 	Enabled *bool

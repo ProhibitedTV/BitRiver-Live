@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bitriver-live/internal/domain"
 	"context"
 	"errors"
 	"fmt"
@@ -1185,11 +1186,12 @@ func (r *postgresRepository) ListChatFilters(channelID string) ([]models.ChatFil
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) CreateChatFilter(channelID string, params ChatFilterParams) (models.ChatFilter, error) {
+func (r *postgresRepository) CreateChatFilter(channelID string, params domain.ChatFilterCreateParams) (models.ChatFilter, error) {
 	if r == nil || r.pool == nil {
 		return models.ChatFilter{}, ErrPostgresUnavailable
 	}
-	kind, pattern, err := normalizeChatFilter(params.Kind, params.Pattern)
+	storageParams := chatFilterParams{Kind: params.Kind, Pattern: params.Pattern, Enabled: params.Enabled}
+	kind, pattern, err := normalizeChatFilter(storageParams.Kind, storageParams.Pattern)
 	if err != nil {
 		return models.ChatFilter{}, err
 	}
@@ -1210,7 +1212,7 @@ func (r *postgresRepository) CreateChatFilter(channelID string, params ChatFilte
 			return err
 		}
 
-		if _, err := tx.Exec(ctx, "INSERT INTO chat_filters (id, channel_id, kind, pattern, enabled, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)", id, channelID, kind, pattern, params.Enabled, now, now); err != nil {
+		if _, err := tx.Exec(ctx, "INSERT INTO chat_filters (id, channel_id, kind, pattern, enabled, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)", id, channelID, kind, pattern, storageParams.Enabled, now, now); err != nil {
 			return fmt.Errorf("insert chat filter: %w", err)
 		}
 
@@ -1223,7 +1225,7 @@ func (r *postgresRepository) CreateChatFilter(channelID string, params ChatFilte
 			ChannelID: channelID,
 			Kind:      kind,
 			Pattern:   pattern,
-			Enabled:   params.Enabled,
+			Enabled:   storageParams.Enabled,
 			CreatedAt: now,
 			UpdatedAt: now,
 		}
@@ -1243,10 +1245,11 @@ func (r *postgresRepository) CreateChatFilter(channelID string, params ChatFilte
 // Transactions/connections: uses repository-managed PostgreSQL connections/transactions and
 // does not mutate caller arguments or perform automatic retries unless explicitly coded below.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (r *postgresRepository) UpdateChatFilter(id string, update ChatFilterUpdate) (models.ChatFilter, error) {
+func (r *postgresRepository) UpdateChatFilter(id string, update domain.ChatFilterUpdate) (models.ChatFilter, error) {
 	if r == nil || r.pool == nil {
 		return models.ChatFilter{}, ErrPostgresUnavailable
 	}
+	storageUpdate := chatFilterUpdate{Kind: update.Kind, Pattern: update.Pattern, Enabled: update.Enabled}
 	updated := models.ChatFilter{}
 	updateErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
@@ -1270,14 +1273,14 @@ func (r *postgresRepository) UpdateChatFilter(id string, update ChatFilterUpdate
 
 		kind := existing.Kind
 		pattern := existing.Pattern
-		if update.Kind != nil {
-			kind = *update.Kind
+		if storageUpdate.Kind != nil {
+			kind = *storageUpdate.Kind
 		}
-		if update.Pattern != nil {
-			pattern = *update.Pattern
+		if storageUpdate.Pattern != nil {
+			pattern = *storageUpdate.Pattern
 		}
-		if update.Enabled != nil {
-			existing.Enabled = *update.Enabled
+		if storageUpdate.Enabled != nil {
+			existing.Enabled = *storageUpdate.Enabled
 		}
 
 		normalizedKind, normalizedPattern, err := normalizeChatFilter(kind, pattern)

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bitriver-live/internal/domain"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -1023,14 +1024,20 @@ func (s *Storage) ListChatFilters(channelID string) ([]models.ChatFilter, error)
 }
 
 // CreateChatFilter registers a new auto-moderation filter for a channel.
-func (s *Storage) CreateChatFilter(channelID string, params ChatFilterParams) (models.ChatFilter, error) {
+func (s *Storage) CreateChatFilter(channelID string, params domain.ChatFilterCreateParams) (models.ChatFilter, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	storageParams := chatFilterParams{
+		Kind:    params.Kind,
+		Pattern: params.Pattern,
+		Enabled: params.Enabled,
+	}
 
 	if _, ok := s.data.Channels[channelID]; !ok {
 		return models.ChatFilter{}, fmt.Errorf("channel %s not found", channelID)
 	}
-	kind, pattern, err := normalizeChatFilter(params.Kind, params.Pattern)
+	kind, pattern, err := normalizeChatFilter(storageParams.Kind, storageParams.Pattern)
 	if err != nil {
 		return models.ChatFilter{}, err
 	}
@@ -1044,7 +1051,7 @@ func (s *Storage) CreateChatFilter(channelID string, params ChatFilterParams) (m
 		ChannelID: channelID,
 		Kind:      kind,
 		Pattern:   pattern,
-		Enabled:   params.Enabled,
+		Enabled:   storageParams.Enabled,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -1060,9 +1067,15 @@ func (s *Storage) CreateChatFilter(channelID string, params ChatFilterParams) (m
 }
 
 // UpdateChatFilter updates an existing auto-moderation filter.
-func (s *Storage) UpdateChatFilter(id string, update ChatFilterUpdate) (models.ChatFilter, error) {
+func (s *Storage) UpdateChatFilter(id string, update domain.ChatFilterUpdate) (models.ChatFilter, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	storageUpdate := chatFilterUpdate{
+		Kind:    update.Kind,
+		Pattern: update.Pattern,
+		Enabled: update.Enabled,
+	}
 
 	filter, ok := s.data.ChatFilters[id]
 	if !ok {
@@ -1070,14 +1083,14 @@ func (s *Storage) UpdateChatFilter(id string, update ChatFilterUpdate) (models.C
 	}
 	kind := filter.Kind
 	pattern := filter.Pattern
-	if update.Kind != nil {
-		kind = *update.Kind
+	if storageUpdate.Kind != nil {
+		kind = *storageUpdate.Kind
 	}
-	if update.Pattern != nil {
-		pattern = *update.Pattern
+	if storageUpdate.Pattern != nil {
+		pattern = *storageUpdate.Pattern
 	}
-	if update.Enabled != nil {
-		filter.Enabled = *update.Enabled
+	if storageUpdate.Enabled != nil {
+		filter.Enabled = *storageUpdate.Enabled
 	}
 	normalizedKind, normalizedPattern, err := normalizeChatFilter(kind, pattern)
 	if err != nil {

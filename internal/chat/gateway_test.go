@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/chat"
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/storage"
 )
@@ -144,7 +145,7 @@ func TestGatewayAutoModBlocksMessage(t *testing.T) {
 	viewer := mustCreateUser(t, store, storage.CreateUserParams{DisplayName: "viewer", Email: "viewer@example.com"})
 	channel := mustCreateChannel(t, store, owner.ID, "Main")
 
-	_, err := store.CreateChatFilter(channel.ID, storage.ChatFilterParams{
+	_, err := store.CreateChatFilter(channel.ID, domain.ChatFilterCreateParams{
 		Kind:    "word",
 		Pattern: "spoiler",
 		Enabled: true,

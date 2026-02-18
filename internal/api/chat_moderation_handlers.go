@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"bitriver-live/internal/chat"
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/models"
-	"bitriver-live/internal/storage"
 )
 
 // Chat request/response DTOs.
@@ -542,7 +542,7 @@ func (h *Handler) handleChatFilters(actor models.User, channel models.Channel, r
 				WriteRequestError(w, ValidationError("at least one field is required"))
 				return
 			}
-			update := storage.ChatFilterUpdate{
+			update := domain.ChatFilterUpdate{
 				Kind:    req.Kind,
 				Pattern: req.Pattern,
 				Enabled: req.Enabled,
@@ -584,7 +584,7 @@ func (h *Handler) handleChatFilters(actor models.User, channel models.Channel, r
 		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
-		filter, err := h.chatModerationService().CreateChatFilter(channel.ID, storage.ChatFilterParams{
+		filter, err := h.chatModerationService().CreateChatFilter(channel.ID, domain.ChatFilterCreateParams{
 			Kind:    req.Kind,
 			Pattern: req.Pattern,
 			Enabled: req.Enabled,
