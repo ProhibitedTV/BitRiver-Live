@@ -21,6 +21,7 @@ import (
 	"bitriver-live/internal/api"
 	"bitriver-live/internal/auth"
 	"bitriver-live/internal/chat"
+	"bitriver-live/internal/models"
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/storage"
 	"bitriver-live/web"
@@ -73,6 +74,17 @@ func findSessionCookie(t *testing.T, cookies []*http.Cookie) *http.Cookie {
 		}
 	}
 	t.Fatalf("session cookie not found: %v", cookies)
+	return nil
+}
+
+func findCSRFCookie(t *testing.T, cookies []*http.Cookie) *http.Cookie {
+	t.Helper()
+	for _, cookie := range cookies {
+		if cookie.Name == csrfCookieName {
+			return cookie
+		}
+	}
+	t.Fatalf("csrf cookie not found: %v", cookies)
 	return nil
 }
 
@@ -301,6 +313,164 @@ func TestAuthMiddlewareRejectsInvalidSession(t *testing.T) {
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status 401, got %d", rec.Code)
+	}
+}
+
+func TestCSRFMiddlewareAcceptsValidToken(t *testing.T) {
+	handler, store := newTestHandler(t)
+	user, err := store.CreateUser(storage.CreateUserParams{DisplayName: "CSRF", Email: "csrf@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser error: %v", err)
+	}
+	sessionToken, _, err := handler.Sessions.Create(user.ID)
+	if err != nil {
+		t.Fatalf("Create session: %v", err)
+	}
+
+	nextCalled := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nextCalled = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/users", nil)
+	req.AddCookie(&http.Cookie{Name: "bitriver_session", Value: sessionToken})
+	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: "csrf-token"})
+	req.Header.Set(csrfHeaderName, "csrf-token")
+
+	rec := httptest.NewRecorder()
+	authMiddleware(handler, csrfMiddleware(handler, nil, nil, next)).ServeHTTP(rec, req)
+
+	if !nextCalled {
+		t.Fatal("expected next handler to be called")
+	}
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected status 204, got %d", rec.Code)
+	}
+}
+
+func TestCSRFMiddlewareRejectsMissingOrInvalidToken(t *testing.T) {
+	handler, store := newTestHandler(t)
+	user, err := store.CreateUser(storage.CreateUserParams{DisplayName: "CSRF", Email: "csrf-invalid@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser error: %v", err)
+	}
+	sessionToken, _, err := handler.Sessions.Create(user.ID)
+	if err != nil {
+		t.Fatalf("Create session: %v", err)
+	}
+
+	t.Run("missing token", func(t *testing.T) {
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("unexpected call to next handler")
+		})
+		req := httptest.NewRequest(http.MethodDelete, "/api/users/123", nil)
+		req.AddCookie(&http.Cookie{Name: "bitriver_session", Value: sessionToken})
+		rec := httptest.NewRecorder()
+
+		authMiddleware(handler, csrfMiddleware(handler, nil, nil, next)).ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("expected status 403, got %d", rec.Code)
+		}
+		_ = findCSRFCookie(t, rec.Result().Cookies())
+	})
+
+	t.Run("invalid token", func(t *testing.T) {
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("unexpected call to next handler")
+		})
+		req := httptest.NewRequest(http.MethodPatch, "/api/users/123", strings.NewReader(`{}`))
+		req.AddCookie(&http.Cookie{Name: "bitriver_session", Value: sessionToken})
+		req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: "valid"})
+		req.Header.Set(csrfHeaderName, "invalid")
+		rec := httptest.NewRecorder()
+
+		authMiddleware(handler, csrfMiddleware(handler, nil, nil, next)).ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("expected status 403, got %d", rec.Code)
+		}
+	})
+}
+
+func TestCSRFMiddlewareSkipsSafeMethodsAndBearerAuth(t *testing.T) {
+	handler, store := newTestHandler(t)
+	user, err := store.CreateUser(storage.CreateUserParams{DisplayName: "CSRF", Email: "csrf-safe@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser error: %v", err)
+	}
+	sessionToken, _, err := handler.Sessions.Create(user.ID)
+	if err != nil {
+		t.Fatalf("Create session: %v", err)
+	}
+
+	t.Run("safe method", func(t *testing.T) {
+		nextCalled := false
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			nextCalled = true
+			w.WriteHeader(http.StatusOK)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+		req.AddCookie(&http.Cookie{Name: "bitriver_session", Value: sessionToken})
+		rec := httptest.NewRecorder()
+
+		authMiddleware(handler, csrfMiddleware(handler, nil, nil, next)).ServeHTTP(rec, req)
+
+		if !nextCalled {
+			t.Fatal("expected next handler to be called")
+		}
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", rec.Code)
+		}
+	})
+
+	t.Run("bearer auth", func(t *testing.T) {
+		nextCalled := false
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			nextCalled = true
+			w.WriteHeader(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/users", nil)
+		req.Header.Set("Authorization", "Bearer "+sessionToken)
+		rec := httptest.NewRecorder()
+
+		authMiddleware(handler, csrfMiddleware(handler, nil, nil, next)).ServeHTTP(rec, req)
+
+		if !nextCalled {
+			t.Fatal("expected next handler to be called")
+		}
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("expected status 204, got %d", rec.Code)
+		}
+	})
+}
+
+func TestCSRFMiddlewareAllowsWebhookAndSRSPaths(t *testing.T) {
+	handler, _ := newTestHandler(t)
+
+	nextCalled := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nextCalled = true
+		w.WriteHeader(http.StatusAccepted)
+	})
+
+	for _, path := range []string{"/api/ingest/srs-hook", "/api/payments/webhooks/stripe"} {
+		t.Run(path, func(t *testing.T) {
+			nextCalled = false
+			req := httptest.NewRequest(http.MethodPost, path, nil)
+			req = req.WithContext(api.ContextWithUser(req.Context(), models.User{ID: "svc"}))
+			rec := httptest.NewRecorder()
+
+			csrfMiddleware(handler, nil, nil, next).ServeHTTP(rec, req)
+
+			if !nextCalled {
+				t.Fatal("expected next handler to be called")
+			}
+			if rec.Code != http.StatusAccepted {
+				t.Fatalf("expected status 202, got %d", rec.Code)
+			}
+		})
 	}
 }
 
