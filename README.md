@@ -51,7 +51,7 @@ All of them execute the same backend pipeline:
 
 ### Known sharp edges (documentation honesty)
 
-- This repository contains roadmap/planning docs (`docs/product-roadmap.md`, `docs/cross-platform-plan.md`) alongside production runbooks. Treat roadmap items as non-binding.
+- This repository separates docs into three zones: Product (stable run/deploy docs), Ops/Runbooks (operational truth), and Labs (experimental planning docs under `docs/labs/`). Labs content is non-binding and not part of shipped guarantees.
 - First-time operators still need to validate host-level Docker capacity and networking; quickstart cannot fix host misconfiguration automatically.
 
 ## 3) Quick start (real)
@@ -212,6 +212,7 @@ go run ./cmd/bitriver ome render --force --env-file ./.env
 - Architecture contract: [`docs/architecture.md`](docs/architecture.md)
 - Production release process: [`docs/production-release.md`](docs/production-release.md)
 - Manual frontend QA checklist: [`web/manual-qa.md`](web/manual-qa.md)
+- Labs (planning / non-binding): [`docs/labs/README.md`](docs/labs/README.md), [`docs/labs/product-roadmap.md`](docs/labs/product-roadmap.md), [`docs/labs/cross-platform-plan.md`](docs/labs/cross-platform-plan.md)
 
 ## Development and test commands
 
@@ -233,4 +234,4 @@ npm run test:playwright
 
 ## NOTE
 
-If you find behavior in code that conflicts with docs, treat code as the immediate source of truth for runtime behavior and open a docs follow-up issue/PR. This repository has both operational docs and planning docs; when in doubt, use the operational runbooks under `docs/` that reference the current Compose pipeline.
+If you find behavior in code that conflicts with docs, treat code as the immediate source of truth for runtime behavior and open a docs follow-up issue/PR. This repository has Product/Ops docs and Labs planning docs; when in doubt, follow operational runbooks in `docs/` and treat `docs/labs/` as planning/non-binding context.

@@ -1,3 +1,5 @@
+> **Planning / Non-binding:** This roadmap describes possible future product direction and experiments. It is not a release commitment.
+
 ## 1. Core Product Scope
 
 ### Creators
