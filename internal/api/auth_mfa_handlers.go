@@ -121,7 +121,7 @@ func (h *Handler) MFAVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, _, tokenUsed, err := h.resolveMFAChallenge(req.Token, r)
+	userID, _, tokenUsed, challengeToken, err := h.resolveMFAChallenge(req.Token, r)
 	if err != nil {
 		WriteError(w, http.StatusUnauthorized, err)
 		return
@@ -171,7 +171,7 @@ func (h *Handler) MFAVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if tokenUsed {
-		if err := h.mfaChallengeManager().Revoke(req.Token); err != nil {
+		if err := h.mfaChallengeManager().Revoke(challengeToken); err != nil {
 			WriteError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -185,6 +185,7 @@ func (h *Handler) MFAVerify(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusUnauthorized, fmt.Errorf("account not found"))
 			return
 		}
+		h.clearMFAChallengeCookie(w, r)
 		h.setSessionCookie(w, r, token, expiresAt)
 		WriteJSON(w, http.StatusOK, newAuthResponse(user, expiresAt))
 		return
@@ -247,8 +248,9 @@ func (h *Handler) MFADisable(w http.ResponseWriter, r *http.Request) {
 
 // resolveMFAUser resolves mfauser from flags and environment values, returning validation errors when incompatible settings are provided.
 func (h *Handler) resolveMFAUser(token string, r *http.Request) (models.User, error) {
-	if strings.TrimSpace(token) != "" {
-		userID, _, ok, err := h.mfaChallengeManager().Validate(token)
+	challengeToken := mfaChallengeTokenFromRequest(r, token)
+	if challengeToken != "" {
+		userID, _, ok, err := h.mfaChallengeManager().Validate(challengeToken)
 		if err != nil {
 			return models.User{}, err
 		}
@@ -269,22 +271,23 @@ func (h *Handler) resolveMFAUser(token string, r *http.Request) (models.User, er
 }
 
 // resolveMFAChallenge resolves mfachallenge from flags and environment values, returning validation errors when incompatible settings are provided.
-func (h *Handler) resolveMFAChallenge(token string, r *http.Request) (string, time.Time, bool, error) {
-	if strings.TrimSpace(token) != "" {
-		userID, expiresAt, ok, err := h.mfaChallengeManager().Validate(token)
+func (h *Handler) resolveMFAChallenge(token string, r *http.Request) (string, time.Time, bool, string, error) {
+	challengeToken := mfaChallengeTokenFromRequest(r, token)
+	if challengeToken != "" {
+		userID, expiresAt, ok, err := h.mfaChallengeManager().Validate(challengeToken)
 		if err != nil {
-			return "", time.Time{}, true, err
+			return "", time.Time{}, true, "", err
 		}
 		if !ok {
-			return "", time.Time{}, true, auth.ErrInvalidMFAChallenge
+			return "", time.Time{}, true, "", auth.ErrInvalidMFAChallenge
 		}
-		return userID, expiresAt, true, nil
+		return userID, expiresAt, true, challengeToken, nil
 	}
 	user, _, err := h.AuthenticateRequest(r)
 	if err != nil {
-		return "", time.Time{}, false, err
+		return "", time.Time{}, false, "", err
 	}
-	return user.ID, time.Time{}, false, nil
+	return user.ID, time.Time{}, false, "", nil
 }
 
 // prepareMFAEnrollment performs prepare mfaenrollment and propagates validation or dependency failures to the caller.

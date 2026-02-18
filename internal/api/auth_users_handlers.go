@@ -246,8 +246,9 @@ func (h *Handler) oauthCallback(w http.ResponseWriter, r *http.Request, provider
 			http.Redirect(w, r, appendQueryParam(returnPath, "oauth", "error"), http.StatusSeeOther)
 			return
 		}
+		h.setMFAChallengeCookie(w, r, token)
 		requiresEnrollment := !exists || !settings.Enabled
-		redirectTarget := buildMFARedirect(returnPath, token, requiresEnrollment)
+		redirectTarget := buildMFARedirect(returnPath, requiresEnrollment)
 		http.Redirect(w, r, redirectTarget, http.StatusSeeOther)
 		return
 	}
@@ -309,14 +310,11 @@ func appendQueryParam(path, key, value string) string {
 }
 
 // buildMFARedirect builds mfaredirect from runtime state used by downstream handlers.
-func buildMFARedirect(returnPath, token string, enroll bool) string {
+func buildMFARedirect(returnPath string, enroll bool) string {
 	destination := "/signup"
 	values := url.Values{}
 	if returnPath != "" {
 		values.Set("next", returnPath)
-	}
-	if token != "" {
-		values.Set("mfaToken", token)
 	}
 	if enroll {
 		values.Set("mfa", "enroll")
@@ -383,7 +381,7 @@ func ExtractToken(r *http.Request) string {
 			return strings.TrimSpace(parts[1])
 		}
 	}
-	if cookie, err := r.Cookie("bitriver_session"); err == nil {
+	if cookie, err := r.Cookie(sessionCookieName); err == nil {
 		return cookie.Value
 	}
 	return ""

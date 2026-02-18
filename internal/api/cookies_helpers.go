@@ -6,6 +6,12 @@ import (
 	"time"
 )
 
+const (
+	sessionCookieName      = "bitriver_session"
+	mfaChallengeCookieName = "bitriver_mfa_challenge"
+	mfaChallengeCookieTTL  = 10 * time.Minute
+)
+
 type SessionCookieSecureMode int
 
 const (
@@ -56,7 +62,7 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expi
 		maxAge = 0
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name:     "bitriver_session",
+		Name:     sessionCookieName,
 		Value:    token,
 		Path:     "/",
 		Expires:  expires.UTC(),
@@ -81,7 +87,7 @@ func (h *Handler) RefreshSessionCookie(w http.ResponseWriter, r *http.Request, t
 // clearSessionCookie performs clear session cookie and propagates validation or dependency failures to the caller.
 func clearSessionCookie(w http.ResponseWriter, r *http.Request, policy SessionCookiePolicy) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     "bitriver_session",
+		Name:     sessionCookieName,
 		Value:    "",
 		Path:     "/",
 		Expires:  time.Unix(0, 0).UTC(),
@@ -100,6 +106,53 @@ func ClearSessionCookie(w http.ResponseWriter, r *http.Request, policy SessionCo
 // ClearSessionCookie removes the BitRiver session cookie from the response using the handler's configured policy.
 func (h *Handler) ClearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	clearSessionCookie(w, r, h.sessionCookiePolicy())
+}
+
+// setMFAChallengeCookie stores a short-lived cookie carrying the MFA challenge token.
+func (h *Handler) setMFAChallengeCookie(w http.ResponseWriter, r *http.Request, token string) {
+	if token == "" {
+		return
+	}
+	expires := time.Now().Add(mfaChallengeCookieTTL).UTC()
+	http.SetCookie(w, &http.Cookie{
+		Name:     mfaChallengeCookieName,
+		Value:    token,
+		Path:     "/api/auth/mfa",
+		Expires:  expires,
+		MaxAge:   int(mfaChallengeCookieTTL.Seconds()),
+		HttpOnly: true,
+		Secure:   h.sessionCookiePolicy().secure(r),
+		SameSite: h.sessionCookiePolicy().SameSite,
+	})
+}
+
+// clearMFAChallengeCookie removes the MFA challenge cookie from the response.
+func (h *Handler) clearMFAChallengeCookie(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     mfaChallengeCookieName,
+		Value:    "",
+		Path:     "/api/auth/mfa",
+		Expires:  time.Unix(0, 0).UTC(),
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   h.sessionCookiePolicy().secure(r),
+		SameSite: h.sessionCookiePolicy().SameSite,
+	})
+}
+
+// mfaChallengeTokenFromRequest extracts the MFA challenge token from body token or cookie.
+func mfaChallengeTokenFromRequest(r *http.Request, bodyToken string) string {
+	if token := strings.TrimSpace(bodyToken); token != "" {
+		return token
+	}
+	if r == nil {
+		return ""
+	}
+	cookie, err := r.Cookie(mfaChallengeCookieName)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(cookie.Value)
 }
 
 // isSecureRequest reports whether secure request is satisfied for the current input.
