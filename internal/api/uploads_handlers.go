@@ -125,7 +125,7 @@ func (h *Handler) Uploads(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusBadRequest, fmt.Errorf("channelId is required"))
 			return
 		}
-		channel, exists := h.Store.GetChannel(channelID)
+		channel, exists := h.uploadsService().GetChannel(channelID)
 		if !exists {
 			WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID))
 			return
@@ -134,7 +134,7 @@ func (h *Handler) Uploads(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
-		uploads, err := h.Store.ListUploads(channelID)
+		uploads, err := h.uploadsService().ListUploads(channelID)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
@@ -169,12 +169,12 @@ func (h *Handler) UploadByID(w http.ResponseWriter, r *http.Request) {
 	}
 	parts := strings.Split(path, "/")
 	uploadID := strings.TrimSpace(parts[0])
-	upload, ok := h.Store.GetUpload(uploadID)
+	upload, ok := h.uploadsService().GetUpload(uploadID)
 	if !ok {
 		WriteError(w, http.StatusNotFound, fmt.Errorf("upload %s not found", uploadID))
 		return
 	}
-	channel, exists := h.Store.GetChannel(upload.ChannelID)
+	channel, exists := h.uploadsService().GetChannel(upload.ChannelID)
 	if !exists {
 		WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", upload.ChannelID))
 		return
@@ -205,7 +205,7 @@ func (h *Handler) UploadByID(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
-		if err := h.Store.DeleteUpload(uploadID); err != nil {
+		if err := h.uploadsService().DeleteUpload(uploadID); err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
@@ -330,7 +330,7 @@ func (h *Handler) createUploadEntry(r *http.Request, actor models.User, req crea
 	if channelID == "" {
 		return models.Upload{}, http.StatusBadRequest, fmt.Errorf("channelId is required")
 	}
-	channel, exists := h.Store.GetChannel(channelID)
+	channel, exists := h.uploadsService().GetChannel(channelID)
 	if !exists {
 		return models.Upload{}, http.StatusNotFound, fmt.Errorf("channel %s not found", channelID)
 	}
@@ -357,7 +357,7 @@ func (h *Handler) createUploadEntry(r *http.Request, actor models.User, req crea
 		Metadata:    metadata,
 		PlaybackURL: playbackURL,
 	}
-	upload, err := h.Store.CreateUpload(params)
+	upload, err := h.uploadsService().CreateUpload(params)
 	if err != nil {
 		return models.Upload{}, http.StatusBadRequest, err
 	}
@@ -407,7 +407,7 @@ func (h *Handler) attachMediaToUpload(r *http.Request, upload models.Upload, bas
 	}
 	storedName, err := h.persistUploadMedia(upload.ID, media)
 	if err != nil {
-		_ = h.Store.DeleteUpload(upload.ID)
+		_ = h.uploadsService().DeleteUpload(upload.ID)
 		return models.Upload{}, err
 	}
 	metadata := cloneStringMap(baseMetadata)
@@ -426,9 +426,9 @@ func (h *Handler) attachMediaToUpload(r *http.Request, upload models.Upload, bas
 	metadata["mediaToken"] = token
 	metadata["sourceUrl"] = h.uploadMediaURL(r, upload.ID, token)
 	update := storage.UploadUpdate{Metadata: metadata}
-	if _, err := h.Store.UpdateUpload(upload.ID, update); err != nil {
+	if _, err := h.uploadsService().UpdateUpload(upload.ID, update); err != nil {
 		_ = os.Remove(filepath.Join(h.uploadMediaDir(), storedName))
-		_ = h.Store.DeleteUpload(upload.ID)
+		_ = h.uploadsService().DeleteUpload(upload.ID)
 		return models.Upload{}, err
 	}
 	upload.Metadata = metadata

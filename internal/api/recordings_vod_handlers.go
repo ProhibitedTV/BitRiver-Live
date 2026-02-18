@@ -203,14 +203,14 @@ func (h *Handler) Recordings(w http.ResponseWriter, r *http.Request) {
 
 	includeUnpublished := false
 	if actor, ok := UserFromContext(r.Context()); ok {
-		if channel, exists := h.Store.GetChannel(channelID); exists {
+		if channel, exists := h.recordingsService().GetChannel(channelID); exists {
 			if channel.OwnerID == actor.ID || actor.HasRole(roleAdmin) {
 				includeUnpublished = true
 			}
 		}
 	}
 
-	recordings, err := h.Store.ListRecordings(channelID, includeUnpublished)
+	recordings, err := h.recordingsService().ListRecordings(channelID, includeUnpublished)
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, err)
 		return
@@ -233,12 +233,12 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 	recordingID := strings.TrimSpace(parts[0])
 	remaining := parts[1:]
 
-	recording, ok := h.Store.GetRecording(recordingID)
+	recording, ok := h.recordingsService().GetRecording(recordingID)
 	if !ok {
 		WriteError(w, http.StatusNotFound, fmt.Errorf("recording %s not found", recordingID))
 		return
 	}
-	channel, channelExists := h.Store.GetChannel(recording.ChannelID)
+	channel, channelExists := h.recordingsService().GetChannel(recording.ChannelID)
 	if !channelExists {
 		WriteError(w, http.StatusNotFound, fmt.Errorf("channel %s not found", recording.ChannelID))
 		return
@@ -265,7 +265,7 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 				WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 				return
 			}
-			updated, err := h.Store.PublishRecording(recordingID)
+			updated, err := h.recordingsService().PublishRecording(recordingID)
 			if err != nil {
 				WriteError(w, http.StatusBadRequest, err)
 				return
@@ -285,7 +285,7 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 						return
 					}
 				}
-				clips, err := h.Store.ListClipExports(recordingID)
+				clips, err := h.recordingsService().ListClipExports(recordingID)
 				if err != nil {
 					WriteError(w, http.StatusBadRequest, err)
 					return
@@ -313,7 +313,7 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 					WriteError(w, http.StatusBadRequest, fmt.Errorf("title is required"))
 					return
 				}
-				clip, err := h.Store.CreateClipExport(recordingID, storage.ClipExportParams{
+				clip, err := h.recordingsService().CreateClipExport(recordingID, storage.ClipExportParams{
 					Title:        title,
 					StartSeconds: req.StartSeconds,
 					EndSeconds:   req.EndSeconds,
@@ -351,7 +351,7 @@ func (h *Handler) RecordingByID(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
-		if err := h.Store.DeleteRecording(recordingID); err != nil {
+		if err := h.recordingsService().DeleteRecording(recordingID); err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
