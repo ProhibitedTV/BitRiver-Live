@@ -32,3 +32,50 @@ func TestLoadSRSControllerFromEnvValidation(t *testing.T) {
 		t.Fatalf("expected upstream validation error, got %v", err)
 	}
 }
+
+func TestLoadServerDatastoreFromEnv(t *testing.T) {
+	env := Environment{values: map[string]string{
+		"BITRIVER_LIVE_POSTGRES_DSN":         "postgres://primary",
+		"BITRIVER_LIVE_SESSION_POSTGRES_DSN": "postgres://session",
+		"DATABASE_URL":                       "postgres://database-url",
+	}}
+	cfg := LoadServerDatastoreFromEnv(env)
+	if cfg.PostgresDSN != "postgres://primary" {
+		t.Fatalf("expected BITRIVER_LIVE_POSTGRES_DSN precedence, got %q", cfg.PostgresDSN)
+	}
+	if cfg.SessionPostgresDSN != "postgres://session" {
+		t.Fatalf("expected session dsn override, got %q", cfg.SessionPostgresDSN)
+	}
+}
+
+func TestLoadServerDatastoreFromEnvFallbacks(t *testing.T) {
+	env := Environment{values: map[string]string{
+		"DATABASE_URL": "postgres://database-url",
+	}}
+	cfg := LoadServerDatastoreFromEnv(env)
+	if cfg.PostgresDSN != "postgres://database-url" {
+		t.Fatalf("expected DATABASE_URL fallback, got %q", cfg.PostgresDSN)
+	}
+	if cfg.SessionPostgresDSN != cfg.PostgresDSN {
+		t.Fatalf("expected session DSN to fallback to primary DSN, got %q", cfg.SessionPostgresDSN)
+	}
+}
+
+func TestResolveServerDatastoreConfigFlagPrecedence(t *testing.T) {
+	env := Environment{values: map[string]string{
+		"BITRIVER_LIVE_POSTGRES_DSN":         "postgres://env-primary",
+		"BITRIVER_LIVE_SESSION_POSTGRES_DSN": "postgres://env-session",
+	}}
+	cfg := ResolveServerDatastoreConfig("postgres://flag-primary", "", env)
+	if cfg.PostgresDSN != "postgres://flag-primary" {
+		t.Fatalf("expected postgres flag precedence, got %q", cfg.PostgresDSN)
+	}
+	if cfg.SessionPostgresDSN != "postgres://env-session" {
+		t.Fatalf("expected session env value when session flag unset, got %q", cfg.SessionPostgresDSN)
+	}
+
+	cfg = ResolveServerDatastoreConfig("postgres://flag-primary", "postgres://flag-session", env)
+	if cfg.SessionPostgresDSN != "postgres://flag-session" {
+		t.Fatalf("expected session flag precedence, got %q", cfg.SessionPostgresDSN)
+	}
+}

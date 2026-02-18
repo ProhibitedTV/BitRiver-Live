@@ -59,6 +59,28 @@ type SRSControllerConfig struct {
 	Token    string
 }
 
+type ServerDatastoreConfig struct {
+	PostgresDSN        string
+	SessionPostgresDSN string
+}
+
+func LoadServerDatastoreFromEnv(env Environment) ServerDatastoreConfig {
+	postgresDSN := firstNonEmpty(strings.TrimSpace(env.Get("BITRIVER_LIVE_POSTGRES_DSN")), strings.TrimSpace(env.Get("DATABASE_URL")))
+	return ServerDatastoreConfig{
+		PostgresDSN:        postgresDSN,
+		SessionPostgresDSN: firstNonEmpty(strings.TrimSpace(env.Get("BITRIVER_LIVE_SESSION_POSTGRES_DSN")), postgresDSN),
+	}
+}
+
+func ResolveServerDatastoreConfig(postgresDSNFlag, sessionPostgresDSNFlag string, env Environment) ServerDatastoreConfig {
+	envCfg := LoadServerDatastoreFromEnv(env)
+	resolvedPostgresDSN := firstNonEmpty(strings.TrimSpace(postgresDSNFlag), envCfg.PostgresDSN)
+	return ServerDatastoreConfig{
+		PostgresDSN:        resolvedPostgresDSN,
+		SessionPostgresDSN: firstNonEmpty(strings.TrimSpace(sessionPostgresDSNFlag), envCfg.SessionPostgresDSN, resolvedPostgresDSN),
+	}
+}
+
 func LoadSRSControllerFromEnv(env Environment) (SRSControllerConfig, error) {
 	bind := firstNonEmpty(strings.TrimSpace(env.Get("SRS_CONTROLLER_BIND")), ":1985")
 	upstreamRaw := firstNonEmpty(strings.TrimSpace(env.Get("SRS_CONTROLLER_UPSTREAM")), "http://localhost:1985/api/")

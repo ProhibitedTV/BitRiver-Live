@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -22,7 +21,6 @@ import (
 	"bitriver-live/internal/server"
 	"bitriver-live/internal/service"
 	"bitriver-live/internal/storage"
-	"bitriver-live/internal/stringsutil"
 )
 
 type ServerRuntimeInput struct {
@@ -61,7 +59,7 @@ type ServerRuntimeInput struct {
 	TLS                      server.TLSConfig
 
 	StorageDriverFlag       string
-	PostgresDSNFlag         string
+	PostgresDSN             string
 	PostgresMaxConns        int
 	PostgresMinConns        int
 	PostgresMaxConnLifetime time.Duration
@@ -71,7 +69,7 @@ type ServerRuntimeInput struct {
 	PostgresAppName         string
 
 	SessionStoreDriverFlag string
-	SessionPostgresDSNFlag string
+	SessionPostgresDSN     string
 	SessionTTL             time.Duration
 	SessionIdleTimeout     time.Duration
 
@@ -183,7 +181,7 @@ func NewServerRuntime(in ServerRuntimeInput) (*ServerRuntime, error) {
 		ingestController = controller
 		options = append(options, storage.WithIngestController(controller))
 	}
-	postgresDefaultDSN := strings.TrimSpace(stringsutil.FirstNonEmpty(in.PostgresDSNFlag, os.Getenv("BITRIVER_LIVE_POSTGRES_DSN"), os.Getenv("DATABASE_URL")))
+	postgresDefaultDSN := strings.TrimSpace(in.PostgresDSN)
 	objectCfg := storage.ObjectStorageConfig{Endpoint: in.ObjectEndpoint, Region: in.ObjectRegion, AccessKey: in.ObjectAccessKey, SecretKey: in.ObjectSecretKey, Bucket: in.ObjectBucket, UseSSL: in.ObjectUseSSL, Prefix: in.ObjectPrefix, PublicEndpoint: in.ObjectPublicEndpoint, LifecycleDays: in.ObjectLifecycleDays}
 	if objectCfg.Endpoint != "" || objectCfg.Bucket != "" || objectCfg.PublicEndpoint != "" || objectCfg.Prefix != "" || objectCfg.Region != "" || objectCfg.AccessKey != "" || objectCfg.SecretKey != "" || objectCfg.LifecycleDays > 0 || objectCfg.UseSSL {
 		options = append(options, storage.WithObjectStorage(objectCfg))
@@ -193,7 +191,7 @@ func NewServerRuntime(in ServerRuntimeInput) (*ServerRuntime, error) {
 		return nil, err
 	}
 
-	sessionDSN := strings.TrimSpace(stringsutil.FirstNonEmpty(in.SessionPostgresDSNFlag, os.Getenv("BITRIVER_LIVE_SESSION_POSTGRES_DSN"), postgresDefaultDSN))
+	sessionDSN := strings.TrimSpace(in.SessionPostgresDSN)
 	var sessionStore auth.SessionStore
 	var mfaStore auth.MFAChallengeStore
 	var sessionCloser func(context.Context) error
