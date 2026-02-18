@@ -93,6 +93,7 @@ Wrapper equivalents (scripts are thin shims around the same CLI command):
 
 ### First login / verification
 
+- Verify install: `bitriver smoke` (or `go run ./cmd/bitriver smoke`).
 - Open the control centre URL shown by quickstart.
 - Use generated/admin credentials from quickstart output.
 - Confirm health in the Overview dashboard (or query `/api/status`).
@@ -206,6 +207,7 @@ go run ./cmd/bitriver ome render --force --env-file ./.env
 ## Additional documentation
 
 - Quickstart details: [`docs/quickstart.md`](docs/quickstart.md)
+- Smoke test command: [`docs/smoke-test.md`](docs/smoke-test.md)
 - Advanced deployments and reverse proxies: [`docs/advanced-deployments.md`](docs/advanced-deployments.md), [`docs/reverse-proxy-npm-cloudflare.md`](docs/reverse-proxy-npm-cloudflare.md)
 - Operations/backups/restores: [`docs/operations.md`](docs/operations.md)
 - Upgrades: [`docs/upgrades.md`](docs/upgrades.md)
