@@ -22,6 +22,7 @@ import (
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/observability/metrics"
+	"bitriver-live/internal/service"
 	"bitriver-live/internal/storage"
 )
 
@@ -50,7 +51,8 @@ func newTestHandler(t *testing.T) (*Handler, *storage.Storage) {
 		t.Fatalf("NewStorage error: %v", err)
 	}
 	sessions := auth.NewSessionManager(24 * time.Hour)
-	return NewHandler(store, sessions), store
+	useCases := service.NewStoreUseCases(store)
+	return NewHandler(Dependencies{Sessions: sessions, AuthUsersService: useCases, ChannelsService: useCases, UploadsService: useCases, RecordingsService: useCases, ChatModerationService: useCases, LegalService: service.NewLegalService(store), StreamsService: useCases, ProfilesService: useCases, AnalyticsService: useCases, SystemService: useCases, MonetizationService: useCases, PaymentService: service.NewPaymentService(store, nil)}), store
 }
 
 type ingestUnavailableRepo struct {
@@ -209,7 +211,7 @@ func TestProfilesList(t *testing.T) {
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
-	handler.Store = profileRepositoryWithOrphan{Repository: handler.Store, orphan: orphan}
+	handler.ProfilesService = profileRepositoryWithOrphan{Repository: store, orphan: orphan}
 
 	assertProfilesResponse := func(body []byte) map[string]profileViewResponse {
 		var payload []profileViewResponse
@@ -1693,7 +1695,7 @@ func TestHealthIncludesDependencyStatuses(t *testing.T) {
 func TestHealthReturnsOKStatusCodeWhenIngestIsDegraded(t *testing.T) {
 	handler, store := newTestHandler(t)
 	failingServices := []ingest.HealthStatus{{Component: "ovenmediaengine", Status: "error", Detail: "unreachable"}}
-	handler.Store = ingestHealthRepository{Repository: store, health: failingServices}
+	handler.SystemService = ingestHealthRepository{Repository: store, health: failingServices}
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
@@ -1732,7 +1734,7 @@ func TestHealthReturnsOKStatusCodeWhenIngestIsDegraded(t *testing.T) {
 func TestReadyIgnoresIngestHealth(t *testing.T) {
 	handler, store := newTestHandler(t)
 	failingServices := []ingest.HealthStatus{{Component: "transcoder", Status: "error", Detail: "offline"}}
-	handler.Store = ingestHealthRepository{Repository: store, health: failingServices}
+	handler.SystemService = ingestHealthRepository{Repository: store, health: failingServices}
 
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	rec := httptest.NewRecorder()
@@ -1758,9 +1760,9 @@ func TestReadyIgnoresIngestHealth(t *testing.T) {
 }
 
 func TestHealthDegradedWhenRepositoryPingFails(t *testing.T) {
-	handler, _ := newTestHandler(t)
-	failing := failingRepository{Repository: handler.Store, err: errors.New("datastore unreachable")}
-	handler.Store = failing
+	handler, store := newTestHandler(t)
+	failing := failingRepository{Repository: store, err: errors.New("datastore unreachable")}
+	handler.SystemService = failing
 	handler.RateLimiter = pingFunc(func(context.Context) error { return nil })
 	handler.ChatQueue = pingFunc(func(context.Context) error { return nil })
 
@@ -1807,9 +1809,9 @@ func TestHealthDegradedWhenRepositoryPingFails(t *testing.T) {
 }
 
 func TestReadyDegradedWhenRepositoryPingFails(t *testing.T) {
-	handler, _ := newTestHandler(t)
-	failing := failingRepository{Repository: handler.Store, err: errors.New("datastore unreachable")}
-	handler.Store = failing
+	handler, store := newTestHandler(t)
+	failing := failingRepository{Repository: store, err: errors.New("datastore unreachable")}
+	handler.SystemService = failing
 
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	rec := httptest.NewRecorder()
@@ -1878,7 +1880,7 @@ func TestStatusAggregatesReadinessAndIngest(t *testing.T) {
 	handler, store := newTestHandler(t)
 	handler.RateLimiter = pingFunc(func(context.Context) error { return nil })
 	handler.ChatQueue = pingFunc(func(context.Context) error { return nil })
-	handler.Store = ingestHealthRepository{
+	handler.SystemService = ingestHealthRepository{
 		Repository: store,
 		health: []ingest.HealthStatus{
 			{Component: "srs", Status: "ok"},
@@ -1921,7 +1923,7 @@ func TestStatusAggregatesReadinessAndIngest(t *testing.T) {
 func TestStatusSurfacesFailuresAndRemediation(t *testing.T) {
 	handler, store := newTestHandler(t)
 	failing := failingRepository{Repository: store, err: errors.New("datastore unreachable")}
-	handler.Store = ingestHealthRepository{
+	handler.SystemService = ingestHealthRepository{
 		Repository: failing,
 		health:     []ingest.HealthStatus{{Component: "transcoder", Status: "error", Detail: "worker stopped"}},
 	}
@@ -2047,7 +2049,7 @@ func TestChannelStreamLifecycle(t *testing.T) {
 
 func TestChannelStreamEndpointsUnavailableWithoutIngest(t *testing.T) {
 	handler, store := newTestHandler(t)
-	handler.Store = ingestUnavailableRepo{Repository: store}
+	handler.StreamsService = ingestUnavailableRepo{Repository: store}
 
 	creator, err := store.CreateUser(storage.CreateUserParams{
 		DisplayName: "Streamer",
@@ -2135,7 +2137,8 @@ func TestSRSHookPublishAndUnpublish(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStorage: %v", err)
 	}
-	handler := NewHandler(store, auth.NewSessionManager(24*time.Hour))
+	useCases := service.NewStoreUseCases(store)
+	handler := NewHandler(Dependencies{Sessions: auth.NewSessionManager(24 * time.Hour), AuthUsersService: useCases, ChannelsService: useCases, UploadsService: useCases, RecordingsService: useCases, ChatModerationService: useCases, LegalService: service.NewLegalService(store), StreamsService: useCases, ProfilesService: useCases, AnalyticsService: useCases, SystemService: useCases, MonetizationService: useCases, PaymentService: service.NewPaymentService(store, nil)})
 	handler.SRSHookToken = "secret"
 	handler.DefaultRenditions = []string{"720p"}
 	creator, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Streamer", Email: "hook2@example.com", Roles: []string{"creator"}})
@@ -3106,7 +3109,7 @@ func TestChatFiltersAPI(t *testing.T) {
 	handler.RateLimiter = pingFunc(func(context.Context) error { return nil })
 	handler.ChatGateway = chat.NewGateway(chat.GatewayConfig{
 		Queue: chat.NewMemoryQueue(32),
-		Store: handler.Store,
+		Store: store,
 	})
 	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com", Roles: []string{"creator"}})
 	if err != nil {
@@ -3387,7 +3390,7 @@ func TestChannelPlaybackIncludesSubscriptionState(t *testing.T) {
 	if _, err := store.UpsertProfile(owner.ID, storage.ProfileUpdate{DonationAddresses: &donation}); err != nil {
 		t.Fatalf("UpsertProfile donation: %v", err)
 	}
-	if profile, ok := handler.Store.GetProfile(owner.ID); !ok || len(profile.DonationAddresses) == 0 {
+	if profile, ok := store.GetProfile(owner.ID); !ok || len(profile.DonationAddresses) == 0 {
 		t.Fatalf("handler store missing donation addresses for %s", owner.ID)
 	}
 	channel, err := store.CreateChannel(owner.ID, "Ambient", "music", nil)
@@ -4069,7 +4072,7 @@ func TestSRSHookStopsStreamAndRecordsPeak(t *testing.T) {
 	if session.EndedAt == nil {
 		t.Fatal("expected session endedAt to be set")
 	}
-	if _, live := handler.Store.CurrentStreamSession(channel.ID); live {
+	if _, live := store.CurrentStreamSession(channel.ID); live {
 		t.Fatal("expected stream session to be cleared")
 	}
 }
@@ -4100,7 +4103,7 @@ func TestSRSHookRejectsInvalidToken(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status 401, got %d", rec.Code)
 	}
-	if _, live := handler.Store.CurrentStreamSession(channel.ID); !live {
+	if _, live := store.CurrentStreamSession(channel.ID); !live {
 		t.Fatal("expected stream session to remain active")
 	}
 }

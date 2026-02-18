@@ -17,14 +17,12 @@ import (
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/observability/tracing"
 	"bitriver-live/internal/service"
-	"bitriver-live/internal/storage"
 )
 
 // Handler aggregates the HTTP endpoints exposed by the BitRiver API along with
 // the shared services they depend on, such as persistence, chat, and upload
 // processing.
 type Handler struct {
-	Store                 storage.Repository
 	Sessions              *auth.SessionManager
 	MFAChallenges         *auth.MFAChallengeManager
 	ChatGateway           *chat.Gateway
@@ -69,7 +67,6 @@ type healthPinger interface {
 // NewHandler wires the core API dependencies together, ensuring a session
 // manager is available by creating a default manager when none is provided.
 type Dependencies struct {
-	Store                 storage.Repository
 	Sessions              *auth.SessionManager
 	MFAChallenges         *auth.MFAChallengeManager
 	AuthUsersService      service.AuthUsersUseCase
@@ -86,33 +83,7 @@ type Dependencies struct {
 	PaymentService        *service.PaymentService
 }
 
-func NewHandler(arg interface{}, sessions ...*auth.SessionManager) *Handler {
-	deps := Dependencies{}
-	switch v := arg.(type) {
-	case Dependencies:
-		deps = v
-	case storage.Repository:
-		deps.Store = v
-		deps.AuthUsersService = deps.Store
-		deps.ChannelsService = deps.Store
-		deps.UploadsService = deps.Store
-		deps.RecordingsService = deps.Store
-		deps.ChatModerationService = deps.Store
-		deps.StreamsService = deps.Store
-		deps.ProfilesService = deps.Store
-		deps.AnalyticsService = service.NewStoreUseCases(deps.Store)
-		deps.SystemService = deps.Store
-		deps.MonetizationService = deps.Store
-		deps.LegalService = service.NewLegalService(v)
-		deps.PaymentService = service.NewPaymentService(v, slog.Default())
-		if len(sessions) > 0 {
-			deps.Sessions = sessions[0]
-		}
-	default:
-		if len(sessions) > 0 {
-			deps.Sessions = sessions[0]
-		}
-	}
+func NewHandler(deps Dependencies) *Handler {
 	if deps.Sessions == nil {
 		deps.Sessions = auth.NewSessionManager(0)
 	}
@@ -120,7 +91,6 @@ func NewHandler(arg interface{}, sessions ...*auth.SessionManager) *Handler {
 		deps.MFAChallenges = auth.NewMFAChallengeManager(0)
 	}
 	return &Handler{
-		Store:                 deps.Store,
 		Sessions:              deps.Sessions,
 		MFAChallenges:         deps.MFAChallenges,
 		DefaultRenditions:     []string{"1080p", "720p", "480p"},
@@ -146,79 +116,46 @@ func NewHandler(arg interface{}, sessions ...*auth.SessionManager) *Handler {
 // sessionManager performs session manager and propagates validation or dependency failures to the caller.
 
 func (h *Handler) authUsersService() service.AuthUsersUseCase {
-	if h.AuthUsersService == nil {
-		h.AuthUsersService = h.Store
-	}
 	return h.AuthUsersService
 }
 
 func (h *Handler) channelsService() service.ChannelsDirectoryUseCase {
-	if h.ChannelsService == nil {
-		h.ChannelsService = h.Store
-	}
 	return h.ChannelsService
 }
 
 func (h *Handler) uploadsService() service.UploadsUseCase {
-	if h.UploadsService == nil {
-		h.UploadsService = h.Store
-	}
 	return h.UploadsService
 }
 
 func (h *Handler) recordingsService() service.RecordingsVODUseCase {
-	if h.RecordingsService == nil {
-		h.RecordingsService = h.Store
-	}
 	return h.RecordingsService
 }
 
 func (h *Handler) chatModerationService() service.ChatModerationUseCase {
-	if h.Store != nil {
-		return service.NewStoreUseCases(h.Store)
-	}
 	return h.ChatModerationService
 }
 
 func (h *Handler) legalService() service.LegalComplianceUseCase {
-	if h.Store != nil {
-		return service.NewLegalService(h.Store)
-	}
 	return h.LegalService
 }
 
 func (h *Handler) streamsService() service.StreamsUseCase {
-	if h.Store != nil {
-		return service.NewStoreUseCases(h.Store)
-	}
 	return h.StreamsService
 }
 
 func (h *Handler) profilesService() service.ProfilesUseCase {
-	if h.Store != nil {
-		return service.NewStoreUseCases(h.Store)
-	}
 	return h.ProfilesService
 }
 
 func (h *Handler) analyticsService() service.AnalyticsUseCase {
-	if h.Store != nil {
-		return service.NewStoreUseCases(h.Store)
-	}
 	return h.AnalyticsService
 }
 
 func (h *Handler) systemService() service.SystemHealthUseCase {
-	if h.Store != nil {
-		return service.NewStoreUseCases(h.Store)
-	}
 	return h.SystemService
 }
 
 func (h *Handler) monetizationService() service.MonetizationUseCase {
-	if h.Store != nil {
-		return service.NewStoreUseCases(h.Store)
-	}
 	return h.MonetizationService
 }
 

@@ -59,7 +59,6 @@ func TestAnalyticsOverviewHandlerMapsServicePayload(t *testing.T) {
 		t.Fatalf("CreateUser admin: %v", err)
 	}
 
-	handler.Store = nil
 	handler.AnalyticsService = analyticsUseCaseStub{overview: service.AnalyticsOverview{
 		Summary: &service.AnalyticsSummary{StreamsLive: 2},
 		PerChannel: []service.AnalyticsChannelOverview{{

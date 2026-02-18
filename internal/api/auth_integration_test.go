@@ -9,15 +9,21 @@ import (
 	"time"
 
 	"bitriver-live/internal/auth"
+	"bitriver-live/internal/service"
 	"bitriver-live/internal/storage"
 	"bitriver-live/internal/testsupport"
 )
+
+func newAuthHandler(store storage.Repository, sessions *auth.SessionManager) *Handler {
+	useCases := service.NewStoreUseCases(store)
+	return NewHandler(Dependencies{Sessions: sessions, AuthUsersService: useCases, ChannelsService: useCases, UploadsService: useCases, RecordingsService: useCases, ChatModerationService: useCases, LegalService: service.NewLegalService(store), StreamsService: useCases, ProfilesService: useCases, AnalyticsService: useCases, SystemService: useCases, MonetizationService: useCases, PaymentService: service.NewPaymentService(store, nil)})
+}
 
 func TestAuthSessionLifecycle(t *testing.T) {
 	store := newTestStorage(t)
 	sessionStore := testsupport.NewSessionStoreStub()
 	sessions := auth.NewSessionManager(30*time.Minute, auth.WithStore(sessionStore))
-	handler := NewHandler(store, sessions)
+	handler := newAuthHandler(store, sessions)
 
 	user, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Admin", Email: "admin@example.com", Password: "password123", Roles: []string{"viewer"}})
 	if err != nil {
@@ -102,7 +108,7 @@ func TestAuthSessionIdleRefresh(t *testing.T) {
 	store := newTestStorage(t)
 	sessionStore := testsupport.NewSessionStoreStub()
 	sessions := auth.NewSessionManager(10*time.Second, auth.WithStore(sessionStore), auth.WithIdleTimeout(2*time.Second))
-	handler := NewHandler(store, sessions)
+	handler := newAuthHandler(store, sessions)
 
 	_, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Admin", Email: "admin@example.com", Password: "password123", Roles: []string{"viewer"}})
 	if err != nil {
@@ -157,7 +163,7 @@ func TestAuthInvalidCredentialsAndExpiredSession(t *testing.T) {
 	store := newTestStorage(t)
 	sessionStore := testsupport.NewSessionStoreStub()
 	sessions := auth.NewSessionManager(5*time.Minute, auth.WithStore(sessionStore))
-	handler := NewHandler(store, sessions)
+	handler := newAuthHandler(store, sessions)
 
 	user, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Viewer", Email: "viewer@example.com", Password: "password123"})
 	if err != nil {
@@ -198,7 +204,7 @@ func TestProtectedEndpointPermissions(t *testing.T) {
 	store := newTestStorage(t)
 	sessionStore := testsupport.NewSessionStoreStub()
 	sessions := auth.NewSessionManager(30*time.Minute, auth.WithStore(sessionStore))
-	handler := NewHandler(store, sessions)
+	handler := newAuthHandler(store, sessions)
 
 	admin, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Admin", Email: "admin@example.com", Password: "password123", Roles: []string{"admin"}})
 	if err != nil {

@@ -235,7 +235,7 @@ func NewServerRuntime(in ServerRuntimeInput) (*ServerRuntime, error) {
 		chatQueuePinger = pingable
 	}
 	useCases := service.NewStoreUseCases(store)
-	handler := NewHandler(HandlerConfig{Store: store, Sessions: sessions, MFAChallenges: mfaChallenges, AllowSelfSignup: in.AllowSelfSignup, ChatGateway: gateway, Setup: in.SetupManager, DefaultRenditions: ladderProfileNames(in.IngestConfig.LadderProfiles), SRSHookToken: in.IngestConfig.SRSToken, TrustForwardedHeaders: in.UploadsTrustForwarded, ChatQueue: chatQueuePinger, AuthUsersService: useCases, ChannelsService: useCases, UploadsService: useCases, RecordingsService: useCases, ChatModerationService: useCases, LegalService: service.NewLegalService(store), StreamsService: useCases, ProfilesService: useCases, AnalyticsService: useCases, SystemService: useCases, MonetizationService: useCases, PaymentService: service.NewPaymentService(store, in.Logger)})
+	handler := NewHandler(HandlerConfig{Sessions: sessions, MFAChallenges: mfaChallenges, AllowSelfSignup: in.AllowSelfSignup, ChatGateway: gateway, Setup: in.SetupManager, DefaultRenditions: ladderProfileNames(in.IngestConfig.LadderProfiles), SRSHookToken: in.IngestConfig.SRSToken, TrustForwardedHeaders: in.UploadsTrustForwarded, ChatQueue: chatQueuePinger, AuthUsersService: useCases, ChannelsService: useCases, UploadsService: useCases, RecordingsService: useCases, ChatModerationService: useCases, LegalService: service.NewLegalService(store), StreamsService: useCases, ProfilesService: useCases, AnalyticsService: useCases, SystemService: useCases, MonetizationService: useCases, PaymentService: service.NewPaymentService(store, in.Logger)})
 
 	var uploadProcessor *api.UploadProcessor
 	if ingestController != nil {

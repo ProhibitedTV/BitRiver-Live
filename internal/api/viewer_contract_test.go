@@ -15,6 +15,7 @@ import (
 	"bitriver-live/internal/auth"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/server"
+	"bitriver-live/internal/service"
 	"bitriver-live/internal/storage"
 	"bitriver-live/internal/testsupport"
 )
@@ -88,7 +89,8 @@ func TestViewerContractEndpoints(t *testing.T) {
 	repo, boot := newJSONRepository(t)
 	sessionStore := testsupport.NewSessionStoreStub()
 	sessions := auth.NewSessionManager(time.Hour, auth.WithStore(sessionStore))
-	handler := api.NewHandler(repo, sessions)
+	useCases := service.NewStoreUseCases(repo)
+	handler := api.NewHandler(api.Dependencies{Sessions: sessions, AuthUsersService: useCases, ChannelsService: useCases, UploadsService: useCases, RecordingsService: useCases, ChatModerationService: useCases, LegalService: service.NewLegalService(repo), StreamsService: useCases, ProfilesService: useCases, AnalyticsService: useCases, SystemService: useCases, MonetizationService: useCases, PaymentService: service.NewPaymentService(repo, nil)})
 
 	srv, err := server.New(handler, server.Config{})
 	if err != nil {
