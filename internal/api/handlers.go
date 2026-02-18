@@ -12,8 +12,8 @@ import (
 	"bitriver-live/internal/auth"
 	"bitriver-live/internal/auth/oauth"
 	"bitriver-live/internal/chat"
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
-	"bitriver-live/internal/models"
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/observability/tracing"
 	"bitriver-live/internal/service"
@@ -190,7 +190,7 @@ type sessionResponse struct {
 }
 
 // newSessionResponse builds and returns session response using the supplied dependencies.
-func newSessionResponse(session models.StreamSession) sessionResponse {
+func newSessionResponse(session domain.StreamSession) sessionResponse {
 	resp := sessionResponse{
 		ID:             session.ID,
 		ChannelID:      session.ChannelID,

@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"bitriver-live/internal/models"
+	"bitriver-live/internal/domain"
 )
 
 type requestLabel struct {
@@ -38,7 +38,7 @@ type Recorder struct {
 	activeStreams     atomic.Int64
 	chatEvents        map[string]uint64
 	monetizationCount map[string]uint64
-	monetizationTotal map[string]models.Money
+	monetizationTotal map[string]domain.Money
 	ingestAttempts    map[string]uint64
 	ingestFailures    map[string]uint64
 	transcoderEvents  map[TranscoderJobLabel]uint64
@@ -89,7 +89,7 @@ func New() *Recorder {
 		ingestHealthState: make(map[string]string),
 		chatEvents:        make(map[string]uint64),
 		monetizationCount: make(map[string]uint64),
-		monetizationTotal: make(map[string]models.Money),
+		monetizationTotal: make(map[string]domain.Money),
 		ingestAttempts:    make(map[string]uint64),
 		ingestFailures:    make(map[string]uint64),
 		transcoderEvents:  make(map[TranscoderJobLabel]uint64),
@@ -172,7 +172,7 @@ func (r *Recorder) ObserveChatEvent(event string) {
 }
 
 // ObserveMonetization tracks monetization events, capturing counts and total amounts.
-func (r *Recorder) ObserveMonetization(event string, amount models.Money) {
+func (r *Recorder) ObserveMonetization(event string, amount domain.Money) {
 	normalized := strings.ToLower(strings.TrimSpace(event))
 	if normalized == "" {
 		normalized = "unknown"
@@ -303,7 +303,7 @@ func (r *Recorder) Reset() {
 	r.ingestHealthState = make(map[string]string)
 	r.chatEvents = make(map[string]uint64)
 	r.monetizationCount = make(map[string]uint64)
-	r.monetizationTotal = make(map[string]models.Money)
+	r.monetizationTotal = make(map[string]domain.Money)
 	r.ingestAttempts = make(map[string]uint64)
 	r.ingestFailures = make(map[string]uint64)
 	r.transcoderEvents = make(map[TranscoderJobLabel]uint64)

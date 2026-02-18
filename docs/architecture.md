@@ -36,6 +36,14 @@ Rules:
 
 BitRiver Live has one deployment pipeline regardless of launcher: `deploy/docker-compose.yml` orchestrated with the repository-root `.env` lifecycle (generate/validate/render/bootstrap). Platform-specific launchers only change command syntax; they must not introduce a second operational runbook. See [`docs/quickstart.md`](quickstart.md#shared-backend-pipeline-all-launchers) for the shared stage sequence and [`docs/cross-platform-plan.md`](cross-platform-plan.md#canonical-production-deployment-path) for cross-platform rollout constraints.
 
+
+## Domain migration status
+
+- `internal/domain` now exists as the canonical home for core business entities.
+- During migration, `internal/domain` re-exports symbols from `internal/models` to keep incremental import changes safe.
+- The type-by-type mapping is tracked in `internal/domain/migration_map.md`.
+- New service and API code should import `internal/domain`; direct `internal/models` imports should be considered legacy and migrated opportunistically.
+
 ## Frontend boundary (Next.js viewer)
 
 - `web/viewer` is an independent UI delivery layer.

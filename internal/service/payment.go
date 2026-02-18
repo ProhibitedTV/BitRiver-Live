@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"bitriver-live/internal/models"
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/observability"
 	"bitriver-live/internal/storage"
 )
@@ -23,30 +23,30 @@ func NewPaymentService(repo storage.Repository, logger *slog.Logger) *PaymentSer
 	return &PaymentService{repo: repo, logger: logger}
 }
 
-func (s *PaymentService) CreatePendingTip(params storage.CreateTipParams) (models.Tip, error) {
+func (s *PaymentService) CreatePendingTip(params storage.CreateTipParams) (domain.Tip, error) {
 	if s == nil || s.repo == nil {
-		return models.Tip{}, fmt.Errorf("payment service unavailable")
+		return domain.Tip{}, fmt.Errorf("payment service unavailable")
 	}
 	return s.repo.CreateTip(params)
 }
 
-func (s *PaymentService) CreatePendingSubscription(params storage.CreateSubscriptionParams) (models.Subscription, error) {
+func (s *PaymentService) CreatePendingSubscription(params storage.CreateSubscriptionParams) (domain.Subscription, error) {
 	if s == nil || s.repo == nil {
-		return models.Subscription{}, fmt.Errorf("payment service unavailable")
+		return domain.Subscription{}, fmt.Errorf("payment service unavailable")
 	}
 	return s.repo.CreateSubscription(params)
 }
 
-func (s *PaymentService) ProcessWebhook(provider string, params storage.ProcessPaymentWebhookParams) (models.PaymentTransaction, error) {
+func (s *PaymentService) ProcessWebhook(provider string, params storage.ProcessPaymentWebhookParams) (domain.PaymentTransaction, error) {
 	if s == nil || s.repo == nil {
-		return models.PaymentTransaction{}, fmt.Errorf("payment service unavailable")
+		return domain.PaymentTransaction{}, fmt.Errorf("payment service unavailable")
 	}
 	params.Provider = provider
 	tx, err := s.repo.ProcessPaymentWebhook(params)
 	if err != nil {
-		return models.PaymentTransaction{}, err
+		return domain.PaymentTransaction{}, err
 	}
-	observability.RecordPaymentTransition(s.logger, strings.ToLower(tx.EntityType), models.PaymentStatePending, strings.ToLower(tx.Status), models.NewMoneyFromMinorUnits(0))
+	observability.RecordPaymentTransition(s.logger, strings.ToLower(tx.EntityType), domain.PaymentStatePending, strings.ToLower(tx.Status), domain.NewMoneyFromMinorUnits(0))
 	return tx, nil
 }
 
