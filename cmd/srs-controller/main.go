@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"bitriver-live/internal/config"
 	"bitriver-live/internal/observability/logging"
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/security/tokenauth"
@@ -24,8 +25,6 @@ import (
 )
 
 const (
-	defaultBind     = ":1985"
-	defaultUpstream = "http://localhost:1985/api/"
 	healthProbePath = "v1/versions"
 )
 
@@ -44,38 +43,23 @@ type controller struct {
 }
 
 func main() {
-	bind := envOrDefault("SRS_CONTROLLER_BIND", defaultBind)
+	env := config.LoadEnvironment()
+	runtimeCfg, err := config.LoadSRSControllerFromEnv(env)
+	if err != nil {
+		logger := logging.WithComponent(logging.Init(logging.Config{Format: string(logging.FormatJSON)}), "srs-controller")
+		logger.Error(err.Error())
+		os.Exit(1)
+	}
+	bind := runtimeCfg.Bind
 	logger := logging.WithComponent(logging.Init(logging.Config{Format: string(logging.FormatJSON)}), "srs-controller")
 	registry := metrics.NewRegistry()
-	upstreamRaw := strings.TrimSpace(os.Getenv("SRS_CONTROLLER_UPSTREAM"))
-	if upstreamRaw == "" {
-		upstreamRaw = defaultUpstream
-	}
-	upstream, err := url.Parse(upstreamRaw)
-	if err != nil {
-		logger.Error("parse upstream URL", "error", err)
-		os.Exit(1)
-	}
-	if upstream.Scheme == "" || upstream.Host == "" {
-		logger.Error("SRS_CONTROLLER_UPSTREAM must include scheme and host")
-		os.Exit(1)
-	}
-	if !strings.HasSuffix(upstream.Path, "/") {
-		upstream.Path += "/"
-	}
-
-	token := strings.TrimSpace(os.Getenv("BITRIVER_SRS_TOKEN"))
-	if token == "" {
-		logger.Error("BITRIVER_SRS_TOKEN must be set")
-		os.Exit(1)
-	}
 
 	ctrl := &controller{
-		token: token,
+		token: runtimeCfg.Token,
 		client: &http.Client{
 			Timeout: 15 * time.Second,
 		},
-		baseURL: upstream,
+		baseURL: runtimeCfg.Upstream,
 		logger:  logger,
 	}
 
@@ -312,12 +296,4 @@ func shouldSkipHeader(key string) bool {
 	default:
 		return false
 	}
-}
-
-func envOrDefault(key, fallback string) string {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
-	}
-	return value
 }

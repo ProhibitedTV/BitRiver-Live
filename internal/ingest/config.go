@@ -2,16 +2,14 @@ package ingest
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
-	"strconv"
-	"strings"
 	"time"
+
+	"bitriver-live/internal/config"
 )
 
-var ErrConfigDisabled = errors.New("ingest disabled: no configuration provided")
+var ErrConfigDisabled = config.ErrIngestConfigDisabled
 
 // MissingConfigError reports which environment variables are required to enable
 // the ingest controller.
@@ -20,7 +18,7 @@ type MissingConfigError struct {
 }
 
 func (e MissingConfigError) Error() string {
-	return fmt.Sprintf("missing ingest configuration: %s", strings.Join(e.Missing, ", "))
+	return config.MissingIngestConfigError{Missing: e.Missing}.Error()
 }
 
 // Config stores connectivity information for the ingest controller.
@@ -44,122 +42,26 @@ type Config struct {
 
 // LoadConfigFromEnv initialises a Config from environment variables.
 func LoadConfigFromEnv() (Config, error) {
-	cfg := Config{
-		SRSBaseURL:        strings.TrimSpace(os.Getenv("BITRIVER_SRS_API")),
-		SRSToken:          strings.TrimSpace(os.Getenv("BITRIVER_SRS_TOKEN")),
-		OMEBaseURL:        strings.TrimSpace(os.Getenv("BITRIVER_OME_API")),
-		OMEUsername:       strings.TrimSpace(os.Getenv("BITRIVER_OME_USERNAME")),
-		OMEPassword:       strings.TrimSpace(os.Getenv("BITRIVER_OME_PASSWORD")),
-		JobBaseURL:        strings.TrimSpace(os.Getenv("BITRIVER_TRANSCODER_API")),
-		JobToken:          strings.TrimSpace(os.Getenv("BITRIVER_TRANSCODER_TOKEN")),
-		HealthEndpoint:    strings.TrimSpace(os.Getenv("BITRIVER_INGEST_HEALTH")),
-		HealthTimeout:     2 * time.Second,
-		MaxBootAttempts:   3,
-		RetryInterval:     500 * time.Millisecond,
-		HTTPMaxAttempts:   30,
-		HTTPRetryInterval: 2 * time.Second,
-	}
-
-	if attempts := strings.TrimSpace(os.Getenv("BITRIVER_INGEST_MAX_BOOT_ATTEMPTS")); attempts != "" {
-		parsed, err := strconv.Atoi(attempts)
-		if err != nil {
-			return Config{}, fmt.Errorf("parse BITRIVER_INGEST_MAX_BOOT_ATTEMPTS: %w", err)
+	parsed, err := config.LoadIngestFromEnv(config.LoadEnvironment())
+	if err != nil {
+		if errors.Is(err, config.ErrIngestConfigDisabled) {
+			return fromConfig(parsed), ErrConfigDisabled
 		}
-		if parsed > 0 {
-			cfg.MaxBootAttempts = parsed
-		}
-	}
-
-	if interval := strings.TrimSpace(os.Getenv("BITRIVER_INGEST_RETRY_INTERVAL")); interval != "" {
-		parsed, err := time.ParseDuration(interval)
-		if err != nil {
-			return Config{}, fmt.Errorf("parse BITRIVER_INGEST_RETRY_INTERVAL: %w", err)
-		}
-		if parsed > 0 {
-			cfg.RetryInterval = parsed
-		}
-	}
-
-	if attempts := strings.TrimSpace(os.Getenv("BITRIVER_INGEST_HTTP_MAX_ATTEMPTS")); attempts != "" {
-		parsed, err := strconv.Atoi(attempts)
-		if err != nil {
-			return Config{}, fmt.Errorf("parse BITRIVER_INGEST_HTTP_MAX_ATTEMPTS: %w", err)
-		}
-		if parsed > 0 {
-			cfg.HTTPMaxAttempts = parsed
-		}
-	}
-
-	if interval := strings.TrimSpace(os.Getenv("BITRIVER_INGEST_HTTP_RETRY_INTERVAL")); interval != "" {
-		parsed, err := time.ParseDuration(interval)
-		if err != nil {
-			return Config{}, fmt.Errorf("parse BITRIVER_INGEST_HTTP_RETRY_INTERVAL: %w", err)
-		}
-		if parsed >= 0 {
-			cfg.HTTPRetryInterval = parsed
-		}
-	}
-
-	if timeout := strings.TrimSpace(os.Getenv("BITRIVER_INGEST_HEALTH_TIMEOUT")); timeout != "" {
-		parsed, err := time.ParseDuration(timeout)
-		if err != nil {
-			return Config{}, fmt.Errorf("parse BITRIVER_INGEST_HEALTH_TIMEOUT: %w", err)
-		}
-		if parsed > 0 {
-			cfg.HealthTimeout = parsed
-		}
-	}
-
-	if ladder := strings.TrimSpace(os.Getenv("BITRIVER_TRANSCODE_LADDER")); ladder != "" {
-		profiles, err := parseLadder(ladder)
-		if err != nil {
-			return Config{}, err
-		}
-		cfg.LadderProfiles = profiles
-	} else {
-		cfg.LadderProfiles = []Rendition{
-			{Name: "1080p", Bitrate: 6000},
-			{Name: "720p", Bitrate: 4000},
-			{Name: "480p", Bitrate: 2500},
-		}
-	}
-
-	if cfg.HealthEndpoint == "" {
-		cfg.HealthEndpoint = "/healthz"
-	}
-
-	if err := cfg.Validate(); err != nil {
-		if errors.Is(err, ErrConfigDisabled) {
-			return cfg, ErrConfigDisabled
+		var missing config.MissingIngestConfigError
+		if errors.As(err, &missing) {
+			return fromConfig(parsed), MissingConfigError{Missing: missing.Missing}
 		}
 		return Config{}, err
 	}
-
-	return cfg, nil
+	return fromConfig(parsed), nil
 }
 
-func parseLadder(spec string) ([]Rendition, error) {
-	entries := strings.Split(spec, ",")
-	results := make([]Rendition, 0, len(entries))
-	for _, entry := range entries {
-		trimmed := strings.TrimSpace(entry)
-		if trimmed == "" {
-			continue
-		}
-		parts := strings.Split(trimmed, ":")
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid rendition spec %q", trimmed)
-		}
-		bitrate, err := strconv.Atoi(parts[1])
-		if err != nil {
-			return nil, fmt.Errorf("invalid bitrate for rendition %q: %w", trimmed, err)
-		}
-		results = append(results, Rendition{Name: parts[0], Bitrate: bitrate})
+func fromConfig(parsed config.IngestConfig) Config {
+	profiles := make([]Rendition, 0, len(parsed.LadderProfiles))
+	for _, profile := range parsed.LadderProfiles {
+		profiles = append(profiles, Rendition{Name: profile.Name, Bitrate: profile.Bitrate})
 	}
-	if len(results) == 0 {
-		return nil, errors.New("no rendition profiles configured")
-	}
-	return results, nil
+	return Config{SRSBaseURL: parsed.SRSBaseURL, SRSToken: parsed.SRSToken, OMEBaseURL: parsed.OMEBaseURL, OMEUsername: parsed.OMEUsername, OMEPassword: parsed.OMEPassword, JobBaseURL: parsed.JobBaseURL, JobToken: parsed.JobToken, LadderProfiles: profiles, HealthEndpoint: parsed.HealthEndpoint, HealthTimeout: parsed.HealthTimeout, MaxBootAttempts: parsed.MaxBootAttempts, RetryInterval: parsed.RetryInterval, HTTPMaxAttempts: parsed.HTTPMaxAttempts, HTTPRetryInterval: parsed.HTTPRetryInterval}
 }
 
 // Enabled reports whether enough configuration has been provided to talk to
