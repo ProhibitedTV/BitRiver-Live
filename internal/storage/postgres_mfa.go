@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"bitriver-live/internal/models"
+	models "bitriver-live/internal/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

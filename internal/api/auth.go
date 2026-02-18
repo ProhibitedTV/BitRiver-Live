@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"bitriver-live/internal/models"
+	models "bitriver-live/internal/domain"
 )
 
 // contextKey is a private type used to avoid collisions when storing values

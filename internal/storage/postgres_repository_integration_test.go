@@ -18,8 +18,8 @@ import (
 	"unsafe"
 
 	"bitriver-live/internal/chat"
+	models "bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
-	"bitriver-live/internal/models"
 	"bitriver-live/internal/storage"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"

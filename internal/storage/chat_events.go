@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/chat"
-	"bitriver-live/internal/models"
+	models "bitriver-live/internal/domain"
 )
 
 // ApplyChatEvent mutates the in-memory dataset based on the supplied chat

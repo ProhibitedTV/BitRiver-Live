@@ -8,7 +8,6 @@ import (
 
 	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
-	"bitriver-live/internal/models"
 )
 
 const (
@@ -52,12 +51,12 @@ var (
 )
 
 type dataset struct {
-	Users               map[string]models.User                    `json:"users"`
-	MFASettings         map[string]models.MFASettings             `json:"mfaSettings"`
-	OAuthAccounts       map[string]models.OAuthAccount            `json:"oauthAccounts"`
-	Channels            map[string]models.Channel                 `json:"channels"`
-	StreamSessions      map[string]models.StreamSession           `json:"streamSessions"`
-	ChatMessages        map[string]models.ChatMessage             `json:"chatMessages"`
+	Users               map[string]domain.User                    `json:"users"`
+	MFASettings         map[string]domain.MFASettings             `json:"mfaSettings"`
+	OAuthAccounts       map[string]domain.OAuthAccount            `json:"oauthAccounts"`
+	Channels            map[string]domain.Channel                 `json:"channels"`
+	StreamSessions      map[string]domain.StreamSession           `json:"streamSessions"`
+	ChatMessages        map[string]domain.ChatMessage             `json:"chatMessages"`
 	ChatBans            map[string]map[string]time.Time           `json:"chatBans"`
 	ChatTimeouts        map[string]map[string]time.Time           `json:"chatTimeouts"`
 	ChatBanActors       map[string]map[string]string              `json:"chatBanActors"`
@@ -65,23 +64,23 @@ type dataset struct {
 	ChatTimeoutActors   map[string]map[string]string              `json:"chatTimeoutActors"`
 	ChatTimeoutReasons  map[string]map[string]string              `json:"chatTimeoutReasons"`
 	ChatTimeoutIssuedAt map[string]map[string]time.Time           `json:"chatTimeoutIssuedAt"`
-	ChatReports         map[string]models.ChatReport              `json:"chatReports"`
-	Appeals             map[string]models.Appeal                  `json:"appeals"`
-	AppealEvents        map[string][]models.AppealEvent           `json:"appealEvents"`
-	ChatFilters         map[string]models.ChatFilter              `json:"chatFilters"`
-	ChatAutoModActions  map[string]models.ChatAutoModAction       `json:"chatAutoModActions"`
-	Tips                map[string]models.Tip                     `json:"tips"`
-	Subscriptions       map[string]models.Subscription            `json:"subscriptions"`
-	PaymentTransactions map[string]models.PaymentTransaction      `json:"paymentTransactions"`
-	Profiles            map[string]models.Profile                 `json:"profiles"`
+	ChatReports         map[string]domain.ChatReport              `json:"chatReports"`
+	Appeals             map[string]domain.Appeal                  `json:"appeals"`
+	AppealEvents        map[string][]domain.AppealEvent           `json:"appealEvents"`
+	ChatFilters         map[string]domain.ChatFilter              `json:"chatFilters"`
+	ChatAutoModActions  map[string]domain.ChatAutoModAction       `json:"chatAutoModActions"`
+	Tips                map[string]domain.Tip                     `json:"tips"`
+	Subscriptions       map[string]domain.Subscription            `json:"subscriptions"`
+	PaymentTransactions map[string]domain.PaymentTransaction      `json:"paymentTransactions"`
+	Profiles            map[string]domain.Profile                 `json:"profiles"`
 	Follows             map[string]map[string]time.Time           `json:"follows"`
-	Recordings          map[string]models.Recording               `json:"recordings"`
-	Uploads             map[string]models.Upload                  `json:"uploads"`
-	ClipExports         map[string]models.ClipExport              `json:"clipExports"`
-	DMCACases           map[string]models.DMCACase                `json:"dmcaCases"`
-	DataSubjectRequests map[string]models.DataSubjectRequest      `json:"dataSubjectRequests"`
-	DataSubjectAudit    map[string][]models.DataSubjectAuditEvent `json:"dataSubjectAudit"`
-	LegalStateHistory   []models.LegalStateHistory                `json:"legalStateHistory"`
+	Recordings          map[string]domain.Recording               `json:"recordings"`
+	Uploads             map[string]domain.Upload                  `json:"uploads"`
+	ClipExports         map[string]domain.ClipExport              `json:"clipExports"`
+	DMCACases           map[string]domain.DMCACase                `json:"dmcaCases"`
+	DataSubjectRequests map[string]domain.DataSubjectRequest      `json:"dataSubjectRequests"`
+	DataSubjectAudit    map[string][]domain.DataSubjectAuditEvent `json:"dataSubjectAudit"`
+	LegalStateHistory   []domain.LegalStateHistory                `json:"legalStateHistory"`
 }
 
 type Storage struct {

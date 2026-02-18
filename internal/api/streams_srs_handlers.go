@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"bitriver-live/internal/domain"
-	"bitriver-live/internal/models"
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/observability/tracing"
 	"bitriver-live/internal/service"
@@ -23,10 +22,10 @@ func normalizeSRSAction(action string) string {
 }
 
 // channelForStream performs channel for stream and propagates validation or dependency failures to the caller.
-func (h *Handler) channelForStream(stream string) (models.Channel, bool) {
+func (h *Handler) channelForStream(stream string) (domain.Channel, bool) {
 	trimmed := strings.TrimSpace(stream)
 	if trimmed == "" || h.streamsService() == nil {
-		return models.Channel{}, false
+		return domain.Channel{}, false
 	}
 	channels := h.streamsService().ListChannels("", "")
 	for _, channel := range channels {
@@ -34,7 +33,7 @@ func (h *Handler) channelForStream(stream string) (models.Channel, bool) {
 			return channel, true
 		}
 	}
-	return models.Channel{}, false
+	return domain.Channel{}, false
 }
 
 type srsHookRequest struct {
@@ -173,7 +172,7 @@ func (h *Handler) SRSHook(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSRSPublish routes and serves srspublish requests, writing HTTP errors for invalid input or backend failures.
-func (h *Handler) handleSRSPublish(channel models.Channel, w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleSRSPublish(channel domain.Channel, w http.ResponseWriter, r *http.Request) {
 	if current, ok := h.streamsService().CurrentStreamSession(channel.ID); ok {
 		WriteJSON(w, http.StatusOK, srsHookResponse{Status: "ok", Action: "on_publish", ChannelID: channel.ID, SessionID: current.ID})
 		return
@@ -193,7 +192,7 @@ func (h *Handler) handleSRSPublish(channel models.Channel, w http.ResponseWriter
 }
 
 // handleSRSUnpublish routes and serves srsunpublish requests, writing HTTP errors for invalid input or backend failures.
-func (h *Handler) handleSRSUnpublish(channel models.Channel, peak int, tracker *srsViewerTracker, w http.ResponseWriter) {
+func (h *Handler) handleSRSUnpublish(channel domain.Channel, peak int, tracker *srsViewerTracker, w http.ResponseWriter) {
 	if _, ok := h.streamsService().CurrentStreamSession(channel.ID); ok {
 		session, err := h.streamsService().StopStream(channel.ID, peak)
 		if err != nil {
@@ -246,7 +245,7 @@ type renditionManifestResponse struct {
 }
 
 // handleStreamRoutes routes and serves stream routes requests, writing HTTP errors for invalid input or backend failures.
-func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleStreamRoutes(channel domain.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	if len(remaining) == 0 {
 		WriteError(w, http.StatusNotFound, fmt.Errorf("stream action missing"))
 		return

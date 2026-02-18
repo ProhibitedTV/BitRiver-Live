@@ -8,7 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"bitriver-live/internal/models"
+	models "bitriver-live/internal/domain"
 )
 
 // CreateTip records a tip event for a channel.

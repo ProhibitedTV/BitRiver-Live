@@ -10,7 +10,6 @@ import (
 
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/domain"
-	"bitriver-live/internal/models"
 )
 
 // Chat request/response DTOs.
@@ -196,7 +195,7 @@ type moderationAutoModPageResponse struct {
 }
 
 // newChatMessageResponse builds and returns chat message response using the supplied dependencies.
-func newChatMessageResponse(message models.ChatMessage) chatMessageResponse {
+func newChatMessageResponse(message domain.ChatMessage) chatMessageResponse {
 	return chatMessageResponse{
 		ID:        message.ID,
 		ChannelID: message.ChannelID,
@@ -207,7 +206,7 @@ func newChatMessageResponse(message models.ChatMessage) chatMessageResponse {
 }
 
 // newChatRestrictionResponse builds and returns chat restriction response using the supplied dependencies.
-func newChatRestrictionResponse(r models.ChatRestriction) chatRestrictionResponse {
+func newChatRestrictionResponse(r domain.ChatRestriction) chatRestrictionResponse {
 	resp := chatRestrictionResponse{
 		ID:       r.ID,
 		Type:     r.Type,
@@ -227,7 +226,7 @@ func newChatRestrictionResponse(r models.ChatRestriction) chatRestrictionRespons
 }
 
 // newChatFilterResponse builds and returns chat filter response using the supplied dependencies.
-func newChatFilterResponse(filter models.ChatFilter) chatFilterResponse {
+func newChatFilterResponse(filter domain.ChatFilter) chatFilterResponse {
 	return chatFilterResponse{
 		ID:        filter.ID,
 		ChannelID: filter.ChannelID,
@@ -239,7 +238,7 @@ func newChatFilterResponse(filter models.ChatFilter) chatFilterResponse {
 	}
 }
 
-func newAppealResponse(appeal models.Appeal) appealResponse {
+func newAppealResponse(appeal domain.Appeal) appealResponse {
 	resp := appealResponse{ID: appeal.ID, ReportID: appeal.ReportID, ChannelID: appeal.ChannelID, ReporterID: appeal.ReporterID, Reason: appeal.Reason, Status: appeal.Status, Resolution: appeal.Resolution, ResolverID: appeal.ResolverID, CreatedAt: appeal.CreatedAt.Format(time.RFC3339Nano)}
 	if appeal.ResolvedAt != nil {
 		v := appeal.ResolvedAt.Format(time.RFC3339Nano)
@@ -254,12 +253,12 @@ func newAppealResponse(appeal models.Appeal) appealResponse {
 	return resp
 }
 
-func (h *Handler) canModerateAppeals(actor models.User, channel models.Channel) bool {
+func (h *Handler) canModerateAppeals(actor domain.User, channel domain.Channel) bool {
 	return channel.OwnerID == actor.ID || actor.HasRole(roleAdmin) || actor.HasRole("moderator")
 }
 
 // newChatReportResponse builds and returns chat report response using the supplied dependencies.
-func newChatReportResponse(report models.ChatReport) chatReportResponse {
+func newChatReportResponse(report domain.ChatReport) chatReportResponse {
 	resp := chatReportResponse{
 		ID:          report.ID,
 		ChannelID:   report.ChannelID,
@@ -281,7 +280,7 @@ func newChatReportResponse(report models.ChatReport) chatReportResponse {
 }
 
 // newModerationUser builds and returns moderation user using the supplied dependencies.
-func newModerationUser(user models.User) moderationUserResponse {
+func newModerationUser(user domain.User) moderationUserResponse {
 	resp := moderationUserResponse{ID: user.ID}
 	if user.DisplayName != "" {
 		resp.DisplayName = user.DisplayName
@@ -399,7 +398,7 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 				WriteError(w, http.StatusBadRequest, err)
 				return
 			}
-			chatMessage := models.ChatMessage{
+			chatMessage := domain.ChatMessage{
 				ID:        messageEvt.ID,
 				ChannelID: messageEvt.ChannelID,
 				UserID:    messageEvt.UserID,
@@ -421,7 +420,7 @@ func (h *Handler) handleChatRoutes(channelID string, remaining []string, w http.
 }
 
 // handleChatModeration routes and serves chat moderation requests, writing HTTP errors for invalid input or backend failures.
-func (h *Handler) handleChatModeration(actor models.User, channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleChatModeration(actor domain.User, channel domain.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	if h.ChatGateway == nil {
 		WriteRequestError(w, ServiceUnavailableError("chat gateway unavailable"))
 		return
@@ -524,7 +523,7 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 }
 
 // handleChatFilters routes and serves chat filters requests, writing HTTP errors for invalid input or backend failures.
-func (h *Handler) handleChatFilters(actor models.User, channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleChatFilters(actor domain.User, channel domain.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	if channel.OwnerID != actor.ID && !actor.HasRole(roleAdmin) {
 		WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 		return
@@ -600,7 +599,7 @@ func (h *Handler) handleChatFilters(actor models.User, channel models.Channel, r
 }
 
 // handleChatReports routes and serves chat reports requests, writing HTTP errors for invalid input or backend failures.
-func (h *Handler) handleChatReports(actor models.User, channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleChatReports(actor domain.User, channel domain.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	if len(remaining) > 0 && strings.TrimSpace(remaining[0]) != "" {
 		reportID := remaining[0]
 		if len(remaining) == 2 && remaining[1] == "appeals" {
@@ -698,7 +697,7 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 				WriteError(w, http.StatusBadRequest, err)
 				return
 			}
-			report := models.ChatReport{
+			report := domain.ChatReport{
 				ID:          evt.ID,
 				ChannelID:   evt.ChannelID,
 				ReporterID:  evt.ReporterID,
@@ -723,7 +722,7 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 	}
 }
 
-func (h *Handler) handleChatAppeals(actor models.User, channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleChatAppeals(actor domain.User, channel domain.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	if len(remaining) > 0 && strings.TrimSpace(remaining[0]) != "" {
 		appealID := remaining[0]
 		if len(remaining) == 2 && (remaining[1] == "resolve" || remaining[1] == "deny" || remaining[1] == "reopen") {
@@ -740,7 +739,7 @@ func (h *Handler) handleChatAppeals(actor models.User, channel models.Channel, r
 				return
 			}
 			var (
-				appeal models.Appeal
+				appeal domain.Appeal
 				err    error
 			)
 			switch remaining[1] {

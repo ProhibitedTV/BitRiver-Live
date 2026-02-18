@@ -12,12 +12,11 @@ import (
 
 	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
-	"bitriver-live/internal/models"
 )
 
 func TestUploadProcessorStartShutdown(t *testing.T) {
 	store := newFakeUploadStore()
-	store.uploads = map[string]models.Upload{
+	store.uploads = map[string]domain.Upload{
 		"upload-1": {
 			ID:        "upload-1",
 			ChannelID: "channel-1",
@@ -81,13 +80,13 @@ func TestUploadProcessorStartShutdown(t *testing.T) {
 	waitForCompletion(t, ingest2Done, "upload-2", 2*time.Second)
 	waitForCompletion(t, ingest3Done, "upload-3", 2*time.Second)
 
-	waitForUploadUpdate(t, upload1Updates, time.Second, func(upload models.Upload) bool {
+	waitForUploadUpdate(t, upload1Updates, time.Second, func(upload domain.Upload) bool {
 		return upload.Status == "ready" && upload.PlaybackURL == "https://vod.example.com/a.m3u8" && upload.Progress == 100
 	})
-	waitForUploadUpdate(t, upload2Updates, time.Second, func(upload models.Upload) bool {
+	waitForUploadUpdate(t, upload2Updates, time.Second, func(upload domain.Upload) bool {
 		return upload.Status == "ready" && upload.PlaybackURL == "https://vod.example.com/b.m3u8" && upload.Progress == 100
 	})
-	waitForUploadUpdate(t, upload3Updates, time.Second, func(upload models.Upload) bool {
+	waitForUploadUpdate(t, upload3Updates, time.Second, func(upload domain.Upload) bool {
 		return upload.Status == "ready" && upload.PlaybackURL == "https://vod.example.com/c.m3u8" && upload.Progress == 100
 	})
 
@@ -100,7 +99,7 @@ func TestUploadProcessorStartShutdown(t *testing.T) {
 
 func TestUploadProcessorFailUpload(t *testing.T) {
 	store := newFakeUploadStore()
-	store.uploads = map[string]models.Upload{
+	store.uploads = map[string]domain.Upload{
 		"upload-err": {
 			ID:        "upload-err",
 			ChannelID: "channel-1",
@@ -134,14 +133,14 @@ func TestUploadProcessorFailUpload(t *testing.T) {
 	processor.Enqueue("upload-err")
 
 	waitForCompletion(t, ingestDone, "upload-err", time.Second)
-	waitForUploadUpdate(t, errUpdates, time.Second, func(upload models.Upload) bool {
+	waitForUploadUpdate(t, errUpdates, time.Second, func(upload domain.Upload) bool {
 		return upload.Status == "failed" && upload.Progress == 0 && upload.Metadata["sourceUrl"] == "https://example.com/error.mp4" && upload.Error == "transcode failed"
 	})
 }
 
 func TestUploadProcessorTimeout(t *testing.T) {
 	store := newFakeUploadStore()
-	store.uploads = map[string]models.Upload{
+	store.uploads = map[string]domain.Upload{
 		"upload-slow": {
 			ID:        "upload-slow",
 			ChannelID: "channel-1",
@@ -175,7 +174,7 @@ func TestUploadProcessorTimeout(t *testing.T) {
 	processor.Enqueue("upload-slow")
 
 	waitForCompletion(t, slowDone, "upload-slow", time.Second)
-	waitForUploadUpdate(t, slowUpdates, time.Second, func(upload models.Upload) bool {
+	waitForUploadUpdate(t, slowUpdates, time.Second, func(upload domain.Upload) bool {
 		if upload.Status != "failed" || upload.Progress != 0 {
 			return false
 		}
@@ -188,7 +187,7 @@ func TestUploadProcessorTimeout(t *testing.T) {
 
 func TestUploadProcessorRetryUpdateFailures(t *testing.T) {
 	store := newFakeUploadStore()
-	store.uploads = map[string]models.Upload{
+	store.uploads = map[string]domain.Upload{
 		"upload-retry": {
 			ID:        "upload-retry",
 			ChannelID: "channel-1",
@@ -222,12 +221,12 @@ func TestUploadProcessorRetryUpdateFailures(t *testing.T) {
 
 	processor.Enqueue("upload-retry")
 
-	waitForUploadUpdate(t, retryUpdates, time.Second, func(models.Upload) bool {
+	waitForUploadUpdate(t, retryUpdates, time.Second, func(domain.Upload) bool {
 		return store.updateAttemptCount("upload-retry") >= 1
 	})
 
 	waitForCompletion(t, retryDone, "upload-retry", 3*time.Second)
-	waitForUploadUpdate(t, retryUpdates, 3*time.Second, func(upload models.Upload) bool {
+	waitForUploadUpdate(t, retryUpdates, 3*time.Second, func(upload domain.Upload) bool {
 		return upload.Status == "ready" && upload.PlaybackURL == "https://vod.example.com/retry.m3u8" && upload.Progress == 100
 	})
 
@@ -242,26 +241,26 @@ func TestUploadProcessorRetryUpdateFailures(t *testing.T) {
 
 type fakeUploadStore struct {
 	mu              sync.Mutex
-	uploads         map[string]models.Upload
+	uploads         map[string]domain.Upload
 	failFirstUpdate map[string]error
 	updateAttempts  map[string]int
-	updateCh        map[string]chan models.Upload
+	updateCh        map[string]chan domain.Upload
 }
 
 func newFakeUploadStore() *fakeUploadStore {
 	return &fakeUploadStore{
-		uploads:         make(map[string]models.Upload),
+		uploads:         make(map[string]domain.Upload),
 		failFirstUpdate: make(map[string]error),
 		updateAttempts:  make(map[string]int),
-		updateCh:        make(map[string]chan models.Upload),
+		updateCh:        make(map[string]chan domain.Upload),
 	}
 }
 
-func (f *fakeUploadStore) ListPendingUploads(ctx context.Context, limit int) ([]models.Upload, error) {
+func (f *fakeUploadStore) ListPendingUploads(ctx context.Context, limit int) ([]domain.Upload, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	pending := make([]models.Upload, 0)
+	pending := make([]domain.Upload, 0)
 	for _, upload := range f.uploads {
 		select {
 		case <-ctx.Done():
@@ -280,10 +279,10 @@ func (f *fakeUploadStore) ListPendingUploads(ctx context.Context, limit int) ([]
 	return pending, nil
 }
 
-func (f *fakeUploadStore) GetUpload(ctx context.Context, id string) (models.Upload, bool) {
+func (f *fakeUploadStore) GetUpload(ctx context.Context, id string) (domain.Upload, bool) {
 	select {
 	case <-ctx.Done():
-		return models.Upload{}, false
+		return domain.Upload{}, false
 	default:
 	}
 
@@ -291,26 +290,26 @@ func (f *fakeUploadStore) GetUpload(ctx context.Context, id string) (models.Uplo
 	defer f.mu.Unlock()
 	upload, ok := f.uploads[id]
 	if !ok {
-		return models.Upload{}, false
+		return domain.Upload{}, false
 	}
 	return cloneUpload(upload), true
 }
 
-func (f *fakeUploadStore) updatesFor(id string) <-chan models.Upload {
+func (f *fakeUploadStore) updatesFor(id string) <-chan domain.Upload {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	ch, ok := f.updateCh[id]
 	if !ok {
-		ch = make(chan models.Upload, 8)
+		ch = make(chan domain.Upload, 8)
 		f.updateCh[id] = ch
 	}
 	return ch
 }
 
-func (f *fakeUploadStore) UpdateUpload(ctx context.Context, id string, update domain.UploadUpdate) (models.Upload, error) {
+func (f *fakeUploadStore) UpdateUpload(ctx context.Context, id string, update domain.UploadUpdate) (domain.Upload, error) {
 	select {
 	case <-ctx.Done():
-		return models.Upload{}, ctx.Err()
+		return domain.Upload{}, ctx.Err()
 	default:
 	}
 
@@ -318,13 +317,13 @@ func (f *fakeUploadStore) UpdateUpload(ctx context.Context, id string, update do
 	defer f.mu.Unlock()
 	upload, ok := f.uploads[id]
 	if !ok {
-		return models.Upload{}, errors.New("upload not found")
+		return domain.Upload{}, errors.New("upload not found")
 	}
 	attempt := f.updateAttempts[id]
 	f.updateAttempts[id] = attempt + 1
 	if err, shouldFail := f.failFirstUpdate[id]; shouldFail && attempt == 0 {
 		delete(f.failFirstUpdate, id)
-		return models.Upload{}, err
+		return domain.Upload{}, err
 	}
 	if update.Status != nil {
 		upload.Status = *update.Status
@@ -381,7 +380,7 @@ func cloneMetadata(src map[string]string) map[string]string {
 	return dst
 }
 
-func cloneUpload(upload models.Upload) models.Upload {
+func cloneUpload(upload domain.Upload) domain.Upload {
 	upload.Metadata = cloneMetadata(upload.Metadata)
 	return upload
 }
@@ -496,7 +495,7 @@ func waitForCompletion(t *testing.T, done <-chan struct{}, id string, timeout ti
 	}
 }
 
-func waitForUploadUpdate(t *testing.T, updates <-chan models.Upload, timeout time.Duration, predicate func(models.Upload) bool) {
+func waitForUploadUpdate(t *testing.T, updates <-chan domain.Upload, timeout time.Duration, predicate func(domain.Upload) bool) {
 	t.Helper()
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()

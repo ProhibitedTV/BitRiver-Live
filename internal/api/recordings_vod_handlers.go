@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"bitriver-live/internal/domain"
-	"bitriver-live/internal/models"
 )
 
 type clipExportRequest struct {
@@ -69,7 +68,7 @@ type clipExportResponse struct {
 }
 
 // newVodItemResponse builds and returns vod item response using the supplied dependencies.
-func newVodItemResponse(recording models.Recording) vodItemResponse {
+func newVodItemResponse(recording domain.Recording) vodItemResponse {
 	item := vodItemResponse{
 		ID:              recording.ID,
 		Title:           recording.Title,
@@ -98,7 +97,7 @@ func newVodItemResponse(recording models.Recording) vodItemResponse {
 }
 
 // newRecordingResponse builds and returns recording response using the supplied dependencies.
-func newRecordingResponse(recording models.Recording) recordingResponse {
+func newRecordingResponse(recording domain.Recording) recordingResponse {
 	resp := recordingResponse{
 		ID:              recording.ID,
 		ChannelID:       recording.ChannelID,
@@ -166,7 +165,7 @@ func newRecordingResponse(recording models.Recording) recordingResponse {
 }
 
 // newClipExportResponse builds and returns clip export response using the supplied dependencies.
-func newClipExportResponse(clip models.ClipExport) clipExportResponse {
+func newClipExportResponse(clip domain.ClipExport) clipExportResponse {
 	resp := clipExportResponse{
 		ID:           clip.ID,
 		RecordingID:  clip.RecordingID,

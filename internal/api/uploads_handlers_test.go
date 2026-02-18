@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"bitriver-live/internal/models"
+	models "bitriver-live/internal/domain"
 )
 
 func TestServeUploadMediaLogsOpenError(t *testing.T) {

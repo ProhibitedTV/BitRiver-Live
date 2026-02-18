@@ -10,7 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"bitriver-live/internal/models"
+	models "bitriver-live/internal/domain"
 	"bitriver-live/internal/storage"
 )
 
