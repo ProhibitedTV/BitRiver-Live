@@ -100,7 +100,7 @@ func NewHandler(arg interface{}, sessions ...*auth.SessionManager) *Handler {
 		deps.ChatModerationService = deps.Store
 		deps.StreamsService = deps.Store
 		deps.ProfilesService = deps.Store
-		deps.AnalyticsService = deps.Store
+		deps.AnalyticsService = service.NewStoreUseCases(deps.Store)
 		deps.SystemService = deps.Store
 		deps.MonetizationService = deps.Store
 		deps.LegalService = service.NewLegalService(v)
