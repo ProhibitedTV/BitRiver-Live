@@ -23,7 +23,7 @@ func TestImportDirectionContract(t *testing.T) {
 		"internal/observability/": {"bitriver-live/internal/api", "bitriver-live/internal/app", "bitriver-live/cmd/"},
 		"internal/service/":       {"bitriver-live/internal/api", "bitriver-live/cmd/"},
 		"internal/domain/":        {"bitriver-live/internal/api", "bitriver-live/cmd/"},
-		"internal/api/":           {"bitriver-live/internal/app", "bitriver-live/cmd/"},
+		"internal/api/":           {"bitriver-live/internal/storage", "bitriver-live/internal/app", "bitriver-live/cmd/"},
 	}
 
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {

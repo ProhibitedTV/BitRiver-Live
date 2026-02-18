@@ -6,7 +6,6 @@ import (
 
 	"bitriver-live/internal/domain"
 	"bitriver-live/internal/models"
-	"bitriver-live/internal/storage"
 )
 
 type dmcaCaseRequest struct {
@@ -147,7 +146,7 @@ func (h *Handler) LegalDataSubjectByID(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			actor, _ := h.requireAuthenticatedUser(w, r)
-			evt, err := h.legalService().AddDataSubjectAuditEvent(requestID, storage.CreateDataSubjectAuditEventParams{ActorUserID: actor.ID, Action: req.Action, Details: req.Details, EvidenceRef: req.EvidenceRef})
+			evt, err := h.legalService().AddDataSubjectAuditEvent(requestID, domain.DataSubjectAuditEventCreateParams{ActorUserID: actor.ID, Action: req.Action, Details: req.Details, EvidenceRef: req.EvidenceRef})
 			if err != nil {
 				WriteRequestError(w, err)
 				return

@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
-	"bitriver-live/internal/storage"
 )
 
 // UploadStore exposes only the upload-related persistence operations required
@@ -20,7 +20,7 @@ import (
 type UploadStore interface {
 	ListPendingUploads(ctx context.Context, limit int) ([]models.Upload, error)
 	GetUpload(ctx context.Context, id string) (models.Upload, bool)
-	UpdateUpload(ctx context.Context, id string, update storage.UploadUpdate) (models.Upload, error)
+	UpdateUpload(ctx context.Context, id string, update domain.UploadUpdate) (models.Upload, error)
 }
 
 // UploadIngestClient captures the ingest functionality needed to process
@@ -39,13 +39,23 @@ var (
 // to match UploadProcessor expectations without introducing new storage
 // behavior.
 type repositoryUploadStore struct {
-	repo storage.Repository
+	repo interface {
+		ListChannels(ownerID, query string) []domain.Channel
+		ListUploads(channelID string) ([]domain.Upload, error)
+		GetUpload(id string) (domain.Upload, bool)
+		UpdateUpload(id string, update domain.UploadUpdate) (domain.Upload, error)
+	}
 }
 
-// RepositoryUploadStore adapts a storage.Repository to the narrower UploadStore
-// interface used by UploadProcessor, allowing call sites to supply the broader
-// repository without re-implementing upload-specific plumbing.
-func RepositoryUploadStore(repo storage.Repository) UploadStore {
+// RepositoryUploadStore adapts a repository-capable use case to the narrower UploadStore
+// interface used by UploadProcessor, allowing call sites to supply broader
+// services without re-implementing upload-specific plumbing.
+func RepositoryUploadStore(repo interface {
+	ListChannels(ownerID, query string) []domain.Channel
+	ListUploads(channelID string) ([]domain.Upload, error)
+	GetUpload(id string) (domain.Upload, bool)
+	UpdateUpload(id string, update domain.UploadUpdate) (domain.Upload, error)
+}) UploadStore {
 	return repositoryUploadStore{repo: repo}
 }
 
@@ -107,7 +117,7 @@ func (s repositoryUploadStore) GetUpload(ctx context.Context, id string) (models
 }
 
 // UpdateUpload updates upload and returns an error when persistence or validation fails.
-func (s repositoryUploadStore) UpdateUpload(ctx context.Context, id string, update storage.UploadUpdate) (models.Upload, error) {
+func (s repositoryUploadStore) UpdateUpload(ctx context.Context, id string, update domain.UploadUpdate) (models.Upload, error) {
 	if s.repo == nil {
 		return models.Upload{}, fmt.Errorf("upload store unavailable")
 	}
@@ -342,7 +352,7 @@ func (p *UploadProcessor) processUpload(id string) {
 	processing := "processing"
 	progress := 10
 	metadata := map[string]string{"sourceUrl": source}
-	if _, err := p.store.UpdateUpload(p.ctx, id, storage.UploadUpdate{
+	if _, err := p.store.UpdateUpload(p.ctx, id, domain.UploadUpdate{
 		Status:   &processing,
 		Progress: &progress,
 		Metadata: metadata,
@@ -400,7 +410,7 @@ func (p *UploadProcessor) processUpload(id string) {
 		}
 	}
 	metadata["playbackUrl"] = playbackURL
-	if _, err := p.store.UpdateUpload(p.ctx, id, storage.UploadUpdate{
+	if _, err := p.store.UpdateUpload(p.ctx, id, domain.UploadUpdate{
 		Status:      &ready,
 		Progress:    &progress,
 		PlaybackURL: &playbackURL,
@@ -449,7 +459,7 @@ func (p *UploadProcessor) failUpload(id, source string, err error) {
 	if source != "" {
 		metadata["sourceUrl"] = source
 	}
-	if _, updateErr := p.store.UpdateUpload(p.ctx, id, storage.UploadUpdate{
+	if _, updateErr := p.store.UpdateUpload(p.ctx, id, domain.UploadUpdate{
 		Status:   &failed,
 		Progress: &progress,
 		Metadata: metadata,

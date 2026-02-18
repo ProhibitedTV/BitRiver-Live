@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/models"
-	"bitriver-live/internal/storage"
 )
 
 type cryptoAddressPayload struct {
@@ -137,7 +137,7 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 		return
 	}
 
-	userUpdate := storage.UserUpdate{}
+	userUpdate := domain.UserUpdate{}
 	if req.DisplayName != nil {
 		userUpdate.DisplayName = req.DisplayName
 	}
@@ -153,7 +153,7 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 		user = updatedUser
 	}
 
-	update := storage.ProfileUpdate{}
+	update := domain.ProfileUpdate{}
 	if req.Bio != nil {
 		update.Bio = req.Bio
 	}
@@ -183,7 +183,7 @@ func (h *Handler) handleUpsertProfile(userID string, w http.ResponseWriter, r *h
 	if req.DonationAddresses != nil {
 		addresses := make([]models.CryptoAddress, 0, len(*req.DonationAddresses))
 		for _, addr := range *req.DonationAddresses {
-			normalized, err := storage.NormalizeDonationAddress(models.CryptoAddress{
+			normalized, err := domain.NormalizeDonationAddress(models.CryptoAddress{
 				Currency: addr.Currency,
 				Address:  addr.Address,
 				Note:     addr.Note,

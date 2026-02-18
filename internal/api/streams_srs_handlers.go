@@ -8,10 +8,11 @@ import (
 	"strings"
 	"sync"
 
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/observability/tracing"
-	"bitriver-live/internal/storage"
+	"bitriver-live/internal/service"
 )
 
 // normalizeSRSAction performs normalize srsaction and propagates validation or dependency failures to the caller.
@@ -181,7 +182,7 @@ func (h *Handler) handleSRSPublish(channel models.Channel, w http.ResponseWriter
 	session, err := h.streamsService().StartStream(channel.ID, h.srsRenditions())
 	if err != nil {
 		status := http.StatusBadRequest
-		if errors.Is(err, storage.ErrIngestControllerUnavailable) {
+		if service.IsIngestUnavailable(err) {
 			status = http.StatusServiceUnavailable
 		}
 		WriteError(w, status, err)
@@ -197,7 +198,7 @@ func (h *Handler) handleSRSUnpublish(channel models.Channel, peak int, tracker *
 		session, err := h.streamsService().StopStream(channel.ID, peak)
 		if err != nil {
 			status := http.StatusBadRequest
-			if errors.Is(err, storage.ErrIngestControllerUnavailable) {
+			if service.IsIngestUnavailable(err) {
 				status = http.StatusServiceUnavailable
 			}
 			WriteError(w, status, err)
@@ -216,7 +217,7 @@ func (h *Handler) handleSRSUnpublish(channel models.Channel, peak int, tracker *
 	}
 
 	offline := "offline"
-	if _, err := h.streamsService().UpdateChannel(channel.ID, storage.ChannelUpdate{LiveState: &offline}); err != nil {
+	if _, err := h.streamsService().UpdateChannel(channel.ID, domain.ChannelUpdate{LiveState: &offline}); err != nil {
 		WriteError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -267,7 +268,7 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 		session, err := h.streamsService().StartStream(channel.ID, req.Renditions)
 		if err != nil {
 			status := http.StatusBadRequest
-			if errors.Is(err, storage.ErrIngestControllerUnavailable) {
+			if service.IsIngestUnavailable(err) {
 				status = http.StatusServiceUnavailable
 			}
 			WriteError(w, status, err)
@@ -287,7 +288,7 @@ func (h *Handler) handleStreamRoutes(channel models.Channel, remaining []string,
 		session, err := h.streamsService().StopStream(channel.ID, req.PeakConcurrent)
 		if err != nil {
 			status := http.StatusBadRequest
-			if errors.Is(err, storage.ErrIngestControllerUnavailable) {
+			if service.IsIngestUnavailable(err) {
 				status = http.StatusServiceUnavailable
 			}
 			WriteError(w, status, err)
