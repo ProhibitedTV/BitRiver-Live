@@ -9,7 +9,6 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -19,18 +18,13 @@ import (
 	"syscall"
 	"time"
 
-	"bitriver-live/internal/api"
 	"bitriver-live/internal/app"
-	"bitriver-live/internal/auth"
 	"bitriver-live/internal/auth/oauth"
-	"bitriver-live/internal/chat"
 	"bitriver-live/internal/envutil/pgdsn"
-	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/observability/logging"
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/observability/tracing"
 	"bitriver-live/internal/server"
-	"bitriver-live/internal/storage"
 	"bitriver-live/internal/stringsutil"
 )
 
@@ -227,7 +221,6 @@ func main() {
 		os.Exit(1)
 	}
 	sessionCookieCrossSiteValue := resolveBool(*sessionCookieCrossSite, "BITRIVER_LIVE_SESSION_COOKIE_CROSS_SITE")
-	sessionCookieSecureMode := resolveSessionCookieSecureMode(serverMode)
 	listenAddr := resolveListenAddr(*addr, serverMode, os.Getenv("BITRIVER_LIVE_ADDR"))
 	envFilePath := strings.TrimSpace(stringsutil.FirstNonEmpty(*envFile, os.Getenv("BITRIVER_LIVE_ENV_FILE")))
 
@@ -254,346 +247,95 @@ func main() {
 		ContentTypeOptions:    stringsutil.FirstNonEmpty(*securityContentTypeOptions, os.Getenv("BITRIVER_LIVE_SECURITY_CONTENT_TYPE_OPTIONS")),
 	}
 
-	ingestConfig, ingestErr := ingest.LoadConfigFromEnv()
-	if fatal := logIngestConfigResult(logger, ingestErr); fatal {
-		os.Exit(1)
-	}
-
-	var (
-		options          []storage.Option
-		ingestController ingest.Controller
-	)
-	if ingestConfig.RetryInterval > 0 || ingestConfig.MaxBootAttempts > 0 {
-		options = append(options, storage.WithIngestRetries(ingestConfig.MaxBootAttempts, ingestConfig.RetryInterval))
-	}
-	if ingestErr == nil && ingestConfig.Enabled() {
-		controller, err := ingestConfig.NewHTTPController()
-		if err != nil {
-			logger.Error("failed to initialise ingest controller", "error", err)
-			os.Exit(1)
-		}
-		controller.SetLogger(logging.WithComponent(logger, "ingest"))
-		ingestController = controller
-		options = append(options, storage.WithIngestController(controller))
-	}
-
-	publishedRetention, publishedSet, err := resolveDurationSetting(*recordingRetentionPublished, "BITRIVER_LIVE_RECORDING_RETENTION_PUBLISHED")
+	ingestConfig, err := app.LoadIngestConfig(logger)
 	if err != nil {
-		logger.Error("invalid published retention", "error", err)
-		os.Exit(1)
-	}
-	unpublishedRetention, unpublishedSet, err := resolveDurationSetting(*recordingRetentionUnpublished, "BITRIVER_LIVE_RECORDING_RETENTION_UNPUBLISHED")
-	if err != nil {
-		logger.Error("invalid unpublished retention", "error", err)
-		os.Exit(1)
-	}
-	if publishedSet || unpublishedSet {
-		policy := storage.RecordingRetentionPolicy{Published: -1, Unpublished: -1}
-		if publishedSet {
-			policy.Published = publishedRetention
-		}
-		if unpublishedSet {
-			policy.Unpublished = unpublishedRetention
-		}
-		options = append(options, storage.WithRecordingRetention(policy))
-	}
-
-	chatMessagesRetention, chatMessagesSet, err := resolveDurationSetting(*chatRetentionMessages, "BITRIVER_LIVE_CHAT_RETENTION_MESSAGES")
-	if err != nil {
-		logger.Error("invalid chat message retention", "error", err)
-		os.Exit(1)
-	}
-	chatModerationRetention, chatModerationSet, err := resolveDurationSetting(*chatRetentionModeration, "BITRIVER_LIVE_CHAT_RETENTION_MODERATION_LOGS")
-	if err != nil {
-		logger.Error("invalid chat moderation retention", "error", err)
-		os.Exit(1)
-	}
-	if chatMessagesSet || chatModerationSet {
-		policy := storage.ChatRetentionPolicy{Messages: -1, ModerationLogs: -1}
-		if chatMessagesSet {
-			policy.Messages = chatMessagesRetention
-		}
-		if chatModerationSet {
-			policy.ModerationLogs = chatModerationRetention
-		}
-		options = append(options, storage.WithChatRetention(policy))
-	}
-
-	objectCfg := storage.ObjectStorageConfig{
-		Endpoint:       stringsutil.FirstNonEmpty(*objectEndpoint, os.Getenv("BITRIVER_LIVE_OBJECT_ENDPOINT")),
-		Region:         stringsutil.FirstNonEmpty(*objectRegion, os.Getenv("BITRIVER_LIVE_OBJECT_REGION")),
-		AccessKey:      stringsutil.FirstNonEmpty(*objectAccessKey, os.Getenv("BITRIVER_LIVE_OBJECT_ACCESS_KEY")),
-		SecretKey:      stringsutil.FirstNonEmpty(*objectSecretKey, os.Getenv("BITRIVER_LIVE_OBJECT_SECRET_KEY")),
-		Bucket:         stringsutil.FirstNonEmpty(*objectBucket, os.Getenv("BITRIVER_LIVE_OBJECT_BUCKET")),
-		UseSSL:         resolveBool(*objectUseSSL, "BITRIVER_LIVE_OBJECT_USE_SSL"),
-		Prefix:         strings.TrimSpace(stringsutil.FirstNonEmpty(*objectPrefix, os.Getenv("BITRIVER_LIVE_OBJECT_PREFIX"))),
-		PublicEndpoint: stringsutil.FirstNonEmpty(*objectPublicEndpoint, os.Getenv("BITRIVER_LIVE_OBJECT_PUBLIC_ENDPOINT")),
-		LifecycleDays:  resolveInt(*objectLifecycleDays, "BITRIVER_LIVE_OBJECT_LIFECYCLE_DAYS"),
-	}
-	if objectCfg.Endpoint != "" || objectCfg.Bucket != "" || objectCfg.PublicEndpoint != "" || objectCfg.Prefix != "" || objectCfg.Region != "" || objectCfg.AccessKey != "" || objectCfg.SecretKey != "" || objectCfg.LifecycleDays > 0 || objectCfg.UseSSL {
-		options = append(options, storage.WithObjectStorage(objectCfg))
-	}
-
-	postgresDefaultDSN := resolvePostgresDSN(*postgresDSN)
-	driver, _, err := resolveStorageDriver(*storageDriver, os.Getenv("BITRIVER_LIVE_STORAGE_DRIVER"), postgresDefaultDSN)
-	if err != nil {
-		logger.Error("failed to resolve storage driver", "error", err)
-		os.Exit(1)
-	}
-	if serverMode == "production" {
-		if err := validateProductionDatastore(driver, postgresDefaultDSN, os.Getenv("BITRIVER_LIVE_POSTGRES_DSN")); err != nil {
-			logger.Error("production datastore validation failed", "error", err)
-			os.Exit(1)
-		}
-	}
-	var (
-		store                   storage.Repository
-		storagePostgresDSN      string
-		datastoreAcquireTimeout time.Duration
-	)
-	switch driver {
-	case "postgres":
-		storagePostgresDSN = postgresDefaultDSN
-		if storagePostgresDSN == "" {
-			logger.Error("postgres storage selected without DSN")
-			os.Exit(1)
-		}
-		pgOptions := append([]storage.Option(nil), options...)
-		maxConns := resolveInt(*postgresMaxConns, "BITRIVER_LIVE_POSTGRES_MAX_CONNS")
-		minConns := resolveInt(*postgresMinConns, "BITRIVER_LIVE_POSTGRES_MIN_CONNS")
-		if maxConns > 0 || minConns > 0 {
-			pgOptions = append(pgOptions, storage.WithPostgresPoolLimits(int32(maxConns), int32(minConns)))
-		}
-		maxLifetime := resolveDuration(*postgresMaxConnLifetime, "BITRIVER_LIVE_POSTGRES_MAX_CONN_LIFETIME", 0)
-		maxIdle := resolveDuration(*postgresMaxConnIdle, "BITRIVER_LIVE_POSTGRES_MAX_CONN_IDLE", 0)
-		healthInterval := resolveDuration(*postgresHealthInterval, "BITRIVER_LIVE_POSTGRES_HEALTH_INTERVAL", 0)
-		if maxLifetime > 0 || maxIdle > 0 || healthInterval > 0 {
-			pgOptions = append(pgOptions, storage.WithPostgresPoolDurations(maxLifetime, maxIdle, healthInterval))
-		}
-		acquireTimeout := resolveDuration(*postgresAcquireTimeout, "BITRIVER_LIVE_POSTGRES_ACQUIRE_TIMEOUT", 0)
-		datastoreAcquireTimeout = acquireTimeout
-		if acquireTimeout > 0 {
-			pgOptions = append(pgOptions, storage.WithPostgresAcquireTimeout(acquireTimeout))
-		}
-		appName := stringsutil.FirstNonEmpty(*postgresAppName, os.Getenv("BITRIVER_LIVE_POSTGRES_APP_NAME"))
-		if appName != "" {
-			pgOptions = append(pgOptions, storage.WithPostgresApplicationName(appName))
-		}
-		store, err = storage.NewPostgresRepository(storagePostgresDSN, pgOptions...)
-	default:
-		logger.Error("unsupported storage driver", "driver", driver)
-		os.Exit(1)
-	}
-	if err != nil {
-		logger.Error("failed to open datastore", "error", err)
+		logger.Error("failed to load ingest config", "error", err)
 		os.Exit(1)
 	}
 
-	sessionConfig, err := resolveSessionStoreConfig(
-		*sessionStoreDriver,
-		os.Getenv("BITRIVER_LIVE_SESSION_STORE"),
-		driver,
-		storagePostgresDSN,
-		*sessionPostgresDSN,
-		os.Getenv("BITRIVER_LIVE_SESSION_POSTGRES_DSN"),
-		serverMode == "production",
-	)
-	if err != nil {
-		logger.Error("failed to resolve session store", "error", err)
-		os.Exit(1)
-	}
-
-	sessionAbsoluteTTL := resolveDuration(*sessionTTL, "BITRIVER_LIVE_SESSION_TTL", 0)
-	sessionIdleTimeoutValue := resolveDuration(*sessionIdleTimeout, "BITRIVER_LIVE_SESSION_IDLE_TIMEOUT", 0)
-	sessionConfig.AbsoluteTTL = sessionAbsoluteTTL
-	sessionConfig.IdleTimeout = sessionIdleTimeoutValue
-
-	var (
-		sessionStore      auth.SessionStore
-		sessionCloser     func(context.Context) error
-		mfaChallengeStore auth.MFAChallengeStore
-		mfaCloser         func(context.Context) error
-	)
-
-	switch sessionConfig.Driver {
-	case "memory":
-		sessionStore = auth.NewMemorySessionStore()
-		mfaChallengeStore = auth.NewMemoryMFAChallengeStore()
-	case "postgres":
-		pgStore, err := auth.NewPostgresSessionStore(sessionConfig.DSN, auth.WithTimeout(datastoreAcquireTimeout))
-		if err != nil {
-			logger.Error("failed to open session store", "error", err)
-			os.Exit(1)
-		}
-		sessionStore = pgStore
-		sessionCloser = func(ctx context.Context) error { return pgStore.Close(ctx) }
-		mfaStore, err := auth.NewPostgresMFAChallengeStore(sessionConfig.DSN, auth.WithMFAChallengeTimeout(datastoreAcquireTimeout))
-		if err != nil {
-			logger.Error("failed to open mfa challenge store", "error", err)
-			os.Exit(1)
-		}
-		mfaCloser = func(ctx context.Context) error { return mfaStore.Close(ctx) }
-		mfaChallengeStore = mfaStore
-	default:
-		logger.Error("unsupported session store driver", "driver", sessionConfig.Driver)
-		os.Exit(1)
-	}
-
-	sessionOptions := []auth.SessionOption{auth.WithStore(sessionStore)}
-	if sessionIdleTimeoutValue > 0 {
-		sessionOptions = append(sessionOptions, auth.WithIdleTimeout(sessionIdleTimeoutValue))
-	}
-	sessions := auth.NewSessionManager(sessionAbsoluteTTL, sessionOptions...)
-	mfaChallenges := auth.NewMFAChallengeManager(0, auth.WithMFAChallengeStore(mfaChallengeStore))
-	chatQueueCfg := chat.RedisQueueConfig{
-		Addr:       stringsutil.FirstNonEmpty(*chatRedisAddr, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR")),
-		Addrs:      splitAndTrim(stringsutil.FirstNonEmpty(*chatRedisAddrs, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDRS"))),
-		Username:   stringsutil.FirstNonEmpty(*chatRedisUsername, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_USERNAME")),
-		Password:   stringsutil.FirstNonEmpty(*chatRedisPassword, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD")),
-		Stream:     stringsutil.FirstNonEmpty(*chatRedisStream, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_STREAM")),
-		Group:      stringsutil.FirstNonEmpty(*chatRedisGroup, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_GROUP")),
-		MasterName: stringsutil.FirstNonEmpty(*chatRedisMasterName, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_SENTINEL_MASTER")),
-		PoolSize:   resolveInt(*chatRedisPoolSize, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_POOL_SIZE"),
-		TLS: chat.RedisTLSConfig{
-			CAFile:             stringsutil.FirstNonEmpty(*chatRedisTLSCA, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_CA")),
-			CertFile:           stringsutil.FirstNonEmpty(*chatRedisTLSCert, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_CERT")),
-			KeyFile:            stringsutil.FirstNonEmpty(*chatRedisTLSKey, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_KEY")),
-			ServerName:         stringsutil.FirstNonEmpty(*chatRedisTLSServerName, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_SERVER_NAME")),
-			InsecureSkipVerify: resolveBool(*chatRedisTLSSkipVerify, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_SKIP_VERIFY"),
-		},
-	}
-	chatDriver := resolveChatQueueDriver(*chatQueueDriver, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_DRIVER"))
-	queue, err := configureChatQueue(chatDriver, chatQueueCfg, logger)
-	if err != nil {
-		logger.Error("failed to configure chat queue", "error", err)
-		os.Exit(1)
-	}
-	gateway := chat.NewGateway(chat.GatewayConfig{
-		Queue:  queue,
-		Store:  store,
-		Logger: logging.WithComponent(logger, "chat"),
-	})
-	restartChan := make(chan struct{}, 1)
-	var chatQueuePinger interface{ Ping(context.Context) error }
-	if pingable, ok := queue.(interface{ Ping(context.Context) error }); ok {
-		chatQueuePinger = pingable
-	}
-	handler := app.NewHandler(app.HandlerConfig{
-		Store:                 store,
-		Sessions:              sessions,
-		MFAChallenges:         mfaChallenges,
-		AllowSelfSignup:       allowSelfSignupValue,
-		ChatGateway:           gateway,
-		Setup:                 newSetupManager(envFilePath, restartChan),
-		DefaultRenditions:     ladderProfileNames(ingestConfig.LadderProfiles),
-		SRSHookToken:          ingestConfig.SRSToken,
-		TrustForwardedHeaders: resolveBool(*uploadsTrustForwarded, "BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS"),
-		ChatQueue:             chatQueuePinger,
-	})
-	var uploadProcessor *api.UploadProcessor
-	if ingestController != nil {
-		uploadProcessor = api.NewUploadProcessor(api.UploadProcessorConfig{
-			Store:      api.RepositoryUploadStore(store),
-			Ingest:     ingestController,
-			Renditions: ingestConfig.LadderProfiles,
-			Logger:     logging.WithComponent(logger, "uploads"),
-		})
-		uploadProcessor.Start()
-		handler.UploadProcessor = uploadProcessor
-	}
-	workerCtx, workerCancel := context.WithCancel(context.Background())
-	defer workerCancel()
-	sessionPurgeStop := startSessionPurgeWorker(workerCtx, logging.WithComponent(logger, "session-purger"), sessions, 15*time.Minute)
-	defer sessionPurgeStop()
-	go storage.NewChatWorker(store, queue, logging.WithComponent(logger, "chat-worker")).Run(workerCtx)
-
-	rateCfg := server.RateLimitConfig{
-		GlobalRPS:              resolveFloat(*globalRPS, "BITRIVER_LIVE_RATE_GLOBAL_RPS"),
-		GlobalBurst:            resolveInt(*globalBurst, "BITRIVER_LIVE_RATE_GLOBAL_BURST"),
-		LoginLimit:             loginLimitValue,
-		LoginWindow:            resolveDuration(*loginWindow, "BITRIVER_LIVE_RATE_LOGIN_WINDOW", time.Minute),
-		RequireLoginProtection: requiresLoginProtection(serverMode),
-		TrustForwardedHeaders:  resolveBool(*trustForwarded, "BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS"),
-		TrustedProxies:         splitAndTrim(stringsutil.FirstNonEmpty(*trustedProxies, os.Getenv("BITRIVER_LIVE_RATE_TRUSTED_PROXIES"))),
-		RedisAddr:              stringsutil.FirstNonEmpty(*redisAddr, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDR")),
-		RedisAddrs:             splitAndTrim(stringsutil.FirstNonEmpty(*redisAddrs, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDRS"))),
-		RedisUsername:          stringsutil.FirstNonEmpty(*redisUsername, os.Getenv("BITRIVER_LIVE_RATE_REDIS_USERNAME")),
-		RedisPassword:          stringsutil.FirstNonEmpty(*redisPassword, os.Getenv("BITRIVER_LIVE_RATE_REDIS_PASSWORD")),
-		RedisMasterName:        stringsutil.FirstNonEmpty(*redisMasterName, os.Getenv("BITRIVER_LIVE_RATE_REDIS_MASTER_NAME")),
-		RedisTimeout:           resolveDuration(*redisTimeout, "BITRIVER_LIVE_RATE_REDIS_TIMEOUT", 2*time.Second),
-		RedisPoolSize:          resolveInt(*redisPoolSize, "BITRIVER_LIVE_RATE_REDIS_POOL_SIZE"),
-		RedisTLS: server.RedisTLSConfig{
-			CAFile:             stringsutil.FirstNonEmpty(*redisTLSCA, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_CA")),
-			CertFile:           stringsutil.FirstNonEmpty(*redisTLSCert, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_CERT")),
-			KeyFile:            stringsutil.FirstNonEmpty(*redisTLSKey, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_KEY")),
-			ServerName:         stringsutil.FirstNonEmpty(*redisTLSServerName, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_SERVER_NAME")),
-			InsecureSkipVerify: resolveBool(*redisTLSSkipVerify, "BITRIVER_LIVE_RATE_REDIS_TLS_SKIP_VERIFY"),
-		},
-	}
-	handler.TrustedProxies = rateCfg.TrustedProxies
-
-	metricsAccessCfg := server.MetricsAccessConfig{
-		Token:           stringsutil.FirstNonEmpty(*metricsToken, os.Getenv("BITRIVER_LIVE_METRICS_TOKEN")),
-		AllowedNetworks: splitAndTrim(stringsutil.FirstNonEmpty(*metricsAllowNetworks, os.Getenv("BITRIVER_LIVE_METRICS_ALLOW_NETWORKS"))),
-	}
-
-	requireMetricsProtection := requiresMetricsProtection(serverMode)
-	if err := validateMetricsProtection(serverMode, metricsAccessCfg); err != nil {
-		logger.Error(err.Error())
-		os.Exit(1)
-	}
-
-	tlsCfg := server.TLSConfig{
-		CertFile: tlsCertPath,
-		KeyFile:  tlsKeyPath,
-	}
-
-	srv, err := app.NewHTTPServer(handler, server.Config{
-		Addr:                     listenAddr,
-		TLS:                      tlsCfg,
-		RateLimit:                rateCfg,
-		CORS:                     corsConfig,
-		Security:                 securityCfg,
-		Logger:                   logger,
-		AuditLogger:              auditLogger,
-		Metrics:                  recorder,
-		Tracer:                   tracingProvider.Tracer(),
-		MetricsAccess:            metricsAccessCfg,
-		RequireMetricsProtection: requireMetricsProtection,
-		ViewerOrigin:             viewerURL,
-		OAuth:                    oauthManager,
-		AllowSelfSignup:          &allowSelfSignupValue,
-		SessionCookieSecureMode:  sessionCookieSecureMode,
-		SessionCookieCrossSite:   sessionCookieCrossSiteValue,
-		SRSHookToken:             ingestConfig.SRSToken,
+	runtime, err := app.NewServerRuntime(app.ServerRuntimeInput{
+		Mode:                          serverMode,
+		ListenAddr:                    listenAddr,
+		Logger:                        logger,
+		AuditLogger:                   auditLogger,
+		MetricsRecorder:               recorder,
+		TracingProvider:               tracingProvider,
+		AllowSelfSignup:               allowSelfSignupValue,
+		SetupManager:                  newSetupManager(envFilePath, nil),
+		UploadsTrustForwarded:         resolveBool(*uploadsTrustForwarded, "BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS"),
+		LoginLimit:                    loginLimitValue,
+		LoginWindow:                   resolveDuration(*loginWindow, "BITRIVER_LIVE_RATE_LOGIN_WINDOW", time.Minute),
+		RequireLoginProtection:        requiresLoginProtection(serverMode),
+		TrustForwardedHeaders:         resolveBool(*trustForwarded, "BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS"),
+		TrustedProxies:                splitAndTrim(stringsutil.FirstNonEmpty(*trustedProxies, os.Getenv("BITRIVER_LIVE_RATE_TRUSTED_PROXIES"))),
+		GlobalRPS:                     resolveFloat(*globalRPS, "BITRIVER_LIVE_RATE_GLOBAL_RPS"),
+		GlobalBurst:                   resolveInt(*globalBurst, "BITRIVER_LIVE_RATE_GLOBAL_BURST"),
+		RateRedisAddr:                 stringsutil.FirstNonEmpty(*redisAddr, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDR")),
+		RateRedisAddrs:                splitAndTrim(stringsutil.FirstNonEmpty(*redisAddrs, os.Getenv("BITRIVER_LIVE_RATE_REDIS_ADDRS"))),
+		RateRedisUsername:             stringsutil.FirstNonEmpty(*redisUsername, os.Getenv("BITRIVER_LIVE_RATE_REDIS_USERNAME")),
+		RateRedisPassword:             stringsutil.FirstNonEmpty(*redisPassword, os.Getenv("BITRIVER_LIVE_RATE_REDIS_PASSWORD")),
+		RateRedisMasterName:           stringsutil.FirstNonEmpty(*redisMasterName, os.Getenv("BITRIVER_LIVE_RATE_REDIS_MASTER_NAME")),
+		RateRedisTimeout:              resolveDuration(*redisTimeout, "BITRIVER_LIVE_RATE_REDIS_TIMEOUT", 2*time.Second),
+		RateRedisPoolSize:             resolveInt(*redisPoolSize, "BITRIVER_LIVE_RATE_REDIS_POOL_SIZE"),
+		RateRedisTLS:                  server.RedisTLSConfig{CAFile: stringsutil.FirstNonEmpty(*redisTLSCA, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_CA")), CertFile: stringsutil.FirstNonEmpty(*redisTLSCert, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_CERT")), KeyFile: stringsutil.FirstNonEmpty(*redisTLSKey, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_KEY")), ServerName: stringsutil.FirstNonEmpty(*redisTLSServerName, os.Getenv("BITRIVER_LIVE_RATE_REDIS_TLS_SERVER_NAME")), InsecureSkipVerify: resolveBool(*redisTLSSkipVerify, "BITRIVER_LIVE_RATE_REDIS_TLS_SKIP_VERIFY")},
+		CORS:                          corsConfig,
+		Security:                      securityCfg,
+		MetricsAccess:                 server.MetricsAccessConfig{Token: stringsutil.FirstNonEmpty(*metricsToken, os.Getenv("BITRIVER_LIVE_METRICS_TOKEN")), AllowedNetworks: splitAndTrim(stringsutil.FirstNonEmpty(*metricsAllowNetworks, os.Getenv("BITRIVER_LIVE_METRICS_ALLOW_NETWORKS")))},
+		RequireMetricsProtection:      requiresMetricsProtection(serverMode),
+		ViewerOrigin:                  viewerURL,
+		OAuth:                         oauthManager,
+		SessionCookieSecureMode:       app.ResolveSessionCookieSecureMode(serverMode),
+		SessionCookieCrossSite:        sessionCookieCrossSiteValue,
+		TLS:                           server.TLSConfig{CertFile: tlsCertPath, KeyFile: tlsKeyPath},
+		StorageDriverFlag:             *storageDriver,
+		PostgresDSNFlag:               *postgresDSN,
+		PostgresMaxConns:              *postgresMaxConns,
+		PostgresMinConns:              *postgresMinConns,
+		PostgresMaxConnLifetime:       *postgresMaxConnLifetime,
+		PostgresMaxConnIdle:           *postgresMaxConnIdle,
+		PostgresHealthInterval:        *postgresHealthInterval,
+		PostgresAcquireTimeout:        *postgresAcquireTimeout,
+		PostgresAppName:               *postgresAppName,
+		SessionStoreDriverFlag:        *sessionStoreDriver,
+		SessionPostgresDSNFlag:        *sessionPostgresDSN,
+		SessionTTL:                    resolveDuration(*sessionTTL, "BITRIVER_LIVE_SESSION_TTL", 0),
+		SessionIdleTimeout:            resolveDuration(*sessionIdleTimeout, "BITRIVER_LIVE_SESSION_IDLE_TIMEOUT", 0),
+		ObjectEndpoint:                stringsutil.FirstNonEmpty(*objectEndpoint, os.Getenv("BITRIVER_LIVE_OBJECT_ENDPOINT")),
+		ObjectRegion:                  stringsutil.FirstNonEmpty(*objectRegion, os.Getenv("BITRIVER_LIVE_OBJECT_REGION")),
+		ObjectAccessKey:               stringsutil.FirstNonEmpty(*objectAccessKey, os.Getenv("BITRIVER_LIVE_OBJECT_ACCESS_KEY")),
+		ObjectSecretKey:               stringsutil.FirstNonEmpty(*objectSecretKey, os.Getenv("BITRIVER_LIVE_OBJECT_SECRET_KEY")),
+		ObjectBucket:                  stringsutil.FirstNonEmpty(*objectBucket, os.Getenv("BITRIVER_LIVE_OBJECT_BUCKET")),
+		ObjectUseSSL:                  resolveBool(*objectUseSSL, "BITRIVER_LIVE_OBJECT_USE_SSL"),
+		ObjectPrefix:                  strings.TrimSpace(stringsutil.FirstNonEmpty(*objectPrefix, os.Getenv("BITRIVER_LIVE_OBJECT_PREFIX"))),
+		ObjectPublicEndpoint:          stringsutil.FirstNonEmpty(*objectPublicEndpoint, os.Getenv("BITRIVER_LIVE_OBJECT_PUBLIC_ENDPOINT")),
+		ObjectLifecycleDays:           resolveInt(*objectLifecycleDays, "BITRIVER_LIVE_OBJECT_LIFECYCLE_DAYS"),
+		RecordingRetentionPublished:   *recordingRetentionPublished,
+		RecordingRetentionUnpublished: *recordingRetentionUnpublished,
+		ChatRetentionMessages:         *chatRetentionMessages,
+		ChatRetentionModeration:       *chatRetentionModeration,
+		IngestConfig:                  ingestConfig,
+		IngestEnabled:                 true,
+		ChatQueueDriver:               stringsutil.FirstNonEmpty(*chatQueueDriver, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_DRIVER")),
+		ChatRedisAddr:                 stringsutil.FirstNonEmpty(*chatRedisAddr, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDR")),
+		ChatRedisAddrs:                splitAndTrim(stringsutil.FirstNonEmpty(*chatRedisAddrs, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_ADDRS"))),
+		ChatRedisUsername:             stringsutil.FirstNonEmpty(*chatRedisUsername, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_USERNAME")),
+		ChatRedisPassword:             stringsutil.FirstNonEmpty(*chatRedisPassword, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD")),
+		ChatRedisStream:               stringsutil.FirstNonEmpty(*chatRedisStream, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_STREAM")),
+		ChatRedisGroup:                stringsutil.FirstNonEmpty(*chatRedisGroup, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_GROUP")),
+		ChatRedisMasterName:           stringsutil.FirstNonEmpty(*chatRedisMasterName, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_SENTINEL_MASTER")),
+		ChatRedisPoolSize:             resolveInt(*chatRedisPoolSize, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_POOL_SIZE"),
+		ChatRedisTLSCA:                stringsutil.FirstNonEmpty(*chatRedisTLSCA, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_CA")),
+		ChatRedisTLSCert:              stringsutil.FirstNonEmpty(*chatRedisTLSCert, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_CERT")),
+		ChatRedisTLSKey:               stringsutil.FirstNonEmpty(*chatRedisTLSKey, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_KEY")),
+		ChatRedisTLSServerName:        stringsutil.FirstNonEmpty(*chatRedisTLSServerName, os.Getenv("BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_SERVER_NAME")),
+		ChatRedisTLSSkipVerify:        resolveBool(*chatRedisTLSSkipVerify, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_TLS_SKIP_VERIFY"),
 	})
 	if err != nil {
-		logger.Error("failed to initialise server", "error", err)
+		logger.Error("failed to initialise runtime", "error", err)
 		os.Exit(1)
 	}
-	summary := newStartupSummary(startupSummaryInput{
-		StorageDriver:          driver,
-		StorageDSN:             storagePostgresDSN,
-		SessionConfig:          sessionConfig,
-		RateLimit:              rateCfg,
-		ChatDriver:             chatDriver,
-		ChatConfig:             chatQueueCfg,
-		IngestConfig:           ingestConfig,
-		IngestControllerActive: ingestController != nil,
-	})
-	logger.Info("startup summary", summary.LogArgs()...)
 
-	errs := make(chan error, 1)
-	go func() {
-		logger.Info("BitRiver Live API listening", "addr", listenAddr, "mode", serverMode)
-		if tlsCfg.CertFile != "" && tlsCfg.KeyFile != "" {
-			logger.Info("TLS enabled", "cert_file", tlsCfg.CertFile)
-		}
-		logger.Info("metrics endpoint available", "path", "/metrics")
-		if err := srv.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errs <- err
-		}
-	}()
+	runtime.Start()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -603,66 +345,16 @@ func main() {
 	select {
 	case sig := <-quit:
 		logger.Info("received shutdown signal", "signal", sig.String())
-	case err := <-errs:
+	case err := <-runtime.Errors():
 		logger.Error("server error", "error", err)
-	case <-restartChan:
+	case <-runtime.RestartSignals():
 		logger.Info("setup wizard requested restart")
 		restartRequested = true
 	}
 
-	workerCancel()
-	sessionPurgeStop()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
-	if err := srv.Shutdown(ctx); err != nil {
-		logger.Warn("graceful shutdown failed", "error", err)
-	}
-
-	if uploadProcessor != nil {
-		if err := uploadProcessor.Shutdown(ctx); err != nil {
-			logger.Warn("failed to stop upload processor", "error", err)
-		}
-	}
-
-	if closer, ok := store.(interface{ Close(context.Context) error }); ok {
-		if err := closer.Close(ctx); err != nil {
-			logger.Warn("failed to close datastore", "error", err)
-		}
-	} else if closer, ok := store.(interface{ Close() error }); ok {
-		if err := closer.Close(); err != nil {
-			logger.Warn("failed to close datastore", "error", err)
-		}
-	}
-
-	if sessionCloser != nil {
-		if err := sessionCloser(ctx); err != nil {
-			logger.Warn("failed to close session store", "error", err)
-		}
-	} else if closer, ok := sessionStore.(interface{ Close(context.Context) error }); ok {
-		if err := closer.Close(ctx); err != nil {
-			logger.Warn("failed to close session store", "error", err)
-		}
-	} else if closer, ok := sessionStore.(interface{ Close() error }); ok {
-		if err := closer.Close(); err != nil {
-			logger.Warn("failed to close session store", "error", err)
-		}
-	}
-
-	if mfaCloser != nil {
-		if err := mfaCloser(ctx); err != nil {
-			logger.Warn("failed to close mfa challenge store", "error", err)
-		}
-	} else if closer, ok := mfaChallengeStore.(interface{ Close(context.Context) error }); ok {
-		if err := closer.Close(ctx); err != nil {
-			logger.Warn("failed to close mfa challenge store", "error", err)
-		}
-	} else if closer, ok := mfaChallengeStore.(interface{ Close() error }); ok {
-		if err := closer.Close(); err != nil {
-			logger.Warn("failed to close mfa challenge store", "error", err)
-		}
-	}
+	runtime.Shutdown(ctx)
 
 	logger.Info("server stopped")
 	if restartRequested {
@@ -675,269 +367,6 @@ type sessionStoreConfig struct {
 	DSN         string
 	AbsoluteTTL time.Duration
 	IdleTimeout time.Duration
-}
-
-type startupSummaryInput struct {
-	StorageDriver          string
-	StorageDSN             string
-	SessionConfig          sessionStoreConfig
-	RateLimit              server.RateLimitConfig
-	ChatDriver             string
-	ChatConfig             chat.RedisQueueConfig
-	IngestConfig           ingest.Config
-	IngestControllerActive bool
-}
-
-type startupSummary struct {
-	Datastore     map[string]any
-	SessionStore  map[string]any
-	LoginThrottle map[string]any
-	ChatQueue     map[string]any
-	Ingest        map[string]any
-}
-
-// newStartupSummary builds and returns startup summary using the supplied dependencies.
-func newStartupSummary(in startupSummaryInput) startupSummary {
-	datastore := map[string]any{
-		"driver": in.StorageDriver,
-	}
-	switch in.StorageDriver {
-	case "postgres":
-		if in.StorageDSN != "" {
-			datastore["dsn"] = redactDSN(in.StorageDSN)
-		}
-	}
-
-	session := map[string]any{
-		"driver": in.SessionConfig.Driver,
-	}
-	if in.SessionConfig.Driver == "postgres" && in.SessionConfig.DSN != "" {
-		session["dsn"] = redactDSN(in.SessionConfig.DSN)
-	}
-	if in.SessionConfig.AbsoluteTTL > 0 {
-		session["absolute_ttl"] = in.SessionConfig.AbsoluteTTL.String()
-	}
-	if in.SessionConfig.IdleTimeout > 0 {
-		session["idle_timeout"] = in.SessionConfig.IdleTimeout.String()
-	}
-
-	loginThrottle := map[string]any{}
-	loginDriver := determineRateLimiterDriver(in.RateLimit)
-	loginThrottle["driver"] = loginDriver
-	if loginDriver == "redis" {
-		if in.RateLimit.RedisAddr != "" {
-			loginThrottle["addr"] = in.RateLimit.RedisAddr
-		}
-		if len(in.RateLimit.RedisAddrs) > 0 {
-			loginThrottle["addrs"] = in.RateLimit.RedisAddrs
-		}
-		if in.RateLimit.RedisMasterName != "" {
-			loginThrottle["master_name"] = in.RateLimit.RedisMasterName
-		}
-	}
-
-	chatQueue := map[string]any{
-		"driver": in.ChatDriver,
-	}
-	if in.ChatDriver == "redis" {
-		if in.ChatConfig.Addr != "" {
-			chatQueue["addr"] = in.ChatConfig.Addr
-		}
-		if len(in.ChatConfig.Addrs) > 0 {
-			chatQueue["addrs"] = in.ChatConfig.Addrs
-		}
-		if in.ChatConfig.MasterName != "" {
-			chatQueue["master_name"] = in.ChatConfig.MasterName
-		}
-		if in.ChatConfig.Stream != "" {
-			chatQueue["stream"] = in.ChatConfig.Stream
-		}
-		if in.ChatConfig.Group != "" {
-			chatQueue["group"] = in.ChatConfig.Group
-		}
-	}
-
-	ingestSummary := map[string]any{
-		"enabled": in.IngestControllerActive,
-	}
-	if in.IngestControllerActive {
-		if in.IngestConfig.SRSBaseURL != "" {
-			ingestSummary["srs_api"] = in.IngestConfig.SRSBaseURL
-		}
-		if in.IngestConfig.OMEBaseURL != "" {
-			ingestSummary["ome_api"] = in.IngestConfig.OMEBaseURL
-		}
-		if in.IngestConfig.JobBaseURL != "" {
-			ingestSummary["transcoder_api"] = in.IngestConfig.JobBaseURL
-		}
-		if in.IngestConfig.HealthEndpoint != "" {
-			ingestSummary["health_endpoint"] = in.IngestConfig.HealthEndpoint
-		}
-		if in.IngestConfig.MaxBootAttempts > 0 {
-			ingestSummary["max_boot_attempts"] = in.IngestConfig.MaxBootAttempts
-		}
-		if in.IngestConfig.RetryInterval > 0 {
-			ingestSummary["retry_interval"] = in.IngestConfig.RetryInterval.String()
-		}
-		if in.IngestConfig.HTTPMaxAttempts > 0 {
-			ingestSummary["http_max_attempts"] = in.IngestConfig.HTTPMaxAttempts
-		}
-		if in.IngestConfig.HTTPRetryInterval > 0 {
-			ingestSummary["http_retry_interval"] = in.IngestConfig.HTTPRetryInterval.String()
-		}
-	}
-
-	return startupSummary{
-		Datastore:     datastore,
-		SessionStore:  session,
-		LoginThrottle: loginThrottle,
-		ChatQueue:     chatQueue,
-		Ingest:        ingestSummary,
-	}
-}
-
-// LogArgs logs args details for observability without mutating runtime state.
-func (s startupSummary) LogArgs() []any {
-	return []any{
-		"datastore", s.Datastore,
-		"session_store", s.SessionStore,
-		"login_throttle", s.LoginThrottle,
-		"chat_queue", s.ChatQueue,
-		"ingest", s.Ingest,
-	}
-}
-
-// resolveSessionStoreConfig resolves session store config from flags and environment values, returning validation errors when incompatible settings are provided.
-func resolveSessionStoreConfig(flagDriver, envDriver, storageDriver, storageDSN, flagDSN, envDSN string, requirePostgres bool) (sessionStoreConfig, error) {
-	driver := strings.ToLower(strings.TrimSpace(flagDriver))
-	if driver == "" {
-		driver = strings.ToLower(strings.TrimSpace(envDriver))
-	}
-
-	sessionDSN := strings.TrimSpace(stringsutil.FirstNonEmpty(flagDSN, envDSN))
-	if driver == "" {
-		switch {
-		case sessionDSN != "":
-			driver = "postgres"
-		case storageDriver == "postgres":
-			driver = "postgres"
-		default:
-			driver = "memory"
-		}
-	}
-
-	if requirePostgres && driver != "postgres" {
-		if driver == "" {
-			return sessionStoreConfig{}, fmt.Errorf("production mode requires the postgres session store driver")
-		}
-		return sessionStoreConfig{}, fmt.Errorf("production mode requires the postgres session store driver, got %q", driver)
-	}
-
-	switch driver {
-	case "", "memory":
-		return sessionStoreConfig{Driver: "memory"}, nil
-	case "postgres":
-		if sessionDSN == "" {
-			sessionDSN = strings.TrimSpace(storageDSN)
-		}
-		if sessionDSN == "" {
-			return sessionStoreConfig{}, fmt.Errorf("postgres session store selected without DSN")
-		}
-		if requirePostgres {
-			if err := validatePostgresTLS(sessionDSN, "BITRIVER_LIVE_SESSION_POSTGRES_DSN"); err != nil {
-				return sessionStoreConfig{}, err
-			}
-		}
-		return sessionStoreConfig{Driver: "postgres", DSN: sessionDSN}, nil
-	default:
-		return sessionStoreConfig{}, fmt.Errorf("unsupported session store driver %q", driver)
-	}
-}
-
-// configureChatQueue performs configure chat queue and propagates validation or dependency failures to the caller.
-func configureChatQueue(driver string, cfg chat.RedisQueueConfig, logger *slog.Logger) (chat.Queue, error) {
-	driver = strings.ToLower(strings.TrimSpace(driver))
-	switch driver {
-	case "redis":
-		if len(cfg.Addrs) == 0 && strings.TrimSpace(cfg.Addr) == "" {
-			return nil, fmt.Errorf("redis addr is required for chat queue")
-		}
-		cfg.Logger = logging.WithComponent(logger, "chat-queue")
-		queue, err := chat.NewRedisQueue(cfg)
-		if err != nil {
-			return nil, err
-		}
-		return queue, nil
-	case "", "memory":
-		return chat.NewMemoryQueue(128), nil
-	default:
-		return nil, fmt.Errorf("unsupported chat queue driver %q", driver)
-	}
-}
-
-// resolveChatQueueDriver resolves chat queue driver from flags and environment values, returning validation errors when incompatible settings are provided.
-func resolveChatQueueDriver(flagValue, envValue string) string {
-	driver := strings.ToLower(strings.TrimSpace(flagValue))
-	if driver == "" {
-		driver = strings.ToLower(strings.TrimSpace(envValue))
-	}
-	if driver == "" {
-		return "memory"
-	}
-	return driver
-}
-
-// determineRateLimiterDriver performs determine rate limiter driver and propagates validation or dependency failures to the caller.
-func determineRateLimiterDriver(cfg server.RateLimitConfig) string {
-	if strings.TrimSpace(cfg.RedisAddr) != "" {
-		return "redis"
-	}
-	if len(cfg.RedisAddrs) > 0 {
-		return "redis"
-	}
-	if strings.TrimSpace(cfg.RedisMasterName) != "" {
-		return "redis"
-	}
-	return "memory"
-}
-
-// redactDSN performs redact dsn and propagates validation or dependency failures to the caller.
-func redactDSN(dsn string) string {
-	dsn = strings.TrimSpace(dsn)
-	if dsn == "" {
-		return ""
-	}
-	if parsed, err := url.Parse(dsn); err == nil && parsed.Scheme != "" {
-		if parsed.User != nil {
-			username := parsed.User.Username()
-			if _, hasPassword := parsed.User.Password(); hasPassword {
-				parsed.User = url.UserPassword(username, "*****")
-			} else {
-				parsed.User = url.User(username)
-			}
-		}
-		if parsed.RawQuery != "" {
-			query := parsed.Query()
-			if _, ok := query["password"]; ok {
-				query.Set("password", "*****")
-				parsed.RawQuery = query.Encode()
-			}
-		}
-		return parsed.String()
-	}
-	parts := strings.Fields(dsn)
-	for i, part := range parts {
-		lower := strings.ToLower(part)
-		if strings.HasPrefix(lower, "password=") {
-			segments := strings.SplitN(part, "=", 2)
-			if len(segments) == 2 {
-				parts[i] = segments[0] + "=*****"
-			} else {
-				parts[i] = "password=*****"
-			}
-		}
-	}
-	return strings.Join(parts, " ")
 }
 
 // resolveListenAddr resolves listen addr from flags and environment values, returning validation errors when incompatible settings are provided.
@@ -967,14 +396,6 @@ func resolveMode(flagMode, envMode string) (string, error) {
 	default:
 		return "", fmt.Errorf("invalid mode %q: must be development or production", mode)
 	}
-}
-
-// resolveSessionCookieSecureMode resolves session cookie secure mode from flags and environment values, returning validation errors when incompatible settings are provided.
-func resolveSessionCookieSecureMode(mode string) api.SessionCookieSecureMode {
-	if strings.ToLower(strings.TrimSpace(mode)) == "production" {
-		return api.SessionCookieSecureAlways
-	}
-	return api.SessionCookieSecureAuto
 }
 
 // resolveSampleRatio resolves sample ratio from flags and environment values, returning validation errors when incompatible settings are provided.
@@ -1167,41 +588,6 @@ func resolveInt(flagValue int, envKey string) int {
 		}
 	}
 	return 0
-}
-
-// ladderProfileNames performs ladder profile names and propagates validation or dependency failures to the caller.
-func ladderProfileNames(profiles []ingest.Rendition) []string {
-	names := make([]string, 0, len(profiles))
-	for _, profile := range profiles {
-		if name := strings.TrimSpace(profile.Name); name != "" {
-			names = append(names, name)
-		}
-	}
-	if len(names) == 0 {
-		return []string{"1080p", "720p", "480p"}
-	}
-	return names
-}
-
-// logIngestConfigResult logs ingest config result details for observability without mutating runtime state.
-func logIngestConfigResult(logger *slog.Logger, loadErr error) bool {
-	if loadErr == nil {
-		return false
-	}
-
-	if errors.Is(loadErr, ingest.ErrConfigDisabled) {
-		logger.Warn("ingest controller disabled; set BITRIVER_SRS_API, BITRIVER_OME_API, and BITRIVER_TRANSCODER_API to enable")
-		return false
-	}
-
-	var missing ingest.MissingConfigError
-	if errors.As(loadErr, &missing) {
-		logger.Error("ingest configuration incomplete", "missing_env", missing.Missing)
-		return true
-	}
-
-	logger.Error("failed to load ingest configuration", "error", loadErr)
-	return true
 }
 
 // resolveDuration resolves duration from flags and environment values, returning validation errors when incompatible settings are provided.
