@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/auth/oauth"
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/storage"
 )
@@ -35,7 +36,7 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.authUsersService().CreateUser(storage.CreateUserParams{
+	user, err := h.authUsersService().CreateUser(domain.UserCreateParams{
 		DisplayName: req.DisplayName,
 		Email:       req.Email,
 		Password:    req.Password,
@@ -223,7 +224,7 @@ func (h *Handler) oauthCallback(w http.ResponseWriter, r *http.Request, provider
 		return
 	}
 
-	user, err := h.authUsersService().AuthenticateOAuth(storage.OAuthLoginParams{
+	user, err := h.authUsersService().AuthenticateOAuth(domain.OAuthLoginParams{
 		Provider:    completion.Profile.Provider,
 		Subject:     completion.Profile.Subject,
 		Email:       completion.Profile.Email,
@@ -471,7 +472,7 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
-		user, err := h.authUsersService().CreateUser(storage.CreateUserParams{
+		user, err := h.authUsersService().CreateUser(domain.UserCreateParams{
 			DisplayName: req.DisplayName,
 			Email:       req.Email,
 			Roles:       req.Roles,

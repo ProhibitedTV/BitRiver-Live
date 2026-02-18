@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
 )
@@ -854,12 +855,7 @@ func (s *Storage) AuthenticateOAuth(params OAuthLoginParams) (models.User, error
 	return user, nil
 }
 
-// UserUpdate represents the fields that can be modified for an existing user.
-type UserUpdate struct {
-	DisplayName *string
-	Email       *string
-	Roles       *[]string
-}
+type UserUpdate = domain.UserUpdate
 
 // UpdateUser mutates user metadata while enforcing uniqueness constraints.
 func (s *Storage) UpdateUser(id string, update UserUpdate) (models.User, error) {
@@ -967,15 +963,7 @@ func (s *Storage) DeleteUser(id string) error {
 
 // Profile operations
 
-type ProfileUpdate struct {
-	Bio               *string
-	AvatarURL         *string
-	BannerURL         *string
-	SocialLinks       *[]models.SocialLink
-	FeaturedChannelID *string
-	TopFriends        *[]string
-	DonationAddresses *[]models.CryptoAddress
-}
+type ProfileUpdate = domain.ProfileUpdate
 
 // UpsertProfile executes UpsertProfile.
 // Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
@@ -1166,12 +1154,7 @@ func (s *Storage) ListProfiles() []models.Profile {
 
 // Channel operations
 
-type ChannelUpdate struct {
-	Title     *string
-	Category  *string
-	Tags      *[]string
-	LiveState *string
-}
+type ChannelUpdate = domain.ChannelUpdate
 
 // CreateChannel executes CreateChannel.
 // Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;

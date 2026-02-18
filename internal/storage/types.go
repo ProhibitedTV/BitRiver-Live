@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/models"
 )
@@ -158,117 +159,16 @@ type objectReference struct {
 
 const defaultObjectStorageRequestTimeout = 30 * time.Second
 
-// ClipExportParams captures the request to generate a recording clip.
-type ClipExportParams struct {
-	Title        string
-	StartSeconds int
-	EndSeconds   int
-}
-
-// CreateUploadParams captures the information required to store an uploaded asset.
-type CreateUploadParams struct {
-	ChannelID   string
-	Title       string
-	Filename    string
-	SizeBytes   int64
-	Metadata    map[string]string
-	PlaybackURL string
-}
-
-// UploadUpdate describes the mutable fields of an upload entry.
-type UploadUpdate struct {
-	Title       *string
-	Status      *string
-	Progress    *int
-	RecordingID *string
-	PlaybackURL *string
-	Metadata    map[string]string
-	Error       *string
-	CompletedAt *time.Time
-}
-
-// CreateUserParams captures the attributes that can be set when creating a user.
-type CreateUserParams struct {
-	DisplayName string
-	Email       string
-	Password    string
-	Roles       []string
-	SelfSignup  bool
-}
-
-// OAuthLoginParams represents the identity information returned by an OAuth
-// provider used to authenticate or provision a user account.
-type OAuthLoginParams struct {
-	Provider    string
-	Subject     string
-	Email       string
-	DisplayName string
-}
-
-// CreateTipParams captures the information required to record a tip.
-type CreateTipParams struct {
-	ChannelID      string
-	FromUserID     string
-	Amount         models.Money
-	Currency       string
-	Provider       string
-	Reference      string
-	WalletAddress  string
-	Message        string
-	IdempotencyKey string
-}
-
-// CreateSubscriptionParams captures the data needed to start a subscription.
-type CreateSubscriptionParams struct {
-	ChannelID         string
-	UserID            string
-	Tier              string
-	Provider          string
-	Reference         string
-	Amount            models.Money
-	Currency          string
-	Duration          time.Duration
-	AutoRenew         bool
-	ExternalReference string
-	IdempotencyKey    string
-}
-
-// ProcessPaymentWebhookParams captures a verified webhook event from a provider.
-type ProcessPaymentWebhookParams struct {
-	Provider       string
-	EventID        string
-	EntityType     string
-	Reference      string
-	Status         string
-	IdempotencyKey string
-}
-
-type CreateDMCACaseParams struct {
-	ReporterName  string
-	ReporterEmail string
-	ContentURL    string
-	Description   string
-}
-
-type DMCACaseUpdate struct {
-	Status *string
-	Notes  *string
-}
-
-type CreateDataSubjectRequestParams struct {
-	SubjectEmail string
-	RequestType  string
-	Notes        string
-}
-
-type DataSubjectRequestUpdate struct {
-	Status *string
-	Notes  *string
-}
-
-type CreateDataSubjectAuditEventParams struct {
-	ActorUserID string
-	Action      string
-	Details     string
-	EvidenceRef string
-}
+type ClipExportParams = domain.ClipExportParams
+type CreateUploadParams = domain.UploadCreateParams
+type UploadUpdate = domain.UploadUpdate
+type CreateUserParams = domain.UserCreateParams
+type OAuthLoginParams = domain.OAuthLoginParams
+type CreateTipParams = domain.TipCreateParams
+type CreateSubscriptionParams = domain.SubscriptionCreateParams
+type ProcessPaymentWebhookParams = domain.ProcessPaymentWebhookParams
+type CreateDMCACaseParams = domain.DMCACaseCreateParams
+type DMCACaseUpdate = domain.DMCACaseUpdate
+type CreateDataSubjectRequestParams = domain.DataSubjectRequestCreateParams
+type DataSubjectRequestUpdate = domain.DataSubjectRequestUpdate
+type CreateDataSubjectAuditEventParams = domain.DataSubjectAuditEventCreateParams

@@ -56,6 +56,12 @@ BitRiver Live has one deployment pipeline regardless of launcher: `deploy/docker
 - Service/domain logic calls infrastructure through interfaces (repositories, gateways, publishers).
 - Adapter implementations live in infrastructure packages and are injected by `internal/app`.
 
+## Repository boundary contract
+
+- Repository interfaces consumed by use cases should be owned by `internal/domain` or `internal/service` and scoped by bounded context (for example: auth/users, channels, recordings, payments, legal).
+- Service method signatures should exchange domain-owned DTOs; avoid exposing adapter package DTOs (such as `internal/storage` param structs) in service contracts.
+- `internal/storage` may provide temporary type aliases/adapters for migration compatibility, but new logic should target domain-owned interfaces first.
+
 ## Enforcement checklist for contributors
 
 Before opening a PR that touches runtime behaviour:

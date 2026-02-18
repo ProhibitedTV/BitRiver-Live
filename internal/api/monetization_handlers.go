@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/service"
-	"bitriver-live/internal/storage"
 )
 
 type createTipRequest struct {
@@ -193,7 +193,7 @@ func (h *Handler) handleTipsRoutes(channel models.Channel, remaining []string, w
 		if idempotencyKey == "" {
 			idempotencyKey = service.BuildIdempotencyKey(actor.ID, req.Reference)
 		}
-		params := storage.CreateTipParams{
+		params := domain.TipCreateParams{
 			ChannelID:      channel.ID,
 			FromUserID:     actor.ID,
 			Amount:         amount,
@@ -291,7 +291,7 @@ func (h *Handler) handleSubscriptionsRoutes(channel models.Channel, remaining []
 		if idempotencyKey == "" {
 			idempotencyKey = service.BuildIdempotencyKey(actor.ID, req.Reference)
 		}
-		params := storage.CreateSubscriptionParams{
+		params := domain.SubscriptionCreateParams{
 			ChannelID:         channel.ID,
 			UserID:            actor.ID,
 			Tier:              req.Tier,
@@ -351,7 +351,7 @@ func (h *Handler) PaymentWebhook(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, fmt.Errorf("decode webhook body: %w", err))
 		return
 	}
-	tx, err := h.PaymentService.ProcessWebhook(provider, storage.ProcessPaymentWebhookParams{
+	tx, err := h.PaymentService.ProcessWebhook(provider, domain.ProcessPaymentWebhookParams{
 		EventID: req.EventID, EntityType: req.EntityType, Reference: req.Reference, Status: req.Status, IdempotencyKey: req.IdempotencyKey,
 	})
 	if err != nil {

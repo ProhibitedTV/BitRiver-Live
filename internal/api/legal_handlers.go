@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/storage"
 )
@@ -44,7 +45,7 @@ func (h *Handler) LegalDMCA(w http.ResponseWriter, r *http.Request) {
 		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
-		rec, err := h.LegalService.CreateDMCACase(storage.CreateDMCACaseParams{ReporterName: req.ReporterName, ReporterEmail: req.ReporterEmail, ContentURL: req.ContentURL, Description: req.Description})
+		rec, err := h.LegalService.CreateDMCACase(domain.DMCACaseCreateParams{ReporterName: req.ReporterName, ReporterEmail: req.ReporterEmail, ContentURL: req.ContentURL, Description: req.Description})
 		if err != nil {
 			WriteRequestError(w, err)
 			return
@@ -110,7 +111,7 @@ func (h *Handler) LegalDataSubject(w http.ResponseWriter, r *http.Request) {
 		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
-		rec, err := h.LegalService.CreateDataSubjectRequest(storage.CreateDataSubjectRequestParams{SubjectEmail: req.SubjectEmail, RequestType: req.RequestType, Notes: req.Notes})
+		rec, err := h.LegalService.CreateDataSubjectRequest(domain.DataSubjectRequestCreateParams{SubjectEmail: req.SubjectEmail, RequestType: req.RequestType, Notes: req.Notes})
 		if err != nil {
 			WriteRequestError(w, err)
 			return
