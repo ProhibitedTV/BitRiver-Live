@@ -220,6 +220,76 @@ If you prefer not to manage another override file, enforce the same restrictions
 
 If you are fronting BitRiver Live with Cloudflare and Nginx Proxy Manager (NPM), use the dedicated runbook at [`docs/reverse-proxy-npm-cloudflare.md`](reverse-proxy-npm-cloudflare.md). It documents the required `.env` keys (`NEXT_PUBLIC_VIEWER_URL`, `BITRIVER_VIEWER_ORIGIN`, CORS allowlists, and `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`), recommended Cloudflare TLS posture (`orange-cloud` + `Full (strict)`), NPM websocket/path forwarding for `/`, `/api`, and `/viewer`, plus an end-to-end validation checklist.
 
+## API websocket proxy requirements
+
+Even when most API calls are regular HTTP, production proxies must be websocket-safe for the API surface so chat/status realtime behaviour keeps working during upgrades and future endpoint additions.
+
+### Required proxy behaviours
+
+- Use HTTP/1.1 between proxy and upstream for websocket-capable routes.
+- Preserve upgrade headers on proxied requests:
+  - `Connection: upgrade`
+  - `Upgrade: websocket`
+  - `Sec-WebSocket-*` headers
+- Keep read/send timeouts long-lived (for example `>= 3600s`) so idle realtime connections are not closed early.
+- Forward origin/scheme headers so auth/cookie/CORS behaviour remains coherent:
+  - `Host`
+  - `X-Forwarded-Host`
+  - `X-Forwarded-Proto`
+  - `X-Forwarded-For`
+
+### Routes that must be websocket-safe
+
+Apply websocket-safe proxying to **all** `/api/*` routes. At minimum, ensure the realtime-facing endpoints below are covered:
+
+- `/api/channels/*/chat` (viewer/admin chat delivery)
+- `/api/status` (control-centre status refreshes and related realtime health checks)
+
+If you split routing by path blocks, keep `/api` on the websocket-capable upstream config instead of creating separate non-upgrade API locations.
+
+### Minimal Nginx config block
+
+```nginx
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+location /api/ {
+    proxy_http_version 1.1;
+    proxy_pass http://bitriver_api;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+}
+```
+
+### NPM UI mapping checklist
+
+For Nginx Proxy Manager, verify all of the following in the Proxy Host UI:
+
+1. **Proxy Host:** domain points to the BitRiver API upstream (`http://<bitriver-host>:8080` by default).
+2. **Path mappings:** include `/` and `/api` (and `/viewer` when serving viewer through the same host).
+3. **Websocket Support:** toggled **on**.
+4. **Forwarded headers:** keep/pass `Host` and `X-Forwarded-Proto` (NPM defaults usually do this; do not override them away in advanced snippets).
+
+### Troubleshooting websocket proxy issues
+
+| Symptom | Likely proxy misconfiguration | What to check/fix |
+| --- | --- | --- |
+| Chat repeatedly disconnects every 30-60 seconds | Proxy read timeout too low | Raise `proxy_read_timeout`/upstream idle timeout to long-lived values (for example `3600s`). |
+| Browser console shows websocket handshake `400` or `426` | Upgrade headers stripped or `proxy_http_version` not `1.1` | Ensure `proxy_http_version 1.1`, `Upgrade`, and `Connection` headers are explicitly forwarded. |
+| Chat/status works directly on API port but fails through proxy | `/api` mapped to a non-websocket path block | Route `/api/*` through the websocket-capable location or enable websocket support on that path in NPM. |
+| Session/cookie behaviour breaks only behind TLS proxy | Forwarded scheme/host headers missing | Pass `Host` + `X-Forwarded-Proto` so secure-cookie and origin handling match the public URL. |
+
 ## Resource limits + ulimits override
 
 For production-ish deployments, add the optional Compose override `deploy/docker-compose.resources.yml`. It sets higher `nofile` limits and CPU/memory reservations for the ingest trio (SRS, OME, and transcoder) while keeping the quickstart path unchanged.
