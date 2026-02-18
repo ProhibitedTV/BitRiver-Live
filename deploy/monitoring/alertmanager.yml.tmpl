@@ -1,0 +1,51 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default-notifications
+  group_by: ['alertname', 'service', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 2h
+  routes:
+    - receiver: critical-notifications
+      matchers:
+        - severity = "critical"
+    - receiver: auth-notifications
+      matchers:
+        - service = "auth"
+
+inhibit_rules:
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
+    equal: ['alertname', 'service']
+
+receivers:
+  - name: default-notifications
+    webhook_configs:
+      - url: "${BITRIVER_ALERTMANAGER_DEFAULT_WEBHOOK_URL}"
+        send_resolved: true
+        http_config:
+          authorization:
+            credentials: "${BITRIVER_ALERTMANAGER_DEFAULT_WEBHOOK_TOKEN}"
+
+  - name: critical-notifications
+    webhook_configs:
+      - url: "${BITRIVER_ALERTMANAGER_CRITICAL_WEBHOOK_URL}"
+        send_resolved: true
+        http_config:
+          authorization:
+            credentials: "${BITRIVER_ALERTMANAGER_CRITICAL_WEBHOOK_TOKEN}"
+
+  - name: auth-notifications
+    webhook_configs:
+      - url: "${BITRIVER_ALERTMANAGER_AUTH_WEBHOOK_URL}"
+        send_resolved: true
+        http_config:
+          authorization:
+            credentials: "${BITRIVER_ALERTMANAGER_AUTH_WEBHOOK_TOKEN}"
+
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'

@@ -44,6 +44,14 @@ GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
 ```
 
 
+
+Monitoring config syntax is validated in CI before release packaging. Run the same guard locally after editing
+`deploy/monitoring/` assets:
+
+```bash
+./scripts/check-monitoring-config.sh
+```
+
 Function comment coverage is enforced in CI with a lightweight guard script:
 
 ```bash

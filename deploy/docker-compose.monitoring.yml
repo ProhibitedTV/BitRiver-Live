@@ -1,4 +1,4 @@
-# Monitoring stack (Prometheus + Grafana).
+# Monitoring stack (Prometheus + Grafana + Alertmanager).
 # Apply with:
 #   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.monitoring.yml --profile monitoring up -d
 services:
@@ -14,12 +14,58 @@ services:
       - "--storage.tsdb.retention.time=15d"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus-alerts.yml:/etc/prometheus/rules/prometheus-alerts.yml:ro
       - ./monitoring/metrics.token:/etc/prometheus/metrics.token:ro
       - prometheus-data:/prometheus
     ports:
       - "9090:9090"
     depends_on:
       - bitriver-live
+      - alertmanager
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: bitriver-alertmanager
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./monitoring/alertmanager-notification.tmpl:/etc/alertmanager/templates/bitriver-default.tmpl:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "9093:9093"
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.1
+    container_name: bitriver-node-exporter
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    command:
+      - "--path.rootfs=/host"
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "9100:9100"
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.60.0
+    container_name: bitriver-redis-exporter
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    environment:
+      REDIS_ADDR: redis:6379
+      REDIS_USER: default
+      REDIS_PASSWORD: ${BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD:-}
+    ports:
+      - "9121:9121"
+    depends_on:
+      - redis
 
   grafana:
     image: grafana/grafana-oss:10.4.3
@@ -41,3 +87,4 @@ services:
 volumes:
   grafana-data:
   prometheus-data:
+  alertmanager-data:
