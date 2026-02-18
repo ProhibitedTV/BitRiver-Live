@@ -66,6 +66,10 @@ jobs:
       - name: Run unit tests
         run: go test ./... -count=1 -timeout=120s
 
+      - name: Validate architecture import direction
+        shell: bash
+        run: ./scripts/check-architecture-deps.sh
+
       - name: Verify dependency source of truth
         shell: bash
         run: ./scripts/check-dependency-source.sh
