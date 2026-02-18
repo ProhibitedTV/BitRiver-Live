@@ -246,6 +246,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	handlerChain = requestIDMiddleware(cfg.Logger, handlerChain)
 	handlerChain = tracing.HTTPMiddleware(cfg.Tracer, handlerChain)
 	handlerChain = authMiddleware(handler, handlerChain)
+	handlerChain = csrfMiddleware(handler, cfg.Logger, ipResolver, handlerChain)
 	handlerChain = rateLimitMiddleware(rl, ipResolver, cfg.Logger, handlerChain)
 	handlerChain = metrics.HTTPMiddleware(recorder, handlerChain)
 	handlerChain = auditMiddleware(cfg.AuditLogger, ipResolver, handlerChain)
