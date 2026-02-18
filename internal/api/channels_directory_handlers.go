@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/observability/metrics"
-	"bitriver-live/internal/storage"
 )
 
 type createChannelRequest struct {
@@ -513,7 +513,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			if !DecodeAndValidate(w, r, &req) {
 				return
 			}
-			update := storage.ChannelUpdate{}
+			update := domain.ChannelUpdate{}
 			if req.Title != nil {
 				update.Title = req.Title
 			}
@@ -747,7 +747,7 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 				}
 				// Treat POST as idempotent: we reuse an active subscription when present so retried client requests do not duplicate billing records or metrics.
 				if !alreadySubscribed {
-					params := storage.CreateSubscriptionParams{
+					params := domain.SubscriptionCreateParams{
 						ChannelID: channel.ID,
 						UserID:    actor.ID,
 						Tier:      "supporter",

@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/models"
 	"bitriver-live/internal/security/tokenauth"
-	"bitriver-live/internal/storage"
 )
 
 var (
@@ -349,7 +349,7 @@ func (h *Handler) createUploadEntry(r *http.Request, actor models.User, req crea
 	if media != nil && media.size > 0 {
 		sizeBytes = media.size
 	}
-	params := storage.CreateUploadParams{
+	params := domain.UploadCreateParams{
 		ChannelID:   channelID,
 		Title:       req.Title,
 		Filename:    req.Filename,
@@ -425,7 +425,7 @@ func (h *Handler) attachMediaToUpload(r *http.Request, upload models.Upload, bas
 	token := generateUploadMediaToken()
 	metadata["mediaToken"] = token
 	metadata["sourceUrl"] = h.uploadMediaURL(r, upload.ID, token)
-	update := storage.UploadUpdate{Metadata: metadata}
+	update := domain.UploadUpdate{Metadata: metadata}
 	if _, err := h.uploadsService().UpdateUpload(upload.ID, update); err != nil {
 		_ = os.Remove(filepath.Join(h.uploadMediaDir(), storedName))
 		_ = h.uploadsService().DeleteUpload(upload.ID)

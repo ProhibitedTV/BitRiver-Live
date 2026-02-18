@@ -12,7 +12,6 @@ import (
 	"bitriver-live/internal/auth/oauth"
 	"bitriver-live/internal/domain"
 	"bitriver-live/internal/models"
-	"bitriver-live/internal/storage"
 )
 
 // Signup performs signup and returns an error when dependent systems reject the operation.
@@ -518,7 +517,7 @@ func (h *Handler) UserByID(w http.ResponseWriter, r *http.Request) {
 		if !DecodeAndValidate(w, r, &req) {
 			return
 		}
-		update := storage.UserUpdate{}
+		update := domain.UserUpdate{}
 		if req.DisplayName != nil {
 			update.DisplayName = req.DisplayName
 		}
