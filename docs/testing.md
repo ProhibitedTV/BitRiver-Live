@@ -261,6 +261,8 @@ Run the installer-language guard to keep shipped milestones consistent across re
 
 CI enforces the same check in [`.github/workflows/docs-consistency.yml`](../.github/workflows/docs-consistency.yml).
 
+Go workflow reproducibility is guarded by [`.github/workflows/go-workflow-consistency.yml`](../.github/workflows/go-workflow-consistency.yml), which runs [`scripts/check-go-workflow-config.sh`](../scripts/check-go-workflow-config.sh) to enforce `actions/setup-go@v5`, `go-version-file: go.mod`, and offline Go env defaults (`GOTOOLCHAIN=local`, `GOPROXY=off`, `GOSUMDB=off`) across the core Go workflows.
+
 ## Postgres storage layer
 
 Storage integration tests live behind the `postgres` build tag. They expect an
