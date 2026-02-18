@@ -21,6 +21,7 @@ const state = {
         queue: [],
         actions: [],
         automod: [],
+        appeals: [],
         filters: {},
         queueMeta: null,
         actionsMeta: null,
@@ -2621,9 +2622,10 @@ async function loadModeration(force = false) {
         if (shouldAppend && state.moderation.automodMeta?.nextCursor) {
             automodParams.set("cursor", state.moderation.automodMeta.nextCursor);
         }
-        const [queuePayload, automodPayload] = await Promise.all([
+        const [queuePayload, automodPayload, appealsPayload] = await Promise.all([
             apiRequest(`/api/moderation/queue?${queueParams.toString()}`),
             apiRequest(`/api/moderation/automod?${automodParams.toString()}`),
+            apiRequest(`/api/channels/${state.channels?.[0]?.id || ""}/chat/moderation/appeals?status=all`).catch(() => []),
         ]);
         const queue = Array.isArray(queuePayload?.queue) ? queuePayload.queue : [];
         const actions = Array.isArray(queuePayload?.actions) ? queuePayload.actions : [];
@@ -2633,6 +2635,7 @@ async function loadModeration(force = false) {
             shouldAppend && queueParams.has("actionsCursor") ? state.moderation.actions.concat(actions) : actions;
         state.moderation.automod =
             shouldAppend && automodParams.has("cursor") ? state.moderation.automod.concat(automod) : automod;
+        state.moderation.appeals = Array.isArray(appealsPayload) ? appealsPayload : [];
         state.moderation.queueMeta = queuePayload?.queueMeta ?? null;
         state.moderation.actionsMeta = queuePayload?.actionsMeta ?? null;
         state.moderation.automodMeta = automodPayload?.meta ?? null;
@@ -2692,6 +2695,7 @@ function renderModeration() {
     const historyContainer = document.getElementById("moderation-history");
     const filtersContainer = document.getElementById("moderation-filters");
     const automodContainer = document.getElementById("moderation-automod");
+    const appealsContainer = document.getElementById("moderation-appeals");
     if (!queueContainer || !historyContainer || !filtersContainer || !automodContainer) {
         return;
     }
@@ -2699,6 +2703,7 @@ function renderModeration() {
     clearElement(historyContainer);
     clearElement(filtersContainer);
     clearElement(automodContainer);
+    clearElement(appealsContainer);
 
     const queue = state.moderation.queue;
     if (!queue.length) {
@@ -2804,6 +2809,29 @@ function renderModeration() {
                 }),
             );
             historyContainer.appendChild(card);
+        }
+    }
+
+
+    const appeals = state.moderation.appeals || [];
+    if (!appeals.length) {
+        appealsContainer.appendChild(createElement("div", { className: "empty", textContent: "No appeals yet." }));
+    } else {
+        for (const appeal of appeals) {
+            const card = createElement("article", { className: "card" });
+            card.append(
+                createElement("h3", { textContent: `Appeal ${appeal.id}` }),
+                createElement("div", { className: "card__meta", textContent: `Status: ${appeal.status}` }),
+                createElement("div", { className: "card__meta", textContent: `Reason: ${appeal.reason || "n/a"}` }),
+            );
+            const actions = createElement("div", { className: "card__actions" });
+            actions.append(
+                createElement("button", { className: "secondary", textContent: "Resolve", dataset: { action: "resolve-appeal", id: appeal.id } }),
+                createElement("button", { className: "danger", textContent: "Deny", dataset: { action: "deny-appeal", id: appeal.id } }),
+                createElement("button", { className: "secondary", textContent: "Reopen", dataset: { action: "reopen-appeal", id: appeal.id } }),
+            );
+            card.appendChild(actions);
+            appealsContainer.appendChild(card);
         }
     }
 
@@ -2919,7 +2947,7 @@ function renderModeration() {
             }
 
             const form = createElement("form", { dataset: { channel: channel.id } });
-            form.classList.add("filter-form");
+            form.className = "filter-form";
             const kindLabel = document.createElement("label");
             kindLabel.append("Filter type");
             const kindSelect = document.createElement("select");

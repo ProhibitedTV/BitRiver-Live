@@ -34,6 +34,8 @@ const (
 
 	ChatReportStatusOpen     = "open"
 	ChatReportStatusResolved = "resolved"
+	AppealStatusOpen         = "open"
+	AppealStatusResolved     = "resolved"
 
 	duplicateTipReferenceError = "pq: duplicate key value violates unique constraint \"tips_reference_unique\""
 )
@@ -63,6 +65,8 @@ type dataset struct {
 	ChatTimeoutReasons  map[string]map[string]string              `json:"chatTimeoutReasons"`
 	ChatTimeoutIssuedAt map[string]map[string]time.Time           `json:"chatTimeoutIssuedAt"`
 	ChatReports         map[string]models.ChatReport              `json:"chatReports"`
+	Appeals             map[string]models.Appeal                  `json:"appeals"`
+	AppealEvents        map[string][]models.AppealEvent           `json:"appealEvents"`
 	ChatFilters         map[string]models.ChatFilter              `json:"chatFilters"`
 	ChatAutoModActions  map[string]models.ChatAutoModAction       `json:"chatAutoModActions"`
 	Tips                map[string]models.Tip                     `json:"tips"`

@@ -126,6 +126,37 @@ type resolveModerationRequest struct {
 	Resolution string `json:"resolution"`
 }
 
+type appealResponse struct {
+	ID         string                `json:"id"`
+	ReportID   string                `json:"reportId"`
+	ChannelID  string                `json:"channelId"`
+	ReporterID string                `json:"reporterId"`
+	Reason     string                `json:"reason"`
+	Status     string                `json:"status"`
+	Resolution string                `json:"resolution,omitempty"`
+	ResolverID string                `json:"resolverId,omitempty"`
+	CreatedAt  string                `json:"createdAt"`
+	ResolvedAt *string               `json:"resolvedAt,omitempty"`
+	Events     []appealEventResponse `json:"events,omitempty"`
+}
+
+type appealEventResponse struct {
+	ID        string `json:"id"`
+	AppealID  string `json:"appealId"`
+	ActorID   string `json:"actorId"`
+	Action    string `json:"action"`
+	Note      string `json:"note,omitempty"`
+	CreatedAt string `json:"createdAt"`
+}
+
+type createAppealRequest struct {
+	Reason string `json:"reason"`
+}
+
+type appealActionRequest struct {
+	Reason string `json:"reason"`
+}
+
 type chatReportResponse struct {
 	ID          string  `json:"id"`
 	ChannelID   string  `json:"channelId"`
@@ -206,6 +237,25 @@ func newChatFilterResponse(filter models.ChatFilter) chatFilterResponse {
 		CreatedAt: filter.CreatedAt.Format(time.RFC3339Nano),
 		UpdatedAt: filter.UpdatedAt.Format(time.RFC3339Nano),
 	}
+}
+
+func newAppealResponse(appeal models.Appeal) appealResponse {
+	resp := appealResponse{ID: appeal.ID, ReportID: appeal.ReportID, ChannelID: appeal.ChannelID, ReporterID: appeal.ReporterID, Reason: appeal.Reason, Status: appeal.Status, Resolution: appeal.Resolution, ResolverID: appeal.ResolverID, CreatedAt: appeal.CreatedAt.Format(time.RFC3339Nano)}
+	if appeal.ResolvedAt != nil {
+		v := appeal.ResolvedAt.Format(time.RFC3339Nano)
+		resp.ResolvedAt = &v
+	}
+	if len(appeal.Events) > 0 {
+		resp.Events = make([]appealEventResponse, 0, len(appeal.Events))
+		for _, evt := range appeal.Events {
+			resp.Events = append(resp.Events, appealEventResponse{ID: evt.ID, AppealID: evt.AppealID, ActorID: evt.ActorID, Action: evt.Action, Note: evt.Note, CreatedAt: evt.CreatedAt.Format(time.RFC3339Nano)})
+		}
+	}
+	return resp
+}
+
+func (h *Handler) canModerateAppeals(actor models.User, channel models.Channel) bool {
+	return channel.OwnerID == actor.ID || actor.HasRole(roleAdmin) || actor.HasRole("moderator")
 }
 
 // newChatReportResponse builds and returns chat report response using the supplied dependencies.
@@ -400,6 +450,9 @@ func (h *Handler) handleChatModeration(actor models.User, channel models.Channel
 		case "reports":
 			h.handleChatReports(actor, channel, remaining[1:], w, r)
 			return
+		case "appeals":
+			h.handleChatAppeals(actor, channel, remaining[1:], w, r)
+			return
 		}
 	}
 	if len(remaining) > 0 {
@@ -550,6 +603,23 @@ func (h *Handler) handleChatFilters(actor models.User, channel models.Channel, r
 func (h *Handler) handleChatReports(actor models.User, channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
 	if len(remaining) > 0 && strings.TrimSpace(remaining[0]) != "" {
 		reportID := remaining[0]
+		if len(remaining) == 2 && remaining[1] == "appeals" {
+			if r.Method != http.MethodPost {
+				WriteMethodNotAllowed(w, r, http.MethodPost)
+				return
+			}
+			var req createAppealRequest
+			if !DecodeAndValidate(w, r, &req) {
+				return
+			}
+			appeal, err := h.Store.CreateAppeal(reportID, actor.ID, req.Reason)
+			if err != nil {
+				WriteError(w, http.StatusBadRequest, err)
+				return
+			}
+			WriteJSON(w, http.StatusCreated, newAppealResponse(appeal))
+			return
+		}
 		if len(remaining) == 2 && remaining[1] == "resolve" {
 			if r.Method != http.MethodPost {
 				WriteMethodNotAllowed(w, r, http.MethodPost)
@@ -651,6 +721,65 @@ func (h *Handler) handleChatReports(actor models.User, channel models.Channel, r
 	default:
 		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodPost)
 	}
+}
+
+func (h *Handler) handleChatAppeals(actor models.User, channel models.Channel, remaining []string, w http.ResponseWriter, r *http.Request) {
+	if len(remaining) > 0 && strings.TrimSpace(remaining[0]) != "" {
+		appealID := remaining[0]
+		if len(remaining) == 2 && (remaining[1] == "resolve" || remaining[1] == "deny" || remaining[1] == "reopen") {
+			if r.Method != http.MethodPost {
+				WriteMethodNotAllowed(w, r, http.MethodPost)
+				return
+			}
+			if !h.canModerateAppeals(actor, channel) {
+				WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+				return
+			}
+			var req appealActionRequest
+			if !DecodeAndValidate(w, r, &req) {
+				return
+			}
+			var (
+				appeal models.Appeal
+				err    error
+			)
+			switch remaining[1] {
+			case "resolve":
+				appeal, err = h.Store.ResolveAppeal(appealID, actor.ID, req.Reason)
+			case "deny":
+				appeal, err = h.Store.ResolveAppeal(appealID, actor.ID, "denied")
+			case "reopen":
+				appeal, err = h.Store.ReopenAppeal(appealID, actor.ID, req.Reason)
+			}
+			if err != nil {
+				WriteError(w, http.StatusBadRequest, err)
+				return
+			}
+			WriteJSON(w, http.StatusOK, newAppealResponse(appeal))
+			return
+		}
+		WriteError(w, http.StatusNotFound, fmt.Errorf("unknown chat appeal path"))
+		return
+	}
+	if r.Method != http.MethodGet {
+		WriteMethodNotAllowed(w, r, http.MethodGet)
+		return
+	}
+	requester := ""
+	if !h.canModerateAppeals(actor, channel) {
+		requester = actor.ID
+	}
+	includeClosed := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("status")), "all")
+	appeals, err := h.Store.ListAppeals(channel.ID, requester, includeClosed)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, err)
+		return
+	}
+	resp := make([]appealResponse, 0, len(appeals))
+	for _, appeal := range appeals {
+		resp = append(resp, newAppealResponse(appeal))
+	}
+	WriteJSON(w, http.StatusOK, resp)
 }
 
 // ModerationQueue performs moderation queue and returns an error when dependent systems reject the operation.

@@ -29,6 +29,8 @@ type Snapshot struct {
 	ChatTimeoutReasons  map[string]map[string]string              `json:"chatTimeoutReasons"`
 	ChatTimeoutIssuedAt map[string]map[string]time.Time           `json:"chatTimeoutIssuedAt"`
 	ChatReports         map[string]models.ChatReport              `json:"chatReports"`
+	Appeals             map[string]models.Appeal                  `json:"appeals"`
+	AppealEvents        map[string][]models.AppealEvent           `json:"appealEvents"`
 	ChatFilters         map[string]models.ChatFilter              `json:"chatFilters"`
 	ChatAutoModActions  map[string]models.ChatAutoModAction       `json:"chatAutoModActions"`
 	Tips                map[string]models.Tip                     `json:"tips"`
@@ -57,6 +59,8 @@ type SnapshotCounts struct {
 	ChatBans               int
 	ChatTimeouts           int
 	ChatReports            int
+	Appeals                int
+	AppealEvents           int
 	ChatFilters            int
 	ChatAutoModActions     int
 	Tips                   int
@@ -143,6 +147,12 @@ func (s *Snapshot) ensureInitialized() {
 	if s.ChatReports == nil {
 		s.ChatReports = make(map[string]models.ChatReport)
 	}
+	if s.Appeals == nil {
+		s.Appeals = make(map[string]models.Appeal)
+	}
+	if s.AppealEvents == nil {
+		s.AppealEvents = make(map[string][]models.AppealEvent)
+	}
 	if s.ChatFilters == nil {
 		s.ChatFilters = make(map[string]models.ChatFilter)
 	}
@@ -198,6 +208,7 @@ func (s *Snapshot) Counts() SnapshotCounts {
 		StreamSessions:      len(s.StreamSessions),
 		ChatMessages:        len(s.ChatMessages),
 		ChatReports:         len(s.ChatReports),
+		Appeals:             len(s.Appeals),
 		ChatFilters:         len(s.ChatFilters),
 		ChatAutoModActions:  len(s.ChatAutoModActions),
 		Tips:                len(s.Tips),
@@ -215,6 +226,9 @@ func (s *Snapshot) Counts() SnapshotCounts {
 	}
 	for _, follows := range s.Follows {
 		counts.Follows += len(follows)
+	}
+	for _, events := range s.AppealEvents {
+		counts.AppealEvents += len(events)
 	}
 	for _, bans := range s.ChatBans {
 		counts.ChatBans += len(bans)

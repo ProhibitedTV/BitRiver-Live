@@ -508,6 +508,42 @@ func RunRepositoryChatReportsLifecycle(t *testing.T, factory RepositoryFactory) 
 	}
 }
 
+func RunRepositoryAppealsLifecycle(t *testing.T, factory RepositoryFactory) {
+	repo := runRepository(t, factory)
+	owner, err := repo.CreateUser(CreateUserParams{DisplayName: "owner", Email: "owner-appeal@example.com", Roles: []string{"creator", "moderator"}})
+	requireAvailable(t, err, "create owner")
+	reporter, err := repo.CreateUser(CreateUserParams{DisplayName: "reporter", Email: "reporter-appeal@example.com"})
+	requireAvailable(t, err, "create reporter")
+	target, err := repo.CreateUser(CreateUserParams{DisplayName: "target", Email: "target-appeal@example.com"})
+	requireAvailable(t, err, "create target")
+	channel, err := repo.CreateChannel(owner.ID, "Lobby", "gaming", nil)
+	requireAvailable(t, err, "create channel")
+	report, err := repo.CreateChatReport(channel.ID, reporter.ID, target.ID, "spam", "", "")
+	requireAvailable(t, err, "create report")
+	_, err = repo.ResolveChatReport(report.ID, owner.ID, "handled")
+	requireAvailable(t, err, "resolve report")
+	appeal, err := repo.CreateAppeal(report.ID, reporter.ID, "please reconsider")
+	requireAvailable(t, err, "create appeal")
+	if appeal.Status != AppealStatusOpen {
+		t.Fatalf("expected open appeal")
+	}
+	mine, err := repo.ListAppeals(channel.ID, reporter.ID, true)
+	requireAvailable(t, err, "list my appeals")
+	if len(mine) != 1 {
+		t.Fatalf("expected one appeal, got %d", len(mine))
+	}
+	resolved, err := repo.ResolveAppeal(appeal.ID, owner.ID, "accepted")
+	requireAvailable(t, err, "resolve appeal")
+	if resolved.Status != AppealStatusResolved {
+		t.Fatalf("expected resolved appeal")
+	}
+	reopened, err := repo.ReopenAppeal(appeal.ID, owner.ID, "retry")
+	requireAvailable(t, err, "reopen appeal")
+	if reopened.Status != AppealStatusOpen {
+		t.Fatalf("expected reopened appeal")
+	}
+}
+
 // RunRepositoryTipsLifecycle asserts tip creation and listing behaviour against
 // a repository implementation.
 func RunRepositoryTipsLifecycle(t *testing.T, factory RepositoryFactory) {
