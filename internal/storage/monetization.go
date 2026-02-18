@@ -8,57 +8,57 @@ import (
 	"time"
 	"unicode/utf8"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 )
 
 // CreateTip records a tip event for a channel.
-func (s *Storage) CreateTip(params CreateTipParams) (models.Tip, error) {
+func (s *Storage) CreateTip(params CreateTipParams) (domain.Tip, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if _, ok := s.data.Channels[params.ChannelID]; !ok {
-		return models.Tip{}, fmt.Errorf("channel %s not found", params.ChannelID)
+		return domain.Tip{}, fmt.Errorf("channel %s not found", params.ChannelID)
 	}
 	if _, ok := s.data.Users[params.FromUserID]; !ok {
-		return models.Tip{}, fmt.Errorf("user %s not found", params.FromUserID)
+		return domain.Tip{}, fmt.Errorf("user %s not found", params.FromUserID)
 	}
 	amount := params.Amount
 	if amount.MinorUnits() <= 0 {
-		return models.Tip{}, fmt.Errorf("amount must be positive")
+		return domain.Tip{}, fmt.Errorf("amount must be positive")
 	}
 	currency := strings.ToUpper(strings.TrimSpace(params.Currency))
 	if currency == "" {
-		return models.Tip{}, fmt.Errorf("currency is required")
+		return domain.Tip{}, fmt.Errorf("currency is required")
 	}
 	provider := strings.ToLower(strings.TrimSpace(params.Provider))
 	if provider == "" {
-		return models.Tip{}, fmt.Errorf("provider is required")
+		return domain.Tip{}, fmt.Errorf("provider is required")
 	}
 	reference := strings.TrimSpace(params.Reference)
 	if reference == "" {
 		reference = fmt.Sprintf("tip-%d", time.Now().UnixNano())
 	}
 	if utf8.RuneCountInString(reference) > MaxTipReferenceLength {
-		return models.Tip{}, fmt.Errorf("reference exceeds %d characters", MaxTipReferenceLength)
+		return domain.Tip{}, fmt.Errorf("reference exceeds %d characters", MaxTipReferenceLength)
 	}
 	wallet := strings.TrimSpace(params.WalletAddress)
 	if utf8.RuneCountInString(wallet) > MaxTipWalletAddressLength {
-		return models.Tip{}, fmt.Errorf("wallet address exceeds %d characters", MaxTipWalletAddressLength)
+		return domain.Tip{}, fmt.Errorf("wallet address exceeds %d characters", MaxTipWalletAddressLength)
 	}
 	message := strings.TrimSpace(params.Message)
 	if utf8.RuneCountInString(message) > MaxTipMessageLength {
-		return models.Tip{}, fmt.Errorf("message exceeds %d characters", MaxTipMessageLength)
+		return domain.Tip{}, fmt.Errorf("message exceeds %d characters", MaxTipMessageLength)
 	}
 	if s.tipExists(provider, reference) {
-		return models.Tip{}, errors.New(duplicateTipReferenceError)
+		return domain.Tip{}, errors.New(duplicateTipReferenceError)
 	}
 	id, err := generateID()
 	if err != nil {
-		return models.Tip{}, err
+		return domain.Tip{}, err
 	}
 	now := time.Now().UTC()
 	idempotencyKey := strings.TrimSpace(params.IdempotencyKey)
-	tip := models.Tip{
+	tip := domain.Tip{
 		ID:             id,
 		ChannelID:      params.ChannelID,
 		FromUserID:     params.FromUserID,
@@ -68,17 +68,17 @@ func (s *Storage) CreateTip(params CreateTipParams) (models.Tip, error) {
 		Reference:      reference,
 		WalletAddress:  wallet,
 		Message:        message,
-		Status:         models.PaymentStatePending,
+		Status:         domain.PaymentStatePending,
 		IdempotencyKey: idempotencyKey,
 		CreatedAt:      now,
 	}
 	if s.data.Tips == nil {
-		s.data.Tips = make(map[string]models.Tip)
+		s.data.Tips = make(map[string]domain.Tip)
 	}
 	s.data.Tips[id] = tip
 	if err := s.persist(); err != nil {
 		delete(s.data.Tips, id)
-		return models.Tip{}, err
+		return domain.Tip{}, err
 	}
 	return tip, nil
 }
@@ -98,14 +98,14 @@ func (s *Storage) tipExists(provider, reference string) bool {
 }
 
 // ListTips returns recent tips for a channel.
-func (s *Storage) ListTips(channelID string, limit int) ([]models.Tip, error) {
+func (s *Storage) ListTips(channelID string, limit int) ([]domain.Tip, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if _, ok := s.data.Channels[channelID]; !ok {
 		return nil, fmt.Errorf("channel %s not found", channelID)
 	}
-	tips := make([]models.Tip, 0)
+	tips := make([]domain.Tip, 0)
 	for _, tip := range s.data.Tips {
 		if tip.ChannelID == channelID {
 			tips = append(tips, tip)
@@ -121,26 +121,26 @@ func (s *Storage) ListTips(channelID string, limit int) ([]models.Tip, error) {
 }
 
 // CreateSubscription records a new channel subscription.
-func (s *Storage) CreateSubscription(params CreateSubscriptionParams) (models.Subscription, error) {
+func (s *Storage) CreateSubscription(params CreateSubscriptionParams) (domain.Subscription, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if _, ok := s.data.Channels[params.ChannelID]; !ok {
-		return models.Subscription{}, fmt.Errorf("channel %s not found", params.ChannelID)
+		return domain.Subscription{}, fmt.Errorf("channel %s not found", params.ChannelID)
 	}
 	if _, ok := s.data.Users[params.UserID]; !ok {
-		return models.Subscription{}, fmt.Errorf("user %s not found", params.UserID)
+		return domain.Subscription{}, fmt.Errorf("user %s not found", params.UserID)
 	}
 	if params.Duration <= 0 {
-		return models.Subscription{}, fmt.Errorf("duration must be positive")
+		return domain.Subscription{}, fmt.Errorf("duration must be positive")
 	}
 	amount := params.Amount
 	if amount.MinorUnits() < 0 {
-		return models.Subscription{}, fmt.Errorf("amount cannot be negative")
+		return domain.Subscription{}, fmt.Errorf("amount cannot be negative")
 	}
 	currency := strings.ToUpper(strings.TrimSpace(params.Currency))
 	if currency == "" {
-		return models.Subscription{}, fmt.Errorf("currency is required")
+		return domain.Subscription{}, fmt.Errorf("currency is required")
 	}
 	tier := strings.TrimSpace(params.Tier)
 	if tier == "" {
@@ -148,7 +148,7 @@ func (s *Storage) CreateSubscription(params CreateSubscriptionParams) (models.Su
 	}
 	provider := strings.ToLower(strings.TrimSpace(params.Provider))
 	if provider == "" {
-		return models.Subscription{}, fmt.Errorf("provider is required")
+		return domain.Subscription{}, fmt.Errorf("provider is required")
 	}
 	reference := strings.TrimSpace(params.Reference)
 	if reference == "" {
@@ -156,17 +156,17 @@ func (s *Storage) CreateSubscription(params CreateSubscriptionParams) (models.Su
 	}
 	for _, existing := range s.data.Subscriptions {
 		if existing.Provider == provider && existing.Reference == reference {
-			return models.Subscription{}, fmt.Errorf("subscription reference %s/%s already exists", provider, reference)
+			return domain.Subscription{}, fmt.Errorf("subscription reference %s/%s already exists", provider, reference)
 		}
 	}
 	id, err := generateID()
 	if err != nil {
-		return models.Subscription{}, err
+		return domain.Subscription{}, err
 	}
 	started := time.Now().UTC()
 	expires := started.Add(params.Duration)
 	idempotencyKey := strings.TrimSpace(params.IdempotencyKey)
-	subscription := models.Subscription{
+	subscription := domain.Subscription{
 		ID:                id,
 		ChannelID:         params.ChannelID,
 		UserID:            params.UserID,
@@ -178,35 +178,35 @@ func (s *Storage) CreateSubscription(params CreateSubscriptionParams) (models.Su
 		StartedAt:         started,
 		ExpiresAt:         expires,
 		AutoRenew:         params.AutoRenew,
-		Status:            models.PaymentStatePending,
+		Status:            domain.PaymentStatePending,
 		ExternalReference: strings.TrimSpace(params.ExternalReference),
 		IdempotencyKey:    idempotencyKey,
 	}
 	if s.data.Subscriptions == nil {
-		s.data.Subscriptions = make(map[string]models.Subscription)
+		s.data.Subscriptions = make(map[string]domain.Subscription)
 	}
 	s.data.Subscriptions[id] = subscription
 	if err := s.persist(); err != nil {
 		delete(s.data.Subscriptions, id)
-		return models.Subscription{}, err
+		return domain.Subscription{}, err
 	}
 	return subscription, nil
 }
 
 // ListSubscriptions lists subscriptions for a channel.
-func (s *Storage) ListSubscriptions(channelID string, includeInactive bool) ([]models.Subscription, error) {
+func (s *Storage) ListSubscriptions(channelID string, includeInactive bool) ([]domain.Subscription, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if _, ok := s.data.Channels[channelID]; !ok {
 		return nil, fmt.Errorf("channel %s not found", channelID)
 	}
-	subs := make([]models.Subscription, 0)
+	subs := make([]domain.Subscription, 0)
 	for _, sub := range s.data.Subscriptions {
 		if sub.ChannelID != channelID {
 			continue
 		}
-		if !includeInactive && !(strings.EqualFold(sub.Status, "active") || strings.EqualFold(sub.Status, models.PaymentStatePending) || strings.EqualFold(sub.Status, models.PaymentStateConfirmed)) {
+		if !includeInactive && !(strings.EqualFold(sub.Status, "active") || strings.EqualFold(sub.Status, domain.PaymentStatePending) || strings.EqualFold(sub.Status, domain.PaymentStateConfirmed)) {
 			continue
 		}
 		subs = append(subs, sub)
@@ -221,7 +221,7 @@ func (s *Storage) ListSubscriptions(channelID string, includeInactive bool) ([]m
 }
 
 // GetSubscription returns a subscription by id.
-func (s *Storage) GetSubscription(id string) (models.Subscription, bool) {
+func (s *Storage) GetSubscription(id string) (domain.Subscription, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	sub, ok := s.data.Subscriptions[id]
@@ -229,19 +229,19 @@ func (s *Storage) GetSubscription(id string) (models.Subscription, bool) {
 }
 
 // CancelSubscription marks a subscription as cancelled.
-func (s *Storage) CancelSubscription(id, cancelledBy, reason string) (models.Subscription, error) {
+func (s *Storage) CancelSubscription(id, cancelledBy, reason string) (domain.Subscription, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	subscription, ok := s.data.Subscriptions[id]
 	if !ok {
-		return models.Subscription{}, fmt.Errorf("subscription %s not found", id)
+		return domain.Subscription{}, fmt.Errorf("subscription %s not found", id)
 	}
 	if subscription.Status == "cancelled" {
 		return subscription, nil
 	}
 	if _, ok := s.data.Users[cancelledBy]; !ok {
-		return models.Subscription{}, fmt.Errorf("user %s not found", cancelledBy)
+		return domain.Subscription{}, fmt.Errorf("user %s not found", cancelledBy)
 	}
 	now := time.Now().UTC()
 	subscription.Status = "cancelled"
@@ -259,13 +259,13 @@ func (s *Storage) CancelSubscription(id, cancelledBy, reason string) (models.Sub
 	subscription.CancelledReason = trimmed
 	s.data.Subscriptions[id] = subscription
 	if err := s.persist(); err != nil {
-		return models.Subscription{}, err
+		return domain.Subscription{}, err
 	}
 	return subscription, nil
 }
 
 // ProcessPaymentWebhook applies a verified provider event with duplicate-event protection.
-func (s *Storage) ProcessPaymentWebhook(params ProcessPaymentWebhookParams) (models.PaymentTransaction, error) {
+func (s *Storage) ProcessPaymentWebhook(params ProcessPaymentWebhookParams) (domain.PaymentTransaction, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -276,7 +276,7 @@ func (s *Storage) ProcessPaymentWebhook(params ProcessPaymentWebhookParams) (mod
 	status := strings.ToLower(strings.TrimSpace(params.Status))
 	idempotencyKey := strings.TrimSpace(params.IdempotencyKey)
 	if provider == "" || eventID == "" || entityType == "" || reference == "" || status == "" {
-		return models.PaymentTransaction{}, fmt.Errorf("provider, eventID, entityType, reference and status are required")
+		return domain.PaymentTransaction{}, fmt.Errorf("provider, eventID, entityType, reference and status are required")
 	}
 	for _, tx := range s.data.PaymentTransactions {
 		if tx.Provider == provider && tx.EventID == eventID {
@@ -310,27 +310,27 @@ func (s *Storage) ProcessPaymentWebhook(params ProcessPaymentWebhookParams) (mod
 			}
 		}
 	default:
-		return models.PaymentTransaction{}, fmt.Errorf("unsupported entity type %s", entityType)
+		return domain.PaymentTransaction{}, fmt.Errorf("unsupported entity type %s", entityType)
 	}
 	if entityID == "" {
-		return models.PaymentTransaction{}, fmt.Errorf("payment entity %s/%s not found", entityType, reference)
+		return domain.PaymentTransaction{}, fmt.Errorf("payment entity %s/%s not found", entityType, reference)
 	}
 	id, err := generateID()
 	if err != nil {
-		return models.PaymentTransaction{}, err
+		return domain.PaymentTransaction{}, err
 	}
 	now := time.Now().UTC()
-	transaction := models.PaymentTransaction{
+	transaction := domain.PaymentTransaction{
 		ID: id, Provider: provider, EventID: eventID, EntityType: entityType, EntityID: entityID,
 		Reference: reference, Status: status, IdempotencyKey: idempotencyKey, CreatedAt: now,
 	}
 	if s.data.PaymentTransactions == nil {
-		s.data.PaymentTransactions = make(map[string]models.PaymentTransaction)
+		s.data.PaymentTransactions = make(map[string]domain.PaymentTransaction)
 	}
 	s.data.PaymentTransactions[id] = transaction
 	if err := s.persist(); err != nil {
 		delete(s.data.PaymentTransactions, id)
-		return models.PaymentTransaction{}, err
+		return domain.PaymentTransaction{}, err
 	}
 	return transaction, nil
 }

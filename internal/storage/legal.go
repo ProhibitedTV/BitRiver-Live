@@ -6,37 +6,37 @@ import (
 	"strings"
 	"time"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 )
 
-func (s *Storage) CreateDMCACase(params CreateDMCACaseParams) (models.DMCACase, error) {
+func (s *Storage) CreateDMCACase(params CreateDMCACaseParams) (domain.DMCACase, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ensureDatasetInitializedLocked()
 	if strings.TrimSpace(params.ReporterName) == "" || strings.TrimSpace(params.ReporterEmail) == "" || strings.TrimSpace(params.ContentURL) == "" {
-		return models.DMCACase{}, fmt.Errorf("reporter name, reporter email, and content url are required")
+		return domain.DMCACase{}, fmt.Errorf("reporter name, reporter email, and content url are required")
 	}
 	id, err := generateID()
 	if err != nil {
-		return models.DMCACase{}, err
+		return domain.DMCACase{}, err
 	}
 	now := time.Now().UTC()
-	rec := models.DMCACase{ID: id, ReporterName: strings.TrimSpace(params.ReporterName), ReporterEmail: strings.TrimSpace(params.ReporterEmail), ContentURL: strings.TrimSpace(params.ContentURL), Description: strings.TrimSpace(params.Description), Status: models.DMCACaseStatusOpen, CreatedAt: now, UpdatedAt: now}
+	rec := domain.DMCACase{ID: id, ReporterName: strings.TrimSpace(params.ReporterName), ReporterEmail: strings.TrimSpace(params.ReporterEmail), ContentURL: strings.TrimSpace(params.ContentURL), Description: strings.TrimSpace(params.Description), Status: domain.DMCACaseStatusOpen, CreatedAt: now, UpdatedAt: now}
 	updated := cloneDataset(s.data)
 	updated.DMCACases[id] = rec
 	s.appendLegalHistoryLocked(&updated, "dmca", id, "", rec.Status, "", "case submitted")
 	if err := s.persistDataset(updated); err != nil {
-		return models.DMCACase{}, err
+		return domain.DMCACase{}, err
 	}
 	s.data = updated
 	return rec, nil
 }
 
-func (s *Storage) ListDMCACases() ([]models.DMCACase, error) {
+func (s *Storage) ListDMCACases() ([]domain.DMCACase, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	s.ensureDatasetInitializedLocked()
-	res := make([]models.DMCACase, 0, len(s.data.DMCACases))
+	res := make([]domain.DMCACase, 0, len(s.data.DMCACases))
 	for _, item := range s.data.DMCACases {
 		res = append(res, item)
 	}
@@ -44,7 +44,7 @@ func (s *Storage) ListDMCACases() ([]models.DMCACase, error) {
 	return res, nil
 }
 
-func (s *Storage) GetDMCACase(id string) (models.DMCACase, bool) {
+func (s *Storage) GetDMCACase(id string) (domain.DMCACase, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	s.ensureDatasetInitializedLocked()
@@ -52,14 +52,14 @@ func (s *Storage) GetDMCACase(id string) (models.DMCACase, bool) {
 	return rec, ok
 }
 
-func (s *Storage) UpdateDMCACase(id string, update DMCACaseUpdate, actorUserID string) (models.DMCACase, error) {
+func (s *Storage) UpdateDMCACase(id string, update DMCACaseUpdate, actorUserID string) (domain.DMCACase, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ensureDatasetInitializedLocked()
 	id = strings.TrimSpace(id)
 	rec, ok := s.data.DMCACases[id]
 	if !ok {
-		return models.DMCACase{}, fmt.Errorf("dmca case not found")
+		return domain.DMCACase{}, fmt.Errorf("dmca case not found")
 	}
 	updated := cloneDataset(s.data)
 	if update.Notes != nil {
@@ -72,11 +72,11 @@ func (s *Storage) UpdateDMCACase(id string, update DMCACaseUpdate, actorUserID s
 		now := time.Now().UTC()
 		rec.UpdatedAt = now
 		switch to {
-		case models.DMCACaseStatusActioned:
+		case domain.DMCACaseStatusActioned:
 			rec.ActionedAt = &now
-		case models.DMCACaseStatusRestored:
+		case domain.DMCACaseStatusRestored:
 			rec.RestoredAt = &now
-		case models.DMCACaseStatusRejected:
+		case domain.DMCACaseStatusRejected:
 			rec.RejectedAt = &now
 		}
 		s.appendLegalHistoryLocked(&updated, "dmca", id, from, to, actorUserID, rec.Notes)
@@ -84,51 +84,51 @@ func (s *Storage) UpdateDMCACase(id string, update DMCACaseUpdate, actorUserID s
 	rec.UpdatedAt = time.Now().UTC()
 	updated.DMCACases[id] = rec
 	if err := s.persistDataset(updated); err != nil {
-		return models.DMCACase{}, err
+		return domain.DMCACase{}, err
 	}
 	s.data = updated
 	return rec, nil
 }
 
-func (s *Storage) CreateDataSubjectRequest(params CreateDataSubjectRequestParams) (models.DataSubjectRequest, error) {
+func (s *Storage) CreateDataSubjectRequest(params CreateDataSubjectRequestParams) (domain.DataSubjectRequest, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ensureDatasetInitializedLocked()
 	if strings.TrimSpace(params.SubjectEmail) == "" {
-		return models.DataSubjectRequest{}, fmt.Errorf("subject email is required")
+		return domain.DataSubjectRequest{}, fmt.Errorf("subject email is required")
 	}
 	reqType := strings.ToLower(strings.TrimSpace(params.RequestType))
-	if reqType != models.DataSubjectRequestTypeExport && reqType != models.DataSubjectRequestTypeDelete {
-		return models.DataSubjectRequest{}, fmt.Errorf("invalid request type")
+	if reqType != domain.DataSubjectRequestTypeExport && reqType != domain.DataSubjectRequestTypeDelete {
+		return domain.DataSubjectRequest{}, fmt.Errorf("invalid request type")
 	}
 	id, err := generateID()
 	if err != nil {
-		return models.DataSubjectRequest{}, err
+		return domain.DataSubjectRequest{}, err
 	}
 	now := time.Now().UTC()
-	rec := models.DataSubjectRequest{ID: id, SubjectEmail: strings.TrimSpace(params.SubjectEmail), RequestType: reqType, Status: models.DataSubjectRequestStatusOpen, Notes: strings.TrimSpace(params.Notes), CreatedAt: now, UpdatedAt: now}
+	rec := domain.DataSubjectRequest{ID: id, SubjectEmail: strings.TrimSpace(params.SubjectEmail), RequestType: reqType, Status: domain.DataSubjectRequestStatusOpen, Notes: strings.TrimSpace(params.Notes), CreatedAt: now, UpdatedAt: now}
 	updated := cloneDataset(s.data)
 	updated.DataSubjectRequests[id] = rec
 	s.appendLegalHistoryLocked(&updated, "data_subject", id, "", rec.Status, "", "request submitted")
 	if err := s.persistDataset(updated); err != nil {
-		return models.DataSubjectRequest{}, err
+		return domain.DataSubjectRequest{}, err
 	}
 	s.data = updated
 	return rec, nil
 }
 
-func (s *Storage) ListDataSubjectRequests() ([]models.DataSubjectRequest, error) {
+func (s *Storage) ListDataSubjectRequests() ([]domain.DataSubjectRequest, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	s.ensureDatasetInitializedLocked()
-	out := make([]models.DataSubjectRequest, 0, len(s.data.DataSubjectRequests))
+	out := make([]domain.DataSubjectRequest, 0, len(s.data.DataSubjectRequests))
 	for _, v := range s.data.DataSubjectRequests {
 		out = append(out, v)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
 	return out, nil
 }
-func (s *Storage) GetDataSubjectRequest(id string) (models.DataSubjectRequest, bool) {
+func (s *Storage) GetDataSubjectRequest(id string) (domain.DataSubjectRequest, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	s.ensureDatasetInitializedLocked()
@@ -136,14 +136,14 @@ func (s *Storage) GetDataSubjectRequest(id string) (models.DataSubjectRequest, b
 	return rec, ok
 }
 
-func (s *Storage) UpdateDataSubjectRequest(id string, update DataSubjectRequestUpdate, actorUserID string) (models.DataSubjectRequest, error) {
+func (s *Storage) UpdateDataSubjectRequest(id string, update DataSubjectRequestUpdate, actorUserID string) (domain.DataSubjectRequest, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ensureDatasetInitializedLocked()
 	id = strings.TrimSpace(id)
 	rec, ok := s.data.DataSubjectRequests[id]
 	if !ok {
-		return models.DataSubjectRequest{}, fmt.Errorf("data subject request not found")
+		return domain.DataSubjectRequest{}, fmt.Errorf("data subject request not found")
 	}
 	updated := cloneDataset(s.data)
 	if update.Notes != nil {
@@ -157,54 +157,54 @@ func (s *Storage) UpdateDataSubjectRequest(id string, update DataSubjectRequestU
 	rec.UpdatedAt = time.Now().UTC()
 	updated.DataSubjectRequests[id] = rec
 	if err := s.persistDataset(updated); err != nil {
-		return models.DataSubjectRequest{}, err
+		return domain.DataSubjectRequest{}, err
 	}
 	s.data = updated
 	return rec, nil
 }
 
-func (s *Storage) AddDataSubjectAuditEvent(requestID string, params CreateDataSubjectAuditEventParams) (models.DataSubjectAuditEvent, error) {
+func (s *Storage) AddDataSubjectAuditEvent(requestID string, params CreateDataSubjectAuditEventParams) (domain.DataSubjectAuditEvent, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ensureDatasetInitializedLocked()
 	requestID = strings.TrimSpace(requestID)
 	if _, ok := s.data.DataSubjectRequests[requestID]; !ok {
-		return models.DataSubjectAuditEvent{}, fmt.Errorf("data subject request not found")
+		return domain.DataSubjectAuditEvent{}, fmt.Errorf("data subject request not found")
 	}
 	if strings.TrimSpace(params.Action) == "" {
-		return models.DataSubjectAuditEvent{}, fmt.Errorf("action is required")
+		return domain.DataSubjectAuditEvent{}, fmt.Errorf("action is required")
 	}
 	id, err := generateID()
 	if err != nil {
-		return models.DataSubjectAuditEvent{}, err
+		return domain.DataSubjectAuditEvent{}, err
 	}
-	evt := models.DataSubjectAuditEvent{ID: id, RequestID: requestID, ActorUserID: strings.TrimSpace(params.ActorUserID), Action: strings.TrimSpace(params.Action), Details: strings.TrimSpace(params.Details), EvidenceRef: strings.TrimSpace(params.EvidenceRef), OccurredAtUTC: time.Now().UTC()}
+	evt := domain.DataSubjectAuditEvent{ID: id, RequestID: requestID, ActorUserID: strings.TrimSpace(params.ActorUserID), Action: strings.TrimSpace(params.Action), Details: strings.TrimSpace(params.Details), EvidenceRef: strings.TrimSpace(params.EvidenceRef), OccurredAtUTC: time.Now().UTC()}
 	updated := cloneDataset(s.data)
 	updated.DataSubjectAudit[requestID] = append(updated.DataSubjectAudit[requestID], evt)
 	if err := s.persistDataset(updated); err != nil {
-		return models.DataSubjectAuditEvent{}, err
+		return domain.DataSubjectAuditEvent{}, err
 	}
 	s.data = updated
 	return evt, nil
 }
 
-func (s *Storage) ListDataSubjectAuditEvents(requestID string) ([]models.DataSubjectAuditEvent, error) {
+func (s *Storage) ListDataSubjectAuditEvents(requestID string) ([]domain.DataSubjectAuditEvent, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	s.ensureDatasetInitializedLocked()
 	requestID = strings.TrimSpace(requestID)
-	items := append([]models.DataSubjectAuditEvent(nil), s.data.DataSubjectAudit[requestID]...)
+	items := append([]domain.DataSubjectAuditEvent(nil), s.data.DataSubjectAudit[requestID]...)
 	sort.Slice(items, func(i, j int) bool { return items[i].OccurredAtUTC.Before(items[j].OccurredAtUTC) })
 	return items, nil
 }
 
-func (s *Storage) ListLegalStateHistory(entityType, entityID string) ([]models.LegalStateHistory, error) {
+func (s *Storage) ListLegalStateHistory(entityType, entityID string) ([]domain.LegalStateHistory, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	s.ensureDatasetInitializedLocked()
 	entityType = strings.TrimSpace(strings.ToLower(entityType))
 	entityID = strings.TrimSpace(entityID)
-	out := make([]models.LegalStateHistory, 0)
+	out := make([]domain.LegalStateHistory, 0)
 	for _, item := range s.data.LegalStateHistory {
 		if entityType != "" && item.EntityType != entityType {
 			continue
@@ -226,5 +226,5 @@ func (s *Storage) appendLegalHistoryLocked(updated *dataset, entityType, entityI
 	if err != nil {
 		return
 	}
-	updated.LegalStateHistory = append(updated.LegalStateHistory, models.LegalStateHistory{ID: id, EntityType: entityType, EntityID: entityID, FromState: fromState, ToState: toState, ActorUserID: strings.TrimSpace(actorUserID), Reason: strings.TrimSpace(reason), CreatedAt: time.Now().UTC()})
+	updated.LegalStateHistory = append(updated.LegalStateHistory, domain.LegalStateHistory{ID: id, EntityType: entityType, EntityID: entityID, FromState: fromState, ToState: toState, ActorUserID: strings.TrimSpace(actorUserID), Reason: strings.TrimSpace(reason), CreatedAt: time.Now().UTC()})
 }

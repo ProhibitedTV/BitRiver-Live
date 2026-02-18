@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 )
 
 func TestServeUploadMediaLogsOpenError(t *testing.T) {
@@ -30,7 +30,7 @@ func TestServeUploadMediaLogsOpenError(t *testing.T) {
 	var logs bytes.Buffer
 	h.Logger = slog.New(slog.NewTextHandler(&logs, nil))
 
-	upload := models.Upload{
+	upload := domain.Upload{
 		ID:        "upload-123",
 		ChannelID: "channel-1",
 		Metadata: map[string]string{
@@ -103,7 +103,7 @@ func TestServeUploadMediaLogsStatError(t *testing.T) {
 		t.Fatalf("write media: %v", err)
 	}
 
-	upload := models.Upload{
+	upload := domain.Upload{
 		ID:        "upload-456",
 		ChannelID: "channel-1",
 		Metadata: map[string]string{

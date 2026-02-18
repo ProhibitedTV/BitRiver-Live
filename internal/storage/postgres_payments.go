@@ -8,31 +8,31 @@ import (
 	"time"
 	"unicode/utf8"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // CreateTip creates tip and returns an error when persistence or validation fails.
-func (r *postgresRepository) CreateTip(params CreateTipParams) (models.Tip, error) {
+func (r *postgresRepository) CreateTip(params CreateTipParams) (domain.Tip, error) {
 	if r == nil || r.pool == nil {
-		return models.Tip{}, ErrPostgresUnavailable
+		return domain.Tip{}, ErrPostgresUnavailable
 	}
 
 	amount := params.Amount
 	if amount.MinorUnits() <= 0 {
-		return models.Tip{}, fmt.Errorf("amount must be positive")
+		return domain.Tip{}, fmt.Errorf("amount must be positive")
 	}
 
 	currency := strings.ToUpper(strings.TrimSpace(params.Currency))
 	if currency == "" {
-		return models.Tip{}, fmt.Errorf("currency is required")
+		return domain.Tip{}, fmt.Errorf("currency is required")
 	}
 
 	provider := strings.ToLower(strings.TrimSpace(params.Provider))
 	if provider == "" {
-		return models.Tip{}, fmt.Errorf("provider is required")
+		return domain.Tip{}, fmt.Errorf("provider is required")
 	}
 
 	reference := strings.TrimSpace(params.Reference)
@@ -40,26 +40,26 @@ func (r *postgresRepository) CreateTip(params CreateTipParams) (models.Tip, erro
 		reference = fmt.Sprintf("tip-%d", time.Now().UnixNano())
 	}
 	if utf8.RuneCountInString(reference) > MaxTipReferenceLength {
-		return models.Tip{}, fmt.Errorf("reference exceeds %d characters", MaxTipReferenceLength)
+		return domain.Tip{}, fmt.Errorf("reference exceeds %d characters", MaxTipReferenceLength)
 	}
 
 	wallet := strings.TrimSpace(params.WalletAddress)
 	if utf8.RuneCountInString(wallet) > MaxTipWalletAddressLength {
-		return models.Tip{}, fmt.Errorf("wallet address exceeds %d characters", MaxTipWalletAddressLength)
+		return domain.Tip{}, fmt.Errorf("wallet address exceeds %d characters", MaxTipWalletAddressLength)
 	}
 
 	message := strings.TrimSpace(params.Message)
 	if utf8.RuneCountInString(message) > MaxTipMessageLength {
-		return models.Tip{}, fmt.Errorf("message exceeds %d characters", MaxTipMessageLength)
+		return domain.Tip{}, fmt.Errorf("message exceeds %d characters", MaxTipMessageLength)
 	}
 
 	id, err := generateID()
 	if err != nil {
-		return models.Tip{}, err
+		return domain.Tip{}, err
 	}
 
 	now := time.Now().UTC()
-	var tip models.Tip
+	var tip domain.Tip
 	saveErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -84,7 +84,7 @@ func (r *postgresRepository) CreateTip(params CreateTipParams) (models.Tip, erro
 
 		var createdAt time.Time
 		idempotencyKey := strings.TrimSpace(params.IdempotencyKey)
-		if err := tx.QueryRow(ctx, "INSERT INTO tips (id, channel_id, from_user_id, amount, currency, provider, reference, wallet_address, message, status, idempotency_key, created_at) VALUES ($1, $2, $3, $4::numeric / 100000000::numeric, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING created_at", id, params.ChannelID, params.FromUserID, amount.MinorUnits(), currency, provider, reference, wallet, message, models.PaymentStatePending, idempotencyKey, now).Scan(&createdAt); err != nil {
+		if err := tx.QueryRow(ctx, "INSERT INTO tips (id, channel_id, from_user_id, amount, currency, provider, reference, wallet_address, message, status, idempotency_key, created_at) VALUES ($1, $2, $3, $4::numeric / 100000000::numeric, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING created_at", id, params.ChannelID, params.FromUserID, amount.MinorUnits(), currency, provider, reference, wallet, message, domain.PaymentStatePending, idempotencyKey, now).Scan(&createdAt); err != nil {
 			return fmt.Errorf("insert tip: %w", err)
 		}
 
@@ -92,7 +92,7 @@ func (r *postgresRepository) CreateTip(params CreateTipParams) (models.Tip, erro
 			return fmt.Errorf("commit create tip: %w", err)
 		}
 
-		tip = models.Tip{
+		tip = domain.Tip{
 			ID:             id,
 			ChannelID:      params.ChannelID,
 			FromUserID:     params.FromUserID,
@@ -102,7 +102,7 @@ func (r *postgresRepository) CreateTip(params CreateTipParams) (models.Tip, erro
 			Reference:      reference,
 			WalletAddress:  wallet,
 			Message:        message,
-			Status:         models.PaymentStatePending,
+			Status:         domain.PaymentStatePending,
 			IdempotencyKey: idempotencyKey,
 			CreatedAt:      createdAt.UTC(),
 		}
@@ -110,19 +110,19 @@ func (r *postgresRepository) CreateTip(params CreateTipParams) (models.Tip, erro
 		return nil
 	})
 	if saveErr != nil {
-		return models.Tip{}, saveErr
+		return domain.Tip{}, saveErr
 	}
 
 	return tip, nil
 }
 
 // ListTips returns tips from the configured backing services.
-func (r *postgresRepository) ListTips(channelID string, limit int) ([]models.Tip, error) {
+func (r *postgresRepository) ListTips(channelID string, limit int) ([]domain.Tip, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
 	}
 
-	tips := make([]models.Tip, 0)
+	tips := make([]domain.Tip, 0)
 	listErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 		if err != nil {
@@ -148,14 +148,14 @@ func (r *postgresRepository) ListTips(channelID string, limit int) ([]models.Tip
 		defer rows.Close()
 
 		for rows.Next() {
-			var tip models.Tip
+			var tip domain.Tip
 			var walletAddress, message, idemKey pgtype.Text
 			var createdAt time.Time
 			var amountMinor int64
 			if err := rows.Scan(&tip.ID, &tip.ChannelID, &tip.FromUserID, &amountMinor, &tip.Currency, &tip.Provider, &tip.Reference, &walletAddress, &message, &tip.Status, &idemKey, &createdAt); err != nil {
 				return fmt.Errorf("scan tip: %w", err)
 			}
-			tip.Amount = models.NewMoneyFromMinorUnits(amountMinor)
+			tip.Amount = domain.NewMoneyFromMinorUnits(amountMinor)
 			if walletAddress.Valid {
 				tip.WalletAddress = walletAddress.String
 			}
@@ -186,23 +186,23 @@ func (r *postgresRepository) ListTips(channelID string, limit int) ([]models.Tip
 }
 
 // CreateSubscription creates subscription and returns an error when persistence or validation fails.
-func (r *postgresRepository) CreateSubscription(params CreateSubscriptionParams) (models.Subscription, error) {
+func (r *postgresRepository) CreateSubscription(params CreateSubscriptionParams) (domain.Subscription, error) {
 	if r == nil || r.pool == nil {
-		return models.Subscription{}, ErrPostgresUnavailable
+		return domain.Subscription{}, ErrPostgresUnavailable
 	}
 
 	if params.Duration <= 0 {
-		return models.Subscription{}, fmt.Errorf("duration must be positive")
+		return domain.Subscription{}, fmt.Errorf("duration must be positive")
 	}
 
 	amount := params.Amount
 	if amount.MinorUnits() < 0 {
-		return models.Subscription{}, fmt.Errorf("amount cannot be negative")
+		return domain.Subscription{}, fmt.Errorf("amount cannot be negative")
 	}
 
 	currency := strings.ToUpper(strings.TrimSpace(params.Currency))
 	if currency == "" {
-		return models.Subscription{}, fmt.Errorf("currency is required")
+		return domain.Subscription{}, fmt.Errorf("currency is required")
 	}
 
 	tier := strings.TrimSpace(params.Tier)
@@ -212,7 +212,7 @@ func (r *postgresRepository) CreateSubscription(params CreateSubscriptionParams)
 
 	provider := strings.ToLower(strings.TrimSpace(params.Provider))
 	if provider == "" {
-		return models.Subscription{}, fmt.Errorf("provider is required")
+		return domain.Subscription{}, fmt.Errorf("provider is required")
 	}
 
 	reference := strings.TrimSpace(params.Reference)
@@ -224,13 +224,13 @@ func (r *postgresRepository) CreateSubscription(params CreateSubscriptionParams)
 
 	id, err := generateID()
 	if err != nil {
-		return models.Subscription{}, err
+		return domain.Subscription{}, err
 	}
 
 	started := time.Now().UTC()
 	expires := started.Add(params.Duration)
 
-	var subscription models.Subscription
+	var subscription domain.Subscription
 	saveErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -254,7 +254,7 @@ func (r *postgresRepository) CreateSubscription(params CreateSubscriptionParams)
 		}
 
 		idempotencyKey := strings.TrimSpace(params.IdempotencyKey)
-		_, err = tx.Exec(ctx, "INSERT INTO subscriptions (id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, external_reference, idempotency_key) VALUES ($1, $2, $3, $4, $5, $6, $7::numeric / 100000000::numeric, $8, $9, $10, $11, $12, $13, $14)", id, params.ChannelID, params.UserID, tier, provider, reference, amount.MinorUnits(), currency, started, expires, params.AutoRenew, models.PaymentStatePending, externalRef, idempotencyKey)
+		_, err = tx.Exec(ctx, "INSERT INTO subscriptions (id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, external_reference, idempotency_key) VALUES ($1, $2, $3, $4, $5, $6, $7::numeric / 100000000::numeric, $8, $9, $10, $11, $12, $13, $14)", id, params.ChannelID, params.UserID, tier, provider, reference, amount.MinorUnits(), currency, started, expires, params.AutoRenew, domain.PaymentStatePending, externalRef, idempotencyKey)
 		if err != nil {
 			return fmt.Errorf("insert subscription: %w", err)
 		}
@@ -263,7 +263,7 @@ func (r *postgresRepository) CreateSubscription(params CreateSubscriptionParams)
 			return fmt.Errorf("commit create subscription: %w", err)
 		}
 
-		subscription = models.Subscription{
+		subscription = domain.Subscription{
 			ID:                id,
 			ChannelID:         params.ChannelID,
 			UserID:            params.UserID,
@@ -275,7 +275,7 @@ func (r *postgresRepository) CreateSubscription(params CreateSubscriptionParams)
 			StartedAt:         started,
 			ExpiresAt:         expires,
 			AutoRenew:         params.AutoRenew,
-			Status:            models.PaymentStatePending,
+			Status:            domain.PaymentStatePending,
 			ExternalReference: externalRef,
 			IdempotencyKey:    idempotencyKey,
 		}
@@ -283,19 +283,19 @@ func (r *postgresRepository) CreateSubscription(params CreateSubscriptionParams)
 		return nil
 	})
 	if saveErr != nil {
-		return models.Subscription{}, saveErr
+		return domain.Subscription{}, saveErr
 	}
 
 	return subscription, nil
 }
 
 // ListSubscriptions returns subscriptions from the configured backing services.
-func (r *postgresRepository) ListSubscriptions(channelID string, includeInactive bool) ([]models.Subscription, error) {
+func (r *postgresRepository) ListSubscriptions(channelID string, includeInactive bool) ([]domain.Subscription, error) {
 	if r == nil || r.pool == nil {
 		return nil, ErrPostgresUnavailable
 	}
 
-	subscriptions := make([]models.Subscription, 0)
+	subscriptions := make([]domain.Subscription, 0)
 	listErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 		if err != nil {
@@ -345,9 +345,9 @@ func (r *postgresRepository) ListSubscriptions(channelID string, includeInactive
 }
 
 // GetSubscription returns subscription from the configured backing services.
-func (r *postgresRepository) GetSubscription(id string) (models.Subscription, bool) {
+func (r *postgresRepository) GetSubscription(id string) (domain.Subscription, bool) {
 	if r == nil || r.pool == nil {
-		return models.Subscription{}, false
+		return domain.Subscription{}, false
 	}
 
 	ctx, cancel := r.acquireContext()
@@ -357,23 +357,23 @@ func (r *postgresRepository) GetSubscription(id string) (models.Subscription, bo
 	sub, err := scanSubscriptionRow(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return models.Subscription{}, false
+			return domain.Subscription{}, false
 		}
-		return models.Subscription{}, false
+		return domain.Subscription{}, false
 	}
 
 	return sub, true
 }
 
 // CancelSubscription performs cancel subscription and returns an error when dependent systems reject the operation.
-func (r *postgresRepository) CancelSubscription(id, cancelledBy, reason string) (models.Subscription, error) {
+func (r *postgresRepository) CancelSubscription(id, cancelledBy, reason string) (domain.Subscription, error) {
 	if r == nil || r.pool == nil {
-		return models.Subscription{}, ErrPostgresUnavailable
+		return domain.Subscription{}, ErrPostgresUnavailable
 	}
 
 	trimmedReason := strings.TrimSpace(reason)
 
-	var updated models.Subscription
+	var updated domain.Subscription
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -431,25 +431,25 @@ func (r *postgresRepository) CancelSubscription(id, cancelledBy, reason string) 
 		return nil
 	})
 	if err != nil {
-		return models.Subscription{}, err
+		return domain.Subscription{}, err
 	}
 
 	return updated, nil
 }
 
 // AuthenticateOAuth performs authenticate oauth and returns an error when dependent systems reject the operation.
-func (r *postgresRepository) AuthenticateOAuth(params OAuthLoginParams) (models.User, error) {
+func (r *postgresRepository) AuthenticateOAuth(params OAuthLoginParams) (domain.User, error) {
 	if r == nil || r.pool == nil {
-		return models.User{}, ErrPostgresUnavailable
+		return domain.User{}, ErrPostgresUnavailable
 	}
 
 	provider := strings.ToLower(strings.TrimSpace(params.Provider))
 	subject := strings.TrimSpace(params.Subject)
 	if provider == "" {
-		return models.User{}, fmt.Errorf("provider is required")
+		return domain.User{}, fmt.Errorf("provider is required")
 	}
 	if subject == "" {
-		return models.User{}, fmt.Errorf("subject is required")
+		return domain.User{}, fmt.Errorf("subject is required")
 	}
 
 	normalizedEmail := strings.TrimSpace(strings.ToLower(params.Email))
@@ -461,7 +461,7 @@ func (r *postgresRepository) AuthenticateOAuth(params OAuthLoginParams) (models.
 		displayName = defaultOAuthDisplayName(provider, normalizedEmail, subject)
 	}
 
-	var user models.User
+	var user domain.User
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -512,7 +512,7 @@ func (r *postgresRepository) AuthenticateOAuth(params OAuthLoginParams) (models.
 			if err != nil {
 				return fmt.Errorf("create oauth user: %w", err)
 			}
-			user = models.User{
+			user = domain.User{
 				ID:          userID,
 				DisplayName: displayName,
 				Email:       normalizedEmail,
@@ -549,7 +549,7 @@ SET user_id = EXCLUDED.user_id, email = EXCLUDED.email, display_name = EXCLUDED.
 		return nil
 	})
 	if err != nil {
-		return models.User{}, err
+		return domain.User{}, err
 	}
 	return user, nil
 }
@@ -557,9 +557,9 @@ SET user_id = EXCLUDED.user_id, email = EXCLUDED.email, display_name = EXCLUDED.
 var _ Repository = (*postgresRepository)(nil)
 
 // scanSubscriptionRow scans subscription row from database rows and returns an error when type conversion fails.
-func scanSubscriptionRow(row pgx.Row) (models.Subscription, error) {
+func scanSubscriptionRow(row pgx.Row) (domain.Subscription, error) {
 	var (
-		sub               models.Subscription
+		sub               domain.Subscription
 		cancelledBy       pgtype.Text
 		cancelledReason   pgtype.Text
 		cancelledAt       pgtype.Timestamptz
@@ -567,9 +567,9 @@ func scanSubscriptionRow(row pgx.Row) (models.Subscription, error) {
 	)
 	var amountMinor int64
 	if err := row.Scan(&sub.ID, &sub.ChannelID, &sub.UserID, &sub.Tier, &sub.Provider, &sub.Reference, &amountMinor, &sub.Currency, &sub.StartedAt, &sub.ExpiresAt, &sub.AutoRenew, &sub.Status, &cancelledBy, &cancelledReason, &cancelledAt, &externalReference); err != nil {
-		return models.Subscription{}, err
+		return domain.Subscription{}, err
 	}
-	sub.Amount = models.NewMoneyFromMinorUnits(amountMinor)
+	sub.Amount = domain.NewMoneyFromMinorUnits(amountMinor)
 	sub.StartedAt = sub.StartedAt.UTC()
 	sub.ExpiresAt = sub.ExpiresAt.UTC()
 	if cancelledBy.Valid {
@@ -591,9 +591,9 @@ func scanSubscriptionRow(row pgx.Row) (models.Subscription, error) {
 }
 
 // ProcessPaymentWebhook persists a verified provider webhook and applies state transitions atomically.
-func (r *postgresRepository) ProcessPaymentWebhook(params ProcessPaymentWebhookParams) (models.PaymentTransaction, error) {
+func (r *postgresRepository) ProcessPaymentWebhook(params ProcessPaymentWebhookParams) (domain.PaymentTransaction, error) {
 	if r == nil || r.pool == nil {
-		return models.PaymentTransaction{}, ErrPostgresUnavailable
+		return domain.PaymentTransaction{}, ErrPostgresUnavailable
 	}
 	provider := strings.ToLower(strings.TrimSpace(params.Provider))
 	eventID := strings.TrimSpace(params.EventID)
@@ -602,9 +602,9 @@ func (r *postgresRepository) ProcessPaymentWebhook(params ProcessPaymentWebhookP
 	status := strings.ToLower(strings.TrimSpace(params.Status))
 	idempotencyKey := strings.TrimSpace(params.IdempotencyKey)
 	if provider == "" || eventID == "" || entityType == "" || reference == "" || status == "" {
-		return models.PaymentTransaction{}, fmt.Errorf("provider, eventID, entityType, reference and status are required")
+		return domain.PaymentTransaction{}, fmt.Errorf("provider, eventID, entityType, reference and status are required")
 	}
-	var txOut models.PaymentTransaction
+	var txOut domain.PaymentTransaction
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -612,7 +612,7 @@ func (r *postgresRepository) ProcessPaymentWebhook(params ProcessPaymentWebhookP
 		}
 		defer rollbackTx(ctx, tx)
 		row := tx.QueryRow(ctx, "SELECT id, provider, event_id, entity_type, entity_id, reference, status, idempotency_key, created_at FROM payment_transactions WHERE provider=$1 AND event_id=$2", provider, eventID)
-		var existing models.PaymentTransaction
+		var existing domain.PaymentTransaction
 		var idem pgtype.Text
 		if err := row.Scan(&existing.ID, &existing.Provider, &existing.EventID, &existing.EntityType, &existing.EntityID, &existing.Reference, &existing.Status, &idem, &existing.CreatedAt); err == nil {
 			if idem.Valid {
@@ -648,11 +648,11 @@ func (r *postgresRepository) ProcessPaymentWebhook(params ProcessPaymentWebhookP
 		if err := tx.Commit(ctx); err != nil {
 			return err
 		}
-		txOut = models.PaymentTransaction{ID: id, Provider: provider, EventID: eventID, EntityType: entityType, EntityID: entityID, Reference: reference, Status: status, IdempotencyKey: idempotencyKey, CreatedAt: created}
+		txOut = domain.PaymentTransaction{ID: id, Provider: provider, EventID: eventID, EntityType: entityType, EntityID: entityID, Reference: reference, Status: status, IdempotencyKey: idempotencyKey, CreatedAt: created}
 		return nil
 	})
 	if err != nil {
-		return models.PaymentTransaction{}, err
+		return domain.PaymentTransaction{}, err
 	}
 	return txOut, nil
 }

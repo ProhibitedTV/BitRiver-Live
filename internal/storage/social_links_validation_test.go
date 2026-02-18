@@ -3,11 +3,11 @@ package storage
 import (
 	"testing"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 )
 
 func TestNormalizeSocialLinks(t *testing.T) {
-	links := []models.SocialLink{
+	links := []domain.SocialLink{
 		{Platform: " Twitch ", URL: "https://twitch.example.com/streamer "},
 		{Platform: "Twitter", URL: "https://twitter.com/streamer"},
 	}
@@ -28,7 +28,7 @@ func TestNormalizeSocialLinks(t *testing.T) {
 }
 
 func TestNormalizeSocialLinksValidation(t *testing.T) {
-	cases := map[string][]models.SocialLink{
+	cases := map[string][]domain.SocialLink{
 		"empty platform": {{Platform: "", URL: "https://example.com"}},
 		"empty url":      {{Platform: "YouTube", URL: "  "}},
 		"invalid url":    {{Platform: "YouTube", URL: "ftp://example.com"}},
@@ -45,9 +45,9 @@ func TestNormalizeSocialLinksValidation(t *testing.T) {
 		}
 	}
 
-	tooMany := make([]models.SocialLink, maxSocialLinks+1)
+	tooMany := make([]domain.SocialLink, maxSocialLinks+1)
 	for i := range tooMany {
-		tooMany[i] = models.SocialLink{Platform: "Link", URL: "https://example.com"}
+		tooMany[i] = domain.SocialLink{Platform: "Link", URL: "https://example.com"}
 	}
 	if _, err := NormalizeSocialLinks(tooMany); err == nil {
 		t.Fatalf("expected error when exceeding max social links")

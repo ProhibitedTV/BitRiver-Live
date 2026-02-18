@@ -13,19 +13,19 @@ import (
 	"sync"
 	"time"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/observability/metrics"
 )
 
 // Store exposes the read-only operations the gateway requires from the backing
 // datastore.
 type Store interface {
-	GetChannel(id string) (models.Channel, bool)
-	GetUser(id string) (models.User, bool)
+	GetChannel(id string) (domain.Channel, bool)
+	GetUser(id string) (domain.User, bool)
 	ChatRestrictions() RestrictionsSnapshot
 	IsChatBanned(channelID, userID string) bool
 	ChatTimeout(channelID, userID string) (time.Time, bool)
-	ListChatFilters(channelID string) ([]models.ChatFilter, error)
+	ListChatFilters(channelID string) ([]domain.ChatFilter, error)
 }
 
 // GatewayConfig configures a chat Gateway.
@@ -76,7 +76,7 @@ func NewGateway(cfg GatewayConfig) *Gateway {
 
 // HandleConnection upgrades the HTTP request to a WebSocket connection for the
 // authenticated user.
-func (g *Gateway) HandleConnection(w http.ResponseWriter, r *http.Request, user models.User) {
+func (g *Gateway) HandleConnection(w http.ResponseWriter, r *http.Request, user domain.User) {
 	conn, err := Accept(w, r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -102,7 +102,7 @@ func (g *Gateway) HandleConnection(w http.ResponseWriter, r *http.Request, user 
 }
 
 // CreateMessage generates a new chat message authored by the given user.
-func (g *Gateway) CreateMessage(ctx context.Context, author models.User, channelID, content string) (MessageEvent, error) {
+func (g *Gateway) CreateMessage(ctx context.Context, author domain.User, channelID, content string) (MessageEvent, error) {
 	if err := g.ensureChannelAccessible(channelID, author.ID); err != nil {
 		return MessageEvent{}, err
 	}
@@ -142,7 +142,7 @@ func (g *Gateway) CreateMessage(ctx context.Context, author models.User, channel
 }
 
 // matchChatFilter performs match chat filter and propagates validation or dependency failures to the caller.
-func (g *Gateway) matchChatFilter(channelID, content string) (*models.ChatFilter, error) {
+func (g *Gateway) matchChatFilter(channelID, content string) (*domain.ChatFilter, error) {
 	filters, err := g.store.ListChatFilters(channelID)
 	if err != nil {
 		return nil, err
@@ -182,7 +182,7 @@ func (g *Gateway) matchChatFilter(channelID, content string) (*models.ChatFilter
 }
 
 // emitAutoMod performs emit auto mod and propagates validation or dependency failures to the caller.
-func (g *Gateway) emitAutoMod(ctx context.Context, author models.User, channelID, content string, filter models.ChatFilter) error {
+func (g *Gateway) emitAutoMod(ctx context.Context, author domain.User, channelID, content string, filter domain.ChatFilter) error {
 	id, err := generateID()
 	if err != nil {
 		return err
@@ -207,7 +207,7 @@ func (g *Gateway) emitAutoMod(ctx context.Context, author models.User, channelID
 }
 
 // ApplyModeration emits a moderation event into the chat stream.
-func (g *Gateway) ApplyModeration(ctx context.Context, actor models.User, event ModerationEvent) error {
+func (g *Gateway) ApplyModeration(ctx context.Context, actor domain.User, event ModerationEvent) error {
 	if err := g.validateModeration(actor, event); err != nil {
 		return err
 	}
@@ -227,7 +227,7 @@ func (g *Gateway) ApplyModeration(ctx context.Context, actor models.User, event 
 }
 
 // SubmitReport emits a viewer report into the chat stream and persistence layer.
-func (g *Gateway) SubmitReport(ctx context.Context, reporter models.User, channelID, targetID, reason, messageID, evidenceURL string) (ReportEvent, error) {
+func (g *Gateway) SubmitReport(ctx context.Context, reporter domain.User, channelID, targetID, reason, messageID, evidenceURL string) (ReportEvent, error) {
 	if err := g.ensureChannelAccessible(channelID, reporter.ID); err != nil {
 		return ReportEvent{}, err
 	}
@@ -302,7 +302,7 @@ func (g *Gateway) ensureChannelAccessible(channelID, userID string) error {
 }
 
 // validateModeration validates moderation and reports an error when required invariants are not met.
-func (g *Gateway) validateModeration(actor models.User, evt ModerationEvent) error {
+func (g *Gateway) validateModeration(actor domain.User, evt ModerationEvent) error {
 	if evt.ChannelID == "" || evt.TargetID == "" {
 		return fmt.Errorf("channel and target are required")
 	}
@@ -450,7 +450,7 @@ func generateID() (string, error) {
 type client struct {
 	gateway *Gateway
 	conn    *Conn
-	user    models.User
+	user    domain.User
 	send    chan outboundMessage
 	rooms   map[string]struct{}
 	closed  sync.Once

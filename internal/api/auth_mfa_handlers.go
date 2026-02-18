@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/auth"
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 )
 
 const (
@@ -247,25 +247,25 @@ func (h *Handler) MFADisable(w http.ResponseWriter, r *http.Request) {
 }
 
 // resolveMFAUser resolves mfauser from flags and environment values, returning validation errors when incompatible settings are provided.
-func (h *Handler) resolveMFAUser(token string, r *http.Request) (models.User, error) {
+func (h *Handler) resolveMFAUser(token string, r *http.Request) (domain.User, error) {
 	challengeToken := mfaChallengeTokenFromRequest(r, token)
 	if challengeToken != "" {
 		userID, _, ok, err := h.mfaChallengeManager().Validate(challengeToken)
 		if err != nil {
-			return models.User{}, err
+			return domain.User{}, err
 		}
 		if !ok {
-			return models.User{}, auth.ErrInvalidMFAChallenge
+			return domain.User{}, auth.ErrInvalidMFAChallenge
 		}
 		user, ok := h.authUsersService().GetUser(userID)
 		if !ok {
-			return models.User{}, fmt.Errorf("account not found")
+			return domain.User{}, fmt.Errorf("account not found")
 		}
 		return user, nil
 	}
 	user, _, err := h.AuthenticateRequest(r)
 	if err != nil {
-		return models.User{}, err
+		return domain.User{}, err
 	}
 	return user, nil
 }
@@ -291,20 +291,20 @@ func (h *Handler) resolveMFAChallenge(token string, r *http.Request) (string, ti
 }
 
 // prepareMFAEnrollment performs prepare mfaenrollment and propagates validation or dependency failures to the caller.
-func (h *Handler) prepareMFAEnrollment(user models.User) (mfaEnrollmentResponse, models.MFASettings, error) {
+func (h *Handler) prepareMFAEnrollment(user domain.User) (mfaEnrollmentResponse, domain.MFASettings, error) {
 	secret, err := auth.GenerateMFASecret()
 	if err != nil {
-		return mfaEnrollmentResponse{}, models.MFASettings{}, err
+		return mfaEnrollmentResponse{}, domain.MFASettings{}, err
 	}
 	codes, err := auth.GenerateRecoveryCodes(8)
 	if err != nil {
-		return mfaEnrollmentResponse{}, models.MFASettings{}, err
+		return mfaEnrollmentResponse{}, domain.MFASettings{}, err
 	}
 	hashedCodes := make([]string, 0, len(codes))
 	for _, code := range codes {
 		hashed, err := auth.HashRecoveryCode(code)
 		if err != nil {
-			return mfaEnrollmentResponse{}, models.MFASettings{}, err
+			return mfaEnrollmentResponse{}, domain.MFASettings{}, err
 		}
 		hashedCodes = append(hashedCodes, hashed)
 	}
@@ -314,14 +314,14 @@ func (h *Handler) prepareMFAEnrollment(user models.User) (mfaEnrollmentResponse,
 	}
 	otpURL, err := auth.BuildOTPAuthURL(mfaIssuer, accountLabel, secret)
 	if err != nil {
-		return mfaEnrollmentResponse{}, models.MFASettings{}, err
+		return mfaEnrollmentResponse{}, domain.MFASettings{}, err
 	}
 	enrollment := mfaEnrollmentResponse{
 		Secret:        secret,
 		OTPAuthURL:    otpURL,
 		RecoveryCodes: codes,
 	}
-	settings := models.MFASettings{
+	settings := domain.MFASettings{
 		UserID:        user.ID,
 		Secret:        secret,
 		RecoveryCodes: hashedCodes,
@@ -331,7 +331,7 @@ func (h *Handler) prepareMFAEnrollment(user models.User) (mfaEnrollmentResponse,
 }
 
 // buildMFAStatus builds mfastatus from runtime state used by downstream handlers.
-func buildMFAStatus(settings models.MFASettings, exists bool) mfaStatusResponse {
+func buildMFAStatus(settings domain.MFASettings, exists bool) mfaStatusResponse {
 	if !exists {
 		return mfaStatusResponse{Enabled: false, Pending: false}
 	}
@@ -352,10 +352,10 @@ func buildMFAStatus(settings models.MFASettings, exists bool) mfaStatusResponse 
 }
 
 // mfaRequirement performs mfa requirement and propagates validation or dependency failures to the caller.
-func (h *Handler) mfaRequirement(user models.User) (models.MFASettings, bool, bool, error) {
+func (h *Handler) mfaRequirement(user domain.User) (domain.MFASettings, bool, bool, error) {
 	settings, exists, err := h.authUsersService().GetMFASettings(user.ID)
 	if err != nil {
-		return models.MFASettings{}, false, false, err
+		return domain.MFASettings{}, false, false, err
 	}
 	requires := (exists && settings.Enabled) || userHasAnyRole(user, roleAdmin, roleCreator)
 	return settings, exists, requires, nil

@@ -19,7 +19,7 @@ import (
 	"bitriver-live/internal/auth"
 	"bitriver-live/internal/auth/oauth"
 	"bitriver-live/internal/chat"
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/service"
@@ -87,15 +87,15 @@ func (r ingestHealthRepository) LastIngestHealth() ([]ingest.HealthStatus, time.
 	return r.health, time.Now()
 }
 
-func (r ingestUnavailableRepo) StartStream(channelID string, renditions []string) (models.StreamSession, error) {
-	return models.StreamSession{}, storage.ErrIngestControllerUnavailable
+func (r ingestUnavailableRepo) StartStream(channelID string, renditions []string) (domain.StreamSession, error) {
+	return domain.StreamSession{}, storage.ErrIngestControllerUnavailable
 }
 
-func (r ingestUnavailableRepo) StopStream(channelID string, peakConcurrent int) (models.StreamSession, error) {
-	return models.StreamSession{}, storage.ErrIngestControllerUnavailable
+func (r ingestUnavailableRepo) StopStream(channelID string, peakConcurrent int) (domain.StreamSession, error) {
+	return domain.StreamSession{}, storage.ErrIngestControllerUnavailable
 }
 
-func withUser(req *http.Request, user models.User) *http.Request {
+func withUser(req *http.Request, user domain.User) *http.Request {
 	return req.WithContext(ContextWithUser(req.Context(), user))
 }
 
@@ -121,10 +121,10 @@ type oauthStub struct {
 
 type profileRepositoryWithOrphan struct {
 	storage.Repository
-	orphan models.Profile
+	orphan domain.Profile
 }
 
-func (r profileRepositoryWithOrphan) ListProfiles() []models.Profile {
+func (r profileRepositoryWithOrphan) ListProfiles() []domain.Profile {
 	profiles := r.Repository.ListProfiles()
 	return append(profiles, r.orphan)
 }
@@ -205,7 +205,7 @@ func TestProfilesList(t *testing.T) {
 		t.Fatalf("UpsertProfile creatorTwo: %v", err)
 	}
 
-	orphan := models.Profile{
+	orphan := domain.Profile{
 		UserID:    "missing-user",
 		Bio:       "ghost profile",
 		CreatedAt: time.Now().UTC(),
@@ -392,14 +392,14 @@ func TestUserByID(t *testing.T) {
 	cases := []struct {
 		name       string
 		method     string
-		setup      func(t *testing.T, store *storage.Storage) (requester models.User, target models.User, body []byte)
+		setup      func(t *testing.T, store *storage.Storage) (requester domain.User, target domain.User, body []byte)
 		wantStatus int
-		assert     func(t *testing.T, rec *httptest.ResponseRecorder, store *storage.Storage, target models.User)
+		assert     func(t *testing.T, rec *httptest.ResponseRecorder, store *storage.Storage, target domain.User)
 	}{
 		{
 			name:   "owner gets own record",
 			method: http.MethodGet,
-			setup: func(t *testing.T, store *storage.Storage) (models.User, models.User, []byte) {
+			setup: func(t *testing.T, store *storage.Storage) (domain.User, domain.User, []byte) {
 				owner, err := store.CreateUser(storage.CreateUserParams{
 					DisplayName: "Owner",
 					Email:       "owner@example.com",
@@ -411,7 +411,7 @@ func TestUserByID(t *testing.T) {
 				return owner, owner, nil
 			},
 			wantStatus: http.StatusOK,
-			assert: func(t *testing.T, rec *httptest.ResponseRecorder, store *storage.Storage, target models.User) {
+			assert: func(t *testing.T, rec *httptest.ResponseRecorder, store *storage.Storage, target domain.User) {
 				var resp userResponse
 				if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 					t.Fatalf("decode response: %v", err)
@@ -444,7 +444,7 @@ func TestUserByID(t *testing.T) {
 		{
 			name:   "non-admin forbidden from viewing others",
 			method: http.MethodGet,
-			setup: func(t *testing.T, store *storage.Storage) (models.User, models.User, []byte) {
+			setup: func(t *testing.T, store *storage.Storage) (domain.User, domain.User, []byte) {
 				viewer, err := store.CreateUser(storage.CreateUserParams{
 					DisplayName: "Viewer",
 					Email:       "viewer@example.com",
@@ -463,7 +463,7 @@ func TestUserByID(t *testing.T) {
 				return viewer, creator, nil
 			},
 			wantStatus: http.StatusForbidden,
-			assert: func(t *testing.T, rec *httptest.ResponseRecorder, store *storage.Storage, target models.User) {
+			assert: func(t *testing.T, rec *httptest.ResponseRecorder, store *storage.Storage, target domain.User) {
 				resp := decodeAPIError(t, rec.Body.Bytes())
 				if resp.Error.Message == "" {
 					t.Fatal("expected error message in response")
@@ -476,7 +476,7 @@ func TestUserByID(t *testing.T) {
 		{
 			name:   "admin patches another user",
 			method: http.MethodPatch,
-			setup: func(t *testing.T, store *storage.Storage) (models.User, models.User, []byte) {
+			setup: func(t *testing.T, store *storage.Storage) (domain.User, domain.User, []byte) {
 				admin, err := store.CreateUser(storage.CreateUserParams{
 					DisplayName: "Admin",
 					Email:       "admin@example.com",
@@ -504,7 +504,7 @@ func TestUserByID(t *testing.T) {
 				return admin, target, body
 			},
 			wantStatus: http.StatusOK,
-			assert: func(t *testing.T, rec *httptest.ResponseRecorder, store *storage.Storage, target models.User) {
+			assert: func(t *testing.T, rec *httptest.ResponseRecorder, store *storage.Storage, target domain.User) {
 				var resp userResponse
 				if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 					t.Fatalf("decode response: %v", err)
@@ -533,7 +533,7 @@ func TestUserByID(t *testing.T) {
 		{
 			name:   "admin deletes user",
 			method: http.MethodDelete,
-			setup: func(t *testing.T, store *storage.Storage) (models.User, models.User, []byte) {
+			setup: func(t *testing.T, store *storage.Storage) (domain.User, domain.User, []byte) {
 				admin, err := store.CreateUser(storage.CreateUserParams{
 					DisplayName: "Admin",
 					Email:       "delete-admin@example.com",
@@ -552,7 +552,7 @@ func TestUserByID(t *testing.T) {
 				return admin, target, nil
 			},
 			wantStatus: http.StatusNoContent,
-			assert: func(t *testing.T, rec *httptest.ResponseRecorder, store *storage.Storage, target models.User) {
+			assert: func(t *testing.T, rec *httptest.ResponseRecorder, store *storage.Storage, target domain.User) {
 				if body := strings.TrimSpace(rec.Body.String()); body != "" {
 					t.Fatalf("expected empty body, got %q", body)
 				}
@@ -2764,7 +2764,7 @@ func TestProfileEndpoints(t *testing.T) {
 }
 
 func TestHandleUpsertProfileDonationValidation(t *testing.T) {
-	setup := func(t *testing.T) (*Handler, *storage.Storage, models.User) {
+	setup := func(t *testing.T) (*Handler, *storage.Storage, domain.User) {
 		t.Helper()
 		handler, store := newTestHandler(t)
 		owner, err := store.CreateUser(storage.CreateUserParams{
@@ -3386,7 +3386,7 @@ func TestChannelPlaybackIncludesSubscriptionState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser owner: %v", err)
 	}
-	donation := []models.CryptoAddress{{Currency: "eth", Address: "0xabc123", Note: "Main"}}
+	donation := []domain.CryptoAddress{{Currency: "eth", Address: "0xabc123", Note: "Main"}}
 	if _, err := store.UpsertProfile(owner.ID, storage.ProfileUpdate{DonationAddresses: &donation}); err != nil {
 		t.Fatalf("UpsertProfile donation: %v", err)
 	}
@@ -3410,7 +3410,7 @@ func TestChannelPlaybackIncludesSubscriptionState(t *testing.T) {
 		UserID:    viewer.ID,
 		Tier:      "VIP",
 		Provider:  "internal",
-		Amount:    models.MustParseMoney("5"),
+		Amount:    domain.MustParseMoney("5"),
 		Currency:  "USD",
 		Duration:  30 * 24 * time.Hour,
 		AutoRenew: true,

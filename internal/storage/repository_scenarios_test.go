@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/chat"
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
 )
 
@@ -556,7 +556,7 @@ func RunRepositoryTipsLifecycle(t *testing.T, factory RepositoryFactory) {
 	channel, err := repo.CreateChannel(owner.ID, "Lobby", "gaming", nil)
 	requireAvailable(t, err, "create channel")
 
-	expectedTipAmount := models.MustParseMoney("5.5")
+	expectedTipAmount := domain.MustParseMoney("5.5")
 	tip, err := repo.CreateTip(CreateTipParams{
 		ChannelID:  channel.ID,
 		FromUserID: supporter.ID,
@@ -588,7 +588,7 @@ func RunRepositoryTipsLifecycle(t *testing.T, factory RepositoryFactory) {
 	if _, err := repo.CreateTip(CreateTipParams{
 		ChannelID:  channel.ID,
 		FromUserID: supporter.ID,
-		Amount:     models.MustParseMoney("5.5"),
+		Amount:     domain.MustParseMoney("5.5"),
 		Currency:   "usd",
 		Provider:   "stripe",
 		Reference:  longReference,
@@ -600,7 +600,7 @@ func RunRepositoryTipsLifecycle(t *testing.T, factory RepositoryFactory) {
 	if _, err := repo.CreateTip(CreateTipParams{
 		ChannelID:     channel.ID,
 		FromUserID:    supporter.ID,
-		Amount:        models.MustParseMoney("5.5"),
+		Amount:        domain.MustParseMoney("5.5"),
 		Currency:      "usd",
 		Provider:      "stripe",
 		Reference:     "ref-wallet",
@@ -613,7 +613,7 @@ func RunRepositoryTipsLifecycle(t *testing.T, factory RepositoryFactory) {
 	if _, err := repo.CreateTip(CreateTipParams{
 		ChannelID:  channel.ID,
 		FromUserID: supporter.ID,
-		Amount:     models.MustParseMoney("5.5"),
+		Amount:     domain.MustParseMoney("5.5"),
 		Currency:   "usd",
 		Provider:   "stripe",
 		Reference:  "ref-message",
@@ -635,7 +635,7 @@ func RunRepositorySubscriptionsLifecycle(t *testing.T, factory RepositoryFactory
 	channel, err := repo.CreateChannel(owner.ID, "Lobby", "gaming", nil)
 	requireAvailable(t, err, "create channel")
 
-	expectedSubAmount := models.MustParseMoney("4.99")
+	expectedSubAmount := domain.MustParseMoney("4.99")
 	sub, err := repo.CreateSubscription(CreateSubscriptionParams{
 		ChannelID: channel.ID,
 		UserID:    viewer.ID,
@@ -701,7 +701,7 @@ func RunRepositoryMonetizationPrecision(t *testing.T, factory RepositoryFactory)
 	channel, err := repo.CreateChannel(owner.ID, "Lobby", "gaming", nil)
 	requireAvailable(t, err, "create channel")
 
-	preciseTip := models.MustParseMoney("0.00000025")
+	preciseTip := domain.MustParseMoney("0.00000025")
 	tip, err := repo.CreateTip(CreateTipParams{
 		ChannelID:  channel.ID,
 		FromUserID: viewer.ID,
@@ -730,7 +730,7 @@ func RunRepositoryMonetizationPrecision(t *testing.T, factory RepositoryFactory)
 		t.Fatalf("expected precision tip %q in listing", tip.ID)
 	}
 
-	preciseSub := models.MustParseMoney("1234.56789012")
+	preciseSub := domain.MustParseMoney("1234.56789012")
 	subscription, err := repo.CreateSubscription(CreateSubscriptionParams{
 		ChannelID: channel.ID,
 		UserID:    viewer.ID,
@@ -1091,9 +1091,9 @@ func RunRepositoryStreamLifecycleWithoutIngest(t *testing.T, factory RepositoryF
 		}
 		now := time.Now().UTC()
 		r.mu.Lock()
-		session := models.StreamSession{ID: sessionID, ChannelID: channel.ID, StartedAt: now}
+		session := domain.StreamSession{ID: sessionID, ChannelID: channel.ID, StartedAt: now}
 		if r.data.StreamSessions == nil {
-			r.data.StreamSessions = make(map[string]models.StreamSession)
+			r.data.StreamSessions = make(map[string]domain.StreamSession)
 		}
 		r.data.StreamSessions[sessionID] = session
 		ch := r.data.Channels[channel.ID]

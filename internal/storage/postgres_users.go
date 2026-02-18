@@ -7,26 +7,26 @@ import (
 	"strings"
 	"time"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // CreateUser creates user and returns an error when persistence or validation fails.
-func (r *postgresRepository) CreateUser(params CreateUserParams) (models.User, error) {
+func (r *postgresRepository) CreateUser(params CreateUserParams) (domain.User, error) {
 	if r == nil || r.pool == nil {
-		return models.User{}, ErrPostgresUnavailable
+		return domain.User{}, ErrPostgresUnavailable
 	}
 
 	normalizedEmail := strings.TrimSpace(strings.ToLower(params.Email))
 	if normalizedEmail == "" {
-		return models.User{}, fmt.Errorf("email is required")
+		return domain.User{}, fmt.Errorf("email is required")
 	}
 
 	displayName := strings.TrimSpace(params.DisplayName)
 	if displayName == "" {
-		return models.User{}, fmt.Errorf("displayName is required")
+		return domain.User{}, fmt.Errorf("displayName is required")
 	}
 
 	roles := normalizeRoles(params.Roles)
@@ -35,7 +35,7 @@ func (r *postgresRepository) CreateUser(params CreateUserParams) (models.User, e
 	}
 	if params.SelfSignup {
 		if params.Password == "" {
-			return models.User{}, fmt.Errorf("password is required for self-service signup")
+			return domain.User{}, fmt.Errorf("password is required for self-service signup")
 		}
 		if len(roles) == 0 {
 			roles = []string{"viewer"}
@@ -44,14 +44,14 @@ func (r *postgresRepository) CreateUser(params CreateUserParams) (models.User, e
 
 	id, err := generateID()
 	if err != nil {
-		return models.User{}, err
+		return domain.User{}, err
 	}
 
 	var passwordHash string
 	if params.Password != "" {
 		hashed, hashErr := hashPassword(params.Password)
 		if hashErr != nil {
-			return models.User{}, fmt.Errorf("hash password: %w", hashErr)
+			return domain.User{}, fmt.Errorf("hash password: %w", hashErr)
 		}
 		passwordHash = hashed
 	}
@@ -84,10 +84,10 @@ func (r *postgresRepository) CreateUser(params CreateUserParams) (models.User, e
 		return nil
 	})
 	if createErr != nil {
-		return models.User{}, createErr
+		return domain.User{}, createErr
 	}
 
-	return models.User{
+	return domain.User{
 		ID:           id,
 		DisplayName:  displayName,
 		Email:        normalizedEmail,
@@ -99,16 +99,16 @@ func (r *postgresRepository) CreateUser(params CreateUserParams) (models.User, e
 }
 
 // AuthenticateUser performs authenticate user and returns an error when dependent systems reject the operation.
-func (r *postgresRepository) AuthenticateUser(email, password string) (models.User, error) {
+func (r *postgresRepository) AuthenticateUser(email, password string) (domain.User, error) {
 	if password == "" {
-		return models.User{}, fmt.Errorf("password is required")
+		return domain.User{}, fmt.Errorf("password is required")
 	}
 	if r == nil || r.pool == nil {
-		return models.User{}, ErrPostgresUnavailable
+		return domain.User{}, ErrPostgresUnavailable
 	}
 
 	trimmedEmail := strings.TrimSpace(strings.ToLower(email))
-	var user models.User
+	var user domain.User
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		row := conn.QueryRow(ctx, "SELECT id, display_name, email, roles, password_hash, self_signup, created_at FROM users WHERE email = $1", trimmedEmail)
 		scanned, scanErr := scanUser(row)
@@ -119,30 +119,30 @@ func (r *postgresRepository) AuthenticateUser(email, password string) (models.Us
 		return nil
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return models.User{}, ErrInvalidCredentials
+		return domain.User{}, ErrInvalidCredentials
 	}
 	if err != nil {
-		return models.User{}, fmt.Errorf("authenticate user: %w", err)
+		return domain.User{}, fmt.Errorf("authenticate user: %w", err)
 	}
 	if user.PasswordHash == "" {
-		return models.User{}, ErrPasswordLoginUnsupported
+		return domain.User{}, ErrPasswordLoginUnsupported
 	}
 	if err := verifyPassword(user.PasswordHash, password); err != nil {
 		if errors.Is(err, ErrInvalidCredentials) {
-			return models.User{}, ErrInvalidCredentials
+			return domain.User{}, ErrInvalidCredentials
 		}
-		return models.User{}, err
+		return domain.User{}, err
 	}
 	return user, nil
 }
 
 // ListUsers returns users from the configured backing services.
-func (r *postgresRepository) ListUsers() []models.User {
+func (r *postgresRepository) ListUsers() []domain.User {
 	if r == nil || r.pool == nil {
 		return nil
 	}
 
-	var users []models.User
+	var users []domain.User
 	listErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		rows, err := conn.Query(ctx, "SELECT id, display_name, email, roles, password_hash, self_signup, created_at FROM users ORDER BY created_at ASC")
 		if err != nil {
@@ -166,12 +166,12 @@ func (r *postgresRepository) ListUsers() []models.User {
 }
 
 // GetUser returns user from the configured backing services.
-func (r *postgresRepository) GetUser(id string) (models.User, bool) {
+func (r *postgresRepository) GetUser(id string) (domain.User, bool) {
 	if r == nil || r.pool == nil {
-		return models.User{}, false
+		return domain.User{}, false
 	}
 
-	var user models.User
+	var user domain.User
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		row := conn.QueryRow(ctx, "SELECT id, display_name, email, roles, password_hash, self_signup, created_at FROM users WHERE id = $1", id)
 		scanned, scanErr := scanUser(row)
@@ -182,21 +182,21 @@ func (r *postgresRepository) GetUser(id string) (models.User, bool) {
 		return nil
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return models.User{}, false
+		return domain.User{}, false
 	}
 	if err != nil {
-		return models.User{}, false
+		return domain.User{}, false
 	}
 	return user, true
 }
 
 // UpdateUser updates user and returns an error when persistence or validation fails.
-func (r *postgresRepository) UpdateUser(id string, update UserUpdate) (models.User, error) {
+func (r *postgresRepository) UpdateUser(id string, update UserUpdate) (domain.User, error) {
 	if r == nil || r.pool == nil {
-		return models.User{}, ErrPostgresUnavailable
+		return domain.User{}, ErrPostgresUnavailable
 	}
 
-	var updated models.User
+	var updated domain.User
 	updateErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -257,27 +257,27 @@ func (r *postgresRepository) UpdateUser(id string, update UserUpdate) (models.Us
 		return nil
 	})
 	if updateErr != nil {
-		return models.User{}, updateErr
+		return domain.User{}, updateErr
 	}
 
 	return updated, nil
 }
 
 // SetUserPassword parses and stores a flag assignment, returning an error when the format is invalid.
-func (r *postgresRepository) SetUserPassword(id, password string) (models.User, error) {
+func (r *postgresRepository) SetUserPassword(id, password string) (domain.User, error) {
 	if r == nil || r.pool == nil {
-		return models.User{}, ErrPostgresUnavailable
+		return domain.User{}, ErrPostgresUnavailable
 	}
 	if len(password) < 8 {
-		return models.User{}, fmt.Errorf("password must be at least 8 characters")
+		return domain.User{}, fmt.Errorf("password must be at least 8 characters")
 	}
 
 	hashed, err := hashPassword(password)
 	if err != nil {
-		return models.User{}, fmt.Errorf("hash password: %w", err)
+		return domain.User{}, fmt.Errorf("hash password: %w", err)
 	}
 
-	var user models.User
+	var user domain.User
 	var roles []string
 	updateErr := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		row := conn.QueryRow(ctx, "UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id, display_name, email, roles, password_hash, self_signup, created_at", hashed, id)
@@ -290,7 +290,7 @@ func (r *postgresRepository) SetUserPassword(id, password string) (models.User, 
 		return nil
 	})
 	if updateErr != nil {
-		return models.User{}, updateErr
+		return domain.User{}, updateErr
 	}
 
 	user.Roles = roles
@@ -349,7 +349,7 @@ func (r *postgresRepository) DeleteUser(id string) error {
 }
 
 // scanUser scans user from database rows and returns an error when type conversion fails.
-func scanUser(row pgx.Row) (models.User, error) {
+func scanUser(row pgx.Row) (domain.User, error) {
 	var (
 		id, displayName, email string
 		roles                  []string
@@ -358,9 +358,9 @@ func scanUser(row pgx.Row) (models.User, error) {
 		createdAt              time.Time
 	)
 	if err := row.Scan(&id, &displayName, &email, &roles, &passwordHash, &selfSignup, &createdAt); err != nil {
-		return models.User{}, err
+		return domain.User{}, err
 	}
-	user := models.User{
+	user := domain.User{
 		ID:          id,
 		DisplayName: displayName,
 		Email:       email,

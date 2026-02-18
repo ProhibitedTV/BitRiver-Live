@@ -7,23 +7,23 @@ import (
 	"strings"
 	"time"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // GetMFASettings returns mfasettings from the configured backing services.
-func (r *postgresRepository) GetMFASettings(userID string) (models.MFASettings, bool, error) {
+func (r *postgresRepository) GetMFASettings(userID string) (domain.MFASettings, bool, error) {
 	if r == nil || r.pool == nil {
-		return models.MFASettings{}, false, ErrPostgresUnavailable
+		return domain.MFASettings{}, false, ErrPostgresUnavailable
 	}
 
 	userID = strings.TrimSpace(userID)
 	if userID == "" {
-		return models.MFASettings{}, false, fmt.Errorf("userID is required")
+		return domain.MFASettings{}, false, fmt.Errorf("userID is required")
 	}
 
-	var settings models.MFASettings
+	var settings domain.MFASettings
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		row := conn.QueryRow(ctx, `
 SELECT user_id, secret, recovery_codes, enabled, created_at, updated_at, enabled_at, last_used_at
@@ -42,10 +42,10 @@ WHERE user_id = $1
 		)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return models.MFASettings{}, false, nil
+		return domain.MFASettings{}, false, nil
 	}
 	if err != nil {
-		return models.MFASettings{}, false, fmt.Errorf("get mfa settings: %w", err)
+		return domain.MFASettings{}, false, fmt.Errorf("get mfa settings: %w", err)
 	}
 	settings.CreatedAt = settings.CreatedAt.UTC()
 	settings.UpdatedAt = settings.UpdatedAt.UTC()
@@ -61,14 +61,14 @@ WHERE user_id = $1
 }
 
 // UpsertMFASettings performs upsert mfasettings and returns an error when dependent systems reject the operation.
-func (r *postgresRepository) UpsertMFASettings(settings models.MFASettings) (models.MFASettings, error) {
+func (r *postgresRepository) UpsertMFASettings(settings domain.MFASettings) (domain.MFASettings, error) {
 	if r == nil || r.pool == nil {
-		return models.MFASettings{}, ErrPostgresUnavailable
+		return domain.MFASettings{}, ErrPostgresUnavailable
 	}
 
 	userID := strings.TrimSpace(settings.UserID)
 	if userID == "" {
-		return models.MFASettings{}, fmt.Errorf("userID is required")
+		return domain.MFASettings{}, fmt.Errorf("userID is required")
 	}
 	if settings.RecoveryCodes == nil {
 		settings.RecoveryCodes = []string{}
@@ -96,7 +96,7 @@ SET secret = EXCLUDED.secret,
 		return err
 	})
 	if upsertErr != nil {
-		return models.MFASettings{}, fmt.Errorf("upsert mfa settings: %w", upsertErr)
+		return domain.MFASettings{}, fmt.Errorf("upsert mfa settings: %w", upsertErr)
 	}
 	return settings, nil
 }

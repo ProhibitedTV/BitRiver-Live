@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 )
 
 // cloneRecording executes cloneRecording.
@@ -18,13 +18,13 @@ import (
 // Errors: this helper does not return `error`; failures are handled by callers.
 // Transactions/connections: no transaction/connection contract applies for this pure helper.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func cloneRecording(recording models.Recording) models.Recording {
+func cloneRecording(recording domain.Recording) domain.Recording {
 	cloned := recording
 	if recording.Renditions != nil {
-		cloned.Renditions = append([]models.RecordingRendition(nil), recording.Renditions...)
+		cloned.Renditions = append([]domain.RecordingRendition(nil), recording.Renditions...)
 	}
 	if recording.Thumbnails != nil {
-		cloned.Thumbnails = append([]models.RecordingThumbnail(nil), recording.Thumbnails...)
+		cloned.Thumbnails = append([]domain.RecordingThumbnail(nil), recording.Thumbnails...)
 	}
 	if recording.Metadata != nil {
 		meta := make(map[string]string, len(recording.Metadata))
@@ -42,7 +42,7 @@ func cloneRecording(recording models.Recording) models.Recording {
 		cloned.RetainUntil = &retain
 	}
 	if recording.Clips != nil {
-		cloned.Clips = append([]models.ClipExportSummary(nil), recording.Clips...)
+		cloned.Clips = append([]domain.ClipExportSummary(nil), recording.Clips...)
 	}
 	return cloned
 }
@@ -53,7 +53,7 @@ func cloneRecording(recording models.Recording) models.Recording {
 // Errors: this helper does not return `error`; failures are handled by callers.
 // Transactions/connections: no transaction/connection contract applies for this pure helper.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func cloneUpload(upload models.Upload) models.Upload {
+func cloneUpload(upload domain.Upload) domain.Upload {
 	cloned := upload
 	if upload.Metadata != nil {
 		meta := make(map[string]string, len(upload.Metadata))
@@ -79,7 +79,7 @@ func cloneUpload(upload models.Upload) models.Upload {
 // Errors: this helper does not return `error`; failures are handled by callers.
 // Transactions/connections: no transaction/connection contract applies for this pure helper.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func cloneClipExport(clip models.ClipExport) models.ClipExport {
+func cloneClipExport(clip domain.ClipExport) domain.ClipExport {
 	cloned := clip
 	if clip.CompletedAt != nil {
 		completed := *clip.CompletedAt
@@ -208,17 +208,17 @@ func (s *Storage) runRecordingRetention(_ context.Context) error {
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) recordingWithClipsLocked(recording models.Recording) models.Recording {
+func (s *Storage) recordingWithClipsLocked(recording domain.Recording) domain.Recording {
 	cloned := cloneRecording(recording)
 	if len(s.data.ClipExports) == 0 {
 		return cloned
 	}
-	var clips []models.ClipExportSummary
+	var clips []domain.ClipExportSummary
 	for _, clip := range s.data.ClipExports {
 		if clip.RecordingID != recording.ID {
 			continue
 		}
-		clips = append(clips, models.ClipExportSummary{
+		clips = append(clips, domain.ClipExportSummary{
 			ID:           clip.ID,
 			Title:        clip.Title,
 			StartSeconds: clip.StartSeconds,
@@ -247,11 +247,11 @@ func (s *Storage) recordingWithClipsLocked(recording models.Recording) models.Re
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) createRecordingLocked(session models.StreamSession, channel models.Channel, ended time.Time) (models.Recording, error) {
+func (s *Storage) createRecordingLocked(session domain.StreamSession, channel domain.Channel, ended time.Time) (domain.Recording, error) {
 	s.ensureDatasetInitializedLocked()
 	id, err := generateID()
 	if err != nil {
-		return models.Recording{}, err
+		return domain.Recording{}, err
 	}
 	duration := int(ended.Sub(session.StartedAt).Round(time.Second).Seconds())
 	if duration < 0 {
@@ -272,7 +272,7 @@ func (s *Storage) createRecordingLocked(session models.StreamSession, channel mo
 	if session.PeakConcurrent > 0 {
 		metadata["peakConcurrent"] = strconv.Itoa(session.PeakConcurrent)
 	}
-	recording := models.Recording{
+	recording := domain.Recording{
 		ID:              id,
 		ChannelID:       channel.ID,
 		SessionID:       session.ID,
@@ -286,14 +286,14 @@ func (s *Storage) createRecordingLocked(session models.StreamSession, channel mo
 		recording.RetainUntil = deadline
 	}
 	if len(session.RenditionManifests) > 0 {
-		renditions := make([]models.RecordingRendition, 0, len(session.RenditionManifests))
+		renditions := make([]domain.RecordingRendition, 0, len(session.RenditionManifests))
 		for _, manifest := range session.RenditionManifests {
-			renditions = append(renditions, models.RecordingRendition(manifest))
+			renditions = append(renditions, domain.RecordingRendition(manifest))
 		}
 		recording.Renditions = renditions
 	}
 	if err := s.populateRecordingArtifactsLocked(&recording, session); err != nil {
-		return models.Recording{}, err
+		return domain.Recording{}, err
 	}
 	return recording, nil
 }
@@ -306,7 +306,7 @@ func (s *Storage) createRecordingLocked(session models.StreamSession, channel mo
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) populateRecordingArtifactsLocked(recording *models.Recording, session models.StreamSession) error {
+func (s *Storage) populateRecordingArtifactsLocked(recording *domain.Recording, session domain.StreamSession) error {
 	client := s.objectClient
 	if client == nil || !client.Enabled() {
 		return nil
@@ -369,7 +369,7 @@ func (s *Storage) populateRecordingArtifactsLocked(recording *models.Recording, 
 	if ref.Key != "" {
 		recording.Metadata[thumbnailMetadataKey(thumbID)] = ref.Key
 	}
-	thumbnail := models.RecordingThumbnail{
+	thumbnail := domain.RecordingThumbnail{
 		ID:          thumbID,
 		RecordingID: recording.ID,
 		URL:         ref.URL,
@@ -388,7 +388,7 @@ func (s *Storage) populateRecordingArtifactsLocked(recording *models.Recording, 
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) deleteRecordingArtifactsLocked(recording models.Recording) error {
+func (s *Storage) deleteRecordingArtifactsLocked(recording domain.Recording) error {
 	client := s.objectClient
 	if client == nil || !client.Enabled() {
 		return nil
@@ -427,7 +427,7 @@ func (s *Storage) deleteRecordingArtifactsLocked(recording models.Recording) err
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) deleteClipArtifactsLocked(clip models.ClipExport) error {
+func (s *Storage) deleteClipArtifactsLocked(clip domain.ClipExport) error {
 	client := s.objectClient
 	if client == nil || !client.Enabled() || strings.TrimSpace(clip.StorageObject) == "" {
 		return nil
@@ -450,7 +450,7 @@ func (s *Storage) deleteClipArtifactsLocked(clip models.ClipExport) error {
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (s *Storage) ListRecordings(channelID string, includeUnpublished bool) ([]models.Recording, error) {
+func (s *Storage) ListRecordings(channelID string, includeUnpublished bool) ([]domain.Recording, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -470,7 +470,7 @@ func (s *Storage) ListRecordings(channelID string, includeUnpublished bool) ([]m
 		}
 	}
 
-	recordings := make([]models.Recording, 0)
+	recordings := make([]domain.Recording, 0)
 	for _, recording := range s.data.Recordings {
 		if recording.ChannelID != channelID {
 			continue
@@ -494,7 +494,7 @@ func (s *Storage) ListRecordings(channelID string, includeUnpublished bool) ([]m
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) CreateUpload(params CreateUploadParams) (models.Upload, error) {
+func (s *Storage) CreateUpload(params CreateUploadParams) (domain.Upload, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -503,7 +503,7 @@ func (s *Storage) CreateUpload(params CreateUploadParams) (models.Upload, error)
 	channelID := strings.TrimSpace(params.ChannelID)
 	channel, ok := s.data.Channels[channelID]
 	if !ok {
-		return models.Upload{}, fmt.Errorf("channel %s not found", channelID)
+		return domain.Upload{}, fmt.Errorf("channel %s not found", channelID)
 	}
 
 	title := strings.TrimSpace(params.Title)
@@ -522,7 +522,7 @@ func (s *Storage) CreateUpload(params CreateUploadParams) (models.Upload, error)
 
 	id, err := generateID()
 	if err != nil {
-		return models.Upload{}, err
+		return domain.Upload{}, err
 	}
 
 	now := time.Now().UTC()
@@ -536,7 +536,7 @@ func (s *Storage) CreateUpload(params CreateUploadParams) (models.Upload, error)
 
 	playbackURL := strings.TrimSpace(params.PlaybackURL)
 
-	upload := models.Upload{
+	upload := domain.Upload{
 		ID:          id,
 		ChannelID:   channelID,
 		Title:       title,
@@ -553,7 +553,7 @@ func (s *Storage) CreateUpload(params CreateUploadParams) (models.Upload, error)
 	s.data.Uploads[id] = upload
 	if err := s.persist(); err != nil {
 		delete(s.data.Uploads, id)
-		return models.Upload{}, err
+		return domain.Upload{}, err
 	}
 
 	return upload, nil
@@ -568,7 +568,7 @@ func (s *Storage) CreateUpload(params CreateUploadParams) (models.Upload, error)
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (s *Storage) ListUploads(channelID string) ([]models.Upload, error) {
+func (s *Storage) ListUploads(channelID string) ([]domain.Upload, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -576,7 +576,7 @@ func (s *Storage) ListUploads(channelID string) ([]models.Upload, error) {
 		return nil, fmt.Errorf("channel %s not found", channelID)
 	}
 
-	uploads := make([]models.Upload, 0)
+	uploads := make([]domain.Upload, 0)
 	for _, upload := range s.data.Uploads {
 		if upload.ChannelID != channelID {
 			continue
@@ -597,13 +597,13 @@ func (s *Storage) ListUploads(channelID string) ([]models.Upload, error) {
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) GetUpload(id string) (models.Upload, bool) {
+func (s *Storage) GetUpload(id string) (domain.Upload, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	upload, ok := s.data.Uploads[id]
 	if !ok {
-		return models.Upload{}, false
+		return domain.Upload{}, false
 	}
 	return cloneUpload(upload), true
 }
@@ -616,13 +616,13 @@ func (s *Storage) GetUpload(id string) (models.Upload, bool) {
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) UpdateUpload(id string, update UploadUpdate) (models.Upload, error) {
+func (s *Storage) UpdateUpload(id string, update UploadUpdate) (domain.Upload, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	upload, ok := s.data.Uploads[id]
 	if !ok {
-		return models.Upload{}, fmt.Errorf("upload %s not found", id)
+		return domain.Upload{}, fmt.Errorf("upload %s not found", id)
 	}
 
 	original := upload
@@ -688,7 +688,7 @@ func (s *Storage) UpdateUpload(id string, update UploadUpdate) (models.Upload, e
 	s.data.Uploads[id] = upload
 	if err := s.persist(); err != nil {
 		s.data.Uploads[id] = original
-		return models.Upload{}, err
+		return domain.Upload{}, err
 	}
 	return cloneUpload(upload), nil
 }
@@ -726,27 +726,27 @@ func (s *Storage) DeleteUpload(id string) error {
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) GetRecording(id string) (models.Recording, bool) {
+func (s *Storage) GetRecording(id string) (domain.Recording, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if id == "" {
-		return models.Recording{}, false
+		return domain.Recording{}, false
 	}
 	now := s.retentionTime()
 	removed, snapshot, err := s.purgeExpiredRecordingsLocked(now)
 	if err != nil {
-		return models.Recording{}, false
+		return domain.Recording{}, false
 	}
 	if removed {
 		if err := s.persist(); err != nil {
 			s.data = snapshot
-			return models.Recording{}, false
+			return domain.Recording{}, false
 		}
 	}
 	recording, ok := s.data.Recordings[id]
 	if !ok {
-		return models.Recording{}, false
+		return domain.Recording{}, false
 	}
 	return s.recordingWithClipsLocked(recording), true
 }
@@ -759,17 +759,17 @@ func (s *Storage) GetRecording(id string) (models.Recording, bool) {
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) PublishRecording(id string) (models.Recording, error) {
+func (s *Storage) PublishRecording(id string) (domain.Recording, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if id == "" {
-		return models.Recording{}, fmt.Errorf("recording id is required")
+		return domain.Recording{}, fmt.Errorf("recording id is required")
 	}
 
 	recording, ok := s.data.Recordings[id]
 	if !ok {
-		return models.Recording{}, fmt.Errorf("recording %s not found", id)
+		return domain.Recording{}, fmt.Errorf("recording %s not found", id)
 	}
 	if recording.PublishedAt != nil {
 		return s.recordingWithClipsLocked(recording), nil
@@ -788,7 +788,7 @@ func (s *Storage) PublishRecording(id string) (models.Recording, error) {
 	s.data.Recordings[id] = updated
 	if err := s.persist(); err != nil {
 		s.data = snapshot
-		return models.Recording{}, err
+		return domain.Recording{}, err
 	}
 	return s.recordingWithClipsLocked(updated), nil
 }
@@ -842,36 +842,36 @@ func (s *Storage) DeleteRecording(id string) error {
 // Transactions/connections: no external transaction is required; it coordinates access with
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
-func (s *Storage) CreateClipExport(recordingID string, params ClipExportParams) (models.ClipExport, error) {
+func (s *Storage) CreateClipExport(recordingID string, params ClipExportParams) (domain.ClipExport, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if recordingID == "" {
-		return models.ClipExport{}, fmt.Errorf("recording id is required")
+		return domain.ClipExport{}, fmt.Errorf("recording id is required")
 	}
 	recording, ok := s.data.Recordings[recordingID]
 	if !ok {
-		return models.ClipExport{}, fmt.Errorf("recording %s not found", recordingID)
+		return domain.ClipExport{}, fmt.Errorf("recording %s not found", recordingID)
 	}
 	title := strings.TrimSpace(params.Title)
 	if title == "" {
-		return models.ClipExport{}, fmt.Errorf("title is required")
+		return domain.ClipExport{}, fmt.Errorf("title is required")
 	}
 	if params.EndSeconds <= params.StartSeconds {
-		return models.ClipExport{}, fmt.Errorf("endSeconds must be greater than startSeconds")
+		return domain.ClipExport{}, fmt.Errorf("endSeconds must be greater than startSeconds")
 	}
 	if params.StartSeconds < 0 {
-		return models.ClipExport{}, fmt.Errorf("startSeconds must be non-negative")
+		return domain.ClipExport{}, fmt.Errorf("startSeconds must be non-negative")
 	}
 	if recording.DurationSeconds > 0 && params.EndSeconds > recording.DurationSeconds {
-		return models.ClipExport{}, fmt.Errorf("clip exceeds recording duration")
+		return domain.ClipExport{}, fmt.Errorf("clip exceeds recording duration")
 	}
 	id, err := generateID()
 	if err != nil {
-		return models.ClipExport{}, err
+		return domain.ClipExport{}, err
 	}
 	now := time.Now().UTC()
-	clip := models.ClipExport{
+	clip := domain.ClipExport{
 		ID:           id,
 		RecordingID:  recordingID,
 		ChannelID:    recording.ChannelID,
@@ -886,7 +886,7 @@ func (s *Storage) CreateClipExport(recordingID string, params ClipExportParams) 
 	s.data.ClipExports[id] = clip
 	if err := s.persist(); err != nil {
 		s.data = snapshot
-		return models.ClipExport{}, err
+		return domain.ClipExport{}, err
 	}
 	return clip, nil
 }
@@ -900,7 +900,7 @@ func (s *Storage) CreateClipExport(recordingID string, params ClipExportParams) 
 // the in-memory mutex and persists snapshots to disk/object storage as needed.
 // Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
 // Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
-func (s *Storage) ListClipExports(recordingID string) ([]models.ClipExport, error) {
+func (s *Storage) ListClipExports(recordingID string) ([]domain.ClipExport, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -910,7 +910,7 @@ func (s *Storage) ListClipExports(recordingID string) ([]models.ClipExport, erro
 	if _, ok := s.data.Recordings[recordingID]; !ok {
 		return nil, fmt.Errorf("recording %s not found", recordingID)
 	}
-	clips := make([]models.ClipExport, 0)
+	clips := make([]domain.ClipExport, 0)
 	for _, clip := range s.data.ClipExports {
 		if clip.RecordingID != recordingID {
 			continue

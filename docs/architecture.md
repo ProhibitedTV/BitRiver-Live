@@ -30,7 +30,7 @@ Rules:
 3. `internal/api` contains transport handlers and request/response translation only. Handlers must depend on use-case interfaces (owned by `internal/service` or `internal/domain`) and must not call `storage.Repository` directly for business operations.
 4. `internal/service` contains use-case/application logic.
 5. `internal/domain` contains core domain models, invariants, and domain-level interfaces.
-6. `internal/domain` is the canonical home for core business entities and value objects. `internal/models` is a legacy compatibility package that aliases `internal/domain` for incremental migration only; new business logic must import `internal/domain` directly.
+6. `internal/domain` is the canonical home for core business entities and value objects. `internal/models` is deprecated and retained only as a temporary compatibility shim; new business logic must import `internal/domain` directly.
 7. `internal/config`, `internal/envutil`, `internal/executil`, `internal/platformutil`, `internal/serverutil`, and `internal/stringsutil` form a shared foundation/utilities layer used by top-level wiring and adapters. Keep these packages dependency-light: they must not import higher-level application, domain, or adapter layers.
 8. `internal/storage`, `internal/ingest`, `internal/chat`, `internal/auth`, `internal/security`, and `internal/observability` are infrastructure and integration adapters.
 9. `internal/service/uploads` currently defines the upload-processing contract used by storage-backed implementations; `internal/storage` may import this package until that contract is relocated to a neutral domain-owned package.
@@ -46,7 +46,7 @@ BitRiver Live has one deployment pipeline regardless of launcher: `deploy/docker
 
 - `internal/domain` now exists as the canonical home for core business entities.
 - Core business entities and value objects now live in `internal/domain` and should be imported directly.
-- `internal/models` remains as a legacy compatibility layer that aliases domain types while older call sites are migrated.
+- `internal/models` is deprecated and retained only as an explicit compatibility shim pending removal in v1.0.0.
 - The historical type-by-type migration map remains in `internal/domain/migration_map.md` for reference.
 
 ## Frontend boundary (Next.js viewer)

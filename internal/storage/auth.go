@@ -10,40 +10,40 @@ import (
 	"strconv"
 	"strings"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 	"golang.org/x/crypto/pbkdf2"
 )
 
 // AuthenticateUser verifies credentials and returns the matching user on success.
-func (s *Storage) AuthenticateUser(email, password string) (models.User, error) {
+func (s *Storage) AuthenticateUser(email, password string) (domain.User, error) {
 	if password == "" {
-		return models.User{}, errors.New("password is required")
+		return domain.User{}, errors.New("password is required")
 	}
 	user, ok := s.FindUserByEmail(email)
 	if !ok {
-		return models.User{}, ErrInvalidCredentials
+		return domain.User{}, ErrInvalidCredentials
 	}
 	if user.PasswordHash == "" {
-		return models.User{}, ErrPasswordLoginUnsupported
+		return domain.User{}, ErrPasswordLoginUnsupported
 	}
 	if err := verifyPassword(user.PasswordHash, password); err != nil {
 		if errors.Is(err, ErrInvalidCredentials) {
-			return models.User{}, ErrInvalidCredentials
+			return domain.User{}, ErrInvalidCredentials
 		}
-		return models.User{}, err
+		return domain.User{}, err
 	}
 	return user, nil
 }
 
 // SetUserPassword replaces the stored password hash for the provided user.
-func (s *Storage) SetUserPassword(id, password string) (models.User, error) {
+func (s *Storage) SetUserPassword(id, password string) (domain.User, error) {
 	if len(password) < 8 {
-		return models.User{}, errors.New("password must be at least 8 characters")
+		return domain.User{}, errors.New("password must be at least 8 characters")
 	}
 
 	hashed, err := hashPassword(password)
 	if err != nil {
-		return models.User{}, fmt.Errorf("hash password: %w", err)
+		return domain.User{}, fmt.Errorf("hash password: %w", err)
 	}
 
 	s.mu.Lock()
@@ -53,14 +53,14 @@ func (s *Storage) SetUserPassword(id, password string) (models.User, error) {
 
 	user, ok := updatedData.Users[id]
 	if !ok {
-		return models.User{}, fmt.Errorf("user %s not found", id)
+		return domain.User{}, fmt.Errorf("user %s not found", id)
 	}
 
 	user.PasswordHash = hashed
 	updatedData.Users[id] = user
 
 	if err := s.persistDataset(updatedData); err != nil {
-		return models.User{}, err
+		return domain.User{}, err
 	}
 
 	s.data = updatedData

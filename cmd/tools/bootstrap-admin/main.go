@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/storage"
 )
 
@@ -83,7 +83,7 @@ func closeRepository(repo storage.Repository) {
 	}
 }
 
-func bootstrapAdmin(repo storage.Repository, email, displayName, password string) (models.User, bool, error) {
+func bootstrapAdmin(repo storage.Repository, email, displayName, password string) (domain.User, bool, error) {
 	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
 	users := repo.ListUsers()
 	for _, existing := range users {
@@ -99,12 +99,12 @@ func bootstrapAdmin(repo storage.Repository, email, displayName, password string
 		Password:    password,
 	})
 	if err != nil {
-		return models.User{}, false, err
+		return domain.User{}, false, err
 	}
 	return user, true, nil
 }
 
-func updateAdmin(repo storage.Repository, existing models.User, displayName, password string) (models.User, bool, error) {
+func updateAdmin(repo storage.Repository, existing domain.User, displayName, password string) (domain.User, bool, error) {
 	roles := ensureAdminRole(existing.Roles)
 
 	var update storage.UserUpdate
@@ -120,13 +120,13 @@ func updateAdmin(repo storage.Repository, existing models.User, displayName, pas
 	if update.DisplayName != nil || update.Roles != nil {
 		updated, err = repo.UpdateUser(existing.ID, update)
 		if err != nil {
-			return models.User{}, false, err
+			return domain.User{}, false, err
 		}
 	}
 
 	updated, err = repo.SetUserPassword(updated.ID, password)
 	if err != nil {
-		return models.User{}, false, err
+		return domain.User{}, false, err
 	}
 	return updated, false, nil
 }

@@ -21,7 +21,7 @@ import (
 	"bitriver-live/internal/api"
 	"bitriver-live/internal/auth"
 	"bitriver-live/internal/chat"
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 	"bitriver-live/internal/observability/metrics"
 	"bitriver-live/internal/service"
 	"bitriver-live/internal/storage"
@@ -461,7 +461,7 @@ func TestCSRFMiddlewareAllowsWebhookAndSRSPaths(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			nextCalled = false
 			req := httptest.NewRequest(http.MethodPost, path, nil)
-			req = req.WithContext(api.ContextWithUser(req.Context(), models.User{ID: "svc"}))
+			req = req.WithContext(api.ContextWithUser(req.Context(), domain.User{ID: "svc"}))
 			rec := httptest.NewRecorder()
 
 			csrfMiddleware(handler, nil, nil, next).ServeHTTP(rec, req)

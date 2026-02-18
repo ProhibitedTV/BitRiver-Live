@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	models "bitriver-live/internal/domain"
+	"bitriver-live/internal/domain"
 )
 
 // contextKey is a private type used to avoid collisions when storing values
@@ -28,15 +28,15 @@ const (
 // This is typically called after AuthenticateRequest has successfully
 // resolved the current user from a session token, and before the request
 // is passed down to application handlers.
-func ContextWithUser(ctx context.Context, user models.User) context.Context {
+func ContextWithUser(ctx context.Context, user domain.User) context.Context {
 	return context.WithValue(ctx, userContextKey, user)
 }
 
 // UserFromContext retrieves the authenticated user from context, if present.
 //
 // It returns the user and a boolean indicating whether a user was found.
-func UserFromContext(ctx context.Context) (models.User, bool) {
-	user, ok := ctx.Value(userContextKey).(models.User)
+func UserFromContext(ctx context.Context) (domain.User, bool) {
+	user, ok := ctx.Value(userContextKey).(domain.User)
 	return user, ok
 }
 
@@ -46,23 +46,23 @@ func UserFromContext(ctx context.Context) (models.User, bool) {
 // The token is extracted using ExtractToken (e.g., from cookies or headers)
 // and validated via the sessionManager. If the token is missing, invalid,
 // expired, or the user no longer exists, an error is returned.
-func (h *Handler) AuthenticateRequest(r *http.Request) (models.User, time.Time, error) {
+func (h *Handler) AuthenticateRequest(r *http.Request) (domain.User, time.Time, error) {
 	token := ExtractToken(r)
 	if token == "" {
-		return models.User{}, time.Time{}, fmt.Errorf("missing session token")
+		return domain.User{}, time.Time{}, fmt.Errorf("missing session token")
 	}
 
 	userID, expiresAt, ok, err := h.sessionManager().Validate(token)
 	if err != nil {
-		return models.User{}, time.Time{}, fmt.Errorf("session validation failed: %w", err)
+		return domain.User{}, time.Time{}, fmt.Errorf("session validation failed: %w", err)
 	}
 	if !ok {
-		return models.User{}, time.Time{}, fmt.Errorf("invalid or expired session")
+		return domain.User{}, time.Time{}, fmt.Errorf("invalid or expired session")
 	}
 
 	user, exists := h.authUsersService().GetUser(userID)
 	if !exists {
-		return models.User{}, time.Time{}, fmt.Errorf("account not found")
+		return domain.User{}, time.Time{}, fmt.Errorf("account not found")
 	}
 
 	return user, expiresAt, nil
@@ -73,11 +73,11 @@ func (h *Handler) AuthenticateRequest(r *http.Request) (models.User, time.Time, 
 //
 // If no user is present, it writes a 401 Unauthorized response and returns
 // false. On success, it returns the user and true.
-func (h *Handler) requireAuthenticatedUser(w http.ResponseWriter, r *http.Request) (models.User, bool) {
+func (h *Handler) requireAuthenticatedUser(w http.ResponseWriter, r *http.Request) (domain.User, bool) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
 		WriteError(w, http.StatusUnauthorized, fmt.Errorf("authentication required"))
-		return models.User{}, false
+		return domain.User{}, false
 	}
 	return user, true
 }
@@ -88,35 +88,35 @@ func (h *Handler) requireAuthenticatedUser(w http.ResponseWriter, r *http.Reques
 // If the user is not authenticated, a 401 is returned. If the user does not
 // have any of the required roles, a 403 Forbidden response is written.
 // When roles is empty, any authenticated user is allowed.
-func (h *Handler) requireRole(w http.ResponseWriter, r *http.Request, roles ...string) (models.User, bool) {
+func (h *Handler) requireRole(w http.ResponseWriter, r *http.Request, roles ...string) (domain.User, bool) {
 	user, ok := h.requireAuthenticatedUser(w, r)
 	if !ok {
-		return models.User{}, false
+		return domain.User{}, false
 	}
 	if len(roles) == 0 {
 		return user, true
 	}
 	if !userHasAnyRole(user, roles...) {
 		WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
-		return models.User{}, false
+		return domain.User{}, false
 	}
 	return user, true
 }
 
 // requireSessionUser validates the session token on the request and returns
 // the authenticated user.
-func (h *Handler) requireSessionUser(w http.ResponseWriter, r *http.Request) (models.User, bool) {
+func (h *Handler) requireSessionUser(w http.ResponseWriter, r *http.Request) (domain.User, bool) {
 	user, _, err := h.AuthenticateRequest(r)
 	if err != nil {
 		WriteError(w, http.StatusUnauthorized, err)
-		return models.User{}, false
+		return domain.User{}, false
 	}
 	return user, true
 }
 
 // userHasAnyRole reports whether the user has at least one of the provided
 // roles. If roles is empty, it returns true.
-func userHasAnyRole(user models.User, roles ...string) bool {
+func userHasAnyRole(user domain.User, roles ...string) bool {
 	if len(roles) == 0 {
 		return true
 	}
@@ -137,14 +137,14 @@ func userHasAnyRole(user models.User, roles ...string) bool {
 //   - Creators may only access channels where channel.OwnerID matches their ID.
 //
 // On failure, a 401 or 403 response is written and false is returned.
-func (h *Handler) ensureChannelAccess(w http.ResponseWriter, r *http.Request, channel models.Channel) (models.User, bool) {
+func (h *Handler) ensureChannelAccess(w http.ResponseWriter, r *http.Request, channel domain.Channel) (domain.User, bool) {
 	user, ok := h.requireRole(w, r, roleAdmin, roleCreator)
 	if !ok {
-		return models.User{}, false
+		return domain.User{}, false
 	}
 	if channel.OwnerID != user.ID && !user.HasRole(roleAdmin) {
 		WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
-		return models.User{}, false
+		return domain.User{}, false
 	}
 	return user, true
 }
