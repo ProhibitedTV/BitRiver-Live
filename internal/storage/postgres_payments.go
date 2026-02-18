@@ -83,7 +83,8 @@ func (r *postgresRepository) CreateTip(params CreateTipParams) (models.Tip, erro
 		}
 
 		var createdAt time.Time
-		if err := tx.QueryRow(ctx, "INSERT INTO tips (id, channel_id, from_user_id, amount, currency, provider, reference, wallet_address, message, created_at) VALUES ($1, $2, $3, $4::numeric / 100000000::numeric, $5, $6, $7, $8, $9, $10) RETURNING created_at", id, params.ChannelID, params.FromUserID, amount.MinorUnits(), currency, provider, reference, wallet, message, now).Scan(&createdAt); err != nil {
+		idempotencyKey := strings.TrimSpace(params.IdempotencyKey)
+		if err := tx.QueryRow(ctx, "INSERT INTO tips (id, channel_id, from_user_id, amount, currency, provider, reference, wallet_address, message, status, idempotency_key, created_at) VALUES ($1, $2, $3, $4::numeric / 100000000::numeric, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING created_at", id, params.ChannelID, params.FromUserID, amount.MinorUnits(), currency, provider, reference, wallet, message, models.PaymentStatePending, idempotencyKey, now).Scan(&createdAt); err != nil {
 			return fmt.Errorf("insert tip: %w", err)
 		}
 
@@ -92,16 +93,18 @@ func (r *postgresRepository) CreateTip(params CreateTipParams) (models.Tip, erro
 		}
 
 		tip = models.Tip{
-			ID:            id,
-			ChannelID:     params.ChannelID,
-			FromUserID:    params.FromUserID,
-			Amount:        amount,
-			Currency:      currency,
-			Provider:      provider,
-			Reference:     reference,
-			WalletAddress: wallet,
-			Message:       message,
-			CreatedAt:     createdAt.UTC(),
+			ID:             id,
+			ChannelID:      params.ChannelID,
+			FromUserID:     params.FromUserID,
+			Amount:         amount,
+			Currency:       currency,
+			Provider:       provider,
+			Reference:      reference,
+			WalletAddress:  wallet,
+			Message:        message,
+			Status:         models.PaymentStatePending,
+			IdempotencyKey: idempotencyKey,
+			CreatedAt:      createdAt.UTC(),
 		}
 
 		return nil
@@ -131,7 +134,7 @@ func (r *postgresRepository) ListTips(channelID string, limit int) ([]models.Tip
 			return err
 		}
 
-		query := "SELECT id, channel_id, from_user_id, (amount * 100000000)::bigint AS amount_minor, currency, provider, reference, wallet_address, message, created_at FROM tips WHERE channel_id = $1 ORDER BY created_at DESC, id ASC"
+		query := "SELECT id, channel_id, from_user_id, (amount * 100000000)::bigint AS amount_minor, currency, provider, reference, wallet_address, message, status, idempotency_key, created_at FROM tips WHERE channel_id = $1 ORDER BY created_at DESC, id ASC"
 		args := []any{channelID}
 		if limit > 0 {
 			query += " LIMIT $2"
@@ -146,10 +149,10 @@ func (r *postgresRepository) ListTips(channelID string, limit int) ([]models.Tip
 
 		for rows.Next() {
 			var tip models.Tip
-			var walletAddress, message pgtype.Text
+			var walletAddress, message, idemKey pgtype.Text
 			var createdAt time.Time
 			var amountMinor int64
-			if err := rows.Scan(&tip.ID, &tip.ChannelID, &tip.FromUserID, &amountMinor, &tip.Currency, &tip.Provider, &tip.Reference, &walletAddress, &message, &createdAt); err != nil {
+			if err := rows.Scan(&tip.ID, &tip.ChannelID, &tip.FromUserID, &amountMinor, &tip.Currency, &tip.Provider, &tip.Reference, &walletAddress, &message, &tip.Status, &idemKey, &createdAt); err != nil {
 				return fmt.Errorf("scan tip: %w", err)
 			}
 			tip.Amount = models.NewMoneyFromMinorUnits(amountMinor)
@@ -158,6 +161,9 @@ func (r *postgresRepository) ListTips(channelID string, limit int) ([]models.Tip
 			}
 			if message.Valid {
 				tip.Message = message.String
+			}
+			if idemKey.Valid {
+				tip.IdempotencyKey = idemKey.String
 			}
 			tip.CreatedAt = createdAt.UTC()
 			tips = append(tips, tip)
@@ -247,7 +253,8 @@ func (r *postgresRepository) CreateSubscription(params CreateSubscriptionParams)
 			return fmt.Errorf("subscription reference %s/%s already exists", provider, reference)
 		}
 
-		_, err = tx.Exec(ctx, "INSERT INTO subscriptions (id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, external_reference) VALUES ($1, $2, $3, $4, $5, $6, $7::numeric / 100000000::numeric, $8, $9, $10, $11, $12, $13)", id, params.ChannelID, params.UserID, tier, provider, reference, amount.MinorUnits(), currency, started, expires, params.AutoRenew, "active", externalRef)
+		idempotencyKey := strings.TrimSpace(params.IdempotencyKey)
+		_, err = tx.Exec(ctx, "INSERT INTO subscriptions (id, channel_id, user_id, tier, provider, reference, amount, currency, started_at, expires_at, auto_renew, status, external_reference, idempotency_key) VALUES ($1, $2, $3, $4, $5, $6, $7::numeric / 100000000::numeric, $8, $9, $10, $11, $12, $13, $14)", id, params.ChannelID, params.UserID, tier, provider, reference, amount.MinorUnits(), currency, started, expires, params.AutoRenew, models.PaymentStatePending, externalRef, idempotencyKey)
 		if err != nil {
 			return fmt.Errorf("insert subscription: %w", err)
 		}
@@ -268,8 +275,9 @@ func (r *postgresRepository) CreateSubscription(params CreateSubscriptionParams)
 			StartedAt:         started,
 			ExpiresAt:         expires,
 			AutoRenew:         params.AutoRenew,
-			Status:            "active",
+			Status:            models.PaymentStatePending,
 			ExternalReference: externalRef,
+			IdempotencyKey:    idempotencyKey,
 		}
 
 		return nil
@@ -299,7 +307,7 @@ func (r *postgresRepository) ListSubscriptions(channelID string, includeInactive
 			return err
 		}
 
-		query := "SELECT id, channel_id, user_id, tier, provider, reference, (amount * 100000000)::bigint AS amount_minor, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference FROM subscriptions WHERE channel_id = $1"
+		query := "SELECT id, channel_id, user_id, tier, provider, reference, (amount * 100000000)::bigint AS amount_minor, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference, idempotency_key FROM subscriptions WHERE channel_id = $1"
 		args := []any{channelID}
 		if !includeInactive {
 			query += " AND status = 'active'"
@@ -343,7 +351,7 @@ func (r *postgresRepository) GetSubscription(id string) (models.Subscription, bo
 	}
 
 	ctx, cancel := r.acquireContext()
-	row := r.pool.QueryRow(ctx, "SELECT id, channel_id, user_id, tier, provider, reference, (amount * 100000000)::bigint AS amount_minor, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference FROM subscriptions WHERE id = $1", id)
+	row := r.pool.QueryRow(ctx, "SELECT id, channel_id, user_id, tier, provider, reference, (amount * 100000000)::bigint AS amount_minor, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference, idempotency_key FROM subscriptions WHERE id = $1", id)
 	cancel()
 
 	sub, err := scanSubscriptionRow(row)
@@ -373,7 +381,7 @@ func (r *postgresRepository) CancelSubscription(id, cancelledBy, reason string) 
 		}
 		defer rollbackTx(ctx, tx)
 
-		row := tx.QueryRow(ctx, "SELECT id, channel_id, user_id, tier, provider, reference, (amount * 100000000)::bigint AS amount_minor, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference FROM subscriptions WHERE id = $1 FOR UPDATE", id)
+		row := tx.QueryRow(ctx, "SELECT id, channel_id, user_id, tier, provider, reference, (amount * 100000000)::bigint AS amount_minor, currency, started_at, expires_at, auto_renew, status, cancelled_by, cancelled_reason, cancelled_at, external_reference, idempotency_key FROM subscriptions WHERE id = $1 FOR UPDATE", id)
 		sub, err := scanSubscriptionRow(row)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -580,4 +588,71 @@ func scanSubscriptionRow(row pgx.Row) (models.Subscription, error) {
 		sub.ExternalReference = externalReference.String
 	}
 	return sub, nil
+}
+
+// ProcessPaymentWebhook persists a verified provider webhook and applies state transitions atomically.
+func (r *postgresRepository) ProcessPaymentWebhook(params ProcessPaymentWebhookParams) (models.PaymentTransaction, error) {
+	if r == nil || r.pool == nil {
+		return models.PaymentTransaction{}, ErrPostgresUnavailable
+	}
+	provider := strings.ToLower(strings.TrimSpace(params.Provider))
+	eventID := strings.TrimSpace(params.EventID)
+	entityType := strings.ToLower(strings.TrimSpace(params.EntityType))
+	reference := strings.TrimSpace(params.Reference)
+	status := strings.ToLower(strings.TrimSpace(params.Status))
+	idempotencyKey := strings.TrimSpace(params.IdempotencyKey)
+	if provider == "" || eventID == "" || entityType == "" || reference == "" || status == "" {
+		return models.PaymentTransaction{}, fmt.Errorf("provider, eventID, entityType, reference and status are required")
+	}
+	var txOut models.PaymentTransaction
+	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("begin payment webhook tx: %w", err)
+		}
+		defer rollbackTx(ctx, tx)
+		row := tx.QueryRow(ctx, "SELECT id, provider, event_id, entity_type, entity_id, reference, status, idempotency_key, created_at FROM payment_transactions WHERE provider=$1 AND event_id=$2", provider, eventID)
+		var existing models.PaymentTransaction
+		var idem pgtype.Text
+		if err := row.Scan(&existing.ID, &existing.Provider, &existing.EventID, &existing.EntityType, &existing.EntityID, &existing.Reference, &existing.Status, &idem, &existing.CreatedAt); err == nil {
+			if idem.Valid {
+				existing.IdempotencyKey = idem.String
+			}
+			txOut = existing
+			_ = tx.Commit(ctx)
+			return nil
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		var entityID string
+		if entityType == "tip" {
+			if err := tx.QueryRow(ctx, "UPDATE tips SET status=$1, idempotency_key=COALESCE(NULLIF($2,''), idempotency_key) WHERE provider=$3 AND reference=$4 RETURNING id", status, idempotencyKey, provider, reference).Scan(&entityID); err != nil {
+				return err
+			}
+		} else if entityType == "subscription" {
+			if err := tx.QueryRow(ctx, "UPDATE subscriptions SET status=$1, idempotency_key=COALESCE(NULLIF($2,''), idempotency_key) WHERE provider=$3 AND reference=$4 RETURNING id", status, idempotencyKey, provider, reference).Scan(&entityID); err != nil {
+				return err
+			}
+		} else {
+			return fmt.Errorf("unsupported entity type %s", entityType)
+		}
+		id, err := generateID()
+		if err != nil {
+			return err
+		}
+		created := time.Now().UTC()
+		_, err = tx.Exec(ctx, "INSERT INTO payment_transactions (id, provider, event_id, entity_type, entity_id, reference, status, idempotency_key, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)", id, provider, eventID, entityType, entityID, reference, status, idempotencyKey, created)
+		if err != nil {
+			return err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return err
+		}
+		txOut = models.PaymentTransaction{ID: id, Provider: provider, EventID: eventID, EntityType: entityType, EntityID: entityID, Reference: reference, Status: status, IdempotencyKey: idempotencyKey, CreatedAt: created}
+		return nil
+	})
+	if err != nil {
+		return models.PaymentTransaction{}, err
+	}
+	return txOut, nil
 }

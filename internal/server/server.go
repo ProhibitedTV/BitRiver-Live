@@ -83,6 +83,7 @@ type Config struct {
 	SessionCookieSecureMode  api.SessionCookieSecureMode
 	SessionCookieCrossSite   bool
 	SRSHookToken             string
+	PaymentWebhookSecrets    map[string]string
 }
 
 // Server wraps the configured http.Server alongside observability, rate
@@ -132,6 +133,9 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 		handler.AllowSelfSignup = *cfg.AllowSelfSignup
 	}
 	handler.SRSHookToken = cfg.SRSHookToken
+	if cfg.PaymentWebhookSecrets != nil {
+		handler.WebhookSecrets = cfg.PaymentWebhookSecrets
+	}
 	handler.SessionCookiePolicy = api.DefaultSessionCookiePolicy()
 	if cfg.SessionCookieSecureMode != 0 {
 		handler.SessionCookiePolicy.SecureMode = cfg.SessionCookieSecureMode
@@ -205,6 +209,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	mux.HandleFunc("/api/legal/data-subject", handler.LegalDataSubject)
 	mux.HandleFunc("/api/legal/data-subject/", handler.LegalDataSubjectByID)
 	mux.HandleFunc("/api/ingest/srs-hook", handler.SRSHook)
+	mux.HandleFunc("/api/payments/webhooks/", handler.PaymentWebhook)
 
 	staticFS, err := web.Static()
 	if err != nil {

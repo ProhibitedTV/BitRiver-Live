@@ -71,6 +71,7 @@ type dataset struct {
 	ChatAutoModActions  map[string]models.ChatAutoModAction       `json:"chatAutoModActions"`
 	Tips                map[string]models.Tip                     `json:"tips"`
 	Subscriptions       map[string]models.Subscription            `json:"subscriptions"`
+	PaymentTransactions map[string]models.PaymentTransaction      `json:"paymentTransactions"`
 	Profiles            map[string]models.Profile                 `json:"profiles"`
 	Follows             map[string]map[string]time.Time           `json:"follows"`
 	Recordings          map[string]models.Recording               `json:"recordings"`
@@ -206,14 +207,15 @@ type OAuthLoginParams struct {
 
 // CreateTipParams captures the information required to record a tip.
 type CreateTipParams struct {
-	ChannelID     string
-	FromUserID    string
-	Amount        models.Money
-	Currency      string
-	Provider      string
-	Reference     string
-	WalletAddress string
-	Message       string
+	ChannelID      string
+	FromUserID     string
+	Amount         models.Money
+	Currency       string
+	Provider       string
+	Reference      string
+	WalletAddress  string
+	Message        string
+	IdempotencyKey string
 }
 
 // CreateSubscriptionParams captures the data needed to start a subscription.
@@ -228,6 +230,17 @@ type CreateSubscriptionParams struct {
 	Duration          time.Duration
 	AutoRenew         bool
 	ExternalReference string
+	IdempotencyKey    string
+}
+
+// ProcessPaymentWebhookParams captures a verified webhook event from a provider.
+type ProcessPaymentWebhookParams struct {
+	Provider       string
+	EventID        string
+	EntityType     string
+	Reference      string
+	Status         string
+	IdempotencyKey string
 }
 
 type CreateDMCACaseParams struct {

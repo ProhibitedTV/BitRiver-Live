@@ -637,3 +637,27 @@ scrape_configs:
 ```
 
 To further tighten access, run the API behind an ingress or firewall that only allows scrapers to hit `/metrics`, combine `--metrics-token` with `--metrics-allow-networks` to require both a token and a trusted IP/CIDR, and avoid publishing the endpoint publicly.
+
+## Payment webhooks, secret rotation, and reconciliation
+
+Payment providers now complete tip/subscription lifecycle transitions asynchronously through signed webhook callbacks. Creation APIs record `pending` payment rows first, and provider events move them to `confirmed`, `failed`, or `refunded`.
+
+### Provider secret rotation
+
+- Configure a per-provider webhook secret and roll it regularly (for example every 90 days).
+- During rotation, accept both the current and next secret at your edge (API gateway / ingress), then switch the application secret and remove the old one after provider retry windows expire.
+- Keep rotation runbooks in your secret manager and include rollback steps for failed cutovers.
+
+### Webhook ingress hardening
+
+- Only expose `POST /api/payments/webhooks/{provider}` through TLS.
+- Enforce source allow-lists for provider CIDR ranges at the ingress layer.
+- Require `X-Bitriver-Signature` verification and reject unsigned or mismatched requests.
+- Apply body-size limits and rate limits on webhook routes distinct from user APIs.
+- Keep `/metrics` and webhook routes behind separate ingress policies so scraper/network exceptions never expand webhook access.
+
+### Reconciliation jobs
+
+- Run a scheduled reconciliation worker (recommended every 5–15 minutes) that queries provider APIs for recently `pending` references and backfills missing webhook outcomes.
+- Reconciliation should use provider event IDs and idempotency keys when writing transitions so reruns are safe.
+- Alert if `pending` rows exceed your provider SLA window or if duplicate-event counters spike.

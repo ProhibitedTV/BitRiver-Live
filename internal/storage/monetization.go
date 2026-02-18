@@ -57,17 +57,20 @@ func (s *Storage) CreateTip(params CreateTipParams) (models.Tip, error) {
 		return models.Tip{}, err
 	}
 	now := time.Now().UTC()
+	idempotencyKey := strings.TrimSpace(params.IdempotencyKey)
 	tip := models.Tip{
-		ID:            id,
-		ChannelID:     params.ChannelID,
-		FromUserID:    params.FromUserID,
-		Amount:        amount,
-		Currency:      currency,
-		Provider:      provider,
-		Reference:     reference,
-		WalletAddress: wallet,
-		Message:       message,
-		CreatedAt:     now,
+		ID:             id,
+		ChannelID:      params.ChannelID,
+		FromUserID:     params.FromUserID,
+		Amount:         amount,
+		Currency:       currency,
+		Provider:       provider,
+		Reference:      reference,
+		WalletAddress:  wallet,
+		Message:        message,
+		Status:         models.PaymentStatePending,
+		IdempotencyKey: idempotencyKey,
+		CreatedAt:      now,
 	}
 	if s.data.Tips == nil {
 		s.data.Tips = make(map[string]models.Tip)
@@ -162,6 +165,7 @@ func (s *Storage) CreateSubscription(params CreateSubscriptionParams) (models.Su
 	}
 	started := time.Now().UTC()
 	expires := started.Add(params.Duration)
+	idempotencyKey := strings.TrimSpace(params.IdempotencyKey)
 	subscription := models.Subscription{
 		ID:                id,
 		ChannelID:         params.ChannelID,
@@ -174,8 +178,9 @@ func (s *Storage) CreateSubscription(params CreateSubscriptionParams) (models.Su
 		StartedAt:         started,
 		ExpiresAt:         expires,
 		AutoRenew:         params.AutoRenew,
-		Status:            "active",
+		Status:            models.PaymentStatePending,
 		ExternalReference: strings.TrimSpace(params.ExternalReference),
+		IdempotencyKey:    idempotencyKey,
 	}
 	if s.data.Subscriptions == nil {
 		s.data.Subscriptions = make(map[string]models.Subscription)
@@ -201,7 +206,7 @@ func (s *Storage) ListSubscriptions(channelID string, includeInactive bool) ([]m
 		if sub.ChannelID != channelID {
 			continue
 		}
-		if !includeInactive && !strings.EqualFold(sub.Status, "active") {
+		if !includeInactive && !(strings.EqualFold(sub.Status, "active") || strings.EqualFold(sub.Status, models.PaymentStatePending) || strings.EqualFold(sub.Status, models.PaymentStateConfirmed)) {
 			continue
 		}
 		subs = append(subs, sub)
@@ -257,4 +262,75 @@ func (s *Storage) CancelSubscription(id, cancelledBy, reason string) (models.Sub
 		return models.Subscription{}, err
 	}
 	return subscription, nil
+}
+
+// ProcessPaymentWebhook applies a verified provider event with duplicate-event protection.
+func (s *Storage) ProcessPaymentWebhook(params ProcessPaymentWebhookParams) (models.PaymentTransaction, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	provider := strings.ToLower(strings.TrimSpace(params.Provider))
+	eventID := strings.TrimSpace(params.EventID)
+	entityType := strings.ToLower(strings.TrimSpace(params.EntityType))
+	reference := strings.TrimSpace(params.Reference)
+	status := strings.ToLower(strings.TrimSpace(params.Status))
+	idempotencyKey := strings.TrimSpace(params.IdempotencyKey)
+	if provider == "" || eventID == "" || entityType == "" || reference == "" || status == "" {
+		return models.PaymentTransaction{}, fmt.Errorf("provider, eventID, entityType, reference and status are required")
+	}
+	for _, tx := range s.data.PaymentTransactions {
+		if tx.Provider == provider && tx.EventID == eventID {
+			return tx, nil
+		}
+	}
+	var entityID string
+	switch entityType {
+	case "tip":
+		for id, tip := range s.data.Tips {
+			if tip.Provider == provider && tip.Reference == reference {
+				tip.Status = status
+				if idempotencyKey != "" {
+					tip.IdempotencyKey = idempotencyKey
+				}
+				s.data.Tips[id] = tip
+				entityID = id
+				break
+			}
+		}
+	case "subscription":
+		for id, sub := range s.data.Subscriptions {
+			if sub.Provider == provider && sub.Reference == reference {
+				sub.Status = status
+				if idempotencyKey != "" {
+					sub.IdempotencyKey = idempotencyKey
+				}
+				s.data.Subscriptions[id] = sub
+				entityID = id
+				break
+			}
+		}
+	default:
+		return models.PaymentTransaction{}, fmt.Errorf("unsupported entity type %s", entityType)
+	}
+	if entityID == "" {
+		return models.PaymentTransaction{}, fmt.Errorf("payment entity %s/%s not found", entityType, reference)
+	}
+	id, err := generateID()
+	if err != nil {
+		return models.PaymentTransaction{}, err
+	}
+	now := time.Now().UTC()
+	transaction := models.PaymentTransaction{
+		ID: id, Provider: provider, EventID: eventID, EntityType: entityType, EntityID: entityID,
+		Reference: reference, Status: status, IdempotencyKey: idempotencyKey, CreatedAt: now,
+	}
+	if s.data.PaymentTransactions == nil {
+		s.data.PaymentTransactions = make(map[string]models.PaymentTransaction)
+	}
+	s.data.PaymentTransactions[id] = transaction
+	if err := s.persist(); err != nil {
+		delete(s.data.PaymentTransactions, id)
+		return models.PaymentTransaction{}, err
+	}
+	return transaction, nil
 }
