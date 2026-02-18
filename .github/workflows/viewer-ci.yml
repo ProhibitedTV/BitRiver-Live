@@ -5,11 +5,21 @@ on:
     branches:
       - main
     paths:
+      # Viewer checks also gate backend routes/domain payload changes because
+      # the web app consumes those API contracts directly.
       - 'web/viewer/**'
+      - 'internal/api/**'
+      - 'internal/domain/**'
+      - 'internal/api/viewer_contract_test.go'
       - '.github/workflows/viewer-ci.yml'
   pull_request:
     paths:
+      # Viewer checks also gate backend routes/domain payload changes because
+      # the web app consumes those API contracts directly.
       - 'web/viewer/**'
+      - 'internal/api/**'
+      - 'internal/domain/**'
+      - 'internal/api/viewer_contract_test.go'
 
 jobs:
   build:

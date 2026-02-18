@@ -107,6 +107,13 @@ Authentication/session lifecycle coverage lives in
 logout, and admin-only enforcement without external services. No additional
 environment toggles are required beyond the standard offline Go flags above.
 
+Viewer CI (`.github/workflows/viewer-ci.yml`) intentionally triggers for both
+`web/viewer/**` and backend contract-facing paths (`internal/api/**`,
+`internal/domain/**`, and `internal/api/viewer_contract_test.go`) because the
+viewer consumes those API payload shapes directly. Treat backend contract
+changes as cross-surface updates and run viewer checks when touching those
+paths.
+
 Viewer payload contracts live in `internal/api/viewer_contract_test.go`. Run
 the suite with the same offline flags and cache-busting timeout CI expects:
 
