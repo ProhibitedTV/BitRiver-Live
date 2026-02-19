@@ -4,14 +4,30 @@ set -Eeuo pipefail
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
+readonly TARGET_IMPORT='"bitriver-live/internal/models"'
+
+# Files matching these prefixes are allowed to import internal/models.
+# Keep this list short and explicit; by default only the shim package itself
+# can import it.
+ALLOWLIST_PREFIXES=(
+  "internal/models/"
+)
+
+is_allowlisted() {
+  local file="$1"
+  local prefix
+  for prefix in "${ALLOWLIST_PREFIXES[@]}"; do
+    if [[ "$file" == "$prefix"* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 go_files=()
 while IFS= read -r file; do
-  file="${file#./}"
-  if [[ "$file" == internal/models/* ]]; then
-    continue
-  fi
   go_files+=("$file")
-done < <(find . -type f -name '*.go' -print)
+done < <(rg --files -g '*.go')
 
 if ((${#go_files[@]} == 0)); then
   echo "No Go files to check."
@@ -20,15 +36,11 @@ fi
 
 violations=""
 for file in "${go_files[@]}"; do
-  # Exception hook for explicit shim validation tests outside internal/models.
-  case "$file" in
-    # Add allowlisted test files here when needed.
-    # internal/somepkg/models_shim_test.go)
-    #   continue
-    #   ;;
-  esac
+  if is_allowlisted "$file"; then
+    continue
+  fi
 
-  matches="$(grep -nE '"bitriver-live/internal/models"' "$file" || true)"
+  matches="$(grep -nF "$TARGET_IMPORT" "$file" || true)"
   if [[ -n "$matches" ]]; then
     while IFS= read -r line; do
       violations+="${file}:${line}"$'\n'
@@ -39,7 +51,8 @@ done
 if [[ -n "$violations" ]]; then
   {
     echo "Forbidden imports detected: bitriver-live/internal/models"
-    echo "Only files under internal/models may import this package."
+    echo "Allowed importers: ${ALLOWLIST_PREFIXES[*]}"
+    echo "Move callers to internal/domain instead of importing internal/models."
     printf '%s' "$violations"
   } >&2
   exit 1
