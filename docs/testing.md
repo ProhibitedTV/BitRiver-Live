@@ -5,8 +5,6 @@ run the same suites locally before opening a pull request. See
 `docs/testing-status.md` for a living summary of flaky suites and gaps that need
 coverage.
 
-
-
 ## Verify prerequisites
 
 `./scripts/verify.sh` requires these tools on `PATH`:

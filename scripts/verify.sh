@@ -10,6 +10,10 @@ Usage: ./scripts/verify.sh [--viewer] [--ci-viewer]
 
 Runs repository verification checks in a consistent order.
 
+Prerequisites:
+  - go
+  - python3 (required by ./scripts/check-contract-invariants.sh)
+
 Options:
   --viewer  Force viewer lint/test checks even when no viewer changes are detected.
   --ci-viewer  In CI, force viewer lint/test checks for non-viewer workflows.
@@ -113,7 +117,7 @@ should_run_viewer_checks() {
   viewer_changes_present
 }
 
-require_tool "python3" "./scripts/check-contract-invariants.sh runs a python3-generated artifact validation block. Install python3 and rerun ./scripts/verify.sh."
+require_tool "python3" "./scripts/check-contract-invariants.sh validates contract-generated artifact references with an embedded Python check. Install python3 and rerun ./scripts/verify.sh."
 
 run_step "Go tests" \
   env GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
