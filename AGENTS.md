@@ -76,3 +76,16 @@ docker compose -f deploy/docker-compose.yml config
 ## Notes for agents
 - Check for nested `AGENTS.md` files before editing subdirectories; deeper scope wins.
 - Do not invent commands, flags, or files; only use what exists in this repository.
+
+## Canonical policy
+- This root `AGENTS.md` is the single canonical source of truth for agent instructions.
+- Nested `AGENTS.md` files only point back here and must not add conflicting policy.
+
+## High-signal local reminders (migrated)
+- Keep CLI flag/env parity in `cmd/*` entrypoints and preserve graceful shutdown behavior.
+- Keep API contracts stable (`internal/api`, `cmd/transcoder`, `cmd/srs-controller`) and update docs when payloads/routes change.
+- For schema/storage changes, update `deploy/migrations`, `internal/storage`, and relevant `cmd/tools` import/verification logic together.
+- Reuse shared test helpers in `internal/testsupport`; avoid duplicating mocks.
+- Preserve middleware ordering and dependency injection patterns in `internal/server` and `internal/api`.
+- Keep scripts CI-safe and rerunnable; document workflow-impacting script changes.
+- Keep web/static embed flows and viewer (`web/viewer`) API clients/tests in sync with backend changes.

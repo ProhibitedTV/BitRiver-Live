@@ -32,6 +32,10 @@ codex auth login                 # stores a short-lived token in ~/.config/codex
 
 If you need to swap accounts or keys later, run `codex auth switch` or re-run `codex auth login`.
 
+## Agent instruction source
+
+Root `AGENTS.md` is canonical.
+
 ## Point the CLI at this repository
 
 From the repository root (`BitRiver-Live`):
