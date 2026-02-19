@@ -234,6 +234,11 @@ const modalTitle = document.getElementById("modal-title");
 const modalBody = document.getElementById("modal-body");
 const overviewCards = document.getElementById("overview-cards");
 const statusBoard = document.getElementById("status-board");
+const overviewIncidents = document.getElementById("overview-incidents");
+const overviewStreams = document.getElementById("overview-streams");
+const streamsList = document.getElementById("streams-list");
+const systemHealthBoard = document.getElementById("system-health-board");
+const adminShortcutButtons = Array.from(document.querySelectorAll("#admin-shortcuts button"));
 const profileDetail = document.getElementById("profile-detail");
 const accountActions = document.getElementById("account-actions");
 const accountName = document.getElementById("current-user-name");
@@ -241,11 +246,14 @@ const signOutButton = document.getElementById("sign-out-button");
 const heroNavButtons = Array.from(document.querySelectorAll(".hero__nav button"));
 const themeToggle = document.getElementById("theme-toggle");
 
+const PRIMARY_VIEWS = new Set(["dashboard", "streams", "system-health", "administration"]);
+
 const THEME_STORAGE_KEY = "bitriver-theme";
 
 function setActiveHeroNav(activeView) {
+    const primaryView = PRIMARY_VIEWS.has(activeView) ? activeView : "administration";
     for (const button of heroNavButtons) {
-        const isActive = button.dataset.view === activeView;
+        const isActive = button.dataset.view === primaryView;
         button.classList.toggle("is-active", isActive);
         if (isActive) {
             button.setAttribute("aria-current", "page");
@@ -317,6 +325,13 @@ function switchView(id) {
 }
 
 heroNavButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+        const view = btn.dataset.view;
+        switchView(view);
+    });
+});
+
+adminShortcutButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
         const view = btn.dataset.view;
         switchView(view);
@@ -759,6 +774,7 @@ async function loadStatus() {
         showToast(`Status check failed: ${error.message}`, "error");
     }
     renderDashboard();
+    renderSystemHealth();
 }
 
 async function loadUsers() {
@@ -928,6 +944,8 @@ async function loadChannels(options = {}) {
     renderChannels();
     renderStreamControls();
     renderDashboard();
+    renderStreams();
+    renderSystemHealth();
     renderSessions();
     renderUploads();
     renderChat();
@@ -1965,6 +1983,80 @@ async function openProfileEditor(userId) {
     });
 }
 
+function mapStatusOwner(name = "") {
+    const normalized = name.toLowerCase();
+    if (normalized.includes("srs") || normalized.includes("rtmp") || normalized.includes("ingest")) {
+        return "SRS";
+    }
+    if (normalized.includes("ome") || normalized.includes("origin")) {
+        return "OME";
+    }
+    if (normalized.includes("transcod")) {
+        return "Transcoder";
+    }
+    if (normalized.includes("config") || normalized.includes("env")) {
+        return "Configuration";
+    }
+    return "Platform";
+}
+
+function mapStatusImpact(status = "") {
+    const normalized = status.toLowerCase();
+    if (normalized === "down") {
+        return "Hard failure; intervention required.";
+    }
+    if (normalized === "degraded") {
+        return "Partial impact; continue with caution.";
+    }
+    if (normalized === "disabled") {
+        return "Component intentionally disabled.";
+    }
+    return "Normal operation.";
+}
+
+function buildPipelineSummary(report) {
+    const checks = Array.isArray(report?.checks) ? report.checks : [];
+    const pickStatus = (predicate) => {
+        const matches = checks.filter((check) => predicate(check.name || ""));
+        if (!matches.length) {
+            return "disabled";
+        }
+        if (matches.some((check) => check.status === "down")) {
+            return "down";
+        }
+        if (matches.some((check) => check.status === "degraded")) {
+            return "degraded";
+        }
+        if (matches.some((check) => check.status === "disabled")) {
+            return "disabled";
+        }
+        return "ready";
+    };
+    const ingestStatus = pickStatus((name) => /ingest|rtmp|srs/i.test(name));
+    const transcoderStatus = pickStatus((name) => /transcod/i.test(name));
+    const playbackStatus = pickStatus((name) => /playback|hls|viewer|origin|ome/i.test(name));
+    return [
+        {
+            title: "Ingest",
+            status: ingestStatus,
+            meaning: ingestStatus === "ready" ? "Ingest healthy; new streams can connect." : "Ingest disruption; new streams may fail.",
+            owner: "SRS",
+        },
+        {
+            title: "Transcoder",
+            status: transcoderStatus,
+            meaning: transcoderStatus === "ready" ? "Transcoder healthy; renditions can be produced." : "Transcoder degraded; renditions may be limited.",
+            owner: "Transcoder",
+        },
+        {
+            title: "Playback readiness",
+            status: playbackStatus,
+            meaning: playbackStatus === "ready" ? "Playback healthy for viewers." : "Playback risk detected; verify viewer playback.",
+            owner: "OME",
+        },
+    ];
+}
+
 function renderStatusCheck(check) {
     const item = createElement("article", { className: "status-item" });
     const header = createElement("div", { className: "status-item__header" });
@@ -1977,7 +2069,7 @@ function renderStatusCheck(check) {
     item.appendChild(
         createElement("div", {
             className: "card__meta",
-            textContent: check.category === "ingest" ? "Ingest" : "Core dependency",
+            textContent: `${check.category === "ingest" ? "Ingest" : "Core dependency"} · Owned by ${mapStatusOwner(check.name)}`,
         }),
     );
 
@@ -1988,7 +2080,13 @@ function renderStatusCheck(check) {
     item.appendChild(
         createElement("p", {
             className: "status-remediation",
-            textContent: check.remediation || "Inspect logs to continue triage.",
+            textContent: `Next action: ${check.remediation || "Inspect logs to continue triage."}`,
+        }),
+    );
+    item.appendChild(
+        createElement("p", {
+            className: "status-meta",
+            textContent: `Impact: ${mapStatusImpact(check.status)}`,
         }),
     );
 
@@ -2102,15 +2200,125 @@ function renderStatusBoard() {
     statusBoard.appendChild(card);
 }
 
+function renderOverviewIncidents() {
+    if (!overviewIncidents) {
+        return;
+    }
+    clearElement(overviewIncidents);
+    const report = state.statusReport;
+    const card = createElement("article", { className: "card" });
+    card.appendChild(createElement("h3", { textContent: "Active failures" }));
+
+    const failures = report?.recentFailures ?? [];
+    if (!failures.length) {
+        card.appendChild(createElement("p", { className: "card__meta", textContent: "No active failures detected." }));
+    } else {
+        const list = createElement("div", { className: "card-column" });
+        for (const failure of failures) {
+            const row = createElement("article", { className: "status-item" });
+            row.append(
+                createElement("h4", { textContent: formatStatusName(failure.name) }),
+                createElement("p", { className: "status-detail", textContent: `What is broken: ${failure.detail || "Check component logs."}` }),
+                createElement("p", { className: "status-meta", textContent: `Owned by: ${mapStatusOwner(failure.name)}` }),
+                createElement("p", { className: "status-remediation", textContent: `Operator action: ${failure.remediation || "Inspect logs to continue triage."}` }),
+                createElement("p", { className: "status-meta", textContent: "Verify recovery: Refresh status and confirm component returns to ready." }),
+            );
+            list.appendChild(row);
+        }
+        card.appendChild(list);
+    }
+    overviewIncidents.appendChild(card);
+}
+
+function renderOverviewStreams() {
+    if (!overviewStreams) {
+        return;
+    }
+    clearElement(overviewStreams);
+    if (!state.channels.length) {
+        overviewStreams.appendChild(createElement("div", { className: "empty", textContent: "No channels available." }));
+        return;
+    }
+    for (const channel of state.channels) {
+        const latestSession = (state.sessions[channel.id] || []).slice().sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))[0];
+        const card = createElement("article", { className: "card" });
+        card.append(
+            createElement("h3", { textContent: channel.title }),
+            createElement("p", { className: "card__meta", textContent: `Current state: ${channel.liveState || "idle"}` }),
+            createElement("p", { className: "card__meta", textContent: `Started/Updated: ${latestSession ? formatRelativeTime(latestSession.startedAt) : "No sessions yet"}` }),
+            createElement("p", { className: "card__meta", textContent: `Health indicator: ${state.statusReport?.status || "unknown"}` }),
+        );
+        overviewStreams.appendChild(card);
+    }
+}
+
+function renderStreams() {
+    if (!streamsList) {
+        return;
+    }
+    clearElement(streamsList);
+    if (!state.channels.length) {
+        streamsList.appendChild(createElement("div", { className: "empty", textContent: "No channels to display." }));
+        return;
+    }
+    for (const channel of state.channels) {
+        const latestSession = (state.sessions[channel.id] || []).slice().sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))[0];
+        const stateLabel = channel.liveState || "idle";
+        const card = createElement("article", { className: "card" });
+        card.append(
+            createElement("h3", { textContent: channel.title }),
+            createElement("p", { className: "card__meta", textContent: `Current lifecycle state: ${stateLabel}` }),
+            createElement("p", { className: "card__meta", textContent: `Last state change: ${latestSession ? formatRelativeTime(latestSession.startedAt) : "Not yet available"}` }),
+            createElement("p", { className: "card__meta", textContent: "Last state change reason: TODO: verify in code" }),
+        );
+        const actions = createElement("div", { className: "card__actions" });
+        const open = createElement("button", { className: "secondary", textContent: "Open Go Live controls" });
+        open.addEventListener("click", () => switchView("stream"));
+        actions.appendChild(open);
+        card.appendChild(actions);
+        streamsList.appendChild(card);
+    }
+}
+
+function renderSystemHealth() {
+    if (!systemHealthBoard) {
+        return;
+    }
+    clearElement(systemHealthBoard);
+    const report = state.statusReport;
+    const card = createElement("article", { className: "card status-card" });
+    card.appendChild(createElement("h3", { textContent: "Component matrix" }));
+    const checks = report?.checks ?? [];
+    if (!checks.length) {
+        card.appendChild(createElement("p", { className: "card__meta", textContent: "No status checks available." }));
+    } else {
+        const list = createElement("div", { className: "status-grid" });
+        for (const check of checks) {
+            list.appendChild(renderStatusCheck(check));
+        }
+        card.appendChild(list);
+    }
+    card.appendChild(renderLogHints(report?.logHints));
+    systemHealthBoard.appendChild(card);
+}
+
 function renderDashboard() {
     renderStatusBoard();
+    renderOverviewIncidents();
+    renderOverviewStreams();
     const sessions = Object.values(state.sessions).flat();
     const totalDuration = sessions.reduce((sum, session) => sum + computeSessionDuration(session), 0);
     const totalPeak = sessions.reduce((sum, session) => sum + session.peakConcurrent, 0);
     const chatCount = Object.values(state.chat).reduce((sum, messages) => sum + (messages?.length || 0), 0);
     const lastSession = sessions.sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))[0];
 
+    const pipeline = buildPipelineSummary(state.statusReport);
     const cards = [
+        ...pipeline.map((item) => ({
+            title: item.title,
+            value: item.status,
+            detail: `${item.meaning} Owner: ${item.owner}`,
+        })),
         {
             title: "Users",
             value: state.users.length,
