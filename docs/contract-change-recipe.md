@@ -25,6 +25,7 @@ Run these before requesting review:
 ```bash
 ./scripts/generate-contract-doc.sh
 ./scripts/verify.sh
+./scripts/require-image-digests.sh
 ./scripts/test-quickstart.sh
 ```
 
@@ -37,6 +38,7 @@ If your branch uses an equivalent smoke/quickstart verification flow, include th
 - [ ] Generated files were re-rendered and committed when applicable (OME/SRS).
 - [ ] `./scripts/generate-contract-doc.sh` completed successfully.
 - [ ] `./scripts/verify.sh` completed successfully.
+- [ ] `./scripts/require-image-digests.sh` completed successfully for production envs (`BITRIVER_LIVE_MODE=production` and `BITRIVER_DEPLOY_IMAGE_SOURCE=pull`).
 - [ ] `./scripts/test-quickstart.sh` (or equivalent smoke verification) completed successfully.
 
 ## PR reviewer checklist
@@ -47,4 +49,5 @@ If your branch uses an equivalent smoke/quickstart verification flow, include th
 - [ ] Verification command results are attached and indicate success:
   - `./scripts/generate-contract-doc.sh`
   - `./scripts/verify.sh`
+  - `./scripts/require-image-digests.sh` (production env contexts)
   - `./scripts/test-quickstart.sh` (or equivalent smoke verification)
