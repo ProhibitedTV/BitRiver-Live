@@ -204,6 +204,11 @@ go run ./cmd/bitriver ome render --force --env-file ./.env
 - Deployment is intentionally standardized to **one Compose + one `.env` contract** to avoid divergent runbooks across platforms.
 - Operational tradeoff: easier onboarding and repeatability, but less flexibility than fully custom multi-cluster setups.
 
+## Production readiness
+
+- Single-host baseline capacity profile (operator starting point): [`docs/production-single-host.md`](docs/production-single-host.md)
+- Production release process: [`docs/production-release.md`](docs/production-release.md)
+
 ## Additional documentation
 
 - Quickstart details: [`docs/quickstart.md`](docs/quickstart.md)
@@ -214,7 +219,6 @@ go run ./cmd/bitriver ome render --force --env-file ./.env
 - Upgrades: [`docs/upgrades.md`](docs/upgrades.md)
 - Testing: [`docs/testing.md`](docs/testing.md), [`docs/testing-status.md`](docs/testing-status.md)
 - Architecture contract: [`docs/architecture.md`](docs/architecture.md)
-- Production release process: [`docs/production-release.md`](docs/production-release.md)
 - Manual frontend QA checklist: [`web/manual-qa.md`](web/manual-qa.md)
 - Labs (planning / non-binding): [`docs/labs/README.md`](docs/labs/README.md), [`docs/labs/product-roadmap.md`](docs/labs/product-roadmap.md), [`docs/labs/cross-platform-plan.md`](docs/labs/cross-platform-plan.md)
 
