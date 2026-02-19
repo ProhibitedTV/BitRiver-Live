@@ -57,6 +57,22 @@ Common fixes are included inline, such as:
 - Run quickstart or compose up
 - Inspect service logs with `docker compose logs --tail=80 <service>`
 
+## Related command: `bitriver verify`
+
+Use `bitriver verify` when you want a single backend/deploy health gate that runs:
+
+1. `bitriver doctor`
+2. `docker compose -f <compose-file> config` (when Docker is available)
+3. `bitriver smoke`
+
+Example:
+
+```bash
+go run ./cmd/bitriver verify --compose-file deploy/docker-compose.yml --env-file ./.env
+```
+
+`bitriver verify` intentionally skips viewer npm checks.
+
 ## Notes
 
 - `bitriver smoke` validates the running stack state; it does not mutate data or restart services.
