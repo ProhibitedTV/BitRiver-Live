@@ -103,7 +103,7 @@ jobs:
           ./scripts/require-image-digests.sh --env-file .env
 
       - name: Upload verified environment file
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: release-env
           path: .env
@@ -361,7 +361,7 @@ jobs:
           fi
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/bitriver-live-${{ matrix.goos }}-${{ matrix.goarch }}.*
@@ -439,7 +439,7 @@ jobs:
           fi
 
       - name: Upload bitriver binary artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: bitriver-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/bitriver-${{ matrix.goos }}-${{ matrix.goarch }}.*
@@ -542,7 +542,7 @@ jobs:
           fi
 
       - name: Upload launcher archives
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: launcher-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/bitriver-launcher-${{ matrix.goos }}-${{ matrix.goarch }}.*
@@ -550,7 +550,7 @@ jobs:
 
       - name: Upload Linux installer packages
         if: matrix.goos == 'linux'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: launcher-linux-packages
           path: |
@@ -628,7 +628,7 @@ jobs:
           rm -rf "$bundle_root"
 
       - name: Upload viewer bundle artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: viewer-bundle
           path: dist/bitriver-viewer-${{ github.ref_name }}.tar.gz
@@ -705,7 +705,7 @@ jobs:
           output-file: ${{ matrix.image_name }}-${{ env.RELEASE_TAG }}.spdx.json
 
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: container-sbom-${{ matrix.component }}
           path: ${{ matrix.image_name }}-${{ env.RELEASE_TAG }}.spdx.json
@@ -743,7 +743,7 @@ jobs:
           scripts/generate-brew-formula.sh "$VERSION" "$arm_url" "$arm_sha" "$amd_url" "$amd_sha" dist/formula/bitriver-live.rb
 
       - name: Upload formula artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: homebrew-formula
           path: dist/formula/bitriver-live.rb
@@ -798,7 +798,7 @@ jobs:
           & $light -ext WixUIExtension bitriver-live.wixobj -o (Join-Path $distDir "bitriver-live-$($env:RELEASE_TAG).msi")
 
       - name: Upload MSI artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: windows-installer
           path: dist/bitriver-live-${{ github.ref_name }}.msi
