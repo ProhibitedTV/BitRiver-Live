@@ -6,6 +6,18 @@ run the same suites locally before opening a pull request. See
 coverage.
 
 
+
+## Verify prerequisites
+
+`./scripts/verify.sh` requires these tools on `PATH`:
+
+- `go` (for `go test ./...`)
+- `python3` (used by `./scripts/check-contract-invariants.sh` to validate generated artifact references in `docs/contract.md`)
+- `docker` (optional; `docker compose ... config` is skipped when Docker is unavailable)
+- `node` + `npm` (optional; required only when viewer lint/test checks are selected)
+
+If `python3` is missing, `./scripts/verify.sh` now fails fast with a clear prerequisite error before running the verify sequence.
+
 ## Dependency source of truth
 
 Offline Go builds in this repository use `go.mod` `replace` directives that point

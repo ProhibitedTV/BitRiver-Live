@@ -50,6 +50,20 @@ run_step() {
   "$@"
 }
 
+require_tool() {
+  local tool_name="$1"
+  local reason="$2"
+
+  if command -v "$tool_name" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo
+  echo "Missing required tool: $tool_name" >&2
+  echo "$reason" >&2
+  exit 1
+}
+
 viewer_changes_present() {
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
 
@@ -98,6 +112,8 @@ should_run_viewer_checks() {
 
   viewer_changes_present
 }
+
+require_tool "python3" "./scripts/check-contract-invariants.sh runs a python3-generated artifact validation block. Install python3 and rerun ./scripts/verify.sh."
 
 run_step "Go tests" \
   env GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
