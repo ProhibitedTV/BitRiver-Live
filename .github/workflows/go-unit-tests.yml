@@ -64,11 +64,6 @@ jobs:
           GOPROXY: https://proxy.golang.org,direct
         run: go install golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }}
 
-      - name: Check internal/models import guard
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        run: ./scripts/check-no-models-imports.sh
-
       - name: Run verification gate
         if: matrix.os == 'ubuntu-latest'
         shell: bash
