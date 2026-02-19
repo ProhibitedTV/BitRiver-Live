@@ -64,16 +64,14 @@ jobs:
           GOPROXY: https://proxy.golang.org,direct
         run: go install golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }}
 
-      - name: Run unit tests
+      - name: Run verification gate
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: ./scripts/verify.sh
+
+      - name: Run unit tests (non-Linux)
+        if: matrix.os != 'ubuntu-latest'
         run: go test ./... -count=1 -timeout=120s
-
-      - name: Validate architecture import direction
-        shell: bash
-        run: ./scripts/check-architecture-deps.sh
-
-      - name: Verify dependency source of truth
-        shell: bash
-        run: ./scripts/check-dependency-source.sh
 
       - name: Verify Helm deploy assets are synced from canonical sources
         shell: bash

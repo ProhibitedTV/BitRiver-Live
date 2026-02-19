@@ -163,11 +163,8 @@ jobs:
           fi
 
 
-      - name: Run unit tests
-        run: go test ./... -count=1 -timeout=120s
-
-      - name: Validate architecture import direction
-        run: ./scripts/check-architecture-deps.sh
+      - name: Run verification gate
+        run: ./scripts/verify.sh
 
   postgres-tests:
     name: Postgres storage tests
