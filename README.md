@@ -30,6 +30,15 @@ All of them execute the same backend pipeline:
 - Not a single-process binary without external services.
 - Not a Kubernetes-first deployment (Compose is the canonical path in this repo).
 
+### Non-goals (for now)
+
+BitRiver Live is focused on delivering a reliable, self-hosted live stack with a clear deployment contract. To keep that trust boundary honest, it does **not** currently aim to provide:
+
+- A built-in global CDN footprint.
+- Twitch-scale trust & safety operations or moderation staffing models.
+- Fully automatic abuse detection/enforcement with no operator oversight.
+- Infinite, no-planning-required horizontal scale.
+
 ## 2) Current status
 
 ### Works today
