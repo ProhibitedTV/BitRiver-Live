@@ -117,7 +117,7 @@ should_run_viewer_checks() {
   viewer_changes_present
 }
 
-require_tool "python3" "./scripts/check-contract-invariants.sh validates contract-generated artifact references with an embedded Python check. Install python3 and rerun ./scripts/verify.sh."
+run_step "go.sum non-empty guard" ./scripts/check-go-sum-not-empty.sh
 
 run_step "Go tests" \
   env GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
@@ -126,6 +126,7 @@ run_step "Architecture dependency direction check" ./scripts/check-architecture-
 run_step "No internal/models imports outside internal/models" ./scripts/check-no-models-imports.sh
 run_step "Dependency source check" ./scripts/check-dependency-source.sh
 run_step "Contract invariants check" ./scripts/check-contract-invariants.sh
+run_step "Production third-party digest gate" ./scripts/require-image-digests.sh
 
 if command -v docker >/dev/null 2>&1; then
   run_step "Docker Compose config validation" docker compose -f deploy/docker-compose.yml config

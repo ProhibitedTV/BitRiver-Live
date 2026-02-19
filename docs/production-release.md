@@ -27,6 +27,7 @@ Recent schema changes to account for:
   privileged accounts can complete MFA verification.
 
 For the upgrade mechanics around schema migrations, safe Compose sequencing, `.env` changes, and OvenMediaEngine config regeneration, follow the upgrade essentials in [`docs/upgrades.md`](upgrades.md#upgrade-essentials-migrations-env-updates-and-ome-re-render).
+For secret management hardening patterns that keep the same `.env` + Compose contract, see [`docs/secrets-hardening.md`](secrets-hardening.md).
 
 ## 1. Pre-release verification
 
@@ -131,7 +132,9 @@ storage builds.
 ### Repository secrets for the release workflow
 
 The `verify-env` job in the release workflow renders a production-ready `.env`
-file and validates it with `deploy/check-env.sh`. Configure the following
+file, validates it with `deploy/check-env.sh`, and then enforces third-party
+image digest pins via `scripts/require-image-digests.sh`. Configure the
+following
 repository secrets (mirroring [`deploy/.env.example`](../deploy/.env.example))
 so the job can populate every required variable and image tag:
 
@@ -162,7 +165,14 @@ so the job can populate every required variable and image tag:
 - `BITRIVER_TRANSCODER_IMAGE_TAG`
 - `BITRIVER_SRS_IMAGE_TAG`
 - `BITRIVER_OME_IMAGE_TAG`
-- Optional: `BITRIVER_*_IMAGE_DIGEST` values when you pin digests in production
+- `BITRIVER_REDIS_IMAGE_DIGEST`
+- `BITRIVER_POSTGRES_IMAGE_DIGEST`
+- `BITRIVER_SRS_IMAGE_DIGEST`
+- `BITRIVER_OME_IMAGE_DIGEST`
+- `BITRIVER_NGINX_IMAGE_DIGEST`
+- `BITRIVER_ALPINE_3_IMAGE_DIGEST`
+- `BITRIVER_ALPINE_3_19_IMAGE_DIGEST`
+- `BITRIVER_DEBIAN_IMAGE_DIGEST`
 - `NEXT_PUBLIC_API_BASE_URL`
 - `NEXT_PUBLIC_VIEWER_URL`
 
@@ -207,11 +217,11 @@ build out:
    `deploy/.env.example` survive in production. Ensure `NEXT_PUBLIC_API_BASE_URL`
    and `NEXT_PUBLIC_VIEWER_URL` point at the public API and viewer endpoints
    users will reach (not localhost or example.com placeholders).
-2. Run the guard script to confirm defaults are gone and service URLs match the
-   target environment. The validator now fails when any sample credential from
-   `deploy/.env.example` remains in the release `.env`:
+2. Run the guard scripts to confirm defaults are gone, service URLs match the
+   target environment, and production image digests are pinned:
    ```bash
    deploy/check-env.sh
+   ./scripts/require-image-digests.sh
    ```
    The release workflow surfaces this output in the deploy logs and fails when
    any OvenMediaEngine URLs, bind addresses, or ports point at loopback
