@@ -13,18 +13,10 @@
             <p>Self-hosted live streaming hub with everything you need to go live at home.</p>
         </div>
         <nav class="hero__nav">
-            <button data-view="dashboard">Dashboard</button>
-            <button data-view="users">Users</button>
-            <button data-view="channels">Channels</button>
-            <button data-view="stream">Go Live</button>
-            <button data-view="chat">Chat</button>
-            <button data-view="moderation">Moderation</button>
-            <button data-view="legal" data-admin-only="true">Legal</button>
-            <button data-view="profiles">Profiles</button>
-            <button data-view="sessions">Sessions</button>
-            <button data-view="uploads">Uploads</button>
-            <button data-view="analytics">Analytics</button>
-            <button data-view="settings">Settings</button>
+            <button data-view="dashboard">Overview</button>
+            <button data-view="streams">Streams</button>
+            <button data-view="system-health">System Health</button>
+            <button data-view="administration">Administration</button>
         </nav>
         <div class="hero__actions">
             <button
@@ -59,7 +51,47 @@
                 <button id="download-snapshot" class="secondary">Download JSON snapshot</button>
             </div>
             <div id="status-board" class="stack"></div>
+            <div id="overview-incidents" class="stack"></div>
+            <div id="overview-streams" class="table"></div>
             <div class="grid" id="overview-cards"></div>
+        </section>
+
+        <section id="streams" class="panel">
+            <header class="panel__header">
+                <div>
+                    <h2>Streams</h2>
+                    <p>Track channel lifecycle, inspect the latest transition, and jump to controls.</p>
+                </div>
+            </header>
+            <div id="streams-list" class="table"></div>
+        </section>
+
+        <section id="system-health" class="panel">
+            <header class="panel__header">
+                <div>
+                    <h2>System Health</h2>
+                    <p>Investigate component failures with ownership, impact, and next action.</p>
+                </div>
+            </header>
+            <div id="system-health-board" class="stack"></div>
+        </section>
+
+        <section id="administration" class="panel">
+            <h2>Administration</h2>
+            <p>Manage business and compliance areas without interrupting operations workflows.</p>
+            <div class="admin-shortcuts" id="admin-shortcuts">
+                <button class="secondary" data-view="users">Users</button>
+                <button class="secondary" data-view="channels">Channels config</button>
+                <button class="secondary" data-view="stream">Go Live</button>
+                <button class="secondary" data-view="sessions">Sessions</button>
+                <button class="secondary" data-view="chat">Chat</button>
+                <button class="secondary" data-view="moderation">Moderation</button>
+                <button class="secondary" data-view="legal">Legal</button>
+                <button class="secondary" data-view="profiles">Profiles</button>
+                <button class="secondary" data-view="uploads">Uploads</button>
+                <button class="secondary" data-view="analytics">Analytics</button>
+                <button class="secondary" data-view="settings">Settings</button>
+            </div>
         </section>
 
         <section id="users" class="panel">

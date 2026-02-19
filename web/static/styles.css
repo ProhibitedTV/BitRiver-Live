@@ -1386,3 +1386,9 @@ chat-log {
 .toast--error {
     background: rgba(239, 68, 68, 0.25);
 }
+
+.admin-shortcuts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
