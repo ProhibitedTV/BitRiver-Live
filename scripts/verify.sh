@@ -6,22 +6,27 @@ cd "$ROOT_DIR"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/verify.sh [--viewer]
+Usage: ./scripts/verify.sh [--viewer] [--ci-viewer]
 
 Runs repository verification checks in a consistent order.
 
 Options:
   --viewer  Force viewer lint/test checks even when no viewer changes are detected.
+  --ci-viewer  In CI, force viewer lint/test checks for non-viewer workflows.
   -h, --help  Show this help.
 USAGE
 }
 
 force_viewer_checks=false
+force_ci_viewer_checks=false
 
 while (($# > 0)); do
   case "$1" in
     --viewer)
       force_viewer_checks=true
+      ;;
+    --ci-viewer)
+      force_ci_viewer_checks=true
       ;;
     -h|--help)
       usage
@@ -53,7 +58,40 @@ viewer_changes_present() {
   [[ -n "$status_output" ]]
 }
 
+is_ci_environment() {
+  case "${CI:-}" in
+    1|true|TRUE)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+is_viewer_related_workflow() {
+  local workflow_context="${GITHUB_WORKFLOW:-} ${GITHUB_WORKFLOW_REF:-}"
+  [[ "$workflow_context" =~ [Vv]iewer ]]
+}
+
+viewer_checks_supported() {
+  [[ -d web/viewer ]] || return 1
+  command -v node >/dev/null 2>&1 || return 1
+  command -v npm >/dev/null 2>&1 || return 1
+}
+
 should_run_viewer_checks() {
+  if ! viewer_checks_supported; then
+    return 1
+  fi
+
+  if is_ci_environment; then
+    if is_viewer_related_workflow || [[ "$force_ci_viewer_checks" == true ]]; then
+      return 0
+    fi
+    return 1
+  fi
+
   if [[ "$force_viewer_checks" == true ]]; then
     return 0
   fi
@@ -82,7 +120,15 @@ if should_run_viewer_checks; then
 else
   echo
   echo "==> Viewer lint/test"
-  echo "Skipping: no changes detected under web/viewer (use --viewer to force)."
+  if ! [[ -d web/viewer ]]; then
+    echo "Skipping: web/viewer does not exist in this checkout."
+  elif ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+    echo "Skipping: node and/or npm are not installed or not on PATH."
+  elif is_ci_environment; then
+    echo "Skipping: CI viewer checks run only for viewer-related workflows or with --ci-viewer."
+  else
+    echo "Skipping: no changes detected under web/viewer (use --viewer to force)."
+  fi
 fi
 
 echo
