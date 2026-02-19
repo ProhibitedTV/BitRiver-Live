@@ -2,19 +2,19 @@
 
 BitRiver Live is a self-hosted live-streaming stack.
 
-It runs a Go control-plane API, a Next.js viewer, ingest/transcoding services, and stateful data services with one Docker Compose deployment (`deploy/docker-compose.yml`) driven by a single root `.env` file.
+It packages a Go control-plane API, a Next.js viewer, ingest/transcoding services, and stateful data services into a single Docker Compose deployment (`deploy/docker-compose.yml`) driven by one root `.env` file.
 
 ## 1) What this project is
 
 ### Mental model
 
-Think of BitRiver Live as **one deployment bundle** with multiple entrypoints:
+Think of BitRiver Live as **one deployment bundle** with multiple ways to launch it:
 
 - Installer launcher (`bitriver-live`)
 - Source launcher (`go run ./cmd/bitriver quickstart`)
 - Shell wrappers (`scripts/quickstart.sh`, `scripts/quickstart.ps1`)
 
-All of them execute the same backend pipeline:
+Each entrypoint runs the same deployment pipeline:
 
 1. Doctor checks
 2. `.env` bootstrap/validation
@@ -32,7 +32,7 @@ All of them execute the same backend pipeline:
 
 ### Non-goals (for now)
 
-BitRiver Live is focused on delivering a reliable, self-hosted live stack with a clear deployment contract. To keep that trust boundary honest, it does **not** currently aim to provide:
+BitRiver Live is focused on a reliable, self-hosted live stack with a clear deployment contract. To keep that scope honest, it does **not** currently aim to provide:
 
 - A built-in global CDN footprint.
 - Twitch-scale trust & safety operations or moderation staffing models.
@@ -65,7 +65,7 @@ BitRiver Live is focused on delivering a reliable, self-hosted live stack with a
 
 ## 3) Quick start (real)
 
-Use this if you want the fastest path to a running stack.
+Use this for the fastest path to a running stack.
 
 ### Assumptions
 
@@ -81,13 +81,13 @@ Use this if you want the fastest path to a running stack.
 bitriver-live
 ```
 
-What happens:
+What this does:
 
 - Creates `<launcher-root>/.env` from `deploy/.env.example` if missing.
 - Runs the canonical deployment pipeline above.
 - Starts services from `deploy/docker-compose.yml`.
 
-### Option B: from source checkout
+### Option B: source checkout
 
 ```bash
 go run ./cmd/bitriver quickstart
@@ -102,12 +102,12 @@ Wrapper equivalents (scripts are thin shims around the same CLI command):
 
 ### First login / verification
 
-- Verify install: `bitriver smoke` (or `go run ./cmd/bitriver smoke`).
+- Verify the install: `bitriver smoke` (or `go run ./cmd/bitriver smoke`).
 - Open the control centre URL shown by quickstart.
 - Use generated/admin credentials from quickstart output.
 - Confirm health in the Overview dashboard (or query `/api/status`).
 
-### Useful day-2 commands
+### Useful day-2 operations commands
 
 ```bash
 # service status
@@ -125,10 +125,10 @@ go run ./cmd/bitriver compose up --file deploy/docker-compose.yml
 
 ## 4) Core workflows
 
-### A) Deploy/upgrade the stack
+### A) Deploy or upgrade the stack
 
 **Input:** `deploy/docker-compose.yml` + root `.env`  
-**Action:** run quickstart or compose wrapper  
+**Action:** run quickstart or a compose wrapper  
 **Output:** running containers, migrated database, rendered OME config (`deploy/ome/Server.generated.xml`)
 
 Primary files:
@@ -138,11 +138,11 @@ Primary files:
 - `deploy/.env.example`
 - `scripts/quickstart.sh`
 
-### B) Stream ingest to viewer playback
+### B) Ingest stream to viewer playback
 
-**Input:** stream pushed to SRS RTMP endpoint (`BITRIVER_SRS_RTMP_PORT`)  
+**Input:** stream pushed to the SRS RTMP endpoint (`BITRIVER_SRS_RTMP_PORT`)  
 **Action:** SRS ingest → transcoder outputs → OME playback orchestration  
-**Output:** viewer can load playback URLs/pages via API + viewer app
+**Output:** playback URLs/pages are served through the API and loaded by the viewer app
 
 Primary files/services:
 
@@ -154,7 +154,7 @@ Primary files/services:
 ### C) Operator/admin management
 
 **Input:** admin credentials + control centre UI/API  
-**Action:** authenticate, manage channels/users/settings  
+**Action:** authenticate, then manage channels/users/settings  
 **Output:** persisted state in Postgres/Redis and updated API responses
 
 Primary code areas:
@@ -166,7 +166,7 @@ Primary code areas:
 
 ## 5) Configuration (minimal)
 
-Start with defaults from `deploy/.env.example`.
+Start with the defaults in `deploy/.env.example`.
 
 Change values only when needed:
 
@@ -205,13 +205,13 @@ go run ./cmd/bitriver ome render --force --env-file ./.env
   Fix: follow `docs/reverse-proxy-npm-cloudflare.md` and `docs/advanced-deployments.md` exactly.
 
 - **Unsupported expectation: “no Docker dependencies”**  
-  Current design intentionally centers on Docker Compose; bare-metal custom layouts require manual adaptation.
+  The current design intentionally centers on Docker Compose; bare-metal custom layouts require manual adaptation.
 
 ## 7) Design notes (brief)
 
 - Backend architecture is intentionally layered (`cmd -> internal/app -> internal/{api,service,domain} -> adapters`) to keep business rules reusable and testable. See `docs/architecture.md`.
 - Deployment is intentionally standardized to **one Compose + one `.env` contract** to avoid divergent runbooks across platforms.
-- Operational tradeoff: easier onboarding and repeatability, but less flexibility than fully custom multi-cluster setups.
+- Operational tradeoff: easier onboarding and repeatability, with less flexibility than fully custom multi-cluster setups.
 
 ## Production readiness
 
