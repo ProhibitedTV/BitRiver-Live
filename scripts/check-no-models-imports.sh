@@ -4,7 +4,14 @@ set -Eeuo pipefail
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-mapfile -t go_files < <(rg --files -g '*.go' | grep -v '^internal/models/')
+go_files=()
+while IFS= read -r file; do
+  file="${file#./}"
+  if [[ "$file" == internal/models/* ]]; then
+    continue
+  fi
+  go_files+=("$file")
+done < <(find . -type f -name '*.go' -print)
 
 if ((${#go_files[@]} == 0)); then
   echo "No Go files to check."
