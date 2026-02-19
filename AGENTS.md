@@ -37,11 +37,13 @@ Equivalent manual sequence:
 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
 ```
 
-2. Viewer checks (if viewer changes are in scope):
+2. Viewer checks:
 ```bash
 cd web/viewer && npm run lint
 cd web/viewer && npm run test
 ```
+- Local default: run when viewer changes are in scope (or force with `./scripts/verify.sh --viewer`).
+- CI default (`CI=1` or `CI=true`): run only when `web/viewer` exists, `node` + `npm` are available, and the workflow is viewer-related; force with `./scripts/verify.sh --ci-viewer` for non-viewer workflows.
 
 3. Docker Compose config validation:
 ```bash
