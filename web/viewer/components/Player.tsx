@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Hls from "hls.js";
 import { reportViewerQoE } from "../lib/viewer-api";
 import type { Playback } from "../lib/viewer-api";
@@ -14,21 +14,39 @@ type PlayerProps = {
   loading?: boolean;
 };
 
+const ERROR_GRACE_MS = 3500;
+
 export function Player({ playback, channelId, live = false, liveState, loading = false }: PlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const playerId = useId();
   const lastSampleRef = useRef<number>(0);
+  const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [runtimeState, setRuntimeState] = useState<UIState>(loading ? UIState.LoadingStream : UIState.StreamEnded);
 
-  const setUIState = (state: UIState) => {
-    setRuntimeState(state);
-  };
+  const clearErrorTimeout = useCallback(() => {
+    if (!errorTimeoutRef.current) {
+      return;
+    }
+    clearTimeout(errorTimeoutRef.current);
+    errorTimeoutRef.current = null;
+  }, []);
+
+  const scheduleUnavailableWithGrace = useCallback(() => {
+    clearErrorTimeout();
+    setRuntimeState(UIState.Reconnecting);
+    errorTimeoutRef.current = setTimeout(() => {
+      setRuntimeState(UIState.StreamUnavailable);
+      errorTimeoutRef.current = null;
+    }, ERROR_GRACE_MS);
+  }, [clearErrorTimeout]);
 
   useEffect(() => {
     if (!playback) {
       return;
     }
-    setUIState(UIState.LoadingStream);
+
+    setRuntimeState(UIState.LoadingStream);
+
     if (playback.protocol === "webrtc") {
       let instance: any;
       const setup = async () => {
@@ -45,11 +63,13 @@ export function Player({ playback, channelId, live = false, liveState, loading =
               }
             ]
           });
-          setUIState(UIState.LiveHealthy);
+          clearErrorTimeout();
+          setRuntimeState(UIState.LiveHealthy);
         } catch {
-          setUIState(UIState.StreamUnavailable);
+          scheduleUnavailableWithGrace();
         }
       };
+
       void setup();
       void reportViewerQoE({
         channelId,
@@ -59,7 +79,9 @@ export function Player({ playback, channelId, live = false, liveState, loading =
         protocol: playback.protocol ?? "webrtc",
         latencyMode: playback.latencyMode
       });
+
       return () => {
+        clearErrorTimeout();
         if (instance && typeof instance.remove === "function") {
           instance.remove();
         }
@@ -68,14 +90,14 @@ export function Player({ playback, channelId, live = false, liveState, loading =
 
     const video = videoRef.current;
     if (!video || !playback.playbackUrl) {
-      setUIState(UIState.StreamUnavailable);
+      setRuntimeState(UIState.StreamUnavailable);
       return;
     }
 
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = playback.playbackUrl;
       void video.play().catch(() => {
-        setUIState(UIState.StreamUnavailable);
+        scheduleUnavailableWithGrace();
       });
       void reportViewerQoE({
         channelId,
@@ -87,6 +109,7 @@ export function Player({ playback, channelId, live = false, liveState, loading =
         playbackUrl: playback.playbackUrl
       });
       return () => {
+        clearErrorTimeout();
         video.pause();
         video.removeAttribute("src");
         video.load();
@@ -121,7 +144,7 @@ export function Player({ playback, channelId, live = false, liveState, loading =
       });
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (data.fatal) {
-          setUIState(UIState.StreamUnavailable);
+          scheduleUnavailableWithGrace();
           hls.destroy();
         }
         void reportViewerQoE({
@@ -135,12 +158,13 @@ export function Player({ playback, channelId, live = false, liveState, loading =
         });
       });
       return () => {
+        clearErrorTimeout();
         hls.destroy();
       };
     }
 
     return undefined;
-  }, [channelId, playback, playerId]);
+  }, [channelId, playback, playerId, scheduleUnavailableWithGrace, clearErrorTimeout]);
 
   useEffect(() => {
     if (!playback || playback.protocol === "webrtc") {
@@ -186,25 +210,27 @@ export function Player({ playback, channelId, live = false, liveState, loading =
     };
 
     const onPlaying = () => {
-      setUIState(UIState.LiveHealthy);
+      clearErrorTimeout();
+      setRuntimeState(UIState.LiveHealthy);
       report("playing");
     };
     const onWaiting = () => {
-      setUIState(UIState.Reconnecting);
+      setRuntimeState(UIState.Reconnecting);
       report("buffering");
     };
     const onStalled = () => {
-      setUIState(UIState.Reconnecting);
+      setRuntimeState(UIState.Reconnecting);
       report("stalled");
     };
     const onPause = () => report("paused");
     const onEnded = () => {
-      setUIState(UIState.StreamEnded);
+      clearErrorTimeout();
+      setRuntimeState(UIState.StreamEnded);
       report("ended");
     };
     const onError = () => {
       const errorMessage = video.error?.message ?? "unknown";
-      setUIState(UIState.StreamUnavailable);
+      scheduleUnavailableWithGrace();
       report("player_error", { error: errorMessage });
     };
     const onTimeUpdate = () => {
@@ -225,6 +251,7 @@ export function Player({ playback, channelId, live = false, liveState, loading =
     video.addEventListener("timeupdate", onTimeUpdate);
 
     return () => {
+      clearErrorTimeout();
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("stalled", onStalled);
@@ -233,7 +260,7 @@ export function Player({ playback, channelId, live = false, liveState, loading =
       video.removeEventListener("error", onError);
       video.removeEventListener("timeupdate", onTimeUpdate);
     };
-  }, [channelId, playback]);
+  }, [channelId, playback, scheduleUnavailableWithGrace, clearErrorTimeout]);
 
   const stateFromChannel = (): UIState => {
     if (loading) {
@@ -252,6 +279,15 @@ export function Player({ playback, channelId, live = false, liveState, loading =
   };
 
   const uiState = stateFromChannel();
+
+  const confidenceStatus =
+    uiState === UIState.LiveHealthy
+      ? { label: "Live", color: "#22c55e" }
+      : uiState === UIState.Reconnecting
+        ? { label: "Reconnecting", color: "#f59e0b" }
+        : uiState === UIState.StreamEnded || uiState === UIState.StreamUnavailable
+          ? { label: "Offline", color: "#94a3b8" }
+          : null;
 
   const stateContent: Record<UIState, { icon: string; title: string; body: string }> = {
     [UIState.LoadingStream]: {
@@ -286,10 +322,32 @@ export function Player({ playback, channelId, live = false, liveState, loading =
     }
   };
 
+  const renderConfidenceStatus = () => {
+    if (!confidenceStatus) {
+      return null;
+    }
+
+    return (
+      <p
+        className="muted"
+        style={{ margin: 0, fontSize: "0.85rem", display: "inline-flex", gap: "0.4rem", alignItems: "center" }}
+        role="status"
+        aria-live="polite"
+      >
+        <span
+          aria-hidden="true"
+          style={{ width: "0.5rem", height: "0.5rem", borderRadius: "999px", backgroundColor: confidenceStatus.color }}
+        />
+        {confidenceStatus.label}
+      </p>
+    );
+  };
+
   const renderStateScreen = (state: UIState) => {
     const content = stateContent[state];
     return (
       <div className="surface stack" role="status" aria-live="polite" data-testid="player-state-screen">
+        {renderConfidenceStatus()}
         <p aria-hidden="true" style={{ fontSize: "1.5rem", margin: 0 }}>
           {content.icon}
         </p>
@@ -303,24 +361,25 @@ export function Player({ playback, channelId, live = false, liveState, loading =
     return renderStateScreen(uiState);
   }
 
-  if (uiState === UIState.LoadingStream || uiState === UIState.StreamUnavailable) {
-    return renderStateScreen(uiState);
-  }
-
-  if (uiState === UIState.StreamEnded || uiState === UIState.StreamStartingSoon) {
+  if (uiState === UIState.StreamUnavailable || uiState === UIState.StreamEnded || uiState === UIState.StreamStartingSoon) {
     return renderStateScreen(uiState);
   }
 
   if (playback.protocol === "webrtc") {
-    if (uiState !== UIState.LiveHealthy) {
+    if (uiState === UIState.LoadingStream) {
       return renderStateScreen(uiState);
     }
-    return <div id={playerId} className="video-container webrtc-player" />;
+    return (
+      <div className="stack">
+        {renderConfidenceStatus()}
+        <div id={playerId} className="video-container webrtc-player" />
+      </div>
+    );
   }
 
   return (
     <div className="stack">
-      {renderStateScreen(uiState)}
+      {renderConfidenceStatus()}
       <div className="video-container">
         <video ref={videoRef} controls playsInline muted={false} poster={playback.originUrl ?? undefined} />
       </div>
