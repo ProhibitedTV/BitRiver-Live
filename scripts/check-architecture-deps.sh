@@ -144,7 +144,7 @@ while IFS='|' read -r pkg imports; do
   [[ -z "$pkg" ]] && continue
   [[ "$pkg" != "$MODULE_PATH"* ]] && continue
 
-  from_rel="${pkg#${MODULE_PATH}/}"
+  from_rel="${pkg#"${MODULE_PATH}/"}"
   from_layer="$(map_layer "$from_rel")"
   [[ -z "$from_layer" ]] && continue
 
@@ -153,7 +153,7 @@ while IFS='|' read -r pkg imports; do
     [[ -z "$imp" ]] && continue
     [[ "$imp" != "$MODULE_PATH"* ]] && continue
 
-    to_rel="${imp#${MODULE_PATH}/}"
+    to_rel="${imp#"${MODULE_PATH}/"}"
     to_layer="$(map_layer "$to_rel")"
     [[ -z "$to_layer" ]] && continue
 
