@@ -65,6 +65,7 @@ run_step "Go tests" \
   env GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
 
 run_step "Architecture dependency direction check" ./scripts/check-architecture-deps.sh
+run_step "No internal/models imports outside internal/models" ./scripts/check-no-models-imports.sh
 run_step "Dependency source check" ./scripts/check-dependency-source.sh
 
 if command -v docker >/dev/null 2>&1; then
