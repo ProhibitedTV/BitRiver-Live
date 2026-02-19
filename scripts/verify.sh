@@ -105,6 +105,7 @@ run_step "Go tests" \
 run_step "Architecture dependency direction check" ./scripts/check-architecture-deps.sh
 run_step "No internal/models imports outside internal/models" ./scripts/check-no-models-imports.sh
 run_step "Dependency source check" ./scripts/check-dependency-source.sh
+run_step "Contract invariants check" ./scripts/check-contract-invariants.sh
 
 if command -v docker >/dev/null 2>&1; then
   run_step "Docker Compose config validation" docker compose -f deploy/docker-compose.yml config
