@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+ROOT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
 usage() {
@@ -9,6 +9,10 @@ usage() {
 Usage: ./scripts/verify.sh [--viewer] [--ci-viewer]
 
 Runs repository verification checks in a consistent order.
+
+Prerequisites:
+  - go
+  - python3 (required by ./scripts/check-contract-invariants.sh)
 
 Options:
   --viewer  Force viewer lint/test checks even when no viewer changes are detected.
@@ -48,6 +52,20 @@ run_step() {
   echo
   echo "==> $label"
   "$@"
+}
+
+require_tool() {
+  local tool_name="$1"
+  local reason="$2"
+
+  if command -v "$tool_name" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo
+  echo "Missing required tool: $tool_name" >&2
+  echo "$reason" >&2
+  exit 1
 }
 
 viewer_changes_present() {
