@@ -64,6 +64,10 @@ jobs:
           GOPROXY: https://proxy.golang.org,direct
         run: go install golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }}
 
+      - name: Ensure go.sum is non-empty
+        shell: bash
+        run: ./scripts/check-go-sum-not-empty.sh
+
       - name: Run verification gate
         if: matrix.os == 'ubuntu-latest'
         shell: bash
