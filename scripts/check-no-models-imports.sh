@@ -26,8 +26,8 @@ is_allowlisted() {
 
 go_files=()
 while IFS= read -r file; do
-  go_files+=("$file")
-done < <(rg --files -g '*.go')
+  go_files+=("${file#./}")
+done < <(find . -type f -name '*.go' | LC_ALL=C sort)
 
 if ((${#go_files[@]} == 0)); then
   echo "No Go files to check."
