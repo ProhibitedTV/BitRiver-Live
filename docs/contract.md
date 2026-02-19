@@ -21,7 +21,7 @@ BitRiver Live has one canonical deployment path: the root `.env` rendered/valida
     - Also checked by `ome verify-health-token` during quickstart preflight.
   - `deploy/srs/conf/srs.generated.conf`
     - Referenced by `deploy/docker-compose.yml` and rendered by `scripts/render-srs-config.sh` via the `srs-config` service.
-    - TODO (needs verification): confirm whether this file is intentionally always runtime-generated (not committed) for every supported packaging path.
+    - This file is not committed in this repository and is generated from `deploy/srs/conf/srs.conf` + `.env` by `scripts/render-srs-config.sh`. In Compose-first flows, `srs-config` always runs with `--force` before `srs` starts; in packaged systemd flow, `srs.service` also runs the same render script with `--force` in `ExecStartPre`.
 
 ## 3) Environment variable schema
 
@@ -141,7 +141,21 @@ A deployment is considered successful when all of the following are true in the 
 7. Critical compose services report healthy: `bitriver-live`, `ome`, `srs`, `srs-controller`, `transcoder`, `postgres`, `redis`.
 8. Admin bootstrap completes via `/app/bootstrap-admin` using env credentials.
 
-TODO (needs verification): document a single post-deploy smoke command set for operators who do not run `cmd/bitriver quickstart` directly.
+## 4.1) Post-deploy verification
+
+Run from repo root (or use `bitriver smoke` in packaged installs):
+
+```bash
+docker compose --env-file ./.env -f deploy/docker-compose.yml ps
+curl -fsS "http://127.0.0.1:${BITRIVER_LIVE_PORT:-8080}/readyz"
+curl -fsS "http://127.0.0.1:${BITRIVER_LIVE_PORT:-8080}/healthz"
+curl -fsS "http://127.0.0.1:${BITRIVER_SRS_CONTROLLER_PORT:-1986}/healthz"
+curl -fsS "http://127.0.0.1:${BITRIVER_TRANSCODER_HOST_PORT:-9001}/healthz"
+curl -fsS -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:${BITRIVER_OME_HTTP_PORT:-8081}/"
+go run ./cmd/bitriver smoke --compose-file deploy/docker-compose.yml --env-file ./.env
+```
+
+`bitriver smoke` is the canonical single-command equivalent and checks compose reachability plus the same host health endpoints.
 
 ## 5) Out of scope / not guaranteed by this contract
 
