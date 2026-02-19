@@ -70,6 +70,7 @@ docker compose -f deploy/docker-compose.yml config
 - Prefer small diffs that isolate one behavior change at a time.
 - Update docs whenever behavior, commands, or operator steps change.
 - Never change the deployment contract (`deploy/docker-compose.yml`, root `.env`, generated OME config expectations) without updating `docs/contract.md` in the same PR.
+- For env/compose/generated-config contract edits, follow `docs/contract-change-recipe.md`.
 - When uncertain, write: `TODO: verify in code`.
 
 ## Notes for agents
