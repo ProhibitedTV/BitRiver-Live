@@ -99,6 +99,8 @@ should_run_viewer_checks() {
   viewer_changes_present
 }
 
+run_step "go.sum non-empty guard" ./scripts/check-go-sum-not-empty.sh
+
 run_step "Go tests" \
   env GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
 
