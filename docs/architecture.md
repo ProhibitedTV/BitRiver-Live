@@ -60,6 +60,7 @@ BitRiver Live has one deployment pipeline regardless of launcher: `deploy/docker
 - Incoming HTTP/API requests are validated and translated in `internal/api`, then handed to service interfaces.
 - Service/domain logic calls infrastructure through interfaces (repositories, gateways, publishers).
 - Adapter implementations live in infrastructure packages and are injected by `internal/app`.
+- Stream-state behavior and ownership across control plane/SRS/transcoder/OME are documented in [`docs/stream-lifecycle.md`](stream-lifecycle.md).
 
 ## Repository boundary contract
 
