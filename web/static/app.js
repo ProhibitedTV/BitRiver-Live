@@ -669,12 +669,32 @@ function formatStatusName(value) {
 }
 
 function createStatusBadge(status) {
-    const normalized = (status || "degraded").toLowerCase();
+    const normalized = normalizeHealthStatus(status);
+    const label = {
+        healthy: "Healthy",
+        degraded: "Degraded",
+        down: "Down",
+        unknown: "Unknown",
+    }[normalized] || "Unknown";
     const badge = createElement("span", {
         className: `badge status-badge status-badge--${normalized}`,
-        textContent: normalized[0].toUpperCase() + normalized.slice(1),
+        textContent: label,
     });
     return badge;
+}
+
+function normalizeHealthStatus(status) {
+    const normalized = (status || "").toLowerCase();
+    if (normalized === "healthy" || normalized === "ready" || normalized === "ok" || normalized === "up") {
+        return "healthy";
+    }
+    if (normalized === "degraded") {
+        return "degraded";
+    }
+    if (normalized === "down" || normalized === "error" || normalized === "failed" || normalized === "unavailable") {
+        return "down";
+    }
+    return "unknown";
 }
 
 const numberFormatter = new Intl.NumberFormat();
@@ -1985,6 +2005,9 @@ async function openProfileEditor(userId) {
 
 function mapStatusOwner(name = "") {
     const normalized = name.toLowerCase();
+    if (normalized.includes("api") || normalized.includes("postgres") || normalized.includes("redis") || normalized.includes("queue") || normalized.includes("chat")) {
+        return "API";
+    }
     if (normalized.includes("srs") || normalized.includes("rtmp") || normalized.includes("ingest")) {
         return "SRS";
     }
@@ -1994,24 +2017,56 @@ function mapStatusOwner(name = "") {
     if (normalized.includes("transcod")) {
         return "Transcoder";
     }
-    if (normalized.includes("config") || normalized.includes("env")) {
-        return "Configuration";
-    }
-    return "Platform";
+    return "unknown";
 }
 
 function mapStatusImpact(status = "") {
-    const normalized = status.toLowerCase();
+    const normalized = normalizeHealthStatus(status);
     if (normalized === "down") {
         return "Hard failure; intervention required.";
     }
     if (normalized === "degraded") {
         return "Partial impact; continue with caution.";
     }
-    if (normalized === "disabled") {
-        return "Component intentionally disabled.";
+    if (normalized === "unknown") {
+        return "Health signal unavailable; verify service manually.";
     }
     return "Normal operation.";
+}
+
+function inferHealthExplanation(check) {
+    if (check.detail) {
+        return check.detail;
+    }
+    const owner = mapStatusOwner(check.name);
+    const status = normalizeHealthStatus(check.status);
+    if (status === "degraded") {
+        return owner === "unknown" ? "Service is responding with degraded health." : `${owner} is reporting degraded health.`;
+    }
+    if (status === "down") {
+        return owner === "unknown" ? "Service is not reporting healthy status." : `${owner} is down or unreachable.`;
+    }
+    return "No active fault reported.";
+}
+
+function inferNextStep(check) {
+    if (check.remediation) {
+        return check.remediation;
+    }
+    const owner = mapStatusOwner(check.name);
+    if (owner === "SRS") {
+        return "Check SRS logs and restart SRS if ingest is not recovering.";
+    }
+    if (owner === "OME") {
+        return "Check OME logs/config and restart OME if playback stays degraded.";
+    }
+    if (owner === "Transcoder") {
+        return "Check transcoder logs/process and restart transcoder if needed.";
+    }
+    if (owner === "API") {
+        return "Check API logs and backing services, then restart API if required.";
+    }
+    return "Inspect service logs and restart the affected service if recovery stalls.";
 }
 
 function buildPipelineSummary(report) {
@@ -2019,18 +2074,18 @@ function buildPipelineSummary(report) {
     const pickStatus = (predicate) => {
         const matches = checks.filter((check) => predicate(check.name || ""));
         if (!matches.length) {
-            return "disabled";
+            return "unknown";
         }
-        if (matches.some((check) => check.status === "down")) {
+        if (matches.some((check) => normalizeHealthStatus(check.status) === "down")) {
             return "down";
         }
-        if (matches.some((check) => check.status === "degraded")) {
+        if (matches.some((check) => normalizeHealthStatus(check.status) === "degraded")) {
             return "degraded";
         }
-        if (matches.some((check) => check.status === "disabled")) {
-            return "disabled";
+        if (matches.every((check) => normalizeHealthStatus(check.status) === "healthy")) {
+            return "healthy";
         }
-        return "ready";
+        return "unknown";
     };
     const ingestStatus = pickStatus((name) => /ingest|rtmp|srs/i.test(name));
     const transcoderStatus = pickStatus((name) => /transcod/i.test(name));
@@ -2039,25 +2094,27 @@ function buildPipelineSummary(report) {
         {
             title: "Ingest",
             status: ingestStatus,
-            meaning: ingestStatus === "ready" ? "Ingest healthy; new streams can connect." : "Ingest disruption; new streams may fail.",
+            meaning: ingestStatus === "healthy" ? "Ingest healthy; new streams can connect." : "Ingest risk detected; check SRS before going live.",
             owner: "SRS",
         },
         {
             title: "Transcoder",
             status: transcoderStatus,
-            meaning: transcoderStatus === "ready" ? "Transcoder healthy; renditions can be produced." : "Transcoder degraded; renditions may be limited.",
+            meaning: transcoderStatus === "healthy" ? "Transcoder healthy; renditions can be produced." : "Transcoder risk detected; renditions may be limited.",
             owner: "Transcoder",
         },
         {
             title: "Playback readiness",
             status: playbackStatus,
-            meaning: playbackStatus === "ready" ? "Playback healthy for viewers." : "Playback risk detected; verify viewer playback.",
+            meaning: playbackStatus === "healthy" ? "Playback healthy for viewers." : "Playback risk detected; verify OME and viewer playback.",
             owner: "OME",
         },
     ];
 }
 
 function renderStatusCheck(check) {
+    const owner = mapStatusOwner(check.name);
+    const normalized = normalizeHealthStatus(check.status);
     const item = createElement("article", { className: "status-item" });
     const header = createElement("div", { className: "status-item__header" });
     header.append(
@@ -2069,18 +2126,25 @@ function renderStatusCheck(check) {
     item.appendChild(
         createElement("div", {
             className: "card__meta",
-            textContent: `${check.category === "ingest" ? "Ingest" : "Core dependency"} · Owned by ${mapStatusOwner(check.name)}`,
+            textContent: `${check.category === "ingest" ? "Ingest" : "Core dependency"} · Component: ${owner}`,
         }),
     );
 
-    if (check.detail) {
-        item.appendChild(createElement("p", { className: "status-detail", textContent: check.detail }));
+    item.appendChild(
+        createElement("p", {
+            className: "status-meta",
+            textContent: `Status: ${createStatusBadge(check.status).textContent}`,
+        }),
+    );
+
+    if (normalized === "degraded" || normalized === "down") {
+        item.appendChild(createElement("p", { className: "status-detail", textContent: `Explanation: ${inferHealthExplanation(check)}` }));
     }
 
     item.appendChild(
         createElement("p", {
             className: "status-remediation",
-            textContent: `Next action: ${check.remediation || "Inspect logs to continue triage."}`,
+            textContent: `Recommended next step: ${inferNextStep(check)}`,
         }),
     );
     item.appendChild(
@@ -2093,7 +2157,7 @@ function renderStatusCheck(check) {
     item.appendChild(
         createElement("p", {
             className: "status-meta",
-            textContent: check.checkedAt ? `Checked ${formatRelativeTime(check.checkedAt)}` : "Pending check",
+            textContent: check.checkedAt ? `Last update: ${formatDate(check.checkedAt)} (${formatRelativeTime(check.checkedAt)})` : "Last update: unknown",
         }),
     );
 
@@ -2141,8 +2205,8 @@ function renderStatusBoard() {
     title.appendChild(createElement("p", { className: "eyebrow", textContent: "Health" }));
     title.appendChild(createElement("h3", { textContent: "System status" }));
     const subtitle = report?.checkedAt
-        ? `Updated ${formatRelativeTime(report.checkedAt)}`
-        : "Waiting for the first status check";
+        ? `Last update: ${formatDate(report.checkedAt)} (${formatRelativeTime(report.checkedAt)})`
+        : "Last update: unknown";
     title.appendChild(createElement("p", { className: "card__meta", textContent: subtitle }));
     header.appendChild(title);
 
@@ -2219,9 +2283,10 @@ function renderOverviewIncidents() {
             row.append(
                 createElement("h4", { textContent: formatStatusName(failure.name) }),
                 createElement("p", { className: "status-detail", textContent: `What is broken: ${failure.detail || "Check component logs."}` }),
-                createElement("p", { className: "status-meta", textContent: `Owned by: ${mapStatusOwner(failure.name)}` }),
-                createElement("p", { className: "status-remediation", textContent: `Operator action: ${failure.remediation || "Inspect logs to continue triage."}` }),
-                createElement("p", { className: "status-meta", textContent: "Verify recovery: Refresh status and confirm component returns to ready." }),
+                createElement("p", { className: "status-meta", textContent: `Owning component: ${mapStatusOwner(failure.name)}` }),
+                createElement("p", { className: "status-remediation", textContent: `Operator action: ${inferNextStep(failure)}` }),
+                createElement("p", { className: "status-meta", textContent: `Last update: ${failure.checkedAt ? formatDate(failure.checkedAt) : "unknown"}` }),
+                createElement("p", { className: "status-meta", textContent: "Verify recovery: Refresh status and confirm component returns to Healthy." }),
             );
             list.appendChild(row);
         }
@@ -2246,7 +2311,8 @@ function renderOverviewStreams() {
             createElement("h3", { textContent: channel.title }),
             createElement("p", { className: "card__meta", textContent: `Current state: ${channel.liveState || "idle"}` }),
             createElement("p", { className: "card__meta", textContent: `Started/Updated: ${latestSession ? formatRelativeTime(latestSession.startedAt) : "No sessions yet"}` }),
-            createElement("p", { className: "card__meta", textContent: `Health indicator: ${state.statusReport?.status || "unknown"}` }),
+            createElement("p", { className: "card__meta", textContent: `Health status: ${createStatusBadge(state.statusReport?.status).textContent}` }),
+            createElement("p", { className: "card__meta", textContent: `Health last update: ${state.statusReport?.checkedAt ? formatDate(state.statusReport.checkedAt) : "unknown"}` }),
         );
         overviewStreams.appendChild(card);
     }
