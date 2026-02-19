@@ -177,7 +177,13 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
         <div className="channel-page__grid">
           <div className="channel-page__hero-grid">
             <div className="channel-player">
-              <Player playback={data.playback} channelId={params.id} />
+              <Player
+                playback={data.playback}
+                channelId={params.id}
+                live={data.live}
+                liveState={data.channel.liveState}
+                loading={loading}
+              />
             </div>
             <aside className="channel-page__chat">
               <div className="channel-page__chat-inner">
