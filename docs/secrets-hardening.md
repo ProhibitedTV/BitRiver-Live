@@ -1,0 +1,92 @@
+# Secrets hardening
+
+BitRiver Live’s canonical deployment path is a repository-root `.env` consumed by `deploy/docker-compose.yml` (plus generated OME config). That baseline is supported and expected by quickstart, release runbooks, and helper scripts.
+
+This guide explains how to harden secret handling **without breaking that contract**.
+
+## 1) Supported baseline and risk profile
+
+### Baseline the repo supports today
+
+- One root `.env` file (usually copied from `deploy/.env.example`) drives runtime credentials and tokens.
+- `deploy/check-env.sh` and `go run ./cmd/bitriver env validate --env-file ./.env` validate required production fields.
+- Runtime launchers (`quickstart`, `compose up`, release workflows) expect environment values, not direct secret-manager APIs.
+
+### Risks to manage when using `.env`
+
+- **At-rest exposure:** plaintext secrets in a filesystem file can leak via backups, snapshots, or overly broad permissions.
+- **Process/shell exposure:** ad-hoc export patterns can leak values into shell history or process inspection tooling.
+- **Reuse drift:** copying one `.env` across environments can accidentally share credentials between dev/staging/prod.
+- **Rotation lag:** static secrets tend to persist unless operators enforce a rotation cadence.
+
+The rest of this document keeps the `.env` contract intact while reducing those risks.
+
+## 2) Hardening patterns compatible with this repo
+
+### A. CI-injected environment files
+
+Use CI to generate deployment-specific `.env` files at deploy time instead of storing production secrets in Git.
+
+Recommended approach:
+
+1. Keep a non-secret template source in Git (`deploy/.env.example`).
+2. In CI, inject secrets from the CI secret store into a generated `.env` artifact.
+3. Run repo validators against that generated file before deployment:
+   - `deploy/check-env.sh`
+   - `go run ./cmd/bitriver env validate --env-file ./.env`
+4. Use the generated `.env` for `docker compose` / quickstart and for OME render checks.
+5. Avoid persisting CI artifacts longer than needed.
+
+Notes:
+
+- This repo already assumes `.env`-driven deploys; CI injection changes *where values come from*, not runtime behavior.
+- Keep environment-specific files isolated (for example, separate CI projects/contexts per environment).
+
+### B. Mounted env files with strict filesystem permissions
+
+When deploying on hosts (Compose or systemd wrappers), keep `.env` files outside shared home/work directories and lock permissions.
+
+Recommended host controls:
+
+- Store deployment `.env` in an operator-owned directory (for example under `/opt/bitriver-*` for systemd installs).
+- Apply restrictive ownership and mode before starting services:
+  - owner: deployment service user (or root-managed with least privilege)
+  - mode: `0600` (or stricter where supported)
+- Prevent accidental world/group reads from backup tooling, sync jobs, and support bundles.
+- Treat rendered/generated config containing credentials (such as OME output) as sensitive data in backup and access policies.
+
+This pattern remains compatible because services still read plain environment variables; only file placement and host ACLs change.
+
+### C. Docker/host secret distribution approaches
+
+BitRiver Live does not require a specific external secret manager integration in-repo. You can still use one of these compatible operational approaches:
+
+- **Host secret manager → rendered `.env` file:** fetch secrets on the host at deploy time, write `.env` with strict permissions, then run existing commands.
+- **Orchestrator secret store → env injection:** where your platform can project secrets as environment variables, materialize a runtime `.env` (or equivalent env map) that preserves expected variable names.
+- **Image/source separation:** keep `BITRIVER_DEPLOY_IMAGE_SOURCE=pull` in production and separate registry credentials from app credentials.
+
+Guardrail: regardless of source, keep exported variable names aligned with `deploy/.env.example` and validate with the existing scripts before rollout.
+
+## 3) Operator checklist
+
+Use this short checklist for every environment:
+
+- [ ] **Unique per-environment credentials:** never reuse production secrets in staging/dev.
+- [ ] **Rotation cadence:** define and follow a schedule for admin, database, cache, ingest, and API tokens.
+- [ ] **No sample/default secrets:** confirm `deploy/check-env.sh` passes and defaults from `deploy/.env.example` are replaced.
+- [ ] **Backup/restore handling:** include secret material handling in backup policy (encryption, restricted restore access, and post-restore rotation where required).
+- [ ] **Access control and audit:** limit secret read/write permissions to release operators and record secret change events in your change-management/audit trail.
+
+## 4) Practical rollout workflow
+
+1. Start from `deploy/.env.example` and fill environment-specific values.
+2. Generate/store the resulting `.env` through CI or host secret tooling (not Git).
+3. Lock filesystem permissions on `.env` (and any rendered secret-bearing config).
+4. Run:
+   - `deploy/check-env.sh`
+   - `go run ./cmd/bitriver env validate --env-file ./.env`
+   - `docker compose -f deploy/docker-compose.yml config`
+5. Deploy via the standard quickstart/compose path.
+6. Document rotation owner + next rotation date in release/change records.
+
+This keeps operations aligned with repository behavior while materially improving secret hygiene.

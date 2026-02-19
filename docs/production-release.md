@@ -27,6 +27,7 @@ Recent schema changes to account for:
   privileged accounts can complete MFA verification.
 
 For the upgrade mechanics around schema migrations, safe Compose sequencing, `.env` changes, and OvenMediaEngine config regeneration, follow the upgrade essentials in [`docs/upgrades.md`](upgrades.md#upgrade-essentials-migrations-env-updates-and-ome-re-render).
+For secret management hardening patterns that keep the same `.env` + Compose contract, see [`docs/secrets-hardening.md`](secrets-hardening.md).
 
 ## 1. Pre-release verification
 
