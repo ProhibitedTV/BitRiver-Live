@@ -18,7 +18,27 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - name: Run shellcheck
-        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
-        with:
-          args: deploy/install/ubuntu.sh scripts/test-postgres.sh scripts/test-wizard-release.sh
+
+      - name: Lint shell scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t shell_files < <(
+            git ls-files \
+              'scripts/*.sh' \
+              'scripts/**/*.sh' \
+              'deploy/install/**/*.sh' \
+              ':(exclude)**/vendor/**' \
+              ':(exclude)**/third_party/**'
+          )
+
+          if ((${#shell_files[@]} == 0)); then
+            echo 'No shell scripts matched; skipping shellcheck.'
+            exit 0
+          fi
+
+          # Keep this workflow fast by linting only tracked scripts in the target trees.
+          # Some files are intentionally bash-specific and use bash-only features; shellcheck
+          # detects shell dialect from each script's shebang.
+          shellcheck "${shell_files[@]}"
