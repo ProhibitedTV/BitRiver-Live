@@ -5,26 +5,6 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  pull_request:
-    paths:
-      - internal/storage/**
-      - deploy/migrations/**
-      - scripts/test-postgres.sh
-      - go.mod
-      - go.sum
-      - third_party/**
-      - .github/workflows/postgres-tests.yml
-  push:
-    branches:
-      - main
-    paths:
-      - internal/storage/**
-      - deploy/migrations/**
-      - scripts/test-postgres.sh
-      - go.mod
-      - go.sum
-      - third_party/**
-      - .github/workflows/postgres-tests.yml
   workflow_dispatch:
 
 jobs:

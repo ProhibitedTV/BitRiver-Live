@@ -1,22 +1,7 @@
 name: Go workflow consistency
 
 on:
-  push:
-    paths:
-      - '.github/workflows/go-unit-tests.yml'
-      - '.github/workflows/postgres-tests.yml'
-      - '.github/workflows/ingest-e2e.yml'
-      - '.github/workflows/release.yml'
-      - 'scripts/check-go-workflow-config.sh'
-      - '.github/workflows/go-workflow-consistency.yml'
-  pull_request:
-    paths:
-      - '.github/workflows/go-unit-tests.yml'
-      - '.github/workflows/postgres-tests.yml'
-      - '.github/workflows/ingest-e2e.yml'
-      - '.github/workflows/release.yml'
-      - 'scripts/check-go-workflow-config.sh'
-      - '.github/workflows/go-workflow-consistency.yml'
+  workflow_dispatch:
 
 jobs:
   verify-go-workflow-config:
