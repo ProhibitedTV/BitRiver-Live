@@ -313,6 +313,8 @@ func (p *UploadProcessor) processUpload(id string) {
 		}
 	}
 	metadata["playbackUrl"] = playbackURL
+	// Current behavior updates upload status/playback only; recording creation
+	// and upload->recording linkage are handled elsewhere (not in this worker).
 	if _, err := p.store.UpdateUpload(p.ctx, id, domain.UploadUpdate{
 		Status:      &ready,
 		Progress:    &progress,

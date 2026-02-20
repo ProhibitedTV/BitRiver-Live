@@ -231,6 +231,12 @@ func (h *Handler) createUploadFromJSON(w http.ResponseWriter, r *http.Request, a
 
 // createUploadFromMultipart creates upload from multipart and returns an error when validation or persistence fails.
 func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Request, actor domain.User) {
+	// Current server-side upload flow:
+	//  1) Stream the multipart body and persist the first `file` part to a temp file.
+	//  2) Create an uploads row (`status=pending`) through uploadsService().
+	//  3) Move the temp file into UploadMediaDir and store media path/token/url in metadata.
+	//  4) Enqueue the background upload processor, which later asks ingest/transcoder to process sourceUrl.
+	// The API is intentionally single-file: additional `file` parts are ignored.
 	reader, err := r.MultipartReader()
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, fmt.Errorf("invalid multipart payload"))
@@ -423,6 +429,9 @@ func (h *Handler) attachMediaToUpload(r *http.Request, upload domain.Upload, bas
 	}
 	token := generateUploadMediaToken()
 	metadata["mediaToken"] = token
+	// `sourceUrl` intentionally points to this API's tokenized media endpoint so
+	// downstream transcode workers can pull bytes over HTTP instead of opening
+	// local files directly.
 	metadata["sourceUrl"] = h.uploadMediaURL(r, upload.ID, token)
 	update := domain.UploadUpdate{Metadata: metadata}
 	if _, err := h.uploadsService().UpdateUpload(upload.ID, update); err != nil {
