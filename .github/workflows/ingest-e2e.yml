@@ -8,25 +8,27 @@ on:
   pull_request:
     paths:
       - internal/ingest/**
-      - deploy/srs/**
-      - deploy/ome/**
       - cmd/srs-controller/**
       - cmd/transcoder/**
+      - deploy/srs/**
+      - deploy/ome/**
       - scripts/test-ingest-e2e.sh
       - scripts/render-srs-config.sh
       - scripts/render-ome-config.sh
+      - .github/workflows/ingest-e2e.yml
   push:
     branches:
       - main
     paths:
       - internal/ingest/**
-      - deploy/srs/**
-      - deploy/ome/**
       - cmd/srs-controller/**
       - cmd/transcoder/**
+      - deploy/srs/**
+      - deploy/ome/**
       - scripts/test-ingest-e2e.sh
       - scripts/render-srs-config.sh
       - scripts/render-ome-config.sh
+      - .github/workflows/ingest-e2e.yml
   workflow_dispatch:
 
 permissions:
