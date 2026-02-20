@@ -1,16 +1,7 @@
 name: Shell lint
 
 on:
-  push:
-    paths:
-      - 'deploy/install/**/*.sh'
-      - 'scripts/**/*.sh'
-      - '.github/workflows/shellcheck.yml'
-  pull_request:
-    paths:
-      - 'deploy/install/**/*.sh'
-      - 'scripts/**/*.sh'
-      - '.github/workflows/shellcheck.yml'
+  workflow_dispatch:
 
 jobs:
   shellcheck:

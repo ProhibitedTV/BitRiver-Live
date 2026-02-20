@@ -1,22 +1,7 @@
 name: Docs consistency
 
 on:
-  push:
-    paths:
-      - 'README.md'
-      - 'docs/**/*.md'
-      - 'deploy/.env.example'
-      - 'scripts/check-doc-installer-language.sh'
-      - 'scripts/generate-contract-doc.sh'
-      - '.github/workflows/docs-consistency.yml'
-  pull_request:
-    paths:
-      - 'README.md'
-      - 'docs/**/*.md'
-      - 'deploy/.env.example'
-      - 'scripts/check-doc-installer-language.sh'
-      - 'scripts/generate-contract-doc.sh'
-      - '.github/workflows/docs-consistency.yml'
+  workflow_dispatch:
 
 jobs:
   installer-wording:

@@ -1,0 +1,283 @@
+name: CI
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  changed-files:
+    name: Detect changed files
+    runs-on: ubuntu-latest
+    outputs:
+      go_changed: ${{ steps.filter.outputs.go_changed }}
+      deploy_changed: ${{ steps.filter.outputs.deploy_changed }}
+      viewer_changed: ${{ steps.filter.outputs.viewer_changed }}
+      monitoring_changed: ${{ steps.filter.outputs.monitoring_changed }}
+      docs_changed: ${{ steps.filter.outputs.docs_changed }}
+      ingest_changed: ${{ steps.filter.outputs.ingest_changed }}
+      shell_changed: ${{ steps.filter.outputs.shell_changed }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Compute path filters
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            go_changed:
+              - 'go.mod'
+              - 'go.sum'
+              - '**/*.go'
+              - 'internal/**'
+              - 'cmd/**'
+              - 'scripts/**'
+              - 'third_party/**'
+            deploy_changed:
+              - 'deploy/**'
+            viewer_changed:
+              - 'web/viewer/**'
+              - 'internal/api/**'
+              - 'internal/domain/**'
+              - 'internal/api/viewer_contract_test.go'
+            monitoring_changed:
+              - 'deploy/monitoring/**'
+              - 'deploy/docker-compose.monitoring.yml'
+              - 'scripts/check-monitoring-config.sh'
+              - 'scripts/render-alertmanager-config.sh'
+            docs_changed:
+              - 'README.md'
+              - 'docs/**'
+              - 'deploy/.env.example'
+            ingest_changed:
+              - 'internal/ingest/**'
+              - 'cmd/transcoder/**'
+              - 'cmd/srs-controller/**'
+              - 'scripts/test-ingest-e2e.sh'
+              - 'deploy/srs/**'
+              - 'deploy/ome/**'
+            shell_changed:
+              - 'scripts/**/*.sh'
+              - 'deploy/install/**/*.sh'
+
+  go-verify:
+    name: Go verify (${{ matrix.os }})
+    needs: changed-files
+    if: needs.changed-files.outputs.go_changed == 'true' || needs.changed-files.outputs.deploy_changed == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Run verification gate
+        shell: bash
+        run: ./scripts/verify.sh
+
+  postgres-tests:
+    name: Postgres storage tests
+    needs: changed-files
+    if: needs.changed-files.outputs.go_changed == 'true' || needs.changed-files.outputs.deploy_changed == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+      GOPROXY: off
+      GOSUMDB: off
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: bitriver
+          POSTGRES_PASSWORD: bitriver
+          POSTGRES_DB: bitriver_test
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd="pg_isready -U bitriver -d bitriver_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Wait for Postgres service
+        run: |
+          container_id="$(docker ps --filter "name=postgres" --format "{{.ID}}" | head -n1)"
+          if [ -z "$container_id" ]; then
+            echo "postgres service container not found" >&2
+            docker ps
+            exit 1
+          fi
+
+          for attempt in $(seq 1 30); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' "$container_id")
+            if [ "$status" = "healthy" ]; then
+              exit 0
+            fi
+            echo "waiting for postgres service to become healthy (attempt $attempt)..." >&2
+            sleep 2
+          done
+
+          echo "postgres service failed to become healthy" >&2
+          docker logs "$container_id"
+          exit 1
+
+      - name: Run postgres-tagged storage tests
+        env:
+          BITRIVER_TEST_POSTGRES_DSN: postgres://bitriver:bitriver@127.0.0.1:54329/bitriver_test?sslmode=disable
+        run: ./scripts/test-postgres.sh
+
+  quickstart-smoke:
+    name: Quickstart compose smoke
+    needs: changed-files
+    if: needs.changed-files.outputs.go_changed == 'true' || needs.changed-files.outputs.deploy_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Verify quickstart defaults match CI seed
+        run: python3 scripts/test-quickstart-env.py
+
+      - name: Validate quickstart compose config
+        run: ./scripts/test-quickstart.sh
+
+  ingest-e2e:
+    name: Ingest end-to-end
+    needs: changed-files
+    if: needs.changed-files.outputs.ingest_changed == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+      GOPROXY: off
+      GOSUMDB: off
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Run ingest pipeline integration test
+        run: ./scripts/test-ingest-e2e.sh
+
+  viewer-ci:
+    name: Viewer CI
+    needs: changed-files
+    if: needs.changed-files.outputs.viewer_changed == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/viewer
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Viewer integration tests
+        run: npm run test:integration
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+  shellcheck:
+    name: Shell lint
+    needs: changed-files
+    if: needs.changed-files.outputs.shell_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Lint shell scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t shell_files < <(
+            git ls-files \
+              'scripts/*.sh' \
+              'scripts/**/*.sh' \
+              'deploy/install/**/*.sh' \
+              ':(exclude)**/vendor/**' \
+              ':(exclude)**/third_party/**'
+          )
+
+          if ((${#shell_files[@]} == 0)); then
+            echo 'No shell scripts matched; skipping shellcheck.'
+            exit 0
+          fi
+
+          shellcheck "${shell_files[@]}"
+
+  docs-consistency:
+    name: Docs consistency
+    needs: changed-files
+    if: needs.changed-files.outputs.docs_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Check installer milestone wording
+        run: ./scripts/check-doc-installer-language.sh
+
+      - name: Check generated contract env docs are fresh
+        run: ./scripts/generate-contract-doc.sh --check
+
+  monitoring-config:
+    name: Monitoring config checks
+    needs: changed-files
+    if: needs.changed-files.outputs.monitoring_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Validate Prometheus + Alertmanager configs
+        shell: bash
+        run: ./scripts/check-monitoring-config.sh

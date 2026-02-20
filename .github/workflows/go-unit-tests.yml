@@ -5,26 +5,7 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '**/*.go'
-      - go.mod
-      - go.sum
-      - third_party/**
-      - scripts/**
-      - deploy/**
-      - .github/workflows/go-unit-tests.yml
-  pull_request:
-    # If you want tests for every PR, delete the paths: filter here.
-    paths:
-      - '**/*.go'
-      - go.mod
-      - go.sum
-      - third_party/**
-      - scripts/**
-      - deploy/**
-      - .github/workflows/go-unit-tests.yml
+  workflow_dispatch:
 
 permissions:
   contents: read
