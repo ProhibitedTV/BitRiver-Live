@@ -82,14 +82,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - name: Check out repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+      - name: Set up Go toolchain
+        uses: ./.github/actions/setup-go
 
       - name: Run verification gate
         shell: bash
@@ -119,14 +113,8 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - name: Check out repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+      - name: Set up Go toolchain
+        uses: ./.github/actions/setup-go
 
       - name: Wait for Postgres service
         run: |
@@ -180,14 +168,8 @@ jobs:
       GOPROXY: off
       GOSUMDB: off
     steps:
-      - name: Check out repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+      - name: Set up Go toolchain
+        uses: ./.github/actions/setup-go
 
       - name: Run ingest pipeline integration test
         run: ./scripts/test-ingest-e2e.sh
@@ -201,18 +183,8 @@ jobs:
       run:
         working-directory: web/viewer
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
-        with:
-          node-version: 20
-
-      - name: Install dependencies
-        run: npm ci
-        env:
-          NEXT_TELEMETRY_DISABLED: 1
+      - name: Set up viewer Node toolchain
+        uses: ./.github/actions/setup-node-viewer
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
