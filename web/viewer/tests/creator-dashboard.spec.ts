@@ -288,6 +288,8 @@ test.describe("creator dashboard", () => {
     await page.getByRole("button", { name: /refresh details/i }).click();
 
     await expect(page.getByText(/unable to load ingest details/i)).not.toBeVisible();
+    await expect(page.getByText(/idle/i)).toBeVisible();
+    await expect(page.getByText(/last transition unknown/i)).toBeVisible();
     await expect(page.getByText(/session started/i)).toBeVisible();
 
     const titleInput = page.getByLabel("Stream title");
@@ -301,5 +303,74 @@ test.describe("creator dashboard", () => {
 
     await expect(page.getByText(/primary ingest/i)).toBeVisible();
     await expect(page.getByText(/backup ingest/i)).toBeVisible();
+  });
+
+  test("shows error lifecycle state when session signals are out of sync", async ({ page }) => {
+    const channelId = "chan-lifecycle-error";
+
+    await page.route("**/api/viewer/me", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          user: { id: "creator-live", displayName: "Live Host", email: "live@example.com", roles: ["creator"] },
+          loginUrl: "https://auth.example.com/login",
+          logoutUrl: "https://auth.example.com/logout",
+        }),
+      });
+    });
+
+    await page.route(`**/api/channels/${channelId}/playback`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          channel: {
+            id: channelId,
+            ownerId: "creator-live",
+            title: "Lifecycle Watch",
+            category: "Talk",
+            tags: [],
+            liveState: "offline",
+            currentSessionId: "session-expected",
+            createdAt: new Date("2024-04-20T10:00:00Z").toISOString(),
+            updatedAt: new Date("2024-04-20T12:00:00Z").toISOString(),
+          },
+          owner: { id: "creator-live", displayName: "Live Host" },
+          profile: { bio: "Live mission updates", avatarUrl: undefined, bannerUrl: undefined },
+          live: false,
+          follow: { followers: 50, following: true },
+          donationAddresses: [],
+          subscription: { subscribers: 5, subscribed: true },
+          playback: undefined,
+          chat: { roomId: "room-live" },
+        }),
+      });
+    });
+
+    await page.route(`**/api/channels/${channelId}/sessions`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            id: "session-other",
+            channelId,
+            startedAt: new Date("2024-04-19T13:00:00Z").toISOString(),
+            renditions: ["1080p"],
+            peakConcurrent: 1200,
+          },
+        ]),
+      });
+    });
+
+    await page.route("**/api/channels", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+    });
+
+    await page.goto(`/creator/live/${channelId}`);
+
+    await expect(page.getByText("Error")).toBeVisible();
+    await expect(page.getByText(/ingest lost: channel session signal is out of sync/i)).toBeVisible();
   });
 });
