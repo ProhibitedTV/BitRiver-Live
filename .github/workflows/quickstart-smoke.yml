@@ -5,6 +5,26 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  pull_request:
+    paths:
+      - cmd/bitriver/**
+      - deploy/**
+      - scripts/test-quickstart.sh
+      - scripts/test-quickstart-env.py
+      - scripts/verify.sh
+      - scripts/quickstart.sh
+      - scripts/quickstart.ps1
+  push:
+    branches:
+      - main
+    paths:
+      - cmd/bitriver/**
+      - deploy/**
+      - scripts/test-quickstart.sh
+      - scripts/test-quickstart-env.py
+      - scripts/verify.sh
+      - scripts/quickstart.sh
+      - scripts/quickstart.ps1
   workflow_dispatch:
 
 jobs:

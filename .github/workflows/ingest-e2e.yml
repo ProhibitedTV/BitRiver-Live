@@ -5,6 +5,28 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  pull_request:
+    paths:
+      - internal/ingest/**
+      - deploy/srs/**
+      - deploy/ome/**
+      - cmd/srs-controller/**
+      - cmd/transcoder/**
+      - scripts/test-ingest-e2e.sh
+      - scripts/render-srs-config.sh
+      - scripts/render-ome-config.sh
+  push:
+    branches:
+      - main
+    paths:
+      - internal/ingest/**
+      - deploy/srs/**
+      - deploy/ome/**
+      - cmd/srs-controller/**
+      - cmd/transcoder/**
+      - scripts/test-ingest-e2e.sh
+      - scripts/render-srs-config.sh
+      - scripts/render-ome-config.sh
   workflow_dispatch:
 
 permissions:
