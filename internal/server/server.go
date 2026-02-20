@@ -84,6 +84,7 @@ type Config struct {
 	SessionCookieCrossSite   bool
 	SRSHookToken             string
 	PaymentWebhookSecrets    map[string]string
+	UploadMaxBytes           int64
 }
 
 // Server wraps the configured http.Server alongside observability, rate
@@ -135,6 +136,9 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	handler.SRSHookToken = cfg.SRSHookToken
 	if cfg.PaymentWebhookSecrets != nil {
 		handler.WebhookSecrets = cfg.PaymentWebhookSecrets
+	}
+	if cfg.UploadMaxBytes > 0 {
+		handler.UploadMaxBytes = cfg.UploadMaxBytes
 	}
 	handler.SessionCookiePolicy = api.DefaultSessionCookiePolicy()
 	if cfg.SessionCookieSecureMode != 0 {

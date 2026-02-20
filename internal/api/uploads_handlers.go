@@ -27,6 +27,10 @@ var (
 	}
 )
 
+const defaultUploadMaxBytes int64 = 512 << 20 // 512 MiB
+
+var errUploadTooLarge = errors.New("upload exceeds maximum allowed size")
+
 type uploadResponse struct {
 	ID          string            `json:"id"`
 	ChannelID   string            `json:"channelId"`
@@ -237,6 +241,8 @@ func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Reque
 	//  3) Move the temp file into UploadMediaDir and store media path/token/url in metadata.
 	//  4) Enqueue the background upload processor, which later asks ingest/transcoder to process sourceUrl.
 	// The API is intentionally single-file: additional `file` parts are ignored.
+	maxUploadBytes := h.uploadMaxBytes()
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
 	reader, err := r.MultipartReader()
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, fmt.Errorf("invalid multipart payload"))
@@ -251,6 +257,10 @@ func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Reque
 			break
 		}
 		if err != nil {
+			if uploadTooLarge(err) {
+				h.writeUploadTooLarge(w, maxUploadBytes)
+				return
+			}
 			WriteError(w, http.StatusBadRequest, fmt.Errorf("read multipart data: %w", err))
 			return
 		}
@@ -266,6 +276,10 @@ func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Reque
 			}
 			saved, saveErr := h.saveMultipartFile(part)
 			if saveErr != nil {
+				if errors.Is(saveErr, errUploadTooLarge) {
+					h.writeUploadTooLarge(w, maxUploadBytes)
+					return
+				}
 				WriteError(w, http.StatusBadRequest, saveErr)
 				return
 			}
@@ -275,6 +289,10 @@ func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Reque
 		payload, readErr := io.ReadAll(part)
 		_ = part.Close()
 		if readErr != nil {
+			if uploadTooLarge(readErr) {
+				h.writeUploadTooLarge(w, maxUploadBytes)
+				return
+			}
 			WriteError(w, http.StatusBadRequest, fmt.Errorf("read form field: %w", readErr))
 			return
 		}
@@ -392,10 +410,19 @@ func (h *Handler) saveMultipartFile(part *multipart.Part) (*uploadedMedia, error
 	defer func() {
 		_ = tmp.Close()
 	}()
-	written, err := io.Copy(tmp, part)
+	maxUploadBytes := h.uploadMaxBytes()
+	limited := &io.LimitedReader{R: part, N: maxUploadBytes + 1}
+	written, err := io.Copy(tmp, limited)
 	if err != nil {
 		_ = os.Remove(tmp.Name())
+		if uploadTooLarge(err) {
+			return nil, errUploadTooLarge
+		}
 		return nil, fmt.Errorf("save upload: %w", err)
+	}
+	if written > maxUploadBytes || limited.N == 0 {
+		_ = os.Remove(tmp.Name())
+		return nil, errUploadTooLarge
 	}
 	return &uploadedMedia{
 		tempPath:     tmp.Name(),
@@ -403,6 +430,36 @@ func (h *Handler) saveMultipartFile(part *multipart.Part) (*uploadedMedia, error
 		originalName: part.FileName(),
 		contentType:  part.Header.Get("Content-Type"),
 	}, nil
+}
+
+// uploadMaxBytes resolves the multipart upload size policy in bytes.
+func (h *Handler) uploadMaxBytes() int64 {
+	if h != nil && h.UploadMaxBytes > 0 {
+		return h.UploadMaxBytes
+	}
+	return defaultUploadMaxBytes
+}
+
+// writeUploadTooLarge writes a standard request-too-large response for uploads.
+func (h *Handler) writeUploadTooLarge(w http.ResponseWriter, maxUploadBytes int64) {
+	WriteError(w, http.StatusRequestEntityTooLarge, RequestError{
+		Status:  http.StatusRequestEntityTooLarge,
+		CodeVal: "request_too_large",
+		Message: fmt.Sprintf("upload size exceeds limit of %d bytes", maxUploadBytes),
+		Err:     errUploadTooLarge,
+	})
+}
+
+// uploadTooLarge reports whether the provided error indicates a max-body-size violation.
+func uploadTooLarge(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, errUploadTooLarge) {
+		return true
+	}
+	var maxBytesErr *http.MaxBytesError
+	return errors.As(err, &maxBytesErr)
 }
 
 // attachMediaToUpload performs attach media to upload and propagates validation or dependency failures to the caller.

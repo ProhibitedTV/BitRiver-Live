@@ -2,9 +2,11 @@ package api
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,6 +15,7 @@ import (
 	"testing"
 
 	"bitriver-live/internal/domain"
+	"bitriver-live/internal/storage"
 )
 
 func TestServeUploadMediaLogsOpenError(t *testing.T) {
@@ -206,4 +209,122 @@ func TestUploadMediaURLRespectsForwardedHost(t *testing.T) {
 			t.Fatalf("url = %q, want %q", got, want)
 		}
 	})
+}
+
+func TestCreateUploadFromMultipartUnderLimitSuccess(t *testing.T) {
+	h, store := newTestHandler(t)
+	h.UploadMediaDir = t.TempDir()
+	h.UploadMaxBytes = 4096
+
+	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Owner Channel", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	req := newMultipartUploadRequest(t, channel.ID, "clip.mp4", bytes.Repeat([]byte("a"), 32), false)
+	rec := httptest.NewRecorder()
+
+	h.createUploadFromMultipart(rec, req, owner)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var resp uploadResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.ChannelID != channel.ID {
+		t.Fatalf("channelId = %q, want %q", resp.ChannelID, channel.ID)
+	}
+	if resp.SizeBytes != 32 {
+		t.Fatalf("sizeBytes = %d, want %d", resp.SizeBytes, 32)
+	}
+}
+
+func TestCreateUploadFromMultipartOverLimitRejected(t *testing.T) {
+	h, store := newTestHandler(t)
+	h.UploadMediaDir = t.TempDir()
+	h.UploadMaxBytes = 32
+
+	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner2@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Owner Channel", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	req := newMultipartUploadRequest(t, channel.ID, "big.mp4", bytes.Repeat([]byte("b"), 128), false)
+	rec := httptest.NewRecorder()
+
+	h.createUploadFromMultipart(rec, req, owner)
+
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusRequestEntityTooLarge)
+	}
+	errResp := decodeAPIError(t, rec.Body.Bytes())
+	if errResp.Error.Code != "request_too_large" {
+		t.Fatalf("code = %q, want %q", errResp.Error.Code, "request_too_large")
+	}
+	if !strings.Contains(errResp.Error.Message, "exceeds limit") {
+		t.Fatalf("message = %q, want contains %q", errResp.Error.Message, "exceeds limit")
+	}
+}
+
+func TestCreateUploadFromMultipartMalformedRejected(t *testing.T) {
+	h, store := newTestHandler(t)
+	h.UploadMaxBytes = 4096
+
+	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner3@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Owner Channel", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	body := strings.NewReader("--bad\r\nContent-Disposition: form-data; name=\"channelId\"\r\n\r\n" + channel.ID)
+	req := httptest.NewRequest(http.MethodPost, "/api/uploads", body)
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=bad")
+	rec := httptest.NewRecorder()
+
+	h.createUploadFromMultipart(rec, req, owner)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	errResp := decodeAPIError(t, rec.Body.Bytes())
+	if errResp.Error.Message == "" {
+		t.Fatal("expected error message")
+	}
+}
+
+func newMultipartUploadRequest(t *testing.T, channelID, filename string, content []byte, malformed bool) *http.Request {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("channelId", channelID); err != nil {
+		t.Fatalf("WriteField channelId: %v", err)
+	}
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		t.Fatalf("CreateFormFile: %v", err)
+	}
+	if _, err := part.Write(content); err != nil {
+		t.Fatalf("Write file part: %v", err)
+	}
+	if !malformed {
+		if err := writer.Close(); err != nil {
+			t.Fatalf("Close writer: %v", err)
+		}
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/uploads", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	return req
 }
