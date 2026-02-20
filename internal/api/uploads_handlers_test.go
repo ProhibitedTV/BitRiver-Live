@@ -225,7 +225,7 @@ func TestCreateUploadFromMultipartUnderLimitSuccess(t *testing.T) {
 		t.Fatalf("CreateChannel: %v", err)
 	}
 
-	req := newMultipartUploadRequest(t, channel.ID, "clip.mp4", bytes.Repeat([]byte("a"), 32), false)
+	req := newMultipartUploadRequest(t, channel.ID, "clip.mp4", validMP4Sample(), false)
 	rec := httptest.NewRecorder()
 
 	h.createUploadFromMultipart(rec, req, owner)
@@ -242,6 +242,9 @@ func TestCreateUploadFromMultipartUnderLimitSuccess(t *testing.T) {
 	}
 	if resp.SizeBytes != 32 {
 		t.Fatalf("sizeBytes = %d, want %d", resp.SizeBytes, 32)
+	}
+	if got := resp.Metadata["contentType"]; got != "video/mp4" {
+		t.Fatalf("contentType = %q, want %q", got, "video/mp4")
 	}
 }
 
@@ -276,6 +279,62 @@ func TestCreateUploadFromMultipartOverLimitRejected(t *testing.T) {
 	}
 }
 
+func TestCreateUploadFromMultipartRejectsUnsupportedExtension(t *testing.T) {
+	h, store := newTestHandler(t)
+	h.UploadMediaDir = t.TempDir()
+	h.UploadMaxBytes = 4096
+
+	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner4@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Owner Channel", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	req := newMultipartUploadRequest(t, channel.ID, "clip.txt", validMP4Sample(), false)
+	rec := httptest.NewRecorder()
+
+	h.createUploadFromMultipart(rec, req, owner)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	errResp := decodeAPIError(t, rec.Body.Bytes())
+	if !strings.Contains(errResp.Error.Message, "unsupported media extension") {
+		t.Fatalf("message = %q, want unsupported extension", errResp.Error.Message)
+	}
+}
+
+func TestCreateUploadFromMultipartRejectsMismatchedMime(t *testing.T) {
+	h, store := newTestHandler(t)
+	h.UploadMediaDir = t.TempDir()
+	h.UploadMaxBytes = 4096
+
+	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner5@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Owner Channel", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	req := newMultipartUploadRequest(t, channel.ID, "clip.mp4", []byte("plain text payload"), false)
+	rec := httptest.NewRecorder()
+
+	h.createUploadFromMultipart(rec, req, owner)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	errResp := decodeAPIError(t, rec.Body.Bytes())
+	if !strings.Contains(errResp.Error.Message, "unsupported media type") {
+		t.Fatalf("message = %q, want unsupported media type", errResp.Error.Message)
+	}
+}
+
 func TestCreateUploadFromMultipartMalformedRejected(t *testing.T) {
 	h, store := newTestHandler(t)
 	h.UploadMaxBytes = 4096
@@ -303,6 +362,10 @@ func TestCreateUploadFromMultipartMalformedRejected(t *testing.T) {
 	if errResp.Error.Message == "" {
 		t.Fatal("expected error message")
 	}
+}
+
+func validMP4Sample() []byte {
+	return []byte{0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00, 0x69, 0x73, 0x6f, 0x6d, 0x69, 0x73, 0x6f, 0x32, 0x61, 0x76, 0x63, 0x31, 0x6d, 0x70, 0x34, 0x31}
 }
 
 func newMultipartUploadRequest(t *testing.T, channelID, filename string, content []byte, malformed bool) *http.Request {

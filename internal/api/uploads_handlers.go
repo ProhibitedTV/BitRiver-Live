@@ -27,6 +27,22 @@ var (
 	}
 )
 
+var allowedUploadMediaTypes = map[string]map[string]struct{}{
+	".mp4": {
+		"video/mp4": {},
+	},
+	".m4v": {
+		"video/mp4": {},
+	},
+	".mov": {
+		"video/mp4":       {},
+		"video/quicktime": {},
+	},
+	".webm": {
+		"video/webm": {},
+	},
+}
+
 const defaultUploadMaxBytes int64 = 512 << 20 // 512 MiB
 
 var errUploadTooLarge = errors.New("upload exceeds maximum allowed size")
@@ -424,11 +440,34 @@ func (h *Handler) saveMultipartFile(part *multipart.Part) (*uploadedMedia, error
 		_ = os.Remove(tmp.Name())
 		return nil, errUploadTooLarge
 	}
+
+	ext := strings.ToLower(filepath.Ext(part.FileName()))
+	if _, ok := allowedUploadMediaTypes[ext]; !ok {
+		_ = os.Remove(tmp.Name())
+		return nil, fmt.Errorf("unsupported media extension %q", ext)
+	}
+
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		_ = os.Remove(tmp.Name())
+		return nil, fmt.Errorf("rewind upload: %w", err)
+	}
+	header := make([]byte, 512)
+	read, err := io.ReadFull(tmp, header)
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		_ = os.Remove(tmp.Name())
+		return nil, fmt.Errorf("read upload header: %w", err)
+	}
+	detectedType := http.DetectContentType(header[:read])
+	if _, ok := allowedUploadMediaTypes[ext][detectedType]; !ok {
+		_ = os.Remove(tmp.Name())
+		return nil, fmt.Errorf("unsupported media type %q for extension %q", detectedType, ext)
+	}
+
 	return &uploadedMedia{
 		tempPath:     tmp.Name(),
 		size:         written,
 		originalName: part.FileName(),
-		contentType:  part.Header.Get("Content-Type"),
+		contentType:  detectedType,
 	}, nil
 }
 
