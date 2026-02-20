@@ -391,3 +391,120 @@ func newMultipartUploadRequest(t *testing.T, channelID, filename string, content
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	return req
 }
+
+func TestCreateUploadPersistsSourceToDurableStorageAndServesMedia(t *testing.T) {
+	storeObjects := map[string][]byte{}
+	storeContentTypes := map[string]string{}
+	objectServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := strings.TrimPrefix(r.URL.Path, "/bucket/")
+		switch r.Method {
+		case http.MethodPut:
+			payload, _ := io.ReadAll(r.Body)
+			storeObjects[key] = payload
+			storeContentTypes[key] = r.Header.Get("Content-Type")
+			w.WriteHeader(http.StatusOK)
+		case http.MethodGet:
+			payload, ok := storeObjects[key]
+			if !ok {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", storeContentTypes[key])
+			_, _ = w.Write(payload)
+		case http.MethodDelete:
+			delete(storeObjects, key)
+			delete(storeContentTypes, key)
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}))
+	defer objectServer.Close()
+
+	h, st := newTestHandler(t)
+	h.UploadSourceStorage = UploadSourceStorageConfig{
+		Endpoint: strings.TrimPrefix(objectServer.URL, "http://"),
+		Bucket:   "bucket",
+		Prefix:   "upload-sources",
+	}
+
+	owner, err := st.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "durable-owner@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := st.CreateChannel(owner.ID, "Owner Channel", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	req := newMultipartUploadRequest(t, channel.ID, "clip.mp4", validMP4Sample(), false)
+	rec := httptest.NewRecorder()
+	h.createUploadFromMultipart(rec, req, owner)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var resp uploadResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Metadata["sourceObjectKey"] == "" {
+		t.Fatal("expected sourceObjectKey metadata")
+	}
+	if !strings.HasPrefix(resp.Metadata["sourceObjectKey"], "upload-sources/") {
+		t.Fatalf("sourceObjectKey = %q", resp.Metadata["sourceObjectKey"])
+	}
+	if _, ok := storeObjects[resp.Metadata["sourceObjectKey"]]; !ok {
+		t.Fatalf("expected object store write for key %q", resp.Metadata["sourceObjectKey"])
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/uploads/"+resp.ID+"/media?token="+resp.Metadata["mediaToken"], nil)
+	getRec := httptest.NewRecorder()
+	h.serveUploadMedia(getRec, getReq, domain.Upload{ID: resp.ID, Metadata: resp.Metadata})
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("serve status = %d, want %d", getRec.Code, http.StatusOK)
+	}
+	if !bytes.Equal(getRec.Body.Bytes(), validMP4Sample()) {
+		t.Fatalf("serve body mismatch")
+	}
+}
+
+func TestDeleteUploadRemovesDurableSourceObject(t *testing.T) {
+	storeObjects := map[string][]byte{}
+	objectServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := strings.TrimPrefix(r.URL.Path, "/bucket/")
+		switch r.Method {
+		case http.MethodPut:
+			payload, _ := io.ReadAll(r.Body)
+			storeObjects[key] = payload
+			w.WriteHeader(http.StatusOK)
+		case http.MethodDelete:
+			delete(storeObjects, key)
+			w.WriteHeader(http.StatusNoContent)
+		case http.MethodGet:
+			if payload, ok := storeObjects[key]; ok {
+				_, _ = w.Write(payload)
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}))
+	defer objectServer.Close()
+
+	h, st := newTestHandler(t)
+	h.UploadSourceStorage = UploadSourceStorageConfig{Endpoint: strings.TrimPrefix(objectServer.URL, "http://"), Bucket: "bucket", Prefix: "upload-sources"}
+
+	owner, _ := st.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "durable-delete@example.com"})
+	channel, _ := st.CreateChannel(owner.ID, "Owner Channel", "gaming", nil)
+	req := newMultipartUploadRequest(t, channel.ID, "clip.mp4", validMP4Sample(), false)
+	rec := httptest.NewRecorder()
+	h.createUploadFromMultipart(rec, req, owner)
+	var resp uploadResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+
+	h.deleteUploadMedia(domain.Upload{ID: resp.ID, Metadata: resp.Metadata})
+	if _, ok := storeObjects[resp.Metadata["sourceObjectKey"]]; ok {
+		t.Fatalf("expected key %q to be deleted", resp.Metadata["sourceObjectKey"])
+	}
+}

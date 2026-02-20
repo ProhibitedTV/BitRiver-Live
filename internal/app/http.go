@@ -8,6 +8,7 @@ import (
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/server"
 	"bitriver-live/internal/service"
+	"bitriver-live/internal/storage"
 )
 
 type healthPinger interface {
@@ -25,6 +26,7 @@ type HandlerConfig struct {
 	SRSHookToken          string
 	TrustForwardedHeaders bool
 	UploadMaxBytes        int64
+	UploadSourceStorage   storage.ObjectStorageConfig
 	ChatQueue             healthPinger
 	AuthUsersService      service.AuthUsersUseCase
 	ChannelsService       service.ChannelsDirectoryUseCase
@@ -50,6 +52,14 @@ func NewHandler(cfg HandlerConfig) *api.Handler {
 	handler.SRSHookToken = cfg.SRSHookToken
 	handler.TrustForwardedHeaders = cfg.TrustForwardedHeaders
 	handler.UploadMaxBytes = cfg.UploadMaxBytes
+	handler.UploadSourceStorage = api.UploadSourceStorageConfig{
+		Endpoint:       cfg.UploadSourceStorage.Endpoint,
+		Bucket:         cfg.UploadSourceStorage.Bucket,
+		Prefix:         cfg.UploadSourceStorage.Prefix,
+		PublicEndpoint: cfg.UploadSourceStorage.PublicEndpoint,
+		UseSSL:         cfg.UploadSourceStorage.UseSSL,
+		RequestTimeout: cfg.UploadSourceStorage.RequestTimeout,
+	}
 	if cfg.ChatQueue != nil {
 		handler.ChatQueue = cfg.ChatQueue
 	}

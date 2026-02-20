@@ -50,10 +50,13 @@ type Handler struct {
 	ChatQueue             healthPinger
 	UploadMediaDir        string
 	UploadMaxBytes        int64
+	UploadSourceStorage   UploadSourceStorageConfig
 	TrustForwardedHeaders bool
 	TrustedProxies        []string
 	uploadDirOnce         sync.Once
 	uploadDir             string
+	uploadSourceOnce      sync.Once
+	uploadSource          uploadSourceStorage
 	trustedProxyOnce      sync.Once
 	trustedProxyNets      []*net.IPNet
 	SessionCookiePolicy   SessionCookiePolicy
@@ -207,6 +210,16 @@ func (h *Handler) srsTracker() *srsViewerTracker {
 		h.srsViewers = newSRSViewerTracker()
 	}
 	return h.srsViewers
+}
+
+func (h *Handler) uploadSourceStore() uploadSourceStorage {
+	h.uploadSourceOnce.Do(func() {
+		h.uploadSource = newUploadSourceStorage(h.UploadSourceStorage)
+	})
+	if h.uploadSource == nil {
+		return noopUploadSourceStorage{}
+	}
+	return h.uploadSource
 }
 
 // Health performs health and returns an error when dependent systems reject the operation.
