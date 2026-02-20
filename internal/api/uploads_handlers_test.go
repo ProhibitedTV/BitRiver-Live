@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"bitriver-live/internal/domain"
 	"bitriver-live/internal/storage"
@@ -524,6 +525,99 @@ func TestDeleteUploadRemovesDurableSourceObject(t *testing.T) {
 	h.deleteUploadMedia(domain.Upload{ID: resp.ID, Metadata: resp.Metadata})
 	if _, ok := storeObjects[resp.Metadata["sourceObjectKey"]]; ok {
 		t.Fatalf("expected key %q to be deleted", resp.Metadata["sourceObjectKey"])
+	}
+}
+
+func TestCreateUploadFromMultipartIdempotencyKeyReturnsExistingUpload(t *testing.T) {
+	h, store := newTestHandler(t)
+	h.UploadMediaDir = t.TempDir()
+	h.UploadMaxBytes = 4096
+
+	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "idem-owner@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Owner Channel", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	req1 := newMultipartUploadRequest(t, channel.ID, "clip.mp4", validMP4Sample(), false)
+	req1.Header.Set("Idempotency-Key", "upload-idem-1")
+	rec1 := httptest.NewRecorder()
+	h.createUploadFromMultipart(rec1, req1, owner)
+	if rec1.Code != http.StatusCreated {
+		t.Fatalf("first status = %d, want %d body=%s", rec1.Code, http.StatusCreated, rec1.Body.String())
+	}
+	var first uploadResponse
+	if err := json.Unmarshal(rec1.Body.Bytes(), &first); err != nil {
+		t.Fatalf("decode first response: %v", err)
+	}
+
+	req2 := newMultipartUploadRequest(t, channel.ID, "clip.mp4", validMP4Sample(), false)
+	req2.Header.Set("Idempotency-Key", "upload-idem-1")
+	rec2 := httptest.NewRecorder()
+	h.createUploadFromMultipart(rec2, req2, owner)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("second status = %d, want %d body=%s", rec2.Code, http.StatusOK, rec2.Body.String())
+	}
+	var second uploadResponse
+	if err := json.Unmarshal(rec2.Body.Bytes(), &second); err != nil {
+		t.Fatalf("decode second response: %v", err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("second upload id = %q, want %q", second.ID, first.ID)
+	}
+
+	uploads, err := store.ListUploads(channel.ID)
+	if err != nil {
+		t.Fatalf("ListUploads: %v", err)
+	}
+	if len(uploads) != 1 {
+		t.Fatalf("upload count = %d, want 1", len(uploads))
+	}
+}
+
+func TestCreateUploadFromMultipartCleansAbandonedTempFiles(t *testing.T) {
+	h, store := newTestHandler(t)
+	h.UploadMediaDir = t.TempDir()
+	h.UploadMaxBytes = 4096
+
+	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "cleanup-owner@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Owner Channel", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	stale := filepath.Join(h.UploadMediaDir, "pending-upload-stale.tmp")
+	if err := os.WriteFile(stale, []byte("stale"), 0o644); err != nil {
+		t.Fatalf("write stale temp file: %v", err)
+	}
+	oldTime := time.Now().UTC().Add(-defaultUploadTempMaxAge - time.Hour)
+	if err := os.Chtimes(stale, oldTime, oldTime); err != nil {
+		t.Fatalf("set stale mtime: %v", err)
+	}
+
+	fresh := filepath.Join(h.UploadMediaDir, "pending-upload-fresh.tmp")
+	if err := os.WriteFile(fresh, []byte("fresh"), 0o644); err != nil {
+		t.Fatalf("write fresh temp file: %v", err)
+	}
+
+	req := newMultipartUploadRequest(t, channel.ID, "clip.mp4", validMP4Sample(), false)
+	rec := httptest.NewRecorder()
+	h.createUploadFromMultipart(rec, req, owner)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+
+	if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stale temp file should be removed, stat err=%v", err)
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Fatalf("fresh temp file should remain: %v", err)
 	}
 }
 
