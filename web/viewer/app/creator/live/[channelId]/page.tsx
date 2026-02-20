@@ -311,7 +311,7 @@ export default function CreatorLivePage() {
               void loadManagedChannel();
             }}
           >
-            Refresh details
+            Diagnose issues
           </button>
           {sessionError ? <span className="error">{sessionError}</span> : null}
           {managedError ? <span className="error">{managedError}</span> : null}
