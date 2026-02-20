@@ -216,6 +216,7 @@ _This section is generated from `deploy/.env.example` by `scripts/generate-contr
 | `BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS` | `false` |
 | `BITRIVER_LIVE_RATE_TRUSTED_PROXIES` | _(empty)_ |
 | `BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS` | `false` |
+| `BITRIVER_LIVE_UPLOAD_MEDIA_BASE_URL` | _(empty)_ |
 | `BITRIVER_POSTGRES_DB` | `brlive_app` |
 | `BITRIVER_POSTGRES_USER` | `brlive_app` |
 | `BITRIVER_POSTGRES_PASSWORD` | `P0stgres-Example!` |

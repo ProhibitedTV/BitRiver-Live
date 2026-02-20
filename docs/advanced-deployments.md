@@ -650,6 +650,7 @@ The HTTP server now enforces an optional global rate limit along with per-IP thr
 | `BITRIVER_LIVE_RATE_TRUST_FORWARDED_HEADERS` | Defaults to `false`. When enabled, login throttling can use forwarded client-IP headers (only from `BITRIVER_LIVE_RATE_TRUSTED_PROXIES`). |
 | `BITRIVER_LIVE_RATE_TRUSTED_PROXIES` | Comma-separated trusted proxy CIDRs/IPs allowed to supply `X-Forwarded-*`/`Forwarded` data for rate-limit IP resolution. |
 | `BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS` | Defaults to `false`. Controls whether upload URL generation trusts forwarded `Host`/`Proto` headers from trusted proxy hops. |
+| `BITRIVER_LIVE_UPLOAD_MEDIA_BASE_URL` | Optional canonical externally reachable base URL (for example `https://media.example.com` or `https://media.example.com/prefix`). When set, upload media `sourceUrl` values are built from this base URL instead of forwarded/request host data. |
 | `BITRIVER_LIVE_RATE_REDIS_ADDR` | Redis address used to coordinate login throttling across replicas. |
 | `BITRIVER_LIVE_RATE_REDIS_PASSWORD` | Password for the Redis instance if required. |
 | `BITRIVER_LIVE_RATE_REDIS_TIMEOUT` | Timeout for Redis operations (`2s` by default). |

@@ -158,7 +158,25 @@ func TestServeUploadMediaLogsStatError(t *testing.T) {
 	}
 }
 
-func TestUploadMediaURLRespectsForwardedHost(t *testing.T) {
+func TestUploadMediaURLBuildsExpectedSourceURL(t *testing.T) {
+
+	t.Run("canonical base URL takes precedence over forwarded headers", func(t *testing.T) {
+		h := &Handler{
+			UploadMediaBaseURL:    "https://media.example.com/base",
+			TrustForwardedHeaders: true,
+		}
+		req := httptest.NewRequest(http.MethodGet, "http://internal.local/api/uploads/upload-123/media", nil)
+		req.RemoteAddr = "10.1.2.3:1234"
+		req.Header.Set("X-Forwarded-Host", "cdn.example.com")
+		req.Header.Set("X-Forwarded-Proto", "http")
+
+		got := h.uploadMediaURL(req, "upload-123", "token-abc")
+		want := "https://media.example.com/base/api/uploads/upload-123/media?token=token-abc"
+		if got != want {
+			t.Fatalf("url = %q, want %q", got, want)
+		}
+	})
+
 	t.Run("trusted proxy honors forwarded headers", func(t *testing.T) {
 		h := &Handler{
 			TrustedProxies: []string{"10.0.0.0/8"},
@@ -507,4 +525,22 @@ func TestDeleteUploadRemovesDurableSourceObject(t *testing.T) {
 	if _, ok := storeObjects[resp.Metadata["sourceObjectKey"]]; ok {
 		t.Fatalf("expected key %q to be deleted", resp.Metadata["sourceObjectKey"])
 	}
+}
+
+func TestParseUploadMediaBaseURL(t *testing.T) {
+	t.Run("sanitizes canonical URL", func(t *testing.T) {
+		parsed, err := parseUploadMediaBaseURL("https://user:pass@media.example.com/base?x=1#frag")
+		if err != nil {
+			t.Fatalf("parseUploadMediaBaseURL: %v", err)
+		}
+		if got, want := parsed.String(), "https://media.example.com/base/"; got != want {
+			t.Fatalf("url = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("rejects invalid scheme", func(t *testing.T) {
+		if _, err := parseUploadMediaBaseURL("ftp://media.example.com"); err == nil {
+			t.Fatalf("expected error")
+		}
+	})
 }

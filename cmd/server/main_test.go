@@ -81,3 +81,41 @@ func TestResolveStorageDriverDefaultsToPostgres(t *testing.T) {
 		t.Fatalf("expected postgres, got %q", driver)
 	}
 }
+
+func TestResolveUploadMediaBaseURL(t *testing.T) {
+	t.Run("flag wins and sanitizes", func(t *testing.T) {
+		got, err := resolveUploadMediaBaseURL("https://user:pass@media.example.com/base?x=1#frag", "https://ignored.example.com")
+		if err != nil {
+			t.Fatalf("resolveUploadMediaBaseURL: %v", err)
+		}
+		if want := "https://media.example.com/base/"; got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("env used when flag empty", func(t *testing.T) {
+		got, err := resolveUploadMediaBaseURL("", "https://media.example.com")
+		if err != nil {
+			t.Fatalf("resolveUploadMediaBaseURL: %v", err)
+		}
+		if want := "https://media.example.com/"; got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("empty returns empty", func(t *testing.T) {
+		got, err := resolveUploadMediaBaseURL("", "")
+		if err != nil {
+			t.Fatalf("resolveUploadMediaBaseURL: %v", err)
+		}
+		if got != "" {
+			t.Fatalf("got %q, want empty", got)
+		}
+	})
+
+	t.Run("invalid scheme errors", func(t *testing.T) {
+		if _, err := resolveUploadMediaBaseURL("ftp://media.example.com", ""); err == nil {
+			t.Fatalf("expected error")
+		}
+	})
+}

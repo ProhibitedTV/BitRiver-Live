@@ -25,6 +25,7 @@ type HandlerConfig struct {
 	DefaultRenditions     []string
 	SRSHookToken          string
 	TrustForwardedHeaders bool
+	UploadMediaBaseURL    string
 	UploadMaxBytes        int64
 	UploadSourceStorage   storage.ObjectStorageConfig
 	ChatQueue             healthPinger
@@ -51,6 +52,7 @@ func NewHandler(cfg HandlerConfig) *api.Handler {
 	handler.DefaultRenditions = cfg.DefaultRenditions
 	handler.SRSHookToken = cfg.SRSHookToken
 	handler.TrustForwardedHeaders = cfg.TrustForwardedHeaders
+	handler.UploadMediaBaseURL = cfg.UploadMediaBaseURL
 	handler.UploadMaxBytes = cfg.UploadMaxBytes
 	handler.UploadSourceStorage = api.UploadSourceStorageConfig{
 		Endpoint:       cfg.UploadSourceStorage.Endpoint,
