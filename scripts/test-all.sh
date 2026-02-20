@@ -9,10 +9,8 @@ usage() {
 Usage: ./scripts/test-all.sh [--ingest-e2e]
 
 Runs local validation entrypoints in one command:
-  - ./scripts/verify.sh
-  - ./scripts/test-postgres.sh (requires docker)
-  - ./scripts/test-quickstart.sh (requires docker)
-  - ./scripts/test-ingest-e2e.sh (only when explicitly enabled)
+  - ./scripts/test-unit.sh
+  - ./scripts/test-integration.sh
   - viewer integration tests (when node + npm + playwright are available)
 
 Ingest e2e controls:
@@ -63,24 +61,12 @@ skip_step() {
   echo "Skipping: ${reason}"
 }
 
-run_step "Repository verification" ./scripts/verify.sh
-
-if command -v docker >/dev/null 2>&1; then
-  run_step "Postgres integration tests" ./scripts/test-postgres.sh
-else
-  skip_step "Postgres integration tests" "docker is not installed or not on PATH."
-fi
-
-if command -v docker >/dev/null 2>&1; then
-  run_step "Quickstart smoke" ./scripts/test-quickstart.sh
-else
-  skip_step "Quickstart smoke" "docker is not installed or not on PATH."
-fi
+run_step "Unit tests" ./scripts/test-unit.sh
 
 if [[ "$run_ingest_e2e" == true ]]; then
-  run_step "Ingest end-to-end tests" ./scripts/test-ingest-e2e.sh
+  run_step "Integration tests" ./scripts/test-integration.sh --ingest-e2e
 else
-  skip_step "Ingest end-to-end tests" "disabled by default (use --ingest-e2e or BITRIVER_TEST_ALL_INGEST_E2E=1)."
+  run_step "Integration tests" ./scripts/test-integration.sh
 fi
 
 if [ ! -d web/viewer ]; then
