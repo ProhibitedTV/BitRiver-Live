@@ -710,6 +710,19 @@ func (h *Handler) uploadMediaURL(r *http.Request, uploadID, token string) string
 	if r == nil {
 		return ""
 	}
+	mediaURL := url.URL{Path: fmt.Sprintf("/api/uploads/%s/media", uploadID)}
+	if token != "" {
+		q := mediaURL.Query()
+		q.Set("token", token)
+		mediaURL.RawQuery = q.Encode()
+	}
+	if baseURL := strings.TrimSpace(h.UploadMediaBaseURL); baseURL != "" {
+		if parsed, err := parseUploadMediaBaseURL(baseURL); err == nil {
+			canonicalMediaURL := mediaURL
+			canonicalMediaURL.Path = strings.TrimPrefix(canonicalMediaURL.Path, "/")
+			return parsed.ResolveReference(&canonicalMediaURL).String()
+		}
+	}
 	trustForwarded := h.shouldTrustForwarded(r)
 	scheme := requestScheme(r, trustForwarded)
 	base := ""
@@ -725,17 +738,36 @@ func (h *Handler) uploadMediaURL(r *http.Request, uploadID, token string) string
 	if base == "" {
 		base = "localhost"
 	}
-	mediaURL := url.URL{
-		Scheme: scheme,
-		Host:   base,
-		Path:   fmt.Sprintf("/api/uploads/%s/media", uploadID),
-	}
-	if token != "" {
-		q := mediaURL.Query()
-		q.Set("token", token)
-		mediaURL.RawQuery = q.Encode()
-	}
+	mediaURL.Scheme = scheme
+	mediaURL.Host = base
 	return mediaURL.String()
+}
+
+func parseUploadMediaBaseURL(raw string) (*url.URL, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, fmt.Errorf("upload media base URL is empty")
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return nil, fmt.Errorf("parse upload media base URL: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil, fmt.Errorf("upload media base URL scheme must be http or https")
+	}
+	if parsed.Host == "" {
+		return nil, fmt.Errorf("upload media base URL host is required")
+	}
+	parsed.User = nil
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	if parsed.Path == "" {
+		parsed.Path = "/"
+	}
+	if !strings.HasSuffix(parsed.Path, "/") {
+		parsed.Path += "/"
+	}
+	return parsed, nil
 }
 
 // forwardedHost performs forwarded host and propagates validation or dependency failures to the caller.

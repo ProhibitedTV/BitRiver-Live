@@ -49,6 +49,7 @@ type Handler struct {
 	RateLimiter           healthPinger
 	ChatQueue             healthPinger
 	UploadMediaDir        string
+	UploadMediaBaseURL    string
 	UploadMaxBytes        int64
 	UploadSourceStorage   UploadSourceStorageConfig
 	TrustForwardedHeaders bool

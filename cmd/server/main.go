@@ -118,6 +118,7 @@ func main() {
 	trustForwarded := flag.Bool("rate-trust-forwarded-headers", false, "trust proxy-provided client IP headers")
 	trustedProxies := flag.String("rate-trusted-proxies", "", "comma separated CIDR blocks or IPs of trusted proxies")
 	uploadsTrustForwarded := flag.Bool("uploads-trust-forwarded-headers", false, "trust proxy-provided forwarded headers when building upload media URLs")
+	uploadMediaBaseURL := flag.String("upload-media-base-url", "", "canonical externally reachable base URL for upload media source URLs")
 	uploadMaxBytes := flag.Int64("upload-max-bytes", 0, "maximum multipart upload size in bytes")
 	redisAddr := flag.String("rate-redis-addr", "", "Redis address for distributed login throttling")
 	redisAddrs := flag.String("rate-redis-addrs", "", "comma separated Redis addresses for distributed login throttling")
@@ -239,6 +240,11 @@ func main() {
 		logger.Error("invalid viewer origin", "error", err)
 		os.Exit(1)
 	}
+	uploadMediaBaseURLValue, err := resolveUploadMediaBaseURL(*uploadMediaBaseURL, envGet("BITRIVER_LIVE_UPLOAD_MEDIA_BASE_URL"))
+	if err != nil {
+		logger.Error("invalid upload media base URL", "error", err)
+		os.Exit(1)
+	}
 
 	corsConfig := server.CORSConfig{
 		AdminOrigins:  splitAndTrim(stringsutil.FirstNonEmpty(*adminCORSOrigins, envGet("BITRIVER_LIVE_ADMIN_CORS_ORIGINS"))),
@@ -270,6 +276,7 @@ func main() {
 		AllowSelfSignup:               allowSelfSignupValue,
 		SetupManager:                  newSetupManager(envFilePath, nil),
 		UploadsTrustForwarded:         resolveBool(*uploadsTrustForwarded, "BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS"),
+		UploadMediaBaseURL:            uploadMediaBaseURLValue,
 		UploadMaxBytes:                resolveInt64(*uploadMaxBytes, "BITRIVER_LIVE_UPLOAD_MAX_BYTES"),
 		LoginLimit:                    loginLimitValue,
 		LoginWindow:                   resolveDuration(*loginWindow, "BITRIVER_LIVE_RATE_LOGIN_WINDOW", time.Minute),
@@ -679,6 +686,36 @@ func parseInt64(value string) (int64, error) {
 		return 0, err
 	}
 	return v, nil
+}
+
+func resolveUploadMediaBaseURL(flagValue, envValue string) (string, error) {
+	raw := strings.TrimSpace(flagValue)
+	if raw == "" {
+		raw = strings.TrimSpace(envValue)
+	}
+	if raw == "" {
+		return "", nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("parse upload media base URL: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", fmt.Errorf("upload media base URL scheme must be http or https")
+	}
+	if parsed.Host == "" {
+		return "", fmt.Errorf("upload media base URL host is required")
+	}
+	parsed.User = nil
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	if parsed.Path == "" {
+		parsed.Path = "/"
+	}
+	if !strings.HasSuffix(parsed.Path, "/") {
+		parsed.Path += "/"
+	}
+	return parsed.String(), nil
 }
 
 func envGet(key string) string {
