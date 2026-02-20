@@ -24,6 +24,7 @@ type HandlerConfig struct {
 	DefaultRenditions     []string
 	SRSHookToken          string
 	TrustForwardedHeaders bool
+	UploadMaxBytes        int64
 	ChatQueue             healthPinger
 	AuthUsersService      service.AuthUsersUseCase
 	ChannelsService       service.ChannelsDirectoryUseCase
@@ -48,6 +49,7 @@ func NewHandler(cfg HandlerConfig) *api.Handler {
 	handler.DefaultRenditions = cfg.DefaultRenditions
 	handler.SRSHookToken = cfg.SRSHookToken
 	handler.TrustForwardedHeaders = cfg.TrustForwardedHeaders
+	handler.UploadMaxBytes = cfg.UploadMaxBytes
 	if cfg.ChatQueue != nil {
 		handler.ChatQueue = cfg.ChatQueue
 	}

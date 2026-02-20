@@ -34,6 +34,7 @@ type ServerRuntimeInput struct {
 	AllowSelfSignup          bool
 	SetupManager             api.SetupManager
 	UploadsTrustForwarded    bool
+	UploadMaxBytes           int64
 	LoginLimit               int
 	LoginWindow              time.Duration
 	RequireLoginProtection   bool
@@ -234,7 +235,7 @@ func NewServerRuntime(in ServerRuntimeInput) (*ServerRuntime, error) {
 		chatQueuePinger = pingable
 	}
 	useCases := service.NewStoreUseCases(store)
-	handler := NewHandler(HandlerConfig{Sessions: sessions, MFAChallenges: mfaChallenges, AllowSelfSignup: in.AllowSelfSignup, ChatGateway: gateway, Setup: in.SetupManager, DefaultRenditions: ladderProfileNames(in.IngestConfig.LadderProfiles), SRSHookToken: in.IngestConfig.SRSToken, TrustForwardedHeaders: in.UploadsTrustForwarded, ChatQueue: chatQueuePinger, AuthUsersService: useCases, ChannelsService: useCases, UploadsService: useCases, RecordingsService: useCases, ChatModerationService: useCases, LegalService: service.NewLegalService(store), StreamsService: useCases, ProfilesService: useCases, AnalyticsService: useCases, SystemService: useCases, MonetizationService: useCases, PaymentService: service.NewPaymentService(store, in.Logger)})
+	handler := NewHandler(HandlerConfig{Sessions: sessions, MFAChallenges: mfaChallenges, AllowSelfSignup: in.AllowSelfSignup, ChatGateway: gateway, Setup: in.SetupManager, DefaultRenditions: ladderProfileNames(in.IngestConfig.LadderProfiles), SRSHookToken: in.IngestConfig.SRSToken, TrustForwardedHeaders: in.UploadsTrustForwarded, UploadMaxBytes: in.UploadMaxBytes, ChatQueue: chatQueuePinger, AuthUsersService: useCases, ChannelsService: useCases, UploadsService: useCases, RecordingsService: useCases, ChatModerationService: useCases, LegalService: service.NewLegalService(store), StreamsService: useCases, ProfilesService: useCases, AnalyticsService: useCases, SystemService: useCases, MonetizationService: useCases, PaymentService: service.NewPaymentService(store, in.Logger)})
 
 	var uploadProcessor *serviceuploads.UploadProcessor
 	if ingestController != nil {
@@ -248,7 +249,7 @@ func NewServerRuntime(in ServerRuntimeInput) (*ServerRuntime, error) {
 
 	rateCfg := server.RateLimitConfig{GlobalRPS: in.GlobalRPS, GlobalBurst: in.GlobalBurst, LoginLimit: in.LoginLimit, LoginWindow: in.LoginWindow, RequireLoginProtection: in.RequireLoginProtection, TrustForwardedHeaders: in.TrustForwardedHeaders, TrustedProxies: in.TrustedProxies, RedisAddr: in.RateRedisAddr, RedisAddrs: in.RateRedisAddrs, RedisUsername: in.RateRedisUsername, RedisPassword: in.RateRedisPassword, RedisMasterName: in.RateRedisMasterName, RedisTimeout: in.RateRedisTimeout, RedisPoolSize: in.RateRedisPoolSize, RedisTLS: in.RateRedisTLS}
 	handler.TrustedProxies = rateCfg.TrustedProxies
-	srv, err := NewHTTPServer(handler, server.Config{Addr: in.ListenAddr, TLS: in.TLS, RateLimit: rateCfg, CORS: in.CORS, Security: in.Security, Logger: in.Logger, AuditLogger: in.AuditLogger, Metrics: in.MetricsRecorder, Tracer: in.TracingProvider.Tracer(), MetricsAccess: in.MetricsAccess, RequireMetricsProtection: in.RequireMetricsProtection, ViewerOrigin: in.ViewerOrigin, OAuth: in.OAuth, AllowSelfSignup: &in.AllowSelfSignup, SessionCookieSecureMode: in.SessionCookieSecureMode, SessionCookieCrossSite: in.SessionCookieCrossSite, SRSHookToken: in.IngestConfig.SRSToken})
+	srv, err := NewHTTPServer(handler, server.Config{Addr: in.ListenAddr, TLS: in.TLS, RateLimit: rateCfg, CORS: in.CORS, Security: in.Security, Logger: in.Logger, AuditLogger: in.AuditLogger, Metrics: in.MetricsRecorder, Tracer: in.TracingProvider.Tracer(), MetricsAccess: in.MetricsAccess, RequireMetricsProtection: in.RequireMetricsProtection, ViewerOrigin: in.ViewerOrigin, OAuth: in.OAuth, AllowSelfSignup: &in.AllowSelfSignup, SessionCookieSecureMode: in.SessionCookieSecureMode, SessionCookieCrossSite: in.SessionCookieCrossSite, SRSHookToken: in.IngestConfig.SRSToken, UploadMaxBytes: in.UploadMaxBytes})
 	if err != nil {
 		return nil, err
 	}

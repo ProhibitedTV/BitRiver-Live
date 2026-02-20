@@ -118,6 +118,7 @@ func main() {
 	trustForwarded := flag.Bool("rate-trust-forwarded-headers", false, "trust proxy-provided client IP headers")
 	trustedProxies := flag.String("rate-trusted-proxies", "", "comma separated CIDR blocks or IPs of trusted proxies")
 	uploadsTrustForwarded := flag.Bool("uploads-trust-forwarded-headers", false, "trust proxy-provided forwarded headers when building upload media URLs")
+	uploadMaxBytes := flag.Int64("upload-max-bytes", 0, "maximum multipart upload size in bytes")
 	redisAddr := flag.String("rate-redis-addr", "", "Redis address for distributed login throttling")
 	redisAddrs := flag.String("rate-redis-addrs", "", "comma separated Redis addresses for distributed login throttling")
 	redisUsername := flag.String("rate-redis-username", "", "Redis username for distributed login throttling")
@@ -269,6 +270,7 @@ func main() {
 		AllowSelfSignup:               allowSelfSignupValue,
 		SetupManager:                  newSetupManager(envFilePath, nil),
 		UploadsTrustForwarded:         resolveBool(*uploadsTrustForwarded, "BITRIVER_LIVE_UPLOADS_TRUST_FORWARDED_HEADERS"),
+		UploadMaxBytes:                resolveInt64(*uploadMaxBytes, "BITRIVER_LIVE_UPLOAD_MAX_BYTES"),
 		LoginLimit:                    loginLimitValue,
 		LoginWindow:                   resolveDuration(*loginWindow, "BITRIVER_LIVE_RATE_LOGIN_WINDOW", time.Minute),
 		RequireLoginProtection:        requiresLoginProtection(serverMode),
@@ -596,6 +598,19 @@ func resolveInt(flagValue int, envKey string) int {
 	return 0
 }
 
+// resolveInt64 resolves int64 from flags and environment values, returning validation errors when incompatible settings are provided.
+func resolveInt64(flagValue int64, envKey string) int64 {
+	if flagValue > 0 {
+		return flagValue
+	}
+	if env := envGet(envKey); env != "" {
+		if value, err := parseInt64(env); err == nil {
+			return value
+		}
+	}
+	return 0
+}
+
 // resolveDuration resolves duration from flags and environment values, returning validation errors when incompatible settings are provided.
 func resolveDuration(flagValue time.Duration, envKey string, fallback time.Duration) time.Duration {
 	if flagValue > 0 {
@@ -651,6 +666,15 @@ func parseFloat(value string) (float64, error) {
 // parseInt parses int and returns an error when the input is malformed.
 func parseInt(value string) (int, error) {
 	v, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+// parseInt64 parses int64 and returns an error when the input is malformed.
+func parseInt64(value string) (int64, error) {
+	v, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
 	if err != nil {
 		return 0, err
 	}

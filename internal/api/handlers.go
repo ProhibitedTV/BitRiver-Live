@@ -49,6 +49,7 @@ type Handler struct {
 	RateLimiter           healthPinger
 	ChatQueue             healthPinger
 	UploadMediaDir        string
+	UploadMaxBytes        int64
 	TrustForwardedHeaders bool
 	TrustedProxies        []string
 	uploadDirOnce         sync.Once
