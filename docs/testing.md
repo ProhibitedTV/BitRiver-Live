@@ -21,7 +21,7 @@ If `python3` is missing, `./scripts/verify.sh` now fails fast with a clear prere
 Use these category entrypoints from the repository root:
 
 - **Unit:** `./scripts/test-unit.sh`
-  - Runs `go test ./...` with offline Go env defaults (`GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off`).
+  - Runs `go test ./... -count=1 -timeout=120s` with offline Go env defaults (`GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off`).
   - CI: [`.github/workflows/go-unit-tests.yml`](../.github/workflows/go-unit-tests.yml) and the `go-tests` job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 - **Postgres integration (tagged):** `./scripts/test-postgres.sh`
   - Runs storage integration tests behind the `postgres` tag using Docker or `BITRIVER_TEST_POSTGRES_DSN`.
@@ -42,7 +42,19 @@ Run everything with the umbrella entrypoint:
 ./scripts/test-all.sh
 ```
 
-`./scripts/test-all.sh` runs verify + postgres + quickstart + ingest e2e and then viewer integration when Node/Playwright tooling is available. It skips unavailable Docker/Node/Playwright-dependent steps with explicit skip messages.
+`./scripts/test-all.sh` runs verify + postgres + quickstart and then viewer integration when Node/Playwright tooling is available. It skips unavailable Docker/Node/Playwright-dependent steps with explicit skip messages.
+
+Ingest e2e is intentionally opt-in in the umbrella script. Enable it with either:
+
+```bash
+./scripts/test-all.sh --ingest-e2e
+```
+
+or:
+
+```bash
+BITRIVER_TEST_ALL_INGEST_E2E=1 ./scripts/test-all.sh
+```
 
 ## Dependency source of truth
 
