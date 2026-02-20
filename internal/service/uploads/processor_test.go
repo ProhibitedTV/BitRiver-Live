@@ -152,7 +152,6 @@ func TestUploadProcessorTimeout(t *testing.T) {
 	ingestFake := newFakeIngest()
 	ingestFake.setDelay("upload-slow", 200*time.Millisecond)
 	slowUpdates := store.updatesFor("upload-slow")
-	slowDone := ingestFake.completion("upload-slow")
 
 	processor := NewUploadProcessor(UploadProcessorConfig{
 		Store:   store,
@@ -173,15 +172,15 @@ func TestUploadProcessorTimeout(t *testing.T) {
 
 	processor.Enqueue("upload-slow")
 
-	waitForCompletion(t, slowDone, "upload-slow", time.Second)
-	waitForUploadUpdate(t, slowUpdates, time.Second, func(upload domain.Upload) bool {
+	waitForIngestCallCount(t, ingestFake, "upload-slow", 3, 3*time.Second)
+	waitForUploadUpdate(t, slowUpdates, 3*time.Second, func(upload domain.Upload) bool {
 		if upload.Status != "failed" || upload.Progress != 0 {
 			return false
 		}
 		if upload.Metadata["sourceUrl"] != "https://example.com/slow.mp4" {
 			return false
 		}
-		return upload.Error == context.DeadlineExceeded.Error() || upload.Error == context.Canceled.Error()
+		return strings.Contains(upload.Error, "retry budget exhausted") && upload.Metadata["retryAttempt"] == "3"
 	})
 }
 
@@ -237,6 +236,87 @@ func TestUploadProcessorRetryUpdateFailures(t *testing.T) {
 	if attempts := store.updateAttemptCount("upload-retry"); attempts < 3 {
 		t.Fatalf("expected at least 3 update attempts, got %d", attempts)
 	}
+}
+
+func TestUploadProcessorTransientRetryProgression(t *testing.T) {
+	store := newFakeUploadStore()
+	store.uploads = map[string]domain.Upload{
+		"upload-transient": {
+			ID:        "upload-transient",
+			ChannelID: "channel-1",
+			Status:    "pending",
+			Metadata:  map[string]string{"sourceUrl": "https://example.com/transient.mp4"},
+		},
+	}
+
+	ingestFake := newFakeIngest()
+	ingestFake.setErrorSequence("upload-transient", []error{
+		errors.New("503 service unavailable"),
+		errors.New("429 too many requests"),
+		nil,
+	})
+	ingestFake.setResult("upload-transient", ingest.UploadTranscodeResult{PlaybackURL: "https://vod.example.com/transient.m3u8"}, nil)
+	updates := store.updatesFor("upload-transient")
+
+	processor := NewUploadProcessor(UploadProcessorConfig{
+		Store:   store,
+		Ingest:  ingestFake,
+		Workers: 1,
+		Timeout: 100 * time.Millisecond,
+		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	processor.Start()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = processor.Shutdown(ctx)
+	})
+
+	processor.Enqueue("upload-transient")
+	waitForIngestCallCount(t, ingestFake, "upload-transient", 3, 3*time.Second)
+	waitForUploadUpdate(t, updates, 3*time.Second, func(upload domain.Upload) bool {
+		return upload.Status == "ready" && upload.Progress == 100 && upload.Metadata["retryAttempt"] == "" && upload.Metadata["nextRetryAt"] == ""
+	})
+}
+
+func TestUploadProcessorTerminalFailureAfterRetryBudget(t *testing.T) {
+	store := newFakeUploadStore()
+	store.uploads = map[string]domain.Upload{
+		"upload-budget": {
+			ID:        "upload-budget",
+			ChannelID: "channel-1",
+			Status:    "pending",
+			Metadata:  map[string]string{"sourceUrl": "https://example.com/budget.mp4"},
+		},
+	}
+
+	ingestFake := newFakeIngest()
+	ingestFake.setErrorSequence("upload-budget", []error{
+		errors.New("503 service unavailable"),
+		errors.New("503 service unavailable"),
+		errors.New("503 service unavailable"),
+	})
+	updates := store.updatesFor("upload-budget")
+
+	processor := NewUploadProcessor(UploadProcessorConfig{
+		Store:   store,
+		Ingest:  ingestFake,
+		Workers: 1,
+		Timeout: 100 * time.Millisecond,
+		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	processor.Start()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = processor.Shutdown(ctx)
+	})
+
+	processor.Enqueue("upload-budget")
+	waitForIngestCallCount(t, ingestFake, "upload-budget", 3, 3*time.Second)
+	waitForUploadUpdate(t, updates, 3*time.Second, func(upload domain.Upload) bool {
+		return upload.Status == "failed" && strings.Contains(upload.Error, "retry budget exhausted") && upload.Metadata["retryAttempt"] == "3"
+	})
 }
 
 type fakeUploadStore struct {
@@ -335,7 +415,7 @@ func (f *fakeUploadStore) UpdateUpload(ctx context.Context, id string, update do
 		upload.PlaybackURL = *update.PlaybackURL
 	}
 	if update.Metadata != nil {
-		upload.Metadata = cloneMetadata(update.Metadata)
+		upload.Metadata = cloneMetadataMap(update.Metadata)
 	}
 	if update.Error != nil {
 		upload.Error = *update.Error
@@ -369,7 +449,7 @@ func (f *fakeUploadStore) updateAttemptCount(id string) int {
 	return f.updateAttempts[id]
 }
 
-func cloneMetadata(src map[string]string) map[string]string {
+func cloneMetadataMap(src map[string]string) map[string]string {
 	if src == nil {
 		return nil
 	}
@@ -381,28 +461,30 @@ func cloneMetadata(src map[string]string) map[string]string {
 }
 
 func cloneUpload(upload domain.Upload) domain.Upload {
-	upload.Metadata = cloneMetadata(upload.Metadata)
+	upload.Metadata = cloneMetadataMap(upload.Metadata)
 	return upload
 }
 
 var _ Store = (*fakeUploadStore)(nil)
 
 type fakeIngest struct {
-	mu        sync.Mutex
-	results   map[string]ingest.UploadTranscodeResult
-	errors    map[string]error
-	delays    map[string]time.Duration
-	callTotal map[string]int
-	done      map[string]chan struct{}
+	mu            sync.Mutex
+	results       map[string]ingest.UploadTranscodeResult
+	errors        map[string]error
+	errorSequence map[string][]error
+	delays        map[string]time.Duration
+	callTotal     map[string]int
+	done          map[string]chan struct{}
 }
 
 func newFakeIngest() *fakeIngest {
 	return &fakeIngest{
-		results:   make(map[string]ingest.UploadTranscodeResult),
-		errors:    make(map[string]error),
-		delays:    make(map[string]time.Duration),
-		callTotal: make(map[string]int),
-		done:      make(map[string]chan struct{}),
+		results:       make(map[string]ingest.UploadTranscodeResult),
+		errors:        make(map[string]error),
+		errorSequence: make(map[string][]error),
+		delays:        make(map[string]time.Duration),
+		callTotal:     make(map[string]int),
+		done:          make(map[string]chan struct{}),
 	}
 }
 
@@ -415,6 +497,14 @@ func (f *fakeIngest) setResult(id string, result ingest.UploadTranscodeResult, e
 	} else {
 		delete(f.errors, id)
 	}
+}
+
+func (f *fakeIngest) setErrorSequence(id string, errs []error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	copied := make([]error, len(errs))
+	copy(copied, errs)
+	f.errorSequence[id] = copied
 }
 
 func (f *fakeIngest) setDelay(id string, delay time.Duration) {
@@ -460,6 +550,10 @@ func (f *fakeIngest) TranscodeUpload(ctx context.Context, params ingest.UploadTr
 	delay := f.delays[params.UploadID]
 	result, hasResult := f.results[params.UploadID]
 	err := f.errors[params.UploadID]
+	if seq, ok := f.errorSequence[params.UploadID]; ok && len(seq) > 0 {
+		err = seq[0]
+		f.errorSequence[params.UploadID] = seq[1:]
+	}
 	f.mu.Unlock()
 
 	defer f.signalComplete(params.UploadID)
@@ -484,6 +578,18 @@ func (f *fakeIngest) TranscodeUpload(ctx context.Context, params ingest.UploadTr
 }
 
 var _ IngestClient = (*fakeIngest)(nil)
+
+func waitForIngestCallCount(t *testing.T, fake *fakeIngest, id string, expected int, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if fake.callCount(id) >= expected {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timeout waiting for %d ingest calls of %s", expected, id)
+}
 
 func waitForCompletion(t *testing.T, done <-chan struct{}, id string, timeout time.Duration) {
 	t.Helper()

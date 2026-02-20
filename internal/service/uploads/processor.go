@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -72,8 +75,14 @@ const (
 	defaultUploadWorkers   = 2
 	defaultUploadQueueSize = 64
 	defaultUploadTimeout   = 30 * time.Minute
-	retryDelay             = 50 * time.Millisecond
+	uploadRetryBaseDelay   = 50 * time.Millisecond
+	uploadMaxRetryAttempts = 3
+
+	metadataRetryAttemptKey = "retryAttempt"
+	metadataNextRetryAtKey  = "nextRetryAt"
 )
+
+var errorStatusCodePattern = regexp.MustCompile(`\b([1-5][0-9]{2})\b`)
 
 // NewUploadProcessor configures a worker pool for upload processing, applying
 // sensible defaults for worker count, queue size, timeout, and logging when
@@ -248,13 +257,14 @@ func (p *UploadProcessor) processUpload(id string) {
 		source = strings.TrimSpace(upload.PlaybackURL)
 	}
 	if source == "" {
-		p.failUpload(id, "", fmt.Errorf("source URL is required"))
+		p.failUpload(id, "", fmt.Errorf("source URL is required"), 0, time.Time{})
 		return
 	}
 
 	processing := "processing"
 	progress := 10
-	metadata := map[string]string{"sourceUrl": source}
+	metadata := cloneMetadata(upload.Metadata)
+	metadata["sourceUrl"] = source
 	if _, err := p.store.UpdateUpload(p.ctx, id, domain.UploadUpdate{
 		Status:   &processing,
 		Progress: &progress,
@@ -262,12 +272,12 @@ func (p *UploadProcessor) processUpload(id string) {
 		Error:    stringPtr(""),
 	}); err != nil {
 		p.logger.Error("failed to mark upload processing", "upload_id", id, "error", err)
-		p.scheduleRetry(id)
+		p.scheduleRetry(id, uploadRetryBaseDelay)
 		return
 	}
 
 	if p.ingest == nil {
-		p.failUpload(id, source, fmt.Errorf("ingest controller unavailable"))
+		p.failUpload(id, source, fmt.Errorf("ingest controller unavailable"), 0, time.Time{})
 		return
 	}
 
@@ -286,7 +296,7 @@ func (p *UploadProcessor) processUpload(id string) {
 				err = ctxErr
 			}
 		}
-		p.failUpload(id, source, err)
+		p.handleTranscodeError(upload, source, err)
 		return
 	}
 
@@ -297,7 +307,10 @@ func (p *UploadProcessor) processUpload(id string) {
 		playbackURL = source
 	}
 	completedAt := time.Now().UTC()
-	metadata = map[string]string{"sourceUrl": source}
+	metadata = cloneMetadata(upload.Metadata)
+	metadata["sourceUrl"] = source
+	delete(metadata, metadataRetryAttemptKey)
+	delete(metadata, metadataNextRetryAtKey)
 	if result.JobID != "" {
 		metadata["transcodeJobId"] = result.JobID
 	}
@@ -324,14 +337,14 @@ func (p *UploadProcessor) processUpload(id string) {
 		Error:       stringPtr(""),
 	}); err != nil {
 		p.logger.Error("failed to mark upload ready", "upload_id", id, "error", err)
-		p.scheduleRetry(id)
+		p.scheduleRetry(id, uploadRetryBaseDelay)
 		return
 	}
 	p.logger.Info("upload transcoded", "upload_id", id, "channel_id", upload.ChannelID, "playback_url", playbackURL)
 }
 
 // scheduleRetry performs schedule retry and propagates validation or dependency failures to the caller.
-func (p *UploadProcessor) scheduleRetry(id string) {
+func (p *UploadProcessor) scheduleRetry(id string, delay time.Duration) {
 	if p == nil || strings.TrimSpace(id) == "" {
 		return
 	}
@@ -340,7 +353,10 @@ func (p *UploadProcessor) scheduleRetry(id string) {
 		return
 	default:
 	}
-	timer := time.NewTimer(retryDelay)
+	if delay < 0 {
+		delay = 0
+	}
+	timer := time.NewTimer(delay)
 	go func() {
 		defer timer.Stop()
 		select {
@@ -352,8 +368,42 @@ func (p *UploadProcessor) scheduleRetry(id string) {
 	}()
 }
 
+func (p *UploadProcessor) handleTranscodeError(upload domain.Upload, source string, err error) {
+	attempt := parseRetryAttempt(upload.Metadata) + 1
+	if !isTransientTranscodeError(err) {
+		p.failUpload(upload.ID, source, err, attempt, time.Time{})
+		return
+	}
+	if attempt >= uploadMaxRetryAttempts {
+		p.failUpload(upload.ID, source, fmt.Errorf("retry budget exhausted after %d attempts: %w", attempt, err), attempt, time.Time{})
+		return
+	}
+
+	delay := uploadRetryBaseDelay * time.Duration(1<<(attempt-1))
+	nextRetry := time.Now().UTC().Add(delay)
+	message := strings.TrimSpace(err.Error())
+	status := "pending"
+	progress := 0
+	metadata := cloneMetadata(upload.Metadata)
+	metadata["sourceUrl"] = source
+	metadata[metadataRetryAttemptKey] = strconv.Itoa(attempt)
+	metadata[metadataNextRetryAtKey] = nextRetry.Format(time.RFC3339Nano)
+	if _, updateErr := p.store.UpdateUpload(p.ctx, upload.ID, domain.UploadUpdate{
+		Status:   &status,
+		Progress: &progress,
+		Metadata: metadata,
+		Error:    &message,
+	}); updateErr != nil {
+		p.logger.Error("failed to mark upload for retry", "upload_id", upload.ID, "error", updateErr, "failure", err)
+		p.scheduleRetry(upload.ID, delay)
+		return
+	}
+	p.logger.Warn("upload transcode transient failure", "upload_id", upload.ID, "attempt", attempt, "next_retry_at", nextRetry, "error", err)
+	p.scheduleRetry(upload.ID, delay)
+}
+
 // failUpload performs fail upload and propagates validation or dependency failures to the caller.
-func (p *UploadProcessor) failUpload(id, source string, err error) {
+func (p *UploadProcessor) failUpload(id, source string, err error, attempt int, nextRetry time.Time) {
 	if p.store == nil {
 		return
 	}
@@ -363,6 +413,12 @@ func (p *UploadProcessor) failUpload(id, source string, err error) {
 	metadata := map[string]string{}
 	if source != "" {
 		metadata["sourceUrl"] = source
+	}
+	if attempt > 0 {
+		metadata[metadataRetryAttemptKey] = strconv.Itoa(attempt)
+	}
+	if !nextRetry.IsZero() {
+		metadata[metadataNextRetryAtKey] = nextRetry.UTC().Format(time.RFC3339Nano)
 	}
 	if _, updateErr := p.store.UpdateUpload(p.ctx, id, domain.UploadUpdate{
 		Status:   &failed,
@@ -374,6 +430,68 @@ func (p *UploadProcessor) failUpload(id, source string, err error) {
 		return
 	}
 	p.logger.Error("upload transcode failed", "upload_id", id, "error", err)
+}
+
+func parseRetryAttempt(metadata map[string]string) int {
+	if metadata == nil {
+		return 0
+	}
+	raw := strings.TrimSpace(metadata[metadataRetryAttemptKey])
+	if raw == "" {
+		return 0
+	}
+	attempt, err := strconv.Atoi(raw)
+	if err != nil || attempt < 0 {
+		return 0
+	}
+	return attempt
+}
+
+func isTransientTranscodeError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return true
+	}
+	statusCode := statusCodeFromError(err.Error())
+	if statusCode == 0 {
+		return false
+	}
+	if statusCode == 429 || (statusCode >= 500 && statusCode <= 599) {
+		return true
+	}
+	if statusCode >= 400 && statusCode <= 499 {
+		return false
+	}
+	return true
+}
+
+func statusCodeFromError(message string) int {
+	matches := errorStatusCodePattern.FindStringSubmatch(message)
+	if len(matches) < 2 {
+		return 0
+	}
+	statusCode, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return 0
+	}
+	return statusCode
+}
+
+func cloneMetadata(src map[string]string) map[string]string {
+	if src == nil {
+		return map[string]string{}
+	}
+	dst := make(map[string]string, len(src))
+	for key, value := range src {
+		dst[key] = value
+	}
+	return dst
 }
 
 // stringPtr returns a stable string form for flag and log output.
