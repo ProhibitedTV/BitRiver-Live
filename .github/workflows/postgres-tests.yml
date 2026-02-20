@@ -5,6 +5,24 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  pull_request:
+    paths:
+      - internal/storage/**
+      - deploy/migrations/**
+      - scripts/test-postgres.sh
+      - go.mod
+      - go.sum
+      - third_party/**
+  push:
+    branches:
+      - main
+    paths:
+      - internal/storage/**
+      - deploy/migrations/**
+      - scripts/test-postgres.sh
+      - go.mod
+      - go.sum
+      - third_party/**
   workflow_dispatch:
 
 jobs:
