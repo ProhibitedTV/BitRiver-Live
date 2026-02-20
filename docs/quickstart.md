@@ -199,6 +199,7 @@ The quickstart keeps retention settings unset, so the API and transcoder apply t
 - **Recordings + VODs:** `BITRIVER_LIVE_RECORDING_RETENTION_PUBLISHED` defaults to 90 days and `BITRIVER_LIVE_RECORDING_RETENTION_UNPUBLISHED` defaults to 14 days. Set either to `0` to keep recordings indefinitely, and pair it with object storage lifecycle rules when you archive recordings outside the host filesystem.
 - **Chat logs:** `BITRIVER_LIVE_CHAT_RETENTION_MESSAGES` and `BITRIVER_LIVE_CHAT_RETENTION_MODERATION_LOGS` default to `0` (no automatic purge). Set durations like `720h` to prune messages and moderation reports.
 - **Transcoder outputs:** `BITRIVER_TRANSCODER_RETENTION_LIVE` and `BITRIVER_TRANSCODER_RETENTION_UPLOADS` default to empty/disabled, so HLS output under `./transcoder-data` persists until you delete it. Set a duration (for example, `168h`) to enable the 30-minute cleanup sweep for stopped live sessions and finished uploads.
+- **Stored upload source artifacts:** source files used for upload transcoding are cleaned by upload status. `ready`/`completed` uploads delete source artifacts immediately after handoff, while `failed` uploads retain source artifacts for 24 hours to support debugging and retries before cleanup runs. Deletion is idempotent (already-missing artifacts are treated as no-op) and cleanup actions are logged.
 
 The health payload still expects the ingest services to be reachable from the API container:
 

@@ -240,7 +240,23 @@ func NewServerRuntime(in ServerRuntimeInput) (*ServerRuntime, error) {
 
 	var uploadProcessor *serviceuploads.UploadProcessor
 	if ingestController != nil {
-		uploadProcessor = serviceuploads.NewUploadProcessor(serviceuploads.UploadProcessorConfig{Store: storage.NewUploadProcessingStore(store), Ingest: ingestController, Renditions: in.IngestConfig.LadderProfiles, Logger: logging.WithComponent(in.Logger, "uploads")})
+		uploadSourceCfg := api.UploadSourceStorageConfig{
+			Endpoint:       objectCfg.Endpoint,
+			Bucket:         objectCfg.Bucket,
+			Prefix:         objectCfg.Prefix,
+			PublicEndpoint: objectCfg.PublicEndpoint,
+			UseSSL:         objectCfg.UseSSL,
+			RequestTimeout: objectCfg.RequestTimeout,
+		}
+		uploadProcessor = serviceuploads.NewUploadProcessor(serviceuploads.UploadProcessorConfig{
+			Store:                 storage.NewUploadProcessingStore(useCases),
+			Ingest:                ingestController,
+			Cleaner:               api.NewUploadSourceCleaner(uploadSourceCfg, "", logging.WithComponent(in.Logger, "uploads")),
+			Renditions:            in.IngestConfig.LadderProfiles,
+			ReadySourceRetention:  0,
+			FailedSourceRetention: 24 * time.Hour,
+			Logger:                logging.WithComponent(in.Logger, "uploads"),
+		})
 		uploadProcessor.Start()
 		handler.UploadProcessor = uploadProcessor
 	}

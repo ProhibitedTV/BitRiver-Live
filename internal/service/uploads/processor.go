@@ -36,25 +36,37 @@ type IngestClient interface {
 // to process archived uploads, including storage, ingest coordination, worker
 // concurrency, and back pressure limits.
 type UploadProcessorConfig struct {
-	Store      Store
-	Ingest     IngestClient
-	Renditions []ingest.Rendition
-	Workers    int
-	QueueSize  int
-	Timeout    time.Duration
-	Logger     *slog.Logger
+	Store                 Store
+	Ingest                IngestClient
+	Cleaner               SourceArtifactCleaner
+	Renditions            []ingest.Rendition
+	Workers               int
+	QueueSize             int
+	Timeout               time.Duration
+	ReadySourceRetention  time.Duration
+	FailedSourceRetention time.Duration
+	Logger                *slog.Logger
+}
+
+// SourceArtifactCleaner removes persisted upload source artifacts once the
+// processor reaches a status that permits cleanup.
+type SourceArtifactCleaner interface {
+	Delete(ctx context.Context, upload domain.Upload, sourceKey string) error
 }
 
 // UploadProcessor runs background workers that resolve pending uploads by
 // coordinating persistence, ingest, and rendition generation while honoring
 // queue limits and cancellation.
 type UploadProcessor struct {
-	store      Store
-	ingest     IngestClient
-	renditions []ingest.Rendition
-	workers    int
-	timeout    time.Duration
-	logger     *slog.Logger
+	store                 Store
+	ingest                IngestClient
+	renditions            []ingest.Rendition
+	workers               int
+	timeout               time.Duration
+	logger                *slog.Logger
+	cleaner               SourceArtifactCleaner
+	readySourceRetention  time.Duration
+	failedSourceRetention time.Duration
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -73,11 +85,12 @@ type Enqueuer interface {
 }
 
 const (
-	defaultUploadWorkers   = 2
-	defaultUploadQueueSize = 64
-	defaultUploadTimeout   = 30 * time.Minute
-	uploadRetryBaseDelay   = 50 * time.Millisecond
-	uploadMaxRetryAttempts = 3
+	defaultUploadWorkers         = 2
+	defaultUploadQueueSize       = 64
+	defaultUploadTimeout         = 30 * time.Minute
+	uploadRetryBaseDelay         = 50 * time.Millisecond
+	uploadMaxRetryAttempts       = 3
+	defaultFailedSourceRetention = 24 * time.Hour
 
 	metadataRetryAttemptKey = "retryAttempt"
 	metadataNextRetryAtKey  = "nextRetryAt"
@@ -107,16 +120,19 @@ func NewUploadProcessor(cfg UploadProcessorConfig) *UploadProcessor {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	processor := &UploadProcessor{
-		store:      cfg.Store,
-		ingest:     cfg.Ingest,
-		renditions: ingest.CloneRenditions(cfg.Renditions),
-		workers:    workers,
-		timeout:    timeout,
-		logger:     logger,
-		ctx:        ctx,
-		cancel:     cancel,
-		queue:      make(chan string, queueSize),
-		inFlight:   make(map[string]struct{}),
+		store:                 cfg.Store,
+		ingest:                cfg.Ingest,
+		cleaner:               cfg.Cleaner,
+		renditions:            ingest.CloneRenditions(cfg.Renditions),
+		workers:               workers,
+		timeout:               timeout,
+		logger:                logger,
+		readySourceRetention:  maxDuration(cfg.ReadySourceRetention, 0),
+		failedSourceRetention: maxDuration(cfg.FailedSourceRetention, defaultFailedSourceRetention),
+		ctx:                   ctx,
+		cancel:                cancel,
+		queue:                 make(chan string, queueSize),
+		inFlight:              make(map[string]struct{}),
 	}
 	return processor
 }
@@ -248,6 +264,7 @@ func (p *UploadProcessor) processUpload(id string) {
 	}
 	status := strings.ToLower(strings.TrimSpace(upload.Status))
 	if status == "ready" || status == "completed" || status == "failed" {
+		p.scheduleSourceCleanup(upload, status)
 		return
 	}
 	source := strings.TrimSpace(upload.Metadata["sourceUrl"])
@@ -258,7 +275,7 @@ func (p *UploadProcessor) processUpload(id string) {
 		source = strings.TrimSpace(upload.PlaybackURL)
 	}
 	if source == "" {
-		p.failUpload(id, "", fmt.Errorf("source URL is required"), 0, time.Time{})
+		p.failUpload(upload, fmt.Errorf("source URL is required"), 0, time.Time{})
 		return
 	}
 
@@ -278,7 +295,7 @@ func (p *UploadProcessor) processUpload(id string) {
 	}
 
 	if p.ingest == nil {
-		p.failUpload(id, source, fmt.Errorf("ingest controller unavailable"), 0, time.Time{})
+		p.failUpload(upload, fmt.Errorf("ingest controller unavailable"), 0, time.Time{})
 		return
 	}
 
@@ -336,7 +353,7 @@ func (p *UploadProcessor) processUpload(id string) {
 	if recordingID != "" {
 		metadata["recordingId"] = recordingID
 	}
-	if _, err := p.store.UpdateUpload(p.ctx, id, domain.UploadUpdate{
+	updatedUpload, err := p.store.UpdateUpload(p.ctx, id, domain.UploadUpdate{
 		Status:      &ready,
 		Progress:    &progress,
 		RecordingID: &recordingID,
@@ -344,11 +361,13 @@ func (p *UploadProcessor) processUpload(id string) {
 		Metadata:    metadata,
 		CompletedAt: &completedAt,
 		Error:       stringPtr(""),
-	}); err != nil {
+	})
+	if err != nil {
 		p.logger.Error("failed to mark upload ready", "upload_id", id, "error", err)
 		p.scheduleRetry(id, uploadRetryBaseDelay)
 		return
 	}
+	p.scheduleSourceCleanup(updatedUpload, ready)
 	p.logger.Info("upload transcoded", "upload_id", id, "channel_id", upload.ChannelID, "playback_url", playbackURL)
 }
 
@@ -380,11 +399,11 @@ func (p *UploadProcessor) scheduleRetry(id string, delay time.Duration) {
 func (p *UploadProcessor) handleTranscodeError(upload domain.Upload, source string, err error) {
 	attempt := parseRetryAttempt(upload.Metadata) + 1
 	if !isTransientTranscodeError(err) {
-		p.failUpload(upload.ID, source, err, attempt, time.Time{})
+		p.failUpload(upload, err, attempt, time.Time{})
 		return
 	}
 	if attempt >= uploadMaxRetryAttempts {
-		p.failUpload(upload.ID, source, fmt.Errorf("retry budget exhausted after %d attempts: %w", attempt, err), attempt, time.Time{})
+		p.failUpload(upload, fmt.Errorf("retry budget exhausted after %d attempts: %w", attempt, err), attempt, time.Time{})
 		return
 	}
 
@@ -412,14 +431,19 @@ func (p *UploadProcessor) handleTranscodeError(upload domain.Upload, source stri
 }
 
 // failUpload performs fail upload and propagates validation or dependency failures to the caller.
-func (p *UploadProcessor) failUpload(id, source string, err error, attempt int, nextRetry time.Time) {
+func (p *UploadProcessor) failUpload(upload domain.Upload, err error, attempt int, nextRetry time.Time) {
 	if p.store == nil {
+		return
+	}
+	id := strings.TrimSpace(upload.ID)
+	if id == "" {
 		return
 	}
 	failed := "failed"
 	progress := 0
 	message := strings.TrimSpace(err.Error())
-	metadata := map[string]string{}
+	metadata := cloneMetadata(upload.Metadata)
+	source := strings.TrimSpace(metadata["sourceUrl"])
 	if source != "" {
 		metadata["sourceUrl"] = source
 	}
@@ -429,16 +453,76 @@ func (p *UploadProcessor) failUpload(id, source string, err error, attempt int, 
 	if !nextRetry.IsZero() {
 		metadata[metadataNextRetryAtKey] = nextRetry.UTC().Format(time.RFC3339Nano)
 	}
-	if _, updateErr := p.store.UpdateUpload(p.ctx, id, domain.UploadUpdate{
+	updatedUpload, updateErr := p.store.UpdateUpload(p.ctx, id, domain.UploadUpdate{
 		Status:   &failed,
 		Progress: &progress,
 		Metadata: metadata,
 		Error:    &message,
-	}); updateErr != nil {
+	})
+	if updateErr != nil {
 		p.logger.Error("failed to update failed upload", "upload_id", id, "error", updateErr, "failure", err)
 		return
 	}
+	p.scheduleSourceCleanup(updatedUpload, failed)
 	p.logger.Error("upload transcode failed", "upload_id", id, "error", err)
+}
+
+func (p *UploadProcessor) scheduleSourceCleanup(upload domain.Upload, status string) {
+	if p == nil || p.cleaner == nil {
+		return
+	}
+	key := strings.TrimSpace(upload.Metadata["sourceObjectKey"])
+	if key == "" {
+		key = strings.TrimSpace(upload.Metadata["mediaPath"])
+	}
+	if key == "" {
+		return
+	}
+	retention, ok := p.retentionForStatus(status)
+	if !ok {
+		return
+	}
+	delay := retention
+	if delay < 0 {
+		delay = 0
+	}
+	go func() {
+		if delay > 0 {
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			select {
+			case <-p.ctx.Done():
+				return
+			case <-timer.C:
+			}
+		}
+		if err := p.cleaner.Delete(p.ctx, upload, key); err != nil {
+			p.logger.Warn("cleanup upload source artifact failed", "upload_id", upload.ID, "status", status, "source_key", key, "error", err)
+			return
+		}
+		p.logger.Info("cleanup upload source artifact", "upload_id", upload.ID, "status", status, "source_key", key)
+	}()
+}
+
+func (p *UploadProcessor) retentionForStatus(status string) (time.Duration, bool) {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "ready", "completed":
+		return p.readySourceRetention, true
+	case "failed":
+		return p.failedSourceRetention, true
+	default:
+		return 0, false
+	}
+}
+
+func maxDuration(value, fallback time.Duration) time.Duration {
+	if value < 0 {
+		return 0
+	}
+	if value == 0 {
+		return fallback
+	}
+	return value
 }
 
 func parseRetryAttempt(metadata map[string]string) int {

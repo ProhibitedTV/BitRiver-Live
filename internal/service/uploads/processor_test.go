@@ -331,6 +331,64 @@ type fakeUploadStore struct {
 	updateCh        map[string]chan domain.Upload
 }
 
+type fakeSourceCleaner struct {
+	mu       sync.Mutex
+	calls    []cleanupCall
+	errByKey map[string]error
+	doneByID map[string]chan struct{}
+}
+
+type cleanupCall struct {
+	UploadID string
+	Status   string
+	Key      string
+}
+
+func newFakeSourceCleaner() *fakeSourceCleaner {
+	return &fakeSourceCleaner{
+		errByKey: make(map[string]error),
+		doneByID: make(map[string]chan struct{}),
+	}
+}
+
+func (f *fakeSourceCleaner) Delete(_ context.Context, upload domain.Upload, sourceKey string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	status := strings.ToLower(strings.TrimSpace(upload.Status))
+	f.calls = append(f.calls, cleanupCall{UploadID: upload.ID, Status: status, Key: sourceKey})
+	ch, ok := f.doneByID[upload.ID]
+	if !ok {
+		ch = make(chan struct{})
+		f.doneByID[upload.ID] = ch
+	}
+	select {
+	case <-ch:
+	default:
+		close(ch)
+	}
+	if err, exists := f.errByKey[sourceKey]; exists {
+		return err
+	}
+	return nil
+}
+
+func (f *fakeSourceCleaner) completion(id string) <-chan struct{} {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	ch, ok := f.doneByID[id]
+	if !ok {
+		ch = make(chan struct{})
+		f.doneByID[id] = ch
+	}
+	return ch
+}
+
+func (f *fakeSourceCleaner) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.calls)
+}
+
 func newFakeUploadStore() *fakeUploadStore {
 	return &fakeUploadStore{
 		uploads:         make(map[string]domain.Upload),
@@ -657,5 +715,85 @@ func waitForUploadUpdate(t *testing.T, updates <-chan domain.Upload, timeout tim
 		case <-timer.C:
 			t.Fatalf("condition not met within %s", timeout)
 		}
+	}
+}
+
+func TestUploadProcessorCleanupOnReady(t *testing.T) {
+	store := newFakeUploadStore()
+	store.uploads = map[string]domain.Upload{
+		"upload-ready": {
+			ID:        "upload-ready",
+			ChannelID: "channel-1",
+			Status:    "pending",
+			Metadata: map[string]string{
+				"sourceUrl":       "https://example.com/ready.mp4",
+				"sourceObjectKey": "uploads/source-ready.mp4",
+			},
+		},
+	}
+	ingestFake := newFakeIngest()
+	ingestFake.setResult("upload-ready", ingest.UploadTranscodeResult{PlaybackURL: "https://vod.example.com/ready.m3u8"}, nil)
+	cleaner := newFakeSourceCleaner()
+
+	processor := NewUploadProcessor(UploadProcessorConfig{
+		Store:                store,
+		Ingest:               ingestFake,
+		Cleaner:              cleaner,
+		Workers:              1,
+		Timeout:              time.Second,
+		ReadySourceRetention: 0,
+		Logger:               slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	processor.Start()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = processor.Shutdown(ctx)
+	})
+
+	processor.Enqueue("upload-ready")
+	waitForCompletion(t, cleaner.completion("upload-ready"), "cleanup upload-ready", time.Second)
+	if got := cleaner.callCount(); got != 1 {
+		t.Fatalf("expected 1 cleanup call, got %d", got)
+	}
+}
+
+func TestUploadProcessorCleanupOnFailed(t *testing.T) {
+	store := newFakeUploadStore()
+	store.uploads = map[string]domain.Upload{
+		"upload-failed": {
+			ID:        "upload-failed",
+			ChannelID: "channel-1",
+			Status:    "pending",
+			Metadata: map[string]string{
+				"sourceUrl": "https://example.com/failed.mp4",
+				"mediaPath": "upload-failed.mp4",
+			},
+		},
+	}
+	ingestFake := newFakeIngest()
+	ingestFake.setResult("upload-failed", ingest.UploadTranscodeResult{}, errors.New("transcode failed"))
+	cleaner := newFakeSourceCleaner()
+
+	processor := NewUploadProcessor(UploadProcessorConfig{
+		Store:                 store,
+		Ingest:                ingestFake,
+		Cleaner:               cleaner,
+		Workers:               1,
+		Timeout:               time.Second,
+		FailedSourceRetention: -1,
+		Logger:                slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	processor.Start()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = processor.Shutdown(ctx)
+	})
+
+	processor.Enqueue("upload-failed")
+	waitForCompletion(t, cleaner.completion("upload-failed"), "cleanup upload-failed", 2*time.Second)
+	if got := cleaner.callCount(); got != 1 {
+		t.Fatalf("expected 1 cleanup call, got %d", got)
 	}
 }
