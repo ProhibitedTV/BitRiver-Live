@@ -145,6 +145,9 @@ func (s *objectUploadSourceStorage) Delete(ctx context.Context, key string) erro
 		return fmt.Errorf("delete upload source %s: %w", finalKey, err)
 	}
 	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode == http.StatusNotFound {
+		return nil
+	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return fmt.Errorf("delete upload source %s: unexpected status %d", finalKey, response.StatusCode)
 	}

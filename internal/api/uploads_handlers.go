@@ -678,11 +678,17 @@ func (h *Handler) deleteStoredUploadSource(key string) {
 	if store := h.uploadSourceStore(); store.Enabled() {
 		if err := store.Delete(context.Background(), key); err != nil {
 			h.logger().Warn("delete upload source", "key", key, "err", err)
+			return
 		}
+		h.logger().Info("deleted upload source", "key", key, "backend", "object")
 		return
 	}
 	fullPath := filepath.Join(h.uploadMediaDir(), filepath.Base(key))
-	_ = os.Remove(fullPath)
+	if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+		h.logger().Warn("delete upload source", "key", key, "path", fullPath, "err", err)
+		return
+	}
+	h.logger().Info("deleted upload source", "key", key, "path", fullPath, "backend", "filesystem")
 }
 
 // uploadMediaDir performs upload media dir and propagates validation or dependency failures to the caller.
