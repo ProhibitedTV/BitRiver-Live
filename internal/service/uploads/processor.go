@@ -22,6 +22,7 @@ import (
 type Store interface {
 	ListPendingUploads(ctx context.Context, limit int) ([]domain.Upload, error)
 	GetUpload(ctx context.Context, id string) (domain.Upload, bool)
+	EnsureUploadRecording(ctx context.Context, uploadID string, playbackURL string, completedAt time.Time) (string, error)
 	UpdateUpload(ctx context.Context, id string, update domain.UploadUpdate) (domain.Upload, error)
 }
 
@@ -326,11 +327,19 @@ func (p *UploadProcessor) processUpload(id string) {
 		}
 	}
 	metadata["playbackUrl"] = playbackURL
-	// Current behavior updates upload status/playback only; recording creation
-	// and upload->recording linkage are handled elsewhere (not in this worker).
+	recordingID, err := p.store.EnsureUploadRecording(p.ctx, id, playbackURL, completedAt)
+	if err != nil {
+		p.logger.Error("failed to ensure upload recording", "upload_id", id, "error", err)
+		p.scheduleRetry(id, uploadRetryBaseDelay)
+		return
+	}
+	if recordingID != "" {
+		metadata["recordingId"] = recordingID
+	}
 	if _, err := p.store.UpdateUpload(p.ctx, id, domain.UploadUpdate{
 		Status:      &ready,
 		Progress:    &progress,
+		RecordingID: &recordingID,
 		PlaybackURL: &playbackURL,
 		Metadata:    metadata,
 		CompletedAt: &completedAt,

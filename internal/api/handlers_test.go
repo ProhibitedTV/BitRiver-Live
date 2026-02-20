@@ -3547,6 +3547,67 @@ func TestChannelVodsReturnPublishedRecordings(t *testing.T) {
 	}
 }
 
+func TestChannelVodsHideUploadRecordingsUntilPublished(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	owner, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Owner", Email: "owner-vod@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Upload Archive", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	upload, err := store.CreateUpload(storage.CreateUploadParams{ChannelID: channel.ID, Title: "Upload VOD", Filename: "upload.mp4", SizeBytes: 256})
+	if err != nil {
+		t.Fatalf("CreateUpload: %v", err)
+	}
+	completedAt := time.Now().UTC()
+	recording, err := store.EnsureUploadRecording(upload.ID, "https://vod.example.com/upload.m3u8", completedAt)
+	if err != nil {
+		t.Fatalf("EnsureUploadRecording: %v", err)
+	}
+	ready := "ready"
+	if _, err := store.UpdateUpload(upload.ID, storage.UploadUpdate{Status: &ready, RecordingID: &recording.ID, PlaybackURL: &recording.PlaybackBaseURL, CompletedAt: &completedAt}); err != nil {
+		t.Fatalf("UpdateUpload ready: %v", err)
+	}
+
+	path := fmt.Sprintf("/api/channels/%s/vods", channel.ID)
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	rec := httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected VOD status 200, got %d", rec.Code)
+	}
+	var hidden vodCollectionResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &hidden); err != nil {
+		t.Fatalf("decode hidden VOD payload: %v", err)
+	}
+	if len(hidden.Items) != 0 {
+		t.Fatalf("expected unpublished upload VOD to stay hidden, got %d items", len(hidden.Items))
+	}
+
+	published, err := store.PublishRecording(recording.ID)
+	if err != nil {
+		t.Fatalf("PublishRecording: %v", err)
+	}
+	rec = httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected VOD status 200 after publish, got %d", rec.Code)
+	}
+	var visible vodCollectionResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &visible); err != nil {
+		t.Fatalf("decode visible VOD payload: %v", err)
+	}
+	if len(visible.Items) != 1 {
+		t.Fatalf("expected published upload VOD to be visible, got %d items", len(visible.Items))
+	}
+	if visible.Items[0].ID != published.ID {
+		t.Fatalf("expected VOD %s, got %s", published.ID, visible.Items[0].ID)
+	}
+}
+
 func TestModerationQueueLifecycle(t *testing.T) {
 	handler, store := newTestHandler(t)
 

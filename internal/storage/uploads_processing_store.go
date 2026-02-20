@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"bitriver-live/internal/domain"
 	serviceuploads "bitriver-live/internal/service/uploads"
@@ -15,6 +16,7 @@ type UploadProcessingStore struct {
 		ListChannels(ownerID, query string) []domain.Channel
 		ListUploads(channelID string) ([]domain.Upload, error)
 		GetUpload(id string) (domain.Upload, bool)
+		EnsureUploadRecording(id, playbackURL string, completedAt time.Time) (domain.Recording, error)
 		UpdateUpload(id string, update domain.UploadUpdate) (domain.Upload, error)
 	}
 }
@@ -24,6 +26,7 @@ func NewUploadProcessingStore(repo interface {
 	ListChannels(ownerID, query string) []domain.Channel
 	ListUploads(channelID string) ([]domain.Upload, error)
 	GetUpload(id string) (domain.Upload, bool)
+	EnsureUploadRecording(id, playbackURL string, completedAt time.Time) (domain.Recording, error)
 	UpdateUpload(id string, update domain.UploadUpdate) (domain.Upload, error)
 }) serviceuploads.Store {
 	return UploadProcessingStore{repo: repo}
@@ -84,6 +87,24 @@ func (s UploadProcessingStore) GetUpload(ctx context.Context, id string) (domain
 	}
 
 	return s.repo.GetUpload(id)
+}
+
+// EnsureUploadRecording creates or returns a recording associated with the upload.
+func (s UploadProcessingStore) EnsureUploadRecording(ctx context.Context, uploadID string, playbackURL string, completedAt time.Time) (string, error) {
+	if s.repo == nil {
+		return "", fmt.Errorf("upload store unavailable")
+	}
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	default:
+	}
+
+	recording, err := s.repo.EnsureUploadRecording(uploadID, playbackURL, completedAt)
+	if err != nil {
+		return "", err
+	}
+	return recording.ID, nil
 }
 
 // UpdateUpload updates upload and returns an error when persistence or validation fails.

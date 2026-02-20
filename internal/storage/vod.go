@@ -608,6 +608,73 @@ func (s *Storage) GetUpload(id string) (domain.Upload, bool) {
 	return cloneUpload(upload), true
 }
 
+// EnsureUploadRecording creates or reuses a recording for a completed upload.
+func (s *Storage) EnsureUploadRecording(id, playbackURL string, completedAt time.Time) (domain.Recording, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	upload, ok := s.data.Uploads[id]
+	if !ok {
+		return domain.Recording{}, fmt.Errorf("upload %s not found", id)
+	}
+	if upload.RecordingID != nil {
+		recordingID := strings.TrimSpace(*upload.RecordingID)
+		if recordingID != "" {
+			if recording, exists := s.data.Recordings[recordingID]; exists {
+				return cloneRecording(recording), nil
+			}
+		}
+	}
+	for _, recording := range s.data.Recordings {
+		if strings.TrimSpace(recording.Metadata["uploadId"]) == upload.ID {
+			return cloneRecording(recording), nil
+		}
+	}
+
+	now := completedAt.UTC()
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	title := strings.TrimSpace(upload.Title)
+	if title == "" {
+		title = strings.TrimSpace(upload.Filename)
+	}
+	if title == "" {
+		title = fmt.Sprintf("Upload %s", upload.ID)
+	}
+
+	recordingID, err := generateID()
+	if err != nil {
+		return domain.Recording{}, err
+	}
+	metadata := map[string]string{
+		"channelId": upload.ChannelID,
+		"uploadId":  upload.ID,
+		"source":    "upload",
+	}
+	recording := domain.Recording{
+		ID:              recordingID,
+		ChannelID:       upload.ChannelID,
+		SessionID:       "upload-" + upload.ID,
+		Title:           title,
+		DurationSeconds: 0,
+		PlaybackBaseURL: strings.TrimSpace(playbackURL),
+		Metadata:        metadata,
+		CreatedAt:       now,
+	}
+	if deadline := s.recordingDeadline(now, false); deadline != nil {
+		recording.RetainUntil = deadline
+	}
+
+	snapshot := cloneDataset(s.data)
+	s.data.Recordings[recording.ID] = recording
+	if err := s.persist(); err != nil {
+		s.data = snapshot
+		return domain.Recording{}, err
+	}
+	return cloneRecording(recording), nil
+}
+
 // UpdateUpload executes UpdateUpload.
 // Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
 // this function still normalizes/trims where needed and rejects empty required fields.
