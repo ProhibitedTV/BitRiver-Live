@@ -260,6 +260,44 @@ func TestRecordingLifecycle(t *testing.T) {
 	}
 }
 
+func TestEnsureUploadRecordingCreatesUnpublishedRecording(t *testing.T) {
+	store := newTestStore(t)
+	owner, err := store.CreateUser(CreateUserParams{DisplayName: "Owner", Email: "owner-upload@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Upload Channel", "gaming", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+	upload, err := store.CreateUpload(CreateUploadParams{ChannelID: channel.ID, Title: "Uploaded VOD", Filename: "uploaded.mp4", SizeBytes: 128})
+	if err != nil {
+		t.Fatalf("CreateUpload: %v", err)
+	}
+	completedAt := time.Now().UTC()
+	recording, err := store.EnsureUploadRecording(upload.ID, "https://vod.example.com/uploaded.m3u8", completedAt)
+	if err != nil {
+		t.Fatalf("EnsureUploadRecording: %v", err)
+	}
+	if recording.ChannelID != channel.ID {
+		t.Fatalf("expected recording channel %s, got %s", channel.ID, recording.ChannelID)
+	}
+	if recording.PublishedAt != nil {
+		t.Fatal("expected upload recording to start unpublished")
+	}
+	if recording.Metadata["source"] != "upload" {
+		t.Fatalf("expected upload source metadata, got %q", recording.Metadata["source"])
+	}
+
+	reused, err := store.EnsureUploadRecording(upload.ID, "https://vod.example.com/uploaded.m3u8", completedAt)
+	if err != nil {
+		t.Fatalf("EnsureUploadRecording second call: %v", err)
+	}
+	if reused.ID != recording.ID {
+		t.Fatalf("expected EnsureUploadRecording to be idempotent, got %s then %s", recording.ID, reused.ID)
+	}
+}
+
 func TestDeleteRecordingRemovesStorageArtifacts(t *testing.T) {
 	controller := &fakeIngestController{bootResponses: []bootResponse{{result: ingest.BootResult{
 		Renditions: []ingest.Rendition{{Name: "1080p", ManifestURL: "https://origin/1080p.m3u8"}},

@@ -97,3 +97,9 @@ It is intentionally conservative: transitions are listed only when they are alre
 - `CREATED`, `INGESTING`, `DEGRADED`, and `ERROR` are part of the canonical lifecycle vocabulary but are **observed-only** in current code.
 - `LIVE` and `ENDED` are directly represented by persisted session/channel mutations.
 - When implementing future lifecycle enforcement, keep this document aligned with actual state transitions and ownership boundaries.
+
+## Upload-to-VOD publish policy
+
+- Successful upload transcode processing now ensures a `recordings` row exists and links `uploads.recording_id` to that recording.
+- Upload-created recordings are **unpublished by default** (`published_at` remains `NULL`).
+- `/api/channels/{id}/vods` only returns recordings with `published_at` set, so upload VODs remain hidden until an explicit publish action occurs through recording APIs.

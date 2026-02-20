@@ -2007,6 +2007,136 @@ func (r *postgresRepository) GetUpload(id string) (domain.Upload, bool) {
 	return upload, true
 }
 
+// EnsureUploadRecording creates or reuses a recording for a completed upload.
+func (r *postgresRepository) EnsureUploadRecording(id, playbackURL string, completedAt time.Time) (domain.Recording, error) {
+	if r == nil || r.pool == nil {
+		return domain.Recording{}, ErrPostgresUnavailable
+	}
+	var result domain.Recording
+	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("begin ensure upload recording tx: %w", err)
+		}
+		defer rollbackTx(ctx, tx)
+
+		upload, ok, err := r.loadUpload(ctx, id)
+		if err != nil {
+			return fmt.Errorf("load upload %s: %w", id, err)
+		}
+		if !ok {
+			return fmt.Errorf("upload %s not found", id)
+		}
+		if upload.RecordingID != nil {
+			recordingID := strings.TrimSpace(*upload.RecordingID)
+			if recordingID != "" {
+				recording, ok, loadErr := r.loadRecording(ctx, recordingID)
+				if loadErr != nil {
+					return fmt.Errorf("load recording %s: %w", recordingID, loadErr)
+				}
+				if ok {
+					result = recording
+					if err := tx.Commit(ctx); err != nil {
+						return fmt.Errorf("commit ensure upload recording: %w", err)
+					}
+					return nil
+				}
+			}
+		}
+		var existingRecordingID pgtype.Text
+		if err := tx.QueryRow(ctx, "SELECT id FROM recordings WHERE metadata ->> 'uploadId' = $1 ORDER BY created_at DESC LIMIT 1", upload.ID).Scan(&existingRecordingID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("query existing upload recording: %w", err)
+		}
+		if existingRecordingID.Valid {
+			recording, ok, loadErr := r.loadRecording(ctx, strings.TrimSpace(existingRecordingID.String))
+			if loadErr != nil {
+				return fmt.Errorf("load existing upload recording %s: %w", existingRecordingID.String, loadErr)
+			}
+			if ok {
+				result = recording
+				if err := tx.Commit(ctx); err != nil {
+					return fmt.Errorf("commit ensure upload recording: %w", err)
+				}
+				return nil
+			}
+		}
+
+		now := completedAt.UTC()
+		if now.IsZero() {
+			now = time.Now().UTC()
+		}
+		title := strings.TrimSpace(upload.Title)
+		if title == "" {
+			title = strings.TrimSpace(upload.Filename)
+		}
+		if title == "" {
+			title = fmt.Sprintf("Upload %s", upload.ID)
+		}
+		recordingID, err := generateID()
+		if err != nil {
+			return err
+		}
+		uploadSessionID := "upload-" + upload.ID
+		if _, err := tx.Exec(ctx, "INSERT INTO stream_sessions (id, channel_id, started_at, ended_at, renditions, peak_concurrent, origin_url, playback_url, ingest_endpoints, ingest_job_ids) VALUES ($1, $2, $3, $4, ARRAY[]::TEXT[], 0, '', $5, ARRAY[]::TEXT[], ARRAY[]::TEXT[]) ON CONFLICT (id) DO NOTHING",
+			uploadSessionID,
+			upload.ChannelID,
+			now,
+			now,
+			strings.TrimSpace(playbackURL),
+		); err != nil {
+			return fmt.Errorf("ensure upload session: %w", err)
+		}
+		metadata := map[string]string{
+			"channelId": upload.ChannelID,
+			"uploadId":  upload.ID,
+			"source":    "upload",
+		}
+		metadataJSON, err := json.Marshal(metadata)
+		if err != nil {
+			return fmt.Errorf("encode recording metadata: %w", err)
+		}
+
+		var retainUntil any
+		if deadline := r.recordingDeadline(now, false); deadline != nil {
+			retainUntil = deadline
+		}
+		if _, err := tx.Exec(ctx, "INSERT INTO recordings (id, channel_id, session_id, title, duration_seconds, playback_base_url, metadata, created_at, retain_until) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+			recordingID,
+			upload.ChannelID,
+			uploadSessionID,
+			title,
+			0,
+			strings.TrimSpace(playbackURL),
+			metadataJSON,
+			now,
+			retainUntil,
+		); err != nil {
+			return fmt.Errorf("insert upload recording: %w", err)
+		}
+		result = domain.Recording{
+			ID:              recordingID,
+			ChannelID:       upload.ChannelID,
+			SessionID:       uploadSessionID,
+			Title:           title,
+			DurationSeconds: 0,
+			PlaybackBaseURL: strings.TrimSpace(playbackURL),
+			Metadata:        metadata,
+			CreatedAt:       now,
+		}
+		if deadline, ok := retainUntil.(*time.Time); ok && deadline != nil {
+			result.RetainUntil = deadline
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit ensure upload recording: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.Recording{}, err
+	}
+	return result, nil
+}
+
 // UpdateUpload executes UpdateUpload.
 // Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
 // this function still normalizes/trims where needed and rejects empty required fields.

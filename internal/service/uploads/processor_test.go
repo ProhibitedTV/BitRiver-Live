@@ -81,14 +81,17 @@ func TestUploadProcessorStartShutdown(t *testing.T) {
 	waitForCompletion(t, ingest3Done, "upload-3", 2*time.Second)
 
 	waitForUploadUpdate(t, upload1Updates, time.Second, func(upload domain.Upload) bool {
-		return upload.Status == "ready" && upload.PlaybackURL == "https://vod.example.com/a.m3u8" && upload.Progress == 100
+		return upload.Status == "ready" && upload.PlaybackURL == "https://vod.example.com/a.m3u8" && upload.Progress == 100 && upload.RecordingID != nil && *upload.RecordingID != ""
 	})
 	waitForUploadUpdate(t, upload2Updates, time.Second, func(upload domain.Upload) bool {
 		return upload.Status == "ready" && upload.PlaybackURL == "https://vod.example.com/b.m3u8" && upload.Progress == 100
 	})
 	waitForUploadUpdate(t, upload3Updates, time.Second, func(upload domain.Upload) bool {
-		return upload.Status == "ready" && upload.PlaybackURL == "https://vod.example.com/c.m3u8" && upload.Progress == 100
+		return upload.Status == "ready" && upload.PlaybackURL == "https://vod.example.com/c.m3u8" && upload.Progress == 100 && upload.RecordingID != nil && *upload.RecordingID != ""
 	})
+	if len(store.recordings) != 3 {
+		t.Fatalf("expected 3 recordings linked to uploads, got %d", len(store.recordings))
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -322,6 +325,7 @@ func TestUploadProcessorTerminalFailureAfterRetryBudget(t *testing.T) {
 type fakeUploadStore struct {
 	mu              sync.Mutex
 	uploads         map[string]domain.Upload
+	recordings      map[string]domain.Recording
 	failFirstUpdate map[string]error
 	updateAttempts  map[string]int
 	updateCh        map[string]chan domain.Upload
@@ -330,6 +334,7 @@ type fakeUploadStore struct {
 func newFakeUploadStore() *fakeUploadStore {
 	return &fakeUploadStore{
 		uploads:         make(map[string]domain.Upload),
+		recordings:      make(map[string]domain.Recording),
 		failFirstUpdate: make(map[string]error),
 		updateAttempts:  make(map[string]int),
 		updateCh:        make(map[string]chan domain.Upload),
@@ -386,6 +391,35 @@ func (f *fakeUploadStore) updatesFor(id string) <-chan domain.Upload {
 	return ch
 }
 
+func (f *fakeUploadStore) EnsureUploadRecording(ctx context.Context, id string, playbackURL string, completedAt time.Time) (string, error) {
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	default:
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	upload, ok := f.uploads[id]
+	if !ok {
+		return "", errors.New("upload not found")
+	}
+	if upload.RecordingID != nil && strings.TrimSpace(*upload.RecordingID) != "" {
+		return strings.TrimSpace(*upload.RecordingID), nil
+	}
+	recordingID := "recording-" + id
+	f.recordings[recordingID] = domain.Recording{
+		ID:              recordingID,
+		ChannelID:       upload.ChannelID,
+		SessionID:       "upload-" + id,
+		Title:           upload.Title,
+		DurationSeconds: 0,
+		PlaybackBaseURL: playbackURL,
+		CreatedAt:       completedAt,
+	}
+	return recordingID, nil
+}
+
 func (f *fakeUploadStore) UpdateUpload(ctx context.Context, id string, update domain.UploadUpdate) (domain.Upload, error) {
 	select {
 	case <-ctx.Done():
@@ -413,6 +447,14 @@ func (f *fakeUploadStore) UpdateUpload(ctx context.Context, id string, update do
 	}
 	if update.PlaybackURL != nil {
 		upload.PlaybackURL = *update.PlaybackURL
+	}
+	if update.RecordingID != nil {
+		recordingID := strings.TrimSpace(*update.RecordingID)
+		if recordingID == "" {
+			upload.RecordingID = nil
+		} else {
+			upload.RecordingID = &recordingID
+		}
 	}
 	if update.Metadata != nil {
 		upload.Metadata = cloneMetadataMap(update.Metadata)
