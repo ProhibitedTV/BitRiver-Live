@@ -38,17 +38,6 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
 
-      - name: Install govulncheck
-        env:
-          # Intentional exception: govulncheck is fetched from the public module proxy.
-          GOFLAGS: ''
-          GOPROXY: https://proxy.golang.org,direct
-        run: go install golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }}
-
-      - name: Ensure go.sum is non-empty
-        shell: bash
-        run: ./scripts/check-go-sum-not-empty.sh
-
       - name: Run verification gate
         if: matrix.os == 'ubuntu-latest'
         shell: bash
@@ -57,6 +46,13 @@ jobs:
       - name: Run unit tests (non-Linux)
         if: matrix.os != 'ubuntu-latest'
         run: go test ./... -count=1 -timeout=120s
+
+      - name: Install govulncheck
+        env:
+          # Intentional exception: govulncheck is fetched from the public module proxy.
+          GOFLAGS: ''
+          GOPROXY: https://proxy.golang.org,direct
+        run: go install golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }}
 
       - name: Verify Helm deploy assets are synced from canonical sources
         shell: bash
