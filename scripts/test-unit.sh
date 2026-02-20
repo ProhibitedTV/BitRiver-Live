@@ -8,4 +8,4 @@ export GOTOOLCHAIN="${GOTOOLCHAIN:-local}"
 export GOPROXY="${GOPROXY:-off}"
 export GOSUMDB="${GOSUMDB:-off}"
 
-go test ./...
+go test ./... -count=1 -timeout=120s
