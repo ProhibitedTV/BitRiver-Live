@@ -12,8 +12,10 @@ on:
       - scripts/test-quickstart.sh
       - scripts/test-quickstart-env.py
       - scripts/verify.sh
-      - scripts/quickstart.sh
-      - scripts/quickstart.ps1
+      - go.mod
+      - go.sum
+      - third_party/**
+      - .github/workflows/quickstart-smoke.yml
   push:
     branches:
       - main
@@ -23,8 +25,10 @@ on:
       - scripts/test-quickstart.sh
       - scripts/test-quickstart-env.py
       - scripts/verify.sh
-      - scripts/quickstart.sh
-      - scripts/quickstart.ps1
+      - go.mod
+      - go.sum
+      - third_party/**
+      - .github/workflows/quickstart-smoke.yml
   workflow_dispatch:
 
 jobs:
