@@ -144,6 +144,8 @@ test.describe("creator schedule management", () => {
 
     await expect(page.getByText(/sessions unavailable/i)).toBeHidden();
     await expect(page.getByText(/channel list offline/i)).toBeHidden();
+    await expect(page.getByText(/idle/i)).toBeVisible();
+    await expect(page.getByText(/last transition unknown/i)).toBeVisible();
     await expect(page.getByText(/session started/i)).toBeVisible();
 
     const titleInput = page.getByLabel("Stream title");

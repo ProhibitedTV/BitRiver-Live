@@ -30,6 +30,77 @@ function describeEndpoint(endpoint: string, index: number) {
   return `Ingest ${index + 1}`;
 }
 
+type ControlCentreStreamStatus = {
+  label: "Idle" | "Ingesting" | "Live" | "Ended" | "Error";
+  badgeClassName: string;
+  lastTransitionAt?: string;
+  reason?: string;
+};
+
+function deriveControlCentreStatus(
+  liveState: string | undefined,
+  currentSessionId: string | undefined,
+  latestSession: StreamSession | undefined,
+): ControlCentreStreamStatus {
+  if (liveState === "starting") {
+    return {
+      label: "Ingesting",
+      badgeClassName: "badge badge--ingesting",
+      lastTransitionAt: latestSession?.startedAt,
+      reason: "Encoder connected; stream is still provisioning.",
+    };
+  }
+
+  if (liveState === "live") {
+    return {
+      label: "Live",
+      badgeClassName: "badge badge--live",
+      lastTransitionAt: latestSession?.startedAt,
+    };
+  }
+
+  if (liveState === "offline") {
+    if (latestSession?.endedAt) {
+      return {
+        label: "Ended",
+        badgeClassName: "badge badge--ended",
+        lastTransitionAt: latestSession.endedAt,
+        reason: "Ended normally.",
+      };
+    }
+
+    if (currentSessionId && !latestSession) {
+      return {
+        label: "Error",
+        badgeClassName: "badge badge--error",
+        reason: "Ingest lost before session details were persisted.",
+      };
+    }
+
+    if (currentSessionId && latestSession && latestSession.id !== currentSessionId) {
+      return {
+        label: "Error",
+        badgeClassName: "badge badge--error",
+        lastTransitionAt: latestSession.startedAt,
+        reason: "Ingest lost: channel session signal is out of sync.",
+      };
+    }
+
+    return {
+      label: "Idle",
+      badgeClassName: "badge badge--muted",
+      lastTransitionAt: latestSession?.endedAt,
+    };
+  }
+
+  // TODO: verify in code if additional persisted live_state values should map to Ended/Error explicitly.
+  return {
+    label: "Error",
+    badgeClassName: "badge badge--error",
+    reason: liveState ? `Unexpected stream state: ${liveState}` : "No stream state available",
+  };
+}
+
 export default function CreatorLivePage() {
   const { playback, loading, error, channelId, reload } = useCreatorChannel();
   const { user, loading: authLoading } = useAuth();
@@ -130,6 +201,12 @@ export default function CreatorLivePage() {
   );
 
   const ingestEndpoints = managedChannel?.ingestEndpoints ?? [];
+  const streamStatus = useMemo(() => {
+    if (!playback) {
+      return { label: "Idle", badgeClassName: "badge badge--muted" } as ControlCentreStreamStatus;
+    }
+    return deriveControlCentreStatus(playback.channel.liveState, playback.channel.currentSessionId, latestSession);
+  }, [latestSession, playback]);
 
   const handleTitleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -215,6 +292,15 @@ export default function CreatorLivePage() {
             </select>
           </div>
         ) : null}
+        <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+          <span className={streamStatus.badgeClassName}>{streamStatus.label}</span>
+          {streamStatus.lastTransitionAt ? (
+            <span className="muted">Last transition {new Date(streamStatus.lastTransitionAt).toLocaleString()}</span>
+          ) : (
+            <span className="muted">Last transition unknown</span>
+          )}
+          {streamStatus.reason ? <span className="muted">Reason: {streamStatus.reason}</span> : null}
+        </div>
         <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
           <button
             type="button"

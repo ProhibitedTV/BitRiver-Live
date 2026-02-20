@@ -587,6 +587,21 @@ button {
   color: var(--text);
 }
 
+.badge--ingesting {
+  background: #1d4ed8;
+  color: #dbeafe;
+}
+
+.badge--ended {
+  background: #065f46;
+  color: #d1fae5;
+}
+
+.badge--error {
+  background: #7f1d1d;
+  color: #fee2e2;
+}
+
 .pill {
   display: inline-flex;
   align-items: center;
