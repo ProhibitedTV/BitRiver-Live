@@ -123,11 +123,12 @@ export function FeaturedChannel({
               ))}
             </div>
             <div className="featured-channel__actions">
-              <Link className="primary-button" href={`/channels/${activeChannel.channel.id}`} aria-label="Watch featured channel">
-                Watch now
-              </Link>
-              <Link className="secondary-button" href={`/channels/${activeChannel.channel.id}`} aria-label="View channel details">
-                View channel
+              <Link
+                className="primary-button"
+                href={`/channels/${activeChannel.channel.id}`}
+                aria-label="View featured channel"
+              >
+                View stream
               </Link>
             </div>
           </div>

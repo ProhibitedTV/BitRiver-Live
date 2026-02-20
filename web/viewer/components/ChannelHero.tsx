@@ -202,7 +202,6 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
       </header>
       <div className="channel-hero__meta-row">
         <div className="tag-list">
-          {data.live && <span className="badge">Live now</span>}
           {data.channel.category && <span className="tag">{data.channel.category}</span>}
           {data.channel.tags.map((tag) => (
             <span key={tag} className="tag">
