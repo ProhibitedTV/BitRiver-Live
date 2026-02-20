@@ -16,6 +16,34 @@ coverage.
 
 If `python3` is missing, `./scripts/verify.sh` now fails fast with a clear prerequisite error before running the verify sequence.
 
+## Test taxonomy and single entrypoints
+
+Use these category entrypoints from the repository root:
+
+- **Unit:** `./scripts/test-unit.sh`
+  - Runs `go test ./...` with offline Go env defaults (`GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off`).
+  - CI: [`.github/workflows/go-unit-tests.yml`](../.github/workflows/go-unit-tests.yml) and the `go-tests` job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+- **Postgres integration (tagged):** `./scripts/test-postgres.sh`
+  - Runs storage integration tests behind the `postgres` tag using Docker or `BITRIVER_TEST_POSTGRES_DSN`.
+  - CI: [`.github/workflows/postgres-tests.yml`](../.github/workflows/postgres-tests.yml), plus `postgres-tests` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) and release validation in [`.github/workflows/release.yml`](../.github/workflows/release.yml).
+- **Quickstart smoke:** `./scripts/test-quickstart.sh`
+  - Validates compose rendering/healthcheck wiring and boots the quickstart stack.
+  - CI: [`.github/workflows/quickstart-smoke.yml`](../.github/workflows/quickstart-smoke.yml) and `quickstart-smoke` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+- **Ingest e2e:** `./scripts/test-ingest-e2e.sh`
+  - Exercises the ingest control-plane/storage lifecycle guard.
+  - CI: [`.github/workflows/ingest-e2e.yml`](../.github/workflows/ingest-e2e.yml) and `ingest-e2e` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+- **Viewer integration / Playwright:** `npm --prefix web/viewer run test:integration`
+  - Runs viewer lint + Jest + Playwright integration checks.
+  - CI: [`.github/workflows/viewer-ci.yml`](../.github/workflows/viewer-ci.yml), `viewer-tests` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), and release viewer validation in [`.github/workflows/release.yml`](../.github/workflows/release.yml).
+
+Run everything with the umbrella entrypoint:
+
+```bash
+./scripts/test-all.sh
+```
+
+`./scripts/test-all.sh` runs verify + postgres + quickstart + ingest e2e and then viewer integration when Node/Playwright tooling is available. It skips unavailable Docker/Node/Playwright-dependent steps with explicit skip messages.
+
 ## Dependency source of truth
 
 Offline Go builds in this repository use `go.mod` `replace` directives that point
