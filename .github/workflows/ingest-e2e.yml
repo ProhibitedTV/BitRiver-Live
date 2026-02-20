@@ -5,21 +5,7 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  push:
-    branches: [main]
-    tags:
-      - 'v*'
-    paths:
-      - '**/*.go'
-      - scripts/**
-      - internal/**
-      - .github/workflows/ingest-e2e.yml
-  pull_request:
-    paths:
-      - '**/*.go'
-      - scripts/**
-      - internal/**
-      - .github/workflows/ingest-e2e.yml
+  workflow_dispatch:
 
 permissions:
   contents: read
