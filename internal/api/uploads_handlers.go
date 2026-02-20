@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -46,6 +47,7 @@ var allowedUploadMediaTypes = map[string]map[string]struct{}{
 }
 
 const defaultUploadMaxBytes int64 = 512 << 20 // 512 MiB
+const defaultUploadTempMaxAge = 6 * time.Hour
 
 var errUploadTooLarge = errors.New("upload exceeds maximum allowed size")
 
@@ -243,7 +245,7 @@ func (h *Handler) createUploadFromJSON(w http.ResponseWriter, r *http.Request, a
 	if !DecodeAndValidate(w, r, &req) {
 		return
 	}
-	upload, status, err := h.createUploadEntry(r, actor, req, nil)
+	upload, status, err := h.createUploadEntry(r, actor, req, nil, strings.TrimSpace(r.Header.Get("Idempotency-Key")))
 	if err != nil {
 		WriteError(w, status, err)
 		return
@@ -260,6 +262,7 @@ func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Reque
 	//  4) Enqueue the background upload processor, which later asks ingest/transcoder to process sourceUrl.
 	// The API is intentionally single-file: additional `file` parts are ignored.
 	maxUploadBytes := h.uploadMaxBytes()
+	h.cleanupStalePendingUploadFiles()
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
 	reader, err := r.MultipartReader()
 	if err != nil {
@@ -357,16 +360,16 @@ func (h *Handler) createUploadFromMultipart(w http.ResponseWriter, r *http.Reque
 			req.SizeBytes = media.size
 		}
 	}
-	upload, status, err := h.createUploadEntry(r, actor, req, media)
+	upload, status, err := h.createUploadEntry(r, actor, req, media, strings.TrimSpace(r.Header.Get("Idempotency-Key")))
 	if err != nil {
 		WriteError(w, status, err)
 		return
 	}
-	WriteJSON(w, http.StatusCreated, newUploadResponse(upload))
+	WriteJSON(w, status, newUploadResponse(upload))
 }
 
 // createUploadEntry creates upload entry and returns an error when validation or persistence fails.
-func (h *Handler) createUploadEntry(r *http.Request, actor domain.User, req createUploadRequest, media *uploadedMedia) (domain.Upload, int, error) {
+func (h *Handler) createUploadEntry(r *http.Request, actor domain.User, req createUploadRequest, media *uploadedMedia, idempotencyKey string) (domain.Upload, int, error) {
 	channelID := strings.TrimSpace(req.ChannelID)
 	if channelID == "" {
 		return domain.Upload{}, http.StatusBadRequest, fmt.Errorf("channelId is required")
@@ -379,6 +382,23 @@ func (h *Handler) createUploadEntry(r *http.Request, actor domain.User, req crea
 		return domain.Upload{}, http.StatusForbidden, fmt.Errorf("forbidden")
 	}
 	metadata := cloneStringMap(req.Metadata)
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if idempotencyKey != "" {
+		existing, findErr := h.findUploadByIdempotencyKey(channelID, idempotencyKey)
+		if findErr != nil {
+			return domain.Upload{}, http.StatusInternalServerError, findErr
+		}
+		if existing != nil {
+			if media != nil && media.tempPath != "" {
+				_ = os.Remove(media.tempPath)
+			}
+			return *existing, http.StatusOK, nil
+		}
+		if metadata == nil {
+			metadata = make(map[string]string, 1)
+		}
+		metadata["idempotencyKey"] = idempotencyKey
+	}
 	playbackURL := strings.TrimSpace(req.PlaybackURL)
 	if playbackURL != "" {
 		if metadata == nil {
@@ -412,7 +432,24 @@ func (h *Handler) createUploadEntry(r *http.Request, actor domain.User, req crea
 	if h.UploadProcessor != nil {
 		h.UploadProcessor.Enqueue(upload.ID)
 	}
-	return upload, 0, nil
+	return upload, http.StatusCreated, nil
+}
+
+func (h *Handler) findUploadByIdempotencyKey(channelID, key string) (*domain.Upload, error) {
+	uploads, err := h.uploadsService().ListUploads(channelID)
+	if err != nil {
+		return nil, err
+	}
+	for _, upload := range uploads {
+		if upload.Metadata == nil {
+			continue
+		}
+		if strings.TrimSpace(upload.Metadata["idempotencyKey"]) == key {
+			found := upload
+			return &found, nil
+		}
+	}
+	return nil, nil
 }
 
 // saveMultipartFile performs save multipart file and propagates validation or dependency failures to the caller.
@@ -464,6 +501,10 @@ func (h *Handler) saveMultipartFile(part *multipart.Part) (*uploadedMedia, error
 		_ = os.Remove(tmp.Name())
 		return nil, fmt.Errorf("unsupported media type %q for extension %q", detectedType, ext)
 	}
+	if err := validateUploadSignature(ext, header[:read]); err != nil {
+		_ = os.Remove(tmp.Name())
+		return nil, err
+	}
 
 	return &uploadedMedia{
 		tempPath:     tmp.Name(),
@@ -471,6 +512,54 @@ func (h *Handler) saveMultipartFile(part *multipart.Part) (*uploadedMedia, error
 		originalName: part.FileName(),
 		contentType:  detectedType,
 	}, nil
+}
+
+func validateUploadSignature(ext string, header []byte) error {
+	switch ext {
+	case ".mp4", ".m4v", ".mov":
+		if len(header) < 12 {
+			return fmt.Errorf("media signature is too short for extension %q", ext)
+		}
+		if string(header[4:8]) != "ftyp" {
+			return fmt.Errorf("unsupported media signature for extension %q", ext)
+		}
+		brand := string(header[8:12])
+		switch ext {
+		case ".mov":
+			if brand != "qt  " {
+				return fmt.Errorf("unsupported media signature for extension %q", ext)
+			}
+		default:
+			if brand == "qt  " {
+				return fmt.Errorf("unsupported media signature for extension %q", ext)
+			}
+		}
+	case ".webm":
+		if len(header) < 4 || binary.BigEndian.Uint32(header[:4]) != 0x1A45DFA3 {
+			return fmt.Errorf("unsupported media signature for extension %q", ext)
+		}
+	}
+	return nil
+}
+
+func (h *Handler) cleanupStalePendingUploadFiles() {
+	dir := h.uploadMediaDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().UTC().Add(-defaultUploadTempMaxAge)
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, "pending-upload-") {
+			continue
+		}
+		info, statErr := entry.Info()
+		if statErr != nil || info.ModTime().After(cutoff) {
+			continue
+		}
+		_ = os.Remove(filepath.Join(dir, name))
+	}
 }
 
 // uploadMaxBytes resolves the multipart upload size policy in bytes.
