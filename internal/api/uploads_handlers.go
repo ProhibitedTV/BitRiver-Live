@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -506,7 +508,7 @@ func (h *Handler) attachMediaToUpload(r *http.Request, upload domain.Upload, bas
 	if media == nil {
 		return upload, nil
 	}
-	storedName, err := h.persistUploadMedia(upload.ID, media)
+	stored, err := h.persistUploadMedia(r.Context(), upload.ID, media)
 	if err != nil {
 		_ = h.uploadsService().DeleteUpload(upload.ID)
 		return domain.Upload{}, err
@@ -516,22 +518,31 @@ func (h *Handler) attachMediaToUpload(r *http.Request, upload domain.Upload, bas
 		metadata = make(map[string]string)
 	}
 	metadata["source"] = "upload"
-	metadata["mediaPath"] = storedName
+	metadata["mediaPath"] = stored.Key
+	metadata["sourceObjectKey"] = stored.Key
+	if stored.PublicURL != "" {
+		metadata["sourceObjectURL"] = stored.PublicURL
+	}
 	if media.originalName != "" {
 		metadata["uploadedFilename"] = media.originalName
 	}
-	if media.contentType != "" {
-		metadata["contentType"] = media.contentType
+	contentType := strings.TrimSpace(media.contentType)
+	if contentType == "" {
+		contentType = strings.TrimSpace(stored.ContentType)
+	}
+	if contentType != "" {
+		metadata["contentType"] = contentType
 	}
 	token := generateUploadMediaToken()
 	metadata["mediaToken"] = token
-	// `sourceUrl` intentionally points to this API's tokenized media endpoint so
-	// downstream transcode workers can pull bytes over HTTP instead of opening
-	// local files directly.
-	metadata["sourceUrl"] = h.uploadMediaURL(r, upload.ID, token)
+	if stored.PublicURL != "" {
+		metadata["sourceUrl"] = stored.PublicURL
+	} else {
+		metadata["sourceUrl"] = h.uploadMediaURL(r, upload.ID, token)
+	}
 	update := domain.UploadUpdate{Metadata: metadata}
 	if _, err := h.uploadsService().UpdateUpload(upload.ID, update); err != nil {
-		_ = os.Remove(filepath.Join(h.uploadMediaDir(), storedName))
+		h.deleteStoredUploadSource(stored.Key)
 		_ = h.uploadsService().DeleteUpload(upload.ID)
 		return domain.Upload{}, err
 	}
@@ -540,15 +551,27 @@ func (h *Handler) attachMediaToUpload(r *http.Request, upload domain.Upload, bas
 }
 
 // persistUploadMedia performs persist upload media and propagates validation or dependency failures to the caller.
-func (h *Handler) persistUploadMedia(uploadID string, media *uploadedMedia) (string, error) {
+func (h *Handler) persistUploadMedia(ctx context.Context, uploadID string, media *uploadedMedia) (storedUploadSource, error) {
 	if media == nil || media.tempPath == "" {
-		return "", fmt.Errorf("media payload missing")
+		return storedUploadSource{}, fmt.Errorf("media payload missing")
 	}
 	defer func() {
 		if media.tempPath != "" {
 			_ = os.Remove(media.tempPath)
 		}
 	}()
+	payload, err := readUploadMediaFile(media.tempPath)
+	if err != nil {
+		return storedUploadSource{}, fmt.Errorf("read upload media: %w", err)
+	}
+	if store := h.uploadSourceStore(); store.Enabled() {
+		stored, storeErr := store.Store(ctx, uploadID, media.originalName, media.contentType, payload)
+		if storeErr != nil {
+			return storedUploadSource{}, fmt.Errorf("store upload media: %w", storeErr)
+		}
+		media.tempPath = ""
+		return stored, nil
+	}
 	dir := h.uploadMediaDir()
 	ext := strings.ToLower(filepath.Ext(media.originalName))
 	if ext == "" {
@@ -558,10 +581,10 @@ func (h *Handler) persistUploadMedia(uploadID string, media *uploadedMedia) (str
 	finalPath := filepath.Join(dir, storedName)
 	_ = os.Remove(finalPath)
 	if err := os.Rename(media.tempPath, finalPath); err != nil {
-		return "", fmt.Errorf("store upload media: %w", err)
+		return storedUploadSource{}, fmt.Errorf("store upload media: %w", err)
 	}
 	media.tempPath = ""
-	return storedName, nil
+	return storedUploadSource{Key: storedName, ContentType: media.contentType}, nil
 }
 
 // serveUploadMedia performs serve upload media and propagates validation or dependency failures to the caller.
@@ -580,12 +603,35 @@ func (h *Handler) serveUploadMedia(w http.ResponseWriter, r *http.Request, uploa
 		WriteError(w, http.StatusForbidden, fmt.Errorf("invalid token"))
 		return
 	}
-	mediaPath := strings.TrimSpace(upload.Metadata["mediaPath"])
-	if mediaPath == "" {
+	key := strings.TrimSpace(upload.Metadata["sourceObjectKey"])
+	if key == "" {
+		key = strings.TrimSpace(upload.Metadata["mediaPath"])
+	}
+	if key == "" {
 		WriteError(w, http.StatusNotFound, fmt.Errorf("media not found"))
 		return
 	}
-	fullPath := filepath.Join(h.uploadMediaDir(), filepath.Base(mediaPath))
+	if store := h.uploadSourceStore(); store.Enabled() {
+		obj, err := store.Get(r.Context(), key)
+		if err != nil {
+			err = fmt.Errorf("get upload %s media (%s): %w", upload.ID, key, err)
+			h.logger().Error("serve upload media get", "uploadId", upload.ID, "key", key, "err", err)
+			WriteError(w, http.StatusNotFound, RequestError{Err: err, Status: http.StatusNotFound, Message: "media unavailable"})
+			return
+		}
+		contentType := strings.TrimSpace(upload.Metadata["contentType"])
+		if contentType == "" {
+			contentType = strings.TrimSpace(obj.ContentType)
+		}
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Cache-Control", "private, max-age=300")
+		http.ServeContent(w, r, upload.Metadata["uploadedFilename"], obj.ModTime, bytes.NewReader(obj.Body))
+		return
+	}
+	fullPath := filepath.Join(h.uploadMediaDir(), filepath.Base(key))
 	file, err := openUploadMediaFile(fullPath)
 	if err != nil {
 		err = fmt.Errorf("open upload %s media (%s): %w", upload.ID, fullPath, err)
@@ -593,9 +639,7 @@ func (h *Handler) serveUploadMedia(w http.ResponseWriter, r *http.Request, uploa
 		WriteError(w, http.StatusNotFound, RequestError{Err: err, Status: http.StatusNotFound, Message: "media unavailable"})
 		return
 	}
-	defer func() {
-		_ = file.Close()
-	}()
+	defer func() { _ = file.Close() }()
 	stat, err := statUploadMediaFile(file)
 	if err != nil {
 		err = fmt.Errorf("stat upload %s media (%s): %w", upload.ID, fullPath, err)
@@ -617,11 +661,27 @@ func (h *Handler) deleteUploadMedia(upload domain.Upload) {
 	if upload.Metadata == nil {
 		return
 	}
-	mediaPath := strings.TrimSpace(upload.Metadata["mediaPath"])
-	if mediaPath == "" {
+	key := strings.TrimSpace(upload.Metadata["sourceObjectKey"])
+	if key == "" {
+		key = strings.TrimSpace(upload.Metadata["mediaPath"])
+	}
+	if key == "" {
 		return
 	}
-	fullPath := filepath.Join(h.uploadMediaDir(), filepath.Base(mediaPath))
+	h.deleteStoredUploadSource(key)
+}
+
+func (h *Handler) deleteStoredUploadSource(key string) {
+	if strings.TrimSpace(key) == "" {
+		return
+	}
+	if store := h.uploadSourceStore(); store.Enabled() {
+		if err := store.Delete(context.Background(), key); err != nil {
+			h.logger().Warn("delete upload source", "key", key, "err", err)
+		}
+		return
+	}
+	fullPath := filepath.Join(h.uploadMediaDir(), filepath.Base(key))
 	_ = os.Remove(fullPath)
 }
 

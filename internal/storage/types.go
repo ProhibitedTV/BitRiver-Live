@@ -146,12 +146,18 @@ type ObjectStorageConfig struct {
 type objectStorageClient interface {
 	Enabled() bool
 	Upload(ctx context.Context, key, contentType string, body []byte) (objectReference, error)
+	Download(ctx context.Context, key string) (objectObject, error)
 	Delete(ctx context.Context, key string) error
 }
 
 type objectReference struct {
 	Key string
 	URL string
+}
+
+type objectObject struct {
+	Body        []byte
+	ContentType string
 }
 
 const defaultObjectStorageRequestTimeout = 30 * time.Second

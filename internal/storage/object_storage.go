@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -59,6 +60,11 @@ func (noopObjectStorageClient) Enabled() bool { return false }
 // Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
 func (noopObjectStorageClient) Upload(ctx context.Context, key, contentType string, body []byte) (objectReference, error) {
 	return objectReference{}, nil
+}
+
+// Download executes Download.
+func (noopObjectStorageClient) Download(ctx context.Context, key string) (objectObject, error) {
+	return objectObject{}, fmt.Errorf("object storage disabled")
 }
 
 // Delete executes Delete.
@@ -155,6 +161,32 @@ func (c *s3ObjectStorageClient) Upload(ctx context.Context, key, contentType str
 		return objectReference{}, fmt.Errorf("upload object %s: unexpected status %d", finalKey, response.StatusCode)
 	}
 	return objectReference{Key: finalKey, URL: c.publicURL(finalKey)}, nil
+}
+
+// Download executes Download.
+func (c *s3ObjectStorageClient) Download(ctx context.Context, key string) (objectObject, error) {
+	finalKey := c.applyPrefix(key)
+	target := c.objectURL(finalKey)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
+	if err != nil {
+		return objectObject{}, fmt.Errorf("create download request: %w", err)
+	}
+	if err := c.signRequest(request, emptyPayloadHash); err != nil {
+		return objectObject{}, err
+	}
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return objectObject{}, fmt.Errorf("download object %s: %w", finalKey, err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return objectObject{}, fmt.Errorf("download object %s: unexpected status %d", finalKey, response.StatusCode)
+	}
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return objectObject{}, fmt.Errorf("read object %s: %w", finalKey, err)
+	}
+	return objectObject{Body: body, ContentType: strings.TrimSpace(response.Header.Get("Content-Type"))}, nil
 }
 
 // Delete executes Delete.

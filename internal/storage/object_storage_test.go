@@ -299,6 +299,16 @@ func (f *fakeObjectStorage) Upload(ctx context.Context, key, contentType string,
 	return objectReference{Key: finalKey, URL: url}, nil
 }
 
+func (f *fakeObjectStorage) Download(ctx context.Context, key string) (objectObject, error) {
+	for i := len(f.uploads) - 1; i >= 0; i-- {
+		u := f.uploads[i]
+		if u.Key == key {
+			return objectObject{Body: append([]byte(nil), u.Body...), ContentType: u.ContentType}, nil
+		}
+	}
+	return objectObject{}, fmt.Errorf("object %s not found", key)
+}
+
 func (f *fakeObjectStorage) Delete(ctx context.Context, key string) error {
 	f.deletes = append(f.deletes, key)
 	return nil
@@ -308,6 +318,10 @@ func (h *hangingDeleteObjectStorage) Enabled() bool { return true }
 
 func (h *hangingDeleteObjectStorage) Upload(ctx context.Context, key, contentType string, body []byte) (objectReference, error) {
 	return objectReference{}, nil
+}
+
+func (h *hangingDeleteObjectStorage) Download(ctx context.Context, key string) (objectObject, error) {
+	return objectObject{}, nil
 }
 
 func (h *hangingDeleteObjectStorage) Delete(ctx context.Context, key string) error {

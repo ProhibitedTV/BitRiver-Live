@@ -8,7 +8,7 @@ This document describes the **current implementation** for creator VOD uploads.
 - `POST /api/uploads` (JSON or multipart): `internal/api/uploads_handlers.go` (`Handler.Uploads`, `createUploadFromJSON`, `createUploadFromMultipart`)
 - `GET /api/uploads?channelId=...`: list uploads for channel owner/admin (`Handler.Uploads`)
 - `GET /api/uploads/{id}` and `DELETE /api/uploads/{id}`: upload detail/delete (`Handler.UploadByID`)
-- `GET /api/uploads/{id}/media?token=...`: serves stored source file (`serveUploadMedia`)
+- `GET /api/uploads/{id}/media?token=...`: serves stored source file (`serveUploadMedia`), now reading object storage by `sourceObjectKey` when durable storage is enabled while preserving local-path fallback compatibility
 
 ### Viewer/admin UI that initiates uploads
 - Creator page: `web/viewer/app/creator/uploads/[channelId]/page.tsx`
@@ -28,14 +28,14 @@ This document describes the **current implementation** for creator VOD uploads.
    - `saveMultipartFile` writes the file part to a temp file in `UploadMediaDir` (fallback `os.TempDir()/bitriver-uploads`).
 
 3. **Metadata + upload record creation**
+   - Multipart source files are persisted to configured object storage when `BITRIVER_LIVE_OBJECT_ENDPOINT` + bucket settings are present; otherwise the local upload media directory fallback is used. Upload metadata stores `sourceObjectKey` (and `sourceObjectURL` when available).
    - `createUploadEntry` validates channel/ownership and calls `uploadsService().CreateUpload(...)`.
    - Backing persistence:
      - in-memory/file store: `internal/storage/vod.go` (`CreateUpload`)
      - postgres: `internal/storage/postgres_channels.go` (`CreateUpload`), table from `deploy/migrations/0001_initial.sql` (`uploads`)
 
 4. **File storage location**
-   - `persistUploadMedia` renames temp file to `{uploadID}.{ext}` under `uploadMediaDir()`.
-   - This is **local filesystem storage on API node**, not object storage.
+   - `persistUploadMedia` uploads source bytes to the configured object-storage backend and stores the durable key; when object storage is not configured, it falls back to local `uploadMediaDir()` storage.
 
 5. **Source URL and tokenization**
    - `attachMediaToUpload` stores metadata keys:
