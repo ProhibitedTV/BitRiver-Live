@@ -19,6 +19,7 @@ jobs:
     name: Detect changed files
     runs-on: ubuntu-latest
     outputs:
+      verify_changed: ${{ steps.filter.outputs.verify_changed }}
       go_changed: ${{ steps.filter.outputs.go_changed }}
       deploy_changed: ${{ steps.filter.outputs.deploy_changed }}
       viewer_changed: ${{ steps.filter.outputs.viewer_changed }}
@@ -26,6 +27,11 @@ jobs:
       docs_changed: ${{ steps.filter.outputs.docs_changed }}
       ingest_changed: ${{ steps.filter.outputs.ingest_changed }}
       shell_changed: ${{ steps.filter.outputs.shell_changed }}
+      postgres_changed: ${{ steps.filter.outputs.postgres_changed }}
+      image_scan_changed: ${{ steps.filter.outputs.image_scan_changed }}
+      quickstart_changed: ${{ steps.filter.outputs.quickstart_changed }}
+      wizard_release_changed: ${{ steps.filter.outputs.wizard_release_changed }}
+      go_workflow_changed: ${{ steps.filter.outputs.go_workflow_changed }}
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -37,6 +43,16 @@ jobs:
         uses: dorny/paths-filter@v3
         with:
           filters: |
+            verify_changed:
+              - 'go.mod'
+              - 'go.sum'
+              - '**/*.go'
+              - 'internal/**'
+              - 'cmd/**'
+              - 'scripts/**'
+              - 'deploy/**'
+              - 'third_party/**'
+              - 'web/viewer/**'
             go_changed:
               - 'go.mod'
               - 'go.sum'
@@ -49,9 +65,6 @@ jobs:
               - 'deploy/**'
             viewer_changed:
               - 'web/viewer/**'
-              - 'internal/api/**'
-              - 'internal/domain/**'
-              - 'internal/api/viewer_contract_test.go'
             monitoring_changed:
               - 'deploy/monitoring/**'
               - 'deploy/docker-compose.monitoring.yml'
@@ -66,21 +79,48 @@ jobs:
               - 'cmd/transcoder/**'
               - 'cmd/srs-controller/**'
               - 'scripts/test-ingest-e2e.sh'
+              - 'scripts/render-srs-config.sh'
+              - 'scripts/render-ome-config.sh'
               - 'deploy/srs/**'
               - 'deploy/ome/**'
             shell_changed:
               - 'scripts/**/*.sh'
               - 'deploy/install/**/*.sh'
+            postgres_changed:
+              - 'internal/storage/**'
+              - 'deploy/migrations/**'
+              - 'scripts/test-postgres.sh'
+              - 'go.mod'
+              - 'go.sum'
+              - 'third_party/**'
+            image_scan_changed:
+              - '.github/workflows/image-scan.yml'
+              - '.trivyignore/**'
+              - 'deploy/docker-compose.yml'
+              - 'deploy/**/Dockerfile*'
+              - 'cmd/**'
+              - 'internal/**'
+              - 'web/viewer/**'
+            quickstart_changed:
+              - 'cmd/bitriver/**'
+              - 'deploy/**'
+              - 'scripts/**'
+            wizard_release_changed:
+              - 'deploy/install/wizard.sh'
+              - 'scripts/test-wizard-release.sh'
+            go_workflow_changed:
+              - '.github/workflows/go-unit-tests.yml'
+              - '.github/workflows/postgres-tests.yml'
+              - '.github/workflows/ingest-e2e.yml'
+              - '.github/workflows/release.yml'
+              - 'scripts/check-go-workflow-config.sh'
+              - '.github/workflows/go-workflow-consistency.yml'
 
-  go-verify:
-    name: Go verify (${{ matrix.os }})
+  verify:
+    name: Verification gate
     needs: changed-files
-    if: needs.changed-files.outputs.go_changed == 'true' || needs.changed-files.outputs.deploy_changed == 'true'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+    if: needs.changed-files.outputs.verify_changed == 'true'
+    runs-on: ubuntu-latest
     steps:
       - name: Set up Go toolchain
         uses: ./.github/actions/setup-go
@@ -89,10 +129,30 @@ jobs:
         shell: bash
         run: ./scripts/verify.sh
 
+  go-verify:
+    name: Go tests (${{ matrix.os }})
+    needs:
+      - changed-files
+      - verify
+    if: always() && (needs.changed-files.outputs.go_changed == 'true' || needs.changed-files.outputs.deploy_changed == 'true') && (needs.verify.result == 'success' || needs.verify.result == 'skipped')
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - name: Set up Go toolchain
+        uses: ./.github/actions/setup-go
+
+      - name: Run unit tests
+        run: go test ./... -count=1 -timeout=120s
+
   postgres-tests:
     name: Postgres storage tests
-    needs: changed-files
-    if: needs.changed-files.outputs.go_changed == 'true' || needs.changed-files.outputs.deploy_changed == 'true'
+    needs:
+      - changed-files
+      - verify
+    if: always() && needs.changed-files.outputs.postgres_changed == 'true' && (needs.verify.result == 'success' || needs.verify.result == 'skipped')
     runs-on: ubuntu-latest
     env:
       GOTOOLCHAIN: local
@@ -144,24 +204,77 @@ jobs:
         run: ./scripts/test-postgres.sh
 
   quickstart-smoke:
-    name: Quickstart compose smoke
-    needs: changed-files
-    if: needs.changed-files.outputs.go_changed == 'true' || needs.changed-files.outputs.deploy_changed == 'true'
-    runs-on: ubuntu-latest
+    name: Quickstart entrypoint sanity (${{ matrix.os }})
+    needs:
+      - changed-files
+      - verify
+    if: always() && needs.changed-files.outputs.quickstart_changed == 'true' && (needs.verify.result == 'success' || needs.verify.result == 'skipped')
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Verify quickstart defaults match CI seed
-        run: python3 scripts/test-quickstart-env.py
+      - name: Validate quickstart.sh help and static checks
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          bash -n scripts/quickstart.sh
+          ./scripts/quickstart.sh --help
+          if ./scripts/quickstart.sh --definitely-not-a-real-flag; then
+            echo "Expected unknown-flag invocation to fail" >&2
+            exit 1
+          fi
 
-      - name: Validate quickstart compose config
-        run: ./scripts/test-quickstart.sh
+      - name: Run shellcheck for quickstart.sh
+        if: runner.os != 'Windows'
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
+        with:
+          scandir: scripts
+          check_together: 'yes'
+          ignore_names: |
+            *.md
+
+      - name: Validate quickstart.ps1 help output
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: pwsh -File scripts/quickstart.ps1 -help
+
+      - name: Validate quickstart.ps1 no-op entrypoint path
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: pwsh -File scripts/quickstart.ps1 -ValidateOnly
+
+      - name: Static validation for quickstart.ps1 helper usage
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $scriptText = Get-Content -Path scripts/quickstart.ps1 -Raw
+          $requiredSnippets = @(
+            'Ensure-Go',
+            'Ensure-DockerDesktopRunning',
+            'Invoke-Cli',
+            "Join-Path $CodeRoot 'deploy/docker-compose.yml'",
+            "quickstart', '--env-file', $EnvFile, '--compose-file', $ComposeFile",
+            "if ($ValidateOnly)",
+            "Invoke-Cli -CliArgs @('quickstart', '--help')"
+          )
+
+          foreach ($snippet in $requiredSnippets) {
+            if (-not $scriptText.Contains($snippet)) {
+              Write-Error "Missing expected quickstart.ps1 snippet: $snippet"
+            }
+          }
 
   ingest-e2e:
     name: Ingest end-to-end
-    needs: changed-files
-    if: needs.changed-files.outputs.ingest_changed == 'true'
+    needs:
+      - changed-files
+      - verify
+    if: always() && needs.changed-files.outputs.ingest_changed == 'true' && (needs.verify.result == 'success' || needs.verify.result == 'skipped')
     runs-on: ubuntu-latest
     env:
       GOTOOLCHAIN: local
@@ -176,8 +289,10 @@ jobs:
 
   viewer-ci:
     name: Viewer CI
-    needs: changed-files
-    if: needs.changed-files.outputs.viewer_changed == 'true'
+    needs:
+      - changed-files
+      - verify
+    if: always() && needs.changed-files.outputs.viewer_changed == 'true' && (needs.verify.result == 'success' || needs.verify.result == 'skipped')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -193,6 +308,17 @@ jobs:
 
       - name: Viewer integration tests
         run: npm run test:integration
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+        continue-on-error: true
         env:
           NEXT_TELEMETRY_DISABLED: 1
 
@@ -253,3 +379,142 @@ jobs:
       - name: Validate Prometheus + Alertmanager configs
         shell: bash
         run: ./scripts/check-monitoring-config.sh
+
+  go-workflow-consistency:
+    name: Go workflow consistency
+    needs: changed-files
+    if: needs.changed-files.outputs.go_workflow_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Validate Go workflow setup conventions
+        run: ./scripts/check-go-workflow-config.sh
+
+  wizard-release:
+    name: Wizard release regression
+    needs: changed-files
+    if: needs.changed-files.outputs.wizard_release_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run staged release wizard test
+        run: bash scripts/test-wizard-release.sh
+
+  image-scan:
+    name: Image vulnerability scan
+    needs: changed-files
+    if: needs.changed-files.outputs.image_scan_changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Prepare Compose environment
+        run: |
+          cat <<'ENV' > .ci.env
+          BITRIVER_LIVE_IMAGE_TAG=ci
+          BITRIVER_VIEWER_IMAGE_TAG=ci
+          BITRIVER_SRS_CONTROLLER_IMAGE_TAG=ci
+          BITRIVER_TRANSCODER_IMAGE_TAG=ci
+          BITRIVER_SRS_IMAGE_TAG=v5.0.185
+          BITRIVER_OME_IMAGE_TAG=0.16.0
+          BITRIVER_LIVE_ADMIN_EMAIL=ci@example.com
+          BITRIVER_LIVE_ADMIN_PASSWORD=ci-admin-password
+          BITRIVER_SRS_TOKEN=ci-srs-token
+          BITRIVER_OME_USERNAME=ci-ome-user
+          BITRIVER_OME_PASSWORD=ci-ome-password
+          BITRIVER_OME_API_TOKEN=ci-ome-api-token
+          BITRIVER_TRANSCODER_TOKEN=ci-transcoder-token
+          BITRIVER_REDIS_PASSWORD=ci-redis-password
+          BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD=ci-redis-password
+          BITRIVER_POSTGRES_USER=ci-postgres
+          BITRIVER_POSTGRES_PASSWORD=ci-postgres-password
+          BITRIVER_TRANSCODER_PUBLIC_BASE_URL=https://example.com/hls
+          ENV
+
+      - name: Build local images from the Compose stack
+        run: |
+          docker compose --env-file .ci.env -f deploy/docker-compose.yml build \
+            bitriver-live \
+            viewer \
+            srs-controller \
+            transcoder \
+            srs \
+            ome-config
+
+      - name: Collect Compose images
+        run: |
+          docker compose --env-file .ci.env -f deploy/docker-compose.yml config --images | sort -u > /tmp/compose-images.txt
+          cat /tmp/compose-images.txt
+
+      - name: Install Trivy
+        run: |
+          TRIVY_VERSION=0.50.1
+          curl -sfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
+            | tar -xz
+          sudo install trivy /usr/local/bin/trivy
+
+      - name: Verify ome-config has no OS-package CVEs
+        run: |
+          trivy image --scanners vuln --pkg-types os --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 --no-progress bitriver-live/ome-config:local
+
+      - name: Scan first-party images for critical vulnerabilities (blocking)
+        run: |
+          set -euo pipefail
+          while read -r image; do
+            if [ -z "$image" ]; then
+              continue
+            fi
+
+            case "$image" in
+              ghcr.io/bitriver-live/*|bitriver-live/*)
+                echo "Scanning first-party image (blocking): $image"
+                trivy image \
+                  --severity CRITICAL \
+                  --exit-code 1 \
+                  --ignorefile .trivyignore/default.txt \
+                  --no-progress \
+                  "$image"
+                ;;
+            esac
+          done < /tmp/compose-images.txt
+
+      - name: Scan pinned third-party images for critical vulnerabilities (informational)
+        run: |
+          set -euo pipefail
+          while read -r image; do
+            if [ -z "$image" ]; then
+              continue
+            fi
+
+            case "$image" in
+              ghcr.io/bitriver-live/*|bitriver-live/*)
+                continue
+                ;;
+            esac
+
+            ignore_file=".trivyignore/default.txt"
+            case "$image" in
+              postgres:15-alpine*)
+                ignore_file=".trivyignore/postgres-15-alpine.txt"
+                ;;
+            esac
+
+            echo "Scanning third-party image (informational): $image"
+            trivy image \
+              --severity CRITICAL \
+              --exit-code 0 \
+              --ignorefile "$ignore_file" \
+              --no-progress \
+              "$image"
+          done < /tmp/compose-images.txt

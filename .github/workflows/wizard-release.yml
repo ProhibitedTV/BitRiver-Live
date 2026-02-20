@@ -1,16 +1,7 @@
 name: Wizard release regression
 
 on:
-  push:
-    paths:
-      - 'deploy/install/wizard.sh'
-      - 'scripts/test-wizard-release.sh'
-      - '.github/workflows/wizard-release.yml'
-  pull_request:
-    paths:
-      - 'deploy/install/wizard.sh'
-      - 'scripts/test-wizard-release.sh'
-      - '.github/workflows/wizard-release.yml'
+  workflow_dispatch:
 
 jobs:
   wizard-release:

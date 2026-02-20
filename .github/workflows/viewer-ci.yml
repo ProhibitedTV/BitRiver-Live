@@ -1,14 +1,6 @@
 name: Viewer CI
 
 on:
-  pull_request:
-    paths: &viewer_paths
-      - 'web/viewer/**'
-      - 'internal/api/**'
-      - 'internal/domain/**'
-      - 'internal/api/viewer_contract_test.go'
-  push:
-    paths: *viewer_paths
   workflow_dispatch:
 
 jobs:

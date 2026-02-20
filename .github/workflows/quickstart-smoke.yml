@@ -5,30 +5,6 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  pull_request:
-    paths:
-      - cmd/bitriver/**
-      - deploy/**
-      - scripts/test-quickstart.sh
-      - scripts/test-quickstart-env.py
-      - scripts/verify.sh
-      - go.mod
-      - go.sum
-      - third_party/**
-      - .github/workflows/quickstart-smoke.yml
-  push:
-    branches:
-      - main
-    paths:
-      - cmd/bitriver/**
-      - deploy/**
-      - scripts/test-quickstart.sh
-      - scripts/test-quickstart-env.py
-      - scripts/verify.sh
-      - go.mod
-      - go.sum
-      - third_party/**
-      - .github/workflows/quickstart-smoke.yml
   workflow_dispatch:
 
 jobs:
