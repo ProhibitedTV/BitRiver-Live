@@ -1,0 +1,34 @@
+name: Setup Node for Viewer
+
+description: Checkout repository, install Node, restore npm cache, and install viewer dependencies.
+inputs:
+  checkout-fetch-depth:
+    description: Fetch depth passed to actions/checkout.
+    required: false
+    default: '1'
+  node-version:
+    description: Node.js version passed to actions/setup-node.
+    required: false
+    default: '20'
+
+runs:
+  using: composite
+  steps:
+    - name: Check out repository
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        fetch-depth: ${{ inputs.checkout-fetch-depth }}
+
+    - name: Set up Node.js
+      uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+        cache-dependency-path: web/viewer/package-lock.json
+
+    - name: Install viewer dependencies
+      shell: bash
+      working-directory: web/viewer
+      env:
+        NEXT_TELEMETRY_DISABLED: '1'
+      run: npm ci
