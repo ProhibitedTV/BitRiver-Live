@@ -23,6 +23,10 @@ Use these category entrypoints from the repository root:
 - **Unit:** `./scripts/test-unit.sh`
   - Runs `go test ./... -count=1 -timeout=120s` with offline Go env defaults (`GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off`).
   - CI: [`.github/workflows/go-unit-tests.yml`](../.github/workflows/go-unit-tests.yml) and the `go-tests` job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+- **Integration umbrella:** `./scripts/test-integration.sh`
+  - Wraps `./scripts/test-postgres.sh` and `./scripts/test-quickstart.sh`.
+  - Docker-dependent checks are skipped with explicit messages when Docker is unavailable.
+  - Ingest e2e remains opt-in (`--ingest-e2e` or `BITRIVER_TEST_ALL_INGEST_E2E=1`) and runs `./scripts/test-ingest-e2e.sh` when enabled.
 - **Postgres integration (tagged):** `./scripts/test-postgres.sh`
   - Runs storage integration tests behind the `postgres` tag using Docker or `BITRIVER_TEST_POSTGRES_DSN`.
   - CI: [`.github/workflows/postgres-tests.yml`](../.github/workflows/postgres-tests.yml), plus `postgres-tests` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) and release validation in [`.github/workflows/release.yml`](../.github/workflows/release.yml).
@@ -42,7 +46,7 @@ Run everything with the umbrella entrypoint:
 ./scripts/test-all.sh
 ```
 
-`./scripts/test-all.sh` runs verify + postgres + quickstart and then viewer integration when Node/Playwright tooling is available. It skips unavailable Docker/Node/Playwright-dependent steps with explicit skip messages.
+`./scripts/test-all.sh` runs `./scripts/test-unit.sh` + `./scripts/test-integration.sh` and then viewer integration when Node/Playwright tooling is available. It skips unavailable Docker/Node/Playwright-dependent steps with explicit skip messages.
 
 Ingest e2e is intentionally opt-in in the umbrella script. Enable it with either:
 
