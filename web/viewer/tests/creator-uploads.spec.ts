@@ -154,4 +154,76 @@ test.describe("creator uploads", () => {
     await page.getByLabel(/search uploads/i).fill("does-not-exist");
     await expect(page.getByText(/no uploads match the selected filters/i)).toBeVisible();
   });
+
+  test("redirects guests back to uploads after sign-in", async ({ page }) => {
+    const channelId = "creator-uploads-auth";
+    let signedIn = false;
+
+    await page.route("**/api/viewer/me", async (route) => {
+      if (!signedIn) {
+        await route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "not signed in", loginUrl: "/login" }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          user: { id: "creator-uploads-user", displayName: "Uploader", roles: ["creator"] },
+          loginUrl: "/login",
+          logoutUrl: "/logout",
+        }),
+      });
+    });
+
+    await page.route(`**/api/channels/${channelId}/playback`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          channel: {
+            id: channelId,
+            ownerId: "creator-uploads-user",
+            title: "Uploads Dashboard",
+            category: "Talk Shows",
+            tags: ["postshow"],
+            liveState: "offline",
+            createdAt: new Date("2024-06-01T10:00:00Z").toISOString(),
+            updatedAt: new Date("2024-06-01T12:00:00Z").toISOString(),
+          },
+          owner: { id: "creator-uploads-user", displayName: "Uploader" },
+          profile: { bio: "Testing upload flows", avatarUrl: undefined, bannerUrl: undefined },
+          live: false,
+          follow: { followers: 0, following: true },
+          donationAddresses: [],
+          subscription: { subscribers: 0, subscribed: true },
+          playback: undefined,
+          chat: { roomId: "uploads-room" },
+        }),
+      });
+    });
+
+    await page.route(`**/api/uploads?channelId=${channelId}`, async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+    });
+
+    await page.goto(`/creator/uploads/${channelId}?tab=ready`);
+    await expect(page.getByText(/sign in to manage uploads/i)).toBeVisible();
+
+    await page.waitForURL((url) => url.pathname === "/login" && url.searchParams.has("redirect"));
+    const loginUrl = new URL(page.url());
+    expect(loginUrl.searchParams.get("redirect")).toBe(`/creator/uploads/${channelId}?tab=ready`);
+    expect(loginUrl.searchParams.get("redirect")).not.toContain(`/creator/live/${channelId}`);
+
+    signedIn = true;
+    const redirectTarget = loginUrl.searchParams.get("redirect")!;
+    await page.goto(redirectTarget);
+
+    await expect(page).toHaveURL(`/creator/uploads/${channelId}?tab=ready`);
+    await expect(page.getByRole("heading", { level: 2, name: /manage uploads for uploads dashboard/i })).toBeVisible();
+  });
+
 });

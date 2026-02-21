@@ -1,7 +1,9 @@
 import {
   creatorUser,
   mockAuthenticatedUser,
+  mockAnonymousUser,
   mockRouter,
+  mockUseAuth,
   ownerUser,
   renderWithProviders,
   resetRouterMocks,
@@ -255,6 +257,21 @@ test("shows reset after upload failure and clears failure state", async () => {
   await waitFor(() => expect(screen.queryByRole("button", { name: "Reset" })).not.toBeInTheDocument());
   expect(screen.getByText("Select media to start a new upload.")).toBeInTheDocument();
   expect(screen.queryByText(/upload failed/i)).not.toBeInTheDocument();
+});
+
+test("prompts guests to sign in and preserves the uploads path", async () => {
+  jest.useFakeTimers();
+  mockAnonymousUser();
+
+  renderWithProviders(<UploadManager channelId="chan-1" ownerId="owner-1" />);
+
+  expect(await screen.findByText(/sign in to manage uploads/i)).toBeInTheDocument();
+
+  const signIn = mockUseAuth.mock.results.at(-1)?.value.signIn as jest.Mock;
+  jest.advanceTimersByTime(500);
+  await waitFor(() => expect(signIn).toHaveBeenCalledWith());
+
+  jest.useRealTimers();
 });
 
 test("redirects viewers who lack permission", async () => {

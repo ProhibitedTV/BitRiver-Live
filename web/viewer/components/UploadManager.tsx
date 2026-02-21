@@ -118,11 +118,16 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
       return;
     }
     if (!user) {
-      void signIn(`/creator/live/${channelId}`);
-      return;
+      const timer = window.setTimeout(() => {
+        void signIn();
+      }, 500);
+      return () => {
+        window.clearTimeout(timer);
+      };
     }
     if (!canManage) {
       router.replace(`/channels/${channelId}`);
+      return;
     }
   }, [authLoading, canManage, channelId, router, signIn, user]);
 
@@ -404,7 +409,19 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
     }
   };
 
-  if (authLoading || !canManage) {
+  if (authLoading) {
+    return null;
+  }
+
+  if (!user) {
+    return (
+      <Card>
+        <InlineAlert>Sign in to manage uploads</InlineAlert>
+      </Card>
+    );
+  }
+
+  if (!canManage) {
     return null;
   }
 
