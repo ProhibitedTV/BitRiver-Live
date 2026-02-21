@@ -2,45 +2,49 @@
 
 import Link from "next/link";
 import { UploadManager } from "../../../../components/UploadManager";
+import { Button, buttonClassName } from "../../../../components/ui/Button";
+import { Card, CardHeader } from "../../../../components/ui/Card";
+import { EmptyState } from "../../../../components/ui/EmptyState";
+import { InlineAlert } from "../../../../components/ui/InlineAlert";
 import { useCreatorChannel } from "../../../../hooks/useCreatorChannel";
 
 export default function CreatorUploadsPage() {
   const { playback, loading, error, channelId, reload } = useCreatorChannel();
 
   if (loading) {
-    return <section className="surface">Loading channel…</section>;
+    return <Card>Loading channel…</Card>;
   }
 
   if (error) {
     return (
-      <section className="surface stack">
+      <Card>
         <h2>Unable to load channel</h2>
-        <p className="error">{error}</p>
-        <button type="button" className="secondary-button" onClick={() => { void reload(false); }}>
+        <InlineAlert>{error}</InlineAlert>
+        <Button variant="secondary" onClick={() => { void reload(false); }}>
           Try again
-        </button>
-      </section>
+        </Button>
+      </Card>
     );
   }
 
   if (!playback) {
     return (
-      <section className="surface stack">
+      <EmptyState>
         <h2>Channel not available</h2>
         <p className="muted">We couldn&apos;t find channel details for this dashboard.</p>
-      </section>
+      </EmptyState>
     );
   }
 
   return (
     <div className="stack" style={{ gap: "1.5rem" }}>
-      <header className="stack">
+      <CardHeader>
         <h2>Manage uploads for {playback.channel.title}</h2>
         <p className="muted">Register VODs after streams wrap and monitor processing progress.</p>
-        <Link href={`/channels/${channelId}`} className="secondary-button" style={{ alignSelf: "flex-start" }}>
+        <Link href={`/channels/${channelId}`} className={buttonClassName("secondary")} style={{ alignSelf: "flex-start" }}>
           View public channel
         </Link>
-      </header>
+      </CardHeader>
       <UploadManager channelId={channelId} ownerId={playback.channel.ownerId} />
     </div>
   );

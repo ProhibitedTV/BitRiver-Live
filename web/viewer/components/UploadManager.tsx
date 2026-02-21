@@ -11,7 +11,11 @@ import {
   deleteUpload,
   fetchChannelUploads,
 } from "../lib/viewer-api";
-import { StatusBadge } from "./StatusBadge";
+import { Badge } from "./ui/Badge";
+import { Button, buttonClassName } from "./ui/Button";
+import { Card, CardBody, CardHeader } from "./ui/Card";
+import { EmptyState } from "./ui/EmptyState";
+import { InlineAlert } from "./ui/InlineAlert";
 
 type UploadManagerProps = {
   channelId: string;
@@ -405,11 +409,11 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
   }
 
   return (
-    <section className="surface stack">
-      <header className="stack">
+    <Card>
+      <CardHeader>
         <h3>Upload manager</h3>
         <p className="muted">Register new VODs and review processing progress.</p>
-      </header>
+      </CardHeader>
       <form className="stack" onSubmit={handleSubmit}>
         <label className="stack">
           <span>Media</span>
@@ -436,16 +440,15 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
                   <strong>{selectedFile.name}</strong>
                   <p className="muted">{formatFileSize(selectedFile.size)}</p>
                 </div>
-                <button
-                  type="button"
-                  className="secondary-button"
+                <Button
+                  variant="secondary"
                   onClick={(event) => {
                     event.stopPropagation();
                     clearSelectedFile();
                   }}
                 >
                   Clear
-                </button>
+                </Button>
               </div>
             ) : (
               <div className="upload-dropzone__hint">
@@ -455,7 +458,7 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
             )}
           </div>
           <div className="upload-status">
-            <StatusBadge label={phasePresentation.label} tone={phasePresentation.tone} />
+            <Badge tone={phasePresentation.tone}>{phasePresentation.label}</Badge>
             <p className={`upload-state upload-state--${uploadPhase}`}>{phasePresentation.summary}</p>
           </div>
           {uploadProgress !== null && (
@@ -528,49 +531,49 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
                   value={entry.value}
                   onChange={(event) => updateMetadataEntry(entry.id, "value", event.target.value)}
                 />
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
                   className="metadata-row__remove"
                   onClick={() => removeMetadataEntry(entry.id)}
                   disabled={metadataEntries.length === 1}
                 >
                   Remove
-                </button>
+                </Button>
               </div>
             ))}
           </div>
-          <button type="button" className="secondary-button" onClick={addMetadataEntry}>
+          <Button variant="secondary" onClick={addMetadataEntry}>
             Add metadata
-          </button>
+          </Button>
         </div>
-        {formError && <p className="error">{formError}</p>}
+        {formError && <InlineAlert>{formError}</InlineAlert>}
         <div className="upload-submit-row">
-          <button type="submit" className="primary-button" disabled={submitting || !hasUploadSource}>
+          <Button type="submit" disabled={submitting || !hasUploadSource}>
             {submitting ? "Submitting…" : "Register upload"}
-          </button>
+          </Button>
           {uploadPhase === "uploading" && (
-            <button type="button" className="secondary-button" onClick={handleCancelUpload}>
+            <Button variant="secondary" onClick={handleCancelUpload}>
               Cancel upload
-            </button>
+            </Button>
           )}
           {uploadPhase === "failed" && (
-            <button type="button" className="secondary-button" onClick={resetUploadState}>
+            <Button variant="secondary" onClick={resetUploadState}>
               Reset
-            </button>
+            </Button>
           )}
           {uploadPhase === "failed" && isRetryableUploadError(formError) && (
-            <button type="button" className="secondary-button" onClick={handleRetry} disabled={submitting || !lastSubmission}>
+            <Button variant="secondary" onClick={handleRetry} disabled={submitting || !lastSubmission}>
               Retry
-            </button>
+            </Button>
           )}
         </div>
       </form>
-      <div className="stack">
+      <CardBody>
         <div className="upload-actions">
-          <button type="button" className="secondary-button" onClick={() => load()} disabled={loading}>
+          <Button variant="secondary" onClick={() => load()} disabled={loading}>
             {loading ? "Refreshing…" : "Refresh"}
-          </button>
-          {error && <span className="error">{error}</span>}
+          </Button>
+          {error && <InlineAlert>{error}</InlineAlert>}
         </div>
         <div className="upload-actions">
           <div className="upload-filter-row" role="group" aria-label="Upload filter">
@@ -615,10 +618,14 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
         </div>
         {loading && <p className="muted">Loading uploads…</p>}
         {!loading && items.length === 0 && !error && (
-          <p className="muted">No uploads yet. Select media and register your first upload.</p>
+          <EmptyState className="upload-empty-state">
+            <p className="muted">No uploads yet. Select media and register your first upload.</p>
+          </EmptyState>
         )}
         {!loading && items.length > 0 && visibleItems.length === 0 && (
-          <p className="muted">No uploads match the selected filters.</p>
+          <EmptyState className="upload-empty-state">
+            <p className="muted">No uploads match the selected filters.</p>
+          </EmptyState>
         )}
         {visibleItems.length > 0 && (
           <ul className="upload-list">
@@ -631,10 +638,10 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
               return (
                 <li key={item.id} className="upload-card">
                   <div className="upload-status upload-status--card">
-                    <StatusBadge label={statusPresentation.label} tone={statusPresentation.tone} />
+                    <Badge tone={statusPresentation.tone}>{statusPresentation.label}</Badge>
                     <p className="muted">{statusPresentation.summary}</p>
                   </div>
-                  {item.error && <p className="error">{mapUploadItemError(item.error)}</p>}
+                  {item.error && <InlineAlert>{mapUploadItemError(item.error)}</InlineAlert>}
                   <div className="upload-card__header">
                     <strong>{item.title || item.filename}</strong>
                     <span className="muted">{new Date(item.createdAt).toLocaleString()}</span>
@@ -645,29 +652,29 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
                   <p className="muted">{formatFileSize(item.sizeBytes)}</p>
                   <div className="upload-card__actions">
                     {isReadyForPlayback && hasPlaybackUrl && (
-                      <a className="primary-button" href={item.playbackUrl} target="_blank" rel="noreferrer">
+                      <a className={buttonClassName("primary")} href={item.playbackUrl} target="_blank" rel="noreferrer">
                         Watch
                       </a>
                     )}
                     {hasRecordingWithoutPlayback && recordingDetailHref && (
-                      <Link className="secondary-button" href={recordingDetailHref}>
+                      <Link className={buttonClassName("secondary")} href={recordingDetailHref}>
                         View recording
                       </Link>
                     )}
                     {hasRecordingWithoutPlayback && !recordingDetailHref && (
                       <span className="muted">Playback pending. Check back soon to watch this recording.</span>
                     )}
-                    <button type="button" className="secondary-button" onClick={() => handleDelete(item.id)}>
+                    <Button variant="secondary" onClick={() => handleDelete(item.id)}>
                       Delete
-                    </button>
+                    </Button>
                   </div>
                 </li>
               );
             })}
           </ul>
         )}
-      </div>
-    </section>
+      </CardBody>
+    </Card>
   );
 }
 
