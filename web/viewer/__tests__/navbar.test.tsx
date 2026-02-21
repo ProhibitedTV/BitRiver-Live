@@ -20,6 +20,7 @@ const fetchManagedChannelsMock = viewerApiMocks.fetchManagedChannels;
 describe("Navbar", () => {
   const originalApiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
   const originalSignupUrl = process.env.NEXT_PUBLIC_SIGNUP_URL;
+  const originalViewerUrl = process.env.NEXT_PUBLIC_VIEWER_URL;
   const overrideWindowLocation = (
     overrides: Partial<Pick<Location, "hash" | "href" | "origin" | "pathname" | "search">>,
   ) => {
@@ -84,6 +85,11 @@ describe("Navbar", () => {
       delete process.env.NEXT_PUBLIC_SIGNUP_URL;
     } else {
       process.env.NEXT_PUBLIC_SIGNUP_URL = originalSignupUrl;
+    }
+    if (originalViewerUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_VIEWER_URL;
+    } else {
+      process.env.NEXT_PUBLIC_VIEWER_URL = originalViewerUrl;
     }
     window.history.replaceState({}, "", "/");
   });
@@ -171,6 +177,37 @@ describe("Navbar", () => {
     ["Home", "Following", "Browse"].forEach((label) => {
       expect(drawer.getAllByRole("link", { name: new RegExp(label, "i") })).toHaveLength(1);
     });
+  });
+
+
+  test("shows a local setup banner when API base URL is localhost", () => {
+    mockAnonymousUser();
+    process.env.NEXT_PUBLIC_API_BASE_URL = "http://localhost:8080";
+
+    renderWithProviders(<Navbar />);
+
+    expect(screen.getByText(/running in local setup mode/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /setup guide/i })).toHaveAttribute("href", "/getting-started");
+  });
+
+  test("shows a local setup banner when viewer URL is localhost", () => {
+    mockAnonymousUser();
+    process.env.NEXT_PUBLIC_VIEWER_URL = "http://localhost:3000";
+    delete process.env.NEXT_PUBLIC_API_BASE_URL;
+
+    renderWithProviders(<Navbar />);
+
+    expect(screen.getByText(/running in local setup mode/i)).toBeInTheDocument();
+  });
+
+  test("hides the local setup banner for non-local URLs", () => {
+    mockAnonymousUser();
+    process.env.NEXT_PUBLIC_VIEWER_URL = "https://viewer.example.com";
+    process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.example.com";
+
+    renderWithProviders(<Navbar />);
+
+    expect(screen.queryByText(/running in local setup mode/i)).not.toBeInTheDocument();
   });
 
   test("shows sign in and join calls-to-action when signed out", () => {
