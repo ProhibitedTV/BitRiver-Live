@@ -115,7 +115,8 @@ export default function CreatorLivePage() {
   const [titleError, setTitleError] = useState<string | undefined>();
   const [titleSaved, setTitleSaved] = useState(false);
   const [streamKeyVisible, setStreamKeyVisible] = useState(false);
-  const [copyMessage, setCopyMessage] = useState<string | undefined>();
+  const [streamKeyCopyMessage, setStreamKeyCopyMessage] = useState<string | undefined>();
+  const [ingestCopyMessage, setIngestCopyMessage] = useState<string | undefined>();
   const router = useRouter();
 
   const codeBlockStyle = {
@@ -175,7 +176,8 @@ export default function CreatorLivePage() {
 
   useEffect(() => {
     setStreamKeyVisible(false);
-    setCopyMessage(undefined);
+    setStreamKeyCopyMessage(undefined);
+    setIngestCopyMessage(undefined);
   }, [channelId, managedChannel?.id]);
 
   const handleChannelChange = (event: FormEvent<HTMLSelectElement>) => {
@@ -258,17 +260,37 @@ export default function CreatorLivePage() {
   }
 
   const handleCopyKey = async () => {
-    if (!streamKeyVisible || !managedChannel?.streamKey || !isChannelOwner) {
+    if (!managedChannel?.streamKey || !isChannelOwner) {
       return;
     }
     try {
       await navigator.clipboard.writeText(managedChannel.streamKey);
-      setCopyMessage("Copied");
+      setStreamKeyCopyMessage("Copied");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to copy";
-      setCopyMessage(message);
+      setStreamKeyCopyMessage(message);
     }
   };
+
+  const handleCopyIngestEndpoint = async (endpoint: string) => {
+    try {
+      await navigator.clipboard.writeText(endpoint);
+      setIngestCopyMessage(`Copied ${describeEndpoint(endpoint, ingestEndpoints.indexOf(endpoint))}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to copy";
+      setIngestCopyMessage(message);
+    }
+  };
+
+  const testPanelStatus = useMemo(() => {
+    if (playback.channel.liveState === "live") {
+      return "Live";
+    }
+    if (playback.channel.liveState === "starting") {
+      return "Reconnecting";
+    }
+    return "Not live";
+  }, [playback.channel.liveState]);
 
   return (
     <div className="stack" style={{ gap: "1.5rem" }}>
@@ -371,10 +393,10 @@ export default function CreatorLivePage() {
                         className="secondary-button"
                         onClick={() => {
                           setStreamKeyVisible((prev) => !prev);
-                          setCopyMessage(undefined);
+                          setStreamKeyCopyMessage(undefined);
                         }}
                       >
-                        {streamKeyVisible ? "Hide" : "Show"}
+                        {streamKeyVisible ? "Hide stream key" : "Reveal stream key"}
                       </button>
                       <button
                         type="button"
@@ -382,12 +404,11 @@ export default function CreatorLivePage() {
                         onClick={() => {
                           void handleCopyKey();
                         }}
-                        disabled={!streamKeyVisible}
                       >
                         Copy
                       </button>
-                      {copyMessage ? (
-                        <span className={copyMessage === "Copied" ? "success" : "error"}>{copyMessage}</span>
+                      {streamKeyCopyMessage ? (
+                        <span className={streamKeyCopyMessage === "Copied" ? "success" : "error"}>{streamKeyCopyMessage}</span>
                       ) : null}
                     </div>
                   </div>
@@ -405,7 +426,18 @@ export default function CreatorLivePage() {
                     {ingestEndpoints.map((endpoint, index) => (
                       <li key={endpoint} className="stack" style={{ gap: "0.15rem" }}>
                         <span className="muted">{describeEndpoint(endpoint, index)}</span>
-                        <div style={codeBlockStyle}>{endpoint}</div>
+                        <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+                          <div style={{ ...codeBlockStyle, flex: "1 1 18rem" }}>{endpoint}</div>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => {
+                              void handleCopyIngestEndpoint(endpoint);
+                            }}
+                          >
+                            Copy
+                          </button>
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -414,9 +446,34 @@ export default function CreatorLivePage() {
                     Ingest endpoints are not configured yet. Check your deployment settings or configuration.
                   </p>
                 )}
+                {ingestCopyMessage ? (
+                  <p className={ingestCopyMessage.startsWith("Copied") ? "success" : "error"}>{ingestCopyMessage}</p>
+                ) : null}
               </div>
             </div>
           </div>
+        </section>
+
+        <section className="surface stack" aria-labelledby="test-stream-heading">
+          <h3 id="test-stream-heading">Test stream</h3>
+          <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+            <span className={streamStatus.badgeClassName}>{testPanelStatus}</span>
+            <span className="muted">Status updates as soon as your encoder connects.</span>
+          </div>
+          <ol className="stack muted" style={{ gap: "0.5rem", paddingLeft: "1.25rem" }}>
+            <li>In OBS, set the Service to Custom and paste the ingest URL and stream key from this page.</li>
+            <li>Click Start Streaming in OBS and wait 10–20 seconds for status to switch to Live.</li>
+            <li>Keep this tab open and refresh with Diagnose issues if status does not update.</li>
+          </ol>
+          <details>
+            <summary>Common issues</summary>
+            <ul className="stack muted" style={{ gap: "0.35rem", paddingLeft: "1.25rem", marginTop: "0.5rem" }}>
+              <li>Wrong server URL: ensure OBS server matches the ingest URL shown above.</li>
+              <li>Key rotated: copy the latest stream key from this dashboard and re-paste it into OBS.</li>
+              <li>Ports blocked / firewall: verify your network allows outbound ingest traffic to the ingest host.</li>
+              <li>RTMP/SRT mismatch: make sure OBS output protocol matches the ingest endpoint protocol.</li>
+            </ul>
+          </details>
         </section>
 
         <section className="surface stack" aria-labelledby="preview-heading">
