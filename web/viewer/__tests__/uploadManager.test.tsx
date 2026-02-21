@@ -42,7 +42,8 @@ test("loads uploads when the viewer owns the channel", async () => {
   expect(await screen.findByRole("heading", { name: /upload manager/i })).toBeInTheDocument();
   expect(screen.getByText(/recap/i)).toBeInTheDocument();
   expect(screen.getByText("Processing")).toBeInTheDocument();
-  expect(screen.getByText(/this may take a few minutes/i)).toBeInTheDocument();
+  expect(screen.getByText(/we are transcoding and packaging this recording for playback/i)).toBeInTheDocument();
+  expect(screen.getByText(/Last updated:/i)).toBeInTheDocument();
   expect(screen.queryByText(/^State:/i)).not.toBeInTheDocument();
   expect(mockRouter.replace).not.toHaveBeenCalled();
 });
