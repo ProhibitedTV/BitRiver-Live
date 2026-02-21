@@ -30,6 +30,11 @@ function describeEndpoint(endpoint: string, index: number) {
   return `Ingest ${index + 1}`;
 }
 
+function getPreferredIngestEndpoint(endpoints: string[]) {
+  const rtmpEndpoint = endpoints.find((endpoint) => endpoint.toLowerCase().startsWith("rtmp://"));
+  return rtmpEndpoint ?? endpoints[0];
+}
+
 type ControlCentreStreamStatus = {
   label: "Idle" | "Ingesting" | "Live" | "Ended" | "Error";
   badgeClassName: string;
@@ -117,6 +122,7 @@ export default function CreatorLivePage() {
   const [streamKeyVisible, setStreamKeyVisible] = useState(false);
   const [streamKeyCopyMessage, setStreamKeyCopyMessage] = useState<string | undefined>();
   const [ingestCopyMessage, setIngestCopyMessage] = useState<string | undefined>();
+  const [copiedIngestEndpoint, setCopiedIngestEndpoint] = useState<string | undefined>();
   const [obsSettingsCopyMessage, setObsSettingsCopyMessage] = useState<string | undefined>();
   const [testStreamUpdatedAt, setTestStreamUpdatedAt] = useState<string>(new Date().toISOString());
   const router = useRouter();
@@ -217,7 +223,8 @@ export default function CreatorLivePage() {
     [managedChannel, user]
   );
 
-  const ingestEndpoints = managedChannel?.ingestEndpoints ?? [];
+  const ingestEndpoints = useMemo(() => managedChannel?.ingestEndpoints ?? [], [managedChannel?.ingestEndpoints]);
+  const preferredIngestEndpoint = useMemo(() => getPreferredIngestEndpoint(ingestEndpoints), [ingestEndpoints]);
   const streamStatus = useMemo(() => {
     if (!playback) {
       return { label: "Idle", badgeClassName: "badge badge--muted" } as ControlCentreStreamStatus;
@@ -265,6 +272,20 @@ export default function CreatorLivePage() {
     }
   };
 
+  useEffect(() => {
+    if (!copiedIngestEndpoint) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setCopiedIngestEndpoint(undefined);
+    }, 1500);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [copiedIngestEndpoint]);
+
   if (loading) {
     return <section className="surface">Loading channel…</section>;
   }
@@ -306,18 +327,21 @@ export default function CreatorLivePage() {
   const handleCopyIngestEndpoint = async (endpoint: string) => {
     try {
       await navigator.clipboard.writeText(endpoint);
+      setCopiedIngestEndpoint(endpoint);
       setIngestCopyMessage(`Copied ${describeEndpoint(endpoint, ingestEndpoints.indexOf(endpoint))}`);
     } catch (err) {
+      setCopiedIngestEndpoint(undefined);
       const message = err instanceof Error ? err.message : "Unable to copy";
       setIngestCopyMessage(message);
     }
   };
 
   const handleCopyObsSettings = async () => {
-    if (!managedChannel?.streamKey || !isChannelOwner || ingestEndpoints.length === 0) {
+    if (!managedChannel?.streamKey || !isChannelOwner || ingestEndpoints.length === 0 || !preferredIngestEndpoint) {
       return;
     }
-    const settings = `Server: ${ingestEndpoints[0]}\nStream Key: ${managedChannel.streamKey}`;
+    const streamKeyValue = streamKeyVisible ? managedChannel.streamKey : "[hidden - reveal to copy]";
+    const settings = `Server: ${preferredIngestEndpoint}\nStream Key: ${streamKeyValue}`;
     try {
       await navigator.clipboard.writeText(settings);
       setObsSettingsCopyMessage("Copied OBS settings");
@@ -419,19 +443,19 @@ export default function CreatorLivePage() {
                   <p className="muted">Loading ingest configuration…</p>
                 ) : ingestEndpoints.length > 0 ? (
                   <div className="stack" style={{ gap: "0.5rem" }}>
-                    <input
-                      aria-label="Server URL"
-                      readOnly
-                      value={ingestEndpoints[0]}
-                    />
+                    <input aria-label="Server URL" readOnly value={preferredIngestEndpoint ?? ""} />
                     <button
                       type="button"
                       className="secondary-button"
+                      data-testid="copy-preferred-ingest-endpoint"
                       onClick={() => {
-                        void handleCopyIngestEndpoint(ingestEndpoints[0]);
+                        if (!preferredIngestEndpoint) {
+                          return;
+                        }
+                        void handleCopyIngestEndpoint(preferredIngestEndpoint);
                       }}
                     >
-                      Copy URL
+                      {copiedIngestEndpoint === preferredIngestEndpoint ? "Copied" : "Copy URL"}
                     </button>
                   </div>
                 ) : (
@@ -475,6 +499,7 @@ export default function CreatorLivePage() {
                       <button
                         type="button"
                         className="secondary-button"
+                        data-testid="copy-obs-settings"
                         onClick={() => {
                           void handleCopyObsSettings();
                         }}
@@ -508,11 +533,12 @@ export default function CreatorLivePage() {
                           <button
                             type="button"
                             className="secondary-button"
+                            data-testid={`copy-ingest-endpoint-${index}`}
                             onClick={() => {
                               void handleCopyIngestEndpoint(endpoint);
                             }}
                           >
-                            Copy URL
+                            {copiedIngestEndpoint === endpoint ? "Copied" : "Copy URL"}
                           </button>
                         </div>
                       </li>
