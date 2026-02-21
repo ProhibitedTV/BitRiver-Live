@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -989,6 +990,64 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	expectedCalls := []string{"doctor", "env-init", "env-validate", "image-preflight", "migrations", "compose-up", "wait", "health", "bootstrap"}
 	if !reflect.DeepEqual(calls, expectedCalls) {
 		t.Fatalf("call order = %v, want %v", calls, expectedCalls)
+	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	originalStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = originalStdout }()
+
+	fn()
+	_ = w.Close()
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read stdout: %v", err)
+	}
+	return string(data)
+}
+
+func TestPrintQuickstartSuccessSummaryIncludesHelpfulDetails(t *testing.T) {
+	out := captureStdout(t, func() {
+		printQuickstartSuccessSummary("deploy/docker-compose.yml", ".env", map[string]string{
+			"BITRIVER_LIVE_PORT":        "18080",
+			"BITRIVER_LIVE_ADMIN_EMAIL": "admin@example.com",
+		})
+	})
+
+	checks := []string{
+		"BitRiver Live is running",
+		"Control/API URL: http://localhost:18080",
+		"Viewer URL: http://localhost:18080/viewer",
+		"Admin email: admin@example.com",
+		"Env file: .env",
+		"docker compose --file deploy/docker-compose.yml --env-file .env ps",
+		"docker compose --file deploy/docker-compose.yml --env-file .env logs -f",
+		"docker compose --file deploy/docker-compose.yml --env-file .env down",
+	}
+	for _, check := range checks {
+		if !strings.Contains(out, check) {
+			t.Fatalf("expected output to contain %q, got %q", check, out)
+		}
+	}
+}
+
+func TestQuickstartStageFailureUsesWhatHappenedAndNextSteps(t *testing.T) {
+	err := quickstartStageFailure("Compose up", errors.New("docker compose up: missing network"), "Check logs and retry.")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	message := err.Error()
+	if !strings.Contains(message, "What happened:") {
+		t.Fatalf("expected What happened section, got %q", message)
+	}
+	if !strings.Contains(message, "What to do next:") {
+		t.Fatalf("expected What to do next section, got %q", message)
 	}
 }
 
