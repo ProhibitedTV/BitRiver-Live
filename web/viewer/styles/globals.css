@@ -991,6 +991,13 @@ button:focus-visible {
   flex-wrap: wrap;
 }
 
+
+.upload-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
 .upload-dropzone {
   border: 1px dashed var(--border);
   border-radius: 1rem;

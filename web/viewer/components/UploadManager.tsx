@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, DragEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../hooks/useAuth";
@@ -25,6 +25,7 @@ type MetadataEntry = {
 };
 
 type UploadPhase = "selecting" | "uploading" | "processing" | "ready" | "failed";
+type UploadListFilter = "all" | "active" | "ready" | "failed";
 
 type UploadProgressState = {
   percent: number;
@@ -55,6 +56,8 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
   const router = useRouter();
   const { user, loading: authLoading, signIn } = useAuth();
   const [items, setItems] = useState<UploadItem[]>([]);
+  const [listFilter, setListFilter] = useState<UploadListFilter>("all");
+  const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
   const [formError, setFormError] = useState<string | undefined>();
@@ -81,6 +84,29 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
 
   const hasCreatorRole = user?.roles?.includes("creator") ?? false;
   const canManage = !!user && (user.id === ownerId || hasCreatorRole);
+
+  const visibleItems = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    return [...items]
+      .sort(compareUploadsForMonitoring)
+      .filter((item) => {
+        if (listFilter === "active" && !isUploadInActiveState(item.status)) {
+          return false;
+        }
+        if (listFilter === "ready" && !isUploadItemReady(item.status)) {
+          return false;
+        }
+        if (listFilter === "failed" && !isUploadItemFailed(item.status)) {
+          return false;
+        }
+        if (!normalizedSearch) {
+          return true;
+        }
+        const title = item.title?.toLowerCase() ?? "";
+        const filename = item.filename?.toLowerCase() ?? "";
+        return title.includes(normalizedSearch) || filename.includes(normalizedSearch);
+      });
+  }, [items, listFilter, searchTerm]);
 
   useEffect(() => {
     if (authLoading) {
@@ -504,13 +530,57 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
           </button>
           {error && <span className="error">{error}</span>}
         </div>
+        <div className="upload-actions">
+          <div className="upload-filter-row" role="group" aria-label="Upload filter">
+            <button
+              type="button"
+              className={`chip${listFilter === "all" ? " chip--active" : ""}`}
+              onClick={() => setListFilter("all")}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              className={`chip${listFilter === "active" ? " chip--active" : ""}`}
+              onClick={() => setListFilter("active")}
+            >
+              Active
+            </button>
+            <button
+              type="button"
+              className={`chip${listFilter === "ready" ? " chip--active" : ""}`}
+              onClick={() => setListFilter("ready")}
+            >
+              Ready
+            </button>
+            <button
+              type="button"
+              className={`chip${listFilter === "failed" ? " chip--active" : ""}`}
+              onClick={() => setListFilter("failed")}
+            >
+              Failed
+            </button>
+          </div>
+          <label>
+            Search uploads
+            <input
+              type="search"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search title or filename"
+            />
+          </label>
+        </div>
         {loading && <p className="muted">Loading uploads…</p>}
         {!loading && items.length === 0 && !error && (
           <p className="muted">No uploads yet. Select media and register your first upload.</p>
         )}
-        {items.length > 0 && (
+        {!loading && items.length > 0 && visibleItems.length === 0 && (
+          <p className="muted">No uploads match the selected filters.</p>
+        )}
+        {visibleItems.length > 0 && (
           <ul className="upload-list">
-            {items.map((item) => {
+            {visibleItems.map((item) => {
               const statusPresentation = getUploadItemStatusPresentation(item);
               const hasPlaybackUrl = item.playbackUrl?.trim().length > 0;
               const isReadyForPlayback = hasPlaybackUrl || isUploadItemReady(item.status);
@@ -530,7 +600,7 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
                   {item.status.toLowerCase().trim() === "processing" && (
                     <p className="muted">Last updated: {new Date(item.updatedAt).toLocaleString()}</p>
                   )}
-                  <p className="muted">{Math.round(item.sizeBytes / 1_000_000)} MB</p>
+                  <p className="muted">{formatFileSize(item.sizeBytes)}</p>
                   <div className="upload-card__actions">
                     {isReadyForPlayback && hasPlaybackUrl && (
                       <a className="primary-button" href={item.playbackUrl} target="_blank" rel="noreferrer">
@@ -559,6 +629,33 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
   );
 }
 
+
+function normalizeUploadStatus(status: string): string {
+  return status.toLowerCase().trim();
+}
+
+function isUploadInActiveState(status: string): boolean {
+  const normalized = normalizeUploadStatus(status);
+  return normalized === "uploading" || normalized === "processing" || normalized === "failed" || normalized === "error";
+}
+
+function isUploadItemFailed(status: string): boolean {
+  const normalized = normalizeUploadStatus(status);
+  return normalized === "failed" || normalized === "error";
+}
+
+function compareUploadsForMonitoring(a: UploadItem, b: UploadItem): number {
+  const aActiveRank = isUploadInActiveState(a.status) ? 0 : 1;
+  const bActiveRank = isUploadInActiveState(b.status) ? 0 : 1;
+  if (aActiveRank !== bActiveRank) {
+    return aActiveRank - bActiveRank;
+  }
+  const aUpdated = Date.parse(a.updatedAt);
+  const bUpdated = Date.parse(b.updatedAt);
+  const aTime = Number.isFinite(aUpdated) ? aUpdated : 0;
+  const bTime = Number.isFinite(bUpdated) ? bUpdated : 0;
+  return bTime - aTime;
+}
 function getUploadPhasePresentation(
   phase: UploadPhase,
   hasSource: boolean,
@@ -599,7 +696,7 @@ function getUploadPhasePresentation(
 }
 
 function formatUploadStatus(status: string): string {
-  const normalized = status.toLowerCase().trim();
+  const normalized = normalizeUploadStatus(status);
   if (normalized === "pending" || normalized === "queued") {
     return "Processing";
   }
@@ -610,7 +707,7 @@ function formatUploadStatus(status: string): string {
 }
 
 function isUploadItemReady(status: string): boolean {
-  const normalized = status.toLowerCase().trim();
+  const normalized = normalizeUploadStatus(status);
   return normalized === "completed" || normalized === "ready";
 }
 
