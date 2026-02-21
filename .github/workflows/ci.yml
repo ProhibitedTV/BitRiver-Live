@@ -122,17 +122,21 @@ jobs:
               - '.github/workflows/go-workflow-consistency.yml'
 
   verify:
-    name: Verification gate
+    name: Ubuntu test-all gate
     needs: changed-files
     if: needs.changed-files.outputs.verify_changed == 'true'
     runs-on: ubuntu-latest
+    env:
+      BITRIVER_TEST_POSTGRES: ${{ needs.changed-files.outputs.postgres_changed == 'true' && '1' || '0' }}
+      BITRIVER_TEST_QUICKSTART: ${{ needs.changed-files.outputs.quickstart_changed == 'true' && '1' || '0' }}
+      BITRIVER_TEST_ALL_INGEST_E2E: ${{ needs.changed-files.outputs.ingest_changed == 'true' && '1' || '0' }}
     steps:
       - name: Set up Go toolchain
         uses: ./.github/actions/setup-go
 
-      - name: Run verification gate
+      - name: Run unified ubuntu test gate
         shell: bash
-        run: ./scripts/verify.sh
+        run: ./scripts/test-all.sh
 
   go-verify:
     name: Go tests (${{ matrix.os }})
@@ -151,62 +155,6 @@ jobs:
 
       - name: Run unit tests
         run: go test ./... -count=1 -timeout=120s
-
-  postgres-tests:
-    name: Postgres storage tests
-    needs:
-      - changed-files
-      - verify
-    if: always() && needs.changed-files.outputs.postgres_changed == 'true' && (needs.verify.result == 'success' || needs.verify.result == 'skipped')
-    runs-on: ubuntu-latest
-    env:
-      GOTOOLCHAIN: local
-      GOPROXY: off
-      GOSUMDB: off
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: bitriver
-          POSTGRES_PASSWORD: bitriver
-          POSTGRES_DB: bitriver_test
-        ports:
-          - 54329:5432
-        options: >-
-          --health-cmd="pg_isready -U bitriver -d bitriver_test"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=10
-    steps:
-      - name: Set up Go toolchain
-        uses: ./.github/actions/setup-go
-
-      - name: Wait for Postgres service
-        run: |
-          container_id="$(docker ps --filter "name=postgres" --format "{{.ID}}" | head -n1)"
-          if [ -z "$container_id" ]; then
-            echo "postgres service container not found" >&2
-            docker ps
-            exit 1
-          fi
-
-          for attempt in $(seq 1 30); do
-            status=$(docker inspect --format '{{.State.Health.Status}}' "$container_id")
-            if [ "$status" = "healthy" ]; then
-              exit 0
-            fi
-            echo "waiting for postgres service to become healthy (attempt $attempt)..." >&2
-            sleep 2
-          done
-
-          echo "postgres service failed to become healthy" >&2
-          docker logs "$container_id"
-          exit 1
-
-      - name: Run postgres-tagged storage tests
-        env:
-          BITRIVER_TEST_POSTGRES_DSN: postgres://bitriver:bitriver@127.0.0.1:54329/bitriver_test?sslmode=disable
-        run: ./scripts/test-postgres.sh
 
   quickstart-smoke:
     name: Quickstart entrypoint sanity (${{ matrix.os }})
@@ -273,24 +221,6 @@ jobs:
               Write-Error "Missing expected quickstart.ps1 snippet: $snippet"
             }
           }
-
-  ingest-e2e:
-    name: Ingest end-to-end
-    needs:
-      - changed-files
-      - verify
-    if: always() && needs.changed-files.outputs.ingest_changed == 'true' && (needs.verify.result == 'success' || needs.verify.result == 'skipped')
-    runs-on: ubuntu-latest
-    env:
-      GOTOOLCHAIN: local
-      GOPROXY: off
-      GOSUMDB: off
-    steps:
-      - name: Set up Go toolchain
-        uses: ./.github/actions/setup-go
-
-      - name: Run ingest pipeline integration test
-        run: ./scripts/test-ingest-e2e.sh
 
   viewer-ci:
     name: Viewer CI
