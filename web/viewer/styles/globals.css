@@ -602,6 +602,22 @@ button {
   color: #fee2e2;
 }
 
+.status-badge--neutral {
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.status-badge--info {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.status-badge--success {
+  background: rgba(16, 185, 129, 0.2);
+}
+
+.status-badge--danger {
+  background: rgba(239, 68, 68, 0.2);
+}
+
 .pill {
   display: inline-flex;
   align-items: center;
@@ -1009,6 +1025,17 @@ button:focus-visible {
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
+}
+
+.upload-status {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.upload-status--card {
+  margin-bottom: 0.35rem;
 }
 
 .upload-progress {

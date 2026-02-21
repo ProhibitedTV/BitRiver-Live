@@ -10,6 +10,7 @@ import {
   deleteUpload,
   fetchChannelUploads,
 } from "../lib/viewer-api";
+import { StatusBadge } from "./StatusBadge";
 
 type UploadManagerProps = {
   channelId: string;
@@ -28,6 +29,12 @@ type UploadProgressState = {
   percent: number;
   loadedBytes: number;
   totalBytes: number;
+};
+
+type UploadStatusPresentation = {
+  label: string;
+  summary: string;
+  tone: "neutral" | "info" | "success" | "danger";
 };
 
 type PendingUploadSnapshot = {
@@ -69,6 +76,7 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
   const [lastSubmission, setLastSubmission] = useState<PendingUploadSnapshot | null>(null);
 
   const hasUploadSource = selectedFile !== null || formValues.playbackUrl.trim().length > 0;
+  const phasePresentation = getUploadPhasePresentation(uploadPhase, hasUploadSource, uploadProgress?.percent);
 
   const hasCreatorRole = user?.roles?.includes("creator") ?? false;
   const canManage = !!user && (user.id === ownerId || hasCreatorRole);
@@ -387,9 +395,10 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
               </div>
             )}
           </div>
-          <p className={`upload-state upload-state--${uploadPhase}`}>
-            {renderUploadPhase(uploadPhase, selectedFile !== null || formValues.playbackUrl.trim().length > 0)}
-          </p>
+          <div className="upload-status">
+            <StatusBadge label={phasePresentation.label} tone={phasePresentation.tone} />
+            <p className={`upload-state upload-state--${uploadPhase}`}>{phasePresentation.summary}</p>
+          </div>
           {uploadProgress !== null && (
             <div className="upload-progress">
               <div className="upload-progress__track">
@@ -500,23 +509,28 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
         )}
         {items.length > 0 && (
           <ul className="upload-list">
-            {items.map((item) => (
-              <li key={item.id} className="upload-card">
+            {items.map((item) => {
+              const statusPresentation = getUploadItemStatusPresentation(item);
+              return (
+                <li key={item.id} className="upload-card">
+                  <div className="upload-status upload-status--card">
+                    <StatusBadge label={statusPresentation.label} tone={statusPresentation.tone} />
+                    <p className="muted">{statusPresentation.summary}</p>
+                  </div>
+                  {item.error && <p className="error">{mapUploadItemError(item.error)}</p>}
                 <div className="upload-card__header">
                   <strong>{item.title || item.filename}</strong>
                   <span className="muted">{new Date(item.createdAt).toLocaleString()}</span>
                 </div>
-                <p className="muted">
-                  {formatUploadStatus(item.status)} · {item.progress}% · {Math.round(item.sizeBytes / 1_000_000)} MB
-                </p>
-                {item.error && <p className="error">{mapUploadItemError(item.error)}</p>}
+                <p className="muted">{Math.round(item.sizeBytes / 1_000_000)} MB</p>
                 <div className="upload-card__actions">
                   <button type="button" className="secondary-button" onClick={() => handleDelete(item.id)}>
                     Delete
                   </button>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>
@@ -524,30 +538,88 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
   );
 }
 
-function renderUploadPhase(phase: UploadPhase, hasSource: boolean): string {
+function getUploadPhasePresentation(
+  phase: UploadPhase,
+  hasSource: boolean,
+  progressPercent?: number,
+): UploadStatusPresentation {
   switch (phase) {
     case "uploading":
-      return "State: uploading";
+      return {
+        label: "Uploading",
+        summary: `Uploading… ${progressPercent ?? 0}% complete.`,
+        tone: "info",
+      };
     case "processing":
-      return "State: processing";
+      return {
+        label: "Processing",
+        summary: "Processing… This may take a few minutes before playback is ready.",
+        tone: "info",
+      };
     case "ready":
-      return "State: ready";
+      return {
+        label: "Ready",
+        summary: "Ready. Review it below and publish or share when you are set.",
+        tone: "success",
+      };
     case "failed":
-      return "State: failed";
+      return {
+        label: "Failed",
+        summary: "Failed. Check the error details, then update fields and retry.",
+        tone: "danger",
+      };
     default:
-      return hasSource ? "State: selecting" : "State: selecting media";
+      return {
+        label: "Select media",
+        summary: hasSource ? "Media selected. Confirm details, then register upload." : "Select media to start a new upload.",
+        tone: "neutral",
+      };
   }
 }
 
 function formatUploadStatus(status: string): string {
   const normalized = status.toLowerCase().trim();
   if (normalized === "pending" || normalized === "queued") {
-    return "processing";
+    return "Processing";
   }
   if (normalized === "completed") {
-    return "ready";
+    return "Ready";
   }
-  return normalized.replace(/_/g, " ");
+  return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getUploadItemStatusPresentation(item: UploadItem): UploadStatusPresentation {
+  const label = formatUploadStatus(item.status);
+  const status = label.toLowerCase();
+  const percent = Math.round(item.progress);
+
+  if (status === "processing") {
+    return {
+      label,
+      summary: `Processing… ${percent}% complete. This may take a few minutes.`,
+      tone: "info",
+    };
+  }
+  if (status === "ready") {
+    return {
+      label,
+      summary: `Ready. Open playback and confirm quality.`,
+      tone: "success",
+    };
+  }
+  if (status === "failed" || status === "error") {
+    return {
+      label: "Failed",
+      summary: "Failed. Fix the issue and retry this upload.",
+      tone: "danger",
+    };
+  }
+
+  return {
+    label,
+    summary: `${label} · ${percent}%`,
+    tone: "neutral",
+  };
 }
 
 function mapUploadError(err: unknown): string {

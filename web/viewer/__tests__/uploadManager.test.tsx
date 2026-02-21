@@ -41,6 +41,9 @@ test("loads uploads when the viewer owns the channel", async () => {
   await waitFor(() => expect(fetchUploadsMock).toHaveBeenCalledWith("chan-1"));
   expect(await screen.findByRole("heading", { name: /upload manager/i })).toBeInTheDocument();
   expect(screen.getByText(/recap/i)).toBeInTheDocument();
+  expect(screen.getByText("Processing")).toBeInTheDocument();
+  expect(screen.getByText(/this may take a few minutes/i)).toBeInTheDocument();
+  expect(screen.queryByText(/^State:/i)).not.toBeInTheDocument();
   expect(mockRouter.replace).not.toHaveBeenCalled();
 });
 
