@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "../hooks/useAuth";
 import {
   UploadItem,
+  ViewerApiError,
   createUpload,
   deleteUpload,
   fetchChannelUploads,
@@ -21,8 +22,27 @@ type MetadataEntry = {
   value: string;
 };
 
-const FILE_METADATA_KEYS = ["contentType", "fileLastModified"];
+type UploadPhase = "selecting" | "uploading" | "processing" | "ready" | "failed";
 
+type UploadProgressState = {
+  percent: number;
+  loadedBytes: number;
+  totalBytes: number;
+};
+
+type PendingUploadSnapshot = {
+  payload: {
+    channelId: string;
+    title: string;
+    filename: string;
+    playbackUrl: string;
+    sizeBytes: number | undefined;
+    metadata: Record<string, string> | undefined;
+  };
+  file: File | null;
+};
+
+const FILE_METADATA_KEYS = ["contentType", "fileLastModified"];
 export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
   const router = useRouter();
   const { user, loading: authLoading, signIn } = useAuth();
@@ -43,8 +63,11 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
   const metadataIdRef = useRef(1);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgressState | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase>("selecting");
+  const [lastSubmission, setLastSubmission] = useState<PendingUploadSnapshot | null>(null);
+
   const hasUploadSource = selectedFile !== null || formValues.playbackUrl.trim().length > 0;
 
   const hasCreatorRole = user?.roles?.includes("creator") ?? false;
@@ -124,6 +147,8 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
       const file = files[0];
       setSelectedFile(file);
       setUploadProgress(null);
+      setUploadPhase("selecting");
+      setFormError(undefined);
       setFormValues((prev) => ({
         ...prev,
         title: prev.title || deriveTitleFromFilename(file.name),
@@ -198,6 +223,7 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
   const clearSelectedFile = () => {
     setSelectedFile(null);
     setUploadProgress(null);
+    setUploadPhase("selecting");
     setMetadataEntries((current) => {
       const next = current.filter((entry) => !FILE_METADATA_KEYS.includes(entry.key));
       if (next.length === 0) {
@@ -216,49 +242,82 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
     fileInputRef.current?.click();
   };
 
+  const submitUpload = useCallback(
+    async (snapshot?: PendingUploadSnapshot) => {
+      if (!canManage) {
+        return;
+      }
+
+      const metadata = snapshot
+        ? snapshot.payload.metadata
+        : metadataEntries.reduce<Record<string, string>>((acc, entry) => {
+            const key = entry.key.trim();
+            if (key.length === 0) {
+              return acc;
+            }
+            acc[key] = entry.value.trim();
+            return acc;
+          }, {});
+
+      const sizeBytes = snapshot
+        ? snapshot.payload.sizeBytes
+        : Number.parseInt(formValues.sizeBytes || "0", 10);
+
+      const payload = snapshot
+        ? snapshot.payload
+        : {
+            channelId,
+            title: formValues.title,
+            filename: formValues.filename,
+            playbackUrl: formValues.playbackUrl,
+            sizeBytes: Number.isNaN(sizeBytes) ? undefined : sizeBytes,
+            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+          };
+
+      const file = snapshot ? snapshot.file : selectedFile;
+
+      if (!file && !payload.playbackUrl) {
+        setFormError("Select a media file or provide a playback URL");
+        setUploadPhase("failed");
+        return;
+      }
+
+      try {
+        setFormError(undefined);
+        setSubmitting(true);
+        setUploadPhase(file ? "uploading" : "processing");
+        setUploadProgress(file ? { percent: 0, loadedBytes: 0, totalBytes: file.size } : null);
+        setLastSubmission({ payload, file });
+        await createUpload(payload, file ? { file, onProgress: setUploadProgress } : undefined);
+        setUploadPhase("ready");
+        setFormValues({ title: "", filename: "", playbackUrl: "", sizeBytes: "" });
+        setMetadataEntries([{ id: "meta-0", key: "source", value: "upload" }]);
+        setSelectedFile(null);
+        setUploadProgress(null);
+        setLastSubmission(null);
+        await load(true);
+      } catch (err) {
+        const message = mapUploadError(err);
+        setFormError(message);
+        setUploadPhase("failed");
+      } finally {
+        setSubmitting(false);
+        setUploadProgress(null);
+      }
+    },
+    [canManage, channelId, formValues.filename, formValues.playbackUrl, formValues.sizeBytes, formValues.title, load, metadataEntries, selectedFile],
+  );
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canManage) {
+    await submitUpload();
+  };
+
+  const handleRetry = async () => {
+    if (!lastSubmission || !isRetryableUploadError(formError)) {
       return;
     }
-    const metadata = metadataEntries.reduce<Record<string, string>>((acc, entry) => {
-      const key = entry.key.trim();
-      if (key.length === 0) {
-        return acc;
-      }
-      acc[key] = entry.value.trim();
-      return acc;
-    }, {});
-    const sizeBytes = Number.parseInt(formValues.sizeBytes || "0", 10);
-    const payload = {
-      channelId,
-      title: formValues.title,
-      filename: formValues.filename,
-      playbackUrl: formValues.playbackUrl,
-      sizeBytes: Number.isNaN(sizeBytes) ? undefined : sizeBytes,
-      metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-    };
-    if (!selectedFile && !payload.playbackUrl) {
-      setFormError("Select a media file or provide a playback URL");
-      return;
-    }
-    try {
-      setFormError(undefined);
-      setSubmitting(true);
-      setUploadProgress(selectedFile ? 0 : null);
-      await createUpload(payload, selectedFile ? { file: selectedFile, onProgress: setUploadProgress } : undefined);
-      setFormValues({ title: "", filename: "", playbackUrl: "", sizeBytes: "" });
-      setMetadataEntries([{ id: "meta-0", key: "source", value: "upload" }]);
-      setSelectedFile(null);
-      setUploadProgress(null);
-      await load(true);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to create upload";
-      setFormError(message);
-    } finally {
-      setSubmitting(false);
-      setUploadProgress(null);
-    }
+    await submitUpload(lastSubmission);
   };
 
   const handleDelete = async (id: string) => {
@@ -303,7 +362,7 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
             }}
             aria-label="Upload media file"
           >
-            <input ref={fileInputRef} type="file" className="sr-only" onChange={handleFileInputChange} />
+            <input ref={fileInputRef} type="file" hidden onChange={handleFileInputChange} />
             {selectedFile ? (
               <div className="upload-dropzone__file">
                 <div>
@@ -324,16 +383,21 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
             ) : (
               <div className="upload-dropzone__hint">
                 <p>Drag &amp; drop a file, or click to browse</p>
-                <p className="muted">MP4, MOV, MKV</p>
+                <p className="muted">MP4, MOV, WEBM</p>
               </div>
             )}
           </div>
+          <p className={`upload-state upload-state--${uploadPhase}`}>
+            {renderUploadPhase(uploadPhase, selectedFile !== null || formValues.playbackUrl.trim().length > 0)}
+          </p>
           {uploadProgress !== null && (
             <div className="upload-progress">
               <div className="upload-progress__track">
-                <div className="upload-progress__bar" style={{ width: `${uploadProgress}%` }} />
+                <div className="upload-progress__bar" style={{ width: `${uploadProgress.percent}%` }} />
               </div>
-              <span className="upload-progress__value">{uploadProgress}%</span>
+              <span className="upload-progress__value">
+                {formatFileSize(uploadProgress.loadedBytes)} / {formatFileSize(uploadProgress.totalBytes)} · {uploadProgress.percent}%
+              </span>
             </div>
           )}
         </label>
@@ -412,9 +476,16 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
           </button>
         </div>
         {formError && <p className="error">{formError}</p>}
-        <button type="submit" className="primary-button" disabled={submitting || !hasUploadSource}>
-          {submitting ? "Submitting…" : "Register upload"}
-        </button>
+        <div className="upload-submit-row">
+          <button type="submit" className="primary-button" disabled={submitting || !hasUploadSource}>
+            {submitting ? "Submitting…" : "Register upload"}
+          </button>
+          {uploadPhase === "failed" && isRetryableUploadError(formError) && (
+            <button type="button" className="secondary-button" onClick={handleRetry} disabled={submitting || !lastSubmission}>
+              Retry
+            </button>
+          )}
+        </div>
       </form>
       <div className="stack">
         <div className="upload-actions">
@@ -423,8 +494,9 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
           </button>
           {error && <span className="error">{error}</span>}
         </div>
+        {loading && <p className="muted">Loading uploads…</p>}
         {!loading && items.length === 0 && !error && (
-          <p className="muted">No uploads yet.</p>
+          <p className="muted">No uploads yet. Select media and register your first upload.</p>
         )}
         {items.length > 0 && (
           <ul className="upload-list">
@@ -435,9 +507,9 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
                   <span className="muted">{new Date(item.createdAt).toLocaleString()}</span>
                 </div>
                 <p className="muted">
-                  {item.status.replace(/_/g, " ")} · {item.progress}% · {Math.round(item.sizeBytes / 1_000_000)} MB
+                  {formatUploadStatus(item.status)} · {item.progress}% · {Math.round(item.sizeBytes / 1_000_000)} MB
                 </p>
-                {item.error && <p className="error">{item.error}</p>}
+                {item.error && <p className="error">{mapUploadItemError(item.error)}</p>}
                 <div className="upload-card__actions">
                   <button type="button" className="secondary-button" onClick={() => handleDelete(item.id)}>
                     Delete
@@ -449,6 +521,78 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
         )}
       </div>
     </section>
+  );
+}
+
+function renderUploadPhase(phase: UploadPhase, hasSource: boolean): string {
+  switch (phase) {
+    case "uploading":
+      return "State: uploading";
+    case "processing":
+      return "State: processing";
+    case "ready":
+      return "State: ready";
+    case "failed":
+      return "State: failed";
+    default:
+      return hasSource ? "State: selecting" : "State: selecting media";
+  }
+}
+
+function formatUploadStatus(status: string): string {
+  const normalized = status.toLowerCase().trim();
+  if (normalized === "pending" || normalized === "queued") {
+    return "processing";
+  }
+  if (normalized === "completed") {
+    return "ready";
+  }
+  return normalized.replace(/_/g, " ");
+}
+
+function mapUploadError(err: unknown): string {
+  if (err instanceof ViewerApiError) {
+    const bodyMessage =
+      typeof err.body === "object" && err.body !== null && "message" in err.body && typeof err.body.message === "string"
+        ? err.body.message
+        : err.message;
+    const msg = bodyMessage.toLowerCase();
+    if (err.status === 413 || msg.includes("exceeds limit") || msg.includes("too large")) {
+      return "Upload failed: file size exceeds the allowed limit.";
+    }
+    if (msg.includes("unsupported media") || msg.includes("unsupported") || msg.includes("invalid type")) {
+      return "Upload failed: invalid file type. Supported types are MP4, MOV, and WEBM.";
+    }
+    if (err.status === 429 || msg.includes("quota")) {
+      return "Upload failed: quota exceeded. Free up storage or try again later.";
+    }
+    return bodyMessage || "Unable to create upload";
+  }
+  return err instanceof Error ? err.message : "Unable to create upload";
+}
+
+function mapUploadItemError(message: string): string {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("quota")) {
+    return "Quota exceeded while processing this upload.";
+  }
+  if (normalized.includes("unsupported media") || normalized.includes("invalid type")) {
+    return "Processing failed due to an invalid file type.";
+  }
+  return message;
+}
+
+function isRetryableUploadError(message?: string): boolean {
+  if (!message) {
+    return false;
+  }
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("timeout") ||
+    normalized.includes("tempor") ||
+    normalized.includes("network") ||
+    normalized.includes("unavailable") ||
+    normalized.includes("upload failed")
   );
 }
 

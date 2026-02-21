@@ -258,7 +258,7 @@ export type UpdateChannelPayload = {
 
 type MultipartOptions = {
   file?: File | Blob;
-  onProgress?: (percent: number) => void;
+  onProgress?: (progress: { percent: number; loadedBytes: number; totalBytes: number }) => void;
 };
 
 export type ChannelPlaybackResponse = {
@@ -324,7 +324,11 @@ async function viewerRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-function multipartRequest<T>(path: string, form: FormData, onProgress?: (percent: number) => void): Promise<T> {
+function multipartRequest<T>(
+  path: string,
+  form: FormData,
+  onProgress?: (progress: { percent: number; loadedBytes: number; totalBytes: number }) => void,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${API_BASE}${path}`);
@@ -338,10 +342,17 @@ function multipartRequest<T>(path: string, form: FormData, onProgress?: (percent
         }
         return;
       }
-      reject(new Error(xhr.responseText || `${xhr.status}`));
+      const rawBody = xhr.responseText;
+      let parsedBody: unknown;
+      try {
+        parsedBody = rawBody ? JSON.parse(rawBody) : undefined;
+      } catch {
+        parsedBody = undefined;
+      }
+      reject(new ViewerApiError(xhr.status, parsedBody, rawBody));
     };
     xhr.onerror = () => {
-      reject(new Error("upload failed"));
+      reject(new ViewerApiError(0, undefined, "upload failed", "upload failed"));
     };
     if (onProgress) {
       xhr.upload.onprogress = (event) => {
@@ -349,7 +360,11 @@ function multipartRequest<T>(path: string, form: FormData, onProgress?: (percent
           return;
         }
         const percent = Math.round((event.loaded / event.total) * 100);
-        onProgress(percent);
+        onProgress({
+          percent,
+          loadedBytes: event.loaded,
+          totalBytes: event.total,
+        });
       };
     }
     xhr.send(form);
