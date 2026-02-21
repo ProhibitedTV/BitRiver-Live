@@ -78,6 +78,7 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
   const [isDragActive, setIsDragActive] = useState(false);
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>("selecting");
   const [lastSubmission, setLastSubmission] = useState<PendingUploadSnapshot | null>(null);
+  const uploadAbortControllerRef = useRef<AbortController | null>(null);
 
   const hasUploadSource = selectedFile !== null || formValues.playbackUrl.trim().length > 0;
   const phasePresentation = getUploadPhasePresentation(uploadPhase, hasUploadSource, uploadProgress?.percent);
@@ -273,6 +274,20 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
     }));
   };
 
+  const resetUploadState = useCallback(() => {
+    uploadAbortControllerRef.current = null;
+    setSelectedFile(null);
+    setUploadProgress(null);
+    setUploadPhase("selecting");
+    setFormError(undefined);
+    setLastSubmission(null);
+  }, []);
+
+  const handleCancelUpload = () => {
+    uploadAbortControllerRef.current?.abort();
+    resetUploadState();
+  };
+
   const handleDropzoneClick = () => {
     fileInputRef.current?.click();
   };
@@ -317,13 +332,25 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
         return;
       }
 
+      const abortController = file ? new AbortController() : null;
+      uploadAbortControllerRef.current = abortController;
+
       try {
         setFormError(undefined);
         setSubmitting(true);
         setUploadPhase(file ? "uploading" : "processing");
         setUploadProgress(file ? { percent: 0, loadedBytes: 0, totalBytes: file.size } : null);
         setLastSubmission({ payload, file });
-        await createUpload(payload, file ? { file, onProgress: setUploadProgress } : undefined);
+        await createUpload(
+          payload,
+          file
+            ? {
+                file,
+                onProgress: setUploadProgress,
+                signal: abortController?.signal,
+              }
+            : undefined,
+        );
         setUploadPhase("ready");
         setFormValues({ title: "", filename: "", playbackUrl: "", sizeBytes: "" });
         setMetadataEntries([{ id: "meta-0", key: "source", value: "upload" }]);
@@ -332,15 +359,20 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
         setLastSubmission(null);
         await load(true);
       } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          resetUploadState();
+          return;
+        }
         const message = mapUploadError(err);
         setFormError(message);
         setUploadPhase("failed");
       } finally {
+        uploadAbortControllerRef.current = null;
         setSubmitting(false);
         setUploadProgress(null);
       }
     },
-    [canManage, channelId, formValues.filename, formValues.playbackUrl, formValues.sizeBytes, formValues.title, load, metadataEntries, selectedFile],
+    [canManage, channelId, formValues.filename, formValues.playbackUrl, formValues.sizeBytes, formValues.title, load, metadataEntries, resetUploadState, selectedFile],
   );
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -516,6 +548,16 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
           <button type="submit" className="primary-button" disabled={submitting || !hasUploadSource}>
             {submitting ? "Submitting…" : "Register upload"}
           </button>
+          {uploadPhase === "uploading" && (
+            <button type="button" className="secondary-button" onClick={handleCancelUpload}>
+              Cancel upload
+            </button>
+          )}
+          {uploadPhase === "failed" && (
+            <button type="button" className="secondary-button" onClick={resetUploadState}>
+              Reset
+            </button>
+          )}
           {uploadPhase === "failed" && isRetryableUploadError(formError) && (
             <button type="button" className="secondary-button" onClick={handleRetry} disabled={submitting || !lastSubmission}>
               Retry

@@ -8,11 +8,12 @@ import {
   viewerApiMocks,
   viewerUser,
 } from "../test/test-utils";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { UploadManager } from "../components/UploadManager";
 
 jest.mock("../hooks/useAuth");
 
+const createUploadMock = viewerApiMocks.createUpload;
 const fetchUploadsMock = viewerApiMocks.fetchChannelUploads;
 
 beforeEach(() => {
@@ -193,6 +194,67 @@ test("shows processing progress, transcoding/packaging explanation, and last upd
   expect(await screen.findByText(/processing… 67% complete\./i)).toBeInTheDocument();
   expect(screen.getByText(/we are transcoding and packaging this recording for playback\./i)).toBeInTheDocument();
   expect(screen.getByText(/^Last updated:/i)).toBeInTheDocument();
+});
+
+
+
+test("cancels an in-progress upload and returns to selecting state", async () => {
+  mockAuthenticatedUser(ownerUser);
+  fetchUploadsMock.mockResolvedValue([]);
+
+  let capturedSignal: AbortSignal | undefined;
+  createUploadMock.mockImplementation(
+    async (_payload, options?: { signal?: AbortSignal }) =>
+      await new Promise((resolve, reject) => {
+        capturedSignal = options?.signal;
+        capturedSignal?.addEventListener("abort", () => reject(new DOMException("The operation was aborted", "AbortError")));
+      }),
+  );
+
+  renderWithProviders(<UploadManager channelId="chan-1" ownerId="owner-1" />);
+
+  await screen.findByRole("heading", { name: /upload manager/i });
+
+  const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+  const file = new File(["video-data"], "demo.mp4", { type: "video/mp4" });
+  fireEvent.change(fileInput, { target: { files: [file] } });
+
+  fireEvent.click(screen.getByRole("button", { name: "Register upload" }));
+
+  expect(await screen.findByRole("button", { name: "Cancel upload" })).toBeInTheDocument();
+  expect(screen.getByText(/0 b\s*\/\s*10 b\s*·\s*0%/i)).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Cancel upload" }));
+
+  await waitFor(() => expect(capturedSignal?.aborted).toBe(true));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Cancel upload" })).not.toBeInTheDocument());
+  expect(screen.queryByText(/\/\s*10 b\s*·\s*0%/i)).not.toBeInTheDocument();
+  expect(screen.getByText("Select media to start a new upload.")).toBeInTheDocument();
+});
+
+test("shows reset after upload failure and clears failure state", async () => {
+  mockAuthenticatedUser(ownerUser);
+  fetchUploadsMock.mockResolvedValue([]);
+  createUploadMock.mockRejectedValue(new Error("upload failed"));
+
+  renderWithProviders(<UploadManager channelId="chan-1" ownerId="owner-1" />);
+
+  await screen.findByRole("heading", { name: /upload manager/i });
+
+  const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+  const file = new File(["video-data"], "failed.mp4", { type: "video/mp4" });
+  fireEvent.change(fileInput, { target: { files: [file] } });
+
+  fireEvent.click(screen.getByRole("button", { name: "Register upload" }));
+
+  expect(await screen.findByRole("button", { name: "Reset" })).toBeInTheDocument();
+  expect(screen.getByText(/upload failed/i)).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Reset" })).not.toBeInTheDocument());
+  expect(screen.getByText("Select media to start a new upload.")).toBeInTheDocument();
+  expect(screen.queryByText(/upload failed/i)).not.toBeInTheDocument();
 });
 
 test("redirects viewers who lack permission", async () => {

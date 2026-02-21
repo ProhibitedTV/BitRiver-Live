@@ -259,6 +259,7 @@ export type UpdateChannelPayload = {
 type MultipartOptions = {
   file?: File | Blob;
   onProgress?: (progress: { percent: number; loadedBytes: number; totalBytes: number }) => void;
+  signal?: AbortSignal;
 };
 
 export type ChannelPlaybackResponse = {
@@ -328,12 +329,28 @@ function multipartRequest<T>(
   path: string,
   form: FormData,
   onProgress?: (progress: { percent: number; loadedBytes: number; totalBytes: number }) => void,
+  signal?: AbortSignal,
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("The operation was aborted", "AbortError"));
+      return;
+    }
+
     const xhr = new XMLHttpRequest();
+    const onAbortSignal = () => {
+      xhr.abort();
+    };
+    const cleanupAbortSignal = () => {
+      signal?.removeEventListener("abort", onAbortSignal);
+    };
+
+    signal?.addEventListener("abort", onAbortSignal);
+
     xhr.open("POST", `${API_BASE}${path}`);
     xhr.withCredentials = true;
     xhr.onload = () => {
+      cleanupAbortSignal();
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           resolve(JSON.parse(xhr.responseText) as T);
@@ -352,7 +369,12 @@ function multipartRequest<T>(
       reject(new ViewerApiError(xhr.status, parsedBody, rawBody));
     };
     xhr.onerror = () => {
+      cleanupAbortSignal();
       reject(new ViewerApiError(0, undefined, "upload failed", "upload failed"));
+    };
+    xhr.onabort = () => {
+      cleanupAbortSignal();
+      reject(new DOMException("The operation was aborted", "AbortError"));
     };
     if (onProgress) {
       xhr.upload.onprogress = (event) => {
@@ -557,7 +579,7 @@ export function createUpload(payload: CreateUploadPayload, options?: MultipartOp
     const file = options.file;
     const filename = file instanceof File ? file.name : payload.filename ?? "upload.bin";
     form.append("file", file, filename);
-    return multipartRequest<UploadItem>("/api/uploads", form, options.onProgress);
+    return multipartRequest<UploadItem>("/api/uploads", form, options.onProgress, options.signal);
   }
   return viewerRequest<UploadItem>("/api/uploads", {
     method: "POST",
