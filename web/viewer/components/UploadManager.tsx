@@ -511,6 +511,8 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
           <ul className="upload-list">
             {items.map((item) => {
               const statusPresentation = getUploadItemStatusPresentation(item);
+              const hasPlaybackUrl = item.playbackUrl?.trim().length > 0;
+              const isReadyForPlayback = hasPlaybackUrl || isUploadItemReady(item.status);
               return (
                 <li key={item.id} className="upload-card">
                   <div className="upload-status upload-status--card">
@@ -524,6 +526,11 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
                 </div>
                 <p className="muted">{Math.round(item.sizeBytes / 1_000_000)} MB</p>
                 <div className="upload-card__actions">
+                  {isReadyForPlayback && hasPlaybackUrl && (
+                    <a className="primary-button" href={item.playbackUrl} target="_blank" rel="noreferrer">
+                      Watch
+                    </a>
+                  )}
                   <button type="button" className="secondary-button" onClick={() => handleDelete(item.id)}>
                     Delete
                   </button>
@@ -586,6 +593,11 @@ function formatUploadStatus(status: string): string {
     return "Ready";
   }
   return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function isUploadItemReady(status: string): boolean {
+  const normalized = status.toLowerCase().trim();
+  return normalized === "completed" || normalized === "ready";
 }
 
 function getUploadItemStatusPresentation(item: UploadItem): UploadStatusPresentation {
