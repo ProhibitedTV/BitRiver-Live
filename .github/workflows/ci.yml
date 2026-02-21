@@ -54,17 +54,20 @@ jobs:
               - 'third_party/**'
               - 'web/viewer/**'
             go_changed:
+              # Go runtime + module/dependency inputs (exclude docs-only changes).
               - 'go.mod'
               - 'go.sum'
               - '**/*.go'
-              - 'internal/**'
-              - 'cmd/**'
-              - 'scripts/**'
               - 'third_party/**'
             deploy_changed:
+              # Any deploy contract or deployment artifact edit.
               - 'deploy/**'
             viewer_changed:
+              # Viewer app + immediate viewer/runtime contract dependencies.
               - 'web/viewer/**'
+              - 'deploy/.env.example'
+              - 'internal/api/**'
+              - 'internal/server/**'
             monitoring_changed:
               - 'deploy/monitoring/**'
               - 'deploy/docker-compose.monitoring.yml'
@@ -75,6 +78,7 @@ jobs:
               - 'docs/**'
               - 'deploy/.env.example'
             ingest_changed:
+              # Ingest pipeline only (controllers, renderers, and ingest config).
               - 'internal/ingest/**'
               - 'cmd/transcoder/**'
               - 'cmd/srs-controller/**'
@@ -84,6 +88,7 @@ jobs:
               - 'deploy/srs/**'
               - 'deploy/ome/**'
             shell_changed:
+              # Shell scripts only.
               - 'scripts/**/*.sh'
               - 'deploy/install/**/*.sh'
             postgres_changed:
