@@ -7,6 +7,22 @@ import { useAuth } from "../hooks/useAuth";
 import { deriveQuickLinks, getNavigationAudience, getVisibleNavigationItems } from "../lib/navigation";
 import { fetchManagedChannels } from "../lib/viewer-api";
 
+const LOCAL_SETUP_DOCS_ROUTE = "/getting-started";
+
+const isLocalhostUrl = (rawUrl?: string) => {
+  const value = rawUrl?.trim();
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "::1";
+  } catch {
+    return false;
+  }
+};
+
 export function Navbar() {
   const { user, signIn, signOut } = useAuth();
   const router = useRouter();
@@ -39,6 +55,9 @@ export function Navbar() {
   );
   const navItems = useMemo(() => getVisibleNavigationItems(navigationAudience), [navigationAudience]);
   const configuredSignupUrl = process.env.NEXT_PUBLIC_SIGNUP_URL?.trim();
+  const shouldShowLocalSetupBanner =
+    process.env.NODE_ENV !== "production" &&
+    (isLocalhostUrl(process.env.NEXT_PUBLIC_VIEWER_URL) || isLocalhostUrl(process.env.NEXT_PUBLIC_API_BASE_URL));
   const signupUrl = useMemo(() => {
     if (configuredSignupUrl !== undefined) {
       return configuredSignupUrl || undefined;
@@ -207,6 +226,14 @@ export function Navbar() {
 
   return (
     <header className="navbar">
+      {shouldShowLocalSetupBanner && (
+        <div className="local-setup-banner" role="status">
+          <span>Running in local setup mode. Before going public, configure your domain + CORS settings.</span>{" "}
+          <Link href={LOCAL_SETUP_DOCS_ROUTE} className="local-setup-banner__link" onClick={closeMenu}>
+            Setup guide
+          </Link>
+        </div>
+      )}
       <div className="navbar-inner">
         {/* navbar-left contract: anchor brand + primary destinations; desktop keeps this always visible while mobile mirrors links in drawer. */}
         <div className="navbar-left" aria-hidden={menuOpen}>

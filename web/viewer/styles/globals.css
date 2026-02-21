@@ -1227,6 +1227,25 @@ button:focus-visible {
   box-shadow: var(--navbar-shadow);
 }
 
+
+.local-setup-banner {
+  margin: 0 auto;
+  max-width: var(--container-wide);
+  padding: 0.45rem 1.5rem 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.local-setup-banner__link {
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.local-setup-banner__link:hover,
+.local-setup-banner__link:focus-visible {
+  text-decoration: underline;
+}
+
 .navbar-inner {
   margin: 0 auto;
   max-width: var(--container-wide);
