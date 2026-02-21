@@ -10,8 +10,15 @@ Usage: ./scripts/test-all.sh [--ingest-e2e]
 
 Runs local validation entrypoints in one command:
   - ./scripts/test-unit.sh
-  - ./scripts/test-integration.sh
+  - ./scripts/verify.sh
+  - ./scripts/test-postgres.sh (opt-in)
+  - ./scripts/test-quickstart.sh (opt-in)
+  - ./scripts/test-ingest-e2e.sh (opt-in)
   - viewer integration tests (when node + npm + playwright are available)
+
+Integration controls:
+  BITRIVER_TEST_POSTGRES=1       Run Postgres integration tests.
+  BITRIVER_TEST_QUICKSTART=1     Run quickstart smoke test.
 
 Ingest e2e controls:
   --ingest-e2e                    Run ingest e2e in this invocation.
@@ -20,6 +27,8 @@ USAGE
 }
 
 run_ingest_e2e=false
+run_postgres=false
+run_quickstart=false
 
 while (($# > 0)); do
   case "$1" in
@@ -43,6 +52,14 @@ if [[ "${BITRIVER_TEST_ALL_INGEST_E2E:-}" == "1" ]]; then
   run_ingest_e2e=true
 fi
 
+if [[ "${BITRIVER_TEST_POSTGRES:-}" == "1" ]]; then
+  run_postgres=true
+fi
+
+if [[ "${BITRIVER_TEST_QUICKSTART:-}" == "1" ]]; then
+  run_quickstart=true
+fi
+
 run_step() {
   local label="$1"
   shift
@@ -63,10 +80,32 @@ skip_step() {
 
 run_step "Unit tests" ./scripts/test-unit.sh
 
-if [[ "$run_ingest_e2e" == true ]]; then
-  run_step "Integration tests" ./scripts/test-integration.sh --ingest-e2e
+run_step "Verification gate" ./scripts/verify.sh
+
+if [[ "$run_postgres" == true ]]; then
+  if command -v docker >/dev/null 2>&1 || [[ -n "${BITRIVER_TEST_POSTGRES_DSN:-}" ]]; then
+    run_step "Postgres integration tests" ./scripts/test-postgres.sh
+  else
+    skip_step "Postgres integration tests" "docker is not installed or not on PATH, and BITRIVER_TEST_POSTGRES_DSN is unset."
+  fi
 else
-  run_step "Integration tests" ./scripts/test-integration.sh
+  skip_step "Postgres integration tests" "disabled by default (set BITRIVER_TEST_POSTGRES=1 to enable)."
+fi
+
+if [[ "$run_quickstart" == true ]]; then
+  if command -v docker >/dev/null 2>&1; then
+    run_step "Quickstart smoke" ./scripts/test-quickstart.sh
+  else
+    skip_step "Quickstart smoke" "docker is not installed or not on PATH."
+  fi
+else
+  skip_step "Quickstart smoke" "disabled by default (set BITRIVER_TEST_QUICKSTART=1 to enable)."
+fi
+
+if [[ "$run_ingest_e2e" == true ]]; then
+  run_step "Ingest end-to-end tests" ./scripts/test-ingest-e2e.sh
+else
+  skip_step "Ingest end-to-end tests" "disabled by default (use --ingest-e2e or BITRIVER_TEST_ALL_INGEST_E2E=1)."
 fi
 
 if [ ! -d web/viewer ]; then
