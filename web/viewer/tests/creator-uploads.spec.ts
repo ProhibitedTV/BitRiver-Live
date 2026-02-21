@@ -52,6 +52,7 @@ test.describe("creator uploads", () => {
       status: string;
       progress: number;
       createdAt: string;
+      updatedAt: string;
       error?: string;
     };
 
@@ -86,6 +87,7 @@ test.describe("creator uploads", () => {
           status: "processing",
           progress: 18,
           createdAt: new Date("2024-06-01T12:30:00Z").toISOString(),
+          updatedAt: new Date("2024-06-01T12:30:00Z").toISOString(),
           error: payload?.metadata?.fileLastModified ? undefined : "missing metadata",
         };
         uploadItems = [newItem];
@@ -142,5 +144,14 @@ test.describe("creator uploads", () => {
     await expect.poll(() => uploadItems.length).toBe(1);
     await expect(page.getByText(/processing · 18%/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /delete/i })).toBeVisible();
+
+    await page.getByRole("button", { name: /^ready$/i }).click();
+    await expect(page.getByText(/no uploads match the selected filters/i)).toBeVisible();
+
+    await page.getByRole("button", { name: /^all$/i }).click();
+    await page.getByLabel(/search uploads/i).fill("recap");
+    await expect(page.getByText(/processing · 18%/i)).toBeVisible();
+    await page.getByLabel(/search uploads/i).fill("does-not-exist");
+    await expect(page.getByText(/no uploads match the selected filters/i)).toBeVisible();
   });
 });

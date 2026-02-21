@@ -53,6 +53,7 @@ test.describe("creator dashboard", () => {
       status: string;
       progress: number;
       createdAt: string;
+      updatedAt: string;
       error?: string;
     };
 
@@ -93,6 +94,7 @@ test.describe("creator dashboard", () => {
           status: "processing",
           progress: 12,
           createdAt: new Date("2024-04-20T12:00:00Z").toISOString(),
+          updatedAt: new Date("2024-04-20T12:00:00Z").toISOString(),
         };
         uploadItems = [newItem];
         await route.fulfill({
