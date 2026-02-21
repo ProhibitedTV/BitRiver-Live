@@ -523,30 +523,33 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
                     <p className="muted">{statusPresentation.summary}</p>
                   </div>
                   {item.error && <p className="error">{mapUploadItemError(item.error)}</p>}
-                <div className="upload-card__header">
-                  <strong>{item.title || item.filename}</strong>
-                  <span className="muted">{new Date(item.createdAt).toLocaleString()}</span>
-                </div>
-                <p className="muted">{Math.round(item.sizeBytes / 1_000_000)} MB</p>
-                <div className="upload-card__actions">
-                  {isReadyForPlayback && hasPlaybackUrl && (
-                    <a className="primary-button" href={item.playbackUrl} target="_blank" rel="noreferrer">
-                      Watch
-                    </a>
+                  <div className="upload-card__header">
+                    <strong>{item.title || item.filename}</strong>
+                    <span className="muted">{new Date(item.createdAt).toLocaleString()}</span>
+                  </div>
+                  {item.status.toLowerCase().trim() === "processing" && (
+                    <p className="muted">Last updated: {new Date(item.updatedAt).toLocaleString()}</p>
                   )}
-                  {hasRecordingWithoutPlayback && recordingDetailHref && (
-                    <Link className="secondary-button" href={recordingDetailHref}>
-                      View recording
-                    </Link>
-                  )}
-                  {hasRecordingWithoutPlayback && !recordingDetailHref && (
-                    <span className="muted">Playback pending. Check back soon to watch this recording.</span>
-                  )}
-                  <button type="button" className="secondary-button" onClick={() => handleDelete(item.id)}>
-                    Delete
-                  </button>
-                </div>
-              </li>
+                  <p className="muted">{Math.round(item.sizeBytes / 1_000_000)} MB</p>
+                  <div className="upload-card__actions">
+                    {isReadyForPlayback && hasPlaybackUrl && (
+                      <a className="primary-button" href={item.playbackUrl} target="_blank" rel="noreferrer">
+                        Watch
+                      </a>
+                    )}
+                    {hasRecordingWithoutPlayback && recordingDetailHref && (
+                      <Link className="secondary-button" href={recordingDetailHref}>
+                        View recording
+                      </Link>
+                    )}
+                    {hasRecordingWithoutPlayback && !recordingDetailHref && (
+                      <span className="muted">Playback pending. Check back soon to watch this recording.</span>
+                    )}
+                    <button type="button" className="secondary-button" onClick={() => handleDelete(item.id)}>
+                      Delete
+                    </button>
+                  </div>
+                </li>
               );
             })}
           </ul>
@@ -619,7 +622,7 @@ function getUploadItemStatusPresentation(item: UploadItem): UploadStatusPresenta
   if (status === "processing") {
     return {
       label,
-      summary: `Processing… ${percent}% complete. This may take a few minutes.`,
+      summary: `Processing… ${percent}% complete. We are transcoding and packaging this recording for playback.`,
       tone: "info",
     };
   }
