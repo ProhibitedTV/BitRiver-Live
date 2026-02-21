@@ -1040,6 +1040,27 @@ button:focus-visible {
   text-align: right;
 }
 
+.upload-state {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.upload-state--ready {
+  color: var(--success);
+}
+
+.upload-state--failed {
+  color: var(--danger);
+}
+
+.upload-submit-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
 .metadata-grid {
   display: flex;
   flex-direction: column;
