@@ -134,6 +134,10 @@ jobs:
       - name: Set up Go toolchain
         uses: ./.github/actions/setup-go
 
+      - name: Check CI workflow contract
+        shell: bash
+        run: ./scripts/check-ci-contract.sh
+
       - name: Run unified ubuntu test gate
         shell: bash
         run: ./scripts/test-all.sh
@@ -153,6 +157,7 @@ jobs:
       - name: Set up Go toolchain
         uses: ./.github/actions/setup-go
 
+      # ci-contract: allow-duplicate Cross-platform coverage on macOS/Windows complements ubuntu verify.sh.
       - name: Run unit tests
         run: go test ./... -count=1 -timeout=120s
 
