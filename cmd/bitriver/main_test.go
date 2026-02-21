@@ -1068,7 +1068,6 @@ func TestWaitForComposeServiceHealthHealthy(t *testing.T) {
 			{"Service":"bitriver-live","State":"running","Health":"healthy","Status":"Up (healthy)"},
 			{"Service":"ome","State":"running","Health":"healthy","Status":"Up (healthy)"},
 			{"Service":"srs","State":"running","Health":"healthy","Status":"Up (healthy)"},
-			{"Service":"srs-controller","State":"running","Health":"healthy","Status":"Up (healthy)"},
 			{"Service":"transcoder","State":"running","Health":"healthy","Status":"Up (healthy)"},
 			{"Service":"postgres","State":"running","Health":"healthy","Status":"Up (healthy)"},
 			{"Service":"redis","State":"running","Health":"healthy","Status":"Up (healthy)"}
@@ -1097,7 +1096,6 @@ func TestWaitForComposeServiceHealthFailsOnUnhealthyService(t *testing.T) {
 			{"Service":"bitriver-live","State":"running","Health":"unhealthy","Status":"Up (unhealthy)"},
 			{"Service":"ome","State":"running","Health":"healthy","Status":"Up (healthy)"},
 			{"Service":"srs","State":"running","Health":"healthy","Status":"Up (healthy)"},
-			{"Service":"srs-controller","State":"running","Health":"healthy","Status":"Up (healthy)"},
 			{"Service":"transcoder","State":"running","Health":"healthy","Status":"Up (healthy)"},
 			{"Service":"postgres","State":"running","Health":"healthy","Status":"Up (healthy)"},
 			{"Service":"redis","State":"running","Health":"healthy","Status":"Up (healthy)"}
@@ -1109,7 +1107,10 @@ func TestWaitForComposeServiceHealthFailsOnUnhealthyService(t *testing.T) {
 		t.Fatal("expected waitForComposeServiceHealth to fail for unhealthy service")
 	}
 	if !strings.Contains(err.Error(), "bitriver-live") {
-		t.Fatalf("expected error to mention unhealthy service, got %v", err)
+		t.Fatalf("expected error to mention api service, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "next commands:") {
+		t.Fatalf("expected error to include next commands, got %v", err)
 	}
 }
 
@@ -1130,7 +1131,6 @@ func TestWaitForComposeServiceHealthTimesOutWithSummary(t *testing.T) {
 			{"Service":"bitriver-live","State":"running","Health":"starting","Status":"Up (health: starting)"},
 			{"Service":"ome","State":"running","Health":"healthy","Status":"Up (healthy)"},
 			{"Service":"srs","State":"running","Health":"healthy","Status":"Up (healthy)"},
-			{"Service":"srs-controller","State":"running","Health":"healthy","Status":"Up (healthy)"},
 			{"Service":"transcoder","State":"running","Health":"healthy","Status":"Up (healthy)"},
 			{"Service":"postgres","State":"running","Health":"healthy","Status":"Up (healthy)"},
 			{"Service":"redis","State":"running","Health":"healthy","Status":"Up (healthy)"}
@@ -1144,8 +1144,11 @@ func TestWaitForComposeServiceHealthTimesOutWithSummary(t *testing.T) {
 	if !strings.Contains(err.Error(), "did not become healthy before timeout") {
 		t.Fatalf("expected timeout message, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "bitriver-live=Up (health: starting)") {
+	if !strings.Contains(err.Error(), "api=Up (health: starting)") {
 		t.Fatalf("expected last-known state summary in error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "failing services:") {
+		t.Fatalf("expected timeout error to include failing services, got %v", err)
 	}
 }
 func TestRunQuickstartFirstRunFailsUntilProductionOverridesAreSet(t *testing.T) {
@@ -1850,8 +1853,10 @@ func TestWaitForAPIReadinessTimeoutIncludesDiagnostics(t *testing.T) {
 
 func TestGatherReadinessDiagnosticsIncludesStubbedPostgresHint(t *testing.T) {
 	originalRunner := dockerComposeCommandRunner
+	originalComposePSRunner := composePSRunner
 	t.Cleanup(func() {
 		dockerComposeCommandRunner = originalRunner
+		composePSRunner = originalComposePSRunner
 	})
 
 	dockerComposeCommandRunner = func(composeFile, envFile string, extraArgs ...string) (string, error) {
@@ -1862,6 +1867,15 @@ func TestGatherReadinessDiagnosticsIncludesStubbedPostgresHint(t *testing.T) {
 		switch joined {
 		case "ps":
 			return "NAME                STATUS\nbitriver-live       exited", nil
+		case "ps --format json":
+			return `[
+				{"Service":"bitriver-live","State":"exited","Health":"","Status":"Exited (1)"},
+				{"Service":"postgres","State":"running","Health":"healthy","Status":"Up (healthy)"},
+				{"Service":"redis","State":"running","Health":"healthy","Status":"Up (healthy)"},
+				{"Service":"srs","State":"running","Health":"healthy","Status":"Up (healthy)"},
+				{"Service":"ome","State":"running","Health":"healthy","Status":"Up (healthy)"},
+				{"Service":"transcoder","State":"running","Health":"healthy","Status":"Up (healthy)"}
+			]`, nil
 		case "logs --tail=80 bitriver-live":
 			return strings.Join([]string{
 				"bitriver-live | info: booting",
@@ -1873,10 +1887,29 @@ func TestGatherReadinessDiagnosticsIncludesStubbedPostgresHint(t *testing.T) {
 			return "", nil
 		}
 	}
+	composePSRunner = func(composeFile, envFile string) ([]byte, error) {
+		return []byte(`[
+			{"Service":"bitriver-live","State":"exited","Health":"","Status":"Exited (1)"},
+			{"Service":"postgres","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"redis","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"srs","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"ome","State":"running","Health":"healthy","Status":"Up (healthy)"},
+			{"Service":"transcoder","State":"running","Health":"healthy","Status":"Up (healthy)"}
+		]`), nil
+	}
 
 	diagnostics := gatherReadinessDiagnostics("deploy/docker-compose.yml", ".env")
 	if !strings.Contains(diagnostics, "docker compose ps:") {
 		t.Fatalf("expected ps output in diagnostics, got %q", diagnostics)
+	}
+	if !strings.Contains(diagnostics, "critical service status:") {
+		t.Fatalf("expected critical service status section, got %q", diagnostics)
+	}
+	if !strings.Contains(diagnostics, "- api: Exited (1)") {
+		t.Fatalf("expected api status line, got %q", diagnostics)
+	}
+	if !strings.Contains(diagnostics, "next commands:") {
+		t.Fatalf("expected per-service next command section, got %q", diagnostics)
 	}
 	if !strings.Contains(diagnostics, "pgx driver stubbed in this build") {
 		t.Fatalf("expected stubbed pgx line in diagnostics, got %q", diagnostics)

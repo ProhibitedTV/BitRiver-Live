@@ -976,6 +976,10 @@ func gatherReadinessDiagnostics(composeFile, envFile string) string {
 		sections = append(sections, "docker compose ps:\n"+trimmed)
 	}
 
+	if criticalStatus := gatherCriticalServiceStatusSection(composeFile, envFile); criticalStatus != "" {
+		sections = append(sections, criticalStatus)
+	}
+
 	logsOutput, logsErr := dockerComposeCommandRunner(composeFile, envFile, "logs", "--tail=80", "bitriver-live")
 	if logsErr != nil {
 		sections = append(sections, fmt.Sprintf("docker compose logs --tail=80 bitriver-live failed: %v", logsErr))
@@ -990,6 +994,29 @@ func gatherReadinessDiagnostics(composeFile, envFile string) string {
 	}
 
 	return strings.Join(sections, "\n\n")
+}
+
+func gatherCriticalServiceStatusSection(composeFile, envFile string) string {
+	output, err := composePSRunner(composeFile, envFile)
+	if err != nil {
+		return fmt.Sprintf("critical service status unavailable: %v", err)
+	}
+
+	serviceStates, err := parseComposeServiceStates(output)
+	if err != nil {
+		return fmt.Sprintf("critical service status unavailable: parse docker compose ps output: %v", err)
+	}
+
+	statusLines, nextSteps := summarizeCriticalServiceStates(serviceStates, composeFile, envFile)
+	if len(statusLines) == 0 {
+		return ""
+	}
+
+	section := "critical service status:\n" + strings.Join(statusLines, "\n")
+	if len(nextSteps) > 0 {
+		section += "\nnext commands:\n" + strings.Join(nextSteps, "\n")
+	}
+	return section
 }
 
 func runDockerComposeCommand(composeFile, envFile string, extraArgs ...string) (string, error) {
@@ -1045,7 +1072,19 @@ type quickstartComposeServiceStatus struct {
 	Health  string `json:"Health"`
 }
 
-var criticalComposeServices = []string{"bitriver-live", "ome", "srs", "srs-controller", "transcoder", "postgres", "redis"}
+type quickstartCriticalService struct {
+	name    string
+	compose string
+}
+
+var criticalComposeServices = []quickstartCriticalService{
+	{name: "api", compose: "bitriver-live"},
+	{name: "postgres", compose: "postgres"},
+	{name: "redis", compose: "redis"},
+	{name: "srs", compose: "srs"},
+	{name: "ome", compose: "ome"},
+	{name: "transcoder", compose: "transcoder"},
+}
 
 var composePSRunner = runComposePS
 var composeHealthWaitTimeout = 2 * time.Minute
@@ -1065,10 +1104,47 @@ func runComposePS(composeFile, envFile string) ([]byte, error) {
 	return output, nil
 }
 
+func summarizeCriticalServiceStates(serviceStates map[string]quickstartComposeServiceStatus, composeFile, envFile string) ([]string, []string) {
+	statusLines := make([]string, 0, len(criticalComposeServices))
+	nextSteps := []string{}
+
+	for _, svc := range criticalComposeServices {
+		state, ok := serviceStates[svc.compose]
+		if !ok {
+			statusLines = append(statusLines, fmt.Sprintf("- %s: missing", svc.name))
+			continue
+		}
+
+		currentState := strings.ToLower(strings.TrimSpace(state.State))
+		health := strings.ToLower(strings.TrimSpace(state.Health))
+		currentStatus := strings.TrimSpace(state.Status)
+		if currentStatus == "" {
+			currentStatus = currentState
+		}
+
+		if health != "" {
+			statusLines = append(statusLines, fmt.Sprintf("- %s: %s (health=%s)", svc.name, currentStatus, health))
+		} else {
+			statusLines = append(statusLines, fmt.Sprintf("- %s: %s", svc.name, currentStatus))
+		}
+
+		if health == "unhealthy" || currentState == "exited" || currentState == "dead" {
+			nextSteps = append(nextSteps, fmt.Sprintf("- %s: run `%s`", svc.name, composeServiceLogCommand(composeFile, envFile, svc.compose)))
+		}
+	}
+
+	return statusLines, nextSteps
+}
+
+func composeServiceLogCommand(composeFile, envFile, service string) string {
+	return fmt.Sprintf("docker compose --file %s --env-file %s logs --tail=80 %s", composeFile, envFile, service)
+}
+
 func waitForComposeServiceHealth(composeFile, envFile string) error {
 	fmt.Fprintln(os.Stdout, "Waiting for critical Docker Compose services to report healthy...")
 	deadline := time.Now().Add(composeHealthWaitTimeout)
 	lastSummary := map[string]string{}
+	lastStates := map[string]quickstartComposeServiceStatus{}
 
 	for time.Now().Before(deadline) {
 		output, err := composePSRunner(composeFile, envFile)
@@ -1082,13 +1158,16 @@ func waitForComposeServiceHealth(composeFile, envFile string) error {
 		}
 
 		allHealthy := true
+		failingDetails := []string{}
+		nextSteps := []string{}
 		for _, svc := range criticalComposeServices {
-			state, ok := serviceStates[svc]
+			state, ok := serviceStates[svc.compose]
 			if !ok {
 				allHealthy = false
-				lastSummary[svc] = "missing"
+				lastSummary[svc.name] = "missing"
 				continue
 			}
+			lastStates[svc.name] = state
 
 			health := strings.ToLower(strings.TrimSpace(state.Health))
 			currentState := strings.ToLower(strings.TrimSpace(state.State))
@@ -1096,15 +1175,20 @@ func waitForComposeServiceHealth(composeFile, envFile string) error {
 			if currentStatus == "" {
 				currentStatus = currentState
 			}
-			lastSummary[svc] = currentStatus
+			lastSummary[svc.name] = currentStatus
 
 			if health == "unhealthy" || currentState == "exited" || currentState == "dead" {
-				return fmt.Errorf("critical service %q is %s (state=%s, health=%s); run `docker compose logs %s` for details", svc, currentStatus, currentState, health, svc)
+				failingDetails = append(failingDetails, fmt.Sprintf("%s=%s (state=%s, health=%s)", svc.name, currentStatus, currentState, health))
+				nextSteps = append(nextSteps, fmt.Sprintf("- %s: run `%s`", svc.name, composeServiceLogCommand(composeFile, envFile, svc.compose)))
 			}
 
 			if health != "healthy" {
 				allHealthy = false
 			}
+		}
+
+		if len(failingDetails) > 0 {
+			return fmt.Errorf("critical service failure detected: %s\nnext commands:\n%s", strings.Join(failingDetails, ", "), strings.Join(nextSteps, "\n"))
 		}
 
 		if allHealthy {
@@ -1116,15 +1200,36 @@ func waitForComposeServiceHealth(composeFile, envFile string) error {
 	}
 
 	var statusParts []string
+	failingDetails := []string{}
+	nextSteps := []string{}
 	for _, svc := range criticalComposeServices {
-		status := lastSummary[svc]
+		status := lastSummary[svc.name]
 		if status == "" {
 			status = "unknown"
 		}
-		statusParts = append(statusParts, fmt.Sprintf("%s=%s", svc, status))
+		statusParts = append(statusParts, fmt.Sprintf("%s=%s", svc.name, status))
+
+		state, ok := lastStates[svc.name]
+		if !ok {
+			failingDetails = append(failingDetails, fmt.Sprintf("%s=missing", svc.name))
+			continue
+		}
+		health := strings.ToLower(strings.TrimSpace(state.Health))
+		currentState := strings.ToLower(strings.TrimSpace(state.State))
+		if health != "healthy" {
+			failingDetails = append(failingDetails, fmt.Sprintf("%s=%s (state=%s, health=%s)", svc.name, status, currentState, health))
+			nextSteps = append(nextSteps, fmt.Sprintf("- %s: run `%s`", svc.name, composeServiceLogCommand(composeFile, envFile, svc.compose)))
+		}
 	}
 
-	return fmt.Errorf("critical services did not become healthy before timeout; last known states: %s", strings.Join(statusParts, ", "))
+	message := fmt.Sprintf("critical services did not become healthy before timeout; last known states: %s", strings.Join(statusParts, ", "))
+	if len(failingDetails) > 0 {
+		message += fmt.Sprintf("\nfailing services: %s", strings.Join(failingDetails, ", "))
+	}
+	if len(nextSteps) > 0 {
+		message += "\nnext commands:\n" + strings.Join(nextSteps, "\n")
+	}
+	return errors.New(message)
 }
 
 func parseComposeServiceStates(raw []byte) (map[string]quickstartComposeServiceStatus, error) {
