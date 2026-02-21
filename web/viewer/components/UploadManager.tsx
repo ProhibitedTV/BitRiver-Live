@@ -653,7 +653,11 @@ function getRecordingDetailHref(recordingId?: string): string | null {
   if (!normalizedId) {
     return null;
   }
-  return null;
+  const routeTemplate = process.env.NEXT_PUBLIC_RECORDING_DETAIL_ROUTE_TEMPLATE?.trim();
+  if (!routeTemplate || !routeTemplate.includes("[id]")) {
+    return null;
+  }
+  return routeTemplate.replace("[id]", encodeURIComponent(normalizedId));
 }
 
 function mapUploadError(err: unknown): string {
