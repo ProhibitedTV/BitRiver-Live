@@ -303,6 +303,15 @@ test.describe("creator dashboard", () => {
     await expect(page.getByText(/stream title updated/i)).toBeVisible();
     await expect.poll(() => lastUpdatePayload?.title).toBe("Scheduled Mission Update");
 
+    await expect(page.getByRole("button", { name: /copy url/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /copy key/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /copy obs settings/i })).toBeVisible();
+
+    const streamKeyInput = page.getByLabel("Stream key");
+    await expect(streamKeyInput).toHaveAttribute("type", "password");
+    await page.getByRole("button", { name: "Reveal" }).click();
+    await expect(streamKeyInput).toHaveAttribute("type", "text");
+
     await expect(page.getByText(/primary ingest/i)).toBeVisible();
     await expect(page.getByText(/backup ingest/i)).toBeVisible();
   });

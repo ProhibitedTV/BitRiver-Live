@@ -117,6 +117,8 @@ export default function CreatorLivePage() {
   const [streamKeyVisible, setStreamKeyVisible] = useState(false);
   const [streamKeyCopyMessage, setStreamKeyCopyMessage] = useState<string | undefined>();
   const [ingestCopyMessage, setIngestCopyMessage] = useState<string | undefined>();
+  const [obsSettingsCopyMessage, setObsSettingsCopyMessage] = useState<string | undefined>();
+  const [testStreamUpdatedAt, setTestStreamUpdatedAt] = useState<string>(new Date().toISOString());
   const router = useRouter();
 
   const codeBlockStyle = {
@@ -178,7 +180,20 @@ export default function CreatorLivePage() {
     setStreamKeyVisible(false);
     setStreamKeyCopyMessage(undefined);
     setIngestCopyMessage(undefined);
+    setObsSettingsCopyMessage(undefined);
   }, [channelId, managedChannel?.id]);
+
+  useEffect(() => {
+    const pollId = window.setInterval(() => {
+      void reload(true);
+      void loadSessions();
+      setTestStreamUpdatedAt(new Date().toISOString());
+    }, 10000);
+
+    return () => {
+      window.clearInterval(pollId);
+    };
+  }, [loadSessions, reload]);
 
   const handleChannelChange = (event: FormEvent<HTMLSelectElement>) => {
     const nextChannelId = event.currentTarget.value;
@@ -209,6 +224,22 @@ export default function CreatorLivePage() {
     }
     return deriveControlCentreStatus(playback.channel.liveState, playback.channel.currentSessionId, latestSession);
   }, [latestSession, playback]);
+
+  const testPanelStatus = useMemo(() => {
+    if (!playback?.channel.liveState) {
+      return "Unknown";
+    }
+    if (playback.channel.liveState === "live") {
+      return "Live";
+    }
+    if (playback.channel.liveState === "starting") {
+      return "Reconnecting";
+    }
+    if (playback.channel.liveState !== "offline") {
+      return "Unknown";
+    }
+    return "Not live";
+  }, [playback?.channel.liveState]);
 
   const handleTitleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -282,15 +313,19 @@ export default function CreatorLivePage() {
     }
   };
 
-  const testPanelStatus = useMemo(() => {
-    if (playback.channel.liveState === "live") {
-      return "Live";
+  const handleCopyObsSettings = async () => {
+    if (!managedChannel?.streamKey || !isChannelOwner || ingestEndpoints.length === 0) {
+      return;
     }
-    if (playback.channel.liveState === "starting") {
-      return "Reconnecting";
+    const settings = `Server: ${ingestEndpoints[0]}\nStream Key: ${managedChannel.streamKey}`;
+    try {
+      await navigator.clipboard.writeText(settings);
+      setObsSettingsCopyMessage("Copied OBS settings");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to copy";
+      setObsSettingsCopyMessage(message);
     }
-    return "Not live";
-  }, [playback.channel.liveState]);
+  };
 
   return (
     <div className="stack" style={{ gap: "1.5rem" }}>
@@ -341,8 +376,8 @@ export default function CreatorLivePage() {
       </header>
 
       <div className="grid two-column">
-        <section className="surface stack" aria-labelledby="live-setup-heading">
-          <h3 id="live-setup-heading">Stream setup</h3>
+        <section className="surface stack" aria-labelledby="obs-setup-heading">
+          <h3 id="obs-setup-heading">OBS setup</h3>
           <div className="stack" style={{ gap: "0.5rem" }}>
             <form className="stack" style={{ gap: "0.5rem" }} onSubmit={handleTitleSubmit}>
               <div className="cluster" style={{ justifyContent: "space-between", alignItems: "flex-end", gap: "0.75rem", flexWrap: "wrap" }}>
@@ -379,24 +414,54 @@ export default function CreatorLivePage() {
             </div>
             <div className="stack" style={{ gap: "0.75rem" }}>
               <div>
+                <p className="muted">Server URL</p>
+                {managedLoading ? (
+                  <p className="muted">Loading ingest configuration…</p>
+                ) : ingestEndpoints.length > 0 ? (
+                  <div className="stack" style={{ gap: "0.5rem" }}>
+                    <input
+                      aria-label="Server URL"
+                      readOnly
+                      value={ingestEndpoints[0]}
+                    />
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => {
+                        void handleCopyIngestEndpoint(ingestEndpoints[0]);
+                      }}
+                    >
+                      Copy URL
+                    </button>
+                  </div>
+                ) : (
+                  <p className="muted">Ingest endpoints are not configured yet.</p>
+                )}
+              </div>
+
+              <div>
                 <p className="muted">Stream key</p>
                 {authLoading || managedLoading ? (
                   <p className="muted">Verifying channel ownership…</p>
                 ) : isChannelOwner ? (
                   <div className="stack" style={{ gap: "0.5rem" }}>
-                    <div style={codeBlockStyle} aria-live="polite">
-                      {streamKeyVisible ? managedChannel?.streamKey : "Hidden"}
-                    </div>
+                    <input
+                      aria-label="Stream key"
+                      type={streamKeyVisible ? "text" : "password"}
+                      readOnly
+                      value={managedChannel?.streamKey ?? ""}
+                    />
                     <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
                       <button
                         type="button"
                         className="secondary-button"
+                        aria-pressed={streamKeyVisible}
                         onClick={() => {
                           setStreamKeyVisible((prev) => !prev);
                           setStreamKeyCopyMessage(undefined);
                         }}
                       >
-                        {streamKeyVisible ? "Hide stream key" : "Reveal stream key"}
+                        {streamKeyVisible ? "Hide" : "Reveal"}
                       </button>
                       <button
                         type="button"
@@ -405,10 +470,22 @@ export default function CreatorLivePage() {
                           void handleCopyKey();
                         }}
                       >
-                        Copy
+                        Copy key
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => {
+                          void handleCopyObsSettings();
+                        }}
+                      >
+                        Copy OBS settings
                       </button>
                       {streamKeyCopyMessage ? (
                         <span className={streamKeyCopyMessage === "Copied" ? "success" : "error"}>{streamKeyCopyMessage}</span>
+                      ) : null}
+                      {obsSettingsCopyMessage ? (
+                        <span className={obsSettingsCopyMessage.startsWith("Copied") ? "success" : "error"}>{obsSettingsCopyMessage}</span>
                       ) : null}
                     </div>
                   </div>
@@ -418,7 +495,7 @@ export default function CreatorLivePage() {
               </div>
 
               <div>
-                <p className="muted">Ingest URLs</p>
+                <p className="muted">All ingest URLs</p>
                 {managedLoading ? (
                   <p className="muted">Loading ingest configuration…</p>
                 ) : ingestEndpoints.length > 0 ? (
@@ -435,7 +512,7 @@ export default function CreatorLivePage() {
                               void handleCopyIngestEndpoint(endpoint);
                             }}
                           >
-                            Copy
+                            Copy URL
                           </button>
                         </div>
                       </li>
@@ -458,20 +535,18 @@ export default function CreatorLivePage() {
           <h3 id="test-stream-heading">Test stream</h3>
           <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
             <span className={streamStatus.badgeClassName}>{testPanelStatus}</span>
-            <span className="muted">Status updates as soon as your encoder connects.</span>
+            <span className="muted">Last updated {new Date(testStreamUpdatedAt).toLocaleTimeString()}</span>
           </div>
-          <ol className="stack muted" style={{ gap: "0.5rem", paddingLeft: "1.25rem" }}>
-            <li>In OBS, set the Service to Custom and paste the ingest URL and stream key from this page.</li>
-            <li>Click Start Streaming in OBS and wait 10–20 seconds for status to switch to Live.</li>
-            <li>Keep this tab open and refresh with Diagnose issues if status does not update.</li>
-          </ol>
+          {testPanelStatus !== "Live" ? (
+            <p className="muted">Start streaming in OBS. This page will update automatically.</p>
+          ) : null}
           <details>
             <summary>Common issues</summary>
             <ul className="stack muted" style={{ gap: "0.35rem", paddingLeft: "1.25rem", marginTop: "0.5rem" }}>
-              <li>Wrong server URL: ensure OBS server matches the ingest URL shown above.</li>
-              <li>Key rotated: copy the latest stream key from this dashboard and re-paste it into OBS.</li>
-              <li>Ports blocked / firewall: verify your network allows outbound ingest traffic to the ingest host.</li>
-              <li>RTMP/SRT mismatch: make sure OBS output protocol matches the ingest endpoint protocol.</li>
+              <li>Server URL mismatch: copy the Server URL from this page and paste it into OBS.</li>
+              <li>Wrong stream key: copy the latest key here in case your previous key was rotated.</li>
+              <li>Network blocked: some networks block streaming ports, so try a different network if possible.</li>
+              <li>Protocol mismatch: this setup expects RTMP, so confirm OBS is sending RTMP to the shown server URL.</li>
             </ul>
           </details>
         </section>
