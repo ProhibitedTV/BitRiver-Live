@@ -524,8 +524,9 @@ func runQuickstart(args []string) error {
 		return err
 	}
 
+	printQuickstartStageHeader("Doctor")
 	if !doctorRunner(nil) {
-		return errors.New("doctor checks failed")
+		return quickstartStageFailure("Doctor", errors.New("some local requirements are missing"), "Run `go run ./cmd/bitriver doctor` and follow the suggested fixes, then run quickstart again.")
 	}
 
 	preExisting := map[string]string{}
@@ -537,47 +538,52 @@ func runQuickstart(args []string) error {
 	preExistingCopy := copyEnvValues(preExisting)
 	_, generatedSecrets := generateEnvValues(preExistingCopy)
 	if err := validateQuickstartOMEAuthMode(preExisting["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"], *envFile); err != nil {
-		return err
+		return quickstartStageFailure("Env validate", err, fmt.Sprintf("Review OME auth values in %s, then rerun quickstart.", *envFile))
 	}
 
+	printQuickstartStageHeader("Env init")
 	if err := envInitRunner([]string{"--env-file", *envFile}); err != nil {
-		return fmt.Errorf("env init: %w", err)
+		return quickstartStageFailure("Env init", err, fmt.Sprintf("Check that %s is writable, then run quickstart again.", *envFile))
 	}
+
+	printQuickstartStageHeader("Env validate")
 	envValues, err := loadEnvValues(*envFile, false)
 	if err != nil {
-		return fmt.Errorf("read env file: %w", err)
+		return quickstartStageFailure("Env validate", err, fmt.Sprintf("Open %s, fix the highlighted values, then rerun quickstart.", *envFile))
 	}
 
 	modeCfg, err := resolveDeployImageSource(*imageSource, envValues, config.LoadEnvironment())
 	if err != nil {
-		return err
+		return quickstartStageFailure("Image preflight (pull/build)", err, "Choose image source pull or build and rerun quickstart.")
 	}
 	if *build && modeCfg.mode == deployImageSourcePull {
 		return errors.New("conflicting quickstart options: --build cannot be used with image source mode 'pull'; set BITRIVER_DEPLOY_IMAGE_SOURCE=build or pass --image-source build")
 	}
 
 	if err := validateProductionDeploymentContract(*envFile, envValues, modeCfg.mode); err != nil {
-		return err
+		return quickstartStageFailure("Env validate", err, fmt.Sprintf("Update %s to match production requirements, then run quickstart again.", *envFile))
 	}
 
 	if err := envValidateRunner([]string{"--env-file", *envFile}); err != nil {
-		return fmt.Errorf("env validate: %w", err)
+		return quickstartStageFailure("Env validate", err, fmt.Sprintf("Fix the env validation issues in %s and rerun quickstart.", *envFile))
 	}
 
 	if err := quickstartOMEAuthPreflightRunner(*envFile, envValues); err != nil {
-		return err
+		return quickstartStageFailure("Env validate", err, fmt.Sprintf("Review OME auth values in %s, then rerun quickstart.", *envFile))
 	}
 
 	if err := validateComposeEffectiveEnvironment(*envFile); err != nil {
-		return err
+		return quickstartStageFailure("Env validate", err, "Resolve the compose environment mismatch and run quickstart again.")
 	}
 
+	printQuickstartStageHeader("Image preflight (pull/build)")
 	if err := deployImageSourcePreflightRunner(modeCfg.mode, envValues, *envFile); err != nil {
-		return err
+		return quickstartStageFailure("Image preflight (pull/build)", err, "Confirm image tags/access settings, then rerun quickstart.")
 	}
 
+	printQuickstartStageHeader("Migrations")
 	if err := migrationsRunner(*composeFile, *envFile); err != nil {
-		return fmt.Errorf("run migrations: %w", err)
+		return quickstartStageFailure("Migrations", err, "Check database container logs and rerun quickstart.")
 	}
 
 	composeUpArgs := []string{"--file", *composeFile, "--env-file", *envFile}
@@ -586,24 +592,60 @@ func runQuickstart(args []string) error {
 		composeUpArgs = append(composeUpArgs, "--build")
 	}
 
+	printQuickstartStageHeader("Compose up")
 	if err := composeUpRunner(composeUpArgs); err != nil {
-		return fmt.Errorf("docker compose up: %w", err)
+		return quickstartStageFailure("Compose up", err, "Run `docker compose --file deploy/docker-compose.yml --env-file .env logs --tail=120` to inspect startup issues, then rerun quickstart.")
 	}
 
+	printQuickstartStageHeader("Wait for readiness")
 	if err := quickstartWaiter(envValues, *composeFile, *envFile); err != nil {
-		return fmt.Errorf("wait for API readiness: %w", err)
+		return quickstartStageFailure("Wait for readiness", err, "Give the stack a bit more time, check service logs, then rerun quickstart.")
 	}
 
+	printQuickstartStageHeader("Health checks")
 	if err := quickstartComposeHealthWaiter(*composeFile, *envFile); err != nil {
-		return fmt.Errorf("wait for critical service health: %w", err)
+		return quickstartStageFailure("Health checks", err, "Run compose logs for unhealthy services, fix the root cause, then rerun quickstart.")
 	}
 
+	printQuickstartStageHeader("Admin bootstrap")
 	if err := bootstrapAdminRunner(*composeFile, *envFile, envValues); err != nil {
-		return fmt.Errorf("bootstrap admin: %w", err)
+		return quickstartStageFailure("Admin bootstrap", err, "Confirm admin env values and database readiness, then rerun quickstart.")
 	}
 
 	printGeneratedSecrets(generatedSecrets)
+	printQuickstartSuccessSummary(*composeFile, *envFile, envValues)
 	return nil
+}
+
+func printQuickstartStageHeader(stage string) {
+	fmt.Fprintf(os.Stdout, "\n[%s]\n", stage)
+}
+
+func quickstartStageFailure(stage string, err error, next string) error {
+	return fmt.Errorf("quickstart stopped during %s\n\nWhat happened:\n%s\n\nWhat to do next:\n%s", stage, strings.TrimSpace(err.Error()), strings.TrimSpace(next))
+}
+
+func printQuickstartSuccessSummary(composeFile, envFile string, values map[string]string) {
+	apiPort := resolveAPIPort(values)
+	apiURL := fmt.Sprintf("http://localhost:%s", apiPort)
+	viewerURL := strings.TrimSpace(values["NEXT_PUBLIC_VIEWER_URL"])
+	if viewerURL == "" {
+		viewerURL = fmt.Sprintf("http://localhost:%s/viewer", apiPort)
+	}
+	adminEmail := strings.TrimSpace(values["BITRIVER_LIVE_ADMIN_EMAIL"])
+	if adminEmail == "" {
+		adminEmail = "(not set)"
+	}
+
+	fmt.Fprintln(os.Stdout, "\nBitRiver Live is running")
+	fmt.Fprintf(os.Stdout, "- Control/API URL: %s\n", apiURL)
+	fmt.Fprintf(os.Stdout, "- Viewer URL: %s\n", viewerURL)
+	fmt.Fprintf(os.Stdout, "- Admin email: %s\n", adminEmail)
+	fmt.Fprintf(os.Stdout, "- Env file: %s\n", envFile)
+	fmt.Fprintln(os.Stdout, "- Useful next commands:")
+	fmt.Fprintf(os.Stdout, "  - docker compose --file %s --env-file %s ps\n", composeFile, envFile)
+	fmt.Fprintf(os.Stdout, "  - docker compose --file %s --env-file %s logs -f\n", composeFile, envFile)
+	fmt.Fprintf(os.Stdout, "  - docker compose --file %s --env-file %s down\n", composeFile, envFile)
 }
 
 func resolveDeployImageSource(explicitMode string, envValues map[string]string, runtimeEnv config.Environment) (deployImageSourceConfig, error) {
