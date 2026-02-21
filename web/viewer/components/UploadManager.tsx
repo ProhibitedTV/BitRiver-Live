@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, DragEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../hooks/useAuth";
 import {
@@ -513,6 +514,8 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
               const statusPresentation = getUploadItemStatusPresentation(item);
               const hasPlaybackUrl = item.playbackUrl?.trim().length > 0;
               const isReadyForPlayback = hasPlaybackUrl || isUploadItemReady(item.status);
+              const hasRecordingWithoutPlayback = Boolean(item.recordingId && !hasPlaybackUrl);
+              const recordingDetailHref = hasRecordingWithoutPlayback ? getRecordingDetailHref(item.recordingId) : null;
               return (
                 <li key={item.id} className="upload-card">
                   <div className="upload-status upload-status--card">
@@ -530,6 +533,14 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
                     <a className="primary-button" href={item.playbackUrl} target="_blank" rel="noreferrer">
                       Watch
                     </a>
+                  )}
+                  {hasRecordingWithoutPlayback && recordingDetailHref && (
+                    <Link className="secondary-button" href={recordingDetailHref}>
+                      View recording
+                    </Link>
+                  )}
+                  {hasRecordingWithoutPlayback && !recordingDetailHref && (
+                    <span className="muted">Playback pending. Check back soon to watch this recording.</span>
                   )}
                   <button type="button" className="secondary-button" onClick={() => handleDelete(item.id)}>
                     Delete
@@ -632,6 +643,14 @@ function getUploadItemStatusPresentation(item: UploadItem): UploadStatusPresenta
     summary: `${label} · ${percent}%`,
     tone: "neutral",
   };
+}
+
+function getRecordingDetailHref(recordingId?: string): string | null {
+  const normalizedId = recordingId?.trim();
+  if (!normalizedId) {
+    return null;
+  }
+  return null;
 }
 
 function mapUploadError(err: unknown): string {
