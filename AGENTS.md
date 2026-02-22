@@ -156,3 +156,10 @@ export function StreamStatus({ streamId }: { streamId: string }) {
 - Preserve middleware ordering and dependency injection patterns in `internal/server` and `internal/api`.
 - Keep scripts CI-safe and rerunnable; document workflow-impacting script changes.
 - Keep web/static embed flows and viewer (`web/viewer`) API clients/tests in sync with backend changes.
+## Required end-of-run self-check (must include in final response)
+Before finishing, add this short checklist-style audit:
+- [ ] Did I run the right commands? (List commands; default: `./scripts/verify.sh`)
+- [ ] Did I update docs if contract/runtime behavior changed?
+- [ ] Did I add/adjust tests?
+- [ ] Any boundaries violated?
+- [ ] What remains incomplete?
