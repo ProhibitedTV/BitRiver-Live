@@ -885,6 +885,9 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	originalComposeHealthWaiter := quickstartComposeHealthWaiter
 	originalOMEPreflight := quickstartOMEAuthPreflightRunner
 	originalImagePreflight := deployImageSourcePreflightRunner
+	originalDockerVersion := dockerVersionRunner
+	originalComposeVersion := dockerComposeVersionRunner
+	originalPortPreflight := quickstartHostPortPreflightRunner
 	originalBootstrap := bootstrapAdminRunner
 	t.Cleanup(func() {
 		doctorRunner = originalDoctor
@@ -897,6 +900,9 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 		quickstartComposeHealthWaiter = originalComposeHealthWaiter
 		quickstartOMEAuthPreflightRunner = originalOMEPreflight
 		deployImageSourcePreflightRunner = originalImagePreflight
+		dockerVersionRunner = originalDockerVersion
+		dockerComposeVersionRunner = originalComposeVersion
+		quickstartHostPortPreflightRunner = originalPortPreflight
 		bootstrapAdminRunner = originalBootstrap
 	})
 	var calls []string
@@ -964,6 +970,18 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 		return nil
 	}
 	quickstartOMEAuthPreflightRunner = func(string, map[string]string) error { return nil }
+	dockerVersionRunner = func() error {
+		calls = append(calls, "docker-version")
+		return nil
+	}
+	dockerComposeVersionRunner = func() error {
+		calls = append(calls, "docker-compose-version")
+		return nil
+	}
+	quickstartHostPortPreflightRunner = func(map[string]string) error {
+		calls = append(calls, "host-port-preflight")
+		return nil
+	}
 	deployImageSourcePreflightRunner = func(mode string, values map[string]string, envFile string) error {
 		calls = append(calls, "image-preflight")
 		if mode != deployImageSourcePull {
@@ -987,9 +1005,93 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath}); err != nil {
 		t.Fatalf("quickstart failed: %v", err)
 	}
-	expectedCalls := []string{"doctor", "env-init", "env-validate", "image-preflight", "migrations", "compose-up", "wait", "health", "bootstrap"}
+	expectedCalls := []string{"doctor", "env-init", "env-validate", "docker-version", "docker-compose-version", "host-port-preflight", "image-preflight", "migrations", "compose-up", "wait", "health", "bootstrap"}
 	if !reflect.DeepEqual(calls, expectedCalls) {
 		t.Fatalf("call order = %v, want %v", calls, expectedCalls)
+	}
+}
+
+func TestRunQuickstartFailsWhenDeploymentPreflightFails(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	composePath := filepath.Join(t.TempDir(), "compose.yml")
+	values := buildValidProductionEnv(t)
+	values["BITRIVER_LIVE_PORT"] = "18080"
+	var lines []string
+	for key, value := range values {
+		lines = append(lines, fmt.Sprintf("%s=%s", key, value))
+	}
+	if err := os.WriteFile(envPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	originalDoctor := doctorRunner
+	originalEnvInit := envInitRunner
+	originalEnvValidate := envValidateRunner
+	originalOMEPreflight := quickstartOMEAuthPreflightRunner
+	originalDockerVersion := dockerVersionRunner
+	originalComposeVersion := dockerComposeVersionRunner
+	originalPortPreflight := quickstartHostPortPreflightRunner
+	t.Cleanup(func() {
+		doctorRunner = originalDoctor
+		envInitRunner = originalEnvInit
+		envValidateRunner = originalEnvValidate
+		quickstartOMEAuthPreflightRunner = originalOMEPreflight
+		dockerVersionRunner = originalDockerVersion
+		dockerComposeVersionRunner = originalComposeVersion
+		quickstartHostPortPreflightRunner = originalPortPreflight
+	})
+
+	doctorRunner = func([]string) bool { return true }
+	envInitRunner = func([]string) error { return nil }
+	envValidateRunner = func([]string) error { return nil }
+	quickstartOMEAuthPreflightRunner = func(string, map[string]string) error { return nil }
+	dockerVersionRunner = func() error { return nil }
+	dockerComposeVersionRunner = func() error {
+		return errors.New("docker compose version failed")
+	}
+	quickstartHostPortPreflightRunner = func(map[string]string) error { return nil }
+
+	err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath})
+	if err == nil {
+		t.Fatal("expected quickstart to fail on deployment preflight")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "quickstart stopped during Deployment preflight") {
+		t.Fatalf("expected deployment preflight stage failure, got %v", err)
+	}
+	if !strings.Contains(msg, "Install/enable Docker Compose v2") {
+		t.Fatalf("expected one-line next action for compose v2, got %v", err)
+	}
+}
+
+func TestRunQuickstartHostPortPreflightReportsConflicts(t *testing.T) {
+	values := buildValidProductionEnv(t)
+	values["BITRIVER_LIVE_PORT"] = "18080"
+	values["BITRIVER_SRS_CONTROLLER_PORT"] = "1986"
+	originalChecker := quickstartHostPortAvailabilityChecker
+	t.Cleanup(func() {
+		quickstartHostPortAvailabilityChecker = originalChecker
+	})
+	quickstartHostPortAvailabilityChecker = func(protocol string, port int) error {
+		if (protocol == "tcp" && (port == 18080 || port == 1986)) || (protocol == "udp" && port == 3478) {
+			return errors.New("bind: address already in use")
+		}
+		return nil
+	}
+
+	err := runQuickstartHostPortPreflight(values)
+	if err == nil {
+		t.Fatal("expected host port preflight to report conflicts")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "host port conflicts detected") {
+		t.Fatalf("expected conflict summary header, got %v", err)
+	}
+	if !strings.Contains(msg, "TCP 18080") || !strings.Contains(msg, "TCP 1986") || !strings.Contains(msg, "UDP 3478") {
+		t.Fatalf("expected conflict list with ports/protocols, got %v", err)
+	}
+	if !strings.Contains(msg, "change the matching .env port value") {
+		t.Fatalf("expected actionable next step, got %v", err)
 	}
 }
 
