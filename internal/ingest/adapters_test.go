@@ -151,7 +151,8 @@ func TestHTTPChannelAdapterRetries(t *testing.T) {
 }
 
 // TestHTTPChannelAdapterDoesNotRetryOn4xx verifies that 4xx responses
-// other than 429 are treated as permanent errors and are not retried.
+// other than 429 are treated as permanent errors, are not retried, and keep
+// the same HTTP status/body error details.
 func TestHTTPChannelAdapterDoesNotRetryOn4xx(t *testing.T) {
 	t.Helper()
 	var attempts int
@@ -161,7 +162,7 @@ func TestHTTPChannelAdapterDoesNotRetryOn4xx(t *testing.T) {
 		if r.Method != http.MethodPost || r.URL.Path != "/v1/channels" {
 			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "not found", http.StatusNotFound)
 	}))
 	defer server.Close()
 
@@ -171,7 +172,10 @@ func TestHTTPChannelAdapterDoesNotRetryOn4xx(t *testing.T) {
 		t.Fatal("expected error for 4xx response, got nil")
 	}
 	if attempts != 1 {
-		t.Fatalf("expected exactly 1 attempt for 4xx, got %d", attempts)
+		t.Fatalf("expected exactly 1 attempt for non-429 4xx, got %d", attempts)
+	}
+	if got := err.Error(); !strings.Contains(got, "404 Not Found: not found") {
+		t.Fatalf("unexpected error message: %q", got)
 	}
 }
 

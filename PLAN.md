@@ -1,17 +1,17 @@
 # PLAN
 
 ## Scope (current change)
-- Introduce a private shared default `http.Client` in `internal/ingest/adapters.go` for nil-client call paths.
-- Update `postJSON` and `deleteRequest` to reuse the shared client while preserving existing timeout and retry semantics.
-- Add tests in `internal/ingest/adapters_test.go` covering nil-client behavior for helper paths.
+- Refactor `doWithRetry` in `internal/ingest/adapters.go` to remove the `attempt = attempts` loop-control hack.
+- Introduce explicit branching for retryable versus non-retryable failures while preserving existing error text and retry counts.
+- Add/adjust tests in `internal/ingest/adapters_test.go` to prove non-429 4xx responses are not retried.
 
 ## Assumptions
-- This change is internal to ingest adapter HTTP helper behavior and does not alter API contracts.
-- Timeout value (`defaultHTTPTimeout`) and retry logic (`doWithRetry`) must remain unchanged.
+- Existing status classification remains the same: retry on 5xx and 429; do not retry other 4xx.
+- Error message formatting (including HTTP status/body composition) must stay unchanged.
 
 ## Risks
-- Accidentally changing effective client timeout or retry behavior when refactoring nil-client fallback.
-- Missing regression coverage for both POST and DELETE nil-client helper paths.
+- Off-by-one retry regressions if control flow changes around loop exit.
+- Accidentally changing returned error content for permanent HTTP failures.
 
 ## Test plan
 - Run targeted ingest tests: `go test ./internal/ingest -count=1`.

@@ -527,8 +527,10 @@ func doWithRetry(
 	}
 
 	var lastErr error
+	var shouldRetry bool
 
 	for attempt := 1; attempt <= attempts; attempt++ {
+		shouldRetry = true
 		reqBody := io.Reader(nil)
 		if payload != nil {
 			reqBody = bytes.NewReader(payload)
@@ -552,6 +554,7 @@ func doWithRetry(
 		if err != nil {
 			// Network or transport-level error. Treat as retryable.
 			lastErr = err
+			shouldRetry = true
 		} else {
 			func() {
 				defer func() {
@@ -582,18 +585,22 @@ func doWithRetry(
 				// Determine if this status code is retryable.
 				if isRetryableStatus(statusCode) {
 					lastErr = errMsg
+					shouldRetry = true
 					return
 				}
 
 				// Non-retryable HTTP status (e.g., 4xx other than 429).
 				lastErr = errMsg
-				// We return early to avoid additional retries.
-				attempt = attempts
+				shouldRetry = false
 			}()
 		}
 
 		if lastErr == nil {
 			return nil
+		}
+
+		if !shouldRetry {
+			return lastErr
 		}
 
 		if attempt < attempts {
