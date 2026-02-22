@@ -250,7 +250,10 @@ func runEnvInit(args []string) error {
 
 	promptForAdminEmail(existingValues)
 
-	generated, _ := generateEnvValues(existingValues)
+	generated, _, err := generateEnvValues(existingValues)
+	if err != nil {
+		return fmt.Errorf("generate env values: %w", err)
+	}
 	content := mergeEnv(templateLines, existingValues, generated)
 	if err := os.WriteFile(*envPath, []byte(content), 0o600); err != nil {
 		return fmt.Errorf("write env file: %w", err)
@@ -541,7 +544,10 @@ func runQuickstart(args []string) error {
 		return fmt.Errorf("read env file before init: %w", err)
 	}
 	preExistingCopy := copyEnvValues(preExisting)
-	_, generatedSecrets := generateEnvValues(preExistingCopy)
+	_, generatedSecrets, err := generateEnvValues(preExistingCopy)
+	if err != nil {
+		return quickstartStageFailure("Env init", fmt.Errorf("generate env values: %w", err), fmt.Sprintf("Retry quickstart; if this persists, verify system entropy and rerun with %s.", *envFile))
+	}
 	if err := validateQuickstartOMEAuthMode(preExisting["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"], *envFile); err != nil {
 		return quickstartStageFailure("Env validate", err, fmt.Sprintf("Review OME auth values in %s, then rerun quickstart.", *envFile))
 	}

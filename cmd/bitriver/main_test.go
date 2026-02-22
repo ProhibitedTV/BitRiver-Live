@@ -108,7 +108,10 @@ func TestEnvInitWritesGeneratedValues(t *testing.T) {
 	}
 }
 func TestGenerateEnvValuesGeneratesOMEAPIToken(t *testing.T) {
-	generated, _ := generateEnvValues(map[string]string{})
+	generated, _, err := generateEnvValues(map[string]string{})
+	if err != nil {
+		t.Fatalf("generate env values: %v", err)
+	}
 	if generated["BITRIVER_LIVE_MODE"] != "production" {
 		t.Fatalf("expected BITRIVER_LIVE_MODE default to production, got %q", generated["BITRIVER_LIVE_MODE"])
 	}
@@ -118,13 +121,19 @@ func TestGenerateEnvValuesGeneratesOMEAPIToken(t *testing.T) {
 	}
 }
 func TestGenerateEnvValuesEmptyModeDefaultsToProduction(t *testing.T) {
-	generated, _ := generateEnvValues(map[string]string{"BITRIVER_LIVE_MODE": "   "})
+	generated, _, err := generateEnvValues(map[string]string{"BITRIVER_LIVE_MODE": "   "})
+	if err != nil {
+		t.Fatalf("generate env values: %v", err)
+	}
 	if generated["BITRIVER_LIVE_MODE"] != "production" {
 		t.Fatalf("expected empty mode to default to production, got %q", generated["BITRIVER_LIVE_MODE"])
 	}
 }
 func TestGenerateEnvValuesPromotesDevelopmentModeToProduction(t *testing.T) {
-	generated, _ := generateEnvValues(map[string]string{"BITRIVER_LIVE_MODE": "development"})
+	generated, _, err := generateEnvValues(map[string]string{"BITRIVER_LIVE_MODE": "development"})
+	if err != nil {
+		t.Fatalf("generate env values: %v", err)
+	}
 	if generated["BITRIVER_LIVE_MODE"] != "production" {
 		t.Fatalf("expected development mode to be rewritten to production, got %q", generated["BITRIVER_LIVE_MODE"])
 	}
@@ -143,7 +152,10 @@ func TestGenerateEnvValuesNormalizesOMEHealthcheckAuthMode(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			generated, _ := generateEnvValues(map[string]string{"BITRIVER_OME_HEALTHCHECK_AUTH_MODE": tc.input})
+			generated, _, err := generateEnvValues(map[string]string{"BITRIVER_OME_HEALTHCHECK_AUTH_MODE": tc.input})
+			if err != nil {
+				t.Fatalf("generate env values: %v", err)
+			}
 			if generated["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"] != tc.expected {
 				t.Fatalf("expected auth mode %q, got %q", tc.expected, generated["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"])
 			}
@@ -151,11 +163,66 @@ func TestGenerateEnvValuesNormalizesOMEHealthcheckAuthMode(t *testing.T) {
 	}
 }
 func TestGenerateEnvValuesPlaceholderModeDefaultsToProduction(t *testing.T) {
-	generated, _ := generateEnvValues(map[string]string{"BITRIVER_LIVE_MODE": "placeholder"})
+	generated, _, err := generateEnvValues(map[string]string{"BITRIVER_LIVE_MODE": "placeholder"})
+	if err != nil {
+		t.Fatalf("generate env values: %v", err)
+	}
 	if generated["BITRIVER_LIVE_MODE"] != "production" {
 		t.Fatalf("expected placeholder mode to default to production, got %q", generated["BITRIVER_LIVE_MODE"])
 	}
 }
+
+func TestGenerateEnvValuesReturnsErrorWhenSecretEntropyReadFails(t *testing.T) {
+	orig := entropyRead
+	entropyRead = func([]byte) (int, error) {
+		return 0, errors.New("entropy unavailable")
+	}
+	t.Cleanup(func() { entropyRead = orig })
+
+	_, _, err := generateEnvValues(map[string]string{})
+	if err == nil {
+		t.Fatal("expected generateEnvValues to fail when entropy read fails")
+	}
+	if !strings.Contains(err.Error(), "generate BITRIVER_") {
+		t.Fatalf("expected key context in error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "read entropy for secret") {
+		t.Fatalf("expected entropy read context in error, got %v", err)
+	}
+}
+
+func TestGenerateEnvValuesReturnsErrorWhenSuffixEntropyReadFails(t *testing.T) {
+	orig := entropyRead
+	entropyRead = func(b []byte) (int, error) {
+		if len(b) == 6 {
+			return 0, errors.New("entropy unavailable")
+		}
+		for i := range b {
+			b[i] = byte(i + 1)
+		}
+		return len(b), nil
+	}
+	t.Cleanup(func() { entropyRead = orig })
+
+	existing := map[string]string{}
+	for key := range defaultEnvSecrets.secrets {
+		existing[key] = "already-set"
+	}
+	existing["BITRIVER_LIVE_METRICS_TOKEN"] = "already-set"
+	existing["BITRIVER_OME_USERNAME"] = ""
+
+	_, _, err := generateEnvValues(existing)
+	if err == nil {
+		t.Fatal("expected generateEnvValues to fail when suffix entropy read fails")
+	}
+	if !strings.Contains(err.Error(), "generate BITRIVER_OME_USERNAME suffix") {
+		t.Fatalf("expected username suffix context in error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "read entropy for suffix") {
+		t.Fatalf("expected entropy read context in error, got %v", err)
+	}
+}
+
 func TestEnvValidateFailsForMissingFile(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing.env")
 	if err := runEnvValidate([]string{"--env-file", missing}); err == nil {

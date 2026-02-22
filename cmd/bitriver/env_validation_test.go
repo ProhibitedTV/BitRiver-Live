@@ -413,7 +413,10 @@ func TestValidateEnvAllowsComposeInsecurePostgresDSN(t *testing.T) {
 }
 
 func TestValidateEnvAcceptsFreshInitDefaults(t *testing.T) {
-	generated, _ := generateEnvValues(map[string]string{})
+	generated, _, err := generateEnvValues(map[string]string{})
+	if err != nil {
+		t.Fatalf("generate env values: %v", err)
+	}
 	values := baseEnvValues("", "")
 
 	for key, value := range generated {
@@ -432,7 +435,10 @@ func TestValidateEnvAcceptsFreshInitDefaults(t *testing.T) {
 }
 
 func TestValidateEnvAcceptsFreshInitDefaultsWithPlaceholderMode(t *testing.T) {
-	generated, _ := generateEnvValues(map[string]string{"BITRIVER_LIVE_MODE": "development"})
+	generated, _, err := generateEnvValues(map[string]string{"BITRIVER_LIVE_MODE": "development"})
+	if err != nil {
+		t.Fatalf("generate env values: %v", err)
+	}
 	values := baseEnvValues("", "")
 
 	for key, value := range generated {
