@@ -6,44 +6,38 @@ import { Badge } from "../../../components/ui/Badge";
 import { Button, buttonClassName } from "../../../components/ui/Button";
 import { Card, CardBody, CardHeader } from "../../../components/ui/Card";
 import { useAuth } from "../../../hooks/useAuth";
-import {
-  ManagedChannel,
-  ViewerApiError,
-  fetchChannelPlayback,
-  fetchManagedChannels,
-  fetchProfile,
-} from "../../../lib/viewer-api";
+import { ManagedChannel, fetchChannelPlayback, fetchManagedChannels } from "../../../lib/viewer-api";
 
 type ManualChecks = {
-  ingestCopied: boolean;
-  sharedViewerLink: boolean;
+  obsConfigured: boolean;
+  viewerLinkShared: boolean;
+  vodUploaded: boolean;
 };
 
 const MANUAL_CHECKS_STORAGE_KEY = "creator-getting-started-manual-checks";
 
 function loadStoredChecks(): ManualChecks {
   if (typeof window === "undefined") {
-    return { ingestCopied: false, sharedViewerLink: false };
+    return { obsConfigured: false, viewerLinkShared: false, vodUploaded: false };
   }
   try {
     const raw = window.localStorage.getItem(MANUAL_CHECKS_STORAGE_KEY);
     if (!raw) {
-      return { ingestCopied: false, sharedViewerLink: false };
+      return { obsConfigured: false, viewerLinkShared: false, vodUploaded: false };
     }
     const parsed = JSON.parse(raw) as Partial<ManualChecks>;
     return {
-      ingestCopied: Boolean(parsed.ingestCopied),
-      sharedViewerLink: Boolean(parsed.sharedViewerLink),
+      obsConfigured: Boolean(parsed.obsConfigured),
+      viewerLinkShared: Boolean(parsed.viewerLinkShared),
+      vodUploaded: Boolean(parsed.vodUploaded),
     };
   } catch {
-    return { ingestCopied: false, sharedViewerLink: false };
+    return { obsConfigured: false, viewerLinkShared: false, vodUploaded: false };
   }
 }
 
 export default function CreatorGettingStartedPage() {
   const { user, loading: authLoading, signIn } = useAuth();
-  const [profileExists, setProfileExists] = useState(false);
-  const [profileLoading, setProfileLoading] = useState(false);
   const [channels, setChannels] = useState<ManagedChannel[]>([]);
   const [channelsLoading, setChannelsLoading] = useState(false);
   const [channelsError, setChannelsError] = useState<string | undefined>();
@@ -52,7 +46,11 @@ export default function CreatorGettingStartedPage() {
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveError, setLiveError] = useState<string | undefined>();
   const [copyMessage, setCopyMessage] = useState<string | undefined>();
-  const [manualChecks, setManualChecks] = useState<ManualChecks>({ ingestCopied: false, sharedViewerLink: false });
+  const [manualChecks, setManualChecks] = useState<ManualChecks>({
+    obsConfigured: false,
+    viewerLinkShared: false,
+    vodUploaded: false,
+  });
 
   useEffect(() => {
     setManualChecks(loadStoredChecks());
@@ -64,41 +62,6 @@ export default function CreatorGettingStartedPage() {
     }
     window.localStorage.setItem(MANUAL_CHECKS_STORAGE_KEY, JSON.stringify(manualChecks));
   }, [manualChecks]);
-
-  useEffect(() => {
-    if (!user) {
-      setProfileExists(false);
-      return;
-    }
-
-    let cancelled = false;
-    const loadProfile = async () => {
-      setProfileLoading(true);
-      try {
-        await fetchProfile(user.id);
-        if (!cancelled) {
-          setProfileExists(true);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          if (err instanceof ViewerApiError && err.status === 404) {
-            setProfileExists(false);
-          } else {
-            setProfileExists(false);
-          }
-        }
-      } finally {
-        if (!cancelled) {
-          setProfileLoading(false);
-        }
-      }
-    };
-
-    void loadProfile();
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
 
   const loadChannels = useCallback(async () => {
     if (!user) {
@@ -156,74 +119,60 @@ export default function CreatorGettingStartedPage() {
     if (!selectedChannel?.id) {
       return;
     }
-    const id = window.setInterval(() => {
+    const pollId = window.setInterval(() => {
       void refreshLiveStatus();
     }, 10000);
     return () => {
-      window.clearInterval(id);
+      window.clearInterval(pollId);
     };
   }, [refreshLiveStatus, selectedChannel?.id]);
 
-  const ingestInfo = useMemo(() => {
-    if (!selectedChannel) {
-      return undefined;
-    }
-    const endpoint = selectedChannel.ingestEndpoints?.[0] ?? "";
-    const streamKey = selectedChannel.streamKey;
-    return {
-      endpoint,
-      streamKey,
-      combined: `${endpoint}${endpoint && streamKey ? "\n" : ""}${streamKey}`,
-    };
-  }, [selectedChannel]);
+  const liveSetupLink = selectedChannel ? `/creator/live/${selectedChannel.id}` : "/creator";
+  const uploadsLink = selectedChannel ? `/creator/uploads/${selectedChannel.id}` : "/creator";
+  const viewerLink = selectedChannel ? `/channels/${selectedChannel.id}` : "/browse";
 
-  const handleCopyStreamInfo = useCallback(async () => {
-    if (!ingestInfo?.combined) {
+  const handleCopyViewerLink = useCallback(async () => {
+    if (typeof window === "undefined" || !selectedChannel) {
       return;
     }
     try {
-      await navigator.clipboard.writeText(ingestInfo.combined);
-      setCopyMessage("Copied ingest info");
+      await navigator.clipboard.writeText(`${window.location.origin}/channels/${selectedChannel.id}`);
+      setCopyMessage("Viewer link copied");
     } catch {
-      setCopyMessage("Copy failed. Copy manually from the fields below.");
+      setCopyMessage("Copy failed. Open the viewer page and copy the URL manually.");
     }
-  }, [ingestInfo?.combined]);
+  }, [selectedChannel]);
 
-  const viewerLink = selectedChannel ? `/channels/${selectedChannel.id}` : "/browse";
-
-  const step1Done = Boolean(user && profileExists);
-  const step2Done = channels.length > 0;
-  const step3Done = manualChecks.ingestCopied;
-  const step4Done = isLive;
-  const step5Done = manualChecks.sharedViewerLink;
+  const hasChannel = Boolean(selectedChannel?.id);
+  const step1Done = hasChannel;
+  const step2Done = manualChecks.obsConfigured;
+  const step3Done = isLive;
+  const step4Done = manualChecks.viewerLinkShared;
+  const step5Done = manualChecks.vodUploaded;
 
   return (
     <div className="container" style={{ paddingTop: "2rem", paddingBottom: "4rem" }}>
       <Card>
         <CardHeader>
-          <h1>Getting Started</h1>
-          <p className="muted">Set up your creator workflow once, then go live faster next time.</p>
+          <h1>Creator getting started</h1>
+          <p className="muted">Follow this checklist to set up your channel and run your first live stream.</p>
         </CardHeader>
         <CardBody style={{ gap: "1rem" }}>
-          <Card>
-            <h2 style={{ marginBottom: "0.5rem" }}>1) Create your profile (if required)</h2>
-            <Badge tone={step1Done ? "success" : "info"}>{step1Done ? "Complete" : "Pending"}</Badge>
-            <p className="muted">Create your profile so viewers see your public identity and branding.</p>
-            {!user && !authLoading ? (
-              <Button onClick={() => void signIn("/profile")}>Create profile</Button>
-            ) : (
-              <Link href="/profile" className={buttonClassName(step1Done ? "secondary" : "primary")}>Create profile</Link>
-            )}
-            {profileLoading && <p className="muted">Checking profile…</p>}
-          </Card>
+          {!user && !authLoading ? (
+            <Card>
+              <h2 style={{ marginBottom: "0.5rem" }}>Sign in to continue</h2>
+              <p className="muted">Sign in to pick your channel and finish onboarding.</p>
+              <Button onClick={() => void signIn("/creator/getting-started")}>Sign in</Button>
+            </Card>
+          ) : null}
 
           <Card>
-            <h2 style={{ marginBottom: "0.5rem" }}>2) Create or select a channel</h2>
-            <Badge tone={step2Done ? "success" : "info"}>{step2Done ? "Complete" : "Pending"}</Badge>
-            <p className="muted">Choose the channel you want to stream from.</p>
-            {channels.length > 0 ? (
-              <>
-                <label htmlFor="channel-select">Managed channel</label>
+            <h2 style={{ marginBottom: "0.5rem" }}>1) Pick a channel</h2>
+            <Badge tone={step1Done ? "success" : "info"}>{step1Done ? "Complete" : "Pending"}</Badge>
+            <p className="muted">Select the channel you want to use for onboarding.</p>
+            {channels.length > 1 ? (
+              <label htmlFor="channel-select">
+                Channel
                 <select
                   id="channel-select"
                   value={selectedChannel?.id ?? ""}
@@ -235,74 +184,99 @@ export default function CreatorGettingStartedPage() {
                     </option>
                   ))}
                 </select>
-                <Link href={`/creator/live/${selectedChannel?.id ?? channels[0].id}`} className={buttonClassName("secondary")}>
-                  Open channel dashboard
-                </Link>
-              </>
+              </label>
+            ) : channels.length === 1 ? (
+              <p>
+                Selected channel: <strong>{channels[0].title}</strong>
+              </p>
             ) : (
-              <Link href="/creator" className={buttonClassName("primary")}>Create channel</Link>
+              <p className="muted">No channels found yet.</p>
             )}
+            <Link href="/creator" className={buttonClassName(hasChannel ? "secondary" : "primary")}>Manage channels</Link>
             {channelsLoading && <p className="muted">Loading channels…</p>}
             {channelsError && <p className="error">{channelsError}</p>}
           </Card>
 
           <Card>
-            <h2 style={{ marginBottom: "0.5rem" }}>3) Copy stream ingest info (RTMP/SRT endpoint + stream key)</h2>
-            <Badge tone={step3Done ? "success" : "neutral"}>{step3Done ? "Complete" : "Manual confirmation"}</Badge>
-            <p className="muted">Copy your primary ingest endpoint and stream key into OBS (or your encoder).</p>
-            <Button onClick={() => void handleCopyStreamInfo()} disabled={!ingestInfo?.combined}>
-              Copy stream key
-            </Button>
-            {ingestInfo?.endpoint && <code>{ingestInfo.endpoint}</code>}
-            {ingestInfo?.streamKey && <code>{ingestInfo.streamKey}</code>}
-            {copyMessage && <p className="muted">{copyMessage}</p>}
-            {/* TODO: add backend ingest handshake signal so this step can auto-complete without manual confirmation. */}
+            <h2 style={{ marginBottom: "0.5rem" }}>2) Copy OBS settings</h2>
+            <Badge tone={step2Done ? "success" : "neutral"}>{step2Done ? "Complete" : "Manual confirmation"}</Badge>
+            <p className="muted">Open your live control room to copy stream key and ingest endpoint into OBS.</p>
+            <Link href={liveSetupLink} className={buttonClassName("primary")}>Open live setup</Link>
             <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
               <input
                 type="checkbox"
-                checked={manualChecks.ingestCopied}
-                onChange={(event) =>
+                checked={manualChecks.obsConfigured}
+                onChange={(event) => {
+                  const checked = event.currentTarget.checked;
                   setManualChecks((prev) => ({
                     ...prev,
-                    ingestCopied: event.currentTarget.checked,
-                  }))
-                }
+                    obsConfigured: checked,
+                  }));
+                }}
               />
-              I copied the stream ingest info.
+              I copied my OBS settings.
             </label>
           </Card>
 
           <Card>
-            <h2 style={{ marginBottom: "0.5rem" }}>4) Confirm a test stream is live</h2>
-            <Badge tone={step4Done ? "success" : "info"}>{step4Done ? "Complete" : "Pending"}</Badge>
-            <p className="muted">We poll your channel playback status every 10s and mark this done once live.</p>
+            <h2 style={{ marginBottom: "0.5rem" }}>3) Go live</h2>
+            <Badge tone={step3Done ? "success" : "info"}>{step3Done ? "Complete" : "Pending"}</Badge>
+            <p className="muted">We detect this automatically from your channel’s live playback status.</p>
             <Button variant="secondary" onClick={() => void refreshLiveStatus()} disabled={!selectedChannel || liveLoading}>
               Check live status
             </Button>
             {liveLoading && <p className="muted">Checking live status…</p>}
             {liveError && <p className="error">{liveError}</p>}
+            <p className="muted">Current status: {step3Done ? "Live" : "Offline"}</p>
           </Card>
 
           <Card>
-            <h2 style={{ marginBottom: "0.5rem" }}>5) Share your viewer link</h2>
-            <Badge tone={step5Done ? "success" : "neutral"}>{step5Done ? "Complete" : "Manual confirmation"}</Badge>
-            <p className="muted">Open your public channel page and share it with your first viewers.</p>
-            <Link href={viewerLink} className={buttonClassName("primary")}>Open viewer</Link>
-            {/* TODO: add backend share attribution/analytics event so this step can auto-complete from real signals. */}
+            <h2 style={{ marginBottom: "0.5rem" }}>4) Share viewer link</h2>
+            <Badge tone={step4Done ? "success" : "neutral"}>{step4Done ? "Complete" : "Manual confirmation"}</Badge>
+            <p className="muted">Copy your public channel page and share it with viewers.</p>
+            <Button onClick={() => void handleCopyViewerLink()} disabled={!selectedChannel}>
+              Copy viewer link
+            </Button>
+            {copyMessage && <p className="muted">{copyMessage}</p>}
             <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
               <input
                 type="checkbox"
-                checked={manualChecks.sharedViewerLink}
-                onChange={(event) =>
+                checked={manualChecks.viewerLinkShared}
+                onChange={(event) => {
+                  const checked = event.currentTarget.checked;
                   setManualChecks((prev) => ({
                     ...prev,
-                    sharedViewerLink: event.currentTarget.checked,
-                  }))
-                }
+                    viewerLinkShared: checked,
+                  }));
+                }}
               />
               I shared my viewer link.
             </label>
           </Card>
+
+          <Card>
+            <h2 style={{ marginBottom: "0.5rem" }}>5) Optional: Upload a test VOD</h2>
+            <Badge tone={step5Done ? "success" : "neutral"}>{step5Done ? "Complete" : "Optional"}</Badge>
+            <p className="muted">Verify uploads and playback by submitting one short VOD.</p>
+            <Link href={uploadsLink} className={buttonClassName("secondary")}>Open uploads</Link>
+            <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={manualChecks.vodUploaded}
+                onChange={(event) => {
+                  const checked = event.currentTarget.checked;
+                  setManualChecks((prev) => ({
+                    ...prev,
+                    vodUploaded: checked,
+                  }));
+                }}
+              />
+              I uploaded a test VOD.
+            </label>
+          </Card>
+
+          <p className="muted">Need help? You can reopen this checklist anytime from the creator dashboard.</p>
+          <Link href={viewerLink} className={buttonClassName("secondary")}>Preview viewer page</Link>
         </CardBody>
       </Card>
     </div>
