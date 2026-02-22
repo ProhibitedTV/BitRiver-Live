@@ -2,23 +2,30 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [ ] Task 1 — Confirm scope and update `PLAN.md`
+- [x] Task 1 — Update planning artifacts for quickstart preflight scope
   - Acceptance criteria:
-    - `PLAN.md` reflects current scope, risks, and test approach.
-    - Any scope changes are captured before code edits.
+    - `PLAN.md` documents scope, assumptions, risks, and test approach for this change.
+    - `TASKS.md` lists ordered implementation tasks.
   - Relevant checks:
-    - Documentation sanity check (links/paths/commands are valid and present in repo).
+    - ✅ `test -s PLAN.md && test -s TASKS.md`
+  - Result:
+    - Passed.
 
-- [ ] Task 2 — Implement top-to-bottom work items from plan
+- [x] Task 2 — Implement deployment preflight checks in quickstart
   - Acceptance criteria:
-    - Each change maps to a concrete plan item.
-    - No out-of-order task execution.
+    - Quickstart validates Docker daemon availability, Docker Compose v2, and env-derived host-port availability before deployment starts.
+    - Failures include clear one-line next actions.
+    - No deployment pipeline behavior changes beyond preflight/output.
   - Relevant checks:
-    - Run task-specific tests/checks and record results after each task.
+    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver -run Quickstart -count=1`
+  - Result:
+    - Passed.
 
-- [ ] Task 3 — Final verification and handoff notes
+- [x] Task 3 — Final verification and handoff
   - Acceptance criteria:
-    - `TASKS.md` statuses are up to date.
-    - Final summary references completed tasks and checks.
+    - Required checks executed and results recorded.
+    - Task statuses updated to complete.
   - Relevant checks:
-    - Any final aggregate check required by scope (for example `./scripts/verify.sh` when applicable).
+    - ✅ `./scripts/verify.sh`
+  - Result:
+    - Passed (with expected docker-dependent steps skipped by script in this environment).

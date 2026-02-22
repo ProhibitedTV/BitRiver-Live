@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -339,6 +340,10 @@ var omeRunner = runOME
 var omeVerifyHealthTokenRunner = runOMEVerifyHealthToken
 var quickstartOMEAuthPreflightRunner = runQuickstartOMEAuthPreflight
 var doctorRunner = runDoctor
+var dockerVersionRunner = runDockerVersionPreflight
+var dockerComposeVersionRunner = runDockerComposeVersionPreflight
+var quickstartHostPortPreflightRunner = runQuickstartHostPortPreflight
+var quickstartHostPortAvailabilityChecker = checkHostPortAvailable
 
 const (
 	deployImageSourcePull  = "pull"
@@ -576,6 +581,17 @@ func runQuickstart(args []string) error {
 		return quickstartStageFailure("Env validate", err, "Resolve the compose environment mismatch and run quickstart again.")
 	}
 
+	printQuickstartStageHeader("Deployment preflight")
+	if err := dockerVersionRunner(); err != nil {
+		return quickstartStageFailure("Deployment preflight", err, "Start Docker Desktop/Engine, then rerun quickstart.")
+	}
+	if err := dockerComposeVersionRunner(); err != nil {
+		return quickstartStageFailure("Deployment preflight", err, "Install/enable Docker Compose v2 (`docker compose`), then rerun quickstart.")
+	}
+	if err := quickstartHostPortPreflightRunner(envValues); err != nil {
+		return quickstartStageFailure("Deployment preflight", err, "Free the listed host ports by stopping conflicting services or updating .env port values, then rerun quickstart.")
+	}
+
 	printQuickstartStageHeader("Image preflight (pull/build)")
 	if err := deployImageSourcePreflightRunner(modeCfg.mode, envValues, *envFile); err != nil {
 		return quickstartStageFailure("Image preflight (pull/build)", err, "Confirm image tags/access settings, then rerun quickstart.")
@@ -615,6 +631,204 @@ func runQuickstart(args []string) error {
 	printGeneratedSecrets(generatedSecrets)
 	printQuickstartSuccessSummary(*composeFile, *envFile, envValues)
 	return nil
+}
+
+func runDockerVersionPreflight() error {
+	if _, err := executil.LookPath("docker"); err != nil {
+		return fmt.Errorf("docker CLI not found: %w\nNext: install Docker Desktop/Engine and ensure `docker` is on PATH", err)
+	}
+	if err := commandRunner("docker", "version"); err != nil {
+		return fmt.Errorf("docker daemon check failed (`docker version`): %w\nNext: start Docker Desktop/Engine and verify `docker version` succeeds", err)
+	}
+	return nil
+}
+
+func runDockerComposeVersionPreflight() error {
+	if err := commandRunner("docker", "compose", "version"); err != nil {
+		return fmt.Errorf("docker compose v2 check failed (`docker compose version`): %w\nNext: enable/install Docker Compose v2 and verify `docker compose version` succeeds", err)
+	}
+	return nil
+}
+
+type quickstartPortRequirement struct {
+	name     string
+	protocol string
+	ports    []int
+}
+
+type quickstartPortConflict struct {
+	name     string
+	protocol string
+	port     int
+	err      error
+}
+
+func runQuickstartHostPortPreflight(values map[string]string) error {
+	requirements, err := quickstartRequiredHostPorts(values)
+	if err != nil {
+		return err
+	}
+
+	var conflicts []quickstartPortConflict
+	for _, req := range requirements {
+		for _, port := range req.ports {
+			if err := quickstartHostPortAvailabilityChecker(req.protocol, port); err != nil {
+				conflicts = append(conflicts, quickstartPortConflict{name: req.name, protocol: req.protocol, port: port, err: err})
+			}
+		}
+	}
+
+	if len(conflicts) == 0 {
+		return nil
+	}
+
+	lines := []string{"host port conflicts detected:"}
+	for _, conflict := range conflicts {
+		lines = append(lines, fmt.Sprintf("- %s %d (%s): %v", strings.ToUpper(conflict.protocol), conflict.port, conflict.name, conflict.err))
+	}
+	lines = append(lines, "Next: stop the conflicting local service, or change the matching .env port value and rerun quickstart")
+	return errors.New(strings.Join(lines, "\n"))
+}
+
+func quickstartRequiredHostPorts(values map[string]string) ([]quickstartPortRequirement, error) {
+	tcp := "tcp"
+	udp := "udp"
+	requirements := []quickstartPortRequirement{}
+
+	addSingle := func(name, key, fallback, protocol string) error {
+		port, err := parseRequiredPort(values, key, fallback)
+		if err != nil {
+			return err
+		}
+		requirements = append(requirements, quickstartPortRequirement{name: name, protocol: protocol, ports: []int{port}})
+		return nil
+	}
+
+	addPrefer := func(name, primaryKey, primaryFallback, secondaryKey, secondaryFallback, protocol string) error {
+		port, err := parsePreferredPort(values, primaryKey, primaryFallback, secondaryKey, secondaryFallback)
+		if err != nil {
+			return err
+		}
+		requirements = append(requirements, quickstartPortRequirement{name: name, protocol: protocol, ports: []int{port}})
+		return nil
+	}
+
+	if err := addSingle("BITRIVER_LIVE_PORT", "BITRIVER_LIVE_PORT", "8080", tcp); err != nil {
+		return nil, err
+	}
+	if err := addSingle("BITRIVER_SRS_CONTROLLER_PORT", "BITRIVER_SRS_CONTROLLER_PORT", "1986", tcp); err != nil {
+		return nil, err
+	}
+	if err := addSingle("BITRIVER_SRS_RTMP_PORT", "BITRIVER_SRS_RTMP_PORT", "1935", tcp); err != nil {
+		return nil, err
+	}
+	if err := addSingle("BITRIVER_OME_HTTP_PORT", "BITRIVER_OME_HTTP_PORT", "8081", tcp); err != nil {
+		return nil, err
+	}
+	if err := addSingle("BITRIVER_OME_HTTP_TLS_PORT", "BITRIVER_OME_HTTP_TLS_PORT", "8082", tcp); err != nil {
+		return nil, err
+	}
+	if err := addPrefer("BITRIVER_OME_LLHLS_HOST_PORT/BITRIVER_OME_LLHLS_PORT", "BITRIVER_OME_LLHLS_HOST_PORT", "", "BITRIVER_OME_LLHLS_PORT", "8080", tcp); err != nil {
+		return nil, err
+	}
+	if err := addSingle("BITRIVER_OME_LLHLS_TLS_PORT", "BITRIVER_OME_LLHLS_TLS_PORT", "8443", tcp); err != nil {
+		return nil, err
+	}
+	if err := addPrefer("BITRIVER_OME_SIGNALLING_PORT/BITRIVER_OME_SERVER_PORT", "BITRIVER_OME_SIGNALLING_PORT", "", "BITRIVER_OME_SERVER_PORT", "9000", tcp); err != nil {
+		return nil, err
+	}
+	if err := addSingle("BITRIVER_OME_SERVER_TLS_PORT", "BITRIVER_OME_SERVER_TLS_PORT", "9443", tcp); err != nil {
+		return nil, err
+	}
+	if err := addSingle("BITRIVER_OME_RELAY_PORT", "BITRIVER_OME_RELAY_PORT", "3478", tcp); err != nil {
+		return nil, err
+	}
+	if err := addSingle("BITRIVER_OME_RELAY_PORT", "BITRIVER_OME_RELAY_PORT", "3478", udp); err != nil {
+		return nil, err
+	}
+	if err := addSingle("BITRIVER_TRANSCODER_HOST_PORT", "BITRIVER_TRANSCODER_HOST_PORT", "9001", tcp); err != nil {
+		return nil, err
+	}
+	if err := addSingle("BITRIVER_TRANSCODER_PUBLIC_PORT", "BITRIVER_TRANSCODER_PUBLIC_PORT", "9080", tcp); err != nil {
+		return nil, err
+	}
+
+	icePorts, err := parseRequiredPortRange(values, "BITRIVER_OME_ICE_PORT_RANGE", "10000-10009")
+	if err != nil {
+		return nil, err
+	}
+	requirements = append(requirements, quickstartPortRequirement{name: "BITRIVER_OME_ICE_PORT_RANGE", protocol: udp, ports: icePorts})
+
+	return requirements, nil
+}
+
+func parseRequiredPort(values map[string]string, key, fallback string) (int, error) {
+	value := strings.TrimSpace(values[key])
+	if value == "" {
+		value = fallback
+	}
+	port, err := strconv.Atoi(value)
+	if err != nil || port < 1 || port > 65535 {
+		return 0, fmt.Errorf("invalid %s value %q: expected TCP/UDP port 1-65535", key, value)
+	}
+	return port, nil
+}
+
+func parsePreferredPort(values map[string]string, primaryKey, primaryFallback, secondaryKey, secondaryFallback string) (int, error) {
+	if strings.TrimSpace(values[primaryKey]) != "" {
+		return parseRequiredPort(values, primaryKey, primaryFallback)
+	}
+	return parseRequiredPort(values, secondaryKey, secondaryFallback)
+}
+
+func parseRequiredPortRange(values map[string]string, key, fallback string) ([]int, error) {
+	value := strings.TrimSpace(values[key])
+	if value == "" {
+		value = fallback
+	}
+	parts := strings.Split(value, "-")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid %s value %q: expected range start-end", key, value)
+	}
+	start, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+	if err != nil {
+		return nil, fmt.Errorf("invalid %s value %q: expected numeric start", key, value)
+	}
+	end, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err != nil {
+		return nil, fmt.Errorf("invalid %s value %q: expected numeric end", key, value)
+	}
+	if start < 1 || end > 65535 || start > end {
+		return nil, fmt.Errorf("invalid %s value %q: expected 1 <= start <= end <= 65535", key, value)
+	}
+
+	ports := make([]int, 0, end-start+1)
+	for p := start; p <= end; p++ {
+		ports = append(ports, p)
+	}
+	return ports, nil
+}
+
+func checkHostPortAvailable(protocol string, port int) error {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	switch protocol {
+	case "tcp":
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			return err
+		}
+		_ = ln.Close()
+		return nil
+	case "udp":
+		pc, err := net.ListenPacket("udp", addr)
+		if err != nil {
+			return err
+		}
+		_ = pc.Close()
+		return nil
+	default:
+		return fmt.Errorf("unsupported protocol %q", protocol)
+	}
 }
 
 func printQuickstartStageHeader(stage string) {
