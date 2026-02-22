@@ -168,13 +168,14 @@ export default function CreatorLivePage() {
     }
   }, [channelId]);
 
-  useEffect(() => {
-    void loadSessions();
-  }, [loadSessions]);
+  const refreshNow = useCallback(async () => {
+    await Promise.allSettled([reload(true), loadSessions(), loadManagedChannel()]);
+    setTestStreamUpdatedAt(new Date().toISOString());
+  }, [loadManagedChannel, loadSessions, reload]);
 
   useEffect(() => {
-    void loadManagedChannel();
-  }, [loadManagedChannel]);
+    void refreshNow();
+  }, [refreshNow]);
 
   useEffect(() => {
     setTitleDraft(playback?.channel.title ?? "");
@@ -191,15 +192,13 @@ export default function CreatorLivePage() {
 
   useEffect(() => {
     const pollId = window.setInterval(() => {
-      void reload(true);
-      void loadSessions();
-      setTestStreamUpdatedAt(new Date().toISOString());
-    }, 10000);
+      void refreshNow();
+    }, 4000);
 
     return () => {
       window.clearInterval(pollId);
     };
-  }, [loadSessions, reload]);
+  }, [refreshNow]);
 
   const handleChannelChange = (event: FormEvent<HTMLSelectElement>) => {
     const nextChannelId = event.currentTarget.value;
@@ -234,18 +233,42 @@ export default function CreatorLivePage() {
 
   const testPanelStatus = useMemo(() => {
     if (!playback?.channel.liveState) {
-      return "Unknown";
+      return {
+        label: "Unknown",
+        badgeClassName: "badge badge--muted",
+        instructions: "Start streaming in OBS. This page updates automatically.",
+      };
     }
+
     if (playback.channel.liveState === "live") {
-      return "Live";
+      return {
+        label: "Live",
+        badgeClassName: "badge badge--live",
+        instructions: "You're live. Check preview below.",
+      };
     }
+
     if (playback.channel.liveState === "starting") {
-      return "Reconnecting";
+      return {
+        label: "Reconnecting",
+        badgeClassName: "badge badge--ingesting",
+        instructions: "Connection interrupted—keep streaming; we'll recover.",
+      };
     }
-    if (playback.channel.liveState !== "offline") {
-      return "Unknown";
+
+    if (playback.channel.liveState === "offline") {
+      return {
+        label: "Not live",
+        badgeClassName: "badge badge--muted",
+        instructions: "Start streaming in OBS. This page updates automatically.",
+      };
     }
-    return "Not live";
+
+    return {
+      label: "Unknown",
+      badgeClassName: "badge badge--error",
+      instructions: "Start streaming in OBS. This page updates automatically.",
+    };
   }, [playback?.channel.liveState]);
 
   const handleTitleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -373,15 +396,6 @@ export default function CreatorLivePage() {
             </select>
           </div>
         ) : null}
-        <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
-          <span className={streamStatus.badgeClassName}>{streamStatus.label}</span>
-          {streamStatus.lastTransitionAt ? (
-            <span className="muted">Last transition {new Date(streamStatus.lastTransitionAt).toLocaleString()}</span>
-          ) : (
-            <span className="muted">Last transition unknown</span>
-          )}
-          {streamStatus.reason ? <span className="muted">Reason: {streamStatus.reason}</span> : null}
-        </div>
         <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
           <button
             type="button"
@@ -560,12 +574,27 @@ export default function CreatorLivePage() {
         <section className="surface stack" aria-labelledby="test-stream-heading">
           <h3 id="test-stream-heading">Test stream</h3>
           <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
-            <span className={streamStatus.badgeClassName}>{testPanelStatus}</span>
-            <span className="muted">Last updated {new Date(testStreamUpdatedAt).toLocaleTimeString()}</span>
+            <span className={testPanelStatus.badgeClassName}>{testPanelStatus.label}</span>
+            <span className="muted">Last updated {new Date(testStreamUpdatedAt).toLocaleString()}</span>
           </div>
-          {testPanelStatus !== "Live" ? (
-            <p className="muted">Start streaming in OBS. This page will update automatically.</p>
-          ) : null}
+          <p className="muted">{testPanelStatus.instructions}</p>
+          <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                void refreshNow();
+              }}
+            >
+              Refresh now
+            </button>
+            {streamStatus.lastTransitionAt ? (
+              <span className="muted">Last transition {new Date(streamStatus.lastTransitionAt).toLocaleString()}</span>
+            ) : (
+              <span className="muted">Last transition unknown</span>
+            )}
+            {streamStatus.reason ? <span className="muted">Reason: {streamStatus.reason}</span> : null}
+          </div>
           <details>
             <summary>Common issues</summary>
             <ul className="stack muted" style={{ gap: "0.35rem", paddingLeft: "1.25rem", marginTop: "0.5rem" }}>
