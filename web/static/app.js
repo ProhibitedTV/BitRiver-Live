@@ -2330,12 +2330,13 @@ function renderStreams() {
     for (const channel of state.channels) {
         const latestSession = (state.sessions[channel.id] || []).slice().sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))[0];
         const stateLabel = channel.liveState || "idle";
+        const stateReason = deriveStreamStateChangeReason(channel.liveState, channel.currentSessionId, latestSession);
         const card = createElement("article", { className: "card" });
         card.append(
             createElement("h3", { textContent: channel.title }),
             createElement("p", { className: "card__meta", textContent: `Current lifecycle state: ${stateLabel}` }),
             createElement("p", { className: "card__meta", textContent: `Last state change: ${latestSession ? formatRelativeTime(latestSession.startedAt) : "Not yet available"}` }),
-            createElement("p", { className: "card__meta", textContent: "Last state change reason: TODO: verify in code" }),
+            createElement("p", { className: "card__meta", textContent: `Last state change reason: ${stateReason}` }),
         );
         const actions = createElement("div", { className: "card__actions" });
         const open = createElement("button", { className: "secondary", textContent: "Open Go Live controls" });
@@ -2344,6 +2345,32 @@ function renderStreams() {
         card.appendChild(actions);
         streamsList.appendChild(card);
     }
+}
+
+function deriveStreamStateChangeReason(liveState, currentSessionId, latestSession) {
+    if (liveState === "starting") {
+        return "Encoder connected; stream is still provisioning.";
+    }
+
+    if (liveState === "offline") {
+        if (latestSession?.endedAt) {
+            return "Ended normally.";
+        }
+
+        if (currentSessionId && !latestSession) {
+            return "Ingest lost before session details were persisted.";
+        }
+
+        if (currentSessionId && latestSession && latestSession.id !== currentSessionId) {
+            return "Ingest lost: channel session signal is out of sync.";
+        }
+    }
+
+    if (liveState && liveState !== "live") {
+        return `Unexpected stream state: ${liveState}`;
+    }
+
+    return "Reason not yet available";
 }
 
 function renderSystemHealth() {
@@ -3551,4 +3578,4 @@ export function __setCurrentUserForTest(user) {
     state.currentUser = user;
 }
 
-export { renderModeration };
+export { deriveStreamStateChangeReason, renderModeration };

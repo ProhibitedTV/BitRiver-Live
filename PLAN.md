@@ -1,31 +1,21 @@
 # PLAN
 
 ## Scope (current change)
-- Add a short required self-check footer section to root `AGENTS.md`.
-- Ensure the footer explicitly points agents to `./scripts/verify.sh` as the default validation command.
-- Keep wording concise and checklist-oriented so agents can append it before finishing runs.
+- Replace the hardcoded `Last state change reason: TODO: verify in code` text in `web/static/app.js` stream cards with data-driven messaging.
+- Derive the reason from `channel.liveState`, `channel.currentSessionId`, and the computed `latestSession`.
+- Align static dashboard messaging with creator UI stream-state semantics where they overlap (ended normally, ingest lost, unexpected state).
+- Add/update static-app tests to prove the reason line is no longer hardcoded TODO text.
 
 ## Assumptions
-- This is a documentation-only workflow change; no runtime behavior or deployment contract files are affected.
-- Existing `AGENTS.md` structure remains intact, with the new footer added near end-of-file guidance sections.
-
-## Implementation approach
-1. Add a compact “finish-run self-check” checklist to `AGENTS.md`.
-2. Include all required prompts from the request, with a command-list item anchored on `./scripts/verify.sh`.
-3. Keep text brief to minimize instruction noise.
-
-## Technical plan
-1. Read `SPEC.md` and relevant repo docs/code in read-only mode.
-2. Update this file with scope, assumptions, and implementation approach.
-3. Break implementation into ordered tasks in `TASKS.md`.
-4. Execute tasks top-to-bottom; do not skip ahead.
+- This is a UI logic and test change scoped to `web/static/*`; no deployment contract files are impacted.
+- Existing creator UI semantics in `web/viewer/app/creator/live/[channelId]/page.tsx` are the canonical source for reason mapping language.
 
 ## Risks
-- Checklist could be too verbose and reduce compliance.
-- Footer placement could conflict with existing agent guidance if not clearly marked required.
-- Plan drift if `TASKS.md` status updates are missed during doc edits.
+- Semantic drift if static copy differs too much from creator control centre messages.
+- Incomplete fallback handling if sessions are missing or inconsistent.
+- Test brittleness if assertions depend on full card DOM shape instead of focused reason text.
 
 ## Test plan
-- Run a documentation sanity check by inspecting the updated `AGENTS.md` section content.
-- Confirm required checklist bullets are present, concise, and include `./scripts/verify.sh`.
-- Record checks and outcomes in `TASKS.md` immediately after edits.
+- Run focused static app unit tests: `node --test web/static/app.test.mjs`.
+- Run repository validation gate per policy: `./scripts/verify.sh`.
+- Record task-level check results in `TASKS.md` after each task.
