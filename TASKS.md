@@ -2,45 +2,35 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Add shared polling helper in `cmd/bitriver/commands_env_compose.go`
+- [x] Task 1 — Refactor `waitFor` helper to ticker + context timeout
   - Acceptance criteria:
-    - A reusable internal poll utility encapsulates deadline checks, interval waits, and cancellation handling.
-    - Helper integration preserves existing user-facing strings in readiness/critical health flows.
+    - `waitFor` uses `context.WithTimeout` and `time.Ticker`.
+    - Helper no longer uses `time.Sleep` busy-wait polling.
+    - Failure path keeps explicit timeout context in message.
   - Relevant checks:
-    - ✅ `go test ./cmd/bitriver -count=1`
+    - ✅ `go test ./cmd/transcoder -count=1`
   - Result:
     - Passed.
 
-- [x] Task 2 — Refactor readiness and compose health loops to use helper
+- [x] Task 2 — Update transcoder tests for new `waitFor` signature
   - Acceptance criteria:
-    - `waitForAPIReadiness` uses helper for polling/wait logic.
-    - `waitForComposeServiceHealth` uses helper for polling/wait logic.
-    - Existing emitted text remains unchanged.
+    - All `waitFor` call sites compile with new signature.
+    - Failure reason strings are explicit per wait condition.
   - Relevant checks:
-    - ✅ `go test ./cmd/bitriver -count=1`
+    - ✅ `go test ./cmd/transcoder -count=1`
   - Result:
     - Passed.
 
-- [x] Task 3 — Add focused polling tests (timeout/success/cancellation)
+- [x] Task 3 — Final verification and status log
   - Acceptance criteria:
-    - Tests cover success before deadline, timeout at deadline, and context cancellation paths.
-    - Tests are deterministic and scoped to polling helper behavior.
+    - Targeted transcoder package test passes with no assertion behavior changes.
+    - Task results are recorded below.
   - Relevant checks:
-    - ✅ `go test ./cmd/bitriver -count=1`
+    - ✅ `go test ./cmd/transcoder -count=1`
   - Result:
     - Passed.
-
-- [x] Task 4 — Final verification and task log update
-  - Acceptance criteria:
-    - Required verification command(s) run and captured.
-    - Task statuses and execution log updated with outcomes.
-  - Relevant checks:
-    - ✅ `./scripts/verify.sh`
-  - Result:
-    - Passed (with expected docker-related skips because Docker is not installed in this environment).
 
 ## Execution log
-- Task 1 check: `go test ./cmd/bitriver -count=1` (pass).
-- Task 2 check: `go test ./cmd/bitriver -count=1` (pass).
-- Task 3 check: `go test ./cmd/bitriver -count=1` (pass; includes new `pollUntil` success/timeout/cancellation tests).
-- Task 4 check: `./scripts/verify.sh` (pass; docker compose validation skipped because Docker is not installed in this environment).
+- Task 1 check: `go test ./cmd/transcoder -count=1` (pass).
+- Task 2 check: `go test ./cmd/transcoder -count=1` (pass).
+- Task 3 check: `go test ./cmd/transcoder -count=1` (pass; no behavior assertion changes).
