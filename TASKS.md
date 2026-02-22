@@ -2,34 +2,45 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Confirm scope and update `PLAN.md`
+- [x] Task 1 — Confirm scope and update `PLAN.md` with read-only analysis
   - Acceptance criteria:
-    - `PLAN.md` documents scope, assumptions, risks, and test approach for this change.
-    - `TASKS.md` lists ordered implementation tasks.
+    - `PLAN.md` documents scope, assumptions, risks, and test plan for this viewer state-mapping change.
+    - Authoritative known persisted `live_state` values are identified from backend code paths.
   - Relevant checks:
-    - ✅ `test -s PLAN.md && test -s TASKS.md`
+    - ✅ `test -s PLAN.md`
   - Result:
     - Passed.
 
-- [x] Task 2 — Implement top-to-bottom work items from plan
+- [x] Task 2 — Implement explicit `deriveControlCentreStatus()` mapping for known states
   - Acceptance criteria:
-    - Quickstart validates Docker daemon availability, Docker Compose v2, and env-derived host-port availability before deployment starts.
-    - Failures include clear one-line next actions.
-    - No deployment pipeline behavior changes beyond preflight/output.
+    - `starting`, `live`, `offline`, and `ended` all have explicit branches with stable `label`, `badgeClassName`, and `reason` behavior.
+    - Default branch remains for unknown values with wording indicating unexpected server state.
+    - TODO comment is removed.
   - Relevant checks:
-    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver -run Quickstart -count=1`
+    - ✅ `cd web/viewer && npm run test -- creatorLiveStreamStatus`
   - Result:
     - Passed.
 
-- [x] Task 3 — Final verification and handoff notes
+- [x] Task 3 — Add/extend viewer tests for all mapped states + unknown fallback
   - Acceptance criteria:
-    - Required checks executed and results recorded.
-    - Task statuses updated to complete.
+    - Tests cover each known mapped state and one unknown fallback case.
+    - Assertions verify stable mapped outputs.
   - Relevant checks:
-    - Any final aggregate check required by scope (for example `./scripts/verify.sh` when applicable).
+    - ✅ `cd web/viewer && npm run test -- creatorLiveStreamStatus`
+  - Result:
+    - Passed.
 
+- [x] Task 4 — Run required validation and finalize task log
+  - Acceptance criteria:
+    - Required repo check(s) run and outcomes recorded.
+    - `TASKS.md` statuses/results are up to date.
+  - Relevant checks:
+    - ❌ `./scripts/verify.sh`
+  - Result:
+    - Failed due existing viewer snapshot mismatch in `__tests__/channelDisplayPrimitives.test.tsx` unrelated to this change.
 
 ## Execution log
-- Task 1 check: Reviewed updated `PLAN.md` for scope/risks/test-plan alignment (pass).
-- Task 2 check: `rg -n "Required end-of-run self-check|Did I run the right commands\?|scripts/verify\.sh|What remains incomplete\?" AGENTS.md` (pass; required footer bullets and default command present).
-- Task 3 check: Verified task statuses and log entries are up to date in `TASKS.md` (pass).
+- Task 1 check: `test -s PLAN.md` (pass).
+- Task 2 check: `cd web/viewer && npm run test -- creatorLiveStreamStatus` (pass).
+- Task 3 check: `cd web/viewer && npm run test -- creatorLiveStreamStatus` (pass).
+- Task 4 check: `./scripts/verify.sh` (fail: snapshot mismatch in `channelDisplayPrimitives.test.tsx`; docker compose validation skipped because docker is not installed).

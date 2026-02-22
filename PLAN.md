@@ -1,31 +1,29 @@
 # PLAN
 
 ## Scope (current change)
-- Add a short required self-check footer section to root `AGENTS.md`.
-- Ensure the footer explicitly points agents to `./scripts/verify.sh` as the default validation command.
-- Keep wording concise and checklist-oriented so agents can append it before finishing runs.
+- Complete `deriveControlCentreStatus()` in `web/viewer/app/creator/live/[channelId]/page.tsx` so every known persisted backend `live_state` value is explicitly mapped.
+- Remove the existing TODO about verifying additional persisted values.
+- Add/extend viewer tests to cover each mapped known state plus an unknown-state fallback.
+
+## Read-only analysis summary
+- Backend storage validation currently allows persisted `live_state` values: `offline`, `live`, `starting`, and `ended`.
+- Control-plane handlers and directory responses frequently use `offline`/`starting`/`live`; `ended` is also accepted by storage update paths and should be treated as known.
+- The creator live page currently maps `starting`, `live`, and `offline`, while unknown values (including `ended`) fall through to a generic error branch and TODO.
 
 ## Assumptions
-- This is a documentation-only workflow change; no runtime behavior or deployment contract files are affected.
-- Existing `AGENTS.md` structure remains intact, with the new footer added near end-of-file guidance sections.
+- No deployment contract/runtime orchestration files are affected (`deploy/docker-compose.yml`, root `.env`, generated OME config unchanged).
+- This change is viewer-only behavior and test coverage; no backend API contract changes are required.
 
 ## Implementation approach
-1. Add a compact “finish-run self-check” checklist to `AGENTS.md`.
-2. Include all required prompts from the request, with a command-list item anchored on `./scripts/verify.sh`.
-3. Keep text brief to minimize instruction noise.
-
-## Technical plan
-1. Read `SPEC.md` and relevant repo docs/code in read-only mode.
-2. Update this file with scope, assumptions, and implementation approach.
-3. Break implementation into ordered tasks in `TASKS.md`.
-4. Execute tasks top-to-bottom; do not skip ahead.
+1. Update `deriveControlCentreStatus()` with explicit handling for `ended` and refine fallback wording for unexpected server values.
+2. Remove TODO once mapping is complete.
+3. Add focused unit tests around `deriveControlCentreStatus()` covering `offline`, `starting`, `live`, `ended`, and unknown input.
+4. Run viewer-relevant checks and record outcomes in `TASKS.md` after each task.
 
 ## Risks
-- Checklist could be too verbose and reduce compliance.
-- Footer placement could conflict with existing agent guidance if not clearly marked required.
-- Plan drift if `TASKS.md` status updates are missed during doc edits.
+- Status messaging regressions if `offline` conditional branches are unintentionally altered.
+- Test brittleness if assertions over-couple to non-essential text.
 
 ## Test plan
-- Run a documentation sanity check by inspecting the updated `AGENTS.md` section content.
-- Confirm required checklist bullets are present, concise, and include `./scripts/verify.sh`.
-- Record checks and outcomes in `TASKS.md` immediately after edits.
+- Viewer unit tests for stream-status derivation mapping.
+- Repo-required check: run `./scripts/verify.sh` before handoff.
