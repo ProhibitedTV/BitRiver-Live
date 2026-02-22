@@ -156,3 +156,32 @@ test("renderModeration handles partial data payloads", async () => {
     assert.ok(elements.get("moderation-automod").children.length > 0);
     assert.ok(elements.get("moderation-filters").children.length > 0);
 });
+
+
+test("deriveStreamStateChangeReason mirrors creator stream-state semantics", async () => {
+    globalThis.__BR_SKIP_INIT__ = true;
+    setupDom();
+
+    const moduleUrl = new URL("./app.js", import.meta.url);
+    const { deriveStreamStateChangeReason } = await import(moduleUrl);
+
+    assert.equal(deriveStreamStateChangeReason("offline", undefined, { id: "s1", endedAt: new Date().toISOString() }), "Ended normally.");
+    assert.equal(deriveStreamStateChangeReason("offline", "session-missing", undefined), "Ingest lost before session details were persisted.");
+    assert.equal(
+        deriveStreamStateChangeReason("offline", "session-current", { id: "session-other", startedAt: new Date().toISOString() }),
+        "Ingest lost: channel session signal is out of sync.",
+    );
+    assert.equal(deriveStreamStateChangeReason("paused", undefined, undefined), "Unexpected stream state: paused");
+});
+
+test("deriveStreamStateChangeReason uses neutral fallback instead of TODO text", async () => {
+    globalThis.__BR_SKIP_INIT__ = true;
+    setupDom();
+
+    const moduleUrl = new URL("./app.js", import.meta.url);
+    const { deriveStreamStateChangeReason } = await import(moduleUrl);
+
+    const reason = deriveStreamStateChangeReason("live", "session-1", { id: "session-1", startedAt: new Date().toISOString() });
+    assert.equal(reason, "Reason not yet available");
+    assert.equal(reason.includes("TODO"), false);
+});

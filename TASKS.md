@@ -2,34 +2,35 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Confirm scope and update `PLAN.md`
+- [x] Task 1 — Implement stream reason derivation in `web/static/app.js`
   - Acceptance criteria:
-    - `PLAN.md` documents scope, assumptions, risks, and test approach for this change.
-    - `TASKS.md` lists ordered implementation tasks.
+    - `renderStreams()` no longer renders TODO language.
+    - A helper or inline logic maps `liveState`/`currentSessionId`/`latestSession` to human-readable reason text.
+    - Reason semantics mirror creator UI guidance where applicable.
   - Relevant checks:
-    - ✅ `test -s PLAN.md && test -s TASKS.md`
+    - ✅ `node --test web/static/app.test.mjs`
   - Result:
     - Passed.
 
-- [x] Task 2 — Implement top-to-bottom work items from plan
+- [x] Task 2 — Add/update tests in `web/static/app.test.mjs`
   - Acceptance criteria:
-    - Quickstart validates Docker daemon availability, Docker Compose v2, and env-derived host-port availability before deployment starts.
-    - Failures include clear one-line next actions.
-    - No deployment pipeline behavior changes beyond preflight/output.
+    - Tests assert stream reason text is data-driven and does not contain TODO placeholder text.
+    - At least one assertion validates neutral fallback text for unavailable reason.
   - Relevant checks:
-    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver -run Quickstart -count=1`
+    - ✅ `node --test web/static/app.test.mjs`
   - Result:
     - Passed.
 
-- [x] Task 3 — Final verification and handoff notes
+- [x] Task 3 — Final verification and handoff
   - Acceptance criteria:
-    - Required checks executed and results recorded.
-    - Task statuses updated to complete.
+    - Required repo checks run and captured.
+    - Task statuses and execution log updated with outcomes.
   - Relevant checks:
-    - Any final aggregate check required by scope (for example `./scripts/verify.sh` when applicable).
-
+    - ✅ `./scripts/verify.sh`
+  - Result:
+    - Passed (with expected docker-related skips due to environment lacking Docker).
 
 ## Execution log
-- Task 1 check: Reviewed updated `PLAN.md` for scope/risks/test-plan alignment (pass).
-- Task 2 check: `rg -n "Required end-of-run self-check|Did I run the right commands\?|scripts/verify\.sh|What remains incomplete\?" AGENTS.md` (pass; required footer bullets and default command present).
-- Task 3 check: Verified task statuses and log entries are up to date in `TASKS.md` (pass).
+- Task 1 check: `node --test web/static/app.test.mjs` (pass).
+- Task 2 check: `node --test web/static/app.test.mjs` (pass; includes new reason/fallback assertions).
+- Task 3 check: `./scripts/verify.sh` (pass; docker compose validation skipped because Docker is not installed in this environment).
