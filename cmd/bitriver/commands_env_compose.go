@@ -1146,30 +1146,77 @@ var readinessPollInterval = 3 * time.Second
 var readinessDiagnosticsRunner = gatherReadinessDiagnostics
 var dockerComposeCommandRunner = runDockerComposeCommand
 
+func pollUntil(ctx context.Context, timeout, interval time.Duration, poll func(context.Context) (bool, error)) (bool, error) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+
+		done, err := poll(ctx)
+		if err != nil {
+			return false, err
+		}
+		if done {
+			return true, nil
+		}
+
+		wait := interval
+		remaining := time.Until(deadline)
+		if remaining < wait {
+			wait = remaining
+		}
+		if wait <= 0 {
+			break
+		}
+
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return false, ctx.Err()
+		case <-timer.C:
+		}
+	}
+
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+
+	return false, nil
+}
+
 func waitForAPIReadiness(values map[string]string, composeFile, envFile string) error {
 	readyzURL := fmt.Sprintf("http://127.0.0.1:%s/readyz", resolveAPIPort(values))
 	fmt.Fprintf(os.Stdout, "Waiting for API readiness at %s...\n", readyzURL)
 
-	deadline := time.Now().Add(readinessWaitTimeout)
-	for time.Now().Before(deadline) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, readyzURL, nil)
+	ready, err := pollUntil(context.Background(), readinessWaitTimeout, readinessPollInterval, func(ctx context.Context) (bool, error) {
+		requestCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		req, reqErr := http.NewRequestWithContext(requestCtx, http.MethodGet, readyzURL, nil)
 		if reqErr != nil {
-			cancel()
-			return fmt.Errorf("build readiness request: %w", reqErr)
+			return false, fmt.Errorf("build readiness request: %w", reqErr)
 		}
 
-		resp, err := http.DefaultClient.Do(req)
-		cancel()
-		if err == nil {
+		resp, reqErr := http.DefaultClient.Do(req)
+		if reqErr == nil {
 			resp.Body.Close()
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				fmt.Fprintln(os.Stdout, "API is ready.")
-				return nil
+				return true, nil
 			}
 		}
 
-		time.Sleep(readinessPollInterval)
+		return false, nil
+	})
+	if err != nil {
+		return err
+	}
+	if ready {
+		fmt.Fprintln(os.Stdout, "API is ready.")
+		return nil
 	}
 
 	diagnostics := strings.TrimSpace(readinessDiagnosticsRunner(composeFile, envFile))
@@ -1356,19 +1403,18 @@ func composeServiceLogCommand(composeFile, envFile, service string) string {
 
 func waitForComposeServiceHealth(composeFile, envFile string) error {
 	fmt.Fprintln(os.Stdout, "Waiting for critical Docker Compose services to report healthy...")
-	deadline := time.Now().Add(composeHealthWaitTimeout)
 	lastSummary := map[string]string{}
 	lastStates := map[string]quickstartComposeServiceStatus{}
 
-	for time.Now().Before(deadline) {
+	allHealthy, err := pollUntil(context.Background(), composeHealthWaitTimeout, composeHealthPollInterval, func(context.Context) (bool, error) {
 		output, err := composePSRunner(composeFile, envFile)
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		serviceStates, err := parseComposeServiceStates(output)
 		if err != nil {
-			return fmt.Errorf("parse docker compose ps output: %w", err)
+			return false, fmt.Errorf("parse docker compose ps output: %w", err)
 		}
 
 		allHealthy := true
@@ -1402,15 +1448,21 @@ func waitForComposeServiceHealth(composeFile, envFile string) error {
 		}
 
 		if len(failingDetails) > 0 {
-			return fmt.Errorf("critical service failure detected: %s\nnext commands:\n%s", strings.Join(failingDetails, ", "), strings.Join(nextSteps, "\n"))
+			return false, fmt.Errorf("critical service failure detected: %s\nnext commands:\n%s", strings.Join(failingDetails, ", "), strings.Join(nextSteps, "\n"))
 		}
 
 		if allHealthy {
-			fmt.Fprintln(os.Stdout, "Critical services are healthy.")
-			return nil
+			return true, nil
 		}
 
-		time.Sleep(composeHealthPollInterval)
+		return false, nil
+	})
+	if err != nil {
+		return err
+	}
+	if allHealthy {
+		fmt.Fprintln(os.Stdout, "Critical services are healthy.")
+		return nil
 	}
 
 	var statusParts []string

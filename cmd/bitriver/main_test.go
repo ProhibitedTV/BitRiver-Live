@@ -3,6 +3,7 @@ package main
 import (
 	"bitriver-live/internal/config"
 	"bytes"
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -1908,6 +1909,55 @@ func TestBuildOMERenderConfigSeparatesManagersAPIFromSignallingPorts(t *testing.
 	}
 	if cfg.HTTPPort != "18081" || cfg.HTTPTLSPort != "18082" {
 		t.Fatalf("expected Managers API ports from BITRIVER_OME_HTTP_* vars, got %q/%q", cfg.HTTPPort, cfg.HTTPTLSPort)
+	}
+}
+
+func TestPollUntilSuccess(t *testing.T) {
+	calls := 0
+	ready, err := pollUntil(context.Background(), 50*time.Millisecond, time.Millisecond, func(context.Context) (bool, error) {
+		calls++
+		return calls >= 3, nil
+	})
+	if err != nil {
+		t.Fatalf("pollUntil returned error: %v", err)
+	}
+	if !ready {
+		t.Fatal("expected pollUntil to report success")
+	}
+	if calls != 3 {
+		t.Fatalf("expected 3 poll attempts, got %d", calls)
+	}
+}
+
+func TestPollUntilTimeout(t *testing.T) {
+	calls := 0
+	ready, err := pollUntil(context.Background(), 5*time.Millisecond, time.Millisecond, func(context.Context) (bool, error) {
+		calls++
+		return false, nil
+	})
+	if err != nil {
+		t.Fatalf("expected timeout without error, got %v", err)
+	}
+	if ready {
+		t.Fatal("expected pollUntil timeout to report not ready")
+	}
+	if calls == 0 {
+		t.Fatal("expected pollUntil to invoke poll function at least once")
+	}
+}
+
+func TestPollUntilCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	ready, err := pollUntil(ctx, 50*time.Millisecond, time.Millisecond, func(context.Context) (bool, error) {
+		return false, nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled error, got %v", err)
+	}
+	if ready {
+		t.Fatal("expected canceled pollUntil to report not ready")
 	}
 }
 

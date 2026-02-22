@@ -2,35 +2,45 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Implement stream reason derivation in `web/static/app.js`
+- [x] Task 1 — Add shared polling helper in `cmd/bitriver/commands_env_compose.go`
   - Acceptance criteria:
-    - `renderStreams()` no longer renders TODO language.
-    - A helper or inline logic maps `liveState`/`currentSessionId`/`latestSession` to human-readable reason text.
-    - Reason semantics mirror creator UI guidance where applicable.
+    - A reusable internal poll utility encapsulates deadline checks, interval waits, and cancellation handling.
+    - Helper integration preserves existing user-facing strings in readiness/critical health flows.
   - Relevant checks:
-    - ✅ `node --test web/static/app.test.mjs`
+    - ✅ `go test ./cmd/bitriver -count=1`
   - Result:
     - Passed.
 
-- [x] Task 2 — Add/update tests in `web/static/app.test.mjs`
+- [x] Task 2 — Refactor readiness and compose health loops to use helper
   - Acceptance criteria:
-    - Tests assert stream reason text is data-driven and does not contain TODO placeholder text.
-    - At least one assertion validates neutral fallback text for unavailable reason.
+    - `waitForAPIReadiness` uses helper for polling/wait logic.
+    - `waitForComposeServiceHealth` uses helper for polling/wait logic.
+    - Existing emitted text remains unchanged.
   - Relevant checks:
-    - ✅ `node --test web/static/app.test.mjs`
+    - ✅ `go test ./cmd/bitriver -count=1`
   - Result:
     - Passed.
 
-- [x] Task 3 — Final verification and handoff
+- [x] Task 3 — Add focused polling tests (timeout/success/cancellation)
   - Acceptance criteria:
-    - Required repo checks run and captured.
+    - Tests cover success before deadline, timeout at deadline, and context cancellation paths.
+    - Tests are deterministic and scoped to polling helper behavior.
+  - Relevant checks:
+    - ✅ `go test ./cmd/bitriver -count=1`
+  - Result:
+    - Passed.
+
+- [x] Task 4 — Final verification and task log update
+  - Acceptance criteria:
+    - Required verification command(s) run and captured.
     - Task statuses and execution log updated with outcomes.
   - Relevant checks:
     - ✅ `./scripts/verify.sh`
   - Result:
-    - Passed (with expected docker-related skips due to environment lacking Docker).
+    - Passed (with expected docker-related skips because Docker is not installed in this environment).
 
 ## Execution log
-- Task 1 check: `node --test web/static/app.test.mjs` (pass).
-- Task 2 check: `node --test web/static/app.test.mjs` (pass; includes new reason/fallback assertions).
-- Task 3 check: `./scripts/verify.sh` (pass; docker compose validation skipped because Docker is not installed in this environment).
+- Task 1 check: `go test ./cmd/bitriver -count=1` (pass).
+- Task 2 check: `go test ./cmd/bitriver -count=1` (pass).
+- Task 3 check: `go test ./cmd/bitriver -count=1` (pass; includes new `pollUntil` success/timeout/cancellation tests).
+- Task 4 check: `./scripts/verify.sh` (pass; docker compose validation skipped because Docker is not installed in this environment).
