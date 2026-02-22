@@ -1,22 +1,19 @@
 # PLAN
 
 ## Scope (current change)
-- Extend `scripts/verify.sh` with an opt-in flag that allows running Go tests for a targeted package pattern.
-- Keep default behavior unchanged: existing full `go test ./...` run must remain the default when no new flag is provided.
-- Document the new flag in `usage()` help text.
-- Validate behavior with local invocation examples (no dedicated script test harness currently covers `scripts/verify.sh`).
+- Reduce comment noise in `internal/storage/storage.go` by removing template/generic comments that only restate function names.
+- Keep immediate function comments where repository comment checks require coverage, but rewrite them to concise behavior-specific descriptions.
+- Limit this change to comments only (no runtime logic changes).
 
 ## Assumptions
-- The new option will be additive and optional, with no change to existing flags (`--viewer`, `--ci-viewer`).
-- Targeted Go tests should still include existing go test arguments (`-count=1 -timeout=120s`) and env vars used by verify.
+- CI/go comment coverage checks require an immediate comment before each function but do not require long template blocks.
+- Reworded comments that are concise and accurate will satisfy repository policy.
 - No deployment contract files are impacted.
 
 ## Risks
-- Argument parsing regressions could break existing `verify.sh` flags.
-- Incorrect quoting around package patterns could cause `go test` failures.
-- Accidentally reordering steps would violate required verify flow.
+- Removing too much could break strict function comment coverage checks.
+- Editing large comment blocks may accidentally touch logic lines if done carelessly.
 
 ## Test plan
-- `bash -n scripts/verify.sh`
-- `./scripts/verify.sh --help`
-- `./scripts/verify.sh --go-packages ./internal/chat` (local invocation example for targeted Go tests)
+- `python3 scripts/check-function-comments.py --strict-unexported`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -count=1 -timeout=120s`
