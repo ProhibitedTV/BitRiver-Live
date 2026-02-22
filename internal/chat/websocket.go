@@ -191,9 +191,7 @@ func (c *Conn) ReadMessage(ctx context.Context) ([]byte, error) {
 	if c.closed {
 		return nil, io.EOF
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = normalizeContext(ctx)
 	deadline, ok := ctx.Deadline()
 	if ok {
 		_ = c.conn.SetReadDeadline(deadline)

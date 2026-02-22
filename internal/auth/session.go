@@ -164,9 +164,7 @@ func (m *SessionManager) Ping(ctx context.Context) error {
 	if m == nil {
 		return nil
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = normalizeContext(ctx)
 	if m.store == nil {
 		return nil
 	}

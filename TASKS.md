@@ -2,45 +2,41 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Identify cohesive helper sections for extraction
+- [x] Task 1 — Identify and map repeated nil-context guards in scoped packages
   - Acceptance criteria:
-    - Function groups in `storage.go` and `postgres_channels.go` are identified by concern.
-    - Planned destination files are listed.
-  - Identified groups:
-    - `storage.go`: dataset init/clone helpers, object-key metadata helpers, OAuth identity normalization helpers, channel query/tag helpers.
-    - `postgres_channels.go`: stream-session/recording construction helpers, object artifact helpers, recording retention/purge helpers, row-loading helpers.
-  - Planned destination files:
-    - `internal/storage/storage_dataset_helpers.go`
-    - `internal/storage/storage_object_helpers.go`
-    - `internal/storage/storage_oauth_helpers.go`
-    - `internal/storage/storage_channel_helpers.go`
-    - `internal/storage/postgres_recording_helpers.go`
+    - Target files/functions with repeated `ctx == nil` checks are identified for `chat/storage/auth/server/observability`.
+    - Planned helper placement avoids duplicate definitions per package.
+  - Identified targets:
+    - `internal/chat`: `redis_queue.go` (3), `websocket.go` (1) → add one `normalizeContext` helper in package `chat`.
+    - `internal/storage`: `postgres_repository.go` (2) → add one `normalizeContext` helper in package `storage`.
+    - `internal/auth`: `postgres_store.go` (1), `session.go` (1), `mfa_challenge.go` (1), `postgres_mfa_challenge_store.go` (1) → add one `normalizeContext` helper in package `auth`.
+    - `internal/server`: `redis_store.go` (1) → add one `normalizeContext` helper in package `server`.
+    - `internal/observability`: `logging/logging.go` (3), `tracing/tracing.go` (3) are separate packages (`logging`, `tracing`) so helper placement is package-specific.
   - Relevant checks:
-    - ✅ `go test ./internal/storage -count=1`
+    - ✅ `rg -n "if ctx == nil" internal/chat internal/storage internal/auth internal/server internal/observability`
   - Result:
-    - Passed.
+    - Completed; helper placement confirmed.
 
-- [x] Task 2 — Move `storage.go` private helpers into concern-grouped files
+- [x] Task 2 — Add private `normalizeContext` helper(s) and replace inline guards
   - Acceptance criteria:
-    - Private helper functions/methods from `storage.go` are moved into new files under `internal/storage/`.
-    - Package name and exported symbols remain unchanged.
-    - No SQL/runtime behavior changes.
+    - `normalizeContext` exists as an unexported helper in each affected package.
+    - Targeted inline `ctx == nil` blocks are replaced with helper calls.
+    - Fallback behavior remains `context.Background()`.
   - Relevant checks:
-    - ✅ `go test ./internal/storage -count=1`
+    - ✅ `go test ./internal/chat ./internal/storage ./internal/auth ./internal/server ./internal/observability -count=1`
   - Result:
-    - Passed.
+    - Passed. Added helpers for `chat`, `storage`, `auth`, `server`, and `tracing`; replaced targeted nil-guard blocks in scoped files with `normalizeContext(ctx)`.
 
-- [x] Task 3 — Move `postgres_channels.go` private helpers into concern-grouped files
+- [x] Task 3 — Validate regressions in affected packages
   - Acceptance criteria:
-    - Private PostgreSQL helper methods are moved into new files under `internal/storage/` grouped by concern.
-    - SQL text and behavior remain unchanged.
+    - Affected package tests pass.
+    - Task log records command and result.
   - Relevant checks:
-    - ✅ `go test ./internal/storage -count=1`
-    - ✅ `go test ./internal/storage -count=1 -tags=integration`
+    - ✅ `./scripts/verify.sh`
   - Result:
-    - Passed.
+    - Passed. Full repository verification succeeded; Docker-specific checks were skipped by script because Docker is unavailable in this environment.
 
 ## Execution log
-- `go test ./internal/storage -count=1` (pass).
-- `go test ./internal/storage -count=1` (pass, post-refactor).
-- `go test ./internal/storage -count=1 -tags=integration` (pass).
+- ✅ `rg -n "if ctx == nil" internal/chat internal/storage internal/auth internal/server internal/observability` (pass).
+- ✅ `go test ./internal/chat ./internal/storage ./internal/auth ./internal/server ./internal/observability -count=1` (pass).
+- ✅ `./scripts/verify.sh` (pass with expected Docker-unavailable skips).

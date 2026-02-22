@@ -77,9 +77,7 @@ func (r *postgresRepository) Ping(ctx context.Context) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = normalizeContext(ctx)
 	return pingPostgresPool(ctx, r.pool)
 }
 
@@ -169,9 +167,7 @@ func pingPostgresPool(ctx context.Context, pool *pgxpool.Pool) error {
 	if pool == nil {
 		return errors.New("postgres pool unavailable")
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = normalizeContext(ctx)
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		return fmt.Errorf("acquire postgres connection: %w", err)

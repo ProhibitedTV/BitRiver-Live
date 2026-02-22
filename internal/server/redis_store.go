@@ -130,9 +130,7 @@ func (s *redisStore) Ping(ctx context.Context) error {
 	if s == nil || s.client == nil {
 		return nil
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = normalizeContext(ctx)
 	timeout := s.timeout
 	if timeout <= 0 {
 		timeout = 2 * time.Second

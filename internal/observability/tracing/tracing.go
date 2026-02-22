@@ -71,9 +71,7 @@ func TraceFromContext(ctx context.Context) (TraceContext, bool) {
 
 // ContextWithTrace stores trace metadata on the context.
 func ContextWithTrace(ctx context.Context, tc TraceContext) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = normalizeContext(ctx)
 	if tc.TraceID == "" {
 		return ctx
 	}
@@ -170,9 +168,7 @@ func (p *Provider) Shutdown(ctx context.Context) error {
 
 // StartSpan begins a new span, inheriting trace information from ctx.
 func (t *Tracer) StartSpan(ctx context.Context, name string, attrs ...Attribute) (context.Context, *Span) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = normalizeContext(ctx)
 	provider := t.provider
 	if provider == nil {
 		provider = &Provider{}
