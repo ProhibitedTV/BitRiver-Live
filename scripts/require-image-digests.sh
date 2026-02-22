@@ -83,7 +83,7 @@ for entry in "${checks[@]}"; do
   image_ref="${entry%%|*}"
   digest_var="${entry##*|}"
 
-  if ! rg -q "image:\\s*${image_ref}.*\\$\\{${digest_var}" "$COMPOSE_FILE"; then
+  if ! grep -Eq "image:[[:space:]]*${image_ref}.*\\$\\{${digest_var}" "$COMPOSE_FILE"; then
     missing_compose_refs+=("${digest_var} (expected image containing '${image_ref}')")
     continue
   fi

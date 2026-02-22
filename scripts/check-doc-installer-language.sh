@@ -18,9 +18,9 @@ patterns=(
 failed=0
 for file in "${files[@]}"; do
   for pattern in "${patterns[@]}"; do
-    if rg -n -i "$pattern" "$file" >/dev/null; then
+    if grep -Ein "$pattern" "$file" >/dev/null; then
       echo "stale installer wording detected in $file (pattern: $pattern)" >&2
-      rg -n -i "$pattern" "$file" >&2
+      grep -Ein "$pattern" "$file" >&2
       failed=1
     fi
   done

@@ -9,27 +9,27 @@ workflows=(
 )
 
 for workflow in "${workflows[@]}"; do
-  if ! rg -q "uses:\\s+actions/setup-go@v5" "$workflow"; then
+  if ! grep -Eq "uses:[[:space:]]+actions/setup-go@v5" "$workflow"; then
     echo "$workflow must use actions/setup-go@v5" >&2
     exit 1
   fi
 
-  if ! rg -q "go-version-file:\\s*'go\\.mod'|go-version-file:\\s*go\\.mod" "$workflow"; then
+  if ! grep -Eq "go-version-file:[[:space:]]*'go\\.mod'|go-version-file:[[:space:]]*go\\.mod" "$workflow"; then
     echo "$workflow must set go-version-file: go.mod" >&2
     exit 1
   fi
 
-  if ! rg -q "GOTOOLCHAIN:\\s*local" "$workflow"; then
+  if ! grep -Eq "GOTOOLCHAIN:[[:space:]]*local" "$workflow"; then
     echo "$workflow must define GOTOOLCHAIN=local" >&2
     exit 1
   fi
 
-  if ! rg -q "GOPROXY:\\s*off" "$workflow"; then
+  if ! grep -Eq "GOPROXY:[[:space:]]*off" "$workflow"; then
     echo "$workflow must define GOPROXY=off" >&2
     exit 1
   fi
 
-  if ! rg -q "GOSUMDB:\\s*off" "$workflow"; then
+  if ! grep -Eq "GOSUMDB:[[:space:]]*off" "$workflow"; then
     echo "$workflow must define GOSUMDB=off" >&2
     exit 1
   fi
