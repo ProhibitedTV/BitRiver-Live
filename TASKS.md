@@ -2,45 +2,35 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Confirm scope and update `PLAN.md` with read-only analysis
+- [x] Task 1 — Implement stream reason derivation in `web/static/app.js`
   - Acceptance criteria:
-    - `PLAN.md` documents scope, assumptions, risks, and test plan for this viewer state-mapping change.
-    - Authoritative known persisted `live_state` values are identified from backend code paths.
+    - `renderStreams()` no longer renders TODO language.
+    - A helper or inline logic maps `liveState`/`currentSessionId`/`latestSession` to human-readable reason text.
+    - Reason semantics mirror creator UI guidance where applicable.
   - Relevant checks:
-    - ✅ `test -s PLAN.md`
+    - ✅ `node --test web/static/app.test.mjs`
   - Result:
     - Passed.
 
-- [x] Task 2 — Implement explicit `deriveControlCentreStatus()` mapping for known states
+- [x] Task 2 — Add/update tests in `web/static/app.test.mjs`
   - Acceptance criteria:
-    - `starting`, `live`, `offline`, and `ended` all have explicit branches with stable `label`, `badgeClassName`, and `reason` behavior.
-    - Default branch remains for unknown values with wording indicating unexpected server state.
-    - TODO comment is removed.
+    - Tests assert stream reason text is data-driven and does not contain TODO placeholder text.
+    - At least one assertion validates neutral fallback text for unavailable reason.
   - Relevant checks:
-    - ✅ `cd web/viewer && npm run test -- creatorLiveStreamStatus`
+    - ✅ `node --test web/static/app.test.mjs`
   - Result:
     - Passed.
 
-- [x] Task 3 — Add/extend viewer tests for all mapped states + unknown fallback
+- [x] Task 3 — Final verification and handoff
   - Acceptance criteria:
-    - Tests cover each known mapped state and one unknown fallback case.
-    - Assertions verify stable mapped outputs.
+    - Required repo checks run and captured.
+    - Task statuses and execution log updated with outcomes.
   - Relevant checks:
-    - ✅ `cd web/viewer && npm run test -- creatorLiveStreamStatus`
+    - ✅ `./scripts/verify.sh`
   - Result:
-    - Passed.
-
-- [x] Task 4 — Run required validation and finalize task log
-  - Acceptance criteria:
-    - Required repo check(s) run and outcomes recorded.
-    - `TASKS.md` statuses/results are up to date.
-  - Relevant checks:
-    - ❌ `./scripts/verify.sh`
-  - Result:
-    - Failed due existing viewer snapshot mismatch in `__tests__/channelDisplayPrimitives.test.tsx` unrelated to this change.
+    - Passed (with expected docker-related skips due to environment lacking Docker).
 
 ## Execution log
-- Task 1 check: `test -s PLAN.md` (pass).
-- Task 2 check: `cd web/viewer && npm run test -- creatorLiveStreamStatus` (pass).
-- Task 3 check: `cd web/viewer && npm run test -- creatorLiveStreamStatus` (pass).
-- Task 4 check: `./scripts/verify.sh` (fail: snapshot mismatch in `channelDisplayPrimitives.test.tsx`; docker compose validation skipped because docker is not installed).
+- Task 1 check: `node --test web/static/app.test.mjs` (pass).
+- Task 2 check: `node --test web/static/app.test.mjs` (pass; includes new reason/fallback assertions).
+- Task 3 check: `./scripts/verify.sh` (pass; docker compose validation skipped because Docker is not installed in this environment).

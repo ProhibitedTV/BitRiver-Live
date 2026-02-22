@@ -1,29 +1,21 @@
 # PLAN
 
 ## Scope (current change)
-- Complete `deriveControlCentreStatus()` in `web/viewer/app/creator/live/[channelId]/page.tsx` so every known persisted backend `live_state` value is explicitly mapped.
-- Remove the existing TODO about verifying additional persisted values.
-- Add/extend viewer tests to cover each mapped known state plus an unknown-state fallback.
-
-## Read-only analysis summary
-- Backend storage validation currently allows persisted `live_state` values: `offline`, `live`, `starting`, and `ended`.
-- Control-plane handlers and directory responses frequently use `offline`/`starting`/`live`; `ended` is also accepted by storage update paths and should be treated as known.
-- The creator live page currently maps `starting`, `live`, and `offline`, while unknown values (including `ended`) fall through to a generic error branch and TODO.
+- Replace the hardcoded `Last state change reason: TODO: verify in code` text in `web/static/app.js` stream cards with data-driven messaging.
+- Derive the reason from `channel.liveState`, `channel.currentSessionId`, and the computed `latestSession`.
+- Align static dashboard messaging with creator UI stream-state semantics where they overlap (ended normally, ingest lost, unexpected state).
+- Add/update static-app tests to prove the reason line is no longer hardcoded TODO text.
 
 ## Assumptions
-- No deployment contract/runtime orchestration files are affected (`deploy/docker-compose.yml`, root `.env`, generated OME config unchanged).
-- This change is viewer-only behavior and test coverage; no backend API contract changes are required.
-
-## Implementation approach
-1. Update `deriveControlCentreStatus()` with explicit handling for `ended` and refine fallback wording for unexpected server values.
-2. Remove TODO once mapping is complete.
-3. Add focused unit tests around `deriveControlCentreStatus()` covering `offline`, `starting`, `live`, `ended`, and unknown input.
-4. Run viewer-relevant checks and record outcomes in `TASKS.md` after each task.
+- This is a UI logic and test change scoped to `web/static/*`; no deployment contract files are impacted.
+- Existing creator UI semantics in `web/viewer/app/creator/live/[channelId]/page.tsx` are the canonical source for reason mapping language.
 
 ## Risks
-- Status messaging regressions if `offline` conditional branches are unintentionally altered.
-- Test brittleness if assertions over-couple to non-essential text.
+- Semantic drift if static copy differs too much from creator control centre messages.
+- Incomplete fallback handling if sessions are missing or inconsistent.
+- Test brittleness if assertions depend on full card DOM shape instead of focused reason text.
 
 ## Test plan
-- Viewer unit tests for stream-status derivation mapping.
-- Repo-required check: run `./scripts/verify.sh` before handoff.
+- Run focused static app unit tests: `node --test web/static/app.test.mjs`.
+- Run repository validation gate per policy: `./scripts/verify.sh`.
+- Record task-level check results in `TASKS.md` after each task.
