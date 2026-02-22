@@ -127,15 +127,6 @@ export default function CreatorLivePage() {
   const [testStreamUpdatedAt, setTestStreamUpdatedAt] = useState<string>(new Date().toISOString());
   const router = useRouter();
 
-  const codeBlockStyle = {
-    fontFamily: "monospace",
-    backgroundColor: "var(--surface-alt)",
-    padding: "0.75rem",
-    borderRadius: "0.75rem",
-    border: "1px solid var(--border)",
-    wordBreak: "break-all" as const,
-  };
-
   const loadSessions = useCallback(async () => {
     setSessionError(undefined);
     try {
@@ -452,11 +443,11 @@ export default function CreatorLivePage() {
             </div>
             <div className="stack" style={{ gap: "0.75rem" }}>
               <div>
-                <p className="muted">Server URL</p>
+                <p className="muted">Server (preferred)</p>
                 {managedLoading ? (
                   <p className="muted">Loading ingest configuration…</p>
                 ) : ingestEndpoints.length > 0 ? (
-                  <div className="stack" style={{ gap: "0.5rem" }}>
+                  <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
                     <input aria-label="Server URL" readOnly value={preferredIngestEndpoint ?? ""} />
                     <button
                       type="button"
@@ -483,11 +474,12 @@ export default function CreatorLivePage() {
                   <p className="muted">Verifying channel ownership…</p>
                 ) : isChannelOwner ? (
                   <div className="stack" style={{ gap: "0.5rem" }}>
+                    <p className="muted">Keep your stream key secret.</p>
                     <input
                       aria-label="Stream key"
-                      type={streamKeyVisible ? "text" : "password"}
+                      type="text"
                       readOnly
-                      value={managedChannel?.streamKey ?? ""}
+                      value={streamKeyVisible ? managedChannel?.streamKey ?? "" : "••••••••"}
                     />
                     <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
                       <button
@@ -527,6 +519,7 @@ export default function CreatorLivePage() {
                         <span className={obsSettingsCopyMessage.startsWith("Copied") ? "success" : "error"}>{obsSettingsCopyMessage}</span>
                       ) : null}
                     </div>
+                    <p className="muted">Use the Server + Stream Key fields in OBS → Settings → Stream.</p>
                   </div>
                 ) : (
                   <p className="muted">Sign in as the channel owner to view the stream key.</p>
@@ -534,7 +527,7 @@ export default function CreatorLivePage() {
               </div>
 
               <div>
-                <p className="muted">All ingest URLs</p>
+                <p className="muted">Advanced: all ingest URLs</p>
                 {managedLoading ? (
                   <p className="muted">Loading ingest configuration…</p>
                 ) : ingestEndpoints.length > 0 ? (
@@ -543,7 +536,7 @@ export default function CreatorLivePage() {
                       <li key={endpoint} className="stack" style={{ gap: "0.15rem" }}>
                         <span className="muted">{describeEndpoint(endpoint, index)}</span>
                         <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
-                          <div style={{ ...codeBlockStyle, flex: "1 1 18rem" }}>{endpoint}</div>
+                          <input readOnly value={endpoint} aria-label={`${describeEndpoint(endpoint, index)} URL`} />
                           <button
                             type="button"
                             className="secondary-button"
