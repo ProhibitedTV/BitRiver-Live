@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/verify.sh [--viewer] [--ci-viewer]
+Usage: ./scripts/verify.sh [--viewer] [--ci-viewer] [--go-packages <pattern>]
 
 Runs repository verification checks in a consistent order.
 
@@ -17,12 +17,14 @@ Prerequisites:
 Options:
   --viewer  Force viewer lint/test checks even when no viewer changes are detected.
   --ci-viewer  In CI, force viewer lint/test checks for non-viewer workflows.
+  --go-packages  Optional Go package pattern for targeted tests (default: ./...).
   -h, --help  Show this help.
 USAGE
 }
 
 force_viewer_checks=false
 force_ci_viewer_checks=false
+go_test_packages="./..."
 
 while (($# > 0)); do
   case "$1" in
@@ -31,6 +33,15 @@ while (($# > 0)); do
       ;;
     --ci-viewer)
       force_ci_viewer_checks=true
+      ;;
+    --go-packages)
+      shift
+      if (($# == 0)); then
+        echo "Missing value for --go-packages" >&2
+        usage >&2
+        exit 1
+      fi
+      go_test_packages="$1"
       ;;
     -h|--help)
       usage
@@ -121,7 +132,7 @@ run_step "go.sum non-empty guard" ./scripts/check-go-sum-not-empty.sh
 run_step "CI workflow contract check" ./scripts/check-ci-contract.sh
 
 run_step "Go tests" \
-  env GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s
+  env GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test "$go_test_packages" -count=1 -timeout=120s
 
 run_step "Architecture dependency direction check" ./scripts/check-architecture-deps.sh
 run_step "No internal/models imports outside internal/models" ./scripts/check-no-models-imports.sh

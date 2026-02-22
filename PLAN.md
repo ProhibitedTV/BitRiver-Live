@@ -1,20 +1,22 @@
 # PLAN
 
 ## Scope (current change)
-- Refactor repeated `ctx == nil` guards in scoped packages: `internal/chat`, `internal/storage`, `internal/auth`, `internal/server`, and `internal/observability`.
-- Add a small private helper named `normalizeContext` in each affected package that currently repeats the same fallback logic.
-- Replace targeted inline nil-context checks with calls to `normalizeContext` while preserving exact behavior (`context.Background()` fallback).
-- Run affected package tests to verify no regressions.
+- Extend `scripts/verify.sh` with an opt-in flag that allows running Go tests for a targeted package pattern.
+- Keep default behavior unchanged: existing full `go test ./...` run must remain the default when no new flag is provided.
+- Document the new flag in `usage()` help text.
+- Validate behavior with local invocation examples (no dedicated script test harness currently covers `scripts/verify.sh`).
 
 ## Assumptions
-- The helper remains unexported and package-local (`normalizeContext`).
-- Only repeated nil checks in scoped files are replaced; other context creation patterns (timeouts/cancels) stay as-is.
-- No runtime behavior, APIs, SQL, or contract files are changed.
+- The new option will be additive and optional, with no change to existing flags (`--viewer`, `--ci-viewer`).
+- Targeted Go tests should still include existing go test arguments (`-count=1 -timeout=120s`) and env vars used by verify.
+- No deployment contract files are impacted.
 
 ## Risks
-- Introducing duplicate helper definitions in the same package could cause build conflicts.
-- Missing a nil-check replacement could leave inconsistency.
-- Refactor-only change could still affect behavior if fallback semantics differ from current code.
+- Argument parsing regressions could break existing `verify.sh` flags.
+- Incorrect quoting around package patterns could cause `go test` failures.
+- Accidentally reordering steps would violate required verify flow.
 
 ## Test plan
-- `go test ./internal/chat ./internal/storage ./internal/auth ./internal/server ./internal/observability -count=1`
+- `bash -n scripts/verify.sh`
+- `./scripts/verify.sh --help`
+- `./scripts/verify.sh --go-packages ./internal/chat` (local invocation example for targeted Go tests)

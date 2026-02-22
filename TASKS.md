@@ -2,41 +2,40 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Identify and map repeated nil-context guards in scoped packages
+- [x] Task 1 — Add opt-in targeted Go package flag to `scripts/verify.sh`
   - Acceptance criteria:
-    - Target files/functions with repeated `ctx == nil` checks are identified for `chat/storage/auth/server/observability`.
-    - Planned helper placement avoids duplicate definitions per package.
-  - Identified targets:
-    - `internal/chat`: `redis_queue.go` (3), `websocket.go` (1) → add one `normalizeContext` helper in package `chat`.
-    - `internal/storage`: `postgres_repository.go` (2) → add one `normalizeContext` helper in package `storage`.
-    - `internal/auth`: `postgres_store.go` (1), `session.go` (1), `mfa_challenge.go` (1), `postgres_mfa_challenge_store.go` (1) → add one `normalizeContext` helper in package `auth`.
-    - `internal/server`: `redis_store.go` (1) → add one `normalizeContext` helper in package `server`.
-    - `internal/observability`: `logging/logging.go` (3), `tracing/tracing.go` (3) are separate packages (`logging`, `tracing`) so helper placement is package-specific.
+    - New CLI flag parses a package pattern/value for Go tests.
+    - Default path still runs `go test ./... -count=1 -timeout=120s` when flag is omitted.
+    - Verify step order remains unchanged.
   - Relevant checks:
-    - ✅ `rg -n "if ctx == nil" internal/chat internal/storage internal/auth internal/server internal/observability`
+    - ✅ `bash -n scripts/verify.sh`
   - Result:
-    - Completed; helper placement confirmed.
+    - Added `--go-packages` parsing with `./...` default, preserving default full test target and verify step ordering.
 
-- [x] Task 2 — Add private `normalizeContext` helper(s) and replace inline guards
+- [x] Task 2 — Document new flag in `scripts/verify.sh` help text
   - Acceptance criteria:
-    - `normalizeContext` exists as an unexported helper in each affected package.
-    - Targeted inline `ctx == nil` blocks are replaced with helper calls.
-    - Fallback behavior remains `context.Background()`.
+    - `usage()` includes the new flag syntax and behavior.
+    - Existing help entries remain accurate.
   - Relevant checks:
-    - ✅ `go test ./internal/chat ./internal/storage ./internal/auth ./internal/server ./internal/observability -count=1`
+    - ✅ `./scripts/verify.sh --help`
   - Result:
-    - Passed. Added helpers for `chat`, `storage`, `auth`, `server`, and `tracing`; replaced targeted nil-guard blocks in scoped files with `normalizeContext(ctx)`.
+    - Help usage/options now document `--go-packages <pattern>` while keeping existing options intact.
 
-- [x] Task 3 — Validate regressions in affected packages
+- [x] Task 3 — Validate via local invocation examples
   - Acceptance criteria:
-    - Affected package tests pass.
-    - Task log records command and result.
+    - Script syntax check passes.
+    - `--help` reflects the new flag.
+    - Example invocation demonstrates targeted Go package test mode.
   - Relevant checks:
-    - ✅ `./scripts/verify.sh`
+    - ✅ `bash -n scripts/verify.sh`
+    - ✅ `./scripts/verify.sh --help`
+    - ✅ `./scripts/verify.sh --go-packages ./internal/chat`
   - Result:
-    - Passed. Full repository verification succeeded; Docker-specific checks were skipped by script because Docker is unavailable in this environment.
+    - Targeted Go package mode works as expected; verify completed successfully with `internal/chat` Go tests plus existing checks in original order.
 
 ## Execution log
-- ✅ `rg -n "if ctx == nil" internal/chat internal/storage internal/auth internal/server internal/observability` (pass).
-- ✅ `go test ./internal/chat ./internal/storage ./internal/auth ./internal/server ./internal/observability -count=1` (pass).
-- ✅ `./scripts/verify.sh` (pass with expected Docker-unavailable skips).
+- ✅ `bash -n scripts/verify.sh` (pass).
+- ✅ `./scripts/verify.sh --help` (pass).
+- ✅ `./scripts/verify.sh --go-packages ./internal/chat` (pass; Docker compose validation skipped due to unavailable docker).
+
+- ✅ `./scripts/verify.sh` (pass; Docker compose validation skipped due to unavailable docker).
