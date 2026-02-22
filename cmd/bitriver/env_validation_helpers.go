@@ -18,6 +18,8 @@ import (
 	"bitriver-live/internal/stringsutil"
 )
 
+var entropyRead = rand.Read
+
 // This file contains environment template helpers, secret generation, and
 // env validation rules used by quickstart and installer flows.
 
@@ -185,7 +187,7 @@ func mergeEnv(template []templateLine, existing, generated map[string]string) st
 	return strings.Join(out, "\n") + "\n"
 }
 
-func generateEnvValues(existing map[string]string) (map[string]string, map[string]string) {
+func generateEnvValues(existing map[string]string) (map[string]string, map[string]string, error) {
 	if existing == nil {
 		existing = make(map[string]string)
 	}
@@ -203,7 +205,10 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 	for key := range defaultEnvSecrets.secrets {
 		current := strings.TrimSpace(existing[key])
 		if current == "" || isForbiddenValue(key, current) {
-			secret := randomSecret()
+			secret, err := randomSecret()
+			if err != nil {
+				return nil, nil, fmt.Errorf("generate %s: %w", key, err)
+			}
 			generated[key] = secret
 			newlyGenerated[key] = secret
 			existing[key] = ""
@@ -215,7 +220,10 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 
 	if current := existing["BITRIVER_LIVE_METRICS_TOKEN"]; current == "" || isForbiddenValue("BITRIVER_LIVE_METRICS_TOKEN", current) {
 		if generated["BITRIVER_LIVE_METRICS_TOKEN"] == "" {
-			secret := randomSecret()
+			secret, err := randomSecret()
+			if err != nil {
+				return nil, nil, fmt.Errorf("generate BITRIVER_LIVE_METRICS_TOKEN: %w", err)
+			}
 			generated["BITRIVER_LIVE_METRICS_TOKEN"] = secret
 			newlyGenerated["BITRIVER_LIVE_METRICS_TOKEN"] = secret
 		}
@@ -223,7 +231,11 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 	}
 
 	if current := existing["BITRIVER_OME_USERNAME"]; current == "" || isForbiddenValue("BITRIVER_OME_USERNAME", current) {
-		generated["BITRIVER_OME_USERNAME"] = fmt.Sprintf("ome-operator-%s", randomSuffix())
+		suffix, err := randomSuffix()
+		if err != nil {
+			return nil, nil, fmt.Errorf("generate BITRIVER_OME_USERNAME suffix: %w", err)
+		}
+		generated["BITRIVER_OME_USERNAME"] = fmt.Sprintf("ome-operator-%s", suffix)
 		existing["BITRIVER_OME_USERNAME"] = ""
 	}
 
@@ -244,7 +256,7 @@ func generateEnvValues(existing map[string]string) (map[string]string, map[strin
 		}
 	}
 
-	return generated, newlyGenerated
+	return generated, newlyGenerated, nil
 }
 
 func normalizedOMEHealthcheckAuthMode(raw string) string {
@@ -333,20 +345,20 @@ func isForbiddenValue(key, value string) bool {
 	return false
 }
 
-func randomSecret() string {
+func randomSecret() (string, error) {
 	b := make([]byte, 24)
-	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Errorf("failed to generate secret: %w", err))
+	if _, err := entropyRead(b); err != nil {
+		return "", fmt.Errorf("read entropy for secret: %w", err)
 	}
-	return base64.RawURLEncoding.EncodeToString(b)
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func randomSuffix() string {
+func randomSuffix() (string, error) {
 	b := make([]byte, 6)
-	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Errorf("failed to generate suffix: %w", err))
+	if _, err := entropyRead(b); err != nil {
+		return "", fmt.Errorf("read entropy for suffix: %w", err)
 	}
-	return base64.RawURLEncoding.EncodeToString(b)
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 func validateEnv(values map[string]string) envValidatorResult {

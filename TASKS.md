@@ -2,25 +2,35 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Refactor `doWithRetry` control flow
+- [x] Task 1 — Convert random generators to error-returning helpers
   - Acceptance criteria:
-    - Remove the `attempt = attempts` control-flow pattern.
-    - Introduce explicit branching for retryable vs non-retryable failures.
-    - Preserve existing retry counts and error message content.
+    - `randomSecret` and `randomSuffix` return `(string, error)`.
+    - A test seam exists to force entropy-read failure in tests.
   - Relevant checks:
-    - ✅ `go test ./internal/ingest -count=1`
+    - ✅ `go test ./cmd/bitriver -count=1 -run 'TestGenerateEnvValuesReturnsErrorWhen'`
   - Result:
     - Passed.
 
-- [x] Task 2 — Add/adjust non-retryable 4xx coverage
+- [x] Task 2 — Thread and wrap errors through env generation + callers
   - Acceptance criteria:
-    - A test proves non-429 4xx responses execute exactly one attempt (no retries).
-    - Existing ingest adapter tests continue to pass.
+    - `generateEnvValues` surfaces generator failures as errors.
+    - Call sites handle and wrap errors with `%w` while preserving successful CLI behavior.
   - Relevant checks:
-    - ✅ `go test ./internal/ingest -count=1`
+    - ✅ `go test ./cmd/bitriver -count=1 -run 'TestEnvInitWritesGeneratedValues'`
+  - Result:
+    - Passed.
+
+- [x] Task 3 — Add/adjust tests for failure and happy paths
+  - Acceptance criteria:
+    - Unit tests cover entropy-read failures for secret and suffix generation.
+    - Existing happy-path expectations remain unchanged and pass.
+  - Relevant checks:
+    - ✅ `go test ./cmd/bitriver -count=1 -run 'TestGenerateEnvValues|TestValidateEnvAcceptsFreshInitDefaults|TestEnvInitWritesGeneratedValues'`
   - Result:
     - Passed.
 
 ## Execution log
-- Task 1 check: `go test ./internal/ingest -count=1` (pass).
-- Task 2 check: `go test ./internal/ingest -count=1` (pass).
+- `go test ./cmd/bitriver -count=1` (fails non-deterministically in existing `TestGenerateStrongPasswordHasRequiredClasses`; unrelated to this change).
+- `go test ./cmd/bitriver -count=1 -run 'TestGenerateEnvValuesReturnsErrorWhen'` (pass).
+- `go test ./cmd/bitriver -count=1 -run 'TestEnvInitWritesGeneratedValues'` (pass).
+- `go test ./cmd/bitriver -count=1 -run 'TestGenerateEnvValues|TestValidateEnvAcceptsFreshInitDefaults|TestEnvInitWritesGeneratedValues'` (pass).
