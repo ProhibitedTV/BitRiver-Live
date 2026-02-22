@@ -1,21 +1,20 @@
 # PLAN
 
 ## Scope (current change)
-- Identify cohesive helper/function groups in `internal/storage/storage.go` and `internal/storage/postgres_channels.go`.
-- Move private helpers/methods into new `internal/storage/*.go` files grouped by concern, without changing package name, exported API surface, or SQL text/behavior.
-- Keep all call sites unchanged aside from file placement.
-- Run storage-focused tests, including integration-tagged tests that exercise moved PostgreSQL storage code.
+- Refactor repeated `ctx == nil` guards in scoped packages: `internal/chat`, `internal/storage`, `internal/auth`, `internal/server`, and `internal/observability`.
+- Add a small private helper named `normalizeContext` in each affected package that currently repeats the same fallback logic.
+- Replace targeted inline nil-context checks with calls to `normalizeContext` while preserving exact behavior (`context.Background()` fallback).
+- Run affected package tests to verify no regressions.
 
 ## Assumptions
-- This is a pure refactor: no runtime behavior changes are intended.
-- Grouping by concern can be done via new files while remaining in package `storage`.
-- Existing tests provide sufficient regression coverage for moved helpers/methods.
+- The helper remains unexported and package-local (`normalizeContext`).
+- Only repeated nil checks in scoped files are replaced; other context creation patterns (timeouts/cancels) stay as-is.
+- No runtime behavior, APIs, SQL, or contract files are changed.
 
 ## Risks
-- Moving methods can accidentally alter imports or introduce subtle compile issues.
-- Integration-tagged tests may require local services; if unavailable, record environment limitation.
-- Large file splits can accidentally modify SQL literals if not copied exactly.
+- Introducing duplicate helper definitions in the same package could cause build conflicts.
+- Missing a nil-check replacement could leave inconsistency.
+- Refactor-only change could still affect behavior if fallback semantics differ from current code.
 
 ## Test plan
-- `go test ./internal/storage -count=1`
-- `go test ./internal/storage -count=1 -tags=integration`
+- `go test ./internal/chat ./internal/storage ./internal/auth ./internal/server ./internal/observability -count=1`

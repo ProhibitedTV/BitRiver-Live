@@ -122,9 +122,7 @@ func (m *MFAChallengeManager) Ping(ctx context.Context) error {
 	if m == nil || m.store == nil {
 		return nil
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = normalizeContext(ctx)
 	if pinger, ok := m.store.(interface{ Ping(context.Context) error }); ok {
 		return pinger.Ping(ctx)
 	}

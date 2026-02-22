@@ -163,9 +163,7 @@ func newBackoff(base, max time.Duration) *backoff {
 
 // Sleep performs sleep and returns an error when dependent systems reject the operation.
 func (b *backoff) Sleep(ctx context.Context) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = normalizeContext(ctx)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -279,9 +277,7 @@ func (q *redisQueue) Ping(ctx context.Context) error {
 	if q == nil || q.client == nil {
 		return nil
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = normalizeContext(ctx)
 	timeout := q.blockTimeout
 	if timeout <= 0 {
 		timeout = 2 * time.Second
@@ -322,9 +318,7 @@ func (s *redisSubscription) run(ctx context.Context) {
 	s.wg.Add(1)
 	defer close(s.ch)
 	defer s.wg.Done()
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = normalizeContext(ctx)
 	groupBackoff := newBackoff(200*time.Millisecond, 5*time.Second)
 	readBackoff := newBackoff(200*time.Millisecond, 5*time.Second)
 	for {

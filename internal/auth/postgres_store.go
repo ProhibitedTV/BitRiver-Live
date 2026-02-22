@@ -80,9 +80,7 @@ func (s *PostgresSessionStore) Ping(ctx context.Context) error {
 	if s == nil || s.pool == nil {
 		return fmt.Errorf("postgres session pool not configured")
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = normalizeContext(ctx)
 	if s.timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, s.timeout)
