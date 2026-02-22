@@ -3,9 +3,11 @@ package ingest
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -400,5 +402,85 @@ func TestHTTPTranscoderAdapterStartUpload(t *testing.T) {
 	}
 	if len(result.Renditions) != 1 || result.Renditions[0].ManifestURL != "https://cdn/hls/720p.m3u8" {
 		t.Fatalf("unexpected renditions: %+v", result.Renditions)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestPostJSONUsesSharedDefaultClientWhenNil(t *testing.T) {
+	t.Helper()
+	originalClient := defaultHTTPClient
+	defer func() { defaultHTTPClient = originalClient }()
+
+	var requests int
+	defaultHTTPClient = &http.Client{
+		Timeout: defaultHTTPTimeout,
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			requests++
+			if req.Method != http.MethodPost {
+				t.Fatalf("expected POST, got %s", req.Method)
+			}
+			if got := req.Header.Get("Authorization"); got != "Bearer shared-token" {
+				t.Fatalf("expected bearer header from mutate callback, got %q", got)
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"originUrl":"http://origin","playbackUrl":"https://playback"}`)),
+			}, nil
+		}),
+	}
+
+	var response omeApplicationResponse
+	err := postJSON(context.Background(), nil, "http://example.test/v1/applications", omeApplicationRequest{ChannelID: "channel-123"}, &response, func(req *http.Request) {
+		setBearer(req, "shared-token")
+	}, nil, 1, 0)
+	if err != nil {
+		t.Fatalf("postJSON: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("expected exactly one request, got %d", requests)
+	}
+	if response.OriginURL != "http://origin" || response.PlaybackURL != "https://playback" {
+		t.Fatalf("unexpected response: %+v", response)
+	}
+}
+
+func TestDeleteRequestUsesSharedDefaultClientWhenNil(t *testing.T) {
+	t.Helper()
+	originalClient := defaultHTTPClient
+	defer func() { defaultHTTPClient = originalClient }()
+
+	var requests int
+	defaultHTTPClient = &http.Client{
+		Timeout: defaultHTTPTimeout,
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			requests++
+			if req.Method != http.MethodDelete {
+				t.Fatalf("expected DELETE, got %s", req.Method)
+			}
+			if got := req.Header.Get("Authorization"); got != "Bearer shared-token" {
+				t.Fatalf("expected bearer header from mutate callback, got %q", got)
+			}
+			return &http.Response{
+				StatusCode: http.StatusNoContent,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader("")),
+			}, nil
+		}),
+	}
+
+	err := deleteRequest(context.Background(), nil, "http://example.test/v1/applications/channel-123", func(req *http.Request) {
+		setBearer(req, "shared-token")
+	}, nil, 1, 0)
+	if err != nil {
+		t.Fatalf("deleteRequest: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("expected exactly one request, got %d", requests)
 	}
 }

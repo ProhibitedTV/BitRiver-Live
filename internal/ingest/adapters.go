@@ -21,6 +21,8 @@ const (
 	defaultRetryBackoff = 500 * time.Millisecond
 )
 
+var defaultHTTPClient = &http.Client{Timeout: defaultHTTPTimeout}
+
 type adapterConfig struct {
 	logger   *slog.Logger
 	attempts int
@@ -215,8 +217,7 @@ type uploadJobResult struct {
 // If logger is nil, slog.Default is used.
 // If attempts <= 0, a sane default is applied.
 // If interval is zero, a small default backoff is used.
-// If client is nil, a new http.Client with a default timeout is created
-// for each request.
+// If client is nil, a shared default http.Client with a default timeout is used.
 func newHTTPChannelAdapter(baseURL, token string, client *http.Client, logger *slog.Logger, attempts int, interval time.Duration) *httpChannelAdapter {
 	cfg := normalizeAdapterConfig(logger, attempts, interval)
 	return &httpChannelAdapter{
@@ -460,13 +461,11 @@ func renditionsLabel(renditions []Rendition) string {
 
 // postJSON issues an HTTP POST with a JSON payload and decodes the JSON
 // response into dest (if non-nil). It uses retry semantics defined by
-// doWithRetry. If client is nil, a temporary client with a default timeout
-// is created for this call.
+// doWithRetry. If client is nil, a shared default client with a default
+// timeout is used.
 func postJSON(ctx context.Context, client *http.Client, url string, payload interface{}, dest interface{}, mutate func(*http.Request), logger *slog.Logger, attempts int, interval time.Duration) error {
 	if client == nil {
-		client = &http.Client{
-			Timeout: defaultHTTPTimeout,
-		}
+		client = defaultHTTPClient
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -477,12 +476,10 @@ func postJSON(ctx context.Context, client *http.Client, url string, payload inte
 
 // deleteRequest issues an HTTP DELETE request and discards any successful
 // response body. It uses retry semantics defined by doWithRetry. If client
-// is nil, a temporary client with a default timeout is created for this call.
+// is nil, a shared default client with a default timeout is used.
 func deleteRequest(ctx context.Context, client *http.Client, url string, mutate func(*http.Request), logger *slog.Logger, attempts int, interval time.Duration) error {
 	if client == nil {
-		client = &http.Client{
-			Timeout: defaultHTTPTimeout,
-		}
+		client = defaultHTTPClient
 	}
 	return doWithRetry(ctx, client, http.MethodDelete, url, nil, mutate, nil, logger, attempts, interval)
 }

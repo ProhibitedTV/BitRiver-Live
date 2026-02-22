@@ -2,35 +2,37 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Add reusable async wait helper in `internal/testsupport`
+- [x] Task 1 — Add shared default HTTP client for nil-client paths
   - Acceptance criteria:
-    - New helper supports timeout-based polling for async test conditions.
-    - Helper exposes improved timeout diagnostics with caller-provided context.
+    - `internal/ingest/adapters.go` defines a private package-level shared `http.Client` default.
+    - Shared client keeps timeout aligned with `defaultHTTPTimeout`.
   - Relevant checks:
-    - ✅ `go test ./internal/chat -count=1`
+    - ✅ `go test ./internal/ingest -count=1`
   - Result:
     - Passed.
 
-- [x] Task 2 — Replace `waitUntil` in `internal/chat/gateway_test.go`
+- [x] Task 2 — Switch helper nil-client fallback to shared client
   - Acceptance criteria:
-    - Local `waitUntil` helper is removed from `gateway_test.go`.
-    - Existing waits call the shared testsupport helper.
-    - Assertion semantics remain unchanged.
+    - `postJSON` and `deleteRequest` use the shared default client when `client == nil`.
+    - Existing retry behavior and function signatures remain unchanged.
   - Relevant checks:
-    - ✅ `go test ./internal/chat -count=1`
+    - ✅ `go test ./internal/ingest -count=1`
   - Result:
     - Passed.
 
-- [x] Task 3 — Confirm parity with chat tests
+- [x] Task 3 — Add/adjust nil-client tests
   - Acceptance criteria:
-    - Targeted chat package tests pass after refactor.
-    - Task statuses and check results are recorded.
+    - Tests cover nil-client behavior for helper operations.
+    - Targeted ingest tests pass and results are recorded.
   - Relevant checks:
-    - ✅ `go test ./internal/chat -count=1`
+    - ✅ `go test ./internal/ingest -count=1`
+    - ⚠️ `./scripts/verify.sh` (passes; Docker-dependent steps skipped because Docker is unavailable in this environment)
   - Result:
     - Passed.
 
 ## Execution log
-- Task 1 check: `go test ./internal/chat -count=1` (pass).
-- Task 2 check: `go test ./internal/chat -count=1` (pass).
-- Task 3 check: `go test ./internal/chat -count=1` (pass).
+- Task 1 check: `go test ./internal/ingest -count=1` (pass).
+- Task 2 check: `go test ./internal/ingest -count=1` (pass).
+- Task 3 checks:
+  - `go test ./internal/ingest -count=1` (pass).
+  - `./scripts/verify.sh` (pass with expected Docker-unavailable skips).

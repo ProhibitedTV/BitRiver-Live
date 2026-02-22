@@ -1,17 +1,17 @@
 # PLAN
 
 ## Scope (current change)
-- Add a reusable async wait helper in `internal/testsupport` for polling test conditions with timeout handling.
-- Replace the local `waitUntil` helper in `internal/chat/gateway_test.go` with the shared helper.
-- Preserve existing assertion semantics in chat gateway tests while improving timeout failure diagnostics.
+- Introduce a private shared default `http.Client` in `internal/ingest/adapters.go` for nil-client call paths.
+- Update `postJSON` and `deleteRequest` to reuse the shared client while preserving existing timeout and retry semantics.
+- Add tests in `internal/ingest/adapters_test.go` covering nil-client behavior for helper paths.
 
 ## Assumptions
-- This is a test-only refactor; runtime behavior and deployment contract files are unaffected.
-- Existing chat test expectations remain the same (success still depends on condition becoming true before timeout).
+- This change is internal to ingest adapter HTTP helper behavior and does not alter API contracts.
+- Timeout value (`defaultHTTPTimeout`) and retry logic (`doWithRetry`) must remain unchanged.
 
 ## Risks
-- Moving to a shared helper could subtly change polling cadence or fatal message formatting.
-- If helper API is unclear, future tests may pass unhelpful context; include explicit diagnostic message support.
+- Accidentally changing effective client timeout or retry behavior when refactoring nil-client fallback.
+- Missing regression coverage for both POST and DELETE nil-client helper paths.
 
 ## Test plan
-- Run targeted chat tests: `go test ./internal/chat -count=1`.
+- Run targeted ingest tests: `go test ./internal/ingest -count=1`.
