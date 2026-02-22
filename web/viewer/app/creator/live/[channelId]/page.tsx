@@ -35,14 +35,14 @@ function getPreferredIngestEndpoint(endpoints: string[]) {
   return rtmpEndpoint ?? endpoints[0];
 }
 
-type ControlCentreStreamStatus = {
+export type ControlCentreStreamStatus = {
   label: "Idle" | "Ingesting" | "Live" | "Ended" | "Error";
   badgeClassName: string;
   lastTransitionAt?: string;
   reason?: string;
 };
 
-function deriveControlCentreStatus(
+export function deriveControlCentreStatus(
   liveState: string | undefined,
   currentSessionId: string | undefined,
   latestSession: StreamSession | undefined,
@@ -98,11 +98,21 @@ function deriveControlCentreStatus(
     };
   }
 
-  // TODO: verify in code if additional persisted live_state values should map to Ended/Error explicitly.
+  if (liveState === "ended") {
+    return {
+      label: "Ended",
+      badgeClassName: "badge badge--ended",
+      lastTransitionAt: latestSession?.endedAt ?? latestSession?.startedAt,
+      reason: "Stream ended and is awaiting the next ingest session.",
+    };
+  }
+
   return {
     label: "Error",
     badgeClassName: "badge badge--error",
-    reason: liveState ? `Unexpected stream state: ${liveState}` : "No stream state available",
+    reason: liveState
+      ? `Unexpected server live_state: ${liveState}`
+      : "Server did not provide live_state",
   };
 }
 
