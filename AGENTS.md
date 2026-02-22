@@ -3,6 +3,19 @@
 ## Start here
 BitRiver Live is a self-hosted live-streaming stack that runs a Go control-plane API, a Next.js viewer, ingest/transcoding services, and stateful data services together. The canonical deployment shape in this repo is Docker Compose driven from `deploy/docker-compose.yml` and a root `.env`.
 
+## Spec-driven workflow (required)
+For every scoped change, follow this sequence:
+1. Start with **read-only analysis** and update `PLAN.md` first (scope, assumptions, risks, tests).
+2. Only then implement tasks listed in `TASKS.md`, strictly top-to-bottom.
+3. After each task, run the relevant test/check command(s) and update task status/results in `TASKS.md` before moving on.
+
+Working artifacts:
+- `SPEC.md`: user goals and success criteria.
+- `PLAN.md`: current technical plan, risks, and test plan.
+- `TASKS.md`: small reviewable tasks with acceptance criteria and status tracking.
+
+Keep these docs concise and current so a new contributor can execute `SPEC → PLAN → TASKS → Implement` without chat history.
+
 ## Canonical contract
 Treat these files as the deployment contract:
 - `deploy/docker-compose.yml`
