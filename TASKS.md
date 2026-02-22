@@ -2,40 +2,26 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Add opt-in targeted Go package flag to `scripts/verify.sh`
+- [x] Task 1 — Identify and rewrite high-noise function comments in `internal/storage/storage.go`
   - Acceptance criteria:
-    - New CLI flag parses a package pattern/value for Go tests.
-    - Default path still runs `go test ./... -count=1 -timeout=120s` when flag is omitted.
-    - Verify step order remains unchanged.
+    - Generic template comment blocks are removed or collapsed.
+    - Immediate comments remain for functions in this file, written as concise behavior-specific descriptions.
+    - No non-comment logic changes are introduced.
   - Relevant checks:
-    - ✅ `bash -n scripts/verify.sh`
+    - ⚠️ `python3 scripts/check-function-comments.py --strict-unexported` (repository-wide baseline currently fails outside this change scope)
+    - ✅ `python3 scripts/check-function-comments.py --strict-unexported --git-base HEAD~1`
   - Result:
-    - Added `--go-packages` parsing with `./...` default, preserving default full test target and verify step ordering.
+    - Replaced verbose template comments with concise, behavior-specific comments for targeted functions in `internal/storage/storage.go`.
 
-- [x] Task 2 — Document new flag in `scripts/verify.sh` help text
+- [x] Task 2 — Validate storage package behavior remains intact after comment-only edits
   - Acceptance criteria:
-    - `usage()` includes the new flag syntax and behavior.
-    - Existing help entries remain accurate.
+    - `internal/storage` tests pass.
   - Relevant checks:
-    - ✅ `./scripts/verify.sh --help`
+    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -count=1 -timeout=120s`
   - Result:
-    - Help usage/options now document `--go-packages <pattern>` while keeping existing options intact.
-
-- [x] Task 3 — Validate via local invocation examples
-  - Acceptance criteria:
-    - Script syntax check passes.
-    - `--help` reflects the new flag.
-    - Example invocation demonstrates targeted Go package test mode.
-  - Relevant checks:
-    - ✅ `bash -n scripts/verify.sh`
-    - ✅ `./scripts/verify.sh --help`
-    - ✅ `./scripts/verify.sh --go-packages ./internal/chat`
-  - Result:
-    - Targeted Go package mode works as expected; verify completed successfully with `internal/chat` Go tests plus existing checks in original order.
+    - Storage package tests pass with comment-only changes.
 
 ## Execution log
-- ✅ `bash -n scripts/verify.sh` (pass).
-- ✅ `./scripts/verify.sh --help` (pass).
-- ✅ `./scripts/verify.sh --go-packages ./internal/chat` (pass; Docker compose validation skipped due to unavailable docker).
-
-- ✅ `./scripts/verify.sh` (pass; Docker compose validation skipped due to unavailable docker).
+- ⚠️ `python3 scripts/check-function-comments.py --strict-unexported` (fails due to pre-existing repository-wide comment coverage deficits unrelated to this edit).
+- ✅ `python3 scripts/check-function-comments.py --strict-unexported --git-base HEAD~1`.
+- ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -count=1 -timeout=120s`.

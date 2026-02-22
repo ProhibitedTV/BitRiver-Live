@@ -21,13 +21,7 @@ func (s *Storage) Ping(context.Context) error {
 	return nil
 }
 
-// NewStorage executes NewStorage.
-// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
-// this function still normalizes/trims where needed and rejects empty required fields.
-// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
-// storage/object backend failures; not-found is returned as an error when applicable.
-// Transactions/connections: no transaction/connection contract applies for this pure helper.
-// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
+// NewStorage initializes the JSON-backed store with defaults, options, and persisted data.
 func NewStorage(path string, opts ...Option) (*Storage, error) {
 	store := &Storage{
 		filePath:            path,
@@ -67,14 +61,7 @@ func NewStorage(path string, opts ...Option) (*Storage, error) {
 	return store, nil
 }
 
-// load executes load.
-// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
-// this function still normalizes/trims where needed and rejects empty required fields.
-// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
-// storage/object backend failures; not-found is returned as an error when applicable.
-// Transactions/connections: no external transaction is required; it coordinates access with
-// the in-memory mutex and persists snapshots to disk/object storage as needed.
-// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
+// load reads the on-disk dataset into memory, creating an empty dataset when missing or empty.
 func (s *Storage) load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -108,26 +95,12 @@ func (s *Storage) load() error {
 	return nil
 }
 
-// persist executes persist.
-// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
-// this function still normalizes/trims where needed and rejects empty required fields.
-// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
-// storage/object backend failures; not-found is returned as an error when applicable.
-// Transactions/connections: no external transaction is required; it coordinates access with
-// the in-memory mutex and persists snapshots to disk/object storage as needed.
-// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
+// persist writes the current in-memory dataset to durable storage.
 func (s *Storage) persist() error {
 	return s.persistDataset(s.data)
 }
 
-// persistDataset executes persistDataset.
-// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
-// this function still normalizes/trims where needed and rejects empty required fields.
-// Errors: returns validation errors for malformed inputs and wrapped infrastructure errors for
-// storage/object backend failures; not-found is returned as an error when applicable.
-// Transactions/connections: no external transaction is required; it coordinates access with
-// the in-memory mutex and persists snapshots to disk/object storage as needed.
-// Ordering/pagination: not a list method; no ordering or pagination guarantees apply.
+// persistDataset atomically writes a dataset snapshot to disk.
 func (s *Storage) persistDataset(data dataset) error {
 	if s.persistOverride != nil {
 		if err := s.persistOverride(data); err != nil {
@@ -237,14 +210,7 @@ func (s *Storage) CreateUser(params CreateUserParams) (domain.User, error) {
 	return user, nil
 }
 
-// ListUsers executes ListUsers.
-// Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
-// this function still normalizes/trims where needed and rejects empty required fields.
-// Errors: this helper does not return `error`; failures are handled by callers.
-// Transactions/connections: no external transaction is required; it coordinates access with
-// the in-memory mutex and persists snapshots to disk/object storage as needed.
-// Ordering/pagination: returns a full result set (no cursor/offset pagination contract).
-// Ordering is whatever this implementation explicitly enforces; otherwise it is unspecified.
+// ListUsers returns users ordered by creation time.
 func (s *Storage) ListUsers() []domain.User {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
