@@ -17,12 +17,12 @@ add_failure() {
 
 has_pull_request_trigger() {
   local file="$1"
-  rg -q '^[[:space:]]pull_request:' "$file"
+  grep -Eq '^[[:space:]]pull_request:' "$file"
 }
 
 has_verify_gate_invocation() {
   local file="$1"
-  rg -q '(\./scripts/verify\.sh|\./scripts/test-all\.sh)' "$file"
+  grep -Eq '(\./scripts/verify\.sh|\./scripts/test-all\.sh)' "$file"
 }
 
 check_pr_workflows_require_verify_gate() {
@@ -77,7 +77,7 @@ check_duplicate_verify_checks() {
         if ! grep -q 'ci-contract: allow-duplicate' <<<"$context"; then
           add_failure "$(basename "$file"):$line duplicates verify.sh checks (${message}). Remove the duplicate command or add a nearby justification comment: '# ci-contract: allow-duplicate <reason>'."
         fi
-      done < <(rg -n --fixed-strings "$pattern" "$file" || true)
+      done < <(grep -nF "$pattern" "$file" || true)
     done
   done < <(find "$WORKFLOWS_DIR" -maxdepth 1 -type f -name '*.yml' | sort)
 }
@@ -92,7 +92,7 @@ check_standalone_workflow_triggers() {
       continue
     fi
 
-    if rg -q '^[[:space:]](push|pull_request|pull_request_target|schedule):' "$file"; then
+    if grep -Eq '^[[:space:]](push|pull_request|pull_request_target|schedule):' "$file"; then
       add_failure "${base}: standalone CI workflows must use workflow_dispatch and/or workflow_call only. Remove automatic triggers (push/pull_request/schedule)."
     fi
   done < <(find "$WORKFLOWS_DIR" -maxdepth 1 -type f -name '*.yml' | sort)
