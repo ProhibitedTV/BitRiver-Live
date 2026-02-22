@@ -1,18 +1,17 @@
 # PLAN
 
 ## Scope (current change)
-- Refactor `cmd/bitriver/commands_env_compose.go` to extract shared polling/deadline/sleep control flow into an internal helper (e.g. `pollUntil`).
-- Apply the helper in both `waitForAPIReadiness` and `waitForComposeServiceHealth` without changing existing user-facing output/error strings.
-- Add focused tests for polling helper behavior (success, timeout, cancellation) in `cmd/bitriver/main_test.go` or a dedicated `_test.go`.
+- Refactor `waitFor` in `cmd/transcoder/main_test.go` to use `context.WithTimeout` and `time.Ticker` instead of deadline + sleep polling.
+- Preserve existing transcoder test behavior assertions while reducing busy waiting in helper loop.
+- Update all `waitFor` call sites in `cmd/transcoder/main_test.go` to the new helper signature and include explicit failure context.
 
 ## Assumptions
-- Change is limited to CLI control-flow internals in `cmd/bitriver`; no deployment contract files are touched.
-- Existing tests around readiness/compose health should remain valid if messages remain unchanged.
+- Change is test-only and scoped to `cmd/transcoder/main_test.go`; no runtime code or deployment contract files are affected.
+- Existing assertion expectations in transcoder tests should remain unchanged after helper refactor.
 
 ## Risks
-- Subtle behavior drift in loop termination timing could alter timeout/cancellation surfaces.
-- Refactor may accidentally alter error wrapping or emitted text.
+- Helper signature update touches many call sites; a missed update could break compilation.
+- Polling timing changes could make flaky tests more visible if timeout messages are not clear.
 
 ## Test plan
-- Run targeted bitriver command tests including new polling tests: `go test ./cmd/bitriver -count=1`.
-- Run required repo gate: `./scripts/verify.sh`.
+- Run targeted transcoder tests: `go test ./cmd/transcoder -count=1`.

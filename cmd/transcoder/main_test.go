@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -238,7 +239,7 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	master := filepath.Join(tempDir, "live", jobID, "index.m3u8")
 	liveLink := filepath.Join(publicDir, "live", jobID)
 
-	waitFor(t, 30*time.Second, func() bool {
+	waitFor(t, 30*time.Second, "expected live manifest to be served", func() bool {
 		resp, err := http.Get(publicSrv.URL + fmt.Sprintf("/live/%s/index.m3u8", jobID))
 		if err != nil {
 			return false
@@ -279,24 +280,24 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 		t.Fatalf("unexpected live symlink target: %s", resolvedTarget)
 	}
 
-	waitFor(t, 30*time.Second, func() bool {
+	waitFor(t, 30*time.Second, "expected master playlist file to exist", func() bool {
 		_, err := os.Stat(master)
 		return err == nil
 	})
-	waitFor(t, 30*time.Second, func() bool {
+	waitFor(t, 30*time.Second, "expected first job process to stop", func() bool {
 		srv.mu.RLock()
 		_, running := srv.processes[jobID]
 		srv.mu.RUnlock()
 		return !running
 	})
 
-	waitFor(t, 5*time.Second, func() bool {
+	waitFor(t, 5*time.Second, "expected live symlink to be removed", func() bool {
 		_, err := os.Lstat(liveLink)
 		return errors.Is(err, os.ErrNotExist)
 	})
 
 	metaPath := filepath.Join(tempDir, "live", jobID, "metadata.json")
-	waitFor(t, 5*time.Second, func() bool {
+	waitFor(t, 5*time.Second, "expected metadata file for first job", func() bool {
 		_, err := os.Stat(metaPath)
 		return err == nil
 	})
@@ -436,20 +437,20 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 		t.Fatalf("unexpected delete status: %d", respDel.StatusCode)
 	}
 
-	waitFor(t, 30*time.Second, func() bool {
+	waitFor(t, 30*time.Second, "expected cancelled job process to stop", func() bool {
 		srv.mu.RLock()
 		_, running := srv.processes[jobID2]
 		srv.mu.RUnlock()
 		return !running
 	})
 
-	waitFor(t, 5*time.Second, func() bool {
+	waitFor(t, 5*time.Second, "expected cancelled job symlink cleanup", func() bool {
 		_, err := os.Lstat(liveLink2)
 		return errors.Is(err, os.ErrNotExist)
 	})
 
 	metaPath2 := filepath.Join(tempDir, "live", jobID2, "metadata.json")
-	waitFor(t, 5*time.Second, func() bool {
+	waitFor(t, 5*time.Second, "expected metadata file for cancelled job", func() bool {
 		_, err := os.Stat(metaPath2)
 		return err == nil
 	})
@@ -562,11 +563,11 @@ func TestUploadPublishesHTTPPlayback(t *testing.T) {
 	}
 
 	metadataPath := filepath.Join(workDir, "uploads", uploadResp.JobID, "metadata.json")
-	waitFor(t, 45*time.Second, func() bool {
+	waitFor(t, 45*time.Second, "expected upload metadata file to exist", func() bool {
 		_, err := os.Stat(metadataPath)
 		return err == nil
 	})
-	waitFor(t, 30*time.Second, func() bool {
+	waitFor(t, 30*time.Second, "expected upload process to stop", func() bool {
 		srv.mu.RLock()
 		proc := srv.processes[uploadResp.JobID]
 		srv.mu.RUnlock()
@@ -818,17 +819,24 @@ func TestExitHandlersRecordMetrics(t *testing.T) {
 	}
 }
 
-func waitFor(t *testing.T, timeout time.Duration, fn func() bool) {
+func waitFor(t *testing.T, timeout time.Duration, reason string, fn func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+
 	for {
 		if fn() {
 			return
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("condition not met within %s", timeout)
+
+		select {
+		case <-ctx.Done():
+			t.Fatalf("condition not met within %s (%s): %v", timeout, reason, ctx.Err())
+		case <-ticker.C:
 		}
-		time.Sleep(200 * time.Millisecond)
 	}
 }
 
@@ -841,7 +849,7 @@ func TestHealthTracksFFmpegFailuresAndRecovery(t *testing.T) {
 
 	submitJob(t, ts, "file:///tmp/input.mp4")
 
-	waitFor(t, 2*time.Second, func() bool {
+	waitFor(t, 2*time.Second, "expected degraded health status after ffmpeg failure", func() bool {
 		status, _ := fetchHealth(t, ts)
 		return status.Status == "degraded"
 	})
@@ -849,7 +857,7 @@ func TestHealthTracksFFmpegFailuresAndRecovery(t *testing.T) {
 	exitPtr.Store(nil)
 	submitJob(t, ts, "file:///tmp/input.mp4")
 
-	waitFor(t, 2*time.Second, func() bool {
+	waitFor(t, 2*time.Second, "expected healthy status after ffmpeg recovery", func() bool {
 		status, _ := fetchHealth(t, ts)
 		return status.Status == "ok"
 	})
@@ -868,7 +876,7 @@ func TestHealthDegradedWhenPublishFailsAndRecovers(t *testing.T) {
 
 	submitJob(t, ts, "file:///tmp/input.mp4")
 
-	waitFor(t, 2*time.Second, func() bool {
+	waitFor(t, 2*time.Second, "expected degraded health when publish root is broken", func() bool {
 		status, code := fetchHealth(t, ts)
 		return status.Status == "degraded" && code == http.StatusServiceUnavailable
 	})
@@ -886,7 +894,7 @@ func TestHealthDegradedWhenPublishFailsAndRecovers(t *testing.T) {
 
 	submitJob(t, ts, "file:///tmp/input.mp4")
 
-	waitFor(t, 2*time.Second, func() bool {
+	waitFor(t, 2*time.Second, "expected healthy status after publish root repair", func() bool {
 		status, code := fetchHealth(t, ts)
 		return status.Status == "ok" && code == http.StatusOK
 	})
@@ -905,7 +913,7 @@ func TestHealthDegradedWhenUploadPublishFails(t *testing.T) {
 
 	submitUpload(t, ts, "file:///tmp/input.mp4")
 
-	waitFor(t, 2*time.Second, func() bool {
+	waitFor(t, 2*time.Second, "expected degraded health when publish root is broken", func() bool {
 		status, code := fetchHealth(t, ts)
 		return status.Status == "degraded" && code == http.StatusServiceUnavailable
 	})
@@ -923,7 +931,7 @@ func TestHealthDegradedWhenUploadPublishFails(t *testing.T) {
 
 	submitUpload(t, ts, "file:///tmp/input.mp4")
 
-	waitFor(t, 2*time.Second, func() bool {
+	waitFor(t, 2*time.Second, "expected healthy status after publish root repair", func() bool {
 		status, code := fetchHealth(t, ts)
 		return status.Status == "ok" && code == http.StatusOK
 	})
