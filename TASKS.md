@@ -2,35 +2,35 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Refactor `waitFor` helper to ticker + context timeout
+- [x] Task 1 — Add reusable async wait helper in `internal/testsupport`
   - Acceptance criteria:
-    - `waitFor` uses `context.WithTimeout` and `time.Ticker`.
-    - Helper no longer uses `time.Sleep` busy-wait polling.
-    - Failure path keeps explicit timeout context in message.
+    - New helper supports timeout-based polling for async test conditions.
+    - Helper exposes improved timeout diagnostics with caller-provided context.
   - Relevant checks:
-    - ✅ `go test ./cmd/transcoder -count=1`
+    - ✅ `go test ./internal/chat -count=1`
   - Result:
     - Passed.
 
-- [x] Task 2 — Update transcoder tests for new `waitFor` signature
+- [x] Task 2 — Replace `waitUntil` in `internal/chat/gateway_test.go`
   - Acceptance criteria:
-    - All `waitFor` call sites compile with new signature.
-    - Failure reason strings are explicit per wait condition.
+    - Local `waitUntil` helper is removed from `gateway_test.go`.
+    - Existing waits call the shared testsupport helper.
+    - Assertion semantics remain unchanged.
   - Relevant checks:
-    - ✅ `go test ./cmd/transcoder -count=1`
+    - ✅ `go test ./internal/chat -count=1`
   - Result:
     - Passed.
 
-- [x] Task 3 — Final verification and status log
+- [x] Task 3 — Confirm parity with chat tests
   - Acceptance criteria:
-    - Targeted transcoder package test passes with no assertion behavior changes.
-    - Task results are recorded below.
+    - Targeted chat package tests pass after refactor.
+    - Task statuses and check results are recorded.
   - Relevant checks:
-    - ✅ `go test ./cmd/transcoder -count=1`
+    - ✅ `go test ./internal/chat -count=1`
   - Result:
     - Passed.
 
 ## Execution log
-- Task 1 check: `go test ./cmd/transcoder -count=1` (pass).
-- Task 2 check: `go test ./cmd/transcoder -count=1` (pass).
-- Task 3 check: `go test ./cmd/transcoder -count=1` (pass; no behavior assertion changes).
+- Task 1 check: `go test ./internal/chat -count=1` (pass).
+- Task 2 check: `go test ./internal/chat -count=1` (pass).
+- Task 3 check: `go test ./internal/chat -count=1` (pass).

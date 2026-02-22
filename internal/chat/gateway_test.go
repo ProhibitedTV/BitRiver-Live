@@ -12,6 +12,7 @@ import (
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/domain"
 	"bitriver-live/internal/storage"
+	"bitriver-live/internal/testsupport"
 )
 
 func TestGatewayMessageFlow(t *testing.T) {
@@ -65,7 +66,7 @@ func TestGatewayMessageFlow(t *testing.T) {
 	waitForType(t, viewerAConn, "event")
 	waitForType(t, viewerBConn, "event")
 
-	waitUntil(t, 2*time.Second, func() bool {
+	testsupport.WaitUntil(t, 2*time.Second, "chat message persisted", func() bool {
 		messages, err := store.ListChatMessages(channel.ID, 0)
 		if err != nil {
 			return false
@@ -132,7 +133,7 @@ func TestGatewayModerationFlow(t *testing.T) {
 	})
 	expectError(t, viewerConn)
 
-	waitUntil(t, time.Second, func() bool {
+	testsupport.WaitUntil(t, time.Second, "chat timeout persisted", func() bool {
 		_, ok := store.ChatTimeout(channel.ID, viewer.ID)
 		return ok
 	})
@@ -165,7 +166,7 @@ func TestGatewayAutoModBlocksMessage(t *testing.T) {
 		t.Fatalf("expected automod rejection, got nil")
 	}
 
-	waitUntil(t, time.Second, func() bool {
+	testsupport.WaitUntil(t, time.Second, "automod action recorded", func() bool {
 		actions, err := store.ListChatAutoModActions(channel.ID, 0)
 		if err != nil || len(actions) == 0 {
 			return false
@@ -264,18 +265,6 @@ func readJSON(t *testing.T, conn *chat.Conn) map[string]interface{} {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	return payload
-}
-
-func waitUntil(t *testing.T, timeout time.Duration, condition func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if condition() {
-			return
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	t.Fatal("condition not met before timeout")
 }
 
 func waitForType(t *testing.T, conn *chat.Conn, expected string) map[string]interface{} {
