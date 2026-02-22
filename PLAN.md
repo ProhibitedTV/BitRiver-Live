@@ -1,17 +1,17 @@
 # PLAN
 
 ## Scope (current change)
-- Refactor `waitFor` in `cmd/transcoder/main_test.go` to use `context.WithTimeout` and `time.Ticker` instead of deadline + sleep polling.
-- Preserve existing transcoder test behavior assertions while reducing busy waiting in helper loop.
-- Update all `waitFor` call sites in `cmd/transcoder/main_test.go` to the new helper signature and include explicit failure context.
+- Add a reusable async wait helper in `internal/testsupport` for polling test conditions with timeout handling.
+- Replace the local `waitUntil` helper in `internal/chat/gateway_test.go` with the shared helper.
+- Preserve existing assertion semantics in chat gateway tests while improving timeout failure diagnostics.
 
 ## Assumptions
-- Change is test-only and scoped to `cmd/transcoder/main_test.go`; no runtime code or deployment contract files are affected.
-- Existing assertion expectations in transcoder tests should remain unchanged after helper refactor.
+- This is a test-only refactor; runtime behavior and deployment contract files are unaffected.
+- Existing chat test expectations remain the same (success still depends on condition becoming true before timeout).
 
 ## Risks
-- Helper signature update touches many call sites; a missed update could break compilation.
-- Polling timing changes could make flaky tests more visible if timeout messages are not clear.
+- Moving to a shared helper could subtly change polling cadence or fatal message formatting.
+- If helper API is unclear, future tests may pass unhelpful context; include explicit diagnostic message support.
 
 ## Test plan
-- Run targeted transcoder tests: `go test ./cmd/transcoder -count=1`.
+- Run targeted chat tests: `go test ./internal/chat -count=1`.
