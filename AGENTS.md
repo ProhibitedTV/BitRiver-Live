@@ -68,6 +68,58 @@ docker compose -f deploy/docker-compose.yml config
 - Experimental/planning docs only: `docs/labs/`.
 - Do not treat Labs docs as release contract.
 
+## Code style
+- Keep handlers/services context-aware and explicit about dependencies.
+- Return wrapped errors (`%w`) with actionable context.
+- Keep logging structured and close to failure/success boundaries.
+- Preserve DI boundaries: wire concrete dependencies in `cmd/*`; pass interfaces into `internal/*` services.
+
+Go (preferred pattern):
+```go
+func (s *StreamService) Start(ctx context.Context, id string) error {
+	if err := s.repo.MarkStarting(ctx, id); err != nil {
+		s.log.Error("mark starting failed", "stream_id", id, "err", err)
+		return fmt.Errorf("mark stream starting: %w", err)
+	}
+	return nil
+}
+```
+
+- Keep React components small, typed, and testable.
+- Isolate fetch/API logic in client helpers/hooks, not JSX trees.
+- Add stable `data-testid` attributes for critical interactive paths.
+
+TS/React (preferred pattern):
+```tsx
+export function StreamStatus({ streamId }: { streamId: string }) {
+  const { data, isLoading } = useStream(streamId)
+  if (isLoading) return <p data-testid="stream-status-loading">Loading…</p>
+  return <p data-testid="stream-status-value">{data?.status ?? "unknown"}</p>
+}
+```
+
+## Git workflow
+- Branch naming: `feat/<scope>-<topic>`, `fix/<scope>-<topic>`, `chore/<scope>-<topic>`.
+- Commit messages: short imperative with scope, e.g. `api: validate stream payload`.
+- PRs: keep diffs small; run required checks (`./scripts/verify.sh`); update docs when behavior/contracts/workflows change.
+- Merge strategy: **squash merge** to keep history focused per change.
+
+## Boundaries
+### ✅ Always do
+- Run `./scripts/verify.sh` before opening/merging a PR.
+- Keep `deploy/docker-compose.yml`, root `.env`, and `deploy/ome/Server.generated.xml` aligned with `docs/contract.md`.
+- Update docs in `docs/` when user-visible behavior or operator workflow changes.
+
+### ⚠️ Ask first
+- Any deployment contract change (compose, root `.env`, generated OME expectations).
+- CI/workflow changes (including `scripts/verify.sh` behavior or required checks).
+- Cross-cutting refactors touching multiple product zones in one PR.
+
+### 🚫 Never do
+- Commit secrets, credentials, or private keys (including real `.env` values).
+- Invent commands/flags/files not present in this repository.
+- Bypass required checks or merge with failing validation.
+
 ## How to do changes safely
 - Prefer small diffs that isolate one behavior change at a time.
 - Update docs whenever behavior, commands, or operator steps change.
