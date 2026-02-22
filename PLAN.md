@@ -1,19 +1,21 @@
 # PLAN
 
 ## Scope (current change)
-- Refactor `randomSecret` and `randomSuffix` in `cmd/bitriver/env_validation_helpers.go` to return `(string, error)` instead of panicking.
-- Thread entropy generation errors through `generateEnvValues` and all CLI call sites with wrapped `%w` errors while preserving existing success-path console output.
-- Add unit tests that force entropy-read failures via a test seam and verify surfaced errors.
-- Verify happy-path outputs remain unchanged.
+- Identify cohesive helper/function groups in `internal/storage/storage.go` and `internal/storage/postgres_channels.go`.
+- Move private helpers/methods into new `internal/storage/*.go` files grouped by concern, without changing package name, exported API surface, or SQL text/behavior.
+- Keep all call sites unchanged aside from file placement.
+- Run storage-focused tests, including integration-tagged tests that exercise moved PostgreSQL storage code.
 
 ## Assumptions
-- Entropy read failures are exceptional and should fail fast with contextual errors.
-- Existing success-path formatting and generated output values (shape/prefixes) must remain stable.
+- This is a pure refactor: no runtime behavior changes are intended.
+- Grouping by concern can be done via new files while remaining in package `storage`.
+- Existing tests provide sufficient regression coverage for moved helpers/methods.
 
 ## Risks
-- Signature changes can ripple through command code and tests.
-- Error handling could unintentionally change user-visible output on successful runs.
+- Moving methods can accidentally alter imports or introduce subtle compile issues.
+- Integration-tagged tests may require local services; if unavailable, record environment limitation.
+- Large file splits can accidentally modify SQL literals if not copied exactly.
 
 ## Test plan
-- Targeted bitriver tests: `go test ./cmd/bitriver -count=1`.
-- Focused happy-path and failure-path unit tests around env generation helpers.
+- `go test ./internal/storage -count=1`
+- `go test ./internal/storage -count=1 -tags=integration`
