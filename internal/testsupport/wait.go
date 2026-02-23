@@ -31,3 +31,9 @@ func WaitUntil(t testing.TB, timeout time.Duration, description string, conditio
 		<-ticker.C
 	}
 }
+
+// EventuallyTrueWithin waits until condition is true or the timeout elapses.
+func EventuallyTrueWithin(t testing.TB, timeout time.Duration, description string, condition func() bool) {
+	t.Helper()
+	WaitUntil(t, timeout, description, condition)
+}
