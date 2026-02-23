@@ -717,10 +717,6 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 		return domain.StreamSession{}, err
 	}
 
-	attempts := r.ingestMaxAttempts
-	if attempts <= 0 {
-		attempts = 1
-	}
 	controller := r.ingestController
 	if controller == nil {
 		_ = r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
@@ -730,24 +726,12 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 		return domain.StreamSession{}, ErrIngestControllerUnavailable
 	}
 	deadline := normalizeIngestTimeout(r.ingestTimeout)
-	var boot ingest.BootResult
-	var bootErr error
-	for attempt := 0; attempt < attempts; attempt++ {
-		bootCtx, cancel := context.WithTimeout(context.Background(), deadline)
-		boot, bootErr = controller.BootStream(bootCtx, ingest.BootParams{
-			ChannelID:  channelID,
-			SessionID:  sessionID,
-			StreamKey:  streamKey,
-			Renditions: append([]string{}, renditions...),
-		})
-		cancel()
-		if bootErr == nil {
-			break
-		}
-		if attempt < attempts-1 && r.ingestRetryInterval > 0 {
-			time.Sleep(r.ingestRetryInterval)
-		}
-	}
+	boot, bootErr := runIngestBootWithRetry(controller, ingest.BootParams{
+		ChannelID:  channelID,
+		SessionID:  sessionID,
+		StreamKey:  streamKey,
+		Renditions: append([]string{}, renditions...),
+	}, deadline, r.ingestMaxAttempts, r.ingestRetryInterval)
 	if bootErr != nil {
 		_ = r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 			_, err := conn.Exec(ctx, "UPDATE channels SET current_session_id = NULL, live_state = 'offline', updated_at = NOW() WHERE id = $1", channelID)
@@ -762,29 +746,8 @@ func (r *postgresRepository) StartStream(channelID string, renditions []string) 
 		StartedAt:      startedAt,
 		Renditions:     append([]string{}, renditions...),
 		PeakConcurrent: 0,
-		OriginURL:      boot.OriginURL,
-		PlaybackURL:    boot.PlaybackURL,
-		IngestJobIDs:   append([]string{}, boot.JobIDs...),
 	}
-	ingestEndpoints := make([]string, 0, 2)
-	if boot.PrimaryIngest != "" {
-		ingestEndpoints = append(ingestEndpoints, boot.PrimaryIngest)
-	}
-	if boot.BackupIngest != "" {
-		ingestEndpoints = append(ingestEndpoints, boot.BackupIngest)
-	}
-	session.IngestEndpoints = ingestEndpoints
-	if len(boot.Renditions) > 0 {
-		manifests := make([]domain.RenditionManifest, 0, len(boot.Renditions))
-		for _, rendition := range boot.Renditions {
-			manifests = append(manifests, domain.RenditionManifest{
-				Name:        rendition.Name,
-				ManifestURL: rendition.ManifestURL,
-				Bitrate:     rendition.Bitrate,
-			})
-		}
-		session.RenditionManifests = manifests
-	}
+	applyBootResultToSession(&session, boot, true)
 
 	revertChannel := func() {
 		_ = r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {

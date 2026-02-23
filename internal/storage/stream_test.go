@@ -392,6 +392,60 @@ func TestStartStreamRetriesBootFailures(t *testing.T) {
 	}
 }
 
+func TestStartStreamDefaultsAttemptsToOne(t *testing.T) {
+	fake := &fakeIngestController{bootErr: errors.New("transcoder offline")}
+	store := newTestStoreWithController(t, fake, WithIngestRetries(0, 0))
+
+	user, err := store.CreateUser(CreateUserParams{DisplayName: "Creator", Email: "creator@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(user.ID, "Tech", "science", []string{"hardware"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	if _, err := store.StartStream(channel.ID, []string{"1080p"}); err == nil {
+		t.Fatal("expected StartStream to fail")
+	} else if got := err.Error(); got != "boot ingest: transcoder offline" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fake.bootCalls != 1 {
+		t.Fatalf("expected one boot attempt, got %d", fake.bootCalls)
+	}
+}
+
+func TestStartStreamAppliesRetryInterval(t *testing.T) {
+	interval := 20 * time.Millisecond
+	fake := &fakeIngestController{bootResponses: []bootResponse{
+		{err: errors.New("transcoder offline")},
+		{err: errors.New("transcoder still offline")},
+		{result: ingest.BootResult{OriginURL: "http://origin/hls"}},
+	}}
+	store := newTestStoreWithController(t, fake, WithIngestRetries(3, interval))
+
+	user, err := store.CreateUser(CreateUserParams{DisplayName: "Creator", Email: "creator@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(user.ID, "Tech", "science", []string{"hardware"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	start := time.Now()
+	if _, err := store.StartStream(channel.ID, []string{"1080p"}); err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+	elapsed := time.Since(start)
+	if elapsed < 2*interval {
+		t.Fatalf("expected retries to wait at least %v, got %v", 2*interval, elapsed)
+	}
+	if fake.bootCalls != 3 {
+		t.Fatalf("expected three boot attempts, got %d", fake.bootCalls)
+	}
+}
+
 func TestStartStreamFailureRollsBackState(t *testing.T) {
 	fake := &fakeIngestController{bootResponses: []bootResponse{
 		{err: errors.New("network error")},

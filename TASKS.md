@@ -2,41 +2,41 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Update auth idle refresh test to avoid fixed sleep
+- [x] Task 1 — Extract shared ingest boot retry + mapping helpers
   - Acceptance criteria:
-    - `TestAuthSessionIdleRefresh` no longer uses `time.Sleep` to wait for refreshability.
-    - Test waits with bounded polling and fails with clear timeout context if expiry does not advance.
+    - Shared helper(s) in `internal/storage` encapsulate common `BootStream` retry loop behavior and boot-result-to-session-field mapping.
+    - Helper behavior preserves existing timeout, retry, and error propagation semantics.
   - Relevant checks:
-    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run TestAuthSessionIdleRefresh -count=20 -timeout=120s`
+    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -run 'TestStartStream(RetriesBootFailures|FailureRollsBackState|DefaultsAttemptsToOne|AppliesRetryInterval)' -count=1 -timeout=120s`
 
-- [x] Task 2 — Update ingest concurrency test to use synchronization instead of fixed server sleep
+- [x] Task 2 — Refactor JSON and Postgres `StartStream` paths to use helpers
   - Acceptance criteria:
-    - `TestHTTPControllerHealthChecksRunConcurrentlyAndDeterministically` no longer uses fixed server-side sleeps.
-    - Concurrency observation uses atomics/channels with bounded waits and deterministic assertions.
+    - `internal/storage/storage.go` and `internal/storage/postgres_channels.go` both use the shared helper(s).
+    - Persistence-specific writes/transactions stay local to each implementation.
+    - Existing error text/fallback behavior (including rollback to offline + cleared session on boot failure) is preserved.
   - Relevant checks:
-    - ❌ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ingest -run TestHTTPControllerHealthChecksRunConcurrentlyAndDeterministically -count=20 -timeout=120s` (first attempt exposed deadlock in test synchronization; fixed by releasing probes via channel close and waiting for bounded concurrent arrival)
-    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ingest -run TestHTTPControllerHealthChecksRunConcurrentlyAndDeterministically -count=20 -timeout=120s` (after fix)
+    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -run 'TestStartStream(RetriesBootFailures|FailureRollsBackState|DefaultsAttemptsToOne|AppliesRetryInterval)' -count=1 -timeout=120s`
 
-- [x] Task 3 — Add/reuse shared eventually-with-timeout helper in `internal/testsupport`
+- [x] Task 3 — Expand tests for retries/rollback guarantees
   - Acceptance criteria:
-    - A small shared helper supports polling conditions until timeout with useful failure output.
-    - Updated tests use the shared helper where applicable.
+    - Tests assert attempts default to 1 when configured attempts are <= 0.
+    - Tests assert retry interval is applied between failed boot attempts.
+    - Tests assert rollback to `offline` and nil `current_session_id` on boot failure.
   - Relevant checks:
-    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/testsupport ./internal/api ./internal/ingest -count=1 -timeout=120s`
+    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -run 'TestStartStream(RetriesBootFailures|FailureRollsBackState|DefaultsAttemptsToOne|AppliesRetryInterval)' -count=1 -timeout=120s`
 
-- [x] Task 4 — Re-run affected package tests multiple times for determinism validation
+- [x] Task 4 — Run storage verification tests and record results
   - Acceptance criteria:
-    - Repeated runs for targeted tests complete successfully.
+    - Targeted and package-level storage tests pass.
     - Task log records commands and outcomes.
   - Relevant checks:
-    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run TestAuthSessionIdleRefresh -count=20 -timeout=120s`
-    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ingest -run TestHTTPControllerHealthChecksRunConcurrentlyAndDeterministically -count=20 -timeout=120s`
+    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -count=1 -timeout=120s`
+    - ❌ `./scripts/verify.sh` (first run failed in unrelated flaky test `TestStreamGaugeConcurrent`)
+    - ✅ `./scripts/verify.sh` (second run passed; docker checks skipped because docker is not installed)
 
 ## Execution log
-- ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run TestAuthSessionIdleRefresh -count=20 -timeout=120s`.
-- ❌ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ingest -run TestHTTPControllerHealthChecksRunConcurrentlyAndDeterministically -count=20 -timeout=120s` (initial deadlock surfaced).
-- ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ingest -run TestHTTPControllerHealthChecksRunConcurrentlyAndDeterministically -count=20 -timeout=120s` (after synchronization fix).
-- ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/testsupport ./internal/api ./internal/ingest -count=1 -timeout=120s`.
-- ✅ `./scripts/verify.sh` (passes; docker-related checks skipped because docker is not installed in this environment).
-- ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api ./internal/ingest ./internal/testsupport -count=1 -timeout=120s`.
-- ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run TestAuthSessionIdleRefresh -count=20 -timeout=120s && GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ingest -run TestHTTPControllerHealthChecksRunConcurrentlyAndDeterministically -count=20 -timeout=120s`.
+- ✅ `gofmt -w internal/storage/ingest_boot_helpers.go internal/storage/storage.go internal/storage/postgres_channels.go internal/storage/stream_test.go`.
+- ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -run 'TestStartStream(RetriesBootFailures|FailureRollsBackState|DefaultsAttemptsToOne|AppliesRetryInterval)' -count=1 -timeout=120s`.
+- ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -count=1 -timeout=120s`.
+- ❌ `./scripts/verify.sh` (first run failed in unrelated flaky test `TestStreamGaugeConcurrent`).
+- ✅ `./scripts/verify.sh` (rerun passed; docker-dependent checks skipped due missing docker binary).
