@@ -131,25 +131,37 @@ func TestAuthSessionIdleRefresh(t *testing.T) {
 		t.Fatalf("expected session to be stored")
 	}
 
-	time.Sleep(time.Second)
-	refreshReq := httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
-	refreshReq.AddCookie(cookie)
-	refreshRec := httptest.NewRecorder()
+	var (
+		refreshCode     int
+		refreshedCookie *http.Cookie
+		refreshedRecord auth.SessionRecord
+	)
 
-	handler.Session(refreshRec, refreshReq)
+	testsupport.EventuallyTrueWithin(t, 1500*time.Millisecond, "session expiry to advance during idle refresh", func() bool {
+		refreshReq := httptest.NewRequest(http.MethodGet, "/api/auth/session", nil)
+		refreshReq.AddCookie(cookie)
+		refreshRec := httptest.NewRecorder()
 
-	if refreshRec.Code != http.StatusOK {
-		t.Fatalf("unexpected refresh status: %d", refreshRec.Code)
+		handler.Session(refreshRec, refreshReq)
+		refreshCode = refreshRec.Code
+		if refreshCode != http.StatusOK {
+			return false
+		}
+
+		refreshedCookie = findSessionCookie(t, refreshRec.Result().Cookies())
+		record, exists := sessionStore.Record(cookie.Value)
+		if !exists {
+			return false
+		}
+		refreshedRecord = record
+		return refreshedCookie.Expires.After(cookie.Expires) && refreshedRecord.ExpiresAt.After(initialRecord.ExpiresAt)
+	})
+
+	if refreshCode != http.StatusOK {
+		t.Fatalf("unexpected refresh status after polling: %d", refreshCode)
 	}
-
-	refreshedCookie := findSessionCookie(t, refreshRec.Result().Cookies())
 	if !refreshedCookie.Expires.After(cookie.Expires) {
 		t.Fatalf("expected cookie expiry to move forward, got %v before %v", refreshedCookie.Expires, cookie.Expires)
-	}
-
-	refreshedRecord, ok := sessionStore.Record(cookie.Value)
-	if !ok {
-		t.Fatalf("expected session to remain stored")
 	}
 	if !refreshedRecord.ExpiresAt.After(initialRecord.ExpiresAt) {
 		t.Fatalf("expected refreshed expiry after initial %v, got %v", initialRecord.ExpiresAt, refreshedRecord.ExpiresAt)

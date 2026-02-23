@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"bitriver-live/internal/observability/metrics"
+	"bitriver-live/internal/testsupport"
 )
 
 // flakyRoundTripper simulates a transient network failure on the first request
@@ -87,9 +88,12 @@ func TestHTTPControllerHealthChecksFailFastOnTransientError(t *testing.T) {
 func TestHTTPControllerHealthChecksRunConcurrentlyAndDeterministically(t *testing.T) {
 	var current atomic.Int32
 	var maxSeen atomic.Int32
+	requestArrived := make(chan struct{}, 3)
+	releaseRequests := make(chan struct{})
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cur := current.Add(1)
+		defer current.Add(-1)
 		for {
 			observed := maxSeen.Load()
 			if cur <= observed {
@@ -99,8 +103,9 @@ func TestHTTPControllerHealthChecksRunConcurrentlyAndDeterministically(t *testin
 				break
 			}
 		}
-		time.Sleep(50 * time.Millisecond)
-		current.Add(-1)
+
+		requestArrived <- struct{}{}
+		<-releaseRequests
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(server.Close)
@@ -116,15 +121,36 @@ func TestHTTPControllerHealthChecksRunConcurrentlyAndDeterministically(t *testin
 		},
 	}
 
-	statuses := controller.HealthChecks(context.Background())
-	if len(statuses) != 3 {
-		t.Fatalf("expected 3 statuses, got %d", len(statuses))
-	}
+	statusesCh := make(chan []HealthStatus, 1)
+	go func() {
+		statusesCh <- controller.HealthChecks(context.Background())
+	}()
+
+	testsupport.EventuallyTrueWithin(t, 500*time.Millisecond, "at least two concurrent health probes to reach the server", func() bool {
+		return len(requestArrived) >= 2
+	})
+
 	if maxSeen.Load() < 2 {
 		t.Fatalf("expected concurrent probes, saw max %d", maxSeen.Load())
 	}
 	if maxSeen.Load() > healthProbeConcurrency {
 		t.Fatalf("expected max concurrency <= %d, got %d", healthProbeConcurrency, maxSeen.Load())
+	}
+
+	close(releaseRequests)
+
+	var statuses []HealthStatus
+	testsupport.EventuallyTrueWithin(t, 500*time.Millisecond, "health checks to complete", func() bool {
+		select {
+		case statuses = <-statusesCh:
+			return true
+		default:
+			return false
+		}
+	})
+
+	if len(statuses) != 3 {
+		t.Fatalf("expected 3 statuses, got %d", len(statuses))
 	}
 	for idx, component := range []string{"srs", "ovenmediaengine", "transcoder"} {
 		if statuses[idx].Component != component {
