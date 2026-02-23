@@ -1,22 +1,24 @@
 # PLAN
 
 ## Scope (current change)
-- Stabilize `TestAuthSessionIdleRefresh` in `internal/api/auth_integration_test.go` by removing fixed sleep and waiting for observable expiry advancement with bounded polling.
-- Stabilize `TestHTTPControllerHealthChecksRunConcurrentlyAndDeterministically` in `internal/ingest/http_controller_test.go` by replacing server-side fixed delay with synchronization via atomics/channels and bounded waits.
-- Reuse/add a small shared `internal/testsupport` helper for eventual assertions within timeouts.
-- Validate determinism by re-running affected package tests multiple times.
+- Identify and remove duplicated `StartStream` ingest boot logic between `internal/storage/storage.go` and `internal/storage/postgres_channels.go`.
+- Extract shared helpers in `internal/storage` for:
+  - ingest boot retry execution (`BootStream` attempts, timeout, retry interval), and
+  - mapping ingest boot output into stream-session fields (URLs, job IDs, endpoints, rendition manifests).
+- Keep datastore-specific persistence and rollback writes in place (JSON in-memory/persist flow vs Postgres SQL flow).
+- Expand tests to lock behavior for default attempts (`<=0` => `1`), retry interval waiting, and rollback to `offline` + cleared `current_session_id` on boot failure.
 
 ## Assumptions
-- Existing helper support may already exist in `internal/testsupport`; if sufficient, reuse it rather than introducing duplicate helpers.
-- These updates are test-only and should not affect runtime behavior or deployment contract files.
-- Repeated `go test -count` runs are enough to catch timing-related flakiness for this scope.
+- Existing `StartStream` error strings (notably `"boot ingest: %w"`) must remain unchanged.
+- Fallback/rollback semantics differ by backend only in persistence mechanics; logical outcomes must remain equivalent.
+- Timing assertions for retry interval should use tolerant bounds to avoid flaky CI failures.
 
 ## Risks
-- Polling conditions that are too strict may still be flaky under slow CI scheduling.
-- New synchronization in ingest health-check test could deadlock if not carefully bounded.
-- Overly short timeouts may cause false negatives in loaded environments.
+- Over-centralizing could accidentally move persistence-side effects that should remain backend-specific.
+- Retry helper changes could alter call counts or timeout behavior if parameters are mishandled.
+- Time-based tests can be flaky if bounds are too tight.
 
 ## Test plan
-- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run TestAuthSessionIdleRefresh -count=20 -timeout=120s`
-- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ingest -run TestHTTPControllerHealthChecksRunConcurrentlyAndDeterministically -count=20 -timeout=120s`
-- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api ./internal/ingest ./internal/testsupport -count=1 -timeout=120s`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -run 'Test(StartStreamRetriesBootFailures|StartStreamFailureRollsBackState|StartStreamDefaultAttemptsToOne|StartStreamAppliesRetryInterval)' -count=1 -timeout=120s`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -run 'TestRepositoryScenarios/(JSONStore|Postgres)/StreamLifecycleWithoutIngest|TestRepositoryScenarios/(JSONStore|Postgres)/StreamTimeouts' -count=1 -timeout=120s`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -count=1 -timeout=120s`

@@ -1084,29 +1084,13 @@ func (s *Storage) StartStream(channelID string, renditions []string) (domain.Str
 		return domain.StreamSession{}, ErrIngestControllerUnavailable
 	}
 
-	attempts := s.ingestMaxAttempts
-	if attempts <= 0 {
-		attempts = 1
-	}
 	timeout := normalizeIngestTimeout(s.ingestTimeout)
-	var boot ingest.BootResult
-	var bootErr error
-	for attempt := 0; attempt < attempts; attempt++ {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		boot, bootErr = controller.BootStream(ctx, ingest.BootParams{
-			ChannelID:  channelID,
-			SessionID:  sessionID,
-			StreamKey:  channel.StreamKey,
-			Renditions: append([]string{}, renditions...),
-		})
-		cancel()
-		if bootErr == nil {
-			break
-		}
-		if attempt < attempts-1 && s.ingestRetryInterval > 0 {
-			time.Sleep(s.ingestRetryInterval)
-		}
-	}
+	boot, bootErr := runIngestBootWithRetry(controller, ingest.BootParams{
+		ChannelID:  channelID,
+		SessionID:  sessionID,
+		StreamKey:  channel.StreamKey,
+		Renditions: append([]string{}, renditions...),
+	}, timeout, s.ingestMaxAttempts, s.ingestRetryInterval)
 	if bootErr != nil {
 		s.mu.Lock()
 		if updated, exists := s.data.Channels[channelID]; exists {
@@ -1125,31 +1109,8 @@ func (s *Storage) StartStream(channelID string, renditions []string) (domain.Str
 		StartedAt:      now,
 		Renditions:     append([]string{}, renditions...),
 		PeakConcurrent: 0,
-		OriginURL:      boot.OriginURL,
-		PlaybackURL:    boot.PlaybackURL,
-		IngestJobIDs:   append([]string{}, boot.JobIDs...),
 	}
-	ingestEndpoints := make([]string, 0, 2)
-	if boot.PrimaryIngest != "" {
-		ingestEndpoints = append(ingestEndpoints, boot.PrimaryIngest)
-	}
-	if boot.BackupIngest != "" {
-		ingestEndpoints = append(ingestEndpoints, boot.BackupIngest)
-	}
-	if len(ingestEndpoints) > 0 {
-		session.IngestEndpoints = ingestEndpoints
-	}
-	if len(boot.Renditions) > 0 {
-		manifests := make([]domain.RenditionManifest, 0, len(boot.Renditions))
-		for _, rendition := range boot.Renditions {
-			manifests = append(manifests, domain.RenditionManifest{
-				Name:        rendition.Name,
-				ManifestURL: rendition.ManifestURL,
-				Bitrate:     rendition.Bitrate,
-			})
-		}
-		session.RenditionManifests = manifests
-	}
+	applyBootResultToSession(&session, boot, false)
 
 	s.mu.Lock()
 	s.data.StreamSessions[sessionID] = session
