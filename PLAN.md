@@ -1,26 +1,27 @@
 # PLAN
 
 ## Scope (current change)
-- Remove unsynchronized lazy writes in `internal/api/handlers.go` accessor methods:
-  - `sessionManager`
-  - `mfaChallengeManager`
-  - `logger`
-  - `tracer`
-  - `srsTracker`
-- Preserve existing nil-safe behavior expected by current tests (accessors still return usable defaults when fields are unset).
-- Add a concurrency-focused test in `internal/api` that exercises these accessors from many goroutines, then validate with the race detector.
+- Update upload delete cleanup helpers in `internal/api/uploads_handlers.go` so handler call sites pass request `context.Context` into:
+  - `deleteUploadMedia`
+  - `deleteStoredUploadSource`
+- Remove direct use of `context.Background()` for upload source deletion.
+- Where cleanup runs outside the request lifecycle (best-effort rollback path), derive a short timeout context and document why.
+- Add focused tests in `internal/api/uploads_handlers_test.go` verifying:
+  - delete is attempted with the provided context
+  - canceled context is propagated and respected by delete path
 
 ## Assumptions
-- Accessors are expected to be safe to call on a zero-value/partially-initialized `Handler` and should continue to return non-nil defaults.
-- `NewHandler` should keep current defaults for explicit dependency injection while improving concurrency safety.
-- Existing API/runtime behavior is unchanged; this is an internal safety fix plus test coverage.
+- Delete failures remain best-effort/logged and must not change HTTP response semantics.
+- Request-scoped delete should use `r.Context()` so cancellation/deadlines flow through object-store operations.
+- Async/best-effort rollback cleanup should not block indefinitely, so a bounded timeout context is appropriate.
 
 ## Risks
-- Changing initialization timing could alter pointer identity assumptions in tests if not done carefully.
-- Concurrency test could become flaky if it depends on timing rather than deterministic synchronization.
-- Race-detector runs are slower and may expose unrelated package races; scope test selection to `internal/api` accessor tests first.
+- Changing helper signatures can miss call sites and break compilation.
+- Tight timeout for async cleanup might be too short for some environments; keep it short but reasonable and document intent.
+- Tests that rely on cancellation need deterministic synchronization to avoid flakiness.
 
 ## Test plan
-- `gofmt -w internal/api/handlers.go internal/api/handlers_concurrency_test.go`
-- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run TestHandlerAccessorsConcurrentInitialization -count=1 -race -timeout=120s`
+- `gofmt -w internal/api/uploads_handlers.go internal/api/uploads_handlers_test.go`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run 'TestDeleteUploadRemovesDurableSourceObject|TestDeleteUploadMediaPropagatesContextToStoreDelete|TestDeleteUploadMediaRespectsCanceledContext' -count=1 -timeout=120s`
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1 -timeout=120s`
+- `./scripts/verify.sh`

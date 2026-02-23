@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -522,12 +524,102 @@ func TestDeleteUploadRemovesDurableSourceObject(t *testing.T) {
 	var resp uploadResponse
 	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
 
-	h.deleteUploadMedia(domain.Upload{ID: resp.ID, Metadata: resp.Metadata})
+	h.deleteUploadMedia(context.Background(), domain.Upload{ID: resp.ID, Metadata: resp.Metadata})
 	if _, ok := storeObjects[resp.Metadata["sourceObjectKey"]]; ok {
 		t.Fatalf("expected key %q to be deleted", resp.Metadata["sourceObjectKey"])
 	}
 }
 
+type recordingDeleteStore struct {
+	ctxs []context.Context
+	mu   sync.Mutex
+}
+
+func (s *recordingDeleteStore) Enabled() bool { return true }
+
+func (s *recordingDeleteStore) Store(context.Context, string, string, string, []byte) (storedUploadSource, error) {
+	return storedUploadSource{}, nil
+}
+
+func (s *recordingDeleteStore) Get(context.Context, string) (storedUploadSource, error) {
+	return storedUploadSource{}, nil
+}
+
+func (s *recordingDeleteStore) Delete(ctx context.Context, key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ctxs = append(s.ctxs, ctx)
+	return nil
+}
+
+func (s *recordingDeleteStore) snapshotContexts() []context.Context {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cloned := make([]context.Context, len(s.ctxs))
+	copy(cloned, s.ctxs)
+	return cloned
+}
+
+type contextAwareDeleteStore struct {
+	ctxErr chan error
+}
+
+func (s *contextAwareDeleteStore) Enabled() bool { return true }
+
+func (s *contextAwareDeleteStore) Store(context.Context, string, string, string, []byte) (storedUploadSource, error) {
+	return storedUploadSource{}, nil
+}
+
+func (s *contextAwareDeleteStore) Get(context.Context, string) (storedUploadSource, error) {
+	return storedUploadSource{}, nil
+}
+
+func (s *contextAwareDeleteStore) Delete(ctx context.Context, key string) error {
+	err := ctx.Err()
+	if s.ctxErr != nil {
+		s.ctxErr <- err
+	}
+	return err
+}
+
+func TestDeleteUploadMediaPropagatesContextToStoreDelete(t *testing.T) {
+	h, _ := newTestHandler(t)
+	store := &recordingDeleteStore{}
+	h.uploadSource = store
+	h.uploadSourceOnce.Do(func() {})
+
+	ctx := context.WithValue(context.Background(), "delete-context-key", "delete-context-value")
+	h.deleteUploadMedia(ctx, domain.Upload{Metadata: map[string]string{"sourceObjectKey": "upload-sources/object.mp4"}})
+
+	ctxs := store.snapshotContexts()
+	if len(ctxs) != 1 {
+		t.Fatalf("delete calls = %d, want 1", len(ctxs))
+	}
+	if got := ctxs[0].Value("delete-context-key"); got != "delete-context-value" {
+		t.Fatalf("context value = %v, want %q", got, "delete-context-value")
+	}
+}
+
+func TestDeleteUploadMediaRespectsCanceledContext(t *testing.T) {
+	h, _ := newTestHandler(t)
+	store := &contextAwareDeleteStore{ctxErr: make(chan error, 1)}
+	h.uploadSource = store
+	h.uploadSourceOnce.Do(func() {})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	h.deleteUploadMedia(ctx, domain.Upload{Metadata: map[string]string{"sourceObjectKey": "upload-sources/object.mp4"}})
+
+	select {
+	case err := <-store.ctxErr:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("ctx error = %v, want %v", err, context.Canceled)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for delete call")
+	}
+}
 func TestCreateUploadFromMultipartIdempotencyKeyReturnsExistingUpload(t *testing.T) {
 	h, store := newTestHandler(t)
 	h.UploadMediaDir = t.TempDir()
