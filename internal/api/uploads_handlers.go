@@ -48,6 +48,7 @@ var allowedUploadMediaTypes = map[string]map[string]struct{}{
 
 const defaultUploadMaxBytes int64 = 512 << 20 // 512 MiB
 const defaultUploadTempMaxAge = 6 * time.Hour
+const uploadDeleteCleanupTimeout = 3 * time.Second
 
 var errUploadTooLarge = errors.New("upload exceeds maximum allowed size")
 
@@ -232,7 +233,7 @@ func (h *Handler) UploadByID(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusBadRequest, err)
 			return
 		}
-		h.deleteUploadMedia(upload)
+		h.deleteUploadMedia(r.Context(), upload)
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodDelete)
@@ -631,7 +632,9 @@ func (h *Handler) attachMediaToUpload(r *http.Request, upload domain.Upload, bas
 	}
 	update := domain.UploadUpdate{Metadata: metadata}
 	if _, err := h.uploadsService().UpdateUpload(upload.ID, update); err != nil {
-		h.deleteStoredUploadSource(stored.Key)
+		// Rollback cleanup is best-effort and can outlive the client request lifecycle,
+		// so run it with a short bounded timeout context.
+		h.deleteStoredUploadSourceWithTimeout(stored.Key)
 		_ = h.uploadsService().DeleteUpload(upload.ID)
 		return domain.Upload{}, err
 	}
@@ -746,7 +749,7 @@ func (h *Handler) serveUploadMedia(w http.ResponseWriter, r *http.Request, uploa
 }
 
 // deleteUploadMedia deletes upload media and returns an error when cleanup or persistence fails.
-func (h *Handler) deleteUploadMedia(upload domain.Upload) {
+func (h *Handler) deleteUploadMedia(ctx context.Context, upload domain.Upload) {
 	if upload.Metadata == nil {
 		return
 	}
@@ -757,15 +760,21 @@ func (h *Handler) deleteUploadMedia(upload domain.Upload) {
 	if key == "" {
 		return
 	}
-	h.deleteStoredUploadSource(key)
+	h.deleteStoredUploadSource(ctx, key)
 }
 
-func (h *Handler) deleteStoredUploadSource(key string) {
+func (h *Handler) deleteStoredUploadSourceWithTimeout(key string) {
+	ctx, cancel := context.WithTimeout(context.Background(), uploadDeleteCleanupTimeout)
+	defer cancel()
+	h.deleteStoredUploadSource(ctx, key)
+}
+
+func (h *Handler) deleteStoredUploadSource(ctx context.Context, key string) {
 	if strings.TrimSpace(key) == "" {
 		return
 	}
 	if store := h.uploadSourceStore(); store.Enabled() {
-		if err := store.Delete(context.Background(), key); err != nil {
+		if err := store.Delete(ctx, key); err != nil {
 			h.logger().Warn("delete upload source", "key", key, "err", err)
 			return
 		}

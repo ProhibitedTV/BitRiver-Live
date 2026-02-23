@@ -2,33 +2,34 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Make handler accessors concurrency-safe
+- [x] Task 1 — Propagate context through upload delete helpers
   - Acceptance criteria:
-    - `sessionManager`, `mfaChallengeManager`, `logger`, `tracer`, and `srsTracker` no longer perform unsynchronized lazy writes.
-    - Chosen approach is either eager initialization in `NewHandler` or `sync.Once` guards per field.
-    - Nil-safe behavior is preserved (unset fields still yield usable defaults).
+    - `deleteUploadMedia` accepts a `context.Context` and all handler call sites pass request context where available.
+    - `deleteStoredUploadSource` accepts a `context.Context` and no longer uses `context.Background()` for delete operations.
+    - Any async/best-effort cleanup path derives a short timeout context and includes an explanatory code comment.
   - Relevant checks:
-    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run TestHandlerAccessorsConcurrentInitialization -count=1 -race -timeout=120s`
+    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run TestDeleteUploadRemovesDurableSourceObject -count=1 -timeout=120s`
 
-- [x] Task 2 — Add concurrent accessor test coverage
+- [x] Task 2 — Add cancellation/context propagation tests for delete path
   - Acceptance criteria:
-    - New test in `internal/api` calls accessor methods from multiple goroutines.
-    - Test validates non-nil defaults and stable initialized instances under concurrent access.
+    - Tests verify delete is attempted with propagated context.
+    - Tests verify canceled contexts are respected by storage delete implementation.
   - Relevant checks:
-    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run TestHandlerAccessorsConcurrentInitialization -count=1 -race -timeout=120s`
+    - ❌ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run 'TestDeleteUploadMediaPropagatesContextToStoreDelete|TestDeleteUploadMediaRespectsCanceledContext' -count=1 -timeout=120s` (initial failure: test fixture did not initialize uploadSourceOnce)
+    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run 'TestDeleteUploadMediaPropagatesContextToStoreDelete|TestDeleteUploadMediaRespectsCanceledContext' -count=1 -timeout=120s`
 
-- [x] Task 3 — Run package verification and record outcomes
+- [x] Task 3 — Run verification and record outcomes
   - Acceptance criteria:
-    - `internal/api` tests pass after changes.
-    - Task log captures commands and pass/fail.
+    - Updated package tests pass.
+    - Repo verify script is executed and results captured.
   - Relevant checks:
     - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1 -timeout=120s`
-    - ❌ `./scripts/verify.sh` (first run failed due unrelated flaky cleanup in `cmd/transcoder` test)
-    - ✅ `./scripts/verify.sh` (rerun passed; docker checks skipped because docker is not installed)
+    - ✅ `./scripts/verify.sh` (passed; docker-dependent checks skipped due missing docker binary)
 
 ## Execution log
-- ✅ `gofmt -w internal/api/handlers.go internal/api/handlers_concurrency_test.go`.
-- ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run TestHandlerAccessorsConcurrentInitialization -count=1 -race -timeout=120s`.
+- ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run TestDeleteUploadRemovesDurableSourceObject -count=1 -timeout=120s`.
+- ❌ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run 'TestDeleteUploadMediaPropagatesContextToStoreDelete|TestDeleteUploadMediaRespectsCanceledContext' -count=1 -timeout=120s` (initial failure: test fixture did not initialize uploadSourceOnce).
+- ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run 'TestDeleteUploadMediaPropagatesContextToStoreDelete|TestDeleteUploadMediaRespectsCanceledContext' -count=1 -timeout=120s`.
+- ✅ `gofmt -w internal/api/uploads_handlers.go internal/api/uploads_handlers_test.go`.
 - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1 -timeout=120s`.
-- ❌ `./scripts/verify.sh` (first run failed due unrelated flaky cleanup in `cmd/transcoder` test).
-- ✅ `./scripts/verify.sh` (rerun passed; docker-dependent checks skipped due missing docker binary).
+- ✅ `./scripts/verify.sh` (passed; docker-dependent checks skipped due missing docker binary).
