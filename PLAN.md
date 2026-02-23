@@ -1,24 +1,26 @@
 # PLAN
 
 ## Scope (current change)
-- Identify and remove duplicated `StartStream` ingest boot logic between `internal/storage/storage.go` and `internal/storage/postgres_channels.go`.
-- Extract shared helpers in `internal/storage` for:
-  - ingest boot retry execution (`BootStream` attempts, timeout, retry interval), and
-  - mapping ingest boot output into stream-session fields (URLs, job IDs, endpoints, rendition manifests).
-- Keep datastore-specific persistence and rollback writes in place (JSON in-memory/persist flow vs Postgres SQL flow).
-- Expand tests to lock behavior for default attempts (`<=0` => `1`), retry interval waiting, and rollback to `offline` + cleared `current_session_id` on boot failure.
+- Remove unsynchronized lazy writes in `internal/api/handlers.go` accessor methods:
+  - `sessionManager`
+  - `mfaChallengeManager`
+  - `logger`
+  - `tracer`
+  - `srsTracker`
+- Preserve existing nil-safe behavior expected by current tests (accessors still return usable defaults when fields are unset).
+- Add a concurrency-focused test in `internal/api` that exercises these accessors from many goroutines, then validate with the race detector.
 
 ## Assumptions
-- Existing `StartStream` error strings (notably `"boot ingest: %w"`) must remain unchanged.
-- Fallback/rollback semantics differ by backend only in persistence mechanics; logical outcomes must remain equivalent.
-- Timing assertions for retry interval should use tolerant bounds to avoid flaky CI failures.
+- Accessors are expected to be safe to call on a zero-value/partially-initialized `Handler` and should continue to return non-nil defaults.
+- `NewHandler` should keep current defaults for explicit dependency injection while improving concurrency safety.
+- Existing API/runtime behavior is unchanged; this is an internal safety fix plus test coverage.
 
 ## Risks
-- Over-centralizing could accidentally move persistence-side effects that should remain backend-specific.
-- Retry helper changes could alter call counts or timeout behavior if parameters are mishandled.
-- Time-based tests can be flaky if bounds are too tight.
+- Changing initialization timing could alter pointer identity assumptions in tests if not done carefully.
+- Concurrency test could become flaky if it depends on timing rather than deterministic synchronization.
+- Race-detector runs are slower and may expose unrelated package races; scope test selection to `internal/api` accessor tests first.
 
 ## Test plan
-- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -run 'Test(StartStreamRetriesBootFailures|StartStreamFailureRollsBackState|StartStreamDefaultAttemptsToOne|StartStreamAppliesRetryInterval)' -count=1 -timeout=120s`
-- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -run 'TestRepositoryScenarios/(JSONStore|Postgres)/StreamLifecycleWithoutIngest|TestRepositoryScenarios/(JSONStore|Postgres)/StreamTimeouts' -count=1 -timeout=120s`
-- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -count=1 -timeout=120s`
+- `gofmt -w internal/api/handlers.go internal/api/handlers_concurrency_test.go`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run TestHandlerAccessorsConcurrentInitialization -count=1 -race -timeout=120s`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1 -timeout=120s`

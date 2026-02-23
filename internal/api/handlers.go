@@ -64,6 +64,11 @@ type Handler struct {
 	srsViewers            *srsViewerTracker
 	Logger                *slog.Logger
 	Tracer                *tracing.Tracer
+	sessionOnce           sync.Once
+	mfaOnce               sync.Once
+	loggerOnce            sync.Once
+	tracerOnce            sync.Once
+	srsTrackerOnce        sync.Once
 }
 
 type healthPinger interface {
@@ -166,33 +171,41 @@ func (h *Handler) monetizationService() service.MonetizationUseCase {
 }
 
 func (h *Handler) sessionManager() *auth.SessionManager {
-	if h.Sessions == nil {
-		h.Sessions = auth.NewSessionManager(0)
-	}
+	h.sessionOnce.Do(func() {
+		if h.Sessions == nil {
+			h.Sessions = auth.NewSessionManager(0)
+		}
+	})
 	return h.Sessions
 }
 
 // mfaChallengeManager performs mfa challenge manager and propagates validation or dependency failures to the caller.
 func (h *Handler) mfaChallengeManager() *auth.MFAChallengeManager {
-	if h.MFAChallenges == nil {
-		h.MFAChallenges = auth.NewMFAChallengeManager(0)
-	}
+	h.mfaOnce.Do(func() {
+		if h.MFAChallenges == nil {
+			h.MFAChallenges = auth.NewMFAChallengeManager(0)
+		}
+	})
 	return h.MFAChallenges
 }
 
 // logger performs logger and propagates validation or dependency failures to the caller.
 func (h *Handler) logger() *slog.Logger {
-	if h.Logger == nil {
-		h.Logger = slog.Default()
-	}
+	h.loggerOnce.Do(func() {
+		if h.Logger == nil {
+			h.Logger = slog.Default()
+		}
+	})
 	return h.Logger
 }
 
 // tracer performs tracer and propagates validation or dependency failures to the caller.
 func (h *Handler) tracer() *tracing.Tracer {
-	if h.Tracer == nil {
-		h.Tracer = tracing.Default()
-	}
+	h.tracerOnce.Do(func() {
+		if h.Tracer == nil {
+			h.Tracer = tracing.Default()
+		}
+	})
 	return h.Tracer
 }
 
@@ -207,9 +220,11 @@ func (h *Handler) startSpan(r *http.Request, name string, attrs ...tracing.Attri
 
 // srsTracker performs srs tracker and propagates validation or dependency failures to the caller.
 func (h *Handler) srsTracker() *srsViewerTracker {
-	if h.srsViewers == nil {
-		h.srsViewers = newSRSViewerTracker()
-	}
+	h.srsTrackerOnce.Do(func() {
+		if h.srsViewers == nil {
+			h.srsViewers = newSRSViewerTracker()
+		}
+	})
 	return h.srsViewers
 }
 
