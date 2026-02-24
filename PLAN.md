@@ -1,22 +1,20 @@
 # PLAN
 
 ## Scope (current change)
-- Add a reusable shell helper under `scripts/` for bounded polling that accepts interval and timeout values.
-- Refactor `scripts/test-quickstart.sh` service health waiting to use the shared helper.
-- Refactor `scripts/test-postgres.sh` postgres container readiness waiting to use the shared helper while preserving existing failure semantics.
+- Refactor `web/viewer/lib/viewer-api.ts` into internal domain-focused submodules under `web/viewer/lib/` (auth/channel/chat/directory/profile/uploads/metrics style split).
+- Keep `web/viewer/lib/viewer-api.ts` as the stable public facade, re-exporting the same types/functions without caller changes.
+- Move implementation in small slices to reduce risk and preserve blame.
 
 ## Assumptions
-- Shared helper can be sourced from both scripts without changing their current shell options (`set -euo pipefail`).
-- Existing readiness logic can be expressed as callback commands that return pass/retry/fail semantics.
-- Current user-facing error messages should remain unchanged unless made more specific with the same meaning.
+- Existing callers should continue importing only from `viewer-api.ts`.
+- Internal-only helpers can be relocated to private modules and re-exported from the facade.
+- Jest coverage around viewer API request helpers is sufficient to catch regressions for this refactor.
 
 ## Risks
-- Refactoring loops into a helper may accidentally change timeout boundaries or retry cadence.
-- `set -e` behavior in callback commands can cause early exits if not handled carefully.
-- Polling helper API might be too rigid for existing scripts unless designed with explicit hooks.
+- Accidentally changing exported symbol names/order or introducing circular dependencies.
+- Moving shared helpers (`viewerRequest`, `multipartRequest`, `ViewerApiError`) could alter runtime behavior if types/imports drift.
+- Domain split may miss a consumer if a type is no longer re-exported.
 
 ## Test plan
-- `bash -n scripts/polling.sh scripts/test-quickstart.sh scripts/test-postgres.sh`
-- `shellcheck scripts/polling.sh scripts/test-quickstart.sh scripts/test-postgres.sh`
-- `./scripts/test-postgres.sh ./internal/storage/...` (may fail if Docker unavailable; still validates flow attempt)
-- `./scripts/test-quickstart.sh` (may fail if Docker unavailable; still validates flow attempt)
+- `cd web/viewer && npm run test -- --runInBand __tests__/viewer-api.test.ts`
+- `cd web/viewer && npm run test -- --runInBand --testPathPattern=viewer-api`

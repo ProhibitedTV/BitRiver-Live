@@ -2,44 +2,29 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Add reusable bounded polling helper in `scripts/`
+- [x] Task 1 — Create internal viewer API core + first domain slices
   - Acceptance criteria:
-    - New helper script exposes a reusable function for bounded polling.
-    - Helper supports configurable interval and timeout values.
-    - Helper can distinguish success/retry/fail outcomes for callers.
+    - Add shared request/types internals used by domain modules.
+    - Move a small subset of domain implementation from `viewer-api.ts` into new modules without changing behavior.
+    - `viewer-api.ts` remains compiling as public facade.
   - Relevant checks:
-    - ✅ `bash -n scripts/polling.sh`
-    - ⚠️ `shellcheck scripts/polling.sh` (shellcheck not installed in environment)
+    - ✅ `cd web/viewer && npm run test -- --runInBand __tests__/viewer-api.test.ts`
 
-- [x] Task 2 — Apply helper to quickstart service health waits
+- [x] Task 2 — Complete domain split and keep facade exports stable
   - Acceptance criteria:
-    - `scripts/test-quickstart.sh` uses the shared helper for service health polling.
-    - Existing timeout behavior (`WAIT_TIMEOUT`, 5s polling) and error meaning are preserved.
+    - `viewer-api.ts` re-exports all previously exported types/functions unchanged.
+    - Remaining implementation is moved into domain modules under `web/viewer/lib/`.
   - Relevant checks:
-    - ✅ `bash -n scripts/test-quickstart.sh`
-    - ⚠️ `shellcheck scripts/test-quickstart.sh` (shellcheck not installed in environment)
+    - ✅ `cd web/viewer && npm run test -- --runInBand --testPathPattern=viewer-api`
 
-- [x] Task 3 — Apply helper to postgres container readiness waits
+- [x] Task 3 — Final verification and task log update
   - Acceptance criteria:
-    - `scripts/test-postgres.sh` uses the shared helper for container health polling.
-    - Existing failure exits/messages remain equivalent.
+    - Run requested viewer API tests and record outcomes.
+    - Task statuses and execution log are current.
   - Relevant checks:
-    - ✅ `bash -n scripts/test-postgres.sh`
-    - ⚠️ `shellcheck scripts/test-postgres.sh` (shellcheck not installed in environment)
-
-- [x] Task 4 — Validate script flows
-  - Acceptance criteria:
-    - Run existing script test flow commands and record outcomes.
-  - Relevant checks:
-    - ⚠️ `./scripts/test-postgres.sh ./internal/storage/...` (docker unavailable and no `BITRIVER_TEST_POSTGRES_DSN`)
-    - ⚠️ `./scripts/test-quickstart.sh` (docker unavailable)
+    - ✅ `cd web/viewer && npm run test -- --runInBand __tests__/viewer-api.test.ts`
+    - ✅ `cd web/viewer && npm run test -- --runInBand --testPathPattern=viewer-api`
 
 ## Execution log
-- ✅ `bash -n scripts/polling.sh`
-- ✅ `bash -n scripts/test-quickstart.sh`
-- ✅ `bash -n scripts/test-postgres.sh`
-- ⚠️ `shellcheck scripts/polling.sh` (`shellcheck` command not found)
-- ⚠️ `shellcheck scripts/test-quickstart.sh` (`shellcheck` command not found)
-- ⚠️ `shellcheck scripts/test-postgres.sh` (`shellcheck` command not found)
-- ⚠️ `./scripts/test-postgres.sh ./internal/storage/...` (fails fast by design without docker/DSN in this environment)
-- ⚠️ `./scripts/test-quickstart.sh` (fails fast by design without docker in this environment)
+- ✅ `cd web/viewer && npm run test -- --runInBand __tests__/viewer-api.test.ts`
+- ✅ `cd web/viewer && npm run test -- --runInBand --testPathPattern=viewer-api`
