@@ -2,37 +2,44 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Thread caller context through rate-limit interfaces
+- [x] Task 1 — Add reusable bounded polling helper in `scripts/`
   - Acceptance criteria:
-    - `tokenStore.Allow` and `rateLimiter.AllowLogin` accept `context.Context`.
-    - Middleware passes `r.Context()` into `AllowLogin`.
-    - Code compiles with updated signatures.
+    - New helper script exposes a reusable function for bounded polling.
+    - Helper supports configurable interval and timeout values.
+    - Helper can distinguish success/retry/fail outcomes for callers.
   - Relevant checks:
-    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1 -timeout=120s`
+    - ✅ `bash -n scripts/polling.sh`
+    - ⚠️ `shellcheck scripts/polling.sh` (shellcheck not installed in environment)
 
-- [x] Task 2 — Refactor Redis store allow context handling
+- [x] Task 2 — Apply helper to quickstart service health waits
   - Acceptance criteria:
-    - `redisStore.Allow` uses normalized caller context (not `context.Background()`).
-    - Redis operations are wrapped with configured timeout while preserving caller cancellation/deadline behavior.
+    - `scripts/test-quickstart.sh` uses the shared helper for service health polling.
+    - Existing timeout behavior (`WAIT_TIMEOUT`, 5s polling) and error meaning are preserved.
   - Relevant checks:
-    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -run 'TestRedisStoreAllow(Plain|TLS)$|TestRateLimitMiddlewareAuthPaths' -count=1 -timeout=120s`
+    - ✅ `bash -n scripts/test-quickstart.sh`
+    - ⚠️ `shellcheck scripts/test-quickstart.sh` (shellcheck not installed in environment)
 
-- [x] Task 3 — Add tests for cancellation and timeout handling
+- [x] Task 3 — Apply helper to postgres container readiness waits
   - Acceptance criteria:
-    - Tests cover canceled context propagation and timeout behavior for Redis-backed `Allow` path.
-    - Tests pass reliably in `internal/server` package.
+    - `scripts/test-postgres.sh` uses the shared helper for container health polling.
+    - Existing failure exits/messages remain equivalent.
   - Relevant checks:
-    - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -run 'TestRedisStoreAllow(CanceledContext|Timeout)$' -count=1 -timeout=120s`
+    - ✅ `bash -n scripts/test-postgres.sh`
+    - ⚠️ `shellcheck scripts/test-postgres.sh` (shellcheck not installed in environment)
 
-- [x] Task 4 — Run full verification
+- [x] Task 4 — Validate script flows
   - Acceptance criteria:
-    - Repo verification script executed and result recorded.
+    - Run existing script test flow commands and record outcomes.
   - Relevant checks:
-    - ✅ `./scripts/verify.sh` (passed; docker-dependent checks skipped because docker is not installed)
+    - ⚠️ `./scripts/test-postgres.sh ./internal/storage/...` (docker unavailable and no `BITRIVER_TEST_POSTGRES_DSN`)
+    - ⚠️ `./scripts/test-quickstart.sh` (docker unavailable)
 
 ## Execution log
-- ✅ `gofmt -w internal/server/ratelimit.go internal/server/server.go internal/server/redis_store.go internal/server/redis_store_integration_test.go internal/server/redis_store_test.go`.
-- ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1 -timeout=120s`.
-- ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -run 'TestRedisStoreAllow(Plain|TLS)$|TestRateLimitMiddlewareAuthPaths' -count=1 -timeout=120s`.
-- ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -run 'TestRedisStoreAllow(CanceledContext|Timeout)$' -count=1 -timeout=120s`.
-- ✅ `./scripts/verify.sh` (passed; docker compose validation steps skipped because docker is not installed in this environment).
+- ✅ `bash -n scripts/polling.sh`
+- ✅ `bash -n scripts/test-quickstart.sh`
+- ✅ `bash -n scripts/test-postgres.sh`
+- ⚠️ `shellcheck scripts/polling.sh` (`shellcheck` command not found)
+- ⚠️ `shellcheck scripts/test-quickstart.sh` (`shellcheck` command not found)
+- ⚠️ `shellcheck scripts/test-postgres.sh` (`shellcheck` command not found)
+- ⚠️ `./scripts/test-postgres.sh ./internal/storage/...` (fails fast by design without docker/DSN in this environment)
+- ⚠️ `./scripts/test-quickstart.sh` (fails fast by design without docker in this environment)
