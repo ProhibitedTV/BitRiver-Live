@@ -2,39 +2,35 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Implement CI-aware viewer diff detection in `scripts/verify.sh`
+- [x] Task 1 — Wire `require_tool go` before Go tests
   - Acceptance criteria:
-    - `viewer_changes_present()` uses commit range diff when CI base/head metadata is available.
-    - Local fallback remains `git status --porcelain -- web/viewer`.
-    - Existing `--viewer` and `--ci-viewer` behavior is unchanged.
+    - `scripts/verify.sh` checks for `go` via `require_tool` before the Go test step.
+    - Go test command remains unchanged otherwise.
   - Relevant checks:
-    - `bash scripts/test-verify-viewer-detection.sh`
+    - `bash -n scripts/verify.sh`
   - Result:
     - Passed.
 
-- [x] Task 2 — Add script-level detection contract tests under `scripts/`
+- [x] Task 2 — Wire `require_tool python3` before contract invariants check
   - Acceptance criteria:
-    - Tests cover CI base/head range with viewer changes.
-    - Tests cover CI base/head range without viewer changes.
-    - Tests cover local uncommitted viewer changes fallback behavior.
+    - `scripts/verify.sh` checks for `python3` via `require_tool` before `./scripts/check-contract-invariants.sh`.
+    - Existing contract invariants command remains in-place.
   - Relevant checks:
-    - `bash scripts/test-verify-viewer-detection.sh`
+    - `bash -n scripts/verify.sh`
   - Result:
     - Passed.
 
-- [x] Task 3 — Validate integration behavior for viewer skip/run conditions
+- [x] Task 3 — Add optional `git` gate for local viewer-change detection with clear fallback message
   - Acceptance criteria:
-    - Confirm viewer checks are skipped only when out of scope.
-    - Confirm force flags still trigger viewer checks.
-    - Record executed commands and outcomes.
+    - Missing `git` does not hard-fail verify in local mode.
+    - Viewer skip message explicitly explains fallback/force option when `git` is unavailable.
+    - Docker/node/npm remain conditional skips.
   - Relevant checks:
     - `./scripts/verify.sh --go-packages ./cmd/bitriver`
-    - `bash scripts/test-verify-viewer-detection.sh`
   - Result:
-    - Passed (`./scripts/verify.sh` skipped viewer in out-of-scope local run; contract test asserted force-flag run paths).
+    - Passed (local skip path still works and conditional docker/node/npm behavior remains unchanged).
 
 ## Execution log
 
-- ✅ `bash scripts/test-verify-viewer-detection.sh`
+- ✅ `bash -n scripts/verify.sh`
 - ✅ `./scripts/verify.sh --go-packages ./cmd/bitriver`
-- ✅ `bash scripts/test-verify-viewer-detection.sh`
