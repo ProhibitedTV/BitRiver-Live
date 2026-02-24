@@ -2,29 +2,32 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Create internal viewer API core + first domain slices
+- [x] Task 1 — Refactor `useAuth` sign-out state flow
   - Acceptance criteria:
-    - Add shared request/types internals used by domain modules.
-    - Move a small subset of domain implementation from `viewer-api.ts` into new modules without changing behavior.
-    - `viewer-api.ts` remains compiling as public facade.
+    - `signOut` routes post-request auth state updates through one consistent path.
+    - `loadViewer` is the single source of truth for loading/user transitions after sign-out.
+    - Success/failure UX semantics remain unchanged.
   - Relevant checks:
-    - ✅ `cd web/viewer && npm run test -- --runInBand __tests__/viewer-api.test.ts`
+    - `cd web/viewer && npm run test -- --runInBand __tests__/navbar.test.tsx`
 
-- [x] Task 2 — Complete domain split and keep facade exports stable
+- [x] Task 2 — Add auth hook tests for sign-out semantics
   - Acceptance criteria:
-    - `viewer-api.ts` re-exports all previously exported types/functions unchanged.
-    - Remaining implementation is moved into domain modules under `web/viewer/lib/`.
+    - Tests cover signed-out result after sign-out.
+    - Tests cover sign-out failure error handling semantics.
+    - Tests cover loading indicator behavior during sign-out-triggered refresh.
   - Relevant checks:
-    - ✅ `cd web/viewer && npm run test -- --runInBand --testPathPattern=viewer-api`
+    - `cd web/viewer && npm run test -- --runInBand __tests__/useAuth.test.tsx`
 
-- [x] Task 3 — Final verification and task log update
+- [x] Task 3 — Run related regression test(s) and finalize task log
   - Acceptance criteria:
-    - Run requested viewer API tests and record outcomes.
-    - Task statuses and execution log are current.
+    - Existing auth-consuming UI test(s) still pass.
+    - Execution log includes all commands run and outcomes.
   - Relevant checks:
-    - ✅ `cd web/viewer && npm run test -- --runInBand __tests__/viewer-api.test.ts`
-    - ✅ `cd web/viewer && npm run test -- --runInBand --testPathPattern=viewer-api`
+    - `cd web/viewer && npm run test -- --runInBand __tests__/navbar.test.tsx`
 
 ## Execution log
-- ✅ `cd web/viewer && npm run test -- --runInBand __tests__/viewer-api.test.ts`
-- ✅ `cd web/viewer && npm run test -- --runInBand --testPathPattern=viewer-api`
+
+- ✅ `cd web/viewer && npm run test -- --runInBand __tests__/navbar.test.tsx`
+- ✅ `cd web/viewer && npm run test -- --runInBand __tests__/useAuth.test.tsx`
+- ✅ `cd web/viewer && npm run test -- --runInBand __tests__/navbar.test.tsx`
+- ❌ `./scripts/verify.sh` (fails on pre-existing viewer snapshot mismatch in `__tests__/channelDisplayPrimitives.test.tsx`)
