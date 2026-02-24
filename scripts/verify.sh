@@ -80,6 +80,10 @@ require_tool() {
 }
 
 viewer_changes_present() {
+  if ! command -v git >/dev/null 2>&1; then
+    return 2
+  fi
+
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
 
   local ci_base_ref="${GITHUB_BASE_REF:-${GITHUB_BASE_SHA:-${CI_MERGE_REQUEST_TARGET_BRANCH_SHA:-}}}"
@@ -167,12 +171,14 @@ fi
 run_step "go.sum non-empty guard" ./scripts/check-go-sum-not-empty.sh
 run_step "CI workflow contract check" ./scripts/check-ci-contract.sh
 
+require_tool "go" "Install Go to run repository Go tests."
 run_step "Go tests" \
   env GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test "$go_test_packages" -count=1 -timeout=120s
 
 run_step "Architecture dependency direction check" ./scripts/check-architecture-deps.sh
 run_step "No internal/models imports outside internal/models" ./scripts/check-no-models-imports.sh
 run_step "Dependency source check" ./scripts/check-dependency-source.sh
+require_tool "python3" "Install python3 to run ./scripts/check-contract-invariants.sh."
 run_step "Contract invariants check" ./scripts/check-contract-invariants.sh
 run_step "Production third-party digest gate" ./scripts/require-image-digests.sh
 
@@ -197,7 +203,11 @@ else
   elif is_ci_environment; then
     echo "Skipping: CI viewer checks run only for viewer-related workflows or with --ci-viewer."
   else
-    echo "Skipping: no changes detected under web/viewer (use --viewer to force)."
+    if command -v git >/dev/null 2>&1; then
+      echo "Skipping: no changes detected under web/viewer (use --viewer to force)."
+    else
+      echo "Skipping: git is unavailable, so local viewer-change detection cannot run (use --viewer to force)."
+    fi
   fi
 fi
 
