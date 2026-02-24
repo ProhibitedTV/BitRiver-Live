@@ -1,27 +1,26 @@
 # PLAN
 
 ## Scope (current change)
-- Update upload delete cleanup helpers in `internal/api/uploads_handlers.go` so handler call sites pass request `context.Context` into:
-  - `deleteUploadMedia`
-  - `deleteStoredUploadSource`
-- Remove direct use of `context.Background()` for upload source deletion.
-- Where cleanup runs outside the request lifecycle (best-effort rollback path), derive a short timeout context and document why.
-- Add focused tests in `internal/api/uploads_handlers_test.go` verifying:
-  - delete is attempted with the provided context
-  - canceled context is propagated and respected by delete path
+- Introduce a shared context utility package under `internal/ctxutil` that exposes behavior equivalent to existing package-local `normalizeContext` helpers.
+- Replace `normalizeContext` usage in:
+  - `internal/server`
+  - `internal/storage`
+  - `internal/chat`
+- Remove duplicate package-local context helper files after all references are migrated.
+- Add a minimal unit test for nil-context passthrough behavior in the new shared utility.
 
 ## Assumptions
-- Delete failures remain best-effort/logged and must not change HTTP response semantics.
-- Request-scoped delete should use `r.Context()` so cancellation/deadlines flow through object-store operations.
-- Async/best-effort rollback cleanup should not block indefinitely, so a bounded timeout context is appropriate.
+- Existing behavior is: nil context should become `context.Background()`, non-nil context is returned unchanged.
+- No call-site semantics should change beyond import/path updates.
+- A focused unit test in `internal/ctxutil` is sufficient coverage for shared behavior.
 
 ## Risks
-- Changing helper signatures can miss call sites and break compilation.
-- Tight timeout for async cleanup might be too short for some environments; keep it short but reasonable and document intent.
-- Tests that rely on cancellation need deterministic synchronization to avoid flakiness.
+- Missed call sites may leave duplicate helpers or compile failures.
+- Package import cycles could occur if utility placement is wrong (keep helper dependency-free in `internal/ctxutil`).
+- Removing files too early may break packages not included in initial search.
 
 ## Test plan
-- `gofmt -w internal/api/uploads_handlers.go internal/api/uploads_handlers_test.go`
-- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -run 'TestDeleteUploadRemovesDurableSourceObject|TestDeleteUploadMediaPropagatesContextToStoreDelete|TestDeleteUploadMediaRespectsCanceledContext' -count=1 -timeout=120s`
-- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1 -timeout=120s`
+- `gofmt -w internal/ctxutil/context.go internal/ctxutil/context_test.go internal/server/redis_store.go internal/storage/postgres_repository.go internal/chat/websocket.go internal/chat/redis_queue.go`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ctxutil -count=1 -timeout=120s`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server ./internal/storage ./internal/chat -count=1 -timeout=120s`
 - `./scripts/verify.sh`

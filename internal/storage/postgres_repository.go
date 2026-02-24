@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"bitriver-live/internal/ctxutil"
 	"bitriver-live/internal/domain"
 	"bitriver-live/internal/ingest"
 	"github.com/jackc/pgx/v5"
@@ -77,7 +78,7 @@ func (r *postgresRepository) Ping(ctx context.Context) error {
 	if r == nil || r.pool == nil {
 		return ErrPostgresUnavailable
 	}
-	ctx = normalizeContext(ctx)
+	ctx = ctxutil.Normalize(ctx)
 	return pingPostgresPool(ctx, r.pool)
 }
 
@@ -167,7 +168,7 @@ func pingPostgresPool(ctx context.Context, pool *pgxpool.Pool) error {
 	if pool == nil {
 		return errors.New("postgres pool unavailable")
 	}
-	ctx = normalizeContext(ctx)
+	ctx = ctxutil.Normalize(ctx)
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		return fmt.Errorf("acquire postgres connection: %w", err)

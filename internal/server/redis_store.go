@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"bitriver-live/internal/ctxutil"
+
 	redis "github.com/redis/go-redis/v9"
 )
 
@@ -130,7 +132,7 @@ func (s *redisStore) Ping(ctx context.Context) error {
 	if s == nil || s.client == nil {
 		return nil
 	}
-	ctx = normalizeContext(ctx)
+	ctx = ctxutil.Normalize(ctx)
 	timeout := s.timeout
 	if timeout <= 0 {
 		timeout = 2 * time.Second
