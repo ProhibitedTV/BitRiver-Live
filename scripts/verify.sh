@@ -93,6 +93,24 @@ viewer_changes_present() {
     fi
   fi
 
+  local local_base_ref=""
+  if git show-ref --verify --quiet refs/remotes/origin/main; then
+    local_base_ref="$(git merge-base HEAD refs/remotes/origin/main 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$local_base_ref" ]] && git rev-parse --verify --quiet HEAD~1 >/dev/null 2>&1; then
+    local_base_ref="HEAD~1"
+  fi
+
+  if [[ -n "$local_base_ref" ]]; then
+    local local_changed_files
+    if local_changed_files="$(git diff --name-only "$local_base_ref" HEAD -- web/viewer 2>/dev/null)"; then
+      if [[ -n "$local_changed_files" ]]; then
+        return 0
+      fi
+    fi
+  fi
+
   local status_output
   status_output="$(git status --porcelain -- web/viewer)"
   [[ -n "$status_output" ]]
