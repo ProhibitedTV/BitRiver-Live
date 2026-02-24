@@ -1,21 +1,17 @@
 # PLAN
 
 ## Scope (current change)
-- Update `scripts/verify.sh` `viewer_changes_present()` to preserve CI SHA-based diff behavior.
-- Improve local/dev fallback order: detect `web/viewer` changes from a merge-base diff first (prefer `origin/main` when available, then `HEAD~1`) before final `git status` fallback.
-- Keep existing override behavior unchanged (`--viewer`, `--ci-viewer`).
-- Extend script-level verification to deterministically prove committed `web/viewer` changes trigger viewer checks in local mode.
+- Fix OME XML validation in `scripts/test-quickstart.sh` so required-tag checks no longer contradict the legacy-bind guard.
+- Keep rejection of legacy root `<Bind><IP>` / `<Bind><Address>` tags.
+- Validate canonical root `<IP>` value against `BITRIVER_OME_BIND` when present.
 
 ## Assumptions
-- `origin/main` may not exist in all local clones; fallback logic must not error when missing.
-- `HEAD~1` exists for most active branches but may not in single-commit repos; logic should degrade safely.
-- Existing CI detection via base/head SHAs is already correct and should remain first-priority when metadata is provided.
+- Root-level `<IP>` is the canonical bind node in current generated OME config.
+- Legacy `<Bind><IP>` / `<Bind><Address>` tags should remain forbidden.
 
 ## Risks
-- Incorrect merge-base computation could over-trigger viewer checks.
-- Diffing against unavailable refs may cause false negatives if fallback sequence is brittle.
-- Tests that depend on branch names/history can be flaky unless isolated in temporary repos.
+- If canonical bind location differs from current contract, validation may fail in environments with custom templates.
+- Tightened bind-value checks may surface pre-existing env/config drift.
 
 ## Test plan
-- `bash scripts/test-verify-viewer-detection.sh`
-- `./scripts/verify.sh --go-packages ./cmd/bitriver`
+- `./scripts/test-quickstart.sh`

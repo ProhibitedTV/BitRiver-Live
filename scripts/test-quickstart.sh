@@ -170,9 +170,10 @@ expected_tls_port = env_values.get("BITRIVER_OME_SERVER_TLS_PORT", "9443")
 tree = ET.parse(config_path)
 root = tree.getroot()
 
-root_bind_ip = root.findtext("./Bind/IP")
+root_ip = root.findtext("./IP")
+legacy_root_bind_ip = root.findtext("./Bind/IP")
 legacy_root_bind_address = root.findtext("./Bind/Address")
-if (root_bind_ip and root_bind_ip.strip()) or (legacy_root_bind_address and legacy_root_bind_address.strip()):
+if (legacy_root_bind_ip and legacy_root_bind_ip.strip()) or (legacy_root_bind_address and legacy_root_bind_address.strip()):
     sys.exit("error: expected root <Bind> to omit unsupported host child tags (<IP>/<Address>)")
 listener_port = root.findtext("./Bind/Managers/API/Port")
 listener_tls_port = root.findtext("./Bind/Managers/API/TLSPort")
@@ -191,7 +192,6 @@ misplaced_auth_listener = [
 ]
 
 values = {
-    "RootBind": root_bind_ip,
     "ListenerPort": listener_port,
     "ListenerTLSPort": listener_tls_port,
     "ListenerWorkerCount": listener_worker_count,
@@ -209,6 +209,12 @@ if listener_port != expected_port or listener_tls_port != expected_tls_port:
         "error: expected <Bind><Managers><API> listener ports to match env values: "
         f"port={listener_port}, tlsPort={listener_tls_port}, "
         f"expected port={expected_port}, tlsPort={expected_tls_port}"
+    )
+
+if (root_ip or "").strip() != expected_bind:
+    sys.exit(
+        "error: expected root <IP> to match BITRIVER_OME_BIND: "
+        f"ip={root_ip}, expected={expected_bind}"
     )
 
 if legacy_access_tokens is not None:
