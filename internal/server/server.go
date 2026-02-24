@@ -411,7 +411,7 @@ func rateLimitMiddleware(rl *rateLimiter, resolver *clientIPResolver, logger *sl
 			ip, _ := resolveClientIP(r, resolver)
 			key := authRateLimitKey(r, ip)
 			requestLogger := loggingWithRequest(logger, resolver, r)
-			allowed, retryAfter, err := rl.AllowLogin(key)
+			allowed, retryAfter, err := rl.AllowLogin(r.Context(), key)
 			if err != nil {
 				if requestLogger != nil {
 					requestLogger.Error("rate limiter failure", "error", err)

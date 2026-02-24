@@ -82,8 +82,13 @@ func newRedisStore(cfg redisStoreConfig) (*redisStore, error) {
 }
 
 // Allow performs allow and returns an error when dependent systems reject the operation.
-func (s *redisStore) Allow(key string, limit int, window time.Duration) (bool, time.Duration, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
+func (s *redisStore) Allow(ctx context.Context, key string, limit int, window time.Duration) (bool, time.Duration, error) {
+	ctx = ctxutil.Normalize(ctx)
+	timeout := s.timeout
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	countReply, err := s.client.Do(ctx, "INCR", key)
 	if err != nil {

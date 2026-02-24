@@ -1,26 +1,22 @@
 # PLAN
 
 ## Scope (current change)
-- Introduce a shared context utility package under `internal/ctxutil` that exposes behavior equivalent to existing package-local `normalizeContext` helpers.
-- Replace `normalizeContext` usage in:
-  - `internal/server`
-  - `internal/storage`
-  - `internal/chat`
-- Remove duplicate package-local context helper files after all references are migrated.
-- Add a minimal unit test for nil-context passthrough behavior in the new shared utility.
+- Refactor server-side rate-limit token store contract so `Allow` accepts a caller-provided `context.Context`.
+- Update `internal/server/redis_store.go` to normalize caller context and wrap Redis operations with the configured timeout instead of using `context.Background()`.
+- Ensure request-scoped callers in rate-limiting middleware pass `r.Context()` through `AllowLogin` to the token store.
+- Add/adjust tests to verify cancellation and timeout handling through the Redis-backed rate-limit path.
 
 ## Assumptions
-- Existing behavior is: nil context should become `context.Background()`, non-nil context is returned unchanged.
-- No call-site semantics should change beyond import/path updates.
-- A focused unit test in `internal/ctxutil` is sufficient coverage for shared behavior.
+- Existing behavior for nil contexts should still be handled via `ctxutil.Normalize`.
+- `AllowLogin` is only called from HTTP middleware paths and can safely accept context without breaking external APIs.
+- Redis client honors context cancellation/timeouts for `Do` operations, including with the local redis stub used in tests.
 
 ## Risks
-- Missed call sites may leave duplicate helpers or compile failures.
-- Package import cycles could occur if utility placement is wrong (keep helper dependency-free in `internal/ctxutil`).
-- Removing files too early may break packages not included in initial search.
+- Signature changes across `tokenStore`/`rateLimiter` could break compilation in less obvious call sites.
+- Timeout wrapping could accidentally override earlier caller deadlines if composed incorrectly.
+- Cancellation/timeout tests may be flaky if they depend on real timing; keep assertions deterministic.
 
 ## Test plan
-- `gofmt -w internal/ctxutil/context.go internal/ctxutil/context_test.go internal/server/redis_store.go internal/storage/postgres_repository.go internal/chat/websocket.go internal/chat/redis_queue.go`
-- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/ctxutil -count=1 -timeout=120s`
-- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server ./internal/storage ./internal/chat -count=1 -timeout=120s`
+- `gofmt -w internal/server/ratelimit.go internal/server/server.go internal/server/redis_store.go internal/server/redis_store_integration_test.go internal/server/redis_store_test.go internal/server/server_test.go`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1 -timeout=120s`
 - `./scripts/verify.sh`
