@@ -2,39 +2,36 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Implement CI-aware viewer diff detection in `scripts/verify.sh`
+- [x] Task 1 — Update local viewer change detection fallback order in `scripts/verify.sh`
   - Acceptance criteria:
-    - `viewer_changes_present()` uses commit range diff when CI base/head metadata is available.
-    - Local fallback remains `git status --porcelain -- web/viewer`.
-    - Existing `--viewer` and `--ci-viewer` behavior is unchanged.
+    - CI SHA-based detection path remains unchanged in behavior.
+    - Local mode checks committed `web/viewer` changes via merge-base (`origin/main` if available, else `HEAD~1`) before `git status`.
+    - `--viewer` and `--ci-viewer` behavior remains unchanged.
   - Relevant checks:
     - `bash scripts/test-verify-viewer-detection.sh`
   - Result:
     - Passed.
 
-- [x] Task 2 — Add script-level detection contract tests under `scripts/`
+- [x] Task 2 — Add/update deterministic script-level test coverage
   - Acceptance criteria:
-    - Tests cover CI base/head range with viewer changes.
-    - Tests cover CI base/head range without viewer changes.
-    - Tests cover local uncommitted viewer changes fallback behavior.
+    - Test validates committed local `web/viewer` changes are detected without CI SHA env vars.
+    - Existing CI diff and local uncommitted fallback coverage continue to pass.
   - Relevant checks:
     - `bash scripts/test-verify-viewer-detection.sh`
   - Result:
     - Passed.
 
-- [x] Task 3 — Validate integration behavior for viewer skip/run conditions
+- [x] Task 3 — Run integration verification gate
   - Acceptance criteria:
-    - Confirm viewer checks are skipped only when out of scope.
-    - Confirm force flags still trigger viewer checks.
-    - Record executed commands and outcomes.
+    - `./scripts/verify.sh` completes successfully for a targeted Go package run.
+    - Record command outcomes in execution log.
   - Relevant checks:
     - `./scripts/verify.sh --go-packages ./cmd/bitriver`
-    - `bash scripts/test-verify-viewer-detection.sh`
   - Result:
-    - Passed (`./scripts/verify.sh` skipped viewer in out-of-scope local run; contract test asserted force-flag run paths).
+    - Passed.
 
 ## Execution log
 
 - ✅ `bash scripts/test-verify-viewer-detection.sh`
-- ✅ `./scripts/verify.sh --go-packages ./cmd/bitriver`
 - ✅ `bash scripts/test-verify-viewer-detection.sh`
+- ✅ `./scripts/verify.sh --go-packages ./cmd/bitriver`
