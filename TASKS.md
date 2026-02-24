@@ -2,32 +2,39 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Refactor `useAuth` sign-out state flow
+- [x] Task 1 — Implement CI-aware viewer diff detection in `scripts/verify.sh`
   - Acceptance criteria:
-    - `signOut` routes post-request auth state updates through one consistent path.
-    - `loadViewer` is the single source of truth for loading/user transitions after sign-out.
-    - Success/failure UX semantics remain unchanged.
+    - `viewer_changes_present()` uses commit range diff when CI base/head metadata is available.
+    - Local fallback remains `git status --porcelain -- web/viewer`.
+    - Existing `--viewer` and `--ci-viewer` behavior is unchanged.
   - Relevant checks:
-    - `cd web/viewer && npm run test -- --runInBand __tests__/navbar.test.tsx`
+    - `bash scripts/test-verify-viewer-detection.sh`
+  - Result:
+    - Passed.
 
-- [x] Task 2 — Add auth hook tests for sign-out semantics
+- [x] Task 2 — Add script-level detection contract tests under `scripts/`
   - Acceptance criteria:
-    - Tests cover signed-out result after sign-out.
-    - Tests cover sign-out failure error handling semantics.
-    - Tests cover loading indicator behavior during sign-out-triggered refresh.
+    - Tests cover CI base/head range with viewer changes.
+    - Tests cover CI base/head range without viewer changes.
+    - Tests cover local uncommitted viewer changes fallback behavior.
   - Relevant checks:
-    - `cd web/viewer && npm run test -- --runInBand __tests__/useAuth.test.tsx`
+    - `bash scripts/test-verify-viewer-detection.sh`
+  - Result:
+    - Passed.
 
-- [x] Task 3 — Run related regression test(s) and finalize task log
+- [x] Task 3 — Validate integration behavior for viewer skip/run conditions
   - Acceptance criteria:
-    - Existing auth-consuming UI test(s) still pass.
-    - Execution log includes all commands run and outcomes.
+    - Confirm viewer checks are skipped only when out of scope.
+    - Confirm force flags still trigger viewer checks.
+    - Record executed commands and outcomes.
   - Relevant checks:
-    - `cd web/viewer && npm run test -- --runInBand __tests__/navbar.test.tsx`
+    - `./scripts/verify.sh --go-packages ./cmd/bitriver`
+    - `bash scripts/test-verify-viewer-detection.sh`
+  - Result:
+    - Passed (`./scripts/verify.sh` skipped viewer in out-of-scope local run; contract test asserted force-flag run paths).
 
 ## Execution log
 
-- ✅ `cd web/viewer && npm run test -- --runInBand __tests__/navbar.test.tsx`
-- ✅ `cd web/viewer && npm run test -- --runInBand __tests__/useAuth.test.tsx`
-- ✅ `cd web/viewer && npm run test -- --runInBand __tests__/navbar.test.tsx`
-- ❌ `./scripts/verify.sh` (fails on pre-existing viewer snapshot mismatch in `__tests__/channelDisplayPrimitives.test.tsx`)
+- ✅ `bash scripts/test-verify-viewer-detection.sh`
+- ✅ `./scripts/verify.sh --go-packages ./cmd/bitriver`
+- ✅ `bash scripts/test-verify-viewer-detection.sh`

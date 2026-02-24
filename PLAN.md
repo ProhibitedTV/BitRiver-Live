@@ -1,20 +1,21 @@
 # PLAN
 
 ## Scope (current change)
-- Refactor `web/viewer/hooks/useAuth.tsx` `signOut` flow so auth state transitions are centralized via `loadViewer` instead of split between `finally` and `loadViewer`.
-- Preserve current user-visible semantics for sign-out success/failure (error messaging and signed-out state behavior).
-- Add/adjust viewer auth tests to lock sign-out UX semantics: signed-out user state, error handling, and loading indicator behavior during sign-out refresh.
+- Update `scripts/verify.sh` so `viewer_changes_present()` detects viewer changes from CI commit metadata (base/head SHA range) when available.
+- Preserve existing CLI override behavior for `--viewer` and `--ci-viewer`.
+- Add script-level contract tests under `scripts/` that validate viewer change detection in representative git states.
+- Verify viewer checks still only skip when viewer scope is truly absent.
 
 ## Assumptions
-- `loadViewer` remains the source of truth for `user`, `loading`, and `error` transitions after sign-out requests.
-- Existing components consuming `useAuth` should not require call-site changes.
-- Jest/jsdom test environment can validate hook behavior through an `AuthProvider` test harness with mocked `fetch`.
+- CI metadata will be provided through common environment variables (e.g. GitHub base/head refs or SHAs) and may be absent in local runs.
+- Local developer workflows should continue to rely on `git status --porcelain -- web/viewer` semantics.
+- Contract checks can run without executing the full `./scripts/verify.sh` suite by unit-testing helper behavior in isolation.
 
 ## Risks
-- Changing `signOut` sequencing could unintentionally hide errors or alter loading timing.
-- Race conditions between initial `loadViewer` and sign-out-triggered `loadViewer` can make tests flaky if assertions are not synchronized.
-- Refactor might regress unauthorized handling (401/403) if error normalization path changes.
+- Incorrect SHA/ref resolution in CI could overrun viewer checks (false positives) or skip needed checks (false negatives).
+- Diff command failures on shallow clones or missing refs could break verification if fallback logic is not robust.
+- New tests may become brittle if they depend on repository history rather than isolated temp repos.
 
 ## Test plan
-- `cd web/viewer && npm run test -- --runInBand __tests__/useAuth.test.tsx`
-- `cd web/viewer && npm run test -- --runInBand __tests__/navbar.test.tsx`
+- `bash scripts/test-verify-viewer-detection.sh`
+- `./scripts/verify.sh --go-packages ./cmd/bitriver`

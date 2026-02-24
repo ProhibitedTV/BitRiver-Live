@@ -82,6 +82,17 @@ require_tool() {
 viewer_changes_present() {
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
 
+  local ci_base_ref="${GITHUB_BASE_REF:-${GITHUB_BASE_SHA:-${CI_MERGE_REQUEST_TARGET_BRANCH_SHA:-}}}"
+  local ci_head_ref="${GITHUB_HEAD_REF:-${GITHUB_SHA:-${CI_COMMIT_SHA:-}}}"
+
+  if [[ -n "$ci_base_ref" && -n "$ci_head_ref" ]]; then
+    local changed_files
+    if changed_files="$(git diff --name-only "$ci_base_ref" "$ci_head_ref" -- web/viewer 2>/dev/null)"; then
+      [[ -n "$changed_files" ]]
+      return
+    fi
+  fi
+
   local status_output
   status_output="$(git status --porcelain -- web/viewer)"
   [[ -n "$status_output" ]]
@@ -127,6 +138,13 @@ should_run_viewer_checks() {
 
   viewer_changes_present
 }
+
+if [[ "${BITRIVER_VERIFY_SOURCE_ONLY:-0}" == "1" ]]; then
+  if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+    return 0
+  fi
+  exit 0
+fi
 
 run_step "go.sum non-empty guard" ./scripts/check-go-sum-not-empty.sh
 run_step "CI workflow contract check" ./scripts/check-ci-contract.sh
