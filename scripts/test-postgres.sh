@@ -2,6 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/polling.sh"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
@@ -84,29 +86,33 @@ if [ -z "${BITRIVER_TEST_POSTGRES_DSN:-}" ]; then
     --volume "$MIGRATIONS_DIR:/migrations:ro" \
     $IMAGE >/dev/null
 
-  echo "waiting for postgres to become ready..." >&2
-  for attempt in $(seq 1 60); do
+  wait_for_postgres_check() {
     status=$(docker inspect --format '{{.State.Health.Status}}' "$CONTAINER_NAME" 2>/dev/null || echo "")
     if [ "$status" = "healthy" ]; then
-      break
+      return 0
     fi
     if [ "$status" = "unhealthy" ]; then
       echo "error: postgres container failed health checks" >&2
       docker logs "$CONTAINER_NAME" >&2 || true
-      exit 1
+      return 2
     fi
     if ! docker ps --format '{{.Names}}' | grep -q "^$CONTAINER_NAME$"; then
       echo "error: postgres container exited early" >&2
       docker logs "$CONTAINER_NAME" >&2 || true
-      exit 1
+      return 2
     fi
-    sleep 1
-    if [ "$attempt" -eq 60 ]; then
+    return 1
+  }
+
+  echo "waiting for postgres to become ready..." >&2
+  if ! bounded_poll 60 1 wait_for_postgres_check; then
+    poll_rc=$?
+    if [ "$poll_rc" -eq 124 ]; then
       echo "error: postgres container did not become ready" >&2
       docker logs "$CONTAINER_NAME" >&2 || true
-      exit 1
     fi
-  done
+    exit 1
+  fi
 
   echo "applying migrations from $MIGRATIONS_DIR" >&2
   mapfile -t migrations < <(find "$MIGRATIONS_DIR" -maxdepth 1 -type f -name '*.sql' | sort)

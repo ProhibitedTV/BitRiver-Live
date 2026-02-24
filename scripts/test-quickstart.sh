@@ -2,6 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/polling.sh"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="$REPO_ROOT/.env"
 COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
@@ -268,37 +270,47 @@ set +a
 
 WAIT_TIMEOUT=${WAIT_TIMEOUT:-300}
 
+wait_for_health_check() {
+  local service_name="$1"
+
+  container_id=$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps -q "$service_name")
+  if [ -z "$container_id" ]; then
+    echo "error: no container found for service $service_name" >&2
+    return 2
+  fi
+
+  status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id")
+  WAIT_FOR_HEALTH_LAST_STATUS="$status"
+
+  case "$status" in
+  healthy)
+    echo "Service $service_name is healthy."
+    return 0
+    ;;
+  unhealthy)
+    echo "error: service $service_name reported unhealthy" >&2
+    docker inspect "$container_id"
+    return 2
+    ;;
+  *)
+    return 1
+    ;;
+  esac
+}
+
 wait_for_health() {
   local service_name="$1"
-  local deadline=$((SECONDS + WAIT_TIMEOUT))
+  WAIT_FOR_HEALTH_LAST_STATUS="unknown"
 
-  while true; do
-    container_id=$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps -q "$service_name")
-    if [ -z "$container_id" ]; then
-      echo "error: no container found for service $service_name" >&2
-      exit 1
-    fi
+  if bounded_poll "$WAIT_TIMEOUT" 5 wait_for_health_check "$service_name"; then
+    return 0
+  fi
 
-    status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id")
-    case "$status" in
-    healthy)
-      echo "Service $service_name is healthy."
-      return 0
-      ;;
-    unhealthy)
-      echo "error: service $service_name reported unhealthy" >&2
-      docker inspect "$container_id"
-      exit 1
-      ;;
-    esac
-
-    if [ "$SECONDS" -ge "$deadline" ]; then
-      echo "error: timed out waiting for $service_name to become healthy (last status: $status)" >&2
-      exit 1
-    fi
-
-    sleep 5
-  done
+  poll_rc=$?
+  if [ "$poll_rc" -eq 124 ]; then
+    echo "error: timed out waiting for $service_name to become healthy (last status: $WAIT_FOR_HEALTH_LAST_STATUS)" >&2
+  fi
+  exit 1
 }
 
 SERVICES_WITH_HEALTHCHECKS=(

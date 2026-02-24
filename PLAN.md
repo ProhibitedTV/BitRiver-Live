@@ -1,22 +1,22 @@
 # PLAN
 
 ## Scope (current change)
-- Refactor server-side rate-limit token store contract so `Allow` accepts a caller-provided `context.Context`.
-- Update `internal/server/redis_store.go` to normalize caller context and wrap Redis operations with the configured timeout instead of using `context.Background()`.
-- Ensure request-scoped callers in rate-limiting middleware pass `r.Context()` through `AllowLogin` to the token store.
-- Add/adjust tests to verify cancellation and timeout handling through the Redis-backed rate-limit path.
+- Add a reusable shell helper under `scripts/` for bounded polling that accepts interval and timeout values.
+- Refactor `scripts/test-quickstart.sh` service health waiting to use the shared helper.
+- Refactor `scripts/test-postgres.sh` postgres container readiness waiting to use the shared helper while preserving existing failure semantics.
 
 ## Assumptions
-- Existing behavior for nil contexts should still be handled via `ctxutil.Normalize`.
-- `AllowLogin` is only called from HTTP middleware paths and can safely accept context without breaking external APIs.
-- Redis client honors context cancellation/timeouts for `Do` operations, including with the local redis stub used in tests.
+- Shared helper can be sourced from both scripts without changing their current shell options (`set -euo pipefail`).
+- Existing readiness logic can be expressed as callback commands that return pass/retry/fail semantics.
+- Current user-facing error messages should remain unchanged unless made more specific with the same meaning.
 
 ## Risks
-- Signature changes across `tokenStore`/`rateLimiter` could break compilation in less obvious call sites.
-- Timeout wrapping could accidentally override earlier caller deadlines if composed incorrectly.
-- Cancellation/timeout tests may be flaky if they depend on real timing; keep assertions deterministic.
+- Refactoring loops into a helper may accidentally change timeout boundaries or retry cadence.
+- `set -e` behavior in callback commands can cause early exits if not handled carefully.
+- Polling helper API might be too rigid for existing scripts unless designed with explicit hooks.
 
 ## Test plan
-- `gofmt -w internal/server/ratelimit.go internal/server/server.go internal/server/redis_store.go internal/server/redis_store_integration_test.go internal/server/redis_store_test.go internal/server/server_test.go`
-- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1 -timeout=120s`
-- `./scripts/verify.sh`
+- `bash -n scripts/polling.sh scripts/test-quickstart.sh scripts/test-postgres.sh`
+- `shellcheck scripts/polling.sh scripts/test-quickstart.sh scripts/test-postgres.sh`
+- `./scripts/test-postgres.sh ./internal/storage/...` (may fail if Docker unavailable; still validates flow attempt)
+- `./scripts/test-quickstart.sh` (may fail if Docker unavailable; still validates flow attempt)
