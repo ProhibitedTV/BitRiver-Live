@@ -12,6 +12,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+
+	"bitriver-live/internal/ctxutil"
 	"strings"
 	"sync"
 	"time"
@@ -191,7 +193,7 @@ func (c *Conn) ReadMessage(ctx context.Context) ([]byte, error) {
 	if c.closed {
 		return nil, io.EOF
 	}
-	ctx = normalizeContext(ctx)
+	ctx = ctxutil.Normalize(ctx)
 	deadline, ok := ctx.Deadline()
 	if ok {
 		_ = c.conn.SetReadDeadline(deadline)

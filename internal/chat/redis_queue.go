@@ -20,6 +20,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"bitriver-live/internal/ctxutil"
+
 	redis "github.com/redis/go-redis/v9"
 )
 
@@ -163,7 +165,7 @@ func newBackoff(base, max time.Duration) *backoff {
 
 // Sleep performs sleep and returns an error when dependent systems reject the operation.
 func (b *backoff) Sleep(ctx context.Context) error {
-	ctx = normalizeContext(ctx)
+	ctx = ctxutil.Normalize(ctx)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -277,7 +279,7 @@ func (q *redisQueue) Ping(ctx context.Context) error {
 	if q == nil || q.client == nil {
 		return nil
 	}
-	ctx = normalizeContext(ctx)
+	ctx = ctxutil.Normalize(ctx)
 	timeout := q.blockTimeout
 	if timeout <= 0 {
 		timeout = 2 * time.Second
@@ -318,7 +320,7 @@ func (s *redisSubscription) run(ctx context.Context) {
 	s.wg.Add(1)
 	defer close(s.ch)
 	defer s.wg.Done()
-	ctx = normalizeContext(ctx)
+	ctx = ctxutil.Normalize(ctx)
 	groupBackoff := newBackoff(200*time.Millisecond, 5*time.Second)
 	readBackoff := newBackoff(200*time.Millisecond, 5*time.Second)
 	for {
