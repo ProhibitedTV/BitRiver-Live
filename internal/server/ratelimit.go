@@ -41,7 +41,7 @@ type ipLimiter struct {
 }
 
 type tokenStore interface {
-	Allow(key string, limit int, window time.Duration) (bool, time.Duration, error)
+	Allow(ctx context.Context, key string, limit int, window time.Duration) (bool, time.Duration, error)
 }
 
 // newRateLimiter builds and returns rate limiter using the supplied dependencies.
@@ -100,12 +100,12 @@ func (r *rateLimiter) AllowRequest() bool {
 }
 
 // AllowLogin performs allow login and returns an error when dependent systems reject the operation.
-func (r *rateLimiter) AllowLogin(key string) (bool, time.Duration, error) {
+func (r *rateLimiter) AllowLogin(ctx context.Context, key string) (bool, time.Duration, error) {
 	if r == nil || r.loginLimit <= 0 {
 		return true, 0, nil
 	}
 	if r.store != nil {
-		allowed, retryAfter, err := r.store.Allow(fmt.Sprintf("bitriver:login:%s", key), r.loginLimit, r.loginWindow)
+		allowed, retryAfter, err := r.store.Allow(ctx, fmt.Sprintf("bitriver:login:%s", key), r.loginLimit, r.loginWindow)
 		return allowed, retryAfter, err
 	}
 	if key == "" {

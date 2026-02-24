@@ -47,15 +47,15 @@ func runRedisStoreIntegration(t *testing.T, useTLS bool) {
 	t.Cleanup(func() {
 		_ = store.Close(context.Background())
 	})
-	allowed, retry, err := store.Allow("login:test", 2, time.Second)
+	allowed, retry, err := store.Allow(context.Background(), "login:test", 2, time.Second)
 	if err != nil || !allowed || retry != 0 {
 		t.Fatalf("first allow unexpected: allowed=%v retry=%v err=%v", allowed, retry, err)
 	}
-	allowed, retry, err = store.Allow("login:test", 2, time.Second)
+	allowed, retry, err = store.Allow(context.Background(), "login:test", 2, time.Second)
 	if err != nil || !allowed {
 		t.Fatalf("second allow unexpected: allowed=%v retry=%v err=%v", allowed, retry, err)
 	}
-	allowed, retry, err = store.Allow("login:test", 2, time.Second)
+	allowed, retry, err = store.Allow(context.Background(), "login:test", 2, time.Second)
 	if err != nil {
 		t.Fatalf("third allow err: %v", err)
 	}
