@@ -141,16 +141,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    let signOutError: string | undefined;
+    setLoading(true);
     try {
       setError(undefined);
       const path = logoutUrl ?? "/api/viewer/me";
       await request<void>(path, { method: "DELETE" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to sign out");
+      signOutError = err instanceof Error ? err.message : "Unable to sign out";
     } finally {
-      setUser(undefined);
-      setLoading(false);
-      void loadViewer();
+      await loadViewer();
+      if (signOutError) {
+        setError(signOutError);
+      }
     }
   }, [loadViewer, logoutUrl]);
 
