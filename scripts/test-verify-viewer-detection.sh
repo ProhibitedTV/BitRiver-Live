@@ -96,6 +96,13 @@ create_repo "$repo_with_local_status"
 echo "local viewer edit" >> "$repo_with_local_status/web/viewer/app.tsx"
 assert_detection "present" "Local fallback detects uncommitted viewer changes" "$repo_with_local_status"
 
+repo_with_local_committed_viewer_change="$TMP_ROOT/repo-local-committed-viewer-change"
+create_repo "$repo_with_local_committed_viewer_change"
+echo "committed viewer edit" >> "$repo_with_local_committed_viewer_change/web/viewer/app.tsx"
+git -C "$repo_with_local_committed_viewer_change" add web/viewer/app.tsx
+git -C "$repo_with_local_committed_viewer_change" commit -qm "committed viewer edit"
+assert_detection "present" "Local fallback detects committed viewer changes via HEAD~1 diff" "$repo_with_local_committed_viewer_change"
+
 assert_force_logic "--viewer force path keeps viewer checks enabled" 'force_viewer_checks=true; if should_run_viewer_checks; then true; else false; fi'
 assert_force_logic "--ci-viewer force path keeps CI viewer checks enabled" 'force_ci_viewer_checks=true; CI=true; GITHUB_WORKFLOW=api-ci; if should_run_viewer_checks; then true; else false; fi'
 
