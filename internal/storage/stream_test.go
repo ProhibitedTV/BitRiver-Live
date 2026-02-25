@@ -76,6 +76,49 @@ func (f *fakeIngestController) TranscodeUpload(ctx context.Context, params inges
 	return ingest.UploadTranscodeResult{PlaybackURL: params.SourceURL}, nil
 }
 
+func TestRunIngestBootWithRetryStopsOnContextTerminalErrors(t *testing.T) {
+	controller := &fakeIngestController{bootResponses: []bootResponse{{err: context.DeadlineExceeded}}}
+	retryInterval := 100 * time.Millisecond
+
+	start := time.Now()
+	_, err := runIngestBootWithRetry(controller, ingest.BootParams{}, 50*time.Millisecond, 3, retryInterval)
+	elapsed := time.Since(start)
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded error, got %v", err)
+	}
+	if controller.bootCalls != 1 {
+		t.Fatalf("expected exactly 1 boot attempt, got %d", controller.bootCalls)
+	}
+	if elapsed >= retryInterval/2 {
+		t.Fatalf("expected no retry sleep on terminal context error; elapsed=%v retryInterval=%v", elapsed, retryInterval)
+	}
+}
+
+func TestRunIngestBootWithRetryRetriesOnTransientErrors(t *testing.T) {
+	transientErr := errors.New("transient ingest failure")
+	expected := ingest.BootResult{PlaybackURL: "https://playback.example"}
+	controller := &fakeIngestController{bootResponses: []bootResponse{{err: transientErr}, {result: expected}}}
+	retryInterval := 25 * time.Millisecond
+
+	start := time.Now()
+	boot, err := runIngestBootWithRetry(controller, ingest.BootParams{}, 50*time.Millisecond, 3, retryInterval)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("expected retry path to succeed, got error %v", err)
+	}
+	if controller.bootCalls != 2 {
+		t.Fatalf("expected 2 boot attempts, got %d", controller.bootCalls)
+	}
+	if !reflect.DeepEqual(boot, expected) {
+		t.Fatalf("unexpected boot result: got %#v want %#v", boot, expected)
+	}
+	if elapsed < retryInterval/2 {
+		t.Fatalf("expected retry delay for transient errors; elapsed=%v retryInterval=%v", elapsed, retryInterval)
+	}
+}
+
 func TestCreateChannelAndStartStopStream(t *testing.T) {
 	store := newTestStore(t)
 	user, err := store.CreateUser(CreateUserParams{
