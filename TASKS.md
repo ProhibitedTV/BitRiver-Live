@@ -2,32 +2,29 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Wire verify compose config to explicit env-file selection
+- [x] Task 1 — Create root `.env` from deployment template
   - Acceptance criteria:
-    - `scripts/verify.sh` selects env file in this order: root `.env` then `deploy/.env.example`.
-    - Compose validation command is `docker compose --env-file <selected> -f deploy/docker-compose.yml config`.
-    - Clear error emitted if neither env file exists.
+    - Root `.env` exists and is based on `deploy/.env.example`.
+    - `.env` remains ignored/untracked by git.
   - Relevant checks:
-    - `bash -n scripts/verify.sh`
+    - `test -f .env`
+    - `git status --short`
 
-- [x] Task 2 — Add deploy smoke helper script
+- [x] Task 2 — Populate required production secrets/URLs/tokens
   - Acceptance criteria:
-    - New `scripts/deploy-smoke.sh` starts compose stack using a temporary project name.
-    - Script waits for API `/readyz` and prints concise PASS/FAIL summary.
-    - Script always tears down compose resources on exit.
+    - Required admin credentials, DB/Redis/SRS/OME/transcoder tokens, and public URL values are non-placeholder values.
   - Relevant checks:
-    - `bash -n scripts/deploy-smoke.sh`
-    - `./scripts/deploy-smoke.sh`
+    - `deploy/check-env.sh .env`
 
-- [x] Task 3 — Update operator/testing docs for new validation path
+- [x] Task 3 — Pin required third-party image digests
   - Acceptance criteria:
-    - Docs describe verify env-file fallback behavior.
-    - Docs include `scripts/deploy-smoke.sh` as one-command confidence check.
+    - All required third-party digest env vars are set and format-valid.
   - Relevant checks:
-    - `rg -n "deploy-smoke|--env-file" docs/testing.md`
+    - `./scripts/require-image-digests.sh --env-file .env`
 
 ## Execution log
-- ✅ `bash -n scripts/verify.sh scripts/deploy-smoke.sh`
-- ❌ `./scripts/deploy-smoke.sh` (docker unavailable in this environment: `FAIL: docker is required`)
-- ✅ `rg -n "deploy-smoke|--env-file|readyz|Docker Compose config validation" docs/testing.md scripts/verify.sh scripts/deploy-smoke.sh`
-- ❌ `./scripts/verify.sh` (fails on pre-existing viewer snapshot mismatch in `web/viewer/__tests__/channelDisplayPrimitives.test.tsx`)
+- ✅ `cp deploy/.env.example .env && test -f .env && git status --short`
+- ❌ `deploy/check-env.sh .env` (initial failures: placeholder secrets/URLs and missing production digest pins)
+- ✅ `deploy/check-env.sh .env`
+- ✅ `./scripts/require-image-digests.sh --env-file .env`
+- ✅ `git status --short` (confirmed `.env` is still untracked/ignored)
