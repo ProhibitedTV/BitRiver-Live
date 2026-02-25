@@ -1,18 +1,19 @@
 # PLAN
 
 ## Scope (current change)
-- Add a second concurrency accessor test in `internal/api/handlers_concurrency_test.go` for preconfigured dependencies.
-- Verify `sessionManager`, `mfaChallengeManager`, `logger`, `tracer`, and `srsTracker` preserve injected pointer identity under concurrent access.
-- Prevent regressions where accessor lazy-init paths overwrite non-nil dependencies.
+- Add focused unit tests for `runIngestBootWithRetry` in `internal/storage/stream_test.go`.
+- Verify retry loop stops immediately on terminal context errors (`context.DeadlineExceeded` / `context.Canceled`) without waiting for retry sleep.
+- Verify retry loop still retries for non-context transient errors.
+- Make helper behavior explicit in `internal/storage/ingest_boot_helpers.go` only if current implementation does not match expected behavior.
 
 ## Assumptions
-- Existing accessor methods are intended to lazily initialize only when their backing field is `nil`.
-- Pointer identity checks are the strongest assertion for "must not overwrite injected dependency" behavior.
+- `runIngestBootWithRetry` should treat context cancellation/deadline errors as terminal for the current boot flow.
+- Existing storage tests already expose a fake ingest controller that can be reused to count boot attempts.
 
 ## Risks
-- Concurrent test assertions could become flaky if assertions rely on value semantics instead of direct pointer identity.
-- Using globally shared defaults (e.g., `slog.Default()`, `tracing.Default()`) could mask overwrite behavior if not handled carefully.
+- Sleep-based retry checks can become flaky if assertions rely on wall-clock precision.
+- Updating retry behavior could affect both file-backed and postgres-backed stream start paths since they share the helper.
 
 ## Test plan
-- `go test ./internal/api -run 'TestHandlerAccessorsConcurrent' -count=1`
+- `go test ./internal/storage -run 'TestRunIngestBootWithRetry' -count=1`
 - `./scripts/verify.sh`

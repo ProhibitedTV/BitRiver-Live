@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"bitriver-live/internal/domain"
@@ -24,6 +25,9 @@ func runIngestBootWithRetry(controller ingest.Controller, params ingest.BootPara
 		boot, bootErr = controller.BootStream(ctx, params)
 		cancel()
 		if bootErr == nil {
+			break
+		}
+		if errors.Is(bootErr, context.Canceled) || errors.Is(bootErr, context.DeadlineExceeded) {
 			break
 		}
 		if attempt < resolvedAttempts-1 && retryInterval > 0 {
