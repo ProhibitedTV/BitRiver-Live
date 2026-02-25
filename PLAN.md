@@ -1,20 +1,22 @@
 # PLAN
 
 ## Scope (current change)
-- Update `scripts/verify.sh` Docker Compose validation to pass an explicit env file.
-- Add `scripts/deploy-smoke.sh` for operator-focused compose boot + `/readyz` smoke validation with guaranteed teardown.
-- Keep deployment contract/runtime behavior unchanged (validation-only workflow improvements).
+- Create a root `.env` from `deploy/.env.example` for production-oriented local validation.
+- Fill required secrets/tokens and public URL/domain values so env validation passes.
+- Run env validation and third-party digest enforcement, then fix any failures.
+- Keep `.env` untracked in git.
 
 ## Assumptions
-- Root `.env` is the preferred source for local validation when present.
-- `deploy/.env.example` contains enough defaults for compose config rendering when root `.env` is absent.
-- API readiness endpoint is reachable at `http://localhost:${BITRIVER_LIVE_PORT:-8080}/readyz` once stack is ready.
+- Placeholder/example secrets are rejected by `deploy/check-env.sh` / `cmd/bitriver env validate`.
+- Synthetic (non-real) but strong unique values are acceptable for this local setup as long as required fields are populated.
+- Digest enforcement accepts any value in `@sha256:<64 hex>` format and does not verify registry existence.
 
 ## Risks
-- Environments without Docker/Compose cannot run smoke validation (script must fail with clear prerequisite messaging).
-- Using `deploy/.env.example` fallback must not mask missing user-specific required vars in root `.env` scenarios.
+- Missing a required env key may cause repeated validation failures.
+- Incorrect digest formatting will fail `scripts/require-image-digests.sh`.
+- Accidentally staging `.env` would violate repository secret handling policy.
 
 ## Test plan
-- `bash -n scripts/verify.sh scripts/deploy-smoke.sh`
-- `./scripts/verify.sh --go-packages ./cmd/bitriver` (or equivalent targeted run) to confirm compose validation wiring.
-- `./scripts/deploy-smoke.sh` on Docker-enabled host to validate boot/readiness/teardown flow.
+- `deploy/check-env.sh .env`
+- `./scripts/require-image-digests.sh --env-file .env`
+- `git status --short` (confirm `.env` is not tracked)
