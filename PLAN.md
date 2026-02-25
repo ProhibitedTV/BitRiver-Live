@@ -1,19 +1,17 @@
 # PLAN
 
 ## Scope (current change)
-- Add focused unit tests for `runIngestBootWithRetry` in `internal/storage/stream_test.go`.
-- Verify retry loop stops immediately on terminal context errors (`context.DeadlineExceeded` / `context.Canceled`) without waiting for retry sleep.
-- Verify retry loop still retries for non-context transient errors.
-- Make helper behavior explicit in `internal/storage/ingest_boot_helpers.go` only if current implementation does not match expected behavior.
+- Extend `scripts/test-verify-viewer-detection.sh` with explicit outcome tests for `should_run_viewer_checks` CI logic.
+- Cover CI viewer workflow enablement, CI non-viewer workflow skip/force behavior, and missing Node/npm skip behavior.
+- Keep the existing source-only loading approach (`BITRIVER_VERIFY_SOURCE_ONLY=1`) and PASS/FAIL assertion style.
 
 ## Assumptions
-- `runIngestBootWithRetry` should treat context cancellation/deadline errors as terminal for the current boot flow.
-- Existing storage tests already expose a fake ingest controller that can be reused to count boot attempts.
+- `should_run_viewer_checks` relies on `is_ci_environment`, `is_viewer_related_workflow`, and `viewer_checks_supported` and should be exercised through sourced `scripts/verify.sh`.
+- Test determinism is best achieved by controlling `PATH` with temporary fake `node`/`npm` binaries instead of depending on host tools.
 
 ## Risks
-- Sleep-based retry checks can become flaky if assertions rely on wall-clock precision.
-- Updating retry behavior could affect both file-backed and postgres-backed stream start paths since they share the helper.
+- Inline shell snippets may become hard to read if environment setup is duplicated.
+- PATH overrides could accidentally hide required shell tools if not scoped carefully.
 
 ## Test plan
-- `go test ./internal/storage -run 'TestRunIngestBootWithRetry' -count=1`
-- `./scripts/verify.sh`
+- `bash scripts/test-verify-viewer-detection.sh`

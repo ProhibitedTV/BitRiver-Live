@@ -73,6 +73,46 @@ assert_force_logic() {
   fi
 }
 
+assert_viewer_check_outcome() {
+  local expected="$1"
+  local description="$2"
+  local command_snippet="$3"
+
+  local rc=0
+  set +e
+  BITRIVER_VERIFY_SOURCE_ONLY=1 TEST_REPO="$ROOT_DIR" \
+    bash -c 'script_path="$1"; snippet="$2"; set --; source "$script_path"; cd "$TEST_REPO"; set +e; eval "$snippet"; rc=$?; set -e; exit "$rc"' _ "$VERIFY_SCRIPT" "$command_snippet"
+  rc=$?
+  set -e
+
+  if [[ "$expected" == "run" && "$rc" -ne 0 ]]; then
+    echo "FAIL: $description (expected viewer checks to run)" >&2
+    return 1
+  fi
+
+  if [[ "$expected" == "skip" && "$rc" -eq 0 ]]; then
+    echo "FAIL: $description (expected viewer checks to skip)" >&2
+    return 1
+  fi
+
+  echo "PASS: $description"
+}
+
+create_fake_node_npm_bin() {
+  local bin_dir="$1"
+
+  mkdir -p "$bin_dir"
+  cat > "$bin_dir/node" <<'BIN'
+#!/usr/bin/env bash
+exit 0
+BIN
+  cat > "$bin_dir/npm" <<'BIN'
+#!/usr/bin/env bash
+exit 0
+BIN
+  chmod +x "$bin_dir/node" "$bin_dir/npm"
+}
+
 repo_with_viewer_diff="$TMP_ROOT/repo-viewer-diff"
 create_repo "$repo_with_viewer_diff"
 base_sha="$(git -C "$repo_with_viewer_diff" rev-parse HEAD)"
@@ -105,5 +145,27 @@ assert_detection "present" "Local fallback detects committed viewer changes via 
 
 assert_force_logic "--viewer force path keeps viewer checks enabled" 'force_viewer_checks=true; if should_run_viewer_checks; then true; else false; fi'
 assert_force_logic "--ci-viewer force path keeps CI viewer checks enabled" 'force_ci_viewer_checks=true; CI=true; GITHUB_WORKFLOW=api-ci; if should_run_viewer_checks; then true; else false; fi'
+
+repo_for_outcome_checks="$TMP_ROOT/repo-outcome-checks"
+mkdir -p "$repo_for_outcome_checks/web/viewer"
+
+fake_bin_with_node_npm="$TMP_ROOT/fake-bin-with-node-npm"
+create_fake_node_npm_bin "$fake_bin_with_node_npm"
+
+assert_viewer_check_outcome "run" \
+  "CI viewer-related workflow runs viewer checks when viewer support is available" \
+  "PATH='$fake_bin_with_node_npm:$PATH'; CI=true; GITHUB_WORKFLOW='viewer-ci'; cd '$repo_for_outcome_checks'; if should_run_viewer_checks; then true; else false; fi"
+
+assert_viewer_check_outcome "skip" \
+  "CI non-viewer workflow skips viewer checks by default" \
+  "PATH='$fake_bin_with_node_npm:$PATH'; CI=true; GITHUB_WORKFLOW='api-ci'; cd '$repo_for_outcome_checks'; if should_run_viewer_checks; then true; else false; fi"
+
+assert_viewer_check_outcome "run" \
+  "CI non-viewer workflow runs viewer checks when force_ci_viewer_checks=true" \
+  "PATH='$fake_bin_with_node_npm:$PATH'; CI=true; GITHUB_WORKFLOW='api-ci'; force_ci_viewer_checks=true; cd '$repo_for_outcome_checks'; if should_run_viewer_checks; then true; else false; fi"
+
+assert_viewer_check_outcome "skip" \
+  "CI viewer-related workflow skips when node/npm are unavailable" \
+  "PATH='/usr/sbin:/sbin'; CI=true; GITHUB_WORKFLOW='viewer-ci'; cd '$repo_for_outcome_checks'; if should_run_viewer_checks; then true; else false; fi"
 
 echo "viewer detection contract checks passed."
