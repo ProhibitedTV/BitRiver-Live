@@ -2,20 +2,22 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Add CI outcome assertions for `should_run_viewer_checks`
+- [x] Task 1 — Add rapid double-signOut test coverage
   - Acceptance criteria:
-    - Add test coverage for CI + viewer-related workflow where checks are enabled when `web/viewer` exists and Node/npm are available.
-    - Add CI non-viewer workflow coverage where checks are skipped by default and enabled with `force_ci_viewer_checks=true`.
+    - Render `AuthProvider` with `AuthHarness` and a test trigger that invokes `signOut` twice rapidly.
+    - Use a mock fetch sequence with controlled delayed `/api/viewer/me` refresh responses.
+    - Assert final user-visible state is stable and correct (`auth-loading=idle`, `auth-user` matches final refresh, `auth-error` semantics preserved).
   - Relevant checks:
-    - `bash scripts/test-verify-viewer-detection.sh`
+    - `cd web/viewer && npm run test -- useAuth.test.tsx`
 
-- [x] Task 2 — Add missing Node/npm CI outcome assertion
+- [x] Task 2 — Add network call order/count assertions for churn protection
   - Acceptance criteria:
-    - Add coverage showing `should_run_viewer_checks` returns skip when Node/npm support is unavailable, even for viewer-related CI workflows.
-    - Preserve `BITRIVER_VERIFY_SOURCE_ONLY=1` sourcing and PASS/FAIL output style.
+    - Verify expected fetch call count/order for init + two sign-out flows.
+    - Ensure assertions focus on request intent (path/method) and catch unintended extra refresh loops.
   - Relevant checks:
-    - `bash scripts/test-verify-viewer-detection.sh`
+    - `cd web/viewer && npm run test -- useAuth.test.tsx`
 
 ## Execution log
-- ✅ `bash scripts/test-verify-viewer-detection.sh`
-- ✅ `./scripts/verify.sh` (viewer lint/test correctly skipped: no viewer changes in repo working tree)
+- ✅ `cd web/viewer && npm run test -- useAuth.test.tsx`
+- ✅ `cd web/viewer && npm run test -- useAuth.test.tsx`
+- ❌ `./scripts/verify.sh` (fails on existing snapshot mismatch in `web/viewer/__tests__/channelDisplayPrimitives.test.tsx` unrelated to this change)

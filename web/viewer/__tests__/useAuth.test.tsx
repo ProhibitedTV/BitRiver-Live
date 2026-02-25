@@ -17,6 +17,22 @@ function AuthHarness() {
   );
 }
 
+function RapidDoubleSignOutTrigger() {
+  const { signOut } = useAuth();
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void signOut();
+        void signOut();
+      }}
+    >
+      Sign out twice fast
+    </button>
+  );
+}
+
 type MockResponse = {
   ok: boolean;
   status: number;
@@ -184,4 +200,107 @@ describe("useAuth", () => {
       expect(screen.getByTestId("auth-user")).toHaveTextContent("anonymous");
     });
   });
+
+  test("rapid double signOut settles to final refresh outcome without unstable visible state", async () => {
+    const initialViewer = { user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] } };
+    const finalViewer = {
+      user: { id: "viewer-2", displayName: "Viewer Final", email: "final@example.com", roles: ["viewer"] },
+    };
+    const firstRefresh = deferred<Response>();
+    const secondRefresh = deferred<Response>();
+    const calls: Array<{ url: string; method: string }> = [];
+
+    let meGetCount = 0;
+    global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      calls.push({ url, method });
+
+      if (url !== "/api/viewer/me") {
+        throw new Error(`Unexpected url: ${url}`);
+      }
+
+      if (method === "DELETE") {
+        return {
+          ok: true,
+          status: 204,
+          json: async () => undefined,
+          text: async () => "",
+        } as Response;
+      }
+
+      meGetCount += 1;
+      if (meGetCount === 1) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => initialViewer,
+          text: async () => "",
+        } as Response;
+      }
+      if (meGetCount === 2) {
+        return firstRefresh.promise;
+      }
+      if (meGetCount === 3) {
+        return secondRefresh.promise;
+      }
+
+      throw new Error("Unexpected /api/viewer/me GET call");
+    }) as jest.MockedFunction<typeof fetch>;
+
+    const user = userEvent.setup();
+    render(
+      <AuthProvider>
+        <AuthHarness />
+        <RapidDoubleSignOutTrigger />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-user")).toHaveTextContent("Viewer");
+      expect(screen.getByTestId("auth-loading")).toHaveTextContent("idle");
+      expect(screen.getByTestId("auth-error")).toHaveTextContent("none");
+    });
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /sign out twice fast/i }));
+    });
+
+    await act(async () => {
+      firstRefresh.resolve({
+        ok: true,
+        status: 200,
+        json: async () => initialViewer,
+        text: async () => "",
+      } as Response);
+    });
+
+    await act(async () => {
+      secondRefresh.resolve({
+        ok: true,
+        status: 200,
+        json: async () => finalViewer,
+        text: async () => "",
+      } as Response);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-loading")).toHaveTextContent("idle");
+      expect(screen.getByTestId("auth-user")).toHaveTextContent("Viewer Final");
+      expect(screen.getByTestId("auth-error")).toHaveTextContent("none");
+    });
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledTimes(5);
+    });
+
+    expect(calls).toEqual([
+      { url: "/api/viewer/me", method: "GET" },
+      { url: "/api/viewer/me", method: "DELETE" },
+      { url: "/api/viewer/me", method: "DELETE" },
+      { url: "/api/viewer/me", method: "GET" },
+      { url: "/api/viewer/me", method: "GET" },
+    ]);
+  });
+
 });
