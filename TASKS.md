@@ -2,36 +2,39 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Review placeholder-like keys in `deploy/.env.example`
+- [x] Task 1 — Run baseline verification gate (`./scripts/verify.sh`)
   - Acceptance criteria:
-    - Placeholder/sample domain, email, password, and token values are identified for replacement in runtime `.env`.
-  - Relevant checks:
-    - `rg -n "example\\.com|example|Example|secure-token-example|admin@" deploy/.env.example`
+    - Command executed from repo root.
+    - Full log captured to an artifact file.
 
-- [x] Task 2 — Create/update deployment `.env` with non-placeholder production values
+- [x] Task 2 — Run quickstart smoke gate (`./scripts/test-quickstart.sh`)
   - Acceptance criteria:
-    - Root `.env` exists.
-    - Placeholder credentials/domains are replaced with non-sample values.
-    - `BITRIVER_LIVE_MODE=production` remains set.
-    - `BITRIVER_LIVE_RATE_LOGIN_LIMIT` and `BITRIVER_LIVE_RATE_LOGIN_WINDOW` are non-zero/non-empty.
-    - Viewer URL vars point to the selected public endpoints.
-  - Relevant checks:
-    - `test -f .env`
-    - `rg -n "^(BITRIVER_LIVE_MODE|BITRIVER_LIVE_RATE_LOGIN_LIMIT|BITRIVER_LIVE_RATE_LOGIN_WINDOW|NEXT_PUBLIC_VIEWER_URL|NEXT_PUBLIC_API_BASE_URL|BITRIVER_PUBLIC_DOMAIN)=" .env`
-    - `rg -n "(example\\.com|admin@stream|Example|secure-token-example|Sup3rSecureAdmin)" .env`
+    - Command executed from repo root.
+    - Full log captured to an artifact file.
 
-- [x] Task 3 — Validate deployment env consistency
+- [x] Task 3 — Run viewer lint/test commands
   - Acceptance criteria:
-    - `deploy/check-env.sh .env` passes.
-  - Relevant checks:
-    - `deploy/check-env.sh .env`
+    - `npm --prefix web/viewer run lint` executed.
+    - `npm --prefix web/viewer run test` executed.
+    - Full logs captured to artifact files.
+
+- [x] Task 4 — Run production-release checks (automated subset)
+  - Acceptance criteria:
+    - `./scripts/test-postgres.sh` executed.
+    - `./scripts/check-postgres-pgx.sh postgres` executed.
+    - Full logs captured to artifact files.
+
+- [x] Task 5 — Produce release checklist report
+  - Acceptance criteria:
+    - Gate-by-gate pass/fail status documented.
+    - Remediation items included for any non-pass/manual gates.
 
 ## Execution log
-- ✅ `rg -n "example\.com|example|Example|secure-token-example|admin@" deploy/.env.example` (identified placeholder-like defaults for domains, emails, passwords, and tokens)
-- ✅ `cp deploy/.env.example .env`
-- ✅ `test -f .env`
-- ✅ `rg -n "^(BITRIVER_LIVE_MODE|BITRIVER_LIVE_RATE_LOGIN_LIMIT|BITRIVER_LIVE_RATE_LOGIN_WINDOW|NEXT_PUBLIC_VIEWER_URL|NEXT_PUBLIC_API_BASE_URL|BITRIVER_PUBLIC_DOMAIN)=" .env`
-- ✅ `rg -n "(example\.com|admin@stream|Example|secure-token-example|Sup3rSecureAdmin)" .env || true` (only comment text contains example markers; active values replaced)
-- ❌ `deploy/check-env.sh .env` (initially failed due HTTPS viewer/API without TLS cert/key and placeholder OME bind/IP, then missing required production image digests)
-- ✅ `deploy/check-env.sh .env`
-- ✅ Updated `.env` deployment endpoints and security-critical keys: `BITRIVER_LIVE_MODE=production`, login throttling (`10`/`1m`), viewer/API URLs (`http://live.bitriver.net/viewer`, `http://live.bitriver.net`), OME bind/IP (`live.bitriver.net`), and required production image digests (`BITRIVER_*_IMAGE_DIGEST`).
+- ✅ `./scripts/verify.sh 2>&1 | tee artifacts/release-checks-20260225-013109/01-verify.log` (pass; docker-dependent subchecks skipped by script due to missing Docker binary)
+
+- ⚠️ `./scripts/test-quickstart.sh 2>&1 | tee artifacts/release-checks-20260225-013109/02-test-quickstart.log` (blocked: docker is required for smoke checks)
+- ✅ `npm --prefix web/viewer run lint 2>&1 | tee artifacts/release-checks-20260225-013109/03-viewer-lint.log` (pass)
+- ❌ `npm --prefix web/viewer run test 2>&1 | tee artifacts/release-checks-20260225-013109/04-viewer-test.log` (failed: snapshot mismatch in `__tests__/channelDisplayPrimitives.test.tsx`)
+- ⚠️ `./scripts/test-postgres.sh 2>&1 | tee artifacts/release-checks-20260225-013109/05-test-postgres.log` (blocked: Docker or BITRIVER_TEST_POSTGRES_DSN required)
+- ✅ `./scripts/check-postgres-pgx.sh postgres 2>&1 | tee artifacts/release-checks-20260225-013109/06-check-postgres-pgx.log` (pass; script exited 0)
+- ✅ Authored release checklist report: `docs/releases/release-checklist-report-2026-02-25.md`
