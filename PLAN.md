@@ -1,23 +1,24 @@
 # PLAN
 
 ## Scope (current change)
-- Audit `deploy/.env.example` for placeholder/sample defaults (domains, emails, passwords, tokens).
-- Create/update deployment `.env` with non-placeholder production-style values and routable public domains.
-- Ensure production mode and login throttling values are explicitly set to safe non-zero defaults.
-- Align viewer URL variables with the chosen public deployment endpoints.
+- Execute release verification gates requested by the user from repository root.
+- Capture full command logs/artifacts for each automated gate.
+- Produce a release checklist report with pass/fail outcomes and remediation notes.
 
 ## Assumptions
-- The deployment-specific runtime env for this repo is the root `.env` copied from `deploy/.env.example`.
-- Synthetic strong values are acceptable for this task as long as they are not sample placeholders.
-- Validation should be done with `deploy/check-env.sh .env`.
+- Existing repo scripts are the source of truth for verification/release checks.
+- `docs/production-release.md` defines additional release-specific gates beyond `./scripts/verify.sh`.
+- Viewer checks are in scope when explicitly requested by the user.
 
 ## Risks
-- Placeholder-like strings can remain if only partially replaced.
-- URL/domain mismatches can break viewer/API routing.
-- Root `.env` is intentionally untracked; verification must not rely on git diff for env content.
+- Some release checks may require local services/dependencies (Docker daemon, Node modules, Postgres test container).
+- Long-running suites could time out; logs must still be captured fully for diagnostics.
+- Manual runbook items (legal/release-ticket evidence) cannot be fully automated in this environment.
 
 ## Test plan
-- `test -f .env`
-- `deploy/check-env.sh .env`
-- `rg -n "(example\\.com|admin@|Example|secure-token-example|Sup3rSecureAdmin)" .env`
-- `git status --short`
+- `./scripts/verify.sh`
+- `./scripts/test-quickstart.sh`
+- `npm --prefix web/viewer run lint`
+- `npm --prefix web/viewer run test`
+- `./scripts/test-postgres.sh`
+- `./scripts/check-postgres-pgx.sh postgres`
