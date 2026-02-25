@@ -1,22 +1,23 @@
 # PLAN
 
 ## Scope (current change)
-- Create a root `.env` from `deploy/.env.example` for production-oriented local validation.
-- Fill required secrets/tokens and public URL/domain values so env validation passes.
-- Run env validation and third-party digest enforcement, then fix any failures.
-- Keep `.env` untracked in git.
+- Audit `deploy/.env.example` for placeholder/sample defaults (domains, emails, passwords, tokens).
+- Create/update deployment `.env` with non-placeholder production-style values and routable public domains.
+- Ensure production mode and login throttling values are explicitly set to safe non-zero defaults.
+- Align viewer URL variables with the chosen public deployment endpoints.
 
 ## Assumptions
-- Placeholder/example secrets are rejected by `deploy/check-env.sh` / `cmd/bitriver env validate`.
-- Synthetic (non-real) but strong unique values are acceptable for this local setup as long as required fields are populated.
-- Digest enforcement accepts any value in `@sha256:<64 hex>` format and does not verify registry existence.
+- The deployment-specific runtime env for this repo is the root `.env` copied from `deploy/.env.example`.
+- Synthetic strong values are acceptable for this task as long as they are not sample placeholders.
+- Validation should be done with `deploy/check-env.sh .env`.
 
 ## Risks
-- Missing a required env key may cause repeated validation failures.
-- Incorrect digest formatting will fail `scripts/require-image-digests.sh`.
-- Accidentally staging `.env` would violate repository secret handling policy.
+- Placeholder-like strings can remain if only partially replaced.
+- URL/domain mismatches can break viewer/API routing.
+- Root `.env` is intentionally untracked; verification must not rely on git diff for env content.
 
 ## Test plan
+- `test -f .env`
 - `deploy/check-env.sh .env`
-- `./scripts/require-image-digests.sh --env-file .env`
-- `git status --short` (confirm `.env` is not tracked)
+- `rg -n "(example\\.com|admin@|Example|secure-token-example|Sup3rSecureAdmin)" .env`
+- `git status --short`
