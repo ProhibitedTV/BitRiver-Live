@@ -1,17 +1,20 @@
 # PLAN
 
 ## Scope (current change)
-- Add a concurrency-focused auth hook test in `web/viewer/__tests__/useAuth.test.tsx`.
-- Validate rapid double `signOut` invocation behavior while the first refresh (`/api/viewer/me`) is still pending.
-- Assert user-visible final state (`auth-user`, `auth-loading`, `auth-error`) plus fetch call order/count to guard against duplicate refresh churn.
+- Update `scripts/verify.sh` Docker Compose validation to pass an explicit env file.
+- Add `scripts/deploy-smoke.sh` for operator-focused compose boot + `/readyz` smoke validation with guaranteed teardown.
+- Keep deployment contract/runtime behavior unchanged (validation-only workflow improvements).
 
 ## Assumptions
-- Existing `AuthProvider` behavior allows overlapping `signOut` calls when invoked in quick succession.
-- Deterministic sequencing can be achieved with deferred promises for refresh responses.
+- Root `.env` is the preferred source for local validation when present.
+- `deploy/.env.example` contains enough defaults for compose config rendering when root `.env` is absent.
+- API readiness endpoint is reachable at `http://localhost:${BITRIVER_LIVE_PORT:-8080}/readyz` once stack is ready.
 
 ## Risks
-- Async race timing can make test flaky if deferred resolution ordering is not explicit.
-- Overly strict network assertions could fail if unrelated request metadata differs.
+- Environments without Docker/Compose cannot run smoke validation (script must fail with clear prerequisite messaging).
+- Using `deploy/.env.example` fallback must not mask missing user-specific required vars in root `.env` scenarios.
 
 ## Test plan
-- `cd web/viewer && npm run test -- useAuth.test.tsx`
+- `bash -n scripts/verify.sh scripts/deploy-smoke.sh`
+- `./scripts/verify.sh --go-packages ./cmd/bitriver` (or equivalent targeted run) to confirm compose validation wiring.
+- `./scripts/deploy-smoke.sh` on Docker-enabled host to validate boot/readiness/teardown flow.

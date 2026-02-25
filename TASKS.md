@@ -2,22 +2,32 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Add rapid double-signOut test coverage
+- [x] Task 1 — Wire verify compose config to explicit env-file selection
   - Acceptance criteria:
-    - Render `AuthProvider` with `AuthHarness` and a test trigger that invokes `signOut` twice rapidly.
-    - Use a mock fetch sequence with controlled delayed `/api/viewer/me` refresh responses.
-    - Assert final user-visible state is stable and correct (`auth-loading=idle`, `auth-user` matches final refresh, `auth-error` semantics preserved).
+    - `scripts/verify.sh` selects env file in this order: root `.env` then `deploy/.env.example`.
+    - Compose validation command is `docker compose --env-file <selected> -f deploy/docker-compose.yml config`.
+    - Clear error emitted if neither env file exists.
   - Relevant checks:
-    - `cd web/viewer && npm run test -- useAuth.test.tsx`
+    - `bash -n scripts/verify.sh`
 
-- [x] Task 2 — Add network call order/count assertions for churn protection
+- [x] Task 2 — Add deploy smoke helper script
   - Acceptance criteria:
-    - Verify expected fetch call count/order for init + two sign-out flows.
-    - Ensure assertions focus on request intent (path/method) and catch unintended extra refresh loops.
+    - New `scripts/deploy-smoke.sh` starts compose stack using a temporary project name.
+    - Script waits for API `/readyz` and prints concise PASS/FAIL summary.
+    - Script always tears down compose resources on exit.
   - Relevant checks:
-    - `cd web/viewer && npm run test -- useAuth.test.tsx`
+    - `bash -n scripts/deploy-smoke.sh`
+    - `./scripts/deploy-smoke.sh`
+
+- [x] Task 3 — Update operator/testing docs for new validation path
+  - Acceptance criteria:
+    - Docs describe verify env-file fallback behavior.
+    - Docs include `scripts/deploy-smoke.sh` as one-command confidence check.
+  - Relevant checks:
+    - `rg -n "deploy-smoke|--env-file" docs/testing.md`
 
 ## Execution log
-- ✅ `cd web/viewer && npm run test -- useAuth.test.tsx`
-- ✅ `cd web/viewer && npm run test -- useAuth.test.tsx`
-- ❌ `./scripts/verify.sh` (fails on existing snapshot mismatch in `web/viewer/__tests__/channelDisplayPrimitives.test.tsx` unrelated to this change)
+- ✅ `bash -n scripts/verify.sh scripts/deploy-smoke.sh`
+- ❌ `./scripts/deploy-smoke.sh` (docker unavailable in this environment: `FAIL: docker is required`)
+- ✅ `rg -n "deploy-smoke|--env-file|readyz|Docker Compose config validation" docs/testing.md scripts/verify.sh scripts/deploy-smoke.sh`
+- ❌ `./scripts/verify.sh` (fails on pre-existing viewer snapshot mismatch in `web/viewer/__tests__/channelDisplayPrimitives.test.tsx`)

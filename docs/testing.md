@@ -11,7 +11,7 @@ coverage.
 
 - `go` (for `go test ./...`)
 - `python3` (used by `./scripts/check-contract-invariants.sh` to validate generated artifact references in `docs/contract.md`)
-- `docker` (optional; `docker compose ... config` is skipped when Docker is unavailable)
+- `docker` (optional; `docker compose --env-file <file> ... config` is skipped when Docker is unavailable)
 - `node` + `npm` (optional; required only when viewer lint/test checks are selected)
 
 If `python3` is missing, `./scripts/verify.sh` now fails fast with a clear prerequisite error before running the verify sequence.
@@ -33,6 +33,9 @@ Use these category entrypoints from the repository root:
 - **Quickstart smoke:** `./scripts/test-quickstart.sh`
   - Validates compose rendering/healthcheck wiring and boots the quickstart stack.
   - CI: [`.github/workflows/quickstart-smoke.yml`](../.github/workflows/quickstart-smoke.yml) and `quickstart-smoke` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+- **Deploy smoke:** `./scripts/deploy-smoke.sh`
+  - Boots the compose stack with an isolated temporary project name, waits for API `/readyz`, prints a short PASS/FAIL summary, and always tears down.
+  - Operator-focused one-command confidence check before/after deploy changes.
 - **Ingest e2e:** `./scripts/test-ingest-e2e.sh`
   - Exercises the ingest control-plane/storage lifecycle guard.
   - CI: [`.github/workflows/ingest-e2e.yml`](../.github/workflows/ingest-e2e.yml) and `ingest-e2e` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
@@ -296,6 +299,8 @@ calls are recorded:
 
 Run the compose smoke guard to ensure the default `.env` and `deploy/docker-compose.yml` still render and that the tracked health probes stay wired:
 
+`./scripts/verify.sh` now validates compose config with an explicit env file, preferring root `.env` and falling back to `deploy/.env.example` when `.env` is absent, so missing environment variables surface during verification.
+
 ```bash
 ./scripts/test-quickstart.sh
 ```
@@ -303,6 +308,14 @@ Run the compose smoke guard to ensure the default `.env` and `deploy/docker-comp
 When no `.env` exists in the repository root, the helper seeds one with the same quickstart fixture defaults (including `BITRIVER_LIVE_MODE=production` to match `deploy/check-env.sh` validation), renders `docker compose config`, and verifies that the API, transcoder, OME, SRS, Postgres, and Redis healthchecks still point at their expected endpoints. It then boots the compose stack with the seeded `.env`, waits for all healthchecks to go green, curls the API health endpoint and viewer page, and tears the stack down via `docker compose down -v` so nothing is left behind. The script also invokes the Go renderer (`go run ./cmd/bitriver ome render`, or the `scripts/render-ome-config.sh` wrapper) against the seeded `.env` and fails fast when `deploy/ome/Server.generated.xml` is stale or missing required `<Bind>`, `<IP>`, or control credential values so the tracked compose mount stays fresh. It cleans up the temporary `.env` after the run.
 
 CI enforces the same guardrails in [`.github/workflows/quickstart-smoke.yml`](../.github/workflows/quickstart-smoke.yml): keep both the `quickstart-entrypoints` matrix job (Ubuntu/macOS shell usage + static checks, Windows PowerShell help + `-ValidateOnly` no-op path) and the Ubuntu `quickstart-smoke` compose job enabled as required pull-request checks so script drift is blocked before merge.
+
+For a fast operator confidence check outside the heavier quickstart suite, run:
+
+```bash
+./scripts/deploy-smoke.sh
+```
+
+This helper uses the same env-file selection order (`.env`, then `deploy/.env.example`), starts compose under a temporary project name, polls `http://localhost:${BITRIVER_LIVE_PORT:-8080}/readyz`, prints PASS/FAIL, and always tears down containers/volumes on exit.
 
 
 ## Docs installer consistency
