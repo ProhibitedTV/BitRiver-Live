@@ -2,31 +2,20 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Add focused retry-behavior tests for ingest boot helper in `internal/storage/stream_test.go`
+- [x] Task 1 — Add CI outcome assertions for `should_run_viewer_checks`
   - Acceptance criteria:
-    - Add a test where fake ingest boot returns `context.DeadlineExceeded` or `context.Canceled` on first call.
-    - Invoke `runIngestBootWithRetry` with attempts > 1 and non-zero retry interval.
-    - Assert only one boot call is made and elapsed time confirms no retry sleep delay is applied.
-    - Add a complementary test where a transient non-context error on first call triggers retry and succeeds/fails on subsequent call as expected.
+    - Add test coverage for CI + viewer-related workflow where checks are enabled when `web/viewer` exists and Node/npm are available.
+    - Add CI non-viewer workflow coverage where checks are skipped by default and enabled with `force_ci_viewer_checks=true`.
   - Relevant checks:
-    - `go test ./internal/storage -run 'TestRunIngestBootWithRetry' -count=1`
+    - `bash scripts/test-verify-viewer-detection.sh`
 
-- [x] Task 2 — Make retry helper behavior explicit if needed in `internal/storage/ingest_boot_helpers.go`
+- [x] Task 2 — Add missing Node/npm CI outcome assertion
   - Acceptance criteria:
-    - If tests reveal retries continue after terminal context errors, update helper minimally to stop retrying on context cancellation/deadline errors.
-    - Keep behavior unchanged for non-context transient errors.
+    - Add coverage showing `should_run_viewer_checks` returns skip when Node/npm support is unavailable, even for viewer-related CI workflows.
+    - Preserve `BITRIVER_VERIFY_SOURCE_ONLY=1` sourcing and PASS/FAIL output style.
   - Relevant checks:
-    - `go test ./internal/storage -run 'TestRunIngestBootWithRetry' -count=1`
-
-- [x] Task 3 — Run repository verification gate
-  - Acceptance criteria:
-    - `./scripts/verify.sh` runs successfully, or environment limitation/failure is recorded.
-  - Relevant checks:
-    - `./scripts/verify.sh`
+    - `bash scripts/test-verify-viewer-detection.sh`
 
 ## Execution log
-
-- ✅ `gofmt -w internal/storage/ingest_boot_helpers.go internal/storage/stream_test.go`
-- ✅ `go test ./internal/storage -run 'TestRunIngestBootWithRetry' -count=1`
-
-- ⚠️ `./scripts/verify.sh` (passes overall; docker-dependent compose checks skipped because docker is not installed in this environment)
+- ✅ `bash scripts/test-verify-viewer-detection.sh`
+- ✅ `./scripts/verify.sh` (viewer lint/test correctly skipped: no viewer changes in repo working tree)
