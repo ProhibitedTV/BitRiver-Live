@@ -1,17 +1,18 @@
 # PLAN
 
 ## Scope (current change)
-- Fix OME XML validation in `scripts/test-quickstart.sh` so required-tag checks no longer contradict the legacy-bind guard.
-- Keep rejection of legacy root `<Bind><IP>` / `<Bind><Address>` tags.
-- Validate canonical root `<IP>` value against `BITRIVER_OME_BIND` when present.
+- Add a second concurrency accessor test in `internal/api/handlers_concurrency_test.go` for preconfigured dependencies.
+- Verify `sessionManager`, `mfaChallengeManager`, `logger`, `tracer`, and `srsTracker` preserve injected pointer identity under concurrent access.
+- Prevent regressions where accessor lazy-init paths overwrite non-nil dependencies.
 
 ## Assumptions
-- Root-level `<IP>` is the canonical bind node in current generated OME config.
-- Legacy `<Bind><IP>` / `<Bind><Address>` tags should remain forbidden.
+- Existing accessor methods are intended to lazily initialize only when their backing field is `nil`.
+- Pointer identity checks are the strongest assertion for "must not overwrite injected dependency" behavior.
 
 ## Risks
-- If canonical bind location differs from current contract, validation may fail in environments with custom templates.
-- Tightened bind-value checks may surface pre-existing env/config drift.
+- Concurrent test assertions could become flaky if assertions rely on value semantics instead of direct pointer identity.
+- Using globally shared defaults (e.g., `slog.Default()`, `tracing.Default()`) could mask overwrite behavior if not handled carefully.
 
 ## Test plan
-- `./scripts/test-quickstart.sh`
+- `go test ./internal/api -run 'TestHandlerAccessorsConcurrent' -count=1`
+- `./scripts/verify.sh`
