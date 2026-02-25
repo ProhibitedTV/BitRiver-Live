@@ -183,7 +183,19 @@ run_step "Contract invariants check" ./scripts/check-contract-invariants.sh
 run_step "Production third-party digest gate" ./scripts/require-image-digests.sh
 
 if command -v docker >/dev/null 2>&1; then
-  run_step "Docker Compose config validation" docker compose -f deploy/docker-compose.yml config
+  compose_env_file=""
+  if [[ -f .env ]]; then
+    compose_env_file=".env"
+  elif [[ -f deploy/.env.example ]]; then
+    compose_env_file="deploy/.env.example"
+  else
+    echo
+    echo "==> Docker Compose config validation"
+    echo "Missing env file: expected .env or deploy/.env.example" >&2
+    exit 1
+  fi
+
+  run_step "Docker Compose config validation" docker compose --env-file "$compose_env_file" -f deploy/docker-compose.yml config
 else
   echo
   echo "==> Docker Compose config validation"
