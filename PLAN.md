@@ -1,21 +1,20 @@
 # PLAN
 
 ## Scope (current change)
-- Add a deterministic shell guard at `scripts/check-no-committed-secrets.sh` that fails CI when tracked files include high-risk secret artifacts (root `.env`, private key/certificate bundles, and common local secret dump patterns).
-- Wire the guard into `.github/workflows/ci.yml` so it runs on every push and pull request.
-- Document the guard in `docs/security.md` with a brief checklist note about what file classes it blocks.
+- Create a new operator-facing security guide at `docs/security.md` as the primary security entrypoint for this stack.
+- Tailor guidance to the current deployment contract and validation flow (`deploy/docker-compose.yml`, `deploy/.env.example`, `cmd/bitriver env validate`).
+- Add prominent navigation links so operators discover the security guide from high-traffic docs (`README.md` and/or `docs/operations.md`).
 
 ## Assumptions
-- The repository intentionally tracks `deploy/.env.example`, which must remain allowed.
-- The guard should only inspect tracked files (`git ls-files`) and avoid scanning untracked workspace state.
-- CI runners provide POSIX shell + git only; no extra dependencies should be required.
+- Security guidance should match the current single-host Docker Compose deployment model and documented optional profiles.
+- This change is documentation-only and does not alter runtime behavior or deployment contract values.
+- `_FILE`-based secrets are not yet implemented in the current stack, so guidance should mention future compatibility without claiming support exists today.
 
 ## Risks
-- Over-broad filename matching could block legitimate fixtures/examples if exemptions are not explicit.
-- Under-inclusive matching could miss a sensitive filename variant.
-- CI workflow edits must stay compatible with existing CI contract checks.
+- Overstating default exposure levels for ports/services could mislead operators if wording is not anchored to current compose defaults.
+- Security guidance can drift from env validation behavior if we cite controls not enforced by `cmd/bitriver env validate`.
+- If the new doc is not linked clearly, operators may continue to miss security hardening steps.
 
 ## Test plan
-- `bash -n scripts/check-no-committed-secrets.sh`
-- `./scripts/check-no-committed-secrets.sh`
-- `./scripts/check-ci-contract.sh`
+- Markdown/documentation lint via static review for section completeness and command correctness.
+- `./scripts/verify.sh`

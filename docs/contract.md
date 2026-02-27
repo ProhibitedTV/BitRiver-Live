@@ -8,7 +8,7 @@ BitRiver Live has one canonical deployment path: the root `.env` rendered/valida
 
 - `deploy/docker-compose.yml`
   - Canonical service graph and startup order.
-  - Defines health checks, inter-service dependencies, migration execution (`postgres-migrations`), and required env interpolation (`:?set via .env`).
+  - Defines health checks, inter-service dependencies, migration execution (`postgres-migrations`), required env interpolation (`:?set via .env`), and baseline container hardening (public/internal network segmentation, no-new-privileges, and capability dropping with documented exceptions).
 - `deploy/docker-compose.limits.yml` (optional overlay, production-recommended)
   - Adds Docker Compose-compatible CPU/memory limits (`cpus`, `mem_limit`, `mem_reservation`) per service.
   - Activated explicitly via a second `-f` compose file or `cmd/bitriver` `--limits` flag.
