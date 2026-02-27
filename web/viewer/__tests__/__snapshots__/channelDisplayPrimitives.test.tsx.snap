@@ -488,18 +488,11 @@ exports[`channel display primitives uses shared badge copy in rails and featured
             class="featured-channel__actions"
           >
             <a
-              aria-label="Watch featured channel"
+              aria-label="View featured channel"
               class="primary-button"
               href="/channels/chan-offline"
             >
-              Watch now
-            </a>
-            <a
-              aria-label="View channel details"
-              class="secondary-button"
-              href="/channels/chan-offline"
-            >
-              View channel
+              View stream
             </a>
           </div>
         </div>
