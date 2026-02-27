@@ -12,22 +12,29 @@ alerting:
             - alertmanager:9093
 
 scrape_configs:
-  - job_name: bitriver-live
+  - job_name: bitriver-api
     metrics_path: /metrics
     bearer_token_file: /etc/prometheus/metrics.token
     static_configs:
       - targets:
           - bitriver-live:8080
 
-  - job_name: node-exporter
+  - job_name: bitriver-transcoder
+    metrics_path: /metrics
     static_configs:
       - targets:
-          - node-exporter:9100
+          - transcoder:9000
 
-  - job_name: redis-exporter
+  - job_name: bitriver-srs-controller
+    metrics_path: /metrics
     static_configs:
       - targets:
-          - redis-exporter:9121
+          - srs-controller:1985
+
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090
 
   - job_name: alertmanager
     static_configs:

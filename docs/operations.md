@@ -86,40 +86,21 @@ Tune to your traffic profile, but the defaults below are a good starting point f
 
 ### Monitoring stack (Prometheus + Alertmanager + Grafana)
 
-The monitoring profile adds Prometheus, Alertmanager, node-exporter, redis-exporter, and Grafana alongside the default Compose stack.
+Use the dedicated guide in [`docs/monitoring.md`](monitoring.md) for the full quickstart, provisioning behavior,
+alert routing setup, and troubleshooting.
 
-1. Set the API metrics token in `.env` (required in production mode):
+In short:
+
+1. Configure `BITRIVER_LIVE_METRICS_TOKEN` in `.env`.
+2. Copy `deploy/monitoring/metrics.token.example` to `deploy/monitoring/metrics.token` and keep values in sync.
+3. Copy `deploy/monitoring/alertmanager.env.example` to `deploy/monitoring/alertmanager.env`, then run `./scripts/render-alertmanager-config.sh`.
+4. Validate configs with `./scripts/check-monitoring-config.sh`.
+5. Start the optional overlay:
    ```bash
-   BITRIVER_LIVE_METRICS_TOKEN=replace-with-strong-token
-   ```
-2. Create a Prometheus token file that matches the API token:
-   ```bash
-   cp deploy/monitoring/metrics.token.example deploy/monitoring/metrics.token
-   ```
-   Edit `deploy/monitoring/metrics.token` so it contains the same value as `BITRIVER_LIVE_METRICS_TOKEN` (single line).
-3. Create Alertmanager receiver secrets and render the runtime config:
-   ```bash
-   cp deploy/monitoring/alertmanager.env.example deploy/monitoring/alertmanager.env
-   ./scripts/render-alertmanager-config.sh
-   ```
-4. Validate monitoring configs before deployment:
-   ```bash
-   ./scripts/check-monitoring-config.sh
-   ```
-5. Start the monitoring profile:
-   ```bash
-   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.monitoring.yml --profile monitoring up -d
+   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.monitoring.yml up -d
    ```
 
-Prometheus listens on `http://localhost:9090`, Alertmanager on `http://localhost:9093`, and Grafana on
-`http://localhost:3001` (default credentials are `admin` / `admin`, override with `BITRIVER_GRAFANA_ADMIN_USER`
-and `BITRIVER_GRAFANA_ADMIN_PASSWORD` in `.env`).
-
-**Import the dashboard:**
-
-1. Sign into Grafana and add a Prometheus data source pointing at `http://prometheus:9090`.
-2. From **Dashboards → New → Import**, upload `deploy/monitoring/bitriver-live-dashboard.json` and select the Prometheus data
-   source when prompted.
+Grafana provisioning is automatic: the Prometheus datasource and bundled BitRiver dashboard are loaded on first start.
 
 ### Alert runbook map
 

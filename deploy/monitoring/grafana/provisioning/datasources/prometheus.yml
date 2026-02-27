@@ -1,0 +1,10 @@
+apiVersion: 1
+
+datasources:
+  - name: BitRiver Prometheus
+    type: prometheus
+    access: proxy
+    uid: bitriver-prometheus
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false

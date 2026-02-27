@@ -1,0 +1,13 @@
+apiVersion: 1
+
+providers:
+  - name: BitRiver Live dashboards
+    orgId: 1
+    folder: BitRiver Live
+    type: file
+    disableDeletion: true
+    editable: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

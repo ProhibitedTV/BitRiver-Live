@@ -6,14 +6,31 @@ PROM_CONFIG="$ROOT_DIR/deploy/monitoring/prometheus.yml"
 PROM_RULES="$ROOT_DIR/deploy/monitoring/prometheus-alerts.yml"
 ALERT_TEMPLATE="$ROOT_DIR/deploy/monitoring/alertmanager.yml.tmpl"
 RENDER_SCRIPT="$ROOT_DIR/scripts/render-alertmanager-config.sh"
+COMPOSE_BASE="$ROOT_DIR/deploy/docker-compose.yml"
+COMPOSE_MONITORING="$ROOT_DIR/deploy/docker-compose.monitoring.yml"
+GRAFANA_DS="$ROOT_DIR/deploy/monitoring/grafana/provisioning/datasources/prometheus.yml"
+GRAFANA_DASH_PROVISIONING="$ROOT_DIR/deploy/monitoring/grafana/provisioning/dashboards/bitriver-live.yml"
+GRAFANA_DASH_JSON="$ROOT_DIR/deploy/monitoring/bitriver-live-dashboard.json"
 TMP_DIR="$(mktemp -d)"
 ALERT_CONFIG="$TMP_DIR/alertmanager.yml"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-if [[ ! -f "$PROM_CONFIG" || ! -f "$PROM_RULES" || ! -f "$ALERT_TEMPLATE" ]]; then
-  echo "error: monitoring config files are missing" >&2
-  exit 1
-fi
+required_files=(
+  "$PROM_CONFIG"
+  "$PROM_RULES"
+  "$ALERT_TEMPLATE"
+  "$COMPOSE_MONITORING"
+  "$GRAFANA_DS"
+  "$GRAFANA_DASH_PROVISIONING"
+  "$GRAFANA_DASH_JSON"
+)
+
+for f in "${required_files[@]}"; do
+  if [[ ! -f "$f" ]]; then
+    echo "error: required monitoring file missing: $f" >&2
+    exit 1
+  fi
+done
 
 validate_with_ruby_yaml() {
   ruby - "$@" <<'RUBY'
@@ -28,6 +45,8 @@ ARGV.each do |path|
 end
 RUBY
 }
+
+validate_with_ruby_yaml "$GRAFANA_DS" "$GRAFANA_DASH_PROVISIONING" "$COMPOSE_MONITORING"
 
 if command -v promtool >/dev/null 2>&1; then
   promtool check config "$PROM_CONFIG"
@@ -52,6 +71,12 @@ elif command -v docker >/dev/null 2>&1; then
 else
   echo "warning: amtool/docker unavailable, falling back to YAML syntax validation" >&2
   validate_with_ruby_yaml "$ALERT_CONFIG"
+fi
+
+if command -v docker >/dev/null 2>&1; then
+  docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_MONITORING" config >/dev/null
+else
+  echo "warning: docker unavailable, skipping compose overlay validation" >&2
 fi
 
 echo "monitoring config checks passed"
