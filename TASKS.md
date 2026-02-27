@@ -133,3 +133,32 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 complete: updated `docs/secrets-hardening.md` section title/content with a concrete Compose mount example and documented `BITRIVER_OME_HEALTHCHECK_TOKEN_FILE` in `deploy/.env.example`.
 - ✅ Task 3 check:
   - ✅ `rg -n "Using \*_FILE secrets with Docker Compose mounts|Concrete Docker Compose mount example|OME_HEALTHCHECK_TOKEN_FILE|_FILE" docs/secrets-hardening.md deploy/.env.example`
+
+
+## Scoped change: upgrade-plan operator checklist command
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Rework `cmd/bitriver/upgrade_plan.go` for checklist-style planning output
+  - Acceptance criteria:
+    - Supports `--compose-file`, `--env-file`, and required `--target`.
+    - Best-effort running-tag detection from Docker Compose with WARN fallback guidance.
+    - Output includes backup docs link, migration behavior status, rollback caveats, and actionable checklist.
+
+- [x] Task 2 — Update/add tests for planner parsing and output behavior
+  - Acceptance criteria:
+    - Coverage includes missing running stack warning/fallback path.
+    - Coverage includes compose `ps` parsing for running image tags.
+    - Coverage validates checklist sections include backup/migration/rollback guidance.
+
+- [x] Task 3 — Update upgrade documentation with new command usage and sample output
+  - Acceptance criteria:
+    - `docs/upgrades.md` references `--target` syntax.
+    - Includes a concise example output block demonstrating WARN + checklist flow.
+
+
+
+### Execution log (upgrade-plan operator checklist command)
+- ✅ Task 1 complete: `upgrade-plan` now accepts `--compose-file`, `--env-file`, and required `--target`; it performs best-effort running tag detection from Compose with WARN fallback guidance and prints migration + rollback sections with an operator checklist.
+- ✅ Task 2 complete: added focused tests covering compose `ps` image parsing, env-file fallback warnings, and unknown-current-version guidance while still emitting checklist output.
+- ✅ Task 3 complete: updated `docs/upgrades.md` command examples to `--target` and added best-effort behavior notes plus sample command output.

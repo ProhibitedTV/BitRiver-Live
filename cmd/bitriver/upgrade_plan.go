@@ -1,208 +1,218 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 )
 
-type upgradePlan struct {
-	CurrentVersion string
-	TargetVersion  string
-	Supported      bool
-	Warnings       []string
-	Steps          []string
+type migrationPlanStatus struct {
+	Status  string
+	Details string
 }
+
+type upgradeImageTag struct {
+	Service string
+	Image   string
+	Tag     string
+	Source  string
+}
+
+var upgradePlanComposePSRunner = runComposePS
 
 func runUpgradePlan(args []string) error {
 	fs := flag.NewFlagSet("upgrade-plan", flag.ContinueOnError)
-	target := fs.String("to", "", "target BitRiver Live tag (example: v1.3.0)")
-	envFile := fs.String("env-file", defaultEnvFile(), "environment file used to detect deployed image tags")
-	current := fs.String("current", "", "override currently deployed BitRiver Live tag")
-	checkSchema := fs.Bool("check-schema", false, "compare current schema version with expected migration version")
-	currentSchema := fs.String("current-schema", "", "current applied schema version (for --check-schema)")
-	expectedSchema := fs.String("expected-schema", "", "expected schema version override (defaults to latest deploy/migrations prefix)")
+	composeFile := fs.String("compose-file", defaultComposeFile(), "compose file used for stack inspection")
+	envFile := fs.String("env-file", defaultEnvFile(), "environment file used for image tag fallbacks")
+	target := fs.String("target", "", "target BitRiver Live tag (example: v1.3.0)")
+	legacyTarget := fs.String("to", "", "deprecated alias for --target")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if strings.TrimSpace(*target) == "" {
-		return errors.New("missing required --to tag")
+
+	resolvedTarget := strings.TrimSpace(*target)
+	if resolvedTarget == "" {
+		resolvedTarget = strings.TrimSpace(*legacyTarget)
+	}
+	if resolvedTarget == "" {
+		return errors.New("missing required --target tag")
 	}
 
-	currentVersion := strings.TrimSpace(*current)
-	if currentVersion == "" {
-		values, err := loadEnvValues(*envFile, false)
-		if err != nil {
-			return fmt.Errorf("load env values: %w", err)
-		}
-		currentVersion = strings.TrimSpace(values["BITRIVER_LIVE_IMAGE_TAG"])
-		if currentVersion == "" {
-			return fmt.Errorf("BITRIVER_LIVE_IMAGE_TAG missing in %s; set it or pass --current", *envFile)
-		}
-	}
-
-	plan, err := buildUpgradePlan(currentVersion, *target)
-	if err != nil {
-		return err
-	}
+	warnings := []string{}
+	tags, tagWarnings := detectCurrentUpgradeTags(*composeFile, *envFile)
+	warnings = append(warnings, tagWarnings...)
+	migration := detectMigrationPlanStatus(*composeFile)
 
 	fmt.Fprintln(os.Stdout, "BitRiver Live upgrade plan")
-	fmt.Fprintf(os.Stdout, "Current: %s\n", plan.CurrentVersion)
-	fmt.Fprintf(os.Stdout, "Target:  %s\n", plan.TargetVersion)
-	if plan.Supported {
-		fmt.Fprintln(os.Stdout, "Path status: SUPPORTED")
-	} else {
-		fmt.Fprintln(os.Stdout, "Path status: NOT SUPPORTED")
-	}
-
-	if len(plan.Warnings) > 0 {
-		fmt.Fprintln(os.Stdout)
-		fmt.Fprintln(os.Stdout, "Warnings:")
-		for _, warning := range plan.Warnings {
-			fmt.Fprintf(os.Stdout, "- %s\n", warning)
-		}
-	}
-
-	if *checkSchema {
-		expected := strings.TrimSpace(*expectedSchema)
-		if expected == "" {
-			latest, err := detectLatestMigrationVersion(filepath.Join(repoRoot(), "deploy", "migrations"))
-			if err != nil {
-				return fmt.Errorf("detect latest migration version: %w", err)
-			}
-			expected = latest
-		}
-		if strings.TrimSpace(*currentSchema) == "" {
-			fmt.Fprintf(os.Stdout, "\nSchema check: WARN (missing --current-schema, expected %s)\n", expected)
-			fmt.Fprintln(os.Stdout, "- Provide --current-schema from your migration metadata before maintenance starts.")
-		} else if strings.TrimSpace(*currentSchema) != expected {
-			fmt.Fprintf(os.Stdout, "\nSchema check: WARN (current=%s expected=%s)\n", strings.TrimSpace(*currentSchema), expected)
-			fmt.Fprintln(os.Stdout, "- Apply pending migrations (or verify metadata) before upgrading application services.")
-		} else {
-			fmt.Fprintf(os.Stdout, "\nSchema check: PASS (current=%s expected=%s)\n", strings.TrimSpace(*currentSchema), expected)
-		}
-	}
+	fmt.Fprintf(os.Stdout, "Planner version: %s (%s, %s)\n", valueOrFallback(Version, "dev"), valueOrFallback(Commit, "unknown"), valueOrFallback(Date, "unknown"))
+	fmt.Fprintf(os.Stdout, "Compose file: %s\n", *composeFile)
+	fmt.Fprintf(os.Stdout, "Env file: %s\n", *envFile)
+	fmt.Fprintf(os.Stdout, "Target tag: %s\n", resolvedTarget)
 
 	fmt.Fprintln(os.Stdout)
-	fmt.Fprintln(os.Stdout, "Recommended sequence:")
-	for i, step := range plan.Steps {
-		fmt.Fprintf(os.Stdout, "%d. %s\n", i+1, step)
+	fmt.Fprintln(os.Stdout, "Current image tags (best-effort):")
+	if len(tags) == 0 {
+		fmt.Fprintln(os.Stdout, "- none detected")
+	} else {
+		for _, tag := range tags {
+			fmt.Fprintf(os.Stdout, "- %s: %s (tag=%s, source=%s)\n", tag.Service, tag.Image, tag.Tag, tag.Source)
+		}
 	}
 
-	releaseNotesPath := filepath.Join(repoRoot(), "docs", "releases", normalizeReleaseNotesTag(plan.TargetVersion)+".md")
-	if _, err := os.Stat(releaseNotesPath); err == nil {
-		fmt.Fprintf(os.Stdout, "\nRelease notes: %s\n", releaseNotesPath)
-	} else {
-		fmt.Fprintln(os.Stdout, "\nRelease notes: not found in docs/releases/ for target tag; review release announcement manually.")
+	fmt.Fprintf(os.Stdout, "\nMigrations: %s\n", migration.Status)
+	fmt.Fprintf(os.Stdout, "- %s\n", migration.Details)
+
+	if len(warnings) > 0 {
+		fmt.Fprintln(os.Stdout, "\nWarnings:")
+		for _, warning := range warnings {
+			fmt.Fprintf(os.Stdout, "- WARN: %s\n", warning)
+		}
 	}
+
+	fmt.Fprintln(os.Stdout, "\nOperator checklist:")
+	fmt.Fprintln(os.Stdout, "[ ] 1) Review upgrade notes: docs/upgrades.md and docs/production-release.md")
+	fmt.Fprintln(os.Stdout, "[ ] 2) Complete backups before maintenance (docs/upgrades.md#backup-and-restore-checklist-required)")
+	fmt.Fprintf(os.Stdout, "[ ] 3) Update image tags/digests in .env to target %s and run deploy/check-env.sh\n", resolvedTarget)
+	fmt.Fprintln(os.Stdout, "[ ] 4) Stop stack safely: docker compose -f deploy/docker-compose.yml down")
+	fmt.Fprintln(os.Stdout, "[ ] 5) Run database migration job and verify logs: docker compose -f deploy/docker-compose.yml run --rm postgres-migrations")
+	fmt.Fprintln(os.Stdout, "[ ] 6) Start updated stack and validate health: go run ./cmd/bitriver verify --compose-file deploy/docker-compose.yml --env-file .env")
+	fmt.Fprintln(os.Stdout, "[ ] 7) Record upgrade outcome and rollback decision in your runbook/change ticket")
+
+	fmt.Fprintln(os.Stdout, "\nRollback caveats:")
+	fmt.Fprintln(os.Stdout, "- Safe rollback usually requires that irreversible migrations have NOT run.")
+	fmt.Fprintln(os.Stdout, "- If schema/data migrations were irreversible, restore Postgres + volume/config backups before downgrading images.")
+	fmt.Fprintln(os.Stdout, "- When uncertain, treat rollback as unsafe and follow docs/upgrades.md rollback guidance.")
 
 	return nil
 }
 
-func buildUpgradePlan(current, target string) (upgradePlan, error) {
-	normalizedCurrent, currentSemver, err := normalizeSemverTag(current)
-	if err != nil {
-		return upgradePlan{}, fmt.Errorf("parse current version %q: %w", current, err)
-	}
-	normalizedTarget, targetSemver, err := normalizeSemverTag(target)
-	if err != nil {
-		return upgradePlan{}, fmt.Errorf("parse target version %q: %w", target, err)
-	}
-
-	cmp := compareSemver(currentSemver, targetSemver)
-	if cmp == 0 {
-		return upgradePlan{}, errors.New("current and target versions are identical")
-	}
-	if cmp > 0 {
-		return upgradePlan{}, errors.New("downgrade detected; use docs/upgrades.md rollback section instead of upgrade-plan")
-	}
-
-	currentParts := parseSemverParts(currentSemver)
-	targetParts := parseSemverParts(targetSemver)
-
+func detectCurrentUpgradeTags(composeFile, envFile string) ([]upgradeImageTag, []string) {
 	warnings := []string{}
-	supported := true
-	if targetParts[0] > currentParts[0]+1 {
-		supported = false
-		warnings = append(warnings, "major version skip detected. Upgrade only one major at a time with intermediate releases.")
-	} else if targetParts[0] == currentParts[0]+1 {
-		warnings = append(warnings, "major upgrade detected. Expect possible breaking changes and non-reversible schema migrations.")
-	} else if targetParts[0] == currentParts[0] && targetParts[1] > currentParts[1]+1 {
-		supported = false
-		warnings = append(warnings, "minor version skip detected. Supported path is N-1 minor hops only.")
+	runningTags, err := detectRunningComposeImageTags(composeFile, envFile)
+	if err == nil && len(runningTags) > 0 {
+		return runningTags, warnings
 	}
-
-	steps := []string{
-		"Read docs/upgrades.md and target release notes; identify breaking changes and new env keys.",
-		"Take backups (database dump + deploy/data, deploy/transcoder-data, deploy/ome, and .env).",
-		"Stop services without deleting volumes: docker compose -f deploy/docker-compose.yml down",
-		"Update .env image tags to target, run deploy/check-env.sh, and rerender OME config.",
-		"Run migrations with docker compose -f deploy/docker-compose.yml run --rm postgres-migrations and inspect output.",
-		"Start stack: docker compose -f deploy/docker-compose.yml up -d, then run go run ./cmd/bitriver verify --compose-file deploy/docker-compose.yml --env-file .env",
-	}
-
-	return upgradePlan{
-		CurrentVersion: normalizedCurrent,
-		TargetVersion:  normalizedTarget,
-		Supported:      supported,
-		Warnings:       warnings,
-		Steps:          steps,
-	}, nil
-}
-
-func normalizeSemverTag(raw string) (string, string, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return "", "", errors.New("empty version")
-	}
-	cleaned := strings.TrimPrefix(trimmed, "v")
-	version := extractVersion(cleaned)
-	if version == "" {
-		return "", "", errors.New("unable to parse semantic version")
-	}
-	parts := parseSemverParts(version)
-	return "v" + version, fmt.Sprintf("%d.%d.%d", parts[0], parts[1], parts[2]), nil
-}
-
-func normalizeReleaseNotesTag(tag string) string {
-	if strings.HasPrefix(strings.TrimSpace(tag), "v") {
-		return strings.TrimSpace(tag)
-	}
-	return "v" + strings.TrimSpace(tag)
-}
-
-func detectLatestMigrationVersion(dir string) (string, error) {
-	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return "", err
+		warnings = append(warnings, fmt.Sprintf("unable to read running image tags from docker compose ps: %v", err))
 	}
-	versions := make([]int, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".sql") {
-			continue
-		}
-		prefix := strings.SplitN(name, "_", 2)[0]
-		if prefix == "" {
-			continue
-		}
-		n, convErr := strconv.Atoi(prefix)
-		if convErr != nil {
-			continue
-		}
-		versions = append(versions, n)
+
+	envTags, envErr := detectEnvImageTags(envFile)
+	if envErr != nil {
+		warnings = append(warnings, fmt.Sprintf("could not read env image tags: %v", envErr))
+		warnings = append(warnings, "current version could not be determined. If a stack is running, rerun with Docker available, or pass the right --env-file.")
+		return nil, warnings
 	}
-	if len(versions) == 0 {
-		return "", errors.New("no migration versions found")
+	if len(envTags) == 0 {
+		warnings = append(warnings, "current version could not be determined from running stack or env tags. Ensure image tag variables exist in .env.")
+		return nil, warnings
 	}
-	sort.Ints(versions)
-	return fmt.Sprintf("%04d", versions[len(versions)-1]), nil
+
+	warnings = append(warnings, "using env-file tag values because running compose service tags were unavailable.")
+	return envTags, warnings
+}
+
+func detectRunningComposeImageTags(composeFile, envFile string) ([]upgradeImageTag, error) {
+	output, err := upgradePlanComposePSRunner(composeFile, envFile)
+	if err != nil {
+		return nil, err
+	}
+	type composeService struct {
+		Service string `json:"Service"`
+		Name    string `json:"Name"`
+		Image   string `json:"Image"`
+	}
+	var services []composeService
+	if err := json.Unmarshal(output, &services); err != nil {
+		return nil, fmt.Errorf("parse docker compose ps output: %w", err)
+	}
+
+	tags := make([]upgradeImageTag, 0, len(services))
+	for _, svc := range services {
+		service := strings.TrimSpace(svc.Service)
+		if service == "" {
+			service = strings.TrimSpace(svc.Name)
+		}
+		if service == "" || strings.TrimSpace(svc.Image) == "" {
+			continue
+		}
+		tags = append(tags, upgradeImageTag{Service: service, Image: strings.TrimSpace(svc.Image), Tag: imageTagFromRef(svc.Image), Source: "compose-ps"})
+	}
+	sort.Slice(tags, func(i, j int) bool { return tags[i].Service < tags[j].Service })
+	return tags, nil
+}
+
+func detectEnvImageTags(envFile string) ([]upgradeImageTag, error) {
+	values, err := loadEnvValues(envFile, false)
+	if err != nil {
+		return nil, err
+	}
+	serviceToKey := []struct {
+		service string
+		key     string
+	}{
+		{service: "bitriver-live", key: "BITRIVER_LIVE_IMAGE_TAG"},
+		{service: "viewer", key: "BITRIVER_VIEWER_IMAGE_TAG"},
+		{service: "srs-controller", key: "BITRIVER_SRS_CONTROLLER_IMAGE_TAG"},
+		{service: "transcoder", key: "BITRIVER_TRANSCODER_IMAGE_TAG"},
+		{service: "srs", key: "BITRIVER_SRS_IMAGE_TAG"},
+		{service: "ome", key: "BITRIVER_OME_IMAGE_TAG"},
+	}
+
+	tags := []upgradeImageTag{}
+	for _, entry := range serviceToKey {
+		tag := strings.TrimSpace(values[entry.key])
+		if tag == "" {
+			continue
+		}
+		tags = append(tags, upgradeImageTag{Service: entry.service, Image: tag, Tag: normalizeTagValue(tag), Source: "env-file"})
+	}
+	sort.Slice(tags, func(i, j int) bool { return tags[i].Service < tags[j].Service })
+	return tags, nil
+}
+
+func detectMigrationPlanStatus(composeFile string) migrationPlanStatus {
+	data, err := os.ReadFile(composeFile)
+	if err != nil {
+		return migrationPlanStatus{Status: "UNKNOWN", Details: fmt.Sprintf("unable to inspect compose file for migration wiring: %v", err)}
+	}
+	body := string(data)
+	if strings.Contains(body, "postgres-migrations:") {
+		if strings.Contains(body, "bitriver-live:") && strings.Contains(body, "postgres-migrations:") {
+			return migrationPlanStatus{Status: "EXPECTED", Details: "compose file includes postgres-migrations service; migrations are expected before API startup in the default deployment contract."}
+		}
+		return migrationPlanStatus{Status: "EXPECTED", Details: "postgres-migrations service exists; confirm service dependencies/order in compose overrides before maintenance."}
+	}
+	return migrationPlanStatus{Status: "UNKNOWN", Details: "postgres-migrations service not detected in compose file; verify migration strategy manually before upgrading."}
+}
+
+func imageTagFromRef(image string) string {
+	trimmed := strings.TrimSpace(image)
+	if trimmed == "" {
+		return "unknown"
+	}
+	withoutDigest := strings.SplitN(trimmed, "@", 2)[0]
+	slash := strings.LastIndex(withoutDigest, "/")
+	colon := strings.LastIndex(withoutDigest, ":")
+	if colon > slash {
+		return normalizeTagValue(withoutDigest[colon+1:])
+	}
+	if strings.Contains(trimmed, "@") {
+		return "digest-only"
+	}
+	return "unknown"
+}
+
+func normalizeTagValue(tag string) string {
+	trimmed := strings.TrimSpace(tag)
+	if trimmed == "" {
+		return "unknown"
+	}
+	if strings.HasPrefix(trimmed, "v") {
+		return trimmed
+	}
+	return "v" + trimmed
 }
