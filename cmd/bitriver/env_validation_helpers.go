@@ -391,7 +391,7 @@ func resolveEnvValue(values map[string]string, key string) envFileResolution {
 		return envFileResolution{error: fmt.Sprintf("%s points to %s but it cannot be read: %v", fileKey, filePath, err)}
 	}
 
-	trimmed := strings.TrimSpace(string(content))
+	trimmed := strings.TrimRight(string(content), "\r\n")
 	if trimmed == "" {
 		return envFileResolution{}
 	}
@@ -452,6 +452,7 @@ func validateEnv(values map[string]string) envValidatorResult {
 		"BITRIVER_TRANSCODER_TOKEN":               {},
 		"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD": {},
 		"BITRIVER_LIVE_METRICS_TOKEN":             {},
+		"BITRIVER_OME_HEALTHCHECK_TOKEN":          {},
 	}
 
 	for key := range secretRequiredKeys {
