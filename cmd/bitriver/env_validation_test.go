@@ -637,3 +637,25 @@ func containsValue(list []string, value string) bool {
 	}
 	return false
 }
+
+func TestValidateEnvRejectsInvalidResourceCPUValue(t *testing.T) {
+	cert, key := tempTLSFiles(t)
+	values := baseEnvValues(cert, key)
+	values["BITRIVER_API_CPUS"] = "zero"
+
+	res := validateEnv(values)
+	if !containsString(res.Errors, "BITRIVER_API_CPUS must be a positive decimal CPU value") {
+		t.Fatalf("expected invalid cpu error, got %v", res.Errors)
+	}
+}
+
+func TestValidateEnvRejectsInvalidResourceMemoryValue(t *testing.T) {
+	cert, key := tempTLSFiles(t)
+	values := baseEnvValues(cert, key)
+	values["BITRIVER_API_MEM"] = "abc"
+
+	res := validateEnv(values)
+	if !containsString(res.Errors, "BITRIVER_API_MEM must be a Docker Compose memory size") {
+		t.Fatalf("expected invalid memory error, got %v", res.Errors)
+	}
+}

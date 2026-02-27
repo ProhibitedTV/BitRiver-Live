@@ -15,6 +15,23 @@ Production also refuses to start without a non-zero login throttle
 (`BITRIVER_LIVE_RATE_LOGIN_LIMIT`/`BITRIVER_LIVE_RATE_LOGIN_WINDOW`) so
 password spray protection is always enabled in release builds.
 
+For production runtime safety, prefer enabling the resource limits overlay
+(`deploy/docker-compose.limits.yml`) with the canonical stack:
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.limits.yml up -d
+```
+
+The same behavior is available through the CLI wrapper:
+
+```bash
+go run ./cmd/bitriver quickstart --limits
+```
+
+Tune service limits through the `BITRIVER_*_CPUS`, `BITRIVER_*_MEM`, and
+`BITRIVER_*_MEM_RESERVATION` variables in `.env`; `cmd/bitriver env validate`
+now sanity-checks these values before deployment.
+
 Recent schema changes to account for:
 
 - `0002_chat_filters.sql` adds `chat_filters` and `chat_automod_actions` to

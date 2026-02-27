@@ -2,39 +2,29 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Implement structured doctor/preflight checks in CLI
+- [x] Task 1 — Add optional Compose limits overlay + env knobs
   - Acceptance criteria:
-    - `bitriver doctor` evaluates host resources, Docker/Compose availability + minimum versions, host port conflicts, writable dirs/files, and optional GPU hinting.
-    - Output includes per-check PASS/WARN/FAIL with actionable mitigation guidance.
-    - Exit code is non-zero when any FAIL is present; WARN-only runs exit zero.
-    - `--json` emits machine-readable structured results.
+    - `deploy/docker-compose.limits.yml` exists and defines CPU/memory limits per service using Compose-compatible keys.
+    - `deploy/.env.example` includes resource knob defaults referenced by the overlay.
 
-- [x] Task 2 — Add doctor test coverage including intentional fail simulation
+- [x] Task 2 — Add CLI and validation support for limits mode
   - Acceptance criteria:
-    - Unit tests cover summary/exit behavior and at least one intentionally failing condition via flags or mockable check functions.
-    - Existing command tests continue to pass.
+    - `cmd/bitriver compose up` and `cmd/bitriver quickstart` support `--limits` and include the overlay automatically.
+    - `bitriver env validate` sanity-checks resource knob formats/values.
 
-- [x] Task 3 — Enforce doctor in deploy/check-env.sh with skip override
+- [x] Task 3 — Update docs for production guidance and contract updates
   - Acceptance criteria:
-    - `deploy/check-env.sh` runs doctor before `env validate` by default.
-    - `--skip-doctor` bypasses the preflight while preserving existing env validation behavior.
-    - Failure output explains next steps.
-
-- [x] Task 4 — Update docs for minimum host requirements and doctor usage
-  - Acceptance criteria:
-    - Docs include baseline host requirements and factors that change them.
-    - Docs describe `bitriver doctor` and WARN vs FAIL interpretation.
+    - `docs/production-single-host.md` documents resource limits rationale, host size tiers, and tuning guidance.
+    - `docs/production-release.md` documents production compose command with limits overlay.
+    - `docs/contract.md` reflects the limits overlay and resource knob contract.
 
 ## Execution log
-- ✅ Task 1 complete: moved doctor into a dedicated preflight implementation (`cmd/bitriver/doctor.go`) with structured checks for host resources, Docker/Compose versions, host ports, writable runtime paths, and optional GPU profile detection.
-- ✅ Task 1 check: `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run ./cmd/bitriver doctor --help`.
-- ✅ Task 1 check: `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run ./cmd/bitriver doctor --min-cpu 999` (intentional FAIL path exits non-zero).
+- ✅ Task 1 complete: added `deploy/docker-compose.limits.yml` with per-service `cpus`, `mem_limit`, and `mem_reservation`; added corresponding `BITRIVER_*_CPUS`, `BITRIVER_*_MEM`, and `BITRIVER_*_MEM_RESERVATION` defaults to `deploy/.env.example`.
+- ✅ Task 1 check: `docker compose --env-file deploy/.env.example -f deploy/docker-compose.yml -f deploy/docker-compose.limits.yml config` (failed in this environment: `docker` command not available).
 
-- ✅ Task 2 complete: added `cmd/bitriver/doctor_test.go` for intentional failure threshold, JSON report shape, and dependency-injected pass behavior.
+- ✅ Task 2 complete: added `--limits` support in `cmd/bitriver compose up` and `cmd/bitriver quickstart`; added env validation rules for `*_CPUS`, `*_MEM`, and `*_MEM_RESERVATION`; added/updated tests in `cmd/bitriver/main_test.go` and `cmd/bitriver/env_validation_test.go`.
 - ✅ Task 2 check: `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver -count=1`.
 
-- ✅ Task 3 complete: updated `deploy/check-env.sh` to run doctor preflight by default, added `--skip-doctor`, and added explicit remediation text when doctor fails.
-- ✅ Task 3 check: `bash deploy/check-env.sh --skip-doctor` (script path/flag parsing exercised; env validation failed because repo `.env` is absent in this environment).
-
-- ✅ Task 4 complete: updated `docs/quickstart.md` with safe-default minimum host requirements and doctor command guidance (`--json`, WARN vs FAIL semantics).
-- ✅ Task 4 check: `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s`.
+- ✅ Task 3 complete: updated production and contract docs for limits overlay usage, sizing guidance, and env tuning path; regenerated contract generated section.
+- ✅ Task 3 check: `./scripts/generate-contract-doc.sh`.
+- ✅ Task 3 check: `./scripts/verify.sh`.
