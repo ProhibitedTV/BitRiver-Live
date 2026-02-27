@@ -213,10 +213,16 @@ go run ./cmd/bitriver ome render --force --env-file ./.env
 - Deployment is intentionally standardized to **one Compose + one `.env` contract** to avoid divergent runbooks across platforms.
 - Operational tradeoff: easier onboarding and repeatability, with less flexibility than fully custom multi-cluster setups.
 
-## Production readiness
+## Production status
 
-- Single-host baseline capacity profile (operator starting point): [`docs/production-single-host.md`](docs/production-single-host.md)
+BitRiver Live is **production-capable today for operator-managed, single-host deployments** using the documented Docker Compose contract.
+
+- **Production-capable now (current scope):** single-host operator-managed deployments, with operators owning host hardening, backups/restores, and upgrade execution. See [`docs/production-single-host.md`](docs/production-single-host.md), [`docs/upgrades.md`](docs/upgrades.md), and [`docs/security.md`](docs/security.md).
+- **Recommended/optional overlays:** monitoring and alerting overlays (`deploy/compose.monitoring.yml`) plus runtime limit overlays (`deploy/compose.limits.yml`) are recommended for production operations, but optional depending on your environment maturity. See [`docs/monitoring.md`](docs/monitoring.md).
+- **Roadmap (not current GA scope):** HA/multi-host topologies are not claimed as generally available in this repo's deployment contract yet; treat them as planned evolution rather than present-day guarantees.
+
 - Production release process: [`docs/production-release.md`](docs/production-release.md)
+- Lifecycle and guarantee policy: [`docs/production-status.md`](docs/production-status.md)
 
 ## Additional documentation
 

@@ -9,16 +9,17 @@
 
 ## Upgrade notes
 1. Run `go run ./cmd/bitriver upgrade-plan --env-file .env --to vX.Y.Z --check-schema --current-schema <current_schema_version>`.
-2. Required pre-upgrade backup steps completed (DB dump + volumes + `.env`).
-3. Any release-specific operator actions.
+2. Complete required pre-upgrade backups (DB dump + volumes + `.env`).
+3. Review [`docs/upgrades.md`](../docs/upgrades.md) and call out any release-specific steps/operators actions.
 
 ## Breaking changes
-- None
+- None.
 
 _or_
 
-- [ ] Describe each breaking change with impacted modules/operators.
-- [ ] Required mitigation or migration steps.
+- [ ] Describe each breaking change and who is impacted (operators, API clients, viewer users).
+- [ ] Provide required mitigation or migration steps.
+- [ ] State whether downtime is expected.
 
 ## Migration notes
 - DB/schema changes:
@@ -30,6 +31,13 @@ _or_
 - Safe rollback conditions:
 - Unsafe rollback conditions:
 - Restore prerequisites:
+
+## Operator checklist
+- [ ] Confirm single-host production baseline assumptions still hold for this release ([`docs/production-single-host.md`](../docs/production-single-host.md)).
+- [ ] Confirm security-impacting changes and required operator actions are documented ([`docs/security.md`](../docs/security.md)).
+- [ ] Confirm monitoring/alert updates are documented, including overlay changes if applicable ([`docs/monitoring.md`](../docs/monitoring.md)).
+- [ ] Attach/confirm upgrade execution notes for operators ([`docs/upgrades.md`](../docs/upgrades.md)).
+- [ ] Call out any features that remain roadmap-only (for example, HA/multi-host) instead of implying current GA support.
 
 ## Verification checklist
 - [ ] `deploy/check-env.sh`
