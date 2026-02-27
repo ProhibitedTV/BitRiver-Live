@@ -1,21 +1,20 @@
 # PLAN
 
 ## Scope (current change)
-- Add a static placeholder-hygiene lint script for `deploy/.env.example` that prevents empty required credential fields and rejects secret-like production values.
-- Reuse the existing `x-required-credentials` source in `deploy/docker-compose.yml` (same parsing contract used by `scripts/test-quickstart-env.py`) to determine which keys must be validated.
-- Wire the new lint into `scripts/verify.sh` so local + CI verification gates enforce placeholder safety continuously.
-- Document placeholder conventions and examples in `docs/secrets-hardening.md` and a new `docs/security.md` entry.
+- Create a new operator-facing security guide at `docs/security.md` as the primary security entrypoint for this stack.
+- Tailor guidance to the current deployment contract and validation flow (`deploy/docker-compose.yml`, `deploy/.env.example`, `cmd/bitriver env validate`).
+- Add prominent navigation links so operators discover the security guide from high-traffic docs (`README.md` and/or `docs/operations.md`).
 
 ## Assumptions
-- `x-required-credentials` in `deploy/docker-compose.yml` remains the source of truth for required credential keys.
-- `scripts/verify.sh` is the canonical verification entrypoint used by CI workflows (`./scripts/test-all.sh` and `.github/workflows/ci.yml`).
-- `deploy/.env.example` intentionally contains fake sample values and should never include production-derived secrets.
+- Security guidance should match the current single-host Docker Compose deployment model and documented optional profiles.
+- This change is documentation-only and does not alter runtime behavior or deployment contract values.
+- `_FILE`-based secrets are not yet implemented in the current stack, so guidance should mention future compatibility without claiming support exists today.
 
 ## Risks
-- Overly strict pattern checks could reject legitimate placeholders and create noisy false positives.
-- Missing clear sample marker rules could confuse contributors updating `deploy/.env.example`.
-- New documentation path (`docs/security.md`) could drift if not linked clearly to existing security guidance.
+- Overstating default exposure levels for ports/services could mislead operators if wording is not anchored to current compose defaults.
+- Security guidance can drift from env validation behavior if we cite controls not enforced by `cmd/bitriver env validate`.
+- If the new doc is not linked clearly, operators may continue to miss security hardening steps.
 
 ## Test plan
-- `./scripts/check-env-example-placeholders.sh`
+- Markdown/documentation lint via static review for section completeness and command correctness.
 - `./scripts/verify.sh`

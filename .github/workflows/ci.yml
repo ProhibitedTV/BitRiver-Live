@@ -15,6 +15,17 @@ permissions:
   contents: read
 
 jobs:
+  secret-guard:
+    name: Committed secret file guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Reject committed secret artifacts
+        shell: bash
+        run: ./scripts/check-no-committed-secrets.sh
+
   changed-files:
     name: Detect changed files
     runs-on: ubuntu-latest

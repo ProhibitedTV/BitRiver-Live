@@ -659,3 +659,93 @@ func TestValidateEnvRejectsInvalidResourceMemoryValue(t *testing.T) {
 		t.Fatalf("expected invalid memory error, got %v", res.Errors)
 	}
 }
+
+func TestValidateEnvSecretResolutionDirectValueOnly(t *testing.T) {
+	cert, key := tempTLSFiles(t)
+	values := baseEnvValues(cert, key)
+	values["BITRIVER_SRS_TOKEN"] = "direct-token"
+	values["BITRIVER_SRS_TOKEN_FILE"] = ""
+
+	res := validateEnv(values)
+	if containsValue(res.Missing, "BITRIVER_SRS_TOKEN") {
+		t.Fatalf("expected BITRIVER_SRS_TOKEN to be satisfied by direct value, got missing=%v", res.Missing)
+	}
+	if containsString(res.Errors, "BITRIVER_SRS_TOKEN_FILE") {
+		t.Fatalf("did not expect _FILE errors, got %v", res.Errors)
+	}
+}
+
+func TestValidateEnvSecretResolutionFileOnly(t *testing.T) {
+	cert, key := tempTLSFiles(t)
+	values := baseEnvValues(cert, key)
+	values["BITRIVER_SRS_TOKEN"] = ""
+
+	secretFile := filepath.Join(t.TempDir(), "srs-token")
+	if err := os.WriteFile(secretFile, []byte("file-token\n"), 0o600); err != nil {
+		t.Fatalf("write secret file: %v", err)
+	}
+	values["BITRIVER_SRS_TOKEN_FILE"] = secretFile
+
+	res := validateEnv(values)
+	if containsValue(res.Missing, "BITRIVER_SRS_TOKEN") {
+		t.Fatalf("expected BITRIVER_SRS_TOKEN to resolve from _FILE, got missing=%v", res.Missing)
+	}
+	if containsString(res.Errors, "BITRIVER_SRS_TOKEN_FILE") {
+		t.Fatalf("did not expect _FILE errors, got %v", res.Errors)
+	}
+}
+
+func TestValidateEnvSecretResolutionDirectValueWinsOverFile(t *testing.T) {
+	cert, key := tempTLSFiles(t)
+	values := baseEnvValues(cert, key)
+	values["BITRIVER_SRS_TOKEN"] = "direct-token"
+
+	secretFile := filepath.Join(t.TempDir(), "srs-token")
+	if err := os.WriteFile(secretFile, []byte("file-token\n"), 0o600); err != nil {
+		t.Fatalf("write secret file: %v", err)
+	}
+	values["BITRIVER_SRS_TOKEN_FILE"] = secretFile
+
+	res := validateEnv(values)
+	if containsValue(res.Missing, "BITRIVER_SRS_TOKEN") {
+		t.Fatalf("expected BITRIVER_SRS_TOKEN to remain satisfied, got missing=%v", res.Missing)
+	}
+	if !containsString(res.Warnings, "BITRIVER_SRS_TOKEN and BITRIVER_SRS_TOKEN_FILE are both set") {
+		t.Fatalf("expected precedence warning when both direct and _FILE are set, got warnings=%v", res.Warnings)
+	}
+}
+
+func TestValidateEnvSecretResolutionUnreadableFile(t *testing.T) {
+	cert, key := tempTLSFiles(t)
+	values := baseEnvValues(cert, key)
+	values["BITRIVER_SRS_TOKEN"] = ""
+	values["BITRIVER_SRS_TOKEN_FILE"] = t.TempDir()
+
+	res := validateEnv(values)
+	if !containsValue(res.Missing, "BITRIVER_SRS_TOKEN") {
+		t.Fatalf("expected BITRIVER_SRS_TOKEN to be missing when _FILE is unreadable, got missing=%v", res.Missing)
+	}
+	if !containsString(res.Errors, "BITRIVER_SRS_TOKEN_FILE points to") {
+		t.Fatalf("expected _FILE unreadable error, got %v", res.Errors)
+	}
+}
+
+func TestValidateEnvSecretResolutionEmptyFileContent(t *testing.T) {
+	cert, key := tempTLSFiles(t)
+	values := baseEnvValues(cert, key)
+	values["BITRIVER_SRS_TOKEN"] = ""
+
+	secretFile := filepath.Join(t.TempDir(), "srs-token-empty")
+	if err := os.WriteFile(secretFile, []byte("\n\t \n"), 0o600); err != nil {
+		t.Fatalf("write empty secret file: %v", err)
+	}
+	values["BITRIVER_SRS_TOKEN_FILE"] = secretFile
+
+	res := validateEnv(values)
+	if !containsValue(res.Missing, "BITRIVER_SRS_TOKEN") {
+		t.Fatalf("expected BITRIVER_SRS_TOKEN to be missing when _FILE content is empty, got missing=%v", res.Missing)
+	}
+	if containsString(res.Errors, "BITRIVER_SRS_TOKEN_FILE") {
+		t.Fatalf("did not expect read error for empty _FILE content, got %v", res.Errors)
+	}
+}

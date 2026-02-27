@@ -107,3 +107,30 @@ Use this short checklist for every environment:
 6. Document rotation owner + next rotation date in release/change records.
 
 This keeps operations aligned with repository behavior while materially improving secret hygiene.
+
+## 5) `_FILE` secret mounts for `bitriver env validate`
+
+`go run ./cmd/bitriver env validate --env-file ./.env` supports file-backed secret values for required secret keys using the `<KEY>_FILE` convention.
+
+Behavior:
+
+- Set `BITRIVER_SOME_SECRET` directly for inline env values.
+- Or set `BITRIVER_SOME_SECRET_FILE` to a readable file path containing the secret.
+- If **both** are set, direct `BITRIVER_SOME_SECRET` takes precedence and validation emits a warning so precedence is explicit and deterministic.
+- If `_FILE` points to a missing/unreadable path, validation reports an error.
+- If `_FILE` is readable but empty/whitespace-only, validation treats the effective secret as missing.
+
+Example pattern:
+
+```env
+BITRIVER_POSTGRES_PASSWORD_FILE=/run/secrets/bitriver_postgres_password
+BITRIVER_REDIS_PASSWORD_FILE=/run/secrets/bitriver_redis_password
+BITRIVER_LIVE_ADMIN_PASSWORD_FILE=/run/secrets/bitriver_live_admin_password
+```
+
+Recommended operator workflow:
+
+1. Mount secrets to files on the host/orchestrator (for example, `/run/secrets/...`).
+2. Reference those paths with `*_FILE` variables in your environment file.
+3. Run `go run ./cmd/bitriver env validate --env-file ./.env` before deploy.
+4. Keep file permissions restricted (`0600` where applicable) and rotate secrets per environment policy.

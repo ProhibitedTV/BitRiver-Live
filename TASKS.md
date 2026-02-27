@@ -2,32 +2,22 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Add env-example placeholder lint script
+- [x] Task 1 — Add operator security entrypoint doc (`docs/security.md`)
   - Acceptance criteria:
-    - New script validates required credentials in `deploy/.env.example` are present and non-empty.
-    - Script parses required credential keys from `x-required-credentials` in `deploy/docker-compose.yml`.
-    - Script rejects unsafe secret-looking values unless they follow explicit sample marker conventions.
+    - Includes all required sections: threat model summary, network exposure guidance, reverse proxy + TLS recommendation, auth/session/cookie settings guidance, admin bootstrap practices, secret rotation approach, logging guidance, and production checklist.
+    - Guidance is stack-specific and references `deploy/docker-compose.yml`, `deploy/.env.example`, and `cmd/bitriver env validate` where relevant.
+    - Includes service/port exposure table and explicit callouts that `postgres-host` and `srs-api` profiles are debug-only.
 
-- [x] Task 2 — Wire placeholder lint into verification + CI path
+- [x] Task 2 — Add discoverability links to security doc
   - Acceptance criteria:
-    - `scripts/verify.sh` runs the new check as part of standard verification.
-    - CI path that depends on verify (`scripts/test-all.sh`/workflows) enforces the check without duplicate bespoke steps.
-
-- [x] Task 3 — Document placeholder conventions
-  - Acceptance criteria:
-    - `docs/secrets-hardening.md` documents accepted sample marker conventions for secret-bearing placeholders.
-    - `docs/security.md` includes/links placeholder hygiene expectations and references verification command(s).
+    - Add link(s) from `README.md` and/or `docs/operations.md` so operators can quickly find `docs/security.md`.
+    - Link placement is near other operator-facing runbook references.
 
 ## Execution log
-- ✅ Task 1 complete: added `scripts/check-env-example-placeholders.sh` and aligned `deploy/.env.example` admin password placeholder marker.
+- ✅ Task 1 complete: created `docs/security.md` as the operator-facing security entrypoint with all required sections and stack-specific guidance.
 - ✅ Task 1 check:
-  - `./scripts/check-env-example-placeholders.sh`
+  - `rg -n "^## 1\)|^## 2\)|^## 3\)|^## 4\)|^## 5\)|^## 6\)|^## 7\)|^## 8\)|postgres-host|srs-api|env validate" docs/security.md`
 
-- ✅ Task 2 complete: wired placeholder hygiene check into `scripts/verify.sh` (therefore CI paths that invoke verify/test-all also enforce it).
-- ✅ Task 2 check:
-  - `./scripts/verify.sh` (initial run surfaced stale generated contract docs)
-
-- ✅ Task 3 complete: documented placeholder conventions in `docs/secrets-hardening.md` and created `docs/security.md` guardrails page.
-- ✅ Task 3 checks:
-  - `./scripts/generate-contract-doc.sh`
-  - `./scripts/verify.sh` (final pass)
+- ✅ Task 2 complete: added discoverability links to `docs/security.md` from `README.md` and `docs/operations.md`.
+- ✅ Task 2 checks:
+  - `./scripts/verify.sh`
