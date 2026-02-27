@@ -2,25 +2,24 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Prepare release evidence directory and postgres execution path
+- [x] Task 1 — Capture requested release gate command logs
   - Acceptance criteria:
-    - A new `artifacts/release-checks-<timestamp>/` directory exists for this run.
-    - Selected execution path is documented in the task log (prepared integration DB via DSN).
+    - New `artifacts/release-checks-<timestamp>/` directory exists.
+    - Logs for `docker compose -f deploy/docker-compose.yml config`, `./scripts/test-quickstart.sh`, and `./scripts/verify.sh` are stored with full output and exit status.
 
-- [x] Task 2 — Run postgres release checks and capture logs
+- [x] Task 2 — Update release checklist report with new outcomes
   - Acceptance criteria:
-    - `BITRIVER_TEST_POSTGRES_DSN=... BITRIVER_TEST_POSTGRES_RUN_MIGRATIONS=1 ./scripts/test-postgres.sh` passes and log is captured.
-    - `./scripts/check-postgres-pgx.sh postgres` passes and log is captured.
+    - `docs/releases/release-checklist-report-2026-02-27.md` gate summary rows reference the new artifact paths.
+    - Gate pass/fail states reflect the latest command results.
 
-- [x] Task 3 — Update release checklist report with status and residual risks
+- [x] Task 3 — Align final go/no-go decision with refreshed gate results
   - Acceptance criteria:
-    - `docs/releases/release-checklist-report-2026-02-27.md` references new evidence logs.
-    - Report reflects final status and residual risks from this execution.
+    - Final recommendation in the report matches updated gate statuses and evidence.
 
 ## Execution log
-- ✅ Task 1 complete: created `artifacts/release-checks-20260227-163026` and selected prepared integration DB path via `BITRIVER_TEST_POSTGRES_DSN`.
-
-- ✅ Task 2 complete: after triage in `internal/storage/postgres_acquire_timeout_integration_test.go`, reran postgres checks and captured logs in `artifacts/release-checks-20260227-163026/`.
-- ✅ Task 3 complete: updated `docs/releases/release-checklist-report-2026-02-27.md` with final status and residual risks from the new evidence set.
-- ✅ Post-format verification: reran postgres checks and captured final passing logs (`05-test-postgres-post-gofmt.log`, `06-check-postgres-pgx-post-gofmt.log`).
-- ✅ Additional gate: `./scripts/verify.sh` passed (Docker-dependent checks skipped by script) and evidence captured at `07-verify.log`.
+- ✅ Task 1 complete: captured logs in `artifacts/release-checks-20260227-163011/`.
+  - `docker compose -f deploy/docker-compose.yml config` → exit 127 (docker missing).
+  - `./scripts/test-quickstart.sh` → exit 1 (docker required).
+  - `./scripts/verify.sh` → exit 0 (passes with docker-related skips).
+- ✅ Task 2 complete: refreshed gate summary/evidence paths in `docs/releases/release-checklist-report-2026-02-27.md`.
+- ✅ Task 3 complete: retained **NO-GO / NOT READY** decision to match latest failing docker-dependent gates.
