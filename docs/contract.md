@@ -342,7 +342,7 @@ _This section is generated from `deploy/.env.example` by `scripts/generate-contr
 | `BITRIVER_PUBLIC_DOMAIN` | `stream.example.com` |
 | `BITRIVER_TLS_EMAIL` | `admin@stream.example.com` |
 | `BITRIVER_LIVE_ADMIN_EMAIL` | `admin@stream.example.com` |
-| `BITRIVER_LIVE_ADMIN_PASSWORD` | `Sup3rSecureAdmin!` |
+| `BITRIVER_LIVE_ADMIN_PASSWORD` | `Sup3rSecureAdmin-Example!` |
 | `BITRIVER_SRS_TOKEN` | `srs-secure-token-example` |
 | `BITRIVER_OME_USERNAME` | `ome-operator` |
 | `BITRIVER_OME_PASSWORD` | `OME-Example-Pass!` |

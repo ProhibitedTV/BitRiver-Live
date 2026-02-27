@@ -67,7 +67,24 @@ BitRiver Live does not require a specific external secret manager integration in
 
 Guardrail: regardless of source, keep exported variable names aligned with `deploy/.env.example` and validate with the existing scripts before rollout.
 
-## 3) Operator checklist
+## 3) Placeholder hygiene for `deploy/.env.example`
+
+`deploy/.env.example` is documentation and a bootstrap template, so secret-bearing values must stay obviously fake.
+
+Conventions enforced by `./scripts/check-env-example-placeholders.sh`:
+
+- Required credential keys from `x-required-credentials` in `deploy/docker-compose.yml` must be present and non-empty.
+- Secret-bearing placeholders (`*PASSWORD*`, `*TOKEN*`, `*SECRET*`, `*KEY*`) must include a sample marker such as `-example`, `_example`, `Example`, `sample`, `placeholder`, or `changeme`.
+- Email placeholders must use the `example.com` domain.
+- Long high-entropy token-like values are rejected unless clearly marked as examples.
+
+Use these patterns when editing templates:
+
+- `BITRIVER_SRS_TOKEN=srs-secure-token-example`
+- `BITRIVER_OME_API_TOKEN=OME-Example-Access-Token`
+- `BITRIVER_LIVE_ADMIN_EMAIL=admin@stream.example.com`
+
+## 4) Operator checklist
 
 Use this short checklist for every environment:
 
@@ -77,7 +94,7 @@ Use this short checklist for every environment:
 - [ ] **Backup/restore handling:** include secret material handling in backup policy (encryption, restricted restore access, and post-restore rotation where required).
 - [ ] **Access control and audit:** limit secret read/write permissions to release operators and record secret change events in your change-management/audit trail.
 
-## 4) Practical rollout workflow
+## 5) Practical rollout workflow
 
 1. Start from `deploy/.env.example` and fill environment-specific values.
 2. Generate/store the resulting `.env` through CI or host secret tooling (not Git).
