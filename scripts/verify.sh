@@ -170,6 +170,7 @@ fi
 
 run_step "go.sum non-empty guard" ./scripts/check-go-sum-not-empty.sh
 run_step "CI workflow contract check" ./scripts/check-ci-contract.sh
+run_step "Env example placeholder hygiene" ./scripts/check-env-example-placeholders.sh
 
 require_tool "go" "Install Go to run repository Go tests."
 run_step "Go tests" \

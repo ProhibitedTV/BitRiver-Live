@@ -225,6 +225,7 @@ go run ./cmd/bitriver ome render --force --env-file ./.env
 - Advanced deployments and reverse proxies: [`docs/advanced-deployments.md`](docs/advanced-deployments.md), [`docs/reverse-proxy-npm-cloudflare.md`](docs/reverse-proxy-npm-cloudflare.md)
 - Operations/backups/restores: [`docs/operations.md`](docs/operations.md)
 - Secrets hardening: [`docs/secrets-hardening.md`](docs/secrets-hardening.md)
+- Security guardrails: [`docs/security.md`](docs/security.md)
 - Upgrades: [`docs/upgrades.md`](docs/upgrades.md)
 - Testing: [`docs/testing.md`](docs/testing.md), [`docs/testing-status.md`](docs/testing-status.md)
 - Architecture contract: [`docs/architecture.md`](docs/architecture.md)

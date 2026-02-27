@@ -1,20 +1,21 @@
 # PLAN
 
 ## Scope (current change)
-- Strengthen the upgrade contract to v1.0-grade guidance in `docs/upgrades.md` with explicit supported version hops, backup/restore checklist, and rollback safety boundaries.
-- Add a new CLI planner command (`bitriver upgrade-plan`) that reads deployed version hints from `.env` image tags, compares with a target tag, and prints actionable upgrade steps + breaking-change warnings.
-- Add dedicated release versioning rules in `docs/versioning.md` and align release process docs/templates to require upgrade notes + breaking-change callouts.
+- Add a static placeholder-hygiene lint script for `deploy/.env.example` that prevents empty required credential fields and rejects secret-like production values.
+- Reuse the existing `x-required-credentials` source in `deploy/docker-compose.yml` (same parsing contract used by `scripts/test-quickstart-env.py`) to determine which keys must be validated.
+- Wire the new lint into `scripts/verify.sh` so local + CI verification gates enforce placeholder safety continuously.
+- Document placeholder conventions and examples in `docs/secrets-hardening.md` and a new `docs/security.md` entry.
 
 ## Assumptions
-- Deployments use `deploy/docker-compose.yml` plus a repository `.env` where `BITRIVER_LIVE_IMAGE_TAG` is the canonical application version hint.
-- DB schema version cannot always be auto-discovered, so schema checks should be opt-in and non-breaking when metadata is unavailable.
-- Existing upgrade defaults must stay non-disruptive: no forced behavior changes at runtime.
+- `x-required-credentials` in `deploy/docker-compose.yml` remains the source of truth for required credential keys.
+- `scripts/verify.sh` is the canonical verification entrypoint used by CI workflows (`./scripts/test-all.sh` and `.github/workflows/ci.yml`).
+- `deploy/.env.example` intentionally contains fake sample values and should never include production-derived secrets.
 
 ## Risks
-- Ambiguous semver parsing (with/without `v` prefixes) could misclassify supported hops.
-- Overpromising rollback safety when migrations are irreversible could create operator risk.
-- Release template/process changes may drift if not linked from existing release runbook.
+- Overly strict pattern checks could reject legitimate placeholders and create noisy false positives.
+- Missing clear sample marker rules could confuse contributors updating `deploy/.env.example`.
+- New documentation path (`docs/security.md`) could drift if not linked clearly to existing security guidance.
 
 ## Test plan
-- `go test ./cmd/bitriver -count=1`
+- `./scripts/check-env-example-placeholders.sh`
 - `./scripts/verify.sh`

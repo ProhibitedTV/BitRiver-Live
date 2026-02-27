@@ -2,33 +2,32 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Add upgrade planning CLI command
+- [x] Task 1 — Add env-example placeholder lint script
   - Acceptance criteria:
-    - `bitriver upgrade-plan --to <tag>` reads current deployed version hints from `.env` image tags.
-    - Command validates supported upgrade hops (N-1 minors; no major skipping) and prints actionable steps.
-    - Command emits explicit warnings for major upgrades/breaking changes and optional schema checks.
+    - New script validates required credentials in `deploy/.env.example` are present and non-empty.
+    - Script parses required credential keys from `x-required-credentials` in `deploy/docker-compose.yml`.
+    - Script rejects unsafe secret-looking values unless they follow explicit sample marker conventions.
 
-- [x] Task 2 — Upgrade contract documentation
+- [x] Task 2 — Wire placeholder lint into verification + CI path
   - Acceptance criteria:
-    - `docs/upgrades.md` includes Supported upgrade paths, Backup and restore checklist, and Roll back safety/unsafe guidance.
-    - Doc includes a single copy-paste command sequence that operators can run.
+    - `scripts/verify.sh` runs the new check as part of standard verification.
+    - CI path that depends on verify (`scripts/test-all.sh`/workflows) enforces the check without duplicate bespoke steps.
 
-- [x] Task 3 — Versioning + release artifact consistency
+- [x] Task 3 — Document placeholder conventions
   - Acceptance criteria:
-    - New dedicated versioning section/doc defines SemVer policy and breaking-change criteria.
-    - Release process/docs include required upgrade notes and breaking-change callouts.
-    - A reusable template exists under `.github/` for release notes consistency.
+    - `docs/secrets-hardening.md` documents accepted sample marker conventions for secret-bearing placeholders.
+    - `docs/security.md` includes/links placeholder hygiene expectations and references verification command(s).
 
 ## Execution log
-- ✅ Task 1 complete: added `cmd/bitriver/upgrade_plan.go`, wired `upgrade-plan` in `cmd/bitriver/main.go`, and added tests in `cmd/bitriver/upgrade_plan_test.go`.
-- ✅ Task 1 checks:
-  - `go test ./cmd/bitriver -count=1`
-  - `go run ./cmd/bitriver upgrade-plan --current v1.2.3 --to v1.3.0 --check-schema --current-schema 0010 --expected-schema 0010`
+- ✅ Task 1 complete: added `scripts/check-env-example-placeholders.sh` and aligned `deploy/.env.example` admin password placeholder marker.
+- ✅ Task 1 check:
+  - `./scripts/check-env-example-placeholders.sh`
 
-- ✅ Task 2 complete: rewrote `docs/upgrades.md` with explicit supported hops, backup/restore checklist, migration guarantees, single command sequence, and rollback safety boundaries.
-- ✅ Task 2 check: static review of rendered markdown sections/command sequence.
+- ✅ Task 2 complete: wired placeholder hygiene check into `scripts/verify.sh` (therefore CI paths that invoke verify/test-all also enforce it).
+- ✅ Task 2 check:
+  - `./scripts/verify.sh` (initial run surfaced stale generated contract docs)
 
-- ✅ Task 3 complete: added `docs/versioning.md`, updated `docs/production-release.md` with release-notes consistency gate, and added `.github/RELEASE_NOTES_TEMPLATE.md`.
+- ✅ Task 3 complete: documented placeholder conventions in `docs/secrets-hardening.md` and created `docs/security.md` guardrails page.
 - ✅ Task 3 checks:
-  - static review of SemVer/breaking-change policy wording
-  - `./scripts/verify.sh`
+  - `./scripts/generate-contract-doc.sh`
+  - `./scripts/verify.sh` (final pass)
