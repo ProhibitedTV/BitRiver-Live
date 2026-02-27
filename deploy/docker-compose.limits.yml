@@ -1,0 +1,75 @@
+services:
+  bitriver-live:
+    cpus: "${BITRIVER_API_CPUS:-1.50}"
+    mem_limit: "${BITRIVER_API_MEM:-1g}"
+    mem_reservation: "${BITRIVER_API_MEM_RESERVATION:-768m}"
+
+  viewer:
+    cpus: "${BITRIVER_VIEWER_CPUS:-0.50}"
+    mem_limit: "${BITRIVER_VIEWER_MEM:-512m}"
+    mem_reservation: "${BITRIVER_VIEWER_MEM_RESERVATION:-256m}"
+
+  redis:
+    cpus: "${BITRIVER_REDIS_CPUS:-0.50}"
+    mem_limit: "${BITRIVER_REDIS_MEM:-256m}"
+    mem_reservation: "${BITRIVER_REDIS_MEM_RESERVATION:-128m}"
+
+  postgres:
+    cpus: "${BITRIVER_POSTGRES_CPUS:-1.00}"
+    mem_limit: "${BITRIVER_POSTGRES_MEM:-1g}"
+    mem_reservation: "${BITRIVER_POSTGRES_MEM_RESERVATION:-512m}"
+
+  postgres-migrations:
+    cpus: "${BITRIVER_POSTGRES_MIGRATIONS_CPUS:-0.50}"
+    mem_limit: "${BITRIVER_POSTGRES_MIGRATIONS_MEM:-512m}"
+    mem_reservation: "${BITRIVER_POSTGRES_MIGRATIONS_MEM_RESERVATION:-256m}"
+
+  postgres-host-port:
+    cpus: "${BITRIVER_POSTGRES_HOST_PORT_CPUS:-0.25}"
+    mem_limit: "${BITRIVER_POSTGRES_HOST_PORT_MEM:-128m}"
+    mem_reservation: "${BITRIVER_POSTGRES_HOST_PORT_MEM_RESERVATION:-64m}"
+
+  srs-controller:
+    cpus: "${BITRIVER_SRS_CONTROLLER_CPUS:-0.50}"
+    mem_limit: "${BITRIVER_SRS_CONTROLLER_MEM:-512m}"
+    mem_reservation: "${BITRIVER_SRS_CONTROLLER_MEM_RESERVATION:-256m}"
+
+  srs:
+    cpus: "${BITRIVER_SRS_CPUS:-2.00}"
+    mem_limit: "${BITRIVER_SRS_MEM:-2g}"
+    mem_reservation: "${BITRIVER_SRS_MEM_RESERVATION:-1g}"
+
+  srs-api:
+    cpus: "${BITRIVER_SRS_API_CPUS:-0.25}"
+    mem_limit: "${BITRIVER_SRS_API_MEM:-128m}"
+    mem_reservation: "${BITRIVER_SRS_API_MEM_RESERVATION:-64m}"
+
+  srs-config:
+    cpus: "${BITRIVER_SRS_CONFIG_CPUS:-0.25}"
+    mem_limit: "${BITRIVER_SRS_CONFIG_MEM:-128m}"
+    mem_reservation: "${BITRIVER_SRS_CONFIG_MEM_RESERVATION:-64m}"
+
+  ome-config:
+    cpus: "${BITRIVER_OME_CONFIG_CPUS:-0.25}"
+    mem_limit: "${BITRIVER_OME_CONFIG_MEM:-128m}"
+    mem_reservation: "${BITRIVER_OME_CONFIG_MEM_RESERVATION:-64m}"
+
+  ome-health-token-check:
+    cpus: "${BITRIVER_OME_HEALTH_TOKEN_CHECK_CPUS:-0.25}"
+    mem_limit: "${BITRIVER_OME_HEALTH_TOKEN_CHECK_MEM:-128m}"
+    mem_reservation: "${BITRIVER_OME_HEALTH_TOKEN_CHECK_MEM_RESERVATION:-64m}"
+
+  ome:
+    cpus: "${BITRIVER_OME_CPUS:-4.00}"
+    mem_limit: "${BITRIVER_OME_MEM:-4g}"
+    mem_reservation: "${BITRIVER_OME_MEM_RESERVATION:-2g}"
+
+  transcoder:
+    cpus: "${BITRIVER_TRANSCODER_CPUS:-4.00}"
+    mem_limit: "${BITRIVER_TRANSCODER_MEM:-4g}"
+    mem_reservation: "${BITRIVER_TRANSCODER_MEM_RESERVATION:-2g}"
+
+  transcoder-public:
+    cpus: "${BITRIVER_TRANSCODER_PUBLIC_CPUS:-0.50}"
+    mem_limit: "${BITRIVER_TRANSCODER_PUBLIC_MEM:-256m}"
+    mem_reservation: "${BITRIVER_TRANSCODER_PUBLIC_MEM_RESERVATION:-128m}"

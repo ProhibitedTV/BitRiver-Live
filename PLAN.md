@@ -1,24 +1,23 @@
 # PLAN
 
 ## Scope (current change)
-- Expand `cmd/bitriver doctor` into a production-safe preflight that reports PASS/WARN/FAIL for host resources, Docker/Compose availability + minimum versions, host port conflicts, writable runtime paths, and optional GPU expectations.
-- Add machine-readable output via `bitriver doctor --json` while keeping human-friendly actionable output by default.
-- Enforce doctor in canonical env-check wrapper by updating `deploy/check-env.sh` to run doctor first, with an escape hatch `--skip-doctor`.
-- Update operator docs with minimum host requirements and doctor usage/interpreting WARN vs FAIL.
+- Add an optional production resource-limits Compose overlay (`deploy/docker-compose.limits.yml`) that sets CPU and memory limits per service using Docker Compose-compatible fields (`cpus`, `mem_limit`, and reservation companions where useful).
+- Introduce `.env` resource-tuning knobs with safe defaults in `deploy/.env.example` so operators can size limits without editing Compose YAML.
+- Extend `cmd/bitriver` wrappers to support a `--limits` flag that automatically includes the limits overlay for `compose up` and `quickstart`.
+- Add `env validate` sanity checks for resource knobs (CPU and memory format/value) so malformed values fail early.
+- Update production docs and contract docs to describe recommended production usage, host-size tiers, and limit tuning workflow.
 
 ## Assumptions
-- Existing `doctor` command name remains canonical (no alias needed unless trivial).
-- Conservative defaults should avoid false negatives across OSes; when host introspection is unreliable, checks degrade to WARN.
-- Required host ports should match the same `.env`-driven ports used by quickstart preflight.
+- Base behavior must stay unchanged when `--limits` is not passed and when only `deploy/docker-compose.yml` is used.
+- Overlay should remain compatible with `docker compose` non-Swarm mode, so `cpus`/`mem_limit` are preferred over Swarm-only deploy blocks.
+- Resource defaults should be conservative enough for production while still workable for development if the overlay is explicitly enabled.
 
 ## Risks
-- Overly strict version/resource thresholds could block valid development setups.
-- Cross-platform host metrics collection can be inconsistent (Linux/macOS/Windows).
-- `check-env.sh` argument parsing changes could break scripted callers if not backward-compatible.
+- Overly aggressive defaults could starve transcoding/streaming paths on smaller hosts.
+- Compose resource keys can be engine-version sensitive; config validation is required to confirm compatibility.
+- CLI flag wiring changes could alter compose command argument order expected by tests.
 
 ## Test plan
-- `go test ./cmd/bitriver -count=1` for command behavior and injected failure paths.
-- `go test ./... -count=1 -timeout=120s` for repo-wide validation.
-- `go run ./cmd/bitriver doctor --help` to verify CLI wiring/help text.
-- `go run ./cmd/bitriver doctor --min-cpu 999` (or equivalent) to confirm intentional FAIL returns non-zero.
-- `bash deploy/check-env.sh --skip-doctor` smoke check for wrapper flag parsing.
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver -count=1`
+- `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.limits.yml config`
+- `./scripts/verify.sh`

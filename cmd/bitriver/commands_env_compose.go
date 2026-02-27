@@ -87,6 +87,11 @@ func defaultComposeFile() string {
 	return filepath.Join(repoRoot(), "deploy", "docker-compose.yml")
 }
 
+// defaultComposeLimitsFile returns the optional resource-limits overlay file.
+func defaultComposeLimitsFile() string {
+	return filepath.Join(repoRoot(), "deploy", "docker-compose.limits.yml")
+}
+
 // defaultExampleEnv returns the default example env for the current runtime mode.
 func defaultExampleEnv() string {
 	return filepath.Join(repoRoot(), "deploy", ".env.example")
@@ -284,6 +289,7 @@ func runCompose(args []string) error {
 }
 
 var commandRunner = executil.Run
+var lookPathRunner = executil.LookPath
 var manifestInspectRunner = runDockerManifestInspect
 var deployImageSourcePreflightRunner = runDeployImageSourcePreflight
 var quickstartWaiter = waitForAPIReadiness
@@ -315,14 +321,20 @@ type deployImageSourceConfig struct {
 
 // composeArgsWithEnv performs compose args with env and propagates validation or dependency failures to the caller.
 func composeArgsWithEnv(composeFile, envFile string) []string {
+	return composeArgsWithEnvAndFiles([]string{composeFile}, envFile)
+}
+
+func composeArgsWithEnvAndFiles(composeFiles []string, envFile string) []string {
 	args := []string{"compose"}
 	if strings.TrimSpace(envFile) != "" {
 		args = append(args, "--env-file", envFile)
 	} else {
 		args = append(args, "--project-directory", repoRoot())
 	}
-	if strings.TrimSpace(composeFile) != "" {
-		args = append(args, "--file", composeFile)
+	for _, composeFile := range composeFiles {
+		if strings.TrimSpace(composeFile) != "" {
+			args = append(args, "--file", composeFile)
+		}
 	}
 	return args
 }
@@ -331,6 +343,7 @@ func composeArgsWithEnv(composeFile, envFile string) []string {
 func runComposeUp(args []string) error {
 	fs := flag.NewFlagSet("compose up", flag.ContinueOnError)
 	composeFile := fs.String("file", defaultComposeFile(), "compose file to use")
+	limits := fs.Bool("limits", false, "include deploy/docker-compose.limits.yml resource overlay")
 	envFile := fs.String("env-file", "", "env file to use for compose interpolation")
 	detach := fs.Bool("detached", true, "run docker compose in detached mode")
 	build := fs.Bool("build", false, "build images before starting (development-only; rejected in production mode)")
@@ -365,7 +378,7 @@ func runComposeUp(args []string) error {
 		return err
 	}
 
-	if _, err := executil.LookPath("docker"); err != nil {
+	if _, err := lookPathRunner("docker"); err != nil {
 		return err
 	}
 
@@ -373,7 +386,12 @@ func runComposeUp(args []string) error {
 		return err
 	}
 
-	composeArgs := append(composeArgsWithEnv(*composeFile, *envFile), "up")
+	composeFiles := []string{*composeFile}
+	if *limits {
+		composeFiles = append(composeFiles, defaultComposeLimitsFile())
+	}
+
+	composeArgs := append(composeArgsWithEnvAndFiles(composeFiles, *envFile), "up")
 	composeArgs = append(composeArgs, modeCfg.composeArgs...)
 	if *build && modeCfg.mode == deployImageSourceBuild {
 		composeArgs = append(composeArgs, "--build")
@@ -464,7 +482,7 @@ func runComposeDown(args []string) error {
 		return err
 	}
 
-	if _, err := executil.LookPath("docker"); err != nil {
+	if _, err := lookPathRunner("docker"); err != nil {
 		return err
 	}
 
@@ -479,6 +497,7 @@ func runComposeDown(args []string) error {
 func runQuickstart(args []string) error {
 	fs := flag.NewFlagSet("quickstart", flag.ContinueOnError)
 	composeFile := fs.String("compose-file", defaultComposeFile(), "compose file to use")
+	limits := fs.Bool("limits", false, "include deploy/docker-compose.limits.yml resource overlay")
 	envFile := fs.String("env-file", defaultEnvFile(), "environment file path")
 	build := fs.Bool("build", false, "build images from the local source tree before starting (development-only; rejected in production mode)")
 	imageSource := fs.String("image-source", "", "image source mode: pull (default, production) or build (development-only)")
@@ -563,6 +582,9 @@ func runQuickstart(args []string) error {
 	}
 
 	composeUpArgs := []string{"--file", *composeFile, "--env-file", *envFile}
+	if *limits {
+		composeUpArgs = append(composeUpArgs, "--limits")
+	}
 	composeUpArgs = append(composeUpArgs, "--image-source", modeCfg.mode)
 	if *build && modeCfg.mode == deployImageSourceBuild {
 		composeUpArgs = append(composeUpArgs, "--build")
@@ -594,7 +616,7 @@ func runQuickstart(args []string) error {
 }
 
 func runDockerVersionPreflight() error {
-	if _, err := executil.LookPath("docker"); err != nil {
+	if _, err := lookPathRunner("docker"); err != nil {
 		return fmt.Errorf("docker CLI not found: %w\nNext: install Docker Desktop/Engine and ensure `docker` is on PATH", err)
 	}
 	if err := commandRunner("docker", "version"); err != nil {
@@ -1066,7 +1088,7 @@ func valueOrDefault(value, fallback string) string {
 
 // runMigrations runs migrations and exits when the work completes or a dependency fails.
 func runMigrations(composeFile, envFile string) error {
-	if _, err := executil.LookPath("docker"); err != nil {
+	if _, err := lookPathRunner("docker"); err != nil {
 		return err
 	}
 

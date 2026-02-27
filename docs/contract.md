@@ -9,6 +9,9 @@ BitRiver Live has one canonical deployment path: the root `.env` rendered/valida
 - `deploy/docker-compose.yml`
   - Canonical service graph and startup order.
   - Defines health checks, inter-service dependencies, migration execution (`postgres-migrations`), and required env interpolation (`:?set via .env`).
+- `deploy/docker-compose.limits.yml` (optional overlay, production-recommended)
+  - Adds Docker Compose-compatible CPU/memory limits (`cpus`, `mem_limit`, `mem_reservation`) per service.
+  - Activated explicitly via a second `-f` compose file or `cmd/bitriver` `--limits` flag.
 - `deploy/.env.example`
   - Canonical schema/template for environment variables.
   - Source for placeholder detection in `cmd/bitriver env validate` and seed values in `cmd/bitriver env init`.
@@ -100,7 +103,19 @@ Status meanings:
 | `BITRIVER_LIVE_CHAT_QUEUE_REDIS_STREAM` | `bitriver-live-chat` | Optional | Producers/consumers diverge from expected stream. |
 | `BITRIVER_LIVE_CHAT_QUEUE_REDIS_GROUP` | `bitriver-live-api` | Optional | Consumer-group behavior diverges; message handling issues. |
 
-### F) Ingest and playback/control plane
+### G) Optional resource-limit knobs (limits overlay)
+
+These variables are consumed by `deploy/docker-compose.limits.yml` and validated by `cmd/bitriver env validate` when set.
+
+| Variable pattern | Default style | Required? | What breaks if wrong |
+| --- | --- | --- | --- |
+| `BITRIVER_*_CPUS` | decimal cores (for example `0.50`, `1.00`, `4.00`) | Optional | Invalid/non-positive values fail env validation before deploy. |
+| `BITRIVER_*_MEM` | Docker Compose memory size (for example `256m`, `1g`) | Optional | Invalid memory format fails env validation; compose limits may not apply as expected. |
+| `BITRIVER_*_MEM_RESERVATION` | Docker Compose memory size (for example `128m`, `512m`) | Optional | Invalid memory format fails env validation; reservation hints are ignored or rejected. |
+
+Primary service knobs include `BITRIVER_API_*`, `BITRIVER_VIEWER_*`, `BITRIVER_POSTGRES_*`, `BITRIVER_SRS_*`, `BITRIVER_OME_*`, and `BITRIVER_TRANSCODER_*` variants declared in `deploy/.env.example`.
+
+### H) Ingest and playback/control plane
 
 | Variable | Default in template/compose | Required? | What breaks if wrong |
 | --- | --- | --- | --- |
@@ -205,6 +220,51 @@ _This section is generated from `deploy/.env.example` by `scripts/generate-contr
 | `BITRIVER_ALPINE_3_19_IMAGE_DIGEST` | _(empty)_ |
 | `BITRIVER_DEBIAN_IMAGE_DIGEST` | _(empty)_ |
 | `BITRIVER_LIVE_PORT` | `8080` |
+| `BITRIVER_API_CPUS` | `1.50` |
+| `BITRIVER_API_MEM` | `1g` |
+| `BITRIVER_API_MEM_RESERVATION` | `768m` |
+| `BITRIVER_VIEWER_CPUS` | `0.50` |
+| `BITRIVER_VIEWER_MEM` | `512m` |
+| `BITRIVER_VIEWER_MEM_RESERVATION` | `256m` |
+| `BITRIVER_REDIS_CPUS` | `0.50` |
+| `BITRIVER_REDIS_MEM` | `256m` |
+| `BITRIVER_REDIS_MEM_RESERVATION` | `128m` |
+| `BITRIVER_POSTGRES_CPUS` | `1.00` |
+| `BITRIVER_POSTGRES_MEM` | `1g` |
+| `BITRIVER_POSTGRES_MEM_RESERVATION` | `512m` |
+| `BITRIVER_POSTGRES_MIGRATIONS_CPUS` | `0.50` |
+| `BITRIVER_POSTGRES_MIGRATIONS_MEM` | `512m` |
+| `BITRIVER_POSTGRES_MIGRATIONS_MEM_RESERVATION` | `256m` |
+| `BITRIVER_POSTGRES_HOST_PORT_CPUS` | `0.25` |
+| `BITRIVER_POSTGRES_HOST_PORT_MEM` | `128m` |
+| `BITRIVER_POSTGRES_HOST_PORT_MEM_RESERVATION` | `64m` |
+| `BITRIVER_SRS_CONTROLLER_CPUS` | `0.50` |
+| `BITRIVER_SRS_CONTROLLER_MEM` | `512m` |
+| `BITRIVER_SRS_CONTROLLER_MEM_RESERVATION` | `256m` |
+| `BITRIVER_SRS_CPUS` | `2.00` |
+| `BITRIVER_SRS_MEM` | `2g` |
+| `BITRIVER_SRS_MEM_RESERVATION` | `1g` |
+| `BITRIVER_SRS_API_CPUS` | `0.25` |
+| `BITRIVER_SRS_API_MEM` | `128m` |
+| `BITRIVER_SRS_API_MEM_RESERVATION` | `64m` |
+| `BITRIVER_SRS_CONFIG_CPUS` | `0.25` |
+| `BITRIVER_SRS_CONFIG_MEM` | `128m` |
+| `BITRIVER_SRS_CONFIG_MEM_RESERVATION` | `64m` |
+| `BITRIVER_OME_CONFIG_CPUS` | `0.25` |
+| `BITRIVER_OME_CONFIG_MEM` | `128m` |
+| `BITRIVER_OME_CONFIG_MEM_RESERVATION` | `64m` |
+| `BITRIVER_OME_HEALTH_TOKEN_CHECK_CPUS` | `0.25` |
+| `BITRIVER_OME_HEALTH_TOKEN_CHECK_MEM` | `128m` |
+| `BITRIVER_OME_HEALTH_TOKEN_CHECK_MEM_RESERVATION` | `64m` |
+| `BITRIVER_OME_CPUS` | `4.00` |
+| `BITRIVER_OME_MEM` | `4g` |
+| `BITRIVER_OME_MEM_RESERVATION` | `2g` |
+| `BITRIVER_TRANSCODER_CPUS` | `4.00` |
+| `BITRIVER_TRANSCODER_MEM` | `4g` |
+| `BITRIVER_TRANSCODER_MEM_RESERVATION` | `2g` |
+| `BITRIVER_TRANSCODER_PUBLIC_CPUS` | `0.50` |
+| `BITRIVER_TRANSCODER_PUBLIC_MEM` | `256m` |
+| `BITRIVER_TRANSCODER_PUBLIC_MEM_RESERVATION` | `128m` |
 | `BITRIVER_LIVE_STORAGE_DRIVER` | `postgres` |
 | `BITRIVER_PGX_MODE` | `real` |
 | `BITRIVER_LIVE_MODE` | `production` |

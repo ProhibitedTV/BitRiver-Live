@@ -2198,3 +2198,119 @@ func TestRunComposeUpRejectsBuildModeInProduction(t *testing.T) {
 		t.Fatalf("expected pull-mode contract error, got %v", err)
 	}
 }
+
+func TestRunQuickstartPassesLimitsOverlayToComposeUp(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	composePath := filepath.Join(t.TempDir(), "compose.yml")
+	values := buildValidProductionEnv(t)
+	values["BITRIVER_LIVE_PORT"] = "18080"
+	var lines []string
+	for key, value := range values {
+		lines = append(lines, fmt.Sprintf("%s=%s", key, value))
+	}
+	if err := os.WriteFile(envPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+	if err := os.WriteFile(composePath, []byte("services: {}\n"), 0o644); err != nil {
+		t.Fatalf("write compose: %v", err)
+	}
+
+	originalDoctor := doctorRunner
+	originalEnvInit := envInitRunner
+	originalEnvValidate := envValidateRunner
+	originalOME := omeRunner
+	originalMigrations := migrationsRunner
+	originalComposeUp := composeUpRunner
+	originalWaiter := quickstartWaiter
+	originalHealthWaiter := quickstartComposeHealthWaiter
+	originalOMEPreflight := quickstartOMEAuthPreflightRunner
+	originalDockerVersion := dockerVersionRunner
+	originalComposeVersion := dockerComposeVersionRunner
+	originalPortPreflight := quickstartHostPortPreflightRunner
+	originalImagePreflight := deployImageSourcePreflightRunner
+	originalBootstrap := bootstrapAdminRunner
+	t.Cleanup(func() {
+		doctorRunner = originalDoctor
+		envInitRunner = originalEnvInit
+		envValidateRunner = originalEnvValidate
+		omeRunner = originalOME
+		migrationsRunner = originalMigrations
+		composeUpRunner = originalComposeUp
+		quickstartWaiter = originalWaiter
+		quickstartComposeHealthWaiter = originalHealthWaiter
+		quickstartOMEAuthPreflightRunner = originalOMEPreflight
+		dockerVersionRunner = originalDockerVersion
+		dockerComposeVersionRunner = originalComposeVersion
+		quickstartHostPortPreflightRunner = originalPortPreflight
+		deployImageSourcePreflightRunner = originalImagePreflight
+		bootstrapAdminRunner = originalBootstrap
+	})
+
+	doctorRunner = func([]string) bool { return true }
+	envInitRunner = func([]string) error { return nil }
+	envValidateRunner = func([]string) error { return nil }
+	omeRunner = func([]string) error { return nil }
+	migrationsRunner = func(string, string) error { return nil }
+	quickstartWaiter = func(map[string]string, string, string) error { return nil }
+	quickstartComposeHealthWaiter = func(string, string) error { return nil }
+	quickstartOMEAuthPreflightRunner = func(string, map[string]string) error { return nil }
+	dockerVersionRunner = func() error { return nil }
+	dockerComposeVersionRunner = func() error { return nil }
+	quickstartHostPortPreflightRunner = func(map[string]string) error { return nil }
+	deployImageSourcePreflightRunner = func(string, map[string]string, string) error { return nil }
+	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
+	composeUpRunner = func(args []string) error {
+		if !reflect.DeepEqual(args, []string{"--file", composePath, "--env-file", envPath, "--limits", "--image-source", deployImageSourcePull}) {
+			t.Fatalf("compose args = %v", args)
+		}
+		return nil
+	}
+
+	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath, "--limits"}); err != nil {
+		t.Fatalf("quickstart failed: %v", err)
+	}
+}
+
+func TestRunComposeUpIncludesLimitsOverlayFile(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	values := buildValidProductionEnv(t)
+	values["BITRIVER_OME_HEALTHCHECK_AUTH_MODE"] = "accesstoken"
+	var lines []string
+	for key, value := range values {
+		lines = append(lines, fmt.Sprintf("%s=%s", key, value))
+	}
+	if err := os.WriteFile(envPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	originalCommandRunner := commandRunner
+	originalLookPath := lookPathRunner
+	originalDeployPreflight := deployImageSourcePreflightRunner
+	t.Cleanup(func() {
+		commandRunner = originalCommandRunner
+		lookPathRunner = originalLookPath
+		deployImageSourcePreflightRunner = originalDeployPreflight
+	})
+
+	called := false
+	commandRunner = func(name string, args ...string) error {
+		called = true
+		if name != "docker" {
+			t.Fatalf("expected docker, got %s", name)
+		}
+		expectedPrefix := []string{"compose", "--env-file", envPath, "--file", "deploy/docker-compose.yml", "--file", defaultComposeLimitsFile(), "up"}
+		if len(args) < len(expectedPrefix) || !reflect.DeepEqual(args[:len(expectedPrefix)], expectedPrefix) {
+			t.Fatalf("unexpected compose args: %v", args)
+		}
+		return nil
+	}
+	lookPathRunner = func(file string) (string, error) { return "/usr/bin/docker", nil }
+	deployImageSourcePreflightRunner = func(string, map[string]string, string) error { return nil }
+
+	if err := runComposeUp([]string{"--file", "deploy/docker-compose.yml", "--env-file", envPath, "--limits"}); err != nil {
+		t.Fatalf("compose up failed: %v", err)
+	}
+	if !called {
+		t.Fatal("expected docker compose command to run")
+	}
+}

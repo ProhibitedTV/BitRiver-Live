@@ -636,6 +636,25 @@ func validateEnv(values map[string]string) envValidatorResult {
 		res.Warnings = append(res.Warnings, fmt.Sprintf("NEXT_PUBLIC_API_BASE_URL is empty; the viewer will fall back to the API origin when proxied at NEXT_VIEWER_BASE_PATH=%s.", viewerBasePath))
 	}
 
+	for key, raw := range values {
+		val := strings.TrimSpace(raw)
+		if val == "" || !strings.HasPrefix(key, "BITRIVER_") {
+			continue
+		}
+
+		switch {
+		case strings.HasSuffix(key, "_CPUS"):
+			parsed, err := strconv.ParseFloat(val, 64)
+			if err != nil || parsed <= 0 {
+				res.Errors = append(res.Errors, fmt.Sprintf("%s must be a positive decimal CPU value (current: %s)", key, val))
+			}
+		case strings.HasSuffix(key, "_MEM"), strings.HasSuffix(key, "_MEM_RESERVATION"):
+			if !isComposeMemoryValue(val) {
+				res.Errors = append(res.Errors, fmt.Sprintf("%s must be a Docker Compose memory size (examples: 256m, 1g) (current: %s)", key, val))
+			}
+		}
+	}
+
 	if val := strings.TrimSpace(values["NEXT_PUBLIC_VIEWER_URL"]); val != "" {
 		switch {
 		case loopback.MatchString(val):
@@ -646,6 +665,11 @@ func validateEnv(values map[string]string) envValidatorResult {
 	}
 
 	return res
+}
+
+func isComposeMemoryValue(value string) bool {
+	memPattern := regexp.MustCompile(`(?i)^\d+(?:\.\d+)?(?:[kmgt]i?b?|[kmgt]|b)?$`)
+	return memPattern.MatchString(strings.TrimSpace(value))
 }
 
 func validatePort(value, name string) string {
