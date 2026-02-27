@@ -1,0 +1,337 @@
+== install postgres packages ==
+Get:2 http://security.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+Get:3 https://mise.jdx.dev/deb stable InRelease [2065 B]
+Get:1 https://apt.llvm.org/noble llvm-toolchain-noble-20 InRelease [5554 B]
+Hit:4 http://archive.ubuntu.com/ubuntu noble InRelease
+Get:5 http://archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+Get:6 https://mise.jdx.dev/deb stable/main amd64 Packages [361 B]
+Get:7 http://archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]
+Get:8 http://security.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [3262 kB]
+Get:9 http://archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Packages [38.1 kB]
+Get:10 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [2276 kB]
+Get:11 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Packages [1242 kB]
+Get:12 http://archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [2017 kB]
+Get:13 http://security.ubuntu.com/ubuntu noble-security/main amd64 Packages [1883 kB]
+Get:14 http://archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Packages [3471 kB]
+Get:15 http://security.ubuntu.com/ubuntu noble-security/multiverse amd64 Packages [34.8 kB]
+Fetched 14.6 MB in 3s (5168 kB/s)
+Reading package lists...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+The following additional packages will be installed:
+  libc-bin libc-dev-bin libc6 libc6-dev libc6-i386 libcommon-sense-perl
+  libjson-perl libjson-xs-perl libllvm17t64 libsensors-config libsensors5
+  libtypes-serialiser-perl locales logrotate postgresql-16
+  postgresql-client-16 postgresql-client-common postgresql-common ssl-cert
+  sysstat ucf
+Suggested packages:
+  manpages glibc-doc libnss-nis libnss-nisplus manpages-dev lm-sensors
+  bsd-mailx | mailx postgresql-doc postgresql-doc-16 isag
+Recommended packages:
+  manpages manpages-dev libc-devtools
+The following NEW packages will be installed:
+  libcommon-sense-perl libjson-perl libjson-xs-perl libllvm17t64
+  libsensors-config libsensors5 libtypes-serialiser-perl locales logrotate
+  postgresql postgresql-16 postgresql-client-16 postgresql-client-common
+  postgresql-common ssl-cert sysstat ucf
+The following packages will be upgraded:
+  libc-bin libc-dev-bin libc6 libc6-dev libc6-i386
+5 upgraded, 17 newly installed, 0 to remove and 70 not upgraded.
+Need to get 57.2 MB of archives.
+After this operation, 194 MB of additional disk space will be used.
+Get:1 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 libc6-dev amd64 2.39-0ubuntu8.7 [2124 kB]
+Get:2 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 libc-dev-bin amd64 2.39-0ubuntu8.7 [20.4 kB]
+Get:3 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 libc6-i386 amd64 2.39-0ubuntu8.7 [2788 kB]
+Get:4 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 libc6 amd64 2.39-0ubuntu8.7 [3263 kB]
+Get:5 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 libc-bin amd64 2.39-0ubuntu8.7 [682 kB]
+Get:6 http://archive.ubuntu.com/ubuntu noble/main amd64 libjson-perl all 4.10000-1 [81.9 kB]
+Get:7 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 postgresql-client-common all 257build1.1 [36.4 kB]
+Get:8 http://archive.ubuntu.com/ubuntu noble/main amd64 ssl-cert all 1.1.2ubuntu1 [17.8 kB]
+Get:9 http://archive.ubuntu.com/ubuntu noble/main amd64 ucf all 3.0043+nmu1 [56.5 kB]
+Get:10 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 postgresql-common all 257build1.1 [161 kB]
+Get:11 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 locales all 2.39-0ubuntu8.7 [4225 kB]
+Get:12 http://archive.ubuntu.com/ubuntu noble/main amd64 logrotate amd64 3.21.0-2build1 [52.2 kB]
+Get:13 http://archive.ubuntu.com/ubuntu noble/main amd64 libsensors-config all 1:3.6.0-9build1 [5546 B]
+Get:14 http://archive.ubuntu.com/ubuntu noble/main amd64 libsensors5 amd64 1:3.6.0-9build1 [26.6 kB]
+Get:15 http://archive.ubuntu.com/ubuntu noble/main amd64 sysstat amd64 12.6.1-2 [489 kB]
+Get:16 http://archive.ubuntu.com/ubuntu noble/main amd64 libcommon-sense-perl amd64 3.75-3build3 [20.4 kB]
+Get:17 http://archive.ubuntu.com/ubuntu noble/main amd64 libtypes-serialiser-perl all 1.01-1 [11.6 kB]
+Get:18 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 libjson-xs-perl amd64 4.040-0ubuntu0.24.04.1 [83.7 kB]
+Get:19 http://archive.ubuntu.com/ubuntu noble/main amd64 libllvm17t64 amd64 1:17.0.6-9ubuntu1 [26.2 MB]
+Get:20 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 postgresql-client-16 amd64 16.11-0ubuntu0.24.04.1 [1297 kB]
+Get:21 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 postgresql-16 amd64 16.11-0ubuntu0.24.04.1 [15.6 MB]
+Get:22 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 postgresql all 16+257build1.1 [11.6 kB]
+debconf: delaying package configuration, since apt-utils is not installed
+Fetched 57.2 MB in 3s (18.3 MB/s)
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 33650 files and directories currently installed.)
+Preparing to unpack .../libc6-dev_2.39-0ubuntu8.7_amd64.deb ...
+Unpacking libc6-dev:amd64 (2.39-0ubuntu8.7) over (2.39-0ubuntu8.6) ...
+Preparing to unpack .../libc-dev-bin_2.39-0ubuntu8.7_amd64.deb ...
+Unpacking libc-dev-bin (2.39-0ubuntu8.7) over (2.39-0ubuntu8.6) ...
+Preparing to unpack .../libc6-i386_2.39-0ubuntu8.7_amd64.deb ...
+Unpacking libc6-i386 (2.39-0ubuntu8.7) over (2.39-0ubuntu8.6) ...
+Preparing to unpack .../libc6_2.39-0ubuntu8.7_amd64.deb ...
+Unpacking libc6:amd64 (2.39-0ubuntu8.7) over (2.39-0ubuntu8.6) ...
+Setting up libc6:amd64 (2.39-0ubuntu8.7) ...
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 33650 files and directories currently installed.)
+Preparing to unpack .../libc-bin_2.39-0ubuntu8.7_amd64.deb ...
+Unpacking libc-bin (2.39-0ubuntu8.7) over (2.39-0ubuntu8.6) ...
+Setting up libc-bin (2.39-0ubuntu8.7) ...
+Selecting previously unselected package libjson-perl.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 33650 files and directories currently installed.)
+Preparing to unpack .../00-libjson-perl_4.10000-1_all.deb ...
+Unpacking libjson-perl (4.10000-1) ...
+Selecting previously unselected package postgresql-client-common.
+Preparing to unpack .../01-postgresql-client-common_257build1.1_all.deb ...
+Unpacking postgresql-client-common (257build1.1) ...
+Selecting previously unselected package ssl-cert.
+Preparing to unpack .../02-ssl-cert_1.1.2ubuntu1_all.deb ...
+Unpacking ssl-cert (1.1.2ubuntu1) ...
+Selecting previously unselected package ucf.
+Preparing to unpack .../03-ucf_3.0043+nmu1_all.deb ...
+Moving old data out of the way
+Unpacking ucf (3.0043+nmu1) ...
+Selecting previously unselected package postgresql-common.
+Preparing to unpack .../04-postgresql-common_257build1.1_all.deb ...
+Adding 'diversion of /usr/bin/pg_config to /usr/bin/pg_config.libpq-dev by postgresql-common'
+Unpacking postgresql-common (257build1.1) ...
+Selecting previously unselected package locales.
+Preparing to unpack .../05-locales_2.39-0ubuntu8.7_all.deb ...
+Unpacking locales (2.39-0ubuntu8.7) ...
+Selecting previously unselected package logrotate.
+Preparing to unpack .../06-logrotate_3.21.0-2build1_amd64.deb ...
+Unpacking logrotate (3.21.0-2build1) ...
+Selecting previously unselected package libsensors-config.
+Preparing to unpack .../07-libsensors-config_1%3a3.6.0-9build1_all.deb ...
+Unpacking libsensors-config (1:3.6.0-9build1) ...
+Selecting previously unselected package libsensors5:amd64.
+Preparing to unpack .../08-libsensors5_1%3a3.6.0-9build1_amd64.deb ...
+Unpacking libsensors5:amd64 (1:3.6.0-9build1) ...
+Selecting previously unselected package sysstat.
+Preparing to unpack .../09-sysstat_12.6.1-2_amd64.deb ...
+Unpacking sysstat (12.6.1-2) ...
+Selecting previously unselected package libcommon-sense-perl:amd64.
+Preparing to unpack .../10-libcommon-sense-perl_3.75-3build3_amd64.deb ...
+Unpacking libcommon-sense-perl:amd64 (3.75-3build3) ...
+Selecting previously unselected package libtypes-serialiser-perl.
+Preparing to unpack .../11-libtypes-serialiser-perl_1.01-1_all.deb ...
+Unpacking libtypes-serialiser-perl (1.01-1) ...
+Selecting previously unselected package libjson-xs-perl.
+Preparing to unpack .../12-libjson-xs-perl_4.040-0ubuntu0.24.04.1_amd64.deb ...
+Unpacking libjson-xs-perl (4.040-0ubuntu0.24.04.1) ...
+Selecting previously unselected package libllvm17t64:amd64.
+Preparing to unpack .../13-libllvm17t64_1%3a17.0.6-9ubuntu1_amd64.deb ...
+Unpacking libllvm17t64:amd64 (1:17.0.6-9ubuntu1) ...
+Selecting previously unselected package postgresql-client-16.
+Preparing to unpack .../14-postgresql-client-16_16.11-0ubuntu0.24.04.1_amd64.deb ...
+Unpacking postgresql-client-16 (16.11-0ubuntu0.24.04.1) ...
+Selecting previously unselected package postgresql-16.
+Preparing to unpack .../15-postgresql-16_16.11-0ubuntu0.24.04.1_amd64.deb ...
+Unpacking postgresql-16 (16.11-0ubuntu0.24.04.1) ...
+Selecting previously unselected package postgresql.
+Preparing to unpack .../16-postgresql_16+257build1.1_all.deb ...
+Unpacking postgresql (16+257build1.1) ...
+Setting up logrotate (3.21.0-2build1) ...
+Created symlink /etc/systemd/system/timers.target.wants/logrotate.timer → /usr/lib/systemd/system/logrotate.timer.
+Setting up postgresql-client-common (257build1.1) ...
+Setting up postgresql-client-16 (16.11-0ubuntu0.24.04.1) ...
+update-alternatives: using /usr/share/postgresql/16/man/man1/psql.1.gz to provide /usr/share/man/man1/psql.1.gz (psql.1.gz) in auto mode
+Setting up libsensors-config (1:3.6.0-9build1) ...
+Setting up libcommon-sense-perl:amd64 (3.75-3build3) ...
+Setting up locales (2.39-0ubuntu8.7) ...
+Generating locales (this might take a while)...
+Generation complete.
+Setting up libllvm17t64:amd64 (1:17.0.6-9ubuntu1) ...
+Setting up ssl-cert (1.1.2ubuntu1) ...
+Created symlink /etc/systemd/system/multi-user.target.wants/ssl-cert.service → /usr/lib/systemd/system/ssl-cert.service.
+Setting up ucf (3.0043+nmu1) ...
+Setting up libsensors5:amd64 (1:3.6.0-9build1) ...
+Setting up libtypes-serialiser-perl (1.01-1) ...
+Setting up libjson-perl (4.10000-1) ...
+Setting up libc6-i386 (2.39-0ubuntu8.7) ...
+Setting up libc-dev-bin (2.39-0ubuntu8.7) ...
+Setting up sysstat (12.6.1-2) ...
+
+Creating config file /etc/default/sysstat with new version
+update-alternatives: using /usr/bin/sar.sysstat to provide /usr/bin/sar (sar) in auto mode
+update-alternatives: warning: skip creation of /usr/share/man/man1/sar.1.gz because associated file /usr/share/man/man1/sar.sysstat.1.gz (of link group sar) doesn't exist
+Created symlink /etc/systemd/system/sysstat.service.wants/sysstat-collect.timer → /usr/lib/systemd/system/sysstat-collect.timer.
+Created symlink /etc/systemd/system/sysstat.service.wants/sysstat-summary.timer → /usr/lib/systemd/system/sysstat-summary.timer.
+Created symlink /etc/systemd/system/multi-user.target.wants/sysstat.service → /usr/lib/systemd/system/sysstat.service.
+Setting up libjson-xs-perl (4.040-0ubuntu0.24.04.1) ...
+Setting up postgresql-common (257build1.1) ...
+
+Creating config file /etc/postgresql-common/createcluster.conf with new version
+Building PostgreSQL dictionaries from installed myspell/hunspell packages...
+Removing obsolete dictionary files:
+invoke-rc.d: could not determine current runlevel
+invoke-rc.d: policy-rc.d denied execution of start.
+Created symlink /etc/systemd/system/multi-user.target.wants/postgresql.service → /usr/lib/systemd/system/postgresql.service.
+Setting up libc6-dev:amd64 (2.39-0ubuntu8.7) ...
+Setting up postgresql-16 (16.11-0ubuntu0.24.04.1) ...
+Creating new PostgreSQL cluster 16/main ...
+/usr/lib/postgresql/16/bin/initdb -D /var/lib/postgresql/16/main --auth-local peer --auth-host scram-sha-256 --no-instructions
+The files belonging to this database system will be owned by user "postgres".
+This user must also own the server process.
+
+The database cluster will be initialized with locale "C.UTF-8".
+The default database encoding has accordingly been set to "UTF8".
+The default text search configuration will be set to "english".
+
+Data page checksums are disabled.
+
+fixing permissions on existing directory /var/lib/postgresql/16/main ... ok
+creating subdirectories ... ok
+selecting dynamic shared memory implementation ... posix
+selecting default max_connections ... 100
+selecting default shared_buffers ... 128MB
+selecting default time zone ... Etc/UTC
+creating configuration files ... ok
+running bootstrap script ... ok
+performing post-bootstrap initialization ... ok
+syncing data to disk ... ok
+invoke-rc.d: could not determine current runlevel
+invoke-rc.d: policy-rc.d denied execution of start.
+Setting up postgresql (16+257build1.1) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.7) ...
+== init transient postgres cluster ==
+The files belonging to this database system will be owned by user "postgres".
+This user must also own the server process.
+
+The database cluster will be initialized with locale "C.UTF-8".
+The default database encoding has accordingly been set to "UTF8".
+The default text search configuration will be set to "english".
+
+Data page checksums are disabled.
+
+fixing permissions on existing directory /tmp/bitr-postgres-20260227/data ... ok
+creating subdirectories ... ok
+selecting dynamic shared memory implementation ... posix
+selecting default max_connections ... 100
+selecting default shared_buffers ... 128MB
+selecting default time zone ... Etc/UTC
+creating configuration files ... ok
+running bootstrap script ... ok
+performing post-bootstrap initialization ... ok
+syncing data to disk ... ok
+
+initdb: warning: enabling "trust" authentication for local connections
+initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+
+Success. You can now start the database server using:
+
+    /usr/lib/postgresql/16/bin/pg_ctl -D /tmp/bitr-postgres-20260227/data -l logfile start
+
+waiting for server to start.... done
+server started
+== create empty database ==
+== run postgres-tagged storage tests ==
+using provided BITRIVER_TEST_POSTGRES_DSN; skipping docker setup
+applying migrations from /workspace/BitRiver-Live/deploy/migrations
+  -> 0001_initial.sql
+BEGIN
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+CREATE TABLE
+CREATE INDEX
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+COMMIT
+  -> 0002_auth_sessions.sql
+CREATE TABLE
+CREATE INDEX
+  -> 0002_chat_filters.sql
+CREATE TABLE
+CREATE INDEX
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+  -> 0003_oauth_accounts.sql
+BEGIN
+CREATE TABLE
+CREATE INDEX
+COMMIT
+  -> 0004_auth_session_hashes.sql
+CREATE EXTENSION
+ALTER TABLE
+UPDATE 0
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE INDEX
+UPDATE 0
+  -> 0005_auth_session_absolute_expiry.sql
+ALTER TABLE
+UPDATE 0
+ALTER TABLE
+CREATE INDEX
+  -> 0006_profile_social_links.sql
+BEGIN
+ALTER TABLE
+COMMIT
+  -> 0007_auth_mfa.sql
+CREATE TABLE
+CREATE INDEX
+CREATE TABLE
+CREATE INDEX
+  -> 0008_legal_cases.sql
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+  -> 0009_appeals.sql
+BEGIN
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE TABLE
+CREATE INDEX
+COMMIT
+  -> 0010_payments_webhooks.sql
+BEGIN
+ALTER TABLE
+ALTER TABLE
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+COMMIT
+running go test -tags postgres ./internal/storage/...
+2026/02/27 15:48:07 ERROR failed to apply chat event error="cannot persist"
+2026/02/27 15:48:07 INFO booting ingest pipeline channel_id=e24d3425c7c1cf3d0b8373d47b115120 session_id=77971752a4aab692032178d3e9f208d8
+2026/02/27 15:48:07 INFO ingest pipeline ready channel_id=e24d3425c7c1cf3d0b8373d47b115120 session_id=77971752a4aab692032178d3e9f208d8 jobs=2
+2026/02/27 15:48:07 INFO tearing down ingest pipeline channel_id=e24d3425c7c1cf3d0b8373d47b115120 session_id=77971752a4aab692032178d3e9f208d8 jobs=2
+2026/02/27 15:48:07 INFO ingest pipeline removed channel_id=e24d3425c7c1cf3d0b8373d47b115120 session_id=77971752a4aab692032178d3e9f208d8
+--- FAIL: TestPostgresRepositoryAcquireTimeout (0.00s)
+    postgres_acquire_timeout_integration_test.go:19: failed to open postgres repository: postgres repository unavailable: pgx driver stubbed in this build
+--- FAIL: TestPostgresRepositoryAcquireTimeoutUpsertProfile (0.00s)
+    postgres_acquire_timeout_integration_test.go:68: failed to open postgres repository: postgres repository unavailable: pgx driver stubbed in this build
+--- FAIL: TestPostgresRepositoryAcquireTimeoutCreateChannel (0.00s)
+    postgres_acquire_timeout_integration_test.go:138: failed to open postgres repository: postgres repository unavailable: pgx driver stubbed in this build
+--- FAIL: TestPostgresRepositoryAcquireTimeoutCreateUpload (0.00s)
+    postgres_acquire_timeout_integration_test.go:192: failed to open postgres repository: postgres repository unavailable: pgx driver stubbed in this build
+FAIL
+FAIL	bitriver-live/internal/storage	1.506s
+FAIL

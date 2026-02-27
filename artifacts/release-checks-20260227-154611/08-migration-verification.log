@@ -1,0 +1,24 @@
+== verify release-required migration files exist ==
+deploy/migrations/0002_chat_filters.sql
+deploy/migrations/0006_profile_social_links.sql
+deploy/migrations/0007_auth_mfa.sql
+== start transient postgres for schema verification ==
+waiting for server to start.... done
+server started
+== verify objects from release-required migrations ==
+      table_name      
+----------------------
+ auth_mfa
+ auth_mfa_challenges
+ chat_automod_actions
+ chat_filters
+(4 rows)
+
+ column_name  | data_type 
+--------------+-----------
+ social_links | jsonb
+(1 row)
+
+== stop transient postgres ==
+waiting for server to shut down.... done
+server stopped
