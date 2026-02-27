@@ -1,7 +1,7 @@
 import { buildAuthUser, guestAuthState, mockUseAuth, signedInAuthState } from "../test/auth";
 import { viewerApiMocks } from "../test/test-utils";
 import userEvent from "@testing-library/user-event";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import ChannelPage from "../app/channels/[id]/page";
 
 jest.mock("../hooks/useAuth");
@@ -107,6 +107,7 @@ describe("ChannelPage", () => {
   });
 
   test("shows recovery UI and retries playback fetch after failure", async () => {
+    const user = userEvent.setup();
     mockUseAuth.mockReturnValue(guestAuthState());
 
     fetchChannelPlaybackMock.mockRejectedValueOnce(new Error("Network down"));
@@ -115,6 +116,7 @@ describe("ChannelPage", () => {
     render(<ChannelPage params={{ id: "chan-42" }} />);
 
     await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledWith("chan-42"));
+    await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledWith("chan-42"));
 
     expect(
       await screen.findByRole("heading", { name: "We couldn't load this channel." })
@@ -124,7 +126,9 @@ describe("ChannelPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Back to channels/i })).toHaveAttribute("href", "/browse");
 
-    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "Try again" }));
+    });
 
     await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledTimes(2));
     expect(await screen.findByRole("heading", { name: "Deep Space Beats" })).toBeInTheDocument();
@@ -142,20 +146,28 @@ describe("ChannelPage", () => {
     expect(await screen.findByText(/welcome to the stream/i)).toBeInTheDocument();
 
     const followButton = screen.getByRole("button", { name: /follow · 10 supporters/i });
-    await user.click(followButton);
+    await act(async () => {
+      await user.click(followButton);
+    });
     await waitFor(() => expect(followChannelMock).toHaveBeenCalledWith("chan-42"));
     expect(screen.getByRole("button", { name: /following · 11 supporters/i })).toBeInTheDocument();
     expect(screen.getByText("11", { selector: "dd" })).toBeInTheDocument();
 
     const subscribeButton = screen.getByRole("button", { name: /subscribe/i });
-    await user.click(subscribeButton);
+    await act(async () => {
+      await user.click(subscribeButton);
+    });
     await waitFor(() => expect(subscribeChannelMock).toHaveBeenCalledWith("chan-42"));
     expect(screen.getByRole("button", { name: /subscribed · plus/i })).toBeInTheDocument();
     expect(screen.getByText("4", { selector: "dd" })).toBeInTheDocument();
 
     const textarea = screen.getByRole("textbox", { name: /chat message/i });
-    await user.type(textarea, "Hello from viewer");
-    await user.click(screen.getByRole("button", { name: "Send" }));
+    await act(async () => {
+      await user.type(textarea, "Hello from viewer");
+    });
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "Send" }));
+    });
 
     await waitFor(() =>
       expect(sendChatMessageMock).toHaveBeenCalledWith("chan-42", "viewer-1", "Hello from viewer")
@@ -207,35 +219,39 @@ describe("ChannelPage", () => {
   });
 
   test("prompts authentication when the viewer is signed out", async () => {
+    const user = userEvent.setup();
     mockUseAuth.mockReturnValue(guestAuthState());
 
     render(<ChannelPage params={{ id: "chan-42" }} />);
 
     await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalled());
+    await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledWith("chan-42"));
     const followButton = await screen.findByRole("button", { name: /follow · 10 supporters/i });
 
     await act(async () => {
-      followButton.click();
+      await user.click(followButton);
     });
 
     expect(followChannelMock).not.toHaveBeenCalled();
-    expect(screen.getByText(/redirecting to sign in/i)).toBeInTheDocument();
+    expect(await screen.findByText(/redirecting to sign in/i)).toBeInTheDocument();
 
     const subscribeButton = screen.getByRole("button", { name: /subscribe/i });
     await act(async () => {
-      subscribeButton.click();
+      await user.click(subscribeButton);
     });
 
     expect(subscribeChannelMock).not.toHaveBeenCalled();
-    expect(screen.getByText(/redirecting to sign in/i)).toBeInTheDocument();
+    expect(await screen.findByText(/redirecting to sign in/i)).toBeInTheDocument();
 
     const textarea = await screen.findByRole("textbox", { name: /chat message/i });
     expect(textarea).toBeDisabled();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
 
     const tipButton = screen.getByRole("button", { name: /send a tip/i });
-    fireEvent.click(tipButton);
-    expect(screen.getByText(/sign in from the header to send a tip/i)).toBeInTheDocument();
+    await act(async () => {
+      await user.click(tipButton);
+    });
+    expect(await screen.findByText(/sign in from the header to send a tip/i)).toBeInTheDocument();
     expect(createTipMock).not.toHaveBeenCalled();
   });
 
@@ -342,6 +358,7 @@ describe("ChannelPage", () => {
     render(<ChannelPage params={{ id: "chan-42" }} />);
 
     await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledWith("chan-42"));
+    await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledWith("chan-42"));
 
     const link = await screen.findByRole("link", { name: /open creator dashboard/i });
     expect(link).toHaveAttribute("href", "/creator/uploads/chan-42");
@@ -356,17 +373,25 @@ describe("ChannelPage", () => {
 
     render(<ChannelPage params={{ id: "chan-42" }} />);
 
-    await user.click(await screen.findByRole("tab", { name: "Videos" }));
+    const videosTab = await screen.findByRole("tab", { name: "Videos" });
+    await act(async () => {
+      await user.click(videosTab);
+    });
 
     await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledWith("chan-42"));
 
     expect(await screen.findByText(/couldn\'t load past broadcasts right now/i)).toBeInTheDocument();
     expect(screen.getByText(/VODs temporarily offline/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /try again/i }));
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /try again/i }));
+    });
 
     await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledTimes(2));
     expect(await screen.findByText(/no vods yet/i)).toBeInTheDocument();
     expect(screen.queryByText(/couldn\'t load past broadcasts right now/i)).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByText(/loading past broadcasts/i)).not.toBeInTheDocument()
+    );
   });
 });
