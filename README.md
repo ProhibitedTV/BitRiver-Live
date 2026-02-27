@@ -224,6 +224,7 @@ go run ./cmd/bitriver ome render --force --env-file ./.env
 - Smoke test command: [`docs/smoke-test.md`](docs/smoke-test.md)
 - Advanced deployments and reverse proxies: [`docs/advanced-deployments.md`](docs/advanced-deployments.md), [`docs/reverse-proxy-npm-cloudflare.md`](docs/reverse-proxy-npm-cloudflare.md)
 - Operations/backups/restores: [`docs/operations.md`](docs/operations.md)
+- Security hardening guide (operator entrypoint): [`docs/security.md`](docs/security.md)
 - Secrets hardening: [`docs/secrets-hardening.md`](docs/secrets-hardening.md)
 - Upgrades: [`docs/upgrades.md`](docs/upgrades.md)
 - Testing: [`docs/testing.md`](docs/testing.md), [`docs/testing-status.md`](docs/testing-status.md)

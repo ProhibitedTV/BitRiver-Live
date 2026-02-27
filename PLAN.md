@@ -1,20 +1,20 @@
 # PLAN
 
 ## Scope (current change)
-- Strengthen the upgrade contract to v1.0-grade guidance in `docs/upgrades.md` with explicit supported version hops, backup/restore checklist, and rollback safety boundaries.
-- Add a new CLI planner command (`bitriver upgrade-plan`) that reads deployed version hints from `.env` image tags, compares with a target tag, and prints actionable upgrade steps + breaking-change warnings.
-- Add dedicated release versioning rules in `docs/versioning.md` and align release process docs/templates to require upgrade notes + breaking-change callouts.
+- Create a new operator-facing security guide at `docs/security.md` as the primary security entrypoint for this stack.
+- Tailor guidance to the current deployment contract and validation flow (`deploy/docker-compose.yml`, `deploy/.env.example`, `cmd/bitriver env validate`).
+- Add prominent navigation links so operators discover the security guide from high-traffic docs (`README.md` and/or `docs/operations.md`).
 
 ## Assumptions
-- Deployments use `deploy/docker-compose.yml` plus a repository `.env` where `BITRIVER_LIVE_IMAGE_TAG` is the canonical application version hint.
-- DB schema version cannot always be auto-discovered, so schema checks should be opt-in and non-breaking when metadata is unavailable.
-- Existing upgrade defaults must stay non-disruptive: no forced behavior changes at runtime.
+- Security guidance should match the current single-host Docker Compose deployment model and documented optional profiles.
+- This change is documentation-only and does not alter runtime behavior or deployment contract values.
+- `_FILE`-based secrets are not yet implemented in the current stack, so guidance should mention future compatibility without claiming support exists today.
 
 ## Risks
-- Ambiguous semver parsing (with/without `v` prefixes) could misclassify supported hops.
-- Overpromising rollback safety when migrations are irreversible could create operator risk.
-- Release template/process changes may drift if not linked from existing release runbook.
+- Overstating default exposure levels for ports/services could mislead operators if wording is not anchored to current compose defaults.
+- Security guidance can drift from env validation behavior if we cite controls not enforced by `cmd/bitriver env validate`.
+- If the new doc is not linked clearly, operators may continue to miss security hardening steps.
 
 ## Test plan
-- `go test ./cmd/bitriver -count=1`
+- Markdown/documentation lint via static review for section completeness and command correctness.
 - `./scripts/verify.sh`
