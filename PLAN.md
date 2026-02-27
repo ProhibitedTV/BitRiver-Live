@@ -1,23 +1,17 @@
 # PLAN
 
 ## Scope (current change)
-- Update `scripts/verify.sh` to include a deterministic quickstart smoke phase (`./scripts/test-quickstart.sh`) when Docker is available.
-- Mirror existing compose-validation skip behavior with clear messaging when Docker is unavailable.
-- Keep docs synchronized for verify gate coverage in `AGENTS.md`, `docs/testing.md`, and `docs/production-release.md`.
+- Pin `.github/workflows/ci.yml` `dorny/paths-filter` usage from floating `@v3` to a full commit SHA with a release comment.
+- Audit all workflow files under `.github/workflows/` and pin any remaining third-party `uses:` entries that are not already full SHAs.
 
 ## Assumptions
-- `scripts/verify.sh` should remain fail-fast (`set -Eeuo pipefail`) and stop immediately on smoke-test failure.
-- Docker availability check should continue to be PATH-based (`command -v docker`) to mirror current compose validation behavior.
-- Docs should describe the new verify ordering and Docker-dependent skip semantics without changing unrelated release policy text.
+- Existing workflow pinning convention is `uses: owner/repo@<40-char-sha> # vX.Y.Z` (or equivalent release label).
+- Local composite actions (`uses: ./.github/actions/...`) are intentionally unpinned and should remain unchanged.
 
 ## Risks
-- Running quickstart smoke before/after other phases incorrectly could make verify ordering non-deterministic versus documentation.
-- If skip messaging diverges between compose validation and smoke phase, operators may misunderstand what was actually validated.
-- `./scripts/test-quickstart.sh` may take longer and fail in constrained environments; this should intentionally fail verify when Docker is available.
+- Pinning to an incorrect SHA could break CI behavior; use the upstream tag commit for the intended release.
+- Missing another non-SHA `uses:` line would leave policy drift in workflows.
 
 ## Test plan
-- Run `bash -n scripts/verify.sh` to validate shell syntax after edits.
-- Run `./scripts/verify.sh` and confirm deterministic ordering includes:
-  1) Docker Compose config validation, then
-  2) Quickstart smoke (`./scripts/test-quickstart.sh`) when Docker exists, or explicit skip message when not.
-- Review `docs/testing.md`, `docs/production-release.md`, and `AGENTS.md` for contract alignment with verify coverage.
+- Run a repository scan to list workflow `uses:` entries and confirm no non-SHA external actions remain.
+- Optionally run `./scripts/check-ci-contract.sh` to ensure CI workflow contract checks still pass.

@@ -328,7 +328,7 @@ Run the installer-language guard to keep shipped milestones consistent across re
 
 CI enforces the same check in [`.github/workflows/docs-consistency.yml`](../.github/workflows/docs-consistency.yml).
 
-Go workflow reproducibility is guarded by [`.github/workflows/go-workflow-consistency.yml`](../.github/workflows/go-workflow-consistency.yml), which runs [`scripts/check-go-workflow-config.sh`](../scripts/check-go-workflow-config.sh) to enforce `actions/setup-go@v5`, `go-version-file: go.mod`, and offline Go env defaults (`GOTOOLCHAIN=local`, `GOPROXY=off`, `GOSUMDB=off`) across the core Go workflows.
+Go workflow reproducibility is guarded by [`.github/workflows/go-workflow-consistency.yml`](../.github/workflows/go-workflow-consistency.yml), which runs [`scripts/check-go-workflow-config.sh`](../scripts/check-go-workflow-config.sh) to enforce SHA-pinned `actions/setup-go@<40-hex-sha>` usage (either directly in workflows or through the approved `./.github/actions/setup-go` composite action that pins `actions/setup-go` by SHA), `go-version-file: go.mod`, and offline Go env defaults (`GOTOOLCHAIN=local`, `GOPROXY=off`, `GOSUMDB=off`) across the core Go workflows.
 
 ## Postgres storage layer
 
