@@ -2,33 +2,34 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Add upgrade planning CLI command
+- [x] Task 1 — Add committed-secrets guard script
   - Acceptance criteria:
-    - `bitriver upgrade-plan --to <tag>` reads current deployed version hints from `.env` image tags.
-    - Command validates supported upgrade hops (N-1 minors; no major skipping) and prints actionable steps.
-    - Command emits explicit warnings for major upgrades/breaking changes and optional schema checks.
+    - `scripts/check-no-committed-secrets.sh` checks tracked files only and fails on root `.env`, private key/cert bundle filenames, and common local secret dump filenames.
+    - Script allows intended tracked templates/examples (notably `deploy/.env.example`).
+    - Script is deterministic and requires only shell + git.
 
-- [x] Task 2 — Upgrade contract documentation
+- [x] Task 2 — Wire guard into CI
   - Acceptance criteria:
-    - `docs/upgrades.md` includes Supported upgrade paths, Backup and restore checklist, and Roll back safety/unsafe guidance.
-    - Doc includes a single copy-paste command sequence that operators can run.
+    - `.github/workflows/ci.yml` runs the new guard on every PR/push execution.
+    - Workflow ordering/dependencies stay CI-contract compliant.
 
-- [x] Task 3 — Versioning + release artifact consistency
+- [x] Task 3 — Security docs note
   - Acceptance criteria:
-    - New dedicated versioning section/doc defines SemVer policy and breaking-change criteria.
-    - Release process/docs include required upgrade notes and breaking-change callouts.
-    - A reusable template exists under `.github/` for release notes consistency.
+    - `docs/security.md` includes a brief checklist note that this guard exists and lists blocked artifact classes.
 
 ## Execution log
-- ✅ Task 1 complete: added `cmd/bitriver/upgrade_plan.go`, wired `upgrade-plan` in `cmd/bitriver/main.go`, and added tests in `cmd/bitriver/upgrade_plan_test.go`.
+- ✅ Task 1 complete: added `scripts/check-no-committed-secrets.sh` with tracked-file checks, explicit exemptions, and deterministic shell+git behavior.
 - ✅ Task 1 checks:
-  - `go test ./cmd/bitriver -count=1`
-  - `go run ./cmd/bitriver upgrade-plan --current v1.2.3 --to v1.3.0 --check-schema --current-schema 0010 --expected-schema 0010`
+  - `bash -n scripts/check-no-committed-secrets.sh`
+  - `./scripts/check-no-committed-secrets.sh`
 
-- ✅ Task 2 complete: rewrote `docs/upgrades.md` with explicit supported hops, backup/restore checklist, migration guarantees, single command sequence, and rollback safety boundaries.
-- ✅ Task 2 check: static review of rendered markdown sections/command sequence.
+- ✅ Task 2 complete: updated `.github/workflows/ci.yml` with a `secret-guard` job that runs on every CI invocation and executes `./scripts/check-no-committed-secrets.sh`.
+- ✅ Task 2 check:
+  - `./scripts/check-ci-contract.sh`
 
-- ✅ Task 3 complete: added `docs/versioning.md`, updated `docs/production-release.md` with release-notes consistency gate, and added `.github/RELEASE_NOTES_TEMPLATE.md`.
-- ✅ Task 3 checks:
-  - static review of SemVer/breaking-change policy wording
+- ✅ Task 3 complete: added `docs/security.md` checklist note for committed-secret guard coverage and allowed template exception.
+- ✅ Task 3 check:
+  - `./scripts/check-no-committed-secrets.sh`
+
+- ✅ Final required gate:
   - `./scripts/verify.sh`
