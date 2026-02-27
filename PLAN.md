@@ -1,6 +1,22 @@
 # PLAN
 
 ## Scope (current change)
+- Adjust image loading behavior in `web/viewer/components/DirectoryGrid.tsx` and `web/viewer/components/LiveNowGrid.tsx` so `next/image` `priority` is applied only to the leading visible card(s) instead of every mapped card.
+- Keep existing `sizes` values unchanged to preserve responsive image selection behavior.
+- Add/update component tests to validate that only expected leading cards receive priority behavior while subsequent cards are lazy-loaded.
+
+## Assumptions
+- For current layouts, prioritizing only the first card in each grid (`index < 1`) is the intended optimization baseline unless tests/layout indicate otherwise.
+- In this test setup, `next/image` props can be asserted via attributes emitted by the existing test environment.
+
+## Risks
+- If the layout above-the-fold shows multiple cards on large screens, prioritizing only one card could under-fetch some initially visible media.
+- Test assertions may be coupled to the current `next/image` test shim behavior and require updates if that shim changes.
+
+## Test plan
+- `cd web/viewer && npm run test -- channelDisplayPrimitives.test.tsx`
+
+## Scope (current change)
 - Update the navbar notifications icon button in `web/viewer/components/Navbar.tsx` to reflect that notifications are not yet implemented by using proper disabled semantics and helper copy.
 - Preserve existing icon-button styling while making assistive technology state explicit (`disabled`) and exposing a short tooltip/helper string.
 - Add/adjust navbar tests to verify the notifications control is disabled with the expected helper text.

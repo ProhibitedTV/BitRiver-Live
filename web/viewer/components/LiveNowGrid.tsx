@@ -26,7 +26,7 @@ export function LiveNowGrid({ channels, loading = false }: LiveNowGridProps) {
 
   return (
     <div className="grid live-now-grid">
-      {channels.map((entry) => {
+      {channels.map((entry, index) => {
         const previewImage = getChannelPreviewImage(entry);
         return (
           <Link key={entry.channel.id} className="live-card" href={`/channels/${entry.channel.id}`}>
@@ -38,7 +38,8 @@ export function LiveNowGrid({ channels, loading = false }: LiveNowGridProps) {
                   fill
                   sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 100vw"
                   className="live-card__media-image"
-                  priority
+                  priority={index < 1}
+                  loading={index < 1 ? undefined : "lazy"}
                 />
               ) : (
                 <div className="live-card__media-fallback" aria-hidden="true" />
