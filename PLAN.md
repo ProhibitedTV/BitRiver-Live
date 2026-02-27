@@ -1,23 +1,22 @@
 # PLAN
 
 ## Scope (current change)
-- Run the requested release gate commands from repo root and capture complete output logs.
-- Store evidence under a new timestamped `artifacts/release-checks-<timestamp>/` directory, consistent with existing artifact naming.
-- Update `docs/releases/release-checklist-report-2026-02-27.md` gate summary rows and final go/no-go decision based on the new evidence.
+- Update `scripts/check-go-workflow-config.sh` so workflow validation no longer requires literal `actions/setup-go@v5`.
+- Accept either SHA-pinned direct `actions/setup-go@<40-hex>` usage in each target workflow or approved local composite action usage (`./.github/actions/setup-go`) that pins `actions/setup-go` by SHA.
+- Keep existing enforcement for `go-version-file: go.mod` and offline Go environment guards (`GOTOOLCHAIN=local`, `GOPROXY=off`, `GOSUMDB=off`).
+- Update the related note in `docs/testing.md` to describe SHA-based setup-go enforcement.
 
 ## Assumptions
-- The execution environment may or may not expose a working Docker daemon; outcomes must be recorded exactly as observed.
-- Existing release checklist report structure should be preserved while updating only the relevant rows and evidence paths.
-- No product/runtime code changes are required for this request.
+- The approved local action remains `./.github/actions/setup-go` and its implementation is in `.github/actions/setup-go/action.yml`.
+- Existing target workflows remain the same list currently hardcoded in `scripts/check-go-workflow-config.sh`.
+- Text-based checks are acceptable for this script (no YAML parser dependency required).
 
 ## Risks
-- If Docker CLI/daemon is unavailable, `docker compose ... config` and `./scripts/test-quickstart.sh` may fail and should drive a no-go decision.
-- Partial logs or inconsistent artifact naming would weaken release evidence traceability.
+- Regex checks may accidentally miss valid YAML formatting variants if patterns are too strict.
+- Local action validation could pass incorrectly if the script does not verify SHA pinning inside the composite action file.
+- Overly broad matching could allow non-approved local actions.
 
 ## Test plan
-- Create a new timestamped artifact directory and capture stdout/stderr + exit codes for:
-  - `docker compose -f deploy/docker-compose.yml config`
-  - `./scripts/test-quickstart.sh`
-  - `./scripts/verify.sh`
-- Verify artifact files exist and contain full command outputs.
-- Update and review `docs/releases/release-checklist-report-2026-02-27.md` so gate outcomes and final decision align with the new logs.
+- Run `scripts/check-go-workflow-config.sh` and confirm it passes against current workflows.
+- Validate that the script still checks `go-version-file: go.mod` and offline guards by reviewing logic and pass output.
+- Verify updated wording in `docs/testing.md` mentions SHA-pinned direct setup-go usage or approved local composite action pinning.

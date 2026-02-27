@@ -2,24 +2,22 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Capture requested release gate command logs
+- [x] Task 1 — Update workflow setup-go validation logic
   - Acceptance criteria:
-    - New `artifacts/release-checks-<timestamp>/` directory exists.
-    - Logs for `docker compose -f deploy/docker-compose.yml config`, `./scripts/test-quickstart.sh`, and `./scripts/verify.sh` are stored with full output and exit status.
+    - `scripts/check-go-workflow-config.sh` accepts direct SHA-pinned `actions/setup-go@<40-hex>` references.
+    - Script accepts `./.github/actions/setup-go` usage only when `.github/actions/setup-go/action.yml` pins `actions/setup-go` with a 40-hex SHA.
+    - Existing checks for `go-version-file: go.mod`, `GOTOOLCHAIN=local`, `GOPROXY=off`, and `GOSUMDB=off` remain enforced.
 
-- [x] Task 2 — Update release checklist report with new outcomes
+- [x] Task 2 — Update testing docs note for SHA-based enforcement
   - Acceptance criteria:
-    - `docs/releases/release-checklist-report-2026-02-27.md` gate summary rows reference the new artifact paths.
-    - Gate pass/fail states reflect the latest command results.
+    - `docs/testing.md` no longer states literal `actions/setup-go@v5` enforcement.
+    - Note reflects SHA-based direct pinning or approved local composite action behavior.
 
-- [x] Task 3 — Align final go/no-go decision with refreshed gate results
+- [x] Task 3 — Run validation checks and record outcomes
   - Acceptance criteria:
-    - Final recommendation in the report matches updated gate statuses and evidence.
+    - Relevant command(s) executed after changes.
+    - Results captured in execution log with pass/fail status.
 
 ## Execution log
-- ✅ Task 1 complete: captured logs in `artifacts/release-checks-20260227-163011/`.
-  - `docker compose -f deploy/docker-compose.yml config` → exit 127 (docker missing).
-  - `./scripts/test-quickstart.sh` → exit 1 (docker required).
-  - `./scripts/verify.sh` → exit 0 (passes with docker-related skips).
-- ✅ Task 2 complete: refreshed gate summary/evidence paths in `docs/releases/release-checklist-report-2026-02-27.md`.
-- ✅ Task 3 complete: retained **NO-GO / NOT READY** decision to match latest failing docker-dependent gates.
+- ✅ `bash scripts/check-go-workflow-config.sh` (pass).
+- ✅ `./scripts/verify.sh` (pass; docker-related steps were skipped by script design because docker is unavailable).
