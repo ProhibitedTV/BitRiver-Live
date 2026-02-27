@@ -15,9 +15,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     -h|--help)
       cat <<USAGE
-Usage: deploy/check-env.sh [--skip-doctor] [ENV_FILE]
+Usage:
+  deploy/check-env.sh [ENV_FILE] [--skip-doctor]
+  deploy/check-env.sh --skip-doctor [ENV_FILE]
 
-Runs preflight doctor checks (unless --skip-doctor) and then validates the env file.
+Runs the enhanced doctor preflight first (unless --skip-doctor), then runs env validation.
 USAGE
       exit 0
       ;;
@@ -37,23 +39,26 @@ if [[ -z "$ENV_FILE" ]]; then
 fi
 
 if [[ "$SKIP_DOCTOR" -eq 0 ]]; then
-  echo "Running BitRiver doctor preflight..."
+  echo "Running doctor..."
   if ! (
     cd "$REPO_ROOT" &&
-    GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run ./cmd/bitriver doctor --env-file "$ENV_FILE"
+    GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run ./cmd/bitriver doctor --env-file "$ENV_FILE" --compose-file "$REPO_ROOT/deploy/docker-compose.yml"
   ); then
     cat >&2 <<EOFMSG
-error: preflight doctor checks failed.
+error: doctor preflight reported blocking failures.
 
-What to do next:
-  1) Run: GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run ./cmd/bitriver doctor --env-file "$ENV_FILE"
-  2) Fix each FAIL item and rerun deploy/check-env.sh.
-  3) Advanced override: deploy/check-env.sh --skip-doctor "$ENV_FILE"
+Next steps:
+  1) Re-run doctor directly:
+     GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run ./cmd/bitriver doctor --env-file "$ENV_FILE" --compose-file "$REPO_ROOT/deploy/docker-compose.yml"
+  2) Resolve each FAIL item in the doctor output.
+  3) Re-run: bash deploy/check-env.sh
+  4) Temporary bypass (not recommended for production): bash deploy/check-env.sh "$ENV_FILE" --skip-doctor
 EOFMSG
     exit 1
   fi
 fi
 
+echo "Running env validation..."
 (
   cd "$REPO_ROOT" &&
   GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run ./cmd/bitriver env validate --env-file "$ENV_FILE"

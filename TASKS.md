@@ -35,3 +35,37 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 complete: added preflight guidance and minimum sizing notes to `docs/operations.md` and `docs/production-single-host.md`.
 - ✅ Task 3 check:
   - `rg -n "Preflight|bitriver doctor|PASS|WARN|FAIL|4 logical CPUs|8 GiB RAM|20 GiB" docs/operations.md docs/production-single-host.md`
+
+
+## Scoped change: check-env doctor-by-default
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Update `deploy/check-env.sh` doctor + skip flag UX
+  - Acceptance criteria:
+    - Runs `go run ./cmd/bitriver doctor --env-file "$ENV_FILE" --compose-file "$REPO_ROOT/deploy/docker-compose.yml"` before env validate by default.
+    - Supports `--skip-doctor` in either position (`deploy/check-env.sh --skip-doctor [ENV_FILE]` and `deploy/check-env.sh [ENV_FILE] --skip-doctor`).
+    - Prints headings for doctor and env validation.
+    - On doctor failure, exits non-zero with actionable next steps.
+
+- [x] Task 2 — Update quickstart + production docs to call out `deploy/check-env.sh` first
+  - Acceptance criteria:
+    - `docs/quickstart.md` mentions running `deploy/check-env.sh` as first preflight step.
+    - `docs/production-single-host.md` mentions running `deploy/check-env.sh` as first preflight step.
+
+- [x] Task 3 — Validate behavior and capture results
+  - Acceptance criteria:
+    - `bash deploy/check-env.sh --help` shows skip-doctor usage.
+    - `bash deploy/check-env.sh --skip-doctor` succeeds for existing flow.
+    - `bash deploy/check-env.sh` runs doctor+env validation sequence.
+
+
+### Execution log (check-env doctor-by-default)
+- ✅ Task 1 complete: `deploy/check-env.sh` now runs doctor first with canonical compose file, supports `--skip-doctor` in either argument position, prints stage headings, and emits actionable failure next steps.
+- ✅ Task 2 complete: added first-step preflight guidance to quickstart and production single-host docs using `bash deploy/check-env.sh`.
+- ✅ Task 3 checks:
+  - `bash deploy/check-env.sh --help` (pass)
+  - `bash deploy/check-env.sh --skip-doctor` (fails in this environment because root `.env` is absent)
+  - `bash deploy/check-env.sh deploy/.env.example --skip-doctor` (runs env validation; fails as expected because example placeholders are intentionally invalid for production)
+  - `bash deploy/check-env.sh deploy/.env.example` (confirms doctor runs first, then exits non-zero on doctor FAIL with actionable guidance)
+  - `./scripts/verify.sh` (fails on pre-existing `.env.example` placeholder hygiene rule unrelated to this scoped change)

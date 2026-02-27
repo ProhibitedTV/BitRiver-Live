@@ -1,6 +1,25 @@
 # PLAN
 
 ## Scope (current change)
+- Update `deploy/check-env.sh` so doctor preflight runs by default with both `--env-file` and canonical `--compose-file deploy/docker-compose.yml` before env validation.
+- Preserve CI/operator compatibility by keeping default invocation argument-free and adding an explicit escape hatch `--skip-doctor` with documented usage.
+- Improve script UX with explicit phase headings and actionable failure guidance for doctor failures.
+- Update `docs/quickstart.md` and `docs/production-single-host.md` so `deploy/check-env.sh` is called out as the first environment preflight step.
+
+## Assumptions
+- `bitriver doctor` already encodes WARN vs FAIL semantics (WARN should return success; FAIL should return non-zero).
+- Existing CI usage calls `bash deploy/check-env.sh` (or equivalent) without positional changes.
+
+## Risks
+- Parsing logic for optional `--skip-doctor` could regress if argument handling becomes order-sensitive.
+- Doc updates may drift if they duplicate command examples inconsistently between quickstart and production docs.
+
+## Test plan
+- `bash deploy/check-env.sh --help`
+- `bash deploy/check-env.sh --skip-doctor`
+- `bash deploy/check-env.sh`
+
+## Scope (previous change)
 - Upgrade `bitriver doctor` into a production preflight with actionable PASS/WARN/FAIL checks while preserving `func runDoctor(args []string) bool` compatibility used by `verify` and `main`.
 - Add flags `--env-file`, `--compose-file`, and `--json` to support environment-aware checks and machine-readable output.
 - Expand checks to include host sizing, required/optional binaries, Docker/Compose minimum versions, port conflicts, and compose bind-mount readability/writability.
