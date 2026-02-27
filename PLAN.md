@@ -1,23 +1,17 @@
 # PLAN
 
 ## Scope (current change)
-- Run the requested release gate commands from repo root and capture complete output logs.
-- Store evidence under a new timestamped `artifacts/release-checks-<timestamp>/` directory, consistent with existing artifact naming.
-- Update `docs/releases/release-checklist-report-2026-02-27.md` gate summary rows and final go/no-go decision based on the new evidence.
+- Pin `.github/workflows/ci.yml` `dorny/paths-filter` usage from floating `@v3` to a full commit SHA with a release comment.
+- Audit all workflow files under `.github/workflows/` and pin any remaining third-party `uses:` entries that are not already full SHAs.
 
 ## Assumptions
-- The execution environment may or may not expose a working Docker daemon; outcomes must be recorded exactly as observed.
-- Existing release checklist report structure should be preserved while updating only the relevant rows and evidence paths.
-- No product/runtime code changes are required for this request.
+- Existing workflow pinning convention is `uses: owner/repo@<40-char-sha> # vX.Y.Z` (or equivalent release label).
+- Local composite actions (`uses: ./.github/actions/...`) are intentionally unpinned and should remain unchanged.
 
 ## Risks
-- If Docker CLI/daemon is unavailable, `docker compose ... config` and `./scripts/test-quickstart.sh` may fail and should drive a no-go decision.
-- Partial logs or inconsistent artifact naming would weaken release evidence traceability.
+- Pinning to an incorrect SHA could break CI behavior; use the upstream tag commit for the intended release.
+- Missing another non-SHA `uses:` line would leave policy drift in workflows.
 
 ## Test plan
-- Create a new timestamped artifact directory and capture stdout/stderr + exit codes for:
-  - `docker compose -f deploy/docker-compose.yml config`
-  - `./scripts/test-quickstart.sh`
-  - `./scripts/verify.sh`
-- Verify artifact files exist and contain full command outputs.
-- Update and review `docs/releases/release-checklist-report-2026-02-27.md` so gate outcomes and final decision align with the new logs.
+- Run a repository scan to list workflow `uses:` entries and confirm no non-SHA external actions remain.
+- Optionally run `./scripts/check-ci-contract.sh` to ensure CI workflow contract checks still pass.
