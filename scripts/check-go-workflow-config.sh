@@ -8,13 +8,37 @@ workflows=(
   ".github/workflows/release.yml"
 )
 
+approved_local_setup_go="./.github/actions/setup-go"
+approved_local_setup_go_action=".github/actions/setup-go/action.yml"
+
+if ! grep -Eq "uses:[[:space:]]+actions/setup-go@[0-9a-f]{40}" "$approved_local_setup_go_action"; then
+  echo "$approved_local_setup_go_action must pin actions/setup-go to a 40-character SHA" >&2
+  exit 1
+fi
+
+if ! grep -Eq "default:[[:space:]]*'go\\.mod'|default:[[:space:]]*go\\.mod" "$approved_local_setup_go_action"; then
+  echo "$approved_local_setup_go_action must default go-version-file to go.mod" >&2
+  exit 1
+fi
+
 for workflow in "${workflows[@]}"; do
-  if ! grep -Eq "uses:[[:space:]]+actions/setup-go@v5" "$workflow"; then
-    echo "$workflow must use actions/setup-go@v5" >&2
+  uses_direct_sha_setup_go=false
+  uses_approved_local_setup_go=false
+
+  if grep -Eq "uses:[[:space:]]+actions/setup-go@[0-9a-f]{40}" "$workflow"; then
+    uses_direct_sha_setup_go=true
+  fi
+
+  if grep -Eq "uses:[[:space:]]+\./\.github/actions/setup-go" "$workflow"; then
+    uses_approved_local_setup_go=true
+  fi
+
+  if [[ "$uses_direct_sha_setup_go" == false && "$uses_approved_local_setup_go" == false ]]; then
+    echo "$workflow must use actions/setup-go pinned to a 40-character SHA or $approved_local_setup_go" >&2
     exit 1
   fi
 
-  if ! grep -Eq "go-version-file:[[:space:]]*'go\\.mod'|go-version-file:[[:space:]]*go\\.mod" "$workflow"; then
+  if ! grep -Eq "go-version-file:[[:space:]]*'go\.mod'|go-version-file:[[:space:]]*go\.mod" "$workflow" && [[ "$uses_approved_local_setup_go" == false ]]; then
     echo "$workflow must set go-version-file: go.mod" >&2
     exit 1
   fi
