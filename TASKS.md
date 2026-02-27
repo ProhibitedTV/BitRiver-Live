@@ -240,3 +240,34 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 checks:
   - ✅ `cd web/viewer && npm run test -- chatPanel.test.tsx`
   - ✅ `./scripts/verify.sh --viewer`
+
+## Scoped change: viewer grid image priority loading
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Update preview image loading strategy in grid components
+  - Acceptance criteria:
+    - `web/viewer/components/DirectoryGrid.tsx` applies `priority` only to leading mapped card(s) and uses explicit lazy loading for non-priority cards.
+    - `web/viewer/components/LiveNowGrid.tsx` applies `priority` only to leading mapped card(s) and uses explicit lazy loading for non-priority cards.
+    - Existing `sizes` attributes remain unchanged.
+
+- [x] Task 2 — Add/update component tests for priority vs lazy behavior
+  - Acceptance criteria:
+    - Tests render multiple cards in both grids.
+    - Assertions verify only expected leading card(s) receive priority behavior (or corresponding props) and subsequent cards are lazy.
+
+- [x] Task 3 — Run viewer checks for updated grid behavior
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- channelDisplayPrimitives.test.tsx` passes.
+    - `./scripts/verify.sh --viewer` passes (or capture explicit environment limitation).
+
+### Execution log (viewer grid image priority loading)
+- ✅ Task 1 complete: updated `DirectoryGrid` and `LiveNowGrid` mapped preview images to set `priority` only for the first card (`index < 1`) and explicit `loading="lazy"` for non-priority cards while keeping existing `sizes` values.
+- ✅ Task 1 check:
+  - ✅ `cd web/viewer && npm run test -- channelDisplayPrimitives.test.tsx`
+- ✅ Task 2 complete: extended `channelDisplayPrimitives` tests with multi-card assertions confirming only non-leading grid preview images are explicitly lazy-loaded in both directory and live-now layouts.
+- ✅ Task 2 check:
+  - ✅ `cd web/viewer && npm run test -- channelDisplayPrimitives.test.tsx`
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- channelDisplayPrimitives.test.tsx`
+  - ✅ `./scripts/verify.sh --viewer`

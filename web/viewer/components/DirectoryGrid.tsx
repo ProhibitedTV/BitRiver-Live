@@ -21,7 +21,7 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
 
   return (
     <section className="grid directory-grid">
-      {channels.map((entry) => {
+      {channels.map((entry, index) => {
         const createdAt = new Date(entry.channel.createdAt).toLocaleDateString();
         const previewImage = getChannelPreviewImage(entry);
         const followerLabel = formatFollowerLabel(entry.followerCount);
@@ -39,7 +39,8 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
                     className="directory-card__media"
                     fill
                     sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 100vw"
-                    priority
+                    priority={index < 1}
+                    loading={index < 1 ? undefined : "lazy"}
                   />
                 ) : (
                   <div className="directory-card__preview-fallback" aria-hidden="true" />

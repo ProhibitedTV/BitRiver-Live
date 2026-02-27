@@ -61,6 +61,69 @@ describe("channel display primitives", () => {
     expect(asFragment()).toMatchSnapshot();
   });
 
+
+  test("applies lazy loading only to non-leading directory preview cards", () => {
+    const directoryChannels = [
+      {
+        ...liveChannel,
+        profile: {
+          ...liveChannel.profile,
+          bannerUrl: "https://cdn.example.com/neon-nights.jpg",
+        },
+      },
+      {
+        ...offlineChannel,
+        profile: {
+          ...offlineChannel.profile,
+          bannerUrl: "https://cdn.example.com/archive-sessions.jpg",
+        },
+      },
+    ];
+
+    const { container } = render(<DirectoryGrid channels={directoryChannels} />);
+
+    const previewImages = Array.from(container.querySelectorAll("img.directory-card__media"));
+    expect(previewImages).toHaveLength(2);
+    expect(previewImages[0]).not.toHaveAttribute("loading", "lazy");
+    expect(previewImages[1]).toHaveAttribute("loading", "lazy");
+  });
+
+  test("applies lazy loading only to non-leading live-now preview cards", () => {
+    const liveNowChannels = [
+      {
+        ...liveChannel,
+        profile: {
+          ...liveChannel.profile,
+          bannerUrl: "https://cdn.example.com/neon-nights.jpg",
+        },
+      },
+      {
+        ...liveChannel,
+        channel: {
+          ...liveChannel.channel,
+          id: "chan-live-2",
+          title: "Pulse Hour",
+        },
+        owner: {
+          ...liveChannel.owner,
+          id: "owner-2",
+          displayName: "VJ Pulse",
+        },
+        profile: {
+          ...liveChannel.profile,
+          bannerUrl: "https://cdn.example.com/pulse-hour.jpg",
+        },
+      },
+    ];
+
+    const { container } = render(<LiveNowGrid channels={liveNowChannels} />);
+
+    const previewImages = Array.from(container.querySelectorAll("img.live-card__media-image"));
+    expect(previewImages).toHaveLength(2);
+    expect(previewImages[0]).not.toHaveAttribute("loading", "lazy");
+    expect(previewImages[1]).toHaveAttribute("loading", "lazy");
+  });
+
   test("uses shared viewer labels in live grids", () => {
     const { asFragment } = render(<LiveNowGrid channels={[liveChannel]} />);
 
