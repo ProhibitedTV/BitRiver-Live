@@ -1,13 +1,13 @@
 # Release Checklist Report — 2026-02-27
 
 ## Scope
-Consolidated current production release readiness from fresh repository gate runs in this environment.
+Executed the requested postgres release checks using a prepared integration database (`BITRIVER_TEST_POSTGRES_DSN`) and captured fresh evidence for this run.
 
 Evidence sources:
 - `artifacts/release-checks-20260227-163011/`
 - `docs/production-release.md`
 
-## Gate summary (current)
+## Postgres gate summary (current)
 
 | Gate | Command | Latest result | Evidence |
 |---|---|---|---|
