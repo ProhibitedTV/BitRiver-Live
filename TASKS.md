@@ -2,39 +2,27 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Run baseline verification gate (`./scripts/verify.sh`)
+- [x] Task 1 — Analyze failing viewer primitive tests and related components (read-only)
   - Acceptance criteria:
-    - Command executed from repo root.
-    - Full log captured to an artifact file.
+    - Reviewed `channelDisplayPrimitives` test + snapshot.
+    - Reviewed `DirectoryGrid`, `LiveNowGrid`, `ChannelRail`, `FeaturedChannel`, and `ChannelStatusBadge`.
+    - Decision recorded: intentional UX change vs regression.
 
-- [x] Task 2 — Run quickstart smoke gate (`./scripts/test-quickstart.sh`)
+- [x] Task 2 — Apply minimal fix aligned with product intent
   - Acceptance criteria:
-    - Command executed from repo root.
-    - Full log captured to an artifact file.
+    - If intentional behavior: update snapshot and brittle assertions.
+    - If regression: fix component output and align snapshot expectations.
 
-- [x] Task 3 — Run viewer lint/test commands
+- [x] Task 3 — Run viewer checks and record outcomes
   - Acceptance criteria:
+    - `npm --prefix web/viewer run test -- channelDisplayPrimitives.test.tsx` executed.
     - `npm --prefix web/viewer run lint` executed.
     - `npm --prefix web/viewer run test` executed.
-    - Full logs captured to artifact files.
-
-- [x] Task 4 — Run production-release checks (automated subset)
-  - Acceptance criteria:
-    - `./scripts/test-postgres.sh` executed.
-    - `./scripts/check-postgres-pgx.sh postgres` executed.
-    - Full logs captured to artifact files.
-
-- [x] Task 5 — Produce release checklist report
-  - Acceptance criteria:
-    - Gate-by-gate pass/fail status documented.
-    - Remediation items included for any non-pass/manual gates.
+    - Results logged in execution log.
 
 ## Execution log
-- ✅ `./scripts/verify.sh 2>&1 | tee artifacts/release-checks-20260225-013109/01-verify.log` (pass; docker-dependent subchecks skipped by script due to missing Docker binary)
+- ✅ Read-only analysis completed across test/snapshot and related components; mismatch isolated to `FeaturedChannel` CTA copy/structure (now single primary action: “View stream” with aria-label “View featured channel”), indicating intentional UX change to simplified action set.
 
-- ⚠️ `./scripts/test-quickstart.sh 2>&1 | tee artifacts/release-checks-20260225-013109/02-test-quickstart.log` (blocked: docker is required for smoke checks)
-- ✅ `npm --prefix web/viewer run lint 2>&1 | tee artifacts/release-checks-20260225-013109/03-viewer-lint.log` (pass)
-- ❌ `npm --prefix web/viewer run test 2>&1 | tee artifacts/release-checks-20260225-013109/04-viewer-test.log` (failed: snapshot mismatch in `__tests__/channelDisplayPrimitives.test.tsx`)
-- ⚠️ `./scripts/test-postgres.sh 2>&1 | tee artifacts/release-checks-20260225-013109/05-test-postgres.log` (blocked: Docker or BITRIVER_TEST_POSTGRES_DSN required)
-- ✅ `./scripts/check-postgres-pgx.sh postgres 2>&1 | tee artifacts/release-checks-20260225-013109/06-check-postgres-pgx.log` (pass; script exited 0)
-- ✅ Authored release checklist report: `docs/releases/release-checklist-report-2026-02-25.md`
+- ✅ `npm --prefix web/viewer run test -- channelDisplayPrimitives.test.tsx -u` (pass; updated featured CTA snapshot to reflect intentional single-action UX copy).
+- ✅ `npm --prefix web/viewer run lint` (pass).
+- ✅ `npm --prefix web/viewer run test` (pass; suite emits existing React act() warnings in unrelated tests).
