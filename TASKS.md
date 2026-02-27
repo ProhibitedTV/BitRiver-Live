@@ -2,27 +2,24 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Analyze failing viewer primitive tests and related components (read-only)
+- [x] Task 1 — Prepare release-check execution metadata (read-only)
   - Acceptance criteria:
-    - Reviewed `channelDisplayPrimitives` test + snapshot.
-    - Reviewed `DirectoryGrid`, `LiveNowGrid`, `ChannelRail`, `FeaturedChannel`, and `ChannelStatusBadge`.
-    - Decision recorded: intentional UX change vs regression.
+    - Selected a dated artifact directory path consistent with existing `artifacts/release-checks-*` logs.
+    - Identified release checklist report file to update for this run.
 
-- [x] Task 2 — Apply minimal fix aligned with product intent
+- [x] Task 2 — Run quickstart smoke gate and capture full logs
   - Acceptance criteria:
-    - If intentional behavior: update snapshot and brittle assertions.
-    - If regression: fix component output and align snapshot expectations.
+    - Executed `./scripts/test-quickstart.sh` from repo root.
+    - Full stdout/stderr saved in the dated artifact directory.
 
-- [x] Task 3 — Run viewer checks and record outcomes
+- [x] Task 3 — Record outcomes/remediation in task tracker and release checklist report
   - Acceptance criteria:
-    - `npm --prefix web/viewer run test -- channelDisplayPrimitives.test.tsx` executed.
-    - `npm --prefix web/viewer run lint` executed.
-    - `npm --prefix web/viewer run test` executed.
-    - Results logged in execution log.
+    - `TASKS.md` execution log includes pass/fail and remediation notes.
+    - Release checklist report updated with quickstart result and (if needed) contract-file failure mapping.
 
 ## Execution log
-- ✅ Read-only analysis completed across test/snapshot and related components; mismatch isolated to `FeaturedChannel` CTA copy/structure (now single primary action: “View stream” with aria-label “View featured channel”), indicating intentional UX change to simplified action set.
-
-- ✅ `npm --prefix web/viewer run test -- channelDisplayPrimitives.test.tsx -u` (pass; updated featured CTA snapshot to reflect intentional single-action UX copy).
-- ✅ `npm --prefix web/viewer run lint` (pass).
-- ✅ `npm --prefix web/viewer run test` (pass; suite emits existing React act() warnings in unrelated tests).
+- ✅ Task 1 complete: using artifact directory `artifacts/release-checks-20260227-154237/` and updating dated report `docs/releases/release-checklist-report-2026-02-27.md`.
+- ❌ `./scripts/test-quickstart.sh` failed immediately; log captured at `artifacts/release-checks-20260227-154237/01-test-quickstart.log`.
+  - Failure: `error: docker is required for quickstart smoke checks`.
+  - Remediation: run on a host/runner with Docker CLI + daemon access, then rerun the same command.
+- ✅ Updated `docs/releases/release-checklist-report-2026-02-27.md` with gate outcome and failure-to-contract mapping notes for `deploy/docker-compose.yml`, `.env`, and `deploy/ome/Server.generated.xml` (all not evaluated due to prerequisite failure).
