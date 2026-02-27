@@ -4,20 +4,20 @@
 Consolidated current production release readiness from fresh repository gate runs in this environment.
 
 Evidence sources:
-- `artifacts/release-checks-20260227-161113/`
+- `artifacts/release-checks-20260227-163011/`
 - `docs/production-release.md`
 
 ## Gate summary (current)
 
 | Gate | Command | Latest result | Evidence |
 |---|---|---|---|
-| Baseline verify | `./scripts/verify.sh` | PASS (with Docker-dependent skips) | `artifacts/release-checks-20260227-161113/01-verify.log` |
-| Quickstart smoke | `./scripts/test-quickstart.sh` | FAIL (Docker unavailable) | `artifacts/release-checks-20260227-161113/07-test-quickstart.log` |
-| Viewer lint | `npm --prefix web/viewer run lint` | PASS | `artifacts/release-checks-20260227-161113/02-viewer-lint.log` |
-| Viewer tests | `npm --prefix web/viewer run test` | PASS (act warnings emitted) | `artifacts/release-checks-20260227-161113/03-viewer-test.log` |
-| Postgres suite | `./scripts/test-postgres.sh` | FAIL (requires Docker or `BITRIVER_TEST_POSTGRES_DSN`) | `artifacts/release-checks-20260227-161113/05-test-postgres.log` |
-| pgx guard | `./scripts/check-postgres-pgx.sh postgres` | PASS (`postgres` mode expected with stub indicator output) | `artifacts/release-checks-20260227-161113/04-check-postgres-pgx.log` |
-| Docker Compose config validation | `docker compose -f deploy/docker-compose.yml config` | FAIL (`docker` command not installed) | `artifacts/release-checks-20260227-161113/06-docker-compose-config.log` |
+| Baseline verify | `./scripts/verify.sh` | PASS (with Docker-dependent skips; quickstart check still blocked) | `artifacts/release-checks-20260227-163011/03-verify.log` |
+| Quickstart smoke | `./scripts/test-quickstart.sh` | FAIL (Docker unavailable) | `artifacts/release-checks-20260227-163011/02-test-quickstart.log` |
+| Viewer lint | `npm --prefix web/viewer run lint` | PASS (covered in verify log) | `artifacts/release-checks-20260227-163011/03-verify.log` |
+| Viewer tests | `npm --prefix web/viewer run test` | PASS (act warnings emitted; covered in verify log) | `artifacts/release-checks-20260227-163011/03-verify.log` |
+| Postgres suite | `./scripts/test-postgres.sh` | FAIL (requires Docker or `BITRIVER_TEST_POSTGRES_DSN`; covered in verify log) | `artifacts/release-checks-20260227-163011/03-verify.log` |
+| pgx guard | `./scripts/check-postgres-pgx.sh postgres` | PASS (`postgres` mode expected with stub indicator output; covered in verify log) | `artifacts/release-checks-20260227-163011/03-verify.log` |
+| Docker Compose config validation | `docker compose -f deploy/docker-compose.yml config` | FAIL (`docker` command not installed) | `artifacts/release-checks-20260227-163011/01-docker-compose-config.log` |
 
 ## Release decision
 
@@ -40,7 +40,7 @@ Remaining blockers:
 4. If all gates pass, follow `docs/production-release.md` section "2. Tag the release and trigger the workflow".
 
 ## Contract impact
-This update and associated test stabilization are non-contract changes. No deployment contract files were changed:
+This report-only update is a non-contract change. No deployment contract files were changed:
 - `deploy/docker-compose.yml`
 - `./.env`
 - `deploy/ome/Server.generated.xml`

@@ -2,22 +2,24 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Stabilize flaky upload cleanup tests
+- [x] Task 1 — Capture requested release gate command logs
   - Acceptance criteria:
-    - `internal/service/uploads/processor_test.go` no longer double-enqueues cleanup test uploads.
-    - `go test ./internal/service/uploads -count=1` passes.
+    - New `artifacts/release-checks-<timestamp>/` directory exists.
+    - Logs for `docker compose -f deploy/docker-compose.yml config`, `./scripts/test-quickstart.sh`, and `./scripts/verify.sh` are stored with full output and exit status.
 
-- [x] Task 2 — Re-run release gates and capture fresh evidence
+- [x] Task 2 — Update release checklist report with new outcomes
   - Acceptance criteria:
-    - Latest gate logs are captured under a new `artifacts/release-checks-<timestamp>/` directory.
-    - `./scripts/verify.sh`, viewer lint/test, and postgres/docker smoke commands have recorded outcomes.
+    - `docs/releases/release-checklist-report-2026-02-27.md` gate summary rows reference the new artifact paths.
+    - Gate pass/fail states reflect the latest command results.
 
-- [x] Task 3 — Refresh production release checklist report
+- [x] Task 3 — Align final go/no-go decision with refreshed gate results
   - Acceptance criteria:
-    - `docs/releases/release-checklist-report-2026-02-27.md` reflects latest gate outcomes and blockers.
-    - Report includes an updated go/no-go decision and ordered unblock steps.
+    - Final recommendation in the report matches updated gate statuses and evidence.
 
 ## Execution log
-- ✅ Task 1 complete: removed redundant manual enqueue from upload cleanup tests and validated with `go test ./internal/service/uploads -count=1`.
-- ✅ Task 2 complete: captured fresh evidence in `artifacts/release-checks-20260227-161113/` and reran required gates.
-- ✅ Task 3 complete: updated `docs/releases/release-checklist-report-2026-02-27.md` with latest status and unblock guidance.
+- ✅ Task 1 complete: captured logs in `artifacts/release-checks-20260227-163011/`.
+  - `docker compose -f deploy/docker-compose.yml config` → exit 127 (docker missing).
+  - `./scripts/test-quickstart.sh` → exit 1 (docker required).
+  - `./scripts/verify.sh` → exit 0 (passes with docker-related skips).
+- ✅ Task 2 complete: refreshed gate summary/evidence paths in `docs/releases/release-checklist-report-2026-02-27.md`.
+- ✅ Task 3 complete: retained **NO-GO / NOT READY** decision to match latest failing docker-dependent gates.

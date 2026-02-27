@@ -1,27 +1,23 @@
 # PLAN
 
 ## Scope (current change)
-- Use current release readiness evidence to address blockers that are actionable in-repo.
-- Stabilize the flaky upload cleanup tests causing `./scripts/verify.sh` failures.
-- Refresh `docs/releases/release-checklist-report-2026-02-27.md` with latest gate outcomes and an updated go/no-go summary.
+- Run the requested release gate commands from repo root and capture complete output logs.
+- Store evidence under a new timestamped `artifacts/release-checks-<timestamp>/` directory, consistent with existing artifact naming.
+- Update `docs/releases/release-checklist-report-2026-02-27.md` gate summary rows and final go/no-go decision based on the new evidence.
 
 ## Assumptions
-- Docker is unavailable in this environment, so Docker-gated checks remain blocked and must be documented.
-- Viewer lint/tests are runnable locally and can be used as fresh release evidence.
-- Upload processor behavior should remain unchanged; only flaky test orchestration should be adjusted.
+- The execution environment may or may not expose a working Docker daemon; outcomes must be recorded exactly as observed.
+- Existing release checklist report structure should be preserved while updating only the relevant rows and evidence paths.
+- No product/runtime code changes are required for this request.
 
 ## Risks
-- Adjusting tests could mask a real duplicate-cleanup regression if assertions become too weak.
-- Release report can drift quickly if subsequent runs are not captured with explicit evidence paths.
+- If Docker CLI/daemon is unavailable, `docker compose ... config` and `./scripts/test-quickstart.sh` may fail and should drive a no-go decision.
+- Partial logs or inconsistent artifact naming would weaken release evidence traceability.
 
 ## Test plan
-- Run `go test ./internal/service/uploads -count=1` to validate the flaky suite after test updates.
-- Run `./scripts/verify.sh` to exercise the default release gate.
-- Run viewer checks explicitly:
-  - `npm --prefix web/viewer run lint`
-  - `npm --prefix web/viewer run test`
-- Re-run environment-limited release checks and record outcomes:
-  - `./scripts/check-postgres-pgx.sh postgres`
-  - `./scripts/test-postgres.sh`
+- Create a new timestamped artifact directory and capture stdout/stderr + exit codes for:
   - `docker compose -f deploy/docker-compose.yml config`
   - `./scripts/test-quickstart.sh`
+  - `./scripts/verify.sh`
+- Verify artifact files exist and contain full command outputs.
+- Update and review `docs/releases/release-checklist-report-2026-02-27.md` so gate outcomes and final decision align with the new logs.
