@@ -1,23 +1,20 @@
 # PLAN
 
 ## Scope (current change)
-- Promote monitoring assets into an official optional Compose overlay at `deploy/docker-compose.monitoring.yml` for Prometheus, Grafana, and Alertmanager.
-- Add Grafana provisioning files so Prometheus datasource + bundled BitRiver dashboard auto-load on first start.
-- Ensure `deploy/monitoring/prometheus.yml` scrapes BitRiver API metrics and monitoring dependencies included in the overlay.
-- Add dedicated operator guide `docs/monitoring.md` covering quickstart, env/token setup, alert routing, expected healthy state, and troubleshooting.
-- Extend monitoring CI sanity checks to validate the overlay/provisioning contract in addition to Prometheus/Alertmanager syntax.
+- Strengthen the upgrade contract to v1.0-grade guidance in `docs/upgrades.md` with explicit supported version hops, backup/restore checklist, and rollback safety boundaries.
+- Add a new CLI planner command (`bitriver upgrade-plan`) that reads deployed version hints from `.env` image tags, compares with a target tag, and prints actionable upgrade steps + breaking-change warnings.
+- Add dedicated release versioning rules in `docs/versioning.md` and align release process docs/templates to require upgrade notes + breaking-change callouts.
 
 ## Assumptions
-- Monitoring must remain optional and only enabled when the overlay file is supplied.
-- Existing API `/metrics` endpoint already exists and should be scraped with bearer token from `deploy/monitoring/metrics.token`.
-- Docker may be unavailable in some local/CI contexts, so checks should keep graceful fallbacks.
+- Deployments use `deploy/docker-compose.yml` plus a repository `.env` where `BITRIVER_LIVE_IMAGE_TAG` is the canonical application version hint.
+- DB schema version cannot always be auto-discovered, so schema checks should be opt-in and non-breaking when metadata is unavailable.
+- Existing upgrade defaults must stay non-disruptive: no forced behavior changes at runtime.
 
 ## Risks
-- Missing Grafana provisioning paths/permissions can cause dashboard auto-import to fail silently.
-- Prometheus target names and compose service names can drift, causing false-down targets.
-- Alertmanager config rendering requirements can be confusing without explicit docs.
+- Ambiguous semver parsing (with/without `v` prefixes) could misclassify supported hops.
+- Overpromising rollback safety when migrations are irreversible could create operator risk.
+- Release template/process changes may drift if not linked from existing release runbook.
 
 ## Test plan
-- `./scripts/check-monitoring-config.sh`
-- `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.monitoring.yml config`
+- `go test ./cmd/bitriver -count=1`
 - `./scripts/verify.sh`

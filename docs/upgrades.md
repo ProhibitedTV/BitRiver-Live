@@ -1,95 +1,115 @@
 # Upgrading BitRiver Live
 
-Use this guide when you are moving an existing deployment to a newer release. It assumes you are running the supported Docker Compose bundle (`deploy/docker-compose.yml`) with the repository-root `.env` file and the generated OvenMediaEngine config in `deploy/ome/Server.generated.xml`.
+This guide defines the **supported upgrade/rollback contract** for BitRiver Live v1.0+ when running the default deployment contract:
 
-## Upgrade essentials: migrations, `.env` updates, and OME re-render
+- `deploy/docker-compose.yml`
+- repository `.env`
+- `deploy/ome/Server.generated.xml`
 
-Use this section as the concise checklist when you need to ensure schema, environment, and OvenMediaEngine configuration stay aligned during upgrades. The full, step-by-step flow follows in the numbered sections below.
+## Supported upgrade paths
 
-### Schema migrations
+BitRiver Live follows these rules:
 
-- **Compose path (default):** `docker compose up` always runs the `postgres-migrations` helper before the API starts, applying every SQL file in `deploy/migrations/`.
-- **External Postgres:** apply the migrations in `deploy/migrations/` with your database tooling before starting the API, and keep the schema in sync with the release notes under `docs/releases/`.
+1. **No downgrades through the upgrade flow.** `X -> Y` must have `Y > X`.
+2. **Minor upgrades are N-1 only.** You may move one minor at a time within a major line.
+   - ✅ `v1.2.x -> v1.3.x`
+   - ❌ `v1.1.x -> v1.3.x`
+3. **No skipped majors.** You may move only one major at a time.
+   - ✅ `v1.x -> v2.0+`
+   - ❌ `v1.x -> v3.0+`
+4. **Major upgrades are high-risk by default.** Treat them as breaking until release notes prove otherwise.
 
-### Safe upgrade flow (summary)
+Use the planner before every maintenance window:
 
-1. Stop the stack (keep volumes): `docker compose -f deploy/docker-compose.yml down`.
-2. Refresh `.env` from `deploy/.env.example` and validate it with `deploy/check-env.sh`.
-3. Re-render OME config: `./scripts/render-ome-config.sh --check || ./scripts/render-ome-config.sh --force`.
-4. Optionally run migrations explicitly: `docker compose -f deploy/docker-compose.yml run --rm postgres-migrations` (add `-T` on Windows shells without a TTY).
-5. Start everything again: `docker compose -f deploy/docker-compose.yml up -d`.
+```bash
+go run ./cmd/bitriver upgrade-plan --env-file .env --to vX.Y.Z --check-schema --current-schema <current_schema_version>
+```
 
-### `.env` changes
+The planner reads `BITRIVER_LIVE_IMAGE_TAG` from `.env`, validates the hop, prints required steps, and warns when the target may include breaking changes.
 
-> **Upgrade callout (OME healthcheck contract):** The OME healthcheck in both Compose and Helm now probes the unauthenticated local root endpoint (`http://localhost:${BITRIVER_OME_HTTP_PORT:-8081}/` in Compose, `http://localhost:8081/` in Helm) and treats non-`000` statuses below `500` as healthy. Keep `<Managers><API><AccessToken>` aligned with your token env values for API operations, but liveness no longer depends on probe auth headers.
+## Backup and restore checklist (required)
 
-- Compare your existing `.env` against `deploy/.env.example` whenever you upgrade, then add new keys or defaults before restarting.
-- Run `deploy/check-env.sh` to confirm there are no sample credentials or missing required variables.
+Complete all items before stopping production traffic:
 
-### OME re-render steps
+- [ ] Export Postgres backup from the running system (for example `pg_dump`/`pg_dumpall`) and verify the dump is readable.
+- [ ] Snapshot/backup runtime volumes used by the release:
+  - `deploy/data/`
+  - `deploy/transcoder-data/`
+  - `deploy/ome/`
+- [ ] Copy deployment configuration artifacts:
+  - `.env`
+  - `deploy/docker-compose.yml` (and overlays you use)
+  - any reverse proxy / ingress config that routes to BitRiver
+- [ ] Record the currently deployed image tags/digests from `.env`.
+- [ ] Record the current schema version (migration metadata) before migration.
+- [ ] Confirm restore drill ownership (who can run restore, where backups are stored, and expected RTO).
 
-- When you change `BITRIVER_OME_*` variables or update `deploy/ome/Server.xml`, regenerate `deploy/ome/Server.generated.xml` with:
-  ```bash
-  ./scripts/render-ome-config.sh --check || ./scripts/render-ome-config.sh --force
-  ```
-- The Compose `ome-config` preflight runs on every `docker compose up`, but a manual render is still recommended after `.env` edits so you can catch config issues before bringing the stack online.
+If you cannot produce both a DB dump and config backup, **do not start the upgrade**.
 
-## 1. Review release notes and incompatibilities
+## Single copy-paste upgrade sequence
 
-Before you pull new images or rebuild containers, read the release notes under `docs/releases/` (for example, [`docs/releases/v1.0.0.md`](releases/v1.0.0.md)). Any breaking changes, new required environment variables, or schema changes are called out there so you can plan the upgrade safely.
+Run from repo root (replace `vX.Y.Z`):
 
-If a release introduces incompatibilities, document them in `docs/releases/` and follow the mitigation steps before proceeding.
+```bash
+go run ./cmd/bitriver upgrade-plan --env-file .env --to vX.Y.Z --check-schema --current-schema <current_schema_version>
+docker compose -f deploy/docker-compose.yml down
+cp .env .env.backup.$(date +%Y%m%d%H%M%S)
+deploy/check-env.sh
+./scripts/render-ome-config.sh --check || ./scripts/render-ome-config.sh --force
+docker compose -f deploy/docker-compose.yml run --rm postgres-migrations
+docker compose -f deploy/docker-compose.yml up -d
+go run ./cmd/bitriver verify --compose-file deploy/docker-compose.yml --env-file .env
+```
 
-## 2. Database migrations (when/where they run)
+## Migration behavior guarantees
 
-The Compose bundle ships a dedicated `postgres-migrations` helper that applies every SQL file in `deploy/migrations/` against the Postgres container before the API starts. The main `bitriver-live` service depends on this helper (and on a healthy Postgres container), so migrations always run during `docker compose up` when you use the standard Compose bundle.
+For the supported Compose deployment:
 
-If you run Postgres outside the bundle, apply the SQL files in `deploy/migrations/` using your preferred tooling **before** starting the API. The API expects the schema to match the latest migration set.
+- `postgres-migrations` runs before API startup during `docker compose up`.
+- All SQL files in `deploy/migrations/` are applied in version order expected by the migration engine.
+- The API expects the schema to match the release's migration set before serving traffic.
 
-## 3. Safe upgrade flow for Docker Compose
+Important limitations:
 
-Follow this flow to avoid partial upgrades:
+- Not every migration is reversible.
+- Release notes may require operator-managed data transforms before/after SQL migrations.
+- Schema compatibility is only guaranteed for the supported upgrade hops above.
 
-1. **Pull or unpack the new release** (git pull, new release tarball, or updated installer bundle).
-2. **Stop the running services (keep data volumes):**
-   ```bash
-   docker compose -f deploy/docker-compose.yml down
-   ```
-3. **Refresh the `.env` file:**
-   - Compare your existing `.env` to `deploy/.env.example` and add any new variables or defaults.
-   - Run the environment guard script:
-     ```bash
-     deploy/check-env.sh
-     ```
-4. **Re-render the OvenMediaEngine config** if the `.env` or OME template changed:
-   ```bash
-   ./scripts/render-ome-config.sh --check || ./scripts/render-ome-config.sh --force
-   ```
-   Compose also runs the `ome-config` helper on every start, so a clean `docker compose up` will regenerate `deploy/ome/Server.generated.xml` from the current `.env` as needed.
-5. **Run migrations explicitly (optional but safe):**
-   ```bash
-   docker compose -f deploy/docker-compose.yml up -d postgres
-   docker compose -f deploy/docker-compose.yml run --rm postgres-migrations
-   ```
-   On Windows shells without a TTY, add `-T` to the `docker compose run` command to disable pseudo-TTY allocation.
-6. **Restart the stack:**
-   ```bash
-   docker compose -f deploy/docker-compose.yml up -d
-   ```
+## Roll back
 
-The `postgres-migrations` helper also runs on step 6, so skipping step 5 is acceptable if you prefer the single `up -d` flow; the explicit run is helpful if you want to confirm migrations before the API comes back online.
+Rollback safety depends on whether migrations changed data in non-reversible ways.
 
-## 4. Handling `.env` changes and OME template re-render
+### Safe rollback (usually possible)
 
-- Update `.env` any time new release variables appear in `deploy/.env.example` or release notes. Keep credentials and tags current before bringing containers back up.
-- If you touch `BITRIVER_OME_*` values or update the `deploy/ome/Server.xml` template, re-render `deploy/ome/Server.generated.xml` with the script above or rely on the `ome-config` preflight in Compose to regenerate it at startup.
+Use this only when **no irreversible migration has been applied** (or when migrations were backward compatible and validated for rollback in release notes):
 
-## 5. Post-upgrade validation
+1. Stop services: `docker compose -f deploy/docker-compose.yml down`
+2. Restore previous `.env` and previous image tags/digests.
+3. Restore previous generated OME config (`deploy/ome/Server.generated.xml`) if needed.
+4. Start previous release: `docker compose -f deploy/docker-compose.yml up -d`
 
-After the stack is running:
+### Unsafe rollback (common after schema/data changes)
 
-- Confirm containers are healthy (`docker compose ps`).
-- Verify the API `/readyz` and `/healthz` endpoints return success.
-- Stream a short test channel end-to-end to confirm ingest and playback.
+If irreversible migrations ran, rolling binaries back without restoring DB state can corrupt runtime behavior. In this case:
 
-If issues appear, re-check the release notes for incompatibilities and confirm migrations completed cleanly before rollback.
+1. Stop services.
+2. Restore Postgres from pre-upgrade backup.
+3. Restore related volumes/config snapshots.
+4. Bring the previous release back online.
+
+When in doubt, assume rollback is unsafe until verified in release notes.
+
+## Post-upgrade validation
+
+After restart:
+
+- `docker compose -f deploy/docker-compose.yml ps`
+- `go run ./cmd/bitriver verify --compose-file deploy/docker-compose.yml --env-file .env`
+- Confirm API `/healthz`, viewer playback, ingest path, and any payment/chat flows relevant to your deployment.
+
+Also update your internal runbook with:
+
+- previous version
+- target version
+- migration status
+- rollback decision and backup location

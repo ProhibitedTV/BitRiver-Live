@@ -307,6 +307,15 @@ following before rollout:
 - Recording retention windows (`BITRIVER_LIVE_RECORDING_RETENTION_*`) align with
   the business requirements for VOD publishing and archival.
 
+## Release notes and artifact consistency
+
+Before publishing a tag/release, ensure notes follow the versioning contract:
+
+- Apply `docs/versioning.md` rules (SemVer + breaking-change classification).
+- Fill `.github/RELEASE_NOTES_TEMPLATE.md` for every release.
+- Include explicit **Upgrade notes** and **Breaking changes** (or `None`) in release notes.
+- For major releases, add a dedicated rollback safety statement that matches `docs/upgrades.md`.
+
 ## 5. Post-release smoke checks
 
 Once the artefacts are live:
