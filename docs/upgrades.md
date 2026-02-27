@@ -22,10 +22,40 @@ BitRiver Live follows these rules:
 Use the planner before every maintenance window:
 
 ```bash
-go run ./cmd/bitriver upgrade-plan --env-file .env --to vX.Y.Z --check-schema --current-schema <current_schema_version>
+go run ./cmd/bitriver upgrade-plan --compose-file deploy/docker-compose.yml --env-file .env --target vX.Y.Z
 ```
 
-The planner reads `BITRIVER_LIVE_IMAGE_TAG` from `.env`, validates the hop, prints required steps, and warns when the target may include breaking changes.
+The planner prints a checklist with current-image detection, migration expectations, backup guidance, and rollback caveats.
+
+The command is best-effort: if Docker is unavailable or the stack is stopped, it warns and falls back to `.env` tags when possible.
+
+Example output:
+
+```text
+BitRiver Live upgrade plan
+Planner version: dev (dev, unknown)
+Compose file: deploy/docker-compose.yml
+Env file: .env
+Target tag: v1.4.0
+
+Current image tags (best-effort):
+- bitriver-live: v1.3.2 (tag=v1.3.2, source=env-file)
+
+Migrations: EXPECTED
+- compose file includes postgres-migrations service; migrations are expected before API startup in the default deployment contract.
+
+Warnings:
+- WARN: unable to read running image tags from docker compose ps: docker compose ps failed: ...
+- WARN: using env-file tag values because running compose service tags were unavailable.
+
+Operator checklist:
+[ ] 1) Review upgrade notes: docs/upgrades.md and docs/production-release.md
+[ ] 2) Complete backups before maintenance (docs/upgrades.md#backup-and-restore-checklist-required)
+...
+
+Rollback caveats:
+- Safe rollback usually requires that irreversible migrations have NOT run.
+```
 
 ## Backup and restore checklist (required)
 
@@ -51,7 +81,7 @@ If you cannot produce both a DB dump and config backup, **do not start the upgra
 Run from repo root (replace `vX.Y.Z`):
 
 ```bash
-go run ./cmd/bitriver upgrade-plan --env-file .env --to vX.Y.Z --check-schema --current-schema <current_schema_version>
+go run ./cmd/bitriver upgrade-plan --compose-file deploy/docker-compose.yml --env-file .env --target vX.Y.Z
 docker compose -f deploy/docker-compose.yml down
 cp .env .env.backup.$(date +%Y%m%d%H%M%S)
 deploy/check-env.sh

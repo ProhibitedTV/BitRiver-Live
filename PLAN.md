@@ -77,3 +77,21 @@
 - `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.limits.yml config`
 - `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.limits.yml -f deploy/docker-compose.resources.yml config`
 - `go test ./... -count=1 -timeout=120s`
+
+## Scope (current change)
+- Refine `bitriver upgrade-plan` into an operator checklist command with explicit `--compose-file`, `--env-file`, and required `--target` flags.
+- Detect currently running Compose service image tags via `docker compose ps --format json` on a best-effort basis, with env-file fallback and WARN guidance when unavailable.
+- Print upgrade planning guidance that references docs backup procedures, states migration behavior when detectable from compose contract, and includes rollback caveats.
+- Update `docs/upgrades.md` with the new command syntax and a realistic sample checklist output.
+
+## Assumptions
+- Docker may be unavailable or the stack may be stopped; planner output should still be usable.
+- Existing migration contract in docs (`postgres-migrations` for compose deployments) remains accurate for the default compose file.
+
+## Risks
+- Compose `ps --format json` schema can vary across Docker versions; parser must tolerate missing fields.
+- Image references can include digest-only forms, so tag extraction should be defensive and may produce `unknown` entries.
+
+## Test plan
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver -count=1`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s`
