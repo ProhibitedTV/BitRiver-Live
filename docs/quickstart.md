@@ -46,6 +46,35 @@ If your local scripts still include that override filename or env toggle, remove
 Install Go 1.21+ to use the source-based quickstart (`go run ./cmd/bitriver quickstart`) or CLI tooling. Installer-backed
 launchers ship a bundled CLI and do not require Go on the host.
 
+### Minimum host requirements (safe defaults)
+
+`bitriver doctor` now enforces conservative production defaults before startup:
+
+- CPU: **2+ logical cores**
+- RAM: **4+ GiB total host memory**
+- Free disk: **10+ GiB** on the BitRiver workspace filesystem
+- Docker: **24.0.0+**
+- Docker Compose plugin: **2.20.0+**
+
+These are baseline requirements for the default Compose stack. Real deployments
+may need more CPU/RAM/disk when you increase concurrent streams, add heavier
+transcoding profiles, retain more recordings, or enable extra compose profiles.
+
+Run preflight explicitly at any time:
+
+```bash
+go run ./cmd/bitriver doctor
+go run ./cmd/bitriver doctor --json
+```
+
+Result levels:
+
+- `PASS`: check is healthy.
+- `WARN`: not a hard blocker (or platform detection is limited), but review and
+  apply mitigation guidance before production rollout.
+- `FAIL`: blocking issue; command exits non-zero and startup wrappers should stop
+  until you fix the listed item.
+
 ### Tier 1 coverage
 
 The Go-based quickstart defines the canonical deployment contract across Tier 1 platforms—Windows 10/11 with Docker Desktop, macOS with Docker Desktop, and Ubuntu/Debian with Docker Engine plus the Compose plugin. Launcher wrappers and installers remain compatibility entrypoints that forward into the same Compose + `.env` pipeline. See [`docs/cross-platform-plan.md`](labs/cross-platform-plan.md#canonical-production-deployment-path) for the contract and support matrix.

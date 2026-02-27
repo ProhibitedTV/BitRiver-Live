@@ -2,30 +2,39 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Expand release verify-env `.env` emission inputs
+- [x] Task 1 — Implement structured doctor/preflight checks in CLI
   - Acceptance criteria:
-    - `.github/workflows/release.yml` `Create production env file` `env:` map includes:
-      - `BITRIVER_LIVE_MODE` (`production`)
-      - `BITRIVER_DEPLOY_IMAGE_SOURCE` (`pull`)
-      - Third-party digest variables required by `scripts/require-image-digests.sh`
-      - Production security guardrail vars: `BITRIVER_LIVE_RATE_LOGIN_LIMIT`, `BITRIVER_LIVE_RATE_LOGIN_WINDOW`, and one metrics protection input used by env validation.
-    - The same variables are present in the `vars=(...)` list so missing/empty values fail fast.
+    - `bitriver doctor` evaluates host resources, Docker/Compose availability + minimum versions, host port conflicts, writable dirs/files, and optional GPU hinting.
+    - Output includes per-check PASS/WARN/FAIL with actionable mitigation guidance.
+    - Exit code is non-zero when any FAIL is present; WARN-only runs exit zero.
+    - `--json` emits machine-readable structured results.
 
-- [x] Task 2 — Keep digest enforcement active in release verify-env
+- [x] Task 2 — Add doctor test coverage including intentional fail simulation
   - Acceptance criteria:
-    - `./scripts/require-image-digests.sh --env-file .env` remains in `verify-env` and runs with production conditions active from emitted `.env`.
-    - A local script check demonstrates missing/invalid digest values fail under production settings.
+    - Unit tests cover summary/exit behavior and at least one intentionally failing condition via flags or mockable check functions.
+    - Existing command tests continue to pass.
 
-- [x] Task 3 — Sync production release docs with workflow requirements
+- [x] Task 3 — Enforce doctor in deploy/check-env.sh with skip override
   - Acceptance criteria:
-    - `docs/production-release.md` secret requirements match variable names/requirements enforced by `release.yml`.
+    - `deploy/check-env.sh` runs doctor before `env validate` by default.
+    - `--skip-doctor` bypasses the preflight while preserving existing env validation behavior.
+    - Failure output explains next steps.
+
+- [x] Task 4 — Update docs for minimum host requirements and doctor usage
+  - Acceptance criteria:
+    - Docs include baseline host requirements and factors that change them.
+    - Docs describe `bitriver doctor` and WARN vs FAIL interpretation.
 
 ## Execution log
-- ✅ Task 1 complete: expanded `verify-env` `Create production env file` to emit production mode/image-source constants, digest vars, and production security vars in both `env:` and `vars=(...)`.
-- ✅ Task 1 check: `rg -n "BITRIVER_LIVE_MODE|BITRIVER_DEPLOY_IMAGE_SOURCE|BITRIVER_LIVE_METRICS_TOKEN|BITRIVER_LIVE_RATE_LOGIN_LIMIT|BITRIVER_LIVE_RATE_LOGIN_WINDOW|BITRIVER_(REDIS|POSTGRES|SRS|OME|NGINX|ALPINE_3|ALPINE_3_19|DEBIAN)_IMAGE_DIGEST" .github/workflows/release.yml`.
+- ✅ Task 1 complete: moved doctor into a dedicated preflight implementation (`cmd/bitriver/doctor.go`) with structured checks for host resources, Docker/Compose versions, host ports, writable runtime paths, and optional GPU profile detection.
+- ✅ Task 1 check: `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run ./cmd/bitriver doctor --help`.
+- ✅ Task 1 check: `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run ./cmd/bitriver doctor --min-cpu 999` (intentional FAIL path exits non-zero).
 
-- ✅ Task 2 complete: `verify-env` now emits `BITRIVER_LIVE_MODE=production` and `BITRIVER_DEPLOY_IMAGE_SOURCE=pull`, activating digest enforcement in the release job.
-- ✅ Task 2 check: `./scripts/require-image-digests.sh --env-file /tmp/digests-pass.env` (passes with valid production digests).
-- ✅ Task 2 check: `./scripts/require-image-digests.sh --env-file /tmp/digests-fail.env` (expected failure on missing/invalid digest values).
-- ✅ Task 3 complete: updated release runbook secret requirements to match enforced workflow inputs and documented that production mode/image-source are job constants.
-- ✅ Task 3 check: `rg -n "BITRIVER_LIVE_MODE=production|BITRIVER_DEPLOY_IMAGE_SOURCE=pull|BITRIVER_LIVE_METRICS_TOKEN|BITRIVER_LIVE_RATE_LOGIN_WINDOW" docs/production-release.md`.
+- ✅ Task 2 complete: added `cmd/bitriver/doctor_test.go` for intentional failure threshold, JSON report shape, and dependency-injected pass behavior.
+- ✅ Task 2 check: `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver -count=1`.
+
+- ✅ Task 3 complete: updated `deploy/check-env.sh` to run doctor preflight by default, added `--skip-doctor`, and added explicit remediation text when doctor fails.
+- ✅ Task 3 check: `bash deploy/check-env.sh --skip-doctor` (script path/flag parsing exercised; env validation failed because repo `.env` is absent in this environment).
+
+- ✅ Task 4 complete: updated `docs/quickstart.md` with safe-default minimum host requirements and doctor command guidance (`--json`, WARN vs FAIL semantics).
+- ✅ Task 4 check: `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s`.

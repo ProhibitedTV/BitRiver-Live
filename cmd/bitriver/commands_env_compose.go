@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -41,51 +40,6 @@ func printVersionInfo(out io.Writer) {
 	fmt.Fprintf(out, "Version: %s\n", valueOrFallback(Version, "dev"))
 	fmt.Fprintf(out, "Commit: %s\n", valueOrFallback(Commit, "unknown"))
 	fmt.Fprintf(out, "Date: %s\n", valueOrFallback(Date, "unknown"))
-}
-
-// runDoctor runs doctor and exits when the work completes or a dependency fails.
-func runDoctor(args []string) bool {
-	fs := flag.NewFlagSet("doctor", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "Usage: %s doctor\n", os.Args[0])
-	}
-	_ = fs.Parse(args)
-
-	fmt.Println("BitRiver Live doctor")
-	fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
-
-	if cwd, err := os.Getwd(); err == nil {
-		fmt.Printf("Working directory: %s\n", cwd)
-	} else {
-		fmt.Printf("Working directory: (error: %v)\n", err)
-	}
-
-	dockerPath, err := executil.LookPath("docker")
-	if err != nil {
-		fmt.Printf("Docker: not found (%v)\n", err)
-		return false
-	}
-	fmt.Printf("Docker: %s\n", dockerPath)
-
-	fmt.Println()
-	fmt.Println("Checking docker version...")
-	if err := executil.Run(dockerPath, "version"); err != nil {
-		fmt.Printf("docker version failed: %v\n", err)
-		return false
-	}
-	fmt.Println("docker version: ok")
-
-	fmt.Println()
-	fmt.Println("Checking docker compose version...")
-	if err := executil.Run(dockerPath, "compose", "version"); err != nil {
-		fmt.Printf("docker compose version failed: %v\n", err)
-		return false
-	}
-	fmt.Println("docker compose version: ok")
-
-	fmt.Println()
-	fmt.Println("All checks passed! You are ready to run BitRiver Live.")
-	return true
 }
 
 // valueOrFallback performs value or fallback and propagates validation or dependency failures to the caller.
@@ -813,28 +767,6 @@ func parseRequiredPortRange(values map[string]string, key, fallback string) ([]i
 		ports = append(ports, p)
 	}
 	return ports, nil
-}
-
-func checkHostPortAvailable(protocol string, port int) error {
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	switch protocol {
-	case "tcp":
-		ln, err := net.Listen("tcp", addr)
-		if err != nil {
-			return err
-		}
-		_ = ln.Close()
-		return nil
-	case "udp":
-		pc, err := net.ListenPacket("udp", addr)
-		if err != nil {
-			return err
-		}
-		_ = pc.Close()
-		return nil
-	default:
-		return fmt.Errorf("unsupported protocol %q", protocol)
-	}
 }
 
 func printQuickstartStageHeader(stage string) {
