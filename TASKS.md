@@ -212,3 +212,31 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 checks:
   - ✅ `cd web/viewer && npm run test -- navbar.test.tsx`
   - ✅ `./scripts/verify.sh`
+
+## Scoped change: chat panel dialog keyboard/focus accessibility
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Add modal focus management and keyboard handling in `web/viewer/components/ChatPanel.tsx`
+  - Acceptance criteria:
+    - Store trigger refs for pop-out and settings buttons and restore focus to the correct trigger on close.
+    - Opening either dialog moves focus inside the dialog and traps Tab/Shift+Tab within the active modal.
+    - Escape closes the active dialog and opening one dialog closes the other.
+
+- [x] Task 2 — Add dialog accessibility tests in `web/viewer/__tests__/chatPanel.test.tsx`
+  - Acceptance criteria:
+    - Test verifies Escape closes open pop-out/settings dialog.
+    - Test verifies Tab cycles within active dialog controls.
+    - Test verifies focus returns to the originating trigger after close.
+
+- [x] Task 3 — Run viewer checks for chat panel changes and record results
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- chatPanel.test.tsx` passes.
+    - `./scripts/verify.sh --viewer` passes (or capture explicit environment limitation).
+
+### Execution log (chat panel dialog keyboard/focus accessibility)
+- ✅ Task 1 complete: added dedicated trigger refs for pop-out/settings controls; dialog open now moves focus to heading, Escape closes active dialog, Tab/Shift+Tab is trapped within the active modal, close actions restore focus, and opening one dialog closes the other.
+- ✅ Task 2 complete: added dialog-focused tests covering Escape close for both dialogs, focus trap tab wrapping behavior, trigger-focus restoration on close, and single-active-dialog behavior.
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- chatPanel.test.tsx`
+  - ✅ `./scripts/verify.sh --viewer`

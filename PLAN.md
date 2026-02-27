@@ -123,3 +123,21 @@
 
 ## Test plan
 - `./scripts/verify.sh`
+
+## Scope (current change)
+- Improve `ChatPanel` modal accessibility for both pop-out and settings dialogs in `web/viewer/components/ChatPanel.tsx`.
+- Ensure dialog open/close focus lifecycle is deterministic: move focus into active dialog, trap tab navigation, support Escape close, and restore focus to the originating trigger.
+- Enforce single-active-modal behavior so opening one dialog closes the other.
+- Add viewer tests in `web/viewer/__tests__/chatPanel.test.tsx` for Escape close, in-dialog tab cycling, and trigger focus restoration.
+
+## Assumptions
+- Existing dialog headings/buttons are acceptable initial focus targets; we can focus the heading by making it programmatically focusable.
+- `jsdom` focus behavior in existing viewer tests can validate focus trap + restoration semantics using `userEvent.tab()` and key events.
+
+## Risks
+- Focus trap selector scope could unintentionally skip controls if visibility filtering is too strict.
+- Keyboard handler overlap between two dialogs could cause close/open race conditions without explicit single-active-modal state transitions.
+
+## Test plan
+- `cd web/viewer && npm run test -- chatPanel.test.tsx`
+- `./scripts/verify.sh --viewer`
