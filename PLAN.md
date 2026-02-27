@@ -1,27 +1,21 @@
 # PLAN
 
-## Scope (production release preparation)
-- Prepare release execution artifacts for a production-release pass focused on five gates:
-  1. Environment verification.
-  2. Digest enforcement for release manifests/workflows.
-  3. Release workflow parity (docs/scripts/workflows aligned).
-  4. Runbook parity across operator docs.
-  5. Final release checks and handoff evidence.
-- Keep this pass planning-only (no release execution in this change).
+## Scope (current change)
+- Update `.github/workflows/release.yml` `verify-env` job so the generated production `.env` includes runtime mode/image-source production toggles, required third-party image digest variables, and production security guardrail variables.
+- Preserve fast-fail secret checks while ensuring `./scripts/require-image-digests.sh --env-file .env` runs under production conditions.
+- Sync `docs/production-release.md` secret requirements with the workflow variable contract.
 
 ## Assumptions
-- Release owners will execute commands from repo root unless a task states otherwise.
-- Required secrets/tokens (registry creds, signing keys, deployment secrets, GitHub release permissions) are provided out-of-band and are not committed to this repo.
-- Docker engine/Compose and GitHub Actions tooling availability may differ by environment; static checks can run locally even when runtime infra is unavailable.
-- `./scripts/verify.sh` remains the default merge/release gate, but may be deferred until runtime dependencies are present.
+- Release tags must always enforce production settings (`BITRIVER_LIVE_MODE=production`, `BITRIVER_DEPLOY_IMAGE_SOURCE=pull`) even if repository defaults differ.
+- `deploy/check-env.sh` validation accepts either `BITRIVER_LIVE_METRICS_TOKEN` or `BITRIVER_LIVE_METRICS_ALLOW_NETWORKS` for metrics protection; workflow should include one required path to fail fast.
+- Third-party digest values are provided via GitHub secrets and must match `@sha256:<64 lowercase hex>` for production validation.
 
 ## Risks
-- Missing or invalid secrets can block image publication, signing, or deployment despite passing static repo checks.
-- Docker-unavailable environments can prevent compose render/smoke checks and produce false confidence if not explicitly tracked.
-- GitHub Actions permission or runner differences can cause release workflow drift that is not detectable by local-only checks.
-- Doc/runbook drift from scripts/workflows can lead to incomplete release execution steps.
+- Adding new required env inputs can break existing release workflows until repository/org secrets are populated.
+- Mismatch between docs and workflow can cause operator confusion and failed releases.
+- Incorrect env wiring (missing in `env:` or `vars=(...)`) could silently omit values from `.env` and weaken preflight checks.
 
-## Test/check strategy
-- Use explicit per-task commands in `TASKS.md` so each gate has verifiable evidence.
-- Prefer static/parity checks first (CI/workflow scans + docs parity checks) when full runtime verify is deferred.
-- Reserve full runtime validation (`./scripts/verify.sh`) for the final gate once Docker and required credentials are available.
+## Test plan
+- Run a targeted syntax/contract check on `.github/workflows/release.yml` by inspecting the updated `Create production env file` block.
+- Run `./scripts/require-image-digests.sh --env-file <fixture>` once in production mode with valid digests and once with an invalid/missing digest to confirm enforcement behavior.
+- Verify `docs/production-release.md` secret list and release guidance reflect every newly required workflow variable.

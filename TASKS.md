@@ -2,52 +2,30 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [ ] Task 1 — Environment readiness verification
+- [x] Task 1 — Expand release verify-env `.env` emission inputs
   - Acceptance criteria:
-    - Required local tooling/runtime prerequisites are checked and recorded (Go, Node/npm when viewer scope applies, Docker/Compose, GitHub CLI optional).
-    - Availability of release secrets/deployment credentials is explicitly confirmed by owner checklist reference (without exposing values).
-  - Check commands:
-    - `go version`
-    - `node --version`
-    - `npm --version`
-    - `docker --version`
-    - `docker compose version`
-    - `gh --version`
+    - `.github/workflows/release.yml` `Create production env file` `env:` map includes:
+      - `BITRIVER_LIVE_MODE` (`production`)
+      - `BITRIVER_DEPLOY_IMAGE_SOURCE` (`pull`)
+      - Third-party digest variables required by `scripts/require-image-digests.sh`
+      - Production security guardrail vars: `BITRIVER_LIVE_RATE_LOGIN_LIMIT`, `BITRIVER_LIVE_RATE_LOGIN_WINDOW`, and one metrics protection input used by env validation.
+    - The same variables are present in the `vars=(...)` list so missing/empty values fail fast.
 
-- [ ] Task 2 — Digest enforcement/static supply-chain scan
+- [x] Task 2 — Keep digest enforcement active in release verify-env
   - Acceptance criteria:
-    - Workflow/action references are confirmed SHA-pinned for external actions.
-    - Release/deploy manifests reference immutable image digests where contract requires them.
-  - Check commands:
-    - `./scripts/check-ci-contract.sh`
-    - `./scripts/require-image-digests.sh`
-    - `rg -n "uses:\\s+[^#\\n]+@(v|main|master|[0-9]+(\\.[0-9]+)*)" .github/workflows`
+    - `./scripts/require-image-digests.sh --env-file .env` remains in `verify-env` and runs with production conditions active from emitted `.env`.
+    - A local script check demonstrates missing/invalid digest values fail under production settings.
 
-- [ ] Task 3 — Release workflow parity (scripts/docs/workflows)
+- [x] Task 3 — Sync production release docs with workflow requirements
   - Acceptance criteria:
-    - Release workflow docs map to existing scripts/commands with no invented steps.
-    - Any workflow-impacting script references in docs resolve to real files/commands.
-  - Check commands:
-    - `rg -n "quickstart|verify|production-release|release" docs/ README.md scripts/ .github/workflows`
-    - `rg -n "scripts/[A-Za-z0-9._/-]+" docs/ README.md`
-
-- [ ] Task 4 — Runbook parity validation
-  - Acceptance criteria:
-    - Operator runbooks (`docs/operations.md`, `docs/production-release.md`, and related deploy docs) are mutually consistent on release order, rollback hooks, and verification points.
-    - Any identified gaps are documented as follow-up items before execution.
-  - Check commands:
-    - `rg -n "rollback|release|verify|quickstart|smoke" docs/operations.md docs/production-release.md docs/advanced-deployments.md docs/testing.md`
-    - `rg -n "deploy/docker-compose.yml|\.env|Server.generated.xml" docs/contract.md docs/production-release.md docs/operations.md`
-
-- [ ] Task 5 — Final release gate checks and handoff packet
-  - Acceptance criteria:
-    - Full verification command set is executed (or deferred with explicit blocker + owner).
-    - Handoff note records outcomes for environment, digest checks, workflow parity, runbook parity, and outstanding blockers.
-  - Check commands:
-    - `./scripts/verify.sh`
-    - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s`
-    - `docker compose -f deploy/docker-compose.yml config`
-    - `./scripts/test-quickstart.sh`
+    - `docs/production-release.md` secret requirements match variable names/requirements enforced by `release.yml`.
 
 ## Execution log
-- Pending execution. Update each task status and append command outputs/results immediately after each task is performed.
+- ✅ Task 1 complete: expanded `verify-env` `Create production env file` to emit production mode/image-source constants, digest vars, and production security vars in both `env:` and `vars=(...)`.
+- ✅ Task 1 check: `rg -n "BITRIVER_LIVE_MODE|BITRIVER_DEPLOY_IMAGE_SOURCE|BITRIVER_LIVE_METRICS_TOKEN|BITRIVER_LIVE_RATE_LOGIN_LIMIT|BITRIVER_LIVE_RATE_LOGIN_WINDOW|BITRIVER_(REDIS|POSTGRES|SRS|OME|NGINX|ALPINE_3|ALPINE_3_19|DEBIAN)_IMAGE_DIGEST" .github/workflows/release.yml`.
+
+- ✅ Task 2 complete: `verify-env` now emits `BITRIVER_LIVE_MODE=production` and `BITRIVER_DEPLOY_IMAGE_SOURCE=pull`, activating digest enforcement in the release job.
+- ✅ Task 2 check: `./scripts/require-image-digests.sh --env-file /tmp/digests-pass.env` (passes with valid production digests).
+- ✅ Task 2 check: `./scripts/require-image-digests.sh --env-file /tmp/digests-fail.env` (expected failure on missing/invalid digest values).
+- ✅ Task 3 complete: updated release runbook secret requirements to match enforced workflow inputs and documented that production mode/image-source are job constants.
+- ✅ Task 3 check: `rg -n "BITRIVER_LIVE_MODE=production|BITRIVER_DEPLOY_IMAGE_SOURCE=pull|BITRIVER_LIVE_METRICS_TOKEN|BITRIVER_LIVE_RATE_LOGIN_WINDOW" docs/production-release.md`.
