@@ -1,18 +1,23 @@
 # PLAN
 
 ## Scope (current change)
-- Inspect `web/viewer/__tests__/channelPage.test.tsx` retry/load interactions around the failing warning location.
-- Update async interaction/assertion flow to use awaited Testing Library patterns and remove React state update warnings.
-- Re-run viewer test and lint commands to capture clean release evidence for this scoped fix.
+- Run the requested release gate commands from repo root and capture complete output logs.
+- Store evidence under a new timestamped `artifacts/release-checks-<timestamp>/` directory, consistent with existing artifact naming.
+- Update `docs/releases/release-checklist-report-2026-02-27.md` gate summary rows and final go/no-go decision based on the new evidence.
 
 ## Assumptions
-- The warning originates from un-awaited or non-`userEvent.setup()` interactions in channel page tests, not from runtime component logic.
-- No functional behavior changes are required in `web/viewer/app/channels/[id]/page.tsx`.
+- The execution environment may or may not expose a working Docker daemon; outcomes must be recorded exactly as observed.
+- Existing release checklist report structure should be preserved while updating only the relevant rows and evidence paths.
+- No product/runtime code changes are required for this request.
 
 ## Risks
-- Over-waiting or changing assertion timing could accidentally weaken regression coverage.
-- Converting interaction helpers might change exact sequencing and require minor assertion timing updates.
+- If Docker CLI/daemon is unavailable, `docker compose ... config` and `./scripts/test-quickstart.sh` may fail and should drive a no-go decision.
+- Partial logs or inconsistent artifact naming would weaken release evidence traceability.
 
 ## Test plan
-- Run `npm --prefix web/viewer run test` after async test flow updates.
-- Run `npm --prefix web/viewer run lint` after tests pass.
+- Create a new timestamped artifact directory and capture stdout/stderr + exit codes for:
+  - `docker compose -f deploy/docker-compose.yml config`
+  - `./scripts/test-quickstart.sh`
+  - `./scripts/verify.sh`
+- Verify artifact files exist and contain full command outputs.
+- Update and review `docs/releases/release-checklist-report-2026-02-27.md` so gate outcomes and final decision align with the new logs.
