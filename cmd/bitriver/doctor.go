@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -27,28 +28,34 @@ const (
 	doctorStatusFail doctorStatus = "FAIL"
 )
 
-type doctorCheckResult struct {
-	Name       string       `json:"name"`
-	Status     doctorStatus `json:"status"`
-	Summary    string       `json:"summary"`
-	Mitigation string       `json:"mitigation,omitempty"`
+type doctorResult struct {
+	Name        string       `json:"name"`
+	Status      doctorStatus `json:"status"`
+	Details     string       `json:"details"`
+	Remediation string       `json:"remediation,omitempty"`
 }
 
 type doctorReport struct {
-	Status   doctorStatus        `json:"status"`
-	Checks   []doctorCheckResult `json:"checks"`
-	EnvFile  string              `json:"env_file"`
-	JSONMode bool                `json:"json"`
+	Status      doctorStatus   `json:"status"`
+	Checks      []doctorResult `json:"checks"`
+	EnvFile     string         `json:"env_file"`
+	ComposeFile string         `json:"compose_file"`
 }
 
 type doctorOptions struct {
-	JSON       bool
-	EnvFile    string
-	MinCPU     int
-	MinRAMGB   float64
-	MinDiskGB  float64
-	MinDocker  string
-	MinCompose string
+	JSON        bool
+	EnvFile     string
+	ComposeFile string
+	MinCPU      int
+	MinRAMGB    float64
+	MinDiskGB   float64
+	MinDocker   string
+	MinCompose  string
+}
+
+type composeBindMount struct {
+	source   string
+	readOnly bool
 }
 
 var (
@@ -60,7 +67,6 @@ var (
 	}
 	doctorPortRequirementsLoader = quickstartRequiredHostPorts
 	doctorHostPortChecker        = checkHostPortAvailable
-	doctorIsGPUAvailable         = detectGPUAvailable
 )
 
 func runDoctor(args []string) bool {
@@ -89,10 +95,11 @@ func parseDoctorArgs(args []string) (doctorOptions, error) {
 	fs.SetOutput(os.Stdout)
 	opts := doctorOptions{}
 	fs.BoolVar(&opts.JSON, "json", false, "emit machine-readable JSON report")
-	fs.StringVar(&opts.EnvFile, "env-file", defaultEnvFile(), "env file for port/profile checks")
-	fs.IntVar(&opts.MinCPU, "min-cpu", 2, "minimum recommended logical CPUs")
-	fs.Float64Var(&opts.MinRAMGB, "min-ram-gb", 4, "minimum recommended host RAM in GiB")
-	fs.Float64Var(&opts.MinDiskGB, "min-free-disk-gb", 10, "minimum recommended free disk in GiB")
+	fs.StringVar(&opts.EnvFile, "env-file", defaultEnvFile(), "env file for profile/port checks")
+	fs.StringVar(&opts.ComposeFile, "compose-file", defaultComposeFile(), "compose file for port/path checks")
+	fs.IntVar(&opts.MinCPU, "min-cpu", 4, "minimum recommended logical CPUs")
+	fs.Float64Var(&opts.MinRAMGB, "min-ram-gb", 8, "minimum recommended host RAM in GiB")
+	fs.Float64Var(&opts.MinDiskGB, "min-free-disk-gb", 20, "minimum recommended free disk in GiB")
 	fs.StringVar(&opts.MinDocker, "min-docker-version", "24.0.0", "minimum Docker version")
 	fs.StringVar(&opts.MinCompose, "min-compose-version", "2.20.0", "minimum Docker Compose v2 version")
 	fs.Usage = func() {
@@ -106,125 +113,137 @@ func parseDoctorArgs(args []string) (doctorOptions, error) {
 }
 
 func runDoctorChecks(opts doctorOptions) doctorReport {
-	results := []doctorCheckResult{
-		checkHostResources(opts),
+	envValues, _ := loadEnvValues(opts.EnvFile, true)
+	checks := []doctorResult{
+		checkRequiredBinaries(),
 		checkDockerAndCompose(opts),
-		checkPortConflicts(opts),
-		checkWritablePaths(),
-		checkGPUProfile(opts),
+		checkHostResources(opts),
+		checkPortConflicts(opts, envValues),
+		checkWritablePaths(opts, envValues),
 	}
 	status := doctorStatusPass
-	for _, r := range results {
-		if r.Status == doctorStatusFail {
+	for _, c := range checks {
+		if c.Status == doctorStatusFail {
 			status = doctorStatusFail
 			break
 		}
-		if r.Status == doctorStatusWarn {
+		if c.Status == doctorStatusWarn {
 			status = doctorStatusWarn
 		}
 	}
-	return doctorReport{Status: status, Checks: results, EnvFile: opts.EnvFile, JSONMode: opts.JSON}
+	return doctorReport{Status: status, Checks: checks, EnvFile: opts.EnvFile, ComposeFile: opts.ComposeFile}
 }
 
 func printDoctorHuman(report doctorReport) {
-	fmt.Fprintln(os.Stdout, "BitRiver Live doctor")
+	fmt.Fprintln(os.Stdout, "BitRiver Live preflight (doctor)")
 	fmt.Fprintf(os.Stdout, "OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+	fmt.Fprintf(os.Stdout, "Compose file: %s\n", report.ComposeFile)
 	fmt.Fprintf(os.Stdout, "Env file: %s\n\n", report.EnvFile)
 	for _, result := range report.Checks {
-		fmt.Fprintf(os.Stdout, "[%s] %s\n", result.Status, result.Name)
-		fmt.Fprintf(os.Stdout, "  %s\n", result.Summary)
-		if strings.TrimSpace(result.Mitigation) != "" {
-			fmt.Fprintf(os.Stdout, "  Mitigation: %s\n", result.Mitigation)
+		fmt.Fprintf(os.Stdout, "%-6s %-30s %s\n", result.Status, result.Name, result.Details)
+		if strings.TrimSpace(result.Remediation) != "" {
+			fmt.Fprintf(os.Stdout, "       fix: %s\n", result.Remediation)
 		}
 	}
 	fmt.Fprintf(os.Stdout, "\nSUMMARY: %s\n", report.Status)
-	if report.Status == doctorStatusFail {
-		fmt.Fprintln(os.Stdout, "One or more required preflight checks failed. Fix the FAIL items and rerun `go run ./cmd/bitriver doctor`.")
-	} else if report.Status == doctorStatusWarn {
-		fmt.Fprintln(os.Stdout, "Preflight can continue with WARN items, but review mitigations before production use.")
-	}
 }
 
-func checkHostResources(opts doctorOptions) doctorCheckResult {
-	cpus := runtime.NumCPU()
-	ramBytes, ramErr := detectTotalMemoryBytes()
-	diskBytes, diskErr := detectFreeDiskBytes(repoRoot())
-
-	issues := []string{}
-	warns := []string{}
-	if cpus < opts.MinCPU {
-		issues = append(issues, fmt.Sprintf("CPU %d < recommended %d", cpus, opts.MinCPU))
-	}
-	if ramErr != nil {
-		warns = append(warns, fmt.Sprintf("RAM detection unavailable (%v)", ramErr))
-	} else if float64(ramBytes)/(1024*1024*1024) < opts.MinRAMGB {
-		issues = append(issues, fmt.Sprintf("RAM %.1f GiB < recommended %.1f GiB", float64(ramBytes)/(1024*1024*1024), opts.MinRAMGB))
-	}
-	if diskErr != nil {
-		warns = append(warns, fmt.Sprintf("disk free-space detection unavailable (%v)", diskErr))
-	} else if float64(diskBytes)/(1024*1024*1024) < opts.MinDiskGB {
-		issues = append(issues, fmt.Sprintf("free disk %.1f GiB < recommended %.1f GiB", float64(diskBytes)/(1024*1024*1024), opts.MinDiskGB))
-	}
-
-	summaryParts := []string{fmt.Sprintf("logical CPU=%d", cpus)}
-	if ramErr == nil {
-		summaryParts = append(summaryParts, fmt.Sprintf("RAM=%.1f GiB", float64(ramBytes)/(1024*1024*1024)))
-	}
-	if diskErr == nil {
-		summaryParts = append(summaryParts, fmt.Sprintf("free disk=%.1f GiB", float64(diskBytes)/(1024*1024*1024)))
-	}
-	summary := strings.Join(summaryParts, ", ")
-
-	if len(issues) > 0 {
-		return doctorCheckResult{Name: "Host resources", Status: doctorStatusFail, Summary: summary + " (" + strings.Join(issues, "; ") + ")", Mitigation: "Add host resources or lower load (fewer streams/transcodes), then rerun doctor."}
-	}
-	if len(warns) > 0 {
-		return doctorCheckResult{Name: "Host resources", Status: doctorStatusWarn, Summary: summary + " (" + strings.Join(warns, "; ") + ")", Mitigation: "Validate RAM/disk manually for your OS before production rollout."}
-	}
-	return doctorCheckResult{Name: "Host resources", Status: doctorStatusPass, Summary: summary}
-}
-
-func checkDockerAndCompose(opts doctorOptions) doctorCheckResult {
+func checkRequiredBinaries() doctorResult {
 	if _, err := doctorLookPath("docker"); err != nil {
-		return doctorCheckResult{Name: "Docker + Docker Compose", Status: doctorStatusFail, Summary: fmt.Sprintf("docker CLI not found: %v", err), Mitigation: "Install Docker Desktop/Engine and ensure `docker` is on PATH."}
+		return doctorResult{Name: "Required binaries", Status: doctorStatusFail, Details: "docker CLI not found on PATH", Remediation: "Install Docker Desktop/Engine and ensure `docker` is on PATH."}
 	}
+	if _, err := doctorLookPath("git"); err != nil {
+		return doctorResult{Name: "Required binaries", Status: doctorStatusWarn, Details: "docker found; git missing (optional)", Remediation: "Install git for release/debug workflows that inspect repo state."}
+	}
+	return doctorResult{Name: "Required binaries", Status: doctorStatusPass, Details: "docker and git detected"}
+}
+
+func checkDockerAndCompose(opts doctorOptions) doctorResult {
 	dockerVersionOut, err := doctorCommandOutput("docker", "version", "--format", "{{.Client.Version}}")
 	if err != nil {
-		return doctorCheckResult{Name: "Docker + Docker Compose", Status: doctorStatusFail, Summary: fmt.Sprintf("docker version check failed: %v", err), Mitigation: "Start Docker daemon and verify `docker version` succeeds."}
+		return doctorResult{Name: "Docker/Compose versions", Status: doctorStatusFail, Details: fmt.Sprintf("docker version check failed: %v", err), Remediation: "Start Docker daemon and verify `docker version` succeeds."}
 	}
 	composeVersionOut, err := doctorCommandOutput("docker", "compose", "version", "--short")
 	if err != nil {
-		return doctorCheckResult{Name: "Docker + Docker Compose", Status: doctorStatusFail, Summary: fmt.Sprintf("docker compose check failed: %v", err), Mitigation: "Install/enable Docker Compose v2 and verify `docker compose version` succeeds."}
+		return doctorResult{Name: "Docker/Compose versions", Status: doctorStatusFail, Details: fmt.Sprintf("docker compose check failed: %v", err), Remediation: "Install/enable Docker Compose v2 and verify `docker compose version` succeeds."}
 	}
 
 	dockerVersion := extractVersion(dockerVersionOut)
 	composeVersion := extractVersion(composeVersionOut)
 	if dockerVersion == "" || composeVersion == "" {
-		return doctorCheckResult{Name: "Docker + Docker Compose", Status: doctorStatusWarn, Summary: fmt.Sprintf("unable to parse versions (docker=%q compose=%q)", dockerVersionOut, composeVersionOut), Mitigation: fmt.Sprintf("Confirm Docker >= %s and Compose >= %s manually.", opts.MinDocker, opts.MinCompose)}
+		return doctorResult{Name: "Docker/Compose versions", Status: doctorStatusWarn, Details: fmt.Sprintf("could not parse versions (docker=%q compose=%q)", dockerVersionOut, composeVersionOut), Remediation: fmt.Sprintf("Confirm Docker >= %s and Compose >= %s manually.", opts.MinDocker, opts.MinCompose)}
 	}
 	if compareSemver(dockerVersion, opts.MinDocker) < 0 {
-		return doctorCheckResult{Name: "Docker + Docker Compose", Status: doctorStatusFail, Summary: fmt.Sprintf("docker %s is older than required %s", dockerVersion, opts.MinDocker), Mitigation: "Upgrade Docker Desktop/Engine to a supported release."}
+		return doctorResult{Name: "Docker/Compose versions", Status: doctorStatusFail, Details: fmt.Sprintf("docker %s < required %s", dockerVersion, opts.MinDocker), Remediation: "Upgrade Docker Desktop/Engine to a supported release."}
 	}
 	if compareSemver(composeVersion, opts.MinCompose) < 0 {
-		return doctorCheckResult{Name: "Docker + Docker Compose", Status: doctorStatusFail, Summary: fmt.Sprintf("docker compose %s is older than required %s", composeVersion, opts.MinCompose), Mitigation: "Upgrade Docker Compose v2 plugin to a supported release."}
+		return doctorResult{Name: "Docker/Compose versions", Status: doctorStatusFail, Details: fmt.Sprintf("compose %s < required %s", composeVersion, opts.MinCompose), Remediation: "Upgrade Docker Compose v2 plugin to a supported release."}
 	}
-
-	return doctorCheckResult{Name: "Docker + Docker Compose", Status: doctorStatusPass, Summary: fmt.Sprintf("docker=%s compose=%s", dockerVersion, composeVersion)}
+	return doctorResult{Name: "Docker/Compose versions", Status: doctorStatusPass, Details: fmt.Sprintf("docker=%s compose=%s (minimums: %s/%s)", dockerVersion, composeVersion, opts.MinDocker, opts.MinCompose)}
 }
 
-func checkPortConflicts(opts doctorOptions) doctorCheckResult {
-	values, err := loadEnvValues(opts.EnvFile, true)
-	if err != nil {
-		return doctorCheckResult{Name: "Host port conflicts", Status: doctorStatusWarn, Summary: fmt.Sprintf("could not load env file %s: %v", opts.EnvFile, err), Mitigation: "Ensure .env exists and rerun doctor for full port conflict checks."}
+func checkHostResources(opts doctorOptions) doctorResult {
+	cpus := runtime.NumCPU()
+	ramBytes, ramErr := detectTotalMemoryBytes()
+	diskPath := detectDiskPath(repoRoot())
+	diskBytes, diskErr := detectFreeDiskBytes(diskPath)
+
+	issues := []string{}
+	warnings := []string{}
+	if cpus < opts.MinCPU {
+		issues = append(issues, fmt.Sprintf("CPU %d < %d", cpus, opts.MinCPU))
 	}
-	requirements, err := doctorPortRequirementsLoader(values)
-	if err != nil {
-		return doctorCheckResult{Name: "Host port conflicts", Status: doctorStatusFail, Summary: fmt.Sprintf("port requirements invalid: %v", err), Mitigation: "Fix port variables in .env (port range 1-65535, valid ranges), then rerun doctor."}
+	if ramErr != nil {
+		warnings = append(warnings, fmt.Sprintf("RAM detection unavailable (%v)", ramErr))
+	} else if float64(ramBytes)/(1024*1024*1024) < opts.MinRAMGB {
+		issues = append(issues, fmt.Sprintf("RAM %.1f GiB < %.1f GiB", float64(ramBytes)/(1024*1024*1024), opts.MinRAMGB))
+	}
+	if diskErr != nil {
+		warnings = append(warnings, fmt.Sprintf("disk detection unavailable (%v)", diskErr))
+	} else if float64(diskBytes)/(1024*1024*1024) < opts.MinDiskGB {
+		issues = append(issues, fmt.Sprintf("free disk %.1f GiB < %.1f GiB", float64(diskBytes)/(1024*1024*1024), opts.MinDiskGB))
 	}
 
+	details := fmt.Sprintf("cpu=%d", cpus)
+	if ramErr == nil {
+		details += fmt.Sprintf(", ram=%.1fGiB", float64(ramBytes)/(1024*1024*1024))
+	}
+	if diskErr == nil {
+		details += fmt.Sprintf(", free_disk=%.1fGiB@%s", float64(diskBytes)/(1024*1024*1024), diskPath)
+	}
+	if len(issues) > 0 {
+		return doctorResult{Name: "Host resources", Status: doctorStatusFail, Details: details + " (" + strings.Join(issues, "; ") + ")", Remediation: "Scale host CPU/RAM/disk or reduce expected workload before production."}
+	}
+	if len(warnings) > 0 {
+		return doctorResult{Name: "Host resources", Status: doctorStatusWarn, Details: details + " (" + strings.Join(warnings, "; ") + ")", Remediation: "Validate host sizing manually for this OS before production rollout."}
+	}
+	return doctorResult{Name: "Host resources", Status: doctorStatusPass, Details: details}
+}
+
+func checkPortConflicts(opts doctorOptions, envValues map[string]string) doctorResult {
+	if _, err := os.Stat(opts.ComposeFile); err != nil {
+		return doctorResult{Name: "Host port conflicts", Status: doctorStatusFail, Details: fmt.Sprintf("compose file unavailable: %v", err), Remediation: "Pass a valid --compose-file path and rerun doctor."}
+	}
+	if envValues == nil {
+		envValues = map[string]string{}
+	}
+	requirements, err := doctorPortRequirementsLoader(envValues)
+	if err != nil {
+		return doctorResult{Name: "Host port conflicts", Status: doctorStatusFail, Details: fmt.Sprintf("invalid env port values: %v", err), Remediation: "Fix .env port values (1-65535, valid ranges) and rerun doctor."}
+	}
+	composePorts, parseErr := parseComposeHostPorts(opts.ComposeFile, envValues)
+	if parseErr == nil {
+		requirements = append(requirements, composePorts...)
+	}
 	conflicts := []string{}
+	seen := map[string]struct{}{}
 	for _, req := range requirements {
 		for _, port := range req.ports {
+			key := req.protocol + ":" + strconv.Itoa(port)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
 			if err := doctorHostPortChecker(req.protocol, port); err != nil {
 				conflicts = append(conflicts, fmt.Sprintf("%s/%d (%s)", strings.ToUpper(req.protocol), port, req.name))
 			}
@@ -232,70 +251,204 @@ func checkPortConflicts(opts doctorOptions) doctorCheckResult {
 	}
 	if len(conflicts) > 0 {
 		sort.Strings(conflicts)
-		return doctorCheckResult{Name: "Host port conflicts", Status: doctorStatusFail, Summary: fmt.Sprintf("%d required port(s) unavailable", len(conflicts)), Mitigation: "Stop conflicting services or adjust .env port values: " + strings.Join(conflicts, ", ")}
+		return doctorResult{Name: "Host port conflicts", Status: doctorStatusFail, Details: fmt.Sprintf("%d required port(s) unavailable", len(conflicts)), Remediation: "Stop conflicting services or change host port mappings: " + strings.Join(conflicts, ", ")}
 	}
-	return doctorCheckResult{Name: "Host port conflicts", Status: doctorStatusPass, Summary: "all required host ports appear available"}
+	if parseErr != nil {
+		return doctorResult{Name: "Host port conflicts", Status: doctorStatusWarn, Details: "ports from env are available (compose parse incomplete)", Remediation: fmt.Sprintf("Review host port mappings in %s manually: %v", opts.ComposeFile, parseErr)}
+	}
+	return doctorResult{Name: "Host port conflicts", Status: doctorStatusPass, Details: "required host ports appear available"}
 }
 
-func checkWritablePaths() doctorCheckResult {
-	paths := []string{
-		filepath.Join(repoRoot(), "deploy", "data"),
-		filepath.Join(repoRoot(), "deploy", "transcoder-data"),
-		filepath.Join(repoRoot(), "deploy", "ome"),
-		filepath.Join(repoRoot(), "deploy", "srs", "conf"),
+func checkWritablePaths(opts doctorOptions, envValues map[string]string) doctorResult {
+	mounts, err := parseComposeBindMounts(opts.ComposeFile, envValues)
+	if err != nil {
+		return doctorResult{Name: "Compose bind-mount paths", Status: doctorStatusFail, Details: fmt.Sprintf("unable to read compose file: %v", err), Remediation: "Pass a valid --compose-file and ensure it is readable."}
 	}
-	unwritable := []string{}
+	if len(mounts) == 0 {
+		return doctorResult{Name: "Compose bind-mount paths", Status: doctorStatusWarn, Details: "no bind mounts detected in compose file", Remediation: "Confirm compose file still uses expected host bind mounts for state/config."}
+	}
+	failures := []string{}
 	warnings := []string{}
-	for _, path := range paths {
-		fi, err := os.Stat(path)
-		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("%s (%v)", path, err))
+	for _, m := range mounts {
+		fi, statErr := os.Stat(m.source)
+		if statErr != nil {
+			warnings = append(warnings, fmt.Sprintf("%s missing/unreadable", m.source))
 			continue
 		}
-		if !fi.IsDir() {
-			unwritable = append(unwritable, fmt.Sprintf("%s is not a directory", path))
+		if fi.IsDir() {
+			if _, openErr := os.ReadDir(m.source); openErr != nil {
+				warnings = append(warnings, fmt.Sprintf("%s not readable", m.source))
+				continue
+			}
+			if !m.readOnly && fi.Mode().Perm()&0200 == 0 {
+				failures = append(failures, fmt.Sprintf("%s not writable", m.source))
+			}
 			continue
 		}
-		if fi.Mode().Perm()&0200 == 0 {
-			unwritable = append(unwritable, fmt.Sprintf("%s lacks owner write bit", path))
+		if fh, openErr := os.Open(m.source); openErr != nil {
+			warnings = append(warnings, fmt.Sprintf("%s not readable", m.source))
+		} else {
+			_ = fh.Close()
+		}
+		if !m.readOnly && fi.Mode().Perm()&0200 == 0 {
+			failures = append(failures, fmt.Sprintf("%s not writable", m.source))
 		}
 	}
-	if len(unwritable) > 0 {
-		return doctorCheckResult{Name: "Writable runtime paths", Status: doctorStatusFail, Summary: "required runtime directories are not writable", Mitigation: strings.Join(unwritable, "; ")}
+	if len(failures) > 0 {
+		return doctorResult{Name: "Compose bind-mount paths", Status: doctorStatusFail, Details: fmt.Sprintf("%d path permission issue(s)", len(failures)), Remediation: strings.Join(failures, "; ")}
 	}
 	if len(warnings) > 0 {
-		return doctorCheckResult{Name: "Writable runtime paths", Status: doctorStatusWarn, Summary: "some runtime directories are missing/unreadable", Mitigation: "Create/permission-check these paths: " + strings.Join(warnings, "; ")}
+		return doctorResult{Name: "Compose bind-mount paths", Status: doctorStatusWarn, Details: fmt.Sprintf("validated with %d warning(s)", len(warnings)), Remediation: "Create or fix bind-mount paths: " + strings.Join(warnings, "; ")}
 	}
-	return doctorCheckResult{Name: "Writable runtime paths", Status: doctorStatusPass, Summary: "checked deploy runtime directories"}
+	return doctorResult{Name: "Compose bind-mount paths", Status: doctorStatusPass, Details: fmt.Sprintf("validated %d bind-mount host path(s)", len(mounts))}
 }
 
-func checkGPUProfile(opts doctorOptions) doctorCheckResult {
-	values, err := loadEnvValues(opts.EnvFile, true)
+func detectDiskPath(fallback string) string {
+	out, err := doctorCommandOutput("docker", "info", "--format", "{{.DockerRootDir}}")
+	if err == nil && strings.TrimSpace(out) != "" {
+		return strings.TrimSpace(out)
+	}
+	return fallback
+}
+
+func parseComposeHostPorts(composeFile string, values map[string]string) ([]quickstartPortRequirement, error) {
+	f, err := os.Open(composeFile)
 	if err != nil {
-		return doctorCheckResult{Name: "GPU profile (optional)", Status: doctorStatusWarn, Summary: "skipped GPU profile detection (env unavailable)", Mitigation: "If you run GPU workloads, verify host GPU drivers/runtime manually."}
+		return nil, err
 	}
-	profiles := strings.ToLower(strings.TrimSpace(values["COMPOSE_PROFILES"]))
-	if profiles == "" {
-		profiles = strings.ToLower(strings.TrimSpace(os.Getenv("COMPOSE_PROFILES")))
+	defer f.Close()
+
+	ports := []quickstartPortRequirement{}
+	inPorts := false
+	portsIndent := 0
+	s := bufio.NewScanner(f)
+	for s.Scan() {
+		line := s.Text()
+		trim := strings.TrimSpace(line)
+		if trim == "" || strings.HasPrefix(trim, "#") {
+			continue
+		}
+		indent := len(line) - len(strings.TrimLeft(line, " "))
+		if strings.HasSuffix(trim, "ports:") {
+			inPorts = true
+			portsIndent = indent
+			continue
+		}
+		if inPorts && indent <= portsIndent && !strings.HasPrefix(trim, "-") {
+			inPorts = false
+		}
+		if !inPorts || !strings.HasPrefix(trim, "-") {
+			continue
+		}
+		item := strings.Trim(strings.TrimSpace(strings.TrimPrefix(trim, "-")), "\"")
+		parts := strings.Split(item, ":")
+		if len(parts) < 2 {
+			continue
+		}
+		hostPart := parts[len(parts)-2]
+		protocol := "tcp"
+		if strings.Contains(parts[len(parts)-1], "/udp") {
+			protocol = "udp"
+		}
+		hostPart = strings.Split(hostPart, "/")[0]
+		hostPart = strings.TrimSpace(resolveTemplate(hostPart, values))
+		if hostPart == "" {
+			continue
+		}
+		p, convErr := strconv.Atoi(hostPart)
+		if convErr != nil || p < 1 || p > 65535 {
+			continue
+		}
+		ports = append(ports, quickstartPortRequirement{name: "compose-file", protocol: protocol, ports: []int{p}})
 	}
-	if !strings.Contains(profiles, "gpu") && !strings.Contains(profiles, "nvidia") {
-		return doctorCheckResult{Name: "GPU profile (optional)", Status: doctorStatusPass, Summary: "no GPU profile selected"}
+	if err := s.Err(); err != nil {
+		return nil, err
 	}
-	if doctorIsGPUAvailable() {
-		return doctorCheckResult{Name: "GPU profile (optional)", Status: doctorStatusPass, Summary: "GPU profile selected and GPU tooling detected"}
-	}
-	return doctorCheckResult{Name: "GPU profile (optional)", Status: doctorStatusWarn, Summary: "GPU profile appears selected but no GPU runtime detected", Mitigation: "Install/enable NVIDIA drivers + container runtime, or remove GPU profile from COMPOSE_PROFILES."}
+	return ports, nil
 }
 
-func detectGPUAvailable() bool {
-	if _, err := doctorLookPath("nvidia-smi"); err == nil {
-		return true
+func parseComposeBindMounts(composeFile string, values map[string]string) ([]composeBindMount, error) {
+	f, err := os.Open(composeFile)
+	if err != nil {
+		return nil, err
 	}
-	if out, err := doctorCommandOutput("docker", "info", "--format", "{{json .Runtimes}}"); err == nil {
-		lower := strings.ToLower(out)
-		return strings.Contains(lower, "nvidia")
+	defer f.Close()
+
+	baseDir := filepath.Dir(composeFile)
+	mounts := []composeBindMount{}
+	inVolumes := false
+	volumesIndent := 0
+
+	s := bufio.NewScanner(f)
+	for s.Scan() {
+		line := s.Text()
+		trim := strings.TrimSpace(line)
+		if trim == "" || strings.HasPrefix(trim, "#") {
+			continue
+		}
+		indent := len(line) - len(strings.TrimLeft(line, " "))
+		if strings.HasSuffix(trim, "volumes:") {
+			inVolumes = true
+			volumesIndent = indent
+			continue
+		}
+		if inVolumes && indent <= volumesIndent && !strings.HasPrefix(trim, "-") {
+			inVolumes = false
+		}
+		if !inVolumes || !strings.HasPrefix(trim, "-") {
+			continue
+		}
+		item := strings.TrimSpace(strings.TrimPrefix(trim, "-"))
+		item = strings.Trim(item, "\"")
+		parts := strings.Split(item, ":")
+		if len(parts) < 2 {
+			continue
+		}
+		host := strings.TrimSpace(resolveTemplate(parts[0], values))
+		mode := ""
+		if len(parts) > 2 {
+			mode = strings.TrimSpace(parts[len(parts)-1])
+		}
+		if host == "" || (!strings.HasPrefix(host, ".") && !strings.HasPrefix(host, "/")) {
+			continue
+		}
+		if !filepath.IsAbs(host) {
+			host = filepath.Clean(filepath.Join(baseDir, host))
+		}
+		mounts = append(mounts, composeBindMount{source: host, readOnly: strings.Contains(mode, "ro")})
 	}
-	return false
+	if err := s.Err(); err != nil {
+		return nil, err
+	}
+	return mounts, nil
+}
+
+func resolveTemplate(in string, values map[string]string) string {
+	re := regexp.MustCompile(`\$\{([^}]+)\}`)
+	return re.ReplaceAllStringFunc(in, func(token string) string {
+		inner := strings.TrimSuffix(strings.TrimPrefix(token, "${"), "}")
+		if strings.Contains(inner, ":-") {
+			parts := strings.SplitN(inner, ":-", 2)
+			if v := strings.TrimSpace(values[parts[0]]); v != "" {
+				return v
+			}
+			return parts[1]
+		}
+		if strings.Contains(inner, "-") {
+			parts := strings.SplitN(inner, "-", 2)
+			if _, ok := values[parts[0]]; ok {
+				return values[parts[0]]
+			}
+			return parts[1]
+		}
+		if v := strings.TrimSpace(values[inner]); v != "" {
+			return v
+		}
+		if v := strings.TrimSpace(os.Getenv(inner)); v != "" {
+			return v
+		}
+		return ""
+	})
 }
 
 func extractVersion(raw string) string {

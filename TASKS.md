@@ -2,39 +2,36 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Add production status messaging to `README.md`
+- [x] Task 1 — Implement doctor preflight checks and flags in `cmd/bitriver/doctor.go`
   - Acceptance criteria:
-    - Adds a short “Production status” section.
-    - Explicitly states production-capable scope today: operator-managed single-host deployments.
-    - Explicitly states recommended/optional overlays: monitoring and runtime limits.
-    - Explicitly states roadmap scope: HA/multi-host is not current GA behavior.
-    - Includes links to `docs/production-single-host.md`, `docs/upgrades.md`, `docs/security.md`, `docs/monitoring.md`.
+    - Keeps `runDoctor(args []string) bool` signature.
+    - Supports `--env-file`, `--compose-file`, and `--json`.
+    - Emits PASS/WARN/FAIL results with remediation hints.
+    - Returns FAIL when hard requirements fail.
 
-- [x] Task 2 — Add lifecycle guarantees doc `docs/production-status.md`
+- [x] Task 2 — Update/add tests for doctor and verify compatibility
   - Acceptance criteria:
-    - Defines `dev`, `beta`, `rc`, and `v1.0` levels clearly.
-    - States what is guaranteed at each level in operator-facing language.
-    - Includes links to `docs/production-single-host.md`, `docs/upgrades.md`, `docs/security.md`, `docs/monitoring.md`.
+    - Unit coverage validates JSON schema fields (`name`, `status`, `details`, `remediation`).
+    - Unit coverage validates compose-file hard failure path.
+    - Existing `verify` flow remains compatible.
 
-- [x] Task 3 — Update GitHub release template for operator-facing releases
+- [x] Task 3 — Add docs preflight section and host sizing guidance
   - Acceptance criteria:
-    - Release template contains explicit sections for Upgrade notes, Breaking changes, and Operator checklist.
-    - Operator checklist aligns with current docs/runbooks and avoids overpromising.
+    - Docs describe how to run `bitriver doctor` and interpret PASS/WARN/FAIL.
+    - Docs include conservative minimum sizing guidance used by doctor.
 
 ## Execution log
-- ✅ Task 1 complete: added a concise `README.md` Production status section covering current production-capable scope, optional/recommended overlays, roadmap boundary, and required doc links.
-- ✅ Task 1 check:
-  - `rg -n "## Production status|operator-managed|compose.monitoring|compose.limits|docs/production-single-host.md|docs/upgrades.md|docs/security.md|docs/monitoring.md|docs/production-status.md" README.md`
+- ✅ Task 1 complete: rewired doctor checks/flags/output, added compose-aware port+bind-mount checks, binary/version/resource checks, and JSON fields (`name,status,details,remediation`).
+- ✅ Task 1 checks:
+  - `go run ./cmd/bitriver doctor --compose-file deploy/docker-compose.yml`
+  - `go run ./cmd/bitriver doctor --json --compose-file deploy/docker-compose.yml`
+  - `go run ./cmd/bitriver doctor --compose-file deploy/does-not-exist.yml`
 
-- ✅ Task 2 complete: added `docs/production-status.md` with lifecycle definitions (`dev`, `beta`, `rc`, `v1.0`), per-level guarantees, and operator-facing boundaries.
-- ✅ Task 2 check:
-  - `rg -n "^# Production Status Policy|^### dev|^### beta|^### rc|^### v1.0|guaranteed|production-capable|production-single-host|upgrades|security|monitoring" docs/production-status.md`
+- ✅ Task 2 complete: updated doctor tests for new report schema and added explicit missing compose-file fail test.
+- ✅ Task 2 checks:
+  - `go test ./cmd/bitriver -count=1`
+  - `go test ./... -count=1`
 
-- ✅ Task 3 complete: updated `.github/RELEASE_NOTES_TEMPLATE.md` with explicit Upgrade notes, Breaking changes, and Operator checklist sections linked to key operator docs.
+- ✅ Task 3 complete: added preflight guidance and minimum sizing notes to `docs/operations.md` and `docs/production-single-host.md`.
 - ✅ Task 3 check:
-  - `rg -n "## Upgrade notes|## Breaking changes|## Operator checklist|docs/production-single-host.md|docs/upgrades.md|docs/security.md|docs/monitoring.md|HA/multi-host" .github/RELEASE_NOTES_TEMPLATE.md`
-
-
-- ⚠️ Repo gate check (post-tasks):
-  - `./scripts/verify.sh`
-  - Result: failed in existing env placeholder hygiene check (`BITRIVER_LIVE_ADMIN_PASSWORD` sample marker requirement in `deploy/.env.example`), unrelated to this docs-only change.
+  - `rg -n "Preflight|bitriver doctor|PASS|WARN|FAIL|4 logical CPUs|8 GiB RAM|20 GiB" docs/operations.md docs/production-single-host.md`

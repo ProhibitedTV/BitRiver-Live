@@ -1,21 +1,24 @@
 # PLAN
 
 ## Scope (current change)
-- Update production messaging to describe BitRiver Live as production-capable for operator-managed single-host deployments without overstating guarantees.
-- Add a dedicated production status policy document at `docs/production-status.md` with clear lifecycle definitions (`dev`, `beta`, `rc`, `v1.0`) and guarantee boundaries.
-- Update release note templating so every release captures upgrade notes, breaking changes, and an explicit operator checklist.
-- Ensure docs cross-link required operator references: `docs/production-single-host.md`, `docs/upgrades.md`, `docs/security.md`, and `docs/monitoring.md`.
+- Upgrade `bitriver doctor` into a production preflight with actionable PASS/WARN/FAIL checks while preserving `func runDoctor(args []string) bool` compatibility used by `verify` and `main`.
+- Add flags `--env-file`, `--compose-file`, and `--json` to support environment-aware checks and machine-readable output.
+- Expand checks to include host sizing, required/optional binaries, Docker/Compose minimum versions, port conflicts, and compose bind-mount readability/writability.
+- Document the preflight workflow and minimum host guidance in operations/production docs.
 
 ## Assumptions
-- This is a documentation-only change; no runtime or deployment-contract files are modified.
-- Existing repo language around single-host Docker Compose remains authoritative and should be reused where possible.
-- The current release template location is `.github/RELEASE_NOTES_TEMPLATE.md`.
+- Existing quickstart port requirement helpers remain authoritative for env-driven service ports.
+- Compose file parsing should be best-effort using stdlib only (no heavy YAML dependency).
+- `verify` must continue to call `runDoctor(nil)` unchanged.
 
 ## Risks
-- Messaging could imply stronger guarantees than currently documented if wording is too broad.
-- Inconsistent lifecycle definitions between README and new production-status doc could confuse operators.
-- Missing required doc links would fail acceptance criteria and reduce operator discoverability.
+- Compose parsing false positives/negatives if lines use uncommon YAML shapes.
+- OS-specific host resource probes may be incomplete outside Linux and should degrade to WARN.
+- Version parsing may fail on unusual Docker output; should warn with manual remediation.
 
 ## Test plan
-- Static docs QA by checking modified markdown for required sections/links.
-- `./scripts/verify.sh`
+- `go test ./... -count=1`
+- `go run ./cmd/bitriver doctor --compose-file deploy/docker-compose.yml`
+- `go run ./cmd/bitriver doctor --json --compose-file deploy/docker-compose.yml`
+- `go run ./cmd/bitriver doctor --compose-file deploy/does-not-exist.yml` (expect FAIL/non-zero)
+- `go run ./cmd/bitriver verify`

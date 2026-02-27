@@ -6,6 +6,36 @@ without breaking the one-command deployment flow.
 
 For baseline hardening posture, exposure boundaries, and rotation checklists, see [`docs/security.md`](security.md).
 
+
+## Preflight before production changes
+
+Run the built-in preflight before first deployment and before major upgrades:
+
+```bash
+go run ./cmd/bitriver doctor --compose-file deploy/docker-compose.yml --env-file ./.env
+```
+
+Use `--json` for automation/inventory systems:
+
+```bash
+go run ./cmd/bitriver doctor --json
+```
+
+Interpretation:
+
+- `PASS`: requirement is satisfied.
+- `WARN`: soft risk; rollout can continue but remediation is recommended.
+- `FAIL`: hard blocker; `doctor` exits non-zero and rollout should stop.
+
+Doctor minimum preflight thresholds are intentionally conservative for single-host production starts:
+
+- 4 logical CPUs
+- 8 GiB RAM
+- 20 GiB free disk (repo root or Docker data root when detectable)
+- Docker `>= 24.0.0` and Docker Compose v2 `>= 2.20.0`
+
+Adjust thresholds with `--min-cpu`, `--min-ram-gb`, and `--min-free-disk-gb` for larger or smaller environments.
+
 ## Media pipeline failure ownership
 
 For the explicit ownership and recovery boundaries of SRS/OME/transcoder/control-plane failures, see [`docs/media-failure-model.md`](media-failure-model.md).
