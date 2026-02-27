@@ -2,23 +2,22 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Compose network segmentation + hardening defaults
+- [x] Task 1 — Add operator security entrypoint doc (`docs/security.md`)
   - Acceptance criteria:
-    - `deploy/docker-compose.yml` defines `public` and `internal` networks and attaches services per exposure role.
-    - Long-running services include `security_opt: ["no-new-privileges:true"]`.
-    - Safe services include `cap_drop: ["ALL"]` and `read_only: true` with explicit writable mounts as needed.
-    - Non-root users are set where known-safe; inline exceptions explain root/mutable FS cases.
+    - Includes all required sections: threat model summary, network exposure guidance, reverse proxy + TLS recommendation, auth/session/cookie settings guidance, admin bootstrap practices, secret rotation approach, logging guidance, and production checklist.
+    - Guidance is stack-specific and references `deploy/docker-compose.yml`, `deploy/.env.example`, and `cmd/bitriver env validate` where relevant.
+    - Includes service/port exposure table and explicit callouts that `postgres-host` and `srs-api` profiles are debug-only.
 
-- [x] Task 2 — Hardening documentation updates
+- [x] Task 2 — Add discoverability links to security doc
   - Acceptance criteria:
-    - Add/update `docs/security.md` with a concise “container hardening defaults + exceptions” section mapping exact services to rationale.
-    - Update `docs/contract.md` where needed so deployment contract docs reflect compose networking/hardening behavior.
+    - Add link(s) from `README.md` and/or `docs/operations.md` so operators can quickly find `docs/security.md`.
+    - Link placement is near other operator-facing runbook references.
 
 ## Execution log
-- ✅ Task 1 complete: updated `deploy/docker-compose.yml` with explicit `public`/`internal` networks, conservative dual-attachments, `no-new-privileges`, `cap_drop`, read-only rootfs where feasible, explicit tmpfs writable paths, non-root users on supported images, and inline exception comments for compatibility-sensitive services.
-- ✅ Task 1 checks:
-  - `./scripts/verify.sh` (pass; docker-dependent checks skipped because docker is unavailable in environment)
+- ✅ Task 1 complete: created `docs/security.md` as the operator-facing security entrypoint with all required sections and stack-specific guidance.
+- ✅ Task 1 check:
+  - `rg -n "^## 1\)|^## 2\)|^## 3\)|^## 4\)|^## 5\)|^## 6\)|^## 7\)|^## 8\)|postgres-host|srs-api|env validate" docs/security.md`
 
-- ✅ Task 2 complete: added `docs/security.md` with hardening defaults/exceptions and updated `docs/contract.md` contract definition to mention compose hardening/network segmentation baseline.
+- ✅ Task 2 complete: added discoverability links to `docs/security.md` from `README.md` and `docs/operations.md`.
 - ✅ Task 2 checks:
-  - `./scripts/verify.sh` (pass; docker-dependent checks skipped because docker is unavailable in environment)
+  - `./scripts/verify.sh`

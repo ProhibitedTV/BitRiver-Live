@@ -1,22 +1,20 @@
 # PLAN
 
 ## Scope (current change)
-- Harden `deploy/docker-compose.yml` conservatively while preserving default behavior.
-- Add explicit `public`/`internal` network segmentation and service attachments.
-- Apply container hardening defaults (`security_opt`, `cap_drop`, `read_only`, and non-root `user`) where feasible with inline exceptions.
-- Document hardening defaults and service exceptions in `docs/security.md`.
-- Keep deployment contract docs aligned for compose behavior in `docs/contract.md`.
+- Create a new operator-facing security guide at `docs/security.md` as the primary security entrypoint for this stack.
+- Tailor guidance to the current deployment contract and validation flow (`deploy/docker-compose.yml`, `deploy/.env.example`, `cmd/bitriver env validate`).
+- Add prominent navigation links so operators discover the security guide from high-traffic docs (`README.md` and/or `docs/operations.md`).
 
 ## Assumptions
-- Public-facing services are those with host-published ports or viewer-facing endpoints.
-- Stateful services (`postgres`, `redis`) and control/config jobs should remain isolated on `internal` unless a public service must reach them.
-- Some vendor images may require root/mutable filesystems; those will be documented inline as exceptions.
+- Security guidance should match the current single-host Docker Compose deployment model and documented optional profiles.
+- This change is documentation-only and does not alter runtime behavior or deployment contract values.
+- `_FILE`-based secrets are not yet implemented in the current stack, so guidance should mention future compatibility without claiming support exists today.
 
 ## Risks
-- Over-restricting filesystems/capabilities can break entrypoints, healthchecks, or runtime writes.
-- Network over-segmentation could block required API calls between control-plane and ingest/transcoding services.
-- Non-root execution may fail for images expecting privileged startup paths.
+- Overstating default exposure levels for ports/services could mislead operators if wording is not anchored to current compose defaults.
+- Security guidance can drift from env validation behavior if we cite controls not enforced by `cmd/bitriver env validate`.
+- If the new doc is not linked clearly, operators may continue to miss security hardening steps.
 
 ## Test plan
-- `docker compose -f deploy/docker-compose.yml config`
+- Markdown/documentation lint via static review for section completeness and command correctness.
 - `./scripts/verify.sh`
