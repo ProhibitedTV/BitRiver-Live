@@ -749,3 +749,32 @@ func TestValidateEnvSecretResolutionEmptyFileContent(t *testing.T) {
 		t.Fatalf("did not expect read error for empty _FILE content, got %v", res.Errors)
 	}
 }
+
+func TestValidateEnvSecretResolutionFileValueStillAppliesBlockedChecks(t *testing.T) {
+	cert, key := tempTLSFiles(t)
+	values := baseEnvValues(cert, key)
+	values["BITRIVER_POSTGRES_PASSWORD"] = ""
+
+	secretFile := filepath.Join(t.TempDir(), "postgres-password")
+	if err := os.WriteFile(secretFile, []byte("P0stgres-Example!\n"), 0o600); err != nil {
+		t.Fatalf("write secret file: %v", err)
+	}
+	values["BITRIVER_POSTGRES_PASSWORD_FILE"] = secretFile
+
+	res := validateEnv(values)
+	if !containsValue(res.Blocked, "BITRIVER_POSTGRES_PASSWORD") {
+		t.Fatalf("expected BITRIVER_POSTGRES_PASSWORD to be blocked when _FILE resolves to sample placeholder, got blocked=%v", res.Blocked)
+	}
+}
+
+func TestValidateEnvSecretResolutionOptionalKeyFileUnreadable(t *testing.T) {
+	cert, key := tempTLSFiles(t)
+	values := baseEnvValues(cert, key)
+	values["BITRIVER_OME_HEALTHCHECK_TOKEN"] = ""
+	values["BITRIVER_OME_HEALTHCHECK_TOKEN_FILE"] = t.TempDir()
+
+	res := validateEnv(values)
+	if !containsString(res.Errors, "BITRIVER_OME_HEALTHCHECK_TOKEN_FILE points to") {
+		t.Fatalf("expected _FILE unreadable error for optional healthcheck token, got %v", res.Errors)
+	}
+}

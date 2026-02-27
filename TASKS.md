@@ -99,3 +99,37 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - ⚠️ `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.limits.yml config` (blocked: `docker` CLI unavailable in this environment).
   - ⚠️ `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.limits.yml -f deploy/docker-compose.resources.yml config` (blocked: `docker` CLI unavailable in this environment).
   - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s`
+
+
+## Scoped change: `_FILE` secret env support and validation
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Extend env secret resolution in `cmd/bitriver/env_validation_helpers.go`
+  - Acceptance criteria:
+    - All sensitive keys validated by `env validate` support companion `*_FILE` values.
+    - Resolution order is deterministic and documented (`FOO` wins over `FOO_FILE` with warning).
+    - `_FILE` unreadable paths surface validation errors; resolved values feed existing required/blocked checks.
+
+- [x] Task 2 — Expand env validation tests for `*_FILE` behavior
+  - Acceptance criteria:
+    - Coverage includes only direct value, only `_FILE`, both set, and missing/unreadable file.
+    - Coverage includes trailing-newline trimming for file-backed values.
+    - Coverage confirms existing placeholder/constraint checks apply to resolved file values.
+
+- [x] Task 3 — Update env/docs examples for `*_FILE` usage
+  - Acceptance criteria:
+    - `deploy/.env.example` documents `*_FILE` companions for sensitive values.
+    - `docs/secrets-hardening.md` adds section “Using *_FILE secrets with Docker Compose mounts” with a concrete mounted secrets directory example.
+
+
+
+### Execution log (`_FILE` secret env support and validation)
+- ✅ Task 1 complete: secret file resolution now also covers `BITRIVER_OME_HEALTHCHECK_TOKEN`, keeps direct-value precedence with warning, validates unreadable file paths, and trims trailing newlines when loading file-backed secrets.
+- ✅ Task 2 complete: added test coverage ensuring file-backed placeholders still trigger blocked checks and optional sensitive `_FILE` keys emit readable-path errors.
+- ✅ Task 2 checks:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver -count=1`
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s`
+- ✅ Task 3 complete: updated `docs/secrets-hardening.md` section title/content with a concrete Compose mount example and documented `BITRIVER_OME_HEALTHCHECK_TOKEN_FILE` in `deploy/.env.example`.
+- ✅ Task 3 check:
+  - ✅ `rg -n "Using \*_FILE secrets with Docker Compose mounts|Concrete Docker Compose mount example|OME_HEALTHCHECK_TOKEN_FILE|_FILE" docs/secrets-hardening.md deploy/.env.example`

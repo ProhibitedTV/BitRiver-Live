@@ -1,6 +1,24 @@
 # PLAN
 
 ## Scope (current change)
+- Expand env validation secret handling to treat `*_FILE` as first-class companions for all sensitive environment values validated by `cmd/bitriver env validate`.
+- Keep deterministic precedence when both direct and file-based values are provided: direct value wins and validator emits a warning.
+- Ensure file-backed secret values flow through existing missing/blocked checks so placeholder and required-value rules still apply.
+- Update deployment/docs examples to show `*_FILE` usage, including Docker Compose secret-directory mount patterns.
+
+## Assumptions
+- The existing validator behavior (warnings are non-fatal, errors are fatal) should remain unchanged.
+- Secret-file support is scoped to env validation and documentation; runtime service config remains env-driven.
+
+## Risks
+- Adding new sensitive keys to file-resolution may surface new warnings/errors for existing env files that set both direct and `_FILE` values.
+- Documentation examples may drift from compose reality if mount paths are inconsistent across files.
+
+## Test plan
+- `go test ./cmd/bitriver -count=1`
+- `go test ./... -count=1 -timeout=120s`
+
+## Scope (current change)
 - Update `deploy/check-env.sh` so doctor preflight runs by default with both `--env-file` and canonical `--compose-file deploy/docker-compose.yml` before env validation.
 - Preserve CI/operator compatibility by keeping default invocation argument-free and adding an explicit escape hatch `--skip-doctor` with documented usage.
 - Improve script UX with explicit phase headings and actionable failure guidance for doctor failures.
