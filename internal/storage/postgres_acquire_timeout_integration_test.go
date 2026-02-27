@@ -15,6 +15,9 @@ func TestPostgresRepositoryAcquireTimeout(t *testing.T) {
 		WithPostgresPoolLimits(1, 1),
 		WithPostgresAcquireTimeout(50*time.Millisecond),
 	)
+	if errors.Is(err, ErrPostgresUnavailable) {
+		t.Skip("postgres repository unavailable in this build")
+	}
 	if err != nil {
 		t.Fatalf("failed to open postgres repository: %v", err)
 	}
@@ -64,6 +67,9 @@ func TestPostgresRepositoryAcquireTimeoutUpsertProfile(t *testing.T) {
 		WithPostgresPoolLimits(2, 1),
 		WithPostgresAcquireTimeout(100*time.Millisecond),
 	)
+	if errors.Is(err, ErrPostgresUnavailable) {
+		t.Skip("postgres repository unavailable in this build")
+	}
 	if err != nil {
 		t.Fatalf("failed to open postgres repository: %v", err)
 	}
@@ -134,6 +140,9 @@ func TestPostgresRepositoryAcquireTimeoutCreateChannel(t *testing.T) {
 		WithPostgresPoolLimits(1, 1),
 		WithPostgresAcquireTimeout(50*time.Millisecond),
 	)
+	if errors.Is(err, ErrPostgresUnavailable) {
+		t.Skip("postgres repository unavailable in this build")
+	}
 	if err != nil {
 		t.Fatalf("failed to open postgres repository: %v", err)
 	}
@@ -188,6 +197,9 @@ func TestPostgresRepositoryAcquireTimeoutCreateUpload(t *testing.T) {
 		WithPostgresPoolLimits(1, 1),
 		WithPostgresAcquireTimeout(50*time.Millisecond),
 	)
+	if errors.Is(err, ErrPostgresUnavailable) {
+		t.Skip("postgres repository unavailable in this build")
+	}
 	if err != nil {
 		t.Fatalf("failed to open postgres repository: %v", err)
 	}

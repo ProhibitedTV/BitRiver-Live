@@ -1,27 +1,20 @@
 # PLAN
 
 ## Scope (current change)
-- Use current release readiness evidence to address blockers that are actionable in-repo.
-- Stabilize the flaky upload cleanup tests causing `./scripts/verify.sh` failures.
-- Refresh `docs/releases/release-checklist-report-2026-02-27.md` with latest gate outcomes and an updated go/no-go summary.
+- Execute the postgres release checks via a prepared integration database path.
+- Capture command output in a new timestamped release evidence directory under `artifacts/`.
+- Update `docs/releases/release-checklist-report-2026-02-27.md` with final status, evidence paths, and residual risks.
 
 ## Assumptions
-- Docker is unavailable in this environment, so Docker-gated checks remain blocked and must be documented.
-- Viewer lint/tests are runnable locally and can be used as fresh release evidence.
-- Upload processor behavior should remain unchanged; only flaky test orchestration should be adjusted.
+- Docker may still be unavailable; if so, a locally prepared postgres instance can satisfy `BITRIVER_TEST_POSTGRES_DSN`.
+- Running migrations with `BITRIVER_TEST_POSTGRES_RUN_MIGRATIONS=1` is acceptable for the prepared DB path.
+- Scope is limited to release evidence/docs unless triage identifies a real failure in storage or migrations.
 
 ## Risks
-- Adjusting tests could mask a real duplicate-cleanup regression if assertions become too weak.
-- Release report can drift quickly if subsequent runs are not captured with explicit evidence paths.
+- Local postgres bootstrap could fail due to missing binaries or permissions, delaying evidence capture.
+- Migration/test failures may require touching `internal/storage`, `deploy/migrations`, or `cmd/tools/pgx-mode-check` under time pressure.
 
 ## Test plan
-- Run `go test ./internal/service/uploads -count=1` to validate the flaky suite after test updates.
-- Run `./scripts/verify.sh` to exercise the default release gate.
-- Run viewer checks explicitly:
-  - `npm --prefix web/viewer run lint`
-  - `npm --prefix web/viewer run test`
-- Re-run environment-limited release checks and record outcomes:
-  - `./scripts/check-postgres-pgx.sh postgres`
-  - `./scripts/test-postgres.sh`
-  - `docker compose -f deploy/docker-compose.yml config`
-  - `./scripts/test-quickstart.sh`
+- Run `BITRIVER_TEST_POSTGRES_DSN=... BITRIVER_TEST_POSTGRES_RUN_MIGRATIONS=1 ./scripts/test-postgres.sh` and capture output.
+- Run `./scripts/check-postgres-pgx.sh postgres` and capture output.
+- If failures occur, patch relevant files and rerun both checks until both pass.
