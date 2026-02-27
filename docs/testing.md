@@ -366,11 +366,11 @@ explaining how to proceed. The script forces an offline module mode
 
 ## Web viewer
 
-Install dependencies once and execute the lint and integration harnesses:
+Install dependencies with a lockfile-faithful install and execute the lint and integration harnesses:
 
 ```bash
 cd web/viewer
-npm install
+npm ci
 npm run lint
 npm run test:integration
 ```

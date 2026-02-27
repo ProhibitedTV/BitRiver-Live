@@ -1,17 +1,18 @@
 # PLAN
 
 ## Scope (current change)
-- Pin `.github/workflows/ci.yml` `dorny/paths-filter` usage from floating `@v3` to a full commit SHA with a release comment.
-- Audit all workflow files under `.github/workflows/` and pin any remaining third-party `uses:` entries that are not already full SHAs.
+- Update `docs/production-release.md` in the "Viewer lint and integration tests" section to use `npm ci` instead of `npm install` while keeping `npm run lint` and `npm run test:integration` unchanged.
+- Add a short release note in that section clarifying that `npm ci` is required for lockfile-faithful release validation and must be run from `web/viewer`.
+- Audit other release/testing docs for viewer install commands and align release-reproducibility guidance to `npm ci` where appropriate.
 
 ## Assumptions
-- Existing workflow pinning convention is `uses: owner/repo@<40-char-sha> # vX.Y.Z` (or equivalent release label).
-- Local composite actions (`uses: ./.github/actions/...`) are intentionally unpinned and should remain unchanged.
+- `npm ci` is valid for the viewer workspace because `web/viewer/package-lock.json` exists and is the lockfile source of truth.
+- "Release/testing docs" in scope are Markdown docs under `docs/` that describe release gates or testing workflows.
 
 ## Risks
-- Pinning to an incorrect SHA could break CI behavior; use the upstream tag commit for the intended release.
-- Missing another non-SHA `uses:` line would leave policy drift in workflows.
+- Changing install commands in general developer docs could unintentionally affect local iterative workflows; only update contexts where reproducibility is explicitly expected.
+- Missing a second release/testing doc would leave inconsistent guidance.
 
 ## Test plan
-- Run a repository scan to list workflow `uses:` entries and confirm no non-SHA external actions remain.
-- Optionally run `./scripts/check-ci-contract.sh` to ensure CI workflow contract checks still pass.
+- Run targeted searches for viewer install commands in release/testing docs and confirm intended commands now use `npm ci`.
+- Review updated sections to ensure `npm run lint` and `npm run test:integration` lines are unchanged.
