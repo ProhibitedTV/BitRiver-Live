@@ -69,3 +69,33 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `bash deploy/check-env.sh deploy/.env.example --skip-doctor` (runs env validation; fails as expected because example placeholders are intentionally invalid for production)
   - `bash deploy/check-env.sh deploy/.env.example` (confirms doctor runs first, then exits non-zero on doctor FAIL with actionable guidance)
   - `./scripts/verify.sh` (fails on pre-existing `.env.example` placeholder hygiene rule unrelated to this scoped change)
+
+## Scoped change: compose-compatible resource limits overlay
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Convert `deploy/docker-compose.resources.yml` to ulimits-only overlay
+  - Acceptance criteria:
+    - Removes all `services.*.deploy.resources.*` blocks.
+    - Keeps ingest `ulimits` settings.
+    - Adds explicit guidance that enforceable CPU/memory limits come from `deploy/docker-compose.limits.yml`.
+
+- [x] Task 2 — Update docs to distinguish limits overlay vs ulimits overlay
+  - Acceptance criteria:
+    - `docs/production-single-host.md` recommends `docker-compose.limits.yml` for production limits.
+    - Runbook docs no longer describe `docker-compose.resources.yml` as CPU/memory limits.
+    - Docs explain when to layer `docker-compose.resources.yml` for `nofile` ulimits.
+
+- [x] Task 3 — Validate compose rendering and full Go test suite
+  - Acceptance criteria:
+    - Combined compose overlays render cleanly with `docker compose ... config`.
+    - `go test ./...` passes.
+
+
+### Execution log (compose-compatible resource limits overlay)
+- ✅ Task 1 complete: `deploy/docker-compose.resources.yml` is now ulimits-only; all `deploy.resources` Swarm blocks removed with explicit non-Swarm guidance and limits-overlay command.
+- ✅ Task 2 complete: updated `docs/production-single-host.md`, `docs/operations.md`, and `docs/advanced-deployments.md` to separate enforceable limits (`docker-compose.limits.yml`) from ulimits (`docker-compose.resources.yml`).
+- ✅ Task 3 checks:
+  - ⚠️ `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.limits.yml config` (blocked: `docker` CLI unavailable in this environment).
+  - ⚠️ `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.limits.yml -f deploy/docker-compose.resources.yml config` (blocked: `docker` CLI unavailable in this environment).
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s`

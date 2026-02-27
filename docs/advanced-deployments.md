@@ -292,21 +292,19 @@ For Nginx Proxy Manager, verify all of the following in the Proxy Host UI:
 
 ## Resource limits + ulimits override
 
-For production-ish deployments, add the optional Compose override `deploy/docker-compose.resources.yml`. It sets higher `nofile` limits and CPU/memory reservations for the ingest trio (SRS, OME, and transcoder) while keeping the quickstart path unchanged.
-
-Enable it with:
+For production-ish deployments, use `deploy/docker-compose.limits.yml` for enforceable CPU/memory limits under standard Docker Compose:
 
 ```bash
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.resources.yml up -d
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.limits.yml up -d
 ```
 
-The override uses `nofile=262144` and the following baseline reservations/limits (adjust for your workload):
+If you also need higher `nofile` limits for ingest services (SRS, OME, transcoder), layer `deploy/docker-compose.resources.yml` as an additional ulimits-only override:
 
-| Service | CPU reservation | CPU limit | Memory reservation | Memory limit |
-| --- | --- | --- | --- | --- |
-| `srs` | 1.0 | 2.0 | 1G | 2G |
-| `ome` | 1.5 | 4.0 | 2G | 4G |
-| `transcoder` | 2.0 | 6.0 | 4G | 12G |
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.limits.yml -f deploy/docker-compose.resources.yml up -d
+```
+
+The ulimits overlay applies `nofile=262144` to ingest services and does not define CPU/memory limits.
 
 ### Host kernel settings (recommended)
 
