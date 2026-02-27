@@ -95,3 +95,16 @@
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver -count=1`
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s`
+
+## Scope (current change)
+- Assess production-release readiness using the repository's required verification gate (`./scripts/verify.sh`).
+- Address any release-blocking failures found in the default gate with the smallest safe change.
+
+## Assumptions
+- Passing `./scripts/verify.sh` is the project's baseline production-readiness signal for this scope.
+
+## Risks
+- Placeholder hygiene fixes in `deploy/.env.example` must remain clearly non-secret examples and aligned with docs.
+
+## Test plan
+- `./scripts/verify.sh`
