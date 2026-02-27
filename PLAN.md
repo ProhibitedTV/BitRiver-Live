@@ -1,18 +1,27 @@
 # PLAN
 
 ## Scope (current change)
-- Prepare a production release readiness update from existing repository evidence.
-- Consolidate release gate outcomes into `docs/releases/release-checklist-report-2026-02-27.md` so operators have one go/no-go view.
-- Record explicit blocker remediation steps required before tagging a production release.
+- Use current release readiness evidence to address blockers that are actionable in-repo.
+- Stabilize the flaky upload cleanup tests causing `./scripts/verify.sh` failures.
+- Refresh `docs/releases/release-checklist-report-2026-02-27.md` with latest gate outcomes and an updated go/no-go summary.
 
 ## Assumptions
-- This change is documentation-only and does not alter runtime behavior or deployment contracts.
-- Existing artifacts under `artifacts/release-checks-*` are the source of truth for gate outcomes in this environment.
+- Docker is unavailable in this environment, so Docker-gated checks remain blocked and must be documented.
+- Viewer lint/tests are runnable locally and can be used as fresh release evidence.
+- Upload processor behavior should remain unchanged; only flaky test orchestration should be adjusted.
 
 ## Risks
-- Results can go stale if new test runs happen after this report update.
-- Environment-specific blockers (missing Docker, pgx stubbed build, viewer snapshot mismatch) still require remediation outside this docs update.
+- Adjusting tests could mask a real duplicate-cleanup regression if assertions become too weak.
+- Release report can drift quickly if subsequent runs are not captured with explicit evidence paths.
 
 ## Test plan
-- `markdownlint` is not configured in-repo; use static review via `git diff` for formatting and correctness.
-- Verify referenced files/log paths exist with `rg --files`.
+- Run `go test ./internal/service/uploads -count=1` to validate the flaky suite after test updates.
+- Run `./scripts/verify.sh` to exercise the default release gate.
+- Run viewer checks explicitly:
+  - `npm --prefix web/viewer run lint`
+  - `npm --prefix web/viewer run test`
+- Re-run environment-limited release checks and record outcomes:
+  - `./scripts/check-postgres-pgx.sh postgres`
+  - `./scripts/test-postgres.sh`
+  - `docker compose -f deploy/docker-compose.yml config`
+  - `./scripts/test-quickstart.sh`

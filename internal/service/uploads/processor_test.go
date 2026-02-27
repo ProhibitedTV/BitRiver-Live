@@ -751,7 +751,6 @@ func TestUploadProcessorCleanupOnReady(t *testing.T) {
 		_ = processor.Shutdown(ctx)
 	})
 
-	processor.Enqueue("upload-ready")
 	waitForCompletion(t, cleaner.completion("upload-ready"), "cleanup upload-ready", time.Second)
 	if got := cleaner.callCount(); got != 1 {
 		t.Fatalf("expected 1 cleanup call, got %d", got)
@@ -791,7 +790,6 @@ func TestUploadProcessorCleanupOnFailed(t *testing.T) {
 		_ = processor.Shutdown(ctx)
 	})
 
-	processor.Enqueue("upload-failed")
 	waitForCompletion(t, cleaner.completion("upload-failed"), "cleanup upload-failed", 2*time.Second)
 	if got := cleaner.callCount(); got != 1 {
 		t.Fatalf("expected 1 cleanup call, got %d", got)

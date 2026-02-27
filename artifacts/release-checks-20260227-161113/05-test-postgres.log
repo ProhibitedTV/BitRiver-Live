@@ -1,0 +1,1 @@
+error: postgres-tagged tests require Docker or BITRIVER_TEST_POSTGRES_DSN; install Docker or set BITRIVER_TEST_POSTGRES_DSN to a prepared database

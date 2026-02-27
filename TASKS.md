@@ -2,22 +2,22 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Capture release-readiness scope and evidence sources
+- [x] Task 1 — Stabilize flaky upload cleanup tests
   - Acceptance criteria:
-    - `PLAN.md` reflects this release-readiness documentation scope.
-    - Evidence sources are limited to existing logs/artifacts in repo.
+    - `internal/service/uploads/processor_test.go` no longer double-enqueues cleanup test uploads.
+    - `go test ./internal/service/uploads -count=1` passes.
 
-- [x] Task 2 — Consolidate production release status in one report
+- [x] Task 2 — Re-run release gates and capture fresh evidence
   - Acceptance criteria:
-    - `docs/releases/release-checklist-report-2026-02-27.md` includes all current gate outcomes relevant to release readiness.
-    - Report includes a clear go/no-go decision.
+    - Latest gate logs are captured under a new `artifacts/release-checks-<timestamp>/` directory.
+    - `./scripts/verify.sh`, viewer lint/test, and postgres/docker smoke commands have recorded outcomes.
 
-- [x] Task 3 — Document unblock actions before tagging
+- [x] Task 3 — Refresh production release checklist report
   - Acceptance criteria:
-    - Report includes ordered remediation steps for every failing/blocked gate.
-    - Notes specify the exact commands to rerun when environment blockers are resolved.
+    - `docs/releases/release-checklist-report-2026-02-27.md` reflects latest gate outcomes and blockers.
+    - Report includes an updated go/no-go decision and ordered unblock steps.
 
 ## Execution log
-- ✅ Task 1 complete: updated `PLAN.md` to define documentation-only production release readiness scope and constraints.
-- ✅ Task 2 complete: updated `docs/releases/release-checklist-report-2026-02-27.md` with consolidated gate status and release decision.
-- ✅ Task 3 complete: added explicit unblock actions and rerun commands required before creating a production release tag.
+- ✅ Task 1 complete: removed redundant manual enqueue from upload cleanup tests and validated with `go test ./internal/service/uploads -count=1`.
+- ✅ Task 2 complete: captured fresh evidence in `artifacts/release-checks-20260227-161113/` and reran required gates.
+- ✅ Task 3 complete: updated `docs/releases/release-checklist-report-2026-02-27.md` with latest status and unblock guidance.
