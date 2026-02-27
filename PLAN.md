@@ -1,20 +1,22 @@
 # PLAN
 
 ## Scope (current change)
-- Strengthen the upgrade contract to v1.0-grade guidance in `docs/upgrades.md` with explicit supported version hops, backup/restore checklist, and rollback safety boundaries.
-- Add a new CLI planner command (`bitriver upgrade-plan`) that reads deployed version hints from `.env` image tags, compares with a target tag, and prints actionable upgrade steps + breaking-change warnings.
-- Add dedicated release versioning rules in `docs/versioning.md` and align release process docs/templates to require upgrade notes + breaking-change callouts.
+- Harden `deploy/docker-compose.yml` conservatively while preserving default behavior.
+- Add explicit `public`/`internal` network segmentation and service attachments.
+- Apply container hardening defaults (`security_opt`, `cap_drop`, `read_only`, and non-root `user`) where feasible with inline exceptions.
+- Document hardening defaults and service exceptions in `docs/security.md`.
+- Keep deployment contract docs aligned for compose behavior in `docs/contract.md`.
 
 ## Assumptions
-- Deployments use `deploy/docker-compose.yml` plus a repository `.env` where `BITRIVER_LIVE_IMAGE_TAG` is the canonical application version hint.
-- DB schema version cannot always be auto-discovered, so schema checks should be opt-in and non-breaking when metadata is unavailable.
-- Existing upgrade defaults must stay non-disruptive: no forced behavior changes at runtime.
+- Public-facing services are those with host-published ports or viewer-facing endpoints.
+- Stateful services (`postgres`, `redis`) and control/config jobs should remain isolated on `internal` unless a public service must reach them.
+- Some vendor images may require root/mutable filesystems; those will be documented inline as exceptions.
 
 ## Risks
-- Ambiguous semver parsing (with/without `v` prefixes) could misclassify supported hops.
-- Overpromising rollback safety when migrations are irreversible could create operator risk.
-- Release template/process changes may drift if not linked from existing release runbook.
+- Over-restricting filesystems/capabilities can break entrypoints, healthchecks, or runtime writes.
+- Network over-segmentation could block required API calls between control-plane and ingest/transcoding services.
+- Non-root execution may fail for images expecting privileged startup paths.
 
 ## Test plan
-- `go test ./cmd/bitriver -count=1`
+- `docker compose -f deploy/docker-compose.yml config`
 - `./scripts/verify.sh`
