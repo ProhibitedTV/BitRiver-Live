@@ -111,6 +111,17 @@ describe("Navbar", () => {
   });
 
 
+  test("disables notifications action with coming-soon helper text", () => {
+    mockAnonymousUser();
+
+    renderWithProviders(<Navbar />);
+
+    const notificationsButton = screen.getByRole("button", { name: /view notifications/i });
+    expect(notificationsButton).toBeDisabled();
+    expect(notificationsButton).toHaveAttribute("title", "Notifications coming soon");
+  });
+
+
   test("renders desktop tabs and drawer links from the same primary nav list", async () => {
     mockAuthenticatedUser(adminUser);
 

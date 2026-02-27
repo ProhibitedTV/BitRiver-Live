@@ -183,3 +183,32 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 2 complete: updated `deploy/.env.example` admin password example to an explicit sample placeholder string.
 - ✅ Task 2 check:
   - ✅ `./scripts/verify.sh`
+
+
+## Scoped change: navbar notifications control semantics
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Update notifications icon button semantics in `web/viewer/components/Navbar.tsx`
+  - Acceptance criteria:
+    - Notifications button in `.nav-icon-group` is explicitly disabled if feature is not implemented.
+    - Control includes helper text/tooltip such as “Notifications coming soon”.
+    - Styling remains aligned with existing icon button usage.
+
+- [x] Task 2 — Add/update navbar tests in `web/viewer/__tests__/navbar.test.tsx`
+  - Acceptance criteria:
+    - Test verifies notifications control is disabled.
+    - Test verifies helper text/tooltip content is present on the control.
+
+- [x] Task 3 — Run viewer navbar test check and record results
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- navbar.test.tsx` completes successfully.
+    - Execution log is captured in this scoped section.
+
+
+### Execution log (navbar notifications control semantics)
+- ✅ Task 1 complete: notifications icon button now uses disabled semantics and includes helper tooltip text “Notifications coming soon”.
+- ✅ Task 2 complete: added navbar test covering disabled notifications action and tooltip text.
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- navbar.test.tsx`
+  - ✅ `./scripts/verify.sh`
