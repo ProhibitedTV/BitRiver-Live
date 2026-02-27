@@ -67,6 +67,8 @@ docker compose -f deploy/docker-compose.yml config
 ```bash
 ./scripts/test-quickstart.sh
 ```
+- In `./scripts/verify.sh`, Docker-dependent checks run in deterministic order: Compose config validation first, then quickstart smoke.
+- When Docker is unavailable, both Docker-dependent steps are skipped with explicit messages.
 
 ## Repo zones
 ### Product

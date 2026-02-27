@@ -182,7 +182,12 @@ require_tool "python3" "Install python3 to run ./scripts/check-contract-invarian
 run_step "Contract invariants check" ./scripts/check-contract-invariants.sh
 run_step "Production third-party digest gate" ./scripts/require-image-digests.sh
 
+docker_available=false
 if command -v docker >/dev/null 2>&1; then
+  docker_available=true
+fi
+
+if [[ "$docker_available" == true ]]; then
   compose_env_file=""
   if [[ -f .env ]]; then
     compose_env_file=".env"
@@ -196,9 +201,13 @@ if command -v docker >/dev/null 2>&1; then
   fi
 
   run_step "Docker Compose config validation" docker compose --env-file "$compose_env_file" -f deploy/docker-compose.yml config
+  run_step "Quickstart smoke" ./scripts/test-quickstart.sh
 else
   echo
   echo "==> Docker Compose config validation"
+  echo "Skipping: docker is not installed or not on PATH."
+  echo
+  echo "==> Quickstart smoke"
   echo "Skipping: docker is not installed or not on PATH."
 fi
 
