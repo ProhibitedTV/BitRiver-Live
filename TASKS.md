@@ -162,3 +162,24 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 1 complete: `upgrade-plan` now accepts `--compose-file`, `--env-file`, and required `--target`; it performs best-effort running tag detection from Compose with WARN fallback guidance and prints migration + rollback sections with an operator checklist.
 - ✅ Task 2 complete: added focused tests covering compose `ps` image parsing, env-file fallback warnings, and unknown-current-version guidance while still emitting checklist output.
 - ✅ Task 3 complete: updated `docs/upgrades.md` command examples to `--target` and added best-effort behavior notes plus sample command output.
+
+## Scoped change: production-readiness gate unblock (env placeholder hygiene)
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Run release-readiness gate and capture blockers
+  - Acceptance criteria:
+    - Run `./scripts/verify.sh` from repo root.
+    - Record the first release-blocking failure.
+
+- [x] Task 2 — Fix env placeholder hygiene blocker in `deploy/.env.example`
+  - Acceptance criteria:
+    - `BITRIVER_LIVE_ADMIN_PASSWORD` example includes an explicit sample marker.
+    - Re-running `./scripts/verify.sh` passes.
+
+### Execution log (production-readiness gate unblock)
+- ✅ Task 1 check:
+  - ❌ `./scripts/verify.sh` (failed: `BITRIVER_LIVE_ADMIN_PASSWORD` placeholder missing explicit sample marker)
+- ✅ Task 2 complete: updated `deploy/.env.example` admin password example to an explicit sample placeholder string.
+- ✅ Task 2 check:
+  - ✅ `./scripts/verify.sh`
