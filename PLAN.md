@@ -1,17 +1,27 @@
 # PLAN
 
-## Scope (current change)
-- Pin `.github/workflows/ci.yml` `dorny/paths-filter` usage from floating `@v3` to a full commit SHA with a release comment.
-- Audit all workflow files under `.github/workflows/` and pin any remaining third-party `uses:` entries that are not already full SHAs.
+## Scope (production release preparation)
+- Prepare release execution artifacts for a production-release pass focused on five gates:
+  1. Environment verification.
+  2. Digest enforcement for release manifests/workflows.
+  3. Release workflow parity (docs/scripts/workflows aligned).
+  4. Runbook parity across operator docs.
+  5. Final release checks and handoff evidence.
+- Keep this pass planning-only (no release execution in this change).
 
 ## Assumptions
-- Existing workflow pinning convention is `uses: owner/repo@<40-char-sha> # vX.Y.Z` (or equivalent release label).
-- Local composite actions (`uses: ./.github/actions/...`) are intentionally unpinned and should remain unchanged.
+- Release owners will execute commands from repo root unless a task states otherwise.
+- Required secrets/tokens (registry creds, signing keys, deployment secrets, GitHub release permissions) are provided out-of-band and are not committed to this repo.
+- Docker engine/Compose and GitHub Actions tooling availability may differ by environment; static checks can run locally even when runtime infra is unavailable.
+- `./scripts/verify.sh` remains the default merge/release gate, but may be deferred until runtime dependencies are present.
 
 ## Risks
-- Pinning to an incorrect SHA could break CI behavior; use the upstream tag commit for the intended release.
-- Missing another non-SHA `uses:` line would leave policy drift in workflows.
+- Missing or invalid secrets can block image publication, signing, or deployment despite passing static repo checks.
+- Docker-unavailable environments can prevent compose render/smoke checks and produce false confidence if not explicitly tracked.
+- GitHub Actions permission or runner differences can cause release workflow drift that is not detectable by local-only checks.
+- Doc/runbook drift from scripts/workflows can lead to incomplete release execution steps.
 
-## Test plan
-- Run a repository scan to list workflow `uses:` entries and confirm no non-SHA external actions remain.
-- Optionally run `./scripts/check-ci-contract.sh` to ensure CI workflow contract checks still pass.
+## Test/check strategy
+- Use explicit per-task commands in `TASKS.md` so each gate has verifiable evidence.
+- Prefer static/parity checks first (CI/workflow scans + docs parity checks) when full runtime verify is deferred.
+- Reserve full runtime validation (`./scripts/verify.sh`) for the final gate once Docker and required credentials are available.

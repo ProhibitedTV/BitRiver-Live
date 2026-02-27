@@ -2,25 +2,52 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Pin `dorny/paths-filter` in CI workflow
+- [ ] Task 1 — Environment readiness verification
   - Acceptance criteria:
-    - `.github/workflows/ci.yml` uses a full 40-character SHA for `dorny/paths-filter`.
-    - The `uses:` line includes a trailing release comment (e.g., `# v3.0.2`).
+    - Required local tooling/runtime prerequisites are checked and recorded (Go, Node/npm when viewer scope applies, Docker/Compose, GitHub CLI optional).
+    - Availability of release secrets/deployment credentials is explicitly confirmed by owner checklist reference (without exposing values).
+  - Check commands:
+    - `go version`
+    - `node --version`
+    - `npm --version`
+    - `docker --version`
+    - `docker compose version`
+    - `gh --version`
 
-- [x] Task 2 — Audit and align all workflow `uses:` pins
+- [ ] Task 2 — Digest enforcement/static supply-chain scan
   - Acceptance criteria:
-    - All external `uses:` lines under `.github/workflows/` are pinned to 40-character SHAs.
-    - Any updated entries include human-readable release comments matching repo style.
+    - Workflow/action references are confirmed SHA-pinned for external actions.
+    - Release/deploy manifests reference immutable image digests where contract requires them.
+  - Check commands:
+    - `./scripts/check-ci-contract.sh`
+    - `./scripts/require-image-digests.sh`
+    - `rg -n "uses:\\s+[^#\\n]+@(v|main|master|[0-9]+(\\.[0-9]+)*)" .github/workflows`
 
-- [x] Task 3 — Validate workflow pinning and CI contract
+- [ ] Task 3 — Release workflow parity (scripts/docs/workflows)
   - Acceptance criteria:
-    - A command-based scan shows no remaining non-SHA external `uses:` entries.
-    - `./scripts/check-ci-contract.sh` passes.
+    - Release workflow docs map to existing scripts/commands with no invented steps.
+    - Any workflow-impacting script references in docs resolve to real files/commands.
+  - Check commands:
+    - `rg -n "quickstart|verify|production-release|release" docs/ README.md scripts/ .github/workflows`
+    - `rg -n "scripts/[A-Za-z0-9._/-]+" docs/ README.md`
+
+- [ ] Task 4 — Runbook parity validation
+  - Acceptance criteria:
+    - Operator runbooks (`docs/operations.md`, `docs/production-release.md`, and related deploy docs) are mutually consistent on release order, rollback hooks, and verification points.
+    - Any identified gaps are documented as follow-up items before execution.
+  - Check commands:
+    - `rg -n "rollback|release|verify|quickstart|smoke" docs/operations.md docs/production-release.md docs/advanced-deployments.md docs/testing.md`
+    - `rg -n "deploy/docker-compose.yml|\.env|Server.generated.xml" docs/contract.md docs/production-release.md docs/operations.md`
+
+- [ ] Task 5 — Final release gate checks and handoff packet
+  - Acceptance criteria:
+    - Full verification command set is executed (or deferred with explicit blocker + owner).
+    - Handoff note records outcomes for environment, digest checks, workflow parity, runbook parity, and outstanding blockers.
+  - Check commands:
+    - `./scripts/verify.sh`
+    - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s`
+    - `docker compose -f deploy/docker-compose.yml config`
+    - `./scripts/test-quickstart.sh`
 
 ## Execution log
-- ✅ Task 1 complete: pinned `dorny/paths-filter` in `.github/workflows/ci.yml` to `de90cc6fb38fc0963ad72b210f1f284cd68cea36` with `# v3.0.2` comment.
-- ✅ Task 1 check: `rg -n "dorny/paths-filter" .github/workflows/ci.yml`.
-- ✅ Task 2 complete: audited `.github/workflows/*.yml`; no other external non-SHA `uses:` entries remained.
-- ✅ Task 2 check: Python scan for non-SHA external `uses:` refs returned `All external uses entries are SHA-pinned.`.
-- ✅ Task 3 complete: CI contract validation passed.
-- ✅ Task 3 check: `./scripts/check-ci-contract.sh`.
+- Pending execution. Update each task status and append command outputs/results immediately after each task is performed.
