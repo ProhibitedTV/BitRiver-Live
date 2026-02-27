@@ -1,21 +1,18 @@
 # PLAN
 
 ## Scope (current change)
-- Investigate the `channelDisplayPrimitives` snapshot/test mismatch in the viewer test suite.
-- Confirm intended UX copy for status badges, meta labels, and CTA text across shared channel display components.
-- Apply the minimal fix: either restore regressed component output or update brittle test/snapshot expectations if UX copy was intentionally changed.
-- Re-run viewer checks and capture outcomes in `TASKS.md`.
+- Execute the quickstart smoke gate from repo root using `./scripts/test-quickstart.sh`.
+- Capture complete command output in a dated artifact directory that matches existing `artifacts/release-checks-*` naming.
+- If failures occur, map each failure to the runtime deployment contract files (`deploy/docker-compose.yml`, `.env`, `deploy/ome/Server.generated.xml`).
+- Update `TASKS.md` and the dated release checklist report with pass/fail status and remediation notes.
 
 ## Assumptions
-- `channel-presenters.ts` and current component render output represent the canonical UX copy unless contradicted by product docs/tests.
-- The snapshot mismatch is localized to viewer rendering primitives and can be validated via viewer lint/tests.
+- Docker daemon access is available on this host as requested.
+- Existing release report format in `docs/releases/release-checklist-report-*.md` is the expected checklist report structure.
 
 ## Risks
-- Snapshot updates can mask real regressions if component output diverged unintentionally.
-- Text assertions may be too specific and break on harmless copy refinements.
-- Viewer tests may take longer when running the full suite; targeted runs are needed for fast iteration.
+- Quickstart smoke can fail from host-level Docker constraints, image pulls, or contract mismatch.
+- Long-running integration output could be truncated unless fully redirected to a log artifact.
 
 ## Test plan
-- `npm --prefix web/viewer run test -- channelDisplayPrimitives.test.tsx`
-- `npm --prefix web/viewer run lint`
-- `npm --prefix web/viewer run test`
+- `./scripts/test-quickstart.sh` (captured with `tee` into the new artifact log)
