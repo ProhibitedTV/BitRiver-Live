@@ -2,28 +2,22 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Prepare execution artifacts and DSN-backed Postgres path
+- [x] Task 1 — Capture release-readiness scope and evidence sources
   - Acceptance criteria:
-    - Artifact directory for this run is created and selected.
-    - Chosen execution path is documented (`BITRIVER_TEST_POSTGRES_DSN` with local transient Postgres).
+    - `PLAN.md` reflects this release-readiness documentation scope.
+    - Evidence sources are limited to existing logs/artifacts in repo.
 
-- [x] Task 2 — Run Postgres storage suite with migrations and capture logs
+- [x] Task 2 — Consolidate production release status in one report
   - Acceptance criteria:
-    - `./scripts/test-postgres.sh` executed with DSN path.
-    - Run output captured into the artifact directory.
+    - `docs/releases/release-checklist-report-2026-02-27.md` includes all current gate outcomes relevant to release readiness.
+    - Report includes a clear go/no-go decision.
 
-- [x] Task 3 — Confirm release-required migrations are present/applied
+- [x] Task 3 — Document unblock actions before tagging
   - Acceptance criteria:
-    - Verified migration files referenced in `docs/production-release.md` exist in `deploy/migrations`.
-    - Verified database objects introduced by those migrations are present after migration run.
-
-- [x] Task 4 — Run pgx guard and publish final reporting updates
-  - Acceptance criteria:
-    - `./scripts/check-postgres-pgx.sh postgres` executed and logged.
-    - `TASKS.md` and `docs/releases/release-checklist-report-2026-02-25.md` updated with final outcomes.
+    - Report includes ordered remediation steps for every failing/blocked gate.
+    - Notes specify the exact commands to rerun when environment blockers are resolved.
 
 ## Execution log
-- ✅ Task 1 complete: artifact directory `artifacts/release-checks-20260227-154611/` created; selected DSN execution path using local transient Postgres (`BITRIVER_TEST_POSTGRES_DSN`) because Docker CLI is unavailable.
-- ⚠️ Task 2 complete with failing result: `./scripts/test-postgres.sh` executed via DSN path with `BITRIVER_TEST_POSTGRES_RUN_MIGRATIONS=1`; migrations applied, but Go postgres-tagged storage tests failed with `postgres repository unavailable: pgx driver stubbed in this build`. Full output: `artifacts/release-checks-20260227-154611/07-test-postgres-dsn.log`.
-- ✅ Task 3 complete: verified release-required migration files (`0002_chat_filters.sql`, `0006_profile_social_links.sql`, `0007_auth_mfa.sql`) exist and corresponding schema objects (`chat_filters`, `chat_automod_actions`, `auth_mfa`, `auth_mfa_challenges`, `profiles.social_links`) are present in the migrated validation DB. Output: `artifacts/release-checks-20260227-154611/08-migration-verification.log`.
-- ✅ Task 4 complete: `./scripts/check-postgres-pgx.sh postgres` passed (`expected_storage_driver=postgres`). Output: `artifacts/release-checks-20260227-154611/09-check-postgres-pgx.log`.
+- ✅ Task 1 complete: updated `PLAN.md` to define documentation-only production release readiness scope and constraints.
+- ✅ Task 2 complete: updated `docs/releases/release-checklist-report-2026-02-27.md` with consolidated gate status and release decision.
+- ✅ Task 3 complete: added explicit unblock actions and rerun commands required before creating a production release tag.
