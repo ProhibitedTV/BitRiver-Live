@@ -1,24 +1,26 @@
-# Monitoring stack (Prometheus + Grafana + Alertmanager).
-# Apply with:
-#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.monitoring.yml --profile monitoring up -d
+# Optional monitoring overlay (Prometheus + Alertmanager + Grafana).
+# Usage:
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.monitoring.yml up -d
+#
+# Ports are loopback-bound by default for safer local exposure. For remote access,
+# prefer publishing dashboards/alerts through a reverse proxy with TLS/auth rather
+# than opening these ports directly on 0.0.0.0.
 services:
   prometheus:
     image: prom/prometheus:v2.51.2
     container_name: bitriver-prometheus
     restart: unless-stopped
-    profiles:
-      - monitoring
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
-      - "--storage.tsdb.retention.time=15d"
+      - "--storage.tsdb.retention.time=${BITRIVER_PROMETHEUS_RETENTION:-15d}"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/prometheus-alerts.yml:/etc/prometheus/rules/prometheus-alerts.yml:ro
       - ./monitoring/metrics.token:/etc/prometheus/metrics.token:ro
       - prometheus-data:/prometheus
     ports:
-      - "9090:9090"
+      - "${BITRIVER_PROMETHEUS_BIND:-127.0.0.1}:${BITRIVER_PROMETHEUS_HOST_PORT:-9090}:9090"
     depends_on:
       - bitriver-live
       - alertmanager
@@ -27,8 +29,6 @@ services:
     image: prom/alertmanager:v0.27.0
     container_name: bitriver-alertmanager
     restart: unless-stopped
-    profiles:
-      - monitoring
     command:
       - "--config.file=/etc/alertmanager/alertmanager.yml"
       - "--storage.path=/alertmanager"
@@ -37,50 +37,25 @@ services:
       - ./monitoring/alertmanager-notification.tmpl:/etc/alertmanager/templates/bitriver-default.tmpl:ro
       - alertmanager-data:/alertmanager
     ports:
-      - "9093:9093"
-
-  node-exporter:
-    image: prom/node-exporter:v1.8.1
-    container_name: bitriver-node-exporter
-    restart: unless-stopped
-    profiles:
-      - monitoring
-    command:
-      - "--path.rootfs=/host"
-    volumes:
-      - /:/host:ro,rslave
-    ports:
-      - "9100:9100"
-
-  redis-exporter:
-    image: oliver006/redis_exporter:v1.60.0
-    container_name: bitriver-redis-exporter
-    restart: unless-stopped
-    profiles:
-      - monitoring
-    environment:
-      REDIS_ADDR: redis:6379
-      REDIS_USER: default
-      REDIS_PASSWORD: ${BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD:-}
-    ports:
-      - "9121:9121"
-    depends_on:
-      - redis
+      - "${BITRIVER_ALERTMANAGER_BIND:-127.0.0.1}:${BITRIVER_ALERTMANAGER_HOST_PORT:-9093}:9093"
 
   grafana:
     image: grafana/grafana-oss:10.4.3
     container_name: bitriver-grafana
     restart: unless-stopped
-    profiles:
-      - monitoring
     environment:
       GF_SECURITY_ADMIN_USER: ${BITRIVER_GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${BITRIVER_GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_DOMAIN: ${BITRIVER_GRAFANA_DOMAIN:-localhost}
+      GF_SERVER_ROOT_URL: ${BITRIVER_GRAFANA_ROOT_URL:-http://localhost:3001}
     volumes:
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/bitriver-live-dashboard.json:/var/lib/grafana/dashboards/bitriver-live-dashboard.json:ro
       - grafana-data:/var/lib/grafana
     ports:
-      - "3001:3000"
+      - "${BITRIVER_GRAFANA_BIND:-127.0.0.1}:${BITRIVER_GRAFANA_HOST_PORT:-3001}:3000"
     depends_on:
       - prometheus
 

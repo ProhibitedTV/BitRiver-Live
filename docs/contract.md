@@ -12,6 +12,9 @@ BitRiver Live has one canonical deployment path: the root `.env` rendered/valida
 - `deploy/docker-compose.limits.yml` (optional overlay, production-recommended)
   - Adds Docker Compose-compatible CPU/memory limits (`cpus`, `mem_limit`, `mem_reservation`) per service.
   - Activated explicitly via a second `-f` compose file or `cmd/bitriver` `--limits` flag.
+- `deploy/docker-compose.monitoring.yml` (optional overlay)
+  - Adds Prometheus, Alertmanager, and Grafana for observability quickstart.
+  - Activated explicitly via a second `-f` compose file.
 - `deploy/.env.example`
   - Canonical schema/template for environment variables.
   - Source for placeholder detection in `cmd/bitriver env validate` and seed values in `cmd/bitriver env init`.
@@ -114,6 +117,25 @@ These variables are consumed by `deploy/docker-compose.limits.yml` and validated
 | `BITRIVER_*_MEM_RESERVATION` | Docker Compose memory size (for example `128m`, `512m`) | Optional | Invalid memory format fails env validation; reservation hints are ignored or rejected. |
 
 Primary service knobs include `BITRIVER_API_*`, `BITRIVER_VIEWER_*`, `BITRIVER_POSTGRES_*`, `BITRIVER_SRS_*`, `BITRIVER_OME_*`, and `BITRIVER_TRANSCODER_*` variants declared in `deploy/.env.example`.
+
+
+### I) Optional monitoring overlay knobs
+
+These variables are consumed by `deploy/docker-compose.monitoring.yml` when set.
+
+| Variable | Default in overlay | Required? | What breaks if wrong |
+| --- | --- | --- | --- |
+| `BITRIVER_PROMETHEUS_BIND` | `127.0.0.1` | Optional | Prometheus host binding/publish may fail or expose unexpectedly. |
+| `BITRIVER_PROMETHEUS_HOST_PORT` | `9090` | Optional | Prometheus host port collisions or unexpected access path. |
+| `BITRIVER_ALERTMANAGER_BIND` | `127.0.0.1` | Optional | Alertmanager host binding/publish may fail or expose unexpectedly. |
+| `BITRIVER_ALERTMANAGER_HOST_PORT` | `9093` | Optional | Alertmanager host port collisions or unexpected access path. |
+| `BITRIVER_GRAFANA_BIND` | `127.0.0.1` | Optional | Grafana host binding/publish may fail or expose unexpectedly. |
+| `BITRIVER_GRAFANA_HOST_PORT` | `3001` | Optional | Grafana host port collisions or unexpected access path. |
+| `BITRIVER_GRAFANA_ADMIN_USER` | `admin` | Optional | Dashboard login credentials drift from operator expectation. |
+| `BITRIVER_GRAFANA_ADMIN_PASSWORD` | `admin` | Optional | Weak credentials in production if not overridden. |
+| `BITRIVER_GRAFANA_DOMAIN` | `localhost` | Optional | Generated Grafana links/redirects may be incorrect. |
+| `BITRIVER_GRAFANA_ROOT_URL` | `http://localhost:3001` | Optional | Reverse-proxy link generation may be incorrect. |
+| `BITRIVER_PROMETHEUS_RETENTION` | `15d` | Optional | Retention too low/high for host storage capacity. |
 
 ### H) Ingest and playback/control plane
 
