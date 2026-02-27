@@ -152,20 +152,19 @@ Each alert in `deploy/monitoring/prometheus-alerts.yml` should page to the remed
 
 ## Resource sizing + kernel tuning
 
-Use the optional Compose override `deploy/docker-compose.resources.yml` to set higher `nofile` limits and baseline CPU/memory
-reservations for SRS, OME, and the transcoder:
+Use `deploy/docker-compose.limits.yml` for enforceable CPU/memory limits under non-Swarm Docker Compose:
 
 ```bash
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.resources.yml up -d
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.limits.yml up -d
 ```
 
-It sets `nofile=262144` and these baseline reservations/limits:
+If ingest services need elevated descriptor ceilings, add the ulimits-only overlay as well:
 
-| Service | CPU reservation | CPU limit | Memory reservation | Memory limit |
-| --- | --- | --- | --- | --- |
-| `srs` | 1.0 | 2.0 | 1G | 2G |
-| `ome` | 1.5 | 4.0 | 2G | 4G |
-| `transcoder` | 2.0 | 6.0 | 4G | 12G |
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.limits.yml -f deploy/docker-compose.resources.yml up -d
+```
+
+`deploy/docker-compose.resources.yml` sets `nofile=262144` for `srs`, `ome`, and `transcoder`.
 
 **Host kernel recommendations:** ensure the Docker daemon can raise file descriptor limits and that the host allows them:
 

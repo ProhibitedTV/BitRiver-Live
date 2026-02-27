@@ -1,45 +1,29 @@
-# Optional resource limits + ulimits for ingest components.
-# Apply with:
-#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.resources.yml up -d
+# Optional ulimits overlay for ingest components.
+#
+# This file intentionally avoids `deploy.resources` because those limits are
+# Swarm-only semantics and are not reliably enforced by `docker compose` in
+# non-Swarm mode.
+#
+# For enforceable CPU/memory limits under Docker Compose, layer
+# `deploy/docker-compose.limits.yml` as well:
+#   docker compose -f deploy/docker-compose.yml \
+#     -f deploy/docker-compose.limits.yml \
+#     -f deploy/docker-compose.resources.yml up -d
 services:
   srs:
     ulimits:
       nofile:
         soft: 262144
         hard: 262144
-    deploy:
-      resources:
-        reservations:
-          cpus: "1.0"
-          memory: 1G
-        limits:
-          cpus: "2.0"
-          memory: 2G
 
   ome:
     ulimits:
       nofile:
         soft: 262144
         hard: 262144
-    deploy:
-      resources:
-        reservations:
-          cpus: "1.5"
-          memory: 2G
-        limits:
-          cpus: "4.0"
-          memory: 4G
 
   transcoder:
     ulimits:
       nofile:
         soft: 262144
         hard: 262144
-    deploy:
-      resources:
-        reservations:
-          cpus: "2.0"
-          memory: 4G
-        limits:
-          cpus: "6.0"
-          memory: 12G

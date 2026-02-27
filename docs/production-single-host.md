@@ -46,6 +46,9 @@ BitRiver Live ships a production-friendly limits overlay at:
 
 It uses Docker Compose-compatible fields (`cpus`, `mem_limit`, `mem_reservation`) and is optional so developer workflows stay unchanged.
 
+If you also need higher file-descriptor ceilings for ingest workloads, optionally layer
+`deploy/docker-compose.resources.yml` (ulimits-only overlay) on top of the limits overlay.
+
 
 ## Preflight gate
 
