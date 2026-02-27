@@ -1,20 +1,21 @@
 # PLAN
 
 ## Scope (current change)
-- Create a new operator-facing security guide at `docs/security.md` as the primary security entrypoint for this stack.
-- Tailor guidance to the current deployment contract and validation flow (`deploy/docker-compose.yml`, `deploy/.env.example`, `cmd/bitriver env validate`).
-- Add prominent navigation links so operators discover the security guide from high-traffic docs (`README.md` and/or `docs/operations.md`).
+- Update production messaging to describe BitRiver Live as production-capable for operator-managed single-host deployments without overstating guarantees.
+- Add a dedicated production status policy document at `docs/production-status.md` with clear lifecycle definitions (`dev`, `beta`, `rc`, `v1.0`) and guarantee boundaries.
+- Update release note templating so every release captures upgrade notes, breaking changes, and an explicit operator checklist.
+- Ensure docs cross-link required operator references: `docs/production-single-host.md`, `docs/upgrades.md`, `docs/security.md`, and `docs/monitoring.md`.
 
 ## Assumptions
-- Security guidance should match the current single-host Docker Compose deployment model and documented optional profiles.
-- This change is documentation-only and does not alter runtime behavior or deployment contract values.
-- `_FILE`-based secrets are not yet implemented in the current stack, so guidance should mention future compatibility without claiming support exists today.
+- This is a documentation-only change; no runtime or deployment-contract files are modified.
+- Existing repo language around single-host Docker Compose remains authoritative and should be reused where possible.
+- The current release template location is `.github/RELEASE_NOTES_TEMPLATE.md`.
 
 ## Risks
-- Overstating default exposure levels for ports/services could mislead operators if wording is not anchored to current compose defaults.
-- Security guidance can drift from env validation behavior if we cite controls not enforced by `cmd/bitriver env validate`.
-- If the new doc is not linked clearly, operators may continue to miss security hardening steps.
+- Messaging could imply stronger guarantees than currently documented if wording is too broad.
+- Inconsistent lifecycle definitions between README and new production-status doc could confuse operators.
+- Missing required doc links would fail acceptance criteria and reduce operator discoverability.
 
 ## Test plan
-- Markdown/documentation lint via static review for section completeness and command correctness.
+- Static docs QA by checking modified markdown for required sections/links.
 - `./scripts/verify.sh`
