@@ -49,7 +49,15 @@ It uses Docker Compose-compatible fields (`cpus`, `mem_limit`, `mem_reservation`
 
 ## Preflight gate
 
-Before bringing up production services, run:
+Before bringing up production services, run the canonical environment check wrapper first:
+
+```bash
+bash deploy/check-env.sh
+```
+
+This executes doctor preflight with the canonical Compose file and then validates your env file.
+
+If you need to inspect doctor output directly, run:
 
 ```bash
 go run ./cmd/bitriver doctor

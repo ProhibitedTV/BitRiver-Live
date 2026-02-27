@@ -79,6 +79,19 @@ Result levels:
 
 The Go-based quickstart defines the canonical deployment contract across Tier 1 platforms—Windows 10/11 with Docker Desktop, macOS with Docker Desktop, and Ubuntu/Debian with Docker Engine plus the Compose plugin. Launcher wrappers and installers remain compatibility entrypoints that forward into the same Compose + `.env` pipeline. See [`docs/cross-platform-plan.md`](labs/cross-platform-plan.md#canonical-production-deployment-path) for the contract and support matrix.
 
+## First step: run environment preflight
+
+Before quickstart, run the canonical environment check wrapper:
+
+```bash
+bash deploy/check-env.sh
+```
+
+This runs `bitriver doctor` (with the canonical Compose contract) and then
+`bitriver env validate` against your chosen env file. Use
+`bash deploy/check-env.sh --skip-doctor` only as a temporary bypass when
+you have already reviewed doctor output separately.
+
 ## Run the quickstart command
 
 Installer path (recommended for operators):
