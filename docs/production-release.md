@@ -34,6 +34,8 @@ For secret management hardening patterns that keep the same `.env` + Compose con
 Run every test suite locally (or on a staging CI run) so the GitHub release
 workflow does not discover failures after the tag is pushed.
 
+For the default local quality gate, run `./scripts/verify.sh`; it covers Go and contract checks plus Docker-gated Compose validation and quickstart smoke (`./scripts/test-quickstart.sh`) in deterministic order when Docker is available.
+
 ### GitHub Actions supply-chain pinning
 
 All workflow `uses:` references must pin to immutable commit SHAs rather than

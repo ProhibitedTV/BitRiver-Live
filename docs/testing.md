@@ -11,7 +11,7 @@ coverage.
 
 - `go` (for `go test ./...`)
 - `python3` (used by `./scripts/check-contract-invariants.sh` to validate generated artifact references in `docs/contract.md`)
-- `docker` (optional; `docker compose --env-file <file> ... config` is skipped when Docker is unavailable)
+- `docker` (optional; Docker-dependent verify phases (`docker compose ... config`, `./scripts/test-quickstart.sh`) are skipped when Docker is unavailable)
 - `node` + `npm` (optional; required only when viewer lint/test checks are selected)
 
 If `python3` is missing, `./scripts/verify.sh` now fails fast with a clear prerequisite error before running the verify sequence.
@@ -299,7 +299,7 @@ calls are recorded:
 
 Run the compose smoke guard to ensure the default `.env` and `deploy/docker-compose.yml` still render and that the tracked health probes stay wired:
 
-`./scripts/verify.sh` now validates compose config with an explicit env file, preferring root `.env` and falling back to `deploy/.env.example` when `.env` is absent, so missing environment variables surface during verification.
+`./scripts/verify.sh` now validates compose config with an explicit env file, preferring root `.env` and falling back to `deploy/.env.example` when `.env` is absent, so missing environment variables surface during verification. When Docker is available, verify then runs `./scripts/test-quickstart.sh` as an integration/smoke phase immediately after compose validation. Both Docker-dependent phases emit explicit skip messages when Docker is unavailable.
 
 ```bash
 ./scripts/test-quickstart.sh

@@ -1,23 +1,23 @@
 # PLAN
 
 ## Scope (current change)
-- Run the requested release gate commands from repo root and capture complete output logs.
-- Store evidence under a new timestamped `artifacts/release-checks-<timestamp>/` directory, consistent with existing artifact naming.
-- Update `docs/releases/release-checklist-report-2026-02-27.md` gate summary rows and final go/no-go decision based on the new evidence.
+- Update `scripts/verify.sh` to include a deterministic quickstart smoke phase (`./scripts/test-quickstart.sh`) when Docker is available.
+- Mirror existing compose-validation skip behavior with clear messaging when Docker is unavailable.
+- Keep docs synchronized for verify gate coverage in `AGENTS.md`, `docs/testing.md`, and `docs/production-release.md`.
 
 ## Assumptions
-- The execution environment may or may not expose a working Docker daemon; outcomes must be recorded exactly as observed.
-- Existing release checklist report structure should be preserved while updating only the relevant rows and evidence paths.
-- No product/runtime code changes are required for this request.
+- `scripts/verify.sh` should remain fail-fast (`set -Eeuo pipefail`) and stop immediately on smoke-test failure.
+- Docker availability check should continue to be PATH-based (`command -v docker`) to mirror current compose validation behavior.
+- Docs should describe the new verify ordering and Docker-dependent skip semantics without changing unrelated release policy text.
 
 ## Risks
-- If Docker CLI/daemon is unavailable, `docker compose ... config` and `./scripts/test-quickstart.sh` may fail and should drive a no-go decision.
-- Partial logs or inconsistent artifact naming would weaken release evidence traceability.
+- Running quickstart smoke before/after other phases incorrectly could make verify ordering non-deterministic versus documentation.
+- If skip messaging diverges between compose validation and smoke phase, operators may misunderstand what was actually validated.
+- `./scripts/test-quickstart.sh` may take longer and fail in constrained environments; this should intentionally fail verify when Docker is available.
 
 ## Test plan
-- Create a new timestamped artifact directory and capture stdout/stderr + exit codes for:
-  - `docker compose -f deploy/docker-compose.yml config`
-  - `./scripts/test-quickstart.sh`
-  - `./scripts/verify.sh`
-- Verify artifact files exist and contain full command outputs.
-- Update and review `docs/releases/release-checklist-report-2026-02-27.md` so gate outcomes and final decision align with the new logs.
+- Run `bash -n scripts/verify.sh` to validate shell syntax after edits.
+- Run `./scripts/verify.sh` and confirm deterministic ordering includes:
+  1) Docker Compose config validation, then
+  2) Quickstart smoke (`./scripts/test-quickstart.sh`) when Docker exists, or explicit skip message when not.
+- Review `docs/testing.md`, `docs/production-release.md`, and `AGENTS.md` for contract alignment with verify coverage.

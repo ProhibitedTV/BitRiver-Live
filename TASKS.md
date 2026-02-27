@@ -2,24 +2,26 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Capture requested release gate command logs
+- [x] Task 1 — Add verify smoke phase with deterministic Docker-gated ordering
   - Acceptance criteria:
-    - New `artifacts/release-checks-<timestamp>/` directory exists.
-    - Logs for `docker compose -f deploy/docker-compose.yml config`, `./scripts/test-quickstart.sh`, and `./scripts/verify.sh` are stored with full output and exit status.
+    - `scripts/verify.sh` runs quickstart smoke immediately after Docker Compose validation when Docker is available.
+    - Docker-unavailable path prints explicit skip messaging for both compose validation and quickstart smoke.
+    - Failures from `./scripts/test-quickstart.sh` fail `./scripts/verify.sh`.
 
-- [x] Task 2 — Update release checklist report with new outcomes
+- [x] Task 2 — Sync command contract docs with verify coverage
   - Acceptance criteria:
-    - `docs/releases/release-checklist-report-2026-02-27.md` gate summary rows reference the new artifact paths.
-    - Gate pass/fail states reflect the latest command results.
+    - `AGENTS.md` required checks section reflects verify gate sequence including smoke phase and Docker skip semantics.
+    - `docs/testing.md` verify section documents quickstart smoke phase under verify.
+    - `docs/production-release.md` mentions default verify coverage consistently where relevant.
 
-- [x] Task 3 — Align final go/no-go decision with refreshed gate results
+- [x] Task 3 — Validate and record results
   - Acceptance criteria:
-    - Final recommendation in the report matches updated gate statuses and evidence.
+    - Run syntax/behavior checks (`bash -n scripts/verify.sh`, `./scripts/verify.sh`).
+    - Record outcomes in the execution log below.
 
 ## Execution log
-- ✅ Task 1 complete: captured logs in `artifacts/release-checks-20260227-163011/`.
-  - `docker compose -f deploy/docker-compose.yml config` → exit 127 (docker missing).
-  - `./scripts/test-quickstart.sh` → exit 1 (docker required).
-  - `./scripts/verify.sh` → exit 0 (passes with docker-related skips).
-- ✅ Task 2 complete: refreshed gate summary/evidence paths in `docs/releases/release-checklist-report-2026-02-27.md`.
-- ✅ Task 3 complete: retained **NO-GO / NOT READY** decision to match latest failing docker-dependent gates.
+- ✅ Task 1 complete: `scripts/verify.sh` now runs Docker compose validation then `./scripts/test-quickstart.sh` when Docker is available, and prints explicit skip messages for both steps when Docker is unavailable.
+  - Check: `bash -n scripts/verify.sh` (pass).
+- ✅ Task 2 complete: updated `AGENTS.md`, `docs/testing.md`, and `docs/production-release.md` to reflect verify smoke-phase coverage and Docker skip semantics.
+  - Check: `rg -n "quickstart smoke|Docker-dependent|scripts/verify.sh" AGENTS.md docs/testing.md docs/production-release.md` (pass).
+- ✅ Task 3 complete: verification commands passed, including full `./scripts/verify.sh` run with deterministic Docker skip messaging and successful remaining gates.
