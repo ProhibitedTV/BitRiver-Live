@@ -68,13 +68,14 @@ the tracked migrations, and runs the integration tests:
 
 ### Viewer lint and integration tests
 
-Run the viewer quality gates from the repository root. The first invocation will
-install dependencies; subsequent releases can reuse the cached `node_modules`
-directory.
+Run the viewer quality gates from the repository root.
+
+Use `npm ci` for lockfile-faithful release validation, and run it from
+`web/viewer`.
 
 ```bash
 cd web/viewer
-npm install
+npm ci
 npm run lint
 npm run test:integration
 ```
