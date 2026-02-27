@@ -1,6 +1,21 @@
 # PLAN
 
 ## Scope (current change)
+- Update the navbar notifications icon button in `web/viewer/components/Navbar.tsx` to reflect that notifications are not yet implemented by using proper disabled semantics and helper copy.
+- Preserve existing icon-button styling while making assistive technology state explicit (`disabled`) and exposing a short tooltip/helper string.
+- Add/adjust navbar tests to verify the notifications control is disabled with the expected helper text.
+
+## Assumptions
+- There is no existing notifications route/panel in the viewer app, so a disabled “coming soon” control is the correct concrete implementation for now.
+- A `title` attribute is acceptable helper text/tooltip for this icon-only button in current UI patterns.
+
+## Risks
+- Minor copy drift risk if a dedicated tooltip system is introduced later and this string is not centralized.
+
+## Test plan
+- `cd web/viewer && npm run test -- navbar.test.tsx`
+
+## Scope (current change)
 - Expand env validation secret handling to treat `*_FILE` as first-class companions for all sensitive environment values validated by `cmd/bitriver env validate`.
 - Keep deterministic precedence when both direct and file-based values are provided: direct value wins and validator emits a warning.
 - Ensure file-backed secret values flow through existing missing/blocked checks so placeholder and required-value rules still apply.

@@ -297,7 +297,13 @@ export function Navbar() {
             </Link>
           )}
           <div className="nav-icon-group" role="group" aria-label="Viewer quick actions">
-            <button className="icon-button" type="button" aria-label="View notifications">
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="View notifications"
+              disabled
+              title="Notifications coming soon"
+            >
               🔔
             </button>
             <button
