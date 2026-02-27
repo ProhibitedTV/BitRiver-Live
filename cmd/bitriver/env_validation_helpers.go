@@ -361,6 +361,44 @@ func randomSuffix() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
+type envFileResolution struct {
+	value   string
+	error   string
+	warning string
+}
+
+func resolveEnvValue(values map[string]string, key string) envFileResolution {
+	directValue := strings.TrimSpace(values[key])
+	fileKey := key + "_FILE"
+	filePath := strings.TrimSpace(values[fileKey])
+
+	if directValue != "" {
+		if filePath != "" {
+			return envFileResolution{
+				value:   directValue,
+				warning: fmt.Sprintf("%s and %s are both set; using %s and ignoring %s", key, fileKey, key, fileKey),
+			}
+		}
+		return envFileResolution{value: directValue}
+	}
+
+	if filePath == "" {
+		return envFileResolution{}
+	}
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return envFileResolution{error: fmt.Sprintf("%s points to %s but it cannot be read: %v", fileKey, filePath, err)}
+	}
+
+	trimmed := strings.TrimSpace(string(content))
+	if trimmed == "" {
+		return envFileResolution{}
+	}
+
+	return envFileResolution{value: trimmed}
+}
+
 func validateEnv(values map[string]string) envValidatorResult {
 	requiredVars := []string{
 		"BITRIVER_POSTGRES_USER",
@@ -399,6 +437,35 @@ func validateEnv(values map[string]string) envValidatorResult {
 	production := mode == "production"
 
 	res := envValidatorResult{}
+	effectiveValues := make(map[string]string, len(values))
+	for key, value := range values {
+		effectiveValues[key] = value
+	}
+
+	secretRequiredKeys := map[string]struct{}{
+		"BITRIVER_POSTGRES_PASSWORD":              {},
+		"BITRIVER_REDIS_PASSWORD":                 {},
+		"BITRIVER_LIVE_ADMIN_PASSWORD":            {},
+		"BITRIVER_SRS_TOKEN":                      {},
+		"BITRIVER_OME_PASSWORD":                   {},
+		"BITRIVER_OME_API_TOKEN":                  {},
+		"BITRIVER_TRANSCODER_TOKEN":               {},
+		"BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD": {},
+		"BITRIVER_LIVE_METRICS_TOKEN":             {},
+	}
+
+	for key := range secretRequiredKeys {
+		resolved := resolveEnvValue(values, key)
+		if resolved.error != "" {
+			res.Errors = append(res.Errors, resolved.error)
+		}
+		if resolved.warning != "" {
+			res.Warnings = append(res.Warnings, resolved.warning)
+		}
+		if resolved.value != "" {
+			effectiveValues[key] = resolved.value
+		}
+	}
 
 	switch mode {
 	case "":
@@ -416,7 +483,7 @@ func validateEnv(values map[string]string) envValidatorResult {
 	}
 
 	for _, key := range requiredVars {
-		if strings.TrimSpace(values[key]) == "" {
+		if strings.TrimSpace(effectiveValues[key]) == "" {
 			res.Missing = append(res.Missing, key)
 		}
 	}
@@ -428,13 +495,13 @@ func validateEnv(values map[string]string) envValidatorResult {
 	}
 
 	for key, placeholder := range forbiddenPlaceholders {
-		if strings.TrimSpace(values[key]) == placeholder {
+		if strings.TrimSpace(effectiveValues[key]) == placeholder {
 			res.Blocked = append(res.Blocked, key)
 		}
 	}
 
-	if values["BITRIVER_REDIS_PASSWORD"] != "" && values["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"] != "" &&
-		values["BITRIVER_REDIS_PASSWORD"] != values["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"] {
+	if effectiveValues["BITRIVER_REDIS_PASSWORD"] != "" && effectiveValues["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"] != "" &&
+		effectiveValues["BITRIVER_REDIS_PASSWORD"] != effectiveValues["BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD"] {
 		res.Warnings = append(res.Warnings, "BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD does not match BITRIVER_REDIS_PASSWORD. Ensure Redis credentials stay in sync unless intentionally different.")
 	}
 
@@ -464,7 +531,7 @@ func validateEnv(values map[string]string) envValidatorResult {
 		res.Errors = append(res.Errors, "HTTPS URLs are configured for the viewer or API, but BITRIVER_LIVE_TLS_CERT/BITRIVER_LIVE_TLS_KEY are empty. Provide TLS files or terminate HTTPS in front of the service and update the URLs accordingly.")
 	}
 
-	metricsToken := strings.TrimSpace(values["BITRIVER_LIVE_METRICS_TOKEN"])
+	metricsToken := strings.TrimSpace(effectiveValues["BITRIVER_LIVE_METRICS_TOKEN"])
 	metricsAllowNetworks := strings.TrimSpace(values["BITRIVER_LIVE_METRICS_ALLOW_NETWORKS"])
 
 	if metricsToken == "" && metricsAllowNetworks == "" {
