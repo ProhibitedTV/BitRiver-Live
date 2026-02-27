@@ -46,6 +46,9 @@ func TestRunDoctorJSONOutput(t *testing.T) {
 	if len(report.Checks) == 0 {
 		t.Fatal("expected checks in report")
 	}
+	if report.Checks[0].Name == "" || report.Checks[0].Details == "" || report.Checks[0].Status == "" {
+		t.Fatalf("expected check fields to be populated: %+v", report.Checks[0])
+	}
 }
 
 func TestRunDoctorChecksPassWithInjectedDependencies(t *testing.T) {
@@ -53,13 +56,11 @@ func TestRunDoctorChecksPassWithInjectedDependencies(t *testing.T) {
 	originalOutput := doctorCommandOutput
 	originalPortLoader := doctorPortRequirementsLoader
 	originalPortChecker := doctorHostPortChecker
-	originalGPU := doctorIsGPUAvailable
 	defer func() {
 		doctorLookPath = originalLookPath
 		doctorCommandOutput = originalOutput
 		doctorPortRequirementsLoader = originalPortLoader
 		doctorHostPortChecker = originalPortChecker
-		doctorIsGPUAvailable = originalGPU
 	}()
 
 	doctorLookPath = func(file string) (string, error) { return "/usr/bin/" + file, nil }
@@ -70,6 +71,8 @@ func TestRunDoctorChecksPassWithInjectedDependencies(t *testing.T) {
 			return "25.0.1", nil
 		case "docker compose version --short":
 			return "2.27.0", nil
+		case "docker info --format {{.DockerRootDir}}":
+			return repoRoot(), nil
 		default:
 			return "", nil
 		}
@@ -78,10 +81,16 @@ func TestRunDoctorChecksPassWithInjectedDependencies(t *testing.T) {
 		return []quickstartPortRequirement{{name: "test", protocol: "tcp", ports: []int{65530}}}, nil
 	}
 	doctorHostPortChecker = func(protocol string, port int) error { return nil }
-	doctorIsGPUAvailable = func() bool { return false }
 
-	report := runDoctorChecks(doctorOptions{EnvFile: filepath.Join("testdata", "missing.env"), MinCPU: 1, MinRAMGB: 0, MinDiskGB: 0, MinDocker: "24.0.0", MinCompose: "2.20.0"})
+	report := runDoctorChecks(doctorOptions{EnvFile: filepath.Join("testdata", "missing.env"), ComposeFile: defaultComposeFile(), MinCPU: 1, MinRAMGB: 0, MinDiskGB: 0, MinDocker: "24.0.0", MinCompose: "2.20.0"})
 	if report.Status == doctorStatusFail {
 		t.Fatalf("expected non-fail report with injected dependencies, got %+v", report)
+	}
+}
+
+func TestRunDoctorChecksFailWhenComposeFileMissing(t *testing.T) {
+	report := runDoctorChecks(doctorOptions{EnvFile: defaultEnvFile(), ComposeFile: filepath.Join("testdata", "missing-compose.yml"), MinCPU: 1, MinRAMGB: 0, MinDiskGB: 0, MinDocker: "0.0.0", MinCompose: "0.0.0"})
+	if report.Status != doctorStatusFail {
+		t.Fatalf("expected fail for missing compose file, got %+v", report)
 	}
 }

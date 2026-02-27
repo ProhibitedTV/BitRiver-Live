@@ -46,6 +46,17 @@ BitRiver Live ships a production-friendly limits overlay at:
 
 It uses Docker Compose-compatible fields (`cpus`, `mem_limit`, `mem_reservation`) and is optional so developer workflows stay unchanged.
 
+
+## Preflight gate
+
+Before bringing up production services, run:
+
+```bash
+go run ./cmd/bitriver doctor
+```
+
+Treat `FAIL` as a release blocker, and clear `WARN` items (or document risk acceptance) before go-live.
+
 ## Recommended production startup path
 
 Use the base stack plus the limits overlay:
