@@ -23,6 +23,11 @@ services:
         BITRIVER_PGX_MODE: ${BITRIVER_PGX_MODE:-real}
     container_name: bitriver-live
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    # Runtime image sets USER appuser (uid 65532); keep explicit for compose clarity.
+    user: "65532:65532"
     env_file:
       - ../.env
     ports:
@@ -65,6 +70,8 @@ services:
     volumes:
       - ./data:/var/lib/bitriver-live
       # - ./certs:/certs
+    tmpfs:
+      - /tmp
     command: ["/app/bitriver-live"]
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
@@ -85,6 +92,9 @@ services:
         condition: service_healthy
       transcoder:
         condition: service_healthy
+    networks:
+      - public
+      - internal
 
   viewer:
     image: ghcr.io/bitriver-live/bitriver-viewer:${BITRIVER_VIEWER_IMAGE_TAG:?set via .env}${BITRIVER_VIEWER_IMAGE_DIGEST:-}
@@ -92,6 +102,11 @@ services:
       context: ../web/viewer
     container_name: bitriver-viewer
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    # Node official runtime supports the non-root `node` user.
+    user: "node"
     env_file:
       - ../.env
     environment:
@@ -103,12 +118,20 @@ services:
       HOSTNAME: 0.0.0.0
     expose:
       - "3000"
+    tmpfs:
+      - /tmp
     depends_on:
       - bitriver-live
+    networks:
+      - internal
 
   redis:
     image: redis:7-alpine${BITRIVER_REDIS_IMAGE_DIGEST:-}
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    # Exception: Redis image manages runtime config under the container filesystem.
+    # Exception: retain image default root user for upstream redis entrypoint compatibility.
     command:
       - "redis-server"
       - "--save"
@@ -125,11 +148,17 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+    networks:
+      - internal
 
   postgres:
     image: postgres:15-alpine${BITRIVER_POSTGRES_IMAGE_DIGEST:-}
     container_name: bitriver-postgres
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    # Exception: Postgres init/runtime writes beyond mounted data dir during startup.
+    # Exception: retain image default user; upstream postgres entrypoint handles UID/GID setup.
     environment:
       POSTGRES_DB: ${BITRIVER_POSTGRES_DB:-bitriver}
       POSTGRES_USER: ${BITRIVER_POSTGRES_USER:?set via .env}
@@ -143,16 +172,24 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    networks:
+      - internal
 
   postgres-migrations:
     image: postgres:15-alpine${BITRIVER_POSTGRES_IMAGE_DIGEST:-}
     restart: "no"
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    # Exception: keep image default user for psql tooling compatibility in one-shot migration job.
     env_file:
       - ../.env
     environment:
       PGPASSWORD: ${BITRIVER_POSTGRES_PASSWORD:?set via .env}
     volumes:
       - ./migrations:/migrations:ro
+    tmpfs:
+      - /tmp
     depends_on:
       postgres:
         condition: service_healthy
@@ -183,6 +220,8 @@ services:
         -c "SELECT 1 FROM users LIMIT 1;"
 
       echo "Postgres migrations completed."
+    networks:
+      - internal
 
   # Optional sidecar that publishes PostgreSQL to the host when COMPOSE_PROFILES
   # includes "postgres-host". Leave the profile disabled to keep the database
@@ -191,6 +230,9 @@ services:
     image: alpine:3${BITRIVER_ALPINE_3_IMAGE_DIGEST:-}
     container_name: bitriver-postgres-host-port
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
     command: ["sh", "-c", "while true; do sleep 3600; done"]
     network_mode: service:postgres
     depends_on:
@@ -211,6 +253,11 @@ services:
         GOSUMDB: ${GOSUMDB:-off}
     container_name: bitriver-srs-controller
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    # Runtime image sets USER appuser (uid 10002); keep explicit for compose clarity.
+    user: "10002:10002"
     env_file:
       - ../.env
     environment:
@@ -221,12 +268,17 @@ services:
       - "${BITRIVER_SRS_CONTROLLER_PORT:-1986}:1985"
     depends_on:
       - srs
+    tmpfs:
+      - /tmp
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:1985/healthz"]
       interval: 30s
       timeout: 5s
       retries: 5
       start_period: 10s
+    networks:
+      - public
+      - internal
 
   srs:
     image: ossrs/srs:${BITRIVER_SRS_IMAGE_TAG:-v5.0.185}${BITRIVER_SRS_IMAGE_DIGEST:-}
@@ -237,6 +289,10 @@ services:
         SRS_VERSION: ${BITRIVER_SRS_IMAGE_TAG:-v5.0.185}
     container_name: bitriver-srs
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    # Exception: upstream SRS image writes process/log artifacts under /usr/local/srs.
+    # Exception: retain image default root user; upstream image is not documented for non-root startup.
     ports:
       - "${BITRIVER_SRS_RTMP_PORT:-1935}:1935"
     volumes:
@@ -250,6 +306,9 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    networks:
+      - public
+      - internal
 
   # Optional profile to publish the SRS HTTP API (1985) to the host for debugging.
   srs-api:
@@ -259,6 +318,9 @@ services:
     container_name: bitriver-srs-api
     command: ["sh", "-c", "sleep infinity"]
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
     network_mode: "service:srs"
     depends_on:
       - srs
@@ -276,6 +338,12 @@ services:
     env_file:
       - ../.env
     restart: "no"
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    # Exception: config render job needs writable bind-mounted repository workspace.
+    # Exception: keep root because this job chmods generated script paths in mounted workspace.
+    networks:
+      - internal
 
   ome-config:
     build:
@@ -292,6 +360,12 @@ services:
     env_file:
       - ../.env
     restart: "no"
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    # Exception: OME render writes generated config back into the repository workspace.
+    # Exception: keep image default root for repository workspace write permissions.
+    networks:
+      - internal
 
   ome-health-token-check:
     image: bitriver-live/ome-config:local
@@ -306,12 +380,24 @@ services:
       ome-config:
         condition: service_completed_successfully
     restart: "no"
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    # Exception: keep image default user for CLI/image parity with ome-config helper image.
+    tmpfs:
+      - /tmp
+    networks:
+      - internal
 
   ome:
     image: airensoft/ovenmediaengine:${BITRIVER_OME_IMAGE_TAG:-0.16.0}${BITRIVER_OME_IMAGE_DIGEST:-}
     container_name: bitriver-ome
     hostname: ome
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    # Exception: OME runtime uses writable paths inside its image layout.
+    # Exception: retain image default root user; vendor image startup expectations are root-based.
     entrypoint:
       - sh
       - -ec
@@ -363,7 +449,8 @@ services:
       BITRIVER_OME_HEALTHCHECK_TOKEN: ${BITRIVER_OME_HEALTHCHECK_TOKEN:-}
       BITRIVER_OME_API_TOKEN: ${BITRIVER_OME_API_TOKEN:?set via .env}
     networks:
-      default:
+      public:
+      internal:
         aliases:
           - ome
     ports:
@@ -410,6 +497,11 @@ services:
         GOSUMDB: ${GOSUMDB:-off}
     container_name: bitriver-transcoder
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    # Runtime image sets USER appuser (uid 10001); keep explicit for compose clarity.
+    user: "10001:10001"
     ports:
       - "${BITRIVER_TRANSCODER_HOST_PORT:-9001}:9000"
     environment:
@@ -421,12 +513,17 @@ services:
       BITRIVER_TRANSCODER_RETENTION_UPLOADS: ${BITRIVER_TRANSCODER_RETENTION_UPLOADS:-}
     volumes:
       - ./transcoder-data:/work
+    tmpfs:
+      - /tmp
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:9000/healthz"]
       interval: 30s
       timeout: 5s
       retries: 5
       start_period: 10s
+    networks:
+      - public
+      - internal
 
   transcoder-public:
     image: nginx:alpine${BITRIVER_NGINX_IMAGE_DIGEST:-}
@@ -434,13 +531,27 @@ services:
     depends_on:
       - transcoder
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    # Exception: retain image default root user; nginx binds and manages runtime state internally.
     ports:
       - "${BITRIVER_TRANSCODER_PUBLIC_PORT:-9080}:8080"
     volumes:
       - ./transcoder-data:/work:ro
       - ./nginx/transcoder-public.conf:/etc/nginx/nginx.conf:ro
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    networks:
+      - public
 
 volumes:
   redis-data:
   data:
   postgres-data:
+
+networks:
+  public:
+  internal:

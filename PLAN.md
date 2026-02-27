@@ -1,21 +1,20 @@
 # PLAN
 
 ## Scope (current change)
-- Add `_FILE` secret resolution support to `cmd/bitriver env validate` so required secret-like env keys can be supplied via mounted files.
-- Ensure validation reports distinguish missing secret values vs `_FILE` path/readability failures.
-- Document `_FILE` operator usage in `deploy/.env.example`, `docs/secrets-hardening.md`, and a new `docs/security.md`.
-- Add focused tests in `cmd/bitriver/env_validation_test.go` for direct values, `_FILE` values, precedence, unreadable/missing file, and empty file content.
+- Create a new operator-facing security guide at `docs/security.md` as the primary security entrypoint for this stack.
+- Tailor guidance to the current deployment contract and validation flow (`deploy/docker-compose.yml`, `deploy/.env.example`, `cmd/bitriver env validate`).
+- Add prominent navigation links so operators discover the security guide from high-traffic docs (`README.md` and/or `docs/operations.md`).
 
 ## Assumptions
-- `_FILE` support is validation-time only in this change; runtime service env consumption remains unchanged.
-- Deterministic precedence will be: explicit `<KEY>` value wins over `<KEY>_FILE`, with a warning when both are set.
-- Secret file content should be trimmed for surrounding whitespace/newlines before use.
+- Security guidance should match the current single-host Docker Compose deployment model and documented optional profiles.
+- This change is documentation-only and does not alter runtime behavior or deployment contract values.
+- `_FILE`-based secrets are not yet implemented in the current stack, so guidance should mention future compatibility without claiming support exists today.
 
 ## Risks
-- If precedence is unclear to operators, mixed `<KEY>` + `<KEY>_FILE` configuration could mask expected updates.
-- File-permission behavior can vary by platform; tests should avoid brittle permission assumptions and still cover unreadable/missing paths.
-- Missing one secret-like key could produce inconsistent validation behavior.
+- Overstating default exposure levels for ports/services could mislead operators if wording is not anchored to current compose defaults.
+- Security guidance can drift from env validation behavior if we cite controls not enforced by `cmd/bitriver env validate`.
+- If the new doc is not linked clearly, operators may continue to miss security hardening steps.
 
 ## Test plan
-- `go test ./cmd/bitriver -count=1`
+- Markdown/documentation lint via static review for section completeness and command correctness.
 - `./scripts/verify.sh`
