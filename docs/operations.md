@@ -4,6 +4,8 @@ This guide focuses on day-two operations for the default Docker Compose stack in
 Compose service names (`postgres`, `redis`, `transcoder`) and the host-mounted volumes so you can lift and restore state safely
 without breaking the one-command deployment flow.
 
+For baseline hardening posture, exposure boundaries, and rotation checklists, see [`docs/security.md`](security.md).
+
 ## Media pipeline failure ownership
 
 For the explicit ownership and recovery boundaries of SRS/OME/transcoder/control-plane failures, see [`docs/media-failure-model.md`](media-failure-model.md).

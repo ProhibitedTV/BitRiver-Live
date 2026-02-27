@@ -2,33 +2,22 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Add upgrade planning CLI command
+- [x] Task 1 — Add operator security entrypoint doc (`docs/security.md`)
   - Acceptance criteria:
-    - `bitriver upgrade-plan --to <tag>` reads current deployed version hints from `.env` image tags.
-    - Command validates supported upgrade hops (N-1 minors; no major skipping) and prints actionable steps.
-    - Command emits explicit warnings for major upgrades/breaking changes and optional schema checks.
+    - Includes all required sections: threat model summary, network exposure guidance, reverse proxy + TLS recommendation, auth/session/cookie settings guidance, admin bootstrap practices, secret rotation approach, logging guidance, and production checklist.
+    - Guidance is stack-specific and references `deploy/docker-compose.yml`, `deploy/.env.example`, and `cmd/bitriver env validate` where relevant.
+    - Includes service/port exposure table and explicit callouts that `postgres-host` and `srs-api` profiles are debug-only.
 
-- [x] Task 2 — Upgrade contract documentation
+- [x] Task 2 — Add discoverability links to security doc
   - Acceptance criteria:
-    - `docs/upgrades.md` includes Supported upgrade paths, Backup and restore checklist, and Roll back safety/unsafe guidance.
-    - Doc includes a single copy-paste command sequence that operators can run.
-
-- [x] Task 3 — Versioning + release artifact consistency
-  - Acceptance criteria:
-    - New dedicated versioning section/doc defines SemVer policy and breaking-change criteria.
-    - Release process/docs include required upgrade notes and breaking-change callouts.
-    - A reusable template exists under `.github/` for release notes consistency.
+    - Add link(s) from `README.md` and/or `docs/operations.md` so operators can quickly find `docs/security.md`.
+    - Link placement is near other operator-facing runbook references.
 
 ## Execution log
-- ✅ Task 1 complete: added `cmd/bitriver/upgrade_plan.go`, wired `upgrade-plan` in `cmd/bitriver/main.go`, and added tests in `cmd/bitriver/upgrade_plan_test.go`.
-- ✅ Task 1 checks:
-  - `go test ./cmd/bitriver -count=1`
-  - `go run ./cmd/bitriver upgrade-plan --current v1.2.3 --to v1.3.0 --check-schema --current-schema 0010 --expected-schema 0010`
+- ✅ Task 1 complete: created `docs/security.md` as the operator-facing security entrypoint with all required sections and stack-specific guidance.
+- ✅ Task 1 check:
+  - `rg -n "^## 1\)|^## 2\)|^## 3\)|^## 4\)|^## 5\)|^## 6\)|^## 7\)|^## 8\)|postgres-host|srs-api|env validate" docs/security.md`
 
-- ✅ Task 2 complete: rewrote `docs/upgrades.md` with explicit supported hops, backup/restore checklist, migration guarantees, single command sequence, and rollback safety boundaries.
-- ✅ Task 2 check: static review of rendered markdown sections/command sequence.
-
-- ✅ Task 3 complete: added `docs/versioning.md`, updated `docs/production-release.md` with release-notes consistency gate, and added `.github/RELEASE_NOTES_TEMPLATE.md`.
-- ✅ Task 3 checks:
-  - static review of SemVer/breaking-change policy wording
+- ✅ Task 2 complete: added discoverability links to `docs/security.md` from `README.md` and `docs/operations.md`.
+- ✅ Task 2 checks:
   - `./scripts/verify.sh`
