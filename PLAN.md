@@ -1,22 +1,17 @@
 # PLAN
 
 ## Scope (current change)
-- Update `scripts/check-go-workflow-config.sh` so workflow validation no longer requires literal `actions/setup-go@v5`.
-- Accept either SHA-pinned direct `actions/setup-go@<40-hex>` usage in each target workflow or approved local composite action usage (`./.github/actions/setup-go`) that pins `actions/setup-go` by SHA.
-- Keep existing enforcement for `go-version-file: go.mod` and offline Go environment guards (`GOTOOLCHAIN=local`, `GOPROXY=off`, `GOSUMDB=off`).
-- Update the related note in `docs/testing.md` to describe SHA-based setup-go enforcement.
+- Pin `.github/workflows/ci.yml` `dorny/paths-filter` usage from floating `@v3` to a full commit SHA with a release comment.
+- Audit all workflow files under `.github/workflows/` and pin any remaining third-party `uses:` entries that are not already full SHAs.
 
 ## Assumptions
-- The approved local action remains `./.github/actions/setup-go` and its implementation is in `.github/actions/setup-go/action.yml`.
-- Existing target workflows remain the same list currently hardcoded in `scripts/check-go-workflow-config.sh`.
-- Text-based checks are acceptable for this script (no YAML parser dependency required).
+- Existing workflow pinning convention is `uses: owner/repo@<40-char-sha> # vX.Y.Z` (or equivalent release label).
+- Local composite actions (`uses: ./.github/actions/...`) are intentionally unpinned and should remain unchanged.
 
 ## Risks
-- Regex checks may accidentally miss valid YAML formatting variants if patterns are too strict.
-- Local action validation could pass incorrectly if the script does not verify SHA pinning inside the composite action file.
-- Overly broad matching could allow non-approved local actions.
+- Pinning to an incorrect SHA could break CI behavior; use the upstream tag commit for the intended release.
+- Missing another non-SHA `uses:` line would leave policy drift in workflows.
 
 ## Test plan
-- Run `scripts/check-go-workflow-config.sh` and confirm it passes against current workflows.
-- Validate that the script still checks `go-version-file: go.mod` and offline guards by reviewing logic and pass output.
-- Verify updated wording in `docs/testing.md` mentions SHA-pinned direct setup-go usage or approved local composite action pinning.
+- Run a repository scan to list workflow `uses:` entries and confirm no non-SHA external actions remain.
+- Optionally run `./scripts/check-ci-contract.sh` to ensure CI workflow contract checks still pass.
