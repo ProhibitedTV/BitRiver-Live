@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import type { ChatMessage } from "../lib/viewer-api";
 import { fetchChannelChat, sendChatMessage } from "../lib/viewer-api";
@@ -33,6 +33,12 @@ export function ChatPanel({
   const [showSettings, setShowSettings] = useState(false);
   const [showAvatars, setShowAvatars] = useState(true);
   const [showTimestamps, setShowTimestamps] = useState(true);
+  const popoutTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoutDialogRef = useRef<HTMLElement | null>(null);
+  const settingsDialogRef = useRef<HTMLElement | null>(null);
+  const popoutHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const settingsHeadingRef = useRef<HTMLHeadingElement | null>(null);
 
   const isUnauthorizedError = (err: unknown) => {
     if (!(err instanceof Error)) {
@@ -225,8 +231,32 @@ export function ChatPanel({
 
   const shouldShowSignInPrompt = authRequired && !authLoading && !user;
 
+  const closePopoutDialog = (restoreFocus = true) => {
+    setShowPopoutDialog(false);
+    if (restoreFocus) {
+      popoutTriggerRef.current?.focus({ preventScroll: true });
+    }
+  };
+
+  const closeSettingsDialog = (restoreFocus = true) => {
+    setShowSettings(false);
+    if (restoreFocus) {
+      settingsTriggerRef.current?.focus({ preventScroll: true });
+    }
+  };
+
   const handlePopout = () => {
+    closeSettingsDialog(false);
     setShowPopoutDialog(true);
+  };
+
+  const handleSettingsToggle = () => {
+    if (showSettings) {
+      closeSettingsDialog();
+      return;
+    }
+    closePopoutDialog(false);
+    setShowSettings(true);
   };
 
   const openPopoutWindow = () => {
@@ -238,8 +268,95 @@ export function ChatPanel({
       "bitriver-chat-popout",
       "width=420,height=720,noopener,noreferrer"
     );
-    setShowPopoutDialog(false);
+    closePopoutDialog();
   };
+
+  useEffect(() => {
+    if (showPopoutDialog) {
+      popoutHeadingRef.current?.focus({ preventScroll: true });
+    }
+  }, [showPopoutDialog]);
+
+  useEffect(() => {
+    if (showSettings) {
+      settingsHeadingRef.current?.focus({ preventScroll: true });
+    }
+  }, [showSettings]);
+
+  useEffect(() => {
+    if (!showPopoutDialog && !showSettings) {
+      return;
+    }
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      event.preventDefault();
+      if (showPopoutDialog) {
+        closePopoutDialog();
+        return;
+      }
+      closeSettingsDialog();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [showPopoutDialog, showSettings]);
+
+  useEffect(() => {
+    const activeDialog = showPopoutDialog
+      ? popoutDialogRef.current
+      : showSettings
+        ? settingsDialogRef.current
+        : null;
+    if (!activeDialog) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") {
+        return;
+      }
+      const focusableSelectors =
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+      const focusable = Array.from(
+        activeDialog.querySelectorAll<HTMLElement>(focusableSelectors)
+      ).filter((element) => {
+        if (element.hasAttribute("disabled")) {
+          return false;
+        }
+        if (element.getAttribute("aria-hidden") === "true") {
+          return false;
+        }
+        if (element.tabIndex === -1) {
+          return false;
+        }
+        return true;
+      });
+      if (focusable.length === 0) {
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (!active || !activeDialog.contains(active)) {
+        event.preventDefault();
+        first.focus();
+        return;
+      }
+      if (event.shiftKey) {
+        if (active === first) {
+          event.preventDefault();
+          last.focus();
+        }
+        return;
+      }
+      if (active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    activeDialog.addEventListener("keydown", handleKeyDown);
+    return () => activeDialog.removeEventListener("keydown", handleKeyDown);
+  }, [showPopoutDialog, showSettings]);
 
   const renderSkeletons = () => (
     <ul className="chat-skeletons">
@@ -278,6 +395,7 @@ export function ChatPanel({
             className="icon-button"
             aria-label="Open pop-out chat window"
             onClick={handlePopout}
+            ref={popoutTriggerRef}
           >
             <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
               <path
@@ -291,7 +409,8 @@ export function ChatPanel({
             className="icon-button"
             aria-label={showSettings ? "Close chat settings" : "Open chat settings"}
             aria-pressed={showSettings}
-            onClick={() => setShowSettings((open) => !open)}
+            onClick={handleSettingsToggle}
+            ref={settingsTriggerRef}
           >
             <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
               <path
@@ -431,7 +550,7 @@ export function ChatPanel({
         <div
           className="chat-panel__dialog-backdrop"
           role="presentation"
-          onClick={() => setShowPopoutDialog(false)}
+          onClick={() => closePopoutDialog()}
         >
           <section
             className="chat-panel__dialog surface"
@@ -439,13 +558,14 @@ export function ChatPanel({
             aria-modal="true"
             aria-labelledby="chat-popout-title"
             onClick={(event) => event.stopPropagation()}
+            ref={popoutDialogRef}
           >
             <header className="chat-panel__dialog-header">
-              <h4 id="chat-popout-title">Pop out chat</h4>
+              <h4 id="chat-popout-title" tabIndex={-1} ref={popoutHeadingRef}>Pop out chat</h4>
               <button
                 type="button"
                 className="icon-button"
-                onClick={() => setShowPopoutDialog(false)}
+                onClick={() => closePopoutDialog()}
                 aria-label="Close pop-out chat dialog"
               >
                 ✕
@@ -459,7 +579,7 @@ export function ChatPanel({
               <button
                 type="button"
                 className="ghost-button"
-                onClick={() => setShowPopoutDialog(false)}
+                onClick={() => closePopoutDialog()}
               >
                 Cancel
               </button>
@@ -479,7 +599,7 @@ export function ChatPanel({
         <div
           className="chat-panel__dialog-backdrop"
           role="presentation"
-          onClick={() => setShowSettings(false)}
+          onClick={() => closeSettingsDialog()}
         >
           <section
             className="chat-panel__dialog surface"
@@ -487,13 +607,14 @@ export function ChatPanel({
             aria-modal="true"
             aria-labelledby="chat-settings-title"
             onClick={(event) => event.stopPropagation()}
+            ref={settingsDialogRef}
           >
             <header className="chat-panel__dialog-header">
-              <h4 id="chat-settings-title">Chat settings</h4>
+              <h4 id="chat-settings-title" tabIndex={-1} ref={settingsHeadingRef}>Chat settings</h4>
               <button
                 type="button"
                 className="icon-button"
-                onClick={() => setShowSettings(false)}
+                onClick={() => closeSettingsDialog()}
                 aria-label="Close chat settings"
               >
                 ✕
@@ -543,7 +664,7 @@ export function ChatPanel({
               <button
                 type="button"
                 className="accent-button"
-                onClick={() => setShowSettings(false)}
+                onClick={() => closeSettingsDialog()}
                 aria-label="Save chat settings"
               >
                 Done

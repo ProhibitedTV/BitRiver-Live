@@ -1,6 +1,6 @@
 import { guestAuthState, mockUseAuth, signedInAuthState, viewerTwoUser } from "../test/auth";
 import { viewerApiMocks } from "../test/test-utils";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChatPanel } from "../components/ChatPanel";
 import type { ChatMessage } from "../lib/viewer-api";
@@ -244,4 +244,107 @@ test("resumes chat polling once a guest signs in", async () => {
   const textarea = screen.getByRole("textbox", { name: /chat message/i });
   expect(textarea).not.toBeDisabled();
   expect(textarea).toHaveAttribute("placeholder", "Share your thoughts");
+});
+
+test("escape closes active dialogs", async () => {
+  fetchChatMock.mockResolvedValue([]);
+  const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+
+  render(<ChatPanel channelId="chan-dialogs" roomId="room-1" />);
+
+  await screen.findByText(/no messages yet/i);
+
+  await user.click(screen.getByRole("button", { name: /open pop-out chat window/i }));
+  expect(screen.getByRole("dialog", { name: /pop out chat/i })).toBeInTheDocument();
+
+  await user.keyboard("{Escape}");
+  await waitFor(() => {
+    expect(screen.queryByRole("dialog", { name: /pop out chat/i })).not.toBeInTheDocument();
+  });
+
+  await user.click(screen.getByRole("button", { name: /open chat settings/i }));
+  expect(screen.getByRole("dialog", { name: /chat settings/i })).toBeInTheDocument();
+
+  await user.keyboard("{Escape}");
+  await waitFor(() => {
+    expect(screen.queryByRole("dialog", { name: /chat settings/i })).not.toBeInTheDocument();
+  });
+});
+
+test("tab cycles within the pop-out dialog", async () => {
+  fetchChatMock.mockResolvedValue([]);
+  const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+
+  render(<ChatPanel channelId="chan-focus" roomId="room-1" />);
+
+  await screen.findByText(/no messages yet/i);
+  await user.click(screen.getByRole("button", { name: /open pop-out chat window/i }));
+
+  const closeButton = screen.getByRole("button", { name: /close pop-out chat dialog/i });
+  const cancelButton = screen.getByRole("button", { name: /cancel/i });
+  const openWindowButton = screen.getByRole("button", { name: /open chat in new window/i });
+
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: /pop out chat/i })).toHaveFocus();
+  });
+
+  openWindowButton.focus();
+  fireEvent.keyDown(openWindowButton, { key: "Tab", code: "Tab", keyCode: 9, which: 9, bubbles: true });
+  expect(closeButton).toHaveFocus();
+
+  closeButton.focus();
+  fireEvent.keyDown(closeButton, {
+    key: "Tab",
+    code: "Tab",
+    keyCode: 9,
+    which: 9,
+    shiftKey: true,
+    bubbles: true
+  });
+  expect(openWindowButton).toHaveFocus();
+
+  cancelButton.focus();
+  fireEvent.keyDown(cancelButton, { key: "Tab" });
+  expect(cancelButton).toHaveFocus();
+});
+
+test("focus returns to the originating trigger when dialogs close", async () => {
+  fetchChatMock.mockResolvedValue([]);
+  const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+
+  render(<ChatPanel channelId="chan-return" roomId="room-1" />);
+
+  await screen.findByText(/no messages yet/i);
+
+  const popoutTrigger = screen.getByRole("button", { name: /open pop-out chat window/i });
+  await user.click(popoutTrigger);
+  expect(screen.getByRole("dialog", { name: /pop out chat/i })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: /cancel/i }));
+  await waitFor(() => {
+    expect(popoutTrigger).toHaveFocus();
+  });
+
+  const settingsTrigger = screen.getByRole("button", { name: /open chat settings/i });
+  await user.click(settingsTrigger);
+  expect(screen.getByRole("dialog", { name: /chat settings/i })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: /save chat settings/i }));
+  await waitFor(() => {
+    expect(settingsTrigger).toHaveFocus();
+  });
+});
+
+test("opening one chat dialog closes the other", async () => {
+  fetchChatMock.mockResolvedValue([]);
+  const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+
+  render(<ChatPanel channelId="chan-exclusive" roomId="room-1" />);
+
+  await screen.findByText(/no messages yet/i);
+
+  await user.click(screen.getByRole("button", { name: /open pop-out chat window/i }));
+  expect(screen.getByRole("dialog", { name: /pop out chat/i })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: /open chat settings/i }));
+  expect(screen.queryByRole("dialog", { name: /pop out chat/i })).not.toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: /chat settings/i })).toBeInTheDocument();
 });
