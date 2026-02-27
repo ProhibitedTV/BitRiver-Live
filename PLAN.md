@@ -1,18 +1,21 @@
 # PLAN
 
 ## Scope (current change)
-- Update `docs/production-release.md` in the "Viewer lint and integration tests" section to use `npm ci` instead of `npm install` while keeping `npm run lint` and `npm run test:integration` unchanged.
-- Add a short release note in that section clarifying that `npm ci` is required for lockfile-faithful release validation and must be run from `web/viewer`.
-- Audit other release/testing docs for viewer install commands and align release-reproducibility guidance to `npm ci` where appropriate.
+- Update `.github/workflows/release.yml` `verify-env` job so the generated production `.env` includes runtime mode/image-source production toggles, required third-party image digest variables, and production security guardrail variables.
+- Preserve fast-fail secret checks while ensuring `./scripts/require-image-digests.sh --env-file .env` runs under production conditions.
+- Sync `docs/production-release.md` secret requirements with the workflow variable contract.
 
 ## Assumptions
-- `npm ci` is valid for the viewer workspace because `web/viewer/package-lock.json` exists and is the lockfile source of truth.
-- "Release/testing docs" in scope are Markdown docs under `docs/` that describe release gates or testing workflows.
+- Release tags must always enforce production settings (`BITRIVER_LIVE_MODE=production`, `BITRIVER_DEPLOY_IMAGE_SOURCE=pull`) even if repository defaults differ.
+- `deploy/check-env.sh` validation accepts either `BITRIVER_LIVE_METRICS_TOKEN` or `BITRIVER_LIVE_METRICS_ALLOW_NETWORKS` for metrics protection; workflow should include one required path to fail fast.
+- Third-party digest values are provided via GitHub secrets and must match `@sha256:<64 lowercase hex>` for production validation.
 
 ## Risks
-- Changing install commands in general developer docs could unintentionally affect local iterative workflows; only update contexts where reproducibility is explicitly expected.
-- Missing a second release/testing doc would leave inconsistent guidance.
+- Adding new required env inputs can break existing release workflows until repository/org secrets are populated.
+- Mismatch between docs and workflow can cause operator confusion and failed releases.
+- Incorrect env wiring (missing in `env:` or `vars=(...)`) could silently omit values from `.env` and weaken preflight checks.
 
 ## Test plan
-- Run targeted searches for viewer install commands in release/testing docs and confirm intended commands now use `npm ci`.
-- Review updated sections to ensure `npm run lint` and `npm run test:integration` lines are unchanged.
+- Run a targeted syntax/contract check on `.github/workflows/release.yml` by inspecting the updated `Create production env file` block.
+- Run `./scripts/require-image-digests.sh --env-file <fixture>` once in production mode with valid digests and once with an invalid/missing digest to confirm enforcement behavior.
+- Verify `docs/production-release.md` secret list and release guidance reflect every newly required workflow variable.

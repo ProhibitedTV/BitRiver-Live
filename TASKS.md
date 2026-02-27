@@ -2,28 +2,30 @@
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 — Update production release viewer install command
+- [x] Task 1 — Expand release verify-env `.env` emission inputs
   - Acceptance criteria:
-    - `docs/production-release.md` replaces `npm install` with `npm ci` in "Viewer lint and integration tests".
-    - `npm run lint` and `npm run test:integration` remain unchanged in that block.
-    - A short note states `npm ci` is required for lockfile-faithful release validation and should be run from `web/viewer`.
+    - `.github/workflows/release.yml` `Create production env file` `env:` map includes:
+      - `BITRIVER_LIVE_MODE` (`production`)
+      - `BITRIVER_DEPLOY_IMAGE_SOURCE` (`pull`)
+      - Third-party digest variables required by `scripts/require-image-digests.sh`
+      - Production security guardrail vars: `BITRIVER_LIVE_RATE_LOGIN_LIMIT`, `BITRIVER_LIVE_RATE_LOGIN_WINDOW`, and one metrics protection input used by env validation.
+    - The same variables are present in the `vars=(...)` list so missing/empty values fail fast.
 
-- [x] Task 2 — Align other release/testing docs for reproducible viewer installs
+- [x] Task 2 — Keep digest enforcement active in release verify-env
   - Acceptance criteria:
-    - Any additional release/testing doc with viewer install command(s) for reproducible validation is updated from `npm install` to `npm ci`.
-    - Non-release/non-reproducibility guidance is left unchanged.
+    - `./scripts/require-image-digests.sh --env-file .env` remains in `verify-env` and runs with production conditions active from emitted `.env`.
+    - A local script check demonstrates missing/invalid digest values fail under production settings.
 
-- [x] Task 3 — Verify documentation consistency
+- [x] Task 3 — Sync production release docs with workflow requirements
   - Acceptance criteria:
-    - Command-based checks show targeted sections use `npm ci`.
-    - A search confirms no remaining `npm install` in release/testing docs where reproducibility is expected.
+    - `docs/production-release.md` secret requirements match variable names/requirements enforced by `release.yml`.
 
 ## Execution log
-- ✅ Task 1 complete: updated `docs/production-release.md` viewer quality-gate section to use `npm ci` and added lockfile-faithful note scoped to `web/viewer`.
-- ✅ Task 1 check: `rg -n "Viewer lint and integration tests|npm ci|npm run lint|npm run test:integration" docs/production-release.md`.
-- ✅ Task 2 complete: aligned `docs/testing.md` Web viewer install command to `npm ci` for reproducible testing setup.
-- ✅ Task 2 check: `rg -n "Web viewer|npm ci|npm install|test:integration" docs/testing.md`.
-- ✅ Task 3 complete: validated release/testing docs now use `npm ci`; remaining `npm install` mentions in docs are non-install-required statements.
-- ✅ Task 3 checks:
-  - `rg -n "npm install|npm ci" docs/production-release.md docs/testing.md`
-  - `rg -n "npm install" docs -g '*.md'`
+- ✅ Task 1 complete: expanded `verify-env` `Create production env file` to emit production mode/image-source constants, digest vars, and production security vars in both `env:` and `vars=(...)`.
+- ✅ Task 1 check: `rg -n "BITRIVER_LIVE_MODE|BITRIVER_DEPLOY_IMAGE_SOURCE|BITRIVER_LIVE_METRICS_TOKEN|BITRIVER_LIVE_RATE_LOGIN_LIMIT|BITRIVER_LIVE_RATE_LOGIN_WINDOW|BITRIVER_(REDIS|POSTGRES|SRS|OME|NGINX|ALPINE_3|ALPINE_3_19|DEBIAN)_IMAGE_DIGEST" .github/workflows/release.yml`.
+
+- ✅ Task 2 complete: `verify-env` now emits `BITRIVER_LIVE_MODE=production` and `BITRIVER_DEPLOY_IMAGE_SOURCE=pull`, activating digest enforcement in the release job.
+- ✅ Task 2 check: `./scripts/require-image-digests.sh --env-file /tmp/digests-pass.env` (passes with valid production digests).
+- ✅ Task 2 check: `./scripts/require-image-digests.sh --env-file /tmp/digests-fail.env` (expected failure on missing/invalid digest values).
+- ✅ Task 3 complete: updated release runbook secret requirements to match enforced workflow inputs and documented that production mode/image-source are job constants.
+- ✅ Task 3 check: `rg -n "BITRIVER_LIVE_MODE=production|BITRIVER_DEPLOY_IMAGE_SOURCE=pull|BITRIVER_LIVE_METRICS_TOKEN|BITRIVER_LIVE_RATE_LOGIN_WINDOW" docs/production-release.md`.
