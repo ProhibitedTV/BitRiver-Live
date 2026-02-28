@@ -1,6 +1,23 @@
 # PLAN
 
 ## Scope (current change)
+- Update `web/viewer/components/FeaturedChannel.tsx` to respect `prefers-reduced-motion` when deciding carousel autoplay behavior.
+- Default autoplay to off when reduced motion is preferred while preserving a prop-based override path for explicit opt-in/out.
+- React to runtime preference changes via media-query subscription and prevent autoplay interval setup whenever reduced-motion mode is active.
+- Add viewer tests under `web/viewer/__tests__/` covering initial reduced-motion behavior, manual Play re-enable, and dynamic reduce-preference transitions.
+
+## Assumptions
+- `autoPlay` prop remains the explicit policy knob from parent components; reduced-motion handling should only change the initial/user-state behavior when no explicit opt-out is in effect.
+- Existing Play/Pause button is the user override surface and should remain functional even when reduced-motion defaults autoplay off.
+
+## Risks
+- Media query listener compatibility differences (`addEventListener` vs `addListener`) can break updates in test/runtime if not handled defensively.
+- New autoplay precedence rules could regress existing expectations where `autoPlay` prop changes are used to force state.
+
+## Test plan
+- `cd web/viewer && npm run test -- channelDisplayPrimitives.test.tsx`
+
+## Scope (current change)
 - Adjust image loading behavior in `web/viewer/components/DirectoryGrid.tsx` and `web/viewer/components/LiveNowGrid.tsx` so `next/image` `priority` is applied only to the leading visible card(s) instead of every mapped card.
 - Keep existing `sizes` values unchanged to preserve responsive image selection behavior.
 - Add/update component tests to validate that only expected leading cards receive priority behavior while subsequent cards are lazy-loaded.
