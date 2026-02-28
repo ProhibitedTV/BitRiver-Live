@@ -22,18 +22,46 @@ export function FeaturedChannel({
 }: FeaturedChannelProps) {
   const slides = useMemo(() => channels.filter(Boolean), [channels]);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [autoPlayEnabled, setAutoPlayEnabled] = useState(autoPlay);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [manualAutoPlayOverride, setManualAutoPlayOverride] = useState<boolean | null>(null);
 
   useEffect(() => {
-    setAutoPlayEnabled(autoPlay);
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return undefined;
+    }
+
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setPrefersReducedMotion(mediaQuery.matches);
+
+    const handleReducedMotionChange = (event: MediaQueryListEvent) => {
+      setPrefersReducedMotion(event.matches);
+      if (event.matches) {
+        setManualAutoPlayOverride(null);
+      }
+    };
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleReducedMotionChange);
+      return () => mediaQuery.removeEventListener("change", handleReducedMotionChange);
+    }
+
+    mediaQuery.addListener(handleReducedMotionChange);
+    return () => mediaQuery.removeListener(handleReducedMotionChange);
+  }, []);
+
+  useEffect(() => {
+    setManualAutoPlayOverride(null);
   }, [autoPlay]);
 
   useEffect(() => {
     setActiveIndex(0);
   }, [slides.length]);
 
+  const reducedMotionModeActive = prefersReducedMotion && manualAutoPlayOverride !== true;
+  const autoPlayEnabled = manualAutoPlayOverride === null ? autoPlay && !reducedMotionModeActive : manualAutoPlayOverride;
+
   useEffect(() => {
-    if (!autoPlayEnabled || slides.length <= 1) {
+    if (reducedMotionModeActive || !autoPlayEnabled || slides.length <= 1) {
       return undefined;
     }
 
@@ -42,7 +70,7 @@ export function FeaturedChannel({
     }, autoPlayIntervalMs);
 
     return () => window.clearInterval(timer);
-  }, [autoPlayEnabled, slides.length, autoPlayIntervalMs]);
+  }, [autoPlayEnabled, reducedMotionModeActive, slides.length, autoPlayIntervalMs]);
 
   if (loading) {
     return (
@@ -170,7 +198,12 @@ export function FeaturedChannel({
           <button
             type="button"
             className="secondary-button"
-            onClick={() => setAutoPlayEnabled((prev) => !prev)}
+            onClick={() => {
+              setManualAutoPlayOverride((prev) => {
+                const current = prev === null ? autoPlayEnabled : prev;
+                return !current;
+              });
+            }}
             aria-label={`${autoPlayEnabled ? "Pause" : "Resume"} autoplay`}
           >
             {autoPlayEnabled ? "Pause" : "Play"}

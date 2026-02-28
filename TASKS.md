@@ -270,4 +270,38 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - ✅ `cd web/viewer && npm run test -- channelDisplayPrimitives.test.tsx`
 - ✅ Task 3 checks:
   - ✅ `cd web/viewer && npm run test -- channelDisplayPrimitives.test.tsx`
+  - ✅ `./scripts/verify.sh`
   - ✅ `./scripts/verify.sh --viewer`
+
+## Scoped change: featured carousel reduced-motion autoplay behavior
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Implement reduced-motion aware autoplay behavior in `web/viewer/components/FeaturedChannel.tsx`
+  - Acceptance criteria:
+    - Detect `window.matchMedia("(prefers-reduced-motion: reduce)")` on mount and sync component state.
+    - Autoplay initializes to off when reduced motion is preferred, while preserving explicit prop-driven policy behavior.
+    - Preference changes update autoplay behavior reactively and interval setup is blocked while reduced motion mode is active.
+    - Manual Play/Pause control remains available.
+
+- [x] Task 2 — Add reduced-motion autoplay tests in `web/viewer/__tests__/channelDisplayPrimitives.test.tsx`
+  - Acceptance criteria:
+    - Test verifies reduced-motion preference starts with autoplay off.
+    - Test verifies toggling Play enables rotation.
+    - Test verifies preference change to reduced motion stops autoplay.
+
+- [x] Task 3 — Run viewer tests for featured carousel behavior and record results
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- channelDisplayPrimitives.test.tsx` passes and is recorded in execution log.
+
+
+### Execution log (featured carousel reduced-motion autoplay behavior)
+- ✅ Task 1 complete: featured carousel now reads prefers-reduced-motion on mount, tracks preference changes, defaults autoplay off in reduced-motion mode, and blocks interval setup while reduced-motion mode is active unless manually resumed.
+- ✅ Task 1 check:
+  - ✅ `cd web/viewer && npm run test -- channelDisplayPrimitives.test.tsx`
+- ✅ Task 2 complete: added reduced-motion autoplay tests for initial paused state, manual Play rotation, and runtime preference-change stop behavior.
+- ✅ Task 2 check:
+  - ✅ `cd web/viewer && npm run test -- channelDisplayPrimitives.test.tsx`
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- channelDisplayPrimitives.test.tsx`
+  - ✅ `./scripts/verify.sh`

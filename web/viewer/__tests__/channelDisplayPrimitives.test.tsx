@@ -1,5 +1,5 @@
 import "../test/test-utils";
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { DirectoryGrid } from "../components/DirectoryGrid";
 import { LiveNowGrid } from "../components/LiveNowGrid";
 import { ChannelRail } from "../components/ChannelRail";
@@ -42,6 +42,88 @@ const offlineChannel: DirectoryChannel = {
   followerCount: 2,
   viewerCount: 0,
 };
+
+
+
+function buildFeaturedChannels(): DirectoryChannel[] {
+  return [
+    {
+      ...liveChannel,
+      channel: {
+        ...liveChannel.channel,
+        id: "chan-featured-1",
+        title: "Neon Nights",
+      },
+      owner: {
+        ...liveChannel.owner,
+        id: "owner-featured-1",
+        displayName: "DJ Nova",
+      },
+      profile: {
+        ...liveChannel.profile,
+        bannerUrl: "https://cdn.example.com/neon-nights.jpg",
+      },
+    },
+    {
+      ...offlineChannel,
+      channel: {
+        ...offlineChannel.channel,
+        id: "chan-featured-2",
+        title: "Archive Sessions",
+      },
+      owner: {
+        ...offlineChannel.owner,
+        id: "owner-featured-2",
+        displayName: "Archive DJ",
+      },
+      profile: {
+        ...offlineChannel.profile,
+        bannerUrl: "https://cdn.example.com/archive-sessions.jpg",
+      },
+    },
+  ];
+}
+
+type MatchMediaController = {
+  setMatches: (nextValue: boolean) => void;
+};
+
+function mockReducedMotionPreference(initialMatches: boolean): MatchMediaController {
+  let matches = initialMatches;
+  const listeners = new Set<(event: MediaQueryListEvent) => void>();
+
+  const matchMediaMock = jest.fn().mockImplementation((query: string) => ({
+    matches,
+    media: query,
+    onchange: null,
+    addEventListener: (_event: string, listener: (event: MediaQueryListEvent) => void) => {
+      listeners.add(listener);
+    },
+    removeEventListener: (_event: string, listener: (event: MediaQueryListEvent) => void) => {
+      listeners.delete(listener);
+    },
+    addListener: (listener: (event: MediaQueryListEvent) => void) => {
+      listeners.add(listener);
+    },
+    removeListener: (listener: (event: MediaQueryListEvent) => void) => {
+      listeners.delete(listener);
+    },
+    dispatchEvent: jest.fn(),
+  }));
+
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: matchMediaMock,
+  });
+
+  return {
+    setMatches(nextValue: boolean) {
+      matches = nextValue;
+      const event = { matches: nextValue, media: "(prefers-reduced-motion: reduce)" } as MediaQueryListEvent;
+      listeners.forEach((listener) => listener(event));
+    },
+  };
+}
 
 describe("channel display primitives", () => {
   test("renders consistent badge and count labels in directory and featured layouts", () => {
@@ -148,4 +230,64 @@ describe("channel display primitives", () => {
     expect(screen.getByRole("link", { name: "View featured channel" })).toHaveTextContent("View stream");
     expect(featured.asFragment()).toMatchSnapshot();
   });
+
+  test("starts with autoplay disabled when reduced motion is preferred", () => {
+    mockReducedMotionPreference(true);
+    jest.useFakeTimers();
+
+    render(<FeaturedChannel channels={buildFeaturedChannels()} autoPlayIntervalMs={1000} />);
+
+    expect(screen.getByRole("button", { name: "Resume autoplay" })).toHaveTextContent("Play");
+    expect(screen.getByRole("heading", { level: 2, name: "Neon Nights" })).toBeInTheDocument();
+
+    act(() => {
+      jest.advanceTimersByTime(1200);
+    });
+
+    expect(screen.getByRole("heading", { level: 2, name: "Neon Nights" })).toBeInTheDocument();
+    jest.useRealTimers();
+  });
+
+  test("manual play enables featured rotation when reduced motion starts enabled", () => {
+    mockReducedMotionPreference(true);
+    jest.useFakeTimers();
+
+    render(<FeaturedChannel channels={buildFeaturedChannels()} autoPlayIntervalMs={1000} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Resume autoplay" }));
+
+    act(() => {
+      jest.advanceTimersByTime(1200);
+    });
+
+    expect(screen.getByRole("heading", { level: 2, name: "Archive Sessions" })).toBeInTheDocument();
+    jest.useRealTimers();
+  });
+
+  test("switching preference to reduced motion stops autoplay", () => {
+    const preference = mockReducedMotionPreference(false);
+    jest.useFakeTimers();
+
+    render(<FeaturedChannel channels={buildFeaturedChannels()} autoPlayIntervalMs={1000} />);
+
+    act(() => {
+      jest.advanceTimersByTime(1200);
+    });
+
+    expect(screen.getByRole("heading", { level: 2, name: "Archive Sessions" })).toBeInTheDocument();
+
+    act(() => {
+      preference.setMatches(true);
+    });
+
+    expect(screen.getByRole("button", { name: "Resume autoplay" })).toHaveTextContent("Play");
+
+    act(() => {
+      jest.advanceTimersByTime(2500);
+    });
+
+    expect(screen.getByRole("heading", { level: 2, name: "Archive Sessions" })).toBeInTheDocument();
+    jest.useRealTimers();
+  });
+
 });
