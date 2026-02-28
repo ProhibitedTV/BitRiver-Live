@@ -174,3 +174,24 @@
 ## Test plan
 - `cd web/viewer && npm run test -- chatPanel.test.tsx`
 - `./scripts/verify.sh --viewer`
+
+
+## Scope (current change)
+- Improve authenticated avatar-menu accessibility/keyboard behavior in `web/viewer/components/Navbar.tsx` by closing on outside interaction and Escape.
+- Add refs for the avatar toggle and menu container so outside-click logic can accurately detect whether pointer/click targets are outside the account-menu controls.
+- Restore focus to the avatar toggle when the user menu closes because of Escape/outside interaction.
+- Link the avatar button and popup menu with `aria-controls` and a stable menu id.
+- Add navbar tests in `web/viewer/__tests__/navbar.test.tsx` validating outside click close, Escape close, and focus restoration.
+
+## Assumptions
+- The requested close behavior applies only when the user avatar menu is open and should not change normal toggle behavior.
+- Focus restoration is required for Escape/outside-dismiss paths; standard button-toggle close behavior can remain unchanged.
+
+## Risks
+- Using document-level listeners without proper cleanup could leak handlers or cause duplicate close events across rerenders.
+- Outside-click handling that listens to both pointer and click events can trigger duplicate close attempts if not idempotent.
+
+## Test plan
+- `cd web/viewer && npm run test -- navbar.test.tsx`
+- `./scripts/verify.sh --viewer`
+
