@@ -120,6 +120,131 @@ func TestSessionCookieSecureModeApplied(t *testing.T) {
 	}
 }
 
+func TestNewAppliesHandlerConfiguration(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	allowSelfSignup := false
+	secrets := map[string]string{"stripe": "secret"}
+
+	_, err := New(handler, Config{
+		OAuth:                   nil,
+		AllowSelfSignup:         &allowSelfSignup,
+		SRSHookToken:            "hook-token",
+		PaymentWebhookSecrets:   secrets,
+		UploadMaxBytes:          2048,
+		SessionCookieCrossSite:  true,
+		SessionCookieSecureMode: api.SessionCookieSecureAlways,
+	})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	if handler.AllowSelfSignup {
+		t.Fatal("expected allow self-signup to be disabled by config")
+	}
+	if handler.SRSHookToken != "hook-token" {
+		t.Fatalf("expected SRS hook token to be applied, got %q", handler.SRSHookToken)
+	}
+	if handler.WebhookSecrets["stripe"] != "secret" {
+		t.Fatalf("expected webhook secrets to be applied, got %#v", handler.WebhookSecrets)
+	}
+	if handler.UploadMaxBytes != 2048 {
+		t.Fatalf("expected upload max bytes to be applied, got %d", handler.UploadMaxBytes)
+	}
+	if handler.SessionCookiePolicy.SameSite != http.SameSiteNoneMode {
+		t.Fatalf("expected cross-site SameSite policy, got %v", handler.SessionCookiePolicy.SameSite)
+	}
+	if handler.SessionCookiePolicy.SecureMode != api.SessionCookieSecureAlways {
+		t.Fatalf("expected cross-site secure mode to force always, got %v", handler.SessionCookiePolicy.SecureMode)
+	}
+}
+
+func TestNewRegistersKeyRoutes(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	origin, err := url.Parse("http://127.0.0.1:1")
+	if err != nil {
+		t.Fatalf("parse viewer origin: %v", err)
+	}
+	srv, err := New(handler, Config{ViewerOrigin: origin})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		path string
+		code int
+	}{
+		{name: "health", path: "/healthz", code: http.StatusOK},
+		{name: "metrics", path: "/metrics", code: http.StatusOK},
+		{name: "api status", path: "/api/status", code: http.StatusUnauthorized},
+		{name: "static route", path: "/static/does-not-exist.js", code: http.StatusNotFound},
+		{name: "viewer proxy", path: "/viewer", code: http.StatusBadGateway},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			rec := httptest.NewRecorder()
+
+			srv.httpServer.Handler.ServeHTTP(rec, req)
+
+			if rec.Code != tc.code {
+				t.Fatalf("expected status %d for %s, got %d", tc.code, tc.path, rec.Code)
+			}
+		})
+	}
+}
+
+func TestMiddlewareOrderPreservesAuthBeforeCORSAndRequestID(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	srv, err := New(handler, Config{CORS: CORSConfig{ViewerOrigins: []string{"https://viewer.example"}}})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	preflightReq := httptest.NewRequest(http.MethodOptions, "/api/users", nil)
+	preflightReq.Header.Set("Origin", "https://viewer.example")
+	preflightReq.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	preflightRec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(preflightRec, preflightReq)
+
+	if preflightRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected auth middleware to run before CORS preflight handling, got %d", preflightRec.Code)
+	}
+	if preflightRec.Header().Get("Access-Control-Allow-Origin") != "" {
+		t.Fatal("expected CORS headers to be absent when auth middleware rejects before CORS handling")
+	}
+	if preflightRec.Header().Get("X-Request-Id") != "" {
+		t.Fatal("expected request id middleware not to run when auth middleware short-circuits")
+	}
+
+	authReq := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	authRec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(authRec, authReq)
+
+	if authRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected unauthorized response for protected route, got %d", authRec.Code)
+	}
+	if authRec.Header().Get("X-Request-Id") != "" {
+		t.Fatal("expected request id middleware not to run on auth rejection")
+	}
+
+	healthReq := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	healthRec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(healthRec, healthReq)
+
+	if healthRec.Header().Get("X-Request-Id") == "" {
+		t.Fatal("expected request id header when request reaches inner chain")
+	}
+}
+
 func TestAuthMiddlewareAcceptsCookie(t *testing.T) {
 	handler, store := newTestHandler(t)
 	user, err := store.CreateUser(storage.CreateUserParams{

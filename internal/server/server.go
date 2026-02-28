@@ -129,6 +129,60 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	if recorder == nil {
 		recorder = metrics.Default()
 	}
+	configureAPIHandler(handler, cfg)
+
+	rl, err := newRateLimiter(cfg.RateLimit)
+	if err != nil {
+		return nil, fmt.Errorf("configure rate limiter: %w", err)
+	}
+	handler.RateLimiter = rl
+	ipResolver, err := newClientIPResolver(cfg.RateLimit)
+	if err != nil {
+		return nil, fmt.Errorf("configure client ip resolver: %w", err)
+	}
+	if cfg.RequireMetricsProtection && !MetricsAccessConfigured(cfg.MetricsAccess) {
+		return nil, errors.New("metrics protection required: configure metrics token or allowlisted networks")
+	}
+	metricsAccess, err := newMetricsAccessController(cfg.MetricsAccess, ipResolver, cfg.Logger)
+	if err != nil {
+		return nil, fmt.Errorf("configure metrics access: %w", err)
+	}
+
+	mux := http.NewServeMux()
+	if err := registerRoutes(mux, handler, cfg, recorder, metricsAccess, ipResolver); err != nil {
+		return nil, err
+	}
+
+	handlerChain := buildMiddlewareChain(mux, handler, cfg, recorder, corsPolicy, rl, ipResolver)
+
+	httpServer := &http.Server{
+		Addr:              cfg.Addr,
+		Handler:           handlerChain,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	srv := &Server{
+		httpServer:  httpServer,
+		logger:      cfg.Logger,
+		auditLogger: cfg.AuditLogger,
+		metrics:     recorder,
+		rateLimiter: rl,
+		ipResolver:  ipResolver,
+		tlsCertFile: strings.TrimSpace(cfg.TLS.CertFile),
+		tlsKeyFile:  strings.TrimSpace(cfg.TLS.KeyFile),
+	}
+
+	if srv.tlsCertFile != "" && srv.tlsKeyFile != "" {
+		httpServer.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+
+	return srv, nil
+}
+
+func configureAPIHandler(handler *api.Handler, cfg Config) {
 	handler.OAuth = cfg.OAuth
 	if cfg.AllowSelfSignup != nil {
 		handler.AllowSelfSignup = *cfg.AllowSelfSignup
@@ -150,25 +204,9 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 			SecureMode: api.SessionCookieSecureAlways,
 		}
 	}
+}
 
-	rl, err := newRateLimiter(cfg.RateLimit)
-	if err != nil {
-		return nil, fmt.Errorf("configure rate limiter: %w", err)
-	}
-	handler.RateLimiter = rl
-	ipResolver, err := newClientIPResolver(cfg.RateLimit)
-	if err != nil {
-		return nil, fmt.Errorf("configure client ip resolver: %w", err)
-	}
-	if cfg.RequireMetricsProtection && !MetricsAccessConfigured(cfg.MetricsAccess) {
-		return nil, errors.New("metrics protection required: configure metrics token or allowlisted networks")
-	}
-	metricsAccess, err := newMetricsAccessController(cfg.MetricsAccess, ipResolver, cfg.Logger)
-	if err != nil {
-		return nil, fmt.Errorf("configure metrics access: %w", err)
-	}
-
-	mux := http.NewServeMux()
+func registerRoutes(mux *http.ServeMux, handler *api.Handler, cfg Config, recorder *metrics.Recorder, metricsAccess *metricsAccessController, ipResolver *clientIPResolver) error {
 	mux.HandleFunc("/healthz", handler.Health)
 	mux.HandleFunc("/readyz", handler.Ready)
 	mux.HandleFunc("/api/status", handler.Status)
@@ -217,11 +255,11 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 
 	staticFS, err := web.Static()
 	if err != nil {
-		return nil, fmt.Errorf("load web assets: %w", err)
+		return fmt.Errorf("load web assets: %w", err)
 	}
 	index, err := fs.ReadFile(staticFS, "index.html")
 	if err != nil {
-		return nil, fmt.Errorf("read web index: %w", err)
+		return fmt.Errorf("read web index: %w", err)
 	}
 	fileServer := http.FileServer(http.FS(staticFS))
 	mux.Handle("/static/", http.StripPrefix("/static/", fileServer))
@@ -242,7 +280,10 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	}
 
 	mux.HandleFunc("/", spaHandler(staticFS, index, fileServer, cfg.Logger, ipResolver))
+	return nil
+}
 
+func buildMiddlewareChain(mux *http.ServeMux, handler *api.Handler, cfg Config, recorder *metrics.Recorder, corsPolicy corsPolicy, rl *rateLimiter, ipResolver *clientIPResolver) http.Handler {
 	handlerChain := http.Handler(mux)
 	handlerChain = corsMiddleware(corsPolicy, cfg.Logger, ipResolver, handlerChain)
 	securityCfg := cfg.Security.withDefaults()
@@ -255,32 +296,7 @@ func New(handler *api.Handler, cfg Config) (*Server, error) {
 	handlerChain = metrics.HTTPMiddleware(recorder, handlerChain)
 	handlerChain = auditMiddleware(cfg.AuditLogger, ipResolver, handlerChain)
 	handlerChain = loggingMiddleware(cfg.Logger, ipResolver, handlerChain)
-
-	httpServer := &http.Server{
-		Addr:              cfg.Addr,
-		Handler:           handlerChain,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
-
-	srv := &Server{
-		httpServer:  httpServer,
-		logger:      cfg.Logger,
-		auditLogger: cfg.AuditLogger,
-		metrics:     recorder,
-		rateLimiter: rl,
-		ipResolver:  ipResolver,
-		tlsCertFile: strings.TrimSpace(cfg.TLS.CertFile),
-		tlsKeyFile:  strings.TrimSpace(cfg.TLS.KeyFile),
-	}
-
-	if srv.tlsCertFile != "" && srv.tlsKeyFile != "" {
-		httpServer.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
-	}
-
-	return srv, nil
+	return handlerChain
 }
 
 // Start performs start and returns an error when dependent systems reject the operation.

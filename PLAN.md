@@ -211,3 +211,20 @@
 
 ## Test plan
 - `go test ./internal/app -count=1`
+
+## Scope (current change)
+- Refactor `internal/server/New` by extracting helper functions for handler mutation, route registration, and middleware chain assembly without changing constructor inputs/outputs or runtime behavior.
+- Keep route registration coverage explicit for `/healthz`, `/metrics`, `/api/*`, static assets, and `/viewer` wiring.
+- Preserve middleware composition order exactly as today and lock it with focused tests in `internal/server/server_test.go`.
+
+## Assumptions
+- Helper extraction is purely structural and must not alter route handlers, middleware order, or configuration precedence.
+- Existing tests around auth/metrics/viewer remain valid and can be extended to verify route availability and middleware ordering.
+
+## Risks
+- Moving route registration into helpers may accidentally omit or reorder handlers if not copied verbatim.
+- Middleware order regressions could silently alter auth/csrf/rate-limit behavior unless test assertions target the effective chain ordering.
+
+## Test plan
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
+- `./scripts/verify.sh`
