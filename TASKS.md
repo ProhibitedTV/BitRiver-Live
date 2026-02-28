@@ -305,3 +305,38 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 checks:
   - ✅ `cd web/viewer && npm run test -- channelDisplayPrimitives.test.tsx`
   - ✅ `./scripts/verify.sh`
+
+## Scoped change: navbar avatar-menu outside-dismiss + Escape behavior
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Implement avatar-menu refs and dismiss/focus handlers in `web/viewer/components/Navbar.tsx`
+  - Acceptance criteria:
+    - Add refs for avatar toggle button and avatar menu container.
+    - While `userMenuOpen` is true, register document-level outside interaction listener(s) that close menu when target is outside both refs.
+    - While `userMenuOpen` is true, register Escape-key listener that closes the menu.
+    - Escape/outside-dismiss close path restores focus to avatar button.
+    - Avatar toggle includes `aria-controls` pointing to menu element id.
+
+- [x] Task 2 — Add navbar tests for outside click, Escape close, and focus restoration
+  - Acceptance criteria:
+    - `web/viewer/__tests__/navbar.test.tsx` includes a test proving outside click closes the menu.
+    - Includes a test proving Escape closes the menu.
+    - Includes a test proving focus returns to avatar toggle after Escape close.
+
+- [x] Task 3 — Run viewer checks and record results
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- navbar.test.tsx` passes.
+    - `./scripts/verify.sh --viewer` passes (or explicit environment limitation is recorded).
+
+
+### Execution log (navbar avatar-menu outside-dismiss + Escape behavior)
+- ✅ Task 1 complete: added avatar button/menu refs, document-level outside interaction + Escape handlers while menu is open, focus restoration for dismiss paths, and `aria-controls`/menu-id linkage.
+- ✅ Task 1 check:
+  - ✅ `cd web/viewer && npm run test -- navbar.test.tsx`
+- ✅ Task 2 complete: added navbar tests for outside-click close, Escape close, and Escape focus restoration to the avatar toggle.
+- ✅ Task 2 check:
+  - ✅ `cd web/viewer && npm run test -- navbar.test.tsx`
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- navbar.test.tsx`
+  - ✅ `./scripts/verify.sh --viewer`

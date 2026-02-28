@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { deriveQuickLinks, getNavigationAudience, getVisibleNavigationItems } from "../lib/navigation";
 import { fetchManagedChannels } from "../lib/viewer-api";
@@ -36,6 +36,8 @@ export function Navbar() {
   const [searchQuery, setSearchQuery] = useState(searchParamQuery);
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const avatarButtonRef = useRef<HTMLButtonElement | null>(null);
+  const avatarMenuRef = useRef<HTMLDivElement | null>(null);
   const pathname = usePathname();
   const normalizedPathname = (() => {
     const current = pathname ?? "/";
@@ -171,6 +173,51 @@ export function Navbar() {
     setMenuOpen(false);
     setUserMenuOpen(false);
   }, [user]);
+
+  useEffect(() => {
+    if (!userMenuOpen || typeof document === "undefined") {
+      return;
+    }
+
+    let closed = false;
+    const closeMenuWithFocusRestore = () => {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      setUserMenuOpen(false);
+      avatarButtonRef.current?.focus();
+    };
+
+    const handleOutsideInteraction = (event: PointerEvent | MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (avatarButtonRef.current?.contains(target) || avatarMenuRef.current?.contains(target)) {
+        return;
+      }
+      closeMenuWithFocusRestore();
+    };
+
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      event.preventDefault();
+      closeMenuWithFocusRestore();
+    };
+
+    document.addEventListener("pointerdown", handleOutsideInteraction);
+    document.addEventListener("click", handleOutsideInteraction);
+    document.addEventListener("keydown", handleEscapeKey);
+
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsideInteraction);
+      document.removeEventListener("click", handleOutsideInteraction);
+      document.removeEventListener("keydown", handleEscapeKey);
+    };
+  }, [userMenuOpen]);
 
   const closeMenu = () => {
     setMenuOpen(false);
@@ -321,11 +368,17 @@ export function Navbar() {
                   className="avatar-button"
                   aria-label="Open account menu"
                   aria-expanded={userMenuOpen}
+                  aria-controls="viewer-user-menu"
+                  ref={avatarButtonRef}
                   onClick={() => setUserMenuOpen((prev) => !prev)}
                 >
                   {avatarGlyph}
                 </button>
-                <div className={`avatar-menu__items${userMenuOpen ? " avatar-menu__items--open" : ""}`}>
+                <div
+                  id="viewer-user-menu"
+                  ref={avatarMenuRef}
+                  className={`avatar-menu__items${userMenuOpen ? " avatar-menu__items--open" : ""}`}
+                >
                   <div className="avatar-menu__header">
                     <span className="muted">Signed in as</span>
                     <span className="avatar-menu__name">{user.displayName}</span>

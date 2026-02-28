@@ -110,6 +110,72 @@ describe("Navbar", () => {
     expect(screen.queryByRole("link", { name: /dashboard/i })).not.toBeInTheDocument();
   });
 
+  test("closes the account menu on outside click", async () => {
+    mockAuthenticatedUser(viewerUser);
+    const user = userEvent.setup();
+
+    renderWithProviders(<Navbar />);
+
+    const avatarButton = screen.getByRole("button", { name: /open account menu/i });
+    await act(async () => {
+      await user.click(avatarButton);
+    });
+
+    const userMenu = document.getElementById("viewer-user-menu");
+    expect(userMenu).toHaveClass("avatar-menu__items--open");
+
+    await act(async () => {
+      await user.click(document.body);
+    });
+
+    expect(userMenu).not.toHaveClass("avatar-menu__items--open");
+    expect(avatarButton).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("closes the account menu on Escape", async () => {
+    mockAuthenticatedUser(viewerUser);
+    const user = userEvent.setup();
+
+    renderWithProviders(<Navbar />);
+
+    const avatarButton = screen.getByRole("button", { name: /open account menu/i });
+    await act(async () => {
+      await user.click(avatarButton);
+    });
+
+    const userMenu = document.getElementById("viewer-user-menu");
+    expect(userMenu).toHaveClass("avatar-menu__items--open");
+
+    await act(async () => {
+      await user.keyboard("{Escape}");
+    });
+
+    expect(userMenu).not.toHaveClass("avatar-menu__items--open");
+    expect(avatarButton).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("restores focus to avatar toggle after Escape closes account menu", async () => {
+    mockAuthenticatedUser(viewerUser);
+    const user = userEvent.setup();
+
+    renderWithProviders(<Navbar />);
+
+    const avatarButton = screen.getByRole("button", { name: /open account menu/i });
+    await act(async () => {
+      await user.click(avatarButton);
+    });
+
+    const signOutButton = screen.getByRole("button", { name: /sign out/i });
+    signOutButton.focus();
+    expect(signOutButton).toHaveFocus();
+
+    await act(async () => {
+      await user.keyboard("{Escape}");
+    });
+
+    expect(avatarButton).toHaveFocus();
+  });
+
 
   test("disables notifications action with coming-soon helper text", () => {
     mockAnonymousUser();
