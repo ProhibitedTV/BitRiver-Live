@@ -127,6 +127,29 @@ type ServerRuntime struct {
 	sessionPurgeStop func()
 }
 
+type closeableSessionStore interface {
+	auth.SessionStore
+	Close(context.Context) error
+}
+
+type closeableMFAStore interface {
+	auth.MFAChallengeStore
+	Close(context.Context) error
+}
+
+var (
+	newPostgresRepository = func(dsn string, opts ...storage.Option) (storage.Repository, error) {
+		return storage.NewPostgresRepository(dsn, opts...)
+	}
+	newPostgresSessionStore = func(dsn string, opts ...auth.PostgresSessionStoreOption) (closeableSessionStore, error) {
+		return auth.NewPostgresSessionStore(dsn, opts...)
+	}
+	newPostgresMFAChallengeStore = func(dsn string, opts ...auth.PostgresMFAChallengeStoreOption) (closeableMFAStore, error) {
+		return auth.NewPostgresMFAChallengeStore(dsn, opts...)
+	}
+	chatQueueFactory = configureChatQueue
+)
+
 func (r *ServerRuntime) Errors() <-chan error            { return r.errs }
 func (r *ServerRuntime) RestartSignals() <-chan struct{} { return r.restartChan }
 
@@ -189,9 +212,17 @@ func NewServerRuntime(in ServerRuntimeInput) (*ServerRuntime, error) {
 	if objectCfg.Endpoint != "" || objectCfg.Bucket != "" || objectCfg.PublicEndpoint != "" || objectCfg.Prefix != "" || objectCfg.Region != "" || objectCfg.AccessKey != "" || objectCfg.SecretKey != "" || objectCfg.LifecycleDays > 0 || objectCfg.UseSSL {
 		options = append(options, storage.WithObjectStorage(objectCfg))
 	}
-	store, err := storage.NewPostgresRepository(postgresDefaultDSN, options...)
+	store, err := newPostgresRepository(postgresDefaultDSN, options...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("initialise storage repository: %w", err)
+	}
+	storeCleanupEnabled := true
+	if closer, ok := store.(interface{ Close(context.Context) error }); ok {
+		defer func() {
+			if storeCleanupEnabled {
+				_ = closer.Close(context.Background())
+			}
+		}()
 	}
 
 	sessionDSN := strings.TrimSpace(in.SessionPostgresDSN)
@@ -199,22 +230,36 @@ func NewServerRuntime(in ServerRuntimeInput) (*ServerRuntime, error) {
 	var mfaStore auth.MFAChallengeStore
 	var sessionCloser func(context.Context) error
 	var mfaCloser func(context.Context) error
+	sessionCleanupEnabled := false
+	mfaCleanupEnabled := false
 	if strings.EqualFold(in.SessionStoreDriverFlag, "memory") {
 		sessionStore = auth.NewMemorySessionStore()
 		mfaStore = auth.NewMemoryMFAChallengeStore()
 	} else {
-		pgStore, err := auth.NewPostgresSessionStore(sessionDSN, auth.WithTimeout(in.PostgresAcquireTimeout))
+		pgStore, err := newPostgresSessionStore(sessionDSN, auth.WithTimeout(in.PostgresAcquireTimeout))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("initialise session store: %w", err)
 		}
 		sessionStore = pgStore
 		sessionCloser = func(ctx context.Context) error { return pgStore.Close(ctx) }
-		mfaPGStore, err := auth.NewPostgresMFAChallengeStore(sessionDSN, auth.WithMFAChallengeTimeout(in.PostgresAcquireTimeout))
+		sessionCleanupEnabled = true
+		defer func() {
+			if sessionCleanupEnabled {
+				_ = pgStore.Close(context.Background())
+			}
+		}()
+		mfaPGStore, err := newPostgresMFAChallengeStore(sessionDSN, auth.WithMFAChallengeTimeout(in.PostgresAcquireTimeout))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("initialise mfa challenge store: %w", err)
 		}
 		mfaStore = mfaPGStore
 		mfaCloser = func(ctx context.Context) error { return mfaPGStore.Close(ctx) }
+		mfaCleanupEnabled = true
+		defer func() {
+			if mfaCleanupEnabled {
+				_ = mfaPGStore.Close(context.Background())
+			}
+		}()
 	}
 	sessionOptions := []auth.SessionOption{auth.WithStore(sessionStore)}
 	if in.SessionIdleTimeout > 0 {
@@ -224,9 +269,9 @@ func NewServerRuntime(in ServerRuntimeInput) (*ServerRuntime, error) {
 	mfaChallenges := auth.NewMFAChallengeManager(0, auth.WithMFAChallengeStore(mfaStore))
 
 	chatCfg := chat.RedisQueueConfig{Addr: in.ChatRedisAddr, Addrs: in.ChatRedisAddrs, Username: in.ChatRedisUsername, Password: in.ChatRedisPassword, Stream: in.ChatRedisStream, Group: in.ChatRedisGroup, MasterName: in.ChatRedisMasterName, PoolSize: in.ChatRedisPoolSize, TLS: chat.RedisTLSConfig{CAFile: in.ChatRedisTLSCA, CertFile: in.ChatRedisTLSCert, KeyFile: in.ChatRedisTLSKey, ServerName: in.ChatRedisTLSServerName, InsecureSkipVerify: in.ChatRedisTLSSkipVerify}}
-	queue, err := configureChatQueue(in.ChatQueueDriver, chatCfg, in.Logger)
+	queue, err := chatQueueFactory(in.ChatQueueDriver, chatCfg, in.Logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("initialise chat queue: %w", err)
 	}
 	gateway := chat.NewGateway(chat.GatewayConfig{Queue: queue, Store: store, Logger: logging.WithComponent(in.Logger, "chat")})
 
@@ -268,8 +313,11 @@ func NewServerRuntime(in ServerRuntimeInput) (*ServerRuntime, error) {
 	handler.TrustedProxies = rateCfg.TrustedProxies
 	srv, err := NewHTTPServer(handler, server.Config{Addr: in.ListenAddr, TLS: in.TLS, RateLimit: rateCfg, CORS: in.CORS, Security: in.Security, Logger: in.Logger, AuditLogger: in.AuditLogger, Metrics: in.MetricsRecorder, Tracer: in.TracingProvider.Tracer(), MetricsAccess: in.MetricsAccess, RequireMetricsProtection: in.RequireMetricsProtection, ViewerOrigin: in.ViewerOrigin, OAuth: in.OAuth, AllowSelfSignup: &in.AllowSelfSignup, SessionCookieSecureMode: in.SessionCookieSecureMode, SessionCookieCrossSite: in.SessionCookieCrossSite, SRSHookToken: in.IngestConfig.SRSToken, UploadMaxBytes: in.UploadMaxBytes})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("initialise http server: %w", err)
 	}
+	storeCleanupEnabled = false
+	sessionCleanupEnabled = false
+	mfaCleanupEnabled = false
 	return &ServerRuntime{server: srv, errs: make(chan error, 1), restartChan: restartChan, logger: in.Logger, listenAddr: in.ListenAddr, mode: in.Mode, tlsCfg: in.TLS, uploadProcessor: uploadProcessor, store: store, sessionStore: sessionStore, mfaStore: mfaStore, sessionCloser: sessionCloser, mfaCloser: mfaCloser, workerCancel: workerCancel, sessionPurgeStop: sessionPurgeStop}, nil
 }
 
