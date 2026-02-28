@@ -373,3 +373,41 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - ✅ `go test ./internal/app -count=1`
 - ✅ Task 3 checks:
   - ✅ `go test ./internal/app -count=1`
+
+## Scoped change: server.New helper extraction and behavior lock tests
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Extract handler mutation helper in `internal/server/server.go`
+  - Acceptance criteria:
+    - `New(handler, cfg)` delegates OAuth/session-cookie/webhook/upload/self-signup mutations to a helper.
+    - Mutation precedence/behavior remains unchanged.
+
+- [x] Task 2 — Extract route registration helper in `internal/server/server.go`
+  - Acceptance criteria:
+    - Route registration for `/healthz`, `/metrics`, `/api/*`, static files, `/viewer`, and `/` SPA fallback is delegated to helper(s) that accept `*http.ServeMux`.
+    - Viewer proxy error handling behavior remains unchanged.
+
+- [x] Task 3 — Extract middleware chain assembly helper in `internal/server/server.go`
+  - Acceptance criteria:
+    - Middleware chain construction is delegated to a helper.
+    - Effective middleware order remains exactly unchanged.
+
+- [x] Task 4 — Add/adjust tests in `internal/server/server_test.go`
+  - Acceptance criteria:
+    - Tests lock in key route availability (`/healthz`, `/metrics`, representative `/api/*`, static route, `/viewer` behavior).
+    - Tests lock in middleware ordering/effects so reordering is detected.
+
+- [x] Task 5 — Run required checks and record results
+  - Acceptance criteria:
+    - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1` passes.
+    - `./scripts/verify.sh` passes (or environment limitation is explicitly recorded).
+
+### Execution log (server.New helper extraction and behavior lock tests)
+- ✅ Task 1 complete: extracted `configureAPIHandler` for OAuth/self-signup/session cookie policy/webhook/upload mutation while preserving existing precedence.
+- ✅ Task 2 complete: extracted `registerRoutes` handling health/metrics/api/static/viewer/spa routes and preserved viewer proxy error handling behavior.
+- ✅ Task 3 complete: extracted `buildMiddlewareChain` with unchanged middleware wrapping order.
+- ✅ Task 4 complete: added constructor-level tests for config mutation application, key route registration outcomes, and middleware-order effects (auth-before-CORS, request-id reachability).
+- ✅ Task 5 checks:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
+  - ✅ `./scripts/verify.sh` (Docker-dependent checks skipped by script because docker is unavailable)
