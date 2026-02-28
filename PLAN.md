@@ -195,3 +195,19 @@
 - `cd web/viewer && npm run test -- navbar.test.tsx`
 - `./scripts/verify.sh --viewer`
 
+
+## Scope (current change)
+- Refactor `internal/app/NewServerRuntime` to register rollback cleanup for each successfully created closeable dependency (`store`, Postgres session store, Postgres MFA store) and only disable those defers once runtime assembly succeeds.
+- Preserve existing external error outcomes while adding safe stage context to returned errors.
+- Add constructor-failure tests in `internal/app` that inject failures after partial setup and assert no resource closers leak on error paths.
+
+## Assumptions
+- Constructor behavior remains identical for successful initialization and shutdown paths; only constructor-time rollback cleanup is added.
+- Test-time dependency injection can be done through package-level constructor function variables without affecting production behavior.
+
+## Risks
+- Over-wrapping errors could break existing exact-match assertions if messages change too aggressively.
+- Newly introduced constructor indirection must avoid data races in tests (reset via `t.Cleanup`).
+
+## Test plan
+- `go test ./internal/app -count=1`

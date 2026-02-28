@@ -340,3 +340,36 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 checks:
   - ✅ `cd web/viewer && npm run test -- navbar.test.tsx`
   - ✅ `./scripts/verify.sh --viewer`
+
+## Scoped change: server runtime constructor rollback cleanup
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Refactor `NewServerRuntime` to register and disable constructor rollback closers
+  - Acceptance criteria:
+    - Repository/store cleanup is deferred immediately after successful constructor calls and triggered on downstream failure.
+    - Postgres session and MFA store closers are similarly registered when created.
+    - Cleanup defers are disabled on successful `ServerRuntime` return.
+    - Top-level failures remain the same classes with added safe stage context.
+
+- [x] Task 2 — Add constructor-failure tests in `internal/app`
+  - Acceptance criteria:
+    - Test covers MFA store creation failure after session store success and confirms prior closers ran.
+    - Test covers chat queue creation failure after store/session setup and confirms all created closers ran.
+    - Tests verify no leaked closers remain on these error returns.
+
+- [x] Task 3 — Run scoped app tests and record results
+  - Acceptance criteria:
+    - `go test ./internal/app -count=1` passes.
+    - Execution log is captured in this scoped section.
+
+
+### Execution log (server runtime constructor rollback cleanup)
+- ✅ Task 1 complete: `NewServerRuntime` now registers constructor-time rollback defers for repository/session/MFA Postgres stores and disables them on success; setup failures are wrapped with stage context.
+- ✅ Task 1 check:
+  - ✅ `go test ./internal/app -count=1`
+- ✅ Task 2 complete: added constructor-failure tests for MFA-store init failure and chat-queue init failure, asserting repository/session/MFA close hooks run exactly once on constructor errors.
+- ✅ Task 2 check:
+  - ✅ `go test ./internal/app -count=1`
+- ✅ Task 3 checks:
+  - ✅ `go test ./internal/app -count=1`
