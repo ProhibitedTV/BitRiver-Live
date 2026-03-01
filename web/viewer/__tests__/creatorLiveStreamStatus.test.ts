@@ -1,7 +1,7 @@
 import { deriveControlCentreStatus } from "../app/creator/live/[channelId]/page";
 
 describe("deriveControlCentreStatus", () => {
-  it("maps starting to ingesting", () => {
+  it("maps starting to reconnecting", () => {
     const status = deriveControlCentreStatus("starting", "session-1", {
       id: "session-1",
       channelId: "channel-1",
@@ -11,7 +11,7 @@ describe("deriveControlCentreStatus", () => {
     });
 
     expect(status).toEqual({
-      label: "Ingesting",
+      label: "Reconnecting",
       badgeClassName: "badge badge--ingesting",
       lastTransitionAt: "2026-01-01T00:00:00.000Z",
       reason: "Encoder connected; stream is still provisioning.",

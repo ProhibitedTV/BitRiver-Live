@@ -36,11 +36,19 @@ function getPreferredIngestEndpoint(endpoints: string[]) {
 }
 
 export type ControlCentreStreamStatus = {
-  label: "Idle" | "Ingesting" | "Live" | "Ended" | "Error";
+  label: "Offline" | "Reconnecting" | "Live" | "Ended" | "Error";
   badgeClassName: string;
   lastTransitionAt?: string;
   reason?: string;
 };
+
+const CREATOR_STATUS_LABELS = {
+  offline: "Offline",
+  starting: "Reconnecting",
+  live: "Live",
+  ended: "Ended",
+  error: "Error",
+} as const;
 
 export function deriveControlCentreStatus(
   liveState: string | undefined,
@@ -49,7 +57,7 @@ export function deriveControlCentreStatus(
 ): ControlCentreStreamStatus {
   if (liveState === "starting") {
     return {
-      label: "Ingesting",
+      label: CREATOR_STATUS_LABELS.starting,
       badgeClassName: "badge badge--ingesting",
       lastTransitionAt: latestSession?.startedAt,
       reason: "Encoder connected; stream is still provisioning.",
@@ -58,7 +66,7 @@ export function deriveControlCentreStatus(
 
   if (liveState === "live") {
     return {
-      label: "Live",
+      label: CREATOR_STATUS_LABELS.live,
       badgeClassName: "badge badge--live",
       lastTransitionAt: latestSession?.startedAt,
     };
@@ -67,7 +75,7 @@ export function deriveControlCentreStatus(
   if (liveState === "offline") {
     if (latestSession?.endedAt) {
       return {
-        label: "Ended",
+        label: CREATOR_STATUS_LABELS.ended,
         badgeClassName: "badge badge--ended",
         lastTransitionAt: latestSession.endedAt,
         reason: "Ended normally.",
@@ -76,7 +84,7 @@ export function deriveControlCentreStatus(
 
     if (currentSessionId && !latestSession) {
       return {
-        label: "Error",
+        label: CREATOR_STATUS_LABELS.error,
         badgeClassName: "badge badge--error",
         reason: "Ingest lost before session details were persisted.",
       };
@@ -84,7 +92,7 @@ export function deriveControlCentreStatus(
 
     if (currentSessionId && latestSession && latestSession.id !== currentSessionId) {
       return {
-        label: "Error",
+        label: CREATOR_STATUS_LABELS.error,
         badgeClassName: "badge badge--error",
         lastTransitionAt: latestSession.startedAt,
         reason: "Ingest lost: channel session signal is out of sync.",
@@ -92,7 +100,7 @@ export function deriveControlCentreStatus(
     }
 
     return {
-      label: "Idle",
+      label: CREATOR_STATUS_LABELS.offline,
       badgeClassName: "badge badge--muted",
       lastTransitionAt: latestSession?.endedAt,
     };
@@ -100,7 +108,7 @@ export function deriveControlCentreStatus(
 
   if (liveState === "ended") {
     return {
-      label: "Ended",
+      label: CREATOR_STATUS_LABELS.ended,
       badgeClassName: "badge badge--ended",
       lastTransitionAt: latestSession?.endedAt ?? latestSession?.startedAt,
       reason: "Stream ended and is awaiting the next ingest session.",
@@ -108,7 +116,7 @@ export function deriveControlCentreStatus(
   }
 
   return {
-    label: "Error",
+    label: CREATOR_STATUS_LABELS.error,
     badgeClassName: "badge badge--error",
     reason: liveState
       ? `Unexpected server live_state: ${liveState}`
@@ -227,7 +235,7 @@ export default function CreatorLivePage() {
   const preferredIngestEndpoint = useMemo(() => getPreferredIngestEndpoint(ingestEndpoints), [ingestEndpoints]);
   const streamStatus = useMemo(() => {
     if (!playback) {
-      return { label: "Idle", badgeClassName: "badge badge--muted" } as ControlCentreStreamStatus;
+      return { label: CREATOR_STATUS_LABELS.offline, badgeClassName: "badge badge--muted" } as ControlCentreStreamStatus;
     }
     return deriveControlCentreStatus(playback.channel.liveState, playback.channel.currentSessionId, latestSession);
   }, [latestSession, playback]);
@@ -235,40 +243,40 @@ export default function CreatorLivePage() {
   const testPanelStatus = useMemo(() => {
     if (!playback?.channel.liveState) {
       return {
-        label: "Unknown",
+        label: CREATOR_STATUS_LABELS.offline,
         badgeClassName: "badge badge--muted",
-        instructions: "Start streaming in OBS. This page updates automatically.",
+        instructions: "Start streaming in OBS.",
       };
     }
 
     if (playback.channel.liveState === "live") {
       return {
-        label: "Live",
+        label: CREATOR_STATUS_LABELS.live,
         badgeClassName: "badge badge--live",
-        instructions: "You're live. Check preview below.",
+        instructions: "You're live.",
       };
     }
 
     if (playback.channel.liveState === "starting") {
       return {
-        label: "Reconnecting",
+        label: CREATOR_STATUS_LABELS.starting,
         badgeClassName: "badge badge--ingesting",
-        instructions: "Connection interrupted—keep streaming; we'll recover.",
+        instructions: "Keep streaming while we reconnect.",
       };
     }
 
     if (playback.channel.liveState === "offline") {
       return {
-        label: "Not live",
+        label: CREATOR_STATUS_LABELS.offline,
         badgeClassName: "badge badge--muted",
-        instructions: "Start streaming in OBS. This page updates automatically.",
+        instructions: "Start streaming in OBS.",
       };
     }
 
     return {
-      label: "Unknown",
+      label: CREATOR_STATUS_LABELS.error,
       badgeClassName: "badge badge--error",
-      instructions: "Start streaming in OBS. This page updates automatically.",
+      instructions: "Refresh and check ingest settings.",
     };
   }, [playback?.channel.liveState]);
 

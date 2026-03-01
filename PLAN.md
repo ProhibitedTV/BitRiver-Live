@@ -330,3 +330,20 @@
 ### Test plan
 - Run focused Go tests for `internal/app` shutdown behavior additions.
 - Run full required verification gate `./scripts/verify.sh` before finalizing.
+
+## Scope (current change)
+- Normalize creator live status labels in `web/viewer/app/creator/live/[channelId]/page.tsx` by introducing a single label map for offline/starting/live/error-facing states.
+- Reuse the same label source in both `deriveControlCentreStatus(...)` and `testPanelStatus` so each label has one predictable meaning.
+- Keep test-panel instructions concise while preserving current UX intent for idle/live/degraded/error situations.
+- Update viewer tests that assert `deriveControlCentreStatus` label behavior.
+
+## Assumptions
+- `deriveControlCentreStatus` remains the canonical logic source for stream state derivation; this change centralizes labels, not state transitions.
+- Existing `creatorLiveStreamStatus` tests are the primary assertions for label strings and should be updated in step with copy changes.
+
+## Risks
+- Label harmonization could unintentionally alter creator-facing wording relied on elsewhere if any UI snapshots/assertions depend on old strings.
+- Over-centralizing labels without explicit semantic naming could reduce readability unless keys map clearly to meanings.
+
+## Test plan
+- `cd web/viewer && npm run test -- creatorLiveStreamStatus.test.ts`

@@ -604,3 +604,51 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/app -run TestUploadSourceStorageConfigFromObjectStorage -count=1`
 - ✅ Task 4 checks:
   - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/app -count=1`
+
+## Scoped change: unify creator live status labels
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Add single-source creator status labels in creator live page
+  - Acceptance criteria:
+    - `web/viewer/app/creator/live/[channelId]/page.tsx` defines a single shared mapping for creator-visible labels for offline/starting/live/error conditions.
+    - `deriveControlCentreStatus(...)` reads labels from that mapping instead of hardcoded per-branch strings.
+
+- [x] Task 2 — Reuse same labels in test panel status copy
+  - Acceptance criteria:
+    - `testPanelStatus` in `page.tsx` reuses the shared label mapping.
+    - Offline idle and degraded reconnecting states each use one consistent label across derive/test panel.
+    - Instructions remain minimal and deterministic per status.
+
+- [x] Task 3 — Update label assertions in viewer tests
+  - Acceptance criteria:
+    - Tests under `web/viewer/__tests__` that assert `deriveControlCentreStatus` labels are updated for unified wording.
+    - `cd web/viewer && npm run test -- creatorLiveStreamStatus.test.ts` passes.
+- [x] Task 1 — Add single-source creator status labels in creator live page
+  - Acceptance criteria:
+    - `web/viewer/app/creator/live/[channelId]/page.tsx` defines a single shared mapping for creator-visible labels for offline/starting/live/error conditions.
+    - `deriveControlCentreStatus(...)` reads labels from that mapping instead of hardcoded per-branch strings.
+
+- ✅ Task 1 complete: added `CREATOR_STATUS_LABELS` and switched `deriveControlCentreStatus`/default stream status labels to use the shared map.
+- ✅ Task 1 check:
+  - ✅ `cd web/viewer && npm run test -- creatorLiveStreamStatus.test.ts`
+
+- [x] Task 2 — Reuse same labels in test panel status copy
+  - Acceptance criteria:
+    - `testPanelStatus` in `page.tsx` reuses the shared label mapping.
+    - Offline idle and degraded reconnecting states each use one consistent label across derive/test panel.
+    - Instructions remain minimal and deterministic per status.
+
+- ✅ Task 2 complete: updated `testPanelStatus` to reuse shared labels and simplified status instructions for offline/live/reconnecting/error states.
+- ✅ Task 2 check:
+  - ✅ `cd web/viewer && npm run test -- creatorLiveStreamStatus.test.ts`
+
+- [x] Task 3 — Update label assertions in viewer tests
+  - Acceptance criteria:
+    - Tests under `web/viewer/__tests__` that assert `deriveControlCentreStatus` labels are updated for unified wording.
+    - `cd web/viewer && npm run test -- creatorLiveStreamStatus.test.ts` passes.
+
+- ✅ Task 3 complete: updated `creatorLiveStreamStatus` label expectation from `Ingesting` to `Reconnecting`.
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- creatorLiveStreamStatus.test.ts`
+  - ✅ `./scripts/verify.sh` (full repo + viewer checks; passed with expected npm env warnings and docker skip notices)
