@@ -18,6 +18,8 @@ export const FOLLOWING_COPY = {
   empty: "You’re not following any channels yet.",
   error: "We couldn’t load your followed channels.",
   retry: "Try again",
+  summaryFollowed: (count: number) => `${count} followed`,
+  summaryLiveNow: (count: number) => `${count} live now`,
 };
 
 export function FollowingLoadingBlock({ className }: { className?: string }) {

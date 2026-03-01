@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { FollowingList } from "./following/FollowingList";
 import {
+  FOLLOWING_COPY,
   FollowingEmptyPrompt,
   FollowingLoadingBlock,
   FollowingStatus,
@@ -25,7 +26,7 @@ export function FollowingRail({ channels, loading = false, isAuthenticated = fal
           <span className="following-rail__eyebrow muted">Following</span>
           <h3>Catch up with your creators</h3>
         </div>
-        {status === "ready" && <span className="muted">{channels.length} online</span>}
+        {status === "ready" && <span className="muted">{FOLLOWING_COPY.summaryLiveNow(channels.length)}</span>}
       </header>
       {status === "loading" ? (
         <FollowingLoadingBlock className="muted" />

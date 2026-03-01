@@ -111,4 +111,21 @@ describe("Following state presentation", () => {
       expect(screen.getAllByText("Owner").length).toBeGreaterThan(1);
     });
   });
+
+  it("uses explicit live-now and followed summary labels without terminology drift", async () => {
+    renderWithProviders(<FollowingRail channels={[liveChannel]} isAuthenticated />);
+    expect(screen.getByText(FOLLOWING_COPY.summaryLiveNow(1))).toBeInTheDocument();
+
+    mockUseAuth.mockReturnValue(signedInAuthState());
+    fetchFollowingMock.mockResolvedValue({ channels: [liveChannel], generatedAt: new Date().toISOString() });
+
+    renderWithProviders(<FollowingSidebar />);
+
+    await waitFor(() => {
+      expect(screen.getByText(FOLLOWING_COPY.summaryFollowed(1))).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("heading", { name: "Channels you follow" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Creators you follow" })).not.toBeInTheDocument();
+  });
 });
