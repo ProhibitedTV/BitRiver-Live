@@ -514,3 +514,35 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 checks:
   - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server ./internal/storage -count=1`
   - ✅ `./scripts/verify.sh` (Docker-dependent checks skipped by script because docker is unavailable)
+
+## Scoped change: server runtime shutdown close warning logs
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Replace ignored shutdown close errors with warning logs in `internal/app/server_runtime.go`
+  - Acceptance criteria:
+    - Shutdown still attempts `store`, then `session_store`, then `mfa_store` close operations in existing order.
+    - Close errors are logged as warnings with component identifiers: `store`, `session_store`, `mfa_store`.
+    - Shutdown remains non-fatal (no early return introduced).
+
+- [x] Task 2 — Add shutdown close-warning tests in `internal/app/server_runtime_test.go`
+  - Acceptance criteria:
+    - Test uses fake closers returning errors for store/session/mfa.
+    - Assertions verify warning logs include each component identifier and close error context.
+    - Assertions verify shutdown continues and invokes all closers despite earlier close failures.
+
+- [x] Task 3 — Run validation commands and record results
+  - Acceptance criteria:
+    - `go test ./internal/app -count=1` passes.
+    - `./scripts/verify.sh` passes (or explicit environment limitation captured).
+
+### Execution log (server runtime shutdown close warning logs)
+- ✅ Task 1 complete: replaced ignored shutdown close errors with warning logs carrying component identifiers for store, session_store, and mfa_store while preserving shutdown flow/order.
+- ✅ Task 2 complete: added shutdown test with failing closers that asserts warning logs for each component and confirms shutdown continues through all closers in order.
+- ✅ Task 2 check:
+  - ✅ `go test ./internal/app -count=1`
+- ✅ Task 3 checks:
+  - ✅ `./scripts/verify.sh`
+  - ⚠️ Docker-dependent checks skipped by verify script because docker is not installed in this environment.
+- ✅ Task 3 re-check after gofmt:
+  - ✅ `go test ./internal/app -count=1`

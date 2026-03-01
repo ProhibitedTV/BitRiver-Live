@@ -277,3 +277,22 @@
 
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server ./internal/storage -count=1`
+
+## Scoped change: server runtime shutdown close warning logs
+
+### Scope
+- Update `ServerRuntime.Shutdown(ctx)` in `internal/app/server_runtime.go` to replace ignored close errors for `store`, `session_store`, and `mfa_store` with warning logs that include component identifiers.
+- Preserve existing shutdown order and non-fatal behavior (do not return early on close errors).
+- Add targeted tests in `internal/app` verifying warning emission and continued shutdown when closers fail.
+
+### Assumptions
+- Existing `Shutdown` behavior is intentionally best-effort and should keep proceeding after any close failure.
+- Warning-level structured logs can be asserted via `slog` text handler output content.
+
+### Risks
+- Log message/key changes could make tests brittle; assertions should focus on stable substrings (message + component identifiers).
+- Test setup must avoid introducing dependency on full runtime construction.
+
+### Test plan
+- Run focused Go tests for `internal/app` shutdown behavior additions.
+- Run full required verification gate `./scripts/verify.sh` before finalizing.

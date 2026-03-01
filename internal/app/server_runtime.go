@@ -182,13 +182,19 @@ func (r *ServerRuntime) Shutdown(ctx context.Context) {
 		}
 	}
 	if closer, ok := r.store.(interface{ Close(context.Context) error }); ok {
-		_ = closer.Close(ctx)
+		if err := closer.Close(ctx); err != nil {
+			r.logger.Warn("failed to close store", "component", "store", "error", err)
+		}
 	}
 	if r.sessionCloser != nil {
-		_ = r.sessionCloser(ctx)
+		if err := r.sessionCloser(ctx); err != nil {
+			r.logger.Warn("failed to close session store", "component", "session_store", "error", err)
+		}
 	}
 	if r.mfaCloser != nil {
-		_ = r.mfaCloser(ctx)
+		if err := r.mfaCloser(ctx); err != nil {
+			r.logger.Warn("failed to close mfa store", "component", "mfa_store", "error", err)
+		}
 	}
 }
 
