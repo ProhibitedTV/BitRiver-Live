@@ -34,7 +34,7 @@ export function FollowingSidebar() {
     if (status === "unauthenticated") {
       return FOLLOWING_COPY.unauthenticated;
     }
-    return channels.length > 0 ? `${channels.length} creators` : "No channels yet";
+    return channels.length > 0 ? FOLLOWING_COPY.summaryFollowed(channels.length) : FOLLOWING_COPY.empty;
   };
 
   const renderAvatar = (entry: DirectoryChannel) => {
@@ -67,7 +67,7 @@ export function FollowingSidebar() {
       <header className="following-sidebar__header">
         <div>
           <p className="following-sidebar__eyebrow">Following</p>
-          <h4>Creators you follow</h4>
+          <h4>Channels you follow</h4>
         </div>
         <span className="following-sidebar__summary muted">{getSummary()}</span>
       </header>

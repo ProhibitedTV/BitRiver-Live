@@ -30,7 +30,38 @@ describe("FollowingSidebar", () => {
     renderWithProviders(<FollowingSidebar />);
 
     await waitFor(() => {
-      expect(screen.getByText(FOLLOWING_COPY.empty)).toBeInTheDocument();
+      expect(screen.getAllByText(FOLLOWING_COPY.empty).length).toBeGreaterThan(0);
     });
+  });
+
+  it("uses explicit followed-count summary wording in ready state", async () => {
+    fetchFollowingMock.mockResolvedValue({
+      channels: [
+        {
+          channel: {
+            id: "channel-1",
+            ownerId: "owner-1",
+            title: "BitRiver Live",
+            category: "Gaming",
+            tags: [],
+            liveState: "Live",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          owner: { id: "owner-1", displayName: "Owner" },
+          profile: {},
+          live: true,
+          followerCount: 42,
+        },
+      ],
+      generatedAt: new Date().toISOString(),
+    });
+
+    renderWithProviders(<FollowingSidebar />);
+
+    await waitFor(() => {
+      expect(screen.getByText(FOLLOWING_COPY.summaryFollowed(1))).toBeInTheDocument();
+    });
+    expect(screen.getByRole("heading", { name: "Channels you follow" })).toBeInTheDocument();
   });
 });

@@ -681,3 +681,36 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 checks:
   - ✅ `cd web/viewer && npm run test -- creatorLiveStreamStatus.test.ts`
   - ✅ `./scripts/verify.sh` (full repo + viewer checks; passed with expected npm env warnings and docker skip notices)
+
+## Scoped change: following summary label clarity and terminology consistency
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Define and centralize following summary copy constants
+  - Acceptance criteria:
+    - `web/viewer/components/following/FollowingState.tsx` exports shared summary label constants for followed-count and live-now-count text.
+    - Existing empty/unauthenticated copy remains centralized and unchanged in meaning.
+
+- [x] Task 2 — Update FollowingSidebar and FollowingRail to use explicit summary labels
+  - Acceptance criteria:
+    - Sidebar ready summary shows an explicit followed count label (e.g. `X followed`).
+    - Rail ready summary shows an explicit live-now count label (e.g. `X live now`).
+    - Both components consume shared copy constants from `FollowingState.tsx` where applicable.
+
+- [x] Task 3 — Update/verify viewer tests for terminology and summary semantics
+  - Acceptance criteria:
+    - Tests cover new explicit summary labels for sidebar/rail ready states.
+    - Empty/unauthenticated wording remains consistent across both surfaces.
+    - `cd web/viewer && npm run test -- followingStatePresentation.test.tsx followingSidebar.test.tsx` passes and results are logged below.
+
+### Execution log (following summary label clarity and terminology consistency)
+- ✅ Task 1 complete: added shared summary label builders in `FOLLOWING_COPY` for followed-count and live-now-count phrasing.
+- ✅ Task 1 check:
+  - ✅ `cd web/viewer && npm run test -- followingStatePresentation.test.tsx`
+- ✅ Task 2 complete: sidebar now reports explicit followed totals and rail now reports explicit live-now totals, both sourced from shared following copy constants.
+- ⚠️ Task 2 check (intermediate):
+  - ❌ `cd web/viewer && npm run test -- followingStatePresentation.test.tsx followingSidebar.test.tsx` (failed due to pre-existing single-match assertion in `followingSidebar.test.tsx` after summary copy became intentionally duplicated in empty state UI)
+- ✅ Task 3 complete: updated viewer tests to assert explicit summary semantics and consistent channels-focused terminology across rail/sidebar.
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- followingStatePresentation.test.tsx followingSidebar.test.tsx`
+  - ✅ `./scripts/verify.sh`

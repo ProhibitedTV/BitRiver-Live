@@ -1,6 +1,24 @@
 # PLAN
 
 ## Scope (current change)
+- Clarify Following surface summary counts by making labels explicit in `web/viewer/components/FollowingSidebar.tsx` and `web/viewer/components/FollowingRail.tsx`.
+- Decide and encode count semantics per surface (`followed creators` vs `live now`) based on existing data shown in each component.
+- Reuse shared copy constants from `web/viewer/components/following/FollowingState.tsx` for summary labels and state text to prevent wording drift.
+- Keep empty and unauthenticated terminology consistent across rail/sidebar prompts (specifically “channels you follow” vs “creators you follow”).
+
+## Assumptions
+- `FollowingSidebar` count reflects total followed channels returned by `fetchFollowingChannels()` for the signed-in user.
+- `FollowingRail` presents currently live followed channels, so its ready-state summary should use a live-now label.
+- This is viewer copy/label behavior; no backend/API contract changes are needed.
+
+## Risks
+- Tests that assert old inline summary strings may fail until updated.
+- Introducing new shared constants could be partially adopted, leaving mixed terminology if not fully wired into both components.
+
+## Test plan
+- `cd web/viewer && npm run test -- followingStatePresentation.test.tsx followingSidebar.test.tsx`
+
+## Scope (current change)
 - Standardize viewer-facing VOD terminology around the existing heading term “Past broadcasts” in `web/viewer/components/VodGallery.tsx` and adjacent channel page copy.
 - Update VOD gallery empty, loading, and error states to consistently reference “past broadcasts”.
 - Align nearby channel page fallback error text and replay CTA wording so users do not see mixed terms like “VODs”/“replays”.
