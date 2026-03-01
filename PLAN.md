@@ -228,3 +228,19 @@
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
 - `./scripts/verify.sh`
+
+## Scope (current change)
+- Update `internal/server/cors.go` so CORS middleware preserves existing `Vary` header values and only appends `Origin` when missing.
+- Keep all existing CORS allow/expose headers and preflight/status behavior unchanged.
+- Add server CORS test coverage proving upstream `Vary` values are merged with `Origin` rather than overwritten.
+
+## Assumptions
+- Go's header canonicalization and comma-separated `Vary` serialization are acceptable for assertion (`Accept-Encoding, Origin` ordering from append order).
+- Existing middleware/header behavior should remain identical except for preserving previously-set `Vary` tokens.
+
+## Risks
+- Naive string matching on existing `Vary` values could miss case-insensitive duplicates unless normalized.
+- Test could become flaky if it over-specifies formatting beyond token presence/order.
+
+## Test plan
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
