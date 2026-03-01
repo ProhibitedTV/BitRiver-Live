@@ -415,3 +415,20 @@
 
 ## Test plan
 - `cd web/viewer && npm run test -- chatPanel.test.tsx`
+
+## Scope (current change)
+- Gate channel VOD fetching in `web/viewer/app/channels/[id]/page.tsx` so network requests happen only when the Videos tab is actually viewed.
+- Track per-channel VOD request state and reset that state when `id` changes.
+- Preserve existing VOD loading/error/retry UX and keep `VodGallery` prop wiring unchanged.
+- Prevent repeated refetch on tab toggles after an initial successful/failed fetch unless the viewer explicitly retries.
+
+## Assumptions
+- Existing channel page tests in `web/viewer/__tests__/channelPage.test.tsx` can be extended to verify fetch timing without changing unrelated behavior.
+- Keeping prior VOD data visible when leaving/returning to Videos on the same channel is acceptable and aligns with current state retention.
+
+## Risks
+- Effect dependency mistakes could reintroduce repeated requests or skip first fetch when opening Videos.
+- Channel change reset logic could accidentally leak prior channel VOD request state if not keyed correctly.
+
+## Test plan
+- `cd web/viewer && npm run test -- channelPage.test.tsx`

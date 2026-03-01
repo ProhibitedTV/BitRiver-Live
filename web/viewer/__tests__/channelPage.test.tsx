@@ -116,7 +116,6 @@ describe("ChannelPage", () => {
     render(<ChannelPage params={{ id: "chan-42" }} />);
 
     await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledWith("chan-42"));
-    await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledWith("chan-42"));
 
     expect(
       await screen.findByRole("heading", { name: "We couldn't load this channel." })
@@ -225,7 +224,6 @@ describe("ChannelPage", () => {
     render(<ChannelPage params={{ id: "chan-42" }} />);
 
     await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalled());
-    await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledWith("chan-42"));
     const followButton = await screen.findByRole("button", { name: /follow · 10 supporters/i });
 
     await act(async () => {
@@ -326,6 +324,7 @@ describe("ChannelPage", () => {
   });
 
   test("shows VOD loading state before resolving to an empty gallery", async () => {
+    const user = userEvent.setup();
     mockUseAuth.mockReturnValue(signedInAuthState());
 
     let resolveVods: ((value: any) => void) | undefined;
@@ -337,6 +336,11 @@ describe("ChannelPage", () => {
     );
 
     render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    const videosTab = await screen.findByRole("tab", { name: "Videos" });
+    await act(async () => {
+      await user.click(videosTab);
+    });
 
     expect(await screen.findByText(/loading past broadcasts/i)).toBeInTheDocument();
 
@@ -358,7 +362,6 @@ describe("ChannelPage", () => {
     render(<ChannelPage params={{ id: "chan-42" }} />);
 
     await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledWith("chan-42"));
-    await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledWith("chan-42"));
 
     const link = await screen.findByRole("link", { name: /open creator dashboard/i });
     expect(link).toHaveAttribute("href", "/creator/uploads/chan-42");
@@ -393,5 +396,58 @@ describe("ChannelPage", () => {
     await waitFor(() =>
       expect(screen.queryByText(/loading past broadcasts/i)).not.toBeInTheDocument()
     );
+  });
+
+  test("fetches VODs only after opening Videos and avoids refetch on tab toggles", async () => {
+    const user = userEvent.setup();
+    mockUseAuth.mockReturnValue(signedInAuthState());
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledWith("chan-42"));
+    expect(fetchChannelVodsMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await user.click(screen.getByRole("tab", { name: "Videos" }));
+    });
+
+    await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledTimes(1));
+    expect(fetchChannelVodsMock).toHaveBeenCalledWith("chan-42");
+
+    await act(async () => {
+      await user.click(screen.getByRole("tab", { name: "About" }));
+      await user.click(screen.getByRole("tab", { name: "Videos" }));
+    });
+
+    expect(fetchChannelVodsMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("resets Videos-tab fetch gating when channel id changes", async () => {
+    const user = userEvent.setup();
+    mockUseAuth.mockReturnValue(signedInAuthState());
+
+    const { rerender } = render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledWith("chan-42"));
+
+    await act(async () => {
+      await user.click(screen.getByRole("tab", { name: "Videos" }));
+    });
+    await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledTimes(1));
+    expect(fetchChannelVodsMock).toHaveBeenNthCalledWith(1, "chan-42");
+
+    await act(async () => {
+      rerender(<ChannelPage params={{ id: "chan-84" }} />);
+    });
+
+    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledWith("chan-84"));
+    expect(fetchChannelVodsMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await user.click(screen.getByRole("tab", { name: "Videos" }));
+    });
+
+    await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledTimes(2));
+    expect(fetchChannelVodsMock).toHaveBeenNthCalledWith(2, "chan-84");
   });
 });
