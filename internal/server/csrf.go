@@ -26,6 +26,8 @@ var csrfExemptPaths = []string{
 	"/api/payments/webhooks/",
 }
 
+var csrfTokenGenerator = generateCSRFToken
+
 func csrfMiddleware(handler *api.Handler, logger *slog.Logger, resolver *clientIPResolver, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !csrfShouldInspect(r) {
@@ -47,7 +49,14 @@ func csrfMiddleware(handler *api.Handler, logger *slog.Logger, resolver *clientI
 
 		csrfCookie, err := r.Cookie(csrfCookieName)
 		if err != nil || strings.TrimSpace(csrfCookie.Value) == "" {
-			csrfCookie = setCSRFCookie(w)
+			csrfCookie, err = setCSRFCookie(w)
+			if err != nil {
+				if requestLogger := loggingWithRequest(logger, resolver, r); requestLogger != nil {
+					requestLogger.Warn("csrf token creation failed", "path", r.URL.Path, "err", err)
+				}
+				api.WriteError(w, http.StatusForbidden, fmt.Errorf("csrf token creation failed"))
+				return
+			}
 		}
 
 		provided := strings.TrimSpace(r.Header.Get(csrfHeaderName))
@@ -99,10 +108,10 @@ func cookieAuthWithoutBearer(r *http.Request) bool {
 	return strings.TrimSpace(cookie.Value) != ""
 }
 
-func setCSRFCookie(w http.ResponseWriter) *http.Cookie {
-	token, err := generateCSRFToken()
+func setCSRFCookie(w http.ResponseWriter) (*http.Cookie, error) {
+	token, err := csrfTokenGenerator()
 	if err != nil {
-		token = ""
+		return nil, err
 	}
 	cookie := &http.Cookie{
 		Name:     csrfCookieName,
@@ -113,7 +122,7 @@ func setCSRFCookie(w http.ResponseWriter) *http.Cookie {
 		SameSite: http.SameSiteLaxMode,
 	}
 	http.SetCookie(w, cookie)
-	return cookie
+	return cookie, nil
 }
 
 func generateCSRFToken() (string, error) {

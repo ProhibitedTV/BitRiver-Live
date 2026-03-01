@@ -244,3 +244,19 @@
 
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
+
+## Scope (current change)
+- Harden CSRF cookie issuance in `internal/server/csrf.go` so token-generation failures are surfaced as errors instead of silently setting empty cookie values.
+- Update CSRF middleware flow to deny protected cookie-auth requests when CSRF token creation fails, while preserving exempt-path and bearer-token bypass behavior.
+- Add server middleware tests that simulate CSRF token generation failure and assert protected requests return forbidden without invoking downstream handlers.
+
+## Assumptions
+- Protected requests that require CSRF and need a newly issued token should fail closed when token generation fails.
+- Existing bypass paths (`csrfPathExempt`, bearer-auth skip, safe methods) must remain unchanged.
+
+## Risks
+- Introducing token-generator indirection for testing could leak test overrides if not restored per test.
+- New denial path may alter expected error-body text for failure cases that previously produced generic invalid-token errors.
+
+## Test plan
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`

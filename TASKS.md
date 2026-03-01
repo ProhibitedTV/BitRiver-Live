@@ -441,3 +441,35 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 checks:
   - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
   - ✅ `./scripts/verify.sh` (Docker-dependent checks skipped by script because docker is unavailable)
+
+## Scoped change: CSRF cookie creation failure hardening
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Return errors from CSRF cookie creation and fail closed in middleware
+  - Acceptance criteria:
+    - `setCSRFCookie` returns `(*http.Cookie, error)` and never silently emits empty CSRF tokens.
+    - `csrfMiddleware` handles CSRF token generation failure by logging a warning and returning `403` for protected requests.
+    - Existing exempt-path and bearer-token bypass behavior remains unchanged.
+
+- [x] Task 2 — Add regression tests for token-generation failure denial
+  - Acceptance criteria:
+    - Tests can force CSRF token generation failure deterministically.
+    - Protected cookie-auth requests that require token issuance are denied with forbidden status when generation fails.
+    - Downstream handler is not called on token-generation failure.
+
+- [x] Task 3 — Run scoped server tests and record results
+  - Acceptance criteria:
+    - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1` passes.
+    - Execution log for this scoped section is recorded.
+
+### Execution log (CSRF cookie creation failure hardening)
+- ✅ Task 1 complete: `setCSRFCookie` now returns `(*http.Cookie, error)` and `csrfMiddleware` fails closed with a warning + forbidden response when CSRF token issuance fails.
+- ✅ Task 1 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
+- ✅ Task 2 complete: added CSRF middleware tests that force token generation failure, verify protected cookie-auth requests are denied, and confirm bearer/exempt-path bypass behavior remains intact.
+- ✅ Task 2 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
+- ✅ Task 3 checks:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
+  - ✅ `./scripts/verify.sh` (Docker-dependent checks skipped by script because docker is unavailable)
