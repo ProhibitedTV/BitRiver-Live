@@ -778,3 +778,34 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 checks:
   - ✅ `cd web/viewer && npm run test -- chatPanel.test.tsx`
   - ✅ `./scripts/verify.sh`
+
+## Scoped change: gate channel VOD fetch by Videos tab usage
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Refactor channel page VOD fetch trigger to Videos-tab activation
+  - Acceptance criteria:
+    - Remove unconditional VOD fetch-on-mount effect in `web/viewer/app/channels/[id]/page.tsx`.
+    - Add gating so VOD fetch runs when `activeTab === "videos"` and channel `id` changes reset request tracking.
+    - Existing `loadVods`, `handleVodRetry`, and `VodGallery` prop contract remain intact.
+
+- [x] Task 2 — Add/update channel page tests for tab-gated VOD fetching
+  - Acceptance criteria:
+    - Tests verify initial render does not fetch VODs while on default About tab.
+    - Tests verify opening Videos tab fetches once, tab switching does not refetch, and retry still triggers a new fetch.
+    - Tests verify changing `id` resets gating and fetches for the new channel when Videos is viewed.
+
+- [x] Task 3 — Run scoped viewer test check and record results
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- channelPage.test.tsx` passes.
+    - Results are logged in this section.
+
+### Execution log (gate channel VOD fetch by Videos tab usage)
+- ✅ Task 1 complete: replaced unconditional VOD fetch effect with Videos-tab gated fetch logic, added per-channel request tracking, and reset gating on channel changes while preserving `loadVods`, retry behavior, and `VodGallery` props.
+- ✅ Task 2 complete: updated `channelPage` tests to assert no VOD fetch on initial About tab, one fetch on first Videos activation, no refetch on tab toggles, retry-driven refetch, and channel-id reset behavior.
+- ✅ Task 2 check:
+  - ✅ `cd web/viewer && npm run test -- channelPage.test.tsx`
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- channelPage.test.tsx`
+  - ✅ `./scripts/verify.sh`
+  - ⚠️ Docker-dependent steps in `./scripts/verify.sh` were skipped because Docker is not installed in this environment.

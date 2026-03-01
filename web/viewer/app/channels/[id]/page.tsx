@@ -30,6 +30,8 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
   const refreshIntervalRef = useRef<NodeJS.Timeout | undefined>();
   const cancelledRef = useRef(false);
   const vodCancelledRef = useRef(false);
+  const vodRequestedChannelIdRef = useRef<string | undefined>();
+  const previousVodChannelIdRef = useRef<string | undefined>();
 
   const clearRefreshInterval = useCallback(() => {
     if (refreshIntervalRef.current) {
@@ -77,6 +79,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
       setData(undefined);
       setVods([]);
       setVodError(undefined);
+      vodRequestedChannelIdRef.current = undefined;
       setActiveTab("about");
       setLoading(true);
     }
@@ -132,16 +135,40 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
   }, [id]);
 
   const handleVodRetry = useCallback(() => {
+    vodRequestedChannelIdRef.current = undefined;
     void loadVods();
   }, [loadVods]);
 
   useEffect(() => {
     vodCancelledRef.current = false;
+    const channelChanged = previousVodChannelIdRef.current !== id;
+    if (channelChanged) {
+      previousVodChannelIdRef.current = id;
+      vodRequestedChannelIdRef.current = undefined;
+      return () => {
+        vodCancelledRef.current = true;
+      };
+    }
+
+    if (activeTab !== "videos") {
+      return () => {
+        vodCancelledRef.current = true;
+      };
+    }
+
+    if (vodRequestedChannelIdRef.current === id) {
+      return () => {
+        vodCancelledRef.current = true;
+      };
+    }
+
+    vodRequestedChannelIdRef.current = id;
     void loadVods();
+
     return () => {
       vodCancelledRef.current = true;
     };
-  }, [id, loadVods]);
+  }, [activeTab, id, loadVods]);
 
   const tabs = [
     { id: "about", label: "About" },
