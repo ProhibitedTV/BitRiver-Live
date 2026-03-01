@@ -1,6 +1,23 @@
 # PLAN
 
 ## Scope (current change)
+- Add an internal `internal/app` helper that maps `storage.ObjectStorageConfig` to `api.UploadSourceStorageConfig`.
+- Replace duplicated field-by-field mapping in `internal/app/http.go` (`NewHandler`) and `internal/app/server_runtime.go` (upload processor setup) with the new helper.
+- Add a focused unit test in `internal/app` asserting every mapped field is preserved exactly.
+- Keep runtime behavior unchanged aside from deduplicating the mapping logic.
+
+## Assumptions
+- The mapping surface remains exactly: `Endpoint`, `Bucket`, `Prefix`, `PublicEndpoint`, `UseSSL`, and `RequestTimeout`.
+- No call-sites outside `internal/app` need this helper for this scope.
+
+## Risks
+- A helper signature mismatch could accidentally alter zero-value handling if fields are omitted.
+- Refactoring call-sites could unintentionally change behavior if either site had subtle differences.
+
+## Test plan
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/app -count=1`
+
+## Scope (current change)
 - Update `web/viewer/components/FeaturedChannel.tsx` to respect `prefers-reduced-motion` when deciding carousel autoplay behavior.
 - Default autoplay to off when reduced motion is preferred while preserving a prop-based override path for explicit opt-in/out.
 - React to runtime preference changes via media-query subscription and prevent autoplay interval setup whenever reduced-motion mode is active.

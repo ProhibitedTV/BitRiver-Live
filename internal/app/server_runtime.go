@@ -291,14 +291,7 @@ func NewServerRuntime(in ServerRuntimeInput) (*ServerRuntime, error) {
 
 	var uploadProcessor *serviceuploads.UploadProcessor
 	if ingestController != nil {
-		uploadSourceCfg := api.UploadSourceStorageConfig{
-			Endpoint:       objectCfg.Endpoint,
-			Bucket:         objectCfg.Bucket,
-			Prefix:         objectCfg.Prefix,
-			PublicEndpoint: objectCfg.PublicEndpoint,
-			UseSSL:         objectCfg.UseSSL,
-			RequestTimeout: objectCfg.RequestTimeout,
-		}
+		uploadSourceCfg := uploadSourceStorageConfigFromObjectStorage(objectCfg)
 		uploadProcessor = serviceuploads.NewUploadProcessor(serviceuploads.UploadProcessorConfig{
 			Store:                 storage.NewUploadProcessingStore(useCases),
 			Ingest:                ingestController,

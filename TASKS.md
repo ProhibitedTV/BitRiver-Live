@@ -546,3 +546,40 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - ⚠️ Docker-dependent checks skipped by verify script because docker is not installed in this environment.
 - ✅ Task 3 re-check after gofmt:
   - ✅ `go test ./internal/app -count=1`
+
+## Scoped change: deduplicate upload source storage mapping in internal/app
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Add shared storage mapping helper in `internal/app`
+  - Acceptance criteria:
+    - New helper converts `storage.ObjectStorageConfig` to `api.UploadSourceStorageConfig`.
+    - Helper performs explicit field-by-field mapping for `Endpoint`, `Bucket`, `Prefix`, `PublicEndpoint`, `UseSSL`, and `RequestTimeout`.
+
+- [x] Task 2 — Use helper in handler/runtime wiring paths
+  - Acceptance criteria:
+    - `internal/app/http.go` `NewHandler` uses helper for `handler.UploadSourceStorage` assignment.
+    - `internal/app/server_runtime.go` upload processor config setup uses helper.
+    - No behavior changes beyond mapping deduplication.
+
+- [x] Task 3 — Add focused unit test for mapping fidelity
+  - Acceptance criteria:
+    - New unit test in `internal/app` validates mapped fields preserve exact values.
+    - Test covers all mapped fields.
+
+- [x] Task 4 — Run scoped tests/checks and record results
+  - Acceptance criteria:
+    - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/app -count=1` passes.
+
+### Execution log (deduplicate upload source storage mapping in internal/app)
+- ✅ Task 1 complete: added `uploadSourceStorageConfigFromObjectStorage` helper in `internal/app/upload_source_storage.go` with explicit field-by-field mapping.
+- ✅ Task 1 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/app -run '^$' -count=1`
+- ✅ Task 2 complete: updated `internal/app/http.go` and `internal/app/server_runtime.go` to use the shared helper mapping.
+- ✅ Task 2 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/app -run '^$' -count=1`
+- ✅ Task 3 complete: added focused test `TestUploadSourceStorageConfigFromObjectStorage` covering all mapped fields.
+- ✅ Task 3 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/app -run TestUploadSourceStorageConfigFromObjectStorage -count=1`
+- ✅ Task 4 checks:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/app -count=1`
