@@ -344,7 +344,7 @@ describe("ChannelPage", () => {
       resolveVods?.({ channelId: "chan-42", items: [] } as any);
     });
 
-    expect(await screen.findByText(/no vods yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no past broadcasts yet/i)).toBeInTheDocument();
     expect(screen.queryByText(/loading past broadcasts/i)).not.toBeInTheDocument();
   });
 
@@ -388,7 +388,7 @@ describe("ChannelPage", () => {
     });
 
     await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText(/no vods yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no past broadcasts yet/i)).toBeInTheDocument();
     expect(screen.queryByText(/couldn\'t load past broadcasts right now/i)).not.toBeInTheDocument();
     await waitFor(() =>
       expect(screen.queryByText(/loading past broadcasts/i)).not.toBeInTheDocument()

@@ -121,7 +121,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
       }
     } catch (err) {
       if (!vodCancelledRef.current) {
-        setVodError(err instanceof Error ? err.message : "We couldn't load replays.");
+        setVodError(err instanceof Error ? err.message : "We couldn't load past broadcasts.");
         setVods([]);
       }
     } finally {

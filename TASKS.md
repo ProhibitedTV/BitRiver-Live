@@ -1,3 +1,32 @@
+## Scoped change: viewer past-broadcast terminology alignment
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Align VOD gallery/channel copy to one surface term
+  - Acceptance criteria:
+    - `web/viewer/components/VodGallery.tsx` loading, empty, error, and primary CTA copy all use “past broadcast(s)” language.
+    - `web/viewer/app/channels/[id]/page.tsx` VOD fallback error copy no longer uses “replays” and matches the same noun phrase.
+
+- [x] Task 2 — Update viewer tests for revised copy
+  - Acceptance criteria:
+    - `web/viewer/__tests__/channelPage.test.tsx` assertions reflect updated empty-state wording and continue validating loading/error states.
+
+- [x] Task 3 — Run targeted viewer test check and record results
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- channelPage.test.tsx` passes and result is logged in this section.
+
+### Execution log (viewer past-broadcast terminology alignment)
+- ✅ Task 1 complete: standardized `VodGallery` copy to “past broadcast(s)” across loading/error/empty states and CTA text, and aligned channel-page VOD fallback error copy to “past broadcasts”.
+- ✅ Task 1 check:
+  - ✅ `rg -n "No past broadcasts yet|Watch past broadcast|load past broadcasts|load replays" web/viewer/components/VodGallery.tsx web/viewer/app/channels/[id]/page.tsx`
+- ✅ Task 2 complete: updated channel page tests to assert the revised empty-state copy (“No past broadcasts yet”).
+- ✅ Task 2 check:
+  - ✅ `rg -n "no vods yet|no past broadcasts yet" web/viewer/__tests__/channelPage.test.tsx`
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- channelPage.test.tsx`
+  - ✅ `./scripts/verify.sh`
+
+
 ## Scoped change: channel page error panel message consistency
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
