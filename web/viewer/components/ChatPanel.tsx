@@ -76,11 +76,18 @@ export function ChatPanel({
     });
   };
 
+  const normalizedMessages = useMemo(
+    () =>
+      messages.map((message) => ({
+        message,
+        sentAtTs: new Date(message.sentAt).getTime()
+      })),
+    [messages]
+  );
+
   const sortedMessages = useMemo(() => {
-    return [...messages].sort(
-      (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
-    );
-  }, [messages]);
+    return [...normalizedMessages].sort((a, b) => a.sentAtTs - b.sentAtTs);
+  }, [normalizedMessages]);
 
   const groupedMessages = useMemo(() => {
     const groups: {
@@ -88,33 +95,31 @@ export function ChatPanel({
       userLabel: string;
       avatar?: string;
       role?: string;
-      messages: ChatMessage[];
+      messages: { message: ChatMessage; sentAtTs: number }[];
     }[] = [];
     const TIME_DELTA_MS = 2 * 60 * 1000;
-    sortedMessages.forEach((message) => {
+    sortedMessages.forEach((entry) => {
+      const { message, sentAtTs } = entry;
       const displayName =
         message.user?.displayName ?? message.user?.id ?? "Anonymous";
       const previous = groups[groups.length - 1];
-      const messageDate = new Date(message.sentAt).getTime();
       const previousDate = previous?.messages.length
-        ? new Date(
-            previous.messages[previous.messages.length - 1].sentAt
-          ).getTime()
+        ? previous.messages[previous.messages.length - 1].sentAtTs
         : undefined;
       const sameUser = previous?.userLabel === displayName;
       const withinWindow = previousDate
-        ? Math.abs(messageDate - previousDate) <= TIME_DELTA_MS
+        ? Math.abs(sentAtTs - previousDate) <= TIME_DELTA_MS
         : false;
 
       if (previous && sameUser && withinWindow) {
-        previous.messages.push(message);
+        previous.messages.push(entry);
       } else {
         groups.push({
           id: message.id,
           userLabel: displayName,
           avatar: message.user?.avatarUrl,
           role: message.user?.role,
-          messages: [message]
+          messages: [entry]
         });
       }
     });
@@ -492,7 +497,7 @@ export function ChatPanel({
                       </span>
                     </div>
                     <div className="chat-message__bubble">
-                      {group.messages.map((message) => (
+                      {group.messages.map(({ message }) => (
                         <p key={message.id}>
                           {showTimestamps && (
                             <time
