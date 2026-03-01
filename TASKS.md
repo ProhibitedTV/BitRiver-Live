@@ -809,3 +809,36 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - ✅ `cd web/viewer && npm run test -- channelPage.test.tsx`
   - ✅ `./scripts/verify.sh`
   - ⚠️ Docker-dependent steps in `./scripts/verify.sh` were skipped because Docker is not installed in this environment.
+
+## Scoped change: cache compiled regex chat filters in gateway
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Add gateway-level compiled regex cache and use it in regex filter matching
+  - Acceptance criteria:
+    - `Gateway` owns a private regex cache map guarded by a mutex.
+    - `matchChatFilter` regex branch looks up by a key that changes with filter identity + pattern content.
+    - Regexes compile only on cache miss and successful compilations are cached.
+    - Invalid regex behavior remains warn-and-skip.
+
+- [x] Task 2 — Add/update gateway tests for repeated evaluation and cache invalidation behavior
+  - Acceptance criteria:
+    - Tests confirm repeated evaluation with unchanged regex pattern keeps matching behavior unchanged.
+    - Tests confirm unchanged pattern is compiled once across repeated calls.
+    - Tests confirm changing filter pattern triggers recompilation and updated matching behavior.
+
+- [x] Task 3 — Run scoped/full checks and record results
+  - Acceptance criteria:
+    - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1` passes.
+    - `./scripts/verify.sh` is run and results logged.
+
+
+### Execution log (cache compiled regex chat filters in gateway)
+- ✅ Task 1 complete: added a private gateway regex cache guarded by a mutex and routed regex filter matching through cached compilation keyed by filter ID + pattern.
+- ✅ Task 2 complete: added gateway regex cache tests for repeated calls, pattern-change recompilation, and invalid regex skip behavior without caching failures.
+- ✅ Task 2 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1`
+- ✅ Task 3 complete: ran full repository verification gate after the chat gateway changes.
+- ⚠️ Task 3 checks:
+  - ❌ `./scripts/verify.sh` (first run had unrelated transient failure in `internal/api` test `TestChatReportsAPI`)
+  - ✅ `./scripts/verify.sh` (rerun passed; Docker-dependent steps skipped because Docker is not installed in this environment)

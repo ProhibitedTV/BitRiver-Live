@@ -51,6 +51,10 @@ type Gateway struct {
 	rooms    map[string]map[*client]struct{}
 	bans     map[string]map[string]struct{}
 	timeouts map[string]map[string]time.Time
+
+	regexMu      sync.RWMutex
+	regexCache   map[string]*regexp.Regexp
+	regexCompile func(string) (*regexp.Regexp, error)
 }
 
 // NewGateway initialises a gateway using the provided configuration.
@@ -71,6 +75,8 @@ func NewGateway(cfg GatewayConfig) *Gateway {
 		rooms:             make(map[string]map[*client]struct{}),
 		bans:              snapshot.Bans,
 		timeouts:          snapshot.Timeouts,
+		regexCache:        make(map[string]*regexp.Regexp),
+		regexCompile:      regexp.Compile,
 	}
 }
 
@@ -166,7 +172,7 @@ func (g *Gateway) matchChatFilter(channelID, content string) (*domain.ChatFilter
 			if pattern == "" {
 				continue
 			}
-			re, err := regexp.Compile(pattern)
+			re, err := g.compiledRegex(filter.ID, pattern)
 			if err != nil {
 				if g.logger != nil {
 					g.logger.Warn("invalid chat filter regex", "filter_id", filter.ID, "error", err)
@@ -179,6 +185,32 @@ func (g *Gateway) matchChatFilter(channelID, content string) (*domain.ChatFilter
 		}
 	}
 	return nil, nil
+}
+
+func (g *Gateway) compiledRegex(filterID, pattern string) (*regexp.Regexp, error) {
+	cacheKey := filterID + "\n" + pattern
+
+	g.regexMu.RLock()
+	if cached, ok := g.regexCache[cacheKey]; ok {
+		g.regexMu.RUnlock()
+		return cached, nil
+	}
+	g.regexMu.RUnlock()
+
+	compiled, err := g.regexCompile(pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	g.regexMu.Lock()
+	if cached, ok := g.regexCache[cacheKey]; ok {
+		g.regexMu.Unlock()
+		return cached, nil
+	}
+	g.regexCache[cacheKey] = compiled
+	g.regexMu.Unlock()
+
+	return compiled, nil
 }
 
 // emitAutoMod performs emit auto mod and propagates validation or dependency failures to the caller.
