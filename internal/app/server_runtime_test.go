@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"bitriver-live/internal/auth"
 	"bitriver-live/internal/chat"
 	"bitriver-live/internal/observability/tracing"
+	"bitriver-live/internal/server"
 	"bitriver-live/internal/storage"
 )
 
@@ -156,5 +158,65 @@ func TestNewServerRuntimeClosesCreatedStoresOnChatQueueFailure(t *testing.T) {
 	}
 	if mfa.closeCalls != 1 {
 		t.Fatalf("expected mfa close once, got %d", mfa.closeCalls)
+	}
+}
+
+type testErrorRepo struct {
+	storage.Repository
+	closeErr error
+	onClose  func()
+}
+
+func (r *testErrorRepo) Close(context.Context) error {
+	if r.onClose != nil {
+		r.onClose()
+	}
+	return r.closeErr
+}
+
+func TestServerRuntimeShutdownLogsCloseWarningsAndContinues(t *testing.T) {
+	ctx := context.Background()
+	var logOutput bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logOutput, nil))
+
+	storeErr := errors.New("store close failed")
+	sessionErr := errors.New("session close failed")
+	mfaErr := errors.New("mfa close failed")
+
+	closeOrder := make([]string, 0, 3)
+	runtime := &ServerRuntime{
+		server: &server.Server{},
+		logger: logger,
+		store: &testErrorRepo{
+			closeErr: storeErr,
+			onClose: func() {
+				closeOrder = append(closeOrder, "store")
+			},
+		},
+		sessionCloser: func(context.Context) error {
+			closeOrder = append(closeOrder, "session_store")
+			return sessionErr
+		},
+		mfaCloser: func(context.Context) error {
+			closeOrder = append(closeOrder, "mfa_store")
+			return mfaErr
+		},
+	}
+
+	runtime.Shutdown(ctx)
+
+	if got, want := strings.Join(closeOrder, ","), "store,session_store,mfa_store"; got != want {
+		t.Fatalf("expected close order %q, got %q", want, got)
+	}
+
+	logs := logOutput.String()
+	if !strings.Contains(logs, "failed to close store") || !strings.Contains(logs, "component=store") || !strings.Contains(logs, storeErr.Error()) {
+		t.Fatalf("expected store warning log, got %q", logs)
+	}
+	if !strings.Contains(logs, "failed to close session store") || !strings.Contains(logs, "component=session_store") || !strings.Contains(logs, sessionErr.Error()) {
+		t.Fatalf("expected session warning log, got %q", logs)
+	}
+	if !strings.Contains(logs, "failed to close mfa store") || !strings.Contains(logs, "component=mfa_store") || !strings.Contains(logs, mfaErr.Error()) {
+		t.Fatalf("expected mfa warning log, got %q", logs)
 	}
 }
