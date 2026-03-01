@@ -473,3 +473,44 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 checks:
   - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
   - ✅ `./scripts/verify.sh` (Docker-dependent checks skipped by script because docker is unavailable)
+
+## Scoped change: server/storage documentation-only comment cleanup
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Clean misleading comments in server middleware helpers
+  - Acceptance criteria:
+    - `internal/server/ratelimit.go`, `internal/server/request_id.go`, and `internal/server/security.go` comments no longer claim non-error-returning funcs return errors.
+    - Exported API comments are concise and accurate.
+
+
+- ✅ Task 1 complete: cleaned misleading server middleware comments in rate-limit/request-id/security helpers and removed nonexistent error-return wording.
+- ✅ Task 1 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
+
+- [x] Task 2 — Clean repetitive boilerplate comments in postgres repository helpers
+  - Acceptance criteria:
+    - `internal/storage/postgres_repository.go` helper comments are simplified to intent-focused docs.
+    - Comments for bool/string/non-error signatures no longer mention nonexistent error returns.
+
+
+- ✅ Task 2 complete: simplified postgres repository and helper comments to intent-focused docs and removed repetitive boilerplate/error-language mismatches.
+- ✅ Task 2 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -count=1`
+
+- [x] Task 3 — Run scoped tests and record results
+  - Acceptance criteria:
+    - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server ./internal/storage -count=1` passes.
+    - Execution log for this scoped section is recorded.
+
+
+### Execution log (server/storage documentation-only comment cleanup)
+- ✅ Task 1 complete: cleaned misleading server middleware comments in rate-limit/request-id/security helpers and removed nonexistent error-return wording.
+- ✅ Task 1 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
+- ✅ Task 2 complete: simplified postgres repository and helper comments to intent-focused docs and removed repetitive boilerplate/error-language mismatches.
+- ✅ Task 2 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -count=1`
+- ✅ Task 3 checks:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server ./internal/storage -count=1`
+  - ✅ `./scripts/verify.sh` (Docker-dependent checks skipped by script because docker is unavailable)

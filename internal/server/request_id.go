@@ -14,12 +14,12 @@ import (
 
 type idGenerator func() string
 
-// requestIDMiddleware performs request idmiddleware and propagates validation or dependency failures to the caller.
+// requestIDMiddleware injects request and stream IDs into request context and logs.
 func requestIDMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 	return requestIDMiddlewareWithGenerator(logger, newRequestID, next)
 }
 
-// requestIDMiddlewareWithGenerator performs request idmiddleware with generator and propagates validation or dependency failures to the caller.
+// requestIDMiddlewareWithGenerator is requestIDMiddleware with a custom ID generator.
 func requestIDMiddlewareWithGenerator(logger *slog.Logger, generator idGenerator, next http.Handler) http.Handler {
 	if generator == nil {
 		generator = newRequestID
@@ -47,7 +47,7 @@ func requestIDMiddlewareWithGenerator(logger *slog.Logger, generator idGenerator
 	})
 }
 
-// newRequestID builds and returns request id using the supplied dependencies.
+// newRequestID returns a random 16-byte hex ID, with a timestamp fallback.
 func newRequestID() string {
 	var buffer [16]byte
 	if _, err := rand.Read(buffer[:]); err == nil {
