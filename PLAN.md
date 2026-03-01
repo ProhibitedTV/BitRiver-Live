@@ -432,3 +432,21 @@
 
 ## Test plan
 - `cd web/viewer && npm run test -- channelPage.test.tsx`
+
+## Scope (current change)
+- Add a private compiled-regex cache to `internal/chat/Gateway` so regex chat filters are reused across repeated message evaluations.
+- Update `matchChatFilter` regex handling to key cache entries by filter identity + pattern content so changed patterns trigger recompilation.
+- Preserve invalid-regex behavior (warn and skip) while avoiding cache inserts for failed compilations.
+- Add focused chat gateway tests validating unchanged moderation behavior over repeated calls and validating cache reuse/recompile semantics.
+
+## Assumptions
+- Regex cache scope can be process-local on each `Gateway` instance; no cross-instance sharing is required.
+- Keying on `filter.ID` + trimmed `filter.Pattern` is sufficient to invalidate cache when content changes.
+
+## Risks
+- Incorrect cache locking could introduce races under concurrent chat evaluation.
+- Returning cached regex for stale keys could mask pattern updates if key construction is too coarse.
+
+## Test plan
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1`
+- `./scripts/verify.sh`
