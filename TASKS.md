@@ -714,3 +714,35 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 checks:
   - ✅ `cd web/viewer && npm run test -- followingStatePresentation.test.tsx followingSidebar.test.tsx`
   - ✅ `./scripts/verify.sh`
+
+## Scoped change: cache browse created-at timestamps before sort
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Build cached timestamp list and preserve filter behavior
+  - Acceptance criteria:
+    - `sortedChannels` creates an intermediate mapped list with cached numeric `createdAt` timestamp per entry.
+    - Existing filter behavior is applied against that intermediate list without changing semantics.
+
+- [x] Task 2 — Sort using cached timestamp and return original entries
+  - Acceptance criteria:
+    - `new` sort mode uses cached timestamp values, not `Date` parsing inside comparator.
+    - `live`/`trending` sort logic remains unchanged in behavior.
+    - `sortedChannels` returns original channel entries (helper fields removed before return).
+
+- [x] Task 3 — Validate viewer browse checks
+  - Acceptance criteria:
+    - Relevant viewer lint/test command(s) pass and results are logged.
+
+### Execution log (cache browse created-at timestamps before sort)
+- ✅ Task 1 complete: refactored `sortedChannels` to map channels into intermediate objects with cached `createdAtTs` and applied unchanged filter predicate to the mapped list.
+- ✅ Task 1 check:
+  - ✅ `cd web/viewer && npm run test -- browsePage.test.tsx`
+- ✅ Task 2 complete: updated sort logic to use cached `createdAtTs` for `new` mode, preserved existing live/trending viewer/live sort logic, and mapped results back to original channel entries.
+- ✅ Task 2 check:
+  - ✅ `cd web/viewer && npm run test -- browsePage.test.tsx`
+- ✅ Task 3 complete: ran viewer lint/test validation for browse page refactor.
+- ⚠️ Task 3 checks:
+  - ❌ `cd web/viewer && npm run lint -- app/browse/page.tsx` (Next.js lint CLI in this project does not accept file-path arg and exited before linting)
+  - ✅ `cd web/viewer && npm run lint`
+  - ✅ `cd web/viewer && npm run test -- browsePage.test.tsx`

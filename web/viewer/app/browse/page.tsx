@@ -66,32 +66,39 @@ export default function BrowsePage() {
   }, [channels]);
 
   const sortedChannels = useMemo(() => {
-    const list = channels.filter((entry) => {
-      if (!filter) return true;
-      return entry.channel.category === filter || entry.channel.tags.includes(filter);
-    });
+    const list = channels
+      .map((entry) => ({
+        entry,
+        createdAtTs: new Date(entry.channel.createdAt).getTime(),
+      }))
+      .filter(({ entry }) => {
+        if (!filter) return true;
+        return entry.channel.category === filter || entry.channel.tags.includes(filter);
+      });
 
-    return list.sort((a, b) => {
-      if (sort === "new") {
-        return new Date(b.channel.createdAt).getTime() - new Date(a.channel.createdAt).getTime();
-      }
-
-      const viewersA = a.viewerCount ?? 0;
-      const viewersB = b.viewerCount ?? 0;
-
-      if (sort === "trending") {
-        return viewersB - viewersA;
-      }
-
-      if (sort === "live") {
-        if (a.live !== b.live) {
-          return Number(b.live) - Number(a.live);
+    return list
+      .sort((a, b) => {
+        if (sort === "new") {
+          return b.createdAtTs - a.createdAtTs;
         }
-        return viewersB - viewersA;
-      }
 
-      return 0;
-    });
+        const viewersA = a.entry.viewerCount ?? 0;
+        const viewersB = b.entry.viewerCount ?? 0;
+
+        if (sort === "trending") {
+          return viewersB - viewersA;
+        }
+
+        if (sort === "live") {
+          if (a.entry.live !== b.entry.live) {
+            return Number(b.entry.live) - Number(a.entry.live);
+          }
+          return viewersB - viewersA;
+        }
+
+        return 0;
+      })
+      .map(({ entry }) => entry);
   }, [channels, filter, sort]);
 
   const featuredChannels = useMemo(() => {

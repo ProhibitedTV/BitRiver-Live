@@ -381,3 +381,20 @@
 
 ## Test plan
 - `cd web/viewer && npm run test -- creatorLiveStreamStatus.test.ts`
+
+## Scope (current change)
+- Refactor browse directory `sortedChannels` computation in `web/viewer/app/browse/page.tsx` to cache parsed `createdAt` timestamps before sorting.
+- Preserve current filter behavior and sort output ordering for `live`, `trending`, and `new` modes.
+- Ensure memo result still returns original channel entries so rendering behavior stays unchanged.
+
+## Assumptions
+- `channel.createdAt` values are valid date strings currently parsed inline in the `new` comparator.
+- This is a compute-only refactor with no UI copy or contract changes.
+
+## Risks
+- Accidentally changing tie-break behavior or mutation order during map/filter/sort refactor.
+- Returning wrapped helper objects instead of original entries would alter downstream assumptions.
+
+## Test plan
+- `cd web/viewer && npm run lint -- app/browse/page.tsx`
+- `cd web/viewer && npm run test -- browsePage.test.tsx`
