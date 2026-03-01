@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -32,6 +33,44 @@ func TestCORSMiddlewareAllowsConfiguredOrigins(t *testing.T) {
 	}
 	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "https://admin.example.com" {
 		t.Fatalf("unexpected allow origin header: %q", got)
+	}
+}
+
+func TestCORSMiddlewareMergesExistingVaryHeader(t *testing.T) {
+	policy, err := newCORSPolicy(CORSConfig{AdminOrigins: []string{"https://admin.example.com"}})
+	if err != nil {
+		t.Fatalf("newCORSPolicy error: %v", err)
+	}
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := corsMiddleware(policy, nil, nil, next)
+	upstream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Vary", "Accept-Encoding")
+		handler.ServeHTTP(w, r)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	req.Header.Set("Origin", "https://admin.example.com")
+	req.Host = "api.example.com"
+	rec := httptest.NewRecorder()
+
+	upstream.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 status, got %d", rec.Code)
+	}
+	varyTokens := map[string]bool{}
+	for _, value := range rec.Header().Values("Vary") {
+		for _, part := range strings.Split(value, ",") {
+			token := strings.TrimSpace(part)
+			if token != "" {
+				varyTokens[token] = true
+			}
+		}
+	}
+	if !varyTokens["Accept-Encoding"] || !varyTokens["Origin"] {
+		t.Fatalf("expected merged vary header tokens, got %#v", rec.Header().Values("Vary"))
 	}
 }
 

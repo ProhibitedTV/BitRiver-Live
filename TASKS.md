@@ -411,3 +411,33 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 5 checks:
   - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
   - ✅ `./scripts/verify.sh` (Docker-dependent checks skipped by script because docker is unavailable)
+
+## Scoped change: CORS `Vary` merge behavior
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Preserve existing `Vary` header values in CORS middleware
+  - Acceptance criteria:
+    - `internal/server/cors.go` replaces direct `Set("Vary", "Origin")` with helper logic that appends `Origin` only when absent.
+    - Existing CORS headers and status flow remain unchanged.
+
+- [x] Task 2 — Add regression test for upstream `Vary` preservation
+  - Acceptance criteria:
+    - `internal/server/cors_test.go` includes a test where upstream middleware sets `Vary` before CORS runs.
+    - Test verifies resulting `Vary` contains original value(s) and `Origin` (merged, not replaced).
+
+- [x] Task 3 — Run scoped server tests and record results
+  - Acceptance criteria:
+    - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1` passes.
+    - Execution log for this scoped section is recorded.
+
+### Execution log (CORS `Vary` merge behavior)
+- ✅ Task 1 complete: replaced direct `Vary` assignment with `appendVaryHeader` to preserve existing `Vary` values while appending `Origin` only when missing.
+- ✅ Task 1 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
+- ✅ Task 2 complete: added regression coverage proving an upstream `Vary: Accept-Encoding` value is preserved and merged with `Origin`.
+- ✅ Task 2 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
+- ✅ Task 3 checks:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
+  - ✅ `./scripts/verify.sh` (Docker-dependent checks skipped by script because docker is unavailable)

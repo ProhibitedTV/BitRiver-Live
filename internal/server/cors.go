@@ -74,7 +74,7 @@ func corsMiddleware(policy corsPolicy, logger *slog.Logger, resolver *clientIPRe
 
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Vary", "Origin")
+		appendVaryHeader(w.Header(), "Origin")
 		w.Header().Set("Access-Control-Expose-Headers", "Content-Disposition")
 
 		if r.Method == http.MethodOptions {
@@ -96,6 +96,22 @@ func corsMiddleware(policy corsPolicy, logger *slog.Logger, resolver *clientIPRe
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func appendVaryHeader(header http.Header, value string) {
+	if strings.TrimSpace(value) == "" {
+		return
+	}
+
+	for _, existing := range header.Values("Vary") {
+		for _, part := range strings.Split(existing, ",") {
+			if strings.EqualFold(strings.TrimSpace(part), value) {
+				return
+			}
+		}
+	}
+
+	header.Add("Vary", value)
 }
 
 // allows performs allows and propagates validation or dependency failures to the caller.
