@@ -1,6 +1,23 @@
 # PLAN
 
 ## Scope (current change)
+- Update the channel page error panel in `web/viewer/app/channels/[id]/page.tsx` to keep one consistent user-facing message style.
+- Replace inline raw error rendering with friendly guidance text, while exposing raw diagnostics only in non-production environments.
+- Align fallback copy in `setError(...)` and `setVodError(...)` with the existing “We couldn’t…” wording.
+- Keep retry actions and current headline/body structure unchanged.
+
+## Assumptions
+- Existing channel page tests under `web/viewer/__tests__/channelPage.test.tsx` cover the alert surface and can be extended if needed.
+- `process.env.NODE_ENV` checks in this client component are acceptable for dev-only diagnostic blocks.
+
+## Risks
+- Changing fallback copy may require test-string updates where assertions currently look for “Unable to…”.
+- Dev-only diagnostics could accidentally leak to production if the environment guard is implemented incorrectly.
+
+## Test plan
+- `cd web/viewer && npm run test -- channelPage.test.tsx`
+
+## Scope (current change)
 - Add an internal `internal/app` helper that maps `storage.ObjectStorageConfig` to `api.UploadSourceStorageConfig`.
 - Replace duplicated field-by-field mapping in `internal/app/http.go` (`NewHandler`) and `internal/app/server_runtime.go` (upload processor setup) with the new helper.
 - Add a focused unit test in `internal/app` asserting every mapped field is preserved exactly.

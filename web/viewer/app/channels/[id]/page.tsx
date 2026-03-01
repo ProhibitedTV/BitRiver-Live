@@ -51,7 +51,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
         }
       } catch (err) {
         if (!cancelledRef.current) {
-          setError(err instanceof Error ? err.message : "Unable to load channel");
+          setError(err instanceof Error ? err.message : "We couldn't load this channel.");
         }
       } finally {
         if (!cancelledRef.current && showSpinner) {
@@ -121,7 +121,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
       }
     } catch (err) {
       if (!vodCancelledRef.current) {
-        setVodError(err instanceof Error ? err.message : "Unable to load replays");
+        setVodError(err instanceof Error ? err.message : "We couldn't load replays.");
         setVods([]);
       }
     } finally {
@@ -169,8 +169,16 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
             </Link>
           </div>
           <p className="muted" aria-live="polite">
-            Error details: {error}
+            If this keeps happening, refresh or return to Browse.
           </p>
+          {process.env.NODE_ENV !== "production" ? (
+            <details>
+              <summary>Diagnostic details</summary>
+              <pre className="muted" style={{ margin: 0, whiteSpace: "pre-wrap" }}>
+                {error}
+              </pre>
+            </details>
+          ) : null}
         </div>
       )}
       {data && (
