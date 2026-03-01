@@ -521,6 +521,94 @@ func TestCSRFMiddlewareRejectsMissingOrInvalidToken(t *testing.T) {
 	})
 }
 
+func TestCSRFMiddlewareDeniesWhenTokenGenerationFails(t *testing.T) {
+	handler, store := newTestHandler(t)
+	user, err := store.CreateUser(storage.CreateUserParams{DisplayName: "CSRF", Email: "csrf-fail@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser error: %v", err)
+	}
+	sessionToken, _, err := handler.Sessions.Create(user.ID)
+	if err != nil {
+		t.Fatalf("Create session: %v", err)
+	}
+
+	csrfTokenGenerator = func() (string, error) {
+		return "", errors.New("boom")
+	}
+	t.Cleanup(func() {
+		csrfTokenGenerator = generateCSRFToken
+	})
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("unexpected call to next handler")
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/users", nil)
+	req.AddCookie(&http.Cookie{Name: "bitriver_session", Value: sessionToken})
+	rec := httptest.NewRecorder()
+
+	authMiddleware(handler, csrfMiddleware(handler, nil, nil, next)).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d", rec.Code)
+	}
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == csrfCookieName {
+			t.Fatalf("expected no csrf cookie to be set, got %v", cookie)
+		}
+	}
+}
+
+func TestCSRFMiddlewareBypassesTokenFailureForBearerAndExemptPaths(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	csrfTokenGenerator = func() (string, error) {
+		return "", errors.New("boom")
+	}
+	t.Cleanup(func() {
+		csrfTokenGenerator = generateCSRFToken
+	})
+
+	t.Run("bearer auth bypass", func(t *testing.T) {
+		nextCalled := false
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			nextCalled = true
+			w.WriteHeader(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/users", nil)
+		req = req.WithContext(api.ContextWithUser(req.Context(), domain.User{ID: "svc"}))
+		req.Header.Set("Authorization", "Bearer token")
+		rec := httptest.NewRecorder()
+
+		csrfMiddleware(handler, nil, nil, next).ServeHTTP(rec, req)
+
+		if !nextCalled {
+			t.Fatal("expected next handler to be called")
+		}
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("expected status 204, got %d", rec.Code)
+		}
+	})
+
+	t.Run("exempt path bypass", func(t *testing.T) {
+		nextCalled := false
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			nextCalled = true
+			w.WriteHeader(http.StatusAccepted)
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/payments/webhooks/stripe", nil)
+		req = req.WithContext(api.ContextWithUser(req.Context(), domain.User{ID: "svc"}))
+		rec := httptest.NewRecorder()
+
+		csrfMiddleware(handler, nil, nil, next).ServeHTTP(rec, req)
+
+		if !nextCalled {
+			t.Fatal("expected next handler to be called")
+		}
+		if rec.Code != http.StatusAccepted {
+			t.Fatalf("expected status 202, got %d", rec.Code)
+		}
+	})
+}
+
 func TestCSRFMiddlewareSkipsSafeMethodsAndBearerAuth(t *testing.T) {
 	handler, store := newTestHandler(t)
 	user, err := store.CreateUser(storage.CreateUserParams{DisplayName: "CSRF", Email: "csrf-safe@example.com"})
