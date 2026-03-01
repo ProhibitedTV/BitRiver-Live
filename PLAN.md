@@ -398,3 +398,20 @@
 ## Test plan
 - `cd web/viewer && npm run lint -- app/browse/page.tsx`
 - `cd web/viewer && npm run test -- browsePage.test.tsx`
+
+## Scope (current change)
+- Refactor `web/viewer/components/ChatPanel.tsx` to parse each message `sentAt` timestamp once per memo cycle and reuse the cached numeric value.
+- Add a normalized `useMemo` projection that preserves the original `ChatMessage` object while storing `sentAtTs` for sort/group calculations.
+- Keep `MAX_MESSAGES` truncation, sort order, and 2-minute same-user grouping semantics unchanged.
+- Ensure rendering still uses the original message fields (`id`, `sentAt`, `message`, `user`, etc.).
+
+## Assumptions
+- `sentAt` remains ISO-compatible so `new Date(message.sentAt).getTime()` is still the canonical parse behavior; we are only caching its result.
+- Existing ChatPanel tests (if any) are sufficient to catch regressions in grouping/order semantics.
+
+## Risks
+- Accidentally switching grouped message objects to a normalized shape could break JSX that expects raw `ChatMessage` fields.
+- Comparator/window logic could subtly change if previous-message timestamp source is not aligned with existing behavior.
+
+## Test plan
+- `cd web/viewer && npm run test -- chatPanel.test.tsx`

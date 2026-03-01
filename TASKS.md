@@ -746,3 +746,35 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - ❌ `cd web/viewer && npm run lint -- app/browse/page.tsx` (Next.js lint CLI in this project does not accept file-path arg and exited before linting)
   - ✅ `cd web/viewer && npm run lint`
   - ✅ `cd web/viewer && npm run test -- browsePage.test.tsx`
+
+## Scoped change: cache chat sentAt timestamps within memoized derivations
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Add normalized memoized messages with cached `sentAtTs`
+  - Acceptance criteria:
+    - `ChatPanel` adds a `useMemo` that maps `messages` to objects containing the original `message` plus numeric `sentAtTs`.
+    - Timestamp parsing occurs once per message per memo cycle.
+
+- [x] Task 2 — Refactor sort/group calculations to consume cached timestamps
+  - Acceptance criteria:
+    - `sortedMessages` comparator uses cached `sentAtTs` values.
+    - Grouping 2-minute window compares current/previous `sentAtTs` values, preserving same-user grouping behavior.
+    - Render path still reads original `ChatMessage` fields unchanged.
+
+- [x] Task 3 — Run targeted viewer test check and record results
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- chatPanel.test.tsx` runs successfully and is logged.
+
+
+### Execution log (cache chat sentAt timestamps within memoized derivations)
+- ✅ Task 1 complete: added `normalizedMessages` memo that maps each `ChatMessage` to `{ message, sentAtTs }`, parsing `sentAt` once per memo cycle.
+- ✅ Task 1 check:
+  - ✅ `cd web/viewer && npm run test -- chatPanel.test.tsx`
+- ✅ Task 2 complete: `sortedMessages` now compares cached `sentAtTs`, and grouping time-window checks compare current/previous cached timestamps while preserving 2-minute same-user grouping and rendering from original `message` fields.
+- ✅ Task 2 check:
+  - ✅ `cd web/viewer && npm run test -- chatPanel.test.tsx`
+- ✅ Task 3 complete: ran targeted and full verification checks for the viewer/chat-panel refactor.
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- chatPanel.test.tsx`
+  - ✅ `./scripts/verify.sh`
