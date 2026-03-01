@@ -1,6 +1,22 @@
 # PLAN
 
 ## Scope (current change)
+- Standardize viewer-facing VOD terminology around the existing heading term “Past broadcasts” in `web/viewer/components/VodGallery.tsx` and adjacent channel page copy.
+- Update VOD gallery empty, loading, and error states to consistently reference “past broadcasts”.
+- Align nearby channel page fallback error text and replay CTA wording so users do not see mixed terms like “VODs”/“replays”.
+
+## Assumptions
+- This is copy-only behavior; no API shape or data model changes are required.
+- Existing channel page tests in `web/viewer/__tests__/channelPage.test.tsx` cover affected loading/error/empty strings and will be updated for the new wording.
+
+## Risks
+- String assertion drift in viewer tests if any old wording remains.
+- Minor UX ambiguity risk for singular CTA wording (“Watch past broadcast”) if not matched exactly in assertions/content review.
+
+## Test plan
+- `cd web/viewer && npm run test -- channelPage.test.tsx`
+
+## Scope (current change)
 - Update the channel page error panel in `web/viewer/app/channels/[id]/page.tsx` to keep one consistent user-facing message style.
 - Replace inline raw error rendering with friendly guidance text, while exposing raw diagnostics only in non-production environments.
 - Align fallback copy in `setError(...)` and `setVodError(...)` with the existing “We couldn’t…” wording.

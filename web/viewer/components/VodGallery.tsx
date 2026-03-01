@@ -40,7 +40,7 @@ export function VodGallery({ items, error, loading = false, onRetry }: VodGaller
     return (
       <section className="surface stack">
         <h3>Past broadcasts</h3>
-        <p className="muted">No VODs yet. Streams will show up here once the creator publishes replays.</p>
+        <p className="muted">No past broadcasts yet. Streams will show up here once the creator publishes past broadcasts.</p>
       </section>
     );
   }
@@ -71,7 +71,7 @@ export function VodGallery({ items, error, loading = false, onRetry }: VodGaller
                 </p>
                 {item.playbackUrl && (
                   <a className="secondary-button" href={item.playbackUrl} target="_blank" rel="noreferrer">
-                    Watch replay
+                    Watch past broadcast
                   </a>
                 )}
               </div>
