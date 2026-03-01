@@ -1,3 +1,24 @@
+## Scoped change: channel page error panel message consistency
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Update channel page error messaging and diagnostics gating
+  - Acceptance criteria:
+    - `web/viewer/app/channels/[id]/page.tsx` retains the existing friendly headline/body and retry actions.
+    - The visible user-facing detail text is a short guidance sentence instead of `Error details: {error}`.
+    - Raw error text is shown only when `process.env.NODE_ENV !== "production"` in a secondary detail block.
+    - Fallback strings in `setError(...)` and `setVodError(...)` use “We couldn’t…” style copy.
+
+- [x] Task 2 — Run viewer channel-page test and capture results
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- channelPage.test.tsx` passes and is logged in this section.
+
+### Execution log (channel page error panel message consistency)
+- ✅ Task 1 complete: kept the existing friendly channel error headline/body with retry actions, replaced inline raw error copy with short guidance text, added development-only diagnostic details, and aligned fallback `setError`/`setVodError` strings to “We couldn’t…” style.
+- ✅ Task 2 check:
+  - ✅ `cd web/viewer && npm run test -- channelPage.test.tsx`
+
+
 # TASKS
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
