@@ -54,14 +54,7 @@ func NewHandler(cfg HandlerConfig) *api.Handler {
 	handler.TrustForwardedHeaders = cfg.TrustForwardedHeaders
 	handler.UploadMediaBaseURL = cfg.UploadMediaBaseURL
 	handler.UploadMaxBytes = cfg.UploadMaxBytes
-	handler.UploadSourceStorage = api.UploadSourceStorageConfig{
-		Endpoint:       cfg.UploadSourceStorage.Endpoint,
-		Bucket:         cfg.UploadSourceStorage.Bucket,
-		Prefix:         cfg.UploadSourceStorage.Prefix,
-		PublicEndpoint: cfg.UploadSourceStorage.PublicEndpoint,
-		UseSSL:         cfg.UploadSourceStorage.UseSSL,
-		RequestTimeout: cfg.UploadSourceStorage.RequestTimeout,
-	}
+	handler.UploadSourceStorage = uploadSourceStorageConfigFromObjectStorage(cfg.UploadSourceStorage)
 	if cfg.ChatQueue != nil {
 		handler.ChatQueue = cfg.ChatQueue
 	}
