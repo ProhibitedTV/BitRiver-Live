@@ -23,7 +23,7 @@ type SecurityConfig struct {
 	ContentTypeOptions    string
 }
 
-// defaultSecurityConfig returns the default security config for the current runtime mode.
+// defaultSecurityConfig returns the default security-header configuration.
 func defaultSecurityConfig() SecurityConfig {
 	return SecurityConfig{
 		ContentSecurityPolicy: defaultContentSecurityPolicy(defaultFrameAncestors),
@@ -35,7 +35,7 @@ func defaultSecurityConfig() SecurityConfig {
 	}
 }
 
-// withDefaults performs with defaults and propagates validation or dependency failures to the caller.
+// withDefaults applies default header values for unset fields.
 func (cfg SecurityConfig) withDefaults() SecurityConfig {
 	defaults := defaultSecurityConfig()
 
@@ -61,7 +61,7 @@ func (cfg SecurityConfig) withDefaults() SecurityConfig {
 	return cfg
 }
 
-// defaultContentSecurityPolicy returns the default content security policy for the current runtime mode.
+// defaultContentSecurityPolicy builds the default Content-Security-Policy value.
 func defaultContentSecurityPolicy(frameAncestors string) string {
 	value := frameAncestors
 	if value == "" {
@@ -80,7 +80,7 @@ func defaultContentSecurityPolicy(frameAncestors string) string {
 		"form-action 'self'"
 }
 
-// securityHeadersMiddleware performs security headers middleware and propagates validation or dependency failures to the caller.
+// securityHeadersMiddleware sets security headers before invoking the next handler.
 func securityHeadersMiddleware(cfg SecurityConfig, next http.Handler) http.Handler {
 	effective := cfg.withDefaults()
 

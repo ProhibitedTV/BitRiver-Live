@@ -260,3 +260,20 @@
 
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
+
+## Scope (current change)
+- Perform a documentation-only cleanup in `internal/server/ratelimit.go`, `internal/server/request_id.go`, `internal/server/security.go`, and `internal/storage/postgres_repository.go`.
+- Remove inaccurate comment text that claims bool/string-returning helpers return errors.
+- Simplify repetitive boilerplate comment blocks so function intent is clearer while keeping exported API docs accurate.
+- Keep implementation logic unchanged.
+
+## Assumptions
+- This pass is strictly comment/docs cleanup and should not alter behavior, signatures, or tests.
+- Scoped Go tests for touched packages are sufficient validation.
+
+## Risks
+- Broad comment replacement could accidentally touch code if edits are not constrained to comment lines.
+- Over-pruning comments could remove useful exported-doc context.
+
+## Test plan
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server ./internal/storage -count=1`
