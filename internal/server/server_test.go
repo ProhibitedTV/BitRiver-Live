@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1173,6 +1174,79 @@ func TestRateLimitMiddlewareGlobalLimit(t *testing.T) {
 
 	if nextCalls != 1 {
 		t.Fatalf("expected next handler to be called once, got %d", nextCalls)
+	}
+}
+
+func TestRateLimiterAllowLoginBehaviorUnchanged(t *testing.T) {
+	t.Parallel()
+
+	rl, err := newRateLimiter(RateLimitConfig{LoginLimit: 1, LoginWindow: time.Minute})
+	if err != nil {
+		t.Fatalf("newRateLimiter error: %v", err)
+	}
+
+	allowed, retryAfter, err := rl.AllowLogin(context.Background(), "198.51.100.10")
+	if err != nil {
+		t.Fatalf("first AllowLogin error: %v", err)
+	}
+	if !allowed {
+		t.Fatal("expected first login attempt to be allowed")
+	}
+	if retryAfter != 0 {
+		t.Fatalf("expected first login retryAfter to be 0, got %s", retryAfter)
+	}
+
+	allowed, retryAfter, err = rl.AllowLogin(context.Background(), "198.51.100.10")
+	if err != nil {
+		t.Fatalf("second AllowLogin error: %v", err)
+	}
+	if allowed {
+		t.Fatal("expected second login attempt to be rate limited")
+	}
+	if retryAfter != time.Second {
+		t.Fatalf("expected retryAfter to be %s, got %s", time.Second, retryAfter)
+	}
+}
+
+func TestRateLimiterCleanupStaleBucketsEventually(t *testing.T) {
+	t.Parallel()
+
+	rl, err := newRateLimiter(RateLimitConfig{LoginLimit: 5, LoginWindow: 2 * time.Second})
+	if err != nil {
+		t.Fatalf("newRateLimiter error: %v", err)
+	}
+
+	if _, _, err := rl.AllowLogin(context.Background(), "active"); err != nil {
+		t.Fatalf("seed AllowLogin error: %v", err)
+	}
+
+	rl.loginMu.Lock()
+	rl.loginBuckets["stale"] = &ipLimiter{
+		bucket:   newTokenBucket(1, rl.loginLimit),
+		lastSeen: time.Now().Add(-5 * time.Second),
+	}
+	rl.loginMu.Unlock()
+
+	if _, _, err := rl.AllowLogin(context.Background(), "active"); err != nil {
+		t.Fatalf("second AllowLogin error: %v", err)
+	}
+	rl.loginMu.Lock()
+	_, existsBeforeInterval := rl.loginBuckets["stale"]
+	rl.loginMu.Unlock()
+	if !existsBeforeInterval {
+		t.Fatal("expected stale bucket to remain before cleanup interval elapses")
+	}
+
+	time.Sleep(1100 * time.Millisecond)
+
+	if _, _, err := rl.AllowLogin(context.Background(), "active"); err != nil {
+		t.Fatalf("third AllowLogin error: %v", err)
+	}
+	rl.loginMu.Lock()
+	_, existsAfterInterval := rl.loginBuckets["stale"]
+	rl.loginMu.Unlock()
+	if existsAfterInterval {
+		t.Fatal("expected stale bucket to be cleaned after cleanup interval elapses")
 	}
 }
 

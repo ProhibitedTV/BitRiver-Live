@@ -1,3 +1,21 @@
+## Scope (current change)
+- Optimize in-memory login limiter cleanup cadence in `internal/server/ratelimit.go` by tracking last cleanup timestamp on `rateLimiter`.
+- Keep per-key bucket creation/update behavior unchanged in `AllowLogin`, but gate `cleanupLocked()` calls behind a bounded interval (`loginWindow/2` with a minimum duration).
+- Preserve existing stale-bucket eviction semantics by leaving `cleanupLocked()` implementation logic unchanged.
+- Extend server rate-limit tests to verify allow/deny behavior is unchanged and stale buckets are eventually evicted when cleanup interval elapses.
+
+## Assumptions
+- Login limiter behavior should remain functionally identical from caller perspective aside from reduced cleanup frequency.
+- Cleanup throttle interval must stay >0 even for very small windows to avoid per-request cleanup.
+- No deployment contract/docs updates are required because this is internal limiter maintenance behavior.
+
+## Risks
+- Incorrect cleanup interval gating could allow stale buckets to accumulate too long.
+- Time-based test assertions can become flaky if they rely on tight sleeps.
+
+## Test plan
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
+
 # PLAN
 
 ## Scope (current change)
