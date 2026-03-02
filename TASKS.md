@@ -1,3 +1,33 @@
+## Scoped change: rate limiter cleanup cadence throttling
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Add cleanup timestamp tracking and gated cleanup invocation in login limiter
+  - Acceptance criteria:
+    - `rateLimiter` includes a cleanup timestamp field used by in-memory login limiting.
+    - `AllowLogin` still creates/updates per-key buckets on each request.
+    - `cleanupLocked()` invocation is throttled by `loginWindow/2` with a sane minimum interval.
+    - Cleanup timestamp is updated when cleanup runs.
+
+- [x] Task 2 — Add/adjust rate-limit tests for behavior parity and eventual stale eviction
+  - Acceptance criteria:
+    - Existing allow/deny login-limiting behavior remains covered and passing.
+    - New/updated tests assert stale buckets are eventually removed after sufficient elapsed time.
+
+- [x] Task 3 — Run scoped server tests and record results
+  - Acceptance criteria:
+    - `go test ./internal/server -count=1` passes.
+
+
+### Execution log (rate limiter cleanup cadence throttling)
+- ✅ Task 1 complete: added `lastLoginCleanup` timestamp and gated in-memory cleanup calls to run at most every `loginWindow/2` with a 1s minimum interval; per-key bucket update/create and `cleanupLocked()` eviction logic remain unchanged.
+- ✅ Task 2 complete: added focused limiter tests for unchanged allow/deny behavior and eventual stale-bucket eviction once cleanup interval elapses.
+- ✅ Task 3 checks:
+  - ❌ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1` (initial run failed: missing `context` import in `internal/server/server_test.go`; fixed in follow-up).
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
+  - ✅ `gofmt -w internal/server/ratelimit.go internal/server/server_test.go`
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/server -count=1`
+
 ## Scoped change: upload manager sorted-items memo split
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

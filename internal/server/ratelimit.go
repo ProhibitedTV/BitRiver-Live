@@ -27,12 +27,13 @@ type RateLimitConfig struct {
 }
 
 type rateLimiter struct {
-	global       *tokenBucket
-	loginLimit   int
-	loginWindow  time.Duration
-	loginMu      sync.Mutex
-	loginBuckets map[string]*ipLimiter
-	store        tokenStore
+	global           *tokenBucket
+	loginLimit       int
+	loginWindow      time.Duration
+	lastLoginCleanup time.Time
+	loginMu          sync.Mutex
+	loginBuckets     map[string]*ipLimiter
+	store            tokenStore
 }
 
 type ipLimiter struct {
@@ -112,6 +113,7 @@ func (r *rateLimiter) AllowLogin(ctx context.Context, key string) (bool, time.Du
 		key = "unknown"
 	}
 	r.loginMu.Lock()
+	now := time.Now()
 	bucket, exists := r.loginBuckets[key]
 	if !exists {
 		rate := float64(r.loginLimit) / r.loginWindow.Seconds()
@@ -121,8 +123,15 @@ func (r *rateLimiter) AllowLogin(ctx context.Context, key string) (bool, time.Du
 		bucket = &ipLimiter{bucket: newTokenBucket(rate, r.loginLimit)}
 		r.loginBuckets[key] = bucket
 	}
-	bucket.lastSeen = time.Now()
-	r.cleanupLocked()
+	bucket.lastSeen = now
+	cleanupInterval := r.loginWindow / 2
+	if cleanupInterval < time.Second {
+		cleanupInterval = time.Second
+	}
+	if r.lastLoginCleanup.IsZero() || now.Sub(r.lastLoginCleanup) >= cleanupInterval {
+		r.cleanupLocked()
+		r.lastLoginCleanup = now
+	}
 	r.loginMu.Unlock()
 
 	if bucket.bucket.Allow() {
