@@ -1,4 +1,21 @@
 ## Scope (current change)
+- Update `web/viewer/components/following/useFollowingChannels.ts` reload behavior so interval refreshes do not force transient `"loading"` state or clear errors when values are unchanged.
+- Preserve auth gates and existing unauthenticated/empty/error semantics while reducing no-op state writes.
+- Avoid no-op channel state updates when fetched channel IDs/order/length are unchanged.
+
+## Assumptions
+- Polling refreshes should still fetch on schedule; only redundant React state writes are removed.
+- Semantic channel equality for this optimization is defined as identical channel ID sequence and length.
+- Public hook API (`channels`, `status`, `error`, `reload`) remains unchanged.
+
+## Risks
+- Incorrect equality checks could suppress legitimate UI updates.
+- Ref-based comparison bookkeeping could become stale if not synchronized with state updates.
+
+## Test plan
+- `cd web/viewer && npm run test -- followingSidebar.test.tsx`
+
+## Scope (current change)
 - Audit `web/viewer/components/ChatPanel.tsx` message derivation for repeated per-render work in the hot chat render path.
 - Remove redundant intermediate message normalization allocation while preserving identical sort/group output semantics.
 - Keep polling, auth, and UI behavior unchanged; this is a behavior-preserving efficiency refactor.
