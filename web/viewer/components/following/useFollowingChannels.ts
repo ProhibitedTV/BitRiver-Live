@@ -25,39 +25,103 @@ export function useFollowingChannels({
   const [status, setStatus] = useState<FollowingStatus>("loading");
   const [error, setError] = useState<string | undefined>();
   const mountedRef = useRef(true);
+  const channelsRef = useRef<DirectoryChannel[]>(channels);
+  const statusRef = useRef<FollowingStatus>(status);
+  const errorRef = useRef<string | undefined>(error);
+
+  useEffect(() => {
+    channelsRef.current = channels;
+  }, [channels]);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  useEffect(() => {
+    errorRef.current = error;
+  }, [error]);
+
+  const updateStatusIfChanged = useCallback((nextStatus: FollowingStatus) => {
+    if (statusRef.current === nextStatus) {
+      return;
+    }
+    statusRef.current = nextStatus;
+    setStatus(nextStatus);
+  }, []);
+
+  const updateErrorIfChanged = useCallback((nextError: string | undefined) => {
+    if (errorRef.current === nextError) {
+      return;
+    }
+    errorRef.current = nextError;
+    setError(nextError);
+  }, []);
+
+  const channelsSemanticallyEqual = useCallback(
+    (nextChannels: DirectoryChannel[]) => {
+      const currentChannels = channelsRef.current;
+      if (currentChannels.length !== nextChannels.length) {
+        return false;
+      }
+
+      for (let index = 0; index < currentChannels.length; index += 1) {
+        if (currentChannels[index]?.id !== nextChannels[index]?.id) {
+          return false;
+        }
+      }
+
+      return true;
+    },
+    [],
+  );
 
   const reload = useCallback(async () => {
     if (authLoading) {
-      setStatus("loading");
+      updateStatusIfChanged("loading");
       return;
     }
 
     if (!isAuthenticated) {
-      setChannels([]);
-      setError(undefined);
-      setStatus("unauthenticated");
+      if (!channelsSemanticallyEqual([])) {
+        channelsRef.current = [];
+        setChannels([]);
+      }
+      updateErrorIfChanged(undefined);
+      updateStatusIfChanged("unauthenticated");
       return;
     }
 
-    setStatus("loading");
-    setError(undefined);
+    updateStatusIfChanged("loading");
+    updateErrorIfChanged(undefined);
 
     try {
       const response = await fetchFollowingChannels();
       if (!mountedRef.current) {
         return;
       }
-      setChannels(response.channels);
-      setStatus(response.channels.length === 0 ? "empty" : "ready");
+      if (!channelsSemanticallyEqual(response.channels)) {
+        channelsRef.current = response.channels;
+        setChannels(response.channels);
+      }
+      updateStatusIfChanged(response.channels.length === 0 ? "empty" : "ready");
     } catch (err) {
       if (!mountedRef.current) {
         return;
       }
-      setChannels([]);
-      setError(err instanceof Error ? err.message : "Unable to load followed channels");
-      setStatus("error");
+      if (!channelsSemanticallyEqual([])) {
+        channelsRef.current = [];
+        setChannels([]);
+      }
+      updateErrorIfChanged(err instanceof Error ? err.message : "Unable to load followed channels");
+      updateStatusIfChanged("error");
     }
-  }, [authLoading, isAuthenticated]);
+  }, [
+    authLoading,
+    channelsSemanticallyEqual,
+    isAuthenticated,
+    updateErrorIfChanged,
+    updateStatusIfChanged,
+  ]);
 
   useEffect(() => {
     mountedRef.current = true;

@@ -1,3 +1,29 @@
+## Scoped change: following hook reload no-op state guard
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Add guarded status/error updates in `reload`
+  - Acceptance criteria:
+    - Keep `authLoading` and `!isAuthenticated` gates unchanged.
+    - Only call `setStatus`/`setError` when next value differs from current value.
+
+- [x] Task 2 — Skip no-op channel updates on successful fetch
+  - Acceptance criteria:
+    - Compare current vs fetched channels by ID sequence/length.
+    - Avoid `setChannels` when lists are semantically unchanged.
+    - Keep success/empty semantics unchanged.
+
+- [x] Task 3 — Run scoped viewer tests and record outcomes
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- followingSidebar.test.tsx` passes.
+
+### Execution log (following hook reload no-op state guard)
+- ✅ Task 1 complete: added guarded `setStatus`/`setError` helpers that compare current and next values and preserved existing auth gate branching.
+- ✅ Task 2 complete: added semantic channel equality checks (ID order + length) to skip no-op `setChannels` updates while keeping ready/empty/error semantics unchanged.
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- followingSidebar.test.tsx`
+  - ✅ `./scripts/verify.sh` (passed; Docker-dependent checks skipped because Docker is not installed in this environment)
+
 ## Scoped change: chat panel message derivation allocation cleanup
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
