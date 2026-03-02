@@ -647,3 +647,21 @@
 ## Test plan
 - `cd web/viewer && npm run test -- chatPanel.test.tsx`
 - `./scripts/verify.sh`
+
+## Scope (current change)
+- Optimize Redis stream payload extraction in `internal/chat/redis_queue.go` to avoid `[]byte -> string -> []byte` roundtrips when Redis already returns raw bytes.
+- Keep payload key detection logic unchanged (`strings.EqualFold(key, "payload")`) and preserve downstream decode behavior.
+- Add/adjust targeted chat queue tests for helper behavior across string/byte inputs.
+
+## Assumptions
+- Redis stream field keys may arrive as either `string` or `[]byte`, and values may also be either type.
+- Returning raw `[]byte` for byte-backed payload values is behaviorally equivalent for `json.Unmarshal(entry.Payload, &event)` callers.
+- This is an internal performance refactor with no user-facing runtime contract change.
+
+## Risks
+- Helper changes could accidentally alter empty-payload filtering semantics.
+- Key/value decoding paths must continue to tolerate mixed `string`/`[]byte` field tuples.
+
+## Test plan
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1 -run 'Test(ExtractPayload|AsBytes)'`
+- `./scripts/verify.sh`

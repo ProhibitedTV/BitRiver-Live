@@ -1177,3 +1177,35 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 complete: ran full repository verification gate after chat panel refactor.
 - ✅ Task 3 check:
   - ✅ `./scripts/verify.sh` (passed; Docker-dependent checks skipped because Docker is not installed in this environment)
+
+## Scoped change: redis queue payload extraction byte-preserving path
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Add byte-preserving payload helper and wire `extractPayload`
+  - Acceptance criteria:
+    - New helper returns `[]byte` directly for byte-backed values and only allocates from `string` when needed.
+    - `extractPayload(fields []interface{})` uses the helper for the `payload` field while preserving `strings.EqualFold(key, "payload")` matching.
+    - Read/decode call sites remain unchanged.
+
+- [x] Task 2 — Add targeted tests for helper/extraction behavior
+  - Acceptance criteria:
+    - Tests cover mixed `string`/`[]byte` key + value tuples.
+    - Tests confirm payload extraction still ignores empty/non-matching values.
+
+- [x] Task 3 — Run scoped + required verification checks and record outcomes
+  - Acceptance criteria:
+    - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1 -run 'Test(ExtractPayload|AsBytes)'` passes.
+    - `./scripts/verify.sh` is run and results logged.
+
+### Execution log (redis queue payload extraction byte-preserving path)
+- ✅ Task 1 complete: added `asBytes` helper and updated `extractPayload` to preserve byte payload values while retaining case-insensitive `payload` key matching and existing decode call paths.
+- ✅ Task 1 check:
+  - ✅ `rg -n "func extractPayload|func asBytes|json.Unmarshal\(entry.Payload, &event\)|strings.EqualFold\(key, \"payload\"\)" internal/chat/redis_queue.go`
+- ✅ Task 2 complete: added focused unit coverage for `asBytes` and `extractPayload` across mixed string/byte field tuples, including empty and unsupported payload value cases.
+- ✅ Task 2 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1 -run 'Test(ExtractPayload|AsBytes)'`
+- ✅ Task 3 complete: executed scoped chat tests and full repo verification gate after redis queue optimization changes.
+- ✅ Task 3 checks:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1 -run 'Test(ExtractPayload|AsBytes)'`
+  - ✅ `./scripts/verify.sh`

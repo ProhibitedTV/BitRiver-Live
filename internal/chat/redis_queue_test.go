@@ -443,6 +443,86 @@ func TestRedisQueueEnsureGroupRecoversAfterTransientFailure(t *testing.T) {
 	}
 }
 
+func TestAsBytes(t *testing.T) {
+	t.Run("returns raw bytes without conversion", func(t *testing.T) {
+		raw := []byte(`{"id":"evt-1"}`)
+		got, ok := asBytes(raw)
+		if !ok {
+			t.Fatalf("expected ok for []byte input")
+		}
+		if len(got) != len(raw) {
+			t.Fatalf("expected matching length, got %d want %d", len(got), len(raw))
+		}
+		if len(got) > 0 && &got[0] != &raw[0] {
+			t.Fatalf("expected asBytes to return original []byte backing array")
+		}
+	})
+
+	t.Run("encodes string to bytes", func(t *testing.T) {
+		got, ok := asBytes("payload")
+		if !ok {
+			t.Fatalf("expected ok for string input")
+		}
+		if string(got) != "payload" {
+			t.Fatalf("unexpected bytes: %q", string(got))
+		}
+	})
+
+	t.Run("rejects unsupported type", func(t *testing.T) {
+		got, ok := asBytes(123)
+		if ok {
+			t.Fatalf("expected unsupported input to return ok=false")
+		}
+		if got != nil {
+			t.Fatalf("expected nil bytes for unsupported type")
+		}
+	})
+}
+
+func TestExtractPayload(t *testing.T) {
+	t.Run("matches payload key case-insensitively and preserves byte value", func(t *testing.T) {
+		payload := []byte(`{"message":"hello"}`)
+		fields := []interface{}{[]byte("PAYLOAD"), payload}
+
+		got := extractPayload(fields)
+		if string(got) != string(payload) {
+			t.Fatalf("unexpected payload: %q", string(got))
+		}
+		if len(got) > 0 && &got[0] != &payload[0] {
+			t.Fatalf("expected byte payload to be returned without conversion")
+		}
+	})
+
+	t.Run("converts string payload to bytes", func(t *testing.T) {
+		fields := []interface{}{"payload", `{"event":"chat"}`}
+
+		got := extractPayload(fields)
+		if string(got) != `{"event":"chat"}` {
+			t.Fatalf("unexpected payload: %q", string(got))
+		}
+	})
+
+	t.Run("ignores non-matching and empty payload values", func(t *testing.T) {
+		cases := []struct {
+			name   string
+			fields []interface{}
+		}{
+			{name: "missing payload key", fields: []interface{}{"other", "value"}},
+			{name: "empty string payload", fields: []interface{}{"payload", ""}},
+			{name: "empty bytes payload", fields: []interface{}{[]byte("payload"), []byte{}}},
+			{name: "unsupported payload type", fields: []interface{}{"payload", 1}},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				if got := extractPayload(tc.fields); got != nil {
+					t.Fatalf("expected nil payload, got %q", string(got))
+				}
+			})
+		}
+	})
+}
+
 var errTransientGroupCreate = errors.New("transient group creation failure")
 var errSimulatedXAddFailure = errors.New("simulated xadd failure")
 
