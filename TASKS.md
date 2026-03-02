@@ -1029,3 +1029,33 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 checks:
   - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1`
   - ⚠️ `./scripts/verify.sh` (passed; Docker-dependent checks were skipped because Docker is not installed in this environment)
+
+## Scoped change: directory owner/profile bulk lookup in response builder
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Refactor `writeDirectoryResponse` to preload users/profiles and use maps
+  - Acceptance criteria:
+    - `channelsService().ListUsers()` and `channelsService().ListProfiles()` are each called once before iterating channels.
+    - Response loop does O(1) owner/profile lookups via `map[userID]...`.
+    - Missing owner channels are skipped exactly as before; missing profile remains optional/zero-value.
+
+- [x] Task 2 — Extend tests for JSON parity and reduced per-channel lookup calls
+  - Acceptance criteria:
+    - Multi-channel test asserts response payload is identical to current behavior.
+    - Test asserts fewer per-channel `GetUser`/`GetProfile` calls with bulk list usage.
+
+- [x] Task 3 — Run scoped API tests and record outcomes
+  - Acceptance criteria:
+    - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1 -run 'TestDirectory(RecommendedSortsByFollowers|ResponseUsesBulkUserProfileLookups)$'` passes.
+    - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1` passes.
+
+### Execution log (directory owner/profile bulk lookup in response builder)
+- ✅ Task 1 complete: `writeDirectoryResponse` now bulk-loads users/profiles and joins them with in-memory maps, while preserving owner-missing skip and profile optionality behavior.
+- ✅ Task 1 check:
+  - ✅ `rg -n "ListUsers\(|profilesByUserID|usersByID|writeDirectoryResponse" internal/api/channels_directory_handlers.go internal/service/usecases.go`
+- ✅ Task 2 complete: extended directory handler test coverage with call-count instrumentation for `ListUsers`/`ListProfiles`/`GetUser`/`GetProfile` and JSON parity assertions in multi-channel responses.
+- ✅ Task 3 checks:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1 -run 'TestDirectory(RecommendedSortsByFollowers|ResponseUsesBulkUserProfileLookups)$'`
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1`
+  - ⚠️ `./scripts/verify.sh` (docker-dependent checks skipped because docker is not installed in this environment)

@@ -47,12 +47,67 @@ type countingChannelsService struct {
 	service.ChannelsDirectoryUseCase
 	mu                  sync.Mutex
 	countFollowersCalls map[string]int
+	listUsersCalls      int
+	listProfilesCalls   int
+	getUserCalls        int
+	getProfileCalls     int
 }
 
 func newCountingChannelsService(base service.ChannelsDirectoryUseCase) *countingChannelsService {
 	return &countingChannelsService{ChannelsDirectoryUseCase: base, countFollowersCalls: map[string]int{}}
 }
 
+func (s *countingChannelsService) ListUsers() []domain.User {
+	s.mu.Lock()
+	s.listUsersCalls++
+	s.mu.Unlock()
+	return s.ChannelsDirectoryUseCase.ListUsers()
+}
+
+func (s *countingChannelsService) ListProfiles() []domain.Profile {
+	s.mu.Lock()
+	s.listProfilesCalls++
+	s.mu.Unlock()
+	return s.ChannelsDirectoryUseCase.ListProfiles()
+}
+
+func (s *countingChannelsService) GetUser(id string) (domain.User, bool) {
+	s.mu.Lock()
+	s.getUserCalls++
+	s.mu.Unlock()
+	return s.ChannelsDirectoryUseCase.GetUser(id)
+}
+
+func (s *countingChannelsService) GetProfile(userID string) (domain.Profile, bool) {
+	s.mu.Lock()
+	s.getProfileCalls++
+	s.mu.Unlock()
+	return s.ChannelsDirectoryUseCase.GetProfile(userID)
+}
+
+func (s *countingChannelsService) ListUsersCalls() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.listUsersCalls
+}
+
+func (s *countingChannelsService) ListProfilesCalls() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.listProfilesCalls
+}
+
+func (s *countingChannelsService) GetUserCalls() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.getUserCalls
+}
+
+func (s *countingChannelsService) GetProfileCalls() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.getProfileCalls
+}
 func (s *countingChannelsService) CountFollowers(channelID string) int {
 	s.mu.Lock()
 	s.countFollowersCalls[channelID]++
@@ -4228,4 +4283,85 @@ func TestSRSHookRejectsUnknownStream(t *testing.T) {
 
 func stringPtr(s string) *string {
 	return &s
+}
+
+func TestDirectoryResponseUsesBulkUserProfileLookups(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	creatorOne, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Creator One", Email: "creator1@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create creator one: %v", err)
+	}
+	creatorTwo, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Creator Two", Email: "creator2@example.com", Roles: []string{"creator"}})
+	if err != nil {
+		t.Fatalf("create creator two: %v", err)
+	}
+	viewer, err := store.CreateUser(storage.CreateUserParams{DisplayName: "Viewer", Email: "viewer@example.com"})
+	if err != nil {
+		t.Fatalf("create viewer: %v", err)
+	}
+
+	first, err := store.CreateChannel(creatorOne.ID, "Channel One", "music", []string{"dj"})
+	if err != nil {
+		t.Fatalf("create first channel: %v", err)
+	}
+	second, err := store.CreateChannel(creatorTwo.ID, "Channel Two", "tech", []string{"go"})
+	if err != nil {
+		t.Fatalf("create second channel: %v", err)
+	}
+
+	if _, err := store.UpsertProfile(creatorOne.ID, storage.ProfileUpdate{Bio: stringPtr("first bio")}); err != nil {
+		t.Fatalf("upsert first profile: %v", err)
+	}
+	if err := store.FollowChannel(viewer.ID, first.ID); err != nil {
+		t.Fatalf("viewer follow first: %v", err)
+	}
+
+	baselineReq := httptest.NewRequest(http.MethodGet, "/api/directory/recommended", nil)
+	baselineRec := httptest.NewRecorder()
+	handler.DirectoryRecommended(baselineRec, baselineReq)
+	if baselineRec.Code != http.StatusOK {
+		t.Fatalf("expected baseline status 200, got %d", baselineRec.Code)
+	}
+
+	var baselineResp directoryResponse
+	if err := json.Unmarshal(baselineRec.Body.Bytes(), &baselineResp); err != nil {
+		t.Fatalf("decode baseline response: %v", err)
+	}
+	baselineResp.GeneratedAt = ""
+
+	countingService := newCountingChannelsService(handler.ChannelsService)
+	handler.ChannelsService = countingService
+
+	req := httptest.NewRequest(http.MethodGet, "/api/directory/recommended", nil)
+	rec := httptest.NewRecorder()
+	handler.DirectoryRecommended(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var gotResp directoryResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &gotResp); err != nil {
+		t.Fatalf("decode optimized response: %v", err)
+	}
+	gotResp.GeneratedAt = ""
+
+	if !reflect.DeepEqual(gotResp, baselineResp) {
+		t.Fatalf("expected optimized directory response to match baseline\nwant: %+v\ngot: %+v", baselineResp, gotResp)
+	}
+
+	if calls := countingService.ListUsersCalls(); calls != 1 {
+		t.Fatalf("expected ListUsers called once, got %d", calls)
+	}
+	if calls := countingService.ListProfilesCalls(); calls != 1 {
+		t.Fatalf("expected ListProfiles called once, got %d", calls)
+	}
+	if calls := countingService.GetUserCalls(); calls != 0 {
+		t.Fatalf("expected GetUser not called in response builder, got %d", calls)
+	}
+	if calls := countingService.GetProfileCalls(); calls != 0 {
+		t.Fatalf("expected GetProfile not called in response builder, got %d", calls)
+	}
+
+	_ = second
 }
