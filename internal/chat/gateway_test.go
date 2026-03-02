@@ -183,6 +183,25 @@ func TestGatewayAutoModBlocksMessage(t *testing.T) {
 	}
 }
 
+func TestGatewayCreateMessageRuneLimitCountsMultibyteCharacters(t *testing.T) {
+	gateway := chat.NewGateway(chat.GatewayConfig{})
+	author := domain.User{ID: "viewer"}
+	channelID := "channel-1"
+	ctx := context.Background()
+
+	atLimit := strings.Repeat("🙂", 500)
+	if _, err := gateway.CreateMessage(ctx, author, channelID, atLimit); err != nil {
+		t.Fatalf("expected 500-rune message to pass, got %v", err)
+	}
+
+	overLimit := strings.Repeat("🙂", 501)
+	if _, err := gateway.CreateMessage(ctx, author, channelID, overLimit); err == nil {
+		t.Fatalf("expected over-limit error, got nil")
+	} else if err.Error() != "message exceeds 500 characters" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestGatewayApplyModerationWithoutStore(t *testing.T) {
 	gateway := chat.NewGateway(chat.GatewayConfig{})
 	actor := domain.User{ID: "moderator", Roles: []string{"admin"}}

@@ -471,3 +471,19 @@
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1`
 - `./scripts/verify.sh`
+
+## Scope (current change)
+- Replace rune-length checks in chat message creation paths with `utf8.RuneCountInString` in `internal/chat/gateway.go` and `internal/storage/chat.go`.
+- Keep the existing maximum thresholds and error message text unchanged.
+- Add/adjust chat message length tests to confirm multibyte character behavior remains unchanged.
+
+## Assumptions
+- `utf8.RuneCountInString` is behaviorally equivalent to `len([]rune(...))` for valid UTF-8 message content while avoiding unnecessary allocations.
+- Existing chat/store tests can be extended with focused length-validation coverage.
+
+## Risks
+- Missing a validation path could leave mixed length-counting implementations.
+- New tests could become brittle if they assert full error strings beyond the existing contract.
+
+## Test plan
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat ./internal/storage -count=1`

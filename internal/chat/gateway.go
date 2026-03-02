@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"bitriver-live/internal/domain"
 	"bitriver-live/internal/observability/metrics"
@@ -138,7 +139,7 @@ func (g *Gateway) CreateMessage(ctx context.Context, author domain.User, channel
 	if trimmed == "" {
 		return MessageEvent{}, fmt.Errorf("message cannot be empty")
 	}
-	if len([]rune(trimmed)) > 500 {
+	if utf8.RuneCountInString(trimmed) > 500 {
 		return MessageEvent{}, fmt.Errorf("message exceeds 500 characters")
 	}
 	if g.store != nil {

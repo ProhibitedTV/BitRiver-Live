@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // initChatDataset performs init chat dataset and propagates validation or dependency failures to the caller.
@@ -291,7 +292,7 @@ func (s *Storage) CreateChatMessage(channelID, userID, content string) (domain.C
 	if trimmed == "" {
 		return domain.ChatMessage{}, errors.New("message content cannot be empty")
 	}
-	if len([]rune(trimmed)) > MaxChatMessageLength {
+	if utf8.RuneCountInString(trimmed) > MaxChatMessageLength {
 		return domain.ChatMessage{}, fmt.Errorf("message content exceeds %d characters", MaxChatMessageLength)
 	}
 
