@@ -970,3 +970,34 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat ./internal/storage -count=1`
 - ✅ Additional gate check:
   - ⚠️ `./scripts/verify.sh` (passed; Docker-dependent checks were skipped because Docker is not installed in this environment)
+
+## Scoped change: reduce chat filter cache read allocations in gateway
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Return cached filter slice directly and document immutability invariant
+  - Acceptance criteria:
+    - `internal/chat/gateway.go` `cachedChatFilters` returns `entry.filters` directly (no `append` copy).
+    - Cache write path keeps defensive copy `append([]domain.ChatFilter(nil), fetched...)`.
+    - Code comment documents that cached slices are treated as immutable by Gateway internals.
+
+- [x] Task 2 — Add/adjust gateway unit test for unchanged matching + no cache mutation
+  - Acceptance criteria:
+    - A gateway unit test validates repeated matching behavior remains identical.
+    - Test asserts matching logic does not mutate cached filter data.
+
+- [x] Task 3 — Run scoped + required verification checks and record results
+  - Acceptance criteria:
+    - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1` passes.
+    - `./scripts/verify.sh` is run and results logged.
+
+
+### Execution log (reduce chat filter cache read allocations in gateway)
+- ✅ Task 1 complete: `cachedChatFilters` now returns cached slices directly and includes a comment documenting the immutable-slice invariant; cache writes still defensively copy fetched datastore slices.
+- ✅ Task 2 complete: added a gateway unit test that verifies repeated matching behavior and asserts cached filters remain unchanged after matching operations.
+- ✅ Task 2 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1`
+- ✅ Task 3 complete: ran required repository verification gate after gateway cache allocation optimization.
+- ✅ Task 3 checks:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1`
+  - ⚠️ `./scripts/verify.sh` (passed; Docker-dependent checks were skipped because Docker is not installed in this environment)

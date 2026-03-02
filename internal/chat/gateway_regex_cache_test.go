@@ -142,6 +142,54 @@ func TestGatewayMatchChatFilterRegexSkipsInvalidPattern(t *testing.T) {
 	}
 }
 
+
+func TestGatewayMatchChatFilterDoesNotMutateCachedFilters(t *testing.T) {
+	store := &regexCacheStore{filters: []domain.ChatFilter{{
+		ID:      "filter-1",
+		Kind:    "word",
+		Pattern: "Spoiler",
+		Enabled: true,
+	}}}
+	gateway := NewGateway(GatewayConfig{Store: store, ChatFilterCacheTTL: time.Second})
+
+	first, err := gateway.matchChatFilter("channel-1", "contains spoiler")
+	if err != nil {
+		t.Fatalf("matchChatFilter first call: %v", err)
+	}
+	if first == nil || first.ID != "filter-1" {
+		t.Fatalf("expected first word filter match, got %#v", first)
+	}
+
+	gateway.filterCacheMu.RLock()
+	cachedBefore := append([]domain.ChatFilter(nil), gateway.filterCache["channel-1"].filters...)
+	gateway.filterCacheMu.RUnlock()
+
+	second, err := gateway.matchChatFilter("channel-1", "SPOILER alert")
+	if err != nil {
+		t.Fatalf("matchChatFilter second call: %v", err)
+	}
+	if second == nil || second.ID != "filter-1" {
+		t.Fatalf("expected second word filter match, got %#v", second)
+	}
+
+	gateway.filterCacheMu.RLock()
+	cachedAfter := gateway.filterCache["channel-1"].filters
+	gateway.filterCacheMu.RUnlock()
+
+	if len(cachedAfter) != len(cachedBefore) {
+		t.Fatalf("expected cached filter length to remain %d, got %d", len(cachedBefore), len(cachedAfter))
+	}
+	for i := range cachedBefore {
+		if cachedAfter[i] != cachedBefore[i] {
+			t.Fatalf("expected cached filter %d unchanged, before=%#v after=%#v", i, cachedBefore[i], cachedAfter[i])
+		}
+	}
+
+	if store.listCallsByID["channel-1"] != 1 {
+		t.Fatalf("expected one ListChatFilters call within ttl, got %d", store.listCallsByID["channel-1"])
+	}
+}
+
 func TestGatewayMatchChatFilterUsesListCacheWithinTTL(t *testing.T) {
 	store := &regexCacheStore{filters: []domain.ChatFilter{{
 		ID:      "filter-1",

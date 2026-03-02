@@ -522,3 +522,22 @@
 
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat ./internal/storage -count=1`
+
+## Scope (current change)
+- Reduce allocations in chat filter cache reads by returning cached filter slices directly from `cachedChatFilters`.
+- Preserve cache-write defensive copying in `chatFiltersForChannel` so datastore-returned slices are not aliased into cache storage.
+- Document Gateway invariant that cached filter slices are treated as immutable within Gateway internals.
+- Add/adjust gateway tests to confirm moderation match outcomes are unchanged and matching logic does not mutate cached filter entries.
+
+## Assumptions
+- Gateway internals never mutate `entry.filters` after cache insertion.
+- `matchChatFilter` iterates filters read-only, so returning cached slices directly is safe.
+- This is an internal performance change with no deployment contract or user-facing behavior impact.
+
+## Risks
+- Any future mutation of cached slices would now affect shared cached state.
+- Tests must explicitly guard against accidental mutation regression to preserve correctness.
+
+## Test plan
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1`
+- `./scripts/verify.sh`

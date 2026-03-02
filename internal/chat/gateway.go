@@ -243,7 +243,8 @@ func (g *Gateway) cachedChatFilters(channelID string, now time.Time) ([]domain.C
 	if now.Sub(entry.fetchedAt) > g.chatFilterCacheTTL {
 		return nil, false
 	}
-	return append([]domain.ChatFilter(nil), entry.filters...), true
+	// Cached filter slices are treated as immutable by Gateway internals.
+	return entry.filters, true
 }
 
 func (g *Gateway) compiledRegex(filterID, pattern string) (*regexp.Regexp, error) {
