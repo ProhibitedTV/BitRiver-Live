@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -40,6 +41,29 @@ func decodeAPIError(t *testing.T, body []byte) testErrorResponse {
 		t.Fatalf("decode response: %v", err)
 	}
 	return resp
+}
+
+type countingChannelsService struct {
+	service.ChannelsDirectoryUseCase
+	mu                  sync.Mutex
+	countFollowersCalls map[string]int
+}
+
+func newCountingChannelsService(base service.ChannelsDirectoryUseCase) *countingChannelsService {
+	return &countingChannelsService{ChannelsDirectoryUseCase: base, countFollowersCalls: map[string]int{}}
+}
+
+func (s *countingChannelsService) CountFollowers(channelID string) int {
+	s.mu.Lock()
+	s.countFollowersCalls[channelID]++
+	s.mu.Unlock()
+	return s.ChannelsDirectoryUseCase.CountFollowers(channelID)
+}
+
+func (s *countingChannelsService) CallsFor(channelID string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.countFollowersCalls[channelID]
 }
 
 func newTestHandler(t *testing.T) (*Handler, *storage.Storage) {
@@ -1214,6 +1238,9 @@ func TestDirectoryRecommendedSortsByFollowers(t *testing.T) {
 		t.Fatalf("viewer two follow second: %v", err)
 	}
 
+	countingService := newCountingChannelsService(handler.ChannelsService)
+	handler.ChannelsService = countingService
+
 	req := httptest.NewRequest(http.MethodGet, "/api/directory/recommended", nil)
 	rec := httptest.NewRecorder()
 
@@ -1236,6 +1263,20 @@ func TestDirectoryRecommendedSortsByFollowers(t *testing.T) {
 		if resp.Channels[i].Channel.ID != id {
 			t.Fatalf("expected channel %s at index %d, got %s", id, i, resp.Channels[i].Channel.ID)
 		}
+	}
+
+	if got := resp.Channels[0].FollowerCount; got != 2 {
+		t.Fatalf("expected first channel follower count 2, got %d", got)
+	}
+	if got := resp.Channels[1].FollowerCount; got != 0 {
+		t.Fatalf("expected second channel follower count 0, got %d", got)
+	}
+
+	if calls := countingService.CallsFor(first.ID); calls != 1 {
+		t.Fatalf("expected CountFollowers called once for first channel, got %d", calls)
+	}
+	if calls := countingService.CallsFor(second.ID); calls != 1 {
+		t.Fatalf("expected CountFollowers called once for second channel, got %d", calls)
 	}
 }
 

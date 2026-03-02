@@ -137,7 +137,8 @@ func (h *Handler) Directory(w http.ResponseWriter, r *http.Request) {
 		query = strings.TrimSpace(r.URL.Query().Get("q"))
 	}
 	channels := h.channelsService().ListChannels("", query)
-	h.writeDirectoryResponse(w, channels)
+	followerCounts := h.followerCountsForChannels(channels)
+	h.writeDirectoryResponse(w, channels, followerCounts)
 }
 
 // DirectoryFeatured performs directory featured and returns an error when dependent systems reject the operation.
@@ -167,7 +168,8 @@ func (h *Handler) DirectoryFeatured(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, true))
+	followerCounts := h.followerCountsForChannels(channels)
+	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, followerCounts, true), followerCounts)
 }
 
 // DirectoryRecommended performs directory recommended and returns an error when dependent systems reject the operation.
@@ -178,7 +180,8 @@ func (h *Handler) DirectoryRecommended(w http.ResponseWriter, r *http.Request) {
 	}
 
 	channels := h.channelsService().ListChannels("", "")
-	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, false))
+	followerCounts := h.followerCountsForChannels(channels)
+	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, followerCounts, false), followerCounts)
 }
 
 // DirectoryLive performs directory live and returns an error when dependent systems reject the operation.
@@ -190,7 +193,8 @@ func (h *Handler) DirectoryLive(w http.ResponseWriter, r *http.Request) {
 
 	channels := h.channelsService().ListChannels("", "")
 	channels = filterLiveChannels(channels)
-	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, true))
+	followerCounts := h.followerCountsForChannels(channels)
+	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, followerCounts, true), followerCounts)
 }
 
 // DirectoryTrending performs directory trending and returns an error when dependent systems reject the operation.
@@ -201,7 +205,8 @@ func (h *Handler) DirectoryTrending(w http.ResponseWriter, r *http.Request) {
 	}
 
 	channels := filterLiveChannels(h.channelsService().ListChannels("", ""))
-	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, true))
+	followerCounts := h.followerCountsForChannels(channels)
+	h.writeDirectoryResponse(w, h.sortChannelsByFollowers(channels, followerCounts, true), followerCounts)
 }
 
 // DirectoryCategories performs directory categories and returns an error when dependent systems reject the operation.
@@ -248,11 +253,7 @@ func filterLiveChannels(channels []domain.Channel) []domain.Channel {
 }
 
 // sortChannelsByFollowers performs sort channels by followers and propagates validation or dependency failures to the caller.
-func (h *Handler) sortChannelsByFollowers(channels []domain.Channel, liveFirst bool) []domain.Channel {
-	followers := make(map[string]int, len(channels))
-	for _, channel := range channels {
-		followers[channel.ID] = h.channelsService().CountFollowers(channel.ID)
-	}
+func (h *Handler) sortChannelsByFollowers(channels []domain.Channel, followerCounts map[string]int, liveFirst bool) []domain.Channel {
 	sort.Slice(channels, func(i, j int) bool {
 		if liveFirst {
 			iLive := channels[i].LiveState == "live" || channels[i].LiveState == "starting"
@@ -261,12 +262,20 @@ func (h *Handler) sortChannelsByFollowers(channels []domain.Channel, liveFirst b
 				return iLive
 			}
 		}
-		if followers[channels[i].ID] == followers[channels[j].ID] {
+		if followerCounts[channels[i].ID] == followerCounts[channels[j].ID] {
 			return channels[i].CreatedAt.Before(channels[j].CreatedAt)
 		}
-		return followers[channels[i].ID] > followers[channels[j].ID]
+		return followerCounts[channels[i].ID] > followerCounts[channels[j].ID]
 	})
 	return channels
+}
+
+func (h *Handler) followerCountsForChannels(channels []domain.Channel) map[string]int {
+	followerCounts := make(map[string]int, len(channels))
+	for _, channel := range channels {
+		followerCounts[channel.ID] = h.channelsService().CountFollowers(channel.ID)
+	}
+	return followerCounts
 }
 
 // DirectoryFollowing performs directory following and returns an error when dependent systems reject the operation.
@@ -294,11 +303,12 @@ func (h *Handler) DirectoryFollowing(w http.ResponseWriter, r *http.Request) {
 		channels = append(channels, channel)
 	}
 
-	h.writeDirectoryResponse(w, channels)
+	followerCounts := h.followerCountsForChannels(channels)
+	h.writeDirectoryResponse(w, channels, followerCounts)
 }
 
 // writeDirectoryResponse writes directory response to the active response or stream and surfaces encode or I/O failures.
-func (h *Handler) writeDirectoryResponse(w http.ResponseWriter, channels []domain.Channel) {
+func (h *Handler) writeDirectoryResponse(w http.ResponseWriter, channels []domain.Channel, followerCounts map[string]int) {
 	response := make([]directoryChannelResponse, 0, len(channels))
 	for _, channel := range channels {
 		owner, exists := h.channelsService().GetUser(channel.OwnerID)
@@ -306,7 +316,10 @@ func (h *Handler) writeDirectoryResponse(w http.ResponseWriter, channels []domai
 			continue
 		}
 		profile, _ := h.channelsService().GetProfile(owner.ID)
-		followerCount := h.channelsService().CountFollowers(channel.ID)
+		followerCount, ok := followerCounts[channel.ID]
+		if !ok {
+			followerCount = h.channelsService().CountFollowers(channel.ID)
+		}
 		response = append(response, directoryChannelResponse{
 			Channel:       newChannelPublicResponse(channel),
 			Owner:         newOwnerResponse(owner, profile),
