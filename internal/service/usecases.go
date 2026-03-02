@@ -53,6 +53,7 @@ type ChatModerationUseCase interface {
 // handlers.
 type ChannelsDirectoryUseCase interface {
 	ListChannels(ownerID, query string) []domain.Channel
+	ListUsers() []domain.User
 	ListProfiles() []domain.Profile
 	GetChannel(id string) (domain.Channel, bool)
 	GetUser(id string) (domain.User, bool)

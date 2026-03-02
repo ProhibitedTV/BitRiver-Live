@@ -309,13 +309,25 @@ func (h *Handler) DirectoryFollowing(w http.ResponseWriter, r *http.Request) {
 
 // writeDirectoryResponse writes directory response to the active response or stream and surfaces encode or I/O failures.
 func (h *Handler) writeDirectoryResponse(w http.ResponseWriter, channels []domain.Channel, followerCounts map[string]int) {
+	users := h.channelsService().ListUsers()
+	usersByID := make(map[string]domain.User, len(users))
+	for _, user := range users {
+		usersByID[user.ID] = user
+	}
+
+	profiles := h.channelsService().ListProfiles()
+	profilesByUserID := make(map[string]domain.Profile, len(profiles))
+	for _, profile := range profiles {
+		profilesByUserID[profile.UserID] = profile
+	}
+
 	response := make([]directoryChannelResponse, 0, len(channels))
 	for _, channel := range channels {
-		owner, exists := h.channelsService().GetUser(channel.OwnerID)
+		owner, exists := usersByID[channel.OwnerID]
 		if !exists {
 			continue
 		}
-		profile, _ := h.channelsService().GetProfile(owner.ID)
+		profile := profilesByUserID[owner.ID]
 		followerCount, ok := followerCounts[channel.ID]
 		if !ok {
 			followerCount = h.channelsService().CountFollowers(channel.ID)

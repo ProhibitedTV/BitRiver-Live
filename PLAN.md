@@ -559,3 +559,20 @@
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1`
 - `./scripts/verify.sh`
+## Scope (current change)
+- Reduce per-channel user/profile lookup churn in `internal/api/channels_directory_handlers.go` by preloading users/profiles once and doing map lookups in `writeDirectoryResponse`.
+- Extend `service.ChannelsDirectoryUseCase` with bulk user listing support so directory handlers can use `ListUsers` + `ListProfiles` instead of repeated `GetUser`/`GetProfile` calls.
+- Extend directory handler tests to assert response JSON parity while verifying fewer per-channel lookup calls in multi-channel responses.
+
+## Assumptions
+- `ListUsers` and `ListProfiles` represent the same backing data currently accessed by `GetUser`/`GetProfile` and can be used to preserve response semantics.
+- Missing owner behavior must remain a skip (`continue`) and missing profile behavior must remain optional/zero-value.
+- This is an internal performance refactor with no API contract or docs updates required.
+
+## Risks
+- Interface changes to `ChannelsDirectoryUseCase` could break compile-time conformance if any implementation is missed.
+- Incorrect map-keying could alter owner/profile joins or accidentally include channels with missing owners.
+
+## Test plan
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1 -run 'TestDirectory(RecommendedSortsByFollowers|ResponseUsesBulkUserProfileLookups)$'`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1`
