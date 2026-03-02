@@ -481,13 +481,25 @@ func extractPayload(fields []interface{}) []byte {
 	for i := 0; i < len(fields); i += 2 {
 		key, _ := asString(fields[i])
 		if strings.EqualFold(key, "payload") && i+1 < len(fields) {
-			value, _ := asString(fields[i+1])
-			if value != "" {
-				return []byte(value)
+			value, _ := asBytes(fields[i+1])
+			if len(value) > 0 {
+				return value
 			}
 		}
 	}
 	return nil
+}
+
+// asBytes performs as bytes and propagates validation or dependency failures to the caller.
+func asBytes(v interface{}) ([]byte, bool) {
+	switch val := v.(type) {
+	case []byte:
+		return val, true
+	case string:
+		return []byte(val), true
+	default:
+		return nil, false
+	}
 }
 
 // asString performs as string and propagates validation or dependency failures to the caller.
