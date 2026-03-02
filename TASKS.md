@@ -881,3 +881,37 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ⚠️ Task 3 checks:
   - ❌ `./scripts/verify.sh` (first run had unrelated transient failure in `internal/api` test `TestChatReportsAPI`)
   - ✅ `./scripts/verify.sh` (rerun passed; Docker-dependent steps skipped because Docker is not installed in this environment)
+
+## Scoped change: use utf8 rune counting for chat message length validation
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Update gateway message length validation implementation
+  - Acceptance criteria:
+    - `internal/chat/gateway.go` uses `utf8.RuneCountInString(trimmed) > 500` in `CreateMessage`.
+    - `unicode/utf8` import is added and formatting remains gofmt-clean.
+    - Error text remains `message exceeds 500 characters`.
+
+- [x] Task 2 — Update storage message length validation implementation
+  - Acceptance criteria:
+    - `internal/storage/chat.go` uses `utf8.RuneCountInString(trimmed) > MaxChatMessageLength` in `CreateChatMessage`.
+    - `unicode/utf8` import is added and formatting remains gofmt-clean.
+    - Error text remains unchanged.
+
+- [x] Task 3 — Add/adjust multibyte length tests and run scoped checks
+  - Acceptance criteria:
+    - Chat/gateway and storage tests cover multibyte boundary behavior for 500 vs 501 characters.
+    - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat ./internal/storage -count=1` passes and is logged.
+
+### Execution log (use utf8 rune counting for chat message length validation)
+- ✅ Task 1 complete: `CreateMessage` now uses `utf8.RuneCountInString(trimmed) > 500` and imports `unicode/utf8`, with unchanged error text.
+- ✅ Task 1 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1`
+- ✅ Task 2 complete: `CreateChatMessage` now uses `utf8.RuneCountInString(trimmed) > MaxChatMessageLength` and imports `unicode/utf8`, with unchanged error text.
+- ✅ Task 2 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -count=1`
+- ✅ Task 3 complete: added multibyte boundary tests for gateway and storage message length validation and ran scoped package tests.
+- ✅ Task 3 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat ./internal/storage -count=1`
+- ✅ Additional gate check:
+  - ⚠️ `./scripts/verify.sh` (passed; Docker-dependent checks were skipped because Docker is not installed in this environment)

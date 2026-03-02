@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -43,6 +44,30 @@ func TestListChatMessagesOrdering(t *testing.T) {
 	}
 	if msgs[1].ID != msg1.ID {
 		t.Fatalf("expected oldest message last, got %s", msgs[1].ID)
+	}
+}
+
+func TestCreateChatMessageRuneLimitCountsMultibyteCharacters(t *testing.T) {
+	store := newTestStore(t)
+	user, err := store.CreateUser(CreateUserParams{DisplayName: "Alice", Email: "alice@example.com"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	channel, err := store.CreateChannel(user.ID, "My Channel", "", nil)
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	atLimit := strings.Repeat("🙂", MaxChatMessageLength)
+	if _, err := store.CreateChatMessage(channel.ID, user.ID, atLimit); err != nil {
+		t.Fatalf("expected %d-rune message to pass, got %v", MaxChatMessageLength, err)
+	}
+
+	overLimit := strings.Repeat("🙂", MaxChatMessageLength+1)
+	if _, err := store.CreateChatMessage(channel.ID, user.ID, overLimit); err == nil {
+		t.Fatalf("expected over-limit error, got nil")
+	} else if err.Error() != "message content exceeds 500 characters" {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
