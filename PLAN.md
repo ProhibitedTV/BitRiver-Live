@@ -1,4 +1,22 @@
 ## Scope (current change)
+- Audit `web/viewer/components/ChatPanel.tsx` message derivation for repeated per-render work in the hot chat render path.
+- Remove redundant intermediate message normalization allocation while preserving identical sort/group output semantics.
+- Keep polling, auth, and UI behavior unchanged; this is a behavior-preserving efficiency refactor.
+
+## Assumptions
+- Chat ordering remains based on `sentAt` timestamp ascending, exactly as current behavior.
+- Grouping by user and 2-minute window must remain unchanged.
+- Existing ChatPanel tests cover user-visible behavior sufficiently for this scoped optimization.
+
+## Risks
+- Refactoring memoization boundaries could accidentally change ordering/grouping if comparator inputs drift.
+- Removing an intermediate structure could affect types used by grouping logic if not kept equivalent.
+
+## Test plan
+- `cd web/viewer && npm run test -- chatPanel.test.tsx`
+- `./scripts/verify.sh`
+
+## Scope (current change)
 - Add internal analytics bulk/grouped store accessors to fetch follower counts, current sessions, recent sessions, and chat message counts grouped by channel ID.
 - Refactor `computeAnalyticsOverview` in `internal/service/usecases.go` to prefetch grouped datasets once and compute per-channel analytics in a single pass.
 - Preserve existing analytics calculations, summary behavior, and per-channel tie-break sorting semantics.
