@@ -1,3 +1,31 @@
+## Scoped change: directory follower-count single-pass cache
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Refactor directory handler flow to build and reuse follower counts
+  - Acceptance criteria:
+    - A `map[string]int` count cache is built once per directory request path before sorting/serialization.
+    - `sortChannelsByFollowers` consumes precomputed counts (or equivalent single-pass result).
+    - `writeDirectoryResponse` consumes the same map and does not call `CountFollowers` again per channel.
+    - Response ordering and `FollowerCount` payload values remain unchanged.
+
+- [x] Task 2 — Add/adjust directory handler tests for parity and service-call reduction
+  - Acceptance criteria:
+    - Tests assert ordering and `FollowerCount` values are unchanged for representative directory endpoints.
+    - Tests include mock/spy assertions showing `CountFollowers` is not double-called per channel.
+
+- [x] Task 3 — Run scoped API tests and record outcomes
+  - Acceptance criteria:
+    - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1 -run Directory` passes.
+    - If feasible, broader `./internal/api` tests also pass.
+
+### Execution log (directory follower-count single-pass cache)
+- ✅ Task 1 complete: directory handlers now build a per-request `map[string]int` follower-count cache, thread it through follower sorting, and reuse it in response serialization.
+- ✅ Task 2 complete: added a counting `ChannelsDirectoryUseCase` spy in handler tests and asserted recommended-directory order/count payload parity plus exactly one `CountFollowers` call per returned channel.
+- ✅ Task 3 checks:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1 -run Directory`
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1`
+
 ## Scoped change: rate limiter cleanup cadence throttling
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

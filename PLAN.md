@@ -1,4 +1,22 @@
 ## Scope (current change)
+- Refactor directory handlers in `internal/api/channels_directory_handlers.go` to compute follower counts once per request and reuse them for sorting plus response serialization.
+- Thread a `map[string]int` follower-count cache through directory request paths so `CountFollowers` is not called redundantly for the same channel.
+- Update directory handler tests to verify response ordering and `FollowerCount` values remain unchanged while asserting fewer `CountFollowers` invocations.
+
+## Assumptions
+- Directory endpoints should preserve current response ordering semantics, including live-first tie-breaking and `CreatedAt` fallback ordering.
+- Missing map entries should behave equivalently to prior behavior (effectively zero followers when absent).
+- This is an internal performance refactor with no API contract or docs changes required.
+
+## Risks
+- Accidentally changing sort order if follower map wiring is inconsistent between sort and response layers.
+- Test spy wiring could miss some paths and under-assert `CountFollowers` call counts.
+
+## Test plan
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1 -run Directory`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1`
+
+## Scope (current change)
 - Optimize in-memory login limiter cleanup cadence in `internal/server/ratelimit.go` by tracking last cleanup timestamp on `rateLimiter`.
 - Keep per-key bucket creation/update behavior unchanged in `AllowLogin`, but gate `cleanupLocked()` calls behind a bounded interval (`loginWindow/2` with a minimum duration).
 - Preserve existing stale-bucket eviction semantics by leaving `cleanupLocked()` implementation logic unchanged.
