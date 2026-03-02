@@ -90,28 +90,28 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
   const hasCreatorRole = user?.roles?.includes("creator") ?? false;
   const canManage = !!user && (user.id === ownerId || hasCreatorRole);
 
+  const sortedItems = useMemo(() => [...items].sort(compareUploadsForMonitoring), [items]);
+
   const visibleItems = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
-    return [...items]
-      .sort(compareUploadsForMonitoring)
-      .filter((item) => {
-        if (listFilter === "active" && !isUploadInActiveState(item.status)) {
-          return false;
-        }
-        if (listFilter === "ready" && !isUploadItemReady(item.status)) {
-          return false;
-        }
-        if (listFilter === "failed" && !isUploadItemFailed(item.status)) {
-          return false;
-        }
-        if (!normalizedSearch) {
-          return true;
-        }
-        const title = item.title?.toLowerCase() ?? "";
-        const filename = item.filename?.toLowerCase() ?? "";
-        return title.includes(normalizedSearch) || filename.includes(normalizedSearch);
-      });
-  }, [items, listFilter, searchTerm]);
+    return sortedItems.filter((item) => {
+      if (listFilter === "active" && !isUploadInActiveState(item.status)) {
+        return false;
+      }
+      if (listFilter === "ready" && !isUploadItemReady(item.status)) {
+        return false;
+      }
+      if (listFilter === "failed" && !isUploadItemFailed(item.status)) {
+        return false;
+      }
+      if (!normalizedSearch) {
+        return true;
+      }
+      const title = item.title?.toLowerCase() ?? "";
+      const filename = item.filename?.toLowerCase() ?? "";
+      return title.includes(normalizedSearch) || filename.includes(normalizedSearch);
+    });
+  }, [listFilter, searchTerm, sortedItems]);
 
   useEffect(() => {
     if (authLoading) {

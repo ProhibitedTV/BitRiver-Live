@@ -1,6 +1,23 @@
 # PLAN
 
 ## Scope (current change)
+- Refactor upload list derivation in `web/viewer/components/UploadManager.tsx` into two memoized stages.
+- Add `sortedItems` as a dedicated `useMemo` keyed only on `items` that applies `compareUploadsForMonitoring`.
+- Update `visibleItems` to consume `sortedItems` and only apply existing filter/search matching semantics.
+
+## Assumptions
+- Current upload filter semantics for `active`, `ready`, and `failed` remain unchanged.
+- Search matching must stay case-insensitive and continue checking both title and filename.
+- This is a behavior-preserving performance refactor; no API/data contract changes are needed.
+
+## Risks
+- Accidental dependency changes could cause stale filtering or missed re-sorts.
+- Subtle search/filter logic drift could alter currently expected list visibility behavior.
+
+## Test plan
+- `cd web/viewer && npm run test -- uploadManager.test.tsx`
+
+## Scope (current change)
 - Add an internal per-channel chat-filter cache in `internal/chat/gateway.go` that stores fetched filters with freshness metadata (timestamp/version token).
 - Update `matchChatFilter` to prefer cached filters when fresh and fall back to `Store.ListChatFilters(channelID)` when stale/missing, refreshing cache entries after fetch.
 - Add a small configurable TTL to `GatewayConfig` with a conservative default so moderation behavior remains effectively real-time.
