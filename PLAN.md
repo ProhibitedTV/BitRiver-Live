@@ -1,4 +1,23 @@
 ## Scope (current change)
+- Add internal analytics bulk/grouped store accessors to fetch follower counts, current sessions, recent sessions, and chat message counts grouped by channel ID.
+- Refactor `computeAnalyticsOverview` in `internal/service/usecases.go` to prefetch grouped datasets once and compute per-channel analytics in a single pass.
+- Preserve existing analytics calculations, summary behavior, and per-channel tie-break sorting semantics.
+- Add regression tests that compare legacy per-channel fetch behavior with the new grouped-data path on representative multi-channel fixtures.
+
+## Assumptions
+- New bulk accessors are internal-only and do not alter external API contracts.
+- Grouped chat message counts must preserve the prior "messages since UTC day start" semantics.
+- Existing watch-time and stream-live calculations remain unchanged.
+
+## Risks
+- A mismatch in grouped aggregation ordering/counting could subtly alter existing outputs.
+- Introducing new interface methods could break compile-time conformance for storage stubs/fakes.
+
+## Test plan
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/service -count=1`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -count=1`
+
+## Scope (current change)
 - Refactor directory handlers in `internal/api/channels_directory_handlers.go` to compute follower counts once per request and reuse them for sorting plus response serialization.
 - Thread a `map[string]int` follower-count cache through directory request paths so `CountFollowers` is not called redundantly for the same channel.
 - Update directory handler tests to verify response ordering and `FollowerCount` values remain unchanged while asserting fewer `CountFollowers` invocations.

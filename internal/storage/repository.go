@@ -57,6 +57,10 @@ type Repository interface {
 	ListChatAutoModActions(channelID string, limit int) ([]domain.ChatAutoModAction, error)
 
 	ListTips(channelID string, limit int) ([]domain.Tip, error)
+	CountFollowersByChannelIDs(channelIDs []string) map[string]int
+	CurrentStreamSessionsByChannelIDs(channelIDs []string) map[string]domain.StreamSession
+	ListStreamSessionsByChannelIDs(channelIDs []string) (map[string][]domain.StreamSession, error)
+	CountChatMessagesSinceByChannelIDs(channelIDs []string, since time.Time) (map[string]int, error)
 	ListSubscriptions(channelID string, includeInactive bool) ([]domain.Subscription, error)
 	GetSubscription(id string) (domain.Subscription, bool)
 	CancelSubscription(id, cancelledBy, reason string) (domain.Subscription, error)

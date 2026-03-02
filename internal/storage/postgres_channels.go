@@ -625,6 +625,40 @@ func (r *postgresRepository) CountFollowers(channelID string) int {
 	return count
 }
 
+// CountFollowersByChannelIDs returns follower totals keyed by channel ID.
+func (r *postgresRepository) CountFollowersByChannelIDs(channelIDs []string) map[string]int {
+	counts := make(map[string]int, len(channelIDs))
+	if r == nil || r.pool == nil {
+		return counts
+	}
+	for _, channelID := range channelIDs {
+		counts[channelID] = 0
+	}
+	if len(channelIDs) == 0 {
+		return counts
+	}
+	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		rows, err := conn.Query(ctx, "SELECT channel_id, COUNT(*) FROM follows WHERE channel_id = ANY($1) GROUP BY channel_id", channelIDs)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var channelID string
+			var count int
+			if err := rows.Scan(&channelID, &count); err != nil {
+				return err
+			}
+			counts[channelID] = count
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return map[string]int{}
+	}
+	return counts
+}
+
 // ListFollowedChannelIDs executes ListFollowedChannelIDs.
 // Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
 // this function still normalizes/trims where needed and rejects empty required fields.
@@ -1021,6 +1055,46 @@ func (r *postgresRepository) CurrentStreamSession(channelID string) (domain.Stre
 	return session, true
 }
 
+// CurrentStreamSessionsByChannelIDs returns active stream sessions keyed by channel ID.
+func (r *postgresRepository) CurrentStreamSessionsByChannelIDs(channelIDs []string) map[string]domain.StreamSession {
+	grouped := make(map[string]domain.StreamSession, len(channelIDs))
+	if r == nil || r.pool == nil || len(channelIDs) == 0 {
+		return grouped
+	}
+	sessionByChannel := make(map[string]string, len(channelIDs))
+	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		rows, err := conn.Query(ctx, "SELECT id, current_session_id FROM channels WHERE id = ANY($1)", channelIDs)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var channelID string
+			var current pgtype.Text
+			if err := rows.Scan(&channelID, &current); err != nil {
+				return err
+			}
+			if current.Valid {
+				sessionByChannel[channelID] = current.String
+			}
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return map[string]domain.StreamSession{}
+	}
+	for channelID, sessionID := range sessionByChannel {
+		loadCtx, cancel := r.acquireContext()
+		session, ok := r.loadStreamSession(loadCtx, sessionID)
+		cancel()
+		if !ok {
+			continue
+		}
+		grouped[channelID] = session
+	}
+	return grouped
+}
+
 // ListStreamSessions executes ListStreamSessions.
 // Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
 // this function still normalizes/trims where needed and rejects empty required fields.
@@ -1072,6 +1146,74 @@ func (r *postgresRepository) ListStreamSessions(channelID string) ([]domain.Stre
 		sessions = append(sessions, session)
 	}
 	return sessions, nil
+}
+
+// ListStreamSessionsByChannelIDs returns sessions grouped by channel ID.
+func (r *postgresRepository) ListStreamSessionsByChannelIDs(channelIDs []string) (map[string][]domain.StreamSession, error) {
+	if r == nil || r.pool == nil {
+		return nil, ErrPostgresUnavailable
+	}
+	grouped := make(map[string][]domain.StreamSession, len(channelIDs))
+	for _, channelID := range channelIDs {
+		grouped[channelID] = []domain.StreamSession{}
+	}
+	if len(channelIDs) == 0 {
+		return grouped, nil
+	}
+	channelSet := make(map[string]struct{}, len(channelIDs))
+	for _, channelID := range channelIDs {
+		channelSet[channelID] = struct{}{}
+	}
+	idToChannel := make(map[string]string)
+	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
+		rows, err := conn.Query(ctx, "SELECT id FROM channels WHERE id = ANY($1)", channelIDs)
+		if err != nil {
+			return fmt.Errorf("check channels: %w", err)
+		}
+		defer rows.Close()
+		found := make(map[string]struct{})
+		for rows.Next() {
+			var channelID string
+			if err := rows.Scan(&channelID); err != nil {
+				return fmt.Errorf("scan channel id: %w", err)
+			}
+			found[channelID] = struct{}{}
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		for channelID := range channelSet {
+			if _, ok := found[channelID]; !ok {
+				return fmt.Errorf("channel %s not found", channelID)
+			}
+		}
+		sessionRows, err := conn.Query(ctx, "SELECT id, channel_id FROM stream_sessions WHERE channel_id = ANY($1) ORDER BY channel_id, started_at DESC", channelIDs)
+		if err != nil {
+			return fmt.Errorf("list sessions: %w", err)
+		}
+		defer sessionRows.Close()
+		for sessionRows.Next() {
+			var id, channelID string
+			if err := sessionRows.Scan(&id, &channelID); err != nil {
+				return fmt.Errorf("scan session row: %w", err)
+			}
+			idToChannel[id] = channelID
+		}
+		return sessionRows.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	for id, channelID := range idToChannel {
+		loadCtx, cancel := r.acquireContext()
+		session, ok := r.loadStreamSession(loadCtx, id)
+		cancel()
+		if !ok {
+			continue
+		}
+		grouped[channelID] = append(grouped[channelID], session)
+	}
+	return grouped, nil
 }
 
 // ListRecordings executes ListRecordings.

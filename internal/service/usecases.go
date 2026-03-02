@@ -134,10 +134,10 @@ type AnalyticsOverview struct {
 
 type analyticsOverviewStore interface {
 	ListChannels(ownerID, query string) []domain.Channel
-	CountFollowers(channelID string) int
-	CurrentStreamSession(channelID string) (domain.StreamSession, bool)
-	ListStreamSessions(channelID string) ([]domain.StreamSession, error)
-	ListChatMessages(channelID string, limit int) ([]domain.ChatMessage, error)
+	CountFollowersByChannelIDs(channelIDs []string) map[string]int
+	CurrentStreamSessionsByChannelIDs(channelIDs []string) map[string]domain.StreamSession
+	ListStreamSessionsByChannelIDs(channelIDs []string) (map[string][]domain.StreamSession, error)
+	CountChatMessagesSinceByChannelIDs(channelIDs []string, since time.Time) (map[string]int, error)
 }
 
 type SystemHealthUseCase interface {
@@ -226,6 +226,10 @@ type storeUseCases struct {
 		AddDataSubjectAuditEvent(requestID string, params domain.DataSubjectAuditEventCreateParams) (domain.DataSubjectAuditEvent, error)
 		ListDataSubjectAuditEvents(requestID string) ([]domain.DataSubjectAuditEvent, error)
 		ListLegalStateHistory(entityType, entityID string) ([]domain.LegalStateHistory, error)
+		CountFollowersByChannelIDs(channelIDs []string) map[string]int
+		CurrentStreamSessionsByChannelIDs(channelIDs []string) map[string]domain.StreamSession
+		ListStreamSessionsByChannelIDs(channelIDs []string) (map[string][]domain.StreamSession, error)
+		CountChatMessagesSinceByChannelIDs(channelIDs []string, since time.Time) (map[string]int, error)
 	}
 }
 
@@ -266,6 +270,10 @@ func NewStoreUseCases(store interface {
 	AddDataSubjectAuditEvent(requestID string, params domain.DataSubjectAuditEventCreateParams) (domain.DataSubjectAuditEvent, error)
 	ListDataSubjectAuditEvents(requestID string) ([]domain.DataSubjectAuditEvent, error)
 	ListLegalStateHistory(entityType, entityID string) ([]domain.LegalStateHistory, error)
+	CountFollowersByChannelIDs(channelIDs []string) map[string]int
+	CurrentStreamSessionsByChannelIDs(channelIDs []string) map[string]domain.StreamSession
+	ListStreamSessionsByChannelIDs(channelIDs []string) (map[string][]domain.StreamSession, error)
+	CountChatMessagesSinceByChannelIDs(channelIDs []string, since time.Time) (map[string]int, error)
 }) *storeUseCases {
 	return &storeUseCases{store: store}
 }
@@ -331,23 +339,34 @@ func (s *storeUseCases) ComputeAnalyticsOverview(now time.Time) (AnalyticsOvervi
 
 func computeAnalyticsOverview(store analyticsOverviewStore, now time.Time) (AnalyticsOverview, error) {
 	channels := store.ListChannels("", "")
+	channelIDs := make([]string, 0, len(channels))
+	for _, channel := range channels {
+		channelIDs = append(channelIDs, channel.ID)
+	}
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	windowStart := now.Add(-24 * time.Hour)
+	followersByChannel := store.CountFollowersByChannelIDs(channelIDs)
+	currentByChannel := store.CurrentStreamSessionsByChannelIDs(channelIDs)
+	sessionsByChannel, err := store.ListStreamSessionsByChannelIDs(channelIDs)
+	if err != nil {
+		return AnalyticsOverview{}, err
+	}
+	chatCountsByChannel, err := store.CountChatMessagesSinceByChannelIDs(channelIDs, startOfDay)
+	if err != nil {
+		return AnalyticsOverview{}, err
+	}
 	summary := AnalyticsSummary{}
 	perChannel := make([]AnalyticsChannelOverview, 0, len(channels))
 	for _, channel := range channels {
 		entry := AnalyticsChannelOverview{
 			ChannelID: channel.ID,
 			Title:     channel.Title,
-			Followers: store.CountFollowers(channel.ID),
+			Followers: followersByChannel[channel.ID],
 		}
-		if current, ok := store.CurrentStreamSession(channel.ID); ok {
+		if current, ok := currentByChannel[channel.ID]; ok {
 			entry.LiveViewers = current.PeakConcurrent
 		}
-		sessions, err := store.ListStreamSessions(channel.ID)
-		if err != nil {
-			return AnalyticsOverview{}, err
-		}
+		sessions := sessionsByChannel[channel.ID]
 		if len(sessions) > 0 {
 			totalMinutes := 0.0
 			for _, session := range sessions {
@@ -356,17 +375,7 @@ func computeAnalyticsOverview(store analyticsOverviewStore, now time.Time) (Anal
 			}
 			entry.AvgWatchMinutes = totalMinutes / float64(len(sessions))
 		}
-		messages, err := store.ListChatMessages(channel.ID, 0)
-		if err != nil {
-			return AnalyticsOverview{}, err
-		}
-		today := 0
-		for _, message := range messages {
-			if message.CreatedAt.Before(startOfDay) {
-				break
-			}
-			today++
-		}
+		today := chatCountsByChannel[channel.ID]
 		entry.ChatMessages = today
 		summary.ChatMessages += today
 		summary.LiveViewers += entry.LiveViewers

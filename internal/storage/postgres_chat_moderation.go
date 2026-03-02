@@ -211,6 +211,70 @@ func (r *postgresRepository) ListChatMessages(channelID string, limit int) ([]do
 	return messages, nil
 }
 
+// CountChatMessagesSinceByChannelIDs returns per-channel chat totals since the provided cutoff.
+func (r *postgresRepository) CountChatMessagesSinceByChannelIDs(channelIDs []string, since time.Time) (map[string]int, error) {
+	if r == nil || r.pool == nil {
+		return nil, ErrPostgresUnavailable
+	}
+	ctx, cancel := r.acquireContext()
+	defer cancel()
+
+	if err := r.purgeExpiredChatMessages(ctx, r.retentionTime()); err != nil {
+		return nil, fmt.Errorf("purge chat messages: %w", err)
+	}
+
+	counts := make(map[string]int, len(channelIDs))
+	for _, channelID := range channelIDs {
+		counts[channelID] = 0
+	}
+	if len(channelIDs) == 0 {
+		return counts, nil
+	}
+
+	found := make(map[string]struct{}, len(channelIDs))
+	rows, err := r.pool.Query(ctx, "SELECT id FROM channels WHERE id = ANY($1)", channelIDs)
+	if err != nil {
+		return nil, fmt.Errorf("check channels: %w", err)
+	}
+	for rows.Next() {
+		var channelID string
+		if err := rows.Scan(&channelID); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan channel id: %w", err)
+		}
+		found[channelID] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	for _, channelID := range channelIDs {
+		if _, ok := found[channelID]; !ok {
+			return nil, fmt.Errorf("channel %s not found", channelID)
+		}
+	}
+
+	aggRows, err := r.pool.Query(ctx, "SELECT channel_id, COUNT(*) FROM chat_messages WHERE channel_id = ANY($1) AND created_at >= $2 GROUP BY channel_id", channelIDs, since)
+	if err != nil {
+		return nil, fmt.Errorf("count chat messages: %w", err)
+	}
+	defer aggRows.Close()
+	for aggRows.Next() {
+		var channelID string
+		var count int
+		if err := aggRows.Scan(&channelID, &count); err != nil {
+			return nil, fmt.Errorf("scan chat count: %w", err)
+		}
+		counts[channelID] = count
+	}
+	if err := aggRows.Err(); err != nil {
+		return nil, err
+	}
+
+	return counts, nil
+}
+
 // purgeExpiredChatMessages executes purgeExpiredChatMessages.
 // Inputs: callers must prevalidate required IDs, ownership, and user-provided payload shape;
 // this function still normalizes/trims where needed and rejects empty required fields.

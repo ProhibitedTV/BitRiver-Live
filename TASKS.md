@@ -1059,3 +1059,35 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1 -run 'TestDirectory(RecommendedSortsByFollowers|ResponseUsesBulkUserProfileLookups)$'`
   - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1`
   - ⚠️ `./scripts/verify.sh` (docker-dependent checks skipped because docker is not installed in this environment)
+
+
+## Scoped change: analytics overview grouped fetch refactor
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Add grouped analytics accessors in usecase/store interfaces and storage implementations
+  - Acceptance criteria:
+    - Internal analytics store interface supports grouped followers/current sessions/recent sessions/chat-count lookups by channel ID.
+    - In-memory and postgres-backed storage compile with the new methods.
+
+- [x] Task 2 — Refactor `computeAnalyticsOverview` to use grouped maps in one pass
+  - Acceptance criteria:
+    - Prefetches grouped datasets once per request.
+    - Preserves all current calculations and per-channel sort tie-break order.
+
+- [x] Task 3 — Add regression coverage comparing legacy vs refactored outputs
+  - Acceptance criteria:
+    - Tests include representative multi-channel fixture coverage.
+    - Tests compare old/new compute outputs and keep contracts unchanged.
+
+### Execution log (analytics overview grouped fetch refactor)
+- ✅ Task 1 complete: added internal grouped analytics accessors for follower counts, current sessions, stream sessions, and chat message counts across service/store interfaces and both storage implementations.
+- ✅ Task 1 checks:
+  - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage -count=1`
+- ✅ Task 2 complete: refactored `computeAnalyticsOverview` to prefetch grouped maps and compute results in one pass while preserving existing summary math and sort tie-breakers.
+- ✅ Task 2 check:
+  - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/service -count=1`
+- ✅ Task 3 complete: added multi-channel regression test that compares legacy and refactored overview outputs for representative fixture data.
+- ✅ Task 3 checks:
+  - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/service -count=1`
+  - `./scripts/verify.sh`
