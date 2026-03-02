@@ -1,3 +1,29 @@
+## Scoped change: chat panel message derivation allocation cleanup
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Remove redundant normalized-message pass in ChatPanel memoization pipeline
+  - Acceptance criteria:
+    - `ChatPanel` computes sorted message entries in a single memoized pass without a separate `normalizedMessages` array.
+    - Sort/group output remains based on `message.sentAt` timestamps and retains existing grouping semantics.
+
+- [x] Task 2 — Run viewer ChatPanel tests and record outcomes
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- chatPanel.test.tsx` passes.
+
+- [x] Task 3 — Run required verification gate and record outcomes
+  - Acceptance criteria:
+    - `./scripts/verify.sh` is run and results are logged.
+
+### Execution log (chat panel message derivation allocation cleanup)
+- ✅ Task 1 complete: collapsed `normalizedMessages` + `sortedMessages` into a single memoized sorted-entry pass to remove one full-array allocation/memo layer per messages update while preserving sort keys and grouping inputs.
+- ✅ Task 2 checks:
+  - ⚠️ `cd web/viewer && npm run test -- chatPanel.test.tsx` (initially failed because `jest` was not installed before dependencies were restored)
+  - ✅ `cd web/viewer && npm ci`
+  - ✅ `cd web/viewer && npm run test -- chatPanel.test.tsx`
+- ✅ Task 3 checks:
+  - ✅ `./scripts/verify.sh` (passed; Docker-dependent checks skipped because Docker is not installed in this environment)
+
 ## Scoped change: directory follower-count single-pass cache
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

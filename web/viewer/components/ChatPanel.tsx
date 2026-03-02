@@ -76,18 +76,14 @@ export function ChatPanel({
     });
   };
 
-  const normalizedMessages = useMemo(
-    () =>
-      messages.map((message) => ({
-        message,
-        sentAtTs: new Date(message.sentAt).getTime()
-      })),
-    [messages]
-  );
-
   const sortedMessages = useMemo(() => {
-    return [...normalizedMessages].sort((a, b) => a.sentAtTs - b.sentAtTs);
-  }, [normalizedMessages]);
+    const entries = messages.map((message) => ({
+      message,
+      sentAtTs: new Date(message.sentAt).getTime()
+    }));
+    entries.sort((a, b) => a.sentAtTs - b.sentAtTs);
+    return entries;
+  }, [messages]);
 
   const groupedMessages = useMemo(() => {
     const groups: {
