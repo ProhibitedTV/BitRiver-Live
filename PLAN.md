@@ -630,3 +630,20 @@
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1 -run 'TestDirectory(RecommendedSortsByFollowers|ResponseUsesBulkUserProfileLookups)$'`
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/api -count=1`
+
+## Scope (current change)
+- Refactor `web/viewer/components/ChatPanel.tsx` so message normalization/sort ordering is handled when `applyMessages` updates state instead of per-render memo recomputation.
+- Preserve visible chat behavior: chronological ordering, user grouping by display-name fallback logic, and 2-minute merge window semantics.
+- Keep both polling replacement (`fetchChannelChat`) and optimistic append (`sendChatMessage`) paths producing identical message order while preserving `MAX_MESSAGES` truncation.
+
+## Assumptions
+- Polling payloads are usually monotonic by `sentAt`; we can short-circuit sort work when that invariant holds.
+- UI grouping should continue to operate on the same sorted message sequence and same user label derivation.
+
+## Risks
+- Incorrect monotonic detection could skip needed sorting and change ordering.
+- Moving timestamp parsing into update-time state handling could drift from prior behavior if not applied consistently across replace/append flows.
+
+## Test plan
+- `cd web/viewer && npm run test -- chatPanel.test.tsx`
+- `./scripts/verify.sh`

@@ -12,6 +12,11 @@ const MAX_CONSECUTIVE_FAILURES = 5;
 const MAX_MESSAGES = 500;
 const RETRY_MESSAGE = "Unable to load chat. We'll retry in a bit.";
 
+type ChatMessageEntry = {
+  message: ChatMessage;
+  sentAtTs: number;
+};
+
 export function ChatPanel({
   channelId,
   roomId,
@@ -22,7 +27,7 @@ export function ChatPanel({
   viewerCount?: number;
 }) {
   const { user, loading: authLoading, signIn } = useAuth();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messageEntries, setMessageEntries] = useState<ChatMessageEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
   const [content, setContent] = useState("");
@@ -66,24 +71,38 @@ export function ChatPanel({
   };
 
   const applyMessages = (incoming: ChatMessage[] | ChatMessage) => {
-    setMessages((prev) => {
-      const next = Array.isArray(incoming) ? incoming : [...prev, incoming];
-      if (next.length <= MAX_MESSAGES) {
-        return next;
+    setMessageEntries((prev) => {
+      const normalize = (message: ChatMessage): ChatMessageEntry => ({
+        message,
+        sentAtTs: new Date(message.sentAt).getTime()
+      });
+      const isMonotonic = (entries: ChatMessageEntry[]) => {
+        for (let index = 1; index < entries.length; index += 1) {
+          if (entries[index].sentAtTs < entries[index - 1].sentAtTs) {
+            return false;
+          }
+        }
+        return true;
+      };
+
+      const next = Array.isArray(incoming)
+        ? incoming.map(normalize)
+        : [...prev, normalize(incoming)];
+      const truncated =
+        next.length <= MAX_MESSAGES ? next : next.slice(next.length - MAX_MESSAGES);
+      if (truncated.length < 2) {
+        return truncated;
       }
-      // Keep only the most recent MAX_MESSAGES messages
-      return next.slice(next.length - MAX_MESSAGES);
+
+      const alreadyOrdered = Array.isArray(incoming)
+        ? isMonotonic(truncated)
+        : prev.length === 0 || prev[prev.length - 1].sentAtTs <= truncated[truncated.length - 1].sentAtTs;
+      if (alreadyOrdered) {
+        return truncated;
+      }
+      return [...truncated].sort((a, b) => a.sentAtTs - b.sentAtTs);
     });
   };
-
-  const sortedMessages = useMemo(() => {
-    const entries = messages.map((message) => ({
-      message,
-      sentAtTs: new Date(message.sentAt).getTime()
-    }));
-    entries.sort((a, b) => a.sentAtTs - b.sentAtTs);
-    return entries;
-  }, [messages]);
 
   const groupedMessages = useMemo(() => {
     const groups: {
@@ -94,7 +113,7 @@ export function ChatPanel({
       messages: { message: ChatMessage; sentAtTs: number }[];
     }[] = [];
     const TIME_DELTA_MS = 2 * 60 * 1000;
-    sortedMessages.forEach((entry) => {
+    messageEntries.forEach((entry) => {
       const { message, sentAtTs } = entry;
       const displayName =
         message.user?.displayName ?? message.user?.id ?? "Anonymous";
@@ -120,7 +139,7 @@ export function ChatPanel({
       }
     });
     return groups;
-  }, [sortedMessages]);
+  }, [messageEntries]);
 
   useEffect(() => {
     if (pausedForAuth) {
@@ -170,7 +189,7 @@ export function ChatPanel({
             shouldPoll = false;
             setPausedForAuth(true);
             setAuthRequired(true);
-            setMessages([]);
+            setMessageEntries([]);
             setError(undefined);
           } else {
             consecutiveFailures += 1;
@@ -386,7 +405,7 @@ export function ChatPanel({
               </span>
             )}
             <span className="pill pill--ghost">
-              {messages.length} messages
+              {messageEntries.length} messages
             </span>
           </div>
         </div>
@@ -447,7 +466,7 @@ export function ChatPanel({
               </div>
             </div>
           )}
-          {sortedMessages.length === 0 ? (
+          {messageEntries.length === 0 ? (
             <div className="chat-panel__empty surface">
               <p className="muted">
                 No messages yet. Be the first to say hello!

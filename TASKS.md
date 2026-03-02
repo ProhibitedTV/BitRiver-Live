@@ -1143,3 +1143,37 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 checks:
   - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/service -count=1`
   - `./scripts/verify.sh`
+
+## Scoped change: chat panel update-time message normalization/sort
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Refactor chat message state/apply pipeline to normalize once and maintain ordered entries
+  - Acceptance criteria:
+    - `applyMessages` computes/stores `sentAtTs` once per incoming message.
+    - Replacement and append paths preserve prior visible ordering while avoiding unconditional re-sort when incoming payload is already monotonic.
+    - `MAX_MESSAGES` truncation behavior remains unchanged.
+
+- [x] Task 2 — Keep grouped rendering semantics unchanged with updated message-entry state
+  - Acceptance criteria:
+    - Grouping still uses display-name fallback (`displayName` → `id` → `Anonymous`).
+    - Same-user 2-minute merge window behavior is unchanged.
+    - Rendered chat item order remains identical to previous behavior.
+
+- [x] Task 3 — Run scoped + required verification checks and record outcomes
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- chatPanel.test.tsx` passes.
+    - `./scripts/verify.sh` is run and results logged.
+
+
+### Execution log (chat panel update-time message normalization/sort)
+- ✅ Task 1 complete: moved message normalization into `applyMessages`, storing `{ message, sentAtTs }` entries in state and preserving existing `MAX_MESSAGES` truncation slice semantics before ordering checks.
+- ✅ Task 1 check:
+  - ✅ `cd web/viewer && npm run test -- chatPanel.test.tsx`
+- ✅ Task 2 complete: grouped rendering now consumes pre-normalized ordered entries while preserving display-name fallback and 2-minute same-user merge behavior.
+- ✅ Task 2 checks:
+  - ✅ `cd web/viewer && npm run test -- chatPanel.test.tsx`
+  - ⚠️ `cd web/viewer && npm run lint -- components/ChatPanel.tsx` (command failed because `next lint` expects app/pages discovery from project root arguments, not a direct file path)
+- ✅ Task 3 complete: ran full repository verification gate after chat panel refactor.
+- ✅ Task 3 check:
+  - ✅ `./scripts/verify.sh` (passed; Docker-dependent checks skipped because Docker is not installed in this environment)
