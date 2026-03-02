@@ -10,7 +10,9 @@ import (
 )
 
 type regexCacheStore struct {
-	filters []domain.ChatFilter
+	filters       []domain.ChatFilter
+	listCalls     int
+	listCallsByID map[string]int
 }
 
 func (s *regexCacheStore) GetChannel(string) (domain.Channel, bool) { return domain.Channel{}, false }
@@ -20,7 +22,14 @@ func (s *regexCacheStore) IsChatBanned(string, string) bool         { return fal
 func (s *regexCacheStore) ChatTimeout(string, string) (time.Time, bool) {
 	return time.Time{}, false
 }
-func (s *regexCacheStore) ListChatFilters(string) ([]domain.ChatFilter, error) { return s.filters, nil }
+func (s *regexCacheStore) ListChatFilters(channelID string) ([]domain.ChatFilter, error) {
+	s.listCalls++
+	if s.listCallsByID == nil {
+		s.listCallsByID = make(map[string]int)
+	}
+	s.listCallsByID[channelID]++
+	return append([]domain.ChatFilter(nil), s.filters...), nil
+}
 
 func TestGatewayMatchChatFilterRegexCacheReusesCompiledPattern(t *testing.T) {
 	store := &regexCacheStore{filters: []domain.ChatFilter{{
@@ -29,7 +38,7 @@ func TestGatewayMatchChatFilterRegexCacheReusesCompiledPattern(t *testing.T) {
 		Pattern: "(?i)spoiler",
 		Enabled: true,
 	}}}
-	gateway := NewGateway(GatewayConfig{Store: store})
+	gateway := NewGateway(GatewayConfig{Store: store, ChatFilterCacheTTL: time.Millisecond})
 
 	compileCalls := 0
 	gateway.regexCompile = func(pattern string) (*regexp.Regexp, error) {
@@ -65,7 +74,7 @@ func TestGatewayMatchChatFilterRegexCacheRecompilesWhenPatternChanges(t *testing
 		Pattern: "foo",
 		Enabled: true,
 	}}}
-	gateway := NewGateway(GatewayConfig{Store: store})
+	gateway := NewGateway(GatewayConfig{Store: store, ChatFilterCacheTTL: time.Millisecond})
 
 	compileCalls := 0
 	gateway.regexCompile = func(pattern string) (*regexp.Regexp, error) {
@@ -82,6 +91,8 @@ func TestGatewayMatchChatFilterRegexCacheRecompilesWhenPatternChanges(t *testing
 	}
 
 	store.filters[0].Pattern = "bar"
+	time.Sleep(2 * time.Millisecond)
+
 	second, err := gateway.matchChatFilter("channel-1", "hello bar")
 	if err != nil {
 		t.Fatalf("matchChatFilter second call: %v", err)
@@ -102,7 +113,7 @@ func TestGatewayMatchChatFilterRegexSkipsInvalidPattern(t *testing.T) {
 		Pattern: "(",
 		Enabled: true,
 	}}}
-	gateway := NewGateway(GatewayConfig{Store: store})
+	gateway := NewGateway(GatewayConfig{Store: store, ChatFilterCacheTTL: time.Millisecond})
 
 	compileCalls := 0
 	gateway.regexCompile = func(pattern string) (*regexp.Regexp, error) {
@@ -128,5 +139,68 @@ func TestGatewayMatchChatFilterRegexSkipsInvalidPattern(t *testing.T) {
 
 	if compileCalls != 2 {
 		t.Fatalf("expected invalid regex to compile each call (no cache insert), got %d", compileCalls)
+	}
+}
+
+func TestGatewayMatchChatFilterUsesListCacheWithinTTL(t *testing.T) {
+	store := &regexCacheStore{filters: []domain.ChatFilter{{
+		ID:      "filter-1",
+		Kind:    "word",
+		Pattern: "spoiler",
+		Enabled: true,
+	}}}
+	gateway := NewGateway(GatewayConfig{Store: store, ChatFilterCacheTTL: time.Second})
+
+	first, err := gateway.matchChatFilter("channel-1", "No spoilers please")
+	if err != nil {
+		t.Fatalf("matchChatFilter first call: %v", err)
+	}
+	if first == nil || first.ID != "filter-1" {
+		t.Fatalf("expected first word filter match, got %#v", first)
+	}
+
+	second, err := gateway.matchChatFilter("channel-1", "spoiler alert")
+	if err != nil {
+		t.Fatalf("matchChatFilter second call: %v", err)
+	}
+	if second == nil || second.ID != "filter-1" {
+		t.Fatalf("expected second word filter match, got %#v", second)
+	}
+
+	if store.listCallsByID["channel-1"] != 1 {
+		t.Fatalf("expected one ListChatFilters call within ttl, got %d", store.listCallsByID["channel-1"])
+	}
+}
+
+func TestGatewayMatchChatFilterRefreshesAfterTTLExpiry(t *testing.T) {
+	store := &regexCacheStore{filters: []domain.ChatFilter{{
+		ID:      "filter-1",
+		Kind:    "word",
+		Pattern: "foo",
+		Enabled: true,
+	}}}
+	gateway := NewGateway(GatewayConfig{Store: store, ChatFilterCacheTTL: time.Millisecond})
+
+	first, err := gateway.matchChatFilter("channel-1", "hello foo")
+	if err != nil {
+		t.Fatalf("matchChatFilter first call: %v", err)
+	}
+	if first == nil || first.ID != "filter-1" {
+		t.Fatalf("expected first filter match, got %#v", first)
+	}
+
+	store.filters[0].Pattern = "bar"
+	time.Sleep(2 * time.Millisecond)
+
+	second, err := gateway.matchChatFilter("channel-1", "hello bar")
+	if err != nil {
+		t.Fatalf("matchChatFilter second call: %v", err)
+	}
+	if second == nil || second.ID != "filter-1" {
+		t.Fatalf("expected refreshed filter match after ttl expiry, got %#v", second)
+	}
+
+	if store.listCallsByID["channel-1"] != 2 {
+		t.Fatalf("expected two ListChatFilters calls after ttl expiry, got %d", store.listCallsByID["channel-1"])
 	}
 }

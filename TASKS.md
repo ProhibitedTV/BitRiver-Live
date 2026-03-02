@@ -1,3 +1,42 @@
+## Scoped change: chat gateway per-channel filter cache
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Add per-channel chat-filter cache + TTL config in `internal/chat/gateway.go`
+  - Acceptance criteria:
+    - `GatewayConfig` exposes a chat-filter cache TTL with conservative default behavior.
+    - Gateway stores per-channel cache entries with fetch timestamp/version metadata.
+    - Cache reads/writes are protected for concurrent access.
+
+
+### Execution log (chat gateway per-channel filter cache)
+- ✅ Task 1 complete: added `GatewayConfig.ChatFilterCacheTTL` with conservative default, plus concurrency-safe per-channel cache entry scaffolding including fetch timestamp/version metadata in `Gateway`.
+- ✅ Task 1 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1`
+
+- [x] Task 2 — Wire cache-aware `matchChatFilter` refresh behavior
+  - Acceptance criteria:
+    - `matchChatFilter` uses fresh cached filters when available.
+    - Stale/missing cache entries trigger `ListChatFilters(channelID)` and refresh cached data.
+    - Functional matching behavior for word/regex filters remains unchanged.
+
+- ✅ Task 2 complete: `matchChatFilter` now reads per-channel cached filters when fresh and refreshes via `ListChatFilters(channelID)` when stale/missing.
+- ⚠️ Task 2 check:
+  - ❌ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1` (expected interim failure: existing regex pattern-change test assumed immediate refetch before TTL; adjusted in Task 3).
+
+- [x] Task 3 — Add tests for functional parity + TTL refresh behavior
+  - Acceptance criteria:
+    - Tests cover unchanged filter matching expectations.
+    - Tests verify store fetch reuse within TTL and refresh after TTL expiry.
+    - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1` passes and result is logged.
+
+- ✅ Task 3 complete: expanded gateway chat-filter tests to verify unchanged match behavior, cache reuse within TTL, and refresh behavior after TTL expiry.
+- ✅ Task 3 check:
+  - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1`
+
+- ✅ Final scoped verification:
+  - ✅ `./scripts/verify.sh` (passes; Docker-dependent checks skipped because Docker is unavailable in this environment).
+
 ## Scoped change: viewer past-broadcast terminology alignment
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

@@ -1,6 +1,27 @@
 # PLAN
 
 ## Scope (current change)
+- Add an internal per-channel chat-filter cache in `internal/chat/gateway.go` that stores fetched filters with freshness metadata (timestamp/version token).
+- Update `matchChatFilter` to prefer cached filters when fresh and fall back to `Store.ListChatFilters(channelID)` when stale/missing, refreshing cache entries after fetch.
+- Add a small configurable TTL to `GatewayConfig` with a conservative default so moderation behavior remains effectively real-time.
+- Ensure cache access is concurrency-safe for simultaneous chat message moderation checks.
+- Extend gateway chat-filter tests to prove matching behavior remains unchanged while validating cache reuse and refresh after TTL expiry.
+
+## Assumptions
+- Cache staleness is based on elapsed time since last fetch; callers should never observe errors hidden by stale cache refresh failures.
+- A conservative default TTL should be short enough (seconds) to avoid operator-visible moderation drift while still reducing repeated store calls.
+- Existing regex compilation cache behavior should remain unchanged and continue to be exercised by existing tests.
+
+## Risks
+- Overly long default TTL could delay newly added/disabled filter enforcement.
+- Cache synchronization bugs could cause data races or inconsistent filter snapshots under concurrent message creation.
+- Tests relying on real time can flake if TTL windows are too tight.
+
+## Test plan
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1`
+
+
+## Scope (current change)
 - Clarify Following surface summary counts by making labels explicit in `web/viewer/components/FollowingSidebar.tsx` and `web/viewer/components/FollowingRail.tsx`.
 - Decide and encode count semantics per surface (`followed creators` vs `live now`) based on existing data shown in each component.
 - Reuse shared copy constants from `web/viewer/components/following/FollowingState.tsx` for summary labels and state text to prevent wording drift.
