@@ -36,6 +36,17 @@ type GatewayConfig struct {
 	// HeartbeatInterval controls how often the gateway sends WebSocket ping
 	// frames to connected clients. A zero value disables heartbeats.
 	HeartbeatInterval time.Duration
+	// ChatFilterCacheTTL controls how long cached chat filters remain fresh.
+	// A zero value falls back to a conservative default.
+	ChatFilterCacheTTL time.Duration
+}
+
+const defaultChatFilterCacheTTL = 2 * time.Second
+
+type chatFilterCacheEntry struct {
+	filters   []domain.ChatFilter
+	fetchedAt time.Time
+	version   int64
 }
 
 // Gateway coordinates live chat fan-out, managing WebSocket clients and
@@ -55,6 +66,11 @@ type Gateway struct {
 	regexMu      sync.RWMutex
 	regexCache   map[string]*regexp.Regexp
 	regexCompile func(string) (*regexp.Regexp, error)
+
+	chatFilterCacheTTL time.Duration
+	filterCacheMu      sync.RWMutex
+	filterCache        map[string]chatFilterCacheEntry
+	filterCacheVersion int64
 }
 
 // NewGateway initialises a gateway using the provided configuration.
@@ -67,16 +83,22 @@ func NewGateway(cfg GatewayConfig) *Gateway {
 	if cfg.Store != nil {
 		snapshot = cfg.Store.ChatRestrictions().Copy()
 	}
+	cacheTTL := cfg.ChatFilterCacheTTL
+	if cacheTTL <= 0 {
+		cacheTTL = defaultChatFilterCacheTTL
+	}
 	return &Gateway{
-		queue:             cfg.Queue,
-		store:             cfg.Store,
-		logger:            logger,
-		heartbeatInterval: cfg.HeartbeatInterval,
-		rooms:             make(map[string]map[*client]struct{}),
-		bans:              snapshot.Bans,
-		timeouts:          snapshot.Timeouts,
-		regexCache:        make(map[string]*regexp.Regexp),
-		regexCompile:      regexp.Compile,
+		queue:              cfg.Queue,
+		store:              cfg.Store,
+		logger:             logger,
+		heartbeatInterval:  cfg.HeartbeatInterval,
+		chatFilterCacheTTL: cacheTTL,
+		rooms:              make(map[string]map[*client]struct{}),
+		bans:               snapshot.Bans,
+		timeouts:           snapshot.Timeouts,
+		regexCache:         make(map[string]*regexp.Regexp),
+		regexCompile:       regexp.Compile,
+		filterCache:        make(map[string]chatFilterCacheEntry),
 	}
 }
 
@@ -149,7 +171,7 @@ func (g *Gateway) CreateMessage(ctx context.Context, author domain.User, channel
 
 // matchChatFilter performs match chat filter and propagates validation or dependency failures to the caller.
 func (g *Gateway) matchChatFilter(channelID, content string) (*domain.ChatFilter, error) {
-	filters, err := g.store.ListChatFilters(channelID)
+	filters, err := g.chatFiltersForChannel(channelID)
 	if err != nil {
 		return nil, err
 	}
@@ -185,6 +207,42 @@ func (g *Gateway) matchChatFilter(channelID, content string) (*domain.ChatFilter
 		}
 	}
 	return nil, nil
+}
+
+func (g *Gateway) chatFiltersForChannel(channelID string) ([]domain.ChatFilter, error) {
+	if filters, ok := g.cachedChatFilters(channelID, time.Now().UTC()); ok {
+		return filters, nil
+	}
+
+	fetched, err := g.store.ListChatFilters(channelID)
+	if err != nil {
+		return nil, err
+	}
+
+	fetchedAt := time.Now().UTC()
+	g.filterCacheMu.Lock()
+	g.filterCacheVersion++
+	g.filterCache[channelID] = chatFilterCacheEntry{
+		filters:   append([]domain.ChatFilter(nil), fetched...),
+		fetchedAt: fetchedAt,
+		version:   g.filterCacheVersion,
+	}
+	g.filterCacheMu.Unlock()
+
+	return fetched, nil
+}
+
+func (g *Gateway) cachedChatFilters(channelID string, now time.Time) ([]domain.ChatFilter, bool) {
+	g.filterCacheMu.RLock()
+	entry, ok := g.filterCache[channelID]
+	g.filterCacheMu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+	if now.Sub(entry.fetchedAt) > g.chatFilterCacheTTL {
+		return nil, false
+	}
+	return append([]domain.ChatFilter(nil), entry.filters...), true
 }
 
 func (g *Gateway) compiledRegex(filterID, pattern string) (*regexp.Regexp, error) {
