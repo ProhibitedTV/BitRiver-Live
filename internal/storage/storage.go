@@ -959,6 +959,31 @@ func (s *Storage) CountFollowers(channelID string) int {
 	return count
 }
 
+// CountFollowersByChannelIDs returns follower totals for each requested channel.
+func (s *Storage) CountFollowersByChannelIDs(channelIDs []string) map[string]int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	channelSet := make(map[string]struct{}, len(channelIDs))
+	counts := make(map[string]int, len(channelIDs))
+	for _, channelID := range channelIDs {
+		channelSet[channelID] = struct{}{}
+		counts[channelID] = 0
+	}
+
+	for _, follows := range s.data.Follows {
+		if follows == nil {
+			continue
+		}
+		for channelID := range follows {
+			if _, ok := channelSet[channelID]; ok {
+				counts[channelID]++
+			}
+		}
+	}
+	return counts
+}
+
 // ListFollowedChannelIDs returns the identifiers of channels the user follows ordered by recency.
 func (s *Storage) ListFollowedChannelIDs(userID string) []string {
 	s.mu.RLock()
@@ -1253,6 +1278,38 @@ func (s *Storage) ListStreamSessions(channelID string) ([]domain.StreamSession, 
 	return sessions, nil
 }
 
+// ListStreamSessionsByChannelIDs returns stream sessions grouped by channel.
+func (s *Storage) ListStreamSessionsByChannelIDs(channelIDs []string) (map[string][]domain.StreamSession, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	channelSet := make(map[string]struct{}, len(channelIDs))
+	grouped := make(map[string][]domain.StreamSession, len(channelIDs))
+	for _, channelID := range channelIDs {
+		if _, ok := s.data.Channels[channelID]; !ok {
+			return nil, fmt.Errorf("channel %s not found", channelID)
+		}
+		channelSet[channelID] = struct{}{}
+		grouped[channelID] = []domain.StreamSession{}
+	}
+
+	for _, session := range s.data.StreamSessions {
+		if _, ok := channelSet[session.ChannelID]; ok {
+			grouped[session.ChannelID] = append(grouped[session.ChannelID], session)
+		}
+	}
+
+	for channelID := range grouped {
+		sessions := grouped[channelID]
+		sort.Slice(sessions, func(i, j int) bool {
+			return sessions[i].StartedAt.After(sessions[j].StartedAt)
+		})
+		grouped[channelID] = sessions
+	}
+
+	return grouped, nil
+}
+
 // CurrentStreamSession returns the active stream session for the channel if present.
 func (s *Storage) CurrentStreamSession(channelID string) (domain.StreamSession, bool) {
 	s.mu.RLock()
@@ -1267,6 +1324,26 @@ func (s *Storage) CurrentStreamSession(channelID string) (domain.StreamSession, 
 		return domain.StreamSession{}, false
 	}
 	return session, true
+}
+
+// CurrentStreamSessionsByChannelIDs returns active sessions keyed by channel.
+func (s *Storage) CurrentStreamSessionsByChannelIDs(channelIDs []string) map[string]domain.StreamSession {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	grouped := make(map[string]domain.StreamSession, len(channelIDs))
+	for _, channelID := range channelIDs {
+		channel, ok := s.data.Channels[channelID]
+		if !ok || channel.CurrentSessionID == nil {
+			continue
+		}
+		session, exists := s.data.StreamSessions[*channel.CurrentSessionID]
+		if !exists {
+			continue
+		}
+		grouped[channelID] = session
+	}
+	return grouped
 }
 
 // IngestHealth reports the status of configured ingest dependencies.

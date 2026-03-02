@@ -1,6 +1,8 @@
 package service
 
 import (
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,27 +22,107 @@ func (s analyticsStoreStub) ListChannels(_, _ string) []domain.Channel {
 	return append([]domain.Channel(nil), s.channels...)
 }
 
-func (s analyticsStoreStub) CountFollowers(channelID string) int {
-	return s.followerCounts[channelID]
+func (s analyticsStoreStub) CountFollowersByChannelIDs(channelIDs []string) map[string]int {
+	counts := make(map[string]int, len(channelIDs))
+	for _, channelID := range channelIDs {
+		counts[channelID] = s.followerCounts[channelID]
+	}
+	return counts
 }
 
-func (s analyticsStoreStub) CurrentStreamSession(channelID string) (domain.StreamSession, bool) {
-	session, ok := s.current[channelID]
-	return session, ok
+func (s analyticsStoreStub) CurrentStreamSessionsByChannelIDs(channelIDs []string) map[string]domain.StreamSession {
+	grouped := make(map[string]domain.StreamSession)
+	for _, channelID := range channelIDs {
+		if session, ok := s.current[channelID]; ok {
+			grouped[channelID] = session
+		}
+	}
+	return grouped
 }
 
-func (s analyticsStoreStub) ListStreamSessions(channelID string) ([]domain.StreamSession, error) {
-	sessions := s.sessions[channelID]
-	clones := make([]domain.StreamSession, len(sessions))
-	copy(clones, sessions)
-	return clones, nil
+func (s analyticsStoreStub) ListStreamSessionsByChannelIDs(channelIDs []string) (map[string][]domain.StreamSession, error) {
+	grouped := make(map[string][]domain.StreamSession, len(channelIDs))
+	for _, channelID := range channelIDs {
+		sessions := s.sessions[channelID]
+		clones := make([]domain.StreamSession, len(sessions))
+		copy(clones, sessions)
+		grouped[channelID] = clones
+	}
+	return grouped, nil
 }
 
-func (s analyticsStoreStub) ListChatMessages(channelID string, _ int) ([]domain.ChatMessage, error) {
-	messages := s.chatMessages[channelID]
-	clones := make([]domain.ChatMessage, len(messages))
-	copy(clones, messages)
-	return clones, nil
+func (s analyticsStoreStub) CountChatMessagesSinceByChannelIDs(channelIDs []string, since time.Time) (map[string]int, error) {
+	counts := make(map[string]int, len(channelIDs))
+	for _, channelID := range channelIDs {
+		total := 0
+		for _, message := range s.chatMessages[channelID] {
+			if !message.CreatedAt.Before(since) {
+				total++
+			}
+		}
+		counts[channelID] = total
+	}
+	return counts, nil
+}
+
+func computeAnalyticsOverviewLegacy(store analyticsStoreStub, now time.Time) (AnalyticsOverview, error) {
+	channels := store.ListChannels("", "")
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	windowStart := now.Add(-24 * time.Hour)
+	summary := AnalyticsSummary{}
+	perChannel := make([]AnalyticsChannelOverview, 0, len(channels))
+	for _, channel := range channels {
+		entry := AnalyticsChannelOverview{ChannelID: channel.ID, Title: channel.Title, Followers: store.followerCounts[channel.ID]}
+		if current, ok := store.current[channel.ID]; ok {
+			entry.LiveViewers = current.PeakConcurrent
+		}
+		sessions := store.sessions[channel.ID]
+		if len(sessions) > 0 {
+			totalMinutes := 0.0
+			for _, session := range sessions {
+				totalMinutes += sessionDurationMinutes(session, now)
+				summary.WatchTimeMinutes += streamWatchOverlapMinutes(session, windowStart, now)
+			}
+			entry.AvgWatchMinutes = totalMinutes / float64(len(sessions))
+		}
+		today := 0
+		for _, message := range store.chatMessages[channel.ID] {
+			if message.CreatedAt.Before(startOfDay) {
+				break
+			}
+			today++
+		}
+		entry.ChatMessages = today
+		summary.ChatMessages += today
+		summary.LiveViewers += entry.LiveViewers
+		perChannel = append(perChannel, entry)
+	}
+	streamsLive := int(metrics.Default().ActiveStreams())
+	if streamsLive <= 0 {
+		count := 0
+		for _, channel := range channels {
+			state := strings.ToLower(strings.TrimSpace(channel.LiveState))
+			if state == "live" || state == "starting" {
+				count++
+			}
+		}
+		streamsLive = count
+	}
+	summary.StreamsLive = streamsLive
+	sort.Slice(perChannel, func(i, j int) bool {
+		if perChannel[i].LiveViewers != perChannel[j].LiveViewers {
+			return perChannel[i].LiveViewers > perChannel[j].LiveViewers
+		}
+		if perChannel[i].Followers != perChannel[j].Followers {
+			return perChannel[i].Followers > perChannel[j].Followers
+		}
+		return perChannel[i].Title < perChannel[j].Title
+	})
+	resp := AnalyticsOverview{PerChannel: perChannel}
+	if len(perChannel) > 0 || summary.LiveViewers > 0 || summary.StreamsLive > 0 || summary.WatchTimeMinutes > 0 || summary.ChatMessages > 0 {
+		resp.Summary = &summary
+	}
+	return resp, nil
 }
 
 func TestComputeAnalyticsOverviewStreamWindows(t *testing.T) {
@@ -131,4 +213,79 @@ func TestComputeAnalyticsOverviewStreamsLiveFallback(t *testing.T) {
 	if overview.Summary.StreamsLive != 2 {
 		t.Fatalf("expected streams live fallback 2, got %d", overview.Summary.StreamsLive)
 	}
+}
+
+func TestComputeAnalyticsOverviewMatchesLegacyMultiChannelFixture(t *testing.T) {
+	originalMetrics := metrics.Default()
+	metrics.SetDefault(metrics.New())
+	t.Cleanup(func() { metrics.SetDefault(originalMetrics) })
+
+	now := time.Date(2024, time.March, 20, 18, 0, 0, 0, time.UTC)
+	toPtr := func(ts time.Time) *time.Time { return &ts }
+	fixture := analyticsStoreStub{
+		channels: []domain.Channel{
+			{ID: "ch-1", Title: "Alpha", LiveState: "live"},
+			{ID: "ch-2", Title: "Beta", LiveState: " offline "},
+			{ID: "ch-3", Title: "Gamma", LiveState: "starting"},
+		},
+		followerCounts: map[string]int{"ch-1": 7, "ch-2": 7, "ch-3": 2},
+		current: map[string]domain.StreamSession{
+			"ch-1": {ID: "cur-1", ChannelID: "ch-1", PeakConcurrent: 22, StartedAt: now.Add(-45 * time.Minute)},
+			"ch-3": {ID: "cur-3", ChannelID: "ch-3", PeakConcurrent: 22, StartedAt: now.Add(-30 * time.Minute)},
+		},
+		sessions: map[string][]domain.StreamSession{
+			"ch-1": {
+				{ID: "s-1", ChannelID: "ch-1", StartedAt: now.Add(-3 * time.Hour), EndedAt: toPtr(now.Add(-2 * time.Hour))},
+				{ID: "s-2", ChannelID: "ch-1", StartedAt: now.Add(-90 * time.Minute)},
+			},
+			"ch-2": {
+				{ID: "s-3", ChannelID: "ch-2", StartedAt: now.Add(-30 * time.Hour), EndedAt: toPtr(now.Add(-28 * time.Hour))},
+			},
+			"ch-3": {},
+		},
+		chatMessages: map[string][]domain.ChatMessage{
+			"ch-1": {
+				{ID: "m-1", ChannelID: "ch-1", CreatedAt: now.Add(-1 * time.Hour)},
+				{ID: "m-2", ChannelID: "ch-1", CreatedAt: now.Add(-2 * time.Hour)},
+				{ID: "m-3", ChannelID: "ch-1", CreatedAt: now.Add(-30 * time.Hour)},
+			},
+			"ch-2": {
+				{ID: "m-4", ChannelID: "ch-2", CreatedAt: now.Add(-10 * time.Minute)},
+			},
+			"ch-3": {
+				{ID: "m-5", ChannelID: "ch-3", CreatedAt: now.Add(-2 * time.Hour)},
+			},
+		},
+	}
+
+	legacy, err := computeAnalyticsOverviewLegacy(fixture, now)
+	if err != nil {
+		t.Fatalf("computeAnalyticsOverviewLegacy returned error: %v", err)
+	}
+	current, err := computeAnalyticsOverview(fixture, now)
+	if err != nil {
+		t.Fatalf("computeAnalyticsOverview returned error: %v", err)
+	}
+
+	if !analyticsOverviewEqual(legacy, current) {
+		t.Fatalf("expected refactored overview to match legacy output\nlegacy: %#v\ncurrent: %#v", legacy, current)
+	}
+}
+
+func analyticsOverviewEqual(left, right AnalyticsOverview) bool {
+	if (left.Summary == nil) != (right.Summary == nil) {
+		return false
+	}
+	if left.Summary != nil && *left.Summary != *right.Summary {
+		return false
+	}
+	if len(left.PerChannel) != len(right.PerChannel) {
+		return false
+	}
+	for i := range left.PerChannel {
+		if left.PerChannel[i] != right.PerChannel[i] {
+			return false
+		}
+	}
+	return true
 }

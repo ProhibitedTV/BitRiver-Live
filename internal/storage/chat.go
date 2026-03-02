@@ -579,6 +579,45 @@ func (s *Storage) ListChatMessages(channelID string, limit int) ([]domain.ChatMe
 	return messages, nil
 }
 
+// CountChatMessagesSinceByChannelIDs returns per-channel chat message counts since cutoff.
+func (s *Storage) CountChatMessagesSinceByChannelIDs(channelIDs []string, since time.Time) (map[string]int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := s.retentionTime()
+	removed, snapshot, err := s.purgeExpiredChatMessagesLocked(now)
+	if err != nil {
+		return nil, err
+	}
+	if removed {
+		if err := s.persist(); err != nil {
+			s.data = snapshot
+			return nil, err
+		}
+	}
+
+	channelSet := make(map[string]struct{}, len(channelIDs))
+	counts := make(map[string]int, len(channelIDs))
+	for _, channelID := range channelIDs {
+		if _, ok := s.data.Channels[channelID]; !ok {
+			return nil, fmt.Errorf("channel %s not found", channelID)
+		}
+		channelSet[channelID] = struct{}{}
+		counts[channelID] = 0
+	}
+
+	for _, message := range s.data.ChatMessages {
+		if message.CreatedAt.Before(since) {
+			continue
+		}
+		if _, ok := channelSet[message.ChannelID]; ok {
+			counts[message.ChannelID]++
+		}
+	}
+
+	return counts, nil
+}
+
 // DeleteChatMessage removes a single chat message from the transcript.
 func (s *Storage) DeleteChatMessage(channelID, messageID string) error {
 	s.mu.Lock()
