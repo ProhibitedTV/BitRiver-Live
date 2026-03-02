@@ -1,3 +1,28 @@
+## Scoped change: upload manager sorted-items memo split
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Split list derivation into `sortedItems` + filter-only `visibleItems` in `web/viewer/components/UploadManager.tsx`
+  - Acceptance criteria:
+    - `sortedItems` is defined with `useMemo(() => [...items].sort(compareUploadsForMonitoring), [items])`.
+    - `visibleItems` depends on `sortedItems`, `listFilter`, and `searchTerm`.
+    - Existing `active`/`ready`/`failed` filtering and case-insensitive title/filename matching semantics remain unchanged.
+
+- [x] Task 2 — Run targeted viewer upload-manager tests and record result
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- uploadManager.test.tsx` passes and is logged.
+
+
+### Execution log (upload manager sorted-items memo split)
+- ✅ Task 1 complete: extracted `sortedItems` memo keyed only on `items` and updated `visibleItems` to filter/search over `sortedItems` while preserving existing filter/search semantics.
+- ✅ Task 1 check:
+  - ✅ `rg -n "const sortedItems|const visibleItems|normalizedSearch" web/viewer/components/UploadManager.tsx`
+- ✅ Task 2 check:
+  - ✅ `cd web/viewer && npm run test -- uploadManager.test.tsx`
+
+- ✅ Final scoped verification:
+  - ✅ `./scripts/verify.sh`
+
 ## Scoped change: chat gateway per-channel filter cache
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
