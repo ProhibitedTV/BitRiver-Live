@@ -1,3 +1,30 @@
+## Scoped change: directory page suspense data boundary refactor
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Move directory/home awaits into an async `DirectoryDataBoundary` within the Suspense subtree
+  - Acceptance criteria:
+    - `DirectoryPage` only normalizes query and renders `Suspense` + `DirectoryPageFallback` + `DirectoryDataBoundary`.
+    - `DirectoryDataBoundary` performs `loadHomeData()` + `loadDirectoryData(query)` and renders `DirectoryPageContent`.
+    - Existing `mapDirectoryError` and `emptyHomeData` behavior remains intact.
+
+- [x] Task 2 — Add/adjust directory page unit test coverage for pending fallback behavior
+  - Acceptance criteria:
+    - Tests cover loading fallback UI while boundary data promises are unresolved.
+    - Existing directory success/error/auth behavior assertions continue to pass.
+
+- [x] Task 3 — Run scoped viewer tests and full verify gate
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- directoryPage.test.tsx` passes.
+    - `./scripts/verify.sh` is run and results are recorded.
+
+### Execution log (directory page suspense data boundary refactor)
+- ✅ Task 1 complete: refactored `DirectoryPage` to normalize query only and render a suspense shell with async `DirectoryDataBoundary` fetching `loadHomeData()` + `loadDirectoryData(query)` inside the suspended subtree while preserving `mapDirectoryError` and `emptyHomeData` behavior.
+- ✅ Task 2 complete: updated directory page tests to render resolved boundary content via `DirectoryPageShell`/`DirectoryDataBoundary`, added coverage asserting the lightweight shell query normalization, and added a pending-child suspense fallback assertion.
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- directoryPage.test.tsx`
+  - ✅ `./scripts/verify.sh` (passed; Docker-dependent checks skipped because Docker is not installed in this environment)
+
 ## Scoped change: following hook reload no-op state guard
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

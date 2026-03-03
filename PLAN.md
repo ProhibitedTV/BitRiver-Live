@@ -1,4 +1,23 @@
 ## Scope (current change)
+- Refactor `web/viewer/app/page.tsx` so `Suspense` wraps a child async server boundary that performs data loading inside the suspended subtree.
+- Keep `DirectoryPage` lightweight by normalizing `searchParams.q` and rendering `<Suspense fallback={<DirectoryPageFallback .../>}>` with a dedicated `DirectoryDataBoundary` child.
+- Preserve existing `mapDirectoryError` mapping and `emptyHomeData` fallback semantics while moving home/directory awaits into the boundary component.
+- Add/adjust viewer unit coverage to assert fallback loading UI appears while the boundary promise is pending.
+
+## Assumptions
+- Existing directory/home fetch helper behavior and API call patterns remain unchanged; only the async boundary placement is refactored.
+- Rendering fallback assertions can be validated in Jest by forcing unresolved fetch promises during initial render.
+- No deployment contract/docs updates are needed because this is viewer rendering-structure work only.
+
+## Risks
+- Async server component testing in Jest can be brittle if fallback timing is not controlled.
+- Refactor could accidentally bypass existing error/empty-state mapping if helper return paths drift.
+
+## Test plan
+- `cd web/viewer && npm run test -- directoryPage.test.tsx`
+- `./scripts/verify.sh`
+
+## Scope (current change)
 - Update `web/viewer/components/following/useFollowingChannels.ts` reload behavior so interval refreshes do not force transient `"loading"` state or clear errors when values are unchanged.
 - Preserve auth gates and existing unauthenticated/empty/error semantics while reducing no-op state writes.
 - Avoid no-op channel state updates when fetched channel IDs/order/length are unchanged.
