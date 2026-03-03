@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent, MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { FormEvent, MouseEvent as ReactMouseEvent, RefObject } from "react";
 import type { CryptoAddress } from "../lib/viewer-api";
 import { createTip } from "../lib/viewer-api";
 
@@ -12,6 +12,7 @@ export type TipDrawerProps = {
   donationAddresses: CryptoAddress[];
   onClose: () => void;
   onSuccess: (statusMessage: string) => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 };
 
 const CUSTOM_CURRENCY_OPTION = "__custom__";
@@ -22,7 +23,8 @@ export function TipDrawer({
   channelTitle,
   donationAddresses,
   onClose,
-  onSuccess
+  onSuccess,
+  returnFocusRef
 }: TipDrawerProps) {
   const currencyOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -51,6 +53,11 @@ export function TipDrawer({
 
   const drawerRef = useRef<HTMLElement | null>(null);
   const firstFieldRef = useRef<HTMLInputElement | null>(null);
+
+  const closeDrawer = useCallback(() => {
+    onClose();
+    returnFocusRef?.current?.focus({ preventScroll: true });
+  }, [onClose, returnFocusRef]);
 
   const currentCurrency =
     currencySelection === CUSTOM_CURRENCY_OPTION
@@ -98,12 +105,12 @@ export function TipDrawer({
     }
     const handler = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onClose();
+        closeDrawer();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
+  }, [open, closeDrawer]);
 
   useEffect(() => {
     if (!open) {
@@ -170,9 +177,10 @@ export function TipDrawer({
     return () => drawerElement.removeEventListener("keydown", handleKeyDown);
   }, [open]);
 
+
   const handleBackdropClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (event.target === event.currentTarget) {
-      onClose();
+      closeDrawer();
     }
   };
 
@@ -204,6 +212,7 @@ export function TipDrawer({
         message: message.trim() ? message.trim() : undefined
       });
       onSuccess(`Thanks for supporting ${channelTitle}!`);
+      returnFocusRef?.current?.focus({ preventScroll: true });
     } catch (err) {
       const fallback = "Unable to send the tip right now. Try again in a moment.";
       setError(err instanceof Error ? err.message || fallback : fallback);
@@ -230,7 +239,7 @@ export function TipDrawer({
             <p className="muted">Support {channelTitle}</p>
             <h2 id="tip-drawer-title">Send a tip</h2>
           </div>
-          <button type="button" className="tip-drawer__close" onClick={onClose} aria-label="Close tip form">
+          <button type="button" className="tip-drawer__close" onClick={closeDrawer} aria-label="Close tip form">
             ×
           </button>
         </header>
@@ -340,7 +349,7 @@ export function TipDrawer({
             <button type="submit" className="primary-button" disabled={submitting}>
               {submitting ? "Sending…" : "Send tip"}
             </button>
-            <button type="button" className="secondary-button" onClick={onClose} disabled={submitting}>
+            <button type="button" className="secondary-button" onClick={closeDrawer} disabled={submitting}>
               Cancel
             </button>
           </div>

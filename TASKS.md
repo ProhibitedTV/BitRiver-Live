@@ -1270,3 +1270,28 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 checks:
   - ✅ `cd web/viewer && npm run test -- navbar.test.tsx`
   - ✅ `./scripts/verify.sh` (passed; Docker-dependent checks skipped because Docker is not installed in this environment)
+
+## Scoped change: tip drawer focus return on close
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Wire focus-return refs through ChannelHero and TipDrawer close flow
+  - Acceptance criteria:
+    - `ChannelHero` stores a ref for the “Send a tip” trigger and passes it to `TipDrawer` via a new optional prop.
+    - `TipDrawer` centralizes close handling so all close actions (`Escape`, backdrop, close button, cancel button) invoke focus restoration before/when closing.
+    - Successful submit path also closes and restores focus to the trigger.
+
+- [x] Task 2 — Add/extend tests for focus restoration
+  - Acceptance criteria:
+    - Viewer tests assert focus returns to the trigger after drawer close (including successful submit and at least one direct close action).
+
+- [x] Task 3 — Run targeted viewer tests and capture results
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- tipDrawer.test.tsx channelHero.test.tsx` passes and result is logged in this section.
+
+### Execution log (tip drawer focus return on close)
+
+- ✅ Task 1 complete: added a `Send a tip` trigger ref in `ChannelHero`, threaded optional `returnFocusRef` into `TipDrawer`, and unified close handlers so Escape/backdrop/close/cancel return focus to the trigger while successful submit restores focus after success callback.
+- ✅ Task 2 complete: extended `tipDrawer.test.tsx` to verify focus restoration across Escape, backdrop, close button, cancel button, and successful submit; also added a `ChannelHero` integration assertion for focus return on Escape close.
+- ✅ Task 3 check:
+  - ✅ `cd web/viewer && npm run test -- tipDrawer.test.tsx channelHero.test.tsx`

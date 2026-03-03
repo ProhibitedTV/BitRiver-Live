@@ -1,10 +1,35 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useRef, useState } from "react";
 import { viewerApiMocks } from "../test/test-utils";
 import { TipDrawer } from "../components/TipDrawer";
 import type { CryptoAddress } from "../lib/viewer-api";
 
 const createTipMock = viewerApiMocks.createTip;
+
+const donationAddresses: CryptoAddress[] = [{ currency: "btc", address: "bc1-test-address" }];
+
+function TipDrawerHarness() {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} ref={triggerRef}>
+        Open tip drawer
+      </button>
+      <TipDrawer
+        open={open}
+        channelId="chan-123"
+        channelTitle="Lo-fi Beats"
+        donationAddresses={donationAddresses}
+        onClose={() => setOpen(false)}
+        onSuccess={() => setOpen(false)}
+        returnFocusRef={triggerRef}
+      />
+    </>
+  );
+}
 
 describe("TipDrawer", () => {
   beforeEach(() => {
@@ -12,10 +37,6 @@ describe("TipDrawer", () => {
   });
 
   test("submits fractional tip amounts", async () => {
-    const donationAddresses: CryptoAddress[] = [
-      { currency: "btc", address: "bc1-test-address" }
-    ];
-
     createTipMock.mockResolvedValue({} as any);
 
     const handleClose = jest.fn();
@@ -50,5 +71,54 @@ describe("TipDrawer", () => {
         expect.objectContaining({ amount: 0.0005 })
       );
     });
+  });
+
+  test("returns focus to trigger for escape, backdrop, close, and cancel", async () => {
+    const user = userEvent.setup();
+    render(<TipDrawerHarness />);
+
+    const trigger = screen.getByRole("button", { name: /open tip drawer/i });
+
+    await user.click(trigger);
+    await screen.findByRole("dialog", { name: /send a tip/i });
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /send a tip/i })).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+
+    await user.click(trigger);
+    const dialogForBackdrop = await screen.findByRole("dialog", { name: /send a tip/i });
+    fireEvent.click(dialogForBackdrop.parentElement as HTMLElement);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /send a tip/i })).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+
+    await user.click(trigger);
+    const dialogForClose = await screen.findByRole("dialog", { name: /send a tip/i });
+    await user.click(within(dialogForClose).getByRole("button", { name: /close tip form/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /send a tip/i })).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+
+    await user.click(trigger);
+    const dialogForCancel = await screen.findByRole("dialog", { name: /send a tip/i });
+    await user.click(within(dialogForCancel).getByRole("button", { name: /cancel/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /send a tip/i })).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+  });
+
+  test("returns focus to trigger after successful submit", async () => {
+    createTipMock.mockResolvedValue({} as any);
+
+    const user = userEvent.setup();
+    render(<TipDrawerHarness />);
+
+    const trigger = screen.getByRole("button", { name: /open tip drawer/i });
+    await user.click(trigger);
+
+    const dialog = await screen.findByRole("dialog", { name: /send a tip/i });
+    await user.type(within(dialog).getByLabelText(/amount/i), "0.5");
+    await user.type(within(dialog).getByLabelText(/wallet reference/i), "hash-1");
+    await user.click(within(dialog).getByRole("button", { name: /send tip/i }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /send a tip/i })).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
   });
 });
