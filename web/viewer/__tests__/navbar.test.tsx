@@ -52,12 +52,11 @@ describe("Navbar", () => {
         Object.defineProperty(window, "location", { configurable: true, value: originalLocation }),
     };
   };
-
-  beforeAll(() => {
+  const setMatchMedia = (resolver: (query: string) => boolean) => {
     Object.defineProperty(window, "matchMedia", {
       writable: true,
       value: jest.fn().mockImplementation((query: string) => ({
-        matches: false,
+        matches: resolver(query),
         media: query,
         onchange: null,
         addListener: jest.fn(),
@@ -67,10 +66,15 @@ describe("Navbar", () => {
         dispatchEvent: jest.fn(),
       })),
     });
+  };
+
+  beforeAll(() => {
+    setMatchMedia(() => false);
   });
 
   beforeEach(() => {
     jest.clearAllMocks();
+    setMatchMedia(() => false);
     resetRouterMocks();
     fetchManagedChannelsMock.mockResolvedValue([]);
   });
@@ -254,6 +258,64 @@ describe("Navbar", () => {
     ["Home", "Following", "Browse"].forEach((label) => {
       expect(drawer.getAllByRole("link", { name: new RegExp(label, "i") })).toHaveLength(1);
     });
+  });
+
+  test("traps Tab and Shift+Tab focus within the open mobile drawer", async () => {
+    mockAnonymousUser();
+    setMatchMedia((query) => query === "(max-width: 800px)");
+    const user = userEvent.setup();
+
+    renderWithProviders(<Navbar />);
+
+    const toggleButton = screen.getByRole("button", { name: /open navigation menu/i });
+    await act(async () => {
+      await user.click(toggleButton);
+    });
+
+    const drawer = document.getElementById("viewer-nav-menu");
+    expect(drawer).toHaveAttribute("role", "dialog");
+    expect(drawer).toHaveAttribute("aria-modal", "true");
+
+    const focusable = drawer?.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    const first = focusable?.item(0);
+    const last = focusable?.item((focusable?.length ?? 1) - 1);
+    expect(first).toHaveFocus();
+
+    last?.focus();
+    await act(async () => {
+      await user.keyboard("{Tab}");
+    });
+    expect(first).toHaveFocus();
+
+    first?.focus();
+    await act(async () => {
+      await user.keyboard("{Shift>}{Tab}{/Shift}");
+    });
+    expect(last).toHaveFocus();
+  });
+
+  test("restores focus to menu toggle after closing mobile drawer", async () => {
+    mockAnonymousUser();
+    setMatchMedia((query) => query === "(max-width: 800px)");
+    const user = userEvent.setup();
+
+    renderWithProviders(<Navbar />);
+
+    const toggleButton = screen.getByRole("button", { name: /open navigation menu/i });
+    await act(async () => {
+      await user.click(toggleButton);
+    });
+
+    const closeBackdrop = document.querySelector<HTMLButtonElement>(".nav-drawer-backdrop");
+    expect(closeBackdrop).not.toBeNull();
+    await act(async () => {
+      await user.click(closeBackdrop!);
+    });
+
+    expect(toggleButton).toHaveFocus();
+    expect(toggleButton).toHaveAttribute("aria-expanded", "false");
   });
 
 
