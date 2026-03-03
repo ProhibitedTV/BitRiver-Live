@@ -723,3 +723,21 @@
 ## Test plan
 - `cd web/viewer && npm run test -- navbar.test.tsx`
 - `./scripts/verify.sh`
+
+## Scope (current change)
+- Align directory search submit copy by changing `DirectorySearchBar` to use `Search` label (matching shared `SearchBar` default semantics) instead of `Apply`.
+- Update viewer tests under `web/viewer/__tests__/` that assert the search submit button text.
+- Review `web/viewer/README.md` for stale `Apply` wording and update only if needed.
+
+## Assumptions
+- `SearchBar` already defaults submit text to `Search`; this change only removes an overriding label in directory usage.
+- Existing search behavior and routing remain unchanged; only button text/copy assertions are affected.
+- No deployment contract/docs outside viewer README are impacted.
+
+## Risks
+- Tests may assert old `/apply/i` accessible-name matching and fail until updated.
+- If a snapshot indirectly captures the old label, it may need regeneration.
+
+## Test plan
+- `cd web/viewer && npm run test -- directoryPage.test.tsx`
+- `./scripts/verify.sh`

@@ -118,7 +118,7 @@ describe("DirectoryPage", () => {
 
     await user.clear(screen.getByRole("searchbox", { name: /search channels/i }));
     await user.type(screen.getByRole("searchbox", { name: /search channels/i }), "retro");
-    await user.click(screen.getByRole("button", { name: /apply/i }));
+    await user.click(screen.getByRole("button", { name: /search/i }));
 
     const searchBoundary = await DirectoryDataBoundary({ query: "retro" });
     rerender(<DirectoryPageShell query="retro">{searchBoundary}</DirectoryPageShell>);

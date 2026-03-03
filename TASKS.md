@@ -1295,3 +1295,36 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 2 complete: extended `tipDrawer.test.tsx` to verify focus restoration across Escape, backdrop, close button, cancel button, and successful submit; also added a `ChannelHero` integration assertion for focus return on Escape close.
 - ✅ Task 3 check:
   - ✅ `cd web/viewer && npm run test -- tipDrawer.test.tsx channelHero.test.tsx`
+
+## Scoped change: viewer search action label alignment
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Align directory search submit label with shared search copy
+  - Acceptance criteria:
+    - `web/viewer/components/DirectorySearchBar.tsx` no longer passes `submitLabel="Apply"`.
+    - Directory search submit button renders with text `Search` via shared label/default.
+
+- [x] Task 2 — Update related viewer tests/snapshots asserting button text
+  - Acceptance criteria:
+    - Any affected tests under `web/viewer/__tests__/` are updated from `Apply` to `Search` expectations.
+    - Scoped viewer tests pass after expectation updates.
+
+- [x] Task 3 — Review viewer README wording and run required verification checks
+  - Acceptance criteria:
+    - `web/viewer/README.md` is reviewed for stale `Apply` copy and updated only if needed.
+    - `cd web/viewer && npm run test -- directoryPage.test.tsx` passes and result is logged.
+    - `./scripts/verify.sh` is run and result is logged.
+
+### Execution log (viewer search action label alignment)
+- ✅ Task 1 complete: removed the directory-specific `submitLabel="Apply"` override so `DirectorySearchBar` uses shared `SearchBar` submit copy (`Search`).
+- ✅ Task 1 check:
+  - ✅ `rg -n "submitLabel=\"Apply\"|submitLabel = \"Search\"" web/viewer/components/DirectorySearchBar.tsx web/viewer/components/SearchBar.tsx`
+- ✅ Task 2 complete: updated directory page search-button expectation from `Apply` to `Search`; no snapshot updates were required.
+- ✅ Task 2 check:
+  - ✅ `cd web/viewer && npm run test -- directoryPage.test.tsx`
+- ✅ Task 3 complete: reviewed `web/viewer/README.md` and confirmed no stale `Apply` wording; ran required verification checks.
+- ✅ Task 3 checks:
+  - ✅ `rg -n "Apply|apply" web/viewer/README.md`
+  - ✅ `cd web/viewer && npm run test -- directoryPage.test.tsx`
+  - ✅ `./scripts/verify.sh` (passed; Docker-dependent checks skipped because Docker is not installed in this environment)

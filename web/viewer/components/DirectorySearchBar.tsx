@@ -14,5 +14,5 @@ export function DirectorySearchBar({ defaultValue }: { defaultValue?: string }) 
     navigateWithQuery("");
   };
 
-  return <SearchBar onSearch={handleSearch} defaultValue={defaultValue} submitLabel="Apply" onClear={handleClear} />;
+  return <SearchBar onSearch={handleSearch} defaultValue={defaultValue} onClear={handleClear} />;
 }
