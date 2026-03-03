@@ -1328,3 +1328,35 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - ✅ `rg -n "Apply|apply" web/viewer/README.md`
   - ✅ `cd web/viewer && npm run test -- directoryPage.test.tsx`
   - ✅ `./scripts/verify.sh` (passed; Docker-dependent checks skipped because Docker is not installed in this environment)
+
+## Scoped change: directory quick-links semantic nav landmark
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Replace directory hero quick-links wrapper with semantic nav landmark
+  - Acceptance criteria:
+    - `web/viewer/app/directory-view.tsx` uses `<nav aria-label="Quick jump links" className="home-hero__quick-links">`.
+    - Anchor href targets remain `#top-categories`, `#trending-now`, and `#live-now`.
+
+- [x] Task 2 — Update/add browse-directory tests for new quick-links role semantics
+  - Acceptance criteria:
+    - Relevant browse/directory tests validate quick-links via navigation landmark role.
+    - Test expectations remain aligned with unchanged anchor targets.
+
+- [x] Task 3 — Run scoped accessibility checks/specs and required verification
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- directoryPage.test.tsx browsePage.test.tsx` passes.
+    - `cd web/viewer && npm run test:playwright -- tests/accessibility.spec.ts` passes (or failure reason is documented).
+    - `./scripts/verify.sh` is run and result is logged.
+
+### Execution log (directory quick-links semantic nav landmark)
+- ✅ Task 1 complete: replaced the directory hero quick-links wrapper with a semantic `<nav>` landmark while preserving existing quick-jump targets.
+- ✅ Task 1 check:
+  - ✅ `rg -n "<nav aria-label="Quick jump links"|href="#top-categories"|href="#trending-now"|href="#live-now"" web/viewer/app/directory-view.tsx`
+- ✅ Task 2 complete: added directory page coverage asserting the quick-jump region is exposed as a navigation landmark with unchanged link destinations.
+- ✅ Task 2 check:
+  - ✅ `cd web/viewer && npm run test -- directoryPage.test.tsx`
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- directoryPage.test.tsx browsePage.test.tsx`
+  - ⚠️ `cd web/viewer && npm run test:playwright -- tests/accessibility.spec.ts` (fails during `next build` due to pre-existing type error in `app/creator/live/[channelId]/page.tsx`: invalid page export field `deriveControlCentreStatus`)
+  - ✅ `./scripts/verify.sh` (passes; Docker-dependent checks skipped because Docker is not installed in this environment)

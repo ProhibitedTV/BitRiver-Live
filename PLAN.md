@@ -741,3 +741,22 @@
 ## Test plan
 - `cd web/viewer && npm run test -- directoryPage.test.tsx`
 - `./scripts/verify.sh`
+
+## Scope (current change)
+- Update `web/viewer/app/directory-view.tsx` quick-links wrapper from a generic `<div>` to semantic `<nav aria-label="Quick jump links" className="home-hero__quick-links">`.
+- Preserve all existing quick-jump anchors and targets (`#top-categories`, `#trending-now`, `#live-now`).
+- Re-run browse/directory accessibility coverage and adjust tests if role semantics changed.
+
+## Assumptions
+- This is a semantic-only markup change; styling and navigation behavior should remain identical.
+- Existing browse/directory Playwright accessibility coverage is in `web/viewer/tests/accessibility.spec.ts`.
+- Viewer unit tests may need expectation updates only if they assert previous non-landmark semantics.
+
+## Risks
+- Role-semantic changes can break tests that previously queried generic containers.
+- E2E accessibility specs may be slower/flakier in CI-like environments.
+
+## Test plan
+- `cd web/viewer && npm run test -- directoryPage.test.tsx browsePage.test.tsx`
+- `cd web/viewer && npm run test:e2e -- accessibility.spec.ts`
+- `./scripts/verify.sh`
