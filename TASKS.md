@@ -1389,3 +1389,37 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - ✅ `rg -n "scopes live announcements to the chat message log only|aria-relevant|aria-atomic|queryByRole\("log"\)" web/viewer/__tests__/chatPanel.test.tsx`
 - ✅ Task 3 check:
   - ✅ `cd web/viewer && npm run test -- chatPanel.test.tsx`
+
+## Scoped change: viewer mobile sidebar focus + modal accessibility
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Implement sidebar modal-focus behavior in `ViewerShell`
+  - Acceptance criteria:
+    - On open, save previous focus and move focus into sidebar (first focusable element, fallback heading/container).
+    - While open, trap Tab/Shift+Tab within sidebar + close control.
+    - On close, restore focus to sidebar toggle button.
+    - Lock `document.body` scroll while open and clean up on close/unmount.
+    - Mobile overlay semantics include modal context (`aria-modal`), clear close affordance, non-focusable backdrop, and keyboard-inert background.
+
+- [x] Task 2 — Extend tests for sidebar focus + close behavior
+  - Acceptance criteria:
+    - Unit and/or browser coverage verifies focus movement into sidebar and focus restoration to toggle on close.
+    - Coverage verifies Escape close behavior.
+    - Coverage verifies backdrop close behavior.
+
+- [x] Task 3 — Run viewer checks for touched behavior
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- viewerShell.test.tsx` passes.
+    - `cd web/viewer && npm run test -- navbar-mobile.spec.ts` is run (or equivalent sidebar browser spec) and result logged.
+
+
+### Execution log (viewer mobile sidebar focus + modal accessibility)
+- ✅ Task 1 complete: updated `ViewerShell` with open-focus handoff, Tab/Shift+Tab trapping, Escape close, toggle-focus restoration, body scroll lock cleanup, modal semantics, and backdrop accessibility behavior.
+- ✅ Task 1 check:
+  - ✅ `cd web/viewer && npm run test -- viewerShell.test.tsx`
+- ✅ Task 2 complete: extended unit coverage in `viewerShell.test.tsx` and mobile browser coverage in `tests/navbar-mobile.spec.ts` for focus management + Escape/backdrop close paths.
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- viewerShell.test.tsx`
+  - ⚠️ `cd web/viewer && npm run test:playwright -- tests/navbar-mobile.spec.ts` (blocked by pre-existing Next.js build type error in `app/creator/live/[channelId]/page.tsx`: invalid page export `deriveControlCentreStatus`)
+  - ✅ `./scripts/verify.sh`
