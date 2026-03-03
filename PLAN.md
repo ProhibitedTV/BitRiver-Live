@@ -1,4 +1,21 @@
 ## Scope (current change)
+- Update `web/viewer/components/ChatPanel.tsx` accessibility live-region semantics so only the message stream is announced as incremental updates.
+- Remove the outer chat panel live region and apply `role="log"`, `aria-live="polite"`, `aria-relevant="additions text"`, and `aria-atomic="false"` on the chat-entry stream container only.
+- Keep existing `role="alert"` and `role="status"` blocks scoped outside any broad live region to avoid duplicate/overly verbose announcements.
+- Add/adjust viewer tests to assert live-region attributes are attached only to incoming chat entries.
+
+## Assumptions
+- Chat error and sign-in status affordances should remain accessible via their existing ARIA roles without being part of the chat log live stream.
+- Existing chat fetch/send behavior is unchanged; this is an accessibility semantics update only.
+
+## Risks
+- Moving live attributes could regress assistive announcement behavior if the log region no longer wraps rendered chat messages.
+- Test assertions tied to DOM structure may need small updates to avoid brittle selector coupling.
+
+## Test plan
+- `cd web/viewer && npm run test -- chatPanel.test.tsx`
+
+## Scope (current change)
 - Implement focus restoration for `TipDrawer` so keyboard focus reliably returns to the `ChannelHero` “Send a tip” trigger after any drawer close path.
 - Add a trigger button ref in `web/viewer/components/ChannelHero.tsx` and thread it into `TipDrawer` via a new optional focus-return prop.
 - Ensure all existing close entry points (`Escape`, backdrop click, close icon button, cancel button, and successful submit flow) restore focus to that trigger.

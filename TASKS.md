@@ -1360,3 +1360,32 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - ✅ `cd web/viewer && npm run test -- directoryPage.test.tsx browsePage.test.tsx`
   - ⚠️ `cd web/viewer && npm run test:playwright -- tests/accessibility.spec.ts` (fails during `next build` due to pre-existing type error in `app/creator/live/[channelId]/page.tsx`: invalid page export field `deriveControlCentreStatus`)
   - ✅ `./scripts/verify.sh` (passes; Docker-dependent checks skipped because Docker is not installed in this environment)
+
+## Scoped change: chat panel live-region scoping for incoming entries
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Restrict ChatPanel live-region attributes to message stream only
+  - Acceptance criteria:
+    - `web/viewer/components/ChatPanel.tsx` removes `aria-live` from outer `.chat-panel` section.
+    - Message stream element uses `role="log"`, `aria-live="polite"`, `aria-relevant="additions text"`, and `aria-atomic="false"`.
+    - `role="alert"` and `role="status"` blocks are not nested inside a broad live region.
+
+- [x] Task 2 — Add/adjust ChatPanel accessibility test coverage
+  - Acceptance criteria:
+    - Viewer test asserts only the chat entry stream is configured as a live log region.
+    - Test confirms error/status blocks are outside the live log region semantics.
+
+- [x] Task 3 — Run scoped viewer tests and record results
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- chatPanel.test.tsx` passes and is logged.
+
+### Execution log (chat panel live-region scoping for incoming entries)
+- ✅ Task 1 complete: removed broad `aria-live` from `.chat-panel`, moved live-log semantics to the chat thread, and kept alert/status content outside the log region.
+- ✅ Task 1 check:
+  - ✅ `rg -n "<section className="chat-panel"|aria-live="polite"|aria-relevant="additions text"|aria-atomic="false"|role="status"|role="alert"|role="log"" web/viewer/components/ChatPanel.tsx`
+- ✅ Task 2 complete: added chat panel accessibility coverage that verifies only incoming chat entries are treated as live updates and confirms no broad live region on panel/body wrappers.
+- ✅ Task 2 check:
+  - ✅ `rg -n "scopes live announcements to the chat message log only|aria-relevant|aria-atomic|queryByRole\("log"\)" web/viewer/__tests__/chatPanel.test.tsx`
+- ✅ Task 3 check:
+  - ✅ `cd web/viewer && npm run test -- chatPanel.test.tsx`
