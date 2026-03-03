@@ -8,6 +8,8 @@ import { deriveQuickLinks, getNavigationAudience, getVisibleNavigationItems } fr
 import { fetchManagedChannels } from "../lib/viewer-api";
 
 const LOCAL_SETUP_DOCS_ROUTE = "/getting-started";
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 const isLocalhostUrl = (rawUrl?: string) => {
   const value = rawUrl?.trim();
@@ -35,9 +37,13 @@ export function Navbar() {
   const [managedChannelId, setManagedChannelId] = useState<string | undefined>();
   const [searchQuery, setSearchQuery] = useState(searchParamQuery);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isMobileDrawerPresentation, setIsMobileDrawerPresentation] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const menuToggleRef = useRef<HTMLButtonElement | null>(null);
+  const navDrawerRef = useRef<HTMLDivElement | null>(null);
   const avatarButtonRef = useRef<HTMLButtonElement | null>(null);
   const avatarMenuRef = useRef<HTMLDivElement | null>(null);
+  const previousMenuOpenRef = useRef(false);
   const pathname = usePathname();
   const normalizedPathname = (() => {
     const current = pathname ?? "/";
@@ -99,6 +105,25 @@ export function Navbar() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) {
+      return;
+    }
+
+    const query = window.matchMedia("(max-width: 800px)");
+    const syncMobilePresentation = (matches: boolean) => setIsMobileDrawerPresentation(matches);
+    syncMobilePresentation(query.matches);
+
+    const handleChange = (event: MediaQueryListEvent) => {
+      syncMobilePresentation(event.matches);
+    };
+
+    query.addEventListener("change", handleChange);
+    return () => {
+      query.removeEventListener("change", handleChange);
+    };
+  }, []);
+
+  useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
@@ -130,6 +155,74 @@ export function Navbar() {
       document.body.removeAttribute("data-theme");
     }
   }, [theme]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const wasOpen = previousMenuOpenRef.current;
+    const isModalDrawerOpen = menuOpen && isMobileDrawerPresentation;
+    previousMenuOpenRef.current = menuOpen;
+
+    if (!isModalDrawerOpen) {
+      if (wasOpen && !menuOpen) {
+        menuToggleRef.current?.focus();
+      }
+      return;
+    }
+
+    const navDrawer = navDrawerRef.current;
+    if (!navDrawer) {
+      return;
+    }
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const focusable = Array.from(navDrawer.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+    focusable[0]?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMenuOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const elements = Array.from(navDrawer.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+      if (elements.length === 0) {
+        return;
+      }
+
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      const activeElement = document.activeElement;
+
+      if (event.shiftKey) {
+        if (activeElement === first || !navDrawer.contains(activeElement)) {
+          event.preventDefault();
+          last.focus();
+        }
+        return;
+      }
+
+      if (activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [menuOpen, isMobileDrawerPresentation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -308,6 +401,7 @@ export function Navbar() {
           </nav>
         </div>
         <button
+          ref={menuToggleRef}
           className="nav-toggle"
           type="button"
           aria-expanded={menuOpen}
@@ -422,11 +516,22 @@ export function Navbar() {
           </div>
         </div>
       </div>
+      {menuOpen && isMobileDrawerPresentation && (
+        <button
+          type="button"
+          className="nav-drawer-backdrop"
+          aria-label="Close navigation menu"
+          onClick={closeMenu}
+        />
+      )}
       <div
         id="viewer-nav-menu"
+        ref={navDrawerRef}
         className={`nav-drawer${menuOpen ? " nav-drawer--open" : ""}`}
         hidden={!menuOpen}
         aria-hidden={!menuOpen}
+        role={menuOpen && isMobileDrawerPresentation ? "dialog" : undefined}
+        aria-modal={menuOpen && isMobileDrawerPresentation ? "true" : undefined}
       >
         <div className="nav-drawer__section" role="group" aria-label="Viewer navigation mobile">
           {navItems.map((item) => {

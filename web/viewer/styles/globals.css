@@ -1525,6 +1525,18 @@ button:focus-visible {
   transform: translateY(-8px);
   opacity: 0;
   transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 26;
+}
+
+.nav-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: rgba(5, 6, 10, 0.72);
+  backdrop-filter: blur(6px) saturate(120%);
+  z-index: 25;
 }
 
 .nav-drawer--open {
@@ -1643,6 +1655,10 @@ button:focus-visible {
 
   .nav-drawer {
     position: absolute;
+  }
+
+  .nav-drawer-backdrop {
+    display: block;
   }
 }
 .channel-hero {

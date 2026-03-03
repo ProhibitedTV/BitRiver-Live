@@ -1236,3 +1236,37 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 checks:
   - ✅ `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1 -run 'Test(ExtractPayload|AsBytes)'`
   - ✅ `./scripts/verify.sh`
+
+## Scoped change: viewer mobile navbar drawer modal behavior
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Implement modal-like mobile drawer behavior in Navbar
+  - Acceptance criteria:
+    - Opening the mobile drawer focuses the first interactive element in `#viewer-nav-menu`.
+    - Tab and Shift+Tab are trapped within drawer focusable elements while open.
+    - Drawer includes backdrop and closes on backdrop click.
+    - Body scrolling is locked (`document.body.style.overflow = "hidden"`) while open with cleanup on close/unmount.
+    - Mobile drawer applies `role="dialog"` and `aria-modal="true"`; focus restores to menu toggle when drawer closes.
+
+- [x] Task 2 — Add navbar tests for drawer focus trap and focus restore
+  - Acceptance criteria:
+    - `web/viewer/__tests__/navbar.test.tsx` includes tests for Tab/Shift+Tab trapping within open drawer.
+    - Tests verify focus returns to the menu toggle when drawer closes.
+
+- [x] Task 3 — Run scoped viewer checks and record results
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- navbar.test.tsx` passes and result is logged.
+    - `./scripts/verify.sh` is run and result is logged.
+
+### Execution log (viewer mobile navbar drawer modal behavior)
+- ✅ Task 1 complete: updated mobile drawer to behave like a modal with first-focus handoff, Tab/Shift+Tab trapping, Escape close handling, backdrop click close, body-scroll lock/cleanup, and mobile-only dialog semantics plus focus restore to the toggle.
+- ✅ Task 1 check:
+  - ✅ `cd web/viewer && npm run test -- navbar.test.tsx`
+- ✅ Task 2 complete: added navbar tests to validate mobile drawer focus trapping (Tab + Shift+Tab looping) and focus restoration to the menu toggle after close.
+- ✅ Task 2 check:
+  - ✅ `cd web/viewer && npm run test -- navbar.test.tsx`
+- ✅ Task 3 complete: ran scoped and full verification checks after navbar modal-drawer updates.
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- navbar.test.tsx`
+  - ✅ `./scripts/verify.sh` (passed; Docker-dependent checks skipped because Docker is not installed in this environment)

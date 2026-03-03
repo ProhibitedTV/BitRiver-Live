@@ -684,3 +684,24 @@
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/chat -count=1 -run 'Test(ExtractPayload|AsBytes)'`
 - `./scripts/verify.sh`
+
+## Scope (current change)
+- Update `web/viewer/components/Navbar.tsx` mobile drawer behavior to act like a modal dialog when open on small screens.
+- Add drawer focus management: initial focus into drawer, keyboard Tab/Shift+Tab trapping, backdrop click-to-close, and focus restore to the toggle on close.
+- Prevent page scroll while the drawer is open via `document.body.style.overflow = "hidden"` with reliable cleanup.
+- Add mobile-only dialog semantics (`aria-modal`, `role="dialog"`) while preserving existing desktop navigation semantics.
+- Extend `web/viewer/__tests__/navbar.test.tsx` with coverage for drawer focus trap and focus restoration.
+
+## Assumptions
+- Drawer modal semantics should apply only to the mobile presentation (`(max-width: 800px)`), not desktop/tablet layouts.
+- Existing route/navigation behavior stays unchanged; only accessibility and interaction behavior for open drawer is adjusted.
+- JSDOM focus behavior can validate tab order when focusable elements are explicitly queried.
+
+## Risks
+- Overriding `document.body.style.overflow` could conflict with other overlays if cleanup is incomplete.
+- Keyboard event handling for Tab trapping could regress if focusable selector misses expected controls.
+- Mobile-only semantics in tests may require deterministic `matchMedia` stubs to avoid flaky expectations.
+
+## Test plan
+- `cd web/viewer && npm run test -- navbar.test.tsx`
+- `./scripts/verify.sh`
