@@ -260,3 +260,18 @@ test("renders donation addresses and copies to clipboard", async () => {
     screen.getByText(/ETH address copied to clipboard\./i)
   ).toBeInTheDocument();
 });
+test("returns focus to send a tip trigger when drawer closes", async () => {
+  render(<ChannelHeader data={baseData} />);
+
+  const trigger = screen.getByRole("button", { name: /send a tip/i });
+  trigger.focus();
+  fireEvent.click(trigger);
+
+  await screen.findByRole("dialog", { name: /send a tip/i });
+  fireEvent.keyDown(window, { key: "Escape" });
+
+  await waitFor(() => {
+    expect(screen.queryByRole("dialog", { name: /send a tip/i })).not.toBeInTheDocument();
+  });
+  expect(trigger).toHaveFocus();
+});

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import type {
   ChannelPlaybackResponse,
@@ -35,6 +35,7 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
   const [loading, setLoading] = useState(false);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
+  const tipTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [copiedLink, setCopiedLink] = useState(false);
   const donationAddresses = data.donationAddresses ?? [];
@@ -244,7 +245,12 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
               <dd>{data.live ? "Live session active" : "Waiting for the next stream"}</dd>
             </dl>
             <div className="channel-hero__drawer-actions">
-              <button className="secondary-button" type="button" onClick={handleOpenTip}>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={handleOpenTip}
+                ref={tipTriggerRef}
+              >
                 Send a tip
               </button>
               <button
@@ -267,6 +273,7 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
         donationAddresses={donationAddresses}
         onClose={() => setTipOpen(false)}
         onSuccess={handleTipSuccess}
+        returnFocusRef={tipTriggerRef}
       />
     </section>
   );

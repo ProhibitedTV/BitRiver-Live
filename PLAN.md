@@ -1,4 +1,22 @@
 ## Scope (current change)
+- Implement focus restoration for `TipDrawer` so keyboard focus reliably returns to the `ChannelHero` “Send a tip” trigger after any drawer close path.
+- Add a trigger button ref in `web/viewer/components/ChannelHero.tsx` and thread it into `TipDrawer` via a new optional focus-return prop.
+- Ensure all existing close entry points (`Escape`, backdrop click, close icon button, cancel button, and successful submit flow) restore focus to that trigger.
+- Extend viewer tests to verify focus returns correctly when the drawer closes.
+
+## Assumptions
+- The tip drawer trigger remains rendered while the drawer is open, so focusing it on close is valid.
+- A nullable ref prop keeps `TipDrawer` reusable in other contexts without requiring focus-return wiring.
+- Existing tip submission behavior and status messaging remain unchanged.
+
+## Risks
+- Focus restoration could fire before unmount in a way that creates flaky tests if not coordinated with close handlers.
+- Centralizing close behavior may accidentally skip one existing close path if any handler bypasses the shared close routine.
+
+## Test plan
+- `cd web/viewer && npm run test -- tipDrawer.test.tsx channelHero.test.tsx`
+
+## Scope (current change)
 - Refactor `web/viewer/app/page.tsx` so `Suspense` wraps a child async server boundary that performs data loading inside the suspended subtree.
 - Keep `DirectoryPage` lightweight by normalizing `searchParams.q` and rendering `<Suspense fallback={<DirectoryPageFallback .../>}>` with a dedicated `DirectoryDataBoundary` child.
 - Preserve existing `mapDirectoryError` mapping and `emptyHomeData` fallback semantics while moving home/directory awaits into the boundary component.
