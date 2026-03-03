@@ -23,4 +23,35 @@ test.describe("navbar mobile layout", () => {
     await page.getByRole("link", { name: "Browse" }).click();
     await expect(navMenu).toBeHidden();
   });
+
+  test("keeps sidebar focus managed and supports escape/backdrop close on mobile", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/");
+
+    const sidebarToggle = page.getByRole("button", { name: "Show following" });
+    await expect(sidebarToggle).toBeVisible();
+    await sidebarToggle.click();
+
+    const closeSidebar = page.getByRole("button", { name: "Close following sidebar" });
+    await expect(closeSidebar).toBeVisible();
+    await expect(closeSidebar).toBeFocused();
+
+    await page.keyboard.press("Shift+Tab");
+    const focusInsideSidebar = await page.evaluate(() => {
+      const sidebar = document.getElementById("viewer-sidebar");
+      const active = document.activeElement;
+      return Boolean(sidebar && active && sidebar.contains(active));
+    });
+    expect(focusInsideSidebar).toBeTruthy();
+
+    await page.keyboard.press("Tab");
+    await expect(closeSidebar).toBeFocused();
+
+    await page.keyboard.press("Escape");
+    await expect(sidebarToggle).toBeFocused();
+
+    await sidebarToggle.click();
+    await page.locator(".viewer-shell__backdrop").click();
+    await expect(sidebarToggle).toBeFocused();
+  });
 });

@@ -184,6 +184,33 @@ main {
   pointer-events: auto;
 }
 
+
+.viewer-sidebar__header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.viewer-sidebar__header-row h2 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+
+.viewer-sidebar__close {
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  color: inherit;
+  border-radius: 999px;
+  padding: var(--space-2xs) var(--space-sm);
+}
+
+.viewer-sidebar__close:hover,
+.viewer-sidebar__close:focus-visible {
+  border-color: var(--accent);
+}
+
 .viewer-shell__content {
   width: 100%;
 }

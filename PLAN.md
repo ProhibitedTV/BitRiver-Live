@@ -777,3 +777,23 @@
 - `cd web/viewer && npm run test -- directoryPage.test.tsx browsePage.test.tsx`
 - `cd web/viewer && npm run test:e2e -- accessibility.spec.ts`
 - `./scripts/verify.sh`
+
+## Scope (current change)
+- Improve `web/viewer/components/ViewerShell.tsx` mobile sidebar accessibility behavior: focus entry, focus trapping, focus restore, and body scroll locking while open.
+- Treat the mobile sidebar overlay as a modal dialog context (`aria-modal`) with a clear close affordance and keyboard-inert background behavior.
+- Extend viewer tests to cover focus movement and close behaviors (Escape and backdrop).
+
+## Assumptions
+- The existing sidebar toggle button remains mounted while the sidebar is open, so restoring focus to it on close is always valid.
+- The sidebar contains at least one focusable control in normal operation; if none exist, focusing the sidebar heading/container is acceptable fallback behavior.
+- Desktop layout can retain current non-modal behavior while mobile open state enforces modal semantics for keyboard users.
+
+## Risks
+- Incorrect focus trap logic can strand keyboard users or block close interactions.
+- Scroll lock management can leak global `document.body.style.overflow` changes if cleanup is missed.
+- E2E tests that depend on viewport/mobile behavior may be flaky if assertions race transitions.
+
+## Test plan
+- `cd web/viewer && npm run test -- viewerShell.test.tsx`
+- `cd web/viewer && npm run test -- navbar-mobile.spec.ts`
+- `./scripts/verify.sh`
