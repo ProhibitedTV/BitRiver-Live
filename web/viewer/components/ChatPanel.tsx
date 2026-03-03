@@ -393,7 +393,7 @@ export function ChatPanel({
   );
 
   return (
-    <section className="chat-panel" aria-live="polite">
+    <section className="chat-panel">
       {/* Header actions open the pop-out dialog and toggle the local settings modal state. */}
       <header className="chat-panel__header">
         <div className="chat-panel__title">
@@ -448,24 +448,18 @@ export function ChatPanel({
           {error}
         </div>
       )}
+      {!loading && !error && shouldShowSignInPrompt && (
+        <div className="surface stack" role="status">
+          <p className="muted">Sign in to view and participate in chat.</p>
+          <div>
+            <button type="button" className="primary-button" onClick={() => void signIn()}>
+              Sign in
+            </button>
+          </div>
+        </div>
+      )}
       {!loading && !error && (
-        <div
-          className="chat-panel__body"
-          role="log"
-          // Screen readers should announce only newly added chat entries as they stream in.
-          aria-relevant="additions"
-          aria-live="polite"
-        >
-          {shouldShowSignInPrompt && (
-            <div className="surface stack" role="status">
-              <p className="muted">Sign in to view and participate in chat.</p>
-              <div>
-                <button type="button" className="primary-button" onClick={() => void signIn()}>
-                  Sign in
-                </button>
-              </div>
-            </div>
-          )}
+        <div className="chat-panel__body">
           {messageEntries.length === 0 ? (
             <div className="chat-panel__empty surface">
               <p className="muted">
@@ -474,7 +468,14 @@ export function ChatPanel({
             </div>
           ) : (
             // Render author/time-window groups with avatar fallbacks and optional per-message timestamps.
-            <ul className="chat-thread">
+            <ul
+              className="chat-thread"
+              role="log"
+              // Screen readers should announce only newly added chat entries as they stream in.
+              aria-live="polite"
+              aria-relevant="additions text"
+              aria-atomic="false"
+            >
               {groupedMessages.map((group) => (
                 <li key={group.id} className="chat-message chat-message--group">
                   {showAvatars ? (

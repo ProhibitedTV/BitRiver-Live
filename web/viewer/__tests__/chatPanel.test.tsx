@@ -68,6 +68,52 @@ test("renders chat history and sorts by time", async () => {
   expect(renderedMessages[1]).toHaveTextContent("Jax");
 });
 
+
+test("scopes live announcements to the chat message log only", async () => {
+  fetchChatMock.mockResolvedValue([]);
+
+  render(<ChatPanel channelId="chan-live" roomId="room-1" />);
+
+  await screen.findByText(/no messages yet/i);
+
+  const panel = document.querySelector(".chat-panel");
+  expect(panel).not.toBeNull();
+  expect(panel).not.toHaveAttribute("aria-live");
+
+  const body = document.querySelector(".chat-panel__body");
+  expect(body).not.toBeNull();
+  expect(body).not.toHaveAttribute("aria-live");
+
+  expect(screen.queryByRole("log")).not.toBeInTheDocument();
+
+  fetchChatMock.mockResolvedValueOnce([
+    {
+      id: "m-live-1",
+      message: "Live message",
+      sentAt: new Date().toISOString(),
+      user: { id: "user-live", displayName: "Live User" }
+    }
+  ]);
+
+  await advanceTimers(10_000);
+
+  const log = await screen.findByRole("log");
+  expect(log).toHaveAttribute("aria-live", "polite");
+  expect(log).toHaveAttribute("aria-relevant", "additions text");
+  expect(log).toHaveAttribute("aria-atomic", "false");
+  expect(log.closest(".chat-panel__body")).toBeInTheDocument();
+
+  const alert = screen.queryByRole("alert");
+  if (alert) {
+    expect(log).not.toContainElement(alert);
+  }
+
+  const status = screen.queryByRole("status");
+  if (status) {
+    expect(log).not.toContainElement(status);
+  }
+});
+
 test("sends a chat message when the user submits the form", async () => {
   const history: ChatMessage[] = [];
   fetchChatMock.mockResolvedValue(history);
