@@ -1,8 +1,9 @@
 import { mockRouter, resetRouterMocks, viewerApiMocks } from "../test/test-utils";
 import userEvent from "@testing-library/user-event";
 import { render, screen, waitFor, within } from "@testing-library/react";
-import DirectoryPage from "../app/page";
+import DirectoryPage, { DirectoryDataBoundary, DirectoryPageShell } from "../app/page";
 import { directoryInputMatrix } from "../test/directory-input-matrix";
+import { normalizeDirectoryQuery } from "../lib/directory-state";
 
 const fetchDirectoryMock = viewerApiMocks.fetchDirectory;
 const searchDirectoryMock = viewerApiMocks.searchDirectory;
@@ -71,6 +72,12 @@ const searchDirectoryResponse = {
 };
 
 describe("DirectoryPage", () => {
+  const renderResolvedDirectoryPage = async (query?: string) => {
+    const normalizedQuery = normalizeDirectoryQuery(query ?? "");
+    const boundary = await DirectoryDataBoundary({ query: normalizedQuery });
+    return render(<DirectoryPageShell query={normalizedQuery}>{boundary}</DirectoryPageShell>);
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
     resetRouterMocks();
@@ -86,8 +93,7 @@ describe("DirectoryPage", () => {
   test("loads directory entries and renders channel cards", async () => {
     fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
 
-    const page = await DirectoryPage({ searchParams: {} });
-    render(page);
+    await renderResolvedDirectoryPage();
 
     await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalledTimes(1));
 
@@ -106,8 +112,7 @@ describe("DirectoryPage", () => {
     searchDirectoryMock.mockResolvedValueOnce(searchDirectoryResponse as any);
     const user = userEvent.setup();
 
-    const page = await DirectoryPage({ searchParams: {} });
-    const { rerender } = render(page);
+    const { rerender } = await renderResolvedDirectoryPage();
 
     await screen.findByRole("heading", { level: 3, name: "Deep Space Beats" });
 
@@ -115,8 +120,8 @@ describe("DirectoryPage", () => {
     await user.type(screen.getByRole("searchbox", { name: /search channels/i }), "retro");
     await user.click(screen.getByRole("button", { name: /apply/i }));
 
-    const searchPage = await DirectoryPage({ searchParams: { q: "retro" } });
-    rerender(searchPage);
+    const searchBoundary = await DirectoryDataBoundary({ query: "retro" });
+    rerender(<DirectoryPageShell query="retro">{searchBoundary}</DirectoryPageShell>);
 
     await waitFor(() => {
       expect(searchDirectoryMock).toHaveBeenCalledWith("retro");
@@ -130,8 +135,7 @@ describe("DirectoryPage", () => {
     fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
     const user = userEvent.setup();
 
-    const page = await DirectoryPage({ searchParams: { q: "retro" } });
-    render(page);
+    await renderResolvedDirectoryPage("retro");
 
     const clearButton = await screen.findByRole("button", { name: /clear/i });
     await user.click(clearButton);
@@ -149,8 +153,7 @@ describe("DirectoryPage", () => {
       fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
     }
 
-    const page = await DirectoryPage({ searchParams: query ? { q: query } : {} });
-    render(page);
+    await renderResolvedDirectoryPage(query);
 
     if (mode === "search") {
       await waitFor(() => expect(searchDirectoryMock).toHaveBeenCalledWith(normalized));
@@ -173,8 +176,7 @@ describe("DirectoryPage", () => {
   test("gracefully handles directory loading errors", async () => {
     fetchDirectoryMock.mockRejectedValueOnce(new Error("Gateway timeout"));
 
-    const page = await DirectoryPage({ searchParams: {} });
-    render(page);
+    await renderResolvedDirectoryPage();
 
     await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalled());
     expect(screen.getByText(/browse the directory/i)).toBeInTheDocument();
@@ -183,8 +185,7 @@ describe("DirectoryPage", () => {
   test("shows an empty following message for authenticated users with no follows", async () => {
     fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
 
-    const page = await DirectoryPage({ searchParams: {} });
-    render(page);
+    await renderResolvedDirectoryPage();
 
     expect(await screen.findByText(/not following any channels yet/i)).toBeInTheDocument();
     expect(screen.queryByText(/sign in to see channels you follow/i)).not.toBeInTheDocument();
@@ -194,11 +195,33 @@ describe("DirectoryPage", () => {
     fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
     fetchFollowingChannelsMock.mockRejectedValueOnce(new Error("unauthorized"));
 
-    const page = await DirectoryPage({ searchParams: {} });
-    render(page);
+    await renderResolvedDirectoryPage();
 
     expect(await screen.findByText(/sign in to see channels you follow/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /sign in/i })).toHaveAttribute("href", "/login");
     expect(screen.queryByText(/not following any channels yet/i)).not.toBeInTheDocument();
+  });
+
+  test("keeps DirectoryPage lightweight and normalizes query before passing to shell", async () => {
+    const page = DirectoryPage({ searchParams: { q: "   retro   " } });
+
+    expect(page.type).toBe(DirectoryPageShell);
+    expect(page.props.query).toBe("retro");
+  });
+
+  test("shows suspense fallback content while boundary content is pending", async () => {
+    const never = new Promise<never>(() => undefined);
+
+    function PendingBoundary() {
+      throw never;
+    }
+
+    render(
+      <DirectoryPageShell query="retro">
+        <PendingBoundary />
+      </DirectoryPageShell>
+    );
+
+    expect(screen.getAllByText(/loading channels/i).length).toBeGreaterThan(0);
   });
 });

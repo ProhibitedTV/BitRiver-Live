@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import {
   DirectoryPageContent,
   emptyHomeData,
@@ -111,22 +111,31 @@ function DirectoryPageFallback({ query }: { query: string }) {
   );
 }
 
+export function DirectoryPageShell({ query, children }: { query: string; children: ReactNode }) {
+  return <Suspense fallback={<DirectoryPageFallback query={query} />}>{children}</Suspense>;
+}
+
 type PageProps = {
   searchParams?: {
     q?: string;
   };
 };
 
-export default async function DirectoryPage({ searchParams }: PageProps) {
-  const query = normalizeDirectoryQuery(typeof searchParams?.q === "string" ? searchParams.q : "");
+export async function DirectoryDataBoundary({ query }: { query: string }) {
   const [homeData, directoryData] = await Promise.all([
     loadHomeData(),
     loadDirectoryData(query),
   ]);
 
+  return <DirectoryPageContent query={query} homeData={homeData} directoryData={directoryData} />;
+}
+
+export default function DirectoryPage({ searchParams }: PageProps) {
+  const query = normalizeDirectoryQuery(typeof searchParams?.q === "string" ? searchParams.q : "");
+
   return (
-    <Suspense fallback={<DirectoryPageFallback query={query} />}>
-      <DirectoryPageContent query={query} homeData={homeData} directoryData={directoryData} />
-    </Suspense>
+    <DirectoryPageShell query={query}>
+      <DirectoryDataBoundary query={query} />
+    </DirectoryPageShell>
   );
 }
