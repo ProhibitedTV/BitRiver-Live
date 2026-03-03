@@ -71,11 +71,11 @@ export function HomePageView({
                 Browse all channels
               </a>
             </div>
-            <div className="home-hero__quick-links" aria-label="Quick jump links">
+            <nav aria-label="Quick jump links" className="home-hero__quick-links">
               <a href="#top-categories" className="pill pill--tag">Top categories</a>
               <a href="#trending-now" className="pill pill--tag">Trending now</a>
               <a href="#live-now" className="pill pill--tag">Live now</a>
-            </div>
+            </nav>
             <div className="home-hero__search">
               <DirectorySearchBar defaultValue={query} />
             </div>
