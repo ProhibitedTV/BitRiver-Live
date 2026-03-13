@@ -1,3 +1,35 @@
+## Scoped change: navbar search visible keyboard focus treatment
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Add strong theme-aware navbar search focus styling in globals CSS
+  - Acceptance criteria:
+    - `web/viewer/styles/globals.css` defines focus-ring variables in both `:root` and `[data-theme="light"]`.
+    - `.nav-search` gets a clear high-contrast `:focus-within` treatment that keeps existing visual style.
+    - Focus treatment applies for both `.nav-search--inline` and `.nav-search--drawer` via shared/base selector coverage.
+
+- [x] Task 2 — Add/adjust navbar test coverage for keyboard focus visibility contract
+  - Acceptance criteria:
+    - `web/viewer/__tests__/navbar.test.tsx` includes keyboard-focus coverage for navbar search path.
+    - Test asserts style contract for visible focus treatment is present (focus selector + theme variables).
+
+- [x] Task 3 — Run scoped viewer tests and record results
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- navbar.test.tsx` passes and is logged.
+
+
+### Execution log (navbar search visible keyboard focus treatment)
+- ✅ Task 1 complete: added theme-aware navbar search focus tokens for dark/light themes and a shared `.nav-search:focus-within` high-contrast ring/border treatment that applies to both inline and drawer variants.
+- ✅ Task 1 check:
+  - ✅ `rg -n "navbar-search-focus-ring|navbar-search-focus-border|\.nav-search:focus-within|nav-search__input:focus-visible" web/viewer/styles/globals.css`
+- ✅ Task 2 complete: added navbar search keyboard-focus path coverage and CSS focus-visibility contract assertions in viewer tests.
+- ✅ Task 2 check:
+  - ✅ `rg -n "keyboard focus path available|visible nav-search focus-within style contract|readFileSync|resolve\(" web/viewer/__tests__/navbar.test.tsx`
+- ✅ Task 3 checks:
+  - ❌ `cd web/viewer && npm run test -- navbar.test.tsx` (initial attempt failed due to a brittle tab-order assumption in the new test; corrected by directly focusing the intended search inputs for deterministic assertions)
+  - ✅ `cd web/viewer && npm run test -- navbar.test.tsx`
+  - ✅ `./scripts/verify.sh` (passed; Docker-dependent checks skipped because Docker is not installed in this environment)
+
 ## Scoped change: directory page suspense data boundary refactor
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
