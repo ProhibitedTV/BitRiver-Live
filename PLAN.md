@@ -1,4 +1,24 @@
 ## Scope (current change)
+- Implement durable viewer theme preference in `web/viewer/components/Navbar.tsx` by persisting explicit user theme selections in `localStorage` (key: `viewer-theme`).
+- On mount, initialize theme from stored preference when present; only use `prefers-color-scheme` when no stored preference exists.
+- Gate the `matchMedia("(prefers-color-scheme: light)")` change listener so OS-theme updates only apply for users without an explicit saved preference.
+- Centralize body `data-theme` synchronization through a single deterministic effect tied to resolved theme state.
+- Add/adjust navbar component tests for initial load with stored preference, initial load without preference, and persisted manual toggle across remount.
+
+## Assumptions
+- `localStorage` is available in normal browser execution; SSR and non-browser contexts must no-op safely.
+- Existing theme UI contract remains unchanged (same toggle button and aria-label semantics), with behavior updates limited to preference source and persistence.
+- Viewer-only changes do not require deployment contract updates.
+
+## Risks
+- Theme initialization could race with media-query listeners if not sequenced carefully, causing non-deterministic initial theme in tests.
+- Test mocks for `window.matchMedia`/`localStorage` may become brittle if shared helpers do not expose listener behavior.
+
+## Test plan
+- `cd web/viewer && npm run test -- navbar.test.tsx`
+- `./scripts/verify.sh`
+
+## Scope (current change)
 - Strengthen navbar search keyboard focus visibility in `web/viewer/styles/globals.css` without regressing existing navbar visual design.
 - Add a high-contrast `.nav-search` focus treatment that is clearly visible for both desktop inline and mobile drawer search variants.
 - Define/verify theme variables so the focus treatment remains visible in dark (`:root`) and light (`[data-theme="light"]`) modes.

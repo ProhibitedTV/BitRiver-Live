@@ -1486,3 +1486,36 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 checks:
   - ✅ `cd web/viewer && npm run test -- channelPage.test.tsx`
   - ✅ `./scripts/verify.sh`
+
+
+## Scoped change: durable viewer theme preference in navbar
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Refactor navbar theme initialization/persistence flow
+  - Acceptance criteria:
+    - `web/viewer/components/Navbar.tsx` reads `viewer-theme` from `localStorage` on client mount.
+    - Stored preference is prioritized over `prefers-color-scheme`; media query is fallback-only.
+    - Theme toggle writes the new value to `localStorage` and body `data-theme` sync remains deterministic in one place.
+
+- [x] Task 2 — Add navbar theme persistence component coverage
+  - Acceptance criteria:
+    - `web/viewer/__tests__/navbar.test.tsx` covers initial load with stored preference.
+    - `web/viewer/__tests__/navbar.test.tsx` covers initial load without stored preference.
+    - `web/viewer/__tests__/navbar.test.tsx` covers manual toggle persistence across remount.
+
+- [x] Task 3 — Run scoped viewer validation and record results
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- navbar.test.tsx` passes and is logged.
+    - `./scripts/verify.sh` is run and result logged.
+
+### Execution log (durable viewer theme preference in navbar)
+- ✅ Task 1 complete: navbar theme bootstrapping now prioritizes persisted `viewer-theme` preference, falls back to `prefers-color-scheme` only when unset, gates media-query change handling to non-explicit users, and keeps body `data-theme` sync centralized in one effect.
+- ✅ Task 1 check:
+  - ✅ `cd web/viewer && npm run test -- navbar.test.tsx`
+- ✅ Task 2 complete: added navbar tests for stored preference initialization, media-query fallback initialization, and manual-toggle persistence across remount with ignored media-query updates after explicit selection.
+- ✅ Task 2 check:
+  - ✅ `cd web/viewer && npm run test -- navbar.test.tsx`
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- navbar.test.tsx`
+  - ✅ `./scripts/verify.sh`

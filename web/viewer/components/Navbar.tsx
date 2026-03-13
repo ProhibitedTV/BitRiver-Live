@@ -8,6 +8,8 @@ import { deriveQuickLinks, getNavigationAudience, getVisibleNavigationItems } fr
 import { fetchManagedChannels } from "../lib/viewer-api";
 
 const LOCAL_SETUP_DOCS_ROUTE = "/getting-started";
+const THEME_STORAGE_KEY = "viewer-theme";
+const LIGHT_THEME_QUERY = "(prefers-color-scheme: light)";
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -34,6 +36,7 @@ export function Navbar() {
   const isCreator = Boolean(user?.roles?.includes("creator"));
   const canAccessCreatorTools = isAdmin || isCreator;
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [hasExplicitThemePreference, setHasExplicitThemePreference] = useState(false);
   const [managedChannelId, setManagedChannelId] = useState<string | undefined>();
   const [searchQuery, setSearchQuery] = useState(searchParamQuery);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -91,18 +94,37 @@ export function Navbar() {
     if (typeof window === "undefined") {
       return;
     }
+
+    const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (storedTheme === "light" || storedTheme === "dark") {
+      setTheme(storedTheme);
+      setHasExplicitThemePreference(true);
+      return;
+    }
+
     if (!window.matchMedia) {
       return;
     }
-    const query = window.matchMedia("(prefers-color-scheme: light)");
-    const setFromQuery = (matches: boolean) => setTheme(matches ? "light" : "dark");
-    setFromQuery(query.matches);
-    const handler = (event: MediaQueryListEvent) => setFromQuery(event.matches);
+
+    const query = window.matchMedia(LIGHT_THEME_QUERY);
+    setTheme(query.matches ? "light" : "dark");
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!window.matchMedia || hasExplicitThemePreference) {
+      return;
+    }
+
+    const query = window.matchMedia(LIGHT_THEME_QUERY);
+    const handler = (event: MediaQueryListEvent) => setTheme(event.matches ? "light" : "dark");
     query.addEventListener("change", handler);
     return () => {
       query.removeEventListener("change", handler);
     };
-  }, []);
+  }, [hasExplicitThemePreference]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) {
@@ -450,7 +472,14 @@ export function Navbar() {
             <button
               className="icon-button"
               type="button"
-              onClick={() => setTheme((prev) => (prev === "light" ? "dark" : "light"))}
+              onClick={() => {
+                const nextTheme = theme === "light" ? "dark" : "light";
+                setTheme(nextTheme);
+                setHasExplicitThemePreference(true);
+                if (typeof window !== "undefined") {
+                  window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+                }
+              }}
               aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
             >
               {theme === "light" ? "🌙" : "🌞"}
