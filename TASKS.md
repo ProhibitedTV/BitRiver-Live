@@ -1557,3 +1557,31 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 checks:
   - ✅ `cd web/viewer && npm run test -- navbar.test.tsx`
   - ✅ `./scripts/verify.sh`
+
+## Scoped change: channel page tab URL-state synchronization
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Implement URL-backed tab state in channel page
+  - Acceptance criteria:
+    - `web/viewer/app/channels/[id]/page.tsx` derives a validated tab id from URL state (`?tab=` and/or hash fallback) using `CHANNEL_TABS`.
+    - Initial render hydrates `activeTab` from URL when present; invalid values fall back to `about`.
+    - Tab-switch actions update URL state through router/history integration with expected back/forward behavior and no keyboard-regression to tablist controls.
+
+- [x] Task 2 — Add channel page URL-state tab tests
+  - Acceptance criteria:
+    - `web/viewer/__tests__/channelPage.test.tsx` covers loading from deep-linked tab.
+    - Coverage asserts tab switching updates URL state.
+    - Coverage asserts browser navigation restores prior tab selection.
+
+- [x] Task 3 — Run scoped checks and required gate
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- channelPage.test.tsx` passes.
+    - `./scripts/verify.sh` is run and result logged.
+
+### Execution log (channel page tab URL-state synchronization)
+- ✅ Task 1 complete: channel tab state now validates URL tab values from query param (with hash fallback), initializes active tab from URL state, syncs tab changes to router query updates, and preserves existing ARIA keyboard tablist behavior.
+- ✅ Task 2 complete: added tests for deep-linked tab initialization, URL updates on tab switch, and browser back navigation restoring the prior tab.
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- channelPage.test.tsx`
+  - ✅ `./scripts/verify.sh` (Docker-dependent checks skipped because Docker is unavailable in this environment)

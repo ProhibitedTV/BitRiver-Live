@@ -873,3 +873,22 @@
 ## Test plan
 - `cd web/viewer && npm run test -- channelPage.test.tsx`
 - `./scripts/verify.sh`
+
+## Scope (current change)
+- Enhance `web/viewer/app/channels/[id]/page.tsx` tab state management so the selected channel tab is encoded in URL state and deep-linkable.
+- Read initial tab selection from URL (`?tab=` first, hash fallback), validate against `CHANNEL_TABS`, and default to `about` when invalid/missing.
+- Keep tab selection and URL synchronized via router/history updates while preserving current ARIA tablist + keyboard roving behavior.
+- Extend `web/viewer/__tests__/channelPage.test.tsx` for deep-link initialization, URL updates on tab switch, and browser back/forward restoration.
+
+## Assumptions
+- Query-param tab encoding (`?tab=<id>`) is preferred for deterministic router integration; hash can remain read-compatible for backward links.
+- Viewer page remains a client component and can safely read `window.location` and use Next.js `useRouter`/`useSearchParams` APIs in effects.
+- Viewer-only change does not alter deployment contract files.
+
+## Risks
+- URL/state sync can create update loops if route-change listeners and state setters are not guarded against no-op transitions.
+- Test reliability can regress if mocked router/history behavior diverges from browser popstate semantics.
+
+## Test plan
+- `cd web/viewer && npm run test -- channelPage.test.tsx`
+- `./scripts/verify.sh`
