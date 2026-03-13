@@ -206,14 +206,59 @@ describe("Navbar", () => {
   });
 
 
-  test("disables notifications action with coming-soon helper text", () => {
+  test("opens notifications roadmap popover from an enabled quick action", async () => {
     mockAnonymousUser();
+    const user = userEvent.setup();
 
     renderWithProviders(<Navbar />);
 
-    const notificationsButton = screen.getByRole("button", { name: /view notifications/i });
-    expect(notificationsButton).toBeDisabled();
-    expect(notificationsButton).toHaveAttribute("title", "Notifications coming soon");
+    const notificationsButton = screen.getByRole("button", { name: /notifications roadmap details/i });
+    expect(notificationsButton).toBeEnabled();
+    expect(notificationsButton).toHaveAttribute("aria-expanded", "false");
+
+    await act(async () => {
+      await user.click(notificationsButton);
+    });
+
+    expect(notificationsButton).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("status", { name: /notifications feature roadmap/i })).toHaveTextContent(
+      /notifications are coming soon/i,
+    );
+  });
+
+  test("dismisses notifications roadmap popover via Escape and outside click", async () => {
+    mockAnonymousUser();
+    const user = userEvent.setup();
+
+    renderWithProviders(<Navbar />);
+
+    const notificationsButton = screen.getByRole("button", { name: /notifications roadmap details/i });
+
+    await act(async () => {
+      await user.click(notificationsButton);
+    });
+
+    expect(screen.getByRole("status", { name: /notifications feature roadmap/i })).toBeInTheDocument();
+
+    await act(async () => {
+      await user.keyboard("{Escape}");
+    });
+
+    expect(screen.queryByRole("status", { name: /notifications feature roadmap/i })).not.toBeInTheDocument();
+    expect(notificationsButton).toHaveFocus();
+
+    await act(async () => {
+      await user.click(notificationsButton);
+    });
+
+    expect(screen.getByRole("status", { name: /notifications feature roadmap/i })).toBeInTheDocument();
+
+    await act(async () => {
+      await user.click(document.body);
+    });
+
+    expect(screen.queryByRole("status", { name: /notifications feature roadmap/i })).not.toBeInTheDocument();
+    expect(notificationsButton).toHaveFocus();
   });
 
 

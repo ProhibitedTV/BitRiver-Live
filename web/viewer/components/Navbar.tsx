@@ -10,6 +10,7 @@ import { fetchManagedChannels } from "../lib/viewer-api";
 const LOCAL_SETUP_DOCS_ROUTE = "/getting-started";
 const THEME_STORAGE_KEY = "viewer-theme";
 const LIGHT_THEME_QUERY = "(prefers-color-scheme: light)";
+const NOTIFICATIONS_POPOVER_ID = "viewer-notifications-popover";
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -42,10 +43,13 @@ export function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isMobileDrawerPresentation, setIsMobileDrawerPresentation] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [notificationsPopoverOpen, setNotificationsPopoverOpen] = useState(false);
   const menuToggleRef = useRef<HTMLButtonElement | null>(null);
   const navDrawerRef = useRef<HTMLDivElement | null>(null);
   const avatarButtonRef = useRef<HTMLButtonElement | null>(null);
   const avatarMenuRef = useRef<HTMLDivElement | null>(null);
+  const notificationsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const notificationsPopoverRef = useRef<HTMLDivElement | null>(null);
   const previousMenuOpenRef = useRef(false);
   const pathname = usePathname();
   const normalizedPathname = (() => {
@@ -334,8 +338,52 @@ export function Navbar() {
     };
   }, [userMenuOpen]);
 
+  useEffect(() => {
+    if (!notificationsPopoverOpen || typeof document === "undefined") {
+      return;
+    }
+
+    const closePopover = () => {
+      setNotificationsPopoverOpen(false);
+      notificationsButtonRef.current?.focus();
+    };
+
+    const handleOutsideInteraction = (event: PointerEvent | MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (notificationsButtonRef.current?.contains(target) || notificationsPopoverRef.current?.contains(target)) {
+        return;
+      }
+      closePopover();
+    };
+
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      event.preventDefault();
+      closePopover();
+    };
+
+    document.addEventListener("pointerdown", handleOutsideInteraction);
+    document.addEventListener("click", handleOutsideInteraction);
+    document.addEventListener("keydown", handleEscapeKey);
+
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsideInteraction);
+      document.removeEventListener("click", handleOutsideInteraction);
+      document.removeEventListener("keydown", handleEscapeKey);
+    };
+  }, [notificationsPopoverOpen]);
+
   const closeMenu = () => {
     setMenuOpen(false);
+  };
+
+  const toggleNotificationsPopover = () => {
+    setNotificationsPopoverOpen((current) => !current);
   };
 
   const buildRedirectTarget = () => {
@@ -460,15 +508,30 @@ export function Navbar() {
             </Link>
           )}
           <div className="nav-icon-group" role="group" aria-label="Viewer quick actions">
-            <button
-              className="icon-button"
-              type="button"
-              aria-label="View notifications"
-              disabled
-              title="Notifications coming soon"
-            >
-              🔔
-            </button>
+            <div className="nav-notifications">
+              <button
+                ref={notificationsButtonRef}
+                className="icon-button"
+                type="button"
+                aria-label="Notifications roadmap details"
+                aria-expanded={notificationsPopoverOpen}
+                aria-controls={NOTIFICATIONS_POPOVER_ID}
+                onClick={toggleNotificationsPopover}
+              >
+                🔔
+              </button>
+              {notificationsPopoverOpen && (
+                <div
+                  ref={notificationsPopoverRef}
+                  id={NOTIFICATIONS_POPOVER_ID}
+                  className="nav-notifications__popover"
+                  role="status"
+                  aria-label="Notifications feature roadmap"
+                >
+                  Notifications are coming soon. We&apos;re building inbox alerts for follows, mentions, and creator updates.
+                </div>
+              )}
+            </div>
             <button
               className="icon-button"
               type="button"
