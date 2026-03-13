@@ -1,3 +1,41 @@
+## Scoped change: navbar notifications coming-soon interactive affordance
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Replace disabled notifications icon button with interactive coming-soon affordance
+  - Acceptance criteria:
+    - `web/viewer/components/Navbar.tsx` no longer renders a permanently disabled notifications button.
+    - Notifications quick-action remains keyboard focusable and opens a lightweight roadmap popover/toast.
+    - Control has explicit screen-reader labeling for intent beyond icon semantics.
+
+- [x] Task 2 — Implement dismiss and accessibility behavior for the notifications affordance
+  - Acceptance criteria:
+    - Popover/toast can be dismissed via Escape and outside click.
+    - Open/closed state is exposed with appropriate ARIA attributes (`aria-expanded`, `aria-controls`, descriptive region labeling).
+
+- [x] Task 3 — Update navbar tests for notifications affordance interactions
+  - Acceptance criteria:
+    - `web/viewer/__tests__/navbar.test.tsx` verifies button is enabled and toggles roadmap content.
+    - Tests cover dismiss behavior (Escape and outside click).
+
+- [x] Task 4 — Run scoped viewer tests and record results
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- navbar.test.tsx` passes and is logged.
+
+### Execution log (navbar notifications coming-soon interactive affordance)
+- ✅ Task 1 complete: replaced the disabled notifications quick-action with an enabled button that toggles a lightweight roadmap popover and exposes explicit intent labeling for assistive tech.
+- ✅ Task 1 check:
+  - ✅ `rg -n "NOTIFICATIONS_POPOVER_ID|notificationsPopoverOpen|aria-label="Notifications roadmap details"|nav-notifications__popover" web/viewer/components/Navbar.tsx web/viewer/styles/globals.css`
+- ✅ Task 2 complete: added Escape and outside-click dismissal for the notifications popover with focus return to the triggering button and ARIA state wiring (`aria-expanded` + `aria-controls`).
+- ✅ Task 2 check:
+  - ✅ `rg -n "handleEscapeKey|handleOutsideInteraction|notificationsButtonRef|notificationsPopoverRef" web/viewer/components/Navbar.tsx`
+- ✅ Task 3 complete: replaced disabled-control assertions with interactive notifications popover tests, including open/toggle semantics and dismiss paths.
+- ✅ Task 3 check:
+  - ✅ `rg -n "notifications roadmap popover|notifications feature roadmap|toHaveFocus|toBeEnabled" web/viewer/__tests__/navbar.test.tsx`
+- ✅ Task 4 checks:
+  - ✅ `cd web/viewer && npm run test -- navbar.test.tsx`
+  - ❌ `./scripts/verify.sh` (fails due to pre-existing unrelated test failure: `internal/auth` `TestValidateHonorsAbsoluteTTL`)
+
 ## Scoped change: navbar search visible keyboard focus treatment
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

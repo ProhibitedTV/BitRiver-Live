@@ -1,4 +1,23 @@
 ## Scope (current change)
+- Refine the quick-actions notifications affordance in `web/viewer/components/Navbar.tsx` so it is no longer a permanently disabled dead control.
+- Keep the bell affordance visible as an enabled control that opens a lightweight dismissible popover with roadmap context.
+- Add keyboard and assistive semantics for this control (clear accessible label/description, escape dismissal, and outside-click dismissal).
+- Update `web/viewer/__tests__/navbar.test.tsx` to assert the interactive coming-soon behavior and dismiss flows.
+
+## Assumptions
+- Keeping the notifications icon visible is preferable to removal for roadmap discoverability, as long as it behaves interactively.
+- Existing navbar layout can absorb a small anchored popover without requiring wider responsive refactors.
+- Viewer-only component/test updates do not require deployment contract edits.
+
+## Risks
+- Popover open/close behavior can become flaky if dismissal listeners are not cleaned up correctly.
+- Accessibility naming can regress if icon-only button text and aria attributes conflict.
+
+## Test plan
+- `cd web/viewer && npm run test -- navbar.test.tsx`
+- `./scripts/verify.sh`
+
+## Scope (current change)
 - Implement durable viewer theme preference in `web/viewer/components/Navbar.tsx` by persisting explicit user theme selections in `localStorage` (key: `viewer-theme`).
 - On mount, initialize theme from stored preference when present; only use `prefers-color-scheme` when no stored preference exists.
 - Gate the `matchMedia("(prefers-color-scheme: light)")` change listener so OS-theme updates only apply for users without an explicit saved preference.
