@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChannelAboutPanel, ChannelHeader } from "../../../components/ChannelHero";
 import { ChatPanel } from "../../../components/ChatPanel";
 import { Player } from "../../../components/Player";
@@ -22,6 +23,29 @@ const CHANNEL_TABS = [
   { id: "videos", label: "Videos" }
 ] as const;
 
+type ChannelTabId = (typeof CHANNEL_TABS)[number]["id"];
+
+const DEFAULT_CHANNEL_TAB: ChannelTabId = "about";
+
+function parseChannelTab(value: string | null | undefined): ChannelTabId | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalizedValue = value.toLowerCase();
+  return CHANNEL_TABS.find((tab) => tab.id === normalizedValue)?.id;
+}
+
+function resolveTabFromUrl(searchParams: URLSearchParams, hash: string): ChannelTabId {
+  const queryTab = parseChannelTab(searchParams.get("tab"));
+  if (queryTab) {
+    return queryTab;
+  }
+
+  const hashTab = parseChannelTab(hash.replace(/^#/, ""));
+  return hashTab ?? DEFAULT_CHANNEL_TAB;
+}
+
 export default function ChannelPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const [data, setData] = useState<ChannelPlaybackResponse | undefined>();
@@ -30,7 +54,11 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
   const [vods, setVods] = useState<VodItem[]>([]);
   const [vodError, setVodError] = useState<string | undefined>();
   const [vodsLoading, setVodsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"about" | "schedule" | "videos">("about");
+  const [activeTab, setActiveTab] = useState<ChannelTabId>(DEFAULT_CHANNEL_TAB);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tabSearchParam = searchParams.get("tab");
   const { user } = useAuth();
   const previousUserIdRef = useRef<string | undefined>();
   const previousChannelIdRef = useRef<string | undefined>();
@@ -40,6 +68,26 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
   const vodRequestedChannelIdRef = useRef<string | undefined>();
   const previousVodChannelIdRef = useRef<string | undefined>();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const setTabFromCurrentUrl = useCallback(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const nextTab = resolveTabFromUrl(new URLSearchParams(window.location.search), window.location.hash);
+    setActiveTab((currentTab) => (currentTab === nextTab ? currentTab : nextTab));
+  }, []);
+
+  const updateTabUrl = useCallback(
+    (nextTab: ChannelTabId) => {
+      const nextSearchParams = new URLSearchParams(searchParams.toString());
+      nextSearchParams.set("tab", nextTab);
+      const queryString = nextSearchParams.toString();
+      const href = queryString ? `${pathname}?${queryString}` : pathname;
+      router.push(href, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
 
   const clearRefreshInterval = useCallback(() => {
     if (refreshIntervalRef.current) {
@@ -88,7 +136,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
       setVods([]);
       setVodError(undefined);
       vodRequestedChannelIdRef.current = undefined;
-      setActiveTab("about");
+      setTabFromCurrentUrl();
       setLoading(true);
     }
     previousUserIdRef.current = user?.id;
@@ -99,7 +147,29 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
       cancelledRef.current = true;
       clearRefreshInterval();
     };
-  }, [clearRefreshInterval, id, loadPlayback, user?.id]);
+  }, [clearRefreshInterval, id, loadPlayback, setTabFromCurrentUrl, user?.id]);
+
+  useEffect(() => {
+    setTabFromCurrentUrl();
+  }, [setTabFromCurrentUrl, tabSearchParam]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const handleLocationUpdate = () => {
+      setTabFromCurrentUrl();
+    };
+
+    window.addEventListener("hashchange", handleLocationUpdate);
+    window.addEventListener("popstate", handleLocationUpdate);
+
+    return () => {
+      window.removeEventListener("hashchange", handleLocationUpdate);
+      window.removeEventListener("popstate", handleLocationUpdate);
+    };
+  }, [setTabFromCurrentUrl]);
 
   useEffect(() => {
     clearRefreshInterval();
@@ -183,11 +253,12 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
       const normalizedIndex = (index + CHANNEL_TABS.length) % CHANNEL_TABS.length;
       const nextTabId = CHANNEL_TABS[normalizedIndex].id;
       setActiveTab(nextTabId);
+      updateTabUrl(nextTabId);
       if (focusTab) {
         tabRefs.current[normalizedIndex]?.focus();
       }
     },
-    []
+    [updateTabUrl]
   );
 
   const handleTabKeyDown = useCallback(
@@ -289,7 +360,10 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
                     aria-selected={activeTab === tab.id}
                     tabIndex={activeTab === tab.id ? 0 : -1}
                     aria-controls={`channel-tab-${tab.id}`}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      updateTabUrl(tab.id);
+                    }}
                     onKeyDown={(event) => handleTabKeyDown(event, index)}
                   >
                     {tab.label}

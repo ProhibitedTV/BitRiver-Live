@@ -1,5 +1,5 @@
 import { buildAuthUser, guestAuthState, mockUseAuth, signedInAuthState } from "../test/auth";
-import { viewerApiMocks } from "../test/test-utils";
+import { mockRouter, setMockPathname, viewerApiMocks } from "../test/test-utils";
 import userEvent from "@testing-library/user-event";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import ChannelPage from "../app/channels/[id]/page";
@@ -75,7 +75,12 @@ const baseChatMessages = [
 
 describe("ChannelPage", () => {
   beforeEach(() => {
+    window.history.replaceState({}, "", "/channels/chan-42");
+    setMockPathname("/channels/chan-42");
     jest.clearAllMocks();
+    mockRouter.push.mockImplementation((href: string) => {
+      window.history.pushState({}, "", href);
+    });
     mockUseAuth.mockReturnValue(signedInAuthState());
     fetchChannelPlaybackMock.mockResolvedValue(basePlaybackResponse as any);
     fetchChannelVodsMock.mockResolvedValue({ channelId: "chan-42", items: [] } as any);
@@ -301,6 +306,8 @@ describe("ChannelPage", () => {
     expect(screen.getByRole("button", { name: /subscribe/i })).toBeInTheDocument();
 
     await act(async () => {
+      window.history.replaceState({}, "", "/channels/chan-84");
+      setMockPathname("/channels/chan-84");
       rerender(<ChannelPage params={{ id: "chan-84" }} />);
     });
 
@@ -449,6 +456,58 @@ describe("ChannelPage", () => {
     expect(screen.getByRole("tabpanel", { name: "Videos" })).toBeVisible();
   });
 
+  test("loads with a deep-linked tab from query params", async () => {
+    window.history.replaceState({}, "", "/channels/chan-42?tab=videos");
+    mockUseAuth.mockReturnValue(signedInAuthState());
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    const videosTab = await screen.findByRole("tab", { name: "Videos" });
+    expect(videosTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: "Videos" })).toBeVisible();
+  });
+
+  test("updates URL query state when switching tabs", async () => {
+    const user = userEvent.setup();
+    mockUseAuth.mockReturnValue(signedInAuthState());
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    await screen.findByRole("tab", { name: "About" });
+
+    await act(async () => {
+      await user.click(screen.getByRole("tab", { name: "Videos" }));
+    });
+
+    expect(mockRouter.push).toHaveBeenCalledWith("/channels/chan-42?tab=videos", { scroll: false });
+    expect(window.location.search).toBe("?tab=videos");
+  });
+
+  test("restores prior tab on browser navigation", async () => {
+    const user = userEvent.setup();
+    mockUseAuth.mockReturnValue(signedInAuthState());
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    const aboutTab = await screen.findByRole("tab", { name: "About" });
+    expect(aboutTab).toHaveAttribute("aria-selected", "true");
+
+    await act(async () => {
+      await user.click(screen.getByRole("tab", { name: "Videos" }));
+    });
+    expect(screen.getByRole("tab", { name: "Videos" })).toHaveAttribute("aria-selected", "true");
+
+    await act(async () => {
+      window.history.back();
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "About" })).toHaveAttribute("aria-selected", "true");
+    });
+    expect(screen.getByRole("tabpanel", { name: "About" })).toBeVisible();
+  });
+
   test("fetches VODs only after opening Videos and avoids refetch on tab toggles", async () => {
     const user = userEvent.setup();
     mockUseAuth.mockReturnValue(signedInAuthState());
@@ -467,6 +526,12 @@ describe("ChannelPage", () => {
 
     await act(async () => {
       await user.click(screen.getByRole("tab", { name: "About" }));
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "About" })).toHaveAttribute("aria-selected", "true");
+    });
+
+    await act(async () => {
       await user.click(screen.getByRole("tab", { name: "Videos" }));
     });
 
@@ -488,11 +553,16 @@ describe("ChannelPage", () => {
     expect(fetchChannelVodsMock).toHaveBeenNthCalledWith(1, "chan-42");
 
     await act(async () => {
+      window.history.replaceState({}, "", "/channels/chan-84");
+      setMockPathname("/channels/chan-84");
       rerender(<ChannelPage params={{ id: "chan-84" }} />);
     });
 
     await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledWith("chan-84"));
     expect(fetchChannelVodsMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "About" })).toHaveAttribute("aria-selected", "true");
+    });
 
     await act(async () => {
       await user.click(screen.getByRole("tab", { name: "Videos" }));
