@@ -797,3 +797,22 @@
 - `cd web/viewer && npm run test -- viewerShell.test.tsx`
 - `cd web/viewer && npm run test -- navbar-mobile.spec.ts`
 - `./scripts/verify.sh`
+
+## Scope (current change)
+- Add roving-focus keyboard semantics to channel info tabs in `web/viewer/app/channels/[id]/page.tsx`.
+- Ensure tab buttons use `tabIndex=0` only for the active tab and `tabIndex=-1` for inactive tabs while preserving existing ARIA wiring.
+- Add keyboard handling for `ArrowLeft`/`ArrowRight` (plus `ArrowUp`/`ArrowDown`), `Home`, and `End` so focus movement and active panel selection stay synchronized.
+- Add/update viewer tests to verify keyboard-only navigation across About, Schedule, and Videos tabs.
+
+## Assumptions
+- Horizontal tabs should wrap at ends for arrow-key navigation, matching common WAI-ARIA tabs behavior.
+- Existing tabpanel IDs/labels and panel visibility behavior should remain unchanged apart from active-tab updates.
+- Jest unit coverage in `web/viewer/__tests__/channelPage.test.tsx` is sufficient for this keyboard interaction update.
+
+## Risks
+- Focus-ref bookkeeping can break if tab order/index mapping drifts from the rendered tab list.
+- Keyboard handlers could interfere with native button behavior if default action suppression is too broad.
+
+## Test plan
+- `cd web/viewer && npm run test -- channelPage.test.tsx`
+- `./scripts/verify.sh`

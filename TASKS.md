@@ -1423,3 +1423,34 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - ✅ `cd web/viewer && npm run test -- viewerShell.test.tsx`
   - ⚠️ `cd web/viewer && npm run test:playwright -- tests/navbar-mobile.spec.ts` (blocked by pre-existing Next.js build type error in `app/creator/live/[channelId]/page.tsx`: invalid page export `deriveControlCentreStatus`)
   - ✅ `./scripts/verify.sh`
+
+## Scoped change: channel page tab roving-focus keyboard navigation
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Implement roving-focus + keyboard tab navigation in channel page
+  - Acceptance criteria:
+    - `web/viewer/app/channels/[id]/page.tsx` sets `tabIndex=0` for active tab and `tabIndex=-1` for inactive tabs.
+    - Tab triggers handle `ArrowLeft`/`ArrowRight` (and `ArrowUp`/`ArrowDown`), `Home`, and `End` to move focus and switch active tab.
+    - `aria-selected` state remains synchronized with focused/active tab selection.
+
+- [x] Task 2 — Add/update channel page tests for keyboard-only tab traversal
+  - Acceptance criteria:
+    - `web/viewer/__tests__/channelPage.test.tsx` includes coverage proving keyboard navigation across About/Schedule/Videos tabs.
+    - Test asserts active tab and visible `tabpanel` stay in sync after keyboard navigation.
+
+- [x] Task 3 — Run scoped viewer checks and required verify gate
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- channelPage.test.tsx` passes.
+    - `./scripts/verify.sh` is run and result logged.
+
+### Execution log (channel page tab roving-focus keyboard navigation)
+- ✅ Task 1 complete: added tab roving-focus semantics and keyboard handling (`ArrowLeft`/`ArrowRight`/`ArrowUp`/`ArrowDown`, `Home`, `End`) while preserving existing ARIA tab-to-tabpanel wiring.
+- ✅ Task 1 check:
+  - ✅ `cd web/viewer && npm run lint -- --file app/channels/[id]/page.tsx`
+- ✅ Task 2 complete: extended `channelPage.test.tsx` with keyboard-only navigation coverage asserting focus movement, active tab selection, and panel visibility synchronization.
+- ✅ Task 2 check:
+  - ✅ `cd web/viewer && npm run test -- channelPage.test.tsx`
+- ✅ Task 3 checks:
+  - ✅ `cd web/viewer && npm run test -- channelPage.test.tsx`
+  - ✅ `./scripts/verify.sh`
