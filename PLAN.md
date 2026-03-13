@@ -1,4 +1,22 @@
 ## Scope (current change)
+- Strengthen navbar search keyboard focus visibility in `web/viewer/styles/globals.css` without regressing existing navbar visual design.
+- Add a high-contrast `.nav-search` focus treatment that is clearly visible for both desktop inline and mobile drawer search variants.
+- Define/verify theme variables so the focus treatment remains visible in dark (`:root`) and light (`[data-theme="light"]`) modes.
+- Add viewer test coverage that exercises keyboard focus in the navbar search path and asserts the visual focus contract is present.
+
+## Assumptions
+- Both `.nav-search--inline` and `.nav-search--drawer` already share the `.nav-search` base class and should inherit one focus-within treatment.
+- A CSS-contract assertion (plus navbar keyboard-focus path test) is acceptable for verifying visible focus representation in Jest/jsdom.
+- No deployment contract or runtime backend behavior changes are required for this viewer-only CSS/test update.
+
+## Risks
+- Focus styling could be too subtle in one theme if ring/border colors are not theme-tuned.
+- Drawer/inline search focus tests can be brittle if assertions depend on CSS visibility instead of semantic structure.
+
+## Test plan
+- `cd web/viewer && npm run test -- navbar.test.tsx`
+
+## Scope (current change)
 - Update `web/viewer/components/ChatPanel.tsx` accessibility live-region semantics so only the message stream is announced as incremental updates.
 - Remove the outer chat panel live region and apply `role="log"`, `aria-live="polite"`, `aria-relevant="additions text"`, and `aria-atomic="false"` on the chat-entry stream container only.
 - Keep existing `role="alert"` and `role="status"` blocks scoped outside any broad live region to avoid duplicate/overly verbose announcements.

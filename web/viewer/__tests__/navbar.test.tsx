@@ -12,6 +12,8 @@ import {
 import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Navbar } from "../components/Navbar";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 jest.mock("../hooks/useAuth");
 
@@ -316,6 +318,41 @@ describe("Navbar", () => {
 
     expect(toggleButton).toHaveFocus();
     expect(toggleButton).toHaveAttribute("aria-expanded", "false");
+  });
+
+
+  test("keeps keyboard focus path available for both inline and drawer navbar search inputs", async () => {
+    mockAnonymousUser();
+    setMatchMedia((query) => query === "(max-width: 800px)");
+    const user = userEvent.setup();
+
+    renderWithProviders(<Navbar />);
+
+    const inlineSearch = screen.getByRole("searchbox", { name: /search for channels or categories/i });
+    inlineSearch.focus();
+    expect(inlineSearch).toHaveFocus();
+
+    const toggleButton = screen.getByRole("button", { name: /open navigation menu/i });
+    await act(async () => {
+      await user.click(toggleButton);
+    });
+
+    const drawer = document.getElementById("viewer-nav-menu");
+    expect(drawer).not.toBeNull();
+    const drawerSearch = within(drawer!).getByRole("searchbox", { name: /search for channels or categories/i });
+    drawerSearch.focus();
+    expect(drawerSearch).toHaveFocus();
+    expect(drawerSearch.closest(".nav-search")).toHaveClass("nav-search--drawer");
+  });
+
+  test("defines a visible nav-search focus-within style contract for dark and light themes", () => {
+    const globalsCssPath = resolve(__dirname, "../styles/globals.css");
+    const globalsCss = readFileSync(globalsCssPath, "utf8");
+
+    expect(globalsCss).toContain("--navbar-search-focus-ring");
+    expect(globalsCss).toContain("--navbar-search-focus-border");
+    expect(globalsCss).toContain(".nav-search:focus-within");
+    expect(globalsCss).toContain("box-shadow: var(--navbar-search-shadow), 0 0 0 3px var(--navbar-search-focus-ring);");
   });
 
 
