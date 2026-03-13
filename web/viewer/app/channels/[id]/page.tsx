@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
 import Link from "next/link";
 import { ChannelAboutPanel, ChannelHeader } from "../../../components/ChannelHero";
 import { ChatPanel } from "../../../components/ChatPanel";
@@ -14,6 +15,12 @@ import type {
   VodItem
 } from "../../../lib/viewer-api";
 import { fetchChannelPlayback, fetchChannelVods } from "../../../lib/viewer-api";
+
+const CHANNEL_TABS = [
+  { id: "about", label: "About" },
+  { id: "schedule", label: "Schedule" },
+  { id: "videos", label: "Videos" }
+] as const;
 
 export default function ChannelPage({ params }: { params: { id: string } }) {
   const { id } = params;
@@ -32,6 +39,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
   const vodCancelledRef = useRef(false);
   const vodRequestedChannelIdRef = useRef<string | undefined>();
   const previousVodChannelIdRef = useRef<string | undefined>();
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const clearRefreshInterval = useCallback(() => {
     if (refreshIntervalRef.current) {
@@ -170,11 +178,45 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
     };
   }, [activeTab, id, loadVods]);
 
-  const tabs = [
-    { id: "about", label: "About" },
-    { id: "schedule", label: "Schedule" },
-    { id: "videos", label: "Videos" }
-  ] as const;
+  const activateTabAtIndex = useCallback(
+    (index: number, focusTab: boolean) => {
+      const normalizedIndex = (index + CHANNEL_TABS.length) % CHANNEL_TABS.length;
+      const nextTabId = CHANNEL_TABS[normalizedIndex].id;
+      setActiveTab(nextTabId);
+      if (focusTab) {
+        tabRefs.current[normalizedIndex]?.focus();
+      }
+    },
+    []
+  );
+
+  const handleTabKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+      let nextIndex: number | undefined;
+      switch (event.key) {
+        case "ArrowRight":
+        case "ArrowDown":
+          nextIndex = index + 1;
+          break;
+        case "ArrowLeft":
+        case "ArrowUp":
+          nextIndex = index - 1;
+          break;
+        case "Home":
+          nextIndex = 0;
+          break;
+        case "End":
+          nextIndex = CHANNEL_TABS.length - 1;
+          break;
+        default:
+          return;
+      }
+
+      event.preventDefault();
+      activateTabAtIndex(nextIndex, true);
+    },
+    [activateTabAtIndex]
+  );
 
   return (
     <div className="container channel-page">
@@ -234,16 +276,21 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
             />
             <section className="channel-tabs">
               <div className="channel-tabs__list" role="tablist" aria-label="Stream info tabs">
-                {tabs.map((tab) => (
+                {CHANNEL_TABS.map((tab, index) => (
                   <button
                     key={tab.id}
+                    ref={(element) => {
+                      tabRefs.current[index] = element;
+                    }}
                     id={`channel-tab-${tab.id}-trigger`}
                     role="tab"
                     type="button"
                     className="channel-tabs__trigger"
                     aria-selected={activeTab === tab.id}
+                    tabIndex={activeTab === tab.id ? 0 : -1}
                     aria-controls={`channel-tab-${tab.id}`}
                     onClick={() => setActiveTab(tab.id)}
+                    onKeyDown={(event) => handleTabKeyDown(event, index)}
                   >
                     {tab.label}
                   </button>

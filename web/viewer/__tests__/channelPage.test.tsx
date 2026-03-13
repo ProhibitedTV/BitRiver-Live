@@ -398,6 +398,57 @@ describe("ChannelPage", () => {
     );
   });
 
+
+
+  test("supports roving-focus keyboard navigation across tabs", async () => {
+    const user = userEvent.setup();
+    mockUseAuth.mockReturnValue(signedInAuthState());
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    const aboutTab = await screen.findByRole("tab", { name: "About" });
+    const scheduleTab = screen.getByRole("tab", { name: "Schedule" });
+    const videosTab = screen.getByRole("tab", { name: "Videos" });
+
+    expect(aboutTab).toHaveAttribute("tabindex", "0");
+    expect(scheduleTab).toHaveAttribute("tabindex", "-1");
+    expect(videosTab).toHaveAttribute("tabindex", "-1");
+
+    aboutTab.focus();
+    await act(async () => {
+      await user.keyboard("{ArrowRight}");
+    });
+
+    expect(scheduleTab).toHaveFocus();
+    expect(scheduleTab).toHaveAttribute("aria-selected", "true");
+    expect(scheduleTab).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("tabpanel", { name: "Schedule" })).toBeVisible();
+    expect(document.getElementById("channel-tab-about")).toHaveAttribute("hidden");
+
+    await act(async () => {
+      await user.keyboard("{End}");
+    });
+    expect(videosTab).toHaveFocus();
+    expect(videosTab).toHaveAttribute("aria-selected", "true");
+    expect(videosTab).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("tabpanel", { name: "Videos" })).toBeVisible();
+
+    await act(async () => {
+      await user.keyboard("{Home}");
+    });
+    expect(aboutTab).toHaveFocus();
+    expect(aboutTab).toHaveAttribute("aria-selected", "true");
+    expect(aboutTab).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("tabpanel", { name: "About" })).toBeVisible();
+
+    await act(async () => {
+      await user.keyboard("{ArrowLeft}");
+    });
+    expect(videosTab).toHaveFocus();
+    expect(videosTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: "Videos" })).toBeVisible();
+  });
+
   test("fetches VODs only after opening Videos and avoids refetch on tab toggles", async () => {
     const user = userEvent.setup();
     mockUseAuth.mockReturnValue(signedInAuthState());
