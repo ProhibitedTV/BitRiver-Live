@@ -54,7 +54,9 @@ describe("Navbar", () => {
         Object.defineProperty(window, "location", { configurable: true, value: originalLocation }),
     };
   };
+  const mediaListeners = new Map<string, ((event: MediaQueryListEvent) => void)[]>();
   const setMatchMedia = (resolver: (query: string) => boolean) => {
+    mediaListeners.clear();
     Object.defineProperty(window, "matchMedia", {
       writable: true,
       value: jest.fn().mockImplementation((query: string) => ({
@@ -63,11 +65,31 @@ describe("Navbar", () => {
         onchange: null,
         addListener: jest.fn(),
         removeListener: jest.fn(),
-        addEventListener: jest.fn(),
-        removeEventListener: jest.fn(),
+        addEventListener: jest.fn((eventName: string, listener: (event: MediaQueryListEvent) => void) => {
+          if (eventName !== "change") {
+            return;
+          }
+          const existing = mediaListeners.get(query) ?? [];
+          mediaListeners.set(query, [...existing, listener]);
+        }),
+        removeEventListener: jest.fn((eventName: string, listener: (event: MediaQueryListEvent) => void) => {
+          if (eventName !== "change") {
+            return;
+          }
+          const existing = mediaListeners.get(query) ?? [];
+          mediaListeners.set(
+            query,
+            existing.filter((registered) => registered !== listener),
+          );
+        }),
         dispatchEvent: jest.fn(),
       })),
     });
+  };
+  const emitMatchMediaChange = (query: string, matches: boolean) => {
+    const listeners = mediaListeners.get(query) ?? [];
+    const event = { matches, media: query } as MediaQueryListEvent;
+    listeners.forEach((listener) => listener(event));
   };
 
   beforeAll(() => {
@@ -78,6 +100,7 @@ describe("Navbar", () => {
     jest.clearAllMocks();
     setMatchMedia(() => false);
     resetRouterMocks();
+    window.localStorage.clear();
     fetchManagedChannelsMock.mockResolvedValue([]);
   });
 
@@ -353,6 +376,55 @@ describe("Navbar", () => {
     expect(globalsCss).toContain("--navbar-search-focus-border");
     expect(globalsCss).toContain(".nav-search:focus-within");
     expect(globalsCss).toContain("box-shadow: var(--navbar-search-shadow), 0 0 0 3px var(--navbar-search-focus-ring);");
+  });
+
+  test("loads the stored theme preference on initial render", () => {
+    mockAnonymousUser();
+    window.localStorage.setItem("viewer-theme", "light");
+    setMatchMedia(() => false);
+
+    renderWithProviders(<Navbar />);
+
+    expect(document.body).toHaveAttribute("data-theme", "light");
+    expect(screen.getByRole("button", { name: /switch to dark theme/i })).toBeInTheDocument();
+  });
+
+  test("falls back to prefers-color-scheme when no saved preference exists", () => {
+    mockAnonymousUser();
+    setMatchMedia((query) => query === "(prefers-color-scheme: light)");
+
+    renderWithProviders(<Navbar />);
+
+    expect(document.body).toHaveAttribute("data-theme", "light");
+    expect(screen.getByRole("button", { name: /switch to dark theme/i })).toBeInTheDocument();
+  });
+
+  test("persists manual theme toggle across remount and ignores media query updates", async () => {
+    mockAnonymousUser();
+    setMatchMedia((query) => query === "(prefers-color-scheme: light)");
+    const user = userEvent.setup();
+
+    const { unmount } = renderWithProviders(<Navbar />);
+
+    const themeToggle = screen.getByRole("button", { name: /switch to dark theme/i });
+    await act(async () => {
+      await user.click(themeToggle);
+    });
+
+    expect(window.localStorage.getItem("viewer-theme")).toBe("dark");
+    expect(document.body).not.toHaveAttribute("data-theme", "light");
+
+    await act(async () => {
+      emitMatchMediaChange("(prefers-color-scheme: light)", true);
+    });
+
+    expect(document.body).not.toHaveAttribute("data-theme", "light");
+
+    unmount();
+    renderWithProviders(<Navbar />);
+
+    expect(document.body).not.toHaveAttribute("data-theme", "light");
+    expect(screen.getByRole("button", { name: /switch to light theme/i })).toBeInTheDocument();
   });
 
 
