@@ -1,4 +1,4 @@
-import { deriveControlCentreStatus } from "../app/creator/live/[channelId]/page";
+import { deriveControlCentreStatus } from "../app/creator/live/[channelId]/stream-status";
 
 describe("deriveControlCentreStatus", () => {
   it("maps starting to reconnecting", () => {

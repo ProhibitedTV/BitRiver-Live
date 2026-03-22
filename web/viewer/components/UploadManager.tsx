@@ -330,7 +330,7 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
             filename: formValues.filename,
             playbackUrl: formValues.playbackUrl,
             sizeBytes: Number.isNaN(sizeBytes) ? undefined : sizeBytes,
-            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+            metadata: metadata && Object.keys(metadata).length > 0 ? metadata : undefined,
           };
 
       const file = snapshot ? snapshot.file : selectedFile;
@@ -648,7 +648,7 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
           <ul className="upload-list">
             {visibleItems.map((item) => {
               const statusPresentation = getUploadItemStatusPresentation(item);
-              const hasPlaybackUrl = item.playbackUrl?.trim().length > 0;
+              const hasPlaybackUrl = Boolean(item.playbackUrl?.trim());
               const isReadyForPlayback = hasPlaybackUrl || isUploadItemReady(item.status);
               const hasRecordingWithoutPlayback = Boolean(item.recordingId && !hasPlaybackUrl);
               const recordingDetailHref = hasRecordingWithoutPlayback ? getRecordingDetailHref(item.recordingId) : null;

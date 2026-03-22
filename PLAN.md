@@ -1,4 +1,50 @@
 ## Scope (current change)
+- Clean up repo Git hygiene so local build/test/cache artifacts do not flood staging during normal development or Codex-assisted work.
+- Ignore the known generated directories created by the current Go/viewer verification flow on this Windows host (`.gocache`, `.npm-cache`, `web/viewer/.next`, `web/viewer/playwright-report`, `web/viewer/test-results`).
+- Pin the generated OME contract file to a stable line-ending policy so `deploy/ome/Server.generated.xml` does not appear as a false-positive modified file after validation runs.
+- Restore a development-friendly Git working tree by un-staging generated artifacts and verifying status only reports intentional source/doc changes.
+
+## Assumptions
+- The generated directories above are local development outputs and should never be committed from this repository.
+- Adding targeted ignore rules and a narrow `.gitattributes` entry is sufficient; no deployment contract or runtime behavior changes are required.
+- Cleaning the Git index for generated artifacts is safe because these files were produced by local verification commands, not authored source changes.
+
+## Risks
+- Ignore rules that are too broad could accidentally hide a file the repo intends to track, so changes should stay path-specific.
+- Updating `.gitattributes` for the generated OME XML could require a worktree refresh to fully clear existing line-ending noise on Windows.
+- The current index may still contain staged generated paths until we explicitly unstage them after updating ignore policy.
+
+## Test plan
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live check-ignore -v .gocache/example .npm-cache/example web/viewer/.next/example web/viewer/playwright-report/index.html web/viewer/test-results/.last-run.json`
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live restore --staged .gocache .npm-cache web/viewer/.next web/viewer/playwright-report web/viewer/test-results`
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live restore --worktree deploy/ome/Server.generated.xml`
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short`
+
+## Scope (current change)
+- Clear the current viewer release-blocking `next build` failures caused by route-page export violations and immediate type-safety issues surfaced by rerunning the production build.
+- Preserve the creator live control-centre and directory/homepage behavior while moving reusable status/shell/boundary logic into build-safe modules that both page code and unit tests can import.
+- Keep browse-directory behavior unchanged while tightening query typing so production builds can complete.
+- Re-run viewer production validation so the self-hosted creator go-live and directory experience can ship through the documented release path again.
+
+## Assumptions
+- The fastest production-readiness win is to remove known release-gate blockers before expanding product scope.
+- `deriveControlCentreStatus` is pure presentation logic and can be extracted without changing backend contracts or runtime behavior.
+- Viewer-only source/test changes do not require deployment contract edits.
+
+## Risks
+- Refactoring the helper out of the page could introduce import/type drift between the page and its tests.
+- Once this export issue is fixed, `next build` may surface additional latent viewer typing or routing errors.
+- Browser-spec execution may still depend on local Playwright/browser availability even after the build is fixed.
+
+## Test plan
+- `cd web/viewer && npm run test -- creatorLiveStreamStatus.test.ts`
+- `cd web/viewer && npm run test -- directoryPage.test.tsx`
+- `cd web/viewer && npm run test -- browsePage.test.tsx`
+- `cd web/viewer && npm run build`
+- `cd web/viewer && npm run test:playwright -- tests/creator-live-setup.spec.ts`
+- `./scripts/verify.sh --viewer`
+
+## Scope (current change)
 - Validate the canonical deployment path on this Windows host by exercising the BitRiver quickstart/Compose flow against `deploy/docker-compose.yml`.
 - Prefer repo-documented PowerShell or direct Go entrypoints when Bash wrappers are blocked in this environment, without changing the deployment contract.
 - If quickstart or compose smoke exposes a repo issue, implement the smallest fix needed to make the canonical deployment path succeed and re-run validation.

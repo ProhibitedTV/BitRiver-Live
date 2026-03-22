@@ -2,6 +2,7 @@
 node_modules/
 /package-lock.json
 npm-debug.log*
+.npm-cache/
 
 # Go build
 bin/
@@ -10,6 +11,7 @@ bin/
 *.dll
 *.so
 *.dylib
+.gocache/
 
 # Editors
 .idea/
@@ -20,3 +22,6 @@ bin/
 /data/
 .env
 /deploy/srs/conf/srs.generated.conf
+/web/viewer/.next/
+/web/viewer/playwright-report/
+/web/viewer/test-results/
