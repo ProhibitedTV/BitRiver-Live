@@ -1,3 +1,37 @@
+## Scoped change: cleanup audit and `internal/executil` task 1
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Audit hotspots and write `docs/cleanup-plan.md`
+  - Acceptance criteria:
+    - `docs/cleanup-plan.md` captures the top brittle/inefficient hotspots with evidence, risk, proposed fixes, and verification notes.
+    - `docs/cleanup-plan.md` lists 5–8 ordered cleanup tasks.
+
+- [x] Task 2 — Execute `docs/cleanup-plan.md` task 1 in `internal/executil`
+  - Acceptance criteria:
+    - `internal/executil/executil_test.go` no longer depends on POSIX shell tools.
+    - Runtime `executil` behavior is unchanged.
+    - `go test ./internal/executil -count=1 -timeout=120s` passes on this host.
+
+- [x] Task 3 — Run verification and record outcomes
+  - Acceptance criteria:
+    - The targeted `internal/executil` test command is logged as passing.
+    - `go test ./... -count=1 -timeout=120s` is rerun and any remaining unrelated failures are recorded.
+    - `./scripts/verify.sh` is attempted and its result or host blocker is recorded.
+
+### Execution log (cleanup audit and `internal/executil` task 1)
+- ✅ Task 1 complete: audited the current brittle/inefficient hotspots, captured the top 10 findings in `docs/cleanup-plan.md`, and ordered 7 reviewable cleanup tasks with task 1 focused on `internal/executil`.
+- ✅ Task 1 checks:
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s` (fails today in `cmd/transcoder`, `internal/executil`, and `scripts`, which seeded the cleanup ordering)
+- ✅ Task 2 complete: replaced the POSIX-only `internal/executil` test harness with a helper subprocess launched through the Go test binary, preserving the same `CommandError` assertions without relying on `sh`, `head`, or `/dev/zero`.
+- ✅ Task 2 checks:
+  - ✅ `gofmt -w internal/executil/executil_test.go`
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/executil -count=1 -timeout=120s`
+- ✅ Task 3 complete: reran the broad verification commands after the `internal/executil` fix; the package dropped out of the failure list, `cmd/transcoder` and `scripts` still fail for their already-audited reasons, and `./scripts/verify.sh` completed successfully on this host.
+- ✅ Task 3 checks:
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s` (`internal/executil` now passes; remaining failures are limited to `cmd/transcoder` and `scripts`)
+  - ✅ `./scripts/verify.sh`
+
 ## Scoped change: repo git hygiene and generated-artifact cleanup
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

@@ -1,4 +1,24 @@
 ## Scope (current change)
+- Audit the repository for stale, brittle, or inefficient hotspots and record an ordered remediation plan in `docs/cleanup-plan.md`.
+- Complete only `docs/cleanup-plan.md` task 1 in this change: make `internal/executil` tests platform-neutral without changing runtime behavior or public APIs.
+- Re-run targeted verification plus the repo verification entrypoint, and record any host-specific blockers explicitly.
+
+## Assumptions
+- The current `internal/executil` failures come from POSIX-only test fixtures (`sh`, `head`, `/dev/zero`), not from a required product behavior on Windows.
+- A helper subprocess launched via the Go test binary can preserve the existing `CommandError` assertions while removing shell dependencies.
+- This scoped cleanup does not change runtime behavior, routes, CLI output, or deployment contracts.
+
+## Risks
+- Helper-process tests can recurse indefinitely if the env guard is too loose.
+- Changing how stderr is generated could accidentally weaken the truncation coverage if the helper output is too small.
+- `./scripts/verify.sh` may still be blocked by this host's Bash/WSL setup even after the targeted package fix lands; the blocker needs to be captured rather than masked.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/executil -count=1 -timeout=120s`
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s`
+- `./scripts/verify.sh`
+
+## Scope (current change)
 - Clean up repo Git hygiene so local build/test/cache artifacts do not flood staging during normal development or Codex-assisted work.
 - Ignore the known generated directories created by the current Go/viewer verification flow on this Windows host (`.gocache`, `.npm-cache`, `web/viewer/.next`, `web/viewer/playwright-report`, `web/viewer/test-results`).
 - Pin the generated OME contract file to a stable line-ending policy so `deploy/ome/Server.generated.xml` does not appear as a false-positive modified file after validation runs.
