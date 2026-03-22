@@ -1933,3 +1933,58 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 3 checks:
   - ✅ `cd web/viewer && npm run test -- channelPage.test.tsx`
   - ✅ `./scripts/verify.sh` (Docker-dependent checks skipped because Docker is unavailable in this environment)
+
+## Scoped change: creator-first guided go-live flow
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the scoped creator live plan before implementation
+  - Acceptance criteria:
+    - `PLAN.md` captures the guided go-live scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists ordered implementation and verification tasks before viewer code is edited.
+
+- [x] Task 2 - Refine creator live status helpers for guided test-stream messaging
+  - Acceptance criteria:
+    - Existing creator-live helper logic supports the requested status-card states and calm instruction copy using current playback/session signals only.
+    - `web/viewer/__tests__/creatorLiveStreamStatus.test.ts` covers the main state mappings used by the new guided flow.
+
+- [x] Task 3 - Reshape the creator live page into the requested top-to-bottom flow
+  - Acceptance criteria:
+    - `web/viewer/app/creator/live/[channelId]/page.tsx` renders the sections in this order: Channel, OBS Setup, Test Stream, Preview, Share.
+    - The page clearly shows the active channel and supports switching when multiple channels exist.
+    - OBS setup exposes copyable read-only ingest URL + masked stream key with reveal/hide, copy URL/key, and copy OBS settings actions.
+    - Test Stream polls existing signals every 3-5 seconds, shows last checked time, and presents calm state-specific guidance.
+    - Preview and Share sections explain preview readiness clearly and provide copy/open viewer affordances.
+
+- [x] Task 4 - Add happy-path coverage for setup through first successful live signal
+  - Acceptance criteria:
+    - Playwright coverage in `web/viewer/tests/creator-live-setup.spec.ts` exercises the guided flow sections and the main copy/reveal/live-preview/share happy path.
+    - Supporting unit coverage in `web/viewer/__tests__/creatorLivePage.test.tsx` or equivalent asserts the guided section order and key affordances.
+
+- [x] Task 5 - Run scoped viewer validation and record results
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- creatorLiveStreamStatus.test.ts` passes.
+    - `cd web/viewer && npm run test -- creatorLivePage.test.tsx` passes.
+    - `cd web/viewer && npm run test:playwright -- tests/creator-live-setup.spec.ts` is run and logged.
+    - `./scripts/verify.sh --viewer` is run and logged.
+
+### Execution log (creator-first guided go-live flow)
+- ✅ Task 1 complete: appended the scoped creator-live plan and ordered implementation/verification tasks to `PLAN.md` and `TASKS.md` before touching viewer code.
+- ✅ Task 1 check:
+  - ✅ `rg -n -e 'creator-first guided go-live flow' -e 'Test Stream polls existing signals every 3-5 seconds' TASKS.md`
+  - ✅ `rg -n -e 'creator-first guided \"Go Live\" flow' -e 'Copy affordances for stream key, ingest URL, OBS settings, and viewer link' PLAN.md`
+- ✅ Task 2 complete: simplified the creator-live status helper around the requested setup states (`Waiting for stream`, `Live`, `Reconnecting`, `Offline / Unknown`) and added calm instruction copy driven by the existing playback/session signals only.
+- ✅ Task 2 check:
+  - ✅ `npm.cmd --prefix web/viewer run test -- creatorLiveStreamStatus.test.ts` (passes; Jest also reports a pre-existing `.next/standalone/package.json` haste-name collision warning in this checkout)
+- ✅ Task 3 complete: replaced the old two-column control-room layout with a single guided stack in the requested order, kept channel switching/title editing intact, added a visible OBS settings block plus share link actions, and wired the preview to the existing live/liveState signals so "preview warming up" is explained without new APIs.
+- ✅ Task 3 check:
+  - ✅ `npm.cmd --prefix web/viewer run build` (passes; Next.js also reports pre-existing client-render deopt warnings for several routes in this checkout)
+- ✅ Task 4 complete: added `creatorLivePage.test.tsx` to assert the guided section order and key affordances, extended the shared viewer API Jest mocks for creator-live page coverage, and upgraded the existing Playwright happy path to cover setup, live-status transition, preview messaging, and sharing.
+- ✅ Task 4 checks:
+  - ✅ `npm.cmd --prefix web/viewer run test -- creatorLivePage.test.tsx`
+  - ✅ `npm.cmd --prefix web/viewer run test:playwright -- tests/creator-live-setup.spec.ts`
+- ✅ Task 5 complete: reran the targeted creator-live Jest coverage after the last test edits and executed the repo viewer verification gate.
+- ✅ Task 5 checks:
+  - ✅ `npm.cmd --prefix web/viewer run test -- creatorLiveStreamStatus.test.ts creatorLivePage.test.tsx` (passes; `creatorLivePage.test.tsx` still emits React `act(...)` warnings from async polling/state-reset effects in the test harness)
+  - ✅ `npm.cmd --prefix web/viewer run test:playwright -- tests/creator-live-setup.spec.ts` (passes; Playwright logs pre-existing Next.js client-render deopt warnings plus the existing `next start` standalone warning)
+  - ✅ `./scripts/verify.sh --viewer`

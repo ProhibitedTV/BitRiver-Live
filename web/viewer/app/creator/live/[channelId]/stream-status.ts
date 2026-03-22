@@ -1,88 +1,73 @@
 import type { StreamSession } from "../../../../lib/viewer-api";
 
-export type ControlCentreStreamStatus = {
-  label: "Offline" | "Reconnecting" | "Live" | "Ended" | "Error";
+export type CreatorGoLiveStatus = {
+  key: "waiting" | "live" | "reconnecting" | "offline-unknown";
+  label: "Waiting for stream" | "Live" | "Reconnecting" | "Offline / Unknown";
   badgeClassName: string;
+  instructions: string;
   lastTransitionAt?: string;
   reason?: string;
 };
 
 export const CREATOR_STATUS_LABELS = {
-  offline: "Offline",
-  starting: "Reconnecting",
+  waiting: "Waiting for stream",
   live: "Live",
-  ended: "Ended",
-  error: "Error",
+  reconnecting: "Reconnecting",
+  offlineUnknown: "Offline / Unknown",
 } as const;
 
-export function deriveControlCentreStatus(
+function sessionIsActive(session: StreamSession | undefined): boolean {
+  return Boolean(session && !session.endedAt);
+}
+
+export function deriveCreatorGoLiveStatus(
+  live: boolean,
   liveState: string | undefined,
   currentSessionId: string | undefined,
   latestSession: StreamSession | undefined,
-): ControlCentreStreamStatus {
-  if (liveState === "starting") {
+): CreatorGoLiveStatus {
+  if (live || liveState === "live") {
     return {
-      label: CREATOR_STATUS_LABELS.starting,
-      badgeClassName: "badge badge--ingesting",
+      key: "live",
+      label: CREATOR_STATUS_LABELS.live,
+      badgeClassName: "badge badge--live",
+      instructions: "Your stream is reaching BitRiver. Keep OBS running while you confirm the preview below.",
       lastTransitionAt: latestSession?.startedAt,
-      reason: "Encoder connected; stream is still provisioning.",
     };
   }
 
-  if (liveState === "live") {
+  if (
+    liveState === "starting" ||
+    (liveState === "offline" && currentSessionId && sessionIsActive(latestSession))
+  ) {
     return {
-      label: CREATOR_STATUS_LABELS.live,
-      badgeClassName: "badge badge--live",
+      key: "reconnecting",
+      label: CREATOR_STATUS_LABELS.reconnecting,
+      badgeClassName: "badge badge--ingesting",
+      instructions: "We can see your encoder. Keep streaming while BitRiver finishes reconnecting the preview.",
       lastTransitionAt: latestSession?.startedAt,
+      reason:
+        liveState === "starting"
+          ? "Encoder connected; playback is still warming up."
+          : "Recent ingest activity is still settling.",
     };
   }
 
   if (liveState === "offline") {
-    if (latestSession?.endedAt) {
-      return {
-        label: CREATOR_STATUS_LABELS.ended,
-        badgeClassName: "badge badge--ended",
-        lastTransitionAt: latestSession.endedAt,
-        reason: "Ended normally.",
-      };
-    }
-
-    if (currentSessionId && !latestSession) {
-      return {
-        label: CREATOR_STATUS_LABELS.error,
-        badgeClassName: "badge badge--error",
-        reason: "Ingest lost before session details were persisted.",
-      };
-    }
-
-    if (currentSessionId && latestSession && latestSession.id !== currentSessionId) {
-      return {
-        label: CREATOR_STATUS_LABELS.error,
-        badgeClassName: "badge badge--error",
-        lastTransitionAt: latestSession.startedAt,
-        reason: "Ingest lost: channel session signal is out of sync.",
-      };
-    }
-
     return {
-      label: CREATOR_STATUS_LABELS.offline,
+      key: "waiting",
+      label: CREATOR_STATUS_LABELS.waiting,
       badgeClassName: "badge badge--muted",
-      lastTransitionAt: latestSession?.endedAt,
-    };
-  }
-
-  if (liveState === "ended") {
-    return {
-      label: CREATOR_STATUS_LABELS.ended,
-      badgeClassName: "badge badge--ended",
+      instructions: "Open OBS, paste the server URL and stream key, then click Start Streaming to begin your test.",
       lastTransitionAt: latestSession?.endedAt ?? latestSession?.startedAt,
-      reason: "Stream ended and is awaiting the next ingest session.",
     };
   }
 
   return {
-    label: CREATOR_STATUS_LABELS.error,
+    key: "offline-unknown",
+    label: CREATOR_STATUS_LABELS.offlineUnknown,
     badgeClassName: "badge badge--error",
+    instructions: "We could not confirm your stream status yet. Refresh once more and double-check the OBS details on this page.",
     reason: liveState
       ? `Unexpected server live_state: ${liveState}`
       : "Server did not provide live_state",

@@ -1,10 +1,14 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("creator live setup", () => {
-  test("reveals stream key and supports copy actions", async ({ page }) => {
+  test("guides a creator from OBS setup to a live preview and share link", async ({ page }) => {
     const channelId = "creator-live-setup";
+    const backupChannelId = "creator-live-backup";
     const streamKey = "sk_live_setup_123";
     const ingestUrl = "rtmp://ingest.example.com/live";
+    const livePlaybackUrl = "https://cdn.example.com/live/master.m3u8";
+    let playbackChecks = 0;
+    let sessionChecks = 0;
 
     await page.addInitScript(() => {
       const clipboardWrites: string[] = [];
@@ -35,6 +39,8 @@ test.describe("creator live setup", () => {
     });
 
     await page.route(`**/api/channels/${channelId}/playback`, async (route) => {
+      playbackChecks += 1;
+      const isLive = playbackChecks > 2;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -45,24 +51,50 @@ test.describe("creator live setup", () => {
             title: "Creator Live Setup",
             category: "Science & Tech",
             tags: ["setup"],
-            liveState: "offline",
+            liveState: isLive ? "live" : "offline",
+            currentSessionId: isLive ? "session-live-1" : undefined,
             createdAt: new Date("2024-05-01T10:00:00Z").toISOString(),
             updatedAt: new Date("2024-05-01T10:30:00Z").toISOString(),
           },
           owner: { id: "creator-live-owner", displayName: "Live Owner" },
           profile: { bio: "Creator setup", avatarUrl: undefined, bannerUrl: undefined },
-          live: false,
+          live: isLive,
           follow: { followers: 0, following: false },
           donationAddresses: [],
           subscription: { subscribers: 0, subscribed: false },
-          playback: undefined,
+          playback: isLive
+            ? {
+                sessionId: "session-live-1",
+                startedAt: new Date("2024-05-01T10:35:00Z").toISOString(),
+                playbackUrl: livePlaybackUrl,
+                protocol: "hls",
+              }
+            : undefined,
           chat: { roomId: "room-live-setup" },
         }),
       });
     });
 
     await page.route(`**/api/channels/${channelId}/sessions`, async (route) => {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+      sessionChecks += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(
+          sessionChecks > 1
+            ? [
+                {
+                  id: "session-live-1",
+                  channelId,
+                  startedAt: new Date("2024-05-01T10:35:00Z").toISOString(),
+                  renditions: [],
+                  peakConcurrent: 0,
+                  playbackUrl: livePlaybackUrl,
+                },
+              ]
+            : [],
+        ),
+      });
     });
 
     await page.route(`**/api/channels/${channelId}/sessions/status`, async (route) => {
@@ -86,20 +118,50 @@ test.describe("creator live setup", () => {
             streamKey,
             ingestEndpoints: [ingestUrl, "rtmp://backup.example.com/live"],
           },
+          {
+            id: backupChannelId,
+            ownerId: "creator-live-owner",
+            title: "Creator Live Backup",
+            category: "Science & Tech",
+            tags: ["backup"],
+            liveState: "offline",
+            createdAt: new Date("2024-05-01T10:00:00Z").toISOString(),
+            updatedAt: new Date("2024-05-01T10:30:00Z").toISOString(),
+            streamKey: "sk_live_backup_456",
+            ingestEndpoints: ["rtmp://backup-channel.example.com/live"],
+          },
         ]),
       });
     });
 
     await page.goto(`/creator/live/${channelId}`);
 
+    await expect(page.getByRole("heading", { level: 3, name: "1) Channel" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 3, name: "2) OBS Setup" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 3, name: "3) Test Stream" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 3, name: "4) Preview" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 3, name: "5) Share" })).toBeVisible();
+
+    await expect(page.getByLabel("Current channel")).toHaveValue("Creator Live Setup");
+    await expect(page.getByLabel("Switch channel")).toHaveValue(channelId);
+    await expect(page.getByLabel("Preferred ingest URL")).toHaveValue(ingestUrl);
+
     const streamKeyInput = page.getByLabel("Stream key");
     const revealButton = page.getByRole("button", { name: "Reveal", exact: true });
     const copyKeyButton = page.getByRole("button", { name: "Copy key", exact: true });
     const copyIngestButton = page.getByTestId("copy-preferred-ingest-endpoint");
     const copyObsButton = page.getByTestId("copy-obs-settings");
+    const copyViewerLinkButton = page.getByTestId("copy-viewer-link");
 
     await expect(streamKeyInput).toHaveValue("••••••••");
     await expect(copyObsButton).toBeVisible();
+    await expect(page.getByText("Waiting for stream", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("When your OBS test reaches BitRiver, your preview will appear here so you can confirm everything before sharing."),
+    ).toBeVisible();
+    await expect(page.getByLabel("OBS settings block")).toHaveValue(
+      "Service: Custom\nServer: rtmp://ingest.example.com/live\nStream Key: [hidden - reveal to copy]",
+    );
 
     await expect(copyKeyButton).toBeEnabled();
     await copyKeyButton.click();
@@ -118,13 +180,31 @@ test.describe("creator live setup", () => {
     await expect(page.getByText("Copied OBS settings", { exact: true })).toBeVisible();
 
     clipboardWrites = await page.evaluate(() => (window as typeof window & { __clipboardWrites: string[] }).__clipboardWrites);
-    expect(clipboardWrites).toContain(`Server: ${ingestUrl}\nStream Key: [hidden - reveal to copy]`);
+    expect(clipboardWrites).toContain(`Service: Custom\nServer: ${ingestUrl}\nStream Key: [hidden - reveal to copy]`);
 
     await revealButton.click();
     await expect(streamKeyInput).toHaveValue(streamKey);
+    await expect(page.getByLabel("OBS settings block")).toHaveValue(
+      `Service: Custom\nServer: ${ingestUrl}\nStream Key: ${streamKey}`,
+    );
 
     await copyObsButton.click();
     clipboardWrites = await page.evaluate(() => (window as typeof window & { __clipboardWrites: string[] }).__clipboardWrites);
-    expect(clipboardWrites).toContain(`Server: ${ingestUrl}\nStream Key: ${streamKey}`);
+    expect(clipboardWrites).toContain(`Service: Custom\nServer: ${ingestUrl}\nStream Key: ${streamKey}`);
+
+    await copyViewerLinkButton.click();
+    clipboardWrites = await page.evaluate(() => (window as typeof window & { __clipboardWrites: string[] }).__clipboardWrites);
+    expect(clipboardWrites).toContain(`http://127.0.0.1:3000/channels/${channelId}`);
+
+    await page.getByRole("button", { name: "Refresh now" }).click();
+    await expect(page.getByText("Live", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Your live preview is ready. Confirm video and audio here before you share the viewer link."),
+    ).toBeVisible();
+    await expect(page.getByLabel("Viewer link")).toHaveValue(`http://127.0.0.1:3000/channels/${channelId}`);
+    await expect(page.getByRole("link", { name: "Open viewer" })).toHaveAttribute(
+      "href",
+      `http://127.0.0.1:3000/channels/${channelId}`,
+    );
   });
 });

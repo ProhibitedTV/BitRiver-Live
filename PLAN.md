@@ -1004,6 +1004,33 @@
 - `./scripts/verify.sh`
 
 ## Scope (current change)
+- Upgrade `web/viewer/app/creator/live/[channelId]/page.tsx` into a creator-first guided "Go Live" flow with a clear top-to-bottom sequence: Channel, OBS Setup, Test Stream, Preview, and Share.
+- Reuse existing viewer signals only (`fetchManagedChannels`, `fetchChannelPlayback` via `useCreatorChannel`, and `fetchChannelSessions`) to drive channel selection, ingest details, live-status polling, preview readiness messaging, and viewer-link sharing.
+- Keep secrets hidden by default, preserve the existing creator route/layout, and extend Playwright coverage for the main setup-to-live happy path.
+
+## Assumptions
+- The current creator live route is the right surface to upgrade; the getting-started page can continue linking into it without a broader dashboard redesign.
+- Existing signals are sufficient to infer the required status card states:
+  - `liveState === "live"` maps to `Live`
+  - `liveState === "starting"` or active ingest without playback maps to `Reconnecting`
+  - `liveState === "offline"` with no active ingest maps to `Waiting for stream`
+  - missing/unexpected state maps to `Offline / Unknown`
+- Passing existing `live` and `liveState` props into `Player` is enough to explain "preview not ready yet" without adding new preview APIs.
+- Viewer-only changes do not affect deployment-contract files or require docs updates outside the workflow artifacts unless runtime/operator guidance changes materially.
+
+## Risks
+- Status messaging can become confusing if `playback.channel.liveState`, `playback.live`, and session data drift temporarily; helper logic needs stable precedence and conservative copy.
+- Polling plus manual refresh can cause noisy UI state if timestamps/copy messages are reset too aggressively on every cycle.
+- Copy affordances for stream key, ingest URL, OBS settings, and viewer link can become brittle in tests if labels/test IDs are not stable.
+- Reordering the page into a strict guided flow could accidentally bury existing capabilities like title editing or channel switching if they are not integrated carefully into the new sections.
+
+## Test plan
+- `cd web/viewer && npm run test -- creatorLiveStreamStatus.test.ts`
+- `cd web/viewer && npm run test -- creatorLivePage.test.tsx`
+- `cd web/viewer && npm run test:playwright -- tests/creator-live-setup.spec.ts`
+- `./scripts/verify.sh --viewer`
+
+## Scope (current change)
 - Enhance `web/viewer/app/channels/[id]/page.tsx` tab state management so the selected channel tab is encoded in URL state and deep-linkable.
 - Read initial tab selection from URL (`?tab=` first, hash fallback), validate against `CHANNEL_TABS`, and default to `about` when invalid/missing.
 - Keep tab selection and URL synchronized via router/history updates while preserving current ARIA tablist + keyboard roving behavior.
