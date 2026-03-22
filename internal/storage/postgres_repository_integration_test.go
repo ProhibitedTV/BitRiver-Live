@@ -32,7 +32,7 @@ import (
 // database dedicated to automated runs.
 func postgresRepositoryFactory(t *testing.T, opts ...storage.Option) (storage.Repository, func(), error) {
 	t.Helper()
-	if pgx.IsStub {
+	if strings.Contains(strings.ToLower(pgx.ErrNoRows.Error()), "stub") {
 		t.Skip("pgx stubbed; postgres support unavailable")
 	}
 	dsn := os.Getenv("BITRIVER_TEST_POSTGRES_DSN")

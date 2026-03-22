@@ -1004,6 +1004,29 @@
 - `./scripts/verify.sh`
 
 ## Scope (current change)
+- Run a real local shakedown deployment of BitRiver Live on this Windows host using the canonical quickstart/Compose contract (`deploy/docker-compose.yml` plus the repo-root `.env`).
+- Capture the true host-side behavior during bring-up: Docker availability, compose render validity, container health, and basic service reachability after the stack starts.
+- If the shakedown surfaces a repo-side blocker, apply the smallest fix that unblocks deployment validation and rerun the affected checks; otherwise, document host/operator blockers precisely without mutating the deployment contract.
+
+## Assumptions
+- The current repo-root `.env` is the intended local deployment input for this checkout, so we should prefer using it as-is rather than generating or rewriting contract values unless the user asks for contract changes.
+- `scripts/quickstart.ps1` remains the best host-native entrypoint on this Windows system, with direct `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml --env-file .env` available as a fallback for comparison/debugging.
+- A successful shakedown should include more than a config render: we should observe running containers and at least basic API/viewer reachability, or record the exact point where the host prevents that.
+
+## Risks
+- Docker Desktop / Engine may be installed but not running, which would stop the shakedown before container startup and needs to be separated from repo defects.
+- The existing `.env` may contain site-specific or production-mode values that fail strict validation on this host; because `.env` is part of the deployment contract, we should report those gaps rather than silently rewriting them.
+- A full quickstart may build/pull large images and leave containers/volumes behind, so cleanup and final state reporting need to be explicit.
+
+## Test plan
+- `docker version`
+- `docker compose --env-file .env -f deploy/docker-compose.yml config`
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 --env-file .env --compose-file deploy/docker-compose.yml`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120`
+- `./scripts/verify.sh`
+
+## Scope (current change)
 - Upgrade `web/viewer/app/creator/live/[channelId]/page.tsx` into a creator-first guided "Go Live" flow with a clear top-to-bottom sequence: Channel, OBS Setup, Test Stream, Preview, and Share.
 - Reuse existing viewer signals only (`fetchManagedChannels`, `fetchChannelPlayback` via `useCreatorChannel`, and `fetchChannelSessions`) to drive channel selection, ingest details, live-status polling, preview readiness messaging, and viewer-link sharing.
 - Keep secrets hidden by default, preserve the existing creator route/layout, and extend Playwright coverage for the main setup-to-live happy path.

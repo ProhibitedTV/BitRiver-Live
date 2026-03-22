@@ -55,13 +55,19 @@ function Invoke-Cli {
         $env:GOSUMDB = 'off'
         $stdoutPath = [System.IO.Path]::GetTempFileName()
         $stderrPath = [System.IO.Path]::GetTempFileName()
-        $upperPath = [System.Environment]::GetEnvironmentVariable('PATH', 'Process')
+        $goPath = (Get-Command go -ErrorAction Stop).Source
+        $processPath = [System.Environment]::GetEnvironmentVariable('Path', 'Process')
+        $processPATH = [System.Environment]::GetEnvironmentVariable('PATH', 'Process')
+        $normalizedPath = if (-not [string]::IsNullOrEmpty($processPath)) { $processPath } else { $processPATH }
         try {
-            if ($null -ne $upperPath) {
+            if ($null -ne $normalizedPath) {
+                [System.Environment]::SetEnvironmentVariable('Path', $normalizedPath, 'Process')
+            }
+            if ($null -ne $processPATH) {
                 [System.Environment]::SetEnvironmentVariable('PATH', $null, 'Process')
             }
             $goArgs = @('run', './cmd/bitriver') + $CliArgs
-            $process = Start-Process -FilePath 'go' `
+            $process = Start-Process -FilePath $goPath `
                 -ArgumentList $goArgs `
                 -WorkingDirectory $CodeRoot `
                 -NoNewWindow `
@@ -72,9 +78,8 @@ function Invoke-Cli {
             $stdoutLines = if ((Get-Item $stdoutPath).Length -gt 0) { Get-Content $stdoutPath } else { @() }
             $stderrLines = if ((Get-Item $stderrPath).Length -gt 0) { Get-Content $stderrPath } else { @() }
         } finally {
-            if ($null -ne $upperPath) {
-                [System.Environment]::SetEnvironmentVariable('PATH', $upperPath, 'Process')
-            }
+            [System.Environment]::SetEnvironmentVariable('Path', $processPath, 'Process')
+            [System.Environment]::SetEnvironmentVariable('PATH', $processPATH, 'Process')
             Remove-Item $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
         }
         $exitCode = $process.ExitCode

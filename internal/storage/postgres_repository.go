@@ -76,7 +76,7 @@ func NewPostgresRepository(dsn string, opts ...Option) (Repository, error) {
 	if strings.TrimSpace(cfg.DSN) == "" {
 		return nil, fmt.Errorf("postgres dsn required")
 	}
-	if pgx.IsStub {
+	if strings.Contains(strings.ToLower(pgx.ErrNoRows.Error()), "stub") {
 		return nil, wrapPostgresUnavailable(errors.New("pgx driver stubbed in this build"))
 	}
 

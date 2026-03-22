@@ -184,8 +184,26 @@ func TestPowerShellQuickstartPropagatesCliExitCodes(t *testing.T) {
 	}
 
 	script := string(content)
-	if !strings.Contains(script, "Start-Process -FilePath 'go'") {
-		t.Fatalf("expected PowerShell quickstart wrapper to invoke the CLI through Start-Process for reliable exit handling")
+	if !strings.Contains(script, "$goPath = (Get-Command go -ErrorAction Stop).Source") {
+		t.Fatalf("expected PowerShell quickstart wrapper to resolve the absolute go.exe path before launching the CLI")
+	}
+	if !strings.Contains(script, "Start-Process -FilePath $goPath") {
+		t.Fatalf("expected PowerShell quickstart wrapper to invoke the CLI through Start-Process using the resolved go.exe path")
+	}
+	if !strings.Contains(script, "$processPath = [System.Environment]::GetEnvironmentVariable('Path', 'Process')") {
+		t.Fatalf("expected PowerShell quickstart wrapper to capture the process Path value before normalizing environment casing")
+	}
+	if !strings.Contains(script, "$processPATH = [System.Environment]::GetEnvironmentVariable('PATH', 'Process')") {
+		t.Fatalf("expected PowerShell quickstart wrapper to capture the process PATH value before normalizing environment casing")
+	}
+	if !strings.Contains(script, "SetEnvironmentVariable('Path', $normalizedPath, 'Process')") {
+		t.Fatalf("expected PowerShell quickstart wrapper to preserve a canonical Path value for the child process")
+	}
+	if !strings.Contains(script, "SetEnvironmentVariable('PATH', $null, 'Process')") {
+		t.Fatalf("expected PowerShell quickstart wrapper to drop the duplicate PATH key before Start-Process")
+	}
+	if !strings.Contains(script, "SetEnvironmentVariable('PATH', $processPATH, 'Process')") {
+		t.Fatalf("expected PowerShell quickstart wrapper to restore the original PATH value after Start-Process")
 	}
 	if !strings.Contains(script, "$process.ExitCode") {
 		t.Fatalf("expected PowerShell quickstart wrapper to inspect the child process exit code")
@@ -238,6 +256,31 @@ func TestComposeOMEHealthcheckUsesUnauthenticatedRootEndpoint(t *testing.T) {
 	}
 	if strings.Contains(compose, `Authorization: Bearer $$token`) {
 		t.Fatalf("expected OME healthcheck to avoid auth headers when using public liveness endpoint")
+	}
+}
+
+func TestDockerfileDropsStubbedPuddleInRealPgxMode(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	dockerfilePath := filepath.Join(repoRoot, "Dockerfile")
+	content, err := os.ReadFile(dockerfilePath)
+	if err != nil {
+		t.Fatalf("read Dockerfile: %v", err)
+	}
+
+	dockerfile := string(content)
+	if !strings.Contains(dockerfile, `go mod edit -dropreplace=github.com/jackc/pgx/v5;`) {
+		t.Fatalf("expected real pgx mode to drop the local pgx replacement")
+	}
+	if !strings.Contains(dockerfile, `go mod edit -dropreplace=github.com/jackc/puddle/v2;`) {
+		t.Fatalf("expected real pgx mode to drop the local puddle replacement")
+	}
+	if !strings.Contains(dockerfile, `go mod edit -dropreplace=golang.org/x/text;`) {
+		t.Fatalf("expected real pgx mode to drop the local x/text replacement")
 	}
 }
 
