@@ -1,4 +1,64 @@
 ## Scope (current change)
+- Improve the public-facing root `README.md` by featuring the new `bitriver-live-banner-text.png` asset near the top of the file.
+- Tighten the opening README copy so the project pitch reads more clearly to first-time visitors without changing any technical guidance or deployment contracts.
+- Keep this as a docs-only change and verify the asset path plus the standard repository verification gate.
+
+## Assumptions
+- Leaving `bitriver-live-banner-text.png` in the repo root and referencing it directly from `README.md` is the smallest, clearest way to publish the banner.
+- The rest of the README structure remains accurate; only the top presentation copy needs polishing.
+- A docs-only change should not require contract or runtime documentation updates outside `README.md`.
+
+## Risks
+- Moving or renaming the image unnecessarily could create a broken public README image link, so the asset path should stay simple.
+- Rewording the intro too aggressively could drift from the repo’s existing deployment framing, so the copy change should stay tight and factual.
+- `./scripts/verify.sh` may surface unrelated repository issues, so verification results should distinguish README work from ambient failures if any appear.
+
+## Test plan
+- `Test-Path bitriver-live-banner-text.png`
+- `Get-Content README.md -TotalCount 20`
+- `./scripts/verify.sh`
+
+## Scope (current change)
+- Fix the `github.com/jackc/puddle/v2` local replacement so postgres-tagged builds do not fail with `build constraints exclude all Go files`.
+- Keep the change narrowly scoped to vendored dependency buildability; do not change runtime behavior, module contracts, or dependency sources.
+- Verify the exact failing path with postgres-tagged tests and the standard repository verification gate.
+
+## Assumptions
+- The failure is caused by the lone file in `third_party/github.com/jackc/puddle/v2` being gated behind `//go:build !postgres`, while `go.mod` always replaces `github.com/jackc/puddle/v2` with that local directory.
+- Existing tests already define the expected behavior; we only need the vendored package to remain buildable when `-tags postgres` is used.
+- We should not run `go mod tidy` or change dependency sourcing unless the local replacement is actually missing or corrupt, which it is not in this checkout.
+
+## Risks
+- Relaxing the build constraint could allow the local puddle stub to compile in postgres-tagged builds where a future workflow expected a different implementation.
+- A too-broad change in `third_party` could affect non-postgres builds, so the diff should stay minimal and isolated to this package.
+- Other postgres-tagged issues may still exist after this fix; we should verify the reproduced failing command directly before inferring broader success.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test -tags postgres ./internal/auth -count=1 -timeout=120s`
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/auth -count=1 -timeout=120s`
+- `./scripts/verify.sh`
+
+## Scope (current change)
+- Audit the repository for stale, brittle, or inefficient hotspots and record an ordered remediation plan in `docs/cleanup-plan.md`.
+- Complete only `docs/cleanup-plan.md` task 1 in this change: make `internal/executil` tests platform-neutral without changing runtime behavior or public APIs.
+- Re-run targeted verification plus the repo verification entrypoint, and record any host-specific blockers explicitly.
+
+## Assumptions
+- The current `internal/executil` failures come from POSIX-only test fixtures (`sh`, `head`, `/dev/zero`), not from a required product behavior on Windows.
+- A helper subprocess launched via the Go test binary can preserve the existing `CommandError` assertions while removing shell dependencies.
+- This scoped cleanup does not change runtime behavior, routes, CLI output, or deployment contracts.
+
+## Risks
+- Helper-process tests can recurse indefinitely if the env guard is too loose.
+- Changing how stderr is generated could accidentally weaken the truncation coverage if the helper output is too small.
+- `./scripts/verify.sh` may still be blocked by this host's Bash/WSL setup even after the targeted package fix lands; the blocker needs to be captured rather than masked.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/executil -count=1 -timeout=120s`
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s`
+- `./scripts/verify.sh`
+
+## Scope (current change)
 - Clean up repo Git hygiene so local build/test/cache artifacts do not flood staging during normal development or Codex-assisted work.
 - Ignore the known generated directories created by the current Go/viewer verification flow on this Windows host (`.gocache`, `.npm-cache`, `web/viewer/.next`, `web/viewer/playwright-report`, `web/viewer/test-results`).
 - Pin the generated OME contract file to a stable line-ending policy so `deploy/ome/Server.generated.xml` does not appear as a false-positive modified file after validation runs.

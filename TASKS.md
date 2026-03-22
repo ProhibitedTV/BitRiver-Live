@@ -1,3 +1,110 @@
+## Scoped change: root README banner polish
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Record the docs-only plan for the README refresh
+  - Acceptance criteria:
+    - `PLAN.md` captures the README banner scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists a small implementation and verification sequence before editing `README.md`.
+
+- [x] Task 2 — Add the banner image and tighten the README opening copy
+  - Acceptance criteria:
+    - `README.md` includes `bitriver-live-banner-text.png` near the top of the file.
+    - The opening copy is slightly sharper for public readers without changing technical meaning.
+    - The image reference uses a valid repo-relative path.
+
+- [x] Task 3 — Verify the README asset path and record the result
+  - Acceptance criteria:
+    - `Test-Path bitriver-live-banner-text.png` confirms the banner asset exists.
+    - `Get-Content README.md -TotalCount 20` shows the new banner reference near the top.
+    - `./scripts/verify.sh` is run and recorded.
+
+### Execution log (root README banner polish)
+- ✅ Task 1 complete: captured the docs-only README scope in `PLAN.md` and queued a single README implementation task plus verification in `TASKS.md`.
+- ✅ Task 1 checks:
+  - ✅ `Get-Item bitriver-live-banner-text.png | Select-Object Name,Length,LastWriteTime`
+  - ✅ `Get-Content README.md -TotalCount 120`
+- ✅ Task 2 complete: added the new banner directly under the `README.md` title and refreshed the opening two paragraphs so the project pitch reads a little more cleanly for public visitors without changing any technical claims.
+- ✅ Task 2 checks:
+  - ✅ `Get-Content README.md -TotalCount 20`
+- ✅ Task 3 complete: confirmed the banner asset path exists, verified the new banner reference appears at the top of `README.md`, and reran the repository verification gate successfully.
+- ✅ Task 3 checks:
+  - ✅ `Test-Path bitriver-live-banner-text.png`
+  - ✅ `Get-Content README.md -TotalCount 20`
+  - ✅ `./scripts/verify.sh`
+
+## Scoped change: postgres-tagged `puddle/v2` build fix
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Record the reproduced failure and scoped fix plan
+  - Acceptance criteria:
+    - `PLAN.md` captures the postgres-tagged `puddle/v2` build failure, assumptions, risks, and verification commands.
+    - `TASKS.md` lists a small implementation and verification sequence before code edits.
+
+- [x] Task 2 — Make the local `puddle/v2` replacement buildable under `-tags postgres`
+  - Acceptance criteria:
+    - `third_party/github.com/jackc/puddle/v2` contains at least one buildable Go file when the `postgres` tag is enabled.
+    - Default non-postgres builds remain unaffected.
+    - The diff stays narrowly scoped to the vendored package.
+
+- [x] Task 3 — Verify the reproduced failure is resolved
+  - Acceptance criteria:
+    - `go test -tags postgres ./internal/auth -count=1 -timeout=120s` passes.
+    - `go test ./internal/auth -count=1 -timeout=120s` passes.
+    - `./scripts/verify.sh` is run and recorded.
+
+### Execution log (postgres-tagged `puddle/v2` build fix)
+- ✅ Task 1 complete: confirmed that `github.com/jackc/puddle/v2` is locally replaced to `./third_party/github.com/jackc/puddle/v2`, reproduced the exact failure with `go test -tags postgres ./internal/auth`, and narrowed the issue to `third_party/github.com/jackc/puddle/v2/puddle.go` being gated behind `//go:build !postgres`.
+- ✅ Task 1 checks:
+  - ✅ `Get-Content go.mod -TotalCount 200`
+  - ✅ `Get-ChildItem -Recurse third_party\\github.com\\jackc\\puddle\\v2 | Select-Object FullName,Length,LastWriteTime`
+  - ✅ `Get-Content third_party\\github.com\\jackc\\puddle\\v2\\puddle.go -TotalCount 80`
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test -tags postgres ./internal/auth -count=1 -timeout=120s`
+- ✅ Task 2 complete: removed the `!postgres` build constraint from `third_party/github.com/jackc/puddle/v2/puddle.go`, which keeps the existing local replacement visible to both default and postgres-tagged builds without changing dependency sourcing.
+- ✅ Task 2 checks:
+  - ✅ `Get-Content third_party\\github.com\\jackc\\puddle\\v2\\puddle.go -TotalCount 80`
+- ✅ Task 3 complete: reran the reproduced postgres-tagged auth build, confirmed the default auth tests still pass, and reran the repo verification gate. An additional postgres-tagged storage run no longer hits the `puddle` compile error and instead stops at a Docker access blocker on this host.
+- ✅ Task 3 checks:
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test -tags postgres ./internal/auth -count=1 -timeout=120s`
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/auth -count=1 -timeout=120s`
+  - ⚠️ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test -tags postgres ./internal/storage -count=1 -timeout=120s` (compile proceeds past `puddle`; current blocker is Docker access for postgres integration tests on this host)
+  - ✅ `./scripts/verify.sh`
+
+## Scoped change: cleanup audit and `internal/executil` task 1
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Audit hotspots and write `docs/cleanup-plan.md`
+  - Acceptance criteria:
+    - `docs/cleanup-plan.md` captures the top brittle/inefficient hotspots with evidence, risk, proposed fixes, and verification notes.
+    - `docs/cleanup-plan.md` lists 5–8 ordered cleanup tasks.
+
+- [x] Task 2 — Execute `docs/cleanup-plan.md` task 1 in `internal/executil`
+  - Acceptance criteria:
+    - `internal/executil/executil_test.go` no longer depends on POSIX shell tools.
+    - Runtime `executil` behavior is unchanged.
+    - `go test ./internal/executil -count=1 -timeout=120s` passes on this host.
+
+- [x] Task 3 — Run verification and record outcomes
+  - Acceptance criteria:
+    - The targeted `internal/executil` test command is logged as passing.
+    - `go test ./... -count=1 -timeout=120s` is rerun and any remaining unrelated failures are recorded.
+    - `./scripts/verify.sh` is attempted and its result or host blocker is recorded.
+
+### Execution log (cleanup audit and `internal/executil` task 1)
+- ✅ Task 1 complete: audited the current brittle/inefficient hotspots, captured the top 10 findings in `docs/cleanup-plan.md`, and ordered 7 reviewable cleanup tasks with task 1 focused on `internal/executil`.
+- ✅ Task 1 checks:
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s` (fails today in `cmd/transcoder`, `internal/executil`, and `scripts`, which seeded the cleanup ordering)
+- ✅ Task 2 complete: replaced the POSIX-only `internal/executil` test harness with a helper subprocess launched through the Go test binary, preserving the same `CommandError` assertions without relying on `sh`, `head`, or `/dev/zero`.
+- ✅ Task 2 checks:
+  - ✅ `gofmt -w internal/executil/executil_test.go`
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/executil -count=1 -timeout=120s`
+- ✅ Task 3 complete: reran the broad verification commands after the `internal/executil` fix; the package dropped out of the failure list, `cmd/transcoder` and `scripts` still fail for their already-audited reasons, and `./scripts/verify.sh` completed successfully on this host.
+- ✅ Task 3 checks:
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s` (`internal/executil` now passes; remaining failures are limited to `cmd/transcoder` and `scripts`)
+  - ✅ `./scripts/verify.sh`
+
 ## Scoped change: repo git hygiene and generated-artifact cleanup
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
