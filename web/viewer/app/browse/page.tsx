@@ -22,7 +22,7 @@ export default function BrowsePage() {
   const [filter, setFilter] = useState<FilterKey>(null);
   const [queryHydrated, setQueryHydrated] = useState(false);
   const loadChannels = useCallback(
-    async (search?: string) => {
+    async (search = "") => {
       try {
         setLoading(true);
         setError(undefined);

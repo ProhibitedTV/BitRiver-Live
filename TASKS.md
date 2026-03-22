@@ -1,3 +1,185 @@
+## Scoped change: repo git hygiene and generated-artifact cleanup
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Update plan docs for repo hygiene cleanup
+  - Acceptance criteria:
+    - `PLAN.md` records the Git-hygiene scope, assumptions, risks, and verification commands.
+    - `TASKS.md` contains an ordered cleanup checklist before repo files are edited.
+
+- [x] Task 2 — Ignore generated local cache/build/test artifacts
+  - Acceptance criteria:
+    - `.gitignore` ignores `.gocache`, `.npm-cache`, `web/viewer/.next`, `web/viewer/playwright-report`, and `web/viewer/test-results`.
+    - Ignore rules stay path-specific so tracked source paths are unaffected.
+
+- [x] Task 3 — Stabilize `deploy/ome/Server.generated.xml` line endings
+  - Acceptance criteria:
+    - `.gitattributes` includes a targeted entry that keeps `deploy/ome/Server.generated.xml` normalized consistently.
+    - The generated OME file can be restored without a content diff after verification runs.
+
+- [x] Task 4 — Remove generated artifacts from the Git index
+  - Acceptance criteria:
+    - Generated cache/build/test directories are no longer staged.
+    - Working-tree source/doc changes remain intact.
+
+- [x] Task 5 — Verify development-friendly Git status and record the result
+  - Acceptance criteria:
+    - `git status --short` no longer floods with generated-artifact noise.
+    - `TASKS.md` records the resulting clean/intended status set and any residual caveats.
+
+### Execution log (repo git hygiene and generated-artifact cleanup)
+- ✅ Task 1 complete: added a focused repo-hygiene scope to `PLAN.md` and `TASKS.md` covering generated-artifact ignores, OME XML line-ending stabilization, and Git index cleanup.
+- ✅ Task 1 check:
+  - ✅ `rg -n "repo git hygiene and generated-artifact cleanup|Git-hygiene scope|generated OME file" PLAN.md TASKS.md`
+- ✅ Task 2 complete: added path-specific ignore rules for local Go/npm caches plus the viewer build and Playwright/Jest result directories so routine verification output no longer pollutes staging.
+- ✅ Task 2 checks:
+  - ✅ `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live check-ignore -v --no-index .gocache/example .npm-cache/example web/viewer/.next/example web/viewer/playwright-report/index.html web/viewer/test-results/.last-run.json`
+  - ✅ `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live diff -- .gitignore`
+- ✅ Task 3 complete: added a narrow `.gitattributes` policy for `deploy/ome/Server.generated.xml` and refreshed the worktree copy so the generated OME contract file no longer shows a false-positive content modification on Windows.
+- ✅ Task 3 checks:
+  - ✅ `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live restore --worktree deploy/ome/Server.generated.xml`
+  - ✅ `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live diff --numstat -- deploy/ome/Server.generated.xml`
+  - ✅ `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short -- deploy/ome/Server.generated.xml .gitattributes`
+- ✅ Task 4 complete: removed the generated cache/build/test directories from the Git index so local verification output no longer pollutes the staged change set.
+- ✅ Task 4 checks:
+  - ✅ `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live restore --staged .gocache .npm-cache web/viewer/.next web/viewer/playwright-report web/viewer/test-results`
+  - ✅ `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short`
+  - ✅ `(git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live diff --cached --name-only -- .gocache .npm-cache web/viewer/.next web/viewer/playwright-report web/viewer/test-results | Measure-Object -Line).Lines`
+- ✅ Task 5 complete: restaged the intentional repo-hygiene files and verified that Git status now shows only the intended source/doc changes, with generated output hidden by ignore policy.
+- ✅ Task 5 checks:
+  - ✅ `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live add .gitignore .gitattributes PLAN.md TASKS.md`
+  - ✅ `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short`
+  - ✅ `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live diff --cached --name-only`
+  - ✅ `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live check-ignore -v --no-index .gocache/example .npm-cache/example web/viewer/.next/example web/viewer/playwright-report/index.html web/viewer/test-results/.last-run.json`
+- ℹ️ Resulting staged set:
+  - `.gitattributes`
+  - `.gitignore`
+  - `PLAN.md`
+  - `TASKS.md`
+  - `web/viewer/__tests__/creatorLiveStreamStatus.test.ts`
+  - `web/viewer/__tests__/directoryPage.test.tsx`
+  - `web/viewer/app/browse/page.tsx`
+  - `web/viewer/app/creator/live/[channelId]/page.tsx`
+  - `web/viewer/app/creator/live/[channelId]/stream-status.ts`
+  - `web/viewer/app/directory-page-shell.tsx`
+  - `web/viewer/app/page.tsx`
+  - `web/viewer/components/UploadManager.tsx`
+  - `web/viewer/components/following/useFollowingChannels.ts`
+
+## Scoped change: viewer route export release-build unblock
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Update plan docs for the creator live release blocker
+  - Acceptance criteria:
+    - `PLAN.md` records the viewer release-gate scope, assumptions, risks, and test plan.
+    - `TASKS.md` contains an ordered implementation/check list before code changes begin.
+
+- [x] Task 2 — Extract creator live stream-status logic out of the Next.js page module
+  - Acceptance criteria:
+    - `deriveControlCentreStatus` no longer exports from `web/viewer/app/creator/live/[channelId]/page.tsx`.
+    - The creator live page imports the extracted helper from a non-page module.
+    - Existing creator live UI behavior remains unchanged.
+
+- [x] Task 3 — Keep targeted creator live status tests aligned with the extracted helper
+  - Acceptance criteria:
+    - `web/viewer/__tests__/creatorLiveStreamStatus.test.ts` imports the helper from its new module path.
+    - Targeted unit coverage still validates the current live/offline/error status mapping.
+
+- [x] Task 4 — Extract directory page shell/boundary helpers out of the Next.js home page module
+  - Acceptance criteria:
+    - `DirectoryPageShell` and `DirectoryDataBoundary` no longer export from `web/viewer/app/page.tsx`.
+    - The default route page imports those helpers from a non-page module.
+    - Existing directory/homepage behavior remains unchanged.
+
+- [x] Task 5 — Keep directory page tests aligned with the extracted shell/boundary helpers
+  - Acceptance criteria:
+    - `web/viewer/__tests__/directoryPage.test.tsx` imports the extracted helper components from their new module path.
+    - Existing directory page tests still cover the normalized shell + pending-boundary behavior.
+
+- [x] Task 6 — Fix browse page query typing for build-safe directory loading
+  - Acceptance criteria:
+    - `web/viewer/app/browse/page.tsx` no longer passes `string | undefined` into `loadDirectoryChannels`.
+    - Browse page behavior remains unchanged for empty and populated search queries.
+
+- [x] Task 7 — Fix following hook channel identity typing for production builds
+  - Acceptance criteria:
+    - `web/viewer/components/following/useFollowingChannels.ts` compares `DirectoryChannel` entries using valid typed channel identifiers.
+    - Existing no-op reload semantics remain unchanged.
+
+- [x] Task 8 — Fix UploadManager optional metadata typing for production builds
+  - Acceptance criteria:
+    - `web/viewer/components/UploadManager.tsx` no longer calls `Object.keys` on possibly undefined metadata.
+    - Existing upload payload behavior remains unchanged for empty and populated metadata.
+
+- [x] Task 9 — Fix UploadManager playback URL typing for production builds
+  - Acceptance criteria:
+    - `web/viewer/components/UploadManager.tsx` treats optional `playbackUrl` values safely when computing playback availability.
+    - Existing upload card action behavior remains unchanged.
+
+- [-] Task 10 — Run release-facing viewer validation and record results
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- creatorLiveStreamStatus.test.ts` passes.
+    - `cd web/viewer && npm run test -- directoryPage.test.tsx` passes.
+    - `cd web/viewer && npm run test -- browsePage.test.tsx` passes.
+    - `cd web/viewer && npm run test -- followingSidebar.test.tsx` passes.
+    - `cd web/viewer && npm run test -- uploadManager.test.tsx` passes.
+    - `cd web/viewer && npm run build` passes.
+    - `cd web/viewer && npm run test:playwright -- tests/creator-live-setup.spec.ts` is run and logged.
+    - `./scripts/verify.sh --viewer` is run and logged.
+
+### Execution log (viewer route export release-build unblock)
+- ✅ Task 1 complete: updated `PLAN.md` and `TASKS.md` with a scoped release-readiness pass focused on the current viewer production-build blocker in the creator live page.
+- ✅ Task 1 check:
+  - ✅ `rg -n "creator live page release-build unblock|viewer release-blocking `next build` failure" PLAN.md TASKS.md`
+- ✅ Task 2 complete: moved creator live stream-status labels/types/derivation into a sibling `stream-status.ts` module and rewired both the route page and unit test to import it, removing the named helper export from the Next.js page file.
+- ✅ Task 2 check:
+  - ✅ `rg -n "stream-status|export function deriveControlCentreStatus|export const CREATOR_STATUS_LABELS" web/viewer/app/creator/live/[channelId]/page.tsx web/viewer/app/creator/live/[channelId]/stream-status.ts web/viewer/__tests__/creatorLiveStreamStatus.test.ts`
+- ✅ Task 3 complete: updated the targeted creator-live status unit test to import the extracted helper and confirmed the existing live/offline/error mappings still pass unchanged.
+- ✅ Task 3 checks:
+  - ❌ `npm --prefix web/viewer run test -- creatorLiveStreamStatus.test.ts` (PowerShell execution policy blocks `npm.ps1`; switched to `npm.cmd`)
+  - ❌ `npm.cmd --prefix web/viewer run test -- creatorLiveStreamStatus.test.ts` (initially failed because viewer dependencies were not installed in this checkout)
+  - ✅ `npm.cmd --prefix web/viewer ci --cache .npm-cache`
+  - ✅ `npm.cmd --prefix web/viewer run test -- creatorLiveStreamStatus.test.ts`
+- ✅ Task 4 complete: moved the directory page suspense shell and async data boundary out of `web/viewer/app/page.tsx` into `web/viewer/app/directory-page-shell.tsx`, leaving the route file with only its default page export.
+- ✅ Task 4 checks:
+  - ✅ `rg -n "DirectoryPageShell|DirectoryDataBoundary|directory-page-shell" web/viewer/app/page.tsx web/viewer/app/directory-page-shell.tsx web/viewer/__tests__/directoryPage.test.tsx`
+- ✅ Task 5 complete: updated the directory page tests to import the extracted shell/boundary helpers from the new module path and confirmed the normalized-shell + suspense fallback coverage still passes.
+- ✅ Task 5 checks:
+  - ✅ `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx` (passes; emits pre-existing `act(...)` warnings from `SearchBar` interactions but no test failures)
+- ✅ Task 6 complete: defaulted the browse page's optional `search` parameter before calling `loadDirectoryChannels`, preserving empty-query behavior while satisfying the production build type checker.
+- ✅ Task 6 checks:
+  - ✅ `rg -n 'search = ""|loadDirectoryChannels\(search\)' web/viewer/app/browse/page.tsx`
+  - ✅ `npm.cmd --prefix web/viewer run test -- browsePage.test.tsx`
+- ✅ Task 7 complete: corrected the following hook's channel identity comparison to use `DirectoryChannel.channel.id`, preserving the no-op reload optimization while satisfying TypeScript.
+- ✅ Task 7 checks:
+  - ✅ `rg -n 'channel\.id' web/viewer/components/following/useFollowingChannels.ts`
+  - ✅ `npm.cmd --prefix web/viewer run test -- followingSidebar.test.tsx`
+- ✅ Task 8 complete: guarded the upload payload metadata shape so `UploadManager` only calls `Object.keys` when metadata exists, preserving empty-metadata behavior while satisfying the build.
+- ✅ Task 8 checks:
+  - ✅ `rg -n 'metadata && Object\.keys\(metadata\)\.length > 0' web/viewer/components/UploadManager.tsx`
+  - ✅ `npm.cmd --prefix web/viewer run test -- uploadManager.test.tsx`
+- ✅ Task 9 complete: tightened upload-card playback URL detection to treat the optional `playbackUrl` as a boolean presence check, preserving card-action behavior while satisfying TypeScript.
+- ✅ Task 9 checks:
+  - ✅ `rg -n 'Boolean\(item\.playbackUrl\?\.trim\(\)\)' web/viewer/components/UploadManager.tsx`
+  - ✅ `npm.cmd --prefix web/viewer run test -- uploadManager.test.tsx`
+- ⚠️ Task 10 validation progress:
+  - ✅ `npm.cmd --prefix web/viewer run test -- creatorLiveStreamStatus.test.ts`
+  - ✅ `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx` (passes; emits pre-existing `act(...)` warnings from `SearchBar` interactions)
+  - ✅ `npm.cmd --prefix web/viewer run test -- browsePage.test.tsx`
+  - ✅ `npm.cmd --prefix web/viewer run test -- followingSidebar.test.tsx`
+  - ✅ `npm.cmd --prefix web/viewer run test -- uploadManager.test.tsx`
+  - ✅ `npm.cmd --prefix web/viewer run lint`
+  - ✅ `npm.cmd --prefix web/viewer run build`
+  - ❌ `npm.cmd --prefix web/viewer run test:playwright -- tests/creator-live-setup.spec.ts` (initially blocked because Playwright Chromium was not installed on this machine)
+  - ✅ `npx.cmd playwright install chromium`
+  - ✅ `npm.cmd --prefix web/viewer run test:playwright -- tests/creator-live-setup.spec.ts`
+  - ❌ `./scripts/verify.sh --viewer` (wrapper blocked on this host: Git Bash crashes with MSYS signal-pipe error, WSL `bash.exe` returns `E_ACCESSDENIED`, and Python is not installed for the script's `python3` dependency)
+  - ⚠️ Closest documented equivalent subset run directly in PowerShell instead:
+  - ✅ `npm.cmd --prefix web/viewer run lint`
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/ingest -run TestRenderOMEConfigRequiresManagersAuth -count=1 -v`
+  - ❌ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s` (remaining blockers in `cmd/transcoder`, `internal/executil`, `scripts`, plus a likely cross-package race involving `internal/ingest`/OME generated config when the full suite runs concurrently)
+
 ## Scoped change: deployment validation and quickstart smoke on Windows host
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

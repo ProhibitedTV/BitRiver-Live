@@ -65,7 +65,7 @@ export function useFollowingChannels({
       }
 
       for (let index = 0; index < currentChannels.length; index += 1) {
-        if (currentChannels[index]?.id !== nextChannels[index]?.id) {
+        if (currentChannels[index]?.channel.id !== nextChannels[index]?.channel.id) {
           return false;
         }
       }

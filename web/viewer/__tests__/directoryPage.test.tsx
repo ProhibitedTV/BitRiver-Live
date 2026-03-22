@@ -1,7 +1,8 @@
 import { mockRouter, resetRouterMocks, viewerApiMocks } from "../test/test-utils";
 import userEvent from "@testing-library/user-event";
 import { render, screen, waitFor, within } from "@testing-library/react";
-import DirectoryPage, { DirectoryDataBoundary, DirectoryPageShell } from "../app/page";
+import DirectoryPage from "../app/page";
+import { DirectoryDataBoundary, DirectoryPageShell } from "../app/directory-page-shell";
 import { directoryInputMatrix } from "../test/directory-input-matrix";
 import { normalizeDirectoryQuery } from "../lib/directory-state";
 
