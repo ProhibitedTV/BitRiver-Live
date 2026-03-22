@@ -1,5 +1,3 @@
-//go:build !postgres
-
 package puddle
 
 import (

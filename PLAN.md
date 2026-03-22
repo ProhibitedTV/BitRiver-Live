@@ -1,4 +1,24 @@
 ## Scope (current change)
+- Fix the `github.com/jackc/puddle/v2` local replacement so postgres-tagged builds do not fail with `build constraints exclude all Go files`.
+- Keep the change narrowly scoped to vendored dependency buildability; do not change runtime behavior, module contracts, or dependency sources.
+- Verify the exact failing path with postgres-tagged tests and the standard repository verification gate.
+
+## Assumptions
+- The failure is caused by the lone file in `third_party/github.com/jackc/puddle/v2` being gated behind `//go:build !postgres`, while `go.mod` always replaces `github.com/jackc/puddle/v2` with that local directory.
+- Existing tests already define the expected behavior; we only need the vendored package to remain buildable when `-tags postgres` is used.
+- We should not run `go mod tidy` or change dependency sourcing unless the local replacement is actually missing or corrupt, which it is not in this checkout.
+
+## Risks
+- Relaxing the build constraint could allow the local puddle stub to compile in postgres-tagged builds where a future workflow expected a different implementation.
+- A too-broad change in `third_party` could affect non-postgres builds, so the diff should stay minimal and isolated to this package.
+- Other postgres-tagged issues may still exist after this fix; we should verify the reproduced failing command directly before inferring broader success.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test -tags postgres ./internal/auth -count=1 -timeout=120s`
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/auth -count=1 -timeout=120s`
+- `./scripts/verify.sh`
+
+## Scope (current change)
 - Audit the repository for stale, brittle, or inefficient hotspots and record an ordered remediation plan in `docs/cleanup-plan.md`.
 - Complete only `docs/cleanup-plan.md` task 1 in this change: make `internal/executil` tests platform-neutral without changing runtime behavior or public APIs.
 - Re-run targeted verification plus the repo verification entrypoint, and record any host-specific blockers explicitly.

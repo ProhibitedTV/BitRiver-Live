@@ -1,3 +1,41 @@
+## Scoped change: postgres-tagged `puddle/v2` build fix
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Record the reproduced failure and scoped fix plan
+  - Acceptance criteria:
+    - `PLAN.md` captures the postgres-tagged `puddle/v2` build failure, assumptions, risks, and verification commands.
+    - `TASKS.md` lists a small implementation and verification sequence before code edits.
+
+- [x] Task 2 — Make the local `puddle/v2` replacement buildable under `-tags postgres`
+  - Acceptance criteria:
+    - `third_party/github.com/jackc/puddle/v2` contains at least one buildable Go file when the `postgres` tag is enabled.
+    - Default non-postgres builds remain unaffected.
+    - The diff stays narrowly scoped to the vendored package.
+
+- [x] Task 3 — Verify the reproduced failure is resolved
+  - Acceptance criteria:
+    - `go test -tags postgres ./internal/auth -count=1 -timeout=120s` passes.
+    - `go test ./internal/auth -count=1 -timeout=120s` passes.
+    - `./scripts/verify.sh` is run and recorded.
+
+### Execution log (postgres-tagged `puddle/v2` build fix)
+- ✅ Task 1 complete: confirmed that `github.com/jackc/puddle/v2` is locally replaced to `./third_party/github.com/jackc/puddle/v2`, reproduced the exact failure with `go test -tags postgres ./internal/auth`, and narrowed the issue to `third_party/github.com/jackc/puddle/v2/puddle.go` being gated behind `//go:build !postgres`.
+- ✅ Task 1 checks:
+  - ✅ `Get-Content go.mod -TotalCount 200`
+  - ✅ `Get-ChildItem -Recurse third_party\\github.com\\jackc\\puddle\\v2 | Select-Object FullName,Length,LastWriteTime`
+  - ✅ `Get-Content third_party\\github.com\\jackc\\puddle\\v2\\puddle.go -TotalCount 80`
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test -tags postgres ./internal/auth -count=1 -timeout=120s`
+- ✅ Task 2 complete: removed the `!postgres` build constraint from `third_party/github.com/jackc/puddle/v2/puddle.go`, which keeps the existing local replacement visible to both default and postgres-tagged builds without changing dependency sourcing.
+- ✅ Task 2 checks:
+  - ✅ `Get-Content third_party\\github.com\\jackc\\puddle\\v2\\puddle.go -TotalCount 80`
+- ✅ Task 3 complete: reran the reproduced postgres-tagged auth build, confirmed the default auth tests still pass, and reran the repo verification gate. An additional postgres-tagged storage run no longer hits the `puddle` compile error and instead stops at a Docker access blocker on this host.
+- ✅ Task 3 checks:
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test -tags postgres ./internal/auth -count=1 -timeout=120s`
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/auth -count=1 -timeout=120s`
+  - ⚠️ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test -tags postgres ./internal/storage -count=1 -timeout=120s` (compile proceeds past `puddle`; current blocker is Docker access for postgres integration tests on this host)
+  - ✅ `./scripts/verify.sh`
+
 ## Scoped change: cleanup audit and `internal/executil` task 1
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
