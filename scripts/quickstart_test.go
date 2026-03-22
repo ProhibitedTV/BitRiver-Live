@@ -170,6 +170,34 @@ func TestPowerShellWrapperStartUsesCliQuickstart(t *testing.T) {
 	}
 }
 
+func TestPowerShellQuickstartPropagatesCliExitCodes(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Dir(wd)
+
+	scriptPath := filepath.Join(repoRoot, "scripts", "quickstart.ps1")
+	content, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read quickstart.ps1: %v", err)
+	}
+
+	script := string(content)
+	if !strings.Contains(script, "Start-Process -FilePath 'go'") {
+		t.Fatalf("expected PowerShell quickstart wrapper to invoke the CLI through Start-Process for reliable exit handling")
+	}
+	if !strings.Contains(script, "$process.ExitCode") {
+		t.Fatalf("expected PowerShell quickstart wrapper to inspect the child process exit code")
+	}
+	if !strings.Contains(script, "flag: help requested") {
+		t.Fatalf("expected PowerShell quickstart wrapper to allow the validate-only help path")
+	}
+	if !strings.Contains(script, "exit $exitCode") {
+		t.Fatalf("expected PowerShell quickstart wrapper to return non-zero CLI exit codes")
+	}
+}
+
 func TestComposeMountsOmeConfigByDefault(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {

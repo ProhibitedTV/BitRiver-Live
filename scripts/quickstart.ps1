@@ -44,13 +44,53 @@ $RepoRoot = Resolve-Path "$ScriptDir/.."
 $CodeRoot = if ($Env:BITRIVER_QUICKSTART_REPO_ROOT) { Resolve-Path $Env:BITRIVER_QUICKSTART_REPO_ROOT } else { $RepoRoot }
 
 function Invoke-Cli {
-    param([string[]]$CliArgs)
+    param(
+        [string[]]$CliArgs,
+        [switch]$AllowHelpExitCode
+    )
     Push-Location $CodeRoot | Out-Null
     try {
         $env:GOTOOLCHAIN = 'local'
         $env:GOPROXY = 'off'
         $env:GOSUMDB = 'off'
-        & go run ./cmd/bitriver @CliArgs
+        $stdoutPath = [System.IO.Path]::GetTempFileName()
+        $stderrPath = [System.IO.Path]::GetTempFileName()
+        $upperPath = [System.Environment]::GetEnvironmentVariable('PATH', 'Process')
+        try {
+            if ($null -ne $upperPath) {
+                [System.Environment]::SetEnvironmentVariable('PATH', $null, 'Process')
+            }
+            $goArgs = @('run', './cmd/bitriver') + $CliArgs
+            $process = Start-Process -FilePath 'go' `
+                -ArgumentList $goArgs `
+                -WorkingDirectory $CodeRoot `
+                -NoNewWindow `
+                -PassThru `
+                -Wait `
+                -RedirectStandardOutput $stdoutPath `
+                -RedirectStandardError $stderrPath
+            $stdoutLines = if ((Get-Item $stdoutPath).Length -gt 0) { Get-Content $stdoutPath } else { @() }
+            $stderrLines = if ((Get-Item $stderrPath).Length -gt 0) { Get-Content $stderrPath } else { @() }
+        } finally {
+            if ($null -ne $upperPath) {
+                [System.Environment]::SetEnvironmentVariable('PATH', $upperPath, 'Process')
+            }
+            Remove-Item $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
+        }
+        $exitCode = $process.ExitCode
+        $cliOutput = @($stdoutLines) + @($stderrLines)
+        if ($cliOutput.Count -gt 0) {
+            $cliOutput | ForEach-Object { Write-Host $_ }
+        }
+
+        $helpRequested = $false
+        if ($AllowHelpExitCode) {
+            $helpRequested = ($cliOutput | Out-String) -match 'flag: help requested'
+        }
+        if ($exitCode -ne 0 -and -not $helpRequested) {
+            return $exitCode
+        }
+        return 0
     } finally {
         Pop-Location | Out-Null
         Remove-Item Env:GOTOOLCHAIN -ErrorAction SilentlyContinue
@@ -68,10 +108,16 @@ Ensure-Go
 
 if ($ValidateOnly) {
     Write-Output 'Running BitRiver Live quickstart entrypoint validation (no Docker orchestration) ...'
-    Invoke-Cli -CliArgs @('quickstart', '--help')
+    $exitCode = Invoke-Cli -CliArgs @('quickstart', '--help') -AllowHelpExitCode
+    if ($exitCode -ne 0) {
+        exit $exitCode
+    }
     exit 0
 }
 
 Write-Output 'Running BitRiver Live quickstart ...'
 $argsToForward = @('quickstart') + $QuickstartArgs
-Invoke-Cli -CliArgs $argsToForward
+$exitCode = Invoke-Cli -CliArgs $argsToForward
+if ($exitCode -ne 0) {
+    exit $exitCode
+}

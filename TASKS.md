@@ -1,3 +1,62 @@
+## Scoped change: deployment validation and quickstart smoke on Windows host
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Update plan docs for deployment validation
+  - Acceptance criteria:
+    - `PLAN.md` records deployment-validation scope, assumptions, risks, and test plan for this host.
+    - `TASKS.md` contains an ordered task list for the deployment check before runtime changes begin.
+
+- [x] Task 2 — Validate local deployment prerequisites and compose rendering
+  - Acceptance criteria:
+    - Confirm which documented deployment entrypoint is usable on this host (`scripts/quickstart.ps1`, direct Go CLI, or Bash wrapper).
+    - Run a compose render against canonical `deploy/docker-compose.yml` with an appropriate env source.
+    - Record any prerequisite/tooling blockers or render failures in the execution log.
+
+- [x] Task 3 — Run the canonical quickstart deployment flow and inspect readiness
+  - Acceptance criteria:
+    - Execute `cmd/bitriver quickstart` (via wrapper or direct Go entrypoint) against `deploy/docker-compose.yml`.
+    - Confirm the stack reaches expected healthy/ready state, or capture the exact failure stage and logs.
+
+- [x] Task 4 — Fix any repo issue blocking quickstart and rerun deployment validation
+  - Acceptance criteria:
+    - Any implementation change is limited to the concrete issue blocking the canonical deployment path.
+    - Relevant targeted checks run after each fix and results are recorded before proceeding.
+
+- [x] Task 5 — Run final verification and summarize deployment status
+  - Acceptance criteria:
+    - Run `./scripts/verify.sh` or the closest documented equivalent possible on this host.
+    - Record what passed, what was skipped/blocked, and whether deployment is confirmed working.
+
+### Execution log (deployment validation and quickstart smoke on Windows host)
+- ✅ Task 1 complete: updated `PLAN.md` and `TASKS.md` with a deployment-validation scope focused on the canonical quickstart/Compose contract for this Windows environment.
+- ✅ Task 1 check:
+  - ✅ `rg -n "deployment validation and quickstart smoke on Windows host|Validate the canonical deployment path on this Windows host" PLAN.md TASKS.md`
+- ✅ Task 2 complete: confirmed the PowerShell wrapper is the intended Windows quickstart entrypoint here, Bash wrappers are blocked in this environment, and the canonical deployment flow is currently stopped by a Windows compile error before Docker orchestration begins.
+- ✅ Task 2 checks:
+  - ❌ `docker compose --env-file deploy/.env.example -f deploy/docker-compose.yml config` (fails because `deploy/docker-compose.yml` still references the repo-root `.env` via `env_file`, and this checkout does not have one yet)
+  - ❌ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE = (Resolve-Path .gocache).Path; powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -ValidateOnly` (fails while compiling `cmd/bitriver`: `doctor.go` references Unix-only `syscall.Statfs` on Windows)
+  - ❌ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE = (Resolve-Path .gocache).Path; go run ./cmd/bitriver quickstart --help` (same compile failure on Windows)
+- ✅ Task 3 complete: executed the canonical quickstart path on Windows and traced the current runtime stop point to the host Docker service rather than additional BitRiver code failures.
+- ✅ Task 3 checks:
+  - ❌ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE = (Resolve-Path .gocache).Path; powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 --compose-file deploy/docker-compose.yml` (fails during `Doctor` because `docker version` cannot connect to `//./pipe/docker_engine`)
+  - ❌ `docker version` (Docker CLI installed, but `com.docker.service` is stopped and the engine pipe is missing)
+  - ❌ `Start-Service com.docker.service` (this session could not start the Docker Desktop service)
+- ✅ Task 4 complete: fixed the Windows-specific repo blockers by moving the doctor disk probe behind OS-specific files and making `scripts/quickstart.ps1` propagate real CLI failures while still allowing the validate-only help path.
+- ✅ Task 4 checks:
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE = (Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1`
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE = (Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./scripts -run TestPowerShellQuickstartPropagatesCliExitCodes -count=1`
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE = (Resolve-Path .gocache).Path; powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -ValidateOnly`
+  - ❌ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE = (Resolve-Path .gocache).Path; powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 --compose-file deploy/docker-compose.yml; exit $LASTEXITCODE` (now correctly returns non-zero when quickstart fails)
+- ✅ Task 5 complete: ran the closest documented verification subset available on this host and recorded both deployment-contract passes and remaining blockers.
+- ✅ Task 5 checks:
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE = (Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go run ./cmd/bitriver env init --env-file .env`
+  - ❌ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE = (Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go run ./cmd/bitriver env validate --env-file .env` (expected strict `quickstart-prod` rejection until routable/public values replace generated defaults for `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`, `BITRIVER_OME_BIND`, `BITRIVER_OME_IP`, and `NEXT_PUBLIC_VIEWER_URL`)
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE = (Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go run ./cmd/bitriver ome render --force --env-file .env --quiet`
+  - ✅ `docker compose --env-file .env -f deploy/docker-compose.yml config`
+  - ❌ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE = (Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s` (host-specific failures observed in `cmd/transcoder`, `internal/executil`, and `scripts`)
+  - ℹ️ Deployment status: the repo-side Windows quickstart blockers found during this run are fixed, the compose contract renders with a generated root `.env`, but end-to-end deployment is still not confirmed on this machine because Docker Desktop is stopped and strict production networking values still need operator-provided updates before `quickstart`/`env validate` can fully pass.
+
 ## Scoped change: navbar notifications coming-soon interactive affordance
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

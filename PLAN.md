@@ -1,4 +1,27 @@
 ## Scope (current change)
+- Validate the canonical deployment path on this Windows host by exercising the BitRiver quickstart/Compose flow against `deploy/docker-compose.yml`.
+- Prefer repo-documented PowerShell or direct Go entrypoints when Bash wrappers are blocked in this environment, without changing the deployment contract.
+- If quickstart or compose smoke exposes a repo issue, implement the smallest fix needed to make the canonical deployment path succeed and re-run validation.
+- Record any environment-specific blockers precisely when they prevent a full successful boot (for example shell permissions, missing tools, host port conflicts, or unhealthy containers).
+
+## Assumptions
+- Using `scripts/quickstart.ps1` or direct `go run ./cmd/bitriver quickstart` is operationally equivalent to `./scripts/quickstart.sh` for this validation, per repo docs.
+- A temporary/generated root `.env` may be needed because this checkout currently does not include one.
+- Any code, config, or docs updates triggered by quickstart failures should stay narrowly scoped to the issue blocking deployment validation.
+
+## Risks
+- Local Windows shell and permissions issues (Git Bash startup, Go build cache location, git safe-directory detection) may block scripted validation even when the repo logic is healthy.
+- Docker image pulls/builds and container startup can fail for host-specific reasons unrelated to the repo, so failures need careful attribution.
+- Quickstart may rewrite generated artifacts such as the root `.env` and `deploy/ome/Server.generated.xml`; we need to distinguish expected generated drift from real contract regressions.
+
+## Test plan
+- `powershell -File scripts/quickstart.ps1 -ValidateOnly` or `go run ./cmd/bitriver quickstart --help`
+- `docker compose --env-file deploy/.env.example -f deploy/docker-compose.yml config`
+- `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml`
+- If quickstart fails: `docker compose --env-file .env -f deploy/docker-compose.yml ps` and `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120`
+- `./scripts/verify.sh` or the closest documented equivalent subset possible on this host when Bash remains blocked
+
+## Scope (current change)
 - Refine the quick-actions notifications affordance in `web/viewer/components/Navbar.tsx` so it is no longer a permanently disabled dead control.
 - Keep the bell affordance visible as an enabled control that opens a lightweight dismissible popover with roadmap context.
 - Add keyboard and assistive semantics for this control (clear accessible label/description, escape dismissal, and outside-click dismissal).
