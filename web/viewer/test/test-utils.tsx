@@ -14,6 +14,7 @@ export const viewerApiMocks = {
   deleteUpload: jest.fn(),
   fetchChannelChat: jest.fn(),
   fetchChannelPlayback: jest.fn(),
+  fetchChannelSessions: jest.fn(),
   fetchChannelUploads: jest.fn(),
   fetchChannelVods: jest.fn(),
   fetchDirectory: jest.fn(),
@@ -27,6 +28,7 @@ export const viewerApiMocks = {
   subscribeChannel: jest.fn(),
   unfollowChannel: jest.fn(),
   unsubscribeChannel: jest.fn(),
+  updateChannel: jest.fn(),
   updateProfile: jest.fn(),
   followChannel: jest.fn(),
 } satisfies typeof actualViewerApi;

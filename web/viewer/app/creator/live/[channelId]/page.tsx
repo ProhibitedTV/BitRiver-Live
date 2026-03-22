@@ -3,13 +3,13 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Player } from "../../../../components/Player";
+import { Button, buttonClassName } from "../../../../components/ui/Button";
+import { Card, CardBody, CardHeader } from "../../../../components/ui/Card";
+import { InlineAlert } from "../../../../components/ui/InlineAlert";
 import { useAuth } from "../../../../hooks/useAuth";
 import { useCreatorChannel } from "../../../../hooks/useCreatorChannel";
-import {
-  CREATOR_STATUS_LABELS,
-  type ControlCentreStreamStatus,
-  deriveControlCentreStatus,
-} from "./stream-status";
+import { buildViewerPath, buildViewerUrl } from "../../../../lib/viewer-links";
+import { deriveCreatorGoLiveStatus } from "./stream-status";
 import {
   ManagedChannel,
   StreamSession,
@@ -17,6 +17,8 @@ import {
   fetchManagedChannels,
   updateChannel,
 } from "../../../../lib/viewer-api";
+
+const MASKED_STREAM_KEY = "••••••••";
 
 function formatCategory(category?: string) {
   if (!category) {
@@ -40,6 +42,22 @@ function getPreferredIngestEndpoint(endpoints: string[]) {
   return rtmpEndpoint ?? endpoints[0];
 }
 
+function formatTimestamp(timestamp?: string) {
+  if (!timestamp) {
+    return "Checking now...";
+  }
+  return new Date(timestamp).toLocaleString();
+}
+
+function buildObsSettingsBlock(preferredIngestEndpoint?: string, streamKey?: string, streamKeyVisible = false) {
+  const serverLine = preferredIngestEndpoint ? `Server: ${preferredIngestEndpoint}` : "Server: [not available yet]";
+  const streamKeyLine = streamKey
+    ? `Stream Key: ${streamKeyVisible ? streamKey : "[hidden - reveal to copy]"}`
+    : "Stream Key: [owner access required]";
+
+  return `Service: Custom\n${serverLine}\n${streamKeyLine}`;
+}
+
 export default function CreatorLivePage() {
   const { playback, loading, error, channelId, reload } = useCreatorChannel();
   const { user, loading: authLoading } = useAuth();
@@ -58,7 +76,8 @@ export default function CreatorLivePage() {
   const [ingestCopyMessage, setIngestCopyMessage] = useState<string | undefined>();
   const [copiedIngestEndpoint, setCopiedIngestEndpoint] = useState<string | undefined>();
   const [obsSettingsCopyMessage, setObsSettingsCopyMessage] = useState<string | undefined>();
-  const [testStreamUpdatedAt, setTestStreamUpdatedAt] = useState<string>(new Date().toISOString());
+  const [viewerLinkCopyMessage, setViewerLinkCopyMessage] = useState<string | undefined>();
+  const [testStreamUpdatedAt, setTestStreamUpdatedAt] = useState<string | undefined>();
   const router = useRouter();
 
   const loadSessions = useCallback(async () => {
@@ -113,6 +132,7 @@ export default function CreatorLivePage() {
     setStreamKeyCopyMessage(undefined);
     setIngestCopyMessage(undefined);
     setObsSettingsCopyMessage(undefined);
+    setViewerLinkCopyMessage(undefined);
   }, [channelId, managedChannel?.id]);
 
   useEffect(() => {
@@ -124,6 +144,20 @@ export default function CreatorLivePage() {
       window.clearInterval(pollId);
     };
   }, [refreshNow]);
+
+  useEffect(() => {
+    if (!copiedIngestEndpoint) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setCopiedIngestEndpoint(undefined);
+    }, 1500);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [copiedIngestEndpoint]);
 
   const handleChannelChange = (event: FormEvent<HTMLSelectElement>) => {
     const nextChannelId = event.currentTarget.value;
@@ -144,57 +178,52 @@ export default function CreatorLivePage() {
 
   const isChannelOwner = useMemo(
     () => Boolean(managedChannel && user && managedChannel.ownerId === user.id),
-    [managedChannel, user]
+    [managedChannel, user],
   );
 
   const ingestEndpoints = useMemo(() => managedChannel?.ingestEndpoints ?? [], [managedChannel?.ingestEndpoints]);
   const preferredIngestEndpoint = useMemo(() => getPreferredIngestEndpoint(ingestEndpoints), [ingestEndpoints]);
-  const streamStatus = useMemo(() => {
-    if (!playback) {
-      return { label: CREATOR_STATUS_LABELS.offline, badgeClassName: "badge badge--muted" } as ControlCentreStreamStatus;
+  const obsSettingsBlock = useMemo(
+    () =>
+      buildObsSettingsBlock(
+        preferredIngestEndpoint,
+        isChannelOwner ? managedChannel?.streamKey : undefined,
+        streamKeyVisible,
+      ),
+    [isChannelOwner, managedChannel?.streamKey, preferredIngestEndpoint, streamKeyVisible],
+  );
+  const testStreamStatus = useMemo(
+    () =>
+      deriveCreatorGoLiveStatus(
+        Boolean(playback?.live),
+        playback?.channel.liveState,
+        playback?.channel.currentSessionId,
+        latestSession,
+      ),
+    [latestSession, playback?.channel.currentSessionId, playback?.channel.liveState, playback?.live],
+  );
+  const previewReady = Boolean(playback?.playback?.playbackUrl);
+  const previewPending = Boolean(!previewReady && (testStreamStatus.key === "reconnecting" || playback?.live));
+  const currentChannelTitle = managedChannel?.title ?? playback?.channel.title ?? "";
+  const currentChannelCategory = formatCategory(managedChannel?.category ?? playback?.channel.category);
+  const viewerPageHref = useMemo(() => {
+    if (typeof window === "undefined") {
+      return buildViewerPath(`/channels/${channelId}`);
     }
-    return deriveControlCentreStatus(playback.channel.liveState, playback.channel.currentSessionId, latestSession);
-  }, [latestSession, playback]);
+    return buildViewerUrl(`/channels/${channelId}`, window.location.origin);
+  }, [channelId]);
 
-  const testPanelStatus = useMemo(() => {
-    if (!playback?.channel.liveState) {
-      return {
-        label: CREATOR_STATUS_LABELS.offline,
-        badgeClassName: "badge badge--muted",
-        instructions: "Start streaming in OBS.",
-      };
-    }
-
-    if (playback.channel.liveState === "live") {
-      return {
-        label: CREATOR_STATUS_LABELS.live,
-        badgeClassName: "badge badge--live",
-        instructions: "You're live.",
-      };
-    }
-
-    if (playback.channel.liveState === "starting") {
-      return {
-        label: CREATOR_STATUS_LABELS.starting,
-        badgeClassName: "badge badge--ingesting",
-        instructions: "Keep streaming while we reconnect.",
-      };
-    }
-
-    if (playback.channel.liveState === "offline") {
-      return {
-        label: CREATOR_STATUS_LABELS.offline,
-        badgeClassName: "badge badge--muted",
-        instructions: "Start streaming in OBS.",
-      };
+  const previewMessage = useMemo(() => {
+    if (previewReady && testStreamStatus.key === "live") {
+      return "Your live preview is ready. Confirm video and audio here before you share the viewer link.";
     }
 
-    return {
-      label: CREATOR_STATUS_LABELS.error,
-      badgeClassName: "badge badge--error",
-      instructions: "Refresh and check ingest settings.",
-    };
-  }, [playback?.channel.liveState]);
+    if (previewPending) {
+      return "BitRiver is receiving your stream, but the preview player is still warming up. Keep OBS running and this page will refresh automatically.";
+    }
+
+    return "When your OBS test reaches BitRiver, your preview will appear here so you can confirm everything before sharing.";
+  }, [previewPending, previewReady, testStreamStatus.key]);
 
   const handleTitleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -219,45 +248,6 @@ export default function CreatorLivePage() {
       setSavingTitle(false);
     }
   };
-
-  useEffect(() => {
-    if (!copiedIngestEndpoint) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setCopiedIngestEndpoint(undefined);
-    }, 1500);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [copiedIngestEndpoint]);
-
-  if (loading) {
-    return <section className="surface">Loading channel…</section>;
-  }
-
-  if (error) {
-    return (
-      <section className="surface stack">
-        <h2>Unable to load channel</h2>
-        <p className="error">{error}</p>
-        <button type="button" className="secondary-button" onClick={() => { void reload(false); }}>
-          Try again
-        </button>
-      </section>
-    );
-  }
-
-  if (!playback) {
-    return (
-      <section className="surface stack">
-        <h2>Channel not available</h2>
-        <p className="muted">We couldn&apos;t find channel details for this dashboard.</p>
-      </section>
-    );
-  }
 
   const handleCopyKey = async () => {
     if (!managedChannel?.streamKey || !isChannelOwner) {
@@ -285,13 +275,11 @@ export default function CreatorLivePage() {
   };
 
   const handleCopyObsSettings = async () => {
-    if (!managedChannel?.streamKey || !isChannelOwner || ingestEndpoints.length === 0 || !preferredIngestEndpoint) {
+    if (!isChannelOwner) {
       return;
     }
-    const streamKeyValue = streamKeyVisible ? managedChannel.streamKey : "[hidden - reveal to copy]";
-    const settings = `Server: ${preferredIngestEndpoint}\nStream Key: ${streamKeyValue}`;
     try {
-      await navigator.clipboard.writeText(settings);
+      await navigator.clipboard.writeText(obsSettingsBlock);
       setObsSettingsCopyMessage("Copied OBS settings");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to copy";
@@ -299,252 +287,356 @@ export default function CreatorLivePage() {
     }
   };
 
+  const handleCopyViewerLink = async () => {
+    try {
+      await navigator.clipboard.writeText(viewerPageHref);
+      setViewerLinkCopyMessage("Copied viewer link");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to copy";
+      setViewerLinkCopyMessage(message);
+    }
+  };
+
+  if (loading) {
+    return <section className="surface">Loading channel...</section>;
+  }
+
+  if (error) {
+    return (
+      <section className="surface stack">
+        <h2>Unable to load channel</h2>
+        <p className="error">{error}</p>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            void reload(false);
+          }}
+        >
+          Try again
+        </Button>
+      </section>
+    );
+  }
+
+  if (!playback) {
+    return (
+      <section className="surface stack">
+        <h2>Channel not available</h2>
+        <p className="muted">We could not find channel details for this dashboard.</p>
+      </section>
+    );
+  }
+
   return (
     <div className="stack" style={{ gap: "1.5rem" }}>
-      <header className="stack">
-        <h2>Go live with {playback.channel.title}</h2>
+      <header className="stack" style={{ gap: "0.75rem" }}>
+        <h2>Go live</h2>
         <p className="muted">
-          Configure your encoder with the ingest URL and stream key below, then start sending video to see a live
-          preview.
+          Move through this setup from top to bottom: confirm the channel, copy the OBS details, start a test stream,
+          check the preview, then share your viewer page.
         </p>
-        {managedChannels.length > 1 ? (
-          <div className="stack" style={{ gap: "0.5rem", maxWidth: "24rem" }}>
-            <label className="muted" htmlFor="channel-selector">
-              Switch channel
-            </label>
-            <select id="channel-selector" value={channelId} onChange={handleChannelChange}>
-              {managedChannels.map((channel) => (
-                <option key={channel.id} value={channel.id}>
-                  {channel.title}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
-        <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => {
-              void reload();
-              void loadSessions();
-              void loadManagedChannel();
-            }}
-          >
-            Diagnose issues
-          </button>
-          {sessionError ? <span className="error">{sessionError}</span> : null}
-          {managedError ? <span className="error">{managedError}</span> : null}
-        </div>
       </header>
 
-      <div className="grid two-column">
-        <section className="surface stack" aria-labelledby="obs-setup-heading">
-          <h3 id="obs-setup-heading">OBS setup</h3>
+      <Card aria-labelledby="channel-section-heading">
+        <CardHeader>
+          <h3 id="channel-section-heading">1) Channel</h3>
+          <p className="muted">Confirm which channel you are about to stream from before you copy anything into OBS.</p>
+        </CardHeader>
+        <CardBody style={{ gap: "1rem" }}>
           <div className="stack" style={{ gap: "0.5rem" }}>
-            <form className="stack" style={{ gap: "0.5rem" }} onSubmit={handleTitleSubmit}>
-              <div className="cluster" style={{ justifyContent: "space-between", alignItems: "flex-end", gap: "0.75rem", flexWrap: "wrap" }}>
-                <div className="stack" style={{ gap: "0.25rem", flex: "1 1 18rem" }}>
-                  <label className="muted" htmlFor="stream-title-input">
-                    Stream title
-                  </label>
+            <label htmlFor="current-channel-name">Current channel</label>
+            <input id="current-channel-name" aria-label="Current channel" readOnly value={currentChannelTitle} />
+            <p className="muted">Category: {currentChannelCategory}</p>
+          </div>
+
+          {managedChannels.length > 1 ? (
+            <div className="stack" style={{ gap: "0.5rem", maxWidth: "24rem" }}>
+              <label htmlFor="channel-selector">Switch channel</label>
+              <select id="channel-selector" value={channelId} onChange={handleChannelChange}>
+                {managedChannels.map((channel) => (
+                  <option key={channel.id} value={channel.id}>
+                    {channel.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <p className="muted">This is the managed channel currently connected to your account.</p>
+          )}
+
+          <form className="stack" style={{ gap: "0.5rem" }} onSubmit={handleTitleSubmit}>
+            <div
+              className="cluster"
+              style={{ justifyContent: "space-between", alignItems: "flex-end", gap: "0.75rem", flexWrap: "wrap" }}
+            >
+              <div className="stack" style={{ gap: "0.25rem", flex: "1 1 18rem" }}>
+                <label className="muted" htmlFor="stream-title-input">
+                  Stream title
+                </label>
+                <input
+                  id="stream-title-input"
+                  name="streamTitle"
+                  value={titleDraft}
+                  onChange={(event) => {
+                    setTitleDraft(event.target.value);
+                    setTitleSaved(false);
+                  }}
+                  placeholder="What are you streaming today?"
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={savingTitle || !titleDraft.trim() || titleDraft.trim() === playback.channel.title}
+              >
+                {savingTitle ? "Saving..." : "Save title"}
+              </Button>
+            </div>
+            {titleError ? (
+              <InlineAlert role="alert">{titleError}</InlineAlert>
+            ) : null}
+            {titleSaved && !titleError ? <p className="muted">Stream title updated.</p> : null}
+          </form>
+
+          {managedLoading ? <p className="muted">Loading channel details...</p> : null}
+          {managedError ? <InlineAlert>{managedError}</InlineAlert> : null}
+        </CardBody>
+      </Card>
+
+      <Card aria-labelledby="obs-setup-heading">
+        <CardHeader>
+          <h3 id="obs-setup-heading">2) OBS Setup</h3>
+          <p className="muted">Paste these exact values into OBS - Settings - Stream. Keep your stream key hidden unless you need to copy it.</p>
+        </CardHeader>
+        <CardBody style={{ gap: "1rem" }}>
+          <div className="stack" style={{ gap: "0.5rem" }}>
+            <label htmlFor="preferred-ingest-url">Preferred ingest URL</label>
+            {managedLoading ? (
+              <p className="muted">Loading ingest configuration...</p>
+            ) : preferredIngestEndpoint ? (
+              <>
+                <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
                   <input
-                    id="stream-title-input"
-                    name="streamTitle"
-                    value={titleDraft}
-                    onChange={(event) => {
-                      setTitleDraft(event.target.value);
-                      setTitleSaved(false);
-                    }}
-                    placeholder="What are you streaming today?"
+                    id="preferred-ingest-url"
+                    aria-label="Preferred ingest URL"
+                    readOnly
+                    value={preferredIngestEndpoint}
                   />
+                  <Button
+                    variant="secondary"
+                    data-testid="copy-preferred-ingest-endpoint"
+                    onClick={() => {
+                      void handleCopyIngestEndpoint(preferredIngestEndpoint);
+                    }}
+                  >
+                    {copiedIngestEndpoint === preferredIngestEndpoint ? "Copied" : "Copy URL"}
+                  </Button>
                 </div>
-                <button
-                  type="submit"
-                  className="primary-button"
-                  disabled={savingTitle || !titleDraft.trim() || titleDraft.trim() === playback.channel.title}
-                >
-                  {savingTitle ? "Saving…" : "Save title"}
-                </button>
-              </div>
-              {titleError ? (
-                <p className="error" role="alert">{titleError}</p>
-              ) : null}
-              {titleSaved && !titleError ? <p className="success">Stream title updated</p> : null}
-            </form>
-            <div className="muted" aria-label="Stream category">
-              Category: {formatCategory(playback.channel.category)}
-            </div>
-            <div className="stack" style={{ gap: "0.75rem" }}>
-              <div>
-                <p className="muted">Server (preferred)</p>
-                {managedLoading ? (
-                  <p className="muted">Loading ingest configuration…</p>
-                ) : ingestEndpoints.length > 0 ? (
-                  <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
-                    <input aria-label="Server URL" readOnly value={preferredIngestEndpoint ?? ""} />
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      data-testid="copy-preferred-ingest-endpoint"
-                      onClick={() => {
-                        if (!preferredIngestEndpoint) {
-                          return;
-                        }
-                        void handleCopyIngestEndpoint(preferredIngestEndpoint);
-                      }}
-                    >
-                      {copiedIngestEndpoint === preferredIngestEndpoint ? "Copied" : "Copy URL"}
-                    </button>
-                  </div>
-                ) : (
-                  <p className="muted">Ingest endpoints are not configured yet.</p>
-                )}
-              </div>
+                <p className="muted">Use this as the OBS server URL.</p>
+              </>
+            ) : (
+              <p className="muted">Ingest endpoints are not configured yet.</p>
+            )}
+            {ingestCopyMessage ? (
+              <p className={ingestCopyMessage.startsWith("Copied") ? "muted" : "error"}>{ingestCopyMessage}</p>
+            ) : null}
+          </div>
 
-              <div>
-                <p className="muted">Stream key</p>
-                {authLoading || managedLoading ? (
-                  <p className="muted">Verifying channel ownership…</p>
-                ) : isChannelOwner ? (
-                  <div className="stack" style={{ gap: "0.5rem" }}>
-                    <p className="muted">Keep your stream key secret.</p>
-                    <input
-                      aria-label="Stream key"
-                      type="text"
-                      readOnly
-                      value={streamKeyVisible ? managedChannel?.streamKey ?? "" : "••••••••"}
-                    />
-                    <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        aria-pressed={streamKeyVisible}
-                        onClick={() => {
-                          setStreamKeyVisible((prev) => !prev);
-                          setStreamKeyCopyMessage(undefined);
-                        }}
-                      >
-                        {streamKeyVisible ? "Hide" : "Reveal"}
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={() => {
-                          void handleCopyKey();
-                        }}
-                      >
-                        Copy key
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        data-testid="copy-obs-settings"
-                        onClick={() => {
-                          void handleCopyObsSettings();
-                        }}
-                      >
-                        Copy OBS settings
-                      </button>
-                      {streamKeyCopyMessage ? (
-                        <span className={streamKeyCopyMessage === "Copied" ? "success" : "error"}>{streamKeyCopyMessage}</span>
-                      ) : null}
-                      {obsSettingsCopyMessage ? (
-                        <span className={obsSettingsCopyMessage.startsWith("Copied") ? "success" : "error"}>{obsSettingsCopyMessage}</span>
-                      ) : null}
-                    </div>
-                    <p className="muted">Use the Server + Stream Key fields in OBS → Settings → Stream.</p>
-                  </div>
-                ) : (
-                  <p className="muted">Sign in as the channel owner to view the stream key.</p>
-                )}
-              </div>
-
-              <div>
-                <p className="muted">Advanced: all ingest URLs</p>
-                {managedLoading ? (
-                  <p className="muted">Loading ingest configuration…</p>
-                ) : ingestEndpoints.length > 0 ? (
-                  <ul className="stack" style={{ gap: "0.5rem" }}>
-                    {ingestEndpoints.map((endpoint, index) => (
-                      <li key={endpoint} className="stack" style={{ gap: "0.15rem" }}>
-                        <span className="muted">{describeEndpoint(endpoint, index)}</span>
-                        <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
-                          <input readOnly value={endpoint} aria-label={`${describeEndpoint(endpoint, index)} URL`} />
-                          <button
-                            type="button"
-                            className="secondary-button"
-                            data-testid={`copy-ingest-endpoint-${index}`}
-                            onClick={() => {
-                              void handleCopyIngestEndpoint(endpoint);
-                            }}
-                          >
-                            {copiedIngestEndpoint === endpoint ? "Copied" : "Copy URL"}
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="muted">
-                    Ingest endpoints are not configured yet. Check your deployment settings or configuration.
-                  </p>
-                )}
-                {ingestCopyMessage ? (
-                  <p className={ingestCopyMessage.startsWith("Copied") ? "success" : "error"}>{ingestCopyMessage}</p>
+          <div className="stack" style={{ gap: "0.5rem" }}>
+            <label htmlFor="stream-key">Stream key</label>
+            {authLoading || managedLoading ? (
+              <p className="muted">Verifying channel ownership...</p>
+            ) : isChannelOwner ? (
+              <>
+                <input
+                  id="stream-key"
+                  aria-label="Stream key"
+                  type="text"
+                  readOnly
+                  value={streamKeyVisible ? managedChannel?.streamKey ?? "" : MASKED_STREAM_KEY}
+                />
+                <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+                  <Button
+                    variant="secondary"
+                    aria-pressed={streamKeyVisible}
+                    onClick={() => {
+                      setStreamKeyVisible((prev) => !prev);
+                      setStreamKeyCopyMessage(undefined);
+                    }}
+                  >
+                    {streamKeyVisible ? "Hide" : "Reveal"}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      void handleCopyKey();
+                    }}
+                  >
+                    Copy key
+                  </Button>
+                </div>
+                {streamKeyCopyMessage ? (
+                  <p className={streamKeyCopyMessage === "Copied" ? "muted" : "error"}>{streamKeyCopyMessage}</p>
                 ) : null}
-              </div>
-            </div>
+              </>
+            ) : (
+              <p className="muted">Sign in as the channel owner to reveal or copy the stream key.</p>
+            )}
           </div>
-        </section>
 
-        <section className="surface stack" aria-labelledby="test-stream-heading">
-          <h3 id="test-stream-heading">Test stream</h3>
-          <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
-            <span className={testPanelStatus.badgeClassName}>{testPanelStatus.label}</span>
-            <span className="muted">Last updated {new Date(testStreamUpdatedAt).toLocaleString()}</span>
+          <div className="stack" style={{ gap: "0.5rem" }}>
+            <div className="cluster" style={{ justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+              <label htmlFor="obs-settings-block">OBS settings block</label>
+              <Button
+                variant="secondary"
+                data-testid="copy-obs-settings"
+                onClick={() => {
+                  void handleCopyObsSettings();
+                }}
+                disabled={!isChannelOwner}
+              >
+                Copy OBS settings
+              </Button>
+            </div>
+            <textarea
+              id="obs-settings-block"
+              aria-label="OBS settings block"
+              readOnly
+              rows={4}
+              value={obsSettingsBlock}
+              style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", resize: "vertical" }}
+            />
+            <p className="muted">Use `Service: Custom`, then paste the Server and Stream Key values into OBS.</p>
+            {obsSettingsCopyMessage ? (
+              <p className={obsSettingsCopyMessage.startsWith("Copied") ? "muted" : "error"}>
+                {obsSettingsCopyMessage}
+              </p>
+            ) : null}
           </div>
-          <p className="muted">{testPanelStatus.instructions}</p>
+
+          {ingestEndpoints.length > 1 ? (
+            <details>
+              <summary>Show all ingest URLs</summary>
+              <div className="stack" style={{ gap: "0.75rem", marginTop: "0.75rem" }}>
+                {ingestEndpoints.map((endpoint, index) => (
+                  <div key={endpoint} className="stack" style={{ gap: "0.35rem" }}>
+                    <label htmlFor={`ingest-endpoint-${index}`}>{describeEndpoint(endpoint, index)}</label>
+                    <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+                      <input id={`ingest-endpoint-${index}`} readOnly value={endpoint} />
+                      <Button
+                        variant="secondary"
+                        data-testid={`copy-ingest-endpoint-${index}`}
+                        onClick={() => {
+                          void handleCopyIngestEndpoint(endpoint);
+                        }}
+                      >
+                        {copiedIngestEndpoint === endpoint ? "Copied" : "Copy URL"}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : null}
+        </CardBody>
+      </Card>
+
+      <Card aria-labelledby="test-stream-heading">
+        <CardHeader>
+          <h3 id="test-stream-heading">3) Test Stream</h3>
+          <p className="muted">Start streaming from OBS. This page refreshes the current live signals every 4 seconds.</p>
+        </CardHeader>
+        <CardBody style={{ gap: "1rem" }}>
+          <div className="surface surface--empty stack" data-testid="test-stream-status-card">
+            <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+              <span className={testStreamStatus.badgeClassName}>{testStreamStatus.label}</span>
+              <span className="muted">Last checked {formatTimestamp(testStreamUpdatedAt)}</span>
+            </div>
+            <p className="muted">{testStreamStatus.instructions}</p>
+            {testStreamStatus.reason ? <p className="muted">Signal note: {testStreamStatus.reason}</p> : null}
+          </div>
+
           <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className="secondary-button"
+            <Button
+              variant="secondary"
               onClick={() => {
                 void refreshNow();
               }}
             >
               Refresh now
-            </button>
-            {streamStatus.lastTransitionAt ? (
-              <span className="muted">Last transition {new Date(streamStatus.lastTransitionAt).toLocaleString()}</span>
+            </Button>
+            {latestSession ? (
+              <span className="muted">Latest ingest started {formatTimestamp(latestSession.startedAt)}</span>
             ) : (
-              <span className="muted">Last transition unknown</span>
+              <span className="muted">No recent ingest session detected yet.</span>
             )}
-            {streamStatus.reason ? <span className="muted">Reason: {streamStatus.reason}</span> : null}
           </div>
+
+          {sessionError ? <InlineAlert>{sessionError}</InlineAlert> : null}
+
           <details>
             <summary>Common issues</summary>
             <ul className="stack muted" style={{ gap: "0.35rem", paddingLeft: "1.25rem", marginTop: "0.5rem" }}>
-              <li>Server URL mismatch: copy the Server URL from this page and paste it into OBS.</li>
-              <li>Wrong stream key: copy the latest key here in case your previous key was rotated.</li>
-              <li>Network blocked: some networks block streaming ports, so try a different network if possible.</li>
-              <li>Protocol mismatch: this setup expects RTMP, so confirm OBS is sending RTMP to the shown server URL.</li>
+              <li>Paste the server URL from this page directly into OBS to avoid endpoint mismatches.</li>
+              <li>Copy the latest stream key here in case an older key was rotated.</li>
+              <li>Keep OBS streaming for a few extra seconds if the status shows reconnecting while the preview warms up.</li>
+              <li>If the status stays offline, double-check that OBS is set to RTMP and that the selected channel matches this page.</li>
             </ul>
           </details>
-        </section>
+        </CardBody>
+      </Card>
 
-        <section className="surface stack" aria-labelledby="preview-heading">
-          <div className="cluster" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
-            <h3 id="preview-heading">Stream preview</h3>
-            {latestSession ? (
-              <span className="muted">Session started {new Date(latestSession.startedAt).toLocaleString()}</span>
-            ) : (
-              <span className="muted">No active session yet</span>
-            )}
+      <Card
+        aria-labelledby="preview-heading"
+        className={previewReady && testStreamStatus.key === "live" ? "surface--glow" : undefined}
+      >
+        <CardHeader>
+          <h3 id="preview-heading">4) Preview</h3>
+          <p className="muted">{previewMessage}</p>
+        </CardHeader>
+        <CardBody style={{ gap: "1rem" }}>
+          {latestSession ? (
+            <p className="muted">Current session started {formatTimestamp(latestSession.startedAt)}</p>
+          ) : null}
+          <Player
+            playback={playback.playback}
+            channelId={channelId}
+            live={playback.live}
+            liveState={playback.channel.liveState}
+          />
+        </CardBody>
+      </Card>
+
+      <Card aria-labelledby="share-heading">
+        <CardHeader>
+          <h3 id="share-heading">5) Share</h3>
+          <p className="muted">Once the preview looks right, copy your viewer link and open the public page that viewers will use.</p>
+        </CardHeader>
+        <CardBody style={{ gap: "1rem" }}>
+          <div className="stack" style={{ gap: "0.5rem" }}>
+            <label htmlFor="viewer-link">Viewer link</label>
+            <input id="viewer-link" aria-label="Viewer link" readOnly value={viewerPageHref} />
           </div>
-          <Player playback={playback.playback} channelId={channelId} />
-        </section>
-      </div>
+
+          <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+            <Button
+              variant="secondary"
+              data-testid="copy-viewer-link"
+              onClick={() => {
+                void handleCopyViewerLink();
+              }}
+            >
+              Copy viewer link
+            </Button>
+            <a href={viewerPageHref} className={buttonClassName("secondary")} target="_blank" rel="noreferrer">
+              Open viewer
+            </a>
+          </div>
+
+          {viewerLinkCopyMessage ? (
+            <p className={viewerLinkCopyMessage.startsWith("Copied") ? "muted" : "error"}>{viewerLinkCopyMessage}</p>
+          ) : null}
+        </CardBody>
+      </Card>
     </div>
   );
 }
