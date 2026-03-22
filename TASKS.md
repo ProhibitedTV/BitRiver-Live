@@ -1988,3 +1988,47 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - ✅ `npm.cmd --prefix web/viewer run test -- creatorLiveStreamStatus.test.ts creatorLivePage.test.tsx` (passes; `creatorLivePage.test.tsx` still emits React `act(...)` warnings from async polling/state-reset effects in the test harness)
   - ✅ `npm.cmd --prefix web/viewer run test:playwright -- tests/creator-live-setup.spec.ts` (passes; Playwright logs pre-existing Next.js client-render deopt warnings plus the existing `next start` standalone warning)
   - ✅ `./scripts/verify.sh --viewer`
+
+## Scoped change: creator share-link basePath fix
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the scoped base-path regression plan before implementation
+  - Acceptance criteria:
+    - `PLAN.md` captures the share-link base-path regression, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered implementation and validation tasks before viewer code is edited.
+
+- [x] Task 2 - Centralize viewer-link construction with base-path awareness
+  - Acceptance criteria:
+    - Viewer URL construction includes the active Next.js base path instead of hard-coding root-relative `/channels/...`.
+    - The creator live Share step uses the shared base-path-aware logic for both copy and open actions.
+
+- [x] Task 3 - Reuse the fix in getting-started and add regression coverage
+  - Acceptance criteria:
+    - The creator getting-started viewer-link copy flow also uses the shared base-path-aware viewer URL logic.
+    - Viewer tests cover creator-live and/or creator-getting-started URL construction under a non-root viewer mount such as `/viewer`.
+
+- [x] Task 4 - Run scoped viewer validation and record results
+  - Acceptance criteria:
+    - `cd web/viewer && npm run test -- creatorLivePage.test.tsx` passes.
+    - `cd web/viewer && npm run test -- creatorGettingStartedPage.test.tsx` passes.
+    - `cd web/viewer && npm run build` passes.
+    - `./scripts/verify.sh --viewer` is run and logged.
+
+### Execution log (creator share-link basePath fix)
+- ✅ Task 1 complete: appended the scoped share-link base-path fix plan and ordered implementation/validation tasks before editing viewer code.
+- ✅ Task 1 checks:
+  - ✅ `rg -n -e 'creator share-link basePath fix' -e 'Centralize viewer-link construction with base-path awareness' TASKS.md`
+  - ✅ `rg -n -e 'Fix creator-facing viewer/share links so they include the active Next.js basePath' -e 'The active viewer base path can be derived safely on the client' PLAN.md`
+- ✅ Task 2 complete: added a shared `viewer-links` helper that prefixes viewer URLs and paths with the configured Next.js base path, exposed that base path to client code via `NEXT_PUBLIC_VIEWER_BASE_PATH`, and rewired the creator-live Share step to use the helper for both copy and open actions.
+- ✅ Task 2 checks:
+  - ✅ `npm.cmd --prefix web/viewer run test -- creatorLivePage.test.tsx creatorGettingStartedPage.test.tsx viewerLinks.test.ts`
+- ✅ Task 3 complete: reused the same base-path-aware viewer-link helper in creator getting-started and added regression coverage for both page flows and the helper itself under a `/viewer` mount.
+- ✅ Task 3 checks:
+  - ✅ `npm.cmd --prefix web/viewer run test -- creatorLivePage.test.tsx creatorGettingStartedPage.test.tsx viewerLinks.test.ts` (passes; Jest still logs the pre-existing React `act(...)` warnings from creator-live/getting-started async effects)
+- ✅ Task 4 complete: reran the scoped viewer tests and production build successfully, then ran the required `verify.sh --viewer` gate; it entered the repo checks and stopped on this Windows host because `python3` is not installed, which blocks the existing env-placeholder step before viewer checks.
+- ✅ Task 4 checks:
+  - ✅ `npm.cmd --prefix web/viewer run test -- creatorLivePage.test.tsx creatorGettingStartedPage.test.tsx viewerLinks.test.ts`
+  - ✅ `npm.cmd --prefix web/viewer run build`
+  - ⚠️ `bash ./scripts/verify.sh --viewer` (sandbox/WSL host failure: access denied and path translation failure)
+  - ⚠️ `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` (ran outside sandbox, then failed on host prerequisite: `python3` missing during the existing env example placeholder hygiene step)

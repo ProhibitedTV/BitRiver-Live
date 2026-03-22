@@ -6,6 +6,7 @@ import { Badge } from "../../../components/ui/Badge";
 import { Button, buttonClassName } from "../../../components/ui/Button";
 import { Card, CardBody, CardHeader } from "../../../components/ui/Card";
 import { useAuth } from "../../../hooks/useAuth";
+import { buildViewerPath, buildViewerUrl } from "../../../lib/viewer-links";
 import { ManagedChannel, fetchChannelPlayback, fetchManagedChannels } from "../../../lib/viewer-api";
 
 type ManualChecks = {
@@ -129,14 +130,14 @@ export default function CreatorGettingStartedPage() {
 
   const liveSetupLink = selectedChannel ? `/creator/live/${selectedChannel.id}` : "/creator";
   const uploadsLink = selectedChannel ? `/creator/uploads/${selectedChannel.id}` : "/creator";
-  const viewerLink = selectedChannel ? `/channels/${selectedChannel.id}` : "/browse";
+  const viewerLink = selectedChannel ? buildViewerPath(`/channels/${selectedChannel.id}`) : buildViewerPath("/browse");
 
   const handleCopyViewerLink = useCallback(async () => {
     if (typeof window === "undefined" || !selectedChannel) {
       return;
     }
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/channels/${selectedChannel.id}`);
+      await navigator.clipboard.writeText(buildViewerUrl(`/channels/${selectedChannel.id}`, window.location.origin));
       setCopyMessage("Viewer link copied");
     } catch {
       setCopyMessage("Copy failed. Open the viewer page and copy the URL manually.");

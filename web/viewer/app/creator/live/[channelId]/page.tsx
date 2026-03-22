@@ -8,6 +8,7 @@ import { Card, CardBody, CardHeader } from "../../../../components/ui/Card";
 import { InlineAlert } from "../../../../components/ui/InlineAlert";
 import { useAuth } from "../../../../hooks/useAuth";
 import { useCreatorChannel } from "../../../../hooks/useCreatorChannel";
+import { buildViewerPath, buildViewerUrl } from "../../../../lib/viewer-links";
 import { deriveCreatorGoLiveStatus } from "./stream-status";
 import {
   ManagedChannel,
@@ -205,13 +206,12 @@ export default function CreatorLivePage() {
   const previewPending = Boolean(!previewReady && (testStreamStatus.key === "reconnecting" || playback?.live));
   const currentChannelTitle = managedChannel?.title ?? playback?.channel.title ?? "";
   const currentChannelCategory = formatCategory(managedChannel?.category ?? playback?.channel.category);
-  const viewerPagePath = `/channels/${channelId}`;
   const viewerPageHref = useMemo(() => {
     if (typeof window === "undefined") {
-      return viewerPagePath;
+      return buildViewerPath(`/channels/${channelId}`);
     }
-    return new URL(viewerPagePath, window.location.origin).toString();
-  }, [viewerPagePath]);
+    return buildViewerUrl(`/channels/${channelId}`, window.location.origin);
+  }, [channelId]);
 
   const previewMessage = useMemo(() => {
     if (previewReady && testStreamStatus.key === "live") {

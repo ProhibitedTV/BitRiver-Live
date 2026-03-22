@@ -16,6 +16,7 @@ jest.mock("../components/Player", () => ({
 const fetchManagedChannelsMock = viewerApiMocks.fetchManagedChannels;
 const fetchChannelSessionsMock = viewerApiMocks.fetchChannelSessions;
 const updateChannelMock = viewerApiMocks.updateChannel;
+const originalViewerBasePath = process.env.NEXT_PUBLIC_VIEWER_BASE_PATH;
 
 function renderCreatorLivePage() {
   const reload = jest.fn().mockResolvedValue(undefined);
@@ -57,6 +58,7 @@ function renderCreatorLivePage() {
 describe("CreatorLivePage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.NEXT_PUBLIC_VIEWER_BASE_PATH = "/viewer";
     mockAuthenticatedUser({ id: "creator-1" });
     fetchManagedChannelsMock.mockResolvedValue([
       {
@@ -113,6 +115,14 @@ describe("CreatorLivePage", () => {
     });
   });
 
+  afterAll(() => {
+    if (originalViewerBasePath === undefined) {
+      delete process.env.NEXT_PUBLIC_VIEWER_BASE_PATH;
+      return;
+    }
+    process.env.NEXT_PUBLIC_VIEWER_BASE_PATH = originalViewerBasePath;
+  });
+
   it("renders the guided flow in order and exposes the key live-setup affordances", async () => {
     const user = userEvent.setup();
     const { reload } = renderCreatorLivePage();
@@ -142,7 +152,7 @@ describe("CreatorLivePage", () => {
     expect(screen.getByTestId("creator-preview-player")).toHaveTextContent(
       JSON.stringify({ channelId: "chan-1", live: false, liveState: "starting" }),
     );
-    expect(screen.getByLabelText("Viewer link")).toHaveValue("http://localhost/channels/chan-1");
+    expect(screen.getByLabelText("Viewer link")).toHaveValue("http://localhost/viewer/channels/chan-1");
     expect(screen.getByRole("button", { name: "Copy key" })).toBeEnabled();
     expect(screen.getByTestId("copy-preferred-ingest-endpoint")).toBeEnabled();
     expect(screen.getByRole("button", { name: "Copy OBS settings" })).toBeEnabled();
@@ -157,6 +167,9 @@ describe("CreatorLivePage", () => {
     await user.click(screen.getByRole("button", { name: "Refresh now" }));
     await waitFor(() => expect(reload).toHaveBeenCalledWith(true));
 
-    expect(screen.getByRole("link", { name: "Open viewer" })).toHaveAttribute("href", "http://localhost/channels/chan-1");
+    expect(screen.getByRole("link", { name: "Open viewer" })).toHaveAttribute(
+      "href",
+      "http://localhost/viewer/channels/chan-1",
+    );
   });
 });

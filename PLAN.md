@@ -1031,6 +1031,27 @@
 - `./scripts/verify.sh --viewer`
 
 ## Scope (current change)
+- Fix creator-facing viewer/share links so they include the active Next.js `basePath` instead of always assuming the viewer is mounted at `/`.
+- Apply the fix to the new creator live Share step and the older creator getting-started viewer-link copy flow so viewer URLs stay consistent across creator entrypoints.
+- Keep the change client-side and reuse current runtime context rather than adding new APIs or changing deployment-contract files.
+
+## Assumptions
+- The active viewer base path can be derived safely on the client from the current browser pathname because both affected surfaces are client components rendered under the viewer app.
+- The standard deployment shape continues to serve the viewer from the same origin as the current page, so we only need to prepend the correct base path before building absolute URLs.
+- Updating share/copy URL generation in viewer code does not require contract docs changes because the deployment contract itself is unchanged.
+
+## Risks
+- Base-path inference can over-trim or double-prefix URLs if path normalization is sloppy, especially when the viewer is mounted at `/`.
+- Fixing only the new live page would leave the older getting-started viewer-link copy flow inconsistent and still broken under `/viewer`.
+- URL-construction tests can be brittle if they rely on the default jsdom pathname instead of explicitly setting the mounted viewer path.
+
+## Test plan
+- `cd web/viewer && npm run test -- creatorLivePage.test.tsx`
+- `cd web/viewer && npm run test -- creatorGettingStartedPage.test.tsx`
+- `cd web/viewer && npm run build`
+- `./scripts/verify.sh --viewer`
+
+## Scope (current change)
 - Enhance `web/viewer/app/channels/[id]/page.tsx` tab state management so the selected channel tab is encoded in URL state and deep-linkable.
 - Read initial tab selection from URL (`?tab=` first, hash fallback), validate against `CHANNEL_TABS`, and default to `about` when invalid/missing.
 - Keep tab selection and URL synchronized via router/history updates while preserving current ARIA tablist + keyboard roving behavior.

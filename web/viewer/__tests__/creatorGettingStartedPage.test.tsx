@@ -12,10 +12,12 @@ jest.mock("../hooks/useAuth");
 
 const fetchManagedChannelsMock = viewerApiMocks.fetchManagedChannels;
 const fetchChannelPlaybackMock = viewerApiMocks.fetchChannelPlayback;
+const originalViewerBasePath = process.env.NEXT_PUBLIC_VIEWER_BASE_PATH;
 
 describe("CreatorGettingStartedPage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.NEXT_PUBLIC_VIEWER_BASE_PATH = "/viewer";
     window.localStorage.clear();
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -23,6 +25,14 @@ describe("CreatorGettingStartedPage", () => {
         writeText: jest.fn().mockResolvedValue(undefined),
       },
     });
+  });
+
+  afterAll(() => {
+    if (originalViewerBasePath === undefined) {
+      delete process.env.NEXT_PUBLIC_VIEWER_BASE_PATH;
+      return;
+    }
+    process.env.NEXT_PUBLIC_VIEWER_BASE_PATH = originalViewerBasePath;
   });
 
   test("prompts guests to sign in", () => {
@@ -99,5 +109,32 @@ describe("CreatorGettingStartedPage", () => {
 
     await user.click(screen.getByRole("checkbox", { name: /i shared my viewer link/i }));
     expect(screen.getByRole("checkbox", { name: /i shared my viewer link/i })).toBeChecked();
+  });
+
+  test("includes the configured viewer basePath when copying and linking to the public channel page", async () => {
+    mockAuthenticatedUser({ id: "creator-1" });
+    fetchManagedChannelsMock.mockResolvedValue([
+      {
+        id: "chan-share",
+        ownerId: "creator-1",
+        title: "Share channel",
+        tags: [],
+        liveState: "offline",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        streamKey: "stream-key",
+        ingestEndpoints: ["rtmp://ingest"],
+      },
+    ] as any);
+    fetchChannelPlaybackMock.mockResolvedValue({ live: false, channel: { id: "chan-share" } } as any);
+
+    const user = userEvent.setup();
+    renderWithProviders(<CreatorGettingStartedPage />);
+
+    expect(await screen.findByRole("button", { name: /copy viewer link/i })).toBeEnabled();
+    expect(screen.getByRole("link", { name: /preview viewer page/i })).toHaveAttribute("href", "/viewer/channels/chan-share");
+
+    await user.click(screen.getByRole("button", { name: /copy viewer link/i }));
+    expect(await screen.findByText(/viewer link copied/i)).toBeInTheDocument();
   });
 });
