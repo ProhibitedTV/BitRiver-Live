@@ -19,6 +19,7 @@ COPY go.mod go.sum ./
 COPY third_party ./third_party
 RUN if [ "$BITRIVER_PGX_MODE" = "real" ]; then \
       go mod edit -dropreplace=github.com/jackc/pgx/v5; \
+      go mod edit -dropreplace=github.com/jackc/puddle/v2; \
       go mod edit -dropreplace=golang.org/x/text; \
     fi
 RUN GOPROXY=$GOPROXY GOSUMDB=$GOSUMDB go mod download

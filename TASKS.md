@@ -2032,3 +2032,68 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - ✅ `npm.cmd --prefix web/viewer run build`
   - ⚠️ `bash ./scripts/verify.sh --viewer` (sandbox/WSL host failure: access denied and path translation failure)
   - ⚠️ `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` (ran outside sandbox, then failed on host prerequisite: `python3` missing during the existing env example placeholder hygiene step)
+## Scoped change: real local shakedown deployment on this Windows host
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the scoped shakedown plan before deployment
+  - Acceptance criteria:
+    - `PLAN.md` captures the local shakedown scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered deployment-validation tasks before runtime actions begin.
+
+- [x] Task 2 - Confirm host prerequisites and deployment inputs
+  - Acceptance criteria:
+    - Docker availability/state is checked on this host and recorded.
+    - The canonical compose contract renders with the current repo-root `.env`, or the exact render failure is captured.
+    - The deployment entrypoint used for the shakedown is recorded.
+
+- [-] Task 3 - Run the real quickstart deployment and inspect readiness
+  - Acceptance criteria:
+    - The canonical quickstart flow is executed against `deploy/docker-compose.yml` and `.env`.
+    - Post-run service state is inspected with `docker compose ps` and relevant logs.
+    - Basic runtime reachability is checked when the stack starts far enough to do so.
+
+- [-] Task 4 - Fix repo-side deployment blockers if any are found
+  - Acceptance criteria:
+    - Any repo defect surfaced by the shakedown is fixed with the smallest practical change.
+    - The affected deployment checks are rerun after the fix.
+    - Pure host/operator blockers are documented clearly if no repo change can address them.
+
+- [ ] Task 5 - Run closing verification and record the final issue list
+  - Acceptance criteria:
+    - Relevant verification commands are rerun and logged after the shakedown/fixes.
+    - `TASKS.md` records the final deployment outcome, including unresolved issues and whether the stack actually reached a healthy running state on this machine.
+
+### Execution log (real local shakedown deployment on this Windows host)
+- ✅ Task 1 complete: appended a fresh shakedown-deployment scope to `PLAN.md` and an ordered host-validation checklist to `TASKS.md` before running any runtime actions.
+- ✅ Task 1 checks:
+  - ✅ `rg -n "real local shakedown deployment on this Windows host|Run a real local shakedown deployment of BitRiver Live" PLAN.md TASKS.md`
+  - ✅ `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live diff -- PLAN.md TASKS.md`
+- ✅ Task 2 complete: confirmed the current repo-root `.env` renders the canonical compose contract, the PowerShell quickstart wrapper is the intended Windows entrypoint, and Docker daemon access requires elevated execution on this host.
+- ✅ Task 2 checks:
+  - ⚠️ `docker version` (sandboxed shell can see the Docker client but daemon access is denied with "must be run with elevated privileges" and `C:\Users\RhythmicCarnage\.docker\config.json` access warnings)
+  - ✅ `docker compose --env-file .env -f deploy/docker-compose.yml config`
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -ValidateOnly`
+  - ✅ `rg -n "^(BITRIVER_LIVE_MODE|NEXT_PUBLIC_VIEWER_URL|BITRIVER_TRANSCODER_PUBLIC_BASE_URL|BITRIVER_OME_BIND|BITRIVER_OME_IP)=" .env`
+- ⚠️ Task 3 in progress: the first elevated quickstart attempt reached the Windows wrapper and failed before any containers were created because `scripts/quickstart.ps1` calls `Start-Process -FilePath 'go'` after clearing process `PATH`, which prevented `go.exe` from being found in that context.
+- ⚠️ Task 3 checks so far:
+  - ❌ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 --env-file .env --compose-file deploy/docker-compose.yml; docker compose --env-file .env -f deploy/docker-compose.yml ps; docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120` (`Start-Process` could not find `go`; `docker compose ps` showed no containers)
+- ✅ Task 4 partial progress: fixed the first repo-side Windows wrapper blocker in `scripts/quickstart.ps1` by resolving `go.exe` explicitly and normalizing duplicate `Path`/`PATH` keys before `Start-Process`, then added regression coverage for the wrapper and release Dockerfile pgx replacement handling.
+- ✅ Task 4 checks so far:
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./scripts -run 'TestPowerShellQuickstartPropagatesCliExitCodes|TestDockerfileDropsStubbedPuddleInRealPgxMode' -count=1 -timeout=120s`
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -ValidateOnly`
+- ⚠️ Task 3 deeper shakedown result: the direct Go quickstart with elevated Docker access proved the canonical path still stops before container startup because the saved `.env` is production-mode and contains non-routable local placeholders for `BITRIVER_TRANSCODER_PUBLIC_BASE_URL`, `NEXT_PUBLIC_VIEWER_URL`, `BITRIVER_OME_BIND`, and `BITRIVER_OME_IP`.
+- ⚠️ Additional shakedown finding: the documented quickstart-dev shell override (`BITRIVER_LIVE_MODE=development`) did not bypass the quickstart production contract in practice; direct quickstart still evaluated `.env` as production and rejected `--image-source build`, so the docs/behavior need follow-up.
+- ✅ Task 4 additional progress: fixing the direct Compose bring-up exposed and resolved three more repo-side release-build blockers before runtime startup:
+  - Dockerfile real-pgx mode now drops the stub `github.com/jackc/puddle/v2` replacement.
+  - `go.mod` now requires the upstream-available `github.com/jackc/puddle/v2 v2.2.2`.
+  - Postgres storage now detects stubbed pgx via the portable `pgx.ErrNoRows` heuristic instead of the stub-only `pgx.IsStub` symbol.
+- ✅ Task 4 additional checks:
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test -tags postgres ./internal/auth -count=1 -timeout=120s`
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/storage -run TestNewPostgresRepositoryStubbedIncludesCause -count=1 -timeout=120s`
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test -tags postgres ./internal/storage -run '^$' -count=1 -timeout=120s`
+- ⚠️ Task 3 current stop point: a full direct `docker compose up -d --build` with the documented development-mode override now builds the API, viewer, transcoder, SRS controller, and OME helper images successfully and starts part of the stack, but deployment still fails because:
+  - `bitriver-postgres` becomes unhealthy with `chmod ... Operation not permitted` / `find ... Permission denied`.
+  - `deploy-redis-1` crash-loops with `failed switching to "redis": operation not permitted`.
+  - `bitriver-transcoder-public` crash-loops because nginx cannot `chown("/var/cache/nginx/client_temp", 101)`.
+- ⚠️ Current assessment: these remaining failures point at compose-level hardening on vendor images (`cap_drop: ["ALL"]`, plus related startup privilege assumptions), which means the next fix would change `deploy/docker-compose.yml` and must be confirmed with the user before proceeding.
