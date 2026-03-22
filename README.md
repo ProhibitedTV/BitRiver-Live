@@ -1,8 +1,10 @@
 # BitRiver Live
 
-BitRiver Live is a self-hosted live-streaming stack.
+![BitRiver Live banner](./bitriver-live-banner-text.png)
 
-It packages a Go control-plane API, a Next.js viewer, ingest/transcoding services, and stateful data services into a single Docker Compose deployment (`deploy/docker-compose.yml`) driven by one root `.env` file.
+BitRiver Live is a self-hosted live-streaming stack for teams that want one clear deployment bundle instead of a grab bag of loosely connected services.
+
+It packages a Go control-plane API, a Next.js viewer, ingest and transcoding services, and stateful data services into one Docker Compose deployment (`deploy/docker-compose.yml`) driven by a single root `.env` file.
 
 ## 1) What this project is
 

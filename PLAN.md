@@ -1,4 +1,24 @@
 ## Scope (current change)
+- Improve the public-facing root `README.md` by featuring the new `bitriver-live-banner-text.png` asset near the top of the file.
+- Tighten the opening README copy so the project pitch reads more clearly to first-time visitors without changing any technical guidance or deployment contracts.
+- Keep this as a docs-only change and verify the asset path plus the standard repository verification gate.
+
+## Assumptions
+- Leaving `bitriver-live-banner-text.png` in the repo root and referencing it directly from `README.md` is the smallest, clearest way to publish the banner.
+- The rest of the README structure remains accurate; only the top presentation copy needs polishing.
+- A docs-only change should not require contract or runtime documentation updates outside `README.md`.
+
+## Risks
+- Moving or renaming the image unnecessarily could create a broken public README image link, so the asset path should stay simple.
+- Rewording the intro too aggressively could drift from the repo’s existing deployment framing, so the copy change should stay tight and factual.
+- `./scripts/verify.sh` may surface unrelated repository issues, so verification results should distinguish README work from ambient failures if any appear.
+
+## Test plan
+- `Test-Path bitriver-live-banner-text.png`
+- `Get-Content README.md -TotalCount 20`
+- `./scripts/verify.sh`
+
+## Scope (current change)
 - Fix the `github.com/jackc/puddle/v2` local replacement so postgres-tagged builds do not fail with `build constraints exclude all Go files`.
 - Keep the change narrowly scoped to vendored dependency buildability; do not change runtime behavior, module contracts, or dependency sources.
 - Verify the exact failing path with postgres-tagged tests and the standard repository verification gate.

@@ -1,3 +1,38 @@
+## Scoped change: root README banner polish
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 — Record the docs-only plan for the README refresh
+  - Acceptance criteria:
+    - `PLAN.md` captures the README banner scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists a small implementation and verification sequence before editing `README.md`.
+
+- [x] Task 2 — Add the banner image and tighten the README opening copy
+  - Acceptance criteria:
+    - `README.md` includes `bitriver-live-banner-text.png` near the top of the file.
+    - The opening copy is slightly sharper for public readers without changing technical meaning.
+    - The image reference uses a valid repo-relative path.
+
+- [x] Task 3 — Verify the README asset path and record the result
+  - Acceptance criteria:
+    - `Test-Path bitriver-live-banner-text.png` confirms the banner asset exists.
+    - `Get-Content README.md -TotalCount 20` shows the new banner reference near the top.
+    - `./scripts/verify.sh` is run and recorded.
+
+### Execution log (root README banner polish)
+- ✅ Task 1 complete: captured the docs-only README scope in `PLAN.md` and queued a single README implementation task plus verification in `TASKS.md`.
+- ✅ Task 1 checks:
+  - ✅ `Get-Item bitriver-live-banner-text.png | Select-Object Name,Length,LastWriteTime`
+  - ✅ `Get-Content README.md -TotalCount 120`
+- ✅ Task 2 complete: added the new banner directly under the `README.md` title and refreshed the opening two paragraphs so the project pitch reads a little more cleanly for public visitors without changing any technical claims.
+- ✅ Task 2 checks:
+  - ✅ `Get-Content README.md -TotalCount 20`
+- ✅ Task 3 complete: confirmed the banner asset path exists, verified the new banner reference appears at the top of `README.md`, and reran the repository verification gate successfully.
+- ✅ Task 3 checks:
+  - ✅ `Test-Path bitriver-live-banner-text.png`
+  - ✅ `Get-Content README.md -TotalCount 20`
+  - ✅ `./scripts/verify.sh`
+
 ## Scoped change: postgres-tagged `puddle/v2` build fix
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
