@@ -84,6 +84,17 @@ body.auth-page {
     color: var(--text-muted);
 }
 
+.auth-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+}
+
 .auth-mfa {
     margin-top: 1.5rem;
     display: grid;
@@ -159,6 +170,21 @@ body.auth-page {
     margin-top: 1rem;
     font-size: 0.9rem;
     color: var(--text-muted);
+}
+
+.auth-link-row {
+    margin-top: 1rem;
+}
+
+.auth-link-row a {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.auth-link-row a:hover,
+.auth-link-row a:focus-visible {
+    color: var(--accent-strong);
 }
 
 .hero {

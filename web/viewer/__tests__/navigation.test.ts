@@ -22,7 +22,7 @@ describe("navigation config", () => {
     },
     {
       actor: { isAuthenticated: true, roles: ["admin"] },
-      expected: ["Home", "Following", "Browse", "Dashboard", "Creator"],
+      expected: ["Home", "Following", "Browse", "Creator"],
     },
   ])("resolves the expected nav labels for $actor", ({ actor, expected }) => {
     const audience = getNavigationAudience(actor);

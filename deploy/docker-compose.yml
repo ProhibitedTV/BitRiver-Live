@@ -132,6 +132,8 @@ services:
     cap_drop: ["ALL"]
     # Exception: Redis image manages runtime config under the container filesystem.
     # Exception: retain image default root user for upstream redis entrypoint compatibility.
+    # Exception: upstream entrypoint must chown /data and drop privileges to the redis user.
+    cap_add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]
     command:
       - "redis-server"
       - "--save"
@@ -159,6 +161,8 @@ services:
     cap_drop: ["ALL"]
     # Exception: Postgres init/runtime writes beyond mounted data dir during startup.
     # Exception: retain image default user; upstream postgres entrypoint handles UID/GID setup.
+    # Exception: upstream entrypoint must chmod/chown PGDATA and drop privileges to postgres.
+    cap_add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]
     environment:
       POSTGRES_DB: ${BITRIVER_POSTGRES_DB:-bitriver}
       POSTGRES_USER: ${BITRIVER_POSTGRES_USER:?set via .env}
@@ -535,6 +539,8 @@ services:
     cap_drop: ["ALL"]
     read_only: true
     # Exception: retain image default root user; nginx binds and manages runtime state internally.
+    # Exception: nginx startup adjusts cache directory ownership under /var/cache/nginx.
+    cap_add: ["CHOWN"]
     ports:
       - "${BITRIVER_TRANSCODER_PUBLIC_PORT:-9080}:8080"
     volumes:

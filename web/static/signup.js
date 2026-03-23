@@ -1,4 +1,6 @@
 const signupForm = document.getElementById("signup-form");
+const signupCard = document.getElementById("signup-card");
+const signupClosedNote = document.getElementById("signup-closed-note");
 const loginForm = document.getElementById("login-form");
 const feedback = document.getElementById("auth-feedback");
 const mfaStep = document.getElementById("mfa-step");
@@ -8,6 +10,7 @@ const mfaRecoveryCodes = document.getElementById("mfa-recovery-codes");
 const DEFAULT_DESTINATION = "/viewer";
 const REDIRECT_DELAY_MS = 600;
 let pendingMFAToken = null;
+const allowSelfSignup = document.body?.dataset.allowSelfSignup === "true";
 
 function isSafeOnsitePath(candidate) {
     if (!candidate || typeof candidate !== "string") {
@@ -33,6 +36,15 @@ function resolveDestination() {
 }
 
 const destination = resolveDestination();
+
+function applyAuthConfig() {
+    if (signupCard) {
+        signupCard.hidden = !allowSelfSignup;
+    }
+    if (signupClosedNote) {
+        signupClosedNote.hidden = allowSelfSignup;
+    }
+}
 
 function showFeedback(message, variant = "info") {
     if (!feedback) {
@@ -120,7 +132,7 @@ if (signupForm) {
         try {
             await requestAuth("/api/auth/signup", data);
             form.reset();
-            showFeedback("Account created! Redirecting you to the control center.");
+            showFeedback("Account created! Redirecting you now.");
             window.setTimeout(() => {
                 window.location.assign(destination);
             }, REDIRECT_DELAY_MS);
@@ -178,6 +190,7 @@ if (mfaForm) {
 
 const params = new URLSearchParams(window.location.search);
 const mfaToken = params.get("mfaToken");
+applyAuthConfig();
 if (mfaToken) {
     pendingMFAToken = mfaToken;
     showMFA(true);

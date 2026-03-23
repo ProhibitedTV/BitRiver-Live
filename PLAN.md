@@ -1007,6 +1007,7 @@
 - Run a real local shakedown deployment of BitRiver Live on this Windows host using the canonical quickstart/Compose contract (`deploy/docker-compose.yml` plus the repo-root `.env`).
 - Capture the true host-side behavior during bring-up: Docker availability, compose render validity, container health, and basic service reachability after the stack starts.
 - If the shakedown surfaces a repo-side blocker, apply the smallest fix that unblocks deployment validation and rerun the affected checks; otherwise, document host/operator blockers precisely without mutating the deployment contract.
+- If the shakedown confirms compose hardening is blocking vendor/root-based services (for example Postgres, Redis, or the nginx transcoder-public sidecar), narrow the fix to the minimum service/capability exception set and confirm the contract change with the user before editing `deploy/docker-compose.yml`.
 
 ## Assumptions
 - The current repo-root `.env` is the intended local deployment input for this checkout, so we should prefer using it as-is rather than generating or rewriting contract values unless the user asks for contract changes.
@@ -1017,13 +1018,42 @@
 - Docker Desktop / Engine may be installed but not running, which would stop the shakedown before container startup and needs to be separated from repo defects.
 - The existing `.env` may contain site-specific or production-mode values that fail strict validation on this host; because `.env` is part of the deployment contract, we should report those gaps rather than silently rewriting them.
 - A full quickstart may build/pull large images and leave containers/volumes behind, so cleanup and final state reporting need to be explicit.
+- Relaxing compose hardening on vendor images could widen the runtime privilege envelope if we remove restrictions too broadly, so any contract edit should stay limited to the exact services/startup capabilities proven necessary.
 
 ## Test plan
 - `docker version`
 - `docker compose --env-file .env -f deploy/docker-compose.yml config`
 - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 --env-file .env --compose-file deploy/docker-compose.yml`
 - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
 - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 postgres redis transcoder-public`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/healthz -TimeoutSec 10 } catch { $_.Exception.Message }`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -TimeoutSec 10 } catch { $_.Exception.Message }`
+- `./scripts/verify.sh`
+
+## Scope (current change)
+- Make the default public entry on the BitRiver Live HTTP listener viewer-first instead of auth-first, so anonymous visitors who open the host root land in the browsing/watch flow rather than the isolated signup screen.
+- Move the existing control-center SPA off `/` onto an explicit `/admin` entrypoint while preserving the current control-center behavior and auth requirements once an administrator chooses that path.
+- Make the auth page match the default config by treating sign-in as the primary action and only presenting self-signup affordances when `BITRIVER_LIVE_ALLOW_SELF_SIGNUP` is enabled.
+- Add a simple in-product admin route affordance for signed-in admins inside the viewer UI so switching between the public viewer and control center stays easy after the root path change.
+- Update the operator-facing quickstart docs so the new root-to-viewer behavior and explicit `/admin` control-center entrypoint are discoverable without reading code.
+
+## Assumptions
+- Redirecting `/` to `/viewer` only when the viewer proxy is configured is the smallest safe behavioral change for the default compose/install shape; environments without a viewer origin should continue to fall back to the existing root control-center page.
+- `/admin` is the clearest explicit home for the existing control-center SPA and does not require changing the app's internal section navigation model.
+- A small public auth-config endpoint is acceptable for letting the static signup page hide or reframe the signup form when self-signup is disabled.
+- This change affects runtime UX and routes, but it does not change the deployment contract files themselves unless a docs update is needed to describe the new public/admin paths.
+
+## Risks
+- Root-route changes can surprise existing operators or tests that implicitly expect the control center at `/`, so the old experience needs a stable explicit replacement path and coverage.
+- If `/` redirects unconditionally without a viewer proxy configured, some non-compose deployments could end up with a broken landing page.
+- The auth page could briefly flash the signup card before config loads if the client-side gating is not handled carefully.
+- Adding an admin entry link in the viewer navbar could create role-based UI clutter if it is shown too broadly instead of only to admins.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- `npm.cmd --prefix web/viewer run test -- navbar.test.tsx`
 - `./scripts/verify.sh`
 
 ## Scope (current change)

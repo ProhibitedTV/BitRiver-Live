@@ -28,6 +28,14 @@ const isLocalhostUrl = (rawUrl?: string) => {
   }
 };
 
+const joinConfiguredPath = (baseUrl: string | undefined, path: string) => {
+  const base = baseUrl?.trim();
+  if (!base) {
+    return path;
+  }
+  return `${base.replace(/\/+$/, "")}${path}`;
+};
+
 export function Navbar() {
   const { user, signIn, signOut } = useAuth();
   const router = useRouter();
@@ -78,10 +86,11 @@ export function Navbar() {
       return configuredSignupUrl || undefined;
     }
     if (process.env.NEXT_PUBLIC_API_BASE_URL) {
-      return `${process.env.NEXT_PUBLIC_API_BASE_URL}/signup`;
+      return joinConfiguredPath(process.env.NEXT_PUBLIC_API_BASE_URL, "/signup");
     }
     return "/signup";
   }, [configuredSignupUrl]);
+  const adminUrl = useMemo(() => joinConfiguredPath(process.env.NEXT_PUBLIC_API_BASE_URL, "/admin"), []);
   const quickLinks = useMemo(() => deriveQuickLinks(navigationAudience, navItems), [navigationAudience, navItems]);
   const isRouteActive = (href: string) => {
     if (href === "/") {
@@ -502,6 +511,11 @@ export function Navbar() {
         </div>
         {/* navbar-right contract: render role/user-aware actions (creator CTA, theme, auth/account) without diverging desktop/mobile behavior. */}
         <div className="navbar-right">
+          {isAdmin && (
+            <a href={adminUrl} className="nav-cta" onClick={closeMenu}>
+              Control center
+            </a>
+          )}
           {canAccessCreatorTools && managedChannelId && (
             <Link href={`/creator/live/${managedChannelId}`} className="nav-cta" onClick={closeMenu}>
               Go live
@@ -572,6 +586,11 @@ export function Navbar() {
                   <Link href="/profile" className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
                     Profile
                   </Link>
+                  {isAdmin && (
+                    <a href={adminUrl} className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
+                      Control center
+                    </a>
+                  )}
                   {canAccessCreatorTools && (
                     <Link
                       href={managedChannelId ? `/creator/live/${managedChannelId}` : "/creator"}
@@ -663,6 +682,11 @@ export function Navbar() {
               {item.label}
             </Link>
           ))}
+          {isAdmin && (
+            <a href={adminUrl} className="nav-drawer__link" onClick={closeMenu}>
+              Control center
+            </a>
+          )}
           {canAccessCreatorTools && managedChannelId && (
             <Link
               href={`/creator/live/${managedChannelId}`}

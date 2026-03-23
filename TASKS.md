@@ -2096,4 +2096,76 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `bitriver-postgres` becomes unhealthy with `chmod ... Operation not permitted` / `find ... Permission denied`.
   - `deploy-redis-1` crash-loops with `failed switching to "redis": operation not permitted`.
   - `bitriver-transcoder-public` crash-loops because nginx cannot `chown("/var/cache/nginx/client_temp", 101)`.
+- ⚠️ Task 3 latest elevated inspection confirms the partial stack shape behind that failure:
+  - Only `bitriver-srs` and `bitriver-transcoder` are healthy and reachable from Compose.
+  - `bitriver-live`, `bitriver-viewer`, `bitriver-ome`, `bitriver-srs-controller`, and `deploy-postgres-migrations-1` remain stuck in `Created` because their dependencies never become healthy.
+  - Host probes to `http://localhost:8080/healthz` and `http://localhost:8080/viewer` currently fail because nothing is listening on `BITRIVER_LIVE_PORT` yet.
 - ⚠️ Current assessment: these remaining failures point at compose-level hardening on vendor images (`cap_drop: ["ALL"]`, plus related startup privilege assumptions), which means the next fix would change `deploy/docker-compose.yml` and must be confirmed with the user before proceeding.
+- ⚠️ Task 3 additional checks so far:
+  - ✅ `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - ✅ `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+  - ✅ `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 postgres redis transcoder-public`
+  - ⚠️ `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/healthz -TimeoutSec 10 } catch { $_.Exception.Message }` (returns "Unable to connect to the remote server" because the API container never starts)
+  - ⚠️ `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -TimeoutSec 10 } catch { $_.Exception.Message }` (returns "Unable to connect to the remote server" because the API proxy/viewer path never binds)
+
+## Scoped change: viewer-first public entry and explicit admin route
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the scoped public-entry UX plan before implementation
+  - Acceptance criteria:
+    - `PLAN.md` captures the viewer-first root-entry scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered route/auth/navbar implementation tasks before runtime code is edited.
+
+- [x] Task 2 - Move the public root flow to the viewer and expose the control center at `/admin`
+  - Acceptance criteria:
+    - When a viewer origin is configured, requests to `/` redirect to `/viewer`.
+    - The control-center SPA remains reachable from `/admin` without changing its existing internal behavior.
+    - `internal/server` coverage validates the new root/admin behavior and preserves the existing signup asset handling.
+
+- [x] Task 3 - Make the auth screen sign-in-first when self-signup is disabled
+  - Acceptance criteria:
+    - The signup page no longer presents self-signup as the default primary action when `AllowSelfSignup` is false.
+    - A public auth-config path or equivalent wiring lets the static auth page react to `AllowSelfSignup` safely.
+    - Existing sign-in and MFA flows remain unchanged.
+
+- [x] Task 4 - Add a simple admin entrypoint in the viewer UI for signed-in admins
+  - Acceptance criteria:
+    - Signed-in admins can reach `/admin` from the viewer navigation without typing the URL manually.
+    - Non-admin viewer users do not see the new control-center entrypoint.
+    - Viewer tests cover the new admin affordance.
+
+- [x] Task 5 - Update docs for the new public and admin entry paths
+  - Acceptance criteria:
+    - Operator-facing docs explain that the public root now lands in the viewer flow when the viewer proxy is configured.
+    - Docs point administrators to `/admin` for the control center.
+    - The docs update stays narrowly scoped to the workflow/entrypoint guidance impacted by this route change.
+
+- [x] Task 6 - Run targeted verification and record final results
+  - Acceptance criteria:
+    - `go test ./internal/server -count=1 -timeout=120s` passes.
+    - `npm.cmd --prefix web/viewer run test -- navbar.test.tsx` passes.
+    - `./scripts/verify.sh` is run and logged.
+
+### Execution log (viewer-first public entry and explicit admin route)
+- ✅ Task 1 complete: appended the scoped public-entry UX plan and ordered implementation/verification tasks to `PLAN.md` and `TASKS.md` before editing runtime code.
+- ✅ Task 1 checks:
+  - ✅ `rg -n "viewer-first public entry|explicit admin route|public-entry UX" PLAN.md TASKS.md`
+- ✅ Task 2 complete: updated the HTTP server so `/` redirects into `/viewer` when the viewer proxy is configured, preserved the old root control-center fallback for non-viewer deployments, and mounted the existing control-center SPA explicitly at `/admin`.
+- ✅ Task 2 checks:
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- ✅ Task 3 complete: reworked the auth page into a sign-in-first layout, hid self-signup by default, and used server-rendered config on `/signup` so the page only reveals the create-account card when `AllowSelfSignup` is enabled.
+- ✅ Task 3 checks:
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- ✅ Task 4 complete: removed the fake viewer-local admin dashboard item from the shared viewer nav config and replaced it with a real same-origin `Control center` entry at `/admin` in the navbar, drawer, and account menu for signed-in admins only.
+- ✅ Task 4 checks:
+  - ✅ `npm.cmd --prefix web/viewer run test -- navbar.test.tsx navigation.test.ts` (passes; jsdom still logs the expected "navigation not implemented" console warning when the mobile drawer test clicks a real anchor)
+- ✅ Task 5 complete: updated the README, quickstart guide, and Ubuntu install guide so operators now see the viewer-first root behavior and the explicit `/admin` control-center path in the same places they already use for bootstrap guidance.
+- ✅ Task 5 checks:
+  - ✅ `rg -n "/admin|viewer flow|public root|root now lands|control center" README.md docs/quickstart.md docs/installing-on-ubuntu.md`
+- ✅ Task 6 complete: reran the focused server and viewer checks successfully, then ran the repo verification entrypoint and recorded the current host blocker precisely.
+- ✅ Task 6 checks:
+  - ✅ `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+  - ✅ `npm.cmd --prefix web/viewer run test -- navbar.test.tsx navigation.test.ts`
+  - ⚠️ `bash ./scripts/verify.sh` (sandboxed Bash blocked on this Windows host with `Bash/Service/CreateInstance/E_ACCESSDENIED`)
+  - ⚠️ `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (ran outside the sandbox and failed on the existing host prerequisite: `python3` missing during the env-example placeholder hygiene step)
