@@ -261,8 +261,19 @@ func registerRoutes(mux *http.ServeMux, handler *api.Handler, cfg Config, record
 	if err != nil {
 		return fmt.Errorf("read web index: %w", err)
 	}
+	signupDocument, err := fs.ReadFile(staticFS, "signup.html")
+	if err != nil {
+		return fmt.Errorf("read signup page: %w", err)
+	}
 	fileServer := http.FileServer(http.FS(staticFS))
 	mux.Handle("/static/", http.StripPrefix("/static/", fileServer))
+	adminHandler := embeddedHTMLHandler(index)
+	signupHandler := embeddedHTMLHandler(withBodyDataAttribute(signupDocument, "data-allow-self-signup", fmt.Sprintf("%t", handler.AllowSelfSignup)))
+	mux.Handle("/signup", signupHandler)
+	mux.Handle("/signup/", signupHandler)
+	mux.Handle("/signup.html", signupHandler)
+	mux.Handle("/admin", adminHandler)
+	mux.Handle("/admin/", adminHandler)
 
 	if cfg.ViewerOrigin != nil {
 		viewerProxy := httputil.NewSingleHostReverseProxy(cfg.ViewerOrigin)
@@ -279,7 +290,11 @@ func registerRoutes(mux *http.ServeMux, handler *api.Handler, cfg Config, record
 		mux.Handle("/viewer/", viewerHandler)
 	}
 
-	mux.HandleFunc("/", spaHandler(staticFS, index, fileServer, cfg.Logger, ipResolver))
+	rootRedirectPath := ""
+	if cfg.ViewerOrigin != nil {
+		rootRedirectPath = "/viewer"
+	}
+	mux.HandleFunc("/", spaHandler(staticFS, index, fileServer, cfg.Logger, ipResolver, rootRedirectPath))
 	return nil
 }
 
@@ -714,10 +729,39 @@ func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 }
 
 // spaHandler performs spa handler and propagates validation or dependency failures to the caller.
-func spaHandler(staticFS fs.FS, index []byte, fileServer http.Handler, logger *slog.Logger, resolver *clientIPResolver) http.HandlerFunc {
+func embeddedHTMLHandler(document []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.Error(w, fmt.Sprintf("method %s not allowed", r.Method), http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if r.Method == http.MethodHead {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		_, _ = w.Write(document)
+	}
+}
+
+func withBodyDataAttribute(document []byte, name, value string) []byte {
+	if strings.TrimSpace(name) == "" {
+		return document
+	}
+	bodyTag := `<body class="auth-page">`
+	replacement := fmt.Sprintf(`<body class="auth-page" %s="%s">`, name, value)
+	return []byte(strings.Replace(string(document), bodyTag, replacement, 1))
+}
+
+func spaHandler(staticFS fs.FS, index []byte, fileServer http.Handler, logger *slog.Logger, resolver *clientIPResolver, rootRedirectPath string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			http.Error(w, fmt.Sprintf("method %s not allowed", r.Method), http.StatusMethodNotAllowed)
+			return
+		}
+
+		if r.URL.Path == "/" && strings.TrimSpace(rootRedirectPath) != "" {
+			http.Redirect(w, r, rootRedirectPath, http.StatusTemporaryRedirect)
 			return
 		}
 

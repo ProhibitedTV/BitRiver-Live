@@ -105,9 +105,9 @@ Wrapper equivalents (scripts are thin shims around the same CLI command):
 ### First login / verification
 
 - Verify the install: `bitriver smoke` (or `go run ./cmd/bitriver smoke`).
-- Open the control centre URL shown by quickstart.
+- Open the listener shown by quickstart. When the viewer proxy is configured (the default compose shape), the host root lands in the public viewer flow and the control centre lives at `/admin`.
 - Use generated/admin credentials from quickstart output.
-- Confirm health in the Overview dashboard (or query `/api/status`).
+- Confirm health in the `/admin` Overview dashboard (or query `/api/status`).
 
 ### Useful day-2 operations commands
 

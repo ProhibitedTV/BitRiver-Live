@@ -123,20 +123,22 @@ describe("Navbar", () => {
     window.history.replaceState({}, "", "/");
   });
 
-  test("shows a dashboard link to admins", () => {
+  test("shows a control center link to admins", () => {
     mockAuthenticatedUser(adminUser);
 
     renderWithProviders(<Navbar />);
 
-    expect(screen.getByRole("link", { name: /dashboard/i })).toBeInTheDocument();
+    const controlCenterLink = document.querySelector<HTMLAnchorElement>(".navbar-right .nav-cta[href='/admin']");
+    expect(controlCenterLink).not.toBeNull();
+    expect(controlCenterLink).toHaveTextContent(/control center/i);
   });
 
-  test("does not render a dashboard link for non-admins", () => {
+  test("does not render a control center link for non-admins", () => {
     mockAuthenticatedUser(viewerUser);
 
     renderWithProviders(<Navbar />);
 
-    expect(screen.queryByRole("link", { name: /dashboard/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /control center/i })).not.toBeInTheDocument();
   });
 
   test("closes the account menu on outside click", async () => {
@@ -287,7 +289,7 @@ describe("Navbar", () => {
     expect(drawerLabels).toEqual(desktopLabels);
   });
 
-  test("closes the mobile menu after visiting the dashboard link", async () => {
+  test("closes the mobile menu after visiting the control center link", async () => {
     mockAuthenticatedUser(adminUser);
 
     const user = userEvent.setup();
@@ -301,7 +303,8 @@ describe("Navbar", () => {
 
     expect(toggleButton).toHaveAttribute("aria-expanded", "true");
 
-    const dashboardLink = screen.getByRole("link", { name: /dashboard/i });
+    const quickLinks = screen.getByRole("group", { name: /quick links/i });
+    const dashboardLink = within(quickLinks).getByRole("link", { name: /control center/i });
     await act(async () => {
       await user.click(dashboardLink);
     });

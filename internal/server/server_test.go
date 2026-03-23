@@ -183,6 +183,8 @@ func TestNewRegistersKeyRoutes(t *testing.T) {
 		{name: "metrics", path: "/metrics", code: http.StatusOK},
 		{name: "api status", path: "/api/status", code: http.StatusUnauthorized},
 		{name: "static route", path: "/static/does-not-exist.js", code: http.StatusNotFound},
+		{name: "root redirect", path: "/", code: http.StatusTemporaryRedirect},
+		{name: "admin", path: "/admin", code: http.StatusOK},
 		{name: "viewer proxy", path: "/viewer", code: http.StatusBadGateway},
 	}
 
@@ -196,6 +198,119 @@ func TestNewRegistersKeyRoutes(t *testing.T) {
 
 			if rec.Code != tc.code {
 				t.Fatalf("expected status %d for %s, got %d", tc.code, tc.path, rec.Code)
+			}
+		})
+	}
+}
+
+func TestRootFallsBackToControlCenterWithoutViewerOrigin(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	srv, err := New(handler, Config{})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected control center response on root without viewer origin, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "BitRiver Live Control Center") {
+		t.Fatalf("expected control center markup in response, got %q", rec.Body.String())
+	}
+}
+
+func TestRootRedirectsToViewerWhenViewerOriginConfigured(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	origin, err := url.Parse("http://127.0.0.1:1")
+	if err != nil {
+		t.Fatalf("parse viewer origin: %v", err)
+	}
+	srv, err := New(handler, Config{ViewerOrigin: origin})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTemporaryRedirect {
+		t.Fatalf("expected root redirect when viewer origin configured, got %d", rec.Code)
+	}
+	if location := rec.Header().Get("Location"); location != "/viewer" {
+		t.Fatalf("expected root redirect to /viewer, got %q", location)
+	}
+}
+
+func TestAdminRouteServesControlCenter(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	srv, err := New(handler, Config{})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	rec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected admin route to serve control center, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "BitRiver Live Control Center") {
+		t.Fatalf("expected control center markup in response, got %q", rec.Body.String())
+	}
+}
+
+func TestSignupRouteReflectsAllowSelfSignupConfiguration(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name            string
+		allowSelfSignup bool
+		wantAttribute   string
+	}{
+		{name: "disabled", allowSelfSignup: false, wantAttribute: `data-allow-self-signup="false"`},
+		{name: "enabled", allowSelfSignup: true, wantAttribute: `data-allow-self-signup="true"`},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			handler, _ := newTestHandler(t)
+			srv, err := New(handler, Config{AllowSelfSignup: &tc.allowSelfSignup})
+			if err != nil {
+				t.Fatalf("New returned error: %v", err)
+			}
+
+			req := httptest.NewRequest(http.MethodGet, "/signup", nil)
+			rec := httptest.NewRecorder()
+			srv.httpServer.Handler.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected signup page response, got %d", rec.Code)
+			}
+
+			body := rec.Body.String()
+			if !strings.Contains(body, tc.wantAttribute) {
+				t.Fatalf("expected signup page to include %q, got %q", tc.wantAttribute, body)
+			}
+
+			loginIndex := strings.Index(body, `<form id="login-form"`)
+			signupIndex := strings.Index(body, `<section id="signup-card"`)
+			if loginIndex == -1 || signupIndex == -1 {
+				t.Fatalf("expected signup page to include both login and signup sections, got %q", body)
+			}
+			if loginIndex > signupIndex {
+				t.Fatalf("expected sign-in form to appear before signup card, got %q", body)
 			}
 		})
 	}
@@ -762,7 +877,7 @@ func TestSPAHandlerServesSignup(t *testing.T) {
 		t.Fatalf("read index.html: %v", err)
 	}
 
-	handler := spaHandler(staticFS, index, http.FileServer(http.FS(staticFS)), nil, nil)
+	handler := spaHandler(staticFS, index, http.FileServer(http.FS(staticFS)), nil, nil, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/signup", nil)
 	rec := httptest.NewRecorder()
@@ -785,7 +900,7 @@ func TestSPAHandlerLogsUnexpectedErrors(t *testing.T) {
 	buf := &bytes.Buffer{}
 	logger := slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{AddSource: false}))
 
-	handler := spaHandler(staticFS, index, http.FileServer(http.FS(staticFS)), logger, nil)
+	handler := spaHandler(staticFS, index, http.FileServer(http.FS(staticFS)), logger, nil, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/broken", nil)
 	rec := httptest.NewRecorder()
