@@ -5,6 +5,7 @@ import { getChannelPreviewImage } from "../lib/channel-presenters";
 import type { DirectoryChannel } from "../lib/viewer-api";
 
 interface ChannelRailProps {
+  id?: string;
   title: string;
   subtitle?: string;
   channels: DirectoryChannel[];
@@ -55,6 +56,7 @@ function RailCard({ entry, density = "default" }: { entry: DirectoryChannel; den
 }
 
 export function ChannelRail({
+  id,
   title,
   subtitle,
   channels,
@@ -63,7 +65,7 @@ export function ChannelRail({
   eyebrow,
 }: ChannelRailProps) {
   return (
-    <section className="content-rail stack">
+    <section className="content-rail content-rail--panel surface" id={id}>
       <header className="content-rail__header">
         <div className="stack">
           {eyebrow && <span className="muted content-rail__eyebrow">{eyebrow}</span>}
@@ -74,10 +76,14 @@ export function ChannelRail({
       </header>
 
       {loading ? (
-        <div className="surface">Loading channels…</div>
+        <div className="state-panel state-panel--loading" aria-busy="true">
+          <strong>Loading channels</strong>
+          <p className="muted">Pulling the latest picks into this row now.</p>
+        </div>
       ) : channels.length === 0 ? (
-        <div className="surface">
-          <p className="muted">No channels to show right now.</p>
+        <div className="state-panel">
+          <strong>No channels to show right now</strong>
+          <p className="muted">As the network fills out, fresh creators will appear here first.</p>
         </div>
       ) : (
         <div className="content-rail__scroller" role="list">

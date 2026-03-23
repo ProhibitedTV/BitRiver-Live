@@ -74,18 +74,20 @@ export function FeaturedChannel({
 
   if (loading) {
     return (
-      <div className="featured-channel surface" aria-busy="true" aria-live="polite">
-        <div className="muted">Loading featured channels…</div>
+      <div className="featured-channel" aria-busy="true" aria-live="polite">
+        <div className="state-panel state-panel--loading">
+          <strong>Loading featured stream</strong>
+          <p className="muted">Selecting a standout broadcast for the top of the page.</p>
+        </div>
       </div>
     );
   }
 
   if (!slides.length) {
     return (
-      <div className="featured-channel surface" role="region" aria-label="Featured channels">
-        <div className="featured-channel__content">
-          <span className="featured-channel__eyebrow muted">Featured</span>
-          <h2>No featured broadcast yet</h2>
+      <div className="featured-channel" role="region" aria-label="Featured channels">
+        <div className="state-panel">
+          <strong>No featured broadcast yet</strong>
           <p className="muted">
             Once BitRiver highlights a standout creator, their stream will appear here so you can jump in instantly.
           </p>
@@ -99,7 +101,7 @@ export function FeaturedChannel({
 
   return (
     <section
-      className="featured-channel surface"
+      className="featured-channel"
       role="region"
       aria-roledescription="carousel"
       aria-label="Featured channels carousel"
@@ -107,12 +109,7 @@ export function FeaturedChannel({
     >
       <div className="featured-channel__canvas">
         <div className="featured-channel__backdrop" aria-hidden="true">
-          {previewImage && (
-            <div
-              className="featured-channel__backdrop-image"
-              style={{ backgroundImage: `url(${previewImage})` }}
-            />
-          )}
+          {previewImage && <div className="featured-channel__backdrop-image" style={{ backgroundImage: `url(${previewImage})` }} />}
           <div className="featured-channel__backdrop-layer" />
         </div>
 
@@ -136,11 +133,11 @@ export function FeaturedChannel({
             </div>
           </div>
           <div className="featured-channel__content">
-            <span className="featured-channel__eyebrow muted">Featured</span>
+            <span className="featured-channel__eyebrow muted">Featured stream</span>
             <h2 className="featured-channel__title">{activeChannel.channel.title}</h2>
             <p className="featured-channel__subtitle muted">{activeChannel.owner.displayName}</p>
             <p className="muted">
-              {activeChannel.profile.bio ?? "Get to know this creator’s story and tune into their latest broadcast."}
+              {activeChannel.profile.bio ?? "Get to know this creator's story and tune into their latest broadcast."}
             </p>
             <div className="tag-list">
               {activeChannel.channel.category && <span className="tag">{activeChannel.channel.category}</span>}
@@ -156,7 +153,7 @@ export function FeaturedChannel({
                 href={`/channels/${activeChannel.channel.id}`}
                 aria-label="View featured channel"
               >
-                View stream
+                Watch channel
               </Link>
             </div>
           </div>
@@ -184,7 +181,7 @@ export function FeaturedChannel({
             aria-label="Previous featured channel"
             disabled={slides.length <= 1}
           >
-            Previous
+            Back
           </button>
           <button
             type="button"

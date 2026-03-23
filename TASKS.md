@@ -1,3 +1,64 @@
+## Scoped change: homepage UI/UX rescue pass
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the homepage rescue diagnosis and implementation plan before editing
+  - Acceptance criteria:
+    - `PLAN.md` captures the homepage rescue scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered header/shell/homepage/styling/validation tasks before viewer edits begin.
+    - The read-only diagnosis identifies the main hierarchy, spacing, and layout-system conflicts driving the rescue pass.
+
+- [x] Task 2 - Simplify the global shell and header priorities
+  - Acceptance criteria:
+    - The navbar presents a clearer single-priority structure on desktop and mobile without breaking existing auth/creator/admin entry points.
+    - The viewer shell and following sidebar feel like one product frame instead of disconnected panes.
+    - Shared layout/tokens used by the current page are consolidated enough that the touched surfaces are easier to reason about.
+
+- [x] Task 3 - Rebuild the homepage information hierarchy around one coherent discovery layout
+  - Acceptance criteria:
+    - The hero has a clear headline, primary action, search role, and compact supporting proof points.
+    - Featured, categories, trending, following, live-now, and directory sections use consistent spacing, header structure, and surface treatment.
+    - The page feels balanced on desktop and scales down cleanly on smaller screens without lopsided dead space or overflow.
+
+- [x] Task 4 - Standardize shared component sizing and state presentation on the homepage
+  - Acceptance criteria:
+    - Card, button, pill, and input sizing is visibly more consistent across the current page.
+    - Loading/empty/error states on the touched discovery surfaces are more intentional than plain text blocks.
+    - Existing routes, links, and viewer data flows remain functional.
+
+- [x] Task 5 - Run focused viewer validation and record the results
+  - Acceptance criteria:
+    - The targeted homepage/navigation Jest coverage passes.
+    - Viewer lint and production build are rerun and logged.
+    - Any remaining follow-ups or host-specific blockers are captured explicitly in the execution log.
+
+### Execution log (homepage UI/UX rescue pass)
+- Task 1 complete: recorded the scoped homepage rescue plan in `PLAN.md`/`TASKS.md` before editing and captured the read-only diagnosis that the current page was suffering from duplicated shell/navbar systems, muddled header priorities, a hero with weak hierarchy, redundant discovery patterns, and inconsistent state/card sizing.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 40`
+  - `Get-Content TASKS.md -TotalCount 40`
+  - `Get-Content web/viewer/app/directory-view.tsx`
+  - `Get-Content web/viewer/components/Navbar.tsx`
+  - `Get-Content web/viewer/styles/globals.css`
+  - `Get-Content web/viewer/styles/home.css`
+- Task 2 complete: simplified the shared viewer frame by trimming the navbar down to a clearer single-row hierarchy, removing the extra desktop context strip, tightening CTA/search sizing, and refreshing the following shell/sidebar presentation so the current page reads like one product surface instead of separate panes.
+- Task 2 checks:
+  - `npm.cmd --prefix web/viewer run test -- navbar.test.tsx viewerShell.test.tsx`
+- Task 3 complete: rebuilt the homepage into one stronger discovery flow with a more decisive hero, a dedicated featured panel, a cleaner recommended/categories/trending/live/directory section order, and clearer desktop-first balance between the main content and persistent following sidebar.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx`
+- Task 4 complete: standardized the touched discovery components around shared panel/state/search treatments, aligned card/button/input sizing, refreshed empty/loading/error messaging, and updated featured/directory card actions so the page feels intentional instead of pieced together.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- channelDisplayPrimitives.test.tsx -u`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+- Task 5 complete: reran the focused homepage/navigation tests plus lint/build successfully and attempted the repo viewer verification gate; `./scripts/verify.sh --viewer` stopped at the existing host blocker where `python3` is unavailable on this Windows machine, so the verify path was invoked and recorded but not completed end-to-end here.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run test -- navbar.test.tsx viewerShell.test.tsx directoryPage.test.tsx channelDisplayPrimitives.test.tsx -u`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` (blocked at the env-placeholder hygiene step because `python3` is not installed/callable on this host)
+
 ## Scoped change: root README banner polish
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -2435,6 +2496,42 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - Remaining gaps noted during validation:
   - Browser-level Playwright smoke is still blocked on this Windows host by `spawn EPERM`, so accessibility/mobile assertions remain covered by existing code-level tests plus live HTTP inspection rather than a completed headless-browser pass.
   - `directoryPage.test.tsx` still emits pre-existing non-failing React `act(...)` warnings from `SearchBar` interactions, and `navbar.test.tsx` still emits the known jsdom “navigation not implemented” warning when real anchor navigation is exercised.
+
+## Scoped change: local runtime refresh to latest checkout
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the scoped runtime-refresh plan before rebuilding services
+  - Acceptance criteria:
+    - `PLAN.md` captures the local runtime-refresh scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered rebuild and verification steps before Docker actions begin.
+
+- [x] Task 2 - Rebuild and recreate the local application services from the current checkout
+  - Acceptance criteria:
+    - `bitriver-live` and `viewer` are rebuilt from the current source tree using the canonical Compose contract.
+    - Compose status/log output is recorded after the refresh attempt.
+    - Healthy infrastructure services are left alone unless they are required dependencies of the rebuilt services.
+
+- [x] Task 3 - Verify the live local routes reflect the refreshed services
+  - Acceptance criteria:
+    - `http://localhost:8080/` responds as expected after the rebuild.
+    - `http://localhost:8080/viewer` and `http://localhost:8080/signup` load successfully after the refresh.
+    - `TASKS.md` records the post-refresh status so a new contributor can see that the local instance was synced.
+
+### Execution log (local runtime refresh to latest checkout)
+- Task 1 complete: appended a focused local runtime-refresh scope to `PLAN.md` and `TASKS.md` before rebuilding services, using the clean checkout and currently healthy stack as the baseline.
+- Task 2 complete: ran the canonical `docker compose ... up -d --build bitriver-live viewer` refresh from the current clean checkout, then force-recreated `bitriver-live` and `viewer` so the running app containers were restarted explicitly against the latest built images.
+- Task 2 checks:
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --force-recreate --no-deps bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 bitriver-live viewer` (initial log snapshot succeeded during the rebuild pass)
+  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=40 bitriver-live viewer` (follow-up retry hit a host-side Docker access-denied error against `//./pipe/docker_engine`)
+- Task 3 complete: verified the refreshed containers are now newly created and healthy (`bitriver-live`/`viewer` both restarted within seconds of the check), confirmed `/` still returns `307` to the viewer flow, confirmed `/viewer` serves the latest viewer shell markup with the corrected `/signup#login-form` auth CTA, and confirmed `/signup` still serves the current sign-in-first auth page.
+- Task 3 checks:
+  - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0`
+  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'BitRiver Live|/signup#login-form|/viewer/signup|Failed to parse URL|Invalid URL' -AllMatches`
+  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup).Content | Select-String -Pattern 'Sign in to continue|data-allow-self-signup|Back to viewer' -AllMatches`
 
 ### Execution log (platform-grade viewer UX/system redesign)
 - ✅ Task 1 complete: appended the scoped viewer-platform redesign plan to `PLAN.md`/`TASKS.md` before editing and captured the read-only diagnosis that currently the product works as a self-hosted creator/viewer platform, but the UX is fragmented by duplicated discovery entry points, ad-hoc page scaffolding, heavy inline styling, and shell/state tokens that are missing or inconsistent.

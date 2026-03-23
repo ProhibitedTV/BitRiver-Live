@@ -3,7 +3,6 @@ import { ChannelRail } from "../components/ChannelRail";
 import { DirectoryGrid } from "../components/DirectoryGrid";
 import { DirectorySearchBar } from "../components/DirectorySearchBar";
 import { FeaturedChannel } from "../components/FeaturedChannel";
-import { FollowingRail } from "../components/FollowingRail";
 import { LiveNowGrid } from "../components/LiveNowGrid";
 import type { CategorySummary, DirectoryChannel } from "../lib/viewer-api";
 
@@ -50,138 +49,154 @@ export function HomePageView({
   const { channels, error: directoryError } = directoryData;
   const heroStats = [
     { label: "Live now", value: liveNow.length.toLocaleString() },
+    {
+      label: homeData.isAuthenticated ? "Following" : "Recommended",
+      value: (homeData.isAuthenticated ? following.length : recommended.length).toLocaleString(),
+    },
     { label: "Categories", value: categories.length.toLocaleString() },
-    { label: "Recommended", value: recommended.length.toLocaleString() },
+  ];
+  const quickLinks = [
+    { href: "#recommended", label: "Recommended" },
+    { href: "#live-now", label: "Live now" },
+    { href: "#directory", label: query ? "Search results" : "Full directory" },
   ];
   const homeErrorMessage = homeError
-    ? `We couldn't load personalized rows (featured, recommended, following): ${homeError}`
+    ? `We couldn't load the personalized discovery rows right now: ${homeError}`
     : null;
   const directoryErrorMessage = directoryError ? `We couldn't load the directory right now: ${directoryError}` : null;
 
   return (
     <div className="home-page">
       <section className="home-hero">
-        <div className="home-hero__inner container container--wide">
-          <div className="home-hero__content stack stack--lg">
-            <div className="stack stack--xs">
-              <span className="home-hero__eyebrow">Discover</span>
-              <h1>Find the streams worth opening now</h1>
-            </div>
-            <p className="muted">
-              BitRiver Live brings live channels, categories, and the creators you already follow into one clear viewer flow.
-            </p>
-            <div className="home-hero__stats">
-              {heroStats.map((stat) => (
-                <div key={stat.label} className="stat-pill">
-                  <span className="stat-pill__label">{stat.label}</span>
-                  <strong className="stat-pill__value">{stat.value}</strong>
-                </div>
-              ))}
-            </div>
-            <div className="home-hero__actions">
-              <a href="#live-now" className="primary-button">
-                Open live now
-              </a>
-              <a href="#directory" className="secondary-button">
-                Browse directory
-              </a>
-            </div>
-            <nav aria-label="Quick jump links" className="home-hero__quick-links">
-              <a href="#top-categories" className="pill pill--tag">
-                Top categories
-              </a>
-              <a href="#trending-now" className="pill pill--tag">
-                Trending now
-              </a>
-              <a href="#live-now" className="pill pill--tag">
-                Live now
-              </a>
-            </nav>
-            <div className="home-hero__search">
-              <div className="stack stack--2xs">
-                <span className="home-hero__search-label">Search the full directory</span>
-                <span className="muted">Jump straight to a creator, category, or tag.</span>
+        <div className="home-hero__layout">
+          <div className="home-hero__main">
+            <div className="home-hero__copy stack stack--lg">
+              <div className="stack stack--xs">
+                <span className="home-hero__eyebrow">Live discovery</span>
+                <h1>Find the streams worth opening now</h1>
+                <p className="home-hero__lede muted">
+                  Browse live creators, featured broadcasts, and the full BitRiver Live directory in one clear entry point.
+                </p>
               </div>
-              <DirectorySearchBar defaultValue={query} />
+
+              <div className="home-hero__actions">
+                <a href="#live-now" className="primary-button">
+                  Watch live now
+                </a>
+                <a href="#directory" className="secondary-button">
+                  Browse all channels
+                </a>
+              </div>
+
+              <div className="home-hero__search-panel">
+                <div className="stack stack--2xs">
+                  <span className="home-hero__search-label">Search the full directory</span>
+                  <span className="muted">Jump straight to a creator, category, or tag without leaving the homepage.</span>
+                </div>
+                <DirectorySearchBar defaultValue={query} />
+              </div>
+
+              <dl className="home-hero__stats" aria-label="Platform snapshot">
+                {heroStats.map((stat) => (
+                  <div key={stat.label} className="home-stat">
+                    <dt className="home-stat__label">{stat.label}</dt>
+                    <dd className="home-stat__value">{stat.value}</dd>
+                  </div>
+                ))}
+              </dl>
+
+              <nav aria-label="Quick jump links" className="home-hero__quick-links">
+                {quickLinks.map((item) => (
+                  <a key={item.href} href={item.href} className="pill pill--ghost">
+                    {item.label}
+                  </a>
+                ))}
+              </nav>
             </div>
           </div>
 
-          <div className="home-hero__media stack stack--sm">
-            <div className="home-hero__media-header">
-              <span className="home-hero__eyebrow">Featured</span>
-              <p className="muted">A highlighted creator, ready for one-click playback.</p>
+          <aside className="home-hero__aside">
+            <div className="home-hero__aside-header">
+              <div className="stack stack--2xs">
+                <span className="home-hero__eyebrow">Featured today</span>
+                <h2>Start with a highlighted broadcast</h2>
+              </div>
+              <p className="muted">A curated stream with the fastest path into the current community pulse.</p>
             </div>
             <FeaturedChannel channels={featured} loading={homeLoading} />
-          </div>
+          </aside>
         </div>
       </section>
 
-      <div className="content-rail stack stack--xl">
+      <div className="home-sections">
         {!homeLoading && homeErrorMessage && (
-          <div className="surface" role="alert">
-            {homeErrorMessage}
+          <div className="state-panel state-panel--error" role="alert">
+            <strong>Some discovery rows are unavailable</strong>
+            <p className="muted">{homeErrorMessage}</p>
           </div>
         )}
 
         <ChannelRail
+          id="recommended"
           title="Recommended for you"
-          subtitle="Jump back into channels that already have momentum."
+          subtitle="Channels with momentum that should feel relevant the moment you arrive."
           channels={recommended}
           loading={homeLoading}
+          eyebrow="Personalized picks"
         />
 
-        <div className="content-rail__grid">
-          <section className="surface stack" id="top-categories">
-            <div className="section-heading">
-              <div>
-                <h2>Top categories</h2>
-                <p className="muted">Jump into the most active corners of the network.</p>
-              </div>
-              {!homeLoading && categories.length > 0 && <span className="muted">{categories.length} results</span>}
-            </div>
-            <CategoryRail categories={categories} loading={homeLoading} />
-          </section>
-
-          <section className="surface stack" id="trending-now">
-            <div className="section-heading">
-              <div>
-                <h2>Trending now</h2>
-                <p className="muted">Channels pulling viewers right now across BitRiver.</p>
-              </div>
-              {!homeLoading && trending.length > 0 && <span className="muted">{trending.length} channels</span>}
-            </div>
-            <ChannelRail title="Trending now" channels={trending} loading={homeLoading} density="compact" />
-          </section>
+        <div className="home-section-grid">
+          <CategoryRail id="top-categories" categories={categories} loading={homeLoading} />
+          <ChannelRail
+            id="trending"
+            title="Trending now"
+            subtitle="Streams pulling attention across the network right now."
+            channels={trending}
+            loading={homeLoading}
+            density="compact"
+            eyebrow="Momentum"
+          />
         </div>
 
-        <FollowingRail channels={following} loading={homeLoading} isAuthenticated={homeData.isAuthenticated} />
-
-        <section className="surface stack" id="live-now">
-          <div className="section-heading">
-            <div>
+        <section className="home-section surface" id="live-now">
+          <div className="home-section__header">
+            <div className="stack stack--2xs">
+              <span className="home-section__eyebrow">On air</span>
               <h2>Live now</h2>
-              <p className="muted">Creators currently on air and ready to watch.</p>
+              <p className="muted">Creators currently streaming and ready to watch immediately.</p>
             </div>
-            {!homeLoading && liveNow.length > 0 && <span className="muted">{liveNow.length} streams</span>}
+            {!homeLoading && liveNow.length > 0 && <span className="muted">{liveNow.length} live streams</span>}
           </div>
           <LiveNowGrid channels={liveNow} loading={homeLoading} />
         </section>
 
-        <section className="surface stack" id="directory">
-          <div className="section-heading">
-            <div>
-              <h2>Browse the directory</h2>
-              <p className="muted">Search every channel or scan the full lineup below.</p>
+        <section className="home-section surface" id="directory">
+          <div className="home-section__header">
+            <div className="stack stack--2xs">
+              <span className="home-section__eyebrow">Browse everything</span>
+              <h2>{query ? "Search results" : "Full directory"}</h2>
+              <p className="muted">
+                {query
+                  ? `Showing channels that match "${query}".`
+                  : "Scan the full lineup once you are ready to move beyond the curated rows."}
+              </p>
             </div>
-            {query && <span className="muted">{`Results for "${query}"`}</span>}
+            {!directoryLoading && !directoryError && channels.length > 0 && <span className="muted">{channels.length} channels</span>}
           </div>
-          {directoryLoading && <div className="surface">Loading channels...</div>}
-          {!directoryLoading && directoryErrorMessage && (
-            <div className="surface" role="alert">
-              {directoryErrorMessage}
+
+          {directoryLoading ? (
+            <div className="state-panel state-panel--loading" aria-busy="true">
+              <strong>Loading directory</strong>
+              <p className="muted">Refreshing the latest channel lineup now.</p>
             </div>
+          ) : directoryErrorMessage ? (
+            <div className="state-panel state-panel--error" role="alert">
+              <strong>Directory unavailable</strong>
+              <p className="muted">{directoryErrorMessage}</p>
+            </div>
+          ) : (
+            <DirectoryGrid channels={channels} />
           )}
-          {!directoryLoading && !directoryError && <DirectoryGrid channels={channels} />}
         </section>
       </div>
     </div>

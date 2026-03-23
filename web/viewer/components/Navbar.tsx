@@ -77,13 +77,6 @@ export function Navbar() {
   const signupUrl = useMemo(() => resolveSignupUrl(configuredSignupUrl), [configuredSignupUrl]);
   const adminUrl = useMemo(() => joinConfiguredPath(process.env.NEXT_PUBLIC_API_BASE_URL, "/admin"), []);
   const studioHref = managedChannelId ? `/creator/live/${managedChannelId}` : "/creator/getting-started";
-  const activeNavItem = navItems.find((item) => {
-    if (item.href === "/") {
-      return canonicalPath === "/";
-    }
-    return canonicalPath === item.href || canonicalPath.startsWith(`${item.href}/`);
-  });
-  const activeContextLabel = activeNavItem?.label ?? "Discover";
 
   const isRouteActive = (href: string) => {
     if (href === "/") {
@@ -461,13 +454,13 @@ export function Navbar() {
 
           <div className="navbar-right">
             {isAdmin && (
-              <a href={adminUrl} className="nav-cta nav-cta--secondary" onClick={closeMenu}>
+              <a href={adminUrl} className="nav-cta nav-cta--secondary nav-utility-link" onClick={closeMenu}>
                 Control center
               </a>
             )}
             {canAccessCreatorTools && (
               <Link href={studioHref} className="nav-cta nav-cta--primary" onClick={closeMenu}>
-                {managedChannelId ? "Open studio" : "Creator studio"}
+                {managedChannelId ? "Studio" : "Creator studio"}
               </Link>
             )}
 
@@ -550,20 +543,6 @@ export function Navbar() {
             </div>
           </div>
         </div>
-
-        <div className="navbar-context">
-          <div className="navbar-context__summary">
-            <span className="navbar-context__eyebrow">Current section</span>
-            <strong>{activeContextLabel}</strong>
-          </div>
-          <div className="navbar-context__links">
-            {quickLinks.map((item) => (
-              <Link key={item.href} href={item.href} className="navbar-context__link" onClick={closeMenu}>
-                {item.label}
-              </Link>
-            ))}
-          </div>
-        </div>
       </div>
 
       {menuOpen && isMobileDrawerPresentation && (
@@ -587,7 +566,7 @@ export function Navbar() {
         <div className="nav-drawer__header">
           <div className="stack stack--2xs">
             <span className="navbar-context__eyebrow">Navigation</span>
-            <h2>Move around the platform</h2>
+            <h2>Browse BitRiver Live</h2>
           </div>
           <button type="button" className="secondary-button" onClick={closeMenu}>
             Close

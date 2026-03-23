@@ -1,27 +1,32 @@
 import type { CategorySummary } from "../lib/viewer-api";
 
 interface CategoryRailProps {
+  id?: string;
   categories: CategorySummary[];
   loading?: boolean;
 }
 
-export function CategoryRail({ categories, loading = false }: CategoryRailProps) {
+export function CategoryRail({ id, categories, loading = false }: CategoryRailProps) {
   return (
-    <section className="content-rail stack">
+    <section className="content-rail content-rail--panel surface" id={id}>
       <header className="content-rail__header">
         <div className="stack">
           <span className="muted content-rail__eyebrow">Top Categories</span>
           <h2>Browse by category</h2>
-          <p className="muted">Jump into genres that fit your mood or discover something new.</p>
+          <p className="muted">Jump into the most active corners of the network without losing your place.</p>
         </div>
         {!loading && categories.length > 0 && <span className="muted">{categories.length} to explore</span>}
       </header>
 
       {loading ? (
-        <div className="surface">Loading categories…</div>
+        <div className="state-panel state-panel--loading" aria-busy="true">
+          <strong>Loading categories</strong>
+          <p className="muted">Organizing the busiest topics across the network now.</p>
+        </div>
       ) : categories.length === 0 ? (
-        <div className="surface">
-          <p className="muted">No categories available.</p>
+        <div className="state-panel">
+          <strong>No categories available yet</strong>
+          <p className="muted">Once streams are tagged, the most active topics will appear here.</p>
         </div>
       ) : (
         <div className="chip-rail" role="list">

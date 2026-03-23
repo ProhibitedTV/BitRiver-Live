@@ -10,10 +10,10 @@ import type { DirectoryChannel } from "../lib/viewer-api";
 export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
   if (channels.length === 0) {
     return (
-      <div className="surface stack">
-        <h2>No channels yet</h2>
+      <div className="state-panel">
+        <strong>No channels yet</strong>
         <p className="muted">
-          Creators haven’t gone live yet. Check back soon or invite your favourite broadcasters to join BitRiver Live.
+          Creators have not gone live yet. Check back soon or invite your favorite broadcasters to join BitRiver Live.
         </p>
       </div>
     );
@@ -98,7 +98,7 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
             <footer className="directory-card__footer">
               <span className="muted">Created {createdAt}</span>
               <Link className="secondary-button" href={`/channels/${entry.channel.id}`}>
-                View channel
+                Open channel
               </Link>
             </footer>
           </ChannelCardShell>

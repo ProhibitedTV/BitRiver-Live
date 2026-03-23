@@ -12,13 +12,18 @@ interface LiveNowGridProps {
 
 export function LiveNowGrid({ channels, loading = false }: LiveNowGridProps) {
   if (loading) {
-    return <div className="surface" aria-busy="true">Loading live channels…</div>;
+    return (
+      <div className="state-panel state-panel--loading" aria-busy="true">
+        <strong>Loading live channels</strong>
+        <p className="muted">Checking which creators are currently on air.</p>
+      </div>
+    );
   }
 
   if (channels.length === 0) {
     return (
-      <div className="surface">
-        <h3>Nobody is live right now</h3>
+      <div className="state-panel">
+        <strong>Nobody is live right now</strong>
         <p className="muted">As soon as creators go live, their broadcasts will show up here.</p>
       </div>
     );
@@ -56,7 +61,9 @@ export function LiveNowGrid({ channels, loading = false }: LiveNowGridProps) {
                   <ChannelAvatar displayName={entry.owner.displayName} avatarUrl={getChannelAvatarImage(entry)} />
                   <div className="overlay__byline">
                     <span className="overlay__name">{entry.owner.displayName}</span>
-                    <span className="overlay__meta overlay__meta--muted">{entry.channel.tags[0] ? `#${entry.channel.tags[0]}` : "Live"}</span>
+                    <span className="overlay__meta overlay__meta--muted">
+                      {entry.channel.tags[0] ? `#${entry.channel.tags[0]}` : "Live"}
+                    </span>
                   </div>
                 </div>
                 {entry.channel.tags[1] && <span className="pill pill--tag">#{entry.channel.tags[1]}</span>}

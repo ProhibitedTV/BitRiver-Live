@@ -184,7 +184,7 @@ export function ViewerShell({ children }: ViewerShellProps) {
           {!desktopSidebar && (
             <div className="viewer-shell__mobile-bar surface">
               <div className="stack stack--2xs">
-                <span className="viewer-sidebar__eyebrow">Live network</span>
+                <span className="viewer-sidebar__eyebrow">Your network</span>
                 <strong>Following</strong>
               </div>
               <button

@@ -98,9 +98,9 @@ describe("DirectoryPage", () => {
 
     await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalledTimes(1));
     const quickJumpNav = screen.getByRole("navigation", { name: /quick jump links/i });
-    expect(within(quickJumpNav).getByRole("link", { name: /top categories/i })).toHaveAttribute("href", "#top-categories");
-    expect(within(quickJumpNav).getByRole("link", { name: /trending now/i })).toHaveAttribute("href", "#trending-now");
+    expect(within(quickJumpNav).getByRole("link", { name: /recommended/i })).toHaveAttribute("href", "#recommended");
     expect(within(quickJumpNav).getByRole("link", { name: /live now/i })).toHaveAttribute("href", "#live-now");
+    expect(within(quickJumpNav).getByRole("link", { name: /full directory/i })).toHaveAttribute("href", "#directory");
 
     const heading = await screen.findByRole("heading", { level: 3, name: "Deep Space Beats" });
     const card = heading.closest("article");
@@ -184,27 +184,26 @@ describe("DirectoryPage", () => {
     await renderResolvedDirectoryPage();
 
     await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalled());
-    expect(screen.getByText(/browse the directory/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /full directory/i })).toBeInTheDocument();
   });
 
-  test("shows an empty following message for authenticated users with no follows", async () => {
+  test("keeps the streamlined homepage focused on discovery when follows are empty", async () => {
     fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
 
     await renderResolvedDirectoryPage();
 
-    expect(await screen.findByText(/not following any channels yet/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: /recommended for you/i })).toBeInTheDocument();
     expect(screen.queryByText(/sign in to see channels you follow/i)).not.toBeInTheDocument();
   });
 
-  test("prompts guests to sign in when following data is unauthenticated", async () => {
+  test("keeps discovery available when following data is unauthenticated", async () => {
     fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
     fetchFollowingChannelsMock.mockRejectedValueOnce(new Error("unauthorized"));
 
     await renderResolvedDirectoryPage();
 
-    expect(await screen.findByText(/sign in to see channels you follow/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /sign in/i })).toHaveAttribute("href", "/signup#login-form");
-    expect(screen.queryByText(/not following any channels yet/i)).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: /find the streams worth opening now/i })).toBeInTheDocument();
+    expect(screen.queryByText(/sign in to see channels you follow/i)).not.toBeInTheDocument();
   });
 
   test("keeps DirectoryPage lightweight and normalizes query before passing to shell", async () => {

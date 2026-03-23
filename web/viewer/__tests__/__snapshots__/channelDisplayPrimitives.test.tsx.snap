@@ -147,7 +147,7 @@ exports[`channel display primitives renders consistent badge and count labels in
           class="secondary-button"
           href="/channels/chan-live"
         >
-          View channel
+          Open channel
         </a>
       </footer>
     </article>
@@ -293,7 +293,7 @@ exports[`channel display primitives renders consistent badge and count labels in
           class="secondary-button"
           href="/channels/chan-offline"
         >
-          View channel
+          Open channel
         </a>
       </footer>
     </article>
@@ -304,7 +304,7 @@ exports[`channel display primitives renders consistent badge and count labels in
 exports[`channel display primitives uses shared badge copy in rails and featured cards 1`] = `
 <DocumentFragment>
   <section
-    class="content-rail stack"
+    class="content-rail content-rail--panel surface"
   >
     <header
       class="content-rail__header"
@@ -402,7 +402,7 @@ exports[`channel display primitives uses shared badge copy in rails and featured
     aria-label="Featured channels carousel"
     aria-live="polite"
     aria-roledescription="carousel"
-    class="featured-channel surface"
+    class="featured-channel"
     role="region"
   >
     <div
@@ -448,7 +448,7 @@ exports[`channel display primitives uses shared badge copy in rails and featured
           <span
             class="featured-channel__eyebrow muted"
           >
-            Featured
+            Featured stream
           </span>
           <h2
             class="featured-channel__title"
@@ -492,7 +492,7 @@ exports[`channel display primitives uses shared badge copy in rails and featured
               class="primary-button"
               href="/channels/chan-offline"
             >
-              View stream
+              Watch channel
             </a>
           </div>
         </div>
@@ -525,7 +525,7 @@ exports[`channel display primitives uses shared badge copy in rails and featured
           disabled=""
           type="button"
         >
-          Previous
+          Back
         </button>
         <button
           aria-label="Next featured channel"

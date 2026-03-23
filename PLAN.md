@@ -1246,3 +1246,50 @@
 - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0`
 - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer`
 - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup`
+
+## Scope (current change)
+- Ensure the locally running BitRiver Live instance is rebuilt from the current checkout so the app on `localhost:8080` reflects the latest source instead of any older container build.
+- Keep this refresh narrowly scoped to the application services that present the current product changes: `bitriver-live` and `viewer`.
+- Verify the refreshed runtime with Compose status plus public route checks after the rebuild.
+
+## Assumptions
+- The current clean checkout is the desired source of truth for the local runtime.
+- Rebuilding `bitriver-live` and `viewer` is sufficient to pick up the latest application changes without restarting unrelated healthy stateful/vendor services.
+- Successful route checks after the rebuild are enough to confirm the local instance reflects the latest code in this checkout.
+
+## Risks
+- Docker layer caching can make a rebuild look successful while still leaving uncertainty, so route-level verification is required after recreation.
+- Recreating the API/viewer services will briefly interrupt the local app while the containers restart.
+- Host/runtime issues could block startup even when the source tree is healthy, so service status and logs need to be captured if anything fails.
+
+## Test plan
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 bitriver-live viewer`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup`
+
+## Scope (current change)
+- Rescue the public viewer homepage so the current `/` experience reads as a coherent streaming-platform entry point instead of several unrelated sections competing for attention.
+- Keep the existing product direction intact: dark premium viewer UI, desktop-first responsiveness, existing routes/data wiring, and the same discovery/following/channel primitives where they still fit.
+- Focus the implementation on the highest-impact UX surfaces visible on the current page: navbar prioritization, shell/sidebar alignment, homepage hero hierarchy, section rhythm, card consistency, and shared loading/empty states.
+- Keep this pass viewer-only unless a tiny supporting test or presentation-logic adjustment is required to preserve current behavior.
+
+## Assumptions
+- The user is asking for a targeted rescue pass on the current homepage experience, not a broad rebrand or a backend/product-scope expansion.
+- The current discovery data contracts are sufficient; the main problem is information architecture, spacing, and inconsistent visual systems rather than missing content.
+- Reusing the existing homepage/discovery components is preferable to a wholesale rewrite as long as we standardize their hierarchy and styling around one clear layout system.
+- Viewer-only layout/style improvements do not require deployment-contract or operator-doc updates because runtime behavior and routes remain unchanged.
+
+## Risks
+- `globals.css` already contains duplicated navbar/shell/token sections, so touching shared styles can accidentally improve the homepage while regressing another viewer surface if overrides are not consolidated carefully.
+- Simplifying the header too aggressively could hide important creator/admin or auth entry points, so role-aware actions still need a clear home after the cleanup.
+- Reworking the homepage hierarchy may shift DOM structure enough to break viewer tests that currently target old labels/sections, so test updates need to stay aligned with the new information architecture.
+- Because `PLAN.md`, `TASKS.md`, and existing viewer files are already dirty in this checkout, edits need to remain additive and avoid disturbing unrelated work.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- navbar.test.tsx viewerShell.test.tsx directoryPage.test.tsx channelDisplayPrimitives.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `./scripts/verify.sh --viewer`

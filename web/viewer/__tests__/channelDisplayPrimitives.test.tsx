@@ -227,7 +227,7 @@ describe("channel display primitives", () => {
 
     expect(screen.getByText("Offline")).toBeInTheDocument();
     expect(screen.getByText("2 followers")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "View featured channel" })).toHaveTextContent("View stream");
+    expect(screen.getByRole("link", { name: "View featured channel" })).toHaveTextContent("Watch channel");
     expect(featured.asFragment()).toMatchSnapshot();
   });
 

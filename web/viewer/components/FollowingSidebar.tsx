@@ -65,9 +65,12 @@ export function FollowingSidebar() {
   return (
     <div className="following-sidebar">
       <header className="following-sidebar__header">
-        <div>
-          <p className="following-sidebar__eyebrow">Following</p>
-          <h4>Channels you follow</h4>
+        <div className="stack stack--2xs">
+          <div className="following-sidebar__title-row">
+            <p className="following-sidebar__eyebrow">Following</p>
+            {status === "ready" && <span className="following-sidebar__count">{channels.length}</span>}
+          </div>
+          <h4>Keep your circle close</h4>
         </div>
         <span className="following-sidebar__summary muted">{getSummary()}</span>
       </header>
@@ -108,7 +111,7 @@ export function FollowingSidebar() {
       )}
 
       <p className="following-sidebar__footnote muted">
-        Following list updates automatically when a creator goes live.
+        This list refreshes automatically so live creators surface without a full page reload.
       </p>
     </div>
   );
