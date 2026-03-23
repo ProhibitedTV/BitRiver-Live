@@ -1,6 +1,9 @@
 package server
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 const (
 	defaultFrameAncestors     = "'none'"
@@ -54,9 +57,6 @@ func (cfg SecurityConfig) withDefaults() SecurityConfig {
 	if cfg.ContentTypeOptions == "" {
 		cfg.ContentTypeOptions = defaults.ContentTypeOptions
 	}
-	if cfg.ContentSecurityPolicy == "" {
-		cfg.ContentSecurityPolicy = defaultContentSecurityPolicy(cfg.FrameAncestors)
-	}
 
 	return cfg
 }
@@ -80,13 +80,45 @@ func defaultContentSecurityPolicy(frameAncestors string) string {
 		"form-action 'self'"
 }
 
+func defaultViewerContentSecurityPolicy(frameAncestors string) string {
+	value := frameAncestors
+	if value == "" {
+		value = defaultFrameAncestors
+	}
+
+	return "default-src 'self'; " +
+		"connect-src 'self'; " +
+		"img-src 'self' data:; " +
+		"script-src 'self' 'unsafe-inline'; " +
+		"style-src 'self'; " +
+		"font-src 'self'; " +
+		"object-src 'none'; " +
+		"base-uri 'self'; " +
+		"frame-ancestors " + value + "; " +
+		"form-action 'self'"
+}
+
+func isViewerProxyPath(path string) bool {
+	return path == "/viewer" || strings.HasPrefix(path, "/viewer/")
+}
+
+func contentSecurityPolicyForRequest(cfg SecurityConfig, path string) string {
+	if cfg.ContentSecurityPolicy != "" {
+		return cfg.ContentSecurityPolicy
+	}
+	if isViewerProxyPath(path) {
+		return defaultViewerContentSecurityPolicy(cfg.FrameAncestors)
+	}
+	return defaultContentSecurityPolicy(cfg.FrameAncestors)
+}
+
 // securityHeadersMiddleware sets security headers before invoking the next handler.
 func securityHeadersMiddleware(cfg SecurityConfig, next http.Handler) http.Handler {
 	effective := cfg.withDefaults()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if effective.ContentSecurityPolicy != "" {
-			w.Header().Set("Content-Security-Policy", effective.ContentSecurityPolicy)
+		if policy := contentSecurityPolicyForRequest(effective, r.URL.Path); policy != "" {
+			w.Header().Set("Content-Security-Policy", policy)
 		}
 		if effective.FrameOptions != "" {
 			w.Header().Set("X-Frame-Options", effective.FrameOptions)

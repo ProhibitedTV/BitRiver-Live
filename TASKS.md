@@ -2677,3 +2677,101 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Viewer lint and build both pass.
   - The local app services were rebuilt and `http://localhost:8080/` still returns the expected `307` into the viewer flow while `/viewer` serves the updated shell markup.
   - `./scripts/verify.sh --viewer` remains blocked on this host by the missing Python executable before it reaches the viewer-specific checks.
+
+## Scoped change: deploy current branch for viewer review
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the review-deploy scope before runtime actions
+  - Acceptance criteria:
+    - `PLAN.md` captures the deploy/verification scope, assumptions, risks, and commands.
+    - `TASKS.md` lists the rebuild and deployed-toggle verification steps before Docker actions begin.
+
+- [x] Task 2 - Rebuild and refresh the local app services from the current branch
+  - Acceptance criteria:
+    - `bitriver-live` and `viewer` are rebuilt from the current checkout using the canonical Compose contract.
+    - Compose status confirms the refreshed app services are up after the rebuild.
+    - The action stays scoped to the review deployment.
+
+- [x] Task 3 - Verify the deployed light/dark toggle on the running app
+  - Acceptance criteria:
+    - The deployed app at `localhost:8080` serves the current viewer shell from this branch.
+    - A focused browser check confirms the light/dark mode toggle works on the deployed instance.
+    - `TASKS.md` records any host blocker precisely if deployed verification cannot complete.
+
+### Execution log (deploy current branch for viewer review)
+- Task 1 complete: appended a focused deploy-for-review scope to `PLAN.md` and `TASKS.md` before touching Docker, centered on rebuilding the current branch and proving the deployed light/dark toggle works on `localhost:8080`.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 40`
+  - `Get-Content TASKS.md | Select-Object -Last 60`
+  - `git status --short`
+- Task 2 complete: rebuilt the current checkout with `docker compose ... up -d --build bitriver-live viewer` and confirmed the review deployment is up. Compose status shows `bitriver-live` healthy on `0.0.0.0:8080` and the deployed `/viewer` HTML includes the current navbar shell with the `Switch to light theme` toggle button.
+- Task 2 checks:
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'Switch to (light|dark) theme|BitRiver Live' -AllMatches`
+- Task 3 complete: the first deployed browser check failed and revealed the real blocker: proxied `/viewer` pages were not hydrating because the default server CSP blocked the inline Next.js bootstrap scripts. After the follow-up CSP fix and a targeted no-deps recreate of `bitriver-live`/`viewer`, the deployed app now hydrates correctly and the light/dark toggle updates the rendered document on `localhost:8080`.
+- Task 3 checks:
+  - `@'...playwright probe...'@ | node -` against `http://127.0.0.1:8080/`
+  - `$env:PLAYWRIGHT_BASE_URL='http://127.0.0.1:8080'; npx.cmd playwright test tests/channel.spec.ts --grep "theme toggle updates the rendered document" --reporter=list`
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
+
+## Scoped change: viewer proxy CSP hydration fix
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the viewer-hydration blocker and scoped fix plan
+  - Acceptance criteria:
+    - `PLAN.md` captures the CSP/hydration scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered security-header, test, redeploy, and deployed-browser validation steps before code edits begin.
+
+- [x] Task 2 - Adjust default security-header behavior so proxied viewer pages can hydrate
+  - Acceptance criteria:
+    - The default CSP applied to proxied `/viewer` responses permits the inline Next.js bootstrap scripts required for hydration.
+    - Existing non-viewer routes keep the stricter current default unless explicitly configured otherwise.
+    - The implementation remains compatible with existing security-header override flags/env vars.
+
+- [x] Task 3 - Add regression coverage for viewer-path CSP behavior
+  - Acceptance criteria:
+    - `internal/server` tests assert the default viewer-path CSP behavior separately from the stricter non-viewer default.
+    - Tests also cover that custom security-header overrides still take precedence when configured.
+
+- [x] Task 4 - Update the security-header docs for proxied viewer defaults
+  - Acceptance criteria:
+    - `docs/advanced-deployments.md` describes the stricter default CSP for admin/API routes and the relaxed default applied to proxied viewer responses.
+    - Existing flag/env override guidance remains accurate.
+
+- [x] Task 5 - Rebuild the review deployment and prove the live theme toggle works
+  - Acceptance criteria:
+    - `bitriver-live` and `viewer` are rebuilt from the current checkout after the CSP fix.
+    - A real browser check against `http://localhost:8080` confirms the deployed theme toggle changes document theme state.
+    - `TASKS.md` records any remaining host blocker precisely if end-to-end deployed verification still cannot complete.
+
+### Execution log (viewer proxy CSP hydration fix)
+- Task 1 complete: the deployed `/viewer` HTML was current, but an escalated Playwright probe showed repeated browser console errors refusing inline scripts under the API's default `Content-Security-Policy`. Because those Next.js bootstrap scripts never execute, the proxied viewer does not hydrate and controls like the theme toggle remain inert on the live app even though the same component works in the isolated viewer test server.
+- Task 1 checks:
+  - `rg -n "Content-Security-Policy|script-src" internal/server cmd/server docs/advanced-deployments.md`
+  - `Get-Content internal/server/security.go`
+  - `Get-Content internal/server/security_headers_test.go`
+  - `@'...playwright probe...'@ | node -` against `http://127.0.0.1:8080/`
+- Task 2 complete: updated the security-header middleware so default CSP is now selected per request path. Proxied `/viewer` responses use a viewer-specific default that permits the inline Next.js bootstrap scripts needed for hydration, while non-viewer routes still receive the stricter existing default and explicit custom CSP overrides still pass through unchanged.
+- Task 2 checks:
+  - `git diff -- internal/server/security.go`
+  - `gofmt -w internal/server/security.go internal/server/security_headers_test.go`
+- Task 3 complete: added targeted middleware/server coverage for the new viewer-path default plus the custom-override path, then reran the focused `internal/server` suite successfully.
+- Task 3 checks:
+  - `git diff -- internal/server/security_headers_test.go`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- Task 4 complete: updated `docs/advanced-deployments.md` so the default hardening section now distinguishes the stricter admin/API CSP from the proxied viewer default that allows the inline Next.js bootstrap required for hydration. The existing override flag/env guidance remains unchanged.
+- Task 4 checks:
+  - `rg -n "Proxied \`/viewer\` responses|Admin/API and other non-viewer routes" docs/advanced-deployments.md`
+  - `Get-Content docs/advanced-deployments.md | Select-Object -Skip 336 -First 16`
+- Task 5 complete: rebuilt the `bitriver-live` and `viewer` images from the current checkout, used a targeted `--force-recreate --no-deps` refresh to land the new images after Compose hit an unrelated container-reconciliation error elsewhere in the stack, and then reran real browser validation against `http://localhost:8080`. The deployed viewer now hydrates, the browser probe shows the theme toggle changing `body[data-theme]` plus `localStorage`, and the focused Playwright theme test passes against the live deployment.
+- Task 5 checks:
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer` (build completed, then hit an unrelated container reconciliation error while touching non-target services)
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --force-recreate --no-deps bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Headers['Content-Security-Policy']`
+  - `@'...playwright probe...'@ | node -` against `http://127.0.0.1:8080/`
+  - `$env:PLAYWRIGHT_BASE_URL='http://127.0.0.1:8080'; npx.cmd playwright test tests/channel.spec.ts --grep "theme toggle updates the rendered document" --reporter=list`
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`

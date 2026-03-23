@@ -1343,3 +1343,48 @@
 - `npm.cmd --prefix web/viewer run build`
 - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts tests/navbar-mobile.spec.ts`
 - If Playwright remains blocked: `npx.cmd playwright test tests/channel.spec.ts tests/navbar-mobile.spec.ts --reporter=list`
+
+## Scope (current change)
+- Rebuild and redeploy the locally running `bitriver-live` and `viewer` services from the current branch so the user can review the latest viewer-control fixes in the real app.
+- Verify the specific acceptance check the user named: the light/dark mode toggle must work on the deployed app at `localhost:8080`, not only in the isolated viewer test server.
+- Keep this as a runtime refresh and validation pass only; do not broaden into additional product changes unless the deployment/verification uncovers a new blocker in the current branch.
+
+## Assumptions
+- The current checked-out branch and worktree contents are the intended source of truth for the review deployment.
+- Rebuilding `bitriver-live` and `viewer` is sufficient for this review pass because the recent changes are viewer-focused and do not require stateful service contract changes.
+- A focused browser check against the deployed app is the most meaningful proof for the user's review gate because the theme toggle is the named manual test.
+
+## Risks
+- Docker may reuse stale layers or leave an older container running unless we confirm service recreation and route-level behavior after the rebuild.
+- The deployed app may differ slightly from the local Playwright/Jest harness, so the light/dark toggle needs an explicit deployed-instance verification rather than inference from prior test runs.
+- Host-specific issues such as Docker pipe access, Playwright browser launch quirks, or route timing could block the verification even if the current branch is healthy, so results need to distinguish repo issues from host issues.
+
+## Test plan
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `npx.cmd playwright test tests/channel.spec.ts --grep "theme toggle updates the rendered document" --reporter=list` with `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080`
+- `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern "Switch to (light|dark) theme|BitRiver Live" -AllMatches`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
+
+## Scope (current change)
+- Fix the deployed viewer hydration blocker uncovered during review deployment: the Go server's default CSP currently blocks the proxied Next.js viewer boot scripts on `/viewer`, leaving interactive controls inert on the live app.
+- Keep the fix narrowly scoped to security-header behavior for the proxied viewer path, preserving the stricter existing defaults for admin/API routes unless the viewer runtime specifically requires a relaxation.
+- Rebuild the local review deployment after the change and re-run a real browser check against `http://localhost:8080` so the light/dark toggle is proven working on the deployed app, not only in isolated viewer tests.
+- Update the operator-facing security-header docs so the new default viewer-path behavior is documented alongside the existing override flags and environment variables.
+
+## Assumptions
+- The deployed theme-toggle failure is caused by the confirmed CSP console errors blocking Next.js hydration, not by additional bugs in `Navbar.tsx`.
+- Allowing the proxied viewer route to execute the inline bootstrap scripts required by Next.js is the minimal runtime fix needed to restore interactivity.
+- Existing security-header override flags/env vars should keep their current meaning; only the default behavior for proxied viewer responses needs adjustment.
+
+## Risks
+- Relaxing CSP too broadly could weaken protections for admin or API surfaces that do not need inline scripts, so the change should stay path-aware and as narrow as possible.
+- Viewer proxy responses and locally served admin pages currently share middleware, so the implementation must avoid accidentally changing non-viewer routes.
+- Runtime verification may still hit host-specific Docker or Playwright friction, so the execution log needs to distinguish repo fixes from host blockers clearly.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `@'...playwright probe...'@ | node -` against `http://127.0.0.1:8080/`
+- `npx.cmd playwright test tests/channel.spec.ts --grep "theme toggle updates the rendered document" --reporter=list` with `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080`
