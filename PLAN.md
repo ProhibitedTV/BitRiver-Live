@@ -1004,6 +1004,30 @@
 - `./scripts/verify.sh`
 
 ## Scope (current change)
+- Rebuild the running local BitRiver Live stack so `localhost:8080` serves the merged viewer-first routing/auth UX changes instead of the previously pulled release images.
+- Reuse the existing healthy Compose deployment and rebuild only the application services that own the changed behavior (`bitriver-live` and `viewer`) unless runtime evidence shows another local service must also be restarted.
+- Validate the live listener after rebuild by checking `/`, `/admin`, and `/signup`, then confirm whether the remaining signup denial is the intended `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=false` behavior or a fresh runtime defect.
+
+## Assumptions
+- The current mismatch is deployment-state drift, not a new code regression: the running containers are still serving the older published UI while the merged repo contains the new routes/templates.
+- Rebuilding the application services with `docker compose ... up -d --build bitriver-live viewer` is sufficient to pick up the merged server + viewer changes without disturbing the healthy vendor/stateful services more than necessary.
+- The current `.env` should remain unchanged for this shakedown, so a post-rebuild signup denial is expected unless the new sign-in-first page is now correctly hiding public account creation.
+
+## Risks
+- A local rebuild can fail for host-specific Docker/build reasons even when the code is sound, so we need to separate build/runtime failures from the original UX bug.
+- Restarting the API/viewer services can briefly interrupt the current local stack while the new containers come up.
+- If the rebuilt API still serves the old root/signup pages, there may be image-cache or compose-targeting issues that require a narrower inspection of the running container/image IDs.
+
+## Test plan
+- `docker compose --env-file .env -f deploy/docker-compose.yml config --services`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 bitriver-live viewer`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop } catch { $_.Exception.Response }`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/admin -MaximumRedirection 0 -ErrorAction Stop } catch { $_.Exception.Response }`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup -MaximumRedirection 0 -ErrorAction Stop } catch { $_.Exception.Response }`
+
+## Scope (current change)
 - Run a real local shakedown deployment of BitRiver Live on this Windows host using the canonical quickstart/Compose contract (`deploy/docker-compose.yml` plus the repo-root `.env`).
 - Capture the true host-side behavior during bring-up: Docker availability, compose render validity, container health, and basic service reachability after the stack starts.
 - If the shakedown surfaces a repo-side blocker, apply the smallest fix that unblocks deployment validation and rerun the affected checks; otherwise, document host/operator blockers precisely without mutating the deployment contract.

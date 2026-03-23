@@ -2169,3 +2169,46 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - ✅ `npm.cmd --prefix web/viewer run test -- navbar.test.tsx navigation.test.ts`
   - ⚠️ `bash ./scripts/verify.sh` (sandboxed Bash blocked on this Windows host with `Bash/Service/CreateInstance/E_ACCESSDENIED`)
   - ⚠️ `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (ran outside the sandbox and failed on the existing host prerequisite: `python3` missing during the env-example placeholder hygiene step)
+
+## Scoped change: rebuild local stack onto the merged viewer-first routing changes
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the scoped rebuild/validation plan before runtime actions
+  - Acceptance criteria:
+    - `PLAN.md` captures the rebuild scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered runtime rebuild and post-restart validation steps before Docker actions begin.
+
+- [x] Task 2 - Rebuild the local API/viewer services from the merged source tree
+  - Acceptance criteria:
+    - Compose config confirms the expected services are present.
+    - `bitriver-live` and `viewer` are recreated from the local build context rather than continuing to serve the older pulled release containers.
+    - Service status/log output is recorded after the rebuild attempt.
+
+- [x] Task 3 - Verify the live root/admin/auth behavior after the rebuild
+  - Acceptance criteria:
+    - `http://localhost:8080/` no longer serves the old control-center root when the merged API is active.
+    - `http://localhost:8080/admin` serves the control center explicitly.
+    - `http://localhost:8080/signup` reflects the new sign-in-first page and/or clearly reports the intentional self-signup-disabled state.
+    - Any remaining auth denial is attributed precisely to config versus runtime bug.
+
+### Execution log (rebuild local stack onto the merged viewer-first routing changes)
+- ✅ Task 1 complete: captured the rebuild-specific runtime scope in `PLAN.md` and queued the local compose rebuild plus post-restart route/auth checks here before touching the running stack.
+- ✅ Task 1 checks:
+  - ✅ `git status --short`
+  - ✅ `rg -n "rebuild the running local BitRiver Live stack|Rebuild the local API/viewer services from the merged source tree" PLAN.md TASKS.md`
+- ✅ Task 2 complete: confirmed the compose service list, built fresh local images for the API/viewer stack, then forced a no-deps recreate of `bitriver-live` and `viewer` after the first `up -d --build` run hit a Windows Docker/Compose failure before it actually replaced the running containers.
+- ✅ Task 2 checks:
+  - ✅ `docker compose --env-file .env -f deploy/docker-compose.yml config --services`
+  - ⚠️ `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer` (local images built successfully, but Docker Compose exited with a Windows-side stack trace before the old containers were replaced)
+  - ✅ `docker compose --env-file .env -f deploy/docker-compose.yml up -d --force-recreate --no-deps bitriver-live viewer`
+  - ✅ `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - ✅ `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 bitriver-live viewer`
+- ✅ Task 3 complete: verified that the rebuilt API now redirects `/` to `/viewer`, keeps the control center explicitly at `/admin`, serves the new sign-in-first `/signup` page with `data-allow-self-signup="false"`, and still rejects public signup POSTs with the intentional `signup_disabled` response from the current `.env`.
+- ✅ Task 3 checks:
+  - ✅ `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop } catch { $_.Exception.Response }`
+  - ✅ `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/admin -MaximumRedirection 0 -ErrorAction Stop } catch { $_.Exception.Response }`
+  - ✅ `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup -MaximumRedirection 0 -ErrorAction Stop } catch { $_.Exception.Response }`
+  - ✅ `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/admin).Content | Select-String -Pattern "BitRiver Live Control Center|Control Center|Control centre"`
+  - ✅ `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup).Content | Select-String -Pattern "Sign in to continue|Back to viewer|data-allow-self-signup"`
+  - ✅ `Invoke-RestMethod http://localhost:8080/api/auth/signup -Method Post -ContentType 'application/json' -Body ...` (`{"error":{"code":"signup_disabled","message":"public self-signup is disabled"}}`)
