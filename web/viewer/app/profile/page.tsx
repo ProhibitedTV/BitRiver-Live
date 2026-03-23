@@ -1,8 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Button } from "../../components/ui/Button";
+import { Card, CardBody, CardHeader } from "../../components/ui/Card";
+import { InlineAlert } from "../../components/ui/InlineAlert";
 import { useAuth } from "../../hooks/useAuth";
 import type { ProfileView, SocialLink } from "../../lib/viewer-api";
 import { fetchProfile, updateProfile } from "../../lib/viewer-api";
@@ -41,6 +43,7 @@ export default function ProfilePage() {
       setFormState(defaultFormState);
       return;
     }
+
     try {
       setLoadingProfile(true);
       setProfileError(undefined);
@@ -71,6 +74,7 @@ export default function ProfilePage() {
     if (!user) {
       return;
     }
+
     try {
       setSaving(true);
       setSaveError(undefined);
@@ -99,6 +103,7 @@ export default function ProfilePage() {
       setSuccessMessage(undefined);
       return;
     }
+
     if (!profile) {
       setFormState({
         ...defaultFormState,
@@ -109,6 +114,7 @@ export default function ProfilePage() {
       setSuccessMessage(undefined);
       return;
     }
+
     setFormState({
       displayName: profile.displayName ?? user.displayName ?? "",
       email: user.email ?? "",
@@ -126,308 +132,292 @@ export default function ProfilePage() {
     return Boolean(formState.bio.trim() || formState.avatarUrl.trim() || formState.bannerUrl.trim() || hasSocialLinks);
   }, [formState.avatarUrl, formState.bannerUrl, formState.bio, formState.socialLinks]);
 
+  const completedSections = useMemo(() => {
+    let count = 0;
+    if (formState.displayName.trim()) count += 1;
+    if (formState.bio.trim()) count += 1;
+    if (formState.avatarUrl.trim()) count += 1;
+    if (formState.bannerUrl.trim()) count += 1;
+    if (formState.socialLinks.some((link) => link.url.trim())) count += 1;
+    return count;
+  }, [formState.avatarUrl, formState.bannerUrl, formState.bio, formState.displayName, formState.socialLinks]);
+
   const handleSocialLinkChange = (index: number, field: keyof SocialLink, value: string) => {
-    setFormState((prev) => {
-      const updatedLinks = prev.socialLinks.map((link, linkIndex) =>
-        linkIndex === index ? { ...link, [field]: value } : link
-      );
-      return { ...prev, socialLinks: updatedLinks };
-    });
+    setFormState((prev) => ({
+      ...prev,
+      socialLinks: prev.socialLinks.map((link, linkIndex) => (linkIndex === index ? { ...link, [field]: value } : link)),
+    }));
   };
 
   const handleAddSocialLink = () => {
     setFormState((prev) => ({
       ...prev,
-      socialLinks: [...prev.socialLinks, { platform: "", url: "" }]
+      socialLinks: [...prev.socialLinks, { platform: "", url: "" }],
     }));
   };
 
   const handleRemoveSocialLink = (index: number) => {
     setFormState((prev) => ({
       ...prev,
-      socialLinks: prev.socialLinks.filter((_, linkIndex) => linkIndex !== index)
+      socialLinks: prev.socialLinks.filter((_, linkIndex) => linkIndex !== index),
     }));
   };
 
   const avatarGlyph = useMemo(() => {
     if (formState.avatarUrl.trim()) {
       return (
-        <Image
-          src={formState.avatarUrl}
-          alt="Profile avatar"
-          width={64}
-          height={64}
-          sizes="64px"
-          style={{ width: "4rem", height: "4rem", borderRadius: "999px", objectFit: "cover" }}
-          priority
-        />
+        <div className="profile-avatar">
+          <Image src={formState.avatarUrl} alt="Profile avatar" width={72} height={72} sizes="72px" />
+        </div>
       );
     }
+
     const initial = (profile?.displayName ?? user?.displayName ?? "?").slice(0, 1).toUpperCase();
-    return (
-      <span
-        aria-hidden
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: "4rem",
-          height: "4rem",
-          borderRadius: "999px",
-          background: "var(--surface-3)",
-          color: "var(--text-muted)",
-          fontWeight: 700,
-        }}
-      >
-        {initial || "?"}
-      </span>
-    );
+    return <span className="profile-avatar profile-avatar--fallback">{initial || "?"}</span>;
   }, [formState.avatarUrl, profile?.displayName, user?.displayName]);
 
-  return (
-    <div className="container stack" style={{ paddingTop: "2rem", paddingBottom: "4rem", gap: "1.5rem" }}>
-      <header className="stack">
-        <h1>Profile</h1>
-        <p className="muted">Update how others see you across BitRiver Live.</p>
-      </header>
+  const connectedSocialCount = formState.socialLinks.filter((link) => link.url.trim()).length;
 
-      {authError && (
-        <div className="surface" role="alert">
-          {authError}
+  return (
+    <div className="workspace-page workspace-page--narrow">
+      <section className="workspace-hero">
+        <div className="workspace-hero__copy">
+          <span className="page-eyebrow">Profile</span>
+          <h1>Shape how your identity appears across BitRiver Live</h1>
+          <p className="muted">
+            Keep your public bio, visuals, and contact details aligned so channel cards and profile surfaces feel consistent.
+          </p>
         </div>
-      )}
+        <div className="workspace-summary-grid">
+          <article className="summary-card">
+            <span className="summary-card__label">Profile progress</span>
+            <strong className="summary-card__value">{completedSections}/5</strong>
+            <p className="muted">Core profile fields completed</p>
+          </article>
+          <article className="summary-card">
+            <span className="summary-card__label">Social links</span>
+            <strong className="summary-card__value">{connectedSocialCount}</strong>
+            <p className="muted">Connected destinations for viewers</p>
+          </article>
+          <article className="summary-card">
+            <span className="summary-card__label">Account</span>
+            <strong className="summary-card__value">{user?.email ?? "Guest"}</strong>
+            <p className="muted">Signed-in contact currently tied to the profile</p>
+          </article>
+        </div>
+      </section>
+
+      {authError ? (
+        <Card className="workspace-card" role="alert">
+          <InlineAlert>{authError}</InlineAlert>
+        </Card>
+      ) : null}
 
       {authLoading ? (
-        <section className="surface">Loading your account…</section>
+        <Card className="workspace-card">Loading your account...</Card>
       ) : !user ? (
-        <section className="surface stack">
-          <h2>Sign in to manage your profile</h2>
-          <p className="muted">Your avatar, banner, and bio will appear on your channel cards once you&apos;re signed in.</p>
-          <div>
-            <button type="button" className="primary-button" onClick={() => void signIn()}>
-              Sign in
-            </button>
+        <Card className="workspace-card">
+          <CardHeader className="workspace-card__header">
+            <h2>Sign in to manage your profile</h2>
+            <p className="muted">Your avatar, banner, and bio will appear on your channel cards once you are signed in.</p>
+          </CardHeader>
+          <div className="workspace-card__actions">
+            <Button onClick={() => void signIn()}>Sign in</Button>
           </div>
-        </section>
+        </Card>
       ) : (
-        <div className="stack" style={{ gap: "1.5rem" }}>
-          {profileError && (
-            <section className="surface stack" role="alert">
-              <div className="section-heading">
-                <div>
-                  <h2>Unable to load profile</h2>
-                  <p className="muted">{profileError}</p>
-                </div>
-                <button type="button" className="secondary-button" onClick={() => { void loadProfile(); }}>
+        <div className="profile-layout">
+          {profileError ? (
+            <Card className="workspace-card" role="alert">
+              <CardHeader className="workspace-card__header">
+                <h2>Unable to load profile</h2>
+                <p className="muted">{profileError}</p>
+              </CardHeader>
+              <div className="workspace-card__actions">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    void loadProfile();
+                  }}
+                >
                   Try again
-                </button>
+                </Button>
               </div>
-            </section>
-          )}
+            </Card>
+          ) : null}
 
           {loadingProfile ? (
-            <section className="surface">Loading your profile…</section>
+            <Card className="workspace-card">Loading your profile...</Card>
           ) : (
             <>
-              <section className="surface stack" style={{ overflow: "hidden" }}>
+              <Card className="workspace-card profile-hero">
                 <div
                   aria-label="Profile banner"
+                  className="profile-banner"
                   style={{
-                    height: "10rem",
-                    width: "100%",
                     backgroundColor: hasProfileContent ? "var(--surface-3)" : "var(--surface-2)",
                     backgroundImage: formState.bannerUrl ? `url(${formState.bannerUrl})` : undefined,
-                    backgroundSize: "cover",
-                    backgroundPosition: "center",
                   }}
                 />
-                <div style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
+                <div className="profile-identity">
                   {avatarGlyph}
-                  <div className="stack" style={{ gap: "0.25rem" }}>
-                    <div>
-                      <p className="muted" style={{ margin: 0 }}>
-                        Signed in as
-                      </p>
-                      <h2 style={{ margin: 0 }}>{profile?.displayName ?? user.displayName}</h2>
+                  <div className="stack">
+                    <div className="stack stack--2xs">
+                      <p className="muted">Signed in as</p>
+                      <h2>{profile?.displayName ?? user.displayName}</h2>
                     </div>
                     <p className={formState.bio.trim() ? "" : "muted"}>
                       {formState.bio.trim() ? formState.bio : "Add a short bio so viewers know what to expect."}
                     </p>
-                    {!hasProfileContent && (
-                      <p className="muted">Start by adding a banner, avatar, or short bio below.</p>
-                    )}
+                    {!hasProfileContent ? <p className="muted">Start by adding a banner, avatar, or short bio below.</p> : null}
                   </div>
                 </div>
-              </section>
+              </Card>
 
-              <form className="surface stack" onSubmit={handleSubmit}>
-                <div className="stack" style={{ gap: "1.5rem" }}>
-                  <div className="stack" style={{ gap: "0.75rem" }}>
-                    <div>
-                      <h2 style={{ margin: 0 }}>Account</h2>
-                      <p className="muted" style={{ margin: 0 }}>
-                        Keep your display name and contact email up to date so viewers and notifications reach you.
-                      </p>
-                    </div>
+              <form className="profile-form" onSubmit={handleSubmit}>
+                <div className="profile-form__grid">
+                  <Card className="workspace-card">
+                    <CardHeader className="workspace-card__header">
+                      <h2>Account</h2>
+                      <p className="muted">Keep your display name and contact email current so viewers and notifications reach you.</p>
+                    </CardHeader>
+                    <CardBody className="workspace-card__header">
+                      <div className="input-stack">
+                        <label htmlFor="displayName">Display name</label>
+                        <input
+                          id="displayName"
+                          name="displayName"
+                          type="text"
+                          required
+                          placeholder="How viewers see you"
+                          value={formState.displayName}
+                          onChange={(event) => setFormState((prev) => ({ ...prev, displayName: event.target.value }))}
+                        />
+                        <p className="muted">Shown on your channel cards, chat messages, and profile.</p>
+                      </div>
+                      <div className="input-stack">
+                        <label htmlFor="email">Email</label>
+                        <input
+                          id="email"
+                          name="email"
+                          type="email"
+                          required
+                          placeholder="you@example.com"
+                          value={formState.email}
+                          onChange={(event) => setFormState((prev) => ({ ...prev, email: event.target.value }))}
+                        />
+                        <p className="muted">We will use this for updates, notifications, and account recovery.</p>
+                      </div>
+                    </CardBody>
+                  </Card>
 
-                    <div className="stack" style={{ gap: "0.25rem" }}>
-                      <label htmlFor="displayName">Display name</label>
-                      <input
-                        id="displayName"
-                        name="displayName"
-                        type="text"
-                        required
-                        placeholder="How viewers see you"
-                        value={formState.displayName}
-                        onChange={(event) => setFormState((prev) => ({ ...prev, displayName: event.target.value }))}
-                      />
-                      <p className="muted">Shown on your channel cards, chat messages, and profile.</p>
-                    </div>
+                  <Card className="workspace-card">
+                    <CardHeader className="workspace-card__header">
+                      <h2>Profile visuals</h2>
+                      <p className="muted">Personalize your channel preview with images and a short bio.</p>
+                    </CardHeader>
+                    <CardBody className="workspace-card__header">
+                      <div className="input-stack">
+                        <label htmlFor="avatarUrl">Avatar URL</label>
+                        <input
+                          id="avatarUrl"
+                          name="avatarUrl"
+                          type="url"
+                          placeholder="https://example.com/avatar.png"
+                          value={formState.avatarUrl}
+                          onChange={(event) => setFormState((prev) => ({ ...prev, avatarUrl: event.target.value }))}
+                        />
+                        <p className="muted">Use a square image for best results.</p>
+                      </div>
+                      <div className="input-stack">
+                        <label htmlFor="bannerUrl">Banner URL</label>
+                        <input
+                          id="bannerUrl"
+                          name="bannerUrl"
+                          type="url"
+                          placeholder="https://example.com/banner.jpg"
+                          value={formState.bannerUrl}
+                          onChange={(event) => setFormState((prev) => ({ ...prev, bannerUrl: event.target.value }))}
+                        />
+                        <p className="muted">Wide images shine here. Leave blank for a neutral background.</p>
+                      </div>
+                      <div className="input-stack">
+                        <label htmlFor="bio">Bio</label>
+                        <textarea
+                          id="bio"
+                          name="bio"
+                          rows={4}
+                          placeholder="Tell viewers about your streams, schedule, or community."
+                          value={formState.bio}
+                          onChange={(event) => setFormState((prev) => ({ ...prev, bio: event.target.value }))}
+                        />
+                      </div>
+                    </CardBody>
+                  </Card>
 
-                    <div className="stack" style={{ gap: "0.25rem" }}>
-                      <label htmlFor="email">Email</label>
-                      <input
-                        id="email"
-                        name="email"
-                        type="email"
-                        required
-                        placeholder="you@example.com"
-                        value={formState.email}
-                        onChange={(event) => setFormState((prev) => ({ ...prev, email: event.target.value }))}
-                      />
-                      <p className="muted">We&apos;ll use this for updates, notifications, and account recovery.</p>
-                    </div>
-                  </div>
-
-                  <div className="stack" style={{ gap: "0.75rem" }}>
-                    <div>
-                      <h2 style={{ margin: 0 }}>Profile visuals</h2>
-                      <p className="muted" style={{ margin: 0 }}>
-                        Personalize your channel preview with images and a short bio.
-                      </p>
-                    </div>
-
-                    <div className="stack" style={{ gap: "0.25rem" }}>
-                      <label htmlFor="avatarUrl">Avatar URL</label>
-                      <input
-                        id="avatarUrl"
-                        name="avatarUrl"
-                        type="url"
-                        placeholder="https://example.com/avatar.png"
-                        value={formState.avatarUrl}
-                        onChange={(event) => setFormState((prev) => ({ ...prev, avatarUrl: event.target.value }))}
-                      />
-                      <p className="muted">Use a square image for best results.</p>
-                    </div>
-
-                    <div className="stack" style={{ gap: "0.25rem" }}>
-                      <label htmlFor="bannerUrl">Banner URL</label>
-                      <input
-                        id="bannerUrl"
-                        name="bannerUrl"
-                        type="url"
-                        placeholder="https://example.com/banner.jpg"
-                        value={formState.bannerUrl}
-                        onChange={(event) => setFormState((prev) => ({ ...prev, bannerUrl: event.target.value }))}
-                      />
-                      <p className="muted">Wide images shine here. Leave blank for a neutral background.</p>
-                    </div>
-
-                    <div className="stack" style={{ gap: "0.25rem" }}>
-                      <label htmlFor="bio">Bio</label>
-                      <textarea
-                        id="bio"
-                        name="bio"
-                        rows={4}
-                        placeholder="Tell viewers about your streams, schedule, or community."
-                        value={formState.bio}
-                        onChange={(event) => setFormState((prev) => ({ ...prev, bio: event.target.value }))}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="stack" style={{ gap: "0.75rem" }}>
-                    <div>
-                      <h2 style={{ margin: 0 }}>Social links</h2>
-                      <p className="muted" style={{ margin: 0 }}>
-                        Share where viewers can follow you outside BitRiver Live.
-                      </p>
-                    </div>
-
-                    <div className="stack" style={{ gap: "0.75rem" }}>
-                      {formState.socialLinks.length === 0 && (
-                        <p className="muted" style={{ margin: 0 }}>
-                          Add platforms and URLs to feature on your profile.
-                        </p>
-                      )}
-
-                      {formState.socialLinks.map((link, index) => (
-                        <div
-                          key={`social-${index}`}
-                          className="stack"
-                          style={{
-                            gap: "0.5rem",
-                            padding: "0.75rem",
-                            border: "1px solid var(--border)",
-                            borderRadius: "0.75rem",
-                            background: "var(--surface-2)"
-                          }}
-                        >
-                          <div className="stack" style={{ gap: "0.25rem" }}>
-                            <label htmlFor={`social-platform-${index}`}>Platform</label>
-                            <input
-                              id={`social-platform-${index}`}
-                              name={`social-platform-${index}`}
-                              type="text"
-                              placeholder="Platform or label"
-                              value={link.platform}
-                              onChange={(event) => handleSocialLinkChange(index, "platform", event.target.value)}
-                            />
+                  <Card className="workspace-card workspace-grid__full">
+                    <CardHeader className="workspace-card__header">
+                      <h2>Social links</h2>
+                      <p className="muted">Share where viewers can follow you outside BitRiver Live.</p>
+                    </CardHeader>
+                    <CardBody className="workspace-card__header">
+                      {formState.socialLinks.length === 0 ? <p className="muted">Add platforms and URLs to feature on your profile.</p> : null}
+                      <div className="profile-social-list">
+                        {formState.socialLinks.map((link, index) => (
+                          <div key={`social-${index}`} className="profile-social-card">
+                            <div className="input-stack">
+                              <label htmlFor={`social-platform-${index}`}>Platform</label>
+                              <input
+                                id={`social-platform-${index}`}
+                                name={`social-platform-${index}`}
+                                type="text"
+                                placeholder="Platform or label"
+                                value={link.platform}
+                                onChange={(event) => handleSocialLinkChange(index, "platform", event.target.value)}
+                              />
+                            </div>
+                            <div className="input-stack">
+                              <label htmlFor={`social-url-${index}`}>Link</label>
+                              <input
+                                id={`social-url-${index}`}
+                                name={`social-url-${index}`}
+                                type="url"
+                                placeholder="https://example.com/you"
+                                value={link.url}
+                                onChange={(event) => handleSocialLinkChange(index, "url", event.target.value)}
+                              />
+                            </div>
+                            <div className="workspace-card__actions">
+                              <button type="button" className="ghost-button" onClick={() => handleRemoveSocialLink(index)}>
+                                Remove link
+                              </button>
+                            </div>
                           </div>
-                          <div className="stack" style={{ gap: "0.25rem" }}>
-                            <label htmlFor={`social-url-${index}`}>Link</label>
-                            <input
-                              id={`social-url-${index}`}
-                              name={`social-url-${index}`}
-                              type="url"
-                              placeholder="https://example.com/you"
-                              value={link.url}
-                              onChange={(event) => handleSocialLinkChange(index, "url", event.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <button
-                              type="button"
-                              className="ghost-button"
-                              onClick={() => handleRemoveSocialLink(index)}
-                            >
-                              Remove link
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-
-                      <button type="button" className="secondary-button" onClick={handleAddSocialLink}>
-                        Add social link
-                      </button>
-                    </div>
-                  </div>
+                        ))}
+                      </div>
+                      <div className="workspace-card__actions">
+                        <button type="button" className="secondary-button" onClick={handleAddSocialLink}>
+                          Add social link
+                        </button>
+                      </div>
+                    </CardBody>
+                  </Card>
                 </div>
 
-                {saveError && (
+                {saveError ? (
                   <p className="error" role="alert">
                     {saveError}
                   </p>
-                )}
-                {successMessage && <p className="success">{successMessage}</p>}
+                ) : null}
+                {successMessage ? <p className="success">{successMessage}</p> : null}
 
-                <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-                  <button type="submit" className="primary-button" disabled={saving}>
-                    {saving ? "Saving…" : "Save profile"}
-                  </button>
-                  <button type="button" className="secondary-button" onClick={handleReset} disabled={saving}>
+                <div className="profile-actions">
+                  <Button type="submit" disabled={saving}>
+                    {saving ? "Saving..." : "Save profile"}
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={handleReset} disabled={saving}>
                     Reset changes
-                  </button>
+                  </Button>
                 </div>
               </form>
             </>

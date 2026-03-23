@@ -2169,3 +2169,118 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - ✅ `npm.cmd --prefix web/viewer run test -- navbar.test.tsx navigation.test.ts`
   - ⚠️ `bash ./scripts/verify.sh` (sandboxed Bash blocked on this Windows host with `Bash/Service/CreateInstance/E_ACCESSDENIED`)
   - ⚠️ `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (ran outside the sandbox and failed on the existing host prerequisite: `python3` missing during the env-example placeholder hygiene step)
+
+## Scoped change: rebuild local stack onto the merged viewer-first routing changes
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the scoped rebuild/validation plan before runtime actions
+  - Acceptance criteria:
+    - `PLAN.md` captures the rebuild scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered runtime rebuild and post-restart validation steps before Docker actions begin.
+
+- [x] Task 2 - Rebuild the local API/viewer services from the merged source tree
+  - Acceptance criteria:
+    - Compose config confirms the expected services are present.
+    - `bitriver-live` and `viewer` are recreated from the local build context rather than continuing to serve the older pulled release containers.
+    - Service status/log output is recorded after the rebuild attempt.
+
+- [x] Task 3 - Verify the live root/admin/auth behavior after the rebuild
+  - Acceptance criteria:
+    - `http://localhost:8080/` no longer serves the old control-center root when the merged API is active.
+    - `http://localhost:8080/admin` serves the control center explicitly.
+    - `http://localhost:8080/signup` reflects the new sign-in-first page and/or clearly reports the intentional self-signup-disabled state.
+    - Any remaining auth denial is attributed precisely to config versus runtime bug.
+
+### Execution log (rebuild local stack onto the merged viewer-first routing changes)
+- ✅ Task 1 complete: captured the rebuild-specific runtime scope in `PLAN.md` and queued the local compose rebuild plus post-restart route/auth checks here before touching the running stack.
+- ✅ Task 1 checks:
+  - ✅ `git status --short`
+  - ✅ `rg -n "rebuild the running local BitRiver Live stack|Rebuild the local API/viewer services from the merged source tree" PLAN.md TASKS.md`
+- ✅ Task 2 complete: confirmed the compose service list, built fresh local images for the API/viewer stack, then forced a no-deps recreate of `bitriver-live` and `viewer` after the first `up -d --build` run hit a Windows Docker/Compose failure before it actually replaced the running containers.
+- ✅ Task 2 checks:
+  - ✅ `docker compose --env-file .env -f deploy/docker-compose.yml config --services`
+  - ⚠️ `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer` (local images built successfully, but Docker Compose exited with a Windows-side stack trace before the old containers were replaced)
+  - ✅ `docker compose --env-file .env -f deploy/docker-compose.yml up -d --force-recreate --no-deps bitriver-live viewer`
+  - ✅ `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - ✅ `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 bitriver-live viewer`
+- ✅ Task 3 complete: verified that the rebuilt API now redirects `/` to `/viewer`, keeps the control center explicitly at `/admin`, serves the new sign-in-first `/signup` page with `data-allow-self-signup="false"`, and still rejects public signup POSTs with the intentional `signup_disabled` response from the current `.env`.
+- ✅ Task 3 checks:
+  - ✅ `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop } catch { $_.Exception.Response }`
+  - ✅ `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/admin -MaximumRedirection 0 -ErrorAction Stop } catch { $_.Exception.Response }`
+  - ✅ `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup -MaximumRedirection 0 -ErrorAction Stop } catch { $_.Exception.Response }`
+- ✅ `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/admin).Content | Select-String -Pattern "BitRiver Live Control Center|Control Center|Control centre"`
+- ✅ `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup).Content | Select-String -Pattern "Sign in to continue|Back to viewer|data-allow-self-signup"`
+- ✅ `Invoke-RestMethod http://localhost:8080/api/auth/signup -Method Post -ContentType 'application/json' -Body ...` (`{"error":{"code":"signup_disabled","message":"public self-signup is disabled"}}`)
+
+## Scoped change: platform-grade viewer UX/system redesign
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the scoped redesign plan and ordered implementation work before editing
+  - Acceptance criteria:
+    - `PLAN.md` captures redesign scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered shell/discovery/detail validation tasks before viewer code changes begin.
+    - A quick read-only diagnosis identifies the product journeys and the main UX fragmentation points driving the redesign.
+
+- [x] Task 2 - Rebuild the shared viewer shell, navigation, and design-token foundation
+  - Acceptance criteria:
+    - Global navigation communicates primary destinations and role-aware actions clearly on desktop and mobile.
+    - Shared shell/layout classes replace the most fragile one-off scaffolding for top-level viewer pages.
+    - Broken or missing style tokens referenced by the viewer are normalized so touched surfaces render consistently.
+    - Navbar/shell/navigation tests are updated for the new structure and still pass.
+
+- [x] Task 3 - Unify the public discovery experience across Home, Browse, and Following
+  - Acceptance criteria:
+    - Home feels like an editorial discovery surface, Browse feels like the full searchable directory, and Following has a clearer recovery/next-step flow.
+    - Shared card, section-heading, search/filter, and state patterns are reused instead of diverging by page.
+    - Empty/loading/error states remain functional and more intentional across the public discovery routes.
+    - Discovery-surface tests are updated and pass.
+
+- [x] Task 4 - Refactor channel, creator, and profile surfaces onto consistent page patterns
+  - Acceptance criteria:
+    - Channel detail, creator onboarding/live/uploads, and profile management all use clearer hierarchy and stronger next-step guidance.
+    - Inline layout/styling is reduced materially on touched pages in favor of shared classes/components.
+    - Existing creator/profile/channel logic continues to work, with any UI bugs fixed as part of the refactor.
+    - Touched detail/creator/profile tests are updated and pass.
+
+- [x] Task 5 - Run viewer validation and record the final results plus remaining UX follow-ups
+  - Acceptance criteria:
+    - Viewer lint and test commands are run and logged.
+    - The required repo verification path for viewer work is run and logged.
+    - Remaining product ambiguities, tradeoffs, or follow-up improvements are captured in the execution log for handoff.
+
+- Task 5 complete: reran lint plus the full viewer Jest suite after the last channel/hero fixes, attempted the documented `./scripts/verify.sh --viewer` gate, and recorded the remaining host-environment blockers plus the highest-priority UX follow-ups for handoff.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run test -- channelHero.test.tsx`
+  - `npm.cmd --prefix web/viewer run test`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` was attempted but stopped at the env-placeholder hygiene step because `python3` is not callable on this Windows host.
+  - Follow-up attempts to re-run the bash-based verify flow were blocked by Git Bash returning `couldn't create signal pipe, Win32 error 5`, so the required viewer verify path could be invoked but not completed on this machine.
+  - `docker compose --env-file .env -f deploy/docker-compose.yml config`
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s` initially failed because the default Windows Go build cache path was access-denied.
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s` progressed but still failed in existing non-viewer areas (`cmd/transcoder`, `scripts`) due host-specific ffmpeg/WSL/bash assumptions unrelated to the viewer redesign.
+- Remaining UX/product follow-ups captured during validation:
+  - The creator live/getting-started and profile tests still emit non-failing React `act(...)` warnings from async refresh/reset behavior; the product behavior works, but the harness should be tightened.
+  - Notifications are now intentionally removed as a dead-end shell affordance, but a real inbox/alerts product decision is still needed before that surface returns.
+  - Channel schedule remains a placeholder state because the current product contract does not expose structured schedule data; once the backend model exists, that tab should become a true programming/calendar surface.
+
+### Execution log (platform-grade viewer UX/system redesign)
+- ✅ Task 1 complete: appended the scoped viewer-platform redesign plan to `PLAN.md`/`TASKS.md` before editing and captured the read-only diagnosis that currently the product works as a self-hosted creator/viewer platform, but the UX is fragmented by duplicated discovery entry points, ad-hoc page scaffolding, heavy inline styling, and shell/state tokens that are missing or inconsistent.
+- ✅ Task 1 findings:
+  - ✅ Main user journeys found in code: public discovery (`/`, `/browse`, `/following`), channel watching (`/channels/[id]`), profile management (`/profile`), and creator setup/live/uploads (`/creator/*`).
+  - ✅ Main fragmentation points found in code: duplicated Home vs Browse discovery patterns, overlay-first following navigation that obscures primary IA, creator/profile pages built with many one-off inline layouts, and several CSS variables referenced without definitions (`--surface-2`, `--surface-3`, `--success`, `--radius-lg`, `--shadow-md`, `--shadow-lg`, `--accent-500`, `--accent-600`, `--accent-soft`, `--space-3`).
+- ✅ Task 1 checks:
+  - ✅ `rg -n "platform-grade viewer UX/system redesign|viewer shell into a clearer platform-style experience|Record the scoped redesign plan" PLAN.md TASKS.md`
+- ✅ Task 2 complete: rebuilt the viewer shell around a clearer platform frame with stronger desktop/mobile navigation, removed the dead-end notifications affordance, promoted creator access into a studio CTA, made the following rail persistent on desktop but modal on smaller screens, and normalized the missing token/utility foundation that several viewer surfaces were already referencing.
+- ✅ Task 2 checks:
+  - ✅ `npm.cmd --prefix web/viewer run test -- navbar.test.tsx viewerShell.test.tsx navigation.test.ts`
+  - ⚠️ The navbar test run still emits the existing jsdom console warning for real-anchor navigation (`Not implemented: navigation`) when a drawer link is clicked, but the assertions now pass and the behavior is unchanged from earlier viewer tests.
+- ✅ Task 3 complete: split discovery into clearer roles by turning Home into an editorial launch surface, Browse into a search-and-filter workspace, and Following into a recovery-focused live feed with summary cards, while keeping the same directory/follow data wiring underneath.
+- ✅ Task 3 checks:
+  - ✅ `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx browsePage.test.tsx followingStatePresentation.test.tsx channelDisplayPrimitives.test.tsx`
+  - ⚠️ Focused discovery tests still emit existing non-failing warnings from the local test harness: mocked `next/image` props (`fill`/`priority`) and older SearchBar act warnings in directory-page tests.
+- ✅ Task 4 complete: refactored the creator studio, onboarding, live control room, uploads manager, profile management, and channel detail surfaces onto a shared workspace/page system with stronger headers, summary cards, clearer next-step CTAs, fewer one-off inline layouts, and small UX fixes like removing duplicate or dead-end actions and cleaning up broken string rendering/state copy.
+- ✅ Task 4 checks:
+  - ✅ `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx creatorGettingStartedPage.test.tsx creatorLivePage.test.tsx profilePage.test.tsx uploadManager.test.tsx`
+  - ⚠️ The targeted suite passes, but the existing test harness still emits non-failing React `act(...)` warnings from async polling/state-reset effects in the creator getting-started/live pages.

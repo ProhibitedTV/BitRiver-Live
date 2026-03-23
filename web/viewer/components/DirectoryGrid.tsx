@@ -22,7 +22,7 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
   return (
     <section className="grid directory-grid">
       {channels.map((entry, index) => {
-        const createdAt = new Date(entry.channel.createdAt).toLocaleDateString();
+        const createdAt = new Date(entry.channel.createdAt).toLocaleDateString(undefined, { timeZone: "UTC" });
         const previewImage = getChannelPreviewImage(entry);
         const followerLabel = formatFollowerLabel(entry.followerCount);
         const viewerOverlayLabel = formatViewerLabel(entry.viewerCount ?? 0);

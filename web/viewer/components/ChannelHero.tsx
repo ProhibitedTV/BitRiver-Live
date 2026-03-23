@@ -55,7 +55,7 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
 
   const handleToggleFollow = async () => {
     if (!user) {
-      setStatus("Redirecting to sign in…");
+      setStatus("Redirecting to sign in...");
       void signIn();
       return;
     }
@@ -80,7 +80,7 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
 
   const handleToggleSubscription = async () => {
     if (!user) {
-      setStatus("Redirecting to sign in…");
+      setStatus("Redirecting to sign in...");
       void signIn();
       return;
     }
@@ -161,7 +161,7 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
             onClick={handleToggleFollow}
             disabled={loading || isOwner}
             aria-pressed={follow.following}
-            aria-label={`${follow.following ? "Following" : "Follow"} · ${follow.followers.toLocaleString()} supporters`}
+            aria-label={`${follow.following ? "Following" : "Follow"} - ${follow.followers.toLocaleString()} supporters`}
             type="button"
           >
             <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
@@ -178,7 +178,7 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
             onClick={handleToggleSubscription}
             disabled={subscriptionLoading}
             aria-pressed={subscription.subscribed}
-            aria-label={`${subscription.subscribed ? "Subscribed" : "Subscribe"}${subscription.tier ? ` · ${subscription.tier}` : ""}`}
+            aria-label={`${subscription.subscribed ? "Subscribed" : "Subscribe"}${subscription.tier ? ` - ${subscription.tier}` : ""}`}
             type="button"
           >
             <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
@@ -217,7 +217,7 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
                 ? "You manage this channel. Followers will see your updates here."
                 : data.live
                   ? "Enjoy low-latency playback powered by the ingest pipeline."
-                  : "Offline for now – follow to be notified when the stream returns.")}
+                  : "Offline for now - follow to be notified when the stream returns.")}
           </p>
         </div>
       </div>
@@ -387,8 +387,8 @@ export function ChannelAboutPanel({ data }: { data: ChannelPlaybackResponse }) {
           <ul>
             {data.playback.renditions.map((rendition) => (
               <li key={rendition.name}>
-                <strong>{rendition.name}</strong> · {rendition.manifestUrl}
-                {rendition.bitrate && ` · ${Math.round(rendition.bitrate / 1000)} kbps`}
+                <strong>{rendition.name}</strong> - {rendition.manifestUrl}
+                {rendition.bitrate && ` - ${Math.round(rendition.bitrate / 1000)} kbps`}
               </li>
             ))}
           </ul>

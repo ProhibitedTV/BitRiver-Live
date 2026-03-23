@@ -1004,6 +1004,54 @@
 - `./scripts/verify.sh`
 
 ## Scope (current change)
+- Redesign the Next.js viewer shell into a clearer platform-style experience with stronger global navigation, consistent layout scaffolding, and repaired design-token gaps that currently leave some UI states styled inconsistently.
+- Rework the main discovery journeys (`/`, `/browse`, `/following`) so each page has a distinct role, shared section patterns, and intentional empty/loading/error states without changing backend API contracts.
+- Refactor the highest-friction detail and management surfaces (`/channels/[id]`, `/creator/*`, `/profile`) onto shared page patterns so browsing, viewing, onboarding, and creator workflows feel connected instead of page-by-page one-offs.
+- Keep the change viewer-only unless a small UI logic fix is required to preserve current behavior during the refactor; do not change deployment-contract files.
+
+## Assumptions
+- The current viewer routes and API responses are the right functional backbone, so the redesign can focus on information architecture, interaction clarity, and layout consistency rather than introducing new backend features.
+- Control-center access remains an explicit `/admin` handoff, while the viewer experience owns public browsing, watching, profile editing, and creator workflow guidance.
+- Updating viewer styling, structure, and component composition does not require operator-doc updates because the deployment/runtime contract is unchanged.
+
+## Risks
+- Refactoring the shared shell/navigation can regress mobile drawer, focus-management, auth-action, or creator-entry behavior if existing state and accessibility hooks are disturbed.
+- Discovery-page consolidation can blur the distinction between home and browse if section hierarchy and CTA placement are not kept purpose-specific.
+- Creator/profile/channel cleanup touches many UI files at once, so inconsistent test updates or missed inline-style dependencies could leave subtle regressions behind.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- navbar.test.tsx viewerShell.test.tsx navigation.test.ts`
+- `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx browsePage.test.tsx followingStatePresentation.test.tsx channelDisplayPrimitives.test.tsx`
+- `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx creatorGettingStartedPage.test.tsx creatorLivePage.test.tsx profilePage.test.tsx uploadManager.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run test`
+- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer`
+
+## Scope (current change)
+- Rebuild the running local BitRiver Live stack so `localhost:8080` serves the merged viewer-first routing/auth UX changes instead of the previously pulled release images.
+- Reuse the existing healthy Compose deployment and rebuild only the application services that own the changed behavior (`bitriver-live` and `viewer`) unless runtime evidence shows another local service must also be restarted.
+- Validate the live listener after rebuild by checking `/`, `/admin`, and `/signup`, then confirm whether the remaining signup denial is the intended `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=false` behavior or a fresh runtime defect.
+
+## Assumptions
+- The current mismatch is deployment-state drift, not a new code regression: the running containers are still serving the older published UI while the merged repo contains the new routes/templates.
+- Rebuilding the application services with `docker compose ... up -d --build bitriver-live viewer` is sufficient to pick up the merged server + viewer changes without disturbing the healthy vendor/stateful services more than necessary.
+- The current `.env` should remain unchanged for this shakedown, so a post-rebuild signup denial is expected unless the new sign-in-first page is now correctly hiding public account creation.
+
+## Risks
+- A local rebuild can fail for host-specific Docker/build reasons even when the code is sound, so we need to separate build/runtime failures from the original UX bug.
+- Restarting the API/viewer services can briefly interrupt the current local stack while the new containers come up.
+- If the rebuilt API still serves the old root/signup pages, there may be image-cache or compose-targeting issues that require a narrower inspection of the running container/image IDs.
+
+## Test plan
+- `docker compose --env-file .env -f deploy/docker-compose.yml config --services`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 bitriver-live viewer`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop } catch { $_.Exception.Response }`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/admin -MaximumRedirection 0 -ErrorAction Stop } catch { $_.Exception.Response }`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup -MaximumRedirection 0 -ErrorAction Stop } catch { $_.Exception.Response }`
+
+## Scope (current change)
 - Run a real local shakedown deployment of BitRiver Live on this Windows host using the canonical quickstart/Compose contract (`deploy/docker-compose.yml` plus the repo-root `.env`).
 - Capture the true host-side behavior during bring-up: Docker availability, compose render validity, container health, and basic service reachability after the stack starts.
 - If the shakedown surfaces a repo-side blocker, apply the smallest fix that unblocks deployment validation and rerun the affected checks; otherwise, document host/operator blockers precisely without mutating the deployment contract.

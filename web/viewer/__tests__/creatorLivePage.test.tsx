@@ -143,7 +143,7 @@ describe("CreatorLivePage", () => {
     expect(screen.getByLabelText("Current channel")).toHaveValue("Main Channel");
     expect(screen.getByLabelText("Switch channel")).toHaveValue("chan-1");
     expect(screen.getByLabelText("Preferred ingest URL")).toHaveValue("rtmp://ingest.example.com/live");
-    expect(screen.getByLabelText("Stream key")).toHaveValue("••••••••");
+    expect(screen.getByLabelText("Stream key")).toHaveValue("********");
     expect(screen.getByLabelText("OBS settings block")).toHaveValue(
       "Service: Custom\nServer: rtmp://ingest.example.com/live\nStream Key: [hidden - reveal to copy]",
     );

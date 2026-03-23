@@ -193,7 +193,7 @@ test("shows processing progress, transcoding/packaging explanation, and last upd
 
   renderWithProviders(<UploadManager channelId="chan-1" ownerId="owner-1" />);
 
-  expect(await screen.findByText(/processing… 67% complete\./i)).toBeInTheDocument();
+  expect(await screen.findByText(/processing\.\.\. 67% complete\./i)).toBeInTheDocument();
   expect(screen.getByText(/we are transcoding and packaging this recording for playback\./i)).toBeInTheDocument();
   expect(screen.getByText(/^Last updated:/i)).toBeInTheDocument();
 });
@@ -224,13 +224,13 @@ test("cancels an in-progress upload and returns to selecting state", async () =>
   fireEvent.click(screen.getByRole("button", { name: "Register upload" }));
 
   expect(await screen.findByRole("button", { name: "Cancel upload" })).toBeInTheDocument();
-  expect(screen.getByText(/0 b\s*\/\s*10 b\s*·\s*0%/i)).toBeInTheDocument();
+  expect(screen.getByText(/0 b\s*\/\s*10 b\s*-\s*0%/i)).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "Cancel upload" }));
 
   await waitFor(() => expect(capturedSignal?.aborted).toBe(true));
   await waitFor(() => expect(screen.queryByRole("button", { name: "Cancel upload" })).not.toBeInTheDocument());
-  expect(screen.queryByText(/\/\s*10 b\s*·\s*0%/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/\/\s*10 b\s*-\s*0%/i)).not.toBeInTheDocument();
   expect(screen.getByText("Select media to start a new upload.")).toBeInTheDocument();
 });
 

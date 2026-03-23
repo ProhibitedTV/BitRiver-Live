@@ -149,12 +149,12 @@ describe("ChannelPage", () => {
     expect(screen.getByText(/streaming vinyl sets/i)).toBeInTheDocument();
     expect(await screen.findByText(/welcome to the stream/i)).toBeInTheDocument();
 
-    const followButton = screen.getByRole("button", { name: /follow · 10 supporters/i });
+    const followButton = screen.getByRole("button", { name: /follow.+10 supporters/i });
     await act(async () => {
       await user.click(followButton);
     });
     await waitFor(() => expect(followChannelMock).toHaveBeenCalledWith("chan-42"));
-    expect(screen.getByRole("button", { name: /following · 11 supporters/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /following.+11 supporters/i })).toBeInTheDocument();
     expect(screen.getByText("11", { selector: "dd" })).toBeInTheDocument();
 
     const subscribeButton = screen.getByRole("button", { name: /subscribe/i });
@@ -162,7 +162,7 @@ describe("ChannelPage", () => {
       await user.click(subscribeButton);
     });
     await waitFor(() => expect(subscribeChannelMock).toHaveBeenCalledWith("chan-42"));
-    expect(screen.getByRole("button", { name: /subscribed · plus/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /subscribed.+plus/i })).toBeInTheDocument();
     expect(screen.getByText("4", { selector: "dd" })).toBeInTheDocument();
 
     const textarea = screen.getByRole("textbox", { name: /chat message/i });
@@ -204,7 +204,7 @@ describe("ChannelPage", () => {
 
     await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledTimes(1));
 
-    expect(await screen.findByRole("button", { name: /follow · 10 supporters/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /follow.+10 supporters/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /subscribe/i })).toBeInTheDocument();
 
     await act(async () => {
@@ -217,9 +217,9 @@ describe("ChannelPage", () => {
     expect(screen.queryByText(/loading channel/i)).not.toBeInTheDocument();
 
     expect(
-      await screen.findByRole("button", { name: /following · 11 supporters/i })
+      await screen.findByRole("button", { name: /following.+11 supporters/i })
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /subscribed · plus/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /subscribed.+plus/i })).toBeInTheDocument();
   });
 
   test("prompts authentication when the viewer is signed out", async () => {
@@ -229,7 +229,7 @@ describe("ChannelPage", () => {
     render(<ChannelPage params={{ id: "chan-42" }} />);
 
     await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalled());
-    const followButton = await screen.findByRole("button", { name: /follow · 10 supporters/i });
+    const followButton = await screen.findByRole("button", { name: /follow.+10 supporters/i });
 
     await act(async () => {
       await user.click(followButton);
@@ -302,7 +302,7 @@ describe("ChannelPage", () => {
 
     const { rerender } = render(<ChannelPage params={{ id: "chan-42" }} />);
 
-    expect(await screen.findByRole("button", { name: /follow · 10 supporters/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /follow.+10 supporters/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /subscribe/i })).toBeInTheDocument();
 
     await act(async () => {
@@ -325,7 +325,7 @@ describe("ChannelPage", () => {
       resolveSecondPlayback?.(secondChannelPlayback as any);
     });
 
-    expect(await screen.findByRole("button", { name: /follow · 18 supporters/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /follow.+18 supporters/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /subscribe/i })).toBeInTheDocument();
     expect(await screen.findByTestId("player")).toBeInTheDocument();
   });

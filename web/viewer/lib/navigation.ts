@@ -14,15 +14,15 @@ export type NavigationActor = {
 const ALL_AUDIENCES: readonly NavigationAudience[] = ["guest", "member", "creator", "admin"];
 
 export const CANONICAL_NAV_ITEMS: readonly NavigationItem[] = [
-  { label: "Home", href: "/", visibleTo: ALL_AUDIENCES },
-  { label: "Following", href: "/following", visibleTo: ALL_AUDIENCES },
+  { label: "Discover", href: "/", visibleTo: ALL_AUDIENCES },
   { label: "Browse", href: "/browse", visibleTo: ALL_AUDIENCES },
-  { label: "Creator", href: "/creator", visibleTo: ["creator", "admin"] },
+  { label: "Following", href: "/following", visibleTo: ALL_AUDIENCES },
+  { label: "Studio", href: "/creator", visibleTo: ["creator", "admin"] },
 ];
 
 export const CANONICAL_QUICK_LINK_ITEMS: readonly NavigationItem[] = [
-  { label: "Categories", href: "/browse", visibleTo: ALL_AUDIENCES },
-  { label: "Following", href: "/following", visibleTo: ALL_AUDIENCES },
+  { label: "Setup guide", href: "/getting-started", visibleTo: ALL_AUDIENCES },
+  { label: "Profile", href: "/profile", visibleTo: ["member", "creator", "admin"] },
 ];
 
 export function getNavigationAudience(actor: NavigationActor): NavigationAudience {

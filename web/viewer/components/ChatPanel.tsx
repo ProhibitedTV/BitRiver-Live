@@ -563,7 +563,7 @@ export function ChatPanel({
             className="primary-button"
             disabled={isComposerDisabled || content.trim().length === 0}
           >
-            {sending ? "Sending…" : "Send"}
+            {sending ? "Sending..." : "Send"}
           </button>
         </div>
       </form>
@@ -589,7 +589,7 @@ export function ChatPanel({
                 onClick={() => closePopoutDialog()}
                 aria-label="Close pop-out chat dialog"
               >
-                ✕
+                x
               </button>
             </header>
             <p className="muted">
@@ -638,7 +638,7 @@ export function ChatPanel({
                 onClick={() => closeSettingsDialog()}
                 aria-label="Close chat settings"
               >
-                ✕
+                x
               </button>
             </header>
             <div className="chat-panel__settings stack">

@@ -585,3 +585,50 @@
 .filter-chip__meta {
   font-size: 0.9rem;
 }
+
+.home-hero__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+.home-hero__stats {
+  display: grid;
+  gap: var(--space-sm);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.home-hero__search-label {
+  font-weight: 700;
+}
+
+.home-hero__media-header {
+  display: grid;
+  gap: var(--space-2xs);
+}
+
+.content-rail__grid {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.browse-toolbar__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.browse-results {
+  gap: var(--space-md);
+}
+
+@media (min-width: 960px) {
+  .content-rail__grid {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  }
+}
