@@ -1293,3 +1293,53 @@
 - `npm.cmd --prefix web/viewer run lint`
 - `npm.cmd --prefix web/viewer run build`
 - `./scripts/verify.sh --viewer`
+
+## Scope (current change)
+- Redeploy the locally running BitRiver Live app so `localhost:8080` serves the latest homepage rescue code from the current checkout instead of any older container build.
+- Keep the runtime action narrowly scoped to the application services that own the changed viewer experience: `bitriver-live` and `viewer`.
+- Confirm the redeployed routes are reachable and reflect the updated viewer shell/homepage so the user can inspect the changes locally right away.
+
+## Assumptions
+- The current dirty checkout is the intended source of truth and should be what gets rebuilt into the local runtime.
+- Rebuilding `bitriver-live` and `viewer` is sufficient to surface the homepage/UI rescue changes without restarting unrelated healthy stateful services.
+- Route checks against `/`, `/viewer`, and optionally `/signup` are enough to confirm the redeploy succeeded for local visual QA.
+
+## Risks
+- Docker layer caching can make a rebuild appear successful while still leaving stale behavior in the running app, so explicit route verification is required after recreation.
+- Recreating the app services will briefly interrupt the current local instance while the new containers start.
+- Host-side Docker or shell issues may block the redeploy even when the source tree is healthy, so service status/logs need to be captured if anything fails.
+
+## Test plan
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 bitriver-live viewer`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0`
+- `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern "Find the streams worth opening now|Watch live now|Full directory" -AllMatches`
+- `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup).Content | Select-String -Pattern "Sign in to continue|Back to viewer" -AllMatches`
+
+## Scope (current change)
+- Audit the current viewer UI with actual interaction checks so the most visible dead or misleading controls are fixed instead of only restyled.
+- Reproduce the reported navbar theme-toggle failure and identify other broken high-traffic controls on the current discovery shell and homepage before editing implementation code.
+- Prioritize fixes that make the shipped viewer materially usable right now: controls should either perform a real action, navigate somewhere meaningful, or be removed/reframed so they are no longer dead ends.
+- Keep the scope viewer-only unless a tiny supporting test/helper change is required to validate the repaired controls.
+
+## Assumptions
+- The user's report is grounded in the current runtime, so even controls with existing unit coverage still need browser-level validation.
+- The highest-impact broken controls are likely in the signed-out discovery experience (`Navbar`, homepage hero, category/discovery controls, mobile shell) because that is the first surface users hit.
+- Existing viewer tests are not yet sufficient to prove usability; we need a combination of static button audit, targeted Jest coverage, and at least one browser-level pass where the host allows it.
+- Viewer-only control/UX fixes do not require deployment-contract changes as long as routes, env contract, and backend APIs stay the same.
+
+## Risks
+- A broad "fix all buttons" pass could sprawl into unrelated redesign work, so the task list needs to stay tied to reproduced breakage on high-traffic controls.
+- Some controls may appear broken because their visual feedback is too subtle rather than because state never changes; we need to distinguish no-op behavior from weak affordance.
+- Browser automation may still hit the existing Windows Playwright/permission friction on this host, so validation needs a fallback path rather than assuming the first runner will work.
+- `PLAN.md`, `TASKS.md`, and multiple viewer files are already dirty in this checkout, so edits need to stay additive and avoid trampling unrelated in-progress work.
+
+## Test plan
+- `Get-Content web/viewer/components/Navbar.tsx`
+- `Get-Content web/viewer/components/CategoryRail.tsx`
+- `Get-Content web/viewer/app/directory-view.tsx`
+- `npm.cmd --prefix web/viewer run test -- navbar.test.tsx directoryPage.test.tsx`
+- `npm.cmd --prefix web/viewer run build`
+- `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts tests/navbar-mobile.spec.ts`
+- If Playwright remains blocked: `npx.cmd playwright test tests/channel.spec.ts tests/navbar-mobile.spec.ts --reporter=list`

@@ -1,3 +1,43 @@
+## Scoped change: local redeploy for homepage QA
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the local redeploy scope before runtime actions
+  - Acceptance criteria:
+    - `PLAN.md` captures the redeploy scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered rebuild and route-check tasks before Docker actions begin.
+
+- [x] Task 2 - Rebuild and recreate the local app services from the current checkout
+  - Acceptance criteria:
+    - `bitriver-live` and `viewer` are rebuilt from the current source tree using the canonical Compose contract.
+    - Compose status/log output is captured after the rebuild attempt.
+    - The action stays limited to the app services unless a hard blocker requires wider intervention.
+
+- [x] Task 3 - Verify the redeployed local routes reflect the latest viewer code
+  - Acceptance criteria:
+    - `http://localhost:8080/` responds after the rebuild.
+    - `http://localhost:8080/viewer` serves the updated homepage rescue content.
+    - `TASKS.md` records the post-redeploy status or any host blocker precisely.
+
+### Execution log (local redeploy for homepage QA)
+- Task 1 complete: recorded the local redeploy scope in `PLAN.md` and `TASKS.md` before touching the running stack so the rebuild and route checks were explicit.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 30`
+  - `Get-Content TASKS.md -TotalCount 30`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short`
+- Task 2 complete: checked the current Compose status, attempted a targeted `up -d --build` for `bitriver-live` and `viewer`, then forced a no-deps recreate to make sure the app containers actually restarted on the current checkout. The recreate succeeded and the app services now show fresh container ages.
+- Task 2 checks:
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer` (timed out before returning cleanly, so a follow-up status check plus explicit recreate was used)
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --force-recreate --no-deps bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=40 bitriver-live viewer` (still blocked on this host by Docker config/pipe access denial)
+- Task 3 complete: verified the redeployed app is live locally. `/` still returns the expected `307` redirect, `/viewer` now serves the updated homepage rescue content including `Find the streams worth opening now`, `Watch live now`, and `Full directory`, and `/signup` still serves the sign-in-first auth page with `Back to viewer`.
+- Task 3 checks:
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
+  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'Find the streams worth opening now|Watch live now|Full directory|Browse BitRiver Live' -AllMatches`
+  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup).Content | Select-String -Pattern 'Sign in to continue|Back to viewer' -AllMatches`
+
 ## Scoped change: homepage UI/UX rescue pass
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -2552,3 +2592,88 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 4 checks:
   - ✅ `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx creatorGettingStartedPage.test.tsx creatorLivePage.test.tsx profilePage.test.tsx uploadManager.test.tsx`
   - ⚠️ The targeted suite passes, but the existing test harness still emits non-failing React `act(...)` warnings from async polling/state-reset effects in the creator getting-started/live pages.
+## Scoped change: viewer control usability repair pass
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the control-repair scope and initial read-only diagnosis
+  - Acceptance criteria:
+    - `PLAN.md` captures the viewer control-usability scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered reproduce/fix/validate steps before viewer code is edited.
+    - The initial diagnosis names at least the reported theme-toggle issue plus any additional confirmed or strongly suspected dead controls found during read-only inspection.
+
+- [x] Task 2 - Reproduce the broken controls with a focused interaction audit
+  - Acceptance criteria:
+    - The current navbar/homepage/mobile-shell controls are checked with code inspection plus browser/test interaction where available.
+    - Concrete broken or misleading controls are recorded in the execution log with enough specificity to fix them.
+    - The confirmed fix list stays scoped to the highest-traffic usability blockers instead of drifting into broad redesign work.
+
+- [x] Task 3 - Implement the smallest viewer changes needed to make the confirmed controls usable
+  - Acceptance criteria:
+    - Broken controls either perform a meaningful action, navigate somewhere real, or are reframed so they are no longer dead UI.
+    - The light/dark toggle has observable, testable behavior instead of a no-op-feeling interaction.
+    - Any touched homepage/discovery controls remain keyboard-accessible and consistent across desktop/mobile layouts.
+
+- [x] Task 4 - Add or adjust coverage for the repaired controls
+  - Acceptance criteria:
+    - Jest and/or Playwright coverage asserts the repaired behavior for the theme toggle and any other fixed controls.
+    - Tests focus on user-observable outcomes rather than implementation details.
+    - New coverage is stable on this host as far as the environment allows.
+
+- [x] Task 5 - Run focused validation and record the usability status
+  - Acceptance criteria:
+    - Targeted viewer tests and build validation are run and logged after the fixes.
+    - Browser-level interaction checks are attempted and their outcome is recorded precisely, including any host blocker.
+    - Remaining UI gaps, if any, are written down concretely for follow-up.
+
+### Execution log (viewer control usability repair pass)
+- Task 1 complete: appended the scoped control-repair plan to `PLAN.md` and `TASKS.md` before touching viewer code, with the initial read-only diagnosis that the reported theme toggle needs browser-level reproduction and the homepage category chips are already a confirmed dead control because they render as buttons with no action.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 40`
+  - `Get-Content TASKS.md -TotalCount 60`
+  - `git status --short PLAN.md TASKS.md`
+- Task 2 complete: reproduced the breakage with a real browser pass and a static control audit. The closed `#viewer-nav-menu` drawer is still rendered and intercepting pointer events on desktop, which blocks clicks on the theme toggle, sign-in button, and account menu even when the drawer is supposedly closed. The same audit confirmed the homepage `CategoryRail` chips are dead buttons with no `onClick`, route, or filter behavior at all.
+- Task 2 findings:
+  - `npx.cmd playwright test tests/channel.spec.ts tests/navbar-mobile.spec.ts --reporter=list` failed in the browser with `#viewer-nav-menu` intercepting pointer events for the theme toggle, sign-in, and account-menu clicks; the mobile nav hidden-state assertion also failed because the drawer remained visible despite `hidden`.
+  - `web/viewer/styles/globals.css` contains a later `.nav-drawer { display: grid; }` rule that overrides the earlier closed-state `display: none`, which explains why the hidden drawer still occupies the page.
+  - `web/viewer/components/CategoryRail.tsx` renders category controls as plain `<button type="button">` elements without any action, so they are guaranteed no-ops on the homepage today.
+  - The older follow-button Playwright expectations in `tests/channel.spec.ts` also no longer match the current accessible label formatting (`Follow - 10 supporters` in the component versus the old middle-dot string in the spec), but that is test drift rather than the main usability blocker the user reported.
+- Task 2 checks:
+  - `npm.cmd --prefix web/viewer run test -- navbar.test.tsx directoryPage.test.tsx`
+  - `npm.cmd --prefix web/viewer run build`
+  - `npx.cmd playwright test tests/channel.spec.ts tests/navbar-mobile.spec.ts --reporter=list`
+  - `Get-Content web/viewer/styles/globals.css | Select-Object -Skip 1568 -First 60`
+  - `Get-Content web/viewer/styles/globals.css | Select-Object -Skip 3196 -First 70`
+  - `Get-Content web/viewer/components/CategoryRail.tsx`
+- Task 3 complete: added a global `[hidden] { display: none !important; }` rule so hidden UI cannot remain clickable/visible when later display rules try to override it, which restores real click access to the navbar theme toggle and other right-side controls. I also turned the homepage category chips into real browse links that carry the category name into the existing directory search flow instead of rendering inert buttons.
+- Task 3 checks:
+  - `git diff -- web/viewer/styles/globals.css web/viewer/components/CategoryRail.tsx`
+  - `npm.cmd --prefix web/viewer run test -- navbar.test.tsx directoryPage.test.tsx`
+  - `npm.cmd --prefix web/viewer run build`
+  - `npx.cmd playwright test tests/navbar-mobile.spec.ts tests/channel.spec.ts --grep "collapses into a toggle on small viewports|theme toggle updates the rendered document" --reporter=list`
+- Task 3 notes:
+  - The rebuilt-browser theme-toggle Playwright check now passes, confirming the user-reported dead control was being blocked by the hidden drawer overlay rather than by the theme-state logic itself.
+  - The focused mobile-navbar Playwright check progressed past the hidden/blocked state and now only fails on an outdated ambiguous locator (`Browse` versus `Browse all channels`), which is a test issue to clean up in Task 4 rather than a remaining product bug.
+- Task 4 complete: updated the shared viewer test helper to mock the homepage recommendation/category endpoints explicitly, added a homepage unit assertion that category chips now link into `/browse?q=...`, and tightened the mobile Playwright navbar spec so it targets the drawer's `Browse` link precisely instead of colliding with the hero CTA copy.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx navbar.test.tsx`
+  - `npx.cmd playwright test tests/navbar-mobile.spec.ts tests/channel.spec.ts --grep "collapses into a toggle on small viewports|theme toggle updates the rendered document" --reporter=list`
+- Task 4 notes:
+  - The Jest suite now covers the repaired category-chip behavior directly.
+  - The focused Playwright suite now passes for both the mobile drawer interaction and the navbar theme toggle.
+- Task 5 complete: reran the focused viewer validation suite, refreshed the local `bitriver-live` and `viewer` services, and confirmed `localhost:8080` is serving the rebuilt viewer shell. The only remaining validation blocker is the existing host setup issue where `./scripts/verify.sh --viewer` stops immediately because Python is not installed/aliased for the env-placeholder hygiene step on this Windows machine.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx navbar.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+  - `npx.cmd playwright test tests/navbar-mobile.spec.ts tests/channel.spec.ts --grep "collapses into a toggle on small viewports|theme toggle updates the rendered document" --reporter=list`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'Switch to (light|dark) theme|Browse by category|BitRiver Live' -AllMatches`
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
+- Task 5 notes:
+  - Focused Jest and Playwright coverage now pass for the repaired controls.
+  - Viewer lint and build both pass.
+  - The local app services were rebuilt and `http://localhost:8080/` still returns the expected `307` into the viewer flow while `/viewer` serves the updated shell markup.
+  - `./scripts/verify.sh --viewer` remains blocked on this host by the missing Python executable before it reaches the viewer-specific checks.
