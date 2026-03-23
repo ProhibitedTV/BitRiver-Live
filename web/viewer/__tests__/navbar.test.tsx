@@ -505,7 +505,7 @@ describe("Navbar", () => {
       await user.click(joinButton);
     });
 
-    expect(mockLocation.href).toBe("http://localhost/signup?next=%2Fbrowse%3Ftag%3Dmusic%23top");
+    expect(mockLocation.href).toBe("http://localhost/signup?next=%2Fbrowse%3Ftag%3Dmusic%23top#signup-card");
     restore();
   });
 

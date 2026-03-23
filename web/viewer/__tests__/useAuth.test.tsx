@@ -33,6 +33,16 @@ function RapidDoubleSignOutTrigger() {
   );
 }
 
+function SignInTrigger({ redirectTo }: { redirectTo?: string }) {
+  const { signIn } = useAuth();
+
+  return (
+    <button type="button" onClick={() => void signIn(redirectTo)}>
+      Sign in
+    </button>
+  );
+}
+
 type MockResponse = {
   ok: boolean;
   status: number;
@@ -59,6 +69,54 @@ describe("useAuth", () => {
   afterEach(() => {
     global.fetch = originalFetch;
     jest.clearAllMocks();
+  });
+
+  test("signIn falls back to the signup surface when loginUrl is unavailable", async () => {
+    const originalLocation = window.location;
+    const mockLocation = {
+      ...originalLocation,
+      href: "http://localhost/viewer",
+      origin: "http://localhost",
+      pathname: "/viewer",
+      search: "?tab=discover",
+      hash: "#live",
+    } as Location & { href: string };
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: mockLocation,
+    });
+
+    global.fetch = jest.fn(async () => ({
+      ok: false,
+      status: 401,
+      json: async () => ({}),
+      text: async () => "unauthorized",
+    })) as jest.MockedFunction<typeof fetch>;
+
+    const user = userEvent.setup();
+    render(
+      <AuthProvider>
+        <SignInTrigger />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/api/viewer/me",
+        expect.objectContaining({ credentials: "include" }),
+      );
+    });
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /sign in/i }));
+    });
+
+    expect(mockLocation.href).toBe("http://localhost/signup?next=%2Fviewer%3Ftab%3Ddiscover%23live#login-form");
+
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: originalLocation,
+    });
   });
 
   test("signOut signs the viewer out via loadViewer and clears user after refresh", async () => {

@@ -1,4 +1,21 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+import { normalizeConfiguredUrlValue } from "./auth-links";
+
+const API_BASE = normalizeConfiguredUrlValue(process.env.NEXT_PUBLIC_API_BASE_URL) ?? "";
+const SERVER_API_BASE = normalizeConfiguredUrlValue(process.env.BITRIVER_INTERNAL_API_BASE_URL) || "http://bitriver-live:8080";
+
+function resolveRequestTarget(path: string) {
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    return path;
+  }
+
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  if (typeof window !== "undefined") {
+    return `${API_BASE}${normalizedPath}`;
+  }
+
+  const base = API_BASE || SERVER_API_BASE;
+  return new URL(normalizedPath, base).toString();
+}
 
 export class ViewerApiError extends Error {
   status: number;
@@ -24,7 +41,7 @@ export async function viewerRequest<T>(path: string, init?: RequestInit): Promis
   if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(resolveRequestTarget(path), {
     ...init,
     credentials: "include",
     headers,
@@ -68,7 +85,7 @@ export function multipartRequest<T>(
 
     signal?.addEventListener("abort", onAbortSignal);
 
-    xhr.open("POST", `${API_BASE}${path}`);
+    xhr.open("POST", resolveRequestTarget(path));
     xhr.withCredentials = true;
     xhr.onload = () => {
       cleanupAbortSignal();

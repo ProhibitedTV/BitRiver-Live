@@ -17,7 +17,8 @@ interface FollowingRailProps {
 }
 
 export function FollowingRail({ channels, loading = false, isAuthenticated = false }: FollowingRailProps) {
-  const status: FollowingStatus = loading ? "loading" : !isAuthenticated ? "unauthenticated" : channels.length === 0 ? "empty" : "ready";
+  const status: FollowingStatus =
+    loading ? "loading" : !isAuthenticated ? "unauthenticated" : channels.length === 0 ? "empty" : "ready";
 
   return (
     <section className="following-rail surface">
@@ -65,7 +66,7 @@ export function FollowingRail({ channels, loading = false, isAuthenticated = fal
                   <strong>{entry.owner.displayName}</strong>
                   <span className="muted">
                     {entry.channel.category ?? "Variety"}
-                    {entry.channel.category && entry.channel.liveState ? " • " : ""}
+                    {entry.channel.category && entry.channel.liveState ? " - " : ""}
                     {entry.channel.liveState}
                   </span>
                 </div>

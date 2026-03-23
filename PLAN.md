@@ -1004,6 +1004,57 @@
 - `./scripts/verify.sh`
 
 ## Scope (current change)
+- Sync the local checkout to the merged `origin/main` state that now contains the platform-grade viewer redesign.
+- Rebuild or recreate the local Docker-backed runtime from that merged source so manual QA hits the merged viewer code instead of an older container/image.
+- Confirm the locally running app is reachable on the expected routes and record the local inspection entrypoints for the user.
+
+## Assumptions
+- The merged redesign is already contained in `origin/main`, and local manual inspection should happen against that merged branch rather than the older feature-branch checkout.
+- A clean worktree means it is safe to switch to `main` and fast-forward it to `origin/main` without risking uncommitted local work.
+- Rebuilding the local compose stack from repo root is sufficient for manual UI inspection without changing deployment-contract files.
+
+## Risks
+- Switching branches can leave the user inspecting stale containers if the rebuild step does not recreate the viewer/API services from the new source tree.
+- If supporting services are stopped or unhealthy, the viewer may load with misleading empty/error states that look like UI regressions instead of local runtime issues.
+- Docker/Compose on this Windows host has shown intermittent environment-specific issues before, so the deployment path needs explicit status/log verification rather than assuming success.
+
+## Test plan
+- `git fetch origin --prune`
+- `git checkout main`
+- `git pull --ff-only origin main`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 bitriver-live viewer`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop } catch { $_.Exception.Response }`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop } catch { $_.Exception.Response }`
+
+## Scope (current change)
+- Turn the viewer-home shell interactions into real working entry points instead of dead-end buttons, focusing on auth entry, search/discovery continuity, and visibly actionable navigation.
+- Fix the desktop shell/layout issues surfaced in manual QA: the following column should behave like a true sidebar on large screens, and the home page should stop overflowing horizontally on a 1080p desktop.
+- Improve the responsive/mobile behavior for the same shell and home surfaces so the layout remains usable on smaller screens.
+- Fix the broken server-rendered directory fetch on the home page so the merged viewer actually loads its discovery data in local deployment.
+
+## Assumptions
+- The intended public auth entry surface is `/signup`, which already contains the sign-in experience and conditionally reveals self-signup based on server config.
+- We should not change the deployment contract or root `.env` in this pass; if public self-signup remains disabled, the UI should still route correctly to the auth surface without pretending account creation is available.
+- The screenshot’s “sidebar overlap” is primarily caused by the home hero breakout/width strategy and shell breakpoint behavior, not by the following data component itself.
+- Mobile friendliness here means the same routes/components should remain navigable and readable on smaller viewports without introducing a separate mobile-only product surface.
+
+## Risks
+- Changing auth-entry behavior in the navbar and following prompts can regress existing tests or flows that currently assume a `/login` fallback, so link generation needs to be centralized and covered.
+- Fixing the viewer shell width and sidebar behavior touches global CSS that many pages share, so breakpoint changes must be scoped carefully to avoid new regressions in creator/channel/profile layouts.
+- Patching the server-side API-base handling for the discovery surface can accidentally break client-side requests if the server/client resolution logic diverges.
+- Mobile-friendly reductions in nav density can hide critical actions if drawer, auth CTA, and search access are not preserved thoughtfully.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- navbar.test.tsx useAuth.test.tsx followingSidebar.test.tsx viewerShell.test.tsx directoryPage.test.tsx viewer-api.test.ts`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop } catch { $_.Exception.Response }`
+- `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern "Sign in|Join|Browse|Following|Failed to parse URL" -AllMatches`
+
+## Scope (current change)
 - Redesign the Next.js viewer shell into a clearer platform-style experience with stronger global navigation, consistent layout scaffolding, and repaired design-token gaps that currently leave some UI states styled inconsistently.
 - Rework the main discovery journeys (`/`, `/browse`, `/following`) so each page has a distinct role, shared section patterns, and intentional empty/loading/error states without changing backend API contracts.
 - Refactor the highest-friction detail and management surfaces (`/channels/[id]`, `/creator/*`, `/profile`) onto shared page patterns so browsing, viewing, onboarding, and creator workflows feel connected instead of page-by-page one-offs.
@@ -1170,3 +1221,28 @@
 ## Test plan
 - `cd web/viewer && npm run test -- channelPage.test.tsx`
 - `./scripts/verify.sh`
+
+## Scope (current change)
+- Run a focused viewer usability shakedown against the current BitRiver Live interface so the primary product journeys feel sensible and actionable instead of looking polished-but-brittle.
+- Validate the highest-friction flows first: anonymous landing/discovery, auth entry, following recovery states, and shell/layout behavior across desktop and mobile breakpoints.
+- Build on the existing uncommitted viewer work already present in this checkout; keep the pass narrowly scoped to viewer UX/usability fixes unless runtime smoke proves a small supporting API/viewer integration fix is required.
+- Avoid deployment-contract edits in this pass unless a true usability blocker is impossible to resolve without them.
+
+## Assumptions
+- The most important “actually usable” journeys for this pass are: open the product, understand where to go, browse or search channels, reach the real auth surface, and recover cleanly from empty/error/following states.
+- Existing viewer Jest/Playwright coverage plus local HTTP smoke checks are enough to identify the top remaining usability regressions without inventing new product requirements.
+- The uncommitted viewer changes already in this worktree are intentional in-flight fixes, so the safest path is to extend and verify them rather than trying to reset to a cleaner baseline.
+
+## Risks
+- Shared shell/CSS changes can improve one route while subtly regressing another, so touched navigation and layout code needs targeted regression coverage.
+- Local runtime/config issues can masquerade as UI breakage during smoke checks, especially around auth availability and directory data loading, so findings need careful attribution.
+- Because `PLAN.md`, `TASKS.md`, and several viewer files are already dirty, any edits need to stay additive and narrowly scoped to avoid stomping collaborator work.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- navbar.test.tsx useAuth.test.tsx followingSidebar.test.tsx viewerShell.test.tsx directoryPage.test.tsx viewer-api.test.ts`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `npm.cmd --prefix web/viewer run test:playwright -- accessibility.spec.ts navbar-mobile.spec.ts`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup`

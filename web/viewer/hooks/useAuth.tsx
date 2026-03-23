@@ -9,6 +9,7 @@ import {
   useMemo,
   useState
 } from "react";
+import { appendHash, appendRedirectParam, normalizeConfiguredUrlValue, resolveSignupUrl } from "../lib/auth-links";
 
 type AuthUser = {
   id: string;
@@ -25,7 +26,7 @@ type AuthContextValue = {
   signOut: () => Promise<void>;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+const API_BASE = normalizeConfiguredUrlValue(process.env.NEXT_PUBLIC_API_BASE_URL) ?? "";
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 type ViewerAuthResponse = {
@@ -121,21 +122,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (loginUrl) {
           return loginUrl;
         }
-        if (API_BASE) {
-          return `${API_BASE}/login`;
-        }
-        return "/login";
+        return appendHash(resolveSignupUrl(undefined, API_BASE) ?? "/signup", "login-form");
       })();
 
       if (typeof window === "undefined") {
         return;
       }
 
-      const url = new URL(destination, window.location.origin);
-      if (!url.searchParams.has("redirect")) {
-        url.searchParams.set("redirect", target);
-      }
-      window.location.href = url.toString();
+      window.location.href = loginUrl
+        ? appendRedirectParam(destination, window.location.origin, target, "redirect")
+        : appendRedirectParam(destination, window.location.origin, target, "next");
     },
     [buildRedirectTarget, loginUrl]
   );

@@ -2265,6 +2265,177 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Notifications are now intentionally removed as a dead-end shell affordance, but a real inbox/alerts product decision is still needed before that surface returns.
   - Channel schedule remains a placeholder state because the current product contract does not expose structured schedule data; once the backend model exists, that tab should become a true programming/calendar surface.
 
+## Scoped change: sync to merged main and redeploy locally for manual viewer QA
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the sync/deploy plan before switching branches or touching the running stack
+  - Acceptance criteria:
+    - `PLAN.md` captures the merged-main sync scope, assumptions, risks, and local deployment commands.
+    - `TASKS.md` lists the ordered sync, rebuild, and smoke-check tasks before runtime actions begin.
+
+- [x] Task 2 - Sync the local checkout onto merged `main`
+  - Acceptance criteria:
+    - Local refs are refreshed from `origin`.
+    - The checkout is moved to local `main` and fast-forwarded to `origin/main`.
+    - The resulting local HEAD is logged so the deployed source revision is unambiguous.
+
+- [x] Task 3 - Rebuild the local stack from the merged source and verify inspection entrypoints
+  - Acceptance criteria:
+    - Compose status is checked before and after the rebuild.
+    - The local stack is recreated from the merged source tree.
+    - Logs plus HTTP checks confirm the viewer/API routes are reachable for manual inspection.
+
+### Execution log (sync to merged main and redeploy locally for manual viewer QA)
+- Task 1 complete: recorded the merged-main sync and local redeploy scope in `PLAN.md`/`TASKS.md` before switching branches or touching the local runtime.
+- Task 1 checks:
+  - `git status --short --branch`
+  - `git fetch origin --prune`
+  - `rg -n "sync to merged main and redeploy locally for manual viewer QA|Sync the local checkout to the merged|Record the sync/deploy plan" PLAN.md TASKS.md`
+- Task 2 complete: refreshed refs from `origin`, switched the checkout from the older feature branch onto local `main`, fast-forwarded `main` to `origin/main`, and reapplied the scoped workflow-note stash so the deployment run still stays documented on the merged branch.
+- Task 2 checks:
+  - `git branch --show-current`
+  - `git checkout main`
+  - `git pull --ff-only origin main`
+  - `git log --oneline --decorate -n 3`
+  - `git status --short --branch`
+- Task 3 complete: rebuilt the local runtime from merged `main`, confirmed fresh `bitriver-live`/`viewer` containers are serving on localhost, and verified the main inspection entrypoints are reachable for manual QA.
+- Task 3 checks:
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml config --services`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 bitriver-live viewer`
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop } catch { $_.Exception.Response }`
+  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern "Browse|Following|Creator|Profile|BitRiver" -AllMatches`
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/admin -MaximumRedirection 0 -ErrorAction Stop } catch { $_.Exception.Response }`
+- Task 3 notes:
+  - `http://localhost:8080/` returns `307 Temporary Redirect` to `/viewer`.
+  - `http://localhost:8080/viewer` serves the redesigned shell/home experience from the rebuilt viewer container.
+  - `http://localhost:8080/admin` is reachable and still serves the control center.
+  - The local home page currently surfaces `We couldn't load the directory right now: Failed to parse URL from ""/api/directory`, so manual QA can proceed, but that issue is already visible on the freshly deployed merged build.
+
+## Scoped change: fix viewer-shell interaction dead ends, desktop overflow, and mobile responsiveness
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the scoped UX-fix plan before editing
+  - Acceptance criteria:
+    - `PLAN.md` captures the auth-entry, sidebar/layout, mobile, and server-fetch scope plus risks/tests.
+    - `TASKS.md` lists the ordered implementation/validation tasks before viewer files change.
+    - The read-only diagnosis captures the concrete problems from manual QA: dead-end auth entry, pseudo-sidebar behavior, horizontal overflow, and mobile-readiness gaps.
+
+- [x] Task 2 - Make homepage auth/discovery entry points behave like real product flows
+  - Acceptance criteria:
+    - Top-level signed-out entry points route to the actual auth surface instead of dead or mismatched paths.
+    - Following/guest prompts use the same auth entry contract.
+    - The home directory/discovery surface no longer fails on local server render because of a missing API base.
+
+- [x] Task 3 - Rework the shell and home layout so desktop behaves like a real two-column app and small screens stay usable
+  - Acceptance criteria:
+    - The following region renders as a real sidebar on large screens and as a modal/drawer only when space is limited.
+    - The home page no longer overflows horizontally on a standard 1080p desktop viewport.
+    - Navbar/shell/home spacing and breakpoints are tightened so critical controls remain reachable on mobile.
+
+- [x] Task 4 - Run focused viewer validation, redeploy locally, and record inspection notes
+  - Acceptance criteria:
+    - Relevant viewer tests/lint/build commands are run and logged.
+    - The local `bitriver-live` and `viewer` services are rebuilt from the updated source.
+    - Post-redeploy HTTP checks record the local URLs plus any remaining inspection caveats.
+
+### Execution log (fix viewer-shell interaction dead ends, desktop overflow, and mobile responsiveness)
+- Task 1 complete: recorded the scoped feedback pass in `PLAN.md`/`TASKS.md` before editing and confirmed the concrete QA issues in code: auth fallbacks still point at `/login` while the real public auth surface is `/signup`, the home page is server-failing on `"/api/directory"` with no absolute base, the home hero still uses a `100vw` breakout that can spill horizontally, and the shell/sidebar breakpoint behavior leaves the following panel feeling more like an overlap than a stable app column.
+- Task 1 checks:
+  - `Get-Content -Path 'web/viewer/components/Navbar.tsx' | Select-Object -First 260`
+  - `Get-Content -Path 'web/viewer/components/ViewerShell.tsx' | Select-Object -First 260`
+  - `Get-Content -Path 'web/viewer/styles/globals.css' | Select-Object -Skip 2980 -First 440`
+  - `Get-Content -Path 'web/viewer/styles/home.css' | Select-Object -First 320`
+  - `Invoke-RestMethod http://localhost:8080/api/viewer/me -Method Get` (captured `401 missing session token`)
+  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup).Content | Select-String -Pattern "Sign in to continue|Create account|data-allow-self-signup" -AllMatches`
+- Task 2 complete: redirected signed-out viewer entry points onto the real `/signup` auth surface, aligned guest/following prompts with the same contract, restored server-rendered discovery fetches by resolving relative API requests against the internal API origin, and added auth-surface focus behavior so sign-in and join land on the correct section instead of feeling dead.
+- Task 2 checks:
+  - `npm.cmd --prefix web/viewer run test -- navbar.test.tsx useAuth.test.tsx followingSidebar.test.tsx viewer-api.test.ts`
+  - `rg -n "/login|/signup|login-form|signup-card|bitriver-live:8080" web/viewer/components web/viewer/hooks web/viewer/lib web/static web/viewer/__tests__`
+- Task 3 complete: tightened the active shell/home CSS so the viewer shell is width-safe, lowered the desktop sidebar breakpoint so large-but-constrained desktop windows get a real sidebar, removed the home hero breakout that was forcing horizontal overflow, and improved navbar/search/shell spacing for smaller screens.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx directoryPage.test.tsx navbar.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+- Task 4 complete: reran the focused viewer/unit checks, passed lint and production build, rebuilt the local `bitriver-live` and `viewer` services, and confirmed the rebuilt `/viewer` HTML no longer contains the old parse-URL directory error while `/signup` now exposes the real sign-in-first auth surface with explicit section targeting for sign-in vs join.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- navbar.test.tsx useAuth.test.tsx followingSidebar.test.tsx viewerShell.test.tsx directoryPage.test.tsx viewer-api.test.ts`
+  - `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx directoryPage.test.tsx navbar.test.tsx`
+  - `npm.cmd --prefix web/viewer run test -- viewer-api.test.ts navbar.test.tsx useAuth.test.tsx`
+  - `npm.cmd --prefix web/viewer run test`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 bitriver-live viewer`
+  - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0`
+  - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer`
+  - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup`
+- Task 4 notes:
+  - `/` still redirects to `/viewer` as intended.
+  - The rebuilt `/viewer` HTML contains the new shell/auth CTAs and no longer contains `Failed to parse URL` or the previous `Invalid URL` directory alert.
+  - `/signup` contains both `login-form` and `signup-card`, but local self-signup is still disabled by the current deployment config (`data-allow-self-signup="false"`), so true account creation remains gated on an approved `.env` contract change.
+  - The full viewer Jest suite now passes, with existing non-failing warnings still present from jsdom navigation limitations and older `act(...)` gaps in profile/creator/directory tests.
+
+## Scoped change: viewer usability shakedown and polish
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the scoped usability-pass plan before editing
+  - Acceptance criteria:
+    - `PLAN.md` captures the usability-shakedown scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered shakedown, fix, and validation steps before additional viewer edits begin.
+    - The read-only diagnosis identifies the primary journeys and the highest-likelihood usability friction points to validate.
+
+- [x] Task 2 - Run a focused usability shakedown across the primary viewer journeys
+  - Acceptance criteria:
+    - The current behavior of root/viewer/signup plus the main discovery shell is checked via code inspection and local/runtime validation.
+    - Concrete blockers are recorded in the execution log instead of working from vague UX goals.
+    - The top-fix list stays small and tied to actual friction found during the shakedown.
+
+- [x] Task 3 - Implement the smallest fixes needed to remove the confirmed usability blockers
+  - Acceptance criteria:
+    - High-friction actions remain actionable and route to the correct product surfaces.
+    - Layout/shell changes keep desktop and mobile flows usable without reintroducing overflow or dead-end behavior.
+    - Viewer tests are updated when the behavior contract changes.
+
+- [x] Task 4 - Run focused validation and record the final usability status
+  - Acceptance criteria:
+    - The targeted viewer Jest, lint, and build commands are run and logged.
+    - Relevant Playwright/local smoke checks are attempted and their outcomes are recorded.
+    - Remaining gaps, if any, are described precisely for follow-up instead of hand-wavy “needs polish” notes.
+
+### Execution log (viewer usability shakedown and polish)
+- Task 1 complete: appended the scoped viewer-usability plan to `PLAN.md` and this task list before making additional viewer edits, using the current read-only diagnosis that the highest-risk friction remains around primary entry/discovery/auth flows and shared shell responsiveness.
+- Task 2 complete: validated the current root/viewer/signup flow with targeted viewer tests plus live HTTP inspection and found one concrete release-grade blocker still visible in rendered HTML: the signed-out following CTA was rendering as `/viewer/signup#login-form` instead of the real auth surface at `/signup#login-form` because the shared prompt used a Next.js `Link` under the viewer `basePath`. The same sweep also surfaced a remaining separator-copy inconsistency in `FollowingRail`.
+- Task 2 checks:
+  - `npm.cmd --prefix web/viewer run test -- navbar.test.tsx useAuth.test.tsx followingSidebar.test.tsx viewerShell.test.tsx directoryPage.test.tsx viewer-api.test.ts`
+  - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0`
+  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern "/signup#login-form|/viewer/signup|Sign in to see channels you follow|Browse directory|Failed to parse URL|Invalid URL" -AllMatches`
+  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup).Content | Select-String -Pattern "Sign in to continue|Create account|data-allow-self-signup|login-form|signup-card" -AllMatches`
+- Task 3 complete: switched the shared unauthenticated-following CTA to a plain anchor so auth handoff stays outside the viewer `basePath`, and normalized the following-rail category/live-state separator to a stable ASCII ` - ` string.
+- Task 3 checks:
+  - `Get-Content web/viewer/components/following/FollowingState.tsx`
+  - `Get-Content web/viewer/components/FollowingRail.tsx`
+- Task 4 complete: reran the focused viewer regression suite, lint, and production build successfully; attempted browser-level Playwright smoke twice but hit the current Windows `spawn EPERM` restriction; then rebuilt the live `bitriver-live` and `viewer` services and confirmed the real `/viewer` HTML now emits `/signup#login-form` rather than `/viewer/signup`.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- followingStatePresentation.test.tsx followingSidebar.test.tsx directoryPage.test.tsx navbar.test.tsx useAuth.test.tsx viewer-api.test.ts`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/accessibility.spec.ts tests/navbar-mobile.spec.ts` (blocked by Windows `spawn EPERM` during the package pretest build hook)
+  - `npx.cmd playwright test tests/accessibility.spec.ts tests/navbar-mobile.spec.ts` (blocked by the same Windows `spawn EPERM` when Playwright tried to launch its configured process)
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern "/signup#login-form|/viewer/signup|Sign in to see channels you follow|Browse directory|Failed to parse URL|Invalid URL" -AllMatches`
+  - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0`
+  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup).Content | Select-String -Pattern "Sign in to continue|data-allow-self-signup|Back to viewer" -AllMatches`
+- Remaining gaps noted during validation:
+  - Browser-level Playwright smoke is still blocked on this Windows host by `spawn EPERM`, so accessibility/mobile assertions remain covered by existing code-level tests plus live HTTP inspection rather than a completed headless-browser pass.
+  - `directoryPage.test.tsx` still emits pre-existing non-failing React `act(...)` warnings from `SearchBar` interactions, and `navbar.test.tsx` still emits the known jsdom “navigation not implemented” warning when real anchor navigation is exercised.
+
 ### Execution log (platform-grade viewer UX/system redesign)
 - ✅ Task 1 complete: appended the scoped viewer-platform redesign plan to `PLAN.md`/`TASKS.md` before editing and captured the read-only diagnosis that currently the product works as a self-hosted creator/viewer platform, but the UX is fragmented by duplicated discovery entry points, ad-hoc page scaffolding, heavy inline styling, and shell/state tokens that are missing or inconsistent.
 - ✅ Task 1 findings:

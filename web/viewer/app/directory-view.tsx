@@ -54,9 +54,9 @@ export function HomePageView({
     { label: "Recommended", value: recommended.length.toLocaleString() },
   ];
   const homeErrorMessage = homeError
-    ? `We couldnâ€™t load personalized rows (featured, recommended, following): ${homeError}`
+    ? `We couldn't load personalized rows (featured, recommended, following): ${homeError}`
     : null;
-  const directoryErrorMessage = directoryError ? `We couldnâ€™t load the directory right now: ${directoryError}` : null;
+  const directoryErrorMessage = directoryError ? `We couldn't load the directory right now: ${directoryError}` : null;
 
   return (
     <div className="home-page">
@@ -173,9 +173,9 @@ export function HomePageView({
               <h2>Browse the directory</h2>
               <p className="muted">Search every channel or scan the full lineup below.</p>
             </div>
-            {query && <span className="muted">Results for â€œ{query}â€</span>}
+            {query && <span className="muted">{`Results for "${query}"`}</span>}
           </div>
-          {directoryLoading && <div className="surface">Loading channelsâ€¦</div>}
+          {directoryLoading && <div className="surface">Loading channels...</div>}
           {!directoryLoading && directoryErrorMessage && (
             <div className="surface" role="alert">
               {directoryErrorMessage}

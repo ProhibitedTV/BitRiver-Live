@@ -203,7 +203,7 @@ describe("DirectoryPage", () => {
     await renderResolvedDirectoryPage();
 
     expect(await screen.findByText(/sign in to see channels you follow/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /sign in/i })).toHaveAttribute("href", "/login");
+    expect(screen.getByRole("link", { name: /sign in/i })).toHaveAttribute("href", "/signup#login-form");
     expect(screen.queryByText(/not following any channels yet/i)).not.toBeInTheDocument();
   });
 

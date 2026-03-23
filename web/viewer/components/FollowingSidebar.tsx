@@ -98,7 +98,7 @@ export function FollowingSidebar() {
                 <strong>{entry.owner.displayName}</strong>
                 <span className="muted">
                   {entry.channel.category ?? "Variety"}
-                  {entry.channel.category && entry.channel.liveState ? " • " : ""}
+                  {entry.channel.category && entry.channel.liveState ? " - " : ""}
                   {entry.channel.liveState}
                 </span>
               </div>

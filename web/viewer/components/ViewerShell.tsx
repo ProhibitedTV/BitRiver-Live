@@ -7,7 +7,7 @@ interface ViewerShellProps {
   children: ReactNode;
 }
 
-const DESKTOP_SIDEBAR_QUERY = "(min-width: 1180px)";
+const DESKTOP_SIDEBAR_QUERY = "(min-width: 1024px)";
 const FOCUSABLE_SELECTORS =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 

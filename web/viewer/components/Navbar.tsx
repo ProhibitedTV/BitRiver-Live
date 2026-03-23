@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
+import { appendHash, joinConfiguredPath, resolveSignupUrl } from "../lib/auth-links";
 import { deriveQuickLinks, getNavigationAudience, getVisibleNavigationItems } from "../lib/navigation";
 import { fetchManagedChannels } from "../lib/viewer-api";
 
@@ -27,15 +28,6 @@ const isLocalhostUrl = (rawUrl?: string) => {
   } catch {
     return false;
   }
-};
-
-const joinConfiguredPath = (baseUrl: string | undefined, path: string) => {
-  const base = baseUrl?.trim();
-  if (!base) {
-    return path;
-  }
-
-  return `${base.replace(/\/+$/, "")}${path}`;
 };
 
 export function Navbar() {
@@ -82,15 +74,7 @@ export function Navbar() {
   const shouldShowLocalSetupBanner =
     process.env.NODE_ENV !== "production" &&
     (isLocalhostUrl(process.env.NEXT_PUBLIC_VIEWER_URL) || isLocalhostUrl(process.env.NEXT_PUBLIC_API_BASE_URL));
-  const signupUrl = useMemo(() => {
-    if (configuredSignupUrl !== undefined) {
-      return configuredSignupUrl || undefined;
-    }
-    if (process.env.NEXT_PUBLIC_API_BASE_URL) {
-      return joinConfiguredPath(process.env.NEXT_PUBLIC_API_BASE_URL, "/signup");
-    }
-    return "/signup";
-  }, [configuredSignupUrl]);
+  const signupUrl = useMemo(() => resolveSignupUrl(configuredSignupUrl), [configuredSignupUrl]);
   const adminUrl = useMemo(() => joinConfiguredPath(process.env.NEXT_PUBLIC_API_BASE_URL, "/admin"), []);
   const studioHref = managedChannelId ? `/creator/live/${managedChannelId}` : "/creator/getting-started";
   const activeNavItem = navItems.find((item) => {
@@ -383,7 +367,7 @@ export function Navbar() {
       return;
     }
 
-    const url = new URL(signupUrl, window.location.origin);
+    const url = new URL(appendHash(signupUrl, "signup-card"), window.location.origin);
     if (!url.searchParams.has("next")) {
       url.searchParams.set("next", buildRedirectTarget());
     }

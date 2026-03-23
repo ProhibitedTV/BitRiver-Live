@@ -46,6 +46,33 @@ function applyAuthConfig() {
     }
 }
 
+function focusAuthTarget() {
+    const targetId = window.location.hash.replace(/^#/, "");
+    if (!targetId) {
+        return;
+    }
+
+    if (targetId === "signup-card" && !allowSelfSignup) {
+        showFeedback("Public self-signup is disabled on this server. Sign in with an existing account or ask an administrator for access.", "error");
+        const emailInput = loginForm?.querySelector('input[name="email"]');
+        if (emailInput instanceof HTMLElement) {
+            emailInput.focus();
+        }
+        return;
+    }
+
+    const target = document.getElementById(targetId);
+    if (!target) {
+        return;
+    }
+
+    target.scrollIntoView({ block: "start" });
+    const focusTarget = target.querySelector("input, button, a");
+    if (focusTarget instanceof HTMLElement) {
+        focusTarget.focus();
+    }
+}
+
 function showFeedback(message, variant = "info") {
     if (!feedback) {
         return;
@@ -191,6 +218,7 @@ if (mfaForm) {
 const params = new URLSearchParams(window.location.search);
 const mfaToken = params.get("mfaToken");
 applyAuthConfig();
+focusAuthTarget();
 if (mfaToken) {
     pendingMFAToken = mfaToken;
     showMFA(true);
