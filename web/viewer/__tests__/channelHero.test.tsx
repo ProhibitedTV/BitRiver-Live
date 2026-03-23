@@ -106,7 +106,7 @@ test("toggles follow and subscribe state", async () => {
     />
   );
 
-  const followButton = screen.getByRole("button", { name: /follow · 10 supporters/i });
+  const followButton = screen.getByRole("button", { name: /follow.+10 supporters/i });
   fireEvent.click(followButton);
 
   await waitFor(() => {
@@ -114,7 +114,7 @@ test("toggles follow and subscribe state", async () => {
     expect(onFollowChange).toHaveBeenCalledWith({ followers: 11, following: true });
   });
 
-  expect(screen.getByRole("button", { name: /following · 11 supporters/i })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /following.+11 supporters/i })).toBeInTheDocument();
 
   const subscribeButton = screen.getByRole("button", { name: /subscribe/i });
   fireEvent.click(subscribeButton);
@@ -136,7 +136,7 @@ test("disables follow actions for channel owners", () => {
 
   render(<ChannelHeader data={baseData} />);
 
-  const followButton = screen.getByRole("button", { name: /follow · 10 supporters/i });
+  const followButton = screen.getByRole("button", { name: /follow.+10 supporters/i });
   expect(followButton).toBeDisabled();
 
   fireEvent.click(followButton);

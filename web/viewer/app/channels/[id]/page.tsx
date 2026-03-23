@@ -1,49 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
+import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChannelAboutPanel, ChannelHeader } from "../../../components/ChannelHero";
 import { ChatPanel } from "../../../components/ChatPanel";
 import { Player } from "../../../components/Player";
+import { Button } from "../../../components/ui/Button";
+import { Card, CardHeader } from "../../../components/ui/Card";
 import { VodGallery } from "../../../components/VodGallery";
 import { useAuth } from "../../../hooks/useAuth";
-import type {
-  ChannelPlaybackResponse,
-  FollowState,
-  SubscriptionState,
-  VodItem
-} from "../../../lib/viewer-api";
+import type { ChannelPlaybackResponse, FollowState, SubscriptionState, VodItem } from "../../../lib/viewer-api";
 import { fetchChannelPlayback, fetchChannelVods } from "../../../lib/viewer-api";
 
 const CHANNEL_TABS = [
   { id: "about", label: "About" },
   { id: "schedule", label: "Schedule" },
-  { id: "videos", label: "Videos" }
+  { id: "videos", label: "Videos" },
 ] as const;
 
 type ChannelTabId = (typeof CHANNEL_TABS)[number]["id"];
-
 const DEFAULT_CHANNEL_TAB: ChannelTabId = "about";
 
 function parseChannelTab(value: string | null | undefined): ChannelTabId | undefined {
-  if (!value) {
-    return undefined;
-  }
-
+  if (!value) return undefined;
   const normalizedValue = value.toLowerCase();
   return CHANNEL_TABS.find((tab) => tab.id === normalizedValue)?.id;
 }
 
 function resolveTabFromUrl(searchParams: URLSearchParams, hash: string): ChannelTabId {
-  const queryTab = parseChannelTab(searchParams.get("tab"));
-  if (queryTab) {
-    return queryTab;
-  }
-
-  const hashTab = parseChannelTab(hash.replace(/^#/, ""));
-  return hashTab ?? DEFAULT_CHANNEL_TAB;
+  return parseChannelTab(searchParams.get("tab")) ?? parseChannelTab(hash.replace(/^#/, "")) ?? DEFAULT_CHANNEL_TAB;
 }
 
 export default function ChannelPage({ params }: { params: { id: string } }) {
@@ -70,10 +56,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const setTabFromCurrentUrl = useCallback(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
+    if (typeof window === "undefined") return;
     const nextTab = resolveTabFromUrl(new URLSearchParams(window.location.search), window.location.hash);
     setActiveTab((currentTab) => (currentTab === nextTab ? currentTab : nextTab));
   }, []);
@@ -86,22 +69,19 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
       const href = queryString ? `${pathname}?${queryString}` : pathname;
       router.push(href, { scroll: false });
     },
-    [pathname, router, searchParams]
+    [pathname, router, searchParams],
   );
 
   const clearRefreshInterval = useCallback(() => {
-    if (refreshIntervalRef.current) {
-      clearInterval(refreshIntervalRef.current);
-      refreshIntervalRef.current = undefined;
-    }
+    if (!refreshIntervalRef.current) return;
+    clearInterval(refreshIntervalRef.current);
+    refreshIntervalRef.current = undefined;
   }, []);
 
   const loadPlayback = useCallback(
     async (showSpinner: boolean) => {
       try {
-        if (showSpinner) {
-          setLoading(true);
-        }
+        if (showSpinner) setLoading(true);
         setError(undefined);
         const response = await fetchChannelPlayback(id);
         if (!cancelledRef.current) {
@@ -117,7 +97,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
         }
       }
     },
-    [id]
+    [id],
   );
 
   const handleRetry = useCallback(() => {
@@ -141,8 +121,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
     }
     previousUserIdRef.current = user?.id;
     previousChannelIdRef.current = id;
-    const shouldShowSpinner = channelChanged || firstLoad;
-    void loadPlayback(userChanged && !channelChanged ? false : shouldShowSpinner);
+    void loadPlayback(userChanged && !channelChanged ? false : channelChanged || firstLoad);
     return () => {
       cancelledRef.current = true;
       clearRefreshInterval();
@@ -154,17 +133,10 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
   }, [setTabFromCurrentUrl, tabSearchParam]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return undefined;
-    }
-
-    const handleLocationUpdate = () => {
-      setTabFromCurrentUrl();
-    };
-
+    if (typeof window === "undefined") return undefined;
+    const handleLocationUpdate = () => setTabFromCurrentUrl();
     window.addEventListener("hashchange", handleLocationUpdate);
     window.addEventListener("popstate", handleLocationUpdate);
-
     return () => {
       window.removeEventListener("hashchange", handleLocationUpdate);
       window.removeEventListener("popstate", handleLocationUpdate);
@@ -173,15 +145,11 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     clearRefreshInterval();
-    if (error) {
-      return undefined;
-    }
+    if (error) return undefined;
     refreshIntervalRef.current = setInterval(() => {
       void loadPlayback(false);
-    }, 30_000);
-    return () => {
-      clearRefreshInterval();
-    };
+    }, 30000);
+    return () => clearRefreshInterval();
   }, [clearRefreshInterval, error, loadPlayback]);
 
   const handleFollowChange = (follow: FollowState) => {
@@ -197,18 +165,14 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
     setVodError(undefined);
     try {
       const response = await fetchChannelVods(id);
-      if (!vodCancelledRef.current) {
-        setVods(response.items ?? []);
-      }
+      if (!vodCancelledRef.current) setVods(response.items ?? []);
     } catch (err) {
       if (!vodCancelledRef.current) {
         setVodError(err instanceof Error ? err.message : "We couldn't load past broadcasts.");
         setVods([]);
       }
     } finally {
-      if (!vodCancelledRef.current) {
-        setVodsLoading(false);
-      }
+      if (!vodCancelledRef.current) setVodsLoading(false);
     }
   }, [id]);
 
@@ -227,22 +191,18 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
         vodCancelledRef.current = true;
       };
     }
-
     if (activeTab !== "videos") {
       return () => {
         vodCancelledRef.current = true;
       };
     }
-
     if (vodRequestedChannelIdRef.current === id) {
       return () => {
         vodCancelledRef.current = true;
       };
     }
-
     vodRequestedChannelIdRef.current = id;
     void loadVods();
-
     return () => {
       vodCancelledRef.current = true;
     };
@@ -254,11 +214,9 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
       const nextTabId = CHANNEL_TABS[normalizedIndex].id;
       setActiveTab(nextTabId);
       updateTabUrl(nextTabId);
-      if (focusTab) {
-        tabRefs.current[normalizedIndex]?.focus();
-      }
+      if (focusTab) tabRefs.current[normalizedIndex]?.focus();
     },
-    [updateTabUrl]
+    [updateTabUrl],
   );
 
   const handleTabKeyDown = useCallback(
@@ -282,28 +240,24 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
         default:
           return;
       }
-
       event.preventDefault();
       activateTabAtIndex(nextIndex, true);
     },
-    [activateTabAtIndex]
+    [activateTabAtIndex],
   );
 
   return (
-    <div className="container channel-page">
-      {loading && <div className="surface">Loading channel…</div>}
-      {error && (
-        <div className="surface stack" role="alert">
-          <div className="stack">
+    <div className="workspace-page workspace-page--narrow channel-page">
+      {loading ? <Card className="workspace-card">Loading channel...</Card> : null}
+
+      {error ? (
+        <Card className="workspace-card" role="alert">
+          <CardHeader className="workspace-card__header">
             <h2>We couldn&apos;t load this channel.</h2>
-            <p className="muted">
-              Something went wrong while fetching playback details. Please try again or return to the channel list.
-            </p>
-          </div>
-          <div className="cluster" style={{ justifyContent: "flex-start", gap: "var(--space-3)" }}>
-            <button className="button" onClick={handleRetry} type="button">
-              Try again
-            </button>
+            <p className="muted">Something went wrong while fetching playback details. Please try again or return to the channel list.</p>
+          </CardHeader>
+          <div className="channel-page__actions">
+            <Button onClick={handleRetry}>Try again</Button>
             <Link className="secondary-button" href="/browse">
               Back to channels
             </Link>
@@ -319,19 +273,14 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
               </pre>
             </details>
           ) : null}
-        </div>
-      )}
-      {data && (
+        </Card>
+      ) : null}
+
+      {data ? (
         <div className="channel-page__grid">
           <div className="channel-page__hero-grid">
             <div className="channel-player">
-              <Player
-                playback={data.playback}
-                channelId={params.id}
-                live={data.live}
-                liveState={data.channel.liveState}
-                loading={loading}
-              />
+              <Player playback={data.playback} channelId={params.id} live={data.live} liveState={data.channel.liveState} loading={loading} />
             </div>
             <aside className="channel-page__chat">
               <div className="channel-page__chat-inner">
@@ -339,12 +288,10 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
               </div>
             </aside>
           </div>
+
           <div className="channel-page__main stack">
-            <ChannelHeader
-              data={data}
-              onFollowChange={handleFollowChange}
-              onSubscriptionChange={handleSubscriptionChange}
-            />
+            <ChannelHeader data={data} onFollowChange={handleFollowChange} onSubscriptionChange={handleSubscriptionChange} />
+
             <section className="channel-tabs">
               <div className="channel-tabs__list" role="tablist" aria-label="Stream info tabs">
                 {CHANNEL_TABS.map((tab, index) => (
@@ -371,58 +318,36 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
                 ))}
               </div>
               <div className="channel-tabs__panels">
-                <div
-                  id="channel-tab-about"
-                  role="tabpanel"
-                  aria-labelledby="channel-tab-about-trigger"
-                  hidden={activeTab !== "about"}
-                  className="channel-tabs__panel"
-                >
+                <div id="channel-tab-about" role="tabpanel" aria-labelledby="channel-tab-about-trigger" hidden={activeTab !== "about"} className="channel-tabs__panel">
                   <ChannelAboutPanel data={data} />
                 </div>
-                <div
-                  id="channel-tab-schedule"
-                  role="tabpanel"
-                  aria-labelledby="channel-tab-schedule-trigger"
-                  hidden={activeTab !== "schedule"}
-                  className="channel-tabs__panel"
-                >
+                <div id="channel-tab-schedule" role="tabpanel" aria-labelledby="channel-tab-schedule-trigger" hidden={activeTab !== "schedule"} className="channel-tabs__panel">
                   <section className="surface stack">
                     <h3>Schedule</h3>
                     <p className="muted">The broadcaster hasn&apos;t shared an upcoming schedule yet.</p>
                   </section>
                 </div>
-                <div
-                  id="channel-tab-videos"
-                  role="tabpanel"
-                  aria-labelledby="channel-tab-videos-trigger"
-                  hidden={activeTab !== "videos"}
-                  className="channel-tabs__panel"
-                >
+                <div id="channel-tab-videos" role="tabpanel" aria-labelledby="channel-tab-videos-trigger" hidden={activeTab !== "videos"} className="channel-tabs__panel">
                   <VodGallery items={vods} error={vodError} loading={vodsLoading} onRetry={handleVodRetry} />
                 </div>
               </div>
             </section>
-            {(user?.id === data.channel.ownerId || user?.roles.includes("creator")) && (
-              <section className="surface stack">
-                <header className="stack">
-                  <h3>Manage uploads</h3>
-                  <p className="muted">
-                    Use your creator dashboard to register VODs and monitor processing once streams finish.
-                  </p>
-                </header>
-                <Link
-                  href={`/creator/uploads/${data.channel.id}`}
-                  className="secondary-button"
-                  style={{ alignSelf: "flex-start" }}
-                >
-                  Open creator dashboard
-                </Link>
+
+            {user?.id === data.channel.ownerId || user?.roles.includes("creator") ? (
+              <section className="channel-owner-card">
+                <span className="page-eyebrow">Creator tools</span>
+                <h3>Manage uploads</h3>
+                <p className="muted">Use your creator dashboard to register VODs and monitor processing once streams finish.</p>
+                <div className="channel-page__actions">
+                  <Link href={`/creator/uploads/${data.channel.id}`} className="secondary-button">
+                    Open creator dashboard
+                  </Link>
+                </div>
               </section>
-            )}
+            ) : null}
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

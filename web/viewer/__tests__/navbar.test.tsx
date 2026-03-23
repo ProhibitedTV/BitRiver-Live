@@ -208,62 +208,6 @@ describe("Navbar", () => {
   });
 
 
-  test("opens notifications roadmap popover from an enabled quick action", async () => {
-    mockAnonymousUser();
-    const user = userEvent.setup();
-
-    renderWithProviders(<Navbar />);
-
-    const notificationsButton = screen.getByRole("button", { name: /notifications roadmap details/i });
-    expect(notificationsButton).toBeEnabled();
-    expect(notificationsButton).toHaveAttribute("aria-expanded", "false");
-
-    await act(async () => {
-      await user.click(notificationsButton);
-    });
-
-    expect(notificationsButton).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("status", { name: /notifications feature roadmap/i })).toHaveTextContent(
-      /notifications are coming soon/i,
-    );
-  });
-
-  test("dismisses notifications roadmap popover via Escape and outside click", async () => {
-    mockAnonymousUser();
-    const user = userEvent.setup();
-
-    renderWithProviders(<Navbar />);
-
-    const notificationsButton = screen.getByRole("button", { name: /notifications roadmap details/i });
-
-    await act(async () => {
-      await user.click(notificationsButton);
-    });
-
-    expect(screen.getByRole("status", { name: /notifications feature roadmap/i })).toBeInTheDocument();
-
-    await act(async () => {
-      await user.keyboard("{Escape}");
-    });
-
-    expect(screen.queryByRole("status", { name: /notifications feature roadmap/i })).not.toBeInTheDocument();
-    expect(notificationsButton).toHaveFocus();
-
-    await act(async () => {
-      await user.click(notificationsButton);
-    });
-
-    expect(screen.getByRole("status", { name: /notifications feature roadmap/i })).toBeInTheDocument();
-
-    await act(async () => {
-      await user.click(document.body);
-    });
-
-    expect(screen.queryByRole("status", { name: /notifications feature roadmap/i })).not.toBeInTheDocument();
-    expect(notificationsButton).toHaveFocus();
-  });
-
-
   test("renders desktop tabs and drawer links from the same primary nav list", async () => {
     mockAuthenticatedUser(adminUser);
 
@@ -271,7 +215,7 @@ describe("Navbar", () => {
 
     renderWithProviders(<Navbar />);
 
-    const desktopNav = screen.getByRole("group", { name: /viewer navigation/i });
+    const desktopNav = screen.getByRole("navigation", { name: /primary navigation/i });
     const desktopLabels = within(desktopNav)
       .getAllByRole("link")
       .map((link) => link.textContent?.trim());
@@ -281,7 +225,7 @@ describe("Navbar", () => {
       await user.click(toggleButton);
     });
 
-    const drawerNav = screen.getByRole("group", { name: /viewer navigation mobile/i });
+    const drawerNav = screen.getByRole("navigation", { name: /primary navigation mobile/i });
     const drawerLabels = within(drawerNav)
       .getAllByRole("link")
       .map((link) => link.textContent?.trim());
@@ -303,8 +247,8 @@ describe("Navbar", () => {
 
     expect(toggleButton).toHaveAttribute("aria-expanded", "true");
 
-    const quickLinks = screen.getByRole("group", { name: /quick links/i });
-    const dashboardLink = within(quickLinks).getByRole("link", { name: /control center/i });
+    const shortcuts = screen.getByLabelText(/platform shortcuts/i);
+    const dashboardLink = within(shortcuts).getByRole("link", { name: /control center/i });
     await act(async () => {
       await user.click(dashboardLink);
     });
@@ -328,14 +272,14 @@ describe("Navbar", () => {
     expect(navDrawer).toBeInTheDocument();
 
     const drawer = within(navDrawer!);
-    ["Home", "Following", "Browse"].forEach((label) => {
+    ["Discover", "Browse", "Following"].forEach((label) => {
       expect(drawer.getAllByRole("link", { name: new RegExp(label, "i") })).toHaveLength(1);
     });
   });
 
   test("traps Tab and Shift+Tab focus within the open mobile drawer", async () => {
     mockAnonymousUser();
-    setMatchMedia((query) => query === "(max-width: 800px)");
+    setMatchMedia((query) => query === "(max-width: 1080px)");
     const user = userEvent.setup();
 
     renderWithProviders(<Navbar />);
@@ -371,7 +315,7 @@ describe("Navbar", () => {
 
   test("restores focus to menu toggle after closing mobile drawer", async () => {
     mockAnonymousUser();
-    setMatchMedia((query) => query === "(max-width: 800px)");
+    setMatchMedia((query) => query === "(max-width: 1080px)");
     const user = userEvent.setup();
 
     renderWithProviders(<Navbar />);
@@ -394,7 +338,7 @@ describe("Navbar", () => {
 
   test("keeps keyboard focus path available for both inline and drawer navbar search inputs", async () => {
     mockAnonymousUser();
-    setMatchMedia((query) => query === "(max-width: 800px)");
+    setMatchMedia((query) => query === "(max-width: 1080px)");
     const user = userEvent.setup();
 
     renderWithProviders(<Navbar />);
@@ -414,6 +358,14 @@ describe("Navbar", () => {
     drawerSearch.focus();
     expect(drawerSearch).toHaveFocus();
     expect(drawerSearch.closest(".nav-search")).toHaveClass("nav-search--drawer");
+  });
+
+  test("removes the old notifications roadmap dead-end from the header", () => {
+    mockAnonymousUser();
+
+    renderWithProviders(<Navbar />);
+
+    expect(screen.queryByRole("button", { name: /notifications roadmap details/i })).not.toBeInTheDocument();
   });
 
   test("defines a visible nav-search focus-within style contract for dark and light themes", () => {
@@ -482,8 +434,9 @@ describe("Navbar", () => {
 
     renderWithProviders(<Navbar />);
 
-    expect(screen.getByText(/running in local setup mode/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /setup guide/i })).toHaveAttribute("href", "/getting-started");
+    const banner = screen.getByRole("status");
+    expect(within(banner).getByText(/running in local setup mode/i)).toBeInTheDocument();
+    expect(within(banner).getByRole("link", { name: /setup guide/i })).toHaveAttribute("href", "/getting-started");
   });
 
   test("shows a local setup banner when viewer URL is localhost", () => {

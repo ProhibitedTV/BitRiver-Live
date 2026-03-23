@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Player } from "../../../../components/Player";
 import { Button, buttonClassName } from "../../../../components/ui/Button";
@@ -18,7 +19,7 @@ import {
   updateChannel,
 } from "../../../../lib/viewer-api";
 
-const MASKED_STREAM_KEY = "••••••••";
+const MASKED_STREAM_KEY = "********";
 
 function formatCategory(category?: string) {
   if (!category) {
@@ -86,8 +87,7 @@ export default function CreatorLivePage() {
       const response = await fetchChannelSessions(channelId);
       setSessions(response ?? []);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to load ingest details";
-      setSessionError(message);
+      setSessionError(err instanceof Error ? err.message : "Unable to load ingest details");
     }
   }, [channelId]);
 
@@ -105,8 +105,7 @@ export default function CreatorLivePage() {
     } catch (err) {
       setManagedChannels([]);
       setManagedChannel(undefined);
-      const message = err instanceof Error ? err.message : "Unable to load channel settings";
-      setManagedError(message);
+      setManagedError(err instanceof Error ? err.message : "Unable to load channel settings");
     } finally {
       setManagedLoading(false);
     }
@@ -170,9 +169,8 @@ export default function CreatorLivePage() {
     if (sessions.length === 0) {
       return undefined;
     }
-    const sorted = [...sessions].sort(
-      (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
-    );
+
+    const sorted = [...sessions].sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
     return sorted.find((session) => !session.endedAt) ?? sorted[0];
   }, [sessions]);
 
@@ -184,12 +182,7 @@ export default function CreatorLivePage() {
   const ingestEndpoints = useMemo(() => managedChannel?.ingestEndpoints ?? [], [managedChannel?.ingestEndpoints]);
   const preferredIngestEndpoint = useMemo(() => getPreferredIngestEndpoint(ingestEndpoints), [ingestEndpoints]);
   const obsSettingsBlock = useMemo(
-    () =>
-      buildObsSettingsBlock(
-        preferredIngestEndpoint,
-        isChannelOwner ? managedChannel?.streamKey : undefined,
-        streamKeyVisible,
-      ),
+    () => buildObsSettingsBlock(preferredIngestEndpoint, isChannelOwner ? managedChannel?.streamKey : undefined, streamKeyVisible),
     [isChannelOwner, managedChannel?.streamKey, preferredIngestEndpoint, streamKeyVisible],
   );
   const testStreamStatus = useMemo(
@@ -217,11 +210,9 @@ export default function CreatorLivePage() {
     if (previewReady && testStreamStatus.key === "live") {
       return "Your live preview is ready. Confirm video and audio here before you share the viewer link.";
     }
-
     if (previewPending) {
       return "BitRiver is receiving your stream, but the preview player is still warming up. Keep OBS running and this page will refresh automatically.";
     }
-
     return "When your OBS test reaches BitRiver, your preview will appear here so you can confirm everything before sharing.";
   }, [previewPending, previewReady, testStreamStatus.key]);
 
@@ -232,6 +223,7 @@ export default function CreatorLivePage() {
       setTitleSaved(false);
       return;
     }
+
     try {
       setSavingTitle(true);
       setTitleError(undefined);
@@ -242,8 +234,7 @@ export default function CreatorLivePage() {
       setTitleDraft(updated.title);
       setTitleSaved(true);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to update stream title";
-      setTitleError(message);
+      setTitleError(err instanceof Error ? err.message : "Unable to update stream title");
     } finally {
       setSavingTitle(false);
     }
@@ -257,8 +248,7 @@ export default function CreatorLivePage() {
       await navigator.clipboard.writeText(managedChannel.streamKey);
       setStreamKeyCopyMessage("Copied");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to copy";
-      setStreamKeyCopyMessage(message);
+      setStreamKeyCopyMessage(err instanceof Error ? err.message : "Unable to copy");
     }
   };
 
@@ -269,8 +259,7 @@ export default function CreatorLivePage() {
       setIngestCopyMessage(`Copied ${describeEndpoint(endpoint, ingestEndpoints.indexOf(endpoint))}`);
     } catch (err) {
       setCopiedIngestEndpoint(undefined);
-      const message = err instanceof Error ? err.message : "Unable to copy";
-      setIngestCopyMessage(message);
+      setIngestCopyMessage(err instanceof Error ? err.message : "Unable to copy");
     }
   };
 
@@ -282,8 +271,7 @@ export default function CreatorLivePage() {
       await navigator.clipboard.writeText(obsSettingsBlock);
       setObsSettingsCopyMessage("Copied OBS settings");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to copy";
-      setObsSettingsCopyMessage(message);
+      setObsSettingsCopyMessage(err instanceof Error ? err.message : "Unable to copy");
     }
   };
 
@@ -292,87 +280,114 @@ export default function CreatorLivePage() {
       await navigator.clipboard.writeText(viewerPageHref);
       setViewerLinkCopyMessage("Copied viewer link");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to copy";
-      setViewerLinkCopyMessage(message);
+      setViewerLinkCopyMessage(err instanceof Error ? err.message : "Unable to copy");
     }
   };
 
   if (loading) {
-    return <section className="surface">Loading channel...</section>;
+    return <section className="surface workspace-card">Loading channel...</section>;
   }
 
   if (error) {
     return (
-      <section className="surface stack">
-        <h2>Unable to load channel</h2>
-        <p className="error">{error}</p>
-        <Button
-          variant="secondary"
-          onClick={() => {
-            void reload(false);
-          }}
-        >
-          Try again
-        </Button>
+      <section className="surface workspace-card">
+        <div className="workspace-card__header">
+          <h2>Unable to load channel</h2>
+          <p className="error">{error}</p>
+        </div>
+        <div className="workspace-card__actions">
+          <Button
+            variant="secondary"
+            onClick={() => {
+              void reload(false);
+            }}
+          >
+            Try again
+          </Button>
+        </div>
       </section>
     );
   }
 
   if (!playback) {
     return (
-      <section className="surface stack">
-        <h2>Channel not available</h2>
-        <p className="muted">We could not find channel details for this dashboard.</p>
+      <section className="surface workspace-card">
+        <div className="workspace-card__header">
+          <h2>Channel not available</h2>
+          <p className="muted">We could not find channel details for this dashboard.</p>
+        </div>
       </section>
     );
   }
 
   return (
-    <div className="stack" style={{ gap: "1.5rem" }}>
-      <header className="stack" style={{ gap: "0.75rem" }}>
-        <h2>Go live</h2>
-        <p className="muted">
-          Move through this setup from top to bottom: confirm the channel, copy the OBS details, start a test stream,
-          check the preview, then share your viewer page.
-        </p>
-      </header>
+    <div className="workspace-shell">
+      <section className="workspace-hero">
+        <div className="workspace-hero__copy">
+          <span className="page-eyebrow">Go live</span>
+          <h2>Run a calm, guided control room</h2>
+          <p className="muted creator-live__hero-note">
+            Move from channel confirmation to OBS setup to preview and sharing in one steady flow. Signal checks refresh automatically while you work through the page.
+          </p>
+        </div>
+        <div className="workspace-hero__actions">
+          <Link href={`/creator/uploads/${channelId}`} className={buttonClassName("secondary")}>
+            Open uploads
+          </Link>
+          <a href={viewerPageHref} className={buttonClassName("secondary")} target="_blank" rel="noreferrer">
+            Open public channel
+          </a>
+        </div>
+        <div className="workspace-summary-grid">
+          <article className="summary-card">
+            <span className="summary-card__label">Channel</span>
+            <strong className="summary-card__value">{currentChannelTitle}</strong>
+            <p className="muted">Category: {currentChannelCategory}</p>
+          </article>
+          <article className="summary-card">
+            <span className="summary-card__label">Current signal</span>
+            <strong className="summary-card__value">{testStreamStatus.label}</strong>
+            <p className="muted">Last checked {formatTimestamp(testStreamUpdatedAt)}</p>
+          </article>
+          <article className="summary-card">
+            <span className="summary-card__label">Preview</span>
+            <strong className="summary-card__value">{previewReady ? "Ready" : "Pending"}</strong>
+            <p className="muted">{previewReady ? "Review before sharing." : "Keep OBS running while playback warms up."}</p>
+          </article>
+        </div>
+      </section>
 
-      <Card aria-labelledby="channel-section-heading">
-        <CardHeader>
+      <Card className="workspace-card step-card" aria-labelledby="channel-section-heading">
+        <CardHeader className="workspace-card__header">
           <h3 id="channel-section-heading">1) Channel</h3>
           <p className="muted">Confirm which channel you are about to stream from before you copy anything into OBS.</p>
         </CardHeader>
-        <CardBody style={{ gap: "1rem" }}>
-          <div className="stack" style={{ gap: "0.5rem" }}>
-            <label htmlFor="current-channel-name">Current channel</label>
+        <CardBody className="creator-live__section">
+          <label className="input-stack" htmlFor="current-channel-name">
+            <span>Current channel</span>
             <input id="current-channel-name" aria-label="Current channel" readOnly value={currentChannelTitle} />
-            <p className="muted">Category: {currentChannelCategory}</p>
-          </div>
+          </label>
+          <p className="muted">Category: {currentChannelCategory}</p>
 
           {managedChannels.length > 1 ? (
-            <div className="stack" style={{ gap: "0.5rem", maxWidth: "24rem" }}>
-              <label htmlFor="channel-selector">Switch channel</label>
-              <select id="channel-selector" value={channelId} onChange={handleChannelChange}>
+            <label className="input-stack" htmlFor="channel-selector">
+              <span>Switch channel</span>
+              <select id="channel-selector" aria-label="Switch channel" value={channelId} onChange={handleChannelChange}>
                 {managedChannels.map((channel) => (
                   <option key={channel.id} value={channel.id}>
                     {channel.title}
                   </option>
                 ))}
               </select>
-            </div>
+            </label>
           ) : (
             <p className="muted">This is the managed channel currently connected to your account.</p>
           )}
 
-          <form className="stack" style={{ gap: "0.5rem" }} onSubmit={handleTitleSubmit}>
-            <div
-              className="cluster"
-              style={{ justifyContent: "space-between", alignItems: "flex-end", gap: "0.75rem", flexWrap: "wrap" }}
-            >
-              <div className="stack" style={{ gap: "0.25rem", flex: "1 1 18rem" }}>
-                <label className="muted" htmlFor="stream-title-input">
-                  Stream title
-                </label>
+          <form className="creator-live__section" onSubmit={handleTitleSubmit}>
+            <div className="creator-live__split">
+              <label className="input-stack" htmlFor="stream-title-input">
+                <span className="muted">Stream title</span>
                 <input
                   id="stream-title-input"
                   name="streamTitle"
@@ -383,7 +398,7 @@ export default function CreatorLivePage() {
                   }}
                   placeholder="What are you streaming today?"
                 />
-              </div>
+              </label>
               <Button
                 type="submit"
                 disabled={savingTitle || !titleDraft.trim() || titleDraft.trim() === playback.channel.title}
@@ -391,10 +406,8 @@ export default function CreatorLivePage() {
                 {savingTitle ? "Saving..." : "Save title"}
               </Button>
             </div>
-            {titleError ? (
-              <InlineAlert role="alert">{titleError}</InlineAlert>
-            ) : null}
-            {titleSaved && !titleError ? <p className="muted">Stream title updated.</p> : null}
+            {titleError ? <InlineAlert role="alert">{titleError}</InlineAlert> : null}
+            {titleSaved && !titleError ? <p className="success">Stream title updated.</p> : null}
           </form>
 
           {managedLoading ? <p className="muted">Loading channel details...</p> : null}
@@ -402,90 +415,99 @@ export default function CreatorLivePage() {
         </CardBody>
       </Card>
 
-      <Card aria-labelledby="obs-setup-heading">
-        <CardHeader>
+      <Card className="workspace-card step-card" aria-labelledby="obs-setup-heading">
+        <CardHeader className="workspace-card__header">
           <h3 id="obs-setup-heading">2) OBS Setup</h3>
-          <p className="muted">Paste these exact values into OBS - Settings - Stream. Keep your stream key hidden unless you need to copy it.</p>
+          <p className="muted">Paste these exact values into OBS - Settings - Stream, and keep the stream key hidden until you need it.</p>
         </CardHeader>
-        <CardBody style={{ gap: "1rem" }}>
-          <div className="stack" style={{ gap: "0.5rem" }}>
-            <label htmlFor="preferred-ingest-url">Preferred ingest URL</label>
-            {managedLoading ? (
-              <p className="muted">Loading ingest configuration...</p>
-            ) : preferredIngestEndpoint ? (
-              <>
-                <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
-                  <input
-                    id="preferred-ingest-url"
-                    aria-label="Preferred ingest URL"
-                    readOnly
-                    value={preferredIngestEndpoint}
-                  />
-                  <Button
-                    variant="secondary"
-                    data-testid="copy-preferred-ingest-endpoint"
-                    onClick={() => {
-                      void handleCopyIngestEndpoint(preferredIngestEndpoint);
-                    }}
-                  >
-                    {copiedIngestEndpoint === preferredIngestEndpoint ? "Copied" : "Copy URL"}
-                  </Button>
-                </div>
-                <p className="muted">Use this as the OBS server URL.</p>
-              </>
-            ) : (
-              <p className="muted">Ingest endpoints are not configured yet.</p>
-            )}
+        <CardBody className="creator-live__section">
+          <div className="creator-live__field-group">
+            <label className="input-stack" htmlFor="preferred-ingest-url">
+              <span>Preferred ingest URL</span>
+              {managedLoading ? (
+                <p className="muted">Loading ingest configuration...</p>
+              ) : preferredIngestEndpoint ? (
+                <>
+                  <input id="preferred-ingest-url" aria-label="Preferred ingest URL" readOnly value={preferredIngestEndpoint} />
+                  <div className="workspace-card__actions">
+                    <Button
+                      variant="secondary"
+                      data-testid="copy-preferred-ingest-endpoint"
+                      onClick={() => {
+                        void handleCopyIngestEndpoint(preferredIngestEndpoint);
+                      }}
+                    >
+                      {copiedIngestEndpoint === preferredIngestEndpoint ? "Copied" : "Copy URL"}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <p className="muted">Ingest endpoints are not configured yet.</p>
+              )}
+            </label>
+            <p className="muted">Use this as the OBS server URL.</p>
             {ingestCopyMessage ? (
               <p className={ingestCopyMessage.startsWith("Copied") ? "muted" : "error"}>{ingestCopyMessage}</p>
             ) : null}
           </div>
 
-          <div className="stack" style={{ gap: "0.5rem" }}>
-            <label htmlFor="stream-key">Stream key</label>
-            {authLoading || managedLoading ? (
-              <p className="muted">Verifying channel ownership...</p>
-            ) : isChannelOwner ? (
-              <>
-                <input
-                  id="stream-key"
-                  aria-label="Stream key"
-                  type="text"
-                  readOnly
-                  value={streamKeyVisible ? managedChannel?.streamKey ?? "" : MASKED_STREAM_KEY}
-                />
-                <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
-                  <Button
-                    variant="secondary"
-                    aria-pressed={streamKeyVisible}
-                    onClick={() => {
-                      setStreamKeyVisible((prev) => !prev);
-                      setStreamKeyCopyMessage(undefined);
-                    }}
-                  >
-                    {streamKeyVisible ? "Hide" : "Reveal"}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      void handleCopyKey();
-                    }}
-                  >
-                    Copy key
-                  </Button>
-                </div>
-                {streamKeyCopyMessage ? (
-                  <p className={streamKeyCopyMessage === "Copied" ? "muted" : "error"}>{streamKeyCopyMessage}</p>
-                ) : null}
-              </>
-            ) : (
-              <p className="muted">Sign in as the channel owner to reveal or copy the stream key.</p>
-            )}
+          <div className="creator-live__field-group">
+            <label className="input-stack" htmlFor="stream-key">
+              <span>Stream key</span>
+              {authLoading || managedLoading ? (
+                <p className="muted">Verifying channel ownership...</p>
+              ) : isChannelOwner ? (
+                <>
+                  <input
+                    id="stream-key"
+                    aria-label="Stream key"
+                    type="text"
+                    readOnly
+                    value={streamKeyVisible ? managedChannel?.streamKey ?? "" : MASKED_STREAM_KEY}
+                  />
+                  <div className="workspace-card__actions">
+                    <Button
+                      variant="secondary"
+                      aria-pressed={streamKeyVisible}
+                      onClick={() => {
+                        setStreamKeyVisible((prev) => !prev);
+                        setStreamKeyCopyMessage(undefined);
+                      }}
+                    >
+                      {streamKeyVisible ? "Hide" : "Reveal"}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        void handleCopyKey();
+                      }}
+                    >
+                      Copy key
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <p className="muted">Sign in as the channel owner to reveal or copy the stream key.</p>
+              )}
+            </label>
+            {streamKeyCopyMessage ? (
+              <p className={streamKeyCopyMessage === "Copied" ? "muted" : "error"}>{streamKeyCopyMessage}</p>
+            ) : null}
           </div>
 
-          <div className="stack" style={{ gap: "0.5rem" }}>
-            <div className="cluster" style={{ justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
-              <label htmlFor="obs-settings-block">OBS settings block</label>
+          <div className="creator-live__field-group">
+            <div className="workspace-card__actions">
+              <label className="input-stack workspace-grid__full" htmlFor="obs-settings-block">
+                <span>OBS settings block</span>
+                <textarea
+                  id="obs-settings-block"
+                  aria-label="OBS settings block"
+                  readOnly
+                  rows={4}
+                  value={obsSettingsBlock}
+                  style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", resize: "vertical" }}
+                />
+              </label>
               <Button
                 variant="secondary"
                 data-testid="copy-obs-settings"
@@ -497,31 +519,23 @@ export default function CreatorLivePage() {
                 Copy OBS settings
               </Button>
             </div>
-            <textarea
-              id="obs-settings-block"
-              aria-label="OBS settings block"
-              readOnly
-              rows={4}
-              value={obsSettingsBlock}
-              style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", resize: "vertical" }}
-            />
             <p className="muted">Use `Service: Custom`, then paste the Server and Stream Key values into OBS.</p>
             {obsSettingsCopyMessage ? (
-              <p className={obsSettingsCopyMessage.startsWith("Copied") ? "muted" : "error"}>
-                {obsSettingsCopyMessage}
-              </p>
+              <p className={obsSettingsCopyMessage.startsWith("Copied") ? "muted" : "error"}>{obsSettingsCopyMessage}</p>
             ) : null}
           </div>
 
           {ingestEndpoints.length > 1 ? (
             <details>
               <summary>Show all ingest URLs</summary>
-              <div className="stack" style={{ gap: "0.75rem", marginTop: "0.75rem" }}>
+              <div className="creator-live__ingest-list" style={{ marginTop: "0.75rem" }}>
                 {ingestEndpoints.map((endpoint, index) => (
-                  <div key={endpoint} className="stack" style={{ gap: "0.35rem" }}>
-                    <label htmlFor={`ingest-endpoint-${index}`}>{describeEndpoint(endpoint, index)}</label>
-                    <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+                  <div key={endpoint} className="creator-live__field-group">
+                    <label className="input-stack" htmlFor={`ingest-endpoint-${index}`}>
+                      <span>{describeEndpoint(endpoint, index)}</span>
                       <input id={`ingest-endpoint-${index}`} readOnly value={endpoint} />
+                    </label>
+                    <div className="workspace-card__actions">
                       <Button
                         variant="secondary"
                         data-testid={`copy-ingest-endpoint-${index}`}
@@ -540,14 +554,14 @@ export default function CreatorLivePage() {
         </CardBody>
       </Card>
 
-      <Card aria-labelledby="test-stream-heading">
-        <CardHeader>
+      <Card className="workspace-card step-card" aria-labelledby="test-stream-heading">
+        <CardHeader className="workspace-card__header">
           <h3 id="test-stream-heading">3) Test Stream</h3>
           <p className="muted">Start streaming from OBS. This page refreshes the current live signals every 4 seconds.</p>
         </CardHeader>
-        <CardBody style={{ gap: "1rem" }}>
-          <div className="surface surface--empty stack" data-testid="test-stream-status-card">
-            <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+        <CardBody className="creator-live__section">
+          <div className="creator-live__signal-card surface--empty" data-testid="test-stream-status-card">
+            <div className="eyebrow-row">
               <span className={testStreamStatus.badgeClassName}>{testStreamStatus.label}</span>
               <span className="muted">Last checked {formatTimestamp(testStreamUpdatedAt)}</span>
             </div>
@@ -555,7 +569,7 @@ export default function CreatorLivePage() {
             {testStreamStatus.reason ? <p className="muted">Signal note: {testStreamStatus.reason}</p> : null}
           </div>
 
-          <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+          <div className="workspace-card__actions">
             <Button
               variant="secondary"
               onClick={() => {
@@ -575,7 +589,7 @@ export default function CreatorLivePage() {
 
           <details>
             <summary>Common issues</summary>
-            <ul className="stack muted" style={{ gap: "0.35rem", paddingLeft: "1.25rem", marginTop: "0.5rem" }}>
+            <ul className="creator-live__notes muted" style={{ marginTop: "0.5rem" }}>
               <li>Paste the server URL from this page directly into OBS to avoid endpoint mismatches.</li>
               <li>Copy the latest stream key here in case an older key was rotated.</li>
               <li>Keep OBS streaming for a few extra seconds if the status shows reconnecting while the preview warms up.</li>
@@ -585,39 +599,29 @@ export default function CreatorLivePage() {
         </CardBody>
       </Card>
 
-      <Card
-        aria-labelledby="preview-heading"
-        className={previewReady && testStreamStatus.key === "live" ? "surface--glow" : undefined}
-      >
-        <CardHeader>
+      <Card className="workspace-card step-card" aria-labelledby="preview-heading">
+        <CardHeader className="workspace-card__header">
           <h3 id="preview-heading">4) Preview</h3>
           <p className="muted">{previewMessage}</p>
         </CardHeader>
-        <CardBody style={{ gap: "1rem" }}>
-          {latestSession ? (
-            <p className="muted">Current session started {formatTimestamp(latestSession.startedAt)}</p>
-          ) : null}
-          <Player
-            playback={playback.playback}
-            channelId={channelId}
-            live={playback.live}
-            liveState={playback.channel.liveState}
-          />
+        <CardBody className="creator-live__section">
+          {latestSession ? <p className="muted">Current session started {formatTimestamp(latestSession.startedAt)}</p> : null}
+          <Player playback={playback.playback} channelId={channelId} live={playback.live} liveState={playback.channel.liveState} />
         </CardBody>
       </Card>
 
-      <Card aria-labelledby="share-heading">
-        <CardHeader>
+      <Card className="workspace-card step-card" aria-labelledby="share-heading">
+        <CardHeader className="workspace-card__header">
           <h3 id="share-heading">5) Share</h3>
-          <p className="muted">Once the preview looks right, copy your viewer link and open the public page that viewers will use.</p>
+          <p className="muted">Once the preview looks right, copy your viewer link and open the same public page that viewers will use.</p>
         </CardHeader>
-        <CardBody style={{ gap: "1rem" }}>
-          <div className="stack" style={{ gap: "0.5rem" }}>
-            <label htmlFor="viewer-link">Viewer link</label>
+        <CardBody className="creator-live__section">
+          <label className="input-stack" htmlFor="viewer-link">
+            <span>Viewer link</span>
             <input id="viewer-link" aria-label="Viewer link" readOnly value={viewerPageHref} />
-          </div>
+          </label>
 
-          <div className="cluster" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+          <div className="workspace-card__actions">
             <Button
               variant="secondary"
               data-testid="copy-viewer-link"

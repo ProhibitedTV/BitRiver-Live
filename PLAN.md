@@ -1004,6 +1004,30 @@
 - `./scripts/verify.sh`
 
 ## Scope (current change)
+- Redesign the Next.js viewer shell into a clearer platform-style experience with stronger global navigation, consistent layout scaffolding, and repaired design-token gaps that currently leave some UI states styled inconsistently.
+- Rework the main discovery journeys (`/`, `/browse`, `/following`) so each page has a distinct role, shared section patterns, and intentional empty/loading/error states without changing backend API contracts.
+- Refactor the highest-friction detail and management surfaces (`/channels/[id]`, `/creator/*`, `/profile`) onto shared page patterns so browsing, viewing, onboarding, and creator workflows feel connected instead of page-by-page one-offs.
+- Keep the change viewer-only unless a small UI logic fix is required to preserve current behavior during the refactor; do not change deployment-contract files.
+
+## Assumptions
+- The current viewer routes and API responses are the right functional backbone, so the redesign can focus on information architecture, interaction clarity, and layout consistency rather than introducing new backend features.
+- Control-center access remains an explicit `/admin` handoff, while the viewer experience owns public browsing, watching, profile editing, and creator workflow guidance.
+- Updating viewer styling, structure, and component composition does not require operator-doc updates because the deployment/runtime contract is unchanged.
+
+## Risks
+- Refactoring the shared shell/navigation can regress mobile drawer, focus-management, auth-action, or creator-entry behavior if existing state and accessibility hooks are disturbed.
+- Discovery-page consolidation can blur the distinction between home and browse if section hierarchy and CTA placement are not kept purpose-specific.
+- Creator/profile/channel cleanup touches many UI files at once, so inconsistent test updates or missed inline-style dependencies could leave subtle regressions behind.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- navbar.test.tsx viewerShell.test.tsx navigation.test.ts`
+- `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx browsePage.test.tsx followingStatePresentation.test.tsx channelDisplayPrimitives.test.tsx`
+- `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx creatorGettingStartedPage.test.tsx creatorLivePage.test.tsx profilePage.test.tsx uploadManager.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run test`
+- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer`
+
+## Scope (current change)
 - Rebuild the running local BitRiver Live stack so `localhost:8080` serves the merged viewer-first routing/auth UX changes instead of the previously pulled release images.
 - Reuse the existing healthy Compose deployment and rebuild only the application services that own the changed behavior (`bitriver-live` and `viewer`) unless runtime evidence shows another local service must also be restarted.
 - Validate the live listener after rebuild by checking `/`, `/admin`, and `/signup`, then confirm whether the remaining signup denial is the intended `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=false` behavior or a fresh runtime defect.
