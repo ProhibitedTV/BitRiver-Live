@@ -1495,3 +1495,29 @@
 - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
 - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
 - `@'...auth route probe...'@ | node -` against `http://127.0.0.1:8080/signup?next=%2Fviewer`
+
+## Scope (current change)
+- Replace the viewer's auth redirects with a real in-app overlay mounted inside the Next.js `/viewer` experience for sign-in, sign-up, and MFA continuation.
+- Add a small viewer-auth API contract so the viewer can learn session state plus auth affordances (`allowSelfSignup`, logout path, and similar) without relying on the old static `/signup` page bootstrap.
+- Demote `/signup` from the primary UX to a compatibility path that forwards into the viewer overlay when the viewer is configured, while preserving a safe fallback for non-viewer deployments.
+
+## Assumptions
+- The user's main complaint is architectural, not just visual: auth should happen inside the viewer shell, so the right fix is to move the form flow into the viewer runtime instead of polishing the static route again.
+- `useAuth` is already the natural place to centralize session loading plus modal open/close state, and the global viewer layout can host the overlay once that hook exposes the needed controls.
+- Keeping `/signup` as a compatibility redirect when `ViewerOrigin` is configured is safer than deleting the route outright because existing OAuth/MFA/legacy links may still target it.
+- A viewer-specific `/api/viewer/me` response is the cleanest minimal contract because the viewer already expects that path and it can return guest-safe auth config with or without a live session.
+
+## Risks
+- Expanding `useAuth` from "session lookup" into full auth-flow state management could ripple through many signed-out CTAs and existing tests if the API is not kept tidy.
+- Redirect/refresh behavior after successful auth can feel jarring if the modal does not preserve the intended `next` route or if it reloads more of the viewer than necessary.
+- MFA and self-signup-disabled states currently live in the static route script, so porting them into React carries a real risk of regressions unless we keep the same API semantics and cover them explicitly.
+- Converting `/signup` into a compatibility redirect must not break installs that do not proxy the Next.js viewer; the server needs to branch cleanly on whether `ViewerOrigin` is configured.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- `npm.cmd --prefix web/viewer run test -- useAuth.test.tsx navbar.test.tsx followingStatePresentation.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `@'...viewer auth overlay probe...'@ | node -` against `http://127.0.0.1:8080/viewer?auth=signup`

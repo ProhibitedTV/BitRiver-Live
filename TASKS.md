@@ -3084,3 +3084,73 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `(Invoke-WebRequest -UseBasicParsing 'http://localhost:8080/signup?next=%2Fviewer#signup-card').Content | Select-String -Pattern 'Log in to BitRiver Live|auth-stage auth-stage--modal|data-auth-mode="signin"|Need an account\? Sign up' -AllMatches`
   - escalated Playwright probe against `http://127.0.0.1:8080/signup?next=%2Fviewer#signup-card`
   - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (blocked at env-example placeholder hygiene because Python is not installed/aliased on this host)
+
+## Scoped change: real in-viewer auth overlay
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the in-viewer auth-overlay diagnosis and implementation plan
+  - Acceptance criteria:
+    - `PLAN.md` captures the new in-viewer overlay scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered backend, viewer-overlay, CTA migration, and validation tasks before edits begin.
+    - The read-only diagnosis identifies why the current `/signup` route is still architecturally separate from `/viewer`.
+
+- [x] Task 2 - Add a viewer-auth contract and compatibility redirect on the Go server
+  - Acceptance criteria:
+    - The backend exposes a guest-safe viewer-auth response the viewer can call without treating anonymous users as hard failures.
+    - `/signup` forwards into the viewer overlay when the viewer is configured, while preserving a safe fallback when it is not.
+    - Focused server coverage locks the new route behavior and compatibility contract.
+
+- [x] Task 3 - Build the real auth overlay inside the Next.js viewer runtime
+  - Acceptance criteria:
+    - A global viewer-owned modal handles sign-in, sign-up, feedback, and MFA continuation without navigating away from `/viewer`.
+    - `useAuth` exposes the state/actions needed for opening the overlay, submitting auth requests, and refreshing the session after success.
+    - Successful auth keeps users in the viewer experience and returns them to the intended route.
+
+- [x] Task 4 - Retarget signed-out viewer controls to the in-app overlay
+  - Acceptance criteria:
+    - Navbar, following-sidebar, and other existing sign-in/join entry points open the in-viewer overlay instead of treating `/signup` as the primary path.
+    - Updated viewer tests cover the new auth CTA contract and any changed auth-state helpers.
+    - Viewer-facing docs mention the new overlay-first auth flow if the navigation/runtime contract changes.
+
+- [x] Task 5 - Run focused validation, redeploy locally, and record the outcome
+  - Acceptance criteria:
+    - Touched Go and viewer test suites pass, plus viewer lint/build.
+    - The local `bitriver-live` and `viewer` services are refreshed from the current checkout.
+    - A live browser probe confirms auth opens as an overlay on `/viewer`, and `TASKS.md` records any remaining blocker precisely.
+
+### Execution log (real in-viewer auth overlay)
+- Task 1 complete: read-only analysis confirmed that the current setup is still architecturally split. `useAuth` loads `/api/viewer/me` but falls back to redirecting out to `/signup`; the navbar `Join` CTA hard-navigates to `/signup#signup-card`; the following sidebar exposes a static `/signup` link; and the only existing viewer-side `AuthDialog` is just a thin "sign in/sign out" shell that still redirects. On the backend, `/api/viewer/me` is not explicitly registered even though the viewer expects it, and the self-signup flag currently only gets bootstrapped into the static `signup.html` route. That combination is why the auth flow still feels separate even after the prior modal styling pass.
+- Task 1 checks:
+  - `Get-Content web/viewer/hooks/useAuth.tsx`
+  - `Get-Content web/viewer/components/Navbar.tsx`
+  - `Get-Content web/viewer/components/following/FollowingState.tsx`
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/components/Providers.tsx`
+  - `Get-Content web/viewer/app/layout.tsx`
+  - `Get-Content internal/api/auth_users_handlers.go`
+  - `Get-Content internal/server/server.go`
+  - `Get-Content web/static/signup.js`
+- Task 2 complete: added a real guest-safe `/api/viewer/me` handler on the Go API, registered it with optional auth semantics, and made `DELETE /api/viewer/me` an idempotent sign-out path that clears both session and MFA challenge cookies. I also changed `/signup` so viewer-enabled installs now redirect into the appropriate viewer route with `auth`/`mfa` state in the query string, while non-viewer installs still keep the embedded static auth page as a fallback.
+- Task 2 checks:
+  - `gofmt -w internal/api/auth_users_handlers.go internal/api/auth_users_handlers_test.go internal/server/server.go internal/server/server_test.go`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api ./internal/server -count=1 -timeout=120s`
+- Task 3 complete: moved auth into the actual viewer runtime. `useAuth` now owns overlay state, guest-safe session/config loading, sign-in/sign-up/MFA submissions, and same-route auth completion. `Providers` now mounts a global `AuthDialog`, and the modal itself carries the real sign-in, sign-up, MFA, and “continue where you left off” flow inside the Next.js viewer shell instead of redirecting users to a separate page.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- useAuth.test.tsx`
+  - `npm.cmd --prefix web/viewer run build`
+- Task 4 complete: retargeted the signed-out viewer entry points to the new overlay-first flow. The navbar now opens the in-viewer modal for internal auth and only falls back to hard navigation for truly external signup destinations; the following unauthenticated prompt now triggers `signIn()` directly instead of exposing a dead-feeling `/signup` link; and the viewer README now documents the overlay-first contract with `/signup` as compatibility-only behavior.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- navbar.test.tsx followingStatePresentation.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+- Task 5 complete: reran the focused viewer and Go coverage, lint, and production build; rebuilt the running `bitriver-live` and `viewer` services; and then validated the live app with route-level and browser-level probes. The first `docker compose up -d --build` attempt timed out before the viewer image finished rebuilding, which initially left the old auth behavior live; rerunning the same build with a longer timeout resolved that, and the final browser probe against `http://127.0.0.1:8080/viewer` confirmed that the navbar Sign in button now opens the in-viewer auth dialog. I also verified that `http://localhost:8080/signup?next=%2Fviewer%2Fbrowse%3Fq%3Dmusic&mfa=verify` now returns a `307` redirect into `/viewer/browse?auth=signin&mfa=verify...` instead of serving the old auth page on this viewer-enabled install.
+- Task 5 checks:
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api ./internal/server -count=1 -timeout=120s`
+  - `npm.cmd --prefix web/viewer run test -- useAuth.test.tsx navbar.test.tsx followingStatePresentation.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer` (first attempt timed out before the viewer image finished rebuilding; reran with a longer timeout and it completed)
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - escalated headless browser probe against `http://127.0.0.1:8080/viewer`
+  - `Invoke-WebRequest -UseBasicParsing 'http://localhost:8080/signup?next=%2Fviewer%2Fbrowse%3Fq%3Dmusic&mfa=verify' -MaximumRedirection 0`

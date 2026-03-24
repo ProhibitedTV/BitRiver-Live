@@ -12,6 +12,57 @@ import (
 	"bitriver-live/internal/storage"
 )
 
+func TestViewerMeReturnsGuestSafeAuthState(t *testing.T) {
+	handler, _ := newTestHandler(t)
+	handler.AllowSelfSignup = false
+
+	req := httptest.NewRequest(http.MethodGet, "/api/viewer/me", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ViewerMe(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var response viewerAuthResponse
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("decode viewer auth response: %v", err)
+	}
+	if response.AllowSelfSignup {
+		t.Fatal("expected allowSelfSignup to reflect handler config")
+	}
+	if response.LogoutURL != "/api/viewer/me" {
+		t.Fatalf("expected logoutUrl to point at /api/viewer/me, got %q", response.LogoutURL)
+	}
+	if response.User != nil {
+		t.Fatalf("expected anonymous viewer response, got user %#v", response.User)
+	}
+}
+
+func TestViewerMeDeleteClearsSessionCookiesWithoutRequiringAToken(t *testing.T) {
+	handler, _ := newTestHandler(t)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/viewer/me", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ViewerMe(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected status 204, got %d", rec.Code)
+	}
+
+	sessionCookie := findCookie(t, rec.Result().Cookies(), sessionCookieName)
+	if sessionCookie.MaxAge != -1 {
+		t.Fatalf("expected session cookie to be cleared, got max age %d", sessionCookie.MaxAge)
+	}
+
+	mfaCookie := findCookie(t, rec.Result().Cookies(), mfaChallengeCookieName)
+	if mfaCookie.MaxAge != -1 {
+		t.Fatalf("expected MFA cookie to be cleared, got max age %d", mfaCookie.MaxAge)
+	}
+}
+
 func TestOAuthMFARedirectOmitsMFATokenFromQuery(t *testing.T) {
 	handler, store := newTestHandler(t)
 	if _, err := store.CreateUser(storage.CreateUserParams{

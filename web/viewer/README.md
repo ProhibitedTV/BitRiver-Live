@@ -81,13 +81,14 @@ and mobile navigation stay consistent.
 
 ## Auth Landing Contract
 
-- Viewer `Sign in` and `Join` CTAs send users to `/signup` with a safe `next`
-  parameter so auth can return them to the route they came from.
-- The `/signup` page is still served by the Go API, but it should visually read
-  like part of the `/viewer` product rather than a separate admin utility page.
-- The auth page mirrors that continuity with viewer-branded framing plus
-  return-path context derived from the safe `next` route, defaulting to
-  `/viewer` when no viewer destination is available.
+- Viewer `Sign in` and `Join` CTAs now open an in-viewer auth overlay instead
+  of treating `/signup` as the primary destination.
+- The overlay keeps a safe `next` route in the current URL so successful auth
+  can continue where the viewer left off without dropping out of `/viewer`.
+- `/signup` is now a compatibility path for viewer-enabled installs: it
+  forwards into the viewer overlay when the Next.js viewer is configured, and
+  only falls back to the embedded static auth page when no viewer runtime is
+  available.
 
 ## Testing
 

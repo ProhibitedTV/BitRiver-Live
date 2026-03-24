@@ -27,7 +27,15 @@ export class ViewerApiError extends Error {
     const bodyMessage =
       typeof body === "object" && body !== null && "message" in body && typeof body.message === "string"
         ? body.message
-        : undefined;
+        : typeof body === "object" &&
+            body !== null &&
+            "error" in body &&
+            typeof body.error === "object" &&
+            body.error !== null &&
+            "message" in body.error &&
+            typeof body.error.message === "string"
+          ? body.error.message
+          : undefined;
     super(message ?? bodyMessage ?? fallbackMessage);
     this.name = "ViewerApiError";
     this.status = status;
