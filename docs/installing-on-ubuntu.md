@@ -317,7 +317,15 @@ go run ./cmd/bitriver install systemd \
   --bootstrap-admin-binary ./bootstrap-admin
 ```
 
-The command writes `.env` plus a `bitriver-live.service` unit into `--install-dir` so you can review them before copying to `/etc/systemd/system`. The launchd and Windows installers emit `plist` and PowerShell templates alongside the env file using the same defaults.
+The command writes `.env` plus a `bitriver-live.service` unit into `--install-dir` so you can review them before copying to `/etc/systemd/system`. The launchd and Windows installers emit `plist` and PowerShell templates alongside the env file using the same defaults. When you provide `--bootstrap-admin-email`, the installer also prints the `/admin` sign-in URL and records the bootstrap credentials in `--install-dir/.env`, so you can recover them later with:
+
+```bash
+bitriver-live env admin --env-file /opt/bitriver-live/.env
+# Source checkout equivalent:
+go run ./cmd/bitriver env admin --env-file /opt/bitriver-live/.env
+```
+
+Add `--show-password` only when you intentionally need to reveal the env-backed seed password. If you rotate the password later in `/admin`, the `.env` value becomes a historical bootstrap credential rather than the current live one.
 
 ### Option B: Legacy Bash helper
 
@@ -329,7 +337,7 @@ Viewer self-registration is disabled by default in the generated configuration s
 
 When the listen address resolves to a privileged port (<1024) the installer injects `AmbientCapabilities=CAP_NET_BIND_SERVICE`/`CapabilityBoundingSet=CAP_NET_BIND_SERVICE` into the systemd unit and runs `sudo setcap 'cap_net_bind_service=+ep' "$INSTALL_DIR/bitriver-live"` so manual restarts keep the binding. Operators fronting the service with Nginx, Caddy, or another reverse proxy should set `--addr :8080` (or a similar high port) and forward 80/443 from the proxy to avoid capabilities altogether.
 
-Provide `--bootstrap-admin-email` (optionally pairing it with `--bootstrap-admin-password`) to seed the first control-center account automatically. When you skip the password flag the installer now generates a strong random secret, records it in `$INSTALL_DIR/.env`, and prints it exactly once so you can capture it before leaving the terminal. The installer runs the `bootstrap-admin` helper after copying the binaries so the Postgres database already contains an administrator when systemd starts the service. When the viewer proxy is enabled, the public root lands in the viewer flow and administrators should sign in at `/admin`. Rotate the password from the control center after your first login.
+Provide `--bootstrap-admin-email` (optionally pairing it with `--bootstrap-admin-password`) to seed the first control-center account automatically. When you skip the password flag the installer now generates a strong random secret, records it in `$INSTALL_DIR/.env`, and prints it exactly once so you can capture it before leaving the terminal. The installer also prints the `/admin` sign-in URL and the recovery hint for `bitriver-live env admin --env-file "$INSTALL_DIR/.env"` so operators can revisit the bootstrap summary later without hunting through logs or shell scrollback. The installer runs the `bootstrap-admin` helper after copying the binaries so the Postgres database already contains an administrator when systemd starts the service. When the viewer proxy is enabled, the public root lands in the viewer flow and administrators should sign in at `/admin`. Rotate the password from the control center after your first login, and remember that the env-backed bootstrap password becomes a historical seed value once rotated there.
 
 Environment variable equivalents:
 

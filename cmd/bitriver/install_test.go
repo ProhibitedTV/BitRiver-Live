@@ -64,6 +64,53 @@ func TestInstallSystemdStagesArtifacts(t *testing.T) {
 	}
 }
 
+func TestInstallSystemdPrintsBootstrapRecoveryGuidance(t *testing.T) {
+	root := t.TempDir()
+	installDir := filepath.Join(root, "install")
+	dataDir := filepath.Join(root, "data")
+
+	serverBin := filepath.Join(root, "bitriver-live")
+	bootstrapBin := filepath.Join(root, "bootstrap-admin")
+	if err := os.WriteFile(serverBin, []byte("#!/bin/sh\necho server\n"), 0o755); err != nil {
+		t.Fatalf("write server: %v", err)
+	}
+	if err := os.WriteFile(bootstrapBin, []byte("#!/bin/sh\necho bootstrap\n"), 0o755); err != nil {
+		t.Fatalf("write bootstrap: %v", err)
+	}
+
+	args := []string{
+		"--install-dir", installDir,
+		"--data-dir", dataDir,
+		"--service-user", "bitriver",
+		"--addr", ":8081",
+		"--viewer-url", "https://stream.example.com/viewer",
+		"--bootstrap-admin-email", "admin@example.com",
+		"--bootstrap-admin-password", "SeedPassword123",
+		"--server-binary", serverBin,
+		"--bootstrap-admin-binary", bootstrapBin,
+		"--build-from-source=false",
+	}
+
+	output := captureStdout(t, func() {
+		if err := runInstallSystemd(args); err != nil {
+			t.Fatalf("install systemd failed: %v", err)
+		}
+	})
+
+	checks := []string{
+		"Bootstrap admin sign-in URL: https://stream.example.com/admin",
+		"Bootstrap admin email: admin@example.com",
+		"Bootstrap credentials are stored in " + filepath.Join(installDir, ".env"),
+		"env admin",
+		"historical seed value",
+	}
+	for _, check := range checks {
+		if !strings.Contains(output, check) {
+			t.Fatalf("expected output to contain %q, got %q", check, output)
+		}
+	}
+}
+
 func TestRenderWindowsServiceScript(t *testing.T) {
 	cfg := windowsServiceConfig{
 		ServiceName: "BitRiverLive",

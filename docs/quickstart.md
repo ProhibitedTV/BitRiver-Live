@@ -115,7 +115,15 @@ go run ./cmd/bitriver quickstart
 pwsh -c "go run ./cmd/bitriver quickstart"
 ```
 
-The Go CLI renders `deploy/ome/Server.generated.xml` directly (no Python dependency) before launching Compose. The quickstart waits for the API `/readyz` probe to succeed before seeding the admin user via the bundled `bootstrap-admin` binary, then prints a "Generated credentials" block for any secrets it auto-created so you can store them securely before logging in.
+The Go CLI renders `deploy/ome/Server.generated.xml` directly (no Python dependency) before launching Compose. The quickstart waits for the API `/readyz` probe to succeed before seeding the admin user via the bundled `bootstrap-admin` binary, then prints a "Generated credentials" block for any secrets it auto-created so you can store them securely before logging in. The success summary now also points administrators at `/admin`, reminds you that the bootstrap credentials live in the deployment `.env`, and supports a recovery helper when you need to revisit them later:
+
+```bash
+bitriver-live env admin --env-file ./.env
+# Source checkout equivalent:
+go run ./cmd/bitriver env admin --env-file ./.env
+```
+
+Add `--show-password` only when you explicitly need to reveal the env-backed seed password. If you rotate the admin password later in `/admin`, treat the `.env` value as historical and use the newer live credential instead.
 
 ### Deployment image source mode (`BITRIVER_DEPLOY_IMAGE_SOURCE`)
 

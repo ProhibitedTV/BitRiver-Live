@@ -2839,3 +2839,63 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
   - `@'...playwright browse probe...'@ | node -` against `http://127.0.0.1:8080/viewer/browse?category=Music`
   - `Get-Content web/viewer/README.md | Select-Object -Skip 68 -First 8`
+
+## Scoped change: bootstrap admin access recovery UX
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the admin-access UX gap and recovery plan
+  - Acceptance criteria:
+    - `PLAN.md` captures the operator admin-access scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered CLI, messaging, docs, and validation steps before code edits begin.
+    - The read-only diagnosis confirms where bootstrap admin creds are generated, persisted, and currently surfaced.
+
+- [x] Task 2 - Add an operator-facing CLI command to recover bootstrap admin access details
+  - Acceptance criteria:
+    - The CLI can read the deployment `.env` and print the admin sign-in route plus bootstrap email on demand.
+    - Password output is opt-in so routine usage does not dump secrets by default.
+    - The output warns operators that env-backed bootstrap passwords may be stale if they already rotated the admin password later.
+
+- [x] Task 3 - Improve quickstart/install/admin auth messaging
+  - Acceptance criteria:
+    - Quickstart success output calls out the `/admin` route and where bootstrap creds live.
+    - Install output calls out the same recovery path instead of only flashing a generated password line.
+    - The closed-signup auth page gives operators a concise pointer to the bootstrap admin path without exposing secrets.
+
+- [x] Task 4 - Update docs and coverage for the new operator path
+  - Acceptance criteria:
+    - Tests cover the new CLI/admin summary behavior and the updated signup-copy contract.
+    - Quickstart/install docs mention the new recovery flow in the right operator-facing places.
+
+- [x] Task 5 - Run focused validation and record the result
+  - Acceptance criteria:
+    - Targeted `cmd/bitriver` and `internal/server` tests pass.
+    - `TASKS.md` records any remaining host blocker precisely.
+
+### Execution log (bootstrap admin access recovery UX)
+- Task 1 complete: confirmed the current bootstrap flow does persist the admin credentials, but the operator handoff is easy to miss. `quickstart` prints generated secrets once and then a success summary that shows the admin email plus env file path, while `install systemd` writes `BITRIVER_LIVE_ADMIN_EMAIL` and `BITRIVER_LIVE_ADMIN_PASSWORD` into the staged `.env` and only prints the generated password once when it auto-created one. The public `/signup` page, meanwhile, only tells viewers to ask an administrator for access, which leaves operators with no obvious pointer back to the bootstrap admin account when self-signup is disabled.
+- Task 1 checks:
+  - `Get-Content cmd/bitriver/install.go`
+  - `Get-Content cmd/bitriver/commands_env_compose.go`
+  - `Get-Content docs/quickstart.md`
+  - `Get-Content web/static/signup.js`
+  - `Get-Content web/static/signup.html`
+- Task 2 complete: added `env admin` to the BitRiver CLI so operators can reprint the bootstrap admin summary on demand from the deployment `.env`. The new subcommand derives the admin sign-in URL, prints the bootstrap email plus env file path, hides the password by default, reveals it only with `--show-password`, and always warns that the env-backed password may no longer match the live credential after a later rotation in `/admin`. I also wired the shared admin URL helper into quickstart summary generation so the CLI now has one canonical way to describe where operators should sign in.
+- Task 2 checks:
+  - `gofmt -w cmd/bitriver/main.go cmd/bitriver/commands_env_compose.go`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1 -timeout=120s`
+- Task 3 complete: extended the quickstart success summary to call out the `/admin` sign-in URL, the env-backed bootstrap credential source, and the `env admin` recovery path; updated `install systemd` to print the same sign-in and recovery guidance instead of relying only on a one-time generated-password line; and refreshed the closed-signup auth copy so operators get a concise `/admin` + deployment `.env` pointer without exposing any secrets in the public UI.
+- Task 3 checks:
+  - `gofmt -w cmd/bitriver/install.go`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1 -timeout=120s`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- Task 4 complete: added focused `cmd/bitriver` coverage for the new `env admin` recovery flow, the expanded quickstart summary, and the installer recovery messaging; added `internal/server` coverage for the new `/signup` operator hint contract; and updated the quickstart plus Ubuntu install docs to explain how to revisit bootstrap admin access later with the new CLI helper.
+- Task 4 checks:
+  - `gofmt -w cmd/bitriver/main_test.go cmd/bitriver/install_test.go internal/server/server_test.go`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1 -timeout=120s`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- Task 5 complete: reran the focused `cmd/bitriver` and `internal/server` suites successfully and re-attempted the repo verification entrypoint. The targeted validation now passes for this scope; the only remaining blocker is unchanged from earlier work on this Windows host, where `./scripts/verify.sh` stops immediately at the env-example placeholder hygiene step because Python is not installed or aliased.
+- Task 5 checks:
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1 -timeout=120s`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (blocked immediately at env example placeholder hygiene because Python is not installed/aliased on this host)

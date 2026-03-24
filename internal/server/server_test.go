@@ -316,6 +316,32 @@ func TestSignupRouteReflectsAllowSelfSignupConfiguration(t *testing.T) {
 	}
 }
 
+func TestSignupRouteIncludesBootstrapAdminOperatorHint(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	srv, err := New(handler, Config{})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/signup", nil)
+	rec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected signup page response, got %d", rec.Code)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "sign in at /admin") {
+		t.Fatalf("expected signup page to point operators at /admin, got %q", body)
+	}
+	if !strings.Contains(body, "deployment .env file") {
+		t.Fatalf("expected signup page to mention the deployment .env file, got %q", body)
+	}
+}
+
 func TestMiddlewareOrderPreservesAuthBeforeCORSAndRequestID(t *testing.T) {
 	t.Parallel()
 

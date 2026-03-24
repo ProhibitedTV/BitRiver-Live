@@ -1411,3 +1411,23 @@
 - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
 - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --force-recreate --no-deps bitriver-live viewer`
 - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+
+## Scope (current change)
+- Revisit the initial admin-access UX so operators can reliably find the bootstrap control-center credentials after install/quickstart, especially when public self-signup is disabled by default.
+- Add a small operator-facing CLI recovery path that reads the deployment `.env` and prints the admin access summary on demand instead of relying on a one-time terminal flash during bootstrap.
+- Update quickstart/install/auth messaging so the operator sees where the bootstrap creds live, where to sign in (`/admin`), and what caveat applies if the password was rotated later.
+
+## Assumptions
+- The current install/quickstart flows already persist the bootstrap admin credentials in the deployment `.env`, but that storage location is not obvious enough to operators after the initial run.
+- A targeted CLI helper plus clearer summaries is safer than introducing a second secret store or exposing recovery internals too broadly in the public UI.
+- The public auth page can safely include a concise operator hint that points to `/admin` and the deployment environment file without exposing any actual secrets.
+
+## Risks
+- Printing bootstrap password values too casually could leak secrets into shell history or shared terminals, so any recovery command should default to redacting the password unless the operator opts in.
+- Operators who already rotated the admin password in the control center could misread the env-backed bootstrap password as the current live credential, so the output must warn about that distinction.
+- Updating the public signup copy too aggressively could make the page feel operator-centric for normal viewers, so the added guidance should stay short and secondary.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1 -timeout=120s`
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh`

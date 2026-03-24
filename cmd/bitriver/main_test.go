@@ -1194,8 +1194,12 @@ func TestPrintQuickstartSuccessSummaryIncludesHelpfulDetails(t *testing.T) {
 		"BitRiver Live is running",
 		"Control/API URL: http://localhost:18080",
 		"Viewer URL: http://localhost:18080/viewer",
+		"Admin sign-in URL: http://localhost:18080/admin",
 		"Admin email: admin@example.com",
 		"Env file: .env",
+		"Bootstrap credentials: stored in .env",
+		"env admin",
+		"Password note: if you rotate the admin password later in /admin",
 		"docker compose --file deploy/docker-compose.yml --env-file .env ps",
 		"docker compose --file deploy/docker-compose.yml --env-file .env logs -f",
 		"docker compose --file deploy/docker-compose.yml --env-file .env down",
@@ -1204,6 +1208,71 @@ func TestPrintQuickstartSuccessSummaryIncludesHelpfulDetails(t *testing.T) {
 		if !strings.Contains(out, check) {
 			t.Fatalf("expected output to contain %q, got %q", check, out)
 		}
+	}
+}
+
+func TestRunEnvAdminHidesPasswordByDefault(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	content := strings.Join([]string{
+		"BITRIVER_LIVE_ADMIN_EMAIL=admin@example.com",
+		"BITRIVER_LIVE_ADMIN_PASSWORD=SeedPassword123",
+		"NEXT_PUBLIC_API_BASE_URL=https://stream.example.com/api",
+	}, "\n") + "\n"
+	if err := os.WriteFile(envPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	var runErr error
+	out := captureStdout(t, func() {
+		runErr = runEnvAdmin([]string{"--env-file", envPath})
+	})
+	if runErr != nil {
+		t.Fatalf("runEnvAdmin failed: %v", runErr)
+	}
+
+	checks := []string{
+		"Bootstrap admin access",
+		"Admin sign-in URL: https://stream.example.com/admin",
+		"Admin email: admin@example.com",
+		"Env file: " + envPath,
+		"Bootstrap password: hidden by default",
+		"rerun with --show-password",
+		"original seed credential",
+	}
+	for _, check := range checks {
+		if !strings.Contains(out, check) {
+			t.Fatalf("expected output to contain %q, got %q", check, out)
+		}
+	}
+	if strings.Contains(out, "SeedPassword123") {
+		t.Fatalf("expected hidden password to stay out of output, got %q", out)
+	}
+}
+
+func TestRunEnvAdminShowsPasswordWhenRequested(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	content := strings.Join([]string{
+		"BITRIVER_LIVE_ADMIN_EMAIL=admin@example.com",
+		"BITRIVER_LIVE_ADMIN_PASSWORD=SeedPassword123",
+		"NEXT_PUBLIC_VIEWER_URL=https://stream.example.com/viewer",
+	}, "\n") + "\n"
+	if err := os.WriteFile(envPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	var runErr error
+	out := captureStdout(t, func() {
+		runErr = runEnvAdmin([]string{"--env-file", envPath, "--show-password"})
+	})
+	if runErr != nil {
+		t.Fatalf("runEnvAdmin failed: %v", runErr)
+	}
+
+	if !strings.Contains(out, "Admin sign-in URL: https://stream.example.com/admin") {
+		t.Fatalf("expected viewer URL fallback to trim /viewer, got %q", out)
+	}
+	if !strings.Contains(out, "Bootstrap password: SeedPassword123") {
+		t.Fatalf("expected password to be shown when requested, got %q", out)
 	}
 }
 

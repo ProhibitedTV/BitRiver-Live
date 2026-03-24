@@ -53,7 +53,7 @@ function focusAuthTarget() {
     }
 
     if (targetId === "signup-card" && !allowSelfSignup) {
-        showFeedback("Public self-signup is disabled on this server. Sign in with an existing account or ask an administrator for access.", "error");
+        showFeedback("Public self-signup is disabled on this server. Sign in with an existing account or ask an administrator for access. If you run this server, use the bootstrap admin account from the deployment .env file at /admin.", "error");
         const emailInput = loginForm?.querySelector('input[name="email"]');
         if (emailInput instanceof HTMLElement) {
             emailInput.focus();
