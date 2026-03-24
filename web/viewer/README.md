@@ -72,6 +72,13 @@ When adding or changing viewer routes in the navbar:
 This keeps route definitions and role policy in one shared module so desktop
 and mobile navigation stay consistent.
 
+## Browse URL contract
+
+- `/browse?q=...` performs free-text directory search across channel title,
+  owner display name, category, and tags.
+- `/browse?category=...` applies an exact category filter and is the URL shape
+  used by homepage category chips.
+
 ## Testing
 
 Run the lint, unit, and Playwright suites from the viewer directory:

@@ -1388,3 +1388,26 @@
 - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
 - `@'...playwright probe...'@ | node -` against `http://127.0.0.1:8080/`
 - `npx.cmd playwright test tests/channel.spec.ts --grep "theme toggle updates the rendered document" --reporter=list` with `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080`
+
+## Scope (current change)
+- Fix the misleading homepage category-chip browse links so they land on a real exact category filter instead of overloading the free-text `q` search parameter.
+- Add category-aware directory handling across the viewer and API so `/browse?category=...` loads exact category results, while existing free-text search keeps working and also starts matching `channel.category` to align with current UI copy.
+- Keep the change narrowly scoped to directory browsing behavior, category-link wiring, and the minimum test coverage needed to prove both the API and viewer paths.
+
+## Assumptions
+- The user is correct that `?q=<category>` is currently semantically wrong for category chips because the existing backend search is not an exact category filter.
+- Introducing a dedicated `category` query parameter is the clearest user-facing fix for homepage category chips, while also extending free-text search to include `channel.category` keeps the rest of the browse/search copy honest.
+- Directory result sets are still small enough that an exact category filter can be applied in the API layer without introducing pagination or contract changes elsewhere.
+
+## Risks
+- Query-param synchronization on the browse page can become confusing if `q` and `category` are not normalized and preserved consistently through search/reset flows.
+- Changing viewer API helper signatures could ripple through existing tests if the update is not kept backward-compatible.
+- Broadening free-text search to include category could subtly change result sets for existing browse queries, so API coverage needs to assert the intended matching behavior explicitly.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api -count=1 -timeout=120s`
+- `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx browsePage.test.tsx viewer-api.test.ts`
+- `npm.cmd --prefix web/viewer run build`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --force-recreate --no-deps bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`

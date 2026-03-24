@@ -11,7 +11,14 @@ type SortKey = "live" | "trending" | "new";
 type FilterKey = string | null;
 
 export default function BrowsePage() {
-  const { queryFromParams: searchParamQuery, lastQueryFromParams, navigateWithQuery } = useDirectorySearch({
+  const {
+    queryFromParams: searchParamQuery,
+    categoryFromParams,
+    lastQueryFromParams,
+    lastCategoryFromParams,
+    navigateWithDirectoryState,
+    navigateWithQuery,
+  } = useDirectorySearch({
     fallbackPathname: "/browse",
   });
   const [channels, setChannels] = useState<DirectoryChannel[]>([]);
@@ -22,11 +29,11 @@ export default function BrowsePage() {
   const [filter, setFilter] = useState<FilterKey>(null);
   const [queryHydrated, setQueryHydrated] = useState(false);
 
-  const loadChannels = useCallback(async (search = "") => {
+  const loadChannels = useCallback(async (search = "", category = "") => {
     try {
       setLoading(true);
       setError(undefined);
-      const response = await loadDirectoryChannels(search);
+      const response = await loadDirectoryChannels(search, category);
       setChannels(response.channels);
     } catch (err) {
       setError(mapDirectoryError(err));
@@ -40,17 +47,22 @@ export default function BrowsePage() {
       return;
     }
 
-    void loadChannels(query);
-  }, [loadChannels, query, queryHydrated]);
+    void loadChannels(query, categoryFromParams);
+  }, [categoryFromParams, loadChannels, query, queryHydrated]);
 
   useEffect(() => {
-    if (!queryHydrated || lastQueryFromParams.current !== searchParamQuery) {
+    if (
+      !queryHydrated ||
+      lastQueryFromParams.current !== searchParamQuery ||
+      lastCategoryFromParams.current !== categoryFromParams
+    ) {
       lastQueryFromParams.current = searchParamQuery;
-      setFilter(null);
+      lastCategoryFromParams.current = categoryFromParams;
+      setFilter(categoryFromParams || null);
       setQuery(searchParamQuery);
       setQueryHydrated(true);
     }
-  }, [lastQueryFromParams, queryHydrated, searchParamQuery]);
+  }, [categoryFromParams, lastCategoryFromParams, lastQueryFromParams, queryHydrated, searchParamQuery]);
 
   const categoryFilters = useMemo(() => {
     const filters = new Set<string>();
@@ -116,9 +128,9 @@ export default function BrowsePage() {
   };
 
   const handleReset = () => {
-    const normalized = navigateWithQuery("");
-    setFilter(null);
-    setQuery(normalized);
+    const next = navigateWithDirectoryState({ query: "", category: "" });
+    setFilter(next.normalizedCategory || null);
+    setQuery(next.normalizedQuery);
     setSort("live");
   };
 

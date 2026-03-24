@@ -33,7 +33,7 @@ export function CategoryRail({ id, categories, loading = false }: CategoryRailPr
         <div className="chip-rail" role="list">
           {categories.map((category) => (
             <div key={category.name} role="listitem">
-              <Link className="filter-chip" href={`/browse?q=${encodeURIComponent(category.name)}`}>
+              <Link className="filter-chip" href={`/browse?category=${encodeURIComponent(category.name)}`}>
                 <div className="filter-chip__label">{category.name}</div>
                 <div className="filter-chip__meta muted">{category.channelCount} live</div>
               </Link>

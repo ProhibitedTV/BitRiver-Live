@@ -961,23 +961,22 @@ func TestDirectoryFiltersChannelsByQuery(t *testing.T) {
 
 	cases := []struct {
 		name    string
-		query   string
+		path    string
 		wantIDs []string
 	}{
-		{name: "no filter", query: "", wantIDs: []string{lounge.ID, arcade.ID, beats.ID}},
-		{name: "title filter", query: "lounge", wantIDs: []string{lounge.ID}},
-		{name: "owner filter", query: "RETROMASTER", wantIDs: []string{arcade.ID}},
-		{name: "tag filter", query: "MuSiC", wantIDs: []string{beats.ID}},
-		{name: "no matches", query: "unknown", wantIDs: []string{}},
+		{name: "no filter", path: "/api/directory", wantIDs: []string{lounge.ID, arcade.ID, beats.ID}},
+		{name: "title filter", path: "/api/directory?q=lounge", wantIDs: []string{lounge.ID}},
+		{name: "owner filter", path: "/api/directory?q=RETROMASTER", wantIDs: []string{arcade.ID}},
+		{name: "tag filter", path: "/api/directory?q=MuSiC", wantIDs: []string{beats.ID}},
+		{name: "category search filter", path: "/api/directory?q=TECHNOLOGY", wantIDs: []string{lounge.ID}},
+		{name: "exact category filter", path: "/api/directory?category=music", wantIDs: []string{beats.ID}},
+		{name: "query within category filter", path: "/api/directory?q=beats&category=music", wantIDs: []string{beats.ID}},
+		{name: "no matches", path: "/api/directory?q=unknown", wantIDs: []string{}},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			path := "/api/directory"
-			if strings.TrimSpace(tc.query) != "" {
-				path = fmt.Sprintf("/api/directory?q=%s", tc.query)
-			}
-			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 			rec := httptest.NewRecorder()
 			handler.Directory(rec, req)
 			if rec.Code != http.StatusOK {

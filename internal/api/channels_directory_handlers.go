@@ -133,10 +133,15 @@ func (h *Handler) Directory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := ""
+	category := ""
 	if r.URL != nil {
 		query = strings.TrimSpace(r.URL.Query().Get("q"))
+		category = strings.TrimSpace(r.URL.Query().Get("category"))
 	}
 	channels := h.channelsService().ListChannels("", query)
+	if category != "" {
+		channels = filterChannelsByCategory(channels, category)
+	}
 	followerCounts := h.followerCountsForChannels(channels)
 	h.writeDirectoryResponse(w, channels, followerCounts)
 }
@@ -250,6 +255,21 @@ func filterLiveChannels(channels []domain.Channel) []domain.Channel {
 		}
 	}
 	return live
+}
+
+func filterChannelsByCategory(channels []domain.Channel, category string) []domain.Channel {
+	trimmedCategory := strings.TrimSpace(category)
+	if trimmedCategory == "" {
+		return channels
+	}
+
+	filtered := make([]domain.Channel, 0, len(channels))
+	for _, channel := range channels {
+		if strings.EqualFold(strings.TrimSpace(channel.Category), trimmedCategory) {
+			filtered = append(filtered, channel)
+		}
+	}
+	return filtered
 }
 
 // sortChannelsByFollowers performs sort channels by followers and propagates validation or dependency failures to the caller.

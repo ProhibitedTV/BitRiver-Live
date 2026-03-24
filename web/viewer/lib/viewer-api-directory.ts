@@ -5,8 +5,25 @@ import type {
   DirectoryResponse,
 } from "./viewer-api-types";
 
-export function fetchDirectory(): Promise<DirectoryResponse> {
-  return viewerRequest<DirectoryResponse>("/api/directory");
+function buildDirectorySuffix(query?: string, category?: string): string {
+  const params = new URLSearchParams();
+
+  const normalizedQuery = query?.trim();
+  if (normalizedQuery) {
+    params.set("q", normalizedQuery);
+  }
+
+  const normalizedCategory = category?.trim();
+  if (normalizedCategory) {
+    params.set("category", normalizedCategory);
+  }
+
+  const suffix = params.toString();
+  return suffix ? `?${suffix}` : "";
+}
+
+export function fetchDirectory(category?: string): Promise<DirectoryResponse> {
+  return viewerRequest<DirectoryResponse>(`/api/directory${buildDirectorySuffix(undefined, category)}`);
 }
 
 export function fetchFeaturedChannels(): Promise<DirectoryResponse> {
@@ -37,11 +54,6 @@ export function fetchChannelPlayback(channelId: string): Promise<ChannelPlayback
   return viewerRequest<ChannelPlaybackResponse>(`/api/channels/${channelId}/playback`);
 }
 
-export function searchDirectory(query: string): Promise<DirectoryResponse> {
-  const params = new URLSearchParams();
-  if (query.trim().length > 0) {
-    params.set("q", query.trim());
-  }
-  const suffix = params.toString();
-  return viewerRequest<DirectoryResponse>(`/api/directory${suffix ? `?${suffix}` : ""}`);
+export function searchDirectory(query: string, category?: string): Promise<DirectoryResponse> {
+  return viewerRequest<DirectoryResponse>(`/api/directory${buildDirectorySuffix(query, category)}`);
 }

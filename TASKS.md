@@ -2775,3 +2775,67 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `@'...playwright probe...'@ | node -` against `http://127.0.0.1:8080/`
   - `$env:PLAYWRIGHT_BASE_URL='http://127.0.0.1:8080'; npx.cmd playwright test tests/channel.spec.ts --grep "theme toggle updates the rendered document" --reporter=list`
   - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
+
+## Scoped change: exact category browse links
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the category-link bug and the scoped fix plan
+  - Acceptance criteria:
+    - `PLAN.md` captures the exact category-link scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered API/viewer/test steps before code edits begin.
+    - The read-only diagnosis identifies both the misleading `?q=` category links and the current free-text directory search gap around `channel.category`.
+
+- [x] Task 2 - Add category-aware directory handling on the API/storage path
+  - Acceptance criteria:
+    - `/api/directory` accepts a dedicated `category` query parameter for exact category filtering.
+    - Free-text directory search also matches `channel.category` so existing search copy remains accurate.
+    - The implementation stays backward-compatible for callers that only use `q` today.
+
+- [x] Task 3 - Wire the viewer browse flow to the real category filter
+  - Acceptance criteria:
+    - Homepage category chips navigate with an exact category filter instead of `?q=...`.
+    - The browse page preserves and resets `q`/`category` state coherently.
+    - Existing browse search flows without a category continue to behave the same.
+
+- [x] Task 4 - Add regression coverage for the API and viewer category flows
+  - Acceptance criteria:
+    - API tests assert exact category filtering and free-text category matching.
+    - Viewer tests assert homepage category links use the dedicated param and the browse page loads the right API helper path for `?category=...`.
+
+- [x] Task 5 - Run focused validation and record the result
+  - Acceptance criteria:
+    - Targeted Go and viewer tests pass.
+    - Viewer production build passes.
+    - The local `bitriver-live` and `viewer` services are refreshed so the fix is reviewable on the running app.
+    - `TASKS.md` captures any remaining blocker precisely.
+
+### Execution log (exact category browse links)
+- Task 1 complete: confirmed the user-reported mismatch in read-only analysis. `CategoryRail` currently links to `/browse?q=<category>`, but `/api/directory` forwards only `q` into `ListChannels`, and the PostgreSQL search predicate currently matches title, owner display name, and tags only, not `c.category`. That means the homepage chips are currently semantically wrong even before considering result quality, and the browse/search copy is also overstating current search coverage.
+- Task 1 checks:
+  - `Get-Content internal/api/channels_directory_handlers.go`
+  - `Get-Content internal/storage/postgres_channels.go`
+  - `Get-Content web/viewer/components/CategoryRail.tsx`
+  - `Get-Content web/viewer/app/browse/page.tsx`
+  - `Get-Content web/viewer/hooks/useDirectorySearch.ts`
+  - `Get-Content web/viewer/lib/directory-state.ts`
+- Task 2 complete: added a dedicated `category` query path to the directory handler and exact-match category filtering there, while also extending shared free-text channel matching to include `channel.Category` in both the Postgres and in-memory storage paths. That keeps existing `q` callers backward-compatible while making category search true everywhere the current UI says it is.
+- Task 2 checks:
+  - `git diff -- internal/api/channels_directory_handlers.go internal/storage/postgres_channels.go internal/storage/storage_channel_helpers.go`
+  - `gofmt -w internal/api/channels_directory_handlers.go internal/api/handlers_test.go internal/storage/storage_channel_helpers.go`
+- Task 3 complete: rewired the homepage category rail to `/browse?category=...`, extended the viewer directory helpers to preserve both `q` and `category`, and updated the browse page so category-linked entries load the exact category view while reset/search flows keep the URL state coherent.
+- Task 3 checks:
+  - `git diff -- web/viewer/components/CategoryRail.tsx web/viewer/app/browse/page.tsx web/viewer/hooks/useDirectorySearch.ts web/viewer/lib/directory-state.ts web/viewer/lib/viewer-api-directory.ts`
+- Task 4 complete: added API coverage for exact category filtering plus free-text category matching, updated the homepage category-link assertions to use the dedicated param, added browse-page coverage for `?category=Music`, and added viewer API request assertions for category-aware directory calls.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx browsePage.test.tsx viewer-api.test.ts`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api -count=1 -timeout=120s`
+- Task 5 complete: the targeted Go and viewer tests passed, the viewer production build passed, and the local `bitriver-live` plus `viewer` services were rebuilt from the current checkout. A live browser probe against `http://127.0.0.1:8080/viewer/browse?category=Music` confirmed the rebuilt route hydrates and requests `GET /api/directory?category=Music`; the local dataset simply does not have enough seeded category data to render a visible `Music` filter chip in that runtime check. I also updated `web/viewer/README.md` with the browse URL contract so the dedicated `category=` behavior is documented where viewer route semantics already live.
+- Task 5 checks:
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api -count=1 -timeout=120s`
+  - `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx browsePage.test.tsx viewer-api.test.ts`
+  - `npm.cmd --prefix web/viewer run build`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `@'...playwright browse probe...'@ | node -` against `http://127.0.0.1:8080/viewer/browse?category=Music`
+  - `Get-Content web/viewer/README.md | Select-Object -Skip 68 -First 8`

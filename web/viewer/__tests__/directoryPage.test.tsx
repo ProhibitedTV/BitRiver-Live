@@ -226,8 +226,8 @@ describe("DirectoryPage", () => {
     const categoryRail = await screen.findByRole("heading", { level: 2, name: /browse by category/i });
     const withinRail = within(categoryRail.closest("section")!);
 
-    expect(withinRail.getByRole("link", { name: /music 9 live/i })).toHaveAttribute("href", "/browse?q=Music");
-    expect(withinRail.getByRole("link", { name: /retro games 4 live/i })).toHaveAttribute("href", "/browse?q=Retro%20Games");
+    expect(withinRail.getByRole("link", { name: /music 9 live/i })).toHaveAttribute("href", "/browse?category=Music");
+    expect(withinRail.getByRole("link", { name: /retro games 4 live/i })).toHaveAttribute("href", "/browse?category=Retro%20Games");
   });
 
   test("keeps DirectoryPage lightweight and normalizes query before passing to shell", async () => {
