@@ -1431,3 +1431,46 @@
 - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1 -timeout=120s`
 - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
 - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh`
+
+## Scope (current change)
+- Make the `/signup` auth surface feel like a continuation of the `/viewer` experience instead of a disconnected static utility page.
+- Keep the existing API/auth flow intact while tightening the visual language, return-path context, and navigation cues around sign-in/sign-up.
+- Refresh the local review deployment after the change so the updated auth surface is available on the running app for direct UX review.
+
+## Assumptions
+- The main problem is cohesion and continuity, not the underlying login/signup mechanics; the existing auth handlers and redirects can stay intact.
+- The fastest high-impact improvement is to restyle and restructure the static auth page to mirror the current viewer product language, then thread the existing `next` destination more visibly through the page.
+- A small doc update in the viewer README is appropriate because the auth landing behavior is part of the viewer navigation contract even though the page is served by the Go binary.
+
+## Risks
+- The static auth page lives outside the Next.js viewer app, so copying too much viewer styling directly could create a brittle parallel design system unless the scope stays focused on the highest-value shared cues.
+- Dynamic “return to where you left off” messaging can become misleading if the `next` parameter is not sanitized or displayed carefully.
+- Route-level UX validation requires rebuilding the running `bitriver-live` service after the embed changes, so host Docker issues could block final live review even if the code/tests pass.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `@'...playwright auth probe...'@ | node -` against `http://127.0.0.1:8080/signup?next=%2Fviewer%2Fbrowse%3Fq%3Dmusic`
+
+## Scope (current change)
+- Rework the `/viewer` homepage so the above-the-fold experience is video-centric and creator-centric instead of leading with long-form discovery copy.
+- Keep the existing discovery data sources, routes, and viewer shell, but shift the hierarchy toward featured/live previews, creator cards, and faster visual entry into content.
+- Limit the scope to the signed-out/signed-in homepage experience plus the minimum supporting tests and runtime refresh needed for local review.
+
+## Assumptions
+- The gap the user is calling out is primarily information architecture and visual emphasis, not missing backend data or a need for autoplay video playback.
+- Existing components such as `FeaturedChannel`, `LiveNowGrid`, `ChannelRail`, and `CategoryRail` already provide enough content primitives to build a stronger video-first homepage without changing APIs.
+- Viewer-only composition/styling changes do not require deployment-contract or operator-doc updates as long as routes and backend behavior stay the same.
+
+## Risks
+- Moving too much content above the fold can make the homepage feel busier rather than more engaging, so the new hierarchy needs to stay decisive and avoid turning every section into a hero.
+- Rebalancing the viewer shell around larger media modules could regress mobile layout or the current following-sidebar affordances if shared styles are changed too broadly.
+- Updating homepage copy, headings, and section order will likely require aligned Jest assertions and a live redeploy check so we do not ship a visually improved page with stale tests or stale containers.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx viewerShell.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`

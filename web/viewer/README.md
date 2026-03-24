@@ -79,6 +79,16 @@ and mobile navigation stay consistent.
 - `/browse?category=...` applies an exact category filter and is the URL shape
   used by homepage category chips.
 
+## Auth Landing Contract
+
+- Viewer `Sign in` and `Join` CTAs send users to `/signup` with a safe `next`
+  parameter so auth can return them to the route they came from.
+- The `/signup` page is still served by the Go API, but it should visually read
+  like part of the `/viewer` product rather than a separate admin utility page.
+- The auth page mirrors that continuity with viewer-branded framing plus
+  return-path context derived from the safe `next` route, defaulting to
+  `/viewer` when no viewer destination is available.
+
 ## Testing
 
 Run the lint, unit, and Playwright suites from the viewer directory:

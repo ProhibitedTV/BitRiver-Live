@@ -342,6 +342,38 @@ func TestSignupRouteIncludesBootstrapAdminOperatorHint(t *testing.T) {
 	}
 }
 
+func TestSignupRouteIncludesViewerContinuityScaffold(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	srv, err := New(handler, Config{})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/signup", nil)
+	rec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected signup page response, got %d", rec.Code)
+	}
+
+	body := rec.Body.String()
+	checks := []string{
+		`class="auth-stage"`,
+		"Sign in without dropping out of the viewer experience.",
+		"Continue where you left off",
+		`id="auth-destination-path"`,
+		`data-auth-return-link`,
+	}
+	for _, check := range checks {
+		if !strings.Contains(body, check) {
+			t.Fatalf("expected signup page to include %q, got %q", check, body)
+		}
+	}
+}
+
 func TestMiddlewareOrderPreservesAuthBeforeCORSAndRequestID(t *testing.T) {
 	t.Parallel()
 

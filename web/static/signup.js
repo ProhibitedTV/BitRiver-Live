@@ -7,6 +7,10 @@ const mfaStep = document.getElementById("mfa-step");
 const mfaForm = document.getElementById("mfa-form");
 const mfaEnrollment = document.getElementById("mfa-enrollment");
 const mfaRecoveryCodes = document.getElementById("mfa-recovery-codes");
+const destinationCopy = document.getElementById("auth-destination-copy");
+const destinationPath = document.getElementById("auth-destination-path");
+const returnLinks = document.querySelectorAll("[data-auth-return-link]");
+const signupJumpLink = document.getElementById("auth-signup-jump-link");
 const DEFAULT_DESTINATION = "/viewer";
 const REDIRECT_DELAY_MS = 600;
 let pendingMFAToken = null;
@@ -36,6 +40,60 @@ function resolveDestination() {
 }
 
 const destination = resolveDestination();
+const viewerDestination = resolveViewerDestination(destination);
+
+function resolveViewerDestination(candidate) {
+    if (!isSafeOnsitePath(candidate)) {
+        return DEFAULT_DESTINATION;
+    }
+    const url = new URL(candidate, window.location.origin);
+    const path = `${url.pathname}${url.search}${url.hash}` || DEFAULT_DESTINATION;
+    if (url.pathname === "/" || url.pathname === "/viewer") {
+        return DEFAULT_DESTINATION;
+    }
+    if (url.pathname.startsWith("/signup") || url.pathname.startsWith("/admin") || url.pathname.startsWith("/api/")) {
+        return DEFAULT_DESTINATION;
+    }
+    return path;
+}
+
+function describeDestination(route) {
+    const normalized = route.toLowerCase();
+    if (normalized.includes("/browse")) {
+        return "You will land back in browse with your current search or filter context ready to go.";
+    }
+    if (normalized.includes("/channel/")) {
+        return "You will jump back into the stream page you opened from the viewer.";
+    }
+    if (route === DEFAULT_DESTINATION) {
+        return "You will head back to live discovery, featured streams, and the full channel directory.";
+    }
+    return "You will return to the viewer route that sent you here as soon as auth completes.";
+}
+
+function formatDestinationPath(route) {
+    if (route.length <= 56) {
+        return route;
+    }
+    return `${route.slice(0, 53)}...`;
+}
+
+function applyDestinationContext() {
+    returnLinks.forEach((link) => {
+        if (!(link instanceof HTMLAnchorElement)) {
+            return;
+        }
+        link.href = viewerDestination;
+    });
+
+    if (destinationPath) {
+        destinationPath.textContent = formatDestinationPath(viewerDestination);
+    }
+
+    if (destinationCopy) {
+        destinationCopy.textContent = describeDestination(viewerDestination);
+    }
+}
 
 function applyAuthConfig() {
     if (signupCard) {
@@ -43,6 +101,9 @@ function applyAuthConfig() {
     }
     if (signupClosedNote) {
         signupClosedNote.hidden = allowSelfSignup;
+    }
+    if (signupJumpLink) {
+        signupJumpLink.hidden = !allowSelfSignup;
     }
 }
 
@@ -217,6 +278,7 @@ if (mfaForm) {
 
 const params = new URLSearchParams(window.location.search);
 const mfaToken = params.get("mfaToken");
+applyDestinationContext();
 applyAuthConfig();
 focusAuthTarget();
 if (mfaToken) {

@@ -2899,3 +2899,127 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1 -timeout=120s`
   - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
   - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (blocked immediately at env example placeholder hygiene because Python is not installed/aliased on this host)
+
+## Scoped change: viewer-auth UX cohesion
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the auth/viewer cohesion gap and scoped plan
+  - Acceptance criteria:
+    - `PLAN.md` captures the auth/viewer cohesion scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered auth-markup, styling, docs/tests, and runtime validation steps before edits begin.
+    - The read-only diagnosis identifies why the current `/signup` page feels visually and structurally separate from `/viewer`.
+
+- [x] Task 2 - Rebuild the auth page structure around viewer continuity
+  - Acceptance criteria:
+    - The `/signup` page presents clear viewer-connected branding, hierarchy, and return-path context instead of a standalone utility form layout.
+    - Existing sign-in, sign-up, MFA, and self-signup-disabled behaviors remain intact.
+    - The page more clearly communicates how sign-in returns the user to the viewer flow they came from.
+
+- [x] Task 3 - Align auth styling and client-side context with the viewer experience
+  - Acceptance criteria:
+    - Static auth styling uses the same visual direction as the current viewer shell rather than the older static-admin look.
+    - The page updates its “back” and “return after auth” cues from the safe `next` destination when present.
+    - Mobile and desktop layouts both feel intentional and connected to the viewer product.
+
+- [x] Task 4 - Add docs/coverage for the new auth cohesion contract
+  - Acceptance criteria:
+    - Tests assert the new viewer-connected auth markup/copy contract.
+    - Relevant viewer-facing docs mention the auth landing contract where route/navigation behavior is already documented.
+
+- [x] Task 5 - Refresh the local review deployment and validate the live route
+  - Acceptance criteria:
+    - The local `bitriver-live` service is rebuilt from the current checkout so `/signup` serves the updated auth experience.
+    - Focused validation confirms the running auth page shows the new continuity cues and honors the `next`-based return link.
+    - `TASKS.md` records any host/runtime blocker precisely.
+
+### Execution log (viewer-auth UX cohesion)
+- Task 1 complete: read-only analysis confirmed that the auth route is functionally wired into the viewer flow through `next` and the navbar CTAs, but the page itself still uses an older standalone static design system (`web/static/styles.css`) that does not resemble the current `/viewer` shell hierarchy, spacing, or visual direction. The existing page also underplays the return destination even though the JS already resolves a safe `next` path, which is a big part of why the sign-in/sign-up flow feels detached from the viewer journey.
+- Task 1 checks:
+  - `Get-Content web/static/styles.css`
+  - `Get-Content web/static/signup.html`
+  - `Get-Content web/static/signup.js`
+  - `Get-Content web/viewer/styles/globals.css`
+  - `Get-Content web/viewer/components/Navbar.tsx`
+  - `Get-Content web/viewer/lib/auth-links.ts`
+  - `Get-Content internal/server/server_test.go`
+- Task 2 complete: rebuilt `web/static/signup.html` into a two-column auth landing that reads like a viewer continuation instead of a standalone form page. The page now has viewer-branded framing, a “return after auth” context panel, a clearer sign-in-first hierarchy, and the same sign-in/sign-up/MFA structure anchored inside one cohesive experience.
+- Task 2 checks:
+  - `Get-Content web/static/signup.html | Select-Object -First 140`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- Task 3 complete: aligned the auth page styling and lightweight client-side context with the current viewer product language. `web/static/styles.css` now uses a viewer-like dark/teal shell, richer hierarchy, and responsive layout, while `web/static/signup.js` now rewrites return links plus the destination context card from the safe `next` route and hides the sign-up jump affordance when self-signup is disabled.
+- Task 3 checks:
+  - `Get-Content web/static/styles.css | Select-Object -First 320`
+  - `Get-Content web/static/signup.js | Select-Object -First 180`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- Task 4 complete: added targeted server coverage for the new viewer-continuity auth scaffold and documented the auth landing contract in `web/viewer/README.md`. The tests now assert that `/signup` keeps its sign-in-first structure while also shipping the new viewer-framed stage, return-path context, and return-link hooks that the page JS rewrites from the safe `next` route.
+- Task 4 checks:
+  - `gofmt -w internal/server/server_test.go`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- Task 5 complete: rebuilt the local app stack and verified the live `/signup` route against the running deployment. The deployed page now shows the new viewer-connected hero, the continuity panel text, and the `next`-aware return path/link. A browser probe against `http://127.0.0.1:8080/signup?next=%2Fviewer%2Fbrowse%3Fq%3Dmusic` confirmed the page renders `Sign in without dropping out of the viewer experience.`, shows `/viewer/browse?q=music` in the return context, points the top return link at that same route, and hides the sign-up jump affordance when self-signup is disabled on the local install.
+- Task 5 checks:
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - escalated browser probe from `web/viewer` against `http://127.0.0.1:8080/signup?next=%2Fviewer%2Fbrowse%3Fq%3Dmusic`
+
+## Scoped change: video-first homepage discovery pass
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the video-first homepage diagnosis and plan
+  - Acceptance criteria:
+    - `PLAN.md` captures the new homepage scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered homepage composition, styling, test, and redeploy tasks before edits begin.
+    - The read-only diagnosis captures why the current homepage still feels copy-first instead of content-first.
+
+- [x] Task 2 - Recompose the homepage hero around live content and creator previews
+  - Acceptance criteria:
+    - The first screen gives visual priority to featured/live content, not just explanatory copy.
+    - Users can immediately choose a highlighted broadcast or a live rail without scrolling deep into the page.
+    - Existing browse and search entry points remain present but no longer dominate the layout.
+
+- [x] Task 3 - Rebalance the surrounding shell and discovery sections to support the new hierarchy
+  - Acceptance criteria:
+    - The following/sidebar frame supports the homepage instead of competing with it for attention.
+    - Supporting sections below the fold feel like continuation rows under a media-first hero.
+    - Desktop and mobile layouts remain intentional and usable.
+
+- [x] Task 4 - Update homepage/viewer coverage for the new UX contract
+  - Acceptance criteria:
+    - Tests assert the new hero hierarchy and key homepage controls/sections.
+    - Any changed shell expectations stay covered by focused Jest tests.
+
+- [x] Task 5 - Run focused validation, redeploy locally, and record the outcome
+  - Acceptance criteria:
+    - Targeted viewer tests, lint, and build pass.
+    - The local `bitriver-live` and `viewer` services are refreshed from the current checkout.
+    - `TASKS.md` records any remaining host/runtime blocker precisely.
+
+### Execution log (video-first homepage discovery pass)
+- Task 1 complete: read-only inspection of `directory-view.tsx`, `home.css`, `ViewerShell.tsx`, `FollowingSidebar.tsx`, and the current homepage tests confirmed the user’s core critique. The page was opening with a large explanatory hero and a permanently weighty following rail, while the most compelling creator/video surfaces (`FeaturedChannel`, `LiveNowGrid`, and the rails) appeared as secondary sections instead of driving the first impression. The scoped plan kept the same discovery data and routes but shifted the hierarchy toward featured/live media.
+- Task 1 checks:
+  - `Get-Content web/viewer/app/directory-view.tsx`
+  - `Get-Content web/viewer/styles/home.css`
+  - `Get-Content web/viewer/components/ViewerShell.tsx`
+  - `Get-Content web/viewer/components/FollowingSidebar.tsx`
+  - `Get-Content web/viewer/__tests__/directoryPage.test.tsx`
+- Task 2 complete: rebuilt the homepage hero around a large featured-live stage plus a companion quick-picks stack instead of a text-dominant intro block. The new layout keeps browse/search available, but they now support the media modules instead of leading them. I also moved the `Live now` section ahead of the rest of the discovery rows so viewers hit active streams earlier.
+- Task 2 checks:
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live diff -- web/viewer/app/directory-view.tsx`
+- Task 3 complete: rebalanced the supporting shell and styling so the homepage reads more like a content destination. The desktop following rail is narrower and lighter, the hero now uses smaller support panels on the right, and the discovery sections below the fold read as continuation rows under the featured/live stage instead of competing hero blocks.
+- Task 3 checks:
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live diff -- web/viewer/styles/home.css web/viewer/styles/globals.css`
+- Task 4 complete: updated homepage coverage to assert the new quick-link set, the revised hero heading, and the presence of the live quick-picks stack beside the featured stage. Existing `ViewerShell` coverage still passes against the slimmer shell treatment.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx viewerShell.test.tsx`
+- Task 5 complete: focused viewer tests, lint, and production build all passed. I then rebuilt/recreated `bitriver-live` and `viewer` locally and verified that `http://localhost:8080/viewer` serves the new homepage copy (`Start with creators already on air`, `Video first, browse second`, `Find a creator, category, or tag`). The initial targeted `docker compose up -d --build` timed out before returning cleanly, so I followed it with Compose status checks and an explicit `--force-recreate --no-deps` refresh of the app services. The remaining practical caveat is content-related, not code-related: this local runtime currently has little or no live/featured seed data, so the new video-first shell is visible but mostly shows its loading/empty states until creators are active.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx viewerShell.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` (blocked at env-example placeholder hygiene because Python is not installed/aliased on this Windows host)
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer` (timed out before returning cleanly)
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --force-recreate --no-deps bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
+  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'Start with creators already on air|Video first, browse second|Find a creator, category, or tag' -AllMatches`
