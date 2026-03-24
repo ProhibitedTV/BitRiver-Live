@@ -3338,3 +3338,39 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `gh run view 23512046165 --log-failed`
   - `gh run view 23512047607 --log-failed`
   - `gh run view 23512049060 --log-failed`
+
+## Scoped change: auth overlay route-copy trim
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the scoped auth-overlay copy cleanup before editing
+  - Acceptance criteria:
+    - `PLAN.md` captures the narrowed overlay-copy scope, assumptions, risks, and focused validation command.
+    - `TASKS.md` lists the ordered implementation and verification steps before `AuthDialog` is edited.
+    - Read-only inspection identifies the exact redundant sentence currently rendered in the route context card.
+
+- [x] Task 2 - Remove the redundant destination explanation from the auth overlay
+  - Acceptance criteria:
+    - The auth overlay still shows "Continue where you left off" and the destination path.
+    - The extra sentence describing the automatic return behavior is removed from the dialog.
+    - Existing sign-in/sign-up/MFA behavior remains unchanged.
+
+- [x] Task 3 - Add focused viewer coverage and run verification
+  - Acceptance criteria:
+    - A focused auth-dialog test locks in the trimmed route-context contract.
+    - The targeted viewer test command passes.
+    - `TASKS.md` records the executed command(s) and result.
+
+### Execution log (auth overlay route-copy trim)
+- Task 1 complete: captured the scoped copy-cleanup plan in `PLAN.md`/`TASKS.md` before touching the viewer component and confirmed the redundant sentence currently comes from `describeDestination()` inside `web/viewer/components/auth/AuthDialog.tsx`.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 20`
+  - `Get-Content TASKS.md | Select-Object -Last 30`
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+- Task 2 complete: removed the route-context paragraph from `AuthDialog` and deleted the now-unused `describeDestination()` helper, leaving the overlay card focused on the return header plus destination path only.
+- Task 2 checks:
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx | Select-Object -First 120`
+  - `git diff -- web/viewer/components/auth/AuthDialog.tsx web/viewer/__tests__/authDialog.test.tsx`
+- Task 3 complete: added focused `web/viewer/__tests__/authDialog.test.tsx` coverage for the trimmed route-context contract and ran the targeted viewer Jest command successfully. Jest still emitted the existing `.next/standalone/package.json` haste-collision warning from the worktree, but the suite passed cleanly.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx`

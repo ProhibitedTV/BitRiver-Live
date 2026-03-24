@@ -1608,3 +1608,21 @@
 - `docker compose --env-file .env -f deploy/docker-compose.yml config`
 - `gh workflow run "CI" --ref codex/UI_UX_repair`
 - `gh workflow run "Quickstart compose smoke" --ref codex/UI_UX_repair`
+
+## Scope (current change)
+- Remove the redundant destination-explanation sentence from the in-viewer auth overlay's route context card in `web/viewer/components/auth/AuthDialog.tsx`.
+- Keep the compact "Continue where you left off" header plus destination path visible so users still understand where auth returns them without restating automatic behavior.
+- Add focused viewer coverage for the trimmed auth-overlay copy contract.
+
+## Assumptions
+- The user wants the explanatory route paragraph removed from the auth overlay generally, not just for the `/viewer` root case, because the auto-return behavior is already implicit in the flow.
+- Existing auth redirect, MFA, and self-signup behavior should remain unchanged; this is a copy and hierarchy cleanup only.
+- This viewer-only adjustment does not change deployment contracts or require operator-doc updates.
+
+## Risks
+- Removing the sentence could make the route card feel too sparse if the destination path is not still visually obvious.
+- A narrowly scoped copy test can become brittle if it asserts too much surrounding markup instead of the user-visible contract.
+
+## Test plan
+- `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+- `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx`
