@@ -9,9 +9,50 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+func newBashCommand(t *testing.T, scriptPath string) *exec.Cmd {
+	t.Helper()
+	bashPath := resolveTestBash(t)
+	return exec.Command(bashPath, scriptPath)
+}
+
+func resolveTestBash(t *testing.T) string {
+	t.Helper()
+	candidates := []string{}
+	if bashPath, err := exec.LookPath("bash"); err == nil {
+		candidates = append(candidates, bashPath)
+	}
+	if runtime.GOOS == "windows" {
+		candidates = append(candidates,
+			`C:\Program Files\Git\bin\bash.exe`,
+			`C:\Program Files\Git\usr\bin\bash.exe`,
+		)
+	}
+	seen := make(map[string]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		if _, exists := seen[candidate]; exists {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		if err := testBashUsable(candidate); err == nil {
+			return candidate
+		}
+	}
+	t.Skip("skipping bash-wrapper test because no usable bash executable was found")
+	return ""
+}
+
+func testBashUsable(path string) error {
+	cmd := exec.Command(path, "--version")
+	return cmd.Run()
+}
 
 func TestQuickstartDelegatesToCli(t *testing.T) {
 	wd, err := os.Getwd()
@@ -44,15 +85,20 @@ func TestQuickstartDelegatesToCli(t *testing.T) {
 	if err := os.MkdirAll(stubBin, 0o755); err != nil {
 		t.Fatalf("create stub bin: %v", err)
 	}
-	goStub := "#!/usr/bin/env bash\nset -euo pipefail\necho \"$(pwd):$*\" >>\"$GO_LOG\"\n"
-	if err := os.WriteFile(filepath.Join(stubBin, "go"), []byte(goStub), 0o755); err != nil {
+	goStubPath := filepath.Join(stubBin, "go")
+	goStubBytes := []byte("#!/usr/bin/env bash\nset -euo pipefail\necho \"$(pwd):$*\" >>\"$GO_LOG\"\n")
+	if runtime.GOOS == "windows" {
+		goStubPath = filepath.Join(stubBin, "go.cmd")
+		goStubBytes = []byte("@echo off\r\necho %CD%:%*>>\"%GO_LOG%\"\r\n")
+	}
+	if err := os.WriteFile(goStubPath, goStubBytes, 0o755); err != nil {
 		t.Fatalf("write go stub: %v", err)
 	}
 
-	cmd := exec.Command("bash", quickstartDst)
+	cmd := newBashCommand(t, quickstartDst)
 	cmd.Dir = tempDir
 	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("PATH=%s:%s", stubBin, os.Getenv("PATH")),
+		fmt.Sprintf("PATH=%s%c%s", stubBin, os.PathListSeparator, os.Getenv("PATH")),
 		fmt.Sprintf("BITRIVER_QUICKSTART_REPO_ROOT=%s", tempDir),
 		fmt.Sprintf("GO_LOG=%s", logPath),
 	)
@@ -96,7 +142,7 @@ func TestQuickstartFailsWhenCliSourcesMissing(t *testing.T) {
 		t.Fatalf("write quickstart: %v", err)
 	}
 
-	cmd := exec.Command("bash", quickstartDst)
+	cmd := newBashCommand(t, quickstartDst)
 	cmd.Dir = tempDir
 	cmd.Env = append(os.Environ(), fmt.Sprintf("BITRIVER_QUICKSTART_REPO_ROOT=%s", tempDir))
 	output, err := cmd.CombinedOutput()
@@ -195,6 +241,18 @@ func TestPowerShellQuickstartPropagatesCliExitCodes(t *testing.T) {
 	}
 	if !strings.Contains(script, "$processPATH = [System.Environment]::GetEnvironmentVariable('PATH', 'Process')") {
 		t.Fatalf("expected PowerShell quickstart wrapper to capture the process PATH value before normalizing environment casing")
+	}
+	if !strings.Contains(script, "$processGOCACHE = [System.Environment]::GetEnvironmentVariable('GOCACHE', 'Process')") {
+		t.Fatalf("expected PowerShell quickstart wrapper to capture the process GOCACHE value before launching the CLI")
+	}
+	if !strings.Contains(script, "bitriver-live-go-build-cache") {
+		t.Fatalf("expected PowerShell quickstart wrapper to provide a writable fallback GOCACHE location")
+	}
+	if !strings.Contains(script, "SetEnvironmentVariable('GOCACHE', $goCacheRoot, 'Process')") {
+		t.Fatalf("expected PowerShell quickstart wrapper to set GOCACHE before launching the CLI")
+	}
+	if !strings.Contains(script, "SetEnvironmentVariable('GOCACHE', $processGOCACHE, 'Process')") {
+		t.Fatalf("expected PowerShell quickstart wrapper to restore the original GOCACHE value after Start-Process")
 	}
 	if !strings.Contains(script, "SetEnvironmentVariable('Path', $normalizedPath, 'Process')") {
 		t.Fatalf("expected PowerShell quickstart wrapper to preserve a canonical Path value for the child process")

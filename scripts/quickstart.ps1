@@ -58,14 +58,22 @@ function Invoke-Cli {
         $goPath = (Get-Command go -ErrorAction Stop).Source
         $processPath = [System.Environment]::GetEnvironmentVariable('Path', 'Process')
         $processPATH = [System.Environment]::GetEnvironmentVariable('PATH', 'Process')
+        $processGOCACHE = [System.Environment]::GetEnvironmentVariable('GOCACHE', 'Process')
+        $goCacheRoot = if (-not [string]::IsNullOrWhiteSpace($processGOCACHE)) {
+            $processGOCACHE
+        } else {
+            Join-Path ([System.IO.Path]::GetTempPath()) 'bitriver-live-go-build-cache'
+        }
         $normalizedPath = if (-not [string]::IsNullOrEmpty($processPath)) { $processPath } else { $processPATH }
         try {
+            New-Item -ItemType Directory -Force -Path $goCacheRoot | Out-Null
             if ($null -ne $normalizedPath) {
                 [System.Environment]::SetEnvironmentVariable('Path', $normalizedPath, 'Process')
             }
             if ($null -ne $processPATH) {
                 [System.Environment]::SetEnvironmentVariable('PATH', $null, 'Process')
             }
+            [System.Environment]::SetEnvironmentVariable('GOCACHE', $goCacheRoot, 'Process')
             $goArgs = @('run', './cmd/bitriver') + $CliArgs
             $process = Start-Process -FilePath $goPath `
                 -ArgumentList $goArgs `
@@ -80,6 +88,7 @@ function Invoke-Cli {
         } finally {
             [System.Environment]::SetEnvironmentVariable('Path', $processPath, 'Process')
             [System.Environment]::SetEnvironmentVariable('PATH', $processPATH, 'Process')
+            [System.Environment]::SetEnvironmentVariable('GOCACHE', $processGOCACHE, 'Process')
             Remove-Item $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
         }
         $exitCode = $process.ExitCode

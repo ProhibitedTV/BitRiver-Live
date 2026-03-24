@@ -19,6 +19,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -1618,8 +1619,35 @@ func (s *server) publishLive(j *job) error {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("stat live mirror: %w", err)
 	}
-	if err := os.Symlink(absSrc, dest); err != nil {
+	if err := createLiveMirror(absSrc, dest); err != nil {
 		return fmt.Errorf("create live mirror: %w", err)
+	}
+	return nil
+}
+
+func createLiveMirror(src string, dest string) error {
+	if err := os.Symlink(src, dest); err == nil {
+		return nil
+	} else if runtime.GOOS == "windows" {
+		if junctionErr := createWindowsDirectoryJunction(dest, src); junctionErr == nil {
+			return nil
+		} else {
+			return fmt.Errorf("symlink: %w (junction fallback failed: %v)", err, junctionErr)
+		}
+	} else {
+		return err
+	}
+}
+
+func createWindowsDirectoryJunction(linkPath string, targetPath string) error {
+	cmd := exec.Command("cmd", "/c", "mklink", "/J", linkPath, targetPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		trimmed := strings.TrimSpace(string(output))
+		if trimmed == "" {
+			return err
+		}
+		return fmt.Errorf("%w: %s", err, trimmed)
 	}
 	return nil
 }
