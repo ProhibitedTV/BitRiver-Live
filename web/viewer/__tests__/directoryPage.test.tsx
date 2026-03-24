@@ -11,6 +11,9 @@ const searchDirectoryMock = viewerApiMocks.searchDirectory;
 const fetchFeaturedChannelsMock = viewerApiMocks.fetchFeaturedChannels;
 const fetchFollowingChannelsMock = viewerApiMocks.fetchFollowingChannels;
 const fetchLiveNowChannelsMock = viewerApiMocks.fetchLiveNowChannels;
+const fetchRecommendedChannelsMock = viewerApiMocks.fetchRecommendedChannels;
+const fetchTopCategoriesMock = viewerApiMocks.fetchTopCategories;
+const fetchTrendingChannelsMock = viewerApiMocks.fetchTrendingChannels;
 
 const baseDirectoryResponse = {
   channels: [
@@ -89,6 +92,9 @@ describe("DirectoryPage", () => {
     fetchFeaturedChannelsMock.mockResolvedValue(sliceResponse);
     fetchFollowingChannelsMock.mockResolvedValue(sliceResponse);
     fetchLiveNowChannelsMock.mockResolvedValue(sliceResponse);
+    fetchRecommendedChannelsMock.mockResolvedValue(sliceResponse);
+    fetchTrendingChannelsMock.mockResolvedValue(sliceResponse);
+    fetchTopCategoriesMock.mockResolvedValue({ categories: [] } as any);
   });
 
   test("loads directory entries and renders channel cards", async () => {
@@ -98,8 +104,9 @@ describe("DirectoryPage", () => {
 
     await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalledTimes(1));
     const quickJumpNav = screen.getByRole("navigation", { name: /quick jump links/i });
-    expect(within(quickJumpNav).getByRole("link", { name: /recommended/i })).toHaveAttribute("href", "#recommended");
     expect(within(quickJumpNav).getByRole("link", { name: /live now/i })).toHaveAttribute("href", "#live-now");
+    expect(within(quickJumpNav).getByRole("link", { name: /recommended/i })).toHaveAttribute("href", "#recommended");
+    expect(within(quickJumpNav).getByRole("link", { name: /categories/i })).toHaveAttribute("href", "#top-categories");
     expect(within(quickJumpNav).getByRole("link", { name: /full directory/i })).toHaveAttribute("href", "#directory");
 
     const heading = await screen.findByRole("heading", { level: 3, name: "Deep Space Beats" });
@@ -202,8 +209,48 @@ describe("DirectoryPage", () => {
 
     await renderResolvedDirectoryPage();
 
-    expect(await screen.findByRole("heading", { level: 1, name: /find the streams worth opening now/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: /start with creators already on air/i })).toBeInTheDocument();
     expect(screen.queryByText(/sign in to see channels you follow/i)).not.toBeInTheDocument();
+  });
+
+  test("surfaces a live quick-picks stack beside the featured stage", async () => {
+    fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
+    fetchFeaturedChannelsMock.mockResolvedValueOnce({
+      channels: baseDirectoryResponse.channels,
+      generatedAt: baseDirectoryResponse.generatedAt,
+    } as any);
+    fetchLiveNowChannelsMock.mockResolvedValueOnce({
+      channels: searchDirectoryResponse.channels,
+      generatedAt: searchDirectoryResponse.generatedAt,
+    } as any);
+
+    await renderResolvedDirectoryPage();
+
+    const quickPicksHeading = await screen.findByRole("heading", { level: 2, name: /live right now/i });
+    const quickPicksSection = quickPicksHeading.closest("section");
+    expect(quickPicksSection).toBeTruthy();
+    expect(within(quickPicksSection!).getByRole("link", { name: /retro speedruns/i })).toHaveAttribute(
+      "href",
+      "/channels/chan-2",
+    );
+  });
+
+  test("renders category chips as real browse links", async () => {
+    fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
+    fetchTopCategoriesMock.mockResolvedValueOnce({
+      categories: [
+        { name: "Music", channelCount: 9 },
+        { name: "Retro Games", channelCount: 4 },
+      ],
+    } as any);
+
+    await renderResolvedDirectoryPage();
+
+    const categoryRail = await screen.findByRole("heading", { level: 2, name: /browse by category/i });
+    const withinRail = within(categoryRail.closest("section")!);
+
+    expect(withinRail.getByRole("link", { name: /music 9 live/i })).toHaveAttribute("href", "/browse?category=Music");
+    expect(withinRail.getByRole("link", { name: /retro games 4 live/i })).toHaveAttribute("href", "/browse?category=Retro%20Games");
   });
 
   test("keeps DirectoryPage lightweight and normalizes query before passing to shell", async () => {

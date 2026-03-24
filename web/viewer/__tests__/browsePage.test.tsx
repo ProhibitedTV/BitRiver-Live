@@ -90,4 +90,39 @@ describe("BrowsePage", () => {
     expect((await screen.findAllByText("Deep Space Beats")).length).toBeGreaterThan(0);
     expect(searchDirectoryMock).not.toHaveBeenCalled();
   });
+
+  test("uses the dedicated category param to load and focus an exact category view", async () => {
+    window.history.replaceState({}, "", "/browse?category=Music");
+    fetchDirectoryMock.mockResolvedValueOnce({
+      channels: [
+        ...baseDirectoryResponse.channels,
+        {
+          channel: {
+            id: "chan-3",
+            ownerId: "owner-3",
+            title: "Checkpoint Central",
+            category: "Gaming",
+            tags: ["retro"],
+            liveState: "live",
+            currentSessionId: "session-3",
+            createdAt: new Date("2023-10-19T10:00:00Z").toISOString(),
+            updatedAt: new Date("2023-10-21T13:00:00Z").toISOString(),
+          },
+          owner: { id: "owner-3", displayName: "PadPro" },
+          profile: {},
+          live: true,
+          followerCount: 6,
+        },
+      ],
+      generatedAt: new Date("2023-10-21T13:00:00Z").toISOString(),
+    } as any);
+
+    render(<BrowsePage />);
+
+    await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalledWith("Music"));
+    expect((await screen.findAllByText("Deep Space Beats")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Checkpoint Central")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Music" })).toHaveAttribute("aria-pressed", "true");
+    expect(searchDirectoryMock).not.toHaveBeenCalled();
+  });
 });

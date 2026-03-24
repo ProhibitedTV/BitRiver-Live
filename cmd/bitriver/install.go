@@ -253,8 +253,14 @@ func runInstallSystemd(args []string) error {
 
 	fmt.Fprintf(os.Stdout, "Wrote environment file to %s\n", envPath)
 	fmt.Fprintf(os.Stdout, "Wrote systemd unit to %s\n", unitPath)
-	if generatedPassword != "" {
-		fmt.Fprintf(os.Stdout, "Generated bootstrap admin password for %s: %s\n", *bootstrapAdminEmail, generatedPassword)
+	if *bootstrapAdminEmail != "" {
+		fmt.Fprintf(os.Stdout, "Bootstrap admin sign-in URL: %s\n", resolveAdminSignInURL(envValues))
+		fmt.Fprintf(os.Stdout, "Bootstrap admin email: %s\n", *bootstrapAdminEmail)
+		if generatedPassword != "" {
+			fmt.Fprintf(os.Stdout, "Generated bootstrap admin password for %s: %s\n", *bootstrapAdminEmail, generatedPassword)
+		}
+		fmt.Fprintf(os.Stdout, "Bootstrap credentials are stored in %s. Use the CLI's `env admin` subcommand later if you need to reprint the summary.\n", envPath)
+		fmt.Fprintln(os.Stdout, "If you rotate the admin password later in /admin, the env-backed bootstrap password becomes a historical seed value.")
 	}
 	if requiresBindCapability(*addr) {
 		fmt.Fprintln(os.Stdout, "Note: binding to a privileged port may require CAP_NET_BIND_SERVICE when registering the unit.")

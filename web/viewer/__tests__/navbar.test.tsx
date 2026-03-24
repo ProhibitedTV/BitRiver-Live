@@ -488,13 +488,13 @@ describe("Navbar", () => {
     expect(signIn).toHaveBeenCalledWith("/channels/alpha?view=live#info");
   });
 
-  test("join CTA routes to the signup page with the current path as the next parameter", async () => {
-    mockAnonymousUser();
-    const { mockLocation, restore } = overrideWindowLocation({
-      pathname: "/browse",
-      search: "?tag=music",
-      hash: "#top",
+  test("join CTA opens the in-viewer auth overlay with the current path as the redirect target", async () => {
+    const signUp = jest.fn();
+    mockUseAuth.mockReturnValue({
+      ...guestAuthState(),
+      signUp,
     });
+    window.history.pushState({}, "", "/browse?tag=music#top");
 
     const user = userEvent.setup();
 
@@ -505,8 +505,7 @@ describe("Navbar", () => {
       await user.click(joinButton);
     });
 
-    expect(mockLocation.href).toBe("http://localhost/signup?next=%2Fbrowse%3Ftag%3Dmusic%23top#signup-card");
-    restore();
+    expect(signUp).toHaveBeenCalledWith("/browse?tag=music#top");
   });
 
   test("join CTA routes to a configured onboarding URL", async () => {
@@ -548,6 +547,18 @@ describe("Navbar", () => {
   test("shows only the sign in CTA when signup is not configured", () => {
     mockAnonymousUser();
     process.env.NEXT_PUBLIC_SIGNUP_URL = "";
+
+    renderWithProviders(<Navbar />);
+
+    expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /join/i })).not.toBeInTheDocument();
+  });
+
+  test("hides the join CTA when self-signup is disabled on the current install", () => {
+    mockUseAuth.mockReturnValue({
+      ...guestAuthState(),
+      allowSelfSignup: false,
+    });
 
     renderWithProviders(<Navbar />);
 

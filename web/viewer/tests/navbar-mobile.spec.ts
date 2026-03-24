@@ -13,14 +13,15 @@ test.describe("navbar mobile layout", () => {
 
     await toggle.click();
     await expect(navMenu).toBeVisible();
-    await expect(page.getByRole("link", { name: "Browse" })).toBeVisible();
+    const browseLink = navMenu.getByRole("link", { name: "Browse", exact: true });
+    await expect(browseLink).toBeVisible();
 
     const hasHorizontalOverflow = await page.evaluate(() => {
       return document.documentElement.scrollWidth > window.innerWidth;
     });
     expect(hasHorizontalOverflow).toBeFalsy();
 
-    await page.getByRole("link", { name: "Browse" }).click();
+    await browseLink.click();
     await expect(navMenu).toBeHidden();
   });
 

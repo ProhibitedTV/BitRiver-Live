@@ -45,7 +45,21 @@ export const ownerUser = buildAuthUser({
 const baseAuthState = (): Omit<AuthState, "user"> => ({
   loading: false,
   error: undefined,
+  allowSelfSignup: true,
+  authDialogOpen: false,
+  authMode: "signin",
+  authFeedback: undefined,
+  authRedirectTo: "/",
+  mfaRequired: false,
+  mfaEnrollment: undefined,
   signIn: jest.fn(),
+  signUp: jest.fn(),
+  setAuthMode: jest.fn(),
+  closeAuthDialog: jest.fn(),
+  clearAuthFeedback: jest.fn(),
+  submitSignIn: jest.fn(),
+  submitSignUp: jest.fn(),
+  submitMFAVerification: jest.fn(),
   signOut: jest.fn(),
 });
 

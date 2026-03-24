@@ -1,15 +1,15 @@
-import { appendHash, resolveSignupUrl } from "../../lib/auth-links";
+"use client";
+
+import { useAuth } from "../../hooks/useAuth";
 
 export type FollowingStatus = "loading" | "unauthenticated" | "error" | "empty" | "ready";
 
 export type FollowingCallToAction = {
   label: string;
-  href: string;
 };
 
 export const FOLLOWING_SIGN_IN_CTA: FollowingCallToAction = {
   label: "Sign in",
-  href: appendHash(resolveSignupUrl() ?? "/signup", "login-form"),
 };
 
 export const FOLLOWING_COPY = {
@@ -27,12 +27,14 @@ export function FollowingLoadingBlock({ className }: { className?: string }) {
 }
 
 export function FollowingUnauthenticatedPrompt({ className }: { className?: string }) {
+  const { signIn } = useAuth();
+
   return (
     <div className={className}>
       <p>{FOLLOWING_COPY.unauthenticated}</p>
-      <a href={FOLLOWING_SIGN_IN_CTA.href} className="primary-button">
+      <button type="button" className="primary-button" onClick={() => void signIn()}>
         {FOLLOWING_SIGN_IN_CTA.label}
-      </a>
+      </button>
     </div>
   );
 }

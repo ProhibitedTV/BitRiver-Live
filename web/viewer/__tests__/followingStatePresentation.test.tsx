@@ -41,11 +41,15 @@ describe("Following state presentation", () => {
   });
 
   it("renders the same unauthenticated copy and sign-in CTA across rail, sidebar, and following page", async () => {
-    mockUseAuth.mockReturnValue(guestAuthState());
+    const signIn = jest.fn();
+    mockUseAuth.mockReturnValue({
+      ...guestAuthState(),
+      signIn,
+    });
 
     renderWithProviders(<FollowingRail channels={[]} isAuthenticated={false} />);
     expect(screen.getByText(FOLLOWING_COPY.unauthenticated)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: FOLLOWING_SIGN_IN_CTA.label })).toHaveAttribute("href", FOLLOWING_SIGN_IN_CTA.href);
+    expect(screen.getByRole("button", { name: FOLLOWING_SIGN_IN_CTA.label })).toBeInTheDocument();
 
     renderWithProviders(<FollowingSidebar />);
     await waitFor(() => {
@@ -54,8 +58,11 @@ describe("Following state presentation", () => {
 
     renderWithProviders(<FollowingPage />);
     await waitFor(() => {
-      expect(screen.getAllByRole("link", { name: FOLLOWING_SIGN_IN_CTA.label }).length).toBeGreaterThan(1);
+      expect(screen.getAllByRole("button", { name: FOLLOWING_SIGN_IN_CTA.label }).length).toBeGreaterThan(1);
     });
+
+    fireEvent.click(screen.getAllByRole("button", { name: FOLLOWING_SIGN_IN_CTA.label })[0]);
+    expect(signIn).toHaveBeenCalled();
   });
 
   it("renders the same loading and empty copy across surfaces", async () => {
@@ -125,7 +132,7 @@ describe("Following state presentation", () => {
       expect(screen.getByText(FOLLOWING_COPY.summaryFollowed(1))).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("heading", { name: "Channels you follow" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Keep your circle close" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Creators you follow" })).not.toBeInTheDocument();
   });
 });

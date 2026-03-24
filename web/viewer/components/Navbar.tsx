@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
-import { appendHash, joinConfiguredPath, resolveSignupUrl } from "../lib/auth-links";
+import { appendRedirectParam, joinConfiguredPath, resolveSignupUrl } from "../lib/auth-links";
 import { deriveQuickLinks, getNavigationAudience, getVisibleNavigationItems } from "../lib/navigation";
 import { fetchManagedChannels } from "../lib/viewer-api";
 
@@ -30,8 +30,23 @@ const isLocalhostUrl = (rawUrl?: string) => {
   }
 };
 
+const isExternalSignupDestination = (rawUrl?: string) => {
+  const value = rawUrl?.trim();
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const origin = typeof window !== "undefined" ? window.location.origin : "http://bitriver.local";
+    const parsed = new URL(value, origin);
+    return parsed.origin !== origin;
+  } catch {
+    return false;
+  }
+};
+
 export function Navbar() {
-  const { user, signIn, signOut } = useAuth();
+  const { allowSelfSignup, user, signIn, signOut, signUp } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -75,6 +90,11 @@ export function Navbar() {
     process.env.NODE_ENV !== "production" &&
     (isLocalhostUrl(process.env.NEXT_PUBLIC_VIEWER_URL) || isLocalhostUrl(process.env.NEXT_PUBLIC_API_BASE_URL));
   const signupUrl = useMemo(() => resolveSignupUrl(configuredSignupUrl), [configuredSignupUrl]);
+  const externalSignupDestination = useMemo(
+    () => (isExternalSignupDestination(signupUrl) ? signupUrl : undefined),
+    [signupUrl],
+  );
+  const shouldOfferJoin = Boolean(signupUrl) && (Boolean(externalSignupDestination) || allowSelfSignup);
   const adminUrl = useMemo(() => joinConfiguredPath(process.env.NEXT_PUBLIC_API_BASE_URL, "/admin"), []);
   const studioHref = managedChannelId ? `/creator/live/${managedChannelId}` : "/creator/getting-started";
 
@@ -352,19 +372,12 @@ export function Navbar() {
 
   const handleJoin = () => {
     closeMenu();
-    if (!signupUrl) {
-      handleSignIn();
+    const redirectTarget = buildRedirectTarget();
+    if (externalSignupDestination && typeof window !== "undefined") {
+      window.location.href = appendRedirectParam(externalSignupDestination, window.location.origin, redirectTarget, "next");
       return;
     }
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const url = new URL(appendHash(signupUrl, "signup-card"), window.location.origin);
-    if (!url.searchParams.has("next")) {
-      url.searchParams.set("next", buildRedirectTarget());
-    }
-    window.location.href = url.toString();
+    void signUp(redirectTarget);
   };
 
   const handleSearch = async (event: FormEvent<HTMLFormElement>) => {
@@ -454,9 +467,9 @@ export function Navbar() {
 
           <div className="navbar-right">
             {isAdmin && (
-              <a href={adminUrl} className="nav-cta nav-cta--secondary nav-utility-link" onClick={closeMenu}>
+              <Link href={adminUrl} className="nav-cta nav-cta--secondary nav-utility-link" onClick={closeMenu}>
                 Control center
-              </a>
+              </Link>
             )}
             {canAccessCreatorTools && (
               <Link href={studioHref} className="nav-cta nav-cta--primary" onClick={closeMenu}>
@@ -512,9 +525,9 @@ export function Navbar() {
                       </Link>
                     )}
                     {isAdmin && (
-                      <a href={adminUrl} className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
+                      <Link href={adminUrl} className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
                         Control center
-                      </a>
+                      </Link>
                     )}
                     <button
                       type="button"
@@ -533,7 +546,7 @@ export function Navbar() {
                   <button type="button" className={signupUrl ? "ghost-button" : "accent-button"} onClick={handleSignIn}>
                     Sign in
                   </button>
-                  {signupUrl && (
+                  {shouldOfferJoin && (
                     <button type="button" className="accent-button" onClick={handleJoin}>
                       Join
                     </button>
@@ -624,9 +637,9 @@ export function Navbar() {
             </Link>
           )}
           {isAdmin && (
-            <a href={adminUrl} className="nav-drawer__link" onClick={closeMenu}>
+            <Link href={adminUrl} className="nav-drawer__link" onClick={closeMenu}>
               Control center
-            </a>
+            </Link>
           )}
         </div>
 
@@ -652,7 +665,7 @@ export function Navbar() {
             <button type="button" className={signupUrl ? "ghost-button" : "accent-button"} onClick={handleSignIn}>
               Sign in
             </button>
-            {signupUrl && (
+            {shouldOfferJoin && (
               <button type="button" className="accent-button" onClick={handleJoin}>
                 Join
               </button>

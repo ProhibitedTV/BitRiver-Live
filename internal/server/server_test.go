@@ -182,6 +182,7 @@ func TestNewRegistersKeyRoutes(t *testing.T) {
 		{name: "health", path: "/healthz", code: http.StatusOK},
 		{name: "metrics", path: "/metrics", code: http.StatusOK},
 		{name: "api status", path: "/api/status", code: http.StatusUnauthorized},
+		{name: "viewer auth", path: "/api/viewer/me", code: http.StatusOK},
 		{name: "static route", path: "/static/does-not-exist.js", code: http.StatusNotFound},
 		{name: "root redirect", path: "/", code: http.StatusTemporaryRedirect},
 		{name: "admin", path: "/admin", code: http.StatusOK},
@@ -249,6 +250,50 @@ func TestRootRedirectsToViewerWhenViewerOriginConfigured(t *testing.T) {
 	}
 }
 
+func TestSignupRouteRedirectsIntoViewerOverlayWhenViewerOriginConfigured(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	origin, err := url.Parse("http://127.0.0.1:1")
+	if err != nil {
+		t.Fatalf("parse viewer origin: %v", err)
+	}
+	srv, err := New(handler, Config{ViewerOrigin: origin})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/signup?next=%2Fviewer%2Fbrowse%3Fq%3Dmusic&mfa=verify", nil)
+	rec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTemporaryRedirect {
+		t.Fatalf("expected signup redirect when viewer origin configured, got %d", rec.Code)
+	}
+
+	location := rec.Header().Get("Location")
+	if location == "" {
+		t.Fatal("expected redirect location")
+	}
+	parsed, err := url.Parse(location)
+	if err != nil {
+		t.Fatalf("parse redirect location: %v", err)
+	}
+	if parsed.Path != "/viewer/browse" {
+		t.Fatalf("expected redirect to land on viewer route, got %q", parsed.Path)
+	}
+	query := parsed.Query()
+	if query.Get("auth") != "signin" {
+		t.Fatalf("expected auth=signin, got %q", query.Get("auth"))
+	}
+	if query.Get("mfa") != "verify" {
+		t.Fatalf("expected mfa=verify, got %q", query.Get("mfa"))
+	}
+	if query.Get("next") != "/viewer/browse?q=music" {
+		t.Fatalf("expected next to preserve viewer return path, got %q", query.Get("next"))
+	}
+}
+
 func TestAdminRouteServesControlCenter(t *testing.T) {
 	t.Parallel()
 
@@ -313,6 +358,117 @@ func TestSignupRouteReflectsAllowSelfSignupConfiguration(t *testing.T) {
 				t.Fatalf("expected sign-in form to appear before signup card, got %q", body)
 			}
 		})
+	}
+}
+
+func TestSignupRouteIncludesBootstrapAdminOperatorHint(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	srv, err := New(handler, Config{})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/signup", nil)
+	rec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected signup page response, got %d", rec.Code)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "sign in at /admin") {
+		t.Fatalf("expected signup page to point operators at /admin, got %q", body)
+	}
+	if !strings.Contains(body, "deployment .env file") {
+		t.Fatalf("expected signup page to mention the deployment .env file, got %q", body)
+	}
+}
+
+func TestSignupRouteIncludesViewerContinuityScaffold(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	srv, err := New(handler, Config{})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/signup", nil)
+	rec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected signup page response, got %d", rec.Code)
+	}
+
+	body := rec.Body.String()
+	checks := []string{
+		`class="auth-stage auth-stage--modal"`,
+		`class="auth-modal__surface"`,
+		"Log in to BitRiver Live",
+		"Continue where you left off",
+		`id="auth-destination-path"`,
+		`data-auth-return-link`,
+		`data-auth-mode="signin"`,
+	}
+	for _, check := range checks {
+		if !strings.Contains(body, check) {
+			t.Fatalf("expected signup page to include %q, got %q", check, body)
+		}
+	}
+}
+
+func TestViewerMeRouteReturnsAuthenticatedViewerWhenSessionCookieIsPresent(t *testing.T) {
+	t.Parallel()
+
+	handler, store := newTestHandler(t)
+	user, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Viewer",
+		Email:       "viewer@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser error: %v", err)
+	}
+	token, _, err := handler.Sessions.Create(user.ID)
+	if err != nil {
+		t.Fatalf("Create session: %v", err)
+	}
+
+	srv, err := New(handler, Config{})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/viewer/me", nil)
+	req.AddCookie(&http.Cookie{Name: "bitriver_session", Value: token})
+	rec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected viewer auth response, got %d", rec.Code)
+	}
+
+	var payload struct {
+		AllowSelfSignup bool `json:"allowSelfSignup"`
+		User            *struct {
+			ID          string `json:"id"`
+			DisplayName string `json:"displayName"`
+		} `json:"user"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode viewer auth payload: %v", err)
+	}
+	if payload.User == nil {
+		t.Fatal("expected authenticated viewer payload")
+	}
+	if payload.User.ID != user.ID {
+		t.Fatalf("expected user %q, got %q", user.ID, payload.User.ID)
+	}
+	if payload.User.DisplayName != user.DisplayName {
+		t.Fatalf("expected display name %q, got %q", user.DisplayName, payload.User.DisplayName)
 	}
 }
 

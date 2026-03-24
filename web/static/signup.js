@@ -1,3 +1,4 @@
+const loginCard = document.getElementById("login-card");
 const signupForm = document.getElementById("signup-form");
 const signupCard = document.getElementById("signup-card");
 const signupClosedNote = document.getElementById("signup-closed-note");
@@ -7,6 +8,11 @@ const mfaStep = document.getElementById("mfa-step");
 const mfaForm = document.getElementById("mfa-form");
 const mfaEnrollment = document.getElementById("mfa-enrollment");
 const mfaRecoveryCodes = document.getElementById("mfa-recovery-codes");
+const destinationCopy = document.getElementById("auth-destination-copy");
+const destinationPath = document.getElementById("auth-destination-path");
+const returnLinks = document.querySelectorAll("[data-auth-return-link]");
+const signupJumpLink = document.getElementById("auth-signup-jump-link");
+const authModeLinks = document.querySelectorAll("[data-auth-mode]");
 const DEFAULT_DESTINATION = "/viewer";
 const REDIRECT_DELAY_MS = 600;
 let pendingMFAToken = null;
@@ -36,30 +42,126 @@ function resolveDestination() {
 }
 
 const destination = resolveDestination();
+const viewerDestination = resolveViewerDestination(destination);
+
+function resolveViewerDestination(candidate) {
+    if (!isSafeOnsitePath(candidate)) {
+        return DEFAULT_DESTINATION;
+    }
+    const url = new URL(candidate, window.location.origin);
+    const path = `${url.pathname}${url.search}${url.hash}` || DEFAULT_DESTINATION;
+    if (url.pathname === "/" || url.pathname === "/viewer") {
+        return DEFAULT_DESTINATION;
+    }
+    if (url.pathname.startsWith("/signup") || url.pathname.startsWith("/admin") || url.pathname.startsWith("/api/")) {
+        return DEFAULT_DESTINATION;
+    }
+    return path;
+}
+
+function describeDestination(route) {
+    const normalized = route.toLowerCase();
+    if (normalized.includes("/browse")) {
+        return "You will land back in browse with your current search or filter context ready to go.";
+    }
+    if (normalized.includes("/channel/")) {
+        return "You will jump back into the stream page you opened from the viewer.";
+    }
+    if (route === DEFAULT_DESTINATION) {
+        return "You will head back to live discovery, featured streams, and the full channel directory.";
+    }
+    return "You will return to the viewer route that sent you here as soon as auth completes.";
+}
+
+function formatDestinationPath(route) {
+    if (route.length <= 56) {
+        return route;
+    }
+    return `${route.slice(0, 53)}...`;
+}
+
+function applyDestinationContext() {
+    returnLinks.forEach((link) => {
+        if (!(link instanceof HTMLAnchorElement)) {
+            return;
+        }
+        link.href = viewerDestination;
+    });
+
+    if (destinationPath) {
+        destinationPath.textContent = formatDestinationPath(viewerDestination);
+    }
+
+    if (destinationCopy) {
+        destinationCopy.textContent = describeDestination(viewerDestination);
+    }
+}
+
+function signupModeActive() {
+    return allowSelfSignup && window.location.hash === "#signup-card";
+}
+
+function applyAuthMode() {
+    const signupActive = signupModeActive();
+
+    if (loginCard) {
+        loginCard.hidden = signupActive;
+    }
+
+    if (signupCard) {
+        signupCard.hidden = !allowSelfSignup || !signupActive;
+    }
+
+    authModeLinks.forEach((link) => {
+        if (!(link instanceof HTMLAnchorElement)) {
+            return;
+        }
+        const mode = link.dataset.authMode;
+        if (mode === "signup" && !allowSelfSignup) {
+            link.hidden = true;
+            return;
+        }
+
+        const active = signupActive ? mode === "signup" : mode === "signin";
+        link.classList.toggle("is-active", active);
+        if (active) {
+            link.setAttribute("aria-current", "page");
+        } else {
+            link.removeAttribute("aria-current");
+        }
+    });
+}
 
 function applyAuthConfig() {
-    if (signupCard) {
-        signupCard.hidden = !allowSelfSignup;
-    }
     if (signupClosedNote) {
         signupClosedNote.hidden = allowSelfSignup;
     }
+    if (signupJumpLink) {
+        signupJumpLink.hidden = !allowSelfSignup;
+    }
+    applyAuthMode();
 }
 
 function focusAuthTarget() {
     const targetId = window.location.hash.replace(/^#/, "");
     if (!targetId) {
-        return;
-    }
-
-    if (targetId === "signup-card" && !allowSelfSignup) {
-        showFeedback("Public self-signup is disabled on this server. Sign in with an existing account or ask an administrator for access.", "error");
         const emailInput = loginForm?.querySelector('input[name="email"]');
         if (emailInput instanceof HTMLElement) {
             emailInput.focus();
         }
         return;
     }
+
+    if (targetId === "signup-card" && !allowSelfSignup) {
+        showFeedback("Public self-signup is disabled on this server. Sign in with an existing account or ask an administrator for access. If you run this server, use the bootstrap admin account from the deployment .env file at /admin.", "error");
+        const emailInput = loginForm?.querySelector('input[name="email"]');
+        if (emailInput instanceof HTMLElement) {
+            emailInput.focus();
+        }
+        return;
+    }
+
+    applyAuthMode();
 
     const target = document.getElementById(targetId);
     if (!target) {
@@ -217,8 +319,13 @@ if (mfaForm) {
 
 const params = new URLSearchParams(window.location.search);
 const mfaToken = params.get("mfaToken");
+applyDestinationContext();
 applyAuthConfig();
 focusAuthTarget();
+window.addEventListener("hashchange", () => {
+    applyAuthMode();
+    focusAuthTarget();
+});
 if (mfaToken) {
     pendingMFAToken = mfaToken;
     showMFA(true);

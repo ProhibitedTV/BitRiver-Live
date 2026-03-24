@@ -95,7 +95,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  smoke     Run fast post-install smoke checks against Docker Compose")
 	fmt.Fprintln(os.Stderr, "  verify    Run doctor + compose config + smoke checks for backend/deploy health")
 	fmt.Fprintln(os.Stderr, "  upgrade-plan  Print a best-effort upgrade checklist for a target tag")
-	fmt.Fprintln(os.Stderr, "  env       Initialize or validate environment files")
+	fmt.Fprintln(os.Stderr, "  env       Initialize, validate, or inspect environment files")
 	fmt.Fprintln(os.Stderr, "  compose   Run docker compose up/down with defaults")
 	fmt.Fprintln(os.Stderr, "  desktop   Launch the Docker Compose control panel with tray shortcuts")
 	fmt.Fprintln(os.Stderr, "  install   Stage binaries/configs and emit service templates")

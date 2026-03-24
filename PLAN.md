@@ -1293,3 +1293,231 @@
 - `npm.cmd --prefix web/viewer run lint`
 - `npm.cmd --prefix web/viewer run build`
 - `./scripts/verify.sh --viewer`
+
+## Scope (current change)
+- Redeploy the locally running BitRiver Live app so `localhost:8080` serves the latest homepage rescue code from the current checkout instead of any older container build.
+- Keep the runtime action narrowly scoped to the application services that own the changed viewer experience: `bitriver-live` and `viewer`.
+- Confirm the redeployed routes are reachable and reflect the updated viewer shell/homepage so the user can inspect the changes locally right away.
+
+## Assumptions
+- The current dirty checkout is the intended source of truth and should be what gets rebuilt into the local runtime.
+- Rebuilding `bitriver-live` and `viewer` is sufficient to surface the homepage/UI rescue changes without restarting unrelated healthy stateful services.
+- Route checks against `/`, `/viewer`, and optionally `/signup` are enough to confirm the redeploy succeeded for local visual QA.
+
+## Risks
+- Docker layer caching can make a rebuild appear successful while still leaving stale behavior in the running app, so explicit route verification is required after recreation.
+- Recreating the app services will briefly interrupt the current local instance while the new containers start.
+- Host-side Docker or shell issues may block the redeploy even when the source tree is healthy, so service status/logs need to be captured if anything fails.
+
+## Test plan
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 bitriver-live viewer`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0`
+- `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern "Find the streams worth opening now|Watch live now|Full directory" -AllMatches`
+- `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup).Content | Select-String -Pattern "Sign in to continue|Back to viewer" -AllMatches`
+
+## Scope (current change)
+- Audit the current viewer UI with actual interaction checks so the most visible dead or misleading controls are fixed instead of only restyled.
+- Reproduce the reported navbar theme-toggle failure and identify other broken high-traffic controls on the current discovery shell and homepage before editing implementation code.
+- Prioritize fixes that make the shipped viewer materially usable right now: controls should either perform a real action, navigate somewhere meaningful, or be removed/reframed so they are no longer dead ends.
+- Keep the scope viewer-only unless a tiny supporting test/helper change is required to validate the repaired controls.
+
+## Assumptions
+- The user's report is grounded in the current runtime, so even controls with existing unit coverage still need browser-level validation.
+- The highest-impact broken controls are likely in the signed-out discovery experience (`Navbar`, homepage hero, category/discovery controls, mobile shell) because that is the first surface users hit.
+- Existing viewer tests are not yet sufficient to prove usability; we need a combination of static button audit, targeted Jest coverage, and at least one browser-level pass where the host allows it.
+- Viewer-only control/UX fixes do not require deployment-contract changes as long as routes, env contract, and backend APIs stay the same.
+
+## Risks
+- A broad "fix all buttons" pass could sprawl into unrelated redesign work, so the task list needs to stay tied to reproduced breakage on high-traffic controls.
+- Some controls may appear broken because their visual feedback is too subtle rather than because state never changes; we need to distinguish no-op behavior from weak affordance.
+- Browser automation may still hit the existing Windows Playwright/permission friction on this host, so validation needs a fallback path rather than assuming the first runner will work.
+- `PLAN.md`, `TASKS.md`, and multiple viewer files are already dirty in this checkout, so edits need to stay additive and avoid trampling unrelated in-progress work.
+
+## Test plan
+- `Get-Content web/viewer/components/Navbar.tsx`
+- `Get-Content web/viewer/components/CategoryRail.tsx`
+- `Get-Content web/viewer/app/directory-view.tsx`
+- `npm.cmd --prefix web/viewer run test -- navbar.test.tsx directoryPage.test.tsx`
+- `npm.cmd --prefix web/viewer run build`
+- `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts tests/navbar-mobile.spec.ts`
+- If Playwright remains blocked: `npx.cmd playwright test tests/channel.spec.ts tests/navbar-mobile.spec.ts --reporter=list`
+
+## Scope (current change)
+- Rebuild and redeploy the locally running `bitriver-live` and `viewer` services from the current branch so the user can review the latest viewer-control fixes in the real app.
+- Verify the specific acceptance check the user named: the light/dark mode toggle must work on the deployed app at `localhost:8080`, not only in the isolated viewer test server.
+- Keep this as a runtime refresh and validation pass only; do not broaden into additional product changes unless the deployment/verification uncovers a new blocker in the current branch.
+
+## Assumptions
+- The current checked-out branch and worktree contents are the intended source of truth for the review deployment.
+- Rebuilding `bitriver-live` and `viewer` is sufficient for this review pass because the recent changes are viewer-focused and do not require stateful service contract changes.
+- A focused browser check against the deployed app is the most meaningful proof for the user's review gate because the theme toggle is the named manual test.
+
+## Risks
+- Docker may reuse stale layers or leave an older container running unless we confirm service recreation and route-level behavior after the rebuild.
+- The deployed app may differ slightly from the local Playwright/Jest harness, so the light/dark toggle needs an explicit deployed-instance verification rather than inference from prior test runs.
+- Host-specific issues such as Docker pipe access, Playwright browser launch quirks, or route timing could block the verification even if the current branch is healthy, so results need to distinguish repo issues from host issues.
+
+## Test plan
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `npx.cmd playwright test tests/channel.spec.ts --grep "theme toggle updates the rendered document" --reporter=list` with `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080`
+- `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern "Switch to (light|dark) theme|BitRiver Live" -AllMatches`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
+
+## Scope (current change)
+- Fix the deployed viewer hydration blocker uncovered during review deployment: the Go server's default CSP currently blocks the proxied Next.js viewer boot scripts on `/viewer`, leaving interactive controls inert on the live app.
+- Keep the fix narrowly scoped to security-header behavior for the proxied viewer path, preserving the stricter existing defaults for admin/API routes unless the viewer runtime specifically requires a relaxation.
+- Rebuild the local review deployment after the change and re-run a real browser check against `http://localhost:8080` so the light/dark toggle is proven working on the deployed app, not only in isolated viewer tests.
+- Update the operator-facing security-header docs so the new default viewer-path behavior is documented alongside the existing override flags and environment variables.
+
+## Assumptions
+- The deployed theme-toggle failure is caused by the confirmed CSP console errors blocking Next.js hydration, not by additional bugs in `Navbar.tsx`.
+- Allowing the proxied viewer route to execute the inline bootstrap scripts required by Next.js is the minimal runtime fix needed to restore interactivity.
+- Existing security-header override flags/env vars should keep their current meaning; only the default behavior for proxied viewer responses needs adjustment.
+
+## Risks
+- Relaxing CSP too broadly could weaken protections for admin or API surfaces that do not need inline scripts, so the change should stay path-aware and as narrow as possible.
+- Viewer proxy responses and locally served admin pages currently share middleware, so the implementation must avoid accidentally changing non-viewer routes.
+- Runtime verification may still hit host-specific Docker or Playwright friction, so the execution log needs to distinguish repo fixes from host blockers clearly.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `@'...playwright probe...'@ | node -` against `http://127.0.0.1:8080/`
+- `npx.cmd playwright test tests/channel.spec.ts --grep "theme toggle updates the rendered document" --reporter=list` with `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080`
+
+## Scope (current change)
+- Fix the misleading homepage category-chip browse links so they land on a real exact category filter instead of overloading the free-text `q` search parameter.
+- Add category-aware directory handling across the viewer and API so `/browse?category=...` loads exact category results, while existing free-text search keeps working and also starts matching `channel.category` to align with current UI copy.
+- Keep the change narrowly scoped to directory browsing behavior, category-link wiring, and the minimum test coverage needed to prove both the API and viewer paths.
+
+## Assumptions
+- The user is correct that `?q=<category>` is currently semantically wrong for category chips because the existing backend search is not an exact category filter.
+- Introducing a dedicated `category` query parameter is the clearest user-facing fix for homepage category chips, while also extending free-text search to include `channel.category` keeps the rest of the browse/search copy honest.
+- Directory result sets are still small enough that an exact category filter can be applied in the API layer without introducing pagination or contract changes elsewhere.
+
+## Risks
+- Query-param synchronization on the browse page can become confusing if `q` and `category` are not normalized and preserved consistently through search/reset flows.
+- Changing viewer API helper signatures could ripple through existing tests if the update is not kept backward-compatible.
+- Broadening free-text search to include category could subtly change result sets for existing browse queries, so API coverage needs to assert the intended matching behavior explicitly.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api -count=1 -timeout=120s`
+- `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx browsePage.test.tsx viewer-api.test.ts`
+- `npm.cmd --prefix web/viewer run build`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --force-recreate --no-deps bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+
+## Scope (current change)
+- Revisit the initial admin-access UX so operators can reliably find the bootstrap control-center credentials after install/quickstart, especially when public self-signup is disabled by default.
+- Add a small operator-facing CLI recovery path that reads the deployment `.env` and prints the admin access summary on demand instead of relying on a one-time terminal flash during bootstrap.
+- Update quickstart/install/auth messaging so the operator sees where the bootstrap creds live, where to sign in (`/admin`), and what caveat applies if the password was rotated later.
+
+## Assumptions
+- The current install/quickstart flows already persist the bootstrap admin credentials in the deployment `.env`, but that storage location is not obvious enough to operators after the initial run.
+- A targeted CLI helper plus clearer summaries is safer than introducing a second secret store or exposing recovery internals too broadly in the public UI.
+- The public auth page can safely include a concise operator hint that points to `/admin` and the deployment environment file without exposing any actual secrets.
+
+## Risks
+- Printing bootstrap password values too casually could leak secrets into shell history or shared terminals, so any recovery command should default to redacting the password unless the operator opts in.
+- Operators who already rotated the admin password in the control center could misread the env-backed bootstrap password as the current live credential, so the output must warn about that distinction.
+- Updating the public signup copy too aggressively could make the page feel operator-centric for normal viewers, so the added guidance should stay short and secondary.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1 -timeout=120s`
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh`
+
+## Scope (current change)
+- Make the `/signup` auth surface feel like a continuation of the `/viewer` experience instead of a disconnected static utility page.
+- Keep the existing API/auth flow intact while tightening the visual language, return-path context, and navigation cues around sign-in/sign-up.
+- Refresh the local review deployment after the change so the updated auth surface is available on the running app for direct UX review.
+
+## Assumptions
+- The main problem is cohesion and continuity, not the underlying login/signup mechanics; the existing auth handlers and redirects can stay intact.
+- The fastest high-impact improvement is to restyle and restructure the static auth page to mirror the current viewer product language, then thread the existing `next` destination more visibly through the page.
+- A small doc update in the viewer README is appropriate because the auth landing behavior is part of the viewer navigation contract even though the page is served by the Go binary.
+
+## Risks
+- The static auth page lives outside the Next.js viewer app, so copying too much viewer styling directly could create a brittle parallel design system unless the scope stays focused on the highest-value shared cues.
+- Dynamic “return to where you left off” messaging can become misleading if the `next` parameter is not sanitized or displayed carefully.
+- Route-level UX validation requires rebuilding the running `bitriver-live` service after the embed changes, so host Docker issues could block final live review even if the code/tests pass.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `@'...playwright auth probe...'@ | node -` against `http://127.0.0.1:8080/signup?next=%2Fviewer%2Fbrowse%3Fq%3Dmusic`
+
+## Scope (current change)
+- Rework the `/viewer` homepage so the above-the-fold experience is video-centric and creator-centric instead of leading with long-form discovery copy.
+- Keep the existing discovery data sources, routes, and viewer shell, but shift the hierarchy toward featured/live previews, creator cards, and faster visual entry into content.
+- Limit the scope to the signed-out/signed-in homepage experience plus the minimum supporting tests and runtime refresh needed for local review.
+
+## Assumptions
+- The gap the user is calling out is primarily information architecture and visual emphasis, not missing backend data or a need for autoplay video playback.
+- Existing components such as `FeaturedChannel`, `LiveNowGrid`, `ChannelRail`, and `CategoryRail` already provide enough content primitives to build a stronger video-first homepage without changing APIs.
+- Viewer-only composition/styling changes do not require deployment-contract or operator-doc updates as long as routes and backend behavior stay the same.
+
+## Risks
+- Moving too much content above the fold can make the homepage feel busier rather than more engaging, so the new hierarchy needs to stay decisive and avoid turning every section into a hero.
+- Rebalancing the viewer shell around larger media modules could regress mobile layout or the current following-sidebar affordances if shared styles are changed too broadly.
+- Updating homepage copy, headings, and section order will likely require aligned Jest assertions and a live redeploy check so we do not ship a visually improved page with stale tests or stale containers.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx viewerShell.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+
+## Scope (current change)
+- Rework the `/signup` auth presentation so it feels like a centered overlay/modal on top of the viewer instead of a separate full-page destination.
+- Keep the existing auth API flow, `next`-based return behavior, MFA/signup handling, and static-route serving intact while shifting the information architecture and styling toward a Twitch-like overlay pattern.
+- Refresh the local app after the change so the updated auth route is reviewable on `localhost:8080` in the real running install.
+
+## Assumptions
+- The user is asking for a presentation and interaction-framing change, not for a new SPA modal mounted inside the Next.js viewer runtime; a static auth page that visually behaves like an overlay is the right scope.
+- Existing auth JS already has the needed return-path behavior, so the main work is collapsing the page into a modal card and demoting the surrounding explanatory content into backdrop/context treatment.
+- This route-level UX change does not require deployment-contract updates as long as auth endpoints, redirects, and operator hints remain unchanged.
+
+## Risks
+- If the fake viewer backdrop is too decorative or too interactive-looking, users may think the background is usable while the auth card is open, so the backdrop needs to read clearly as dimmed context.
+- Compressing too much auth/help context into a modal-sized surface could hurt clarity around self-signup-disabled and MFA states if spacing or hierarchy gets too tight.
+- Because the route is static HTML/CSS/JS served by the Go binary, server tests that assert specific signup copy/scaffold will need coordinated updates when the modal contract changes.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `@'...auth route probe...'@ | node -` against `http://127.0.0.1:8080/signup?next=%2Fviewer`
+
+## Scope (current change)
+- Replace the viewer's auth redirects with a real in-app overlay mounted inside the Next.js `/viewer` experience for sign-in, sign-up, and MFA continuation.
+- Add a small viewer-auth API contract so the viewer can learn session state plus auth affordances (`allowSelfSignup`, logout path, and similar) without relying on the old static `/signup` page bootstrap.
+- Demote `/signup` from the primary UX to a compatibility path that forwards into the viewer overlay when the viewer is configured, while preserving a safe fallback for non-viewer deployments.
+
+## Assumptions
+- The user's main complaint is architectural, not just visual: auth should happen inside the viewer shell, so the right fix is to move the form flow into the viewer runtime instead of polishing the static route again.
+- `useAuth` is already the natural place to centralize session loading plus modal open/close state, and the global viewer layout can host the overlay once that hook exposes the needed controls.
+- Keeping `/signup` as a compatibility redirect when `ViewerOrigin` is configured is safer than deleting the route outright because existing OAuth/MFA/legacy links may still target it.
+- A viewer-specific `/api/viewer/me` response is the cleanest minimal contract because the viewer already expects that path and it can return guest-safe auth config with or without a live session.
+
+## Risks
+- Expanding `useAuth` from "session lookup" into full auth-flow state management could ripple through many signed-out CTAs and existing tests if the API is not kept tidy.
+- Redirect/refresh behavior after successful auth can feel jarring if the modal does not preserve the intended `next` route or if it reloads more of the viewer than necessary.
+- MFA and self-signup-disabled states currently live in the static route script, so porting them into React carries a real risk of regressions unless we keep the same API semantics and cover them explicitly.
+- Converting `/signup` into a compatibility redirect must not break installs that do not proxy the Next.js viewer; the server needs to branch cleanly on whether `ViewerOrigin` is configured.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- `npm.cmd --prefix web/viewer run test -- useAuth.test.tsx navbar.test.tsx followingStatePresentation.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `@'...viewer auth overlay probe...'@ | node -` against `http://127.0.0.1:8080/viewer?auth=signup`

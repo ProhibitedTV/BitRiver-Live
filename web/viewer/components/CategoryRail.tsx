@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { CategorySummary } from "../lib/viewer-api";
 
 interface CategoryRailProps {
@@ -31,10 +32,12 @@ export function CategoryRail({ id, categories, loading = false }: CategoryRailPr
       ) : (
         <div className="chip-rail" role="list">
           {categories.map((category) => (
-            <button key={category.name} className="filter-chip" type="button" role="listitem">
-              <div className="filter-chip__label">{category.name}</div>
-              <div className="filter-chip__meta muted">{category.channelCount} live</div>
-            </button>
+            <div key={category.name} role="listitem">
+              <Link className="filter-chip" href={`/browse?category=${encodeURIComponent(category.name)}`}>
+                <div className="filter-chip__label">{category.name}</div>
+                <div className="filter-chip__meta muted">{category.channelCount} live</div>
+              </Link>
+            </div>
           ))}
         </div>
       )}
