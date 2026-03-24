@@ -3023,3 +3023,64 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
   - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
   - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'Start with creators already on air|Video first, browse second|Find a creator, category, or tag' -AllMatches`
+
+## Scoped change: auth overlay modal treatment
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the auth-overlay diagnosis and plan
+  - Acceptance criteria:
+    - `PLAN.md` captures the modal-overlay auth scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered auth markup, styling, coverage, and runtime validation tasks before edits begin.
+    - The read-only diagnosis explains why the current `/signup` route still reads like a separate page instead of an overlay.
+
+- [x] Task 2 - Rebuild the auth markup into a centered overlay/dialog presentation
+  - Acceptance criteria:
+    - The auth route visually reads as a modal card over dimmed viewer context instead of a split-page destination.
+    - Existing sign-in, sign-up, MFA, return-link, and self-signup-disabled flows remain intact.
+    - The primary sign-in action stays immediately visible and easy to understand.
+
+- [x] Task 3 - Restyle the auth surface and backdrop for a viewer-overlay feel
+  - Acceptance criteria:
+    - The page background clearly resembles viewer context while remaining non-interactive and subordinate to the auth modal.
+    - The modal uses tighter hierarchy and spacing closer to streaming-platform auth overlays.
+    - Mobile and desktop both remain usable.
+
+- [x] Task 4 - Update auth-route coverage for the new modal contract
+  - Acceptance criteria:
+    - `internal/server` coverage asserts the new auth scaffold/copy hooks that define the overlay treatment.
+    - Existing operator/admin hint expectations remain intact.
+
+- [x] Task 5 - Run focused validation, refresh the local app, and record the outcome
+  - Acceptance criteria:
+    - Targeted `internal/server` tests pass.
+    - The local `bitriver-live` and `viewer` services are refreshed so the updated auth route is reviewable at `localhost:8080`.
+    - `TASKS.md` records any remaining host/runtime blocker precisely.
+
+### Execution log (auth overlay modal treatment)
+- Task 1 complete: read-only review of `web/static/signup.html`, `web/static/signup.js`, `web/static/styles.css`, and `internal/server/server_test.go` confirmed that the current auth route was still structured like a two-column destination page. Even though it shared viewer branding and return-context copy, it still devoted half the screen to explanatory content instead of presenting auth as a centered checkpoint over viewer context, which is the exact gap the user called out via the Twitch comparison.
+- Task 1 checks:
+  - `Get-Content web/static/signup.html`
+  - `Get-Content web/static/signup.js`
+  - `Get-Content web/static/styles.css`
+  - `Get-Content internal/server/server_test.go | Select-Object -Skip 300 -First 120`
+- Task 2 complete: rebuilt `web/static/signup.html` into a modal-first auth route. The page now centers a compact login dialog over a dimmed viewer-style backdrop, keeps the return link in a modal close position, and collapses sign-up into the same modal flow instead of presenting auth as a separate split-page destination. I also added lightweight sign-in/sign-up mode tabs tied to `#login-card` and `#signup-card` so the flow stays compact and more overlay-like.
+- Task 2 checks:
+  - `Get-Content web/static/signup.html`
+  - `node --check web/static/signup.js`
+- Task 3 complete: restyled `web/static/styles.css` so `/signup` reads like a streaming-platform overlay: blurred viewer context behind the modal, tighter modal spacing, full-width primary auth actions, and a compact return-context card instead of a large left-column explainer. The auth JS now hides or reveals the sign-up view based on hash mode while preserving the existing self-signup-disabled behavior and return-path rewrites.
+- Task 3 checks:
+  - `Get-Content web/static/styles.css`
+  - `Get-Content web/static/signup.js`
+- Task 4 complete: updated `internal/server/server_test.go` so the static signup route contract now asserts the modal scaffold (`auth-stage--modal`, `auth-modal__surface`), the simpler auth copy (`Log in to BitRiver Live`), the preserved return-path hook, and the auth-mode toggle hook. The existing operator/admin hint coverage stayed intact.
+- Task 4 checks:
+  - `gofmt -w internal/server/server_test.go`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- Task 5 complete: rebuilt the local app stack and verified the live auth route from the running install. `http://localhost:8080/signup?next=%2Fviewer#signup-card` now serves the new modal scaffold and, in a real browser pass, correctly keeps the login card visible, hides the sign-up tab on this self-signup-disabled local install, points the close/return link back to `/viewer`, and surfaces the operator/admin feedback when someone lands on the sign-up hash. The canonical repo verify entrypoint is still blocked on this Windows host at the env-example placeholder hygiene step because Python is not installed/aliased.
+- Task 5 checks:
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `node --check web/static/signup.js`
+  - `(Invoke-WebRequest -UseBasicParsing 'http://localhost:8080/signup?next=%2Fviewer#signup-card').Content | Select-String -Pattern 'Log in to BitRiver Live|auth-stage auth-stage--modal|data-auth-mode="signin"|Need an account\? Sign up' -AllMatches`
+  - escalated Playwright probe against `http://127.0.0.1:8080/signup?next=%2Fviewer#signup-card`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (blocked at env-example placeholder hygiene because Python is not installed/aliased on this host)

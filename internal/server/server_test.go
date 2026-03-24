@@ -361,11 +361,13 @@ func TestSignupRouteIncludesViewerContinuityScaffold(t *testing.T) {
 
 	body := rec.Body.String()
 	checks := []string{
-		`class="auth-stage"`,
-		"Sign in without dropping out of the viewer experience.",
+		`class="auth-stage auth-stage--modal"`,
+		`class="auth-modal__surface"`,
+		"Log in to BitRiver Live",
 		"Continue where you left off",
 		`id="auth-destination-path"`,
 		`data-auth-return-link`,
+		`data-auth-mode="signin"`,
 	}
 	for _, check := range checks {
 		if !strings.Contains(body, check) {

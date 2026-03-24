@@ -7,134 +7,180 @@
     <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body class="auth-page">
-    <main class="auth-container">
-        <section class="auth-stage">
-            <aside class="auth-stage__viewer">
-                <div class="auth-stage__topbar">
-                    <a class="auth-brand" href="/viewer">
+    <main class="auth-overlay">
+        <section class="auth-stage auth-stage--modal">
+            <div class="auth-scene" aria-hidden="true">
+                <div class="auth-scene__topbar">
+                    <div class="auth-scene__brand">
                         <span class="auth-brand__icon" aria-hidden="true">BR</span>
-                        <span class="auth-brand__copy">
+                        <div class="auth-brand__copy">
                             <span class="auth-brand__name">BitRiver Live</span>
-                            <span class="auth-brand__meta">Viewer access</span>
-                        </span>
-                    </a>
-                    <a id="auth-return-link" class="auth-shell-link" href="/viewer" data-auth-return-link>Back to viewer</a>
-                </div>
-
-                <div class="auth-hero">
-                    <p class="auth-eyebrow">Stay in the flow</p>
-                    <h1>Sign in without dropping out of the viewer experience.</h1>
-                    <p class="auth-hero__lede">
-                        Chat, follow channels, manage your account, and jump straight back into BitRiver Live with the same route context that brought you here.
-                    </p>
-                </div>
-
-                <div class="auth-pill-row" aria-label="Viewer benefits">
-                    <span class="auth-pill">Pick up playback</span>
-                    <span class="auth-pill">Join live chat</span>
-                    <span class="auth-pill">Follow creators</span>
-                    <span class="auth-pill">Open creator tools</span>
-                </div>
-
-                <section class="auth-context-card" aria-labelledby="auth-return-heading">
-                    <p class="auth-context-card__eyebrow">Return after auth</p>
-                    <h2 id="auth-return-heading">Continue where you left off</h2>
-                    <p id="auth-destination-copy" class="auth-context-card__copy">
-                        We will take you back to the viewer route that sent you here as soon as sign-in finishes.
-                    </p>
-                    <p id="auth-destination-path" class="auth-context-card__path">/viewer</p>
-                </section>
-
-                <div class="auth-benefits" aria-label="What you unlock">
-                    <article class="auth-benefit">
-                        <h3>Viewer-first continuity</h3>
-                        <p>The auth step now acts like a checkpoint in the same product journey, not a separate utility screen.</p>
-                    </article>
-                    <article class="auth-benefit">
-                        <h3>Fast return path</h3>
-                        <p>Your original browse or channel destination stays queued so you can get right back to discovery.</p>
-                    </article>
-                    <article class="auth-benefit">
-                        <h3>Account-powered actions</h3>
-                        <p>Signing in unlocks chat, follows, creator tools, and account controls without leaving the viewer context behind.</p>
-                    </article>
-                </div>
-            </aside>
-
-            <div class="auth-stage__forms">
-                <div id="auth-feedback" class="auth-feedback" hidden></div>
-
-                <section class="auth-card auth-card--signin">
-                    <div class="section-header auth-card__header">
-                        <p class="auth-eyebrow">Account access</p>
-                        <h2>Sign in to continue</h2>
-                        <p class="section-subtitle">Open your account, channel tools, and stream controls without losing your place in the viewer.</p>
-                    </div>
-                    <form id="login-form" class="auth-form">
-                        <label>
-                            Email
-                            <input type="email" name="email" required autocomplete="email" />
-                        </label>
-                        <label>
-                            Password
-                            <input type="password" name="password" required minlength="8" autocomplete="current-password" />
-                        </label>
-                        <button type="submit" class="primary">Sign in</button>
-                    </form>
-                    <p id="signup-closed-note" class="auth-hint" hidden>Need an account? Ask an administrator to create or invite you. If you operate this server, sign in at /admin with the bootstrap admin account from the deployment .env file.</p>
-                    <div class="auth-link-row">
-                        <a href="/viewer" data-auth-return-link>Back to viewer</a>
-                        <a id="auth-signup-jump-link" href="#signup-card">Jump to sign up</a>
-                    </div>
-                    <div id="mfa-step" class="auth-mfa" hidden>
-                        <p class="auth-mfa__intro">Enter the code from your authenticator app or a recovery code.</p>
-                        <form id="mfa-form" class="auth-form">
-                            <label>
-                                Verification code
-                                <input type="text" name="code" autocomplete="one-time-code" required />
-                            </label>
-                            <button type="submit" class="primary">Verify</button>
-                        </form>
-                        <div id="mfa-enrollment" class="auth-mfa__enrollment" hidden>
-                            <h3>Set up MFA</h3>
-                            <p>Save your recovery codes and add the secret to your authenticator app.</p>
-                            <label>
-                                MFA secret
-                                <input type="text" name="secret" readonly />
-                            </label>
-                            <label>
-                                Otpauth URL
-                                <input type="text" name="otpauthUrl" readonly />
-                            </label>
-                            <ul class="mfa-recovery-codes" id="mfa-recovery-codes"></ul>
+                            <span class="auth-brand__meta">Community broadcasts</span>
                         </div>
                     </div>
-                </section>
-
-                <section id="signup-card" class="auth-card auth-card--signup" hidden>
-                    <div class="section-header auth-card__header">
-                        <p class="auth-eyebrow">New viewer account</p>
-                        <h2>Create your BitRiver Live account</h2>
-                        <p class="section-subtitle">Claim your channel identity, connect with communities, and stay inside the same viewer journey from the first session.</p>
+                    <div class="auth-scene__nav">
+                        <span>Discover</span>
+                        <span>Browse</span>
+                        <span>Following</span>
                     </div>
-                    <form id="signup-form" class="auth-form">
-                        <label>
-                            Display name
-                            <input type="text" name="displayName" required autocomplete="nickname" />
-                        </label>
-                        <label>
-                            Email
-                            <input type="email" name="email" required autocomplete="email" />
-                        </label>
-                        <label>
-                            Password
-                            <input type="password" name="password" required minlength="8" autocomplete="new-password" />
-                        </label>
-                        <button type="submit" class="secondary">Create account</button>
-                    </form>
-                    <p class="auth-hint">We provision viewer access immediately so you can get back to discovery first and grow into creator tools later.</p>
-                </section>
+                    <div class="auth-scene__actions">
+                        <span class="auth-scene__search">Search creators</span>
+                        <span class="auth-scene__button">Join</span>
+                    </div>
+                </div>
+
+                <div class="auth-scene__content">
+                    <section class="auth-scene__player">
+                        <div class="auth-scene__player-media"></div>
+                        <div class="auth-scene__player-copy">
+                            <p class="auth-scene__eyebrow">Featured stream</p>
+                            <h2>Front-page broadcast</h2>
+                            <p>A highlighted creator, chat, and discovery context stay visible behind the auth checkpoint.</p>
+                        </div>
+                    </section>
+
+                    <aside class="auth-scene__rail">
+                        <article class="auth-scene__mini-card">
+                            <div class="auth-scene__mini-thumb"></div>
+                            <div>
+                                <strong>Live now</strong>
+                                <p>Channels already on air</p>
+                            </div>
+                        </article>
+                        <article class="auth-scene__mini-card">
+                            <div class="auth-scene__mini-thumb"></div>
+                            <div>
+                                <strong>Trending</strong>
+                                <p>Momentum creators</p>
+                            </div>
+                        </article>
+                        <article class="auth-scene__mini-card">
+                            <div class="auth-scene__mini-thumb"></div>
+                            <div>
+                                <strong>Browse</strong>
+                                <p>Categories and tags</p>
+                            </div>
+                        </article>
+                    </aside>
+                </div>
+
+                <div class="auth-scene__shelf">
+                    <div class="auth-scene__shelf-card"></div>
+                    <div class="auth-scene__shelf-card"></div>
+                    <div class="auth-scene__shelf-card"></div>
+                </div>
             </div>
+
+            <section class="auth-modal" aria-labelledby="auth-modal-title">
+                <div class="auth-modal__surface">
+                    <div class="auth-modal__chrome">
+                        <a class="auth-brand" href="/viewer">
+                            <span class="auth-brand__icon" aria-hidden="true">BR</span>
+                            <span class="auth-brand__copy">
+                                <span class="auth-brand__name">BitRiver Live</span>
+                                <span class="auth-brand__meta">Account access</span>
+                            </span>
+                        </a>
+                        <a id="auth-return-link" class="auth-shell-link" href="/viewer" data-auth-return-link>Close</a>
+                    </div>
+
+                    <div class="auth-modal__header">
+                        <p class="auth-eyebrow">Account access</p>
+                        <h1 id="auth-modal-title">Log in to BitRiver Live</h1>
+                        <p class="section-subtitle">Chat, follow creators, and jump back to the viewer in a moment.</p>
+                    </div>
+
+                    <nav class="auth-mode-switch" aria-label="Auth mode">
+                        <a href="#login-card" class="auth-mode-switch__link is-active" data-auth-mode="signin">Sign in</a>
+                        <a href="#signup-card" class="auth-mode-switch__link" data-auth-mode="signup">Sign up</a>
+                    </nav>
+
+                    <section class="auth-context-card auth-context-card--compact" aria-labelledby="auth-return-heading">
+                        <p class="auth-context-card__eyebrow">Return after auth</p>
+                        <h2 id="auth-return-heading">Continue where you left off</h2>
+                        <p id="auth-destination-copy" class="auth-context-card__copy">
+                            We will take you back to the viewer route that sent you here as soon as sign-in finishes.
+                        </p>
+                        <p id="auth-destination-path" class="auth-context-card__path">/viewer</p>
+                    </section>
+
+                    <div id="auth-feedback" class="auth-feedback" hidden></div>
+
+                    <section id="login-card" class="auth-card auth-card--signin">
+                        <div class="section-header auth-card__header">
+                            <p class="auth-eyebrow">Sign in</p>
+                            <h2>Welcome back</h2>
+                            <p class="section-subtitle">Use your existing account to get back into chat, follows, and creator tools.</p>
+                        </div>
+                        <form id="login-form" class="auth-form">
+                            <label>
+                                Email
+                                <input type="email" name="email" required autocomplete="email" />
+                            </label>
+                            <label>
+                                Password
+                                <input type="password" name="password" required minlength="8" autocomplete="current-password" />
+                            </label>
+                            <button type="submit" class="primary">Sign in</button>
+                        </form>
+                        <p id="signup-closed-note" class="auth-hint" hidden>Need an account? Ask an administrator to create or invite you. If you operate this server, sign in at /admin with the bootstrap admin account from the deployment .env file.</p>
+                        <div class="auth-link-row">
+                            <a href="/viewer" data-auth-return-link>Back to viewer</a>
+                            <a id="auth-signup-jump-link" href="#signup-card">Need an account? Sign up</a>
+                        </div>
+                        <div id="mfa-step" class="auth-mfa" hidden>
+                            <p class="auth-mfa__intro">Enter the code from your authenticator app or a recovery code.</p>
+                            <form id="mfa-form" class="auth-form">
+                                <label>
+                                    Verification code
+                                    <input type="text" name="code" autocomplete="one-time-code" required />
+                                </label>
+                                <button type="submit" class="primary">Verify</button>
+                            </form>
+                            <div id="mfa-enrollment" class="auth-mfa__enrollment" hidden>
+                                <h3>Set up MFA</h3>
+                                <p>Save your recovery codes and add the secret to your authenticator app.</p>
+                                <label>
+                                    MFA secret
+                                    <input type="text" name="secret" readonly />
+                                </label>
+                                <label>
+                                    Otpauth URL
+                                    <input type="text" name="otpauthUrl" readonly />
+                                </label>
+                                <ul class="mfa-recovery-codes" id="mfa-recovery-codes"></ul>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="signup-card" class="auth-card auth-card--signup" hidden>
+                        <div class="section-header auth-card__header">
+                            <p class="auth-eyebrow">Create account</p>
+                            <h2>Join this viewer network</h2>
+                            <p class="section-subtitle">Set up your viewer identity and get right back to discovery.</p>
+                        </div>
+                        <form id="signup-form" class="auth-form">
+                            <label>
+                                Display name
+                                <input type="text" name="displayName" required autocomplete="nickname" />
+                            </label>
+                            <label>
+                                Email
+                                <input type="email" name="email" required autocomplete="email" />
+                            </label>
+                            <label>
+                                Password
+                                <input type="password" name="password" required minlength="8" autocomplete="new-password" />
+                            </label>
+                            <button type="submit" class="secondary">Create account</button>
+                        </form>
+                        <p class="auth-hint">Viewer access opens immediately so you can return to the stream or browse route that brought you here.</p>
+                        <div class="auth-link-row">
+                            <a id="auth-signin-jump-link" href="#login-card">Have an account? Sign in</a>
+                        </div>
+                    </section>
+                </div>
+            </section>
         </section>
     </main>
     <script type="module" src="/static/signup.js"></script>

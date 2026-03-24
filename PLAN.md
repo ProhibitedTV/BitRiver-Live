@@ -1474,3 +1474,24 @@
 - `npm.cmd --prefix web/viewer run build`
 - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
 - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+
+## Scope (current change)
+- Rework the `/signup` auth presentation so it feels like a centered overlay/modal on top of the viewer instead of a separate full-page destination.
+- Keep the existing auth API flow, `next`-based return behavior, MFA/signup handling, and static-route serving intact while shifting the information architecture and styling toward a Twitch-like overlay pattern.
+- Refresh the local app after the change so the updated auth route is reviewable on `localhost:8080` in the real running install.
+
+## Assumptions
+- The user is asking for a presentation and interaction-framing change, not for a new SPA modal mounted inside the Next.js viewer runtime; a static auth page that visually behaves like an overlay is the right scope.
+- Existing auth JS already has the needed return-path behavior, so the main work is collapsing the page into a modal card and demoting the surrounding explanatory content into backdrop/context treatment.
+- This route-level UX change does not require deployment-contract updates as long as auth endpoints, redirects, and operator hints remain unchanged.
+
+## Risks
+- If the fake viewer backdrop is too decorative or too interactive-looking, users may think the background is usable while the auth card is open, so the backdrop needs to read clearly as dimmed context.
+- Compressing too much auth/help context into a modal-sized surface could hurt clarity around self-signup-disabled and MFA states if spacing or hierarchy gets too tight.
+- Because the route is static HTML/CSS/JS served by the Go binary, server tests that assert specific signup copy/scaffold will need coordinated updates when the modal contract changes.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `@'...auth route probe...'@ | node -` against `http://127.0.0.1:8080/signup?next=%2Fviewer`

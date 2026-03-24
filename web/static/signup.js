@@ -1,3 +1,4 @@
+const loginCard = document.getElementById("login-card");
 const signupForm = document.getElementById("signup-form");
 const signupCard = document.getElementById("signup-card");
 const signupClosedNote = document.getElementById("signup-closed-note");
@@ -11,6 +12,7 @@ const destinationCopy = document.getElementById("auth-destination-copy");
 const destinationPath = document.getElementById("auth-destination-path");
 const returnLinks = document.querySelectorAll("[data-auth-return-link]");
 const signupJumpLink = document.getElementById("auth-signup-jump-link");
+const authModeLinks = document.querySelectorAll("[data-auth-mode]");
 const DEFAULT_DESTINATION = "/viewer";
 const REDIRECT_DELAY_MS = 600;
 let pendingMFAToken = null;
@@ -95,21 +97,58 @@ function applyDestinationContext() {
     }
 }
 
-function applyAuthConfig() {
-    if (signupCard) {
-        signupCard.hidden = !allowSelfSignup;
+function signupModeActive() {
+    return allowSelfSignup && window.location.hash === "#signup-card";
+}
+
+function applyAuthMode() {
+    const signupActive = signupModeActive();
+
+    if (loginCard) {
+        loginCard.hidden = signupActive;
     }
+
+    if (signupCard) {
+        signupCard.hidden = !allowSelfSignup || !signupActive;
+    }
+
+    authModeLinks.forEach((link) => {
+        if (!(link instanceof HTMLAnchorElement)) {
+            return;
+        }
+        const mode = link.dataset.authMode;
+        if (mode === "signup" && !allowSelfSignup) {
+            link.hidden = true;
+            return;
+        }
+
+        const active = signupActive ? mode === "signup" : mode === "signin";
+        link.classList.toggle("is-active", active);
+        if (active) {
+            link.setAttribute("aria-current", "page");
+        } else {
+            link.removeAttribute("aria-current");
+        }
+    });
+}
+
+function applyAuthConfig() {
     if (signupClosedNote) {
         signupClosedNote.hidden = allowSelfSignup;
     }
     if (signupJumpLink) {
         signupJumpLink.hidden = !allowSelfSignup;
     }
+    applyAuthMode();
 }
 
 function focusAuthTarget() {
     const targetId = window.location.hash.replace(/^#/, "");
     if (!targetId) {
+        const emailInput = loginForm?.querySelector('input[name="email"]');
+        if (emailInput instanceof HTMLElement) {
+            emailInput.focus();
+        }
         return;
     }
 
@@ -121,6 +160,8 @@ function focusAuthTarget() {
         }
         return;
     }
+
+    applyAuthMode();
 
     const target = document.getElementById(targetId);
     if (!target) {
@@ -281,6 +322,10 @@ const mfaToken = params.get("mfaToken");
 applyDestinationContext();
 applyAuthConfig();
 focusAuthTarget();
+window.addEventListener("hashchange", () => {
+    applyAuthMode();
+    focusAuthTarget();
+});
 if (mfaToken) {
     pendingMFAToken = mfaToken;
     showMFA(true);
