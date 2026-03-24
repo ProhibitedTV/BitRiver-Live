@@ -1521,3 +1521,90 @@
 - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
 - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
 - `@'...viewer auth overlay probe...'@ | node -` against `http://127.0.0.1:8080/viewer?auth=signup`
+
+## Scope (current change)
+- Tighten the `/viewer` desktop shell so the Following rail and Featured Live hero share a cleaner top alignment and the sidebar no longer burns vertical space on explanatory copy.
+- Keep the implementation narrowly scoped to viewer shell/homepage composition, focused tests, and a local redeploy for review.
+- Evaluate renaming the Docker Compose project from the default `deploy` label to a clearer stack name, but treat that as a deployment-contract change that requires explicit user approval before implementation.
+
+## Assumptions
+- The visible mismatch in the screenshot is being driven by the desktop shell/sidebar framing, especially the extra intro copy above `FollowingSidebar`, rather than by missing homepage data.
+- A more compact signed-out guidance treatment inside the following rail can preserve the onboarding message without pushing the sidebar out of rhythm with the hero.
+- Docker Desktop is showing `deploy` because Compose is inheriting its default project name from the compose-file directory; we should not change that contract until the user opts in.
+
+## Risks
+- Shared shell CSS changes could accidentally regress mobile sidebar behavior or other viewer pages if they are broader than necessary.
+- Compressing the following rail too aggressively could make signed-out guidance less clear if the CTA and explanation are not still obvious.
+- Renaming the Compose project will rename Docker resources and can surprise operators looking for the old stack name, so it must stay approval-gated.
+
+## Test plan
+- `Get-Content web/viewer/components/ViewerShell.tsx | Select-Object -Skip 130 -First 90`
+- `Get-Content web/viewer/styles/globals.css | Select-Object -Skip 4260 -First 150`
+- `Get-Content web/viewer/styles/home.css | Select-Object -Skip 970 -First 280`
+- `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx viewerShell.test.tsx followingStatePresentation.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+
+## Scope (current change)
+- Audit the GitHub Actions workflows defined under `.github/workflows` and run the closest feasible local equivalents from this Windows host.
+- Use the workflow definitions themselves as the source of truth for which checks matter to cross-platform confidence for a self-hosted streaming deployment.
+- Treat this as a verification/reporting pass only unless a currently reproducible repository failure demands a narrowly scoped fix.
+
+## Assumptions
+- We cannot literally reproduce GitHub-hosted `ubuntu-latest` and `macos-latest` runner environments from this one Windows workstation, but we can still execute the workflow entrypoints and scripts that are platform-agnostic or Windows-compatible.
+- The most meaningful local evidence will come from the canonical gates and workflow scripts: `scripts/verify.sh`, `scripts/test-all.sh`, `scripts/test-postgres.sh`, `scripts/test-quickstart.sh`, viewer CI commands, and workflow consistency/doc checks.
+- Some workflow steps may remain blocked by host-tool differences already known in this environment, especially `python3` inside Bash-based scripts and Linux-only tools such as `shellcheck`.
+
+## Risks
+- Running broad validation on a dirty worktree can mix current uncommitted viewer changes into the results, so the report needs to distinguish “current checkout passes locally” from “clean mainline CI status”.
+- Several workflows are Linux-specific or depend on GitHub-hosted service containers/actions, so local results alone cannot prove full cross-platform coverage for Ubuntu and macOS.
+- Long-running Docker and Playwright checks can consume time and resources; if one host prerequisite is missing, we should record the blocker precisely instead of forcing partial or misleading results.
+
+## Test plan
+- `Get-Content .github/workflows/ci.yml`
+- `Get-Content .github/workflows/go-unit-tests.yml`
+- `Get-Content .github/workflows/viewer-ci.yml`
+- `Get-Content .github/workflows/quickstart-smoke.yml`
+- `Get-Content .github/workflows/postgres-tests.yml`
+- `Get-Command bash, python3, py, go, docker, node, npm, psql, shellcheck, gh, act -ErrorAction SilentlyContinue | Select-Object Name,Source`
+- `pwsh -File scripts/quickstart.ps1 -help`
+- `pwsh -File scripts/quickstart.ps1 -ValidateOnly`
+- `go test ./... -count=1 -timeout=120s`
+- `npm.cmd --prefix web/viewer run test:integration`
+- `npm.cmd --prefix web/viewer run build`
+- `docker compose --env-file .env -f deploy/docker-compose.yml config`
+- `./scripts/test-postgres.sh`
+- `./scripts/test-quickstart.sh`
+- `./scripts/check-go-workflow-config.sh`
+- `./scripts/check-doc-installer-language.sh`
+- `./scripts/generate-contract-doc.sh --check`
+- `./scripts/check-monitoring-config.sh`
+
+## Scope (current change)
+- Close the Windows portability gaps uncovered by the CI verification pass so the repo's defined cross-platform Go and quickstart checks can run meaningfully on a self-hosted Windows workstation.
+- Keep runtime behavior unchanged; the fix should stay inside test harnesses unless a production path is truly required.
+- Continue to use the existing GitHub Actions workflows as the validation target, and dispatch safe hosted workflows only after the local Windows failures are addressed.
+
+## Assumptions
+- The failing `cmd/transcoder` tests are partly caused by the test helper assuming a Unix-style `ffmpeg` stub is executable on Windows, but the direct symlink probe shows there is also a real Windows runtime incompatibility in the transcoder's live publish path.
+- The failing `scripts` tests are caused by choosing an unusable `bash` binary (`C:\\WINDOWS\\system32\\bash.exe`) and by Unix-only PATH assumptions inside the test harness, not by a broken quickstart wrapper.
+- GitHub-hosted Ubuntu/macOS workflows remain the source of truth for non-Windows coverage, but getting the Windows-local equivalents green is necessary before dispatching them with confidence.
+
+## Risks
+- A too-clever Windows stub could diverge from the existing Unix `ffmpeg` stub semantics and mask real transcoder regressions if it does not produce the same playlist and segment shape.
+- Shell-resolution changes in the quickstart tests could accidentally weaken the assertions if they silently skip real wrapper execution instead of selecting a usable shell.
+- Changing the live publish path from "symlink only" to a Windows-capable fallback must preserve the current Unix behavior and still keep live manifests visible to the viewer while a stream is active.
+- Triggering hosted workflows before the local Windows failures are corrected would create noisy, avoidable red CI and make the cross-platform report less credible.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/transcoder -count=1 -timeout=120s`
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./scripts -count=1 -timeout=120s`
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s`
+- `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -help`
+- `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -ValidateOnly`
+- `$tmp = Join-Path (Resolve-Path .).Path '.codex-symlink-check'; if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }; New-Item -ItemType Directory -Path $tmp | Out-Null; New-Item -ItemType Directory -Path (Join-Path $tmp 'target') | Out-Null; try { New-Item -ItemType SymbolicLink -Path (Join-Path $tmp 'link') -Target (Join-Path $tmp 'target') -ErrorAction Stop | Out-Null; 'symlink-ok' } catch { 'symlink-failed: ' + $_.Exception.Message }`
+- `docker compose --env-file .env -f deploy/docker-compose.yml config`
+- `gh workflow run "CI" --ref codex/UI_UX_repair`
+- `gh workflow run "Quickstart compose smoke" --ref codex/UI_UX_repair`

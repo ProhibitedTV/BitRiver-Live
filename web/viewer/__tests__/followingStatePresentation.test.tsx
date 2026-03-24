@@ -132,7 +132,19 @@ describe("Following state presentation", () => {
       expect(screen.getByText(FOLLOWING_COPY.summaryFollowed(1))).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("heading", { name: "Keep your circle close" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Creators you follow" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Following" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Keep your circle close" })).not.toBeInTheDocument();
+  });
+
+  it("shows the guest sign-in message once in the sidebar instead of duplicating it in the header", async () => {
+    mockUseAuth.mockReturnValue(guestAuthState());
+
+    renderWithProviders(<FollowingSidebar />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(FOLLOWING_COPY.unauthenticated)).toHaveLength(1);
+    });
+
+    expect(screen.getByRole("heading", { name: "Following" })).toBeInTheDocument();
   });
 });

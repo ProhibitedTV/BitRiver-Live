@@ -3154,3 +3154,187 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
   - escalated headless browser probe against `http://127.0.0.1:8080/viewer`
   - `Invoke-WebRequest -UseBasicParsing 'http://localhost:8080/signup?next=%2Fviewer%2Fbrowse%3Fq%3Dmusic&mfa=verify' -MaximumRedirection 0`
+
+## Scoped change: viewer shell alignment and Docker project naming review
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the new shell-alignment scope and Docker naming diagnosis before editing
+  - Acceptance criteria:
+    - `PLAN.md` captures the viewer-shell alignment scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered UI tasks plus the approval-gated Docker naming follow-up before code edits begin.
+    - Read-only diagnosis identifies whether the `deploy` label is coming from Compose project naming and whether the homepage mismatch is a shell/layout issue.
+
+- [x] Task 2 - Tighten the desktop viewer shell and following rail hierarchy
+  - Acceptance criteria:
+    - The Following rail feels aligned with the Featured Live hero on desktop instead of starting on an awkwardly different rhythm.
+    - Signed-out guidance remains present, but extra explanatory copy no longer dominates the rail or pushes the layout off balance.
+    - Existing viewer shell/sidebar behavior stays usable on mobile and desktop.
+
+- [x] Task 3 - Update focused viewer coverage for the revised shell contract
+  - Acceptance criteria:
+    - Focused viewer tests cover the updated sidebar/header treatment and homepage structure where expectations changed.
+    - Existing auth-overlay and homepage behaviors remain covered after the shell cleanup.
+
+- [x] Task 4 - Run focused viewer validation, redeploy locally, and record the outcome
+  - Acceptance criteria:
+    - The targeted viewer test suites, lint, and production build pass.
+    - The local `bitriver-live` and `viewer` services are refreshed from the current checkout for review.
+    - `TASKS.md` records any remaining runtime or host blocker precisely.
+
+- [ ] Task 5 - Rename the Compose project to a clearer Docker Desktop stack name if approved
+  - Acceptance criteria:
+    - The Compose project name changes from the default `deploy` label to an explicit BitRiver-specific name.
+    - The deployment contract/docs are updated together if the change is approved and implemented.
+    - Compose config/runtime validation records the new stack naming without breaking the canonical workflow.
+
+### Execution log (viewer shell alignment and Docker project naming review)
+- Task 1 complete: read-only inspection confirmed the two user-reported issues come from different layers. Docker Desktop is showing the stack as `deploy` because the Compose project name is currently implicit and is inheriting from the compose-file directory, which makes any rename a deployment-contract/workflow change that needs approval first. The homepage mismatch is shell-driven: the desktop `viewer-sidebar` currently renders its own eyebrow, heading, and intro copy above `FollowingSidebar`, which makes the left rail start on a different visual rhythm than the hero block.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 30`
+  - `Get-Content TASKS.md | Select-Object -Last 40`
+  - `Get-Content deploy/docker-compose.yml -TotalCount 40`
+  - `Get-Content .env -TotalCount 40`
+  - `Get-Content web/viewer/components/ViewerShell.tsx | Select-Object -Skip 130 -First 90`
+  - `Get-Content web/viewer/styles/globals.css | Select-Object -Skip 4260 -First 150`
+  - `Get-Content web/viewer/styles/home.css | Select-Object -Skip 970 -First 280`
+- Task 2 complete: removed the duplicate shell-owned sidebar intro/header on desktop, kept only the compact mobile close header, and tightened the `FollowingSidebar` header so the rail now carries one concise title plus one state card instead of layering explanatory copy above the actual following UI.
+- Task 2 checks:
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live diff -- web/viewer/components/ViewerShell.tsx web/viewer/components/FollowingSidebar.tsx web/viewer/styles/globals.css`
+- Task 3 complete: updated focused viewer coverage to lock in the cleaner contract. `ViewerShell` now asserts the old duplicate intro copy is gone, and `followingStatePresentation` now checks for the new `Following` heading plus the single guest prompt in the sidebar.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx followingStatePresentation.test.tsx directoryPage.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+- Task 4 complete: reran the focused viewer validation after stripping the stale inner-column padding, added a browser-level Playwright regression for the desktop homepage shell, rebuilt the local `bitriver-live`/`viewer` stack, and then rechecked the deployed page on `http://127.0.0.1:8080/viewer`. The final browser probe showed the desktop shell in the correct mode, the following rail and featured hero aligned at the same top offset (`88px` each), the header rows within `6px` of each other, the old shell intro copy gone, and the guest sign-in message present only once.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx followingStatePresentation.test.tsx directoryPage.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+  - `npx.cmd playwright test tests/homepage-layout.spec.ts --reporter=list`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - escalated headless browser probe against `http://127.0.0.1:8080/viewer`
+
+## Scoped change: workflow and CI verification pass
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the workflow-validation scope and inspect the defined CI jobs before running checks
+  - Acceptance criteria:
+    - `PLAN.md` captures the CI/workflow validation scope, assumptions, risks, and candidate commands.
+    - `TASKS.md` lists the ordered workflow-inspection, execution, and reporting tasks before running broad checks.
+    - The read-only pass identifies which workflows can be mirrored locally on this Windows host and which inherently depend on GitHub-hosted Linux/macOS runners or external services.
+
+- [x] Task 2 - Run the feasible local equivalents of the defined workflow gates
+  - Acceptance criteria:
+    - Local commands cover the main workflow categories: Go/unit gates, viewer CI, quickstart sanity, postgres integration, docs/workflow consistency, and monitoring config.
+    - Each command result is recorded clearly as pass, fail, or host/tooling blocker.
+    - No product-code edits are made unless a currently reproducible repository issue demands it.
+
+- [x] Task 3 - Summarize cross-platform confidence and remaining hosted-runner gaps
+  - Acceptance criteria:
+    - The final report distinguishes what was actually verified on this Windows host from what still requires Ubuntu/macOS GitHub Actions.
+    - Any blockers are tied back to specific workflow steps or missing host tools.
+    - The result is actionable for shipping a self-hosted live-streaming stack, not just a raw command dump.
+
+### Execution log (workflow and CI verification pass)
+- Task 1 complete: inspected the current workflow set under `.github/workflows` and mapped the important gates. The repo currently defines a top-level `ci.yml` with an Ubuntu `test-all` gate plus separate macOS/Windows Go coverage, a cross-platform quickstart sanity matrix, Ubuntu-only viewer CI, postgres integration, shell/docs/workflow consistency checks, monitoring validation, image scan, ingest e2e, and release flows. Tool availability on this host is mixed: `bash`, `py`, `go`, `docker`, `node`, `npm`, and `gh` are available, while `python3`, `psql`, `shellcheck`, and `act` are not currently on PATH.
+- Task 1 checks:
+  - `Get-Content .github/workflows/ci.yml`
+  - `Get-Content .github/workflows/go-unit-tests.yml`
+  - `Get-Content .github/workflows/viewer-ci.yml`
+  - `Get-Content .github/workflows/quickstart-smoke.yml`
+  - `Get-Content .github/workflows/postgres-tests.yml`
+  - `Get-Content scripts/verify.sh`
+  - `Get-Content scripts/test-all.sh`
+  - `Get-Command bash, python3, py, go, docker, node, npm, psql, shellcheck, gh, act -ErrorAction SilentlyContinue | Select-Object Name,Source`
+- Task 2 complete: after the Windows parity fixes below, the feasible local CI equivalents now run cleanly on this workstation. `go test ./... -count=1 -timeout=120s` passes with a workspace-local `GOCACHE`, `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -help` passes, `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -ValidateOnly` now passes after the PowerShell wrapper gained a writable fallback `GOCACHE`, and `docker compose --env-file .env -f deploy/docker-compose.yml config` still renders the deployment contract successfully (with a local Docker config permission warning from this host, but an exit code of 0).
+- Task 2 checks:
+  - `git branch --show-current`
+  - `pwsh -File scripts/quickstart.ps1 -help`
+  - `pwsh -File scripts/quickstart.ps1 -ValidateOnly`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s`
+  - `gh auth status`
+  - `gh workflow list`
+- Task 3 complete: the hosted-runner picture is now clearer. This Windows host verified the core Go/runtime path and PowerShell quickstart entrypoint, but the manually dispatched hosted workflows exposed a second layer of issues: several standalone workflows (`go-unit-tests.yml`, `viewer-ci.yml`, `postgres-tests.yml`, `ingest-e2e.yml`) fail immediately under `workflow_dispatch` because they invoke local composite actions before checking out the repo, while other workflows surfaced real repo/script issues such as ShellCheck warnings, a brittle OME mount assertion in `test-quickstart.sh`, a monitoring config validation command problem, and a staged wizard-release regression.
+
+## Scoped change: Windows CI parity fixes for transcoder and quickstart tests
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Capture the concrete Windows test failures before implementation
+  - Acceptance criteria:
+    - `PLAN.md` records the narrowed Windows parity scope, assumptions, risks, and validation commands.
+    - `TASKS.md` records the exact failing packages and the current root-cause hypothesis.
+    - The implementation stays scoped to the failing test harnesses unless runtime code is proven necessary.
+
+- [x] Task 2 - Make the transcoder FFmpeg stub harness work on Windows without changing runtime behavior
+  - Acceptance criteria:
+    - `cmd/transcoder` tests use a deterministic FFmpeg stub on Windows instead of resolving a real system `ffmpeg.exe`.
+    - The Windows stub produces the same observable playlist/segment outputs the existing Unix stub-based tests expect.
+    - The previously failing transcoder package tests pass on this host.
+
+- [x] Task 3 - Make the quickstart shell-wrapper tests select a usable shell on Windows
+  - Acceptance criteria:
+    - The tests prefer a runnable Git Bash style shell over unusable WSL `bash.exe` on Windows.
+    - PATH manipulation in the harness uses platform-correct separators.
+    - The previously failing `scripts` package tests pass on this host without weakening their assertions.
+
+- [x] Task 4 - Rerun the cross-platform verification commands and dispatch safe hosted workflows
+  - Acceptance criteria:
+    - `go test ./...` passes on this Windows host from the current checkout.
+    - Windows quickstart PowerShell entrypoint checks complete locally with the available shell tooling.
+    - Safe validation workflows are dispatched from GitHub CLI against the current branch, and their run status is recorded.
+
+### Execution log (Windows CI parity fixes for transcoder and quickstart tests)
+- Task 1 complete: confirmed the Windows-local failures are test-harness issues in two isolated areas. `cmd/transcoder/main_test.go` currently assumes `testdata/ffmpeg` is directly executable and therefore fails to shadow a real `ffmpeg.exe` on Windows, which cascades into the health recovery assertions. `scripts/quickstart_test.go` assumes any `bash` on PATH is usable, but on this host the default resolution lands on WSL `bash.exe`, while usable Git Bash binaries exist separately under `C:\Program Files\Git\...`.
+- Task 1 checks:
+  - `Get-Content cmd/transcoder/main_test.go | Select-Object -First 220`
+  - `Get-Content cmd/transcoder/testdata/ffmpeg | Select-Object -First 200`
+  - `Get-Content scripts/quickstart_test.go | Select-Object -First 220`
+  - `Get-Content scripts/quickstart.sh | Select-Object -First 200`
+  - `Get-Content .github/workflows/quickstart-smoke.yml | Select-Object -First 220`
+  - `$candidates = @('C:\Program Files\Git\bin\bash.exe','C:\Program Files\Git\usr\bin\bash.exe','C:\WINDOWS\system32\bash.exe'); foreach ($p in $candidates) { '{0}`t{1}' -f $p, (Test-Path $p) }`
+- Task 2 in progress: the first round of fixes proved the quickstart harness issue was isolated, but also uncovered a real Windows runtime limitation in the transcoder live publish path. `go test ./scripts` now passes on this host after selecting a usable shell and fixing PATH handling. `go test ./cmd/transcoder` improved enough to expose the next blocker: Windows on this machine cannot create directory symlinks without administrator privileges (`New-Item -ItemType SymbolicLink ...` fails with "Administrator privilege required"), while `publishLive` currently relies on `os.Symlink`, so live manifest publication and the related health checks stay degraded even after the FFmpeg stub issue is addressed.
+- Task 2 checks:
+  - `gofmt -w cmd/transcoder/main_test.go scripts/quickstart_test.go`
+  - `New-Item -ItemType Directory -Force .gocache-transcoder | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-transcoder).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/transcoder -count=1 -timeout=120s`
+  - `New-Item -ItemType Directory -Force .gocache-scripts | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-scripts).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./scripts -count=1 -timeout=120s`
+  - `$tmp = Join-Path (Resolve-Path .).Path '.codex-symlink-check'; if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }; New-Item -ItemType Directory -Path $tmp | Out-Null; New-Item -ItemType Directory -Path (Join-Path $tmp 'target') | Out-Null; try { New-Item -ItemType SymbolicLink -Path (Join-Path $tmp 'link') -Target (Join-Path $tmp 'target') -ErrorAction Stop | Out-Null; 'symlink-ok' } catch { 'symlink-failed: ' + $_.Exception.Message }`
+- Task 2 complete: replaced the Windows-only FFmpeg stub path with a native `ffmpeg.exe` test shim so the transcoder suite no longer falls through to a real system `ffmpeg.exe`. The suite also now uses a Windows-capable live mirror path: `publishLive` still prefers `os.Symlink`, but on Windows it falls back to a directory junction created via `mklink /J`, and the lifecycle test now tolerates Windows junction semantics plus slower mirror cleanup timing. With those changes in place, `go test ./cmd/transcoder -count=1 -timeout=120s` passes on this host.
+- Task 2 checks:
+  - `cmd /c mklink /J "<workspace>\\.codex-junction-check\\link" "<workspace>\\.codex-junction-check\\target"`
+  - `New-Item -ItemType Directory -Force .gocache-transcoder | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-transcoder).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/transcoder -count=1 -timeout=120s`
+- Task 3 complete: the quickstart test harness now resolves a usable Git Bash-style shell on Windows instead of assuming the first `bash.exe` is runnable, uses the correct PATH separator on Windows, and stages a Windows-friendly `go.cmd` stub for the wrapper test. I also hardened `scripts/quickstart.ps1` itself so `-ValidateOnly` sets a writable fallback `GOCACHE` before launching `go run`, which removed the local `Access is denied` failure against the default Windows build cache path. `go test ./scripts -count=1 -timeout=120s` and the real `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -ValidateOnly` path both pass now.
+- Task 3 checks:
+  - `gofmt -w scripts/quickstart_test.go`
+  - `New-Item -ItemType Directory -Force .gocache-scripts | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-scripts).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./scripts -count=1 -timeout=120s`
+  - `New-Item -ItemType Directory -Force .gocache-quickstart | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-quickstart).Path; powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -ValidateOnly`
+- Task 4 complete: reran the broad Windows-local gate and then dispatched the safe hosted validation workflows for branch `codex/UI_UX_repair`. The local gate now passes end-to-end (`go test ./...` plus `docker compose ... config`). Hosted workflow dispatch succeeded for `ci.yml`, `docs-consistency.yml`, `go-unit-tests.yml`, `go-workflow-consistency.yml`, `image-scan.yml`, `ingest-e2e.yml`, `monitoring-config.yml`, `postgres-tests.yml`, `quickstart-smoke.yml`, `shellcheck.yml`, `viewer-ci.yml`, and `wizard-release.yml`. The resulting run list shows the current hosted blockers clearly: `CI` and `Docs consistency` passed, `Go workflow consistency` passed, while several workflow-dispatch-only jobs fail immediately because they use local composite actions before checkout, and several others fail on real repo/script issues (`shellcheck`, `monitoring-config`, `quickstart-smoke`, `wizard-release`, and an external Trivy install failure in `image-scan`).
+- Task 4 checks:
+  - `New-Item -ItemType Directory -Force .gocache-all | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-all).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s`
+  - `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -help`
+  - `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -ValidateOnly`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml config`
+  - `gh workflow run ci.yml --ref codex/UI_UX_repair`
+  - `gh workflow run docs-consistency.yml --ref codex/UI_UX_repair`
+  - `gh workflow run go-unit-tests.yml --ref codex/UI_UX_repair`
+  - `gh workflow run go-workflow-consistency.yml --ref codex/UI_UX_repair`
+  - `gh workflow run image-scan.yml --ref codex/UI_UX_repair`
+  - `gh workflow run ingest-e2e.yml --ref codex/UI_UX_repair`
+  - `gh workflow run monitoring-config.yml --ref codex/UI_UX_repair`
+  - `gh workflow run postgres-tests.yml --ref codex/UI_UX_repair`
+  - `gh workflow run quickstart-smoke.yml --ref codex/UI_UX_repair`
+  - `gh workflow run shellcheck.yml --ref codex/UI_UX_repair`
+  - `gh workflow run viewer-ci.yml --ref codex/UI_UX_repair`
+  - `gh workflow run wizard-release.yml --ref codex/UI_UX_repair`
+  - `gh run list --branch codex/UI_UX_repair --limit 20`
+  - `gh run view 23512035395 --log-failed`
+  - `gh run view 23512040120 --log-failed`
+  - `gh run view 23512041661 --log-failed`
+  - `gh run view 23512043069 --log-failed`
+  - `gh run view 23512044850 --log-failed`
+  - `gh run view 23512046165 --log-failed`
+  - `gh run view 23512047607 --log-failed`
+  - `gh run view 23512049060 --log-failed`
