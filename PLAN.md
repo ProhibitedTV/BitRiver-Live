@@ -1697,3 +1697,26 @@
 - `rg -n "github.com/bitriver-live/bitriver-live|docs/cross-platform-plan.md|v1.0|SUPPORT.md" README.md docs CONTRIBUTING.md .github deploy scripts`
 - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-doc-installer-language.sh`
 - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-no-committed-secrets.sh`
+
+## Scope (current change)
+- Fast-forward the local checkout to the merged `origin/main` commit and redeploy the app services so `localhost:8080` reflects the latest merged work.
+- Polish the release-facing viewer UI/UX with one goal in mind: help average people understand and launch a self-hosted Twitch-like experience without extra controls, dense copy, or maintainer-centric phrasing.
+- Focus on high-traffic/product surfaces first: viewer homepage, primary navigation/shell, and creator onboarding/live setup flows. Keep the deployment contract unchanged.
+
+## Assumptions
+- The merged public-release PR is already on `origin/main` and the current local feature branch can fast-forward cleanly to it.
+- The most valuable UX improvements are subtractive: fewer controls, shorter explanations, clearer primary actions, and a more obvious "watch or go live" path.
+- The core product behavior already works; this pass should simplify presentation and task flow rather than add new features.
+
+## Risks
+- Simplifying creator flows too aggressively could hide information people still need when copying ingest settings or validating a stream.
+- UI copy and layout changes can easily break existing viewer tests if text contracts or element hierarchy move more than intended.
+- Redeploying before aligning the local checkout to `origin/main` would risk rebuilding stale code and create confusion about what is actually live on `localhost:8080`.
+
+## Test plan
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live rev-list --left-right --count HEAD...origin/main`
+- `git pull --ff-only origin main`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx navigation.test.ts viewerShell.test.tsx creatorGettingStartedPage.test.tsx creatorLivePage.test.tsx`
+- `npx.cmd playwright test tests/homepage-layout.spec.ts tests/channel.spec.ts tests/creator-live-setup.spec.ts --reporter=list`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`

@@ -1,13 +1,10 @@
-import Image from "next/image";
 import Link from "next/link";
 import { CategoryRail } from "../components/CategoryRail";
 import { ChannelRail } from "../components/ChannelRail";
-import { ChannelStatusBadge } from "../components/channel/ChannelStatusBadge";
 import { DirectoryGrid } from "../components/DirectoryGrid";
 import { DirectorySearchBar } from "../components/DirectorySearchBar";
 import { FeaturedChannel } from "../components/FeaturedChannel";
 import { LiveNowGrid } from "../components/LiveNowGrid";
-import { formatFollowerLabel, formatViewerLabel, getChannelPreviewImage } from "../lib/channel-presenters";
 import type { CategorySummary, DirectoryChannel } from "../lib/viewer-api";
 
 export type HomeData = {
@@ -36,53 +33,6 @@ export const emptyHomeData: HomeData = {
   isAuthenticated: true,
 };
 
-function dedupeChannels(channels: DirectoryChannel[]) {
-  const seen = new Set<string>();
-  return channels.filter((entry) => {
-    if (seen.has(entry.channel.id)) {
-      return false;
-    }
-    seen.add(entry.channel.id);
-    return true;
-  });
-}
-
-function HeroQueueCard({ entry, priority = false }: { entry: DirectoryChannel; priority?: boolean }) {
-  const previewImage = getChannelPreviewImage(entry);
-  const audienceLabel = entry.live
-    ? formatViewerLabel(entry.viewerCount ?? 0)
-    : formatFollowerLabel(entry.followerCount);
-
-  return (
-    <Link href={`/channels/${entry.channel.id}`} className="home-hero__queue-card">
-      <div className="home-hero__queue-media">
-        {previewImage ? (
-          <Image
-            src={previewImage}
-            alt={`${entry.owner.displayName} channel artwork`}
-            fill
-            sizes="(min-width: 1280px) 18vw, (min-width: 960px) 24vw, 100vw"
-            className="home-hero__queue-image"
-            priority={priority}
-            loading={priority ? undefined : "lazy"}
-          />
-        ) : (
-          <div className="home-hero__queue-fallback" aria-hidden="true" />
-        )}
-        <div className="overlay overlay--top overlay--scrim">
-          <ChannelStatusBadge live={entry.live} />
-          <span className="overlay__meta">{entry.channel.category ?? "Streaming"}</span>
-        </div>
-      </div>
-      <div className="home-hero__queue-body">
-        <h3>{entry.channel.title}</h3>
-        <p className="muted">{entry.owner.displayName}</p>
-        <span className="home-hero__queue-meta muted">{audienceLabel}</span>
-      </div>
-    </Link>
-  );
-}
-
 export function HomePageView({
   query,
   homeData,
@@ -98,26 +48,50 @@ export function HomePageView({
 }) {
   const { featured, recommended, following, liveNow, trending, categories, error: homeError } = homeData;
   const { channels, error: directoryError } = directoryData;
-  const heroStats = [
-    { label: "Live now", value: liveNow.length.toLocaleString() },
-    { label: "Featured", value: featured.length.toLocaleString() },
-    { label: homeData.isAuthenticated ? "Following" : "Recommended", value: (homeData.isAuthenticated ? following.length : recommended.length).toLocaleString() },
-    { label: "Categories", value: categories.length.toLocaleString() },
-  ];
+  const hasChannelsToBrowse =
+    featured.length > 0 ||
+    recommended.length > 0 ||
+    following.length > 0 ||
+    liveNow.length > 0 ||
+    trending.length > 0 ||
+    channels.length > 0;
+  const hasDiscoveryContent = hasChannelsToBrowse || categories.length > 0;
+  const showLiveNowSection = homeLoading || liveNow.length > 0;
+  const showRecommendedSection = homeLoading || recommended.length > 0;
+  const showCategoriesSection = homeLoading || categories.length > 0;
+  const showTrendingSection = homeLoading || trending.length > 0;
   const quickLinks = [
-    { href: "#live-now", label: "Live now" },
-    { href: "#recommended", label: "Recommended" },
-    { href: "#top-categories", label: "Categories" },
-    { href: "#directory", label: query ? "Search results" : "Full directory" },
-  ];
-  const featuredIds = new Set(featured.map((entry) => entry.channel.id));
-  const heroCandidates = dedupeChannels([...liveNow, ...recommended, ...featured]);
-  const heroQueue = heroCandidates.filter((entry) => !featuredIds.has(entry.channel.id)).slice(0, 4);
-  const heroQueueChannels = heroQueue.length > 0 ? heroQueue : heroCandidates.slice(0, 4);
+    showLiveNowSection ? { href: "#live-now", label: "Live now" } : null,
+    showRecommendedSection ? { href: "#recommended", label: "Recommended" } : null,
+    showCategoriesSection ? { href: "#top-categories", label: "Categories" } : null,
+    { href: "#directory", label: query ? "Search results" : "Directory" },
+  ].filter((item): item is { href: string; label: string } => Boolean(item));
   const homeErrorMessage = homeError
     ? `We couldn't load the personalized discovery rows right now: ${homeError}`
     : null;
   const directoryErrorMessage = directoryError ? `We couldn't load the directory right now: ${directoryError}` : null;
+  const heroEyebrow = hasDiscoveryContent ? "Self-hosted live" : "First stream";
+  const heroTitle = liveNow.length > 0
+    ? "Watch live or launch your own channel"
+    : hasChannelsToBrowse
+      ? "Browse channels or launch your own"
+      : "Launch your first self-hosted channel";
+  const heroLede = liveNow.length > 0
+    ? "Watch what is live now, then use creator setup when you are ready to stream from your own stack."
+    : hasChannelsToBrowse
+      ? "Browse what is already on this install, then use creator setup when you are ready to start streaming yourself."
+      : "Your install is ready. Create a channel, copy the OBS settings, and share the viewer link once the preview is live.";
+  const primaryHeroAction = liveNow.length > 0
+    ? { href: "#live-now", label: "Watch live now" }
+    : hasChannelsToBrowse
+      ? { href: "#directory", label: "Browse channels" }
+      : { href: "/creator/getting-started", label: "Start creator setup" };
+  const secondaryHeroAction = hasChannelsToBrowse
+    ? { href: "/creator/getting-started", label: "Start streaming" }
+    : { href: "#directory", label: "Browse directory" };
+  const featuredEmptyMessage = hasDiscoveryContent
+    ? "Featured streams will show up here as soon as one is available."
+    : "No one is live yet. Use creator setup to bring the first channel online, then come back here to watch it like a viewer.";
 
   return (
     <div className="home-page">
@@ -126,88 +100,48 @@ export function HomePageView({
           <div className="home-hero__spotlight">
             <div className="home-hero__spotlight-header">
               <div className="stack stack--xs home-hero__spotlight-copy">
-                <span className="home-hero__eyebrow">Featured live</span>
-                <h1>Start with creators already on air</h1>
-                <p className="home-hero__lede muted">
-                  Featured broadcasts lead the page, live picks stay in reach, and the full directory is still one move away.
-                </p>
+                <span className="home-hero__eyebrow">{heroEyebrow}</span>
+                <h1>{heroTitle}</h1>
+                <p className="home-hero__lede muted">{heroLede}</p>
               </div>
               <div className="home-hero__spotlight-actions">
-                <a href="#live-now" className="primary-button">
-                  Watch live now
-                </a>
-                <a href="#directory" className="secondary-button">
-                  Browse all channels
-                </a>
+                <Link href={primaryHeroAction.href} className="primary-button">
+                  {primaryHeroAction.label}
+                </Link>
+                <Link href={secondaryHeroAction.href} className="secondary-button">
+                  {secondaryHeroAction.label}
+                </Link>
               </div>
             </div>
-            <FeaturedChannel channels={featured} loading={homeLoading} />
+            {homeLoading || featured.length > 0 ? (
+              <FeaturedChannel channels={featured} loading={homeLoading} />
+            ) : (
+              <div className="state-panel">
+                <strong>No featured stream yet</strong>
+                <p className="muted">{featuredEmptyMessage}</p>
+              </div>
+            )}
           </div>
 
           <aside className="home-hero__side">
-            <section className="home-hero__editorial">
-              <div className="stack stack--sm">
-                <div className="stack stack--2xs">
-                  <span className="home-hero__eyebrow">Jump straight in</span>
-                  <h2>Video first, browse second</h2>
-                </div>
-                <p className="muted">
-                  Creator previews now carry the first impression, while search and category browse stay ready when you want to go deeper.
-                </p>
-              </div>
-
-              <dl className="home-hero__stats" aria-label="Platform snapshot">
-                {heroStats.map((stat) => (
-                  <div key={stat.label} className="home-stat">
-                    <dt className="home-stat__label">{stat.label}</dt>
-                    <dd className="home-stat__value">{stat.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </section>
-
-            <section className="home-hero__queue" aria-labelledby="home-hero-queue-title">
-              <div className="home-hero__queue-header">
-                <div className="stack stack--2xs">
-                  <span className="home-hero__eyebrow">On deck</span>
-                  <h2 id="home-hero-queue-title">{liveNow.length > 0 ? "Live right now" : "Watch next"}</h2>
-                </div>
-                {!homeLoading && heroQueueChannels.length > 0 && <span className="muted">{heroQueueChannels.length} quick picks</span>}
-              </div>
-
-              {homeLoading ? (
-                <div className="state-panel state-panel--loading" aria-busy="true">
-                  <strong>Loading live picks</strong>
-                  <p className="muted">Pulling active channels into the front page stack now.</p>
-                </div>
-              ) : heroQueueChannels.length === 0 ? (
-                <div className="state-panel">
-                  <strong>No quick picks yet</strong>
-                  <p className="muted">As soon as creators start broadcasting, they will surface here beside the featured stream.</p>
-                </div>
-              ) : (
-                <div className="home-hero__queue-grid">
-                  {heroQueueChannels.map((entry, index) => (
-                    <HeroQueueCard key={entry.channel.id} entry={entry} priority={index < 2} />
-                  ))}
-                </div>
-              )}
-            </section>
-
             <section className="home-hero__utility">
               <div className="stack stack--2xs">
-                <span className="home-hero__eyebrow">Search and browse</span>
-                <h2>Find a creator, category, or tag</h2>
-                <p className="muted">Search stays on the homepage so you can pivot fast once a stream catches your attention.</p>
+                <span className="home-hero__eyebrow">Find a stream fast</span>
+                <h2>Search creators, channels, or tags</h2>
+                <p className="muted">
+                  Use search when you know what you want, or scroll into live and directory sections below.
+                </p>
               </div>
               <DirectorySearchBar defaultValue={query} />
-              <nav aria-label="Quick jump links" className="home-hero__quick-links">
-                {quickLinks.map((item) => (
-                  <a key={item.href} href={item.href} className="pill pill--ghost">
-                    {item.label}
-                  </a>
-                ))}
-              </nav>
+              {quickLinks.length > 1 ? (
+                <nav aria-label="Quick jump links" className="home-hero__quick-links">
+                  {quickLinks.map((item) => (
+                    <a key={item.href} href={item.href} className="pill pill--ghost">
+                      {item.label}
+                    </a>
+                  ))}
+                </nav>
+              ) : null}
             </section>
           </aside>
         </div>
@@ -221,39 +155,47 @@ export function HomePageView({
           </div>
         )}
 
-        <section className="home-section surface" id="live-now">
-          <div className="home-section__header">
-            <div className="stack stack--2xs">
-              <span className="home-section__eyebrow">On air</span>
-              <h2>Live now</h2>
-              <p className="muted">Creators currently streaming and ready to watch immediately.</p>
+        {showLiveNowSection ? (
+          <section className="home-section surface" id="live-now">
+            <div className="home-section__header">
+              <div className="stack stack--2xs">
+                <span className="home-section__eyebrow">On air</span>
+                <h2>Live now</h2>
+                <p className="muted">Channels you can watch right away.</p>
+              </div>
+              {!homeLoading && liveNow.length > 0 && <span className="muted">{liveNow.length} live streams</span>}
             </div>
-            {!homeLoading && liveNow.length > 0 && <span className="muted">{liveNow.length} live streams</span>}
-          </div>
-          <LiveNowGrid channels={liveNow} loading={homeLoading} />
-        </section>
+            <LiveNowGrid channels={liveNow} loading={homeLoading} />
+          </section>
+        ) : null}
 
-        <ChannelRail
-          id="recommended"
-          title="Recommended for you"
-          subtitle="Momentum channels lined up right after the featured live stage."
-          channels={recommended}
-          loading={homeLoading}
-          eyebrow="Personalized picks"
-        />
-
-        <div className="home-section-grid">
-          <CategoryRail id="top-categories" categories={categories} loading={homeLoading} />
+        {showRecommendedSection ? (
           <ChannelRail
-            id="trending"
-            title="Trending now"
-            subtitle="Streams pulling attention across the network right now."
-            channels={trending}
+            id="recommended"
+            title="Recommended for you"
+            subtitle="Good channels to open next."
+            channels={recommended}
             loading={homeLoading}
-            density="compact"
-            eyebrow="Momentum"
+            eyebrow="Suggested"
           />
-        </div>
+        ) : null}
+
+        {showCategoriesSection || showTrendingSection ? (
+          <div className="home-section-grid">
+            {showCategoriesSection ? <CategoryRail id="top-categories" categories={categories} loading={homeLoading} /> : null}
+            {showTrendingSection ? (
+              <ChannelRail
+                id="trending"
+                title="Trending now"
+                subtitle="Streams getting attention right now."
+                channels={trending}
+                loading={homeLoading}
+                density="compact"
+                eyebrow="Trending"
+              />
+            ) : null}
+          </div>
+        ) : null}
 
         <section className="home-section surface" id="directory">
           <div className="home-section__header">
@@ -263,7 +205,7 @@ export function HomePageView({
               <p className="muted">
                 {query
                   ? `Showing channels that match "${query}".`
-                  : "Scan the full lineup once you are ready to move beyond the curated rows."}
+                  : "Every channel on this install, in one place."}
               </p>
             </div>
             {!directoryLoading && !directoryError && channels.length > 0 && <span className="muted">{channels.length} channels</span>}
@@ -278,6 +220,18 @@ export function HomePageView({
             <div className="state-panel state-panel--error" role="alert">
               <strong>Directory unavailable</strong>
               <p className="muted">{directoryErrorMessage}</p>
+            </div>
+          ) : channels.length === 0 && !query ? (
+            <div className="state-panel">
+              <strong>No channels yet</strong>
+              <p className="muted">
+                Start with creator setup, go live from OBS, and this directory will become the public home for every stream on your install.
+              </p>
+              <div className="home-hero__spotlight-actions">
+                <Link href="/creator/getting-started" className="primary-button">
+                  Start creator setup
+                </Link>
+              </div>
             </div>
           ) : (
             <DirectoryGrid channels={channels} />

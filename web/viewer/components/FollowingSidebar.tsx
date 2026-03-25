@@ -25,12 +25,6 @@ export function FollowingSidebar() {
   });
 
   const summary = (() => {
-    if (status === "loading") {
-      return FOLLOWING_COPY.loading;
-    }
-    if (status === "error") {
-      return error ?? FOLLOWING_COPY.error;
-    }
     if (status === "ready") {
       return channels.length > 0 ? FOLLOWING_COPY.summaryFollowed(channels.length) : FOLLOWING_COPY.empty;
     }
@@ -109,10 +103,6 @@ export function FollowingSidebar() {
           )}
         />
       )}
-
-      <p className="following-sidebar__footnote muted">
-        This list refreshes automatically so live creators surface without a full page reload.
-      </p>
     </div>
   );
 }

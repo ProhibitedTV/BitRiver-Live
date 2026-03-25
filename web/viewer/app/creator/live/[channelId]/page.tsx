@@ -208,12 +208,12 @@ export default function CreatorLivePage() {
 
   const previewMessage = useMemo(() => {
     if (previewReady && testStreamStatus.key === "live") {
-      return "Your live preview is ready. Confirm video and audio here before you share the viewer link.";
+      return "Preview is live. Check video and audio, then share the channel.";
     }
     if (previewPending) {
-      return "BitRiver is receiving your stream, but the preview player is still warming up. Keep OBS running and this page will refresh automatically.";
+      return "BitRiver is receiving your stream. Keep OBS running while the preview starts.";
     }
-    return "When your OBS test reaches BitRiver, your preview will appear here so you can confirm everything before sharing.";
+    return "Start streaming in OBS. The preview will appear here automatically.";
   }, [previewPending, previewReady, testStreamStatus.key]);
 
   const handleTitleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -325,42 +325,20 @@ export default function CreatorLivePage() {
       <section className="workspace-hero">
         <div className="workspace-hero__copy">
           <span className="page-eyebrow">Go live</span>
-          <h2>Run a calm, guided control room</h2>
-          <p className="muted creator-live__hero-note">
-            Move from channel confirmation to OBS setup to preview and sharing in one steady flow. Signal checks refresh automatically while you work through the page.
-          </p>
+          <h2>Go live from one simple setup screen</h2>
+          <p className="muted creator-live__hero-note">Confirm the channel, copy the OBS settings, check the preview, and share the viewer link.</p>
         </div>
         <div className="workspace-hero__actions">
-          <Link href={`/creator/uploads/${channelId}`} className={buttonClassName("secondary")}>
-            Open uploads
-          </Link>
           <a href={viewerPageHref} className={buttonClassName("secondary")} target="_blank" rel="noreferrer">
             Open public channel
           </a>
-        </div>
-        <div className="workspace-summary-grid">
-          <article className="summary-card">
-            <span className="summary-card__label">Channel</span>
-            <strong className="summary-card__value">{currentChannelTitle}</strong>
-            <p className="muted">Category: {currentChannelCategory}</p>
-          </article>
-          <article className="summary-card">
-            <span className="summary-card__label">Current signal</span>
-            <strong className="summary-card__value">{testStreamStatus.label}</strong>
-            <p className="muted">Last checked {formatTimestamp(testStreamUpdatedAt)}</p>
-          </article>
-          <article className="summary-card">
-            <span className="summary-card__label">Preview</span>
-            <strong className="summary-card__value">{previewReady ? "Ready" : "Pending"}</strong>
-            <p className="muted">{previewReady ? "Review before sharing." : "Keep OBS running while playback warms up."}</p>
-          </article>
         </div>
       </section>
 
       <Card className="workspace-card step-card" aria-labelledby="channel-section-heading">
         <CardHeader className="workspace-card__header">
           <h3 id="channel-section-heading">1) Channel</h3>
-          <p className="muted">Confirm which channel you are about to stream from before you copy anything into OBS.</p>
+          <p className="muted">Confirm the channel and title viewers should see before you open OBS.</p>
         </CardHeader>
         <CardBody className="creator-live__section">
           <label className="input-stack" htmlFor="current-channel-name">
@@ -399,10 +377,7 @@ export default function CreatorLivePage() {
                   placeholder="What are you streaming today?"
                 />
               </label>
-              <Button
-                type="submit"
-                disabled={savingTitle || !titleDraft.trim() || titleDraft.trim() === playback.channel.title}
-              >
+              <Button type="submit" disabled={savingTitle || !titleDraft.trim() || titleDraft.trim() === playback.channel.title}>
                 {savingTitle ? "Saving..." : "Save title"}
               </Button>
             </div>
@@ -417,8 +392,8 @@ export default function CreatorLivePage() {
 
       <Card className="workspace-card step-card" aria-labelledby="obs-setup-heading">
         <CardHeader className="workspace-card__header">
-          <h3 id="obs-setup-heading">2) OBS Setup</h3>
-          <p className="muted">Paste these exact values into OBS - Settings - Stream, and keep the stream key hidden until you need it.</p>
+          <h3 id="obs-setup-heading">2) Stream settings</h3>
+          <p className="muted">Use these values in OBS &gt; Settings &gt; Stream.</p>
         </CardHeader>
         <CardBody className="creator-live__section">
           <div className="creator-live__field-group">
@@ -495,69 +470,36 @@ export default function CreatorLivePage() {
             ) : null}
           </div>
 
-          <div className="creator-live__field-group">
-            <div className="workspace-card__actions">
-              <label className="input-stack workspace-grid__full" htmlFor="obs-settings-block">
-                <span>OBS settings block</span>
-                <textarea
-                  id="obs-settings-block"
-                  aria-label="OBS settings block"
-                  readOnly
-                  rows={4}
-                  value={obsSettingsBlock}
-                  style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", resize: "vertical" }}
-                />
-              </label>
-              <Button
-                variant="secondary"
-                data-testid="copy-obs-settings"
-                onClick={() => {
-                  void handleCopyObsSettings();
-                }}
-                disabled={!isChannelOwner}
-              >
-                Copy OBS settings
-              </Button>
-            </div>
-            <p className="muted">Use `Service: Custom`, then paste the Server and Stream Key values into OBS.</p>
-            {obsSettingsCopyMessage ? (
-              <p className={obsSettingsCopyMessage.startsWith("Copied") ? "muted" : "error"}>{obsSettingsCopyMessage}</p>
-            ) : null}
+          <div className="state-panel">
+            <strong>OBS</strong>
+            <p className="muted">Service: Custom</p>
+            <p className="muted">Server: {preferredIngestEndpoint ?? "Not available yet"}</p>
+            <p className="muted">Stream key: reveal or copy it above when you need it.</p>
           </div>
 
-          {ingestEndpoints.length > 1 ? (
-            <details>
-              <summary>Show all ingest URLs</summary>
-              <div className="creator-live__ingest-list" style={{ marginTop: "0.75rem" }}>
-                {ingestEndpoints.map((endpoint, index) => (
-                  <div key={endpoint} className="creator-live__field-group">
-                    <label className="input-stack" htmlFor={`ingest-endpoint-${index}`}>
-                      <span>{describeEndpoint(endpoint, index)}</span>
-                      <input id={`ingest-endpoint-${index}`} readOnly value={endpoint} />
-                    </label>
-                    <div className="workspace-card__actions">
-                      <Button
-                        variant="secondary"
-                        data-testid={`copy-ingest-endpoint-${index}`}
-                        onClick={() => {
-                          void handleCopyIngestEndpoint(endpoint);
-                        }}
-                      >
-                        {copiedIngestEndpoint === endpoint ? "Copied" : "Copy URL"}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </details>
+          <div className="workspace-card__actions">
+            <Button
+              variant="secondary"
+              data-testid="copy-obs-settings"
+              onClick={() => {
+                void handleCopyObsSettings();
+              }}
+              disabled={!isChannelOwner}
+            >
+              Copy OBS settings
+            </Button>
+          </div>
+          <p className="muted">Paste the copied settings into OBS and start streaming.</p>
+          {obsSettingsCopyMessage ? (
+            <p className={obsSettingsCopyMessage.startsWith("Copied") ? "muted" : "error"}>{obsSettingsCopyMessage}</p>
           ) : null}
         </CardBody>
       </Card>
 
       <Card className="workspace-card step-card" aria-labelledby="test-stream-heading">
         <CardHeader className="workspace-card__header">
-          <h3 id="test-stream-heading">3) Test Stream</h3>
-          <p className="muted">Start streaming from OBS. This page refreshes the current live signals every 4 seconds.</p>
+          <h3 id="test-stream-heading">3) Go live</h3>
+          <p className="muted">Start the stream in OBS. This page checks the signal every 4 seconds and shows the preview as soon as playback is ready.</p>
         </CardHeader>
         <CardBody className="creator-live__section">
           <div className="creator-live__signal-card surface--empty" data-testid="test-stream-status-card">
@@ -579,7 +521,7 @@ export default function CreatorLivePage() {
               Refresh now
             </Button>
             {latestSession ? (
-              <span className="muted">Latest ingest started {formatTimestamp(latestSession.startedAt)}</span>
+              <span className="muted">Current session started {formatTimestamp(latestSession.startedAt)}</span>
             ) : (
               <span className="muted">No recent ingest session detected yet.</span>
             )}
@@ -587,33 +529,17 @@ export default function CreatorLivePage() {
 
           {sessionError ? <InlineAlert>{sessionError}</InlineAlert> : null}
 
-          <details>
-            <summary>Common issues</summary>
-            <ul className="creator-live__notes muted" style={{ marginTop: "0.5rem" }}>
-              <li>Paste the server URL from this page directly into OBS to avoid endpoint mismatches.</li>
-              <li>Copy the latest stream key here in case an older key was rotated.</li>
-              <li>Keep OBS streaming for a few extra seconds if the status shows reconnecting while the preview warms up.</li>
-              <li>If the status stays offline, double-check that OBS is set to RTMP and that the selected channel matches this page.</li>
-            </ul>
-          </details>
-        </CardBody>
-      </Card>
-
-      <Card className="workspace-card step-card" aria-labelledby="preview-heading">
-        <CardHeader className="workspace-card__header">
-          <h3 id="preview-heading">4) Preview</h3>
-          <p className="muted">{previewMessage}</p>
-        </CardHeader>
-        <CardBody className="creator-live__section">
-          {latestSession ? <p className="muted">Current session started {formatTimestamp(latestSession.startedAt)}</p> : null}
-          <Player playback={playback.playback} channelId={channelId} live={playback.live} liveState={playback.channel.liveState} />
+          <div className="stack stack--sm">
+            <p className="muted">{previewMessage}</p>
+            <Player playback={playback.playback} channelId={channelId} live={playback.live} liveState={playback.channel.liveState} />
+          </div>
         </CardBody>
       </Card>
 
       <Card className="workspace-card step-card" aria-labelledby="share-heading">
         <CardHeader className="workspace-card__header">
-          <h3 id="share-heading">5) Share</h3>
-          <p className="muted">Once the preview looks right, copy your viewer link and open the same public page that viewers will use.</p>
+          <h3 id="share-heading">4) Share</h3>
+          <p className="muted">When the preview looks right, copy the viewer link and open the same page your audience will use.</p>
         </CardHeader>
         <CardBody className="creator-live__section">
           <label className="input-stack" htmlFor="viewer-link">
