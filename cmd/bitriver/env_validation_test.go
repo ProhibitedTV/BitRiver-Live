@@ -549,7 +549,7 @@ func TestRenderOMEConfigRejectsTestDefaults(t *testing.T) {
 		t.Fatalf("write env: %v", err)
 	}
 
-	err := renderOMEFromEnv(envPath, true, false, true)
+	err := renderOMEFromEnv(envPath, filepath.Join(workspace, "deploy", "ome", "Server.generated.xml"), true, false, true)
 	if err == nil {
 		t.Fatalf("expected ome-test defaults to be rejected")
 	}
@@ -583,7 +583,7 @@ func TestRenderOMEConfigFromEnvWritesSecrets(t *testing.T) {
 		t.Fatalf("write env: %v", err)
 	}
 
-	if err := renderOMEFromEnv(envPath, true, false, true); err != nil {
+	if err := renderOMEFromEnv(envPath, filepath.Join(workspace, "deploy", "ome", "Server.generated.xml"), true, false, true); err != nil {
 		t.Fatalf("render config: %v", err)
 	}
 

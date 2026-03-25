@@ -1,2 +1,0 @@
-pgx.ErrNoRows="pgx stub: no rows"
-expected_storage_driver=postgres

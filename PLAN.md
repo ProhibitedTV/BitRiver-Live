@@ -1626,3 +1626,74 @@
 ## Test plan
 - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
 - `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx`
+
+## Scope (current change)
+- Redeploy the local app stack so `http://localhost:8080` reflects the latest checkout, including the most recent viewer/auth updates.
+- Use the canonical Compose contract (`.env` plus `deploy/docker-compose.yml`) without changing deployment settings.
+- Confirm the live HTTP routes after the rebuild/recreate instead of assuming local source edits were already picked up.
+
+## Assumptions
+- The required root `.env` already exists and is valid for the local review stack.
+- Rebuilding and recreating `bitriver-live` and `viewer` should be sufficient to surface the latest app changes on `localhost:8080`.
+- A successful route check on `/`, `/viewer`, and the current auth entry path is enough to confirm the redeploy worked for this request.
+
+## Risks
+- Docker build/recreate commands can time out or hit local daemon/config permission issues on this Windows host.
+- If the running app depends on stale supporting services or cached assets, a targeted app-service rebuild may not be enough and we may need to record that blocker.
+- HTTP verification can pass while still missing the intended UI update if we probe the wrong route, so the post-redeploy check needs to target the current viewer/auth surface.
+
+## Test plan
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
+- `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'Browse BitRiver Live|Watch live now|Full directory' -AllMatches`
+- `(Invoke-WebRequest -UseBasicParsing 'http://localhost:8080/viewer?auth=signup').Content | Select-String -Pattern 'Continue where you left off|Create your BitRiver account|/viewer' -AllMatches`
+
+## Scope (current change)
+- Audit the repository from a first-time open-source adopter's perspective and tighten the public-facing structure before a credible tagged release.
+- Focus on low-risk, high-signal improvements: repo hygiene, onboarding clarity, community/security metadata, release docs, and small docs/config fixes that improve trust.
+- Avoid speculative product rewrites; only make code/config changes when they clearly support safer setup or better release ergonomics.
+
+## Assumptions
+- The existing deployment/docs direction is broadly correct; the main gap is public presentation, consistency, and release readiness rather than missing core functionality.
+- Durable release/runbook docs under `docs/` should stay, but ad-hoc internal artifacts (temporary files, dated evidence logs, speculative release notes) can be removed or replaced with cleaner public equivalents.
+- Public contributors will expect standard repository signals (`CONTRIBUTING.md`, `SECURITY.md`, issue templates, changelog, release checklist) at the repo root or in `.github/`.
+
+## Risks
+- Rewriting the README too aggressively could drift from the actual deployment contract or overstate current support; copy changes need to stay precise and source-backed.
+- Removing tracked artifacts must not break any scripts or docs that still assume those files exist, so references need to be updated in the same pass.
+- Public release docs need to align with the repo's existing semver/release workflow; introducing a contradictory version story would create more confusion than it solves.
+
+## Test plan
+- `git ls-files artifacts .tmp docs/releases`
+- `./scripts/check-no-committed-secrets.sh`
+- `./scripts/check-doc-installer-language.sh`
+- `./scripts/generate-contract-doc.sh --check`
+- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh`
+
+## Scope (current change)
+- Do a second public-release polish pass focused only on outsider trust and adoption signals, not on product behavior or new features.
+- Tighten the first 30 seconds of the README, clarify install/onboarding surfaces, and remove stale or internally scoped wording from public docs and packaging metadata.
+- Add or refine low-risk legitimacy/support surfaces where they materially improve newcomer confidence.
+
+## Assumptions
+- The main remaining gaps are presentation and consistency issues rather than missing runtime capability.
+- Public adopters benefit more from a smaller number of crisp, trustworthy docs than from adding more sprawling internal-detail pages.
+- The current repository remote (`github.com/ProhibitedTV/BitRiver-Live`) is the right public source of truth for repository URLs shown in docs and package metadata.
+
+## Risks
+- Tightening quickstart/install docs too aggressively could accidentally hide important constraints that operators still need before production use.
+- Updating public repo URLs and support paths must stay aligned across docs, issue templates, and packaging metadata so the repo does not feel split-brained.
+- Release-stage wording needs to stay honest about the supported single-host baseline without creating a contradictory version story.
+
+## Test plan
+- `Get-Content README.md -TotalCount 160`
+- `Get-Content docs/quickstart.md -TotalCount 160`
+- `Get-Content CONTRIBUTING.md`
+- `Get-Content SUPPORT.md`
+- `Get-Content .github/ISSUE_TEMPLATE/config.yml`
+- `Get-Content docs/production-status.md`
+- `rg -n "github.com/bitriver-live/bitriver-live|docs/cross-platform-plan.md|v1.0|SUPPORT.md" README.md docs CONTRIBUTING.md .github deploy scripts`
+- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-doc-installer-language.sh`
+- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-no-committed-secrets.sh`

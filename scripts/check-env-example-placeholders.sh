@@ -15,7 +15,7 @@ if [[ ! -f "$ENV_EXAMPLE_PATH" ]]; then
   exit 1
 fi
 
-python3 - "$COMPOSE_PATH" "$ENV_EXAMPLE_PATH" <<'PY'
+./scripts/python.sh - "$COMPOSE_PATH" "$ENV_EXAMPLE_PATH" <<'PY'
 from __future__ import annotations
 
 import math

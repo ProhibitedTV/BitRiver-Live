@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Setup and support guide
+    url: https://github.com/ProhibitedTV/BitRiver-Live/blob/main/SUPPORT.md
+    about: Start here for install help, supported scope, and what to include in an issue.
+  - name: Security policy
+    url: https://github.com/ProhibitedTV/BitRiver-Live/blob/main/SECURITY.md
+    about: Report vulnerabilities privately instead of opening a public issue.

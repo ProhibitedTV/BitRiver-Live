@@ -1,5 +1,0 @@
-==> Command: ./scripts/test-quickstart.sh
-==> Started: 2026-02-27T16:30:11+00:00
-error: docker is required for quickstart smoke checks
-==> Exit code: 1
-==> Finished: 2026-02-27T16:30:11+00:00

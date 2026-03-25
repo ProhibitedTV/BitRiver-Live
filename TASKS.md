@@ -3374,3 +3374,214 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - Task 3 complete: added focused `web/viewer/__tests__/authDialog.test.tsx` coverage for the trimmed route-context contract and ran the targeted viewer Jest command successfully. Jest still emitted the existing `.next/standalone/package.json` haste-collision warning from the worktree, but the suite passed cleanly.
 - Task 3 checks:
   - `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx`
+
+## Scoped change: local redeploy for latest localhost review
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the local redeploy scope before runtime actions
+  - Acceptance criteria:
+    - `PLAN.md` captures the redeploy scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered rebuild and route-check tasks before Docker actions begin.
+
+- [x] Task 2 - Rebuild and recreate the local app services from the current checkout
+  - Acceptance criteria:
+    - `bitriver-live` and `viewer` are rebuilt from the current source tree using the canonical Compose contract.
+    - Compose status output is captured after the rebuild attempt.
+    - The action stays limited to the app services unless a hard blocker requires wider intervention.
+
+- [x] Task 3 - Verify the redeployed local routes reflect the latest app update
+  - Acceptance criteria:
+    - `http://localhost:8080/` responds after the rebuild.
+    - `http://localhost:8080/viewer` serves the current homepage content from the updated app.
+    - The live viewer auth entry path reflects the latest auth-overlay update.
+    - `TASKS.md` records the post-redeploy status or any host blocker precisely.
+
+### Execution log (local redeploy for latest localhost review)
+- Task 1 complete: recorded the redeploy scope in `PLAN.md` and `TASKS.md` before touching Docker so the rebuild/recreate steps and live route checks were explicit.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 30`
+  - `Get-Content TASKS.md | Select-Object -Last 35`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short`
+- Task 2 complete: captured the pre-redeploy Compose state, rebuilt `bitriver-live` and `viewer` from the current checkout with the canonical Compose contract, and confirmed the recreated app services came back on fresh container ages. Compose also refreshed the dependent app-path containers it needed during the targeted `up -d --build` flow, but no contract changes were made.
+- Task 2 checks:
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- Task 3 complete: verified the redeployed stack is serving from the updated build. `/` still returns the expected `307` redirect, `/viewer` serves the current homepage copy including `Start with creators already on air`, `Watch live now`, and `Full directory`, and the live auth flow now resolves to `http://127.0.0.1:8080/viewer?auth=signin&next=%2Fviewer` on this stack (self-signup is currently disabled), where a browser-level check confirmed `CONTINUE WHERE YOU LEFT OFF`, `/viewer`, and the trimmed sign-in overlay copy are present while the removed auto-return sentence stays absent.
+- Task 3 checks:
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
+  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'Browse BitRiver Live|Watch live now|Full directory' -AllMatches`
+  - `(Invoke-WebRequest -UseBasicParsing 'http://localhost:8080/viewer?auth=signup').Content | Select-String -Pattern 'Continue where you left off|Create your BitRiver account|/viewer' -AllMatches` (route served, but the auth surface required a hydrated browser check on this self-signup-disabled stack)
+  - escalated headless browser probe against `http://127.0.0.1:8080/viewer?auth=signup`
+  - escalated headless browser probe against `http://127.0.0.1:8080/viewer` with a click on `Sign in`
+
+## Scoped change: public release readiness and repo hygiene pass
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the public-release audit scope before editing
+  - Acceptance criteria:
+    - `PLAN.md` captures the audit/improvement scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered hygiene/docs/release tasks before edits begin.
+    - The read-only audit identifies concrete trust/onboarding/release blockers rather than vague cleanup ideas.
+
+- [x] Task 2 - Remove internal-looking tracked clutter and harden ignore rules
+  - Acceptance criteria:
+    - Generated temp files and one-off release evidence logs are no longer tracked.
+    - `.gitignore` covers the relevant local temp/output paths without hiding real source files.
+    - Any docs that referenced removed artifact paths are updated or replaced with cleaner public guidance.
+
+- [x] Task 3 - Add the missing public repo governance and contribution surfaces
+  - Acceptance criteria:
+    - Root/community files cover contributing, security reporting, code of conduct, and changelog/release expectations.
+    - GitHub issue templates and a PR template exist for public collaboration.
+    - Added docs stay honest about current support scope and maintainer expectations.
+
+- [x] Task 4 - Rework onboarding docs so the repo lands well for first-time outsiders
+  - Acceptance criteria:
+    - `README.md` leads with a crisp value proposition and practical quickstart path.
+    - The README clearly states what works today, what is planned, and what is not supported.
+    - Broken/stale onboarding links or misleading internal-language sections are fixed in the touched docs.
+
+- [x] Task 5 - Align release-facing artifacts for a credible first public tag
+  - Acceptance criteria:
+    - Release docs/changelog support a real first public release instead of internal placeholder history.
+    - The repo has a clear release checklist and draft notes path for the recommended initial tag.
+    - Remaining public-release blockers are documented precisely after verification.
+
+- [x] Task 6 - Run relevant validation and record the final release-readiness status
+  - Acceptance criteria:
+    - Repo hygiene/docs checks are run and logged.
+    - The closest feasible repo-wide verification gate is attempted and recorded.
+    - `TASKS.md` captures any residual blockers that still prevent a confident public release.
+
+### Execution log (public release readiness and repo hygiene pass)
+- Task 1 complete: finished the read-only audit before editing. The strongest public-facing blockers are tracked temp/release-log artifacts under `.tmp/` and `artifacts/`, missing public collaboration/security files, missing issue/PR templates, a README that reads more like an internal maintainer memo than a first-release landing page, a broken quickstart anchor in `web/viewer/README.md`, and stale/speculative release docs (`docs/releases/release-checklist-report-*.md`, `docs/releases/v1.0.0.md`) that weaken trust.
+- Task 1 checks:
+  - `Get-ChildItem -Force | Select-Object Mode,Length,LastWriteTime,Name`
+  - `Get-Content README.md`
+  - `Get-Content deploy/.env.example`
+  - `Get-ChildItem .github -Recurse | Select-Object FullName`
+  - `git ls-files artifacts .tmp docs/releases`
+  - `rg -n "quick-start-docker-one-command|v1\\.2\\.3|artifacts/release-checks|internal/service" README.md web/viewer/README.md docs .github deploy`
+- Task 2 complete: removed tracked temp/release-evidence clutter (`.tmp/render-srs-config.sh`, `artifacts/release-checks-*`, and dated `docs/releases/release-checklist-report-*` files), deleted the stale speculative `docs/releases/v1.0.0.md`, and tightened `.gitignore` for repo-local scratch/output paths (`artifacts`, `.artifacts`, `.tmp`, `.codex-tmp`, `dist`, and targeted `.gocache-*` directories).
+- Task 2 checks:
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live diff --name-status -- .gitignore .tmp artifacts docs/releases`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live check-ignore -v .tmp/example artifacts/example .artifacts/example .codex-tmp/example dist/example`
+  - `rg -n "artifacts/release-checks|\\.tmp/render-srs-config\\.sh" README.md docs deploy scripts .github`
+- Task 3 complete: added public-facing contributor/community files (`CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`) plus GitHub issue templates and a pull-request template so the repo has the expected trust and collaboration surfaces for outside contributors.
+- Task 3 checks:
+  - `Get-Item CONTRIBUTING.md,SECURITY.md,CODE_OF_CONDUCT.md,.github/pull_request_template.md | Select-Object Name,Length`
+  - `Get-ChildItem .github/ISSUE_TEMPLATE | Select-Object Name,Length`
+  - `Get-Content SECURITY.md`
+- Task 4 complete: rewrote the root `README.md` around a public-first pitch, a simpler quickstart, explicit support boundaries, and a small architecture overview. Also fixed the stale quickstart anchor in `web/viewer/README.md`.
+- Task 4 checks:
+  - `Get-Content README.md -TotalCount 120`
+  - `rg -n "quick-start-docker-one-command|#quickstart" README.md web/viewer/README.md`
+- Task 5 complete: added a root `CHANGELOG.md`, replaced the stale release-note story with `docs/releases/README.md` and `docs/releases/v1.2.3-draft.md`, and aligned the repo around the existing `v1.2.3` version lineage instead of the speculative checked-in `v1.0.0` note.
+- Task 5 checks:
+  - `Get-ChildItem docs/releases | Select-Object Name,Length`
+  - `Get-Content CHANGELOG.md`
+  - `rg -n "first public release|v1\\.0\\.0 release notes" CHANGELOG.md docs/releases docs`
+- Task 6 complete: validation surfaced and then cleared several low-risk release blockers in the repo itself. The shell/doc checks now pass, `docs/contract.md` was regenerated from `deploy/.env.example`, `scripts/check-doc-installer-language.sh` now points at the correct `docs/labs/cross-platform-plan.md`, `verify.sh` now uses a small Python 3 resolver helper for clearer cross-platform prerequisite handling, the OME render tests now write to temp outputs instead of racing on `deploy/ome/Server.generated.xml`, the Windows bash quickstart test now stubs `go` correctly, and the stream/transcoder gauges now clamp at read/export time so concurrent stop-before-start races do not leak negative state or order-dependent positives.
+- Task 6 result: the repo-wide `./scripts/verify.sh` gate now gets all the way through Go tests, architecture checks, dependency checks, and contract invariants. The remaining failure is precise and release-relevant: the local root `.env` used by this workstation does not yet pin real third-party image digests, so `scripts/require-image-digests.sh --env-file .env` stops the gate at the production digest-enforcement step. That is the main remaining blocker before a confident public release tag.
+- Task 6 checks:
+  - `& 'C:\Program Files\Git\bin\bash.exe' -n scripts/python.sh scripts/check-env-example-placeholders.sh scripts/check-contract-invariants.sh scripts/verify.sh`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-no-committed-secrets.sh`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-doc-installer-language.sh`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/generate-contract-doc.sh`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/generate-contract-doc.sh --check`
+  - `New-Item -ItemType Directory -Force .gocache-ingest | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-ingest).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/ingest -count=1 -timeout=120s`
+  - `New-Item -ItemType Directory -Force .gocache-scripts-fix | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-scripts-fix).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./scripts -count=1 -timeout=120s`
+  - `New-Item -ItemType Directory -Force .gocache-bitriver-fix | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-bitriver-fix).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1 -timeout=120s`
+  - `New-Item -ItemType Directory -Force .gocache-metrics-fix | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-metrics-fix).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/observability/metrics -count=1 -timeout=120s`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (current remaining blocker: local `.env` is missing required third-party digest pins for production pull mode)
+
+## Scoped change: second-pass outsider trust and adoption polish
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [ ] Task 1 - Record the trust/adoption polish scope and confirm the remaining rough edges
+  - Acceptance criteria:
+    - `PLAN.md` captures the narrowed second-pass scope, assumptions, risks, and focused checks before edits.
+    - `TASKS.md` lists the ordered public-surface tasks before files are changed.
+    - Read-only inspection identifies concrete remaining trust issues (for example unclear README opening, install/support ambiguity, stale repo URLs, or inconsistent release-stage wording).
+
+- [x] Task 2 - Tighten the README and install-facing docs for first-time trust
+  - Acceptance criteria:
+    - The README makes the project scope, intended operator, and quickest honest first success obvious in the first screenful.
+    - Public install docs remove stale or confusing wording, fix repo/link inconsistencies, and feel more like a maintained project than private notes.
+    - Public-facing packaging/docs metadata no longer point at the wrong GitHub repository path.
+
+- [x] Task 3 - Strengthen contributor/support/release legitimacy signals
+  - Acceptance criteria:
+    - The repo has a clear public support path for newcomers and issue-template routing reflects it.
+    - Contributor-facing docs are clearer about scope, expectations, and the best-supported path.
+    - Release-stage/versioning wording avoids confusing or internally contradictory messaging.
+
+- [x] Task 4 - Run focused validation and record the second-pass outcome
+  - Acceptance criteria:
+    - The touched docs/support/template surfaces are reviewed after edits.
+    - Relevant repo-hygiene checks are rerun and logged.
+    - `TASKS.md` records any remaining outsider-trust issues that should still block or temper a public release.
+
+### Execution log (second-pass outsider trust and adoption polish)
+- Task 1 complete: read-only review confirmed the remaining trust gaps are mostly presentation mismatches rather than missing mechanics. The top of `README.md` still made a newcomer infer too much about who the project is for and what success looks like, `docs/quickstart.md` still read like an internal operator notebook near the top, public package/docs metadata still referenced `github.com/bitriver-live/bitriver-live` even though this checkout's `origin` points at `github.com/ProhibitedTV/BitRiver-Live`, and the release-stage wording in `docs/production-status.md` still mixed a `v1.0` label into a repo that is otherwise aligned to `v1.2.3`.
+- Task 1 checks:
+  - `Get-Content README.md`
+  - `Get-Content CONTRIBUTING.md`
+  - `Get-Content CHANGELOG.md`
+  - `Get-Content docs/releases/README.md`
+  - `Get-Content docs/quickstart.md`
+  - `Get-Content SECURITY.md`
+  - `Get-Content docs/production-release.md`
+  - `Get-Content docs/versioning.md`
+  - `Get-Content .github/RELEASE_NOTES_TEMPLATE.md`
+  - `Get-ChildItem .github -Recurse | Select-Object FullName`
+  - `Test-Path bitriver-live-banner-text.png; Test-Path SUPPORT.md`
+  - `Get-Content docs/releases/v1.2.3-draft.md`
+  - `rg -n "â|�" README.md CONTRIBUTING.md docs web/viewer/README.md`
+  - `Get-Content docs/testing.md`
+  - `Get-Content web/viewer/README.md`
+  - `git remote -v`
+  - `Get-Content docs/architecture.md`
+  - `Get-Content .github/dependabot.yml`
+  - `rg -n "github.com/bitriver-live|ProhibitedTV/BitRiver-Live|cross-platform-plan" README.md docs web .github CONTRIBUTING.md SECURITY.md CHANGELOG.md`
+  - `Get-Content docs/production-single-host.md`
+  - `Get-Content LICENSE`
+  - `Get-Content CODE_OF_CONDUCT.md`
+  - `rg -n "releases/latest/download|ProhibitedTV/BitRiver-Live|github.com/bitriver-live/bitriver-live" README.md docs deploy .github web cmd scripts`
+  - `Get-Content scripts/generate-brew-formula.sh`
+  - `Get-Content deploy/installers/nfpm.yaml`
+  - `Get-Content .github/ISSUE_TEMPLATE/config.yml`
+  - `Get-Content .github/ISSUE_TEMPLATE/bug_report.yml`
+  - `Get-Content .github/ISSUE_TEMPLATE/feature_request.yml`
+- Task 2 complete: tightened the top of `README.md` around an honest operator fit, a clearer first-success quickstart, and a simpler support boundary, then reshaped the top of `docs/quickstart.md` so install paths, expected first success, and migration notes read like maintained public docs instead of internal notes. This pass also corrected the public GitHub repository path in install/package metadata (`docs/quickstart.md`, `scripts/generate-brew-formula.sh`, and `deploy/installers/nfpm.yaml`) and replaced the misleading architecture/quickstart references to the lab-only cross-platform plan with the supported production-status baseline.
+- Task 2 checks:
+  - `Get-Content README.md -TotalCount 180`
+  - `Get-Content docs/quickstart.md -TotalCount 180`
+  - `Get-Content docs/architecture.md -TotalCount 60`
+  - `Get-Content deploy/installers/nfpm.yaml`
+  - `Get-Content scripts/generate-brew-formula.sh`
+- Task 3 complete: added a root `SUPPORT.md`, linked it from `README.md` and `CONTRIBUTING.md`, added GitHub issue-template contact links for support/security, clarified maintainer priorities in `CONTRIBUTING.md`, tightened release-note hygiene guidance in `docs/releases/README.md`, and changed the confusing `v1.0` release-stage label in `docs/production-status.md` to a clearer `stable` stage.
+- Task 3 checks:
+  - `Get-Content SUPPORT.md`
+  - `Get-Content CONTRIBUTING.md`
+  - `Get-Content .github/ISSUE_TEMPLATE/config.yml`
+  - `Get-Content docs/production-status.md -TotalCount 120`
+  - `Get-Content docs/releases/README.md`
+- Task 4 complete: the second-pass trust/adoption surfaces were re-read after edits, the stale public repo URL and stale link grep returned no remaining matches, the docs installer-language check and committed-secret guard both passed, and the updated brew-formula shell script passed `bash -n` once rerun outside the sandbox after a Windows Git Bash signal-pipe permission failure in the sandboxed attempt.
+- Task 4 result: the remaining public-release caution is still operational rather than presentational. The repo now reads more intentionally to outsiders, but the final release gate still depends on a production-grade `.env` with pinned third-party image digests so `./scripts/verify.sh` can go fully green end to end.
+- Task 4 checks:
+  - `Get-Content README.md -TotalCount 180`
+  - `Get-Content docs/quickstart.md -TotalCount 180`
+  - `Get-Content SUPPORT.md`
+  - `Get-Content CONTRIBUTING.md`
+  - `Get-Content .github/ISSUE_TEMPLATE/config.yml`
+  - `Get-Content docs/production-status.md -TotalCount 120`
+  - `Get-Content docs/releases/README.md`
+  - `rg -n "github.com/bitriver-live/bitriver-live|docs/cross-platform-plan.md|### v1.0" README.md docs CONTRIBUTING.md .github deploy scripts` (no matches; `rg` exited 1)
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-doc-installer-language.sh`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-no-committed-secrets.sh`
+  - `& 'C:\Program Files\Git\bin\bash.exe' -n scripts/generate-brew-formula.sh` (rerun outside sandbox after a Windows Git Bash permission failure in the sandboxed attempt)

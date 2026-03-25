@@ -10,11 +10,11 @@ coverage.
 `./scripts/verify.sh` requires these tools on `PATH`:
 
 - `go` (for `go test ./...`)
-- `python3` (used by `./scripts/check-contract-invariants.sh` to validate generated artifact references in `docs/contract.md`)
+- Python 3 (`python3`, `python`, or `py -3`) used by the contract/doc validation helpers
 - `docker` (optional; Docker-dependent verify phases (`docker compose ... config`, `./scripts/test-quickstart.sh`) are skipped when Docker is unavailable)
 - `node` + `npm` (optional; required only when viewer lint/test checks are selected)
 
-If `python3` is missing, `./scripts/verify.sh` now fails fast with a clear prerequisite error before running the verify sequence.
+If no usable Python 3 interpreter is available, `./scripts/verify.sh` fails fast with a clear prerequisite error before running the verify sequence.
 
 ## Test taxonomy and single entrypoints
 
