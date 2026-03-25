@@ -1,21 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
-
-function describeDestination(route: string) {
-  const normalized = route.toLowerCase();
-  if (normalized.includes("/browse")) {
-    return "You will land back in browse with your current filters and discovery context intact.";
-  }
-  if (normalized.includes("/channels/")) {
-    return "You will jump right back into the stream page you were watching.";
-  }
-  if (route === "/" || route === "/viewer") {
-    return "You will return to featured broadcasts and live discovery as soon as auth finishes.";
-  }
-  return "You will continue in the viewer route that opened this auth step.";
-}
 
 function formatDestinationPath(route: string) {
   return route.length <= 56 ? route : `${route.slice(0, 53)}...`;
@@ -76,8 +62,7 @@ export function AuthDialog() {
     setMFACode("");
   }, [mfaRequired]);
 
-  const destinationCopy = useMemo(() => describeDestination(authRedirectTo), [authRedirectTo]);
-  const destinationPath = useMemo(() => formatDestinationPath(authRedirectTo), [authRedirectTo]);
+  const destinationPath = formatDestinationPath(authRedirectTo);
   const title = user ? "Signed in to BitRiver Live" : mfaRequired ? "Verify your account" : "Sign in to BitRiver Live";
 
   if (!authDialogOpen) {
@@ -118,7 +103,6 @@ export function AuthDialog() {
             <span className="navbar-context__eyebrow">Continue where you left off</span>
             <strong>{destinationPath}</strong>
           </div>
-          <p className="muted">{destinationCopy}</p>
         </div>
 
         {user ? (
