@@ -45,9 +45,9 @@ What is not guaranteed:
 - No last-minute changes; critical fixes can still land.
 - HA/multi-host general availability.
 
-### v1.0
+### stable
 
-Use for the first stable release with production positioning.
+Use for stable public releases once the supported baseline and release process are in place.
 
 What is guaranteed:
 - Production-capable scope is clearly defined as **operator-managed single-host deployments**.
@@ -55,7 +55,7 @@ What is guaranteed:
 - Security and monitoring runbooks exist for operators.
 - Breaking changes are explicitly documented in release messaging.
 
-What remains outside the v1.0 guarantee:
+What remains outside the stable guarantee:
 - HA/multi-host deployment guarantees.
 - Fully managed operations by the project team.
 

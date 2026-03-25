@@ -11,7 +11,7 @@ output_path="$6"
 cat >"$output_path" <<FORMULA
 class BitriverLive < Formula
   desc "Launcher for BitRiver Live"
-  homepage "https://github.com/bitriver-live/bitriver-live"
+  homepage "https://github.com/ProhibitedTV/BitRiver-Live"
   version "$version"
 
   on_macos do

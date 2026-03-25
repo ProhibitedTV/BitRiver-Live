@@ -6,7 +6,7 @@ section: misc
 priority: optional
 maintainer: BitRiver Live Team <dev@bitriver.live>
 description: BitRiver Live launcher and CLI
-homepage: https://github.com/bitriver-live/bitriver-live
+homepage: https://github.com/ProhibitedTV/BitRiver-Live
 license: MIT
 bindir: /usr/local/bin
 contents:

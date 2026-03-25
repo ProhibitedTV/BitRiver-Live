@@ -20,7 +20,7 @@ The viewer talks to the Go API for channel data, chat, and authentication. When 
 
 - [Node.js 18+](https://nodejs.org/en/download/package-manager)
 - npm (bundled with Node.js on most platforms)
-- A running BitRiver Live API (follow the [Docker quickstart](../../README.md#quick-start-docker-one-command) or the manual workflow in the root README)
+- A running BitRiver Live API (follow the [root quickstart](../../README.md#quickstart) or the more detailed manual workflow in the root docs)
 
 ## Quick preview
 

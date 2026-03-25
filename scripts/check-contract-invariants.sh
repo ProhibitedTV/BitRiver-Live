@@ -20,8 +20,17 @@ fi
 echo "Found $compose_file"
 
 if command -v docker >/dev/null 2>&1; then
+  compose_env_file=""
+  if [[ -f .env ]]; then
+    compose_env_file=".env"
+  elif [[ -f "$env_example" ]]; then
+    compose_env_file="$env_example"
+  else
+    echo "Missing env file for docker compose validation: expected .env or $env_example" >&2
+    exit 1
+  fi
   echo "Validating docker compose config"
-  docker compose -f "$compose_file" config >/dev/null
+  docker compose --env-file "$compose_env_file" -f "$compose_file" config >/dev/null
 else
   echo "Skipping docker compose config validation: docker is not installed or not on PATH."
 fi
@@ -52,7 +61,7 @@ echo "Found generated section markers in $contract_doc"
 
 ./scripts/generate-contract-doc.sh --check
 
-python3 - <<'PY'
+./scripts/python.sh - <<'PY'
 from pathlib import Path
 import re
 import sys

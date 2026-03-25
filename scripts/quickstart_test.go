@@ -3,7 +3,6 @@ package scripts_test
 import (
 	"bytes"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -87,12 +86,15 @@ func TestQuickstartDelegatesToCli(t *testing.T) {
 	}
 	goStubPath := filepath.Join(stubBin, "go")
 	goStubBytes := []byte("#!/usr/bin/env bash\nset -euo pipefail\necho \"$(pwd):$*\" >>\"$GO_LOG\"\n")
-	if runtime.GOOS == "windows" {
-		goStubPath = filepath.Join(stubBin, "go.cmd")
-		goStubBytes = []byte("@echo off\r\necho %CD%:%*>>\"%GO_LOG%\"\r\n")
-	}
 	if err := os.WriteFile(goStubPath, goStubBytes, 0o755); err != nil {
 		t.Fatalf("write go stub: %v", err)
+	}
+	if runtime.GOOS == "windows" {
+		goCmdStubPath := filepath.Join(stubBin, "go.cmd")
+		goCmdStubBytes := []byte("@echo off\r\necho %CD%:%*>>\"%GO_LOG%\"\r\n")
+		if err := os.WriteFile(goCmdStubPath, goCmdStubBytes, 0o755); err != nil {
+			t.Fatalf("write go.cmd stub: %v", err)
+		}
 	}
 
 	cmd := newBashCommand(t, quickstartDst)
@@ -511,27 +513,9 @@ func renderOMEConfig(t *testing.T, repoRoot, envContents string) []byte {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	outputPath := filepath.Join(repoRoot, "deploy", "ome", "Server.generated.xml")
-	original, err := os.ReadFile(outputPath)
-	var originalMode os.FileMode
-	if err == nil {
-		stat, statErr := os.Stat(outputPath)
-		if statErr != nil {
-			t.Fatalf("stat generated config: %v", statErr)
-		}
-		originalMode = stat.Mode()
-		t.Cleanup(func() {
-			_ = os.WriteFile(outputPath, original, originalMode)
-		})
-	} else if errors.Is(err, os.ErrNotExist) {
-		t.Cleanup(func() {
-			_ = os.Remove(outputPath)
-		})
-	} else {
-		t.Fatalf("read generated config: %v", err)
-	}
+	outputPath := filepath.Join(t.TempDir(), "Server.generated.xml")
 
-	cmd := exec.Command("go", "run", "./cmd/bitriver", "ome", "render", "--force", "--env-file", envPath)
+	cmd := exec.Command("go", "run", "./cmd/bitriver", "ome", "render", "--force", "--env-file", envPath, "--output", outputPath)
 	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(),
 		"GOTOOLCHAIN=local",
