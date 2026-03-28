@@ -247,10 +247,7 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	components, overallStatus, statusCode := h.componentHealth(ctx)
-	checks := []ingest.HealthStatus{}
-	if svc := h.systemService(); svc != nil {
-		checks = svc.IngestHealth(ctx)
-	}
+	checks, _ := h.ingestHealthSnapshot(ctx, false)
 
 	for _, check := range checks {
 		switch strings.ToLower(check.Status) {
@@ -270,6 +267,28 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		metrics.SetIngestHealth(check.Component, check.Status)
 	}
 	WriteJSON(w, statusCode, payload)
+}
+
+// ingestHealthSnapshot returns either the cached ingest health snapshot or a
+// fresh probe result depending on whether refresh is requested. The lightweight
+// /healthz path prefers the cached snapshot so Docker liveness checks do not
+// fan out into live OME/SRS/transcoder probes on every request, while /status
+// still forces a refresh for operator-driven diagnostics.
+func (h *Handler) ingestHealthSnapshot(ctx context.Context, refresh bool) ([]ingest.HealthStatus, time.Time) {
+	svc := h.systemService()
+	if svc == nil {
+		return nil, time.Time{}
+	}
+
+	if !refresh {
+		if snapshot, recordedAt := svc.LastIngestHealth(); !recordedAt.IsZero() && len(snapshot) > 0 {
+			return snapshot, recordedAt
+		}
+	}
+
+	snapshot := svc.IngestHealth(ctx)
+	_, recordedAt := svc.LastIngestHealth()
+	return snapshot, recordedAt
 }
 
 // Ready reports the status of core API dependencies without considering ingest

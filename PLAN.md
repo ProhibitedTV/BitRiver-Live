@@ -1764,6 +1764,30 @@
 - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
 
 ## Scope (current change)
+- Investigate the current local `bitriver-ome` container logs to identify the dominant error or warning patterns after install/redeploy.
+- Trace those log patterns back to generated OME config, Compose wiring, or other repo-owned runtime inputs before deciding whether a code/config/docs fix is warranted.
+- If the logs reveal a narrow repo-owned issue, implement the smallest safe fix and rerun focused validation; otherwise keep the outcome as an evidence-backed diagnosis.
+
+## Assumptions
+- The user is referring to the currently running local Compose stack defined by the repo-root `.env` and `deploy/docker-compose.yml`.
+- Recent OME logs still contain enough startup/runtime evidence to diagnose the noisy behavior without tearing down persistent state.
+- Some OME log noise may be caused by expected probe traffic or upstream image behavior, so only clearly actionable repo-owned findings should drive changes.
+
+## Risks
+- OME logging can be verbose, and changing the wrong config in response to a noisy warning could alter the deployment contract or media behavior unnecessarily.
+- Generated OME config is part of the deployment contract, so any fix touching `deploy/ome/Server.generated.xml`, `.env`, or Compose wiring needs careful attribution and, if contract-changing, may need a user check-in.
+- Docker log access on this Windows host has been intermittently blocked by pipe/config permission issues, so the investigation may need to rely on the commands that succeed instead of one broad log dump.
+
+## Test plan
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=200 ome`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=200 ome-config ome-health-token-check`
+- `Get-Content deploy/ome/Server.generated.xml -TotalCount 260`
+- `rg -n "OME|ome|Server.generated.xml|health token|access token|publishers|webrtc|rtmp" cmd internal deploy docs scripts`
+- If a repo fix is made: run the narrowest focused verification plus any relevant compose/runtime probe
+
+## Scope (current change)
 - Analyze the current local post-install Docker Compose logs for runtime errors or warning patterns that appear repo-owned and actionable from this codebase.
 - Correlate the most important findings to the owning service, source file, script, or contract surface before deciding whether a narrow code/doc fix is warranted.
 - If a high-confidence repo issue is reproducible from the logs, implement the smallest fix and re-run the relevant verification; otherwise keep this pass analysis-only with precise findings.
