@@ -78,12 +78,12 @@ export function ChannelRail({
       {loading ? (
         <div className="state-panel state-panel--loading" aria-busy="true">
           <strong>Loading channels</strong>
-          <p className="muted">Pulling the latest picks into this row now.</p>
+          <p className="muted">Loading this row now.</p>
         </div>
       ) : channels.length === 0 ? (
         <div className="state-panel">
           <strong>No channels to show right now</strong>
-          <p className="muted">As the network fills out, fresh creators will appear here first.</p>
+          <p className="muted">New channels will appear here as the network fills out.</p>
         </div>
       ) : (
         <div className="content-rail__scroller" role="list">

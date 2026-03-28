@@ -1697,3 +1697,90 @@
 - `rg -n "github.com/bitriver-live/bitriver-live|docs/cross-platform-plan.md|v1.0|SUPPORT.md" README.md docs CONTRIBUTING.md .github deploy scripts`
 - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-doc-installer-language.sh`
 - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-no-committed-secrets.sh`
+
+## Scope (current change)
+- Fast-forward the local checkout to the merged `origin/main` commit and redeploy the app services so `localhost:8080` reflects the latest merged work.
+- Polish the release-facing viewer UI/UX with one goal in mind: help average people understand and launch a self-hosted Twitch-like experience without extra controls, dense copy, or maintainer-centric phrasing.
+- Focus on high-traffic/product surfaces first: viewer homepage, primary navigation/shell, and creator onboarding/live setup flows. Keep the deployment contract unchanged.
+
+## Assumptions
+- The merged public-release PR is already on `origin/main` and the current local feature branch can fast-forward cleanly to it.
+- The most valuable UX improvements are subtractive: fewer controls, shorter explanations, clearer primary actions, and a more obvious "watch or go live" path.
+- The core product behavior already works; this pass should simplify presentation and task flow rather than add new features.
+
+## Risks
+- Simplifying creator flows too aggressively could hide information people still need when copying ingest settings or validating a stream.
+- UI copy and layout changes can easily break existing viewer tests if text contracts or element hierarchy move more than intended.
+- Redeploying before aligning the local checkout to `origin/main` would risk rebuilding stale code and create confusion about what is actually live on `localhost:8080`.
+
+## Test plan
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live rev-list --left-right --count HEAD...origin/main`
+- `git pull --ff-only origin main`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx navigation.test.ts viewerShell.test.tsx creatorGettingStartedPage.test.tsx creatorLivePage.test.tsx`
+- `npx.cmd playwright test tests/homepage-layout.spec.ts tests/channel.spec.ts tests/creator-live-setup.spec.ts --reporter=list`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
+
+## Scope (current change)
+- Clean up the in-viewer sign-in overlay so it no longer exposes the raw redirect route (for example `/viewer`) as visible UI copy.
+- Remove the redundant duplicate "Sign in" controls that appear when self-signup is disabled, while keeping the auth flow and redirect behavior unchanged.
+- Add focused viewer test coverage for the cleaned-up auth-dialog presentation.
+
+## Assumptions
+- The reported issue is confined to `web/viewer/components/auth/AuthDialog.tsx`; backend auth APIs and redirect plumbing in `useAuth` should remain unchanged.
+- Replacing the raw route chip with friendlier return-context copy is acceptable as long as successful auth still sends the viewer back to the same route.
+- Hiding the single-mode tab control when sign-up is unavailable is the smallest fix for the duplicate-button complaint.
+
+## Risks
+- If the replacement return copy is too generic, the dialog could feel less grounded than the current route-specific presentation.
+- Tab visibility logic must still preserve the full sign-in/sign-up switcher when self-signup is allowed.
+- Tightening auth-dialog tests around copy and button counts can become brittle if selectors depend on exact phrasing unnecessarily.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx useAuth.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer`
+
+## Scope (current change)
+- Remove the auth-dialog return-summary panel entirely so the sign-in window only shows auth actions and not any "continue where you left off" text box.
+- Keep the previous duplicate-sign-in cleanup intact while tightening the dialog to a simpler signed-out presentation.
+- Re-run focused viewer verification and refresh the local viewer stack so `localhost:8080/viewer` reflects the trimmed dialog.
+
+## Assumptions
+- The return-summary box is purely presentational and can be removed without affecting redirect behavior, because the actual post-auth redirect still lives in `useAuth`.
+- No backend, route, or auth-hook changes are needed; this follow-up should stay confined to the dialog component and its focused tests.
+- Viewer-only UI cleanup still does not require deployment-contract documentation changes.
+
+## Risks
+- Removing the panel changes dialog spacing, so the auth overlay could feel top-heavy if the remaining content does not flow cleanly.
+- Tests that currently assert the return-summary copy must be updated or they will fail for the wrong reason.
+- A local redeploy is still needed after the code change, otherwise the running viewer will continue showing stale overlay markup.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx useAuth.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
+
+## Scope (current change)
+- Simplify the signed-out auth dialog further by removing the extra sign-in reassurance heading and paragraph inside the sign-in form.
+- Keep the dialog focused on the title, fields, and actions only; do not change redirect behavior, auth APIs, or the prior duplicate-sign-in cleanup.
+- Re-run focused viewer checks and refresh the local viewer container so the simplified dialog is live at `localhost:8080/viewer`.
+
+## Assumptions
+- The top-level dialog title already provides enough context, so the inner `Sign in without losing your place` block is redundant.
+- This follow-up remains confined to `web/viewer/components/auth/AuthDialog.tsx` and focused auth-dialog tests.
+- Viewer-only copy removal still does not require deployment-contract documentation changes.
+
+## Risks
+- Removing the inner heading/subcopy changes the dialog rhythm slightly, so we should confirm the remaining fields/actions still read cleanly.
+- Focused tests need to assert the copy is gone so the change does not quietly regress.
+- A local rebuild is still required after the viewer edit, otherwise the running stack will keep serving stale dialog markup.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx useAuth.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`

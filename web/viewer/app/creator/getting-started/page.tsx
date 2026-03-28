@@ -9,36 +9,6 @@ import { useAuth } from "../../../hooks/useAuth";
 import { buildViewerPath, buildViewerUrl } from "../../../lib/viewer-links";
 import { ManagedChannel, fetchChannelPlayback, fetchManagedChannels } from "../../../lib/viewer-api";
 
-type ManualChecks = {
-  obsConfigured: boolean;
-  viewerLinkShared: boolean;
-  vodUploaded: boolean;
-};
-
-const MANUAL_CHECKS_STORAGE_KEY = "creator-getting-started-manual-checks";
-
-function loadStoredChecks(): ManualChecks {
-  if (typeof window === "undefined") {
-    return { obsConfigured: false, viewerLinkShared: false, vodUploaded: false };
-  }
-
-  try {
-    const raw = window.localStorage.getItem(MANUAL_CHECKS_STORAGE_KEY);
-    if (!raw) {
-      return { obsConfigured: false, viewerLinkShared: false, vodUploaded: false };
-    }
-
-    const parsed = JSON.parse(raw) as Partial<ManualChecks>;
-    return {
-      obsConfigured: Boolean(parsed.obsConfigured),
-      viewerLinkShared: Boolean(parsed.viewerLinkShared),
-      vodUploaded: Boolean(parsed.vodUploaded),
-    };
-  } catch {
-    return { obsConfigured: false, viewerLinkShared: false, vodUploaded: false };
-  }
-}
-
 export default function CreatorGettingStartedPage() {
   const { user, loading: authLoading, signIn } = useAuth();
   const [channels, setChannels] = useState<ManagedChannel[]>([]);
@@ -49,22 +19,6 @@ export default function CreatorGettingStartedPage() {
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveError, setLiveError] = useState<string | undefined>();
   const [copyMessage, setCopyMessage] = useState<string | undefined>();
-  const [manualChecks, setManualChecks] = useState<ManualChecks>({
-    obsConfigured: false,
-    viewerLinkShared: false,
-    vodUploaded: false,
-  });
-
-  useEffect(() => {
-    setManualChecks(loadStoredChecks());
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.localStorage.setItem(MANUAL_CHECKS_STORAGE_KEY, JSON.stringify(manualChecks));
-  }, [manualChecks]);
 
   const loadChannels = useCallback(async () => {
     if (!user) {
@@ -135,8 +89,10 @@ export default function CreatorGettingStartedPage() {
   }, [refreshLiveStatus, selectedChannel?.id]);
 
   const liveSetupLink = selectedChannel ? `/creator/live/${selectedChannel.id}` : "/creator";
-  const uploadsLink = selectedChannel ? `/creator/uploads/${selectedChannel.id}` : "/creator";
   const viewerLink = selectedChannel ? buildViewerPath(`/channels/${selectedChannel.id}`) : buildViewerPath("/browse");
+  const hasChannel = Boolean(selectedChannel?.id);
+  const liveStatusTone = isLive ? "success" : "info";
+  const liveStatusLabel = isLive ? "Live" : "Waiting for stream";
 
   const handleCopyViewerLink = useCallback(async () => {
     if (typeof window === "undefined" || !selectedChannel) {
@@ -151,48 +107,23 @@ export default function CreatorGettingStartedPage() {
     }
   }, [selectedChannel]);
 
-  const hasChannel = Boolean(selectedChannel?.id);
-  const step1Done = hasChannel;
-  const step2Done = manualChecks.obsConfigured;
-  const step3Done = isLive;
-  const step4Done = manualChecks.viewerLinkShared;
-  const step5Done = manualChecks.vodUploaded;
-  const completedSteps = [step1Done, step2Done, step3Done, step4Done, step5Done].filter(Boolean).length;
-
   return (
     <div className="workspace-shell">
       <section className="workspace-hero">
         <div className="workspace-hero__copy">
-          <span className="page-eyebrow">Creator onboarding</span>
-          <h2>Get your first stream ready without guesswork</h2>
+          <span className="page-eyebrow">Creator setup</span>
+          <h2>Get your first stream live</h2>
           <p className="muted">
-            This checklist moves from channel setup to OBS to public sharing so you always know the next step.
+            Pick a channel, open the live setup page, then share the viewer link once the preview is working.
           </p>
         </div>
         <div className="workspace-hero__actions">
+          <Link href={liveSetupLink} className={buttonClassName(hasChannel ? undefined : "secondary")}>
+            Open live setup
+          </Link>
           <Link href={viewerLink} className={buttonClassName("secondary")}>
-            Open public preview
+            Open viewer page
           </Link>
-          <Link href="/creator" className={buttonClassName("secondary")}>
-            Open studio overview
-          </Link>
-        </div>
-        <div className="workspace-summary-grid">
-          <article className="summary-card">
-            <span className="summary-card__label">Progress</span>
-            <strong className="summary-card__value">{completedSteps}/5</strong>
-            <p className="muted">Checklist steps complete</p>
-          </article>
-          <article className="summary-card">
-            <span className="summary-card__label">Selected channel</span>
-            <strong className="summary-card__value">{selectedChannel?.title ?? "None"}</strong>
-            <p className="muted">Switch channels any time before you go live.</p>
-          </article>
-          <article className="summary-card">
-            <span className="summary-card__label">Live signal</span>
-            <strong className="summary-card__value">{step3Done ? "Live" : "Offline"}</strong>
-            <p className="muted">This state updates automatically from playback.</p>
-          </article>
         </div>
       </section>
 
@@ -200,7 +131,7 @@ export default function CreatorGettingStartedPage() {
         <Card className="workspace-card">
           <CardHeader className="workspace-card__header">
             <h3>Sign in to continue</h3>
-            <p className="muted">Sign in to pick your channel and finish onboarding.</p>
+            <p className="muted">Sign in to choose a channel and start the guided live setup.</p>
           </CardHeader>
           <div className="workspace-card__actions">
             <Button onClick={() => void signIn("/creator/getting-started")}>Sign in</Button>
@@ -212,10 +143,10 @@ export default function CreatorGettingStartedPage() {
         <Card className="workspace-card step-card" aria-labelledby="creator-step-1">
           <CardHeader className="workspace-card__header">
             <div className="step-card__status">
-              <h3 id="creator-step-1">1) Pick a channel</h3>
-              <Badge tone={step1Done ? "success" : "info"}>{step1Done ? "Complete" : "Pending"}</Badge>
+              <h3 id="creator-step-1">1) Choose your channel</h3>
+              <Badge tone={hasChannel ? "success" : "info"}>{hasChannel ? "Ready" : "Needed"}</Badge>
             </div>
-            <p className="muted">Select the channel you want to use for onboarding before you copy any streaming settings.</p>
+            <p className="muted">Use one channel for your first test so your stream key and viewer link stay consistent.</p>
           </CardHeader>
           <CardBody className="workspace-card__header">
             {channels.length > 1 ? (
@@ -253,10 +184,10 @@ export default function CreatorGettingStartedPage() {
         <Card className="workspace-card step-card" aria-labelledby="creator-step-2">
           <CardHeader className="workspace-card__header">
             <div className="step-card__status">
-              <h3 id="creator-step-2">2) Copy OBS settings</h3>
-              <Badge tone={step2Done ? "success" : "neutral"}>{step2Done ? "Complete" : "Manual confirmation"}</Badge>
+              <h3 id="creator-step-2">2) Copy your stream settings</h3>
+              <Badge tone={hasChannel ? "info" : "neutral"}>{hasChannel ? "Next step" : "Choose a channel first"}</Badge>
             </div>
-            <p className="muted">Open the guided live setup to copy the ingest endpoint and stream key into OBS.</p>
+            <p className="muted">The live setup page gives you the OBS server URL, stream key, preview, and share link in one place.</p>
           </CardHeader>
           <CardBody className="workspace-card__header">
             <div className="workspace-card__actions">
@@ -264,50 +195,22 @@ export default function CreatorGettingStartedPage() {
                 Open live setup
               </Link>
             </div>
-            <label className="inline-check">
-              <input
-                type="checkbox"
-                checked={manualChecks.obsConfigured}
-                onChange={(event) => {
-                  const checked = event.currentTarget.checked;
-                  setManualChecks((prev) => ({ ...prev, obsConfigured: checked }));
-                }}
-              />
-              <span>I copied my OBS settings.</span>
-            </label>
           </CardBody>
         </Card>
 
         <Card className="workspace-card step-card" aria-labelledby="creator-step-3">
           <CardHeader className="workspace-card__header">
             <div className="step-card__status">
-              <h3 id="creator-step-3">3) Go live</h3>
-              <Badge tone={step3Done ? "success" : "info"}>{step3Done ? "Complete" : "Pending"}</Badge>
+              <h3 id="creator-step-3">3) Go live and share the channel</h3>
+              <Badge tone={liveStatusTone}>{liveStatusLabel}</Badge>
             </div>
-            <p className="muted">We read the public playback signal so you can confirm the platform is receiving your stream.</p>
+            <p className="muted">Once OBS is connected, check the live status here and copy the same viewer link your audience will use.</p>
           </CardHeader>
           <CardBody className="workspace-card__header">
             <div className="workspace-card__actions">
               <Button variant="secondary" onClick={() => void refreshLiveStatus()} disabled={!selectedChannel || liveLoading}>
                 Check live status
               </Button>
-              <span className="muted">Current status: {step3Done ? "Live" : "Offline"}</span>
-            </div>
-            {liveLoading && <p className="muted">Checking live status...</p>}
-            {liveError && <p className="error">{liveError}</p>}
-          </CardBody>
-        </Card>
-
-        <Card className="workspace-card step-card" aria-labelledby="creator-step-4">
-          <CardHeader className="workspace-card__header">
-            <div className="step-card__status">
-              <h3 id="creator-step-4">4) Share viewer link</h3>
-              <Badge tone={step4Done ? "success" : "neutral"}>{step4Done ? "Complete" : "Manual confirmation"}</Badge>
-            </div>
-            <p className="muted">Copy the public channel page that viewers will use once your stream is ready.</p>
-          </CardHeader>
-          <CardBody className="workspace-card__header">
-            <div className="workspace-card__actions">
               <Button onClick={() => void handleCopyViewerLink()} disabled={!selectedChannel}>
                 Copy viewer link
               </Button>
@@ -315,46 +218,10 @@ export default function CreatorGettingStartedPage() {
                 Preview viewer page
               </Link>
             </div>
+            <p className="muted">Current status: {isLive ? "Live" : "Offline"}</p>
             {copyMessage && <p className="muted">{copyMessage}</p>}
-            <label className="inline-check">
-              <input
-                type="checkbox"
-                checked={manualChecks.viewerLinkShared}
-                onChange={(event) => {
-                  const checked = event.currentTarget.checked;
-                  setManualChecks((prev) => ({ ...prev, viewerLinkShared: checked }));
-                }}
-              />
-              <span>I shared my viewer link.</span>
-            </label>
-          </CardBody>
-        </Card>
-
-        <Card className="workspace-card step-card" aria-labelledby="creator-step-5">
-          <CardHeader className="workspace-card__header">
-            <div className="step-card__status">
-              <h3 id="creator-step-5">5) Optional: Upload a test VOD</h3>
-              <Badge tone={step5Done ? "success" : "neutral"}>{step5Done ? "Complete" : "Optional"}</Badge>
-            </div>
-            <p className="muted">Use one short recording to confirm that uploads and playback behave the way you expect.</p>
-          </CardHeader>
-          <CardBody className="workspace-card__header">
-            <div className="workspace-card__actions">
-              <Link href={uploadsLink} className={buttonClassName("secondary")}>
-                Open uploads
-              </Link>
-            </div>
-            <label className="inline-check">
-              <input
-                type="checkbox"
-                checked={manualChecks.vodUploaded}
-                onChange={(event) => {
-                  const checked = event.currentTarget.checked;
-                  setManualChecks((prev) => ({ ...prev, vodUploaded: checked }));
-                }}
-              />
-              <span>I uploaded a test VOD.</span>
-            </label>
+            {liveLoading && <p className="muted">Checking live status...</p>}
+            {liveError && <p className="error">{liveError}</p>}
           </CardBody>
         </Card>
       </div>

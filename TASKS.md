@@ -3585,3 +3585,230 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-doc-installer-language.sh`
   - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-no-committed-secrets.sh`
   - `& 'C:\Program Files\Git\bin\bash.exe' -n scripts/generate-brew-formula.sh` (rerun outside sandbox after a Windows Git Bash permission failure in the sandboxed attempt)
+
+## Scoped change: local sync and release-ready UI/UX polish
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the local-sync and UI/UX polish scope before changes
+  - Acceptance criteria:
+    - `PLAN.md` captures the redeploy + UI/UX scope, assumptions, risks, and focused validation commands.
+    - `TASKS.md` lists the ordered sync, implementation, and verification tasks before edits or runtime changes begin.
+    - Read-only inspection identifies the concrete UI clutter to remove instead of relying on generic polish language.
+
+- [x] Task 2 - Fast-forward the local checkout to merged `main` and redeploy app services
+  - Acceptance criteria:
+    - The current branch is aligned to the merged `origin/main` commit without discarding local work.
+    - `bitriver-live` and `viewer` are rebuilt/recreated from the updated checkout using the canonical Compose contract.
+    - Post-redeploy checks confirm `localhost:8080` is serving the refreshed app.
+
+- [x] Task 3 - Simplify the viewer homepage and navigation around watch-first adoption
+  - Acceptance criteria:
+    - The homepage hero and discovery rows prioritize "watch something now" and "browse" without redundant editorial copy or unnecessary controls.
+    - Navigation keeps the primary actions obvious and removes low-value clutter for first-time users.
+    - Any touched styles or components stay consistent across desktop and mobile.
+
+- [x] Task 4 - Simplify creator onboarding/live setup around first success
+  - Acceptance criteria:
+    - Creator onboarding focuses on the shortest path to a first live stream and viewer link.
+    - Manual checklist friction and verbose explanatory text are reduced where the UI can infer the next step.
+    - Live setup still preserves the critical ingest/preview/share flow.
+
+- [x] Task 5 - Run focused viewer validation and record the redeployed outcome
+  - Acceptance criteria:
+    - Targeted viewer/unit tests pass for the touched flows.
+    - Focused Playwright coverage passes for homepage/channel/live-setup UX.
+    - `TASKS.md` records the redeploy command(s), verification result, and any remaining UI risks.
+
+### Execution log (local sync and release-ready UI/UX polish)
+- Task 1 complete: read-only analysis confirmed two separate needs before coding. First, the local branch `codex/release_test` was clean but 12 commits behind `origin/main`, so a fast-forward sync is needed before redeploying. Second, the product UX is currently more complex than the target audience needs: the homepage stacks multiple editorial/info panels and carousel controls, the navbar keeps extra preference/setup affordances visible, and the creator onboarding/live pages read like internal operator workspaces with too many manual confirmations and explanatory paragraphs for a "get your Twitch-like stream running" flow.
+- Task 1 checks:
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live branch --show-current`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live log -1 --oneline`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `Get-ChildItem web/viewer -Force`
+  - `rg --files web/viewer | Select-Object -First 200`
+  - `Get-Content web/viewer/AGENTS.md`
+  - `Get-Content web/viewer/app/page.tsx`
+  - `Get-Content web/viewer/components/ViewerShell.tsx`
+  - `Get-Content web/viewer/components/Navbar.tsx`
+  - `Get-Content web/viewer/app/creator/getting-started/page.tsx`
+  - `Get-Content web/viewer/app/getting-started/page.tsx`
+  - `git fetch origin --prune`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live rev-parse HEAD`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live rev-parse origin/main`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live rev-list --left-right --count HEAD...origin/main`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live log --oneline --decorate --graph --max-count 12 HEAD origin/main`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short --branch`
+  - `Get-Content web/viewer/app/directory-page-shell.tsx`
+  - `Get-Content web/viewer/app/directory-view.tsx`
+  - `Get-Content web/viewer/components/FeaturedChannel.tsx`
+  - `Get-Content web/viewer/components/LiveNowGrid.tsx`
+  - `Get-Content web/viewer/components/CategoryRail.tsx`
+  - `Get-Content web/viewer/styles/home.css`
+  - `Get-Content -LiteralPath 'web/viewer/app/creator/live/[channelId]/page.tsx'`
+  - `Get-Content -LiteralPath 'web/viewer/app/creator/live/[channelId]/layout.tsx'`
+  - `Get-Content web/viewer/components/UploadManager.tsx`
+  - `Get-Content web/viewer/app/creator/page.tsx`
+  - `Get-Content web/viewer/components/ChannelRail.tsx`
+- Task 2 complete: fast-forwarded the local checkout to `origin/main` with `git pull --ff-only origin main`, then rebuilt the app services with the canonical Compose contract. The first `docker compose ... up -d --build bitriver-live viewer` timed out before returning cleanly on this host, so follow-up status checks plus a final rebuild/recreate were used to confirm the viewer service picked up the new UI build now running on `localhost:8080`.
+- Task 2 checks:
+  - `git fetch origin --prune`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live rev-list --left-right --count HEAD...origin/main`
+  - `git pull --ff-only origin main`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer` (timed out before the CLI returned on this Windows host, but the rebuild progressed)
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer` (final viewer rebuild before live verification; timed out again before returning cleanly)
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- Task 3 complete: simplified the viewer homepage around the two jobs an outsider understands immediately: watch what is on right now or start their own stream. The featured rail no longer exposes back/next/play controls, the following rail no longer repeats summary/error text or a footnote, homepage sections stay hidden when they would only show empty filler, and the hero now chooses between `Watch live now`, `Browse channels`, and `Start creator setup` based on what content the install actually has.
+- Task 3 checks:
+  - `Get-Content web/viewer/app/directory-view.tsx`
+  - `Get-Content web/viewer/components/FeaturedChannel.tsx`
+  - `Get-Content web/viewer/components/FollowingSidebar.tsx`
+  - `Get-Content web/viewer/components/CategoryRail.tsx`
+  - `Get-Content web/viewer/components/ChannelRail.tsx`
+  - `Get-Content web/viewer/components/LiveNowGrid.tsx`
+- Task 4 complete: simplified the creator surfaces down to the shortest believable first-success path. `creator/getting-started` now focuses on three steps (`Choose your channel`, `Copy your stream settings`, `Go live and share the channel`) instead of a manual checklist, and the live setup page now keeps the flow to four sections (`Channel`, `Stream settings`, `Go live`, `Share`) with direct OBS copy actions, a single signal/preview area, and less maintainer-style explanatory text.
+- Task 4 checks:
+  - `Get-Content web/viewer/app/creator/getting-started/page.tsx`
+  - `Get-Content -LiteralPath 'web/viewer/app/creator/live/[channelId]/page.tsx'`
+  - `Get-Content web/viewer/__tests__/creatorGettingStartedPage.test.tsx`
+  - `Get-Content web/viewer/__tests__/creatorLivePage.test.tsx`
+  - `Get-Content web/viewer/tests/creator-live-setup.spec.ts`
+- Task 5 complete: reran the focused viewer/unit suite, the browser smoke, and the viewer production build, then confirmed the rebuilt local viewer container is serving the updated homepage on `localhost:8080/viewer`. The live stack currently renders the cleaner empty-install homepage state because this local environment has no live directory content, which is the sensible outcome for the new watch-first/creator-first logic.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run test -- creatorGettingStartedPage.test.tsx creatorLivePage.test.tsx directoryPage.test.tsx navigation.test.ts viewerShell.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+  - `npx.cmd playwright test tests/homepage-layout.spec.ts tests/channel.spec.ts tests/creator-live-setup.spec.ts --reporter=list`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
+  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'Launch your first self-hosted channel|Start creator setup|Browse directory|Full directory' -AllMatches`
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer/creator/getting-started -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
+
+## Scoped change: viewer auth-overlay cleanup
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the auth-overlay cleanup scope before editing
+  - Acceptance criteria:
+    - `PLAN.md` captures the auth-overlay scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered dialog cleanup and verification tasks before code edits begin.
+    - Read-only inspection identifies where the raw `/viewer` copy and duplicate sign-in controls are rendered.
+
+- [x] Task 2 - Clean up the sign-in overlay copy and mode controls
+  - Acceptance criteria:
+    - The auth dialog no longer shows raw redirect paths like `/viewer` as the visible return-context label.
+    - When self-signup is unavailable, the dialog no longer renders a redundant standalone `Sign in` mode tab above the `Sign in` submit action.
+    - Existing sign-in, sign-up, MFA, and redirect behavior remain intact.
+
+- [x] Task 3 - Run focused viewer verification and record the result
+  - Acceptance criteria:
+    - Focused auth-dialog/auth-hook tests pass for the touched flow.
+    - Viewer lint is rerun.
+    - `TASKS.md` records the verification results and any remaining host blocker if the broader viewer gate cannot complete.
+
+### Execution log (viewer auth-overlay cleanup)
+- Task 1 complete: recorded the scope in `PLAN.md` and `TASKS.md` before editing, then confirmed in read-only inspection that `web/viewer/components/auth/AuthDialog.tsx` renders the raw `authRedirectTo` value in the route summary and always shows a `Sign in` tab even when sign-up is disabled, which is what creates the awkward `/viewer` label plus duplicate sign-in controls.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 30`
+  - `Get-Content TASKS.md | Select-Object -Last 40`
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/hooks/useAuth.tsx`
+  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
+- Task 2 complete: replaced the raw route label with a friendlier return-summary in `AuthDialog`, removed the redundant auth-mode tab strip, and kept the existing in-form sign-in/sign-up switches plus redirect behavior intact. The sign-in overlay now shows human-facing labels like `Viewer home` instead of `/viewer`, and signed-out installs without public signup now surface only the real `Sign in` action.
+- Task 2 checks:
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
+- Task 3 complete: reran focused auth-dialog/auth-hook coverage and viewer lint successfully, then ran `./scripts/verify.sh --viewer`. The broader verify gate progressed through the Go and contract checks and stopped only at the existing production image-digest requirement in `.env`, which is outside this UI fix. After verification, the local `bitriver-live` and `viewer` services were explicitly recreated so the running stack picked up the auth-dialog update, and `http://localhost:8080/viewer` returned `200`.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx useAuth.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` (blocked only by missing required `BITRIVER_*_IMAGE_DIGEST` values in `.env`)
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer` (timed out before the CLI returned on this host)
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --force-recreate --no-deps bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
+
+## Scoped change: viewer auth-dialog return-summary removal
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the follow-up auth-dialog cleanup scope before editing
+  - Acceptance criteria:
+    - `PLAN.md` captures the narrower follow-up scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered remove-test-redeploy steps before code edits begin.
+    - Read-only inspection confirms the unwanted text box is still the `auth-overlay__route` block in `AuthDialog`.
+
+- [x] Task 2 - Remove the sign-in dialog return-summary box
+  - Acceptance criteria:
+    - The signed-out auth dialog no longer renders the `Continue where you left off` panel or any viewer-route summary text.
+    - Existing sign-in, sign-up, MFA, and duplicate-sign-in cleanup behavior remain intact.
+    - Focused auth-dialog tests are updated to assert the simpler presentation.
+
+- [x] Task 3 - Verify and redeploy the local viewer stack
+  - Acceptance criteria:
+    - Focused auth-dialog/auth-hook tests pass.
+    - Viewer lint is rerun.
+    - The local `bitriver-live` and `viewer` services are rebuilt/recreated and `http://localhost:8080/viewer` responds afterward.
+
+### Execution log (viewer auth-dialog return-summary removal)
+- Task 1 complete: recorded the follow-up scope in `PLAN.md` and `TASKS.md`, then confirmed in read-only inspection that the extra text box the user still sees is the `auth-overlay__route` block in `web/viewer/components/auth/AuthDialog.tsx`, along with the focused test coverage added in the prior pass.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 30`
+  - `Get-Content TASKS.md | Select-Object -Last 40`
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
+- Task 2 complete: removed the entire `auth-overlay__route` block and the helper code that generated its return-summary copy, leaving the sign-in dialog focused only on the auth form/actions. Updated the focused auth-dialog test to assert that the box and its text do not render anymore.
+- Task 2 checks:
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
+- Task 3 complete: reran the focused auth-dialog/auth-hook tests and viewer lint successfully, rebuilt the local `bitriver-live` and `viewer` services with the canonical Compose contract, and confirmed `http://localhost:8080/viewer` returned `200` after the new viewer container started.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx useAuth.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
+
+## Scoped change: viewer auth-dialog sign-in copy simplification
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the follow-up sign-in copy cleanup scope before editing
+  - Acceptance criteria:
+    - `PLAN.md` captures the narrower sign-in copy cleanup scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered edit, verification, and redeploy steps before code edits begin.
+    - Read-only inspection confirms the remaining unwanted text is the sign-in form's inner heading and muted paragraph in `AuthDialog`.
+
+- [x] Task 2 - Remove the redundant sign-in reassurance copy
+  - Acceptance criteria:
+    - The signed-out sign-in form no longer renders `Sign in without losing your place` or the supporting reassurance paragraph.
+    - Existing sign-in fields, actions, sign-up path, MFA flow, and redirect behavior remain intact.
+    - Focused auth-dialog tests are updated to assert the simpler sign-in presentation.
+
+- [x] Task 3 - Verify and redeploy the local viewer stack
+  - Acceptance criteria:
+    - Focused auth-dialog/auth-hook tests pass.
+    - Viewer lint is rerun.
+    - The local `bitriver-live` and `viewer` services are rebuilt/recreated and `http://localhost:8080/viewer` responds afterward.
+
+### Execution log (viewer auth-dialog sign-in copy simplification)
+- Task 1 complete: recorded the follow-up scope in `PLAN.md` and `TASKS.md`, then confirmed in read-only inspection that the remaining noisy copy the user called out is the sign-in form's inner heading (`Sign in without losing your place`) and muted reassurance paragraph in `web/viewer/components/auth/AuthDialog.tsx`.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 30`
+  - `Get-Content TASKS.md | Select-Object -Last 40`
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
+- Task 2 complete: removed the sign-in form's inner reassurance heading and paragraph so the signed-out dialog now goes straight from the main title into the email/password fields and actions. Updated focused auth-dialog coverage to assert that the removed copy stays gone.
+- Task 2 checks:
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
+- Task 3 complete: reran the focused auth-dialog/auth-hook tests and viewer lint successfully, rebuilt the local `bitriver-live` and `viewer` services with the canonical Compose contract, and confirmed `http://localhost:8080/viewer` returned `200` after the new viewer container started.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx useAuth.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`

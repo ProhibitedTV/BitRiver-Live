@@ -13,8 +13,8 @@ export function CategoryRail({ id, categories, loading = false }: CategoryRailPr
       <header className="content-rail__header">
         <div className="stack">
           <span className="muted content-rail__eyebrow">Top Categories</span>
-          <h2>Browse by category</h2>
-          <p className="muted">Jump into the most active corners of the network without losing your place.</p>
+          <h2>Browse categories</h2>
+          <p className="muted">The busiest categories on this install.</p>
         </div>
         {!loading && categories.length > 0 && <span className="muted">{categories.length} to explore</span>}
       </header>
@@ -22,12 +22,12 @@ export function CategoryRail({ id, categories, loading = false }: CategoryRailPr
       {loading ? (
         <div className="state-panel state-panel--loading" aria-busy="true">
           <strong>Loading categories</strong>
-          <p className="muted">Organizing the busiest topics across the network now.</p>
+          <p className="muted">Loading the latest categories now.</p>
         </div>
       ) : categories.length === 0 ? (
         <div className="state-panel">
           <strong>No categories available yet</strong>
-          <p className="muted">Once streams are tagged, the most active topics will appear here.</p>
+          <p className="muted">Categories will appear here once channels start using them.</p>
         </div>
       ) : (
         <div className="chip-rail" role="list">

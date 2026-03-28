@@ -3,17 +3,12 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 
-function formatDestinationPath(route: string) {
-  return route.length <= 56 ? route : `${route.slice(0, 53)}...`;
-}
-
 export function AuthDialog() {
   const {
     allowSelfSignup,
     authDialogOpen,
     authFeedback,
     authMode,
-    authRedirectTo,
     closeAuthDialog,
     loading,
     mfaEnrollment,
@@ -62,8 +57,13 @@ export function AuthDialog() {
     setMFACode("");
   }, [mfaRequired]);
 
-  const destinationPath = formatDestinationPath(authRedirectTo);
-  const title = user ? "Signed in to BitRiver Live" : mfaRequired ? "Verify your account" : "Sign in to BitRiver Live";
+  const title = user
+    ? "Signed in to BitRiver Live"
+    : mfaRequired
+      ? "Verify your account"
+      : authMode === "signup"
+        ? "Create your BitRiver account"
+        : "Sign in to BitRiver Live";
 
   if (!authDialogOpen) {
     return null;
@@ -98,13 +98,6 @@ export function AuthDialog() {
           </button>
         </header>
 
-        <div className="auth-overlay__route surface">
-          <div className="stack stack--2xs">
-            <span className="navbar-context__eyebrow">Continue where you left off</span>
-            <strong>{destinationPath}</strong>
-          </div>
-        </div>
-
         {user ? (
           <div className="auth-overlay__signed-in surface">
             <div className="stack stack--2xs">
@@ -123,31 +116,6 @@ export function AuthDialog() {
           </div>
         ) : (
           <>
-            {!mfaRequired && (
-              <div className="auth-overlay__tabs" role="tablist" aria-label="Auth mode">
-                <button
-                  type="button"
-                  role="tab"
-                  className={`auth-overlay__tab${authMode === "signin" ? " auth-overlay__tab--active" : ""}`}
-                  aria-selected={authMode === "signin"}
-                  onClick={() => setAuthMode("signin")}
-                >
-                  Sign in
-                </button>
-                {allowSelfSignup && (
-                  <button
-                    type="button"
-                    role="tab"
-                    className={`auth-overlay__tab${authMode === "signup" ? " auth-overlay__tab--active" : ""}`}
-                    aria-selected={authMode === "signup"}
-                    onClick={() => setAuthMode("signup")}
-                  >
-                    Sign up
-                  </button>
-                )}
-              </div>
-            )}
-
             {authFeedback ? (
               <p className={`auth-overlay__feedback${authFeedback.variant === "error" ? " auth-overlay__feedback--error" : ""}`} role={authFeedback.variant === "error" ? "alert" : "status"}>
                 {authFeedback.message}
@@ -263,11 +231,6 @@ export function AuthDialog() {
               </form>
             ) : (
               <form className="auth-overlay__form" onSubmit={handleSignInSubmit}>
-                <div className="stack stack--2xs">
-                  <h3>Sign in without losing your place</h3>
-                  <p className="muted">Your stream, category, and browse context stay right here while you authenticate.</p>
-                </div>
-
                 <label className="auth-overlay__field">
                   <span>Email</span>
                   <input
