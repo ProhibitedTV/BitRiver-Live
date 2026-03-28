@@ -698,6 +698,46 @@ func TestAuthMiddlewareAllowsUnauthenticatedProfileGet(t *testing.T) {
 	}
 }
 
+func TestAuthMiddlewareAllowsUnauthenticatedPublicDirectoryRoutes(t *testing.T) {
+	handler, _ := newTestHandler(t)
+
+	tests := []struct {
+		path     string
+		wantCode int
+		wantNext bool
+	}{
+		{path: "/api/directory", wantCode: http.StatusNoContent, wantNext: true},
+		{path: "/api/directory/featured", wantCode: http.StatusNoContent, wantNext: true},
+		{path: "/api/directory/recommended", wantCode: http.StatusNoContent, wantNext: true},
+		{path: "/api/directory/live", wantCode: http.StatusNoContent, wantNext: true},
+		{path: "/api/directory/trending", wantCode: http.StatusNoContent, wantNext: true},
+		{path: "/api/directory/categories", wantCode: http.StatusNoContent, wantNext: true},
+		{path: "/api/directory/following", wantCode: http.StatusUnauthorized, wantNext: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.path, func(t *testing.T) {
+			nextCalled := false
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				nextCalled = true
+				w.WriteHeader(http.StatusNoContent)
+			})
+
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			rec := httptest.NewRecorder()
+
+			authMiddleware(handler, next).ServeHTTP(rec, req)
+
+			if nextCalled != tc.wantNext {
+				t.Fatalf("expected nextCalled=%t, got %t", tc.wantNext, nextCalled)
+			}
+			if rec.Code != tc.wantCode {
+				t.Fatalf("expected status %d, got %d", tc.wantCode, rec.Code)
+			}
+		})
+	}
+}
+
 func TestAuthMiddlewareRejectsInvalidSession(t *testing.T) {
 	handler, _ := newTestHandler(t)
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -712,6 +752,56 @@ func TestAuthMiddlewareRejectsInvalidSession(t *testing.T) {
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status 401, got %d", rec.Code)
+	}
+}
+
+func TestAuthMiddlewareAllowsExpiredSessionOnPublicDirectoryRoute(t *testing.T) {
+	handler, store := newTestHandler(t)
+	user, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Viewer",
+		Email:       "viewer@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser error: %v", err)
+	}
+	token, _, err := handler.Sessions.Create(user.ID)
+	if err != nil {
+		t.Fatalf("Create session: %v", err)
+	}
+	if err := handler.Sessions.Revoke(token); err != nil {
+		t.Fatalf("Revoke session: %v", err)
+	}
+
+	nextCalled := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nextCalled = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/directory/featured", nil)
+	req.AddCookie(&http.Cookie{Name: "bitriver_session", Value: token})
+	rec := httptest.NewRecorder()
+
+	authMiddleware(handler, next).ServeHTTP(rec, req)
+
+	if !nextCalled {
+		t.Fatal("expected middleware to call next handler")
+	}
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected status 204, got %d", rec.Code)
+	}
+	cleared := false
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "bitriver_session" {
+			if c.MaxAge == -1 {
+				cleared = true
+			} else {
+				t.Fatalf("expected session cookie to be cleared, got MaxAge=%d", c.MaxAge)
+			}
+		}
+	}
+	if !cleared {
+		t.Fatal("expected response to clear session cookie")
 	}
 }
 
