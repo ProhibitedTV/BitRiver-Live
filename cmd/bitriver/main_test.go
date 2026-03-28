@@ -1079,6 +1079,155 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	}
 }
 
+func TestRunEnvInitWizardWritesOperatorChoices(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+
+	originalInput := interactivePromptInput
+	originalOutput := interactivePromptOutput
+	originalAvailable := interactivePromptAvailable
+	t.Cleanup(func() {
+		interactivePromptInput = originalInput
+		interactivePromptOutput = originalOutput
+		interactivePromptAvailable = originalAvailable
+	})
+
+	interactivePromptInput = strings.NewReader(strings.Join([]string{
+		"wizard-admin@example.com",
+		"https://stream.example.net/viewer",
+		"",
+		"9091",
+		"203.0.113.10",
+		"203.0.113.11",
+		"https://cdn.example.net/hls",
+		"y",
+	}, "\n") + "\n")
+	var promptOutput bytes.Buffer
+	interactivePromptOutput = &promptOutput
+	interactivePromptAvailable = func() bool { return true }
+
+	if err := runEnvInit([]string{"--env-file", envPath, "--wizard"}); err != nil {
+		t.Fatalf("run env init wizard: %v", err)
+	}
+
+	values, err := loadEnvValues(envPath, false)
+	if err != nil {
+		t.Fatalf("load env: %v", err)
+	}
+	if values["BITRIVER_LIVE_ADMIN_EMAIL"] != "wizard-admin@example.com" {
+		t.Fatalf("unexpected admin email: %q", values["BITRIVER_LIVE_ADMIN_EMAIL"])
+	}
+	if values["NEXT_PUBLIC_VIEWER_URL"] != "https://stream.example.net/viewer" {
+		t.Fatalf("unexpected viewer URL: %q", values["NEXT_PUBLIC_VIEWER_URL"])
+	}
+	if values["NEXT_PUBLIC_API_BASE_URL"] != "" {
+		t.Fatalf("expected public API URL to remain blank, got %q", values["NEXT_PUBLIC_API_BASE_URL"])
+	}
+	if values["BITRIVER_LIVE_PORT"] != "9091" || values["BITRIVER_LIVE_ADDR"] != ":9091" {
+		t.Fatalf("expected API port/address to update, got port=%q addr=%q", values["BITRIVER_LIVE_PORT"], values["BITRIVER_LIVE_ADDR"])
+	}
+	if values["BITRIVER_OME_BIND"] != "203.0.113.10" {
+		t.Fatalf("unexpected OME bind value: %q", values["BITRIVER_OME_BIND"])
+	}
+	if values["BITRIVER_OME_IP"] != "203.0.113.11" {
+		t.Fatalf("unexpected OME IP value: %q", values["BITRIVER_OME_IP"])
+	}
+	if values["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"] != "https://cdn.example.net/hls" {
+		t.Fatalf("unexpected transcoder URL: %q", values["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"])
+	}
+	if values["BITRIVER_LIVE_ALLOW_SELF_SIGNUP"] != "true" {
+		t.Fatalf("expected self-signup to be enabled, got %q", values["BITRIVER_LIVE_ALLOW_SELF_SIGNUP"])
+	}
+	if strings.TrimSpace(values["BITRIVER_LIVE_ADMIN_PASSWORD"]) == "" {
+		t.Fatalf("expected env init to keep generating required secrets")
+	}
+	if !strings.Contains(promptOutput.String(), "BitRiver Live first-run wizard") {
+		t.Fatalf("expected wizard banner in output, got %q", promptOutput.String())
+	}
+}
+
+func TestRunEnvInitWizardRequiresInteractiveTerminal(t *testing.T) {
+	originalAvailable := interactivePromptAvailable
+	t.Cleanup(func() {
+		interactivePromptAvailable = originalAvailable
+	})
+	interactivePromptAvailable = func() bool { return false }
+
+	err := runEnvInit([]string{"--env-file", filepath.Join(t.TempDir(), ".env"), "--wizard"})
+	if err == nil {
+		t.Fatal("expected wizard mode to require an interactive terminal")
+	}
+	if !strings.Contains(err.Error(), "interactive terminal") {
+		t.Fatalf("expected interactive terminal guidance, got %v", err)
+	}
+}
+
+func TestRunQuickstartPassesWizardFlagToEnvInit(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	composePath := filepath.Join(t.TempDir(), "compose.yml")
+	values := buildValidProductionEnv(t)
+	values["BITRIVER_LIVE_PORT"] = "18080"
+	var lines []string
+	for key, value := range values {
+		lines = append(lines, fmt.Sprintf("%s=%s", key, value))
+	}
+	if err := os.WriteFile(envPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	originalDoctor := doctorRunner
+	originalEnvInit := envInitRunner
+	originalEnvValidate := envValidateRunner
+	originalWaiter := quickstartWaiter
+	originalComposeHealthWaiter := quickstartComposeHealthWaiter
+	originalOMEPreflight := quickstartOMEAuthPreflightRunner
+	originalImagePreflight := deployImageSourcePreflightRunner
+	originalDockerVersion := dockerVersionRunner
+	originalComposeVersion := dockerComposeVersionRunner
+	originalPortPreflight := quickstartHostPortPreflightRunner
+	originalMigrations := migrationsRunner
+	originalComposeUp := composeUpRunner
+	originalBootstrap := bootstrapAdminRunner
+	t.Cleanup(func() {
+		doctorRunner = originalDoctor
+		envInitRunner = originalEnvInit
+		envValidateRunner = originalEnvValidate
+		quickstartWaiter = originalWaiter
+		quickstartComposeHealthWaiter = originalComposeHealthWaiter
+		quickstartOMEAuthPreflightRunner = originalOMEPreflight
+		deployImageSourcePreflightRunner = originalImagePreflight
+		dockerVersionRunner = originalDockerVersion
+		dockerComposeVersionRunner = originalComposeVersion
+		quickstartHostPortPreflightRunner = originalPortPreflight
+		migrationsRunner = originalMigrations
+		composeUpRunner = originalComposeUp
+		bootstrapAdminRunner = originalBootstrap
+	})
+
+	doctorRunner = func([]string) bool { return true }
+	envInitRunner = func(args []string) error {
+		expected := []string{"--env-file", envPath, "--wizard"}
+		if !reflect.DeepEqual(args, expected) {
+			t.Fatalf("env init args = %v, want %v", args, expected)
+		}
+		return nil
+	}
+	envValidateRunner = func([]string) error { return nil }
+	quickstartWaiter = func(map[string]string, string, string) error { return nil }
+	quickstartComposeHealthWaiter = func(string, string) error { return nil }
+	quickstartOMEAuthPreflightRunner = func(string, map[string]string) error { return nil }
+	deployImageSourcePreflightRunner = func(string, map[string]string, string) error { return nil }
+	dockerVersionRunner = func() error { return nil }
+	dockerComposeVersionRunner = func() error { return nil }
+	quickstartHostPortPreflightRunner = func(map[string]string) error { return nil }
+	migrationsRunner = func(string, string) error { return nil }
+	composeUpRunner = func([]string) error { return nil }
+	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
+
+	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath, "--wizard"}); err != nil {
+		t.Fatalf("quickstart failed: %v", err)
+	}
+}
+
 func TestRunQuickstartFailsWhenDeploymentPreflightFails(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), ".env")
 	composePath := filepath.Join(t.TempDir(), "compose.yml")

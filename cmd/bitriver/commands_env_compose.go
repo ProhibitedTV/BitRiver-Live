@@ -195,6 +195,7 @@ func runEnvInit(args []string) error {
 	fs := flag.NewFlagSet("env init", flag.ContinueOnError)
 	envPath := fs.String("env-file", defaultEnvFile(), "path to write the environment file")
 	examplePath := fs.String("example", defaultExampleEnv(), "path to the example env file")
+	wizard := fs.Bool("wizard", false, "prompt for guided first-run quickstart settings before writing the env file")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -209,7 +210,13 @@ func runEnvInit(args []string) error {
 		return err
 	}
 
-	promptForAdminEmail(existingValues)
+	if *wizard {
+		if err := promptForQuickstartWizard(existingValues, *envPath); err != nil {
+			return err
+		}
+	} else {
+		promptForAdminEmail(existingValues)
+	}
 
 	generated, _, err := generateEnvValues(existingValues)
 	if err != nil {
@@ -517,6 +524,7 @@ func runQuickstart(args []string) error {
 	composeFile := fs.String("compose-file", defaultComposeFile(), "compose file to use")
 	limits := fs.Bool("limits", false, "include deploy/docker-compose.limits.yml resource overlay")
 	envFile := fs.String("env-file", defaultEnvFile(), "environment file path")
+	wizard := fs.Bool("wizard", false, "run the guided first-run setup wizard before env init/validate")
 	build := fs.Bool("build", false, "build images from the local source tree before starting (development-only; rejected in production mode)")
 	imageSource := fs.String("image-source", "", "image source mode: pull (default, production) or build (development-only)")
 	if err := fs.Parse(args); err != nil {
@@ -544,7 +552,11 @@ func runQuickstart(args []string) error {
 	}
 
 	printQuickstartStageHeader("Env init")
-	if err := envInitRunner([]string{"--env-file", *envFile}); err != nil {
+	envInitArgs := []string{"--env-file", *envFile}
+	if *wizard {
+		envInitArgs = append(envInitArgs, "--wizard")
+	}
+	if err := envInitRunner(envInitArgs); err != nil {
 		return quickstartStageFailure("Env init", err, fmt.Sprintf("Check that %s is writable, then run quickstart again.", *envFile))
 	}
 

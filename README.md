@@ -66,6 +66,14 @@ Copy-Item deploy/.env.example .env
 go run ./cmd/bitriver env init --env-file ./.env
 ```
 
+Want setup-wizard style control over the generated `.env` instead of the default one-prompt flow? Run:
+
+```bash
+go run ./cmd/bitriver env init --env-file ./.env --wizard
+```
+
+The wizard guides you through the admin email, viewer/API URLs, API port, OME host settings, transcoder public URL, and self-signup while still auto-generating any missing required secrets.
+
 ### 3. Start the local evaluation stack
 
 For a local source-based demo, keep the saved `.env` in production mode and use a temporary development override:
