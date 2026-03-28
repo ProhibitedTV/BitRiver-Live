@@ -3730,3 +3730,85 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --force-recreate --no-deps bitriver-live viewer`
   - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
   - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
+
+## Scoped change: viewer auth-dialog return-summary removal
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the follow-up auth-dialog cleanup scope before editing
+  - Acceptance criteria:
+    - `PLAN.md` captures the narrower follow-up scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered remove-test-redeploy steps before code edits begin.
+    - Read-only inspection confirms the unwanted text box is still the `auth-overlay__route` block in `AuthDialog`.
+
+- [x] Task 2 - Remove the sign-in dialog return-summary box
+  - Acceptance criteria:
+    - The signed-out auth dialog no longer renders the `Continue where you left off` panel or any viewer-route summary text.
+    - Existing sign-in, sign-up, MFA, and duplicate-sign-in cleanup behavior remain intact.
+    - Focused auth-dialog tests are updated to assert the simpler presentation.
+
+- [x] Task 3 - Verify and redeploy the local viewer stack
+  - Acceptance criteria:
+    - Focused auth-dialog/auth-hook tests pass.
+    - Viewer lint is rerun.
+    - The local `bitriver-live` and `viewer` services are rebuilt/recreated and `http://localhost:8080/viewer` responds afterward.
+
+### Execution log (viewer auth-dialog return-summary removal)
+- Task 1 complete: recorded the follow-up scope in `PLAN.md` and `TASKS.md`, then confirmed in read-only inspection that the extra text box the user still sees is the `auth-overlay__route` block in `web/viewer/components/auth/AuthDialog.tsx`, along with the focused test coverage added in the prior pass.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 30`
+  - `Get-Content TASKS.md | Select-Object -Last 40`
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
+- Task 2 complete: removed the entire `auth-overlay__route` block and the helper code that generated its return-summary copy, leaving the sign-in dialog focused only on the auth form/actions. Updated the focused auth-dialog test to assert that the box and its text do not render anymore.
+- Task 2 checks:
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
+- Task 3 complete: reran the focused auth-dialog/auth-hook tests and viewer lint successfully, rebuilt the local `bitriver-live` and `viewer` services with the canonical Compose contract, and confirmed `http://localhost:8080/viewer` returned `200` after the new viewer container started.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx useAuth.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
+
+## Scoped change: viewer auth-dialog sign-in copy simplification
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the follow-up sign-in copy cleanup scope before editing
+  - Acceptance criteria:
+    - `PLAN.md` captures the narrower sign-in copy cleanup scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered edit, verification, and redeploy steps before code edits begin.
+    - Read-only inspection confirms the remaining unwanted text is the sign-in form's inner heading and muted paragraph in `AuthDialog`.
+
+- [x] Task 2 - Remove the redundant sign-in reassurance copy
+  - Acceptance criteria:
+    - The signed-out sign-in form no longer renders `Sign in without losing your place` or the supporting reassurance paragraph.
+    - Existing sign-in fields, actions, sign-up path, MFA flow, and redirect behavior remain intact.
+    - Focused auth-dialog tests are updated to assert the simpler sign-in presentation.
+
+- [x] Task 3 - Verify and redeploy the local viewer stack
+  - Acceptance criteria:
+    - Focused auth-dialog/auth-hook tests pass.
+    - Viewer lint is rerun.
+    - The local `bitriver-live` and `viewer` services are rebuilt/recreated and `http://localhost:8080/viewer` responds afterward.
+
+### Execution log (viewer auth-dialog sign-in copy simplification)
+- Task 1 complete: recorded the follow-up scope in `PLAN.md` and `TASKS.md`, then confirmed in read-only inspection that the remaining noisy copy the user called out is the sign-in form's inner heading (`Sign in without losing your place`) and muted reassurance paragraph in `web/viewer/components/auth/AuthDialog.tsx`.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 30`
+  - `Get-Content TASKS.md | Select-Object -Last 40`
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
+- Task 2 complete: removed the sign-in form's inner reassurance heading and paragraph so the signed-out dialog now goes straight from the main title into the email/password fields and actions. Updated focused auth-dialog coverage to assert that the removed copy stays gone.
+- Task 2 checks:
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
+- Task 3 complete: reran the focused auth-dialog/auth-hook tests and viewer lint successfully, rebuilt the local `bitriver-live` and `viewer` services with the canonical Compose contract, and confirmed `http://localhost:8080/viewer` returned `200` after the new viewer container started.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx useAuth.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`

@@ -3,84 +3,12 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 
-const AUTH_DIALOG_ORIGIN = "http://bitriver.local";
-
-type ReturnDestinationCopy = {
-  label: string;
-  detail: string;
-};
-
-function normalizeDestinationPath(route: string) {
-  try {
-    const url = new URL(route, AUTH_DIALOG_ORIGIN);
-    const trimmedPath = url.pathname.replace(/\/+$/, "");
-    const normalizedPath = trimmedPath.startsWith("/viewer")
-      ? trimmedPath.replace(/^\/viewer/, "") || "/"
-      : trimmedPath || "/";
-    return normalizedPath;
-  } catch {
-    return "/";
-  }
-}
-
-function describeReturnDestination(route: string): ReturnDestinationCopy {
-  const path = normalizeDestinationPath(route);
-
-  if (path === "/") {
-    return {
-      label: "Viewer home",
-      detail: "We'll bring you back to the main viewer page once you're signed in.",
-    };
-  }
-
-  if (path === "/browse") {
-    return {
-      label: "Browse results",
-      detail: "Your current search and filters will still be waiting for you.",
-    };
-  }
-
-  if (path === "/following") {
-    return {
-      label: "Following",
-      detail: "You'll land back on the channels and creators you were tracking.",
-    };
-  }
-
-  if (path === "/profile") {
-    return {
-      label: "Your profile",
-      detail: "We'll take you back to your profile page as soon as you're signed in.",
-    };
-  }
-
-  if (path.startsWith("/channels/")) {
-    return {
-      label: "Channel page",
-      detail: "We'll return you to the stream or video you opened.",
-    };
-  }
-
-  if (path.startsWith("/creator/")) {
-    return {
-      label: "Creator tools",
-      detail: "You'll return to the creator workflow you opened.",
-    };
-  }
-
-  return {
-    label: "Your current page",
-    detail: "We'll bring you back to the same spot once you're signed in.",
-  };
-}
-
 export function AuthDialog() {
   const {
     allowSelfSignup,
     authDialogOpen,
     authFeedback,
     authMode,
-    authRedirectTo,
     closeAuthDialog,
     loading,
     mfaEnrollment,
@@ -129,7 +57,6 @@ export function AuthDialog() {
     setMFACode("");
   }, [mfaRequired]);
 
-  const returnDestination = describeReturnDestination(authRedirectTo);
   const title = user
     ? "Signed in to BitRiver Live"
     : mfaRequired
@@ -170,14 +97,6 @@ export function AuthDialog() {
             Close
           </button>
         </header>
-
-        <div className="auth-overlay__route surface">
-          <div className="stack stack--2xs">
-            <span className="navbar-context__eyebrow">Continue where you left off</span>
-            <strong>{returnDestination.label}</strong>
-            <p className="muted">{returnDestination.detail}</p>
-          </div>
-        </div>
 
         {user ? (
           <div className="auth-overlay__signed-in surface">
@@ -312,11 +231,6 @@ export function AuthDialog() {
               </form>
             ) : (
               <form className="auth-overlay__form" onSubmit={handleSignInSubmit}>
-                <div className="stack stack--2xs">
-                  <h3>Sign in without losing your place</h3>
-                  <p className="muted">Your stream, category, and browse context stay right here while you authenticate.</p>
-                </div>
-
                 <label className="auth-overlay__field">
                   <span>Email</span>
                   <input

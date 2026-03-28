@@ -9,7 +9,7 @@ describe("AuthDialog", () => {
     jest.clearAllMocks();
   });
 
-  it("shows a friendly return summary instead of the raw viewer route", () => {
+  it("does not render the return-summary box in the sign-in dialog", () => {
     mockUseAuth.mockReturnValue(
       buildAuthState({
         user: undefined,
@@ -20,9 +20,9 @@ describe("AuthDialog", () => {
 
     renderWithProviders(<AuthDialog />);
 
-    expect(screen.getByText("Continue where you left off")).toBeInTheDocument();
-    expect(screen.getByText("Viewer home")).toBeInTheDocument();
-    expect(screen.getByText("We'll bring you back to the main viewer page once you're signed in.")).toBeInTheDocument();
+    expect(screen.queryByText("Continue where you left off")).not.toBeInTheDocument();
+    expect(screen.queryByText("Viewer home")).not.toBeInTheDocument();
+    expect(screen.queryByText("We'll bring you back to the main viewer page once you're signed in.")).not.toBeInTheDocument();
     expect(screen.queryByText("/viewer")).not.toBeInTheDocument();
   });
 
@@ -40,5 +40,22 @@ describe("AuthDialog", () => {
     expect(screen.getAllByRole("button", { name: /^sign in$/i })).toHaveLength(1);
     expect(screen.queryByRole("tablist", { name: /auth mode/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /need an account/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps the sign-in form free of reassurance copy", () => {
+    mockUseAuth.mockReturnValue(
+      buildAuthState({
+        user: undefined,
+        authDialogOpen: true,
+        authMode: "signin",
+      }),
+    );
+
+    renderWithProviders(<AuthDialog />);
+
+    expect(screen.queryByText("Sign in without losing your place")).not.toBeInTheDocument();
+    expect(screen.queryByText("Your stream, category, and browse context stay right here while you authenticate.")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Email")).toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).toBeInTheDocument();
   });
 });
