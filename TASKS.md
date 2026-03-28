@@ -3772,6 +3772,53 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
   - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
 
+## Scoped change: quickstart first-run wizard controls
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the quickstart wizard scope before editing runtime code
+  - Acceptance criteria:
+    - `PLAN.md` captures the guided quickstart/env-init scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered implementation and verification tasks before code edits begin.
+    - Read-only inspection identifies the current quickstart/env-init prompt gap and the closest reusable wizard/setup surfaces already in the repo.
+
+- [x] Task 2 - Implement the guided quickstart/env-init wizard
+  - Acceptance criteria:
+    - `cmd/bitriver env init` supports an opt-in wizard mode that prompts for key first-run controls and writes them into `.env`.
+    - `cmd/bitriver quickstart` can invoke the same wizard path before validation/orchestration without breaking the existing non-interactive flow.
+    - Focused `cmd/bitriver` tests cover the wizard prompts, env writes, and quickstart handoff.
+
+- [x] Task 3 - Document and verify the new guided flow
+  - Acceptance criteria:
+    - Operator docs mention the new wizard-driven quickstart path and explain what it configures.
+    - Relevant CLI/backend tests are rerun and recorded here.
+    - Broader verification (`go test ./...`, compose config, `./scripts/verify.sh`) is attempted and any host/environment blocker is captured explicitly.
+
+### Execution log (quickstart first-run wizard controls)
+- Task 1 complete: recorded the new scope in `PLAN.md`/`TASKS.md` after read-only inspection confirmed the current source quickstart only prompts for `BITRIVER_LIVE_ADMIN_EMAIL`, while the repo already has a richer Ubuntu installer wizard (`deploy/install/wizard.sh`) and a post-install control-centre setup wizard that can help shape the new first-run CLI flow.
+- Task 1 checks:
+  - `Get-ChildItem -Force`
+  - `Get-ChildItem -Recurse -Filter AGENTS.md | Select-Object -ExpandProperty FullName`
+  - `Get-Content SPEC.md`
+  - `rg -n "quickstart|wizard|setup" SPEC.md PLAN.md TASKS.md README.md docs scripts cmd deploy web -g '!**/node_modules/**'`
+  - `Get-Content deploy/install/wizard.sh`
+  - `Get-Content cmd/bitriver/commands_env_compose.go`
+  - `Get-Content cmd/bitriver/env_validation_helpers.go`
+  - `Get-Content cmd/server/setup_manager.go`
+- Task 2 complete: added a shared guided wizard path to `cmd/bitriver env init`, threaded the same opt-in flag through `quickstart`, and kept the default non-interactive flow unchanged for scripted use. The wizard now captures operator-facing first-run values (admin email, viewer/API URLs, API port, OME bind/public host, transcoder URL, and self-signup) while leaving secret generation automatic. Focused `cmd/bitriver` coverage now verifies the interactive env write, the non-interactive guardrail, and the quickstart-to-env-init handoff.
+- Task 2 checks:
+  - `gofmt -w cmd/bitriver/env_validation_helpers.go cmd/bitriver/commands_env_compose.go cmd/bitriver/main_test.go`
+  - `go test ./cmd/bitriver -count=1` (initial host cache failure: `Access is denied` under `%LOCALAPPDATA%\\go-build`)
+  - `$env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1`
+- Task 3 complete: documented the new `--wizard` flow in the README and quickstart guide so operators can discover the guided path without changing the existing default examples. Reran the full Go suite with the repo-local cache, validated Compose config with the explicit root `.env`, and attempted the repo's `./scripts/verify.sh` gate. The broader verify run reached the production third-party digest enforcement step and failed only because the local `.env` still omits the required third-party `@sha256:` digest pins, which is an existing host/configuration issue outside this CLI/docs change.
+- Task 3 checks:
+  - `rg -n -- "--wizard|first-run wizard|guided quickstart settings|setup-wizard style control" README.md docs/quickstart.md cmd/bitriver/commands_env_compose.go cmd/bitriver/env_validation_helpers.go`
+  - `$env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s`
+  - `docker compose -f deploy/docker-compose.yml config` (fails on this host unless `--env-file .env` is supplied explicitly; Compose did not pick up the root `.env` automatically here)
+  - `docker compose --env-file .env -f deploy/docker-compose.yml config`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (blocked only by missing third-party image digest pins in `.env`: `BITRIVER_REDIS_IMAGE_DIGEST`, `BITRIVER_POSTGRES_IMAGE_DIGEST`, `BITRIVER_SRS_IMAGE_DIGEST`, `BITRIVER_OME_IMAGE_DIGEST`, `BITRIVER_NGINX_IMAGE_DIGEST`, `BITRIVER_ALPINE_3_IMAGE_DIGEST`, `BITRIVER_ALPINE_3_19_IMAGE_DIGEST`, `BITRIVER_DEBIAN_IMAGE_DIGEST`)
+  - `git status --short`
+
 ## Scoped change: viewer auth-dialog sign-in copy simplification
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

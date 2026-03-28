@@ -1764,6 +1764,27 @@
 - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
 
 ## Scope (current change)
+- Add a guided first-run wizard for the source-based `cmd/bitriver` flow so operators can set key quickstart controls instead of editing `.env` manually after the fact.
+- Support the wizard in both `go run ./cmd/bitriver env init` and `go run ./cmd/bitriver quickstart`, while preserving the existing non-interactive defaults for scripts/CI users who do not opt in.
+- Cover the new wizard prompts with focused `cmd/bitriver` tests and document the guided path in the quickstart docs and README.
+
+## Assumptions
+- The user pain is primarily about missing first-run controls, not about replacing the underlying Compose-based deployment contract.
+- A small guided set of prompts is enough for now: admin email, viewer/API URLs, API port, OME host settings, transcoder public URL, and self-signup.
+- Existing secret generation should remain automatic; the wizard should collect operator-facing deployment values without forcing users to hand-enter every secret up front.
+
+## Risks
+- Interactive prompt code can easily break non-interactive automation if the wizard ever runs unexpectedly, so the opt-in/TTY gating needs to stay explicit and well tested.
+- Writing wizard choices back into `.env` must stay aligned with the current validation and quickstart contract or users will get a friendlier prompt followed by the same validation failure.
+- The quickstart success path currently prints generated credentials based on first-run env state; adding wizard support could accidentally hide or misreport those generated values if the comparison logic is wrong.
+
+## Test plan
+- `go test ./cmd/bitriver -count=1`
+- `go test ./... -count=1 -timeout=120s`
+- `docker compose -f deploy/docker-compose.yml config`
+- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh`
+
+## Scope (current change)
 - Simplify the signed-out auth dialog further by removing the extra sign-in reassurance heading and paragraph inside the sign-in form.
 - Keep the dialog focused on the title, fields, and actions only; do not change redirect behavior, auth APIs, or the prior duplicate-sign-in cleanup.
 - Re-run focused viewer checks and refresh the local viewer container so the simplified dialog is live at `localhost:8080/viewer`.
