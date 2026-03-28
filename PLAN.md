@@ -1764,6 +1764,29 @@
 - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
 
 ## Scope (current change)
+- Analyze the current local post-install Docker Compose logs for runtime errors or warning patterns that appear repo-owned and actionable from this codebase.
+- Correlate the most important findings to the owning service, source file, script, or contract surface before deciding whether a narrow code/doc fix is warranted.
+- If a high-confidence repo issue is reproducible from the logs, implement the smallest fix and re-run the relevant verification; otherwise keep this pass analysis-only with precise findings.
+
+## Assumptions
+- The repo-root `.env` plus `deploy/docker-compose.yml` describe the local install the user wants analyzed.
+- Recent container logs still contain enough startup/runtime signal to identify post-install issues without tearing the stack down and reinstalling.
+- Some log noise may come from third-party services or host Docker behavior, so only findings with clear repo ownership should drive code changes.
+
+## Risks
+- Startup logs can contain benign one-time warnings, so we need to separate ambient noise from real user-facing defects before editing code.
+- A too-broad fix driven by logs could accidentally change the deployment contract or healthy service behavior, so any remediation should stay minimal and evidence-backed.
+- Docker access or missing historical logs on this host could limit what we can verify directly, in which case the investigation should report the evidence gap instead of guessing.
+
+## Test plan
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=200`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=200 bitriver-live viewer postgres redis ome srs transcoder-public`
+- `rg -n "<finding-specific-pattern>" cmd internal web deploy scripts docs`
+- If a repo fix is made: run the narrowest focused test(s) plus `./scripts/verify.sh` when the affected surface warrants it
+
+## Scope (current change)
 - Add a guided first-run wizard for the source-based `cmd/bitriver` flow so operators can set key quickstart controls instead of editing `.env` manually after the fact.
 - Support the wizard in both `go run ./cmd/bitriver env init` and `go run ./cmd/bitriver quickstart`, while preserving the existing non-interactive defaults for scripts/CI users who do not opt in.
 - Cover the new wizard prompts with focused `cmd/bitriver` tests and document the guided path in the quickstart docs and README.
@@ -1783,6 +1806,27 @@
 - `go test ./... -count=1 -timeout=120s`
 - `docker compose -f deploy/docker-compose.yml config`
 - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh`
+
+## Scope (current change)
+- Redeploy the local Docker Compose stack from the current workspace so the operator environment is refreshed against the latest checked-out repo state.
+- Keep the deployment contract unchanged; this is an operational local-stack refresh, not a code or config refactor.
+- Confirm the relevant local services are recreated successfully and report any runtime blocker clearly.
+
+## Assumptions
+- The user wants the current local Compose environment refreshed from this checkout, even though the most recent code changes were in the CLI/docs path rather than the long-running API/viewer runtime.
+- The existing root `.env` remains the intended local deployment input for this machine.
+- Docker Desktop/Engine is available locally because Compose config validation succeeded earlier in this session when `--env-file .env` was supplied.
+
+## Risks
+- Local redeploy may rebuild or recreate containers unexpectedly if the current stack has drifted or if images are stale.
+- Because the current `.env` still uses local loopback/demo-style values in some places, the redeploy only proves local operability, not production readiness.
+- If Docker or the local daemon state changed since the earlier checks, the redeploy could fail for host reasons unrelated to the repository changes.
+
+## Test plan
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
 
 ## Scope (current change)
 - Simplify the signed-out auth dialog further by removing the extra sign-in reassurance heading and paragraph inside the sign-in form.

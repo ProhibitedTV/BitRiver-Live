@@ -3772,6 +3772,55 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
   - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
 
+## Scoped change: post-install docker log triage
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the log-triage scope and capture current runtime evidence
+  - Acceptance criteria:
+    - `PLAN.md` captures the post-install log-analysis scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered capture, triage, and follow-up tasks before Docker log collection begins.
+    - Current Compose status and recent logs are captured from the local install.
+
+- [x] Task 2 - Separate actionable repo-owned findings from host or third-party noise
+  - Acceptance criteria:
+    - The main error/warning patterns are grouped by service and severity.
+    - Each actionable finding is traced to the closest owning code/config/docs surface in this repo.
+    - Non-actionable host/vendor noise is called out clearly so it is not mistaken for a code defect.
+
+- [x] Task 3 - Implement and verify the smallest high-confidence repo fix if warranted
+  - Acceptance criteria:
+    - A code/doc/config change is made only if the logs point to a reproducible repo-owned issue with a narrow fix.
+    - Relevant focused verification is rerun after the change.
+    - `TASKS.md` records either the validated fix or an explicit note that this pass remained analysis-only.
+
+### Execution log (post-install docker log triage)
+- Task 1 complete: recorded the scoped log-triage plan in `PLAN.md` and `TASKS.md`, then captured the current Compose status plus recent logs from `bitriver-live`, `viewer`, `postgres`, `redis`, and `transcoder-public`. The log pull also exposed a host quirk: a broader `docker compose ... logs ... ome srs ...` command hit a Windows Docker pipe access denial, but the already-approved targeted log commands succeeded and produced enough evidence to continue.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 30`
+  - `Get-Content TASKS.md | Select-Object -Last 40`
+  - `git status --short PLAN.md TASKS.md`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 postgres redis transcoder-public`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=200 bitriver-live viewer postgres redis ome srs transcoder-public` (blocked on this host by Windows Docker pipe access denial)
+- Task 2 complete: grouped the captured messages into three buckets. The highest-confidence repo bug was `authMiddleware` treating only `/api/directory` as public while still 401-ing public subroutes like `/api/directory/featured`, `/api/directory/recommended`, `/api/directory/live`, `/api/directory/trending`, and `/api/directory/categories`. Separate findings remain for repeated missing-table errors against Postgres-backed runtime tables and a `transcoder-public` nginx capability mismatch (`setgid(101) failed`) that would require deployment-contract follow-up before changing Compose hardening.
+- Task 2 checks:
+  - `rg -n "authMiddleware|/api/directory|DirectoryFeatured|DirectoryRecommended|DirectoryLive|DirectoryTrending|DirectoryCategories" internal/server/server.go internal/api/channels_directory_handlers.go`
+  - `Get-Content internal/server/server.go | Select-Object -Skip 680 -First 60`
+  - `Get-Content deploy/nginx/transcoder-public.conf | Select-Object -First 40`
+  - `Get-Content deploy/docker-compose.yml | Select-Object -Skip 532 -First 25`
+- Task 3 complete: updated `authMiddleware` so public directory subroutes stay optional-auth while `/api/directory/following` remains protected, then added focused middleware coverage for anonymous and expired-session requests against those routes. The targeted `internal/server` test package passed after formatting the touched files, and a local app rebuild confirmed the live stack now returns `200` for anonymous `/api/directory/featured` while keeping anonymous `/api/directory/following` protected.
+- Task 3 checks:
+  - `gofmt -w internal/server/server.go internal/server/server_test.go`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/api/directory/featured -ErrorAction Stop | Select-Object StatusCode,Content } catch { $_.Exception.Response | Select-Object StatusCode }`
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/api/directory/following -ErrorAction Stop | Select-Object StatusCode,Content } catch { $_.Exception.Response | Select-Object StatusCode }`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=40 bitriver-live viewer` (blocked on this host by Windows Docker pipe access denial after the rebuild; route probes above were used as the runtime confirmation)
+
 ## Scoped change: quickstart first-run wizard controls
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -3818,6 +3867,35 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `docker compose --env-file .env -f deploy/docker-compose.yml config`
   - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (blocked only by missing third-party image digest pins in `.env`: `BITRIVER_REDIS_IMAGE_DIGEST`, `BITRIVER_POSTGRES_IMAGE_DIGEST`, `BITRIVER_SRS_IMAGE_DIGEST`, `BITRIVER_OME_IMAGE_DIGEST`, `BITRIVER_NGINX_IMAGE_DIGEST`, `BITRIVER_ALPINE_3_IMAGE_DIGEST`, `BITRIVER_ALPINE_3_19_IMAGE_DIGEST`, `BITRIVER_DEBIAN_IMAGE_DIGEST`)
   - `git status --short`
+
+## Scoped change: local redeploy refresh
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the local redeploy scope before touching the running stack
+  - Acceptance criteria:
+    - `PLAN.md` captures the local redeploy scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered redeploy and verification steps before runtime actions begin.
+    - Read-only context confirms the intended compose contract and current env file remain the repo-root defaults.
+
+- [x] Task 2 - Redeploy the local Compose stack and verify service health
+  - Acceptance criteria:
+    - The relevant local services are recreated from the current checkout.
+    - Post-redeploy Compose status is captured.
+    - Local HTTP verification is attempted and any blocker is recorded explicitly.
+
+### Execution log (local redeploy refresh)
+- Task 1 complete: recorded the redeploy scope in `PLAN.md` and `TASKS.md` before running Docker commands. This refresh is operational only; the current checkout still points at the canonical root `.env` plus `deploy/docker-compose.yml` contract.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 30`
+  - `Get-Content TASKS.md | Select-Object -Last 40`
+- Task 2 complete: ran a targeted local Compose refresh against `bitriver-live` and `viewer`, which also rebuilt/refreshed the dependent config and media services needed for the stack to settle cleanly. Post-redeploy Compose status shows the stack healthy, and `http://localhost:8080/viewer` returned `200`.
+- Task 2 checks:
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `rg -n "^BITRIVER_LIVE_PORT=|^NEXT_PUBLIC_VIEWER_URL=" .env`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
 
 ## Scoped change: viewer auth-dialog sign-in copy simplification
 

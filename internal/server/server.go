@@ -697,7 +697,7 @@ func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 		}
 		if r.Method == http.MethodGet {
 			switch {
-			case path == "/api/directory":
+			case isPublicDirectoryPath(path):
 				optionalAuth = true
 			case strings.HasPrefix(path, "/api/channels/"):
 				optionalAuth = true
@@ -734,6 +734,16 @@ func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 		ctx := api.ContextWithUser(r.Context(), user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func isPublicDirectoryPath(path string) bool {
+	if path == "/api/directory" {
+		return true
+	}
+	if !strings.HasPrefix(path, "/api/directory/") {
+		return false
+	}
+	return path != "/api/directory/following"
 }
 
 // spaHandler performs spa handler and propagates validation or dependency failures to the caller.
