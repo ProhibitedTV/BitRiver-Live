@@ -3788,7 +3788,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Each actionable finding is traced to the closest owning repo surface (generated config, compose/env input, script, or runtime code).
     - Non-actionable upstream/host noise is called out clearly.
 
-- [-] Task 3 - Implement and verify the smallest high-confidence fix if warranted
+- [x] Task 3 - Implement and verify the smallest high-confidence fix if warranted
   - Acceptance criteria:
     - A change is made only if the OME log evidence points to a narrow repo-owned issue.
     - Relevant focused verification is rerun after the change.
@@ -3811,7 +3811,14 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 -  - `Get-Content internal/api/status_helpers.go`
 -  - `Get-Content internal/storage/storage.go`
 -  - `rg -n "HealthChecks|IngestHealth|LastIngestHealth|BITRIVER_INGEST_HEALTH|OME_API_TOKEN|AccessToken" internal cmd deploy docs scripts`
-- Task 3 in progress: updating the lightweight API `/healthz` path to reuse the last recorded ingest-health snapshot instead of live-probing OME on every container healthcheck, while keeping the deeper `/status` endpoint on the live refresh path for operators.
+- Task 3 complete: updated the lightweight API `/healthz` path to reuse the last recorded ingest-health snapshot instead of live-probing OME on every container healthcheck, while keeping `/api/status` on the live refresh path for operator diagnostics. Added focused handler coverage for cached-vs-live ingest health behavior, rebuilt the local API stack, and rechecked fresh OME logs.
+- Task 3 checks:
+-  - `gofmt -w internal/api/handlers.go internal/api/status_helpers.go internal/api/handlers_test.go`
+-  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Join-Path (Get-Location) '.gocache'); go test ./internal/api -count=1 -timeout=120s`
+-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+-  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/healthz -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
+-  - `Start-Sleep -Seconds 70; docker compose --env-file .env -f deploy/docker-compose.yml logs --since=120s ome | Select-String -Pattern '172\.18\.0\.7|127\.0\.0\.1|Invalid credential|Authorization header is required'`
+- Result: the repeated API-owned `172.18.0.7 GET /healthz` `401 Invalid credential` lines stopped appearing after the rebuild. The remaining `127.0.0.1 GET /` `401 Authorization header is required` lines are still produced by the Compose OME liveness probe and remain a deployment-contract decision rather than an API runtime bug.
 
 ## Scoped change: post-install docker log triage
 
