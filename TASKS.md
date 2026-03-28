@@ -3772,6 +3772,54 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
   - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
 
+## Scoped change: OME container log triage
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the OME log-triage scope and capture current runtime evidence
+  - Acceptance criteria:
+    - `PLAN.md` captures the OME log-analysis scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered capture, diagnosis, and follow-up tasks before log collection begins.
+    - Current Compose status plus recent `ome`-related logs are captured from the local install.
+
+- [x] Task 2 - Separate actionable repo-owned OME findings from upstream or host noise
+  - Acceptance criteria:
+    - The dominant `bitriver-ome` log patterns are grouped by severity and probable cause.
+    - Each actionable finding is traced to the closest owning repo surface (generated config, compose/env input, script, or runtime code).
+    - Non-actionable upstream/host noise is called out clearly.
+
+- [x] Task 3 - Implement and verify the smallest high-confidence fix if warranted
+  - Acceptance criteria:
+    - A change is made only if the OME log evidence points to a narrow repo-owned issue.
+    - Relevant focused verification is rerun after the change.
+    - `TASKS.md` records either the validated fix or an explicit note that this pass remained diagnosis-only.
+
+### Execution log (OME container log triage)
+- Task 1 complete: recorded the scoped OME log-triage plan in `PLAN.md` and `TASKS.md`, then captured the current `ome`, `ome-config`, and `ome-health-token-check` runtime state from the local Compose install. `bitriver-ome` is healthy, `ome-config` rendered successfully, and `ome-health-token-check` confirmed the rendered `<Managers><API><AccessToken>` matches the canonical runtime token source.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 30`
+  - `Get-Content TASKS.md | Select-Object -Last 35`
+-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps ome ome-config ome-health-token-check`
+-  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=200 ome ome-config ome-health-token-check`
+- Task 2 complete: separated the two dominant `bitriver-ome` log loops. The `127.0.0.1 GET /` `401` entries come from the Compose OME liveness probe and are noisy but currently by design under the deployment contract. The `172.18.0.7 GET /healthz` `401 Invalid credential` entries map back to the BitRiver API container calling ingest `HealthChecks()` on each `/healthz` request, which is repo-owned runtime behavior and a good candidate for a narrow code fix.
+- Task 2 checks:
+-  - `Get-Content deploy/docker-compose.yml`
+-  - `Get-Content deploy/ome/Server.generated.xml`
+-  - `Get-Content internal/ingest/http_controller.go`
+-  - `Get-Content internal/config/ingest.go`
+-  - `Get-Content internal/api/handlers.go`
+-  - `Get-Content internal/api/status_helpers.go`
+-  - `Get-Content internal/storage/storage.go`
+-  - `rg -n "HealthChecks|IngestHealth|LastIngestHealth|BITRIVER_INGEST_HEALTH|OME_API_TOKEN|AccessToken" internal cmd deploy docs scripts`
+- Task 3 complete: updated the lightweight API `/healthz` path to reuse the last recorded ingest-health snapshot instead of live-probing OME on every container healthcheck, while keeping `/api/status` on the live refresh path for operator diagnostics. Added focused handler coverage for cached-vs-live ingest health behavior, rebuilt the local API stack, and rechecked fresh OME logs.
+- Task 3 checks:
+-  - `gofmt -w internal/api/handlers.go internal/api/status_helpers.go internal/api/handlers_test.go`
+-  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Join-Path (Get-Location) '.gocache'); go test ./internal/api -count=1 -timeout=120s`
+-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+-  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/healthz -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
+-  - `Start-Sleep -Seconds 70; docker compose --env-file .env -f deploy/docker-compose.yml logs --since=120s ome | Select-String -Pattern '172\.18\.0\.7|127\.0\.0\.1|Invalid credential|Authorization header is required'`
+- Result: the repeated API-owned `172.18.0.7 GET /healthz` `401 Invalid credential` lines stopped appearing after the rebuild. The remaining `127.0.0.1 GET /` `401 Authorization header is required` lines are still produced by the Compose OME liveness probe and remain a deployment-contract decision rather than an API runtime bug.
+
 ## Scoped change: post-install docker log triage
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

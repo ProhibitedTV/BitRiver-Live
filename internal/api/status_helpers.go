@@ -68,8 +68,7 @@ func (h *Handler) ingestStatusChecks(ctx context.Context, fallback time.Time) ([
 		return nil, time.Time{}
 	}
 
-	snapshot := h.systemService().IngestHealth(ctx)
-	_, recordedAt := h.systemService().LastIngestHealth()
+	snapshot, recordedAt := h.ingestHealthSnapshot(ctx, true)
 	checkedAt := fallback
 	if !recordedAt.IsZero() {
 		checkedAt = recordedAt
