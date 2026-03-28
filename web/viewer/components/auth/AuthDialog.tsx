@@ -3,8 +3,75 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 
-function formatDestinationPath(route: string) {
-  return route.length <= 56 ? route : `${route.slice(0, 53)}...`;
+const AUTH_DIALOG_ORIGIN = "http://bitriver.local";
+
+type ReturnDestinationCopy = {
+  label: string;
+  detail: string;
+};
+
+function normalizeDestinationPath(route: string) {
+  try {
+    const url = new URL(route, AUTH_DIALOG_ORIGIN);
+    const trimmedPath = url.pathname.replace(/\/+$/, "");
+    const normalizedPath = trimmedPath.startsWith("/viewer")
+      ? trimmedPath.replace(/^\/viewer/, "") || "/"
+      : trimmedPath || "/";
+    return normalizedPath;
+  } catch {
+    return "/";
+  }
+}
+
+function describeReturnDestination(route: string): ReturnDestinationCopy {
+  const path = normalizeDestinationPath(route);
+
+  if (path === "/") {
+    return {
+      label: "Viewer home",
+      detail: "We'll bring you back to the main viewer page once you're signed in.",
+    };
+  }
+
+  if (path === "/browse") {
+    return {
+      label: "Browse results",
+      detail: "Your current search and filters will still be waiting for you.",
+    };
+  }
+
+  if (path === "/following") {
+    return {
+      label: "Following",
+      detail: "You'll land back on the channels and creators you were tracking.",
+    };
+  }
+
+  if (path === "/profile") {
+    return {
+      label: "Your profile",
+      detail: "We'll take you back to your profile page as soon as you're signed in.",
+    };
+  }
+
+  if (path.startsWith("/channels/")) {
+    return {
+      label: "Channel page",
+      detail: "We'll return you to the stream or video you opened.",
+    };
+  }
+
+  if (path.startsWith("/creator/")) {
+    return {
+      label: "Creator tools",
+      detail: "You'll return to the creator workflow you opened.",
+    };
+  }
+
+  return {
+    label: "Your current page",
+    detail: "We'll bring you back to the same spot once you're signed in.",
+  };
 }
 
 export function AuthDialog() {
@@ -62,8 +129,14 @@ export function AuthDialog() {
     setMFACode("");
   }, [mfaRequired]);
 
-  const destinationPath = formatDestinationPath(authRedirectTo);
-  const title = user ? "Signed in to BitRiver Live" : mfaRequired ? "Verify your account" : "Sign in to BitRiver Live";
+  const returnDestination = describeReturnDestination(authRedirectTo);
+  const title = user
+    ? "Signed in to BitRiver Live"
+    : mfaRequired
+      ? "Verify your account"
+      : authMode === "signup"
+        ? "Create your BitRiver account"
+        : "Sign in to BitRiver Live";
 
   if (!authDialogOpen) {
     return null;
@@ -101,7 +174,8 @@ export function AuthDialog() {
         <div className="auth-overlay__route surface">
           <div className="stack stack--2xs">
             <span className="navbar-context__eyebrow">Continue where you left off</span>
-            <strong>{destinationPath}</strong>
+            <strong>{returnDestination.label}</strong>
+            <p className="muted">{returnDestination.detail}</p>
           </div>
         </div>
 
@@ -123,31 +197,6 @@ export function AuthDialog() {
           </div>
         ) : (
           <>
-            {!mfaRequired && (
-              <div className="auth-overlay__tabs" role="tablist" aria-label="Auth mode">
-                <button
-                  type="button"
-                  role="tab"
-                  className={`auth-overlay__tab${authMode === "signin" ? " auth-overlay__tab--active" : ""}`}
-                  aria-selected={authMode === "signin"}
-                  onClick={() => setAuthMode("signin")}
-                >
-                  Sign in
-                </button>
-                {allowSelfSignup && (
-                  <button
-                    type="button"
-                    role="tab"
-                    className={`auth-overlay__tab${authMode === "signup" ? " auth-overlay__tab--active" : ""}`}
-                    aria-selected={authMode === "signup"}
-                    onClick={() => setAuthMode("signup")}
-                  >
-                    Sign up
-                  </button>
-                )}
-              </div>
-            )}
-
             {authFeedback ? (
               <p className={`auth-overlay__feedback${authFeedback.variant === "error" ? " auth-overlay__feedback--error" : ""}`} role={authFeedback.variant === "error" ? "alert" : "status"}>
                 {authFeedback.message}

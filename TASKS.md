@@ -3686,3 +3686,47 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
   - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'Launch your first self-hosted channel|Start creator setup|Browse directory|Full directory' -AllMatches`
   - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer/creator/getting-started -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
+
+## Scoped change: viewer auth-overlay cleanup
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the auth-overlay cleanup scope before editing
+  - Acceptance criteria:
+    - `PLAN.md` captures the auth-overlay scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered dialog cleanup and verification tasks before code edits begin.
+    - Read-only inspection identifies where the raw `/viewer` copy and duplicate sign-in controls are rendered.
+
+- [x] Task 2 - Clean up the sign-in overlay copy and mode controls
+  - Acceptance criteria:
+    - The auth dialog no longer shows raw redirect paths like `/viewer` as the visible return-context label.
+    - When self-signup is unavailable, the dialog no longer renders a redundant standalone `Sign in` mode tab above the `Sign in` submit action.
+    - Existing sign-in, sign-up, MFA, and redirect behavior remain intact.
+
+- [x] Task 3 - Run focused viewer verification and record the result
+  - Acceptance criteria:
+    - Focused auth-dialog/auth-hook tests pass for the touched flow.
+    - Viewer lint is rerun.
+    - `TASKS.md` records the verification results and any remaining host blocker if the broader viewer gate cannot complete.
+
+### Execution log (viewer auth-overlay cleanup)
+- Task 1 complete: recorded the scope in `PLAN.md` and `TASKS.md` before editing, then confirmed in read-only inspection that `web/viewer/components/auth/AuthDialog.tsx` renders the raw `authRedirectTo` value in the route summary and always shows a `Sign in` tab even when sign-up is disabled, which is what creates the awkward `/viewer` label plus duplicate sign-in controls.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 30`
+  - `Get-Content TASKS.md | Select-Object -Last 40`
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/hooks/useAuth.tsx`
+  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
+- Task 2 complete: replaced the raw route label with a friendlier return-summary in `AuthDialog`, removed the redundant auth-mode tab strip, and kept the existing in-form sign-in/sign-up switches plus redirect behavior intact. The sign-in overlay now shows human-facing labels like `Viewer home` instead of `/viewer`, and signed-out installs without public signup now surface only the real `Sign in` action.
+- Task 2 checks:
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
+- Task 3 complete: reran focused auth-dialog/auth-hook coverage and viewer lint successfully, then ran `./scripts/verify.sh --viewer`. The broader verify gate progressed through the Go and contract checks and stopped only at the existing production image-digest requirement in `.env`, which is outside this UI fix. After verification, the local `bitriver-live` and `viewer` services were explicitly recreated so the running stack picked up the auth-dialog update, and `http://localhost:8080/viewer` returned `200`.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx useAuth.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` (blocked only by missing required `BITRIVER_*_IMAGE_DIGEST` values in `.env`)
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer` (timed out before the CLI returned on this host)
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --force-recreate --no-deps bitriver-live viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`

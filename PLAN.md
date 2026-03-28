@@ -1720,3 +1720,23 @@
 - `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx navigation.test.ts viewerShell.test.tsx creatorGettingStartedPage.test.tsx creatorLivePage.test.tsx`
 - `npx.cmd playwright test tests/homepage-layout.spec.ts tests/channel.spec.ts tests/creator-live-setup.spec.ts --reporter=list`
 - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
+
+## Scope (current change)
+- Clean up the in-viewer sign-in overlay so it no longer exposes the raw redirect route (for example `/viewer`) as visible UI copy.
+- Remove the redundant duplicate "Sign in" controls that appear when self-signup is disabled, while keeping the auth flow and redirect behavior unchanged.
+- Add focused viewer test coverage for the cleaned-up auth-dialog presentation.
+
+## Assumptions
+- The reported issue is confined to `web/viewer/components/auth/AuthDialog.tsx`; backend auth APIs and redirect plumbing in `useAuth` should remain unchanged.
+- Replacing the raw route chip with friendlier return-context copy is acceptable as long as successful auth still sends the viewer back to the same route.
+- Hiding the single-mode tab control when sign-up is unavailable is the smallest fix for the duplicate-button complaint.
+
+## Risks
+- If the replacement return copy is too generic, the dialog could feel less grounded than the current route-specific presentation.
+- Tab visibility logic must still preserve the full sign-in/sign-up switcher when self-signup is allowed.
+- Tightening auth-dialog tests around copy and button counts can become brittle if selectors depend on exact phrasing unnecessarily.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx useAuth.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer`
