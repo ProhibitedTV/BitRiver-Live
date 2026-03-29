@@ -38,6 +38,133 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'Find the streams worth opening now|Watch live now|Full directory|Browse BitRiver Live' -AllMatches`
   - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup).Content | Select-String -Pattern 'Sign in to continue|Back to viewer' -AllMatches`
 
+## Scoped change: installer wizard UX redesign
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the installer redesign scope before touching the UI
+  - Acceptance criteria:
+    - `PLAN.md` captures the wizard redesign scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered implementation/verification tasks before installer files are edited.
+    - Read-only analysis identifies the current installer as the static `web/static` script generator and preserves the existing Ubuntu helper contract.
+
+- [x] Task 2 - Refactor installer state and helper logic into a reusable step model
+  - Acceptance criteria:
+    - Installer state separates presentation flow from generated install execution details.
+    - Validation, defaulting, system checks, review rows, and success-summary derivation live in reusable helpers instead of one large submit handler.
+    - Existing script-generation behavior remains reusable by the new flow.
+
+- [x] Task 3 - Rebuild the installer UI as the new 7-step Quick/Advanced flow
+  - Acceptance criteria:
+    - The wizard renders the required steps: Welcome, System Check, Install Mode, Core Settings, Review, Installing, Success.
+    - Quick Install is the default/recommended path; advanced options stay hidden until explicitly requested.
+    - The UI includes reusable pieces for step header, status list, field help text, review rows, progress stepper, error panel, and success panel.
+    - Entered values persist across validation errors, back navigation, and retry flows.
+
+- [x] Task 4 - Add focused test coverage for installer defaults, validation, and handoff behavior
+  - Acceptance criteria:
+    - Static-app tests cover quick defaults, advanced validation, system-check messaging, and success/install summary derivation.
+    - The new installer module is exercised without requiring a browser-only manual path.
+
+- [x] Task 5 - Update supporting docs and run verification, then record outcomes
+  - Acceptance criteria:
+    - Any operator/manual-QA docs touched by the new installer flow are updated in the same change.
+    - `node --test web/static/app.test.mjs web/static/installer.test.mjs` is run and recorded.
+    - `./scripts/verify.sh` is run and recorded, or a concrete host blocker is noted.
+
+### Execution log (installer wizard UX redesign)
+- Task 1 complete: recorded the installer redesign scope in `PLAN.md` and `TASKS.md` before editing the UI, and confirmed the current surface is the static `web/static` script generator that wraps `deploy/install/ubuntu.sh`.
+- Task 1 checks:
+  - `rg -n "installer wizard UX redesign|Redesign the control-center Home Server Installer|node --test web/static/app.test.mjs web/static/installer.test.mjs" PLAN.md TASKS.md`
+  - `Get-Content web/static/index.html | Select-Object -Skip 512 -First 200`
+  - `Get-Content web/static/app.js | Select-Object -Skip 2680 -First 240`
+- Task 2 complete: moved the installer state, defaults, validation, review summaries, execution handoff, and script-generation logic into the new `web/static/installer.js` module so presentation flow and install execution details are no longer tangled inside `web/static/app.js`.
+- Task 2 checks:
+  - `node --check web/static/installer.js`
+  - `rg -n "setupInstallerWizard|buildSystemChecks|validateInstallerDraft|computeInstallerScript|createInstallerExecution" web/static/installer.js`
+  - `rg -n "setupInstallerWizard" web/static/app.js`
+- Task 3 complete: replaced the single-form script generator with the new 7-step wizard flow, switched the settings page over to the new installer module, refreshed the product copy in `web/static/index.html`, and added the new stepper/card/review/success styling in `web/static/styles.css`.
+- Task 3 checks:
+  - `rg -n "Quick Install|System Check|Install Mode|Core Settings|Start handoff|Continue to success" web/static/installer.js web/static/index.html`
+  - `Get-Content web/static/styles.css | Select-Object -Skip 2120 -First 220`
+- Task 4 complete: added `web/static/installer.test.mjs` to cover quick defaults, advanced validation, system-check statuses, script generation, and success/review summaries, while keeping the existing `web/static/app.test.mjs` coverage green.
+- Task 4 checks:
+  - `node web/static/installer.test.mjs`
+  - `node web/static/app.test.mjs`
+  - `node --check web/static/installer.js`
+  - `node --check web/static/app.js`
+- Task 5 complete: documented the new browser installer flow in `docs/quickstart.md`, attempted the requested combined `node --test` command, captured the Windows `spawn EPERM` runner limitation, reran the static tests directly with `node <file>`, and ran the repo verification gate until it stopped at the local `.env` third-party digest blocker.
+- Task 5 checks:
+  - `node --test web/static/app.test.mjs web/static/installer.test.mjs` (blocked on this Windows host by the Node test runner spawning subprocesses with `EPERM`)
+  - `node web/static/installer.test.mjs`
+  - `node web/static/app.test.mjs`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (Go + contract phases passed; current local blocker is missing required `BITRIVER_*_IMAGE_DIGEST` values in `.env` for the production third-party digest gate)
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short`
+
+## Scoped change: installer preflight + QA follow-up
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the follow-up scope before editing backend or installer files
+  - Acceptance criteria:
+    - `PLAN.md` captures the preflight/cleanup scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered follow-up tasks before implementation starts.
+    - Read-only analysis confirms the server/API seam and the remaining legacy installer block to remove.
+
+- [x] Task 2 - Add a small server-side installer preflight endpoint with focused API tests
+  - Acceptance criteria:
+    - An authenticated admin-only endpoint reports actionable pass/warning/fail host checks for the installer System Check step.
+    - The endpoint stays observational/dry-run only and does not mutate host state.
+    - Focused `internal/api` tests cover auth/method handling plus representative pass/fail preflight results.
+
+- [x] Task 3 - Wire the installer System Check to the live preflight results and preserve recovery behavior
+  - Acceptance criteria:
+    - The wizard fetches real host preflight results before configuration and surfaces actionable copy in the existing System Check UI.
+    - User-entered values remain intact across preflight errors, validation errors, back navigation, and retry flows.
+    - If the preflight request fails, the wizard falls back to the existing local/browser-side readiness messaging instead of blocking progress.
+
+- [x] Task 4 - Add QA coverage for the new wizard flow and remove the legacy installer block
+  - Acceptance criteria:
+    - Browser-level/manual QA guidance covers the new wizard screens and key step transitions.
+    - Focused static-app tests cover the new preflight state/fallback behavior where practical.
+    - The unused legacy installer template/helper block is removed from `web/static` once the new flow is verified.
+
+- [x] Task 5 - Run focused verification, update task results, and record any remaining blockers
+  - Acceptance criteria:
+    - Focused Go/static-app checks are run and logged in this section.
+    - `./scripts/verify.sh` is rerun and any host/env blocker is documented precisely.
+    - `TASKS.md` reflects the final status/results for each follow-up task.
+
+### Execution log (installer preflight + QA follow-up)
+- Task 1 complete: recorded the follow-up scope in `PLAN.md` and `TASKS.md`, confirmed the existing `/api/setup` backend seam is the right place for a sibling preflight endpoint, and verified the remaining legacy installer template/helper code still lives in `web/static/index.html` and `web/static/app.js`.
+- Task 1 checks:
+  - `rg -n "installer preflight \\+ QA follow-up|Add a small authenticated server-side installer preflight endpoint" PLAN.md TASKS.md`
+  - `Get-Content internal/api/setup_handlers.go`
+  - `Get-Content internal/server/server.go`
+  - `rg -n "computeInstallerScript|setupInstaller\\(|installer-template" web/static/app.js web/static/index.html`
+- Task 2 complete: added the new admin-only `/api/install/preflight` dry-run endpoint, defaulted it through the API handler dependency graph, and covered both handler auth/JSON behavior plus representative host-pass/fail results in focused `internal/api` tests.
+- Task 2 checks:
+  - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.gocache'; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api -count=1`
+- Task 3 complete: wired the installer System Check step to request live host results from `/api/install/preflight`, kept the preflight fetch state separate from install execution state, added a refresh path, and preserved safe fallback guidance whenever the request fails.
+- Task 3 checks:
+  - `node --check web/static/installer.js`
+  - `node web/static/installer.test.mjs`
+- Task 4 complete: added UI-level static coverage for the System Check transition/live-fallback behavior, appended a dedicated installer checklist to `web/manual-qa.md`, and removed the dead legacy installer helper/template blocks from `web/static/app.js` and `web/static/index.html`.
+- Task 4 checks:
+  - `node web/static/installer.test.mjs`
+  - `node web/static/app.test.mjs`
+  - `rg -n "computeInstallerScript|setupInstaller\\(|installer-template" web/static/app.js web/static/index.html` (no matches)
+  - `Get-Content web/manual-qa.md | Select-Object -Last 30`
+- Task 5 complete: reran focused Go/static-app verification, including the touched `internal/server` package, then reran `./scripts/verify.sh`. The repo-wide gate passed through Go/unit/contract checks and stopped at the same local `.env` production digest requirement blocker.
+- Task 5 checks:
+  - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.gocache'; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1`
+  - `node --check web/static/installer.js`
+  - `node --check web/static/app.js`
+  - `node web/static/installer.test.mjs`
+  - `node web/static/app.test.mjs`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (Go/unit/contract checks passed; current local blocker is the missing required `BITRIVER_*_IMAGE_DIGEST` values in `.env` for the production third-party digest gate)
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short`
+
 ## Scoped change: homepage UI/UX rescue pass
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

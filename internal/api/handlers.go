@@ -42,7 +42,8 @@ type Handler struct {
 	MonetizationService   service.MonetizationUseCase
 	PaymentService        *service.PaymentService
 	WebhookSecrets        map[string]string
-	Setup                 SetupManager
+	Setup                     SetupManager
+	InstallerPreflightService InstallerPreflightChecker
 	DefaultRenditions     []string
 	SRSHookToken          string
 	AllowSelfSignup       bool
@@ -118,9 +119,10 @@ func NewHandler(deps Dependencies) *Handler {
 		AnalyticsService:      deps.AnalyticsService,
 		SystemService:         deps.SystemService,
 		MonetizationService:   deps.MonetizationService,
-		PaymentService:        deps.PaymentService,
-		WebhookSecrets:        map[string]string{},
-		Logger:                slog.Default(),
+		PaymentService:            deps.PaymentService,
+		WebhookSecrets:            map[string]string{},
+		InstallerPreflightService: newHostInstallerPreflightChecker(),
+		Logger:                    slog.Default(),
 	}
 }
 
@@ -168,6 +170,13 @@ func (h *Handler) systemService() service.SystemHealthUseCase {
 
 func (h *Handler) monetizationService() service.MonetizationUseCase {
 	return h.MonetizationService
+}
+
+func (h *Handler) installerPreflightChecker() InstallerPreflightChecker {
+	if h.InstallerPreflightService == nil {
+		h.InstallerPreflightService = newHostInstallerPreflightChecker()
+	}
+	return h.InstallerPreflightService
 }
 
 func (h *Handler) sessionManager() *auth.SessionManager {
