@@ -246,6 +246,7 @@ func registerRoutes(mux *http.ServeMux, handler *api.Handler, cfg Config, record
 	mux.HandleFunc("/api/moderation/automod", handler.ModerationAutoMod)
 	mux.HandleFunc("/api/analytics/overview", handler.AnalyticsOverview)
 	mux.HandleFunc("/api/metrics/qoe", handler.ViewerQoE)
+	mux.HandleFunc("/api/install/preflight", handler.InstallerPreflight)
 	mux.HandleFunc("/api/setup", handler.SetupWizard)
 	mux.HandleFunc("/api/legal/dmca", handler.LegalDMCA)
 	mux.HandleFunc("/api/legal/dmca/", handler.LegalDMCAByID)

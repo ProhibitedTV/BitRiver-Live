@@ -1811,6 +1811,48 @@
 - If a repo fix is made: run the narrowest focused test(s) plus `./scripts/verify.sh` when the affected surface warrants it
 
 ## Scope (current change)
+- Redesign the control-center Home Server Installer in `web/static` into a linear 7-step wizard that defaults to a Quick Install path while preserving the existing Ubuntu installer/script behavior underneath.
+- Refactor the installer into a dedicated step/state model so validation, preflight messaging, review, retry, and success handoff are separated from the current one-shot form rendering.
+- Improve operator-facing copy, hide advanced/technical details behind explicit reveal controls, and add focused static-app coverage for the installer defaults, validation, and handoff logic.
+
+## Assumptions
+- The current installer surface to redesign is the browser-based Home Server Installer rendered from `web/static/index.html` and `web/static/app.js`, not the Bash prompt wizard in `deploy/install/wizard.sh`.
+- Reusing the existing generated Ubuntu install script flow is the least invasive way to preserve functionality while still upgrading the user experience around it.
+- Quick Install can safely favor beginner-friendly defaults (for example built-in storage and a non-privileged default port) as long as Advanced Install still exposes the current installer capabilities.
+
+## Risks
+- A large markup-only rewrite without a clear state model could make next/back/retry behavior brittle, so the logic should move into a dedicated installer module before styling-heavy work.
+- Changing defaults too aggressively could drift from the underlying installer contract, especially around storage, admin bootstrap, and address handling, so the generated script must remain grounded in `deploy/install/ubuntu.sh`.
+- The static control-center surface has lightweight test coverage today, so we need pure-function seams for installer validation and handoff logic instead of relying on manual browser-only verification.
+
+## Test plan
+- `node --test web/static/app.test.mjs web/static/installer.test.mjs`
+- `./scripts/verify.sh`
+
+## Scope (current change)
+- Add a small authenticated server-side installer preflight endpoint so the control-center installer can report actual host readiness during the System Check step instead of relying on browser-only warnings.
+- Reuse the existing installer draft/default/validation model in `web/static` while separating preflight fetch state from the existing handoff/execution state and keeping the current Ubuntu helper/script contract intact.
+- Add operator QA coverage for the new wizard flow, and remove the now-unused legacy installer template/helper code from `web/static` once the new flow has the needed coverage.
+
+## Assumptions
+- The browser installer is intended to assess the same host that serves the control center, so a lightweight server-side endpoint can improve readiness reporting without changing how the generated install command works.
+- A dry-run preflight should stay observational: inspect host capabilities, file/path readiness, and obvious installer prerequisites without mutating the system or attempting the install itself.
+- If a live preflight request fails, the wizard should keep the existing browser-side messaging as a fallback so the user is never blocked from reviewing or retrying the flow.
+
+## Risks
+- Host inspection can easily sprawl into installer logic duplication, so the endpoint should stay small and report only actionable checks tied directly to the Ubuntu helper requirements.
+- Wiring live preflight state into the wizard could accidentally clear user-entered answers or break back/retry navigation if it is mixed into the install-execution state model.
+- Removing the legacy installer block too early would be risky if the new wizard still depended on its markup or helper code, so cleanup should happen only after the new flow is wired and covered.
+
+## Test plan
+- `go test ./internal/api -count=1`
+- `node web/static/installer.test.mjs`
+- `node web/static/app.test.mjs`
+- `node --check web/static/installer.js`
+- `node --check web/static/app.js`
+- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh`
+
+## Scope (current change)
 - Add a guided first-run wizard for the source-based `cmd/bitriver` flow so operators can set key quickstart controls instead of editing `.env` manually after the fact.
 - Support the wizard in both `go run ./cmd/bitriver env init` and `go run ./cmd/bitriver quickstart`, while preserving the existing non-interactive defaults for scripts/CI users who do not opt in.
 - Cover the new wizard prompts with focused `cmd/bitriver` tests and document the guided path in the quickstart docs and README.

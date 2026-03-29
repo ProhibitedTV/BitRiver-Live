@@ -2122,6 +2122,564 @@ chat-log {
     }
 }
 
+.installer {
+    background:
+        radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 18%, transparent), transparent 32%),
+        linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 92%, transparent), color-mix(in srgb, var(--surface) 88%, transparent));
+    border: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+    border-radius: 1.75rem;
+    padding: clamp(1.35rem, 2.6vw, 2.5rem);
+    display: grid;
+    gap: 1.5rem;
+    box-shadow: 0 28px 60px rgba(7, 12, 26, 0.34);
+}
+
+[data-theme="light"] .installer {
+    box-shadow: 0 24px 55px rgba(15, 23, 42, 0.12);
+}
+
+.installer__header {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.installer__intro {
+    margin: 0;
+    max-width: 64ch;
+    color: var(--text-muted);
+}
+
+.installer__layout {
+    display: grid;
+    gap: 1.5rem;
+}
+
+@media (min-width: 1080px) {
+    .installer__layout {
+        grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.95fr);
+        align-items: start;
+    }
+}
+
+.installer__main {
+    display: grid;
+    gap: 1rem;
+}
+
+.installer__sidebar {
+    display: grid;
+    gap: 1rem;
+}
+
+.installer__sidebar-card,
+.installer__panel,
+.installer__review-section,
+.installer__success-panel,
+.installer__subsection {
+    background: color-mix(in srgb, var(--surface) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+    border-radius: 1.25rem;
+}
+
+.installer__sidebar-card {
+    padding: 1.1rem 1.2rem;
+    display: grid;
+    gap: 0.85rem;
+}
+
+.installer__sidebar-card h4 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.installer__sidebar-label,
+.installer__success-badge {
+    margin: 0;
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+}
+
+.installer__sidebar-list,
+.installer__review-list {
+    display: grid;
+    gap: 0.7rem;
+    margin: 0;
+}
+
+.installer__sidebar-list div,
+.installer__review-row {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.installer__sidebar-list dt,
+.installer__review-row dt {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.installer__sidebar-list dd,
+.installer__review-row dd {
+    margin: 0;
+    font-weight: 600;
+    word-break: break-word;
+}
+
+.installer__sidebar-points {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.5rem;
+    color: var(--text-muted);
+}
+
+.installer__docs {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.installer__docs:hover,
+.installer__docs:focus-visible {
+    color: var(--accent-strong);
+}
+
+.installer__stepper {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.75rem;
+}
+
+@media (min-width: 720px) {
+    .installer__stepper {
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+    }
+}
+
+.installer__step-chip {
+    display: grid;
+    gap: 0.55rem;
+    align-content: start;
+    padding: 0.9rem;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+
+.installer__step-chip[data-state="current"] {
+    border-color: color-mix(in srgb, var(--accent) 72%, var(--border));
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.installer__step-chip[data-state="complete"] {
+    border-color: color-mix(in srgb, #34d399 55%, var(--border));
+    background: color-mix(in srgb, #34d399 12%, transparent);
+}
+
+.installer__step-number {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    display: inline-grid;
+    place-items: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+    background: color-mix(in srgb, var(--surface-strong) 70%, var(--background));
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+}
+
+.installer__step-chip[data-state="current"] .installer__step-number {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 72%, var(--border));
+}
+
+.installer__step-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.installer__step-header {
+    display: grid;
+    gap: 0.4rem;
+}
+
+.installer__step-header h4 {
+    margin: 0;
+    font-size: clamp(1.25rem, 2vw, 1.55rem);
+}
+
+.installer__step-header p:last-child {
+    margin: 0;
+    color: var(--text-muted);
+    max-width: 64ch;
+}
+
+.installer__panel {
+    padding: clamp(1.15rem, 2vw, 1.55rem);
+    display: grid;
+    gap: 1rem;
+}
+
+.installer__hero {
+    display: grid;
+    gap: 1rem;
+}
+
+@media (min-width: 860px) {
+    .installer__hero {
+        grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    }
+}
+
+.installer__hero h5,
+.installer__review-section h5,
+.installer__subsection h5,
+.installer__success-panel h5,
+.installer__success-next h6,
+.installer__error-panel h5 {
+    margin: 0;
+}
+
+.installer__hero p,
+.installer__note,
+.installer__status-item p,
+.installer__success-copy p:last-child {
+    margin: 0;
+    color: var(--text-muted);
+}
+
+.installer__hero-card {
+    padding: 1rem 1.05rem;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    background: color-mix(in srgb, var(--surface-strong) 78%, transparent);
+}
+
+.installer__button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.installer__choice-grid {
+    display: grid;
+    gap: 1rem;
+}
+
+@media (min-width: 780px) {
+    .installer__choice-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.installer__choice {
+    display: grid;
+    gap: 0.55rem;
+    align-content: start;
+    padding: 1.1rem;
+    border-radius: 1.1rem;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    background: color-mix(in srgb, var(--surface) 78%, transparent);
+    cursor: pointer;
+}
+
+.installer__choice input {
+    margin: 0;
+}
+
+.installer__choice.is-selected {
+    border-color: color-mix(in srgb, var(--accent) 72%, var(--border));
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.installer__choice-label {
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.installer__choice-tag {
+    display: inline-flex;
+    width: fit-content;
+    padding: 0.22rem 0.6rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--accent);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.installer__field-grid,
+.installer__checkbox-grid {
+    display: grid;
+    gap: 0.95rem;
+}
+
+@media (min-width: 860px) {
+    .installer__field-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.installer__field {
+    display: grid;
+    gap: 0.38rem;
+}
+
+.installer__field-label {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    font-weight: 700;
+}
+
+.installer__required {
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+}
+
+.installer__field-help,
+.installer__checkbox small {
+    color: var(--text-muted);
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+.installer__field input,
+.installer__field select {
+    width: 100%;
+    border-radius: 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    background: color-mix(in srgb, var(--surface-strong) 82%, transparent);
+    color: inherit;
+    padding: 0.85rem 0.95rem;
+}
+
+.installer__field input:focus-visible,
+.installer__field select:focus-visible,
+.installer__details summary:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 70%, white 10%);
+    outline-offset: 2px;
+}
+
+.installer__field.has-error input,
+.installer__field.has-error select {
+    border-color: color-mix(in srgb, #ef4444 62%, var(--border));
+    background: color-mix(in srgb, #ef4444 9%, transparent);
+}
+
+.installer__field-error {
+    color: #fca5a5;
+    font-size: 0.82rem;
+}
+
+[data-theme="light"] .installer__field-error {
+    color: #b91c1c;
+}
+
+.installer__password-row {
+    display: grid;
+    gap: 0.7rem;
+}
+
+.installer__mini-button {
+    justify-self: start;
+}
+
+.installer__stack {
+    display: grid;
+    gap: 1rem;
+}
+
+.installer__subsection {
+    padding: 1rem 1.05rem;
+    display: grid;
+    gap: 0.9rem;
+}
+
+.installer__checkbox {
+    display: flex;
+    gap: 0.8rem;
+    align-items: flex-start;
+    padding: 0.9rem 1rem;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    background: color-mix(in srgb, var(--surface-strong) 76%, transparent);
+}
+
+.installer__checkbox input {
+    margin-top: 0.2rem;
+}
+
+.installer__checkbox span {
+    display: grid;
+    gap: 0.25rem;
+}
+
+.installer__details {
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    border-radius: 1rem;
+    background: color-mix(in srgb, var(--surface) 74%, transparent);
+}
+
+.installer__details summary {
+    cursor: pointer;
+    padding: 0.95rem 1rem;
+    font-weight: 700;
+    list-style: none;
+}
+
+.installer__details summary::-webkit-details-marker {
+    display: none;
+}
+
+.installer__details-body {
+    padding: 0 1rem 1rem;
+}
+
+.installer__technical-list {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.35rem;
+    color: var(--text-muted);
+}
+
+.installer__status-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.85rem;
+}
+
+.installer__status-item {
+    padding: 1rem 1.05rem;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    background: color-mix(in srgb, var(--surface) 76%, transparent);
+    display: grid;
+    gap: 0.55rem;
+}
+
+.installer__status-item[data-status="pass"],
+.installer__status-item[data-status="complete"] {
+    border-color: color-mix(in srgb, #34d399 55%, var(--border));
+    background: color-mix(in srgb, #34d399 11%, transparent);
+}
+
+.installer__status-item[data-status="warning"],
+.installer__status-item[data-status="active"] {
+    border-color: color-mix(in srgb, #f59e0b 55%, var(--border));
+    background: color-mix(in srgb, #f59e0b 10%, transparent);
+}
+
+.installer__status-item[data-status="fail"] {
+    border-color: color-mix(in srgb, #ef4444 62%, var(--border));
+    background: color-mix(in srgb, #ef4444 11%, transparent);
+}
+
+.installer__status-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.installer__status-badge {
+    display: inline-flex;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--surface-strong) 74%, transparent);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.installer__status-action {
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.installer__review-section,
+.installer__success-panel {
+    padding: 1rem 1.05rem;
+    display: grid;
+    gap: 0.9rem;
+}
+
+.installer__code-block {
+    margin: 0;
+    padding: 1rem;
+    border-radius: 0.95rem;
+    overflow-x: auto;
+    background: color-mix(in srgb, var(--surface-strong) 90%, var(--background) 10%);
+    border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+    font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.installer__error-panel {
+    padding: 1rem 1.05rem;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, #ef4444 62%, var(--border));
+    background: color-mix(in srgb, #ef4444 12%, transparent);
+    display: grid;
+    gap: 0.65rem;
+}
+
+.installer__error-panel ul,
+.installer__success-next ol {
+    margin: 0;
+    padding-left: 1.1rem;
+}
+
+.installer__success-panel {
+    gap: 1rem;
+}
+
+.installer__success-copy {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.installer__success-next {
+    display: grid;
+    gap: 0.6rem;
+}
+
+@media (max-width: 719px) {
+    .installer__step-chip {
+        grid-template-columns: auto 1fr;
+        align-items: center;
+    }
+}
+
+@media (max-width: 640px) {
+    .installer__button-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .installer__button-row > * {
+        width: 100%;
+    }
+}
+
 [data-theme="light"] .analytics-table tr:nth-child(even) td {
     background: rgba(226, 232, 240, 0.6);
 }
