@@ -3,14 +3,68 @@ import userEvent from "@testing-library/user-event";
 import { AuthProvider, useAuth } from "../hooks/useAuth";
 
 function AuthHarness() {
-  const { user, loading, error, signOut } = useAuth();
+  const {
+    allowSelfSignup,
+    authDialogOpen,
+    authFeedback,
+    authMode,
+    authRedirectTo,
+    error,
+    loading,
+    mfaRequired,
+    signIn,
+    signOut,
+    signUp,
+    submitMFAVerification,
+    submitSignIn,
+    submitSignUp,
+    user,
+  } = useAuth();
 
   return (
     <div>
       <p data-testid="auth-user">{user?.displayName ?? "anonymous"}</p>
       <p data-testid="auth-loading">{loading ? "loading" : "idle"}</p>
       <p data-testid="auth-error">{error ?? "none"}</p>
-      <button type="button" onClick={() => void signOut()} disabled={loading}>
+      <p data-testid="auth-open">{authDialogOpen ? "open" : "closed"}</p>
+      <p data-testid="auth-mode">{authMode}</p>
+      <p data-testid="auth-redirect">{authRedirectTo}</p>
+      <p data-testid="auth-feedback">{authFeedback?.message ?? "none"}</p>
+      <p data-testid="auth-allow-signup">{allowSelfSignup ? "enabled" : "disabled"}</p>
+      <p data-testid="auth-mfa">{mfaRequired ? "required" : "not-required"}</p>
+      <button type="button" onClick={() => void signIn()}>
+        Open sign in
+      </button>
+      <button type="button" onClick={() => void signUp()}>
+        Open sign up
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          void submitSignIn({
+            email: "viewer@example.com",
+            password: "supersecret",
+          })
+        }
+      >
+        Submit sign in
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          void submitSignUp({
+            displayName: "Viewer",
+            email: "viewer@example.com",
+            password: "supersecret",
+          })
+        }
+      >
+        Submit sign up
+      </button>
+      <button type="button" onClick={() => void submitMFAVerification("123456")}>
+        Submit MFA
+      </button>
+      <button type="button" onClick={() => void signOut()}>
         Sign out
       </button>
     </div>
@@ -29,16 +83,6 @@ function RapidDoubleSignOutTrigger() {
       }}
     >
       Sign out twice fast
-    </button>
-  );
-}
-
-function SignInTrigger({ redirectTo }: { redirectTo?: string }) {
-  const { signIn } = useAuth();
-
-  return (
-    <button type="button" onClick={() => void signIn(redirectTo)}>
-      Sign in
     </button>
   );
 }
@@ -63,67 +107,270 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+const overrideWindowLocation = (
+  overrides: Partial<Pick<Location, "hash" | "href" | "origin" | "pathname" | "search">>,
+) => {
+  const originalLocation = window.location;
+  const mockLocation = {
+    ancestorOrigins: originalLocation.ancestorOrigins,
+    assign: jest.fn(),
+    hash: "",
+    host: "localhost",
+    hostname: "localhost",
+    href: "http://localhost/",
+    origin: "http://localhost",
+    pathname: "/",
+    port: "",
+    protocol: "http:",
+    reload: jest.fn(),
+    replace: jest.fn(),
+    search: "",
+    toString: () => "http://localhost/",
+    ...overrides,
+  } as unknown as Location & { href: string };
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: mockLocation,
+  });
+  return {
+    mockLocation,
+    restore: () => Object.defineProperty(window, "location", { configurable: true, value: originalLocation }),
+  };
+};
+
 describe("useAuth", () => {
   const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    window.history.replaceState({}, "", "/viewer");
+  });
 
   afterEach(() => {
     global.fetch = originalFetch;
     jest.clearAllMocks();
+    window.history.replaceState({}, "", "/viewer");
   });
 
-  test("signIn falls back to the signup surface when loginUrl is unavailable", async () => {
-    const originalLocation = window.location;
-    const mockLocation = {
-      ...originalLocation,
-      href: "http://localhost/viewer",
-      origin: "http://localhost",
-      pathname: "/viewer",
-      search: "?tab=discover",
-      hash: "#live",
-    } as Location & { href: string };
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: mockLocation,
+  test("opens the in-viewer auth dialog and preserves the current route as redirect target when loginUrl is unavailable", async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ allowSelfSignup: true }),
+      text: async () => "",
+    })) as jest.MockedFunction<typeof fetch>;
+
+    window.history.replaceState({}, "", "/viewer?tab=discover#live");
+    const user = userEvent.setup();
+
+    render(
+      <AuthProvider>
+        <AuthHarness />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-loading")).toHaveTextContent("idle");
     });
 
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /open sign in/i }));
+    });
+
+    expect(screen.getByTestId("auth-open")).toHaveTextContent("open");
+    expect(screen.getByTestId("auth-mode")).toHaveTextContent("signin");
+    expect(screen.getByTestId("auth-redirect")).toHaveTextContent("/viewer?tab=discover#live");
+
+    const search = new URLSearchParams(window.location.search);
+    expect(search.get("auth")).toBe("signin");
+    expect(search.get("next")).toBe("/viewer?tab=discover#live");
+  });
+
+  test("redirects to the configured loginUrl when the runtime provides one", async () => {
     global.fetch = jest.fn(async () => ({
-      ok: false,
-      status: 401,
-      json: async () => ({}),
-      text: async () => "unauthorized",
+      ok: true,
+      status: 200,
+      json: async () => ({
+        allowSelfSignup: true,
+        loginUrl: "https://auth.example.com/login",
+      }),
+      text: async () => "",
+    })) as jest.MockedFunction<typeof fetch>;
+
+    const { mockLocation, restore } = overrideWindowLocation({
+      pathname: "/channels/alpha",
+      search: "?view=live",
+      hash: "#info",
+    });
+    const user = userEvent.setup();
+
+    render(
+      <AuthProvider>
+        <AuthHarness />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-loading")).toHaveTextContent("idle");
+    });
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /open sign in/i }));
+    });
+
+    expect(mockLocation.href).toBe("https://auth.example.com/login?redirect=%2Fchannels%2Falpha%3Fview%3Dlive%23info");
+    restore();
+  });
+
+  test("coerces sign-up requests back to sign-in when self-signup is disabled", async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ allowSelfSignup: false }),
+      text: async () => "",
     })) as jest.MockedFunction<typeof fetch>;
 
     const user = userEvent.setup();
     render(
       <AuthProvider>
-        <SignInTrigger />
+        <AuthHarness />
       </AuthProvider>,
     );
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        "/api/viewer/me",
-        expect.objectContaining({ credentials: "include" }),
-      );
+      expect(screen.getByTestId("auth-allow-signup")).toHaveTextContent("disabled");
     });
 
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: /sign in/i }));
+      await user.click(screen.getByRole("button", { name: /open sign up/i }));
     });
 
-    expect(mockLocation.href).toBe("http://localhost/signup?next=%2Fviewer%3Ftab%3Ddiscover%23live#login-form");
-
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: originalLocation,
-    });
+    expect(screen.getByTestId("auth-open")).toHaveTextContent("open");
+    expect(screen.getByTestId("auth-mode")).toHaveTextContent("signin");
+    expect(screen.getByTestId("auth-feedback")).toHaveTextContent("Public self-signup is disabled");
   });
 
-  test("signOut signs the viewer out via loadViewer and clears user after refresh", async () => {
+  test("enters MFA mode when the login endpoint requires verification", async () => {
+    const responses = [
+      {
+        ok: true,
+        status: 200,
+        json: async () => ({ allowSelfSignup: true }),
+        text: async () => "",
+      },
+      {
+        ok: true,
+        status: 200,
+        json: async () => ({ mfaRequired: true, mfaToken: "mfa-token" }),
+        text: async () => "",
+      },
+    ];
+
+    global.fetch = jest.fn(async () => {
+      const next = responses.shift();
+      if (!next) {
+        throw new Error("Unexpected fetch call");
+      }
+      return next as Response;
+    }) as jest.MockedFunction<typeof fetch>;
+
+    const user = userEvent.setup();
+    render(
+      <AuthProvider>
+        <AuthHarness />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-loading")).toHaveTextContent("idle");
+    });
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /open sign in/i }));
+      await user.click(screen.getByRole("button", { name: /submit sign in/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-mfa")).toHaveTextContent("required");
+      expect(screen.getByTestId("auth-feedback")).toHaveTextContent("Multi-factor verification is required");
+    });
+
+    const search = new URLSearchParams(window.location.search);
+    expect(search.get("mfa")).toBe("verify");
+  });
+
+  test("successful sign-up refreshes the viewer session and closes the dialog in place", async () => {
+    const responses = [
+      {
+        ok: true,
+        status: 200,
+        json: async () => ({ allowSelfSignup: true }),
+        text: async () => "",
+      },
+      {
+        ok: true,
+        status: 201,
+        json: async () => ({ user: { id: "viewer-1", displayName: "Viewer" } }),
+        text: async () => "",
+      },
+      {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          allowSelfSignup: true,
+          user: {
+            id: "viewer-1",
+            displayName: "Viewer",
+            email: "viewer@example.com",
+            roles: [],
+          },
+        }),
+        text: async () => "",
+      },
+    ];
+
+    global.fetch = jest.fn(async () => {
+      const next = responses.shift();
+      if (!next) {
+        throw new Error("Unexpected fetch call");
+      }
+      return next as Response;
+    }) as jest.MockedFunction<typeof fetch>;
+
+    const user = userEvent.setup();
+    render(
+      <AuthProvider>
+        <AuthHarness />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-loading")).toHaveTextContent("idle");
+    });
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /open sign up/i }));
+      await user.click(screen.getByRole("button", { name: /submit sign up/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-user")).toHaveTextContent("Viewer");
+      expect(screen.getByTestId("auth-open")).toHaveTextContent("closed");
+      expect(screen.getByTestId("auth-error")).toHaveTextContent("none");
+    });
+
+    const search = new URLSearchParams(window.location.search);
+    expect(search.get("auth")).toBeNull();
+    expect(search.get("next")).toBeNull();
+  });
+
+  test("signOut signs the viewer out via /api/viewer/me and clears user after refresh", async () => {
     const responses: MockResponse[] = [
-      mockJsonResponse({ user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] } }),
+      mockJsonResponse({
+        allowSelfSignup: true,
+        user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
+      }),
       { ok: true, status: 204 },
-      mockTextError(401, "unauthorized"),
+      mockJsonResponse({ allowSelfSignup: true }),
     ];
 
     global.fetch = jest.fn(async () => {
@@ -143,7 +390,7 @@ describe("useAuth", () => {
     render(
       <AuthProvider>
         <AuthHarness />
-      </AuthProvider>
+      </AuthProvider>,
     );
 
     await waitFor(() => {
@@ -152,7 +399,7 @@ describe("useAuth", () => {
     });
 
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: /sign out/i }));
+      await user.click(screen.getByRole("button", { name: /^sign out$/i }));
     });
 
     await waitFor(() => {
@@ -164,9 +411,15 @@ describe("useAuth", () => {
 
   test("signOut preserves failure message while loadViewer remains source of truth", async () => {
     const responses: MockResponse[] = [
-      mockJsonResponse({ user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] } }),
+      mockJsonResponse({
+        allowSelfSignup: true,
+        user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
+      }),
       mockTextError(500, "sign out failed"),
-      mockJsonResponse({ user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] } }),
+      mockJsonResponse({
+        allowSelfSignup: true,
+        user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
+      }),
     ];
 
     global.fetch = jest.fn(async () => {
@@ -186,7 +439,7 @@ describe("useAuth", () => {
     render(
       <AuthProvider>
         <AuthHarness />
-      </AuthProvider>
+      </AuthProvider>,
     );
 
     await waitFor(() => {
@@ -194,7 +447,7 @@ describe("useAuth", () => {
     });
 
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: /sign out/i }));
+      await user.click(screen.getByRole("button", { name: /^sign out$/i }));
     });
 
     await waitFor(() => {
@@ -205,7 +458,6 @@ describe("useAuth", () => {
   });
 
   test("signOut keeps loading true until loadViewer refresh settles", async () => {
-    const viewer = { user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] } };
     const delayedViewer = deferred<Response>();
 
     global.fetch = jest
@@ -213,7 +465,10 @@ describe("useAuth", () => {
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => viewer,
+        json: async () => ({
+          allowSelfSignup: true,
+          user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
+        }),
         text: async () => "",
       } as Response)
       .mockResolvedValueOnce({
@@ -228,7 +483,7 @@ describe("useAuth", () => {
     render(
       <AuthProvider>
         <AuthHarness />
-      </AuthProvider>
+      </AuthProvider>,
     );
 
     await waitFor(() => {
@@ -237,7 +492,7 @@ describe("useAuth", () => {
     });
 
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: /sign out/i }));
+      await user.click(screen.getByRole("button", { name: /^sign out$/i }));
     });
 
     await waitFor(() => {
@@ -260,8 +515,12 @@ describe("useAuth", () => {
   });
 
   test("rapid double signOut settles to final refresh outcome without unstable visible state", async () => {
-    const initialViewer = { user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] } };
+    const initialViewer = {
+      allowSelfSignup: true,
+      user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
+    };
     const finalViewer = {
+      allowSelfSignup: true,
       user: { id: "viewer-2", displayName: "Viewer Final", email: "final@example.com", roles: ["viewer"] },
     };
     const firstRefresh = deferred<Response>();
@@ -311,7 +570,7 @@ describe("useAuth", () => {
       <AuthProvider>
         <AuthHarness />
         <RapidDoubleSignOutTrigger />
-      </AuthProvider>
+      </AuthProvider>,
     );
 
     await waitFor(() => {
@@ -360,5 +619,4 @@ describe("useAuth", () => {
       { url: "/api/viewer/me", method: "GET" },
     ]);
   });
-
 });

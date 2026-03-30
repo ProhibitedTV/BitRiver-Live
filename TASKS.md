@@ -1,3 +1,79 @@
+## Scoped change: restore overlay auth flow from `codex/signin-polish`
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the selective overlay-restore plan before editing viewer auth
+  - Acceptance criteria:
+    - `PLAN.md` captures the scoped overlay-auth restore, assumptions, risks, and focused viewer test commands.
+    - `TASKS.md` lists a small ordered implementation and validation sequence before auth/viewer files change.
+    - The read-only analysis identifies which branch pieces are being ported and which current-checkout behaviors must be preserved.
+
+- [x] Task 2 - Restore the mounted overlay auth state and dialog wiring
+  - Acceptance criteria:
+    - `useAuth` supports in-viewer dialog state, signup/MFA flow handling, and current-route redirect preservation.
+    - External `loginUrl` redirects still work when provided by the runtime.
+    - `Providers` mounts the overlay dialog so viewer pages can trigger it again.
+
+- [x] Task 3 - Rewire signed-out viewer CTAs back to overlay actions
+  - Acceptance criteria:
+    - Navbar sign-in/join actions open the restored overlay for local auth installs.
+    - Following signed-out prompts use auth actions instead of hard-linking to `/signup#login-form`.
+    - `/signup` remains available as the standalone auth fallback and is not removed.
+
+- [x] Task 4 - Restore overlay styling and align viewer auth tests
+  - Acceptance criteria:
+    - The overlay dialog has the required `auth-overlay` styling hooks in viewer CSS.
+    - Viewer auth test helpers cover the expanded `useAuth` context shape.
+    - Focused Jest coverage is updated for `useAuth`, `AuthDialog`, navbar auth CTAs, and following CTA behavior.
+
+- [x] Task 5 - Run focused viewer validation and record the results
+  - Acceptance criteria:
+    - The targeted auth/viewer Jest commands are run and logged.
+    - Any residual warnings or gaps are recorded explicitly in the execution log.
+
+### Execution log (restore overlay auth flow from `codex/signin-polish`)
+- Task 1 complete: reviewed the current checkout against `codex/signin-polish`, confirmed the overlay flow lives primarily in `web/viewer/hooks/useAuth.tsx`, `web/viewer/components/auth/AuthDialog.tsx`, `web/viewer/components/Providers.tsx`, `web/viewer/components/Navbar.tsx`, `web/viewer/components/following/FollowingState.tsx`, viewer auth tests, and the `auth-overlay` CSS block, and recorded the selective-port plan here before editing.
+- Task 1 checks:
+  - `git show codex/signin-polish:web/viewer/hooks/useAuth.tsx`
+  - `git show codex/signin-polish:web/viewer/components/auth/AuthDialog.tsx`
+  - `git show codex/signin-polish:web/viewer/components/Providers.tsx`
+  - `git show codex/signin-polish:web/viewer/components/Navbar.tsx`
+  - `git show codex/signin-polish:web/viewer/components/following/FollowingState.tsx`
+  - `git show codex/signin-polish:web/viewer/styles/globals.css | Select-Object -Skip 2520 -First 190`
+  - `Get-Content web/viewer/hooks/useAuth.tsx`
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/components/Providers.tsx`
+  - `Get-Content web/viewer/components/Navbar.tsx`
+  - `Get-Content web/viewer/components/following/FollowingState.tsx`
+- Task 2 complete: replaced the current redirect-only `useAuth` state with the selective overlay flow from `codex/signin-polish`, kept `/signup` out of the primary local sign-in path, preserved current-route redirect tracking plus MFA/signup handling, and retained redirect compatibility when `/api/viewer/me` returns a `loginUrl`. `Providers` now mounts the restored overlay dialog globally so viewer routes can open it again.
+- Task 2 checks:
+  - `Get-Content web/viewer/hooks/useAuth.tsx`
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/components/Providers.tsx`
+- Task 3 complete: rewired the signed-out navbar join/sign-in actions and the following unauthenticated prompt back through `useAuth`, so local installs open the overlay in place while explicitly external signup/login destinations still redirect when configured.
+- Task 3 checks:
+  - `Get-Content web/viewer/components/Navbar.tsx`
+  - `Get-Content web/viewer/components/following/FollowingState.tsx`
+- Task 4 complete: restored the `auth-overlay` CSS block in viewer globals, expanded the shared auth mock helpers to cover the richer `useAuth` context shape, replaced the old redirect-centric `useAuth` tests with overlay-focused coverage, added a dedicated `authDialog.test.tsx` suite plus CTA expectation updates in navbar/following tests, and documented the restored viewer-overlay-vs-`/signup` behavior in `docs/quickstart.md`.
+- Task 4 checks:
+  - `Get-Content web/viewer/styles/globals.css | Select-String -Pattern "auth-overlay" -Context 0,2`
+  - `Get-Content web/viewer/test/auth.ts`
+  - `Get-Content web/viewer/__tests__/useAuth.test.tsx`
+  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
+  - `Get-Content web/viewer/__tests__/navbar.test.tsx`
+  - `Get-Content web/viewer/__tests__/followingStatePresentation.test.tsx`
+  - `Get-Content web/viewer/__tests__/followingSidebar.test.tsx`
+  - `Get-Content docs/quickstart.md | Select-String -Pattern "in-viewer auth dialog|The standalone /signup page remains available" -Context 0,0`
+- Task 5 complete: the focused auth/viewer Jest coverage passed, the neighboring auth-adjacent regression sweep passed, viewer lint passed, and the production viewer build compiled successfully after the overlay restore.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/useAuth.test.tsx __tests__/authDialog.test.tsx __tests__/navbar.test.tsx __tests__/followingStatePresentation.test.tsx`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/chatPanel.test.tsx __tests__/channelHero.test.tsx __tests__/uploadManager.test.tsx __tests__/followingSidebar.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+- Remaining validation notes:
+  - `navbar.test.tsx` still emits the existing jsdom "Not implemented: navigation" warning when real anchor navigation is exercised; the assertions pass and this predates the overlay restore.
+  - `chatPanel.test.tsx` still emits the existing non-failing React `act(...)` warnings from chat composer/dialog interactions; the suite passes and this change did not modify `ChatPanel`.
+
 ## Scoped change: homepage UI/UX rescue pass
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
@@ -2532,6 +2608,79 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0`
   - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'BitRiver Live|/signup#login-form|/viewer/signup|Failed to parse URL|Invalid URL' -AllMatches`
   - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup).Content | Select-String -Pattern 'Sign in to continue|data-allow-self-signup|Back to viewer' -AllMatches`
+
+## Scoped change: local redeploy and credential handoff
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the scoped redeploy plan before runtime actions
+  - Acceptance criteria:
+    - `PLAN.md` captures the local redeploy scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered deployment and credential-verification tasks before Docker actions begin.
+
+- [x] Task 2 - Run the documented local deployment workflow
+  - Acceptance criteria:
+    - The Windows quickstart entrypoint is exercised against the canonical repo contract.
+    - Compose service state/logs are captured after the deployment attempt.
+    - Any repo-side deployment blocker is isolated clearly from host-only issues.
+
+- [x] Task 3 - Verify login surfaces and capture the credentials actually used
+  - Acceptance criteria:
+    - The live auth/admin entry points are checked locally after deployment.
+    - The admin credentials used for this run are identified from quickstart output or the active `.env`.
+    - The final response can hand the user a concrete login path plus username/password.
+
+- [x] Task 4 - Run closing verification and record the outcome
+  - Acceptance criteria:
+    - Relevant quickstart/Compose/HTTP checks are rerun or summarized after the deployment attempt.
+    - `TASKS.md` records whether the stack reached a healthy running state and any remaining blockers.
+
+### Execution log (local redeploy and credential handoff)
+- Task 1 complete: appended this scoped redeploy-and-credential plan to `PLAN.md` and `TASKS.md` before rerunning Docker actions, using the existing repo-root `.env` and the canonical Windows quickstart entrypoint as the initial deployment target.
+- Task 1 checks:
+  - `rg -n "local redeploy and credential handoff|Redeploy the local BitRiver Live stack on this Windows host" PLAN.md TASKS.md`
+  - `rg -n "^(BITRIVER_LIVE_MODE|BITRIVER_DEPLOY_IMAGE_SOURCE|BITRIVER_LIVE_ADMIN_EMAIL|BITRIVER_LIVE_ADMIN_PASSWORD|NEXT_PUBLIC_VIEWER_URL|BITRIVER_TRANSCODER_PUBLIC_BASE_URL|BITRIVER_OME_BIND|BITRIVER_OME_IP)=" .env`
+- Task 2 complete: exercised the documented Windows quickstart entrypoint and isolated two repo-side workflow defects plus one host-only blocker before completing a local bring-up with the documented development-mode Compose override flow on an alternate port.
+- Task 2 findings:
+  - Host-only blocker: `TCP/8080` was already occupied by an unrelated `bitriverd.exe` from `C:\Users\RhythmicCarnage\Desktop\BitRiver-Studio-OS`, so the local shakedown had to move to `http://localhost:18080`.
+  - Repo blocker 1: `scripts/quickstart.ps1 --env-file .env --compose-file deploy/docker-compose.yml` fails `Doctor` under elevated execution because the spawned CLI process cannot find `docker` on `PATH`.
+  - Repo blocker 2: `deploy/docker-compose.yml` miswires `postgres-migrations` with `entrypoint: ["/bin/sh","-c"]` plus a scalar `command`, which Compose/tokenization turns into `["set","-e","if",...]`, so the migration job exits successfully without applying schema files.
+  - Workflow note: the canonical quickstart path also enforces the production contract in the saved `.env`, so the checked-in localhost/demo values are intentionally not quickstart-runnable end to end without production-safe overrides.
+- Task 2 checks:
+  - `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 --env-file .env --compose-file deploy/docker-compose.yml`
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go run ./cmd/bitriver quickstart --env-file .env --compose-file deploy/docker-compose.yml`
+  - `docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"`
+  - `Get-NetTCPConnection -LocalPort 8080 -State Listen | Select-Object LocalAddress,LocalPort,OwningProcess | Format-List`
+  - `Get-Process -Id (Get-NetTCPConnection -LocalPort 8080 -State Listen | Select-Object -ExpandProperty OwningProcess -Unique) | Select-Object Id,ProcessName,Path | Format-List`
+  - `docker pull docker/dockerfile:1`
+  - `docker pull ossrs/srs:v5.0.185`
+  - `$env:BITRIVER_LIVE_MODE='development'; $env:BITRIVER_LIVE_PORT='18080'; $env:NEXT_PUBLIC_VIEWER_URL='http://localhost:18080/viewer'; docker compose --env-file .env -f deploy/docker-compose.yml up -d --build`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+  - `docker inspect deploy-postgres-migrations-1 --format '{{json .Config.Entrypoint}} {{json .Config.Cmd}}'`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml run --rm --entrypoint psql postgres-migrations -h postgres -U brlive_app -d brlive_app -v ON_ERROR_STOP=1 -f /migrations/0001_initial.sql -f /migrations/0002_auth_sessions.sql -f /migrations/0002_chat_filters.sql -f /migrations/0003_oauth_accounts.sql -f /migrations/0004_auth_session_hashes.sql -f /migrations/0005_auth_session_absolute_expiry.sql -f /migrations/0006_profile_social_links.sql -f /migrations/0007_auth_mfa.sql -f /migrations/0008_legal_cases.sql -f /migrations/0009_appeals.sql -f /migrations/0010_payments_webhooks.sql`
+- Task 3 complete: verified the live local routes on `http://localhost:18080`, seeded the admin account inside the running stack, and confirmed the active `.env` admin email/password are accepted by the login API.
+- Task 3 findings:
+  - `http://localhost:18080/` returns `307` to `/viewer`.
+  - `http://localhost:18080/viewer` serves the public viewer shell.
+  - `http://localhost:18080/signup` serves the sign-in page with `login-form`.
+  - `http://localhost:18080/admin` returns `200`.
+  - After seeding the admin account, `POST /api/auth/login` with the active `.env` admin email/password returns `200` and an MFA enrollment payload (`mfaRequired: true`), confirming the credentials are valid for this deployment.
+- Task 3 checks:
+  - `docker compose --env-file .env -f deploy/docker-compose.yml exec -T postgres psql -U brlive_app -d brlive_app -c "\dt"`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml exec -T bitriver-live /app/bootstrap-admin --postgres-dsn "postgres://brlive_app:***@postgres:5432/brlive_app?sslmode=disable" --email <active .env admin email> --password <active .env admin password>`
+  - `Invoke-WebRequest -UseBasicParsing http://localhost:18080/ -MaximumRedirection 0`
+  - `Invoke-WebRequest -UseBasicParsing http://localhost:18080/viewer`
+  - `Invoke-WebRequest -UseBasicParsing http://localhost:18080/signup`
+  - `Invoke-WebRequest -UseBasicParsing http://localhost:18080/admin -MaximumRedirection 0`
+  - `Invoke-WebRequest -UseBasicParsing -Uri http://localhost:18080/api/auth/login -Method Post -ContentType 'application/json' -Body <active .env admin creds JSON>`
+- Task 4 complete: recorded the final deployment state and remaining workflow blockers after the local stack reached a usable running state on the alternate port.
+- Task 4 result:
+  - Local deployment is up and usable on `http://localhost:18080`, with healthy API/postgres/redis/OME/SRS/transcoder services and a verified admin login path.
+  - The deployment workflow is not fully healthy yet because the Windows quickstart wrapper loses Docker from `PATH`, and the Compose migration job silently no-ops due to the `postgres-migrations` command wiring.
+  - `bitriver-transcoder-public` still logs `setgid(101) failed (1: Operation not permitted)` under the current hardened container settings, so the local shakedown did not treat the HLS nginx sidecar as fully healthy.
+- Task 4 checks:
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=80 bitriver-live viewer postgres redis srs-controller ome transcoder transcoder-public`
 
 ### Execution log (platform-grade viewer UX/system redesign)
 - ✅ Task 1 complete: appended the scoped viewer-platform redesign plan to `PLAN.md`/`TASKS.md` before editing and captured the read-only diagnosis that currently the product works as a self-hosted creator/viewer platform, but the UX is fragmented by duplicated discovery entry points, ad-hoc page scaffolding, heavy inline styling, and shell/state tokens that are missing or inconsistent.

@@ -1,4 +1,28 @@
 ## Scope (current change)
+- Restore the in-viewer overlay auth flow from `codex/signin-polish` onto the current checkout without wholesale branch checkout or unrelated viewer drift.
+- Re-enable the mounted overlay dialog, route signed-out viewer CTAs back through `useAuth`, and keep `/signup` available as the existing standalone fallback surface.
+- Preserve current external-auth compatibility where `/api/viewer/me` provides a `loginUrl`, so installs that still rely on redirect-based sign-in do not regress.
+- Keep the change viewer-only and avoid deployment-contract edits.
+
+## Assumptions
+- The user wants the old overlay sign-in/join experience back inside the viewer shell, not a full rollback of every auth-related branch change from `codex/signin-polish`.
+- The minimal selective port is the auth state/dialog wiring plus the CTA surfaces that currently send users to `/signup#login-form`.
+- Existing `/signup` behavior should remain intact for admin/MFA/direct-entry flows even after the overlay is restored.
+- Current viewer tests and auth mocks can be updated in place without touching backend contracts or operator docs.
+
+## Risks
+- Porting the branch `useAuth` logic too literally could break current external `loginUrl` redirect deployments, so redirect-based sign-in needs to remain supported when configured.
+- The current checkout may still return `401/403` for anonymous `/api/viewer/me` requests, so the overlay state layer must not regress guest loading/error behavior while adding dialog state.
+- Rewiring shared auth mocks can ripple across many viewer tests if the context shape changes are not kept backward-compatible.
+- Restoring the overlay without its CSS would produce a technically mounted but visually broken dialog, so style hooks need to be carried over with the component wiring.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- __tests__/useAuth.test.tsx`
+- `npm.cmd --prefix web/viewer run test -- __tests__/authDialog.test.tsx`
+- `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx`
+- `npm.cmd --prefix web/viewer run test -- __tests__/followingStatePresentation.test.tsx`
+
+## Scope (current change)
 - Improve the public-facing root `README.md` by featuring the new `bitriver-live-banner-text.png` asset near the top of the file.
 - Tighten the opening README copy so the project pitch reads more clearly to first-time visitors without changing any technical guidance or deployment contracts.
 - Keep this as a docs-only change and verify the asset path plus the standard repository verification gate.
@@ -1293,3 +1317,28 @@
 - `npm.cmd --prefix web/viewer run lint`
 - `npm.cmd --prefix web/viewer run build`
 - `./scripts/verify.sh --viewer`
+
+## Scope (current change)
+- Redeploy the local BitRiver Live stack on this Windows host and confirm the currently checked-in deployment workflow still works in practice from the canonical repo contract.
+- Use the existing repo-root `.env` as the source of truth for credentials and local listener values unless the quickstart path regenerates a different admin secret during this run.
+- Prefer the documented Windows quickstart entrypoint first, then inspect the resulting Compose state, logs, and reachable auth/admin surfaces so the user gets both a running stack and the exact credentials that were exercised.
+
+## Assumptions
+- The current repo-root `.env` is intentionally provisioned for this workstation and already contains the admin email/password that local login should use if bootstrap does not rotate them.
+- Docker daemon access on this machine still requires elevated execution, so the meaningful deployment checks need to run with host-level privileges.
+- For a localhost shakedown, a successful deployment can be validated by healthy Compose services plus reachable `http://localhost:8080/`, `/viewer`, `/signup`, and `/admin`.
+
+## Risks
+- The quickstart path may still reject parts of the saved production `.env` or hit Compose/runtime issues before the stack is fully healthy, in which case we need to distinguish repo defects from host-only blockers.
+- Because deployment-contract edits require confirmation in this repo, any fix that touches `deploy/docker-compose.yml`, root `.env`, or generated OME expectations may need a pause before implementation.
+- Even when the stack starts, auth verification can still fail if bootstrap credentials drifted from the saved `.env`, so we need to confirm the actual login surface and account state before handing credentials back.
+
+## Test plan
+- `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -ValidateOnly`
+- `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 --env-file .env --compose-file deploy/docker-compose.yml`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/admin -MaximumRedirection 0`

@@ -62,6 +62,6 @@ describe("FollowingSidebar", () => {
     await waitFor(() => {
       expect(screen.getByText(FOLLOWING_COPY.summaryFollowed(1))).toBeInTheDocument();
     });
-    expect(screen.getByRole("heading", { name: "Channels you follow" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Keep your circle close" })).toBeInTheDocument();
   });
 });
