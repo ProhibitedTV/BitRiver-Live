@@ -15,6 +15,11 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
         <p className="muted">
           Creators have not gone live yet. Check back soon or invite your favorite broadcasters to join BitRiver Live.
         </p>
+        <div className="browse-actions">
+          <Link href="/creator/getting-started" className="primary-button">
+            Open creator setup
+          </Link>
+        </div>
       </div>
     );
   }

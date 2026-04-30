@@ -91,6 +91,11 @@ export function FeaturedChannel({
           <p className="muted">
             Once BitRiver highlights a standout creator, their stream will appear here so you can jump in instantly.
           </p>
+          <div className="browse-actions">
+            <Link href="/browse" className="secondary-button">
+              Browse full directory
+            </Link>
+          </div>
         </div>
       </div>
     );

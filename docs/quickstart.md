@@ -178,6 +178,8 @@ Use explicit development commands/overrides when intentionally running local-onl
 
 Within the public viewer shell, the standard signed-out sign-in and join actions now open an in-viewer auth dialog so people can authenticate without leaving discovery or channel pages. The standalone `/signup` page remains available for direct links, MFA handoff, and fallback entry when you want to send people straight to the dedicated auth surface.
 
+The viewer discovery surfaces also keep navigation contextual: homepage category chips drill into `/browse?topic=...`, and the browse workspace preserves the active topic in URL state so refresh/back-forward navigation does not drop people out of the slice they were exploring.
+
 Administrators and creators must complete multi-factor authentication (MFA) when signing in. The control centre prompts you to enroll the first time, provides recovery codes, and only issues a session after you verify a code. Keep the recovery codes somewhere safe in case you lose access to your authenticator.
 
 Deployment `.env` files must keep `BITRIVER_LIVE_MODE=production`; the Go env validator (invoked by `deploy/check-env.sh`) fails fast when the mode is empty, still at the example placeholder, or still `development`. For local HTTP-only demos, leave `.env` at production and override the mode inline (for example, `BITRIVER_LIVE_MODE=development docker compose --env-file ./.env -f deploy/docker-compose.yml up -d`) or with a one-off Compose override that sets the API service's `BITRIVER_LIVE_MODE` to `development`. Drop the override after you enable HTTPS via `BITRIVER_LIVE_TLS_CERT`/`BITRIVER_LIVE_TLS_KEY` or a reverse proxy so cookies regain the `Secure` flag.

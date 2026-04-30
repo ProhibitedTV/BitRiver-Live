@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useRef } from "react";
-import { normalizeDirectoryQuery, resolveDirectoryNavigation } from "../lib/directory-state";
+import { normalizeDirectoryQuery, normalizeDirectoryTopic, resolveDirectoryNavigation } from "../lib/directory-state";
 
 export function useDirectorySearch({
   fallbackPathname,
@@ -13,18 +13,29 @@ export function useDirectorySearch({
   const router = useRouter();
   const pathname = usePathname() ?? fallbackPathname;
   const searchParamQuery = useMemo(() => normalizeDirectoryQuery(searchParams.get("q")), [searchParams]);
+  const searchParamTopic = useMemo(() => normalizeDirectoryTopic(searchParams.get("topic")), [searchParams]);
   const lastQueryFromParams = useRef(searchParamQuery);
+  const lastTopicFromParams = useRef(searchParamTopic);
 
-  const navigateWithQuery = useCallback(
-    (value: string) => {
+  const navigateWithDirectoryState = useCallback(
+    ({
+      query,
+      topic,
+    }: {
+      query: string;
+      topic?: string | null;
+    }) => {
       const next = resolveDirectoryNavigation({
         pathname,
         currentParams: new URLSearchParams(searchParams.toString()),
-        nextQuery: value,
+        nextQuery: query,
         previousQuery: lastQueryFromParams.current,
+        nextTopic: topic,
+        previousTopic: lastTopicFromParams.current,
       });
 
       lastQueryFromParams.current = next.normalizedQuery;
+      lastTopicFromParams.current = next.normalizedTopic;
 
       if (next.useReplace) {
         router.replace(next.url);
@@ -32,14 +43,26 @@ export function useDirectorySearch({
         router.push(next.url);
       }
 
-      return next.normalizedQuery;
+      return next;
     },
     [pathname, router, searchParams]
   );
 
+  const navigateWithQuery = useCallback(
+    (value: string) =>
+      navigateWithDirectoryState({
+        query: value,
+        topic: lastTopicFromParams.current,
+      }),
+    [navigateWithDirectoryState]
+  );
+
   return {
     queryFromParams: searchParamQuery,
+    topicFromParams: searchParamTopic,
     lastQueryFromParams,
+    lastTopicFromParams,
+    navigateWithDirectoryState,
     navigateWithQuery,
   };
 }

@@ -2701,3 +2701,62 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 4 checks:
   - ✅ `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx creatorGettingStartedPage.test.tsx creatorLivePage.test.tsx profilePage.test.tsx uploadManager.test.tsx`
   - ⚠️ The targeted suite passes, but the existing test harness still emits non-failing React `act(...)` warnings from async polling/state-reset effects in the creator getting-started/live pages.
+
+## Scoped change: viewer discovery journey polish
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the scoped discovery-journey plan before editing
+  - Acceptance criteria:
+    - `PLAN.md` captures the discovery-navigation scope, assumptions, risks, and focused viewer validation commands.
+    - `TASKS.md` lists the ordered implementation/validation steps before viewer files change.
+    - The read-only diagnosis identifies the concrete dead-end controls or passive recovery states to fix.
+
+- [x] Task 2 - Make homepage and browse discovery controls actionable
+  - Acceptance criteria:
+    - Homepage category chips take the user into Browse with relevant context instead of acting like dead buttons.
+    - Browse featured highlights open the corresponding channel or otherwise provide a direct watch action.
+    - Any new routing/query behavior stays consistent with the current viewer `basePath`.
+
+- [x] Task 3 - Persist browse topic drill-ins and improve recovery states
+  - Acceptance criteria:
+    - Browse can hydrate a selected topic/category filter from URL state and keep it stable through navigation updates.
+    - The touched empty states include explicit next actions grounded in existing routes/behaviors.
+    - Viewer tests are updated where the interaction contract changes.
+
+- [x] Task 4 - Run focused validation and record the results
+  - Acceptance criteria:
+    - The targeted browse/homepage Jest coverage passes.
+    - Viewer lint and production build are rerun and logged.
+    - Any residual warnings or gaps are captured explicitly in the execution log.
+
+### Execution log (viewer discovery journey polish)
+- Task 1 complete: recorded the scoped discovery-journey polish plan in `PLAN.md` and `TASKS.md` before editing, based on the read-only diagnosis that the homepage category chips are dead buttons, the browse "Featured right now" cards are non-actionable visual blocks, and several discovery empty states still strand first-time visitors with passive copy instead of clear recovery paths.
+- Task 1 checks:
+  - `Get-Content web/viewer/components/CategoryRail.tsx`
+  - `Get-Content web/viewer/app/browse/page.tsx`
+  - `Get-Content web/viewer/components/ChannelRail.tsx`
+  - `Get-Content web/viewer/components/LiveNowGrid.tsx`
+  - `Get-Content web/viewer/components/DirectoryGrid.tsx`
+- Task 2 complete: converted homepage category chips into real browse drill-ins, made browse featured highlights open their corresponding channels, and kept the new discovery navigation on internal viewer routes so `basePath` handling stays consistent.
+- Task 2 checks:
+  - `Get-Content web/viewer/components/CategoryRail.tsx`
+  - `Get-Content web/viewer/app/browse/page.tsx`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/browsePage.test.tsx __tests__/channelDisplayPrimitives.test.tsx`
+- Task 3 complete: added URL-backed browse topic hydration/synchronization, kept the selected topic visible through browse summaries/headings, upgraded the touched discovery empty states with explicit recovery actions instead of passive copy, and documented the new discovery drill-in behavior in `docs/quickstart.md`.
+- Task 3 checks:
+  - `Get-Content web/viewer/lib/directory-state.ts`
+  - `Get-Content web/viewer/hooks/useDirectorySearch.ts`
+  - `Get-Content web/viewer/components/FeaturedChannel.tsx`
+  - `Get-Content web/viewer/components/DirectoryGrid.tsx`
+  - `Get-Content docs/quickstart.md | Select-String -Pattern "homepage category chips drill into|browse workspace preserves the active topic" -Context 0,0`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/browsePage.test.tsx __tests__/channelDisplayPrimitives.test.tsx`
+- Task 4 complete: reran the planned browse/homepage Jest coverage, passed viewer lint and production build, and attempted the repo-native viewer verification script. The UX pass is green at the targeted test/build level; the only failing closing check was the existing Windows host blocker where `verify.sh` cannot find Python for the env-placeholder hygiene step.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/browsePage.test.tsx __tests__/directoryPage.test.tsx __tests__/channelDisplayPrimitives.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` (blocked by missing `python`/`python3` on this Windows host during the env example placeholder hygiene step)
+- Task 4 notes:
+  - The focused Jest suites passed with existing non-failing console noise from older `act(...)` warnings in search interactions and the longstanding `next/image` mock warnings about `fill`/`priority` props in jsdom.
+  - `next build` completed successfully and surfaced the existing viewer/app warnings about pages being deopted into client-side rendering plus an outdated `caniuse-lite` database; neither warning blocked the production build.

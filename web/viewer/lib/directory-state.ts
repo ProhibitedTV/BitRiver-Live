@@ -6,12 +6,28 @@ export function normalizeDirectoryQuery(value: string | null | undefined): strin
   return (value ?? "").trim();
 }
 
-export function toDirectorySearchParams(value: string): URLSearchParams {
-  const params = new URLSearchParams();
-  const normalized = normalizeDirectoryQuery(value);
+export function normalizeDirectoryTopic(value: string | null | undefined): string | null {
+  const normalized = (value ?? "").trim();
+  return normalized.length > 0 ? normalized : null;
+}
 
-  if (normalized.length > 0) {
-    params.set("q", normalized);
+export function toDirectorySearchParams({
+  query,
+  topic,
+}: {
+  query: string;
+  topic?: string | null;
+}): URLSearchParams {
+  const params = new URLSearchParams();
+  const normalizedQuery = normalizeDirectoryQuery(query);
+  const normalizedTopic = normalizeDirectoryTopic(topic);
+
+  if (normalizedQuery.length > 0) {
+    params.set("q", normalizedQuery);
+  }
+
+  if (normalizedTopic) {
+    params.set("topic", normalizedTopic);
   }
 
   return params;
@@ -31,6 +47,8 @@ type DirectoryNavigationInput = {
   currentParams: URLSearchParams;
   nextQuery: string;
   previousQuery: string;
+  nextTopic?: string | null;
+  previousTopic?: string | null;
 };
 
 export function resolveDirectoryNavigation({
@@ -38,9 +56,13 @@ export function resolveDirectoryNavigation({
   currentParams,
   nextQuery,
   previousQuery,
-}: DirectoryNavigationInput): { url: string; useReplace: boolean; normalizedQuery: string } {
+  nextTopic,
+  previousTopic,
+}: DirectoryNavigationInput): { url: string; useReplace: boolean; normalizedQuery: string; normalizedTopic: string | null } {
   const normalizedQuery = normalizeDirectoryQuery(nextQuery);
   const normalizedPrevious = normalizeDirectoryQuery(previousQuery);
+  const normalizedTopic = normalizeDirectoryTopic(nextTopic);
+  const normalizedPreviousTopic = normalizeDirectoryTopic(previousTopic);
   const params = new URLSearchParams(currentParams.toString());
 
   if (normalizedQuery.length > 0) {
@@ -49,12 +71,21 @@ export function resolveDirectoryNavigation({
     params.delete("q");
   }
 
+  if (normalizedTopic) {
+    params.set("topic", normalizedTopic);
+  } else {
+    params.delete("topic");
+  }
+
   const queryString = params.toString();
   const url = queryString.length > 0 ? `${pathname}?${queryString}` : pathname;
 
   return {
     url,
-    useReplace: normalizedQuery.length === 0 || normalizedQuery === normalizedPrevious,
+    useReplace:
+      (normalizedQuery.length === 0 && !normalizedTopic) ||
+      (normalizedQuery === normalizedPrevious && normalizedTopic === normalizedPreviousTopic),
     normalizedQuery,
+    normalizedTopic,
   };
 }

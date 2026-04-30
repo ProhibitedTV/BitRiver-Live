@@ -84,6 +84,11 @@ export function ChannelRail({
         <div className="state-panel">
           <strong>No channels to show right now</strong>
           <p className="muted">As the network fills out, fresh creators will appear here first.</p>
+          <div className="browse-actions">
+            <Link href="/browse" className="secondary-button">
+              Browse full directory
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="content-rail__scroller" role="list">

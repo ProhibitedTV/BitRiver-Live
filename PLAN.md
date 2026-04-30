@@ -1342,3 +1342,25 @@
 - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer`
 - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup`
 - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/admin -MaximumRedirection 0`
+
+## Scope (current change)
+- Tighten the viewer discovery journey so homepage and browse surfaces never present dead-end controls to first-time visitors.
+- Make homepage category chips actionable, make browse-page featured highlights open the relevant channel, and persist browse topic filters in the URL so drill-ins survive reload/back-forward navigation.
+- Improve the touched discovery empty states with explicit recovery actions instead of passive "nothing here yet" copy.
+- Keep the change viewer-only and avoid deployment-contract edits.
+
+## Assumptions
+- The highest-value UI/UX win for launch-readiness is to remove discovery dead ends rather than start another broad visual redesign.
+- Reusing the existing browse search/filter model is preferable to introducing a new backend category-filter API; a URL-level `topic` filter on top of the current client-side filtering is enough for now.
+- Homepage category drill-ins can safely route through `/browse` because that page already owns directory exploration and filtering.
+- Viewer-only route/query/state updates do not require operator-doc updates because runtime contracts and deployment workflows stay unchanged.
+
+## Risks
+- Adding a new browse URL parameter can create router-state drift or reset loops if query hydration and local filter state are not synchronized carefully.
+- Converting non-actionable cards/chips into links could break existing tests or styling if the DOM structure changes more than expected.
+- Empty-state CTA copy can become misleading if it promises behavior the current product cannot fulfill, so the actions need to stay grounded in existing routes.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- __tests__/browsePage.test.tsx __tests__/directoryPage.test.tsx __tests__/channelDisplayPrimitives.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`

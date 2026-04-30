@@ -579,6 +579,8 @@
   transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
   min-width: max(150px, 20vw);
   scroll-snap-align: start;
+  color: inherit;
+  text-decoration: none;
 }
 
 .filter-chip:hover {

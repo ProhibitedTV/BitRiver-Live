@@ -861,6 +861,17 @@ button {
   display: grid;
   gap: var(--space-sm);
   min-height: 180px;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.featured-card:hover,
+.featured-card:focus-visible {
+  border-color: var(--accent);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+  outline: none;
 }
 
 .featured-card__header {
@@ -872,8 +883,22 @@ button {
 
 .featured-card__footer {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
   flex-wrap: wrap;
   gap: var(--space-xs);
+  margin-top: auto;
+}
+
+.featured-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.featured-card__cta {
+  font-weight: 700;
+  color: var(--accent-soft);
 }
 
 .featured-card--loading {
