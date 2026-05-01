@@ -1364,3 +1364,26 @@
 - `npm.cmd --prefix web/viewer run test -- __tests__/browsePage.test.tsx __tests__/directoryPage.test.tsx __tests__/channelDisplayPrimitives.test.tsx`
 - `npm.cmd --prefix web/viewer run lint`
 - `npm.cmd --prefix web/viewer run build`
+
+## Scope (current change)
+- Diagnose why the current checkout cannot be pushed to `origin` and repair the safest viable Git path so the current work is available remotely.
+- Confirm whether the blocker is non-fast-forward branch divergence, auth, or remote-policy rejection before making any branch or history changes.
+- Prefer a non-destructive fix that preserves the current commits exactly as they exist now; avoid force-pushing `main`.
+- Keep the change limited to Git workflow metadata and repo planning artifacts unless a small supporting doc update is required.
+
+## Assumptions
+- The immediate goal is to get the current local commits onto GitHub safely, not to rewrite shared history on `origin/main`.
+- Because local `main` is already behind `origin/main`, creating and pushing a dedicated branch is likely safer than rebasing/pushing `main` without explicit user direction.
+- The working tree is clean enough that branch creation or a push repair will not trample unrelated uncommitted work.
+
+## Risks
+- Rebasing or merging `origin/main` into the current `main` without confirmation could create unnecessary conflict resolution or change the exact commits the user expects to publish.
+- Pushing directly to `main` could still be blocked by branch protection or auth even after divergence is addressed, so the exact remote error needs to be captured first.
+- Any networked Git operation may require host-level approval or credentials outside the sandbox, so repair work may pause on environment access rather than repository state.
+
+## Test plan
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short --branch`
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live remote -v`
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live branch -vv`
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live push origin main`
+- If non-fast-forward on `main`: create/push a safe topic branch from the current `HEAD` and verify `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short --branch`

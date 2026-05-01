@@ -2760,3 +2760,53 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - Task 4 notes:
   - The focused Jest suites passed with existing non-failing console noise from older `act(...)` warnings in search interactions and the longstanding `next/image` mock warnings about `fill`/`priority` props in jsdom.
   - `next build` completed successfully and surfaced the existing viewer/app warnings about pages being deopted into client-side rendering plus an outdated `caniuse-lite` database; neither warning blocked the production build.
+
+## Scoped change: Git push repair
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the scoped push-repair plan before changing Git state
+  - Acceptance criteria:
+    - `PLAN.md` captures the push-repair scope, assumptions, risks, and diagnostic commands.
+    - `TASKS.md` lists the ordered diagnosis/repair/verification steps before branch or push actions change repo state.
+    - The read-only diagnosis identifies whether divergence, auth, or remote policy is the likely blocker.
+
+- [x] Task 2 - Reproduce the push failure and identify the precise remote rejection
+  - Acceptance criteria:
+    - The exact `git push` failure mode is captured.
+    - The repo state needed to choose a safe repair path is documented in the execution log.
+
+- [x] Task 3 - Repair the push path without rewriting shared `main` history
+  - Acceptance criteria:
+    - The current commits are placed on a safe remote branch or otherwise pushed successfully.
+    - No force-push to `main` is used unless the user explicitly asked for it.
+    - Local Git state remains clean and understandable afterward.
+
+- [x] Task 4 - Verify the repaired remote state and record the outcome
+  - Acceptance criteria:
+    - The successful push target is logged.
+    - Any remaining auth/policy blockers are recorded precisely if they still prevent publication.
+
+### Execution log (Git push repair)
+- Task 1 complete: recorded the push-repair scope in `PLAN.md` and `TASKS.md` before changing Git state, based on the read-only diagnosis that local `main` is currently `ahead 2, behind 22` relative to `origin/main`, which makes a non-fast-forward rejection the most likely push blocker.
+- Task 1 checks:
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short --branch`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live remote -v`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live branch -vv`
+- Task 2 complete: reproduced the actual push against GitHub and confirmed the blocker is the expected non-fast-forward rejection on `main` (`[rejected] main -> main (fetch first)`), not a bad credential or branch-name issue. The local branch is ahead by the two unpublished commits `b4617f75 restored signin ui` and `4f34a498 Polish viewer discovery navigation and recovery states`.
+- Task 2 checks:
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live push origin main` (sandbox blocked on outbound network)
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live push origin main` (with host network access; rejected as non-fast-forward)
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live log --oneline --decorate origin/main..HEAD`
+- Task 3 complete: created a safe repair branch from the current `HEAD` and pushed that branch to GitHub with upstream tracking instead of rebasing or force-pushing shared `main`. The local environment refused the repo-preferred `fix/...` nested ref path inside `.git`, so the repair used the flat branch name `fix-viewer-discovery-polish`.
+- Task 3 checks:
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live switch -c fix/viewer-discovery-polish` (blocked locally by ref creation/permission issues)
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live switch -c fix-viewer-discovery-polish`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live push -u origin fix-viewer-discovery-polish`
+- Task 4 complete: verified that `fix-viewer-discovery-polish` now tracks `origin/fix-viewer-discovery-polish` successfully. The original `main` branch still remains locally diverged from `origin/main` (`ahead 2, behind 22`), but the unpublished commits are now safely available on GitHub and ready for PR flow.
+- Task 4 checks:
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short --branch`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live branch -vv`
+- Task 4 notes:
+  - The working tree still shows modified `PLAN.md` and `TASKS.md` because this repair followed the repo's spec-driven workflow and recorded the diagnosis/results there; no source-code files were changed as part of the push repair itself.
+  - GitHub reported the new-branch PR URL: `https://github.com/ProhibitedTV/BitRiver-Live/pull/new/fix-viewer-discovery-polish`
