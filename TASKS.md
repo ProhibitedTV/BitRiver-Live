@@ -3103,3 +3103,120 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Targeted Jest coverage still emits existing non-failing React `act(...)` warnings in some creator/search/tip tests, but the suites pass and the new overhaul behavior is covered.
   - Viewer production builds still report the existing Next client-render deopt warnings for several routes (`/`, `/browse`, `/following`, `/videos`, `/creator`, `/creator/getting-started`, `/profile`, `/getting-started`, `/404`); those warnings predate this pass and do not fail the build.
   - This overhaul pass did not rerun a live manual OBS broadcast after the final UI changes, so the remaining manual acceptance item is still a human ingest/playback rehearsal against the running stack.
+
+## Scoped change: redeploy viewer overhaul and live functionality check
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the redeploy/runtime-check scope before touching the running stack
+  - Acceptance criteria:
+    - `PLAN.md` captures the redeploy scope, assumptions, risks, and live validation commands.
+    - `TASKS.md` lists the ordered redeploy and runtime-check steps before Docker commands begin.
+    - The scope stays limited to redeploying and validating the current checkout unless runtime checks reveal a concrete regression.
+
+- [ ] Task 2 - Redeploy the current checkout onto the local Compose stack
+  - Acceptance criteria:
+    - The stack is rebuilt and relaunched from the current checkout with the existing local source-build workflow.
+    - `docker compose ps -a` shows the expected long-lived services running and `postgres-migrations` completed.
+    - If the redeploy fails, the blocking service/log is captured explicitly in the execution log.
+
+- [x] Task 3 - Run live functionality checks against the redeployed stack and repair any runtime blocker they expose
+  - Acceptance criteria:
+    - API readiness and the key public viewer routes respond successfully on the live deployment host.
+    - The redeployed viewer hydrates in a real browser so the shipped theme/auth/nav controls respond to input.
+    - The creator-facing route needed for the new go-live flow is reachable.
+    - Any remaining manual-only gap, such as authenticated interaction or real OBS ingest, is recorded explicitly.
+
+### Execution log (redeploy viewer overhaul and live functionality check)
+- Task 1 complete: recorded the redeploy/runtime-check scope in `PLAN.md` and queued the runtime steps here before reusing the local Docker stack. The read-only check also confirmed that the repo is already in a dirty worktree from earlier release/runtime work, so this pass must avoid destructive cleanup and focus on rebuilding the current checkout in place.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 80`
+  - `Get-Content TASKS.md | Select-Object -Last 120`
+  - `git status --short`
+- Task 2 complete: rebuilt and relaunched the local source-build stack with `docker compose ... up -d --build --pull never`, then verified the expected service state with `docker compose ps -a`. The redeploy succeeded cleanly: `bitriver-live` came back healthy, `bitriver-viewer` restarted from the current checkout, and `postgres-migrations` exited successfully once. A follow-up `docker compose logs` attempt hit a host Docker permission issue, but that did not block the actual rebuild or service restart.
+- Task 2 checks:
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+- Task 3 in progress: the live HTTP checks show `/readyz` and the public `/viewer` host route responding, and the rendered navbar links already resolve to `/viewer/...` paths. The real blocker turned out to be deeper: a headless browser smoke reproduced the user's “buttons do nothing” report because the API server's default CSP rejects Next.js inline bootstrap scripts on the proxied viewer pages. With hydration blocked, the theme toggle never updates `data-theme`, sign-in never opens the auth dialog, and route bodies such as `/viewer/browse` stay inert even though the HTML shell loads. The next step is a minimal server-side CSP fix plus a fresh redeploy and rerun of the live smoke.
+- Task 3 checks so far:
+  - `Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/readyz`
+  - `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/viewer`
+  - `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/viewer/browse`
+  - `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/viewer/videos`
+  - `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/viewer/creator`
+  - Headless Playwright smoke against `http://10.0.0.108:8080/viewer` (confirmed correct `/viewer/...` link hrefs, but no theme/auth interaction and no hydrated route content)
+  - Headless Playwright console capture against `http://10.0.0.108:8080/viewer` (captured repeated CSP `script-src 'self'` violations for inline Next.js bootstrap scripts)
+- Task 3 complete: fixed the live runtime blocker by moving the viewer-specific CSP handling onto the proxied `/viewer` responses themselves and relaxing only that route family to `script-src 'self' 'unsafe-inline'`, which lets the shipped Next.js bootstrap scripts hydrate without weakening the API/admin defaults. Added focused `internal/server` coverage for both the middleware and proxied viewer route behavior, rebuilt the `bitriver-live` container, and reran the live browser smoke. The redeployed viewer now hydrates and responds: the theme toggle changes state again, the sign-in CTA opens the in-viewer auth dialog with the expected `?auth=signin&next=%2Fviewer` state, and `/viewer/browse` plus `/viewer/creator` render real page content instead of inert shells. The remaining gap is still manual/authenticated broadcast validation, especially a real OBS ingest and public playback pass.
+- Task 3 finishing checks:
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never bitriver-live`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+  - `Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/readyz`
+  - `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/viewer` (confirmed `Content-Security-Policy` now includes `script-src 'self' 'unsafe-inline'`)
+  - Headless Playwright smoke against `http://10.0.0.108:8080/viewer` (confirmed theme toggle state change, sign-in dialog open, and hydrated browse/creator content)
+
+## Scoped change: re-enable public signup and redesign homepage discovery
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the signup + homepage scope before changing runtime or viewer files
+  - Acceptance criteria:
+    - `PLAN.md` captures the signup unblock, homepage redesign goals, risks, and validation commands.
+    - `TASKS.md` lists the runtime and viewer work in execution order before product edits begin.
+    - The scope stays limited to self-signup availability plus the homepage/discovery experience.
+
+- [x] Task 2 - Re-enable public self-signup on the local deployment
+  - Acceptance criteria:
+    - The local runtime no longer reports `allowSelfSignup=false` for guest viewer auth state.
+    - The live `bitriver-live` service is restarted cleanly after the env change.
+    - The signup CTA becomes available again in the shipped viewer.
+
+- [x] Task 3 - Redesign the homepage into a more Twitch-style discovery surface
+  - Acceptance criteria:
+    - The homepage leads with live discovery and featured content instead of a marketing-first hero.
+    - The layout clearly separates featured content, recommended/live shelves, and browse-by-topic entry points.
+    - The signed-out experience makes account creation and watching feel immediate and intentional.
+
+- [x] Task 4 - Add focused coverage, redeploy, and verify the live result
+  - Acceptance criteria:
+    - Focused viewer tests cover the updated homepage behavior and any signup-related CTA expectations touched by the change.
+    - Viewer lint and production build pass.
+    - The redeployed `/viewer` experience is verified in a live browser smoke, including homepage hydration and the return of public signup.
+
+### Execution log (re-enable public signup and redesign homepage discovery)
+- Task 1 complete: confirmed that the current signup failure is not a frontend no-op. The live API is intentionally returning `signup_disabled` because the local root `.env` currently sets `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=false`, so guest registration is blocked before the auth dialog can succeed. The homepage read also confirmed that the current `/viewer` landing page still spends too much of its highest-value space on marketing copy and not enough on dense live discovery, which makes it feel less like Twitch and more like a polished prototype. The implementation path is therefore a small local runtime flip plus a viewer-only homepage restructure built on the existing discovery endpoints.
+- Task 1 checks:
+  - `git status --short`
+  - `Get-Content PLAN.md | Select-Object -Last 120`
+  - `Get-Content TASKS.md | Select-Object -Last 180`
+  - `Get-Content .env | Select-String -Pattern "BITRIVER_LIVE_ALLOW_SELF_SIGNUP|NEXT_PUBLIC_VIEWER_URL|NEXT_VIEWER_BASE_PATH" -Context 0,0`
+  - `Get-Content web/viewer/app/directory-view.tsx`
+  - `Get-Content web/viewer/app/directory-page-shell.tsx`
+  - `Get-Content web/viewer/styles/home.css`
+  - `Get-Content web/viewer/components/FeaturedChannel.tsx`
+  - `Get-Content web/viewer/components/ChannelRail.tsx`
+  - `Get-Content web/viewer/__tests__/directoryPage.test.tsx`
+- Task 2 complete: flipped the local runtime back to public signup by setting `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true` in the root `.env` and restarting `bitriver-live`. A real guest signup against the deployed API now succeeds again instead of returning `signup_disabled`; the smoke account created during validation came back with a real user id and viewer role on the live stack.
+- Task 2 checks:
+  - `Get-Content .env | Select-String -Pattern "BITRIVER_LIVE_ALLOW_SELF_SIGNUP" -Context 0,0`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d bitriver-live`
+  - `Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8080/api/auth/signup -ContentType 'application/json' -Body ...` (returned `201` for a disposable smoke account after the restart)
+- Task 3 complete: rebuilt the homepage into a denser, discovery-first landing experience with a featured live panel, recommendation stack, stronger browse/topic pivots, and a signed-out CTA hierarchy that feels closer to Twitch's information density without copying its visual language. The guest account-entry actions now use a real auth action component so the homepage `Create account` buttons open the in-viewer signup flow instead of silently only changing the query string.
+- Task 3 checks:
+  - `Get-Content web/viewer/app/directory-view.tsx`
+  - `Get-Content web/viewer/styles/home.css`
+  - `Get-Content web/viewer/components/auth/AuthActionLink.tsx`
+  - `Get-Content web/viewer/__tests__/directoryPage.test.tsx`
+- Task 4 complete: added homepage CTA regression coverage, reran the focused viewer validation, rebuilt the viewer image, restarted the live viewer container, and verified the deployed homepage in a headless browser. The live stack now shows the new `Live channels worth opening right now` hero, and clicking `Create account` on `http://10.0.0.108:8080/viewer` opens the `Create your BitRiver account` dialog on the running site. `docs/quickstart.md` now also documents the discovery-first homepage and the fact that homepage/navbar signup CTAs depend on `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true`.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/directoryPage.test.tsx`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml build viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+  - `node -e "const { chromium } = require('./web/viewer/node_modules/playwright'); ..."` (confirmed live homepage headline plus visible signup dialog on click)
+- Task 4 notes:
+  - Focused Jest still emits the existing non-failing `SearchBar` `act(...)` warnings, and `navbar.test.tsx` still logs the existing jsdom navigation warning; the suites pass and the updated homepage/signup path is covered.
+  - Rebuilding the viewer required Docker access outside the sandbox on this host because Buildx needs `C:\Users\RhythmicCarnage\.docker\...`; once the command was rerun with approval, the image build and service restart succeeded.

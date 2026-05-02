@@ -342,6 +342,8 @@ The API emits hardening headers by default so the control centre and embedded vi
 - `Permissions-Policy`: `camera=(), microphone=(), geolocation=()`
 - `X-Content-Type-Options`: `nosniff`
 
+When you proxy the Next.js viewer through `/viewer`, BitRiver automatically relaxes only that route family's `script-src` directive to `script-src 'self' 'unsafe-inline'` so the shipped Next bootstrap scripts can hydrate the page. The rest of the default directives stay the same, and `--security-csp` / `BITRIVER_LIVE_SECURITY_CSP` still replace the entire policy when you need a custom header.
+
 Override the policy when you need to embed the admin panel or viewer inside a trusted host or allow external resources. Flags and environment variables let you tune the response headers without recompiling:
 
 | Flag | Purpose |

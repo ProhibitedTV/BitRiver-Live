@@ -1,4 +1,4 @@
-import { mockRouter, resetRouterMocks, viewerApiMocks } from "../test/test-utils";
+import { guestAuthState, mockAnonymousUser, mockRouter, mockUseAuth, resetRouterMocks, viewerApiMocks } from "../test/test-utils";
 import userEvent from "@testing-library/user-event";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import DirectoryPage from "../app/page";
@@ -85,6 +85,7 @@ describe("DirectoryPage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetRouterMocks();
+    mockAnonymousUser();
     const sliceResponse = {
       channels: [],
       generatedAt: new Date("2023-10-21T11:00:00Z").toISOString(),
@@ -107,7 +108,12 @@ describe("DirectoryPage", () => {
     await renderResolvedDirectoryPage();
 
     await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalledTimes(1));
-    const quickJumpNav = screen.getByRole("navigation", { name: /quick jump links/i });
+    expect(await screen.findByRole("heading", { level: 1, name: /live channels worth opening right now/i })).toBeInTheDocument();
+    const quickJumpNav = screen.getByRole("navigation", { name: /popular topics and quick actions/i });
+    expect(within(quickJumpNav).getByRole("link", { name: /live channels we think you'll like/i })).toHaveAttribute(
+      "href",
+      "#recommended",
+    );
     expect(within(quickJumpNav).getByRole("link", { name: /live now/i })).toHaveAttribute("href", "#live-now");
     expect(within(quickJumpNav).getByRole("link", { name: /categories/i })).toHaveAttribute("href", "#top-categories");
     expect(within(quickJumpNav).getByRole("link", { name: /videos/i })).toHaveAttribute("href", "/videos");
@@ -198,7 +204,7 @@ describe("DirectoryPage", () => {
     await renderResolvedDirectoryPage();
 
     await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalled());
-    expect(screen.getByRole("heading", { level: 2, name: /full directory/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /more live channels/i })).toBeInTheDocument();
   });
 
   test("keeps the streamlined homepage focused on discovery when follows are empty", async () => {
@@ -206,7 +212,7 @@ describe("DirectoryPage", () => {
 
     await renderResolvedDirectoryPage();
 
-    expect(await screen.findByRole("heading", { level: 2, name: /recommended live/i })).toBeInTheDocument();
+    expect((await screen.findAllByRole("heading", { level: 2, name: /live channels we think you'll like/i })).length).toBeGreaterThan(0);
     expect(screen.queryByText(/sign in to see channels you follow/i)).not.toBeInTheDocument();
   });
 
@@ -216,10 +222,27 @@ describe("DirectoryPage", () => {
 
     await renderResolvedDirectoryPage();
 
-    expect(
-      await screen.findByRole("heading", { level: 1, name: /watch live now, then launch your own stream with confidence/i }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: /live channels worth opening right now/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /create account/i })[0]).toHaveAttribute("href", "/?auth=signup");
     expect(screen.queryByText(/sign in to see channels you follow/i)).not.toBeInTheDocument();
+  });
+
+  test("guest create account actions open the signup flow instead of silently navigating", async () => {
+    fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
+    fetchFollowingChannelsMock.mockRejectedValueOnce(new Error("unauthorized"));
+    const signUp = jest.fn().mockResolvedValue(undefined);
+    mockUseAuth.mockReturnValue({
+      ...guestAuthState(),
+      signUp,
+    });
+    const user = userEvent.setup();
+
+    await renderResolvedDirectoryPage();
+
+    const createAccount = (await screen.findAllByRole("link", { name: /create account/i }))[0];
+    await user.click(createAccount);
+
+    await waitFor(() => expect(signUp).toHaveBeenCalledWith(undefined));
   });
 
   test("keeps DirectoryPage lightweight and normalizes query before passing to shell", async () => {

@@ -1492,3 +1492,60 @@
 - Viewer validation:
   - `npm.cmd --prefix web/viewer run lint`
   - `npm.cmd --prefix web/viewer run build`
+
+## Scope (current change)
+- Redeploy the current checkout onto the existing local Compose stack so the viewer/creator overhaul is actually running in the live environment again.
+- Validate the redeployed stack at the runtime level rather than only through mocked viewer tests: confirm service/container health, API readiness, public viewer routes, and the key creator/live setup pages.
+- Fix any concrete runtime blocker exposed by the live redeploy when it prevents the shipped viewer from hydrating or responding to input, then redeploy and re-check the live surface.
+- Record any remaining gap explicitly if a fully manual broadcast or authenticated browser flow still requires human interaction.
+
+## Assumptions
+- The repo should still be running in the local source-build workflow established earlier (`BITRIVER_DEPLOY_IMAGE_SOURCE=build` with `docker compose ... up -d --build --pull never`).
+- The current `.env` and generated OME config are already aligned enough to let the stack rebuild from source without another contract change.
+- The highest-signal runtime proof for this pass is a successful rebuild plus live route checks on `http://10.0.0.108:8080`, not another full repository-wide verification sweep.
+- Because this machine shares the same working tree as earlier changes, redeploy commands must avoid resetting or cleaning anything.
+
+## Risks
+- Docker rebuilds can fail for host reasons unrelated to the app changes (daemon state, image cache, port collisions), so the first step must separate environment failure from product failure.
+- The redeployed viewer could still differ from the mocked Playwright coverage in areas that require real auth/session bootstrap or live ingest state, so runtime checks need to include both anonymous and creator-facing routes.
+- The API server's default CSP may be too strict for the Next.js viewer bootstrap, so a server-side header fix could be required even if the viewer build itself is healthy.
+- If the stack comes up but the admin/bootstrap data is stale, functional checks may need to stop at route availability rather than full signed-in action flows.
+
+## Test plan
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 bitriver-live viewer postgres-migrations transcoder-public`
+- `Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/readyz`
+- `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/viewer`
+- `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/browse`
+- `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/videos`
+- `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/creator`
+- `go test ./internal/server -count=1 -timeout=120s`
+- Headless browser smoke against `http://10.0.0.108:8080/viewer` to confirm the theme toggle, auth CTA, and hydrated route content all respond after redeploy
+
+## Scope (current change)
+- Re-enable public self-signup on this local deployment so guest users can actually create accounts from the shipped viewer experience.
+- Redesign the homepage to be more like a modern Twitch-style discovery surface: live content first, tighter copy, strong shelves, and a clearer split between featured content, recommended channels, and browse-by-topic exploration.
+- Keep the changes focused on the live local deployment plus the viewer homepage/auth entry points; avoid unrelated backend or creator-flow changes unless they are required to support signup or homepage behavior.
+- Treat the root `.env` change as local runtime state for this machine and redeploy the affected service after updating it.
+
+## Assumptions
+- The immediate signup blocker is the current runtime flag `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=false`, not a deeper auth/session failure.
+- A Twitch-inspired homepage for this pass means borrowing the information hierarchy and content density, not cloning Twitch styling or copy.
+- Existing discovery APIs (`featured`, `recommended`, `following`, `liveNow`, `trending`, `categories`) are sufficient to build a much stronger homepage without adding new backend endpoints.
+- The current local stack should only require a `bitriver-live` restart for the signup flag and a viewer rebuild/redeploy for homepage code changes.
+
+## Risks
+- Editing the tracked root `.env` is a deployment-contract change, so the local runtime adjustment must stay intentional and should not leak secrets or unrelated config edits.
+- Homepage changes touch a broad CSS surface and the most-trafficked viewer route, so regressions in spacing, mobile behavior, or inactive states are easy to introduce if the layout change is too aggressive.
+- A homepage that becomes too visually close to Twitch without using our own copy, color choices, and interaction patterns could feel derivative instead of intentional.
+- Redeploy validation needs both mocked viewer tests and a real browser smoke, because recent regressions only surfaced on the live `/viewer` mount.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- __tests__/directoryPage.test.tsx __tests__/navbar.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never viewer bitriver-live`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+- `Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/api/viewer/me`
+- Headless browser smoke against `http://10.0.0.108:8080/viewer` to confirm the create-account flow is offered again and the redesigned homepage renders and hydrates on the live deployment

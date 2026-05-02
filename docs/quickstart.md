@@ -183,6 +183,8 @@ Use explicit development settings when intentionally running local-only workflow
 
 Within the public viewer shell, the standard signed-out sign-in and join actions now open an in-viewer auth dialog so people can authenticate without leaving discovery or channel pages. The standalone `/signup` page remains available for direct links, MFA handoff, and fallback entry when you want to send people straight to the dedicated auth surface.
 
+The homepage now behaves like a true discovery surface instead of a marketing splash: featured live content stays above the fold, recommendation shelves and live rows stay visible without extra clicks, and signed-out "Create account" actions on the homepage and navbar open the same in-viewer auth dialog whenever `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true`.
+
 The viewer discovery surfaces also keep navigation contextual: homepage category chips drill into `/browse?topic=...`, and the browse workspace preserves the active topic in URL state so refresh/back-forward navigation does not drop people out of the slice they were exploring.
 
 The public viewer navigation is now centered on the literal destinations `Home`, `Browse`, `Following`, `Go Live`, `Videos`, and signed-in `Profile`. Replay discovery is exposed through `/videos`, and signed-in people who have not created a channel yet can use the self-serve creator flow under `/creator` or `/creator/getting-started` to create a first channel, copy OBS settings, preview the stream, and share the public viewer link without admin intervention.
