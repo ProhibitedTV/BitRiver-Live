@@ -28,7 +28,7 @@ export function CategoryRail({ id, categories, loading = false }: CategoryRailPr
       ) : categories.length === 0 ? (
         <div className="state-panel">
           <strong>No categories available yet</strong>
-          <p className="muted">Once streams are tagged, the most active topics will appear here.</p>
+          <p className="muted">Once creators start tagging streams, the busiest topics will surface here automatically.</p>
           <div className="browse-actions">
             <Link href="/browse" className="secondary-button">
               Open full directory

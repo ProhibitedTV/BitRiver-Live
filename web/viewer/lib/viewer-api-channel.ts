@@ -1,5 +1,6 @@
 import { viewerRequest } from "./viewer-api-core";
 import type {
+  CreateChannelPayload,
   CreateTipPayload,
   FollowState,
   ManagedChannel,
@@ -59,6 +60,18 @@ export function fetchChannelSessions(channelId: string): Promise<StreamSession[]
 export function fetchManagedChannels(ownerId?: string): Promise<ManagedChannel[]> {
   const suffix = ownerId ? `?ownerId=${ownerId}` : "";
   return viewerRequest<ManagedChannel[]>(`/api/channels${suffix}`);
+}
+
+export function createChannel(payload: CreateChannelPayload): Promise<ManagedChannel> {
+  return viewerRequest<ManagedChannel>("/api/channels", {
+    method: "POST",
+    body: JSON.stringify({
+      ownerId: payload.ownerId,
+      title: payload.title,
+      category: payload.category,
+      tags: payload.tags,
+    }),
+  });
 }
 
 export function updateChannel(channelId: string, payload: UpdateChannelPayload): Promise<ManagedChannel> {

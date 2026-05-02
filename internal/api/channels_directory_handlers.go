@@ -472,9 +472,12 @@ func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 		}
 		WriteJSON(w, http.StatusOK, response)
 	case http.MethodPost:
-		actor, ok := h.requireRole(w, r, roleAdmin, roleCreator)
+		actor, ok := h.requireAuthenticatedUser(w, r)
 		if !ok {
 			return
+		}
+		if persistedActor, exists := h.channelsService().GetUser(actor.ID); exists {
+			actor = persistedActor
 		}
 		var req createChannelRequest
 		if !DecodeAndValidate(w, r, &req) {
@@ -487,10 +490,28 @@ func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
+		ownedChannels := h.channelsService().ListChannels(req.OwnerID, "")
+		ownerNeedsCreatorBootstrap := req.OwnerID == actor.ID && !actor.HasRole(roleAdmin) && !actor.HasRole(roleCreator)
+		if ownerNeedsCreatorBootstrap && len(ownedChannels) > 0 {
+			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+			return
+		}
 		channel, err := h.channelsService().CreateChannel(req.OwnerID, req.Title, req.Category, req.Tags)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
+		}
+		if owner, exists := h.channelsService().GetUser(req.OwnerID); exists && len(ownedChannels) == 0 && !owner.HasRole(roleCreator) {
+			roles := append([]string{}, owner.Roles...)
+			roles = append(roles, roleCreator)
+			if _, err := h.channelsService().UpdateUser(owner.ID, domain.UserUpdate{Roles: &roles}); err != nil {
+				if rollbackErr := h.channelsService().DeleteChannel(channel.ID); rollbackErr != nil {
+					WriteError(w, http.StatusInternalServerError, fmt.Errorf("upgrade owner %s to creator after creating channel %s: %w (rollback failed: %v)", owner.ID, channel.ID, err, rollbackErr))
+					return
+				}
+				WriteError(w, http.StatusInternalServerError, fmt.Errorf("upgrade owner %s to creator after creating channel %s: %w", owner.ID, channel.ID, err))
+				return
+			}
 		}
 		WriteJSON(w, http.StatusCreated, newChannelResponse(channel))
 	default:

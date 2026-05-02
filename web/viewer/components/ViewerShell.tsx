@@ -172,7 +172,7 @@ export function ViewerShell({ children }: ViewerShellProps) {
           )}
         </div>
         <p className="viewer-sidebar__intro muted">
-          Keep an eye on the creators you already know while you browse the rest of the platform.
+          Keep your regular creators one click away while you explore live rooms, replays, and new communities.
         </p>
         <FollowingSidebar />
       </aside>
@@ -201,7 +201,7 @@ export function ViewerShell({ children }: ViewerShellProps) {
           )}
 
           <main className="viewer-main">{children}</main>
-          <footer className="footer">BitRiver Live for self-hosted creator networks.</footer>
+          <footer className="footer">BitRiver Live helps independent creators go live, keep replays visible, and stay close to their audience.</footer>
         </div>
       </div>
     </div>

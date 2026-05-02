@@ -43,8 +43,8 @@ const basePlayback = {
 const chatTranscript = [
   {
     id: "msg-1",
-    channelId: "chan-42",
     userId: "owner-42",
+    channelId: "chan-42",
     content: "Welcome to the stream!",
     createdAt: new Date("2023-10-21T12:00:00Z").toISOString()
   }
@@ -74,11 +74,15 @@ test.describe("channel route", () => {
     });
 
     await page.route("**/api/channels/chan-42/vods", async (route) => {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ channelId: "chan-42", items: [] }) });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ channelId: "chan-42", items: [] })
+      });
     });
 
     let lastPostedMessage: string | undefined;
-    await page.route("**/api/channels/chan-42/chat", async (route) => {
+    await page.route("**/api/channels/chan-42/chat**", async (route) => {
       if (route.request().method() === "GET") {
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(chatTranscript) });
         return;
@@ -90,9 +94,10 @@ test.describe("channel route", () => {
         contentType: "application/json",
         body: JSON.stringify({
           id: "msg-2",
+          channelId: "chan-42",
+          userId: "viewer-1",
           content: body.content,
-          createdAt: new Date("2023-10-21T12:05:00Z").toISOString(),
-          userId: "viewer-1"
+          createdAt: new Date("2023-10-21T12:05:00Z").toISOString()
         })
       });
     });
@@ -150,12 +155,12 @@ test.describe("channel route", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Deep Space Beats" })).toBeVisible();
     await expect(page.getByText(/enjoy low-latency playback powered by the ingest pipeline/i)).toBeVisible();
 
-    await page.getByRole("button", { name: /follow · 10 supporters/i }).click();
-    await expect(page.getByRole("button", { name: /following · 11 supporters/i })).toBeVisible();
+    await page.getByRole("button", { name: /follow - 10 supporters/i }).click();
+    await expect(page.getByRole("button", { name: /following - 11 supporters/i })).toBeVisible();
     await expect.poll(() => followCalls).toBeGreaterThan(0);
 
     await page.getByRole("button", { name: /subscribe/i }).click();
-    await expect(page.getByRole("button", { name: /subscribed · plus/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /subscribed - plus/i })).toBeVisible();
     await expect.poll(() => subscribeCalls).toBeGreaterThan(0);
 
     const chatInput = page.getByRole("textbox", { name: /chat message/i });
@@ -209,10 +214,14 @@ test.describe("channel route", () => {
     });
 
     await page.route("**/api/channels/chan-42/vods", async (route) => {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ channelId: "chan-42", items: [] }) });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ channelId: "chan-42", items: [] })
+      });
     });
 
-    await page.route("**/api/channels/chan-42/chat", async (route) => {
+    await page.route("**/api/channels/chan-42/chat**", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(chatTranscript) });
     });
 
@@ -240,7 +249,7 @@ test.describe("channel route", () => {
     await tipButton.click();
     await expect(page.getByText(/sign in from the header to send a tip/i)).toBeVisible();
 
-    const followButton = page.getByRole("button", { name: /follow · 10 supporters/i });
+    const followButton = page.getByRole("button", { name: /follow - 10 supporters/i });
     await followButton.click();
     await expect(page).toHaveURL(/\/login/);
     await expect.poll(() => followAttempted).toBe(false);
@@ -269,10 +278,14 @@ test.describe("channel route", () => {
     });
 
     await page.route("**/api/channels/chan-42/vods", async (route) => {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ channelId: "chan-42", items: [] }) });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ channelId: "chan-42", items: [] })
+      });
     });
 
-    await page.route("**/api/channels/chan-42/chat", async (route) => {
+    await page.route("**/api/channels/chan-42/chat**", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(chatTranscript) });
     });
 
@@ -294,6 +307,39 @@ test.describe("channel route", () => {
 });
 
 test.describe("authentication controls", () => {
+  test("signed-out navbar actions open the in-viewer auth flow when no external login URL is configured", async ({
+    page
+  }) => {
+    await page.route("**/api/viewer/me", async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ allowSelfSignup: true })
+      });
+    });
+
+    await page.route("**/api/directory**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ channels: [], generatedAt: new Date().toISOString() })
+      });
+    });
+
+    await page.goto("/");
+
+    const accountActions = page.getByRole("group", { name: "Account and preferences" });
+
+    await accountActions.getByRole("button", { name: "Sign in" }).click();
+    const signInDialog = page.getByRole("dialog", { name: "Sign in to BitRiver Live" });
+    await expect(signInDialog).toBeVisible();
+
+    await signInDialog.getByRole("button", { name: "Close" }).click();
+
+    await accountActions.getByRole("button", { name: "Create account" }).click();
+    await expect(page.getByRole("dialog", { name: "Create your BitRiver account" })).toBeVisible();
+  });
+
   test("navbar sign-in button redirects to the configured login URL", async ({ page }) => {
     let redirected = false;
 
@@ -312,7 +358,7 @@ test.describe("authentication controls", () => {
 
     await page.goto("/");
 
-    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.getByRole("group", { name: "Account and preferences" }).getByRole("button", { name: "Sign in" }).click();
 
     await expect.poll(() => redirected).toBe(true);
     await expect(page).toHaveURL(/\/login/);
@@ -363,7 +409,7 @@ test.describe("authentication controls", () => {
 
     await expect.poll(() => logoutCalled).toBe(true);
     await expect(
-      page.getByLabel("Viewer quick actions").getByRole("button", { name: "Sign in" })
+      page.getByRole("group", { name: "Account and preferences" }).getByRole("button", { name: "Sign in" })
     ).toBeVisible();
   });
 

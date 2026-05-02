@@ -83,7 +83,7 @@ export function ChannelRail({
       ) : channels.length === 0 ? (
         <div className="state-panel">
           <strong>No channels to show right now</strong>
-          <p className="muted">As the network fills out, fresh creators will appear here first.</p>
+          <p className="muted">Fresh creators and current momentum will surface here as soon as the network has something worth opening.</p>
           <div className="browse-actions">
             <Link href="/browse" className="secondary-button">
               Browse full directory

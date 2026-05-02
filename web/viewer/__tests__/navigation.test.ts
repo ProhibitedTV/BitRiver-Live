@@ -10,19 +10,19 @@ describe("navigation config", () => {
   test.each([
     {
       actor: { isAuthenticated: false, roles: [] },
-      expected: ["Discover", "Browse", "Following"],
+      expected: ["Home", "Browse", "Following", "Go Live", "Videos"],
     },
     {
       actor: { isAuthenticated: true, roles: [] },
-      expected: ["Discover", "Browse", "Following"],
+      expected: ["Home", "Browse", "Following", "Go Live", "Videos", "Profile"],
     },
     {
       actor: { isAuthenticated: true, roles: ["creator"] },
-      expected: ["Discover", "Browse", "Following", "Studio"],
+      expected: ["Home", "Browse", "Following", "Go Live", "Videos", "Profile"],
     },
     {
       actor: { isAuthenticated: true, roles: ["admin"] },
-      expected: ["Discover", "Browse", "Following", "Studio"],
+      expected: ["Home", "Browse", "Following", "Go Live", "Videos", "Profile"],
     },
   ])("resolves the expected nav labels for $actor", ({ actor, expected }) => {
     const audience = getNavigationAudience(actor);

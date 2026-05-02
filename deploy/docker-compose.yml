@@ -197,33 +197,35 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    entrypoint: ["/bin/sh", "-c"]
-    command: |
-      set -e
-      if ! ls /migrations/*.sql >/dev/null 2>&1; then
-        echo "No Postgres migrations found; exiting."
-        exit 1
-      fi
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        if ! ls /migrations/*.sql >/dev/null 2>&1; then
+          echo "No Postgres migrations found; exiting."
+          exit 1
+        fi
 
-      for file in /migrations/*.sql; do
-        echo "Applying $$file"
+        for file in /migrations/*.sql; do
+          echo "Applying $$file"
+          psql \
+            -h postgres \
+            -U "${BITRIVER_POSTGRES_USER:?set via .env}" \
+            -d "${BITRIVER_POSTGRES_DB:-bitriver}" \
+            -v ON_ERROR_STOP=1 \
+            -f "$${file}"
+        done
+
+        echo "Running post-migration sanity check"
         psql \
           -h postgres \
           -U "${BITRIVER_POSTGRES_USER:?set via .env}" \
           -d "${BITRIVER_POSTGRES_DB:-bitriver}" \
           -v ON_ERROR_STOP=1 \
-          -f "$${file}"
-      done
+          -c "SELECT 1 FROM users LIMIT 1;"
 
-      echo "Running post-migration sanity check"
-      psql \
-        -h postgres \
-        -U "${BITRIVER_POSTGRES_USER:?set via .env}" \
-        -d "${BITRIVER_POSTGRES_DB:-bitriver}" \
-        -v ON_ERROR_STOP=1 \
-        -c "SELECT 1 FROM users LIMIT 1;"
-
-      echo "Postgres migrations completed."
+        echo "Postgres migrations completed."
     networks:
       - internal
 
@@ -540,7 +542,8 @@ services:
     read_only: true
     # Exception: retain image default root user; nginx binds and manages runtime state internally.
     # Exception: nginx startup adjusts cache directory ownership under /var/cache/nginx.
-    cap_add: ["CHOWN"]
+    # Exception: nginx also drops privileges to the bundled nginx user after startup.
+    cap_add: ["CHOWN", "SETGID", "SETUID"]
     ports:
       - "${BITRIVER_TRANSCODER_PUBLIC_PORT:-9080}:8080"
     volumes:

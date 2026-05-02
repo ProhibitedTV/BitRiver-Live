@@ -1387,3 +1387,108 @@
 - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live branch -vv`
 - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live push origin main`
 - If non-fast-forward on `main`: create/push a safe topic branch from the current `HEAD` and verify `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short --branch`
+
+## Scope (current change)
+- Prepare this Windows host for a production-leaning local OBS rehearsal using the current deployment contract (`production` + `pull`) and the existing repo-root `.env`.
+- Fix the known LAN-host contract mismatches first: loopback/demo public URLs, `0.0.0.0` OME values, and missing image digests.
+- Authenticate container-registry access, verify that the configured first-party release images actually exist, and only then pin digests plus attempt the canonical quickstart/Compose boot path.
+- Keep `deploy/docker-compose.yml` unchanged unless validation proves a contract bug is the active blocker after real first-party images are available.
+
+## Assumptions
+- The user wants the strict production-like pull workflow first, not a faster fallback to build mode.
+- The current `.env` image tags (`v1.2.3`) may be example/default values rather than already-verified published release tags, so registry reality must be checked before mutating the env file further.
+- This host can use a workspace-local Go build cache (`.gocache`) to avoid the existing Windows profile permission issue during Go-backed validators/renderers.
+- Local/LAN HTTP on `10.0.0.108` is acceptable for this rehearsal even though the saved `.env` remains in `production` mode.
+
+## Risks
+- If the configured first-party release tag does not exist in GHCR, the requested `pull`-mode rehearsal cannot complete without either publishing release images or switching to build mode.
+- Editing the tracked root `.env` for a machine-specific LAN rehearsal can create diff noise and must not be committed with live secrets.
+- Production digest enforcement requires both first-party and third-party pins; resolving only the public third-party digests is not enough to satisfy quickstart.
+- Rerendering `deploy/ome/Server.generated.xml` against the LAN rehearsal values will intentionally change a tracked generated contract file and must stay aligned with the actual `.env`.
+
+## Test plan
+- `gh auth status`
+- `gh auth token | docker login ghcr.io -u ProhibitedTV --password-stdin`
+- `git ls-remote --tags origin`
+- `docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-live:v1.2.3 --format "{{.Manifest.Digest}}"`
+- `docker buildx imagetools inspect redis:7-alpine --format "{{.Manifest.Digest}}"`
+- If first-party release images exist: `go run ./cmd/bitriver env validate --env-file ./.env`, `docker compose --env-file .env -f deploy/docker-compose.yml config`, `./scripts/require-image-digests.sh`, `go run ./cmd/bitriver ome render --force --env-file ./.env`, `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml`
+
+## Scope (current change)
+- Pivot the local OBS rehearsal from the impossible `production + pull` path to a supported source-checkout build path that uses the current repository contents.
+- Fix the concrete deployment-contract blockers already observed on this host: broken `postgres-migrations` command wiring, insufficient `transcoder-public` capabilities for the bundled nginx config, and a quickstart smoke script that assumes unpublished first-party GHCR images exist.
+- Keep public APIs, storage schemas, and viewer/backend contracts unchanged while making the documented local source-build path actually boot and stream.
+- Treat root `.env` and `deploy/ome/Server.generated.xml` as local runtime state for the rehearsal: update them for the host run, keep them aligned, and avoid committing secrets or host-specific values.
+
+## Assumptions
+- The near-term goal is a reliable source-build rehearsal on this Windows host, not publishing release tags or first-party GHCR images.
+- The repo should continue to support strict release-style `pull` mode later, but the source-checkout smoke and local rehearsal path must no longer depend on nonexistent `v1.2.3` or `latest` first-party images.
+- Default host ports (`8080`, `9080`, `1935`, `9000`, `9001`) are currently free and should be used unless a fresh conflict appears during implementation.
+- The safest local runtime path is direct `docker compose ... up -d --build --pull never` with a development-mode `.env`, rather than trying to force the strict production quickstart contract onto unpublished source artifacts.
+
+## Risks
+- `deploy/docker-compose.yml`, root `.env`, and `deploy/ome/Server.generated.xml` are contract files, so any change must stay synchronized with `docs/contract.md` and operator docs.
+- Fixing `postgres-migrations` and `transcoder-public` only in Compose while leaving Helm/docs inconsistent would create contract drift.
+- `scripts/test-quickstart.sh` and `./scripts/verify.sh` may still be partially blocked on this host by missing `python3`, even after the source-build smoke path itself is fixed.
+- The local rehearsal may still surface additional runtime issues after the stack starts (for example creator bootstrap, ingest preview timing, or OBS publishing), so validation needs to include actual route and service checks, not just `docker compose up`.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/storage -count=1 -timeout=120s -run TestIngestPipelineEndToEnd`
+- `docker compose --env-file .env -f deploy/docker-compose.yml config`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 postgres-migrations bitriver-live transcoder-public`
+- `./scripts/test-quickstart.sh`
+- `./scripts/verify.sh`
+- Route/runtime rehearsal checks: `http://10.0.0.108:8080/admin`, `/viewer`, `/viewer/creator/live/<channelId>`, RTMP ingest on `:1935`, and HLS playback on `http://10.0.0.108:9080/hls`
+
+## Scope (current change)
+- Repair the viewer chrome so the visible light/dark toggle, sign-in CTA, and sign-up/join CTA all respond predictably in the live app.
+- Remove the unnecessary top spacing in the homepage shell so the left rail and main content sit cleanly under the fixed navbar.
+- Keep the work viewer-only, with no backend API or deployment-contract changes.
+- Validate the fixes in the shipped viewer surface, not just isolated component logic, because the reported failures are runtime UX issues.
+
+## Assumptions
+- The broken auth/theme behavior is likely caused by viewer-side state wiring or CSS layering rather than a backend auth outage, because the stack is already up and the controls render.
+- The visible top gap is caused by competing shell spacing rules in `web/viewer/styles/globals.css`, especially the later rescue-pass overrides that moved top spacing from the content wrapper to the whole shell.
+- A robust theme fix should update the document-level theme attribute in a way that both existing CSS selectors and browser-native UI elements honor consistently.
+- Sign-in and join should stay in-modal/in-viewer by default unless an explicit external auth URL is configured.
+
+## Risks
+- The viewer stylesheet contains multiple later override sections, so changing spacing or navbar layering in one block can accidentally regress another viewport if the final cascade is not checked carefully.
+- Auth CTA fixes that only satisfy Jest mocks could still miss a real runtime issue such as a hidden overlay, incorrect dialog mounting, or pointer-event conflict.
+- Moving theme state from body-only handling to document-level handling can affect tests and any selectors that assume a single attribute location, so the change needs targeted coverage.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- If browser automation is needed to confirm live behavior: `npm.cmd --prefix web/viewer run test:playwright -- tests/navbar-mobile.spec.ts`
+
+## Scope (current change)
+- Rework the public viewer and creator web surfaces into a polished v1 live-platform experience centered on the core loop: discover, sign up, create a first channel, go live, watch, tip, and replay VOD.
+- Keep the deployment model and backend stack intact while tightening the information architecture, removing silent no-op UX, and making the viewer/watch experience feel intentional instead of experimental.
+- Add self-serve creator bootstrap so an authenticated self-signup user can create their own first channel without admin intervention and immediately enter the creator live flow.
+- Keep the change focused on viewer + creator surfaces plus the minimal backend/channel API updates required to support first-channel onboarding.
+
+## Assumptions
+- The existing viewer already has enough live, chat, follow, tip, and VOD primitives that the best path is a guided overhaul rather than a wholesale rebuild.
+- Open self-signup remains the default posture for this v1 launch, and the highest-friction missing capability is self-serve first-channel creation.
+- Tips and wallet-style support should be visually primary in the channel/watch UX, while subscriptions remain available but de-emphasized.
+- This pass should improve mobile responsiveness and shell consistency without trying to solve broader product areas like admin redesign, notifications, or a clips ecosystem.
+
+## Risks
+- Relaxing `POST /api/channels` for self-service onboarding can accidentally over-broaden channel creation if ownership checks and role upgrades are not kept self-only and first-channel-safe.
+- Refreshing the homepage, browse page, navigation, and channel page together creates a larger CSS and interaction surface, so shared shell regressions are a real possibility.
+- Creator onboarding will touch both backend permissions and viewer client state, which can produce misleading partial success if only one side is updated.
+- The repo already has unrelated modified contract/runtime files in the working tree, so this pass must stay disciplined about not overwriting unrelated changes while still updating the planning artifacts.
+
+## Test plan
+- Backend/bootstrap:
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api ./internal/auth ./internal/storage -count=1 -timeout=120s`
+- Viewer targeted:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx __tests__/browsePage.test.tsx __tests__/directoryPage.test.tsx __tests__/channelDisplayPrimitives.test.tsx`
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts`
+- Viewer validation:
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`

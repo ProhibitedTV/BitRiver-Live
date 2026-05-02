@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CategoryRail } from "../components/CategoryRail";
 import { ChannelRail } from "../components/ChannelRail";
 import { DirectoryGrid } from "../components/DirectoryGrid";
@@ -47,18 +48,26 @@ export function HomePageView({
 }) {
   const { featured, recommended, following, liveNow, trending, categories, error: homeError } = homeData;
   const { channels, error: directoryError } = directoryData;
+  const primaryDiscoveryChannels = homeData.isAuthenticated && following.length > 0 ? following : recommended;
+  const primaryDiscoveryTitle = homeData.isAuthenticated && following.length > 0 ? "Following now" : "Recommended live";
+  const primaryDiscoverySubtitle =
+    homeData.isAuthenticated && following.length > 0
+      ? "Creators you already care about, surfaced first when they are active."
+      : "A fast shortlist of live channels worth opening right away.";
+  const primaryDiscoveryEyebrow = homeData.isAuthenticated && following.length > 0 ? "Your roster" : "Start here";
   const heroStats = [
     { label: "Live now", value: liveNow.length.toLocaleString() },
     {
-      label: homeData.isAuthenticated ? "Following" : "Recommended",
-      value: (homeData.isAuthenticated ? following.length : recommended.length).toLocaleString(),
+      label: homeData.isAuthenticated && following.length > 0 ? "Following" : "Recommended",
+      value: primaryDiscoveryChannels.length.toLocaleString(),
     },
     { label: "Categories", value: categories.length.toLocaleString() },
   ];
   const quickLinks = [
-    { href: "#recommended", label: "Recommended" },
     { href: "#live-now", label: "Live now" },
-    { href: "#directory", label: query ? "Search results" : "Full directory" },
+    { href: "#top-categories", label: "Categories" },
+    { href: "/videos", label: "Videos" },
+    { href: "/creator/getting-started", label: "Go live" },
   ];
   const homeErrorMessage = homeError
     ? `We couldn't load the personalized discovery rows right now: ${homeError}`
@@ -72,10 +81,10 @@ export function HomePageView({
           <div className="home-hero__main">
             <div className="home-hero__copy stack stack--lg">
               <div className="stack stack--xs">
-                <span className="home-hero__eyebrow">Live discovery</span>
-                <h1>Find the streams worth opening now</h1>
+                <span className="home-hero__eyebrow">Live channels, replays, and creator tools</span>
+                <h1>Watch live now, then launch your own stream with confidence</h1>
                 <p className="home-hero__lede muted">
-                  Browse live creators, featured broadcasts, and the full BitRiver Live directory in one clear entry point.
+                  BitRiver Live is built around one simple loop: discover active creators, support them directly, keep replays visible, and make going live feel clear instead of intimidating.
                 </p>
               </div>
 
@@ -83,15 +92,15 @@ export function HomePageView({
                 <a href="#live-now" className="primary-button">
                   Watch live now
                 </a>
-                <a href="#directory" className="secondary-button">
-                  Browse all channels
-                </a>
+                <Link href="/creator/getting-started" className="secondary-button">
+                  Go live
+                </Link>
               </div>
 
               <div className="home-hero__search-panel">
                 <div className="stack stack--2xs">
-                  <span className="home-hero__search-label">Search the full directory</span>
-                  <span className="muted">Jump straight to a creator, category, or tag without leaving the homepage.</span>
+                  <span className="home-hero__search-label">Search creators, categories, and tags</span>
+                  <span className="muted">Start broad, then jump straight into a channel, replay-friendly creator, or niche category.</span>
                 </div>
                 <DirectorySearchBar defaultValue={query} />
               </div>
@@ -107,9 +116,9 @@ export function HomePageView({
 
               <nav aria-label="Quick jump links" className="home-hero__quick-links">
                 {quickLinks.map((item) => (
-                  <a key={item.href} href={item.href} className="pill pill--ghost">
+                  <Link key={item.href} href={item.href} className="pill pill--ghost">
                     {item.label}
-                  </a>
+                  </Link>
                 ))}
               </nav>
             </div>
@@ -118,10 +127,10 @@ export function HomePageView({
           <aside className="home-hero__aside">
             <div className="home-hero__aside-header">
               <div className="stack stack--2xs">
-                <span className="home-hero__eyebrow">Featured today</span>
-                <h2>Start with a highlighted broadcast</h2>
+                <span className="home-hero__eyebrow">Featured live</span>
+                <h2>Start with the stream setting the pace right now</h2>
               </div>
-              <p className="muted">A curated stream with the fastest path into the current community pulse.</p>
+              <p className="muted">A single highlighted broadcast when you want a strong first answer instead of a full scan.</p>
             </div>
             <FeaturedChannel channels={featured} loading={homeLoading} />
           </aside>
@@ -138,37 +147,37 @@ export function HomePageView({
 
         <ChannelRail
           id="recommended"
-          title="Recommended for you"
-          subtitle="Channels with momentum that should feel relevant the moment you arrive."
-          channels={recommended}
+          title={primaryDiscoveryTitle}
+          subtitle={primaryDiscoverySubtitle}
+          channels={primaryDiscoveryChannels}
           loading={homeLoading}
-          eyebrow="Personalized picks"
+          eyebrow={primaryDiscoveryEyebrow}
         />
-
-        <div className="home-section-grid">
-          <CategoryRail id="top-categories" categories={categories} loading={homeLoading} />
-          <ChannelRail
-            id="trending"
-            title="Trending now"
-            subtitle="Streams pulling attention across the network right now."
-            channels={trending}
-            loading={homeLoading}
-            density="compact"
-            eyebrow="Momentum"
-          />
-        </div>
 
         <section className="home-section surface" id="live-now">
           <div className="home-section__header">
             <div className="stack stack--2xs">
               <span className="home-section__eyebrow">On air</span>
               <h2>Live now</h2>
-              <p className="muted">Creators currently streaming and ready to watch immediately.</p>
+              <p className="muted">The creators already live and ready to open right this second.</p>
             </div>
             {!homeLoading && liveNow.length > 0 && <span className="muted">{liveNow.length} live streams</span>}
           </div>
           <LiveNowGrid channels={liveNow} loading={homeLoading} />
         </section>
+
+        <div className="home-section-grid">
+          <CategoryRail id="top-categories" categories={categories} loading={homeLoading} />
+          <ChannelRail
+            id="trending"
+            title="Trending now"
+            subtitle="Channels pulling attention across the network right now."
+            channels={trending}
+            loading={homeLoading}
+            density="compact"
+            eyebrow="Momentum"
+          />
+        </div>
 
         <section className="home-section surface" id="directory">
           <div className="home-section__header">
@@ -178,7 +187,7 @@ export function HomePageView({
               <p className="muted">
                 {query
                   ? `Showing channels that match "${query}".`
-                  : "Scan the full lineup once you are ready to move beyond the curated rows."}
+                  : "Scan the full lineup once you want to move past the curated shelves and hunt for something specific."}
               </p>
             </div>
             {!directoryLoading && !directoryError && channels.length > 0 && <span className="muted">{channels.length} channels</span>}

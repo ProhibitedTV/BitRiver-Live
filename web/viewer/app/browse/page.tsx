@@ -153,10 +153,10 @@ export default function BrowsePage() {
   const resultsDescription = query
     ? filter
       ? `Showing channels that match "${query}" inside ${filter}.`
-      : "Review the filtered lineup below or keep refining the search."
+      : "Review the filtered lineup below or keep refining until one room stands out."
     : filter
       ? `Browsing the ${filter} slice of the current directory.`
-      : "Scan the full network and open a channel when it looks promising.";
+      : "Scan the full network, then open the channel that feels most alive.";
 
   return (
     <div className="container container--wide browse-page stack stack--xl">
@@ -164,10 +164,10 @@ export default function BrowsePage() {
         <div className="page-header__copy stack stack--sm">
           <div className="stack stack--2xs">
             <span className="page-eyebrow">Browse</span>
-            <h1>Browse every channel</h1>
+            <h1>Find the live room that feels right right now</h1>
           </div>
           <p className="muted">
-            Use search, sort, and topic filters to move from a broad scan to the exact stream you want.
+            Search, sort, and filter your way from a wide network scan to the exact creator, category, or tag you want to open.
           </p>
         </div>
 
@@ -181,7 +181,7 @@ export default function BrowsePage() {
             <strong className="stat-pill__value">{channels.length}</strong>
           </div>
           <div className="stat-pill">
-            <span className="stat-pill__label">Categories</span>
+            <span className="stat-pill__label">Topics</span>
             <strong className="stat-pill__value">{categoryFilters.length}</strong>
           </div>
         </div>
@@ -190,8 +190,8 @@ export default function BrowsePage() {
       <section className="surface stack stack--md browse-controls">
         <div className="section-heading">
           <div>
-            <h2>Search and filter the directory</h2>
-            <p className="muted">Search by creator, category, or tags, then refine the results below.</p>
+            <h2>Search and shape the lineup</h2>
+            <p className="muted">Search by creator, category, or tags, then tighten the results until the next click is obvious.</p>
           </div>
           {(query || filter || sort !== "live") && (
             <button className="secondary-button" onClick={handleReset}>
@@ -250,8 +250,8 @@ export default function BrowsePage() {
         <section className="surface stack stack--md">
           <div className="section-heading">
             <div>
-              <h2>Featured right now</h2>
-              <p className="muted">A small shortlist when you want a fast answer instead of a full scan.</p>
+              <h2>Start here</h2>
+              <p className="muted">A quick shortlist for the moments when you want a confident first pick instead of a full sweep.</p>
             </div>
             <span className="muted">{featuredChannels.length} highlights</span>
           </div>

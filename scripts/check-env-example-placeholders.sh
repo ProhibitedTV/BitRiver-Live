@@ -4,6 +4,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 COMPOSE_PATH="$ROOT_DIR/deploy/docker-compose.yml"
 ENV_EXAMPLE_PATH="$ROOT_DIR/deploy/.env.example"
+PYTHON_RUNNER=()
 
 if [[ ! -f "$COMPOSE_PATH" ]]; then
   echo "Missing compose file: $COMPOSE_PATH" >&2
@@ -15,7 +16,18 @@ if [[ ! -f "$ENV_EXAMPLE_PATH" ]]; then
   exit 1
 fi
 
-python3 - "$COMPOSE_PATH" "$ENV_EXAMPLE_PATH" <<'PY'
+if python3 -c 'import sys' >/dev/null 2>&1; then
+  PYTHON_RUNNER=(python3)
+elif py -3 -c 'import sys' >/dev/null 2>&1; then
+  PYTHON_RUNNER=(py -3)
+elif python -c 'import sys' >/dev/null 2>&1; then
+  PYTHON_RUNNER=(python)
+else
+  echo "Missing required Python interpreter: install python3, python, or the Windows py launcher." >&2
+  exit 1
+fi
+
+"${PYTHON_RUNNER[@]}" - "$COMPOSE_PATH" "$ENV_EXAMPLE_PATH" <<'PY'
 from __future__ import annotations
 
 import math

@@ -9,6 +9,7 @@ const actualViewerApi = jest.requireActual("../lib/viewer-api") as typeof import
 
 export const viewerApiMocks = {
   ...actualViewerApi,
+  createChannel: jest.fn(),
   createTip: jest.fn(),
   createUpload: jest.fn(),
   deleteUpload: jest.fn(),
@@ -23,6 +24,9 @@ export const viewerApiMocks = {
   fetchLiveNowChannels: jest.fn(),
   fetchManagedChannels: jest.fn(),
   fetchProfile: jest.fn(),
+  fetchRecommendedChannels: jest.fn(),
+  fetchTopCategories: jest.fn(),
+  fetchTrendingChannels: jest.fn(),
   searchDirectory: jest.fn(),
   sendChatMessage: jest.fn(),
   subscribeChannel: jest.fn(),

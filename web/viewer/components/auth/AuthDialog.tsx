@@ -196,7 +196,7 @@ export function AuthDialog() {
               <form className="auth-overlay__form" onSubmit={handleSignUpSubmit}>
                 <div className="stack stack--2xs">
                   <h3>Create your viewer account</h3>
-                  <p className="muted">Join without leaving the stream discovery flow.</p>
+                  <p className="muted">Create your account, get back to the stream fast, and unlock your creator path later.</p>
                 </div>
 
                 <label className="auth-overlay__field">

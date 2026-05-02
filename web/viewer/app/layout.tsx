@@ -8,23 +8,23 @@ import { ViewerShell } from "../components/ViewerShell";
 
 export const metadata: Metadata = {
   title: {
-    default: "BitRiver Live | Community Broadcasts",
+    default: "BitRiver Live | Live channels and creator tools",
     template: "%s | BitRiver Live"
   },
   description:
-    "Discover community-powered broadcasts on BitRiver Live. Browse live channels, follow creators, and watch low-latency streams from your self-hosted portal.",
+    "Watch live channels, follow creators, tip directly, catch replays, and launch your own stream with BitRiver Live.",
   metadataBase: new URL("https://viewer.localhost"),
   openGraph: {
-    title: "BitRiver Live | Community Broadcasts",
+    title: "BitRiver Live | Live channels and creator tools",
     description:
-      "Discover community-powered broadcasts on BitRiver Live. Browse live channels, follow creators, and watch low-latency streams from your self-hosted portal.",
+      "Watch live channels, follow creators, tip directly, catch replays, and launch your own stream with BitRiver Live.",
     type: "website"
   },
   twitter: {
     card: "summary_large_image",
     title: "BitRiver Live",
     description:
-      "Discover community-powered broadcasts on BitRiver Live. Browse live channels, follow creators, and watch low-latency streams from your self-hosted portal."
+      "Watch live channels, follow creators, tip directly, catch replays, and launch your own stream with BitRiver Live."
   }
 };
 

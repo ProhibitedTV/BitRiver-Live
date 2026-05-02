@@ -9,6 +9,7 @@ env_example="deploy/.env.example"
 contract_doc="docs/contract.md"
 generated_begin='<!-- BEGIN GENERATED ENV -->'
 generated_end='<!-- END GENERATED ENV -->'
+PYTHON_RUNNER=()
 
 echo "Checking deployment contract invariants..."
 
@@ -52,7 +53,18 @@ echo "Found generated section markers in $contract_doc"
 
 ./scripts/generate-contract-doc.sh --check
 
-python3 - <<'PY'
+if python3 -c 'import sys' >/dev/null 2>&1; then
+  PYTHON_RUNNER=(python3)
+elif py -3 -c 'import sys' >/dev/null 2>&1; then
+  PYTHON_RUNNER=(py -3)
+elif python -c 'import sys' >/dev/null 2>&1; then
+  PYTHON_RUNNER=(python)
+else
+  echo "Missing required Python interpreter: install python3, python, or the Windows py launcher." >&2
+  exit 1
+fi
+
+"${PYTHON_RUNNER[@]}" - <<'PY'
 from pathlib import Path
 import re
 import sys

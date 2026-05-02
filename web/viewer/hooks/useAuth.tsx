@@ -51,6 +51,7 @@ type AuthContextValue = {
   submitSignIn: (input: { email: string; password: string }) => Promise<void>;
   submitSignUp: (input: { displayName: string; email: string; password: string }) => Promise<void>;
   submitMFAVerification: (code: string) => Promise<void>;
+  refreshViewer: () => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -549,6 +550,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       submitSignIn,
       submitSignUp,
       submitMFAVerification,
+      refreshViewer: loadViewer,
       signOut,
     }),
     [
@@ -567,6 +569,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signOut,
       signUp,
+      loadViewer,
       submitMFAVerification,
       submitSignIn,
       submitSignUp,

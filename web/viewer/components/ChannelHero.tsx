@@ -119,6 +119,7 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopiedLink(true);
+      setStatus("Channel link copied.");
       setTimeout(() => setCopiedLink(false), 2500);
     } catch {
       setStatus("Copy isn't supported in this browser.");
@@ -174,21 +175,19 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
             <span className="pill-action__meta">{follow.followers.toLocaleString()}</span>
           </button>
           <button
-            className="pill-action pill-action--sub"
-            onClick={handleToggleSubscription}
-            disabled={subscriptionLoading}
-            aria-pressed={subscription.subscribed}
-            aria-label={`${subscription.subscribed ? "Subscribed" : "Subscribe"}${subscription.tier ? ` - ${subscription.tier}` : ""}`}
+            className="pill-action pill-action--accent"
+            onClick={handleOpenTip}
+            aria-label="Send a tip"
+            ref={tipTriggerRef}
             type="button"
           >
             <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
               <path
                 fill="currentColor"
-                d="m10 15.5-5.1 2.67 1-5.74L1 8.73l5.77-.84L10 2.5l3.23 5.4 5.77.84-4.9 3.7 1 5.73Z"
+                d="M10 2.75a2 2 0 0 1 2 2V6h1.25a3 3 0 0 1 3 3v.92a3.5 3.5 0 0 1-.58 1.93l-1.85 2.78a3.5 3.5 0 0 1-2.91 1.57H8a2 2 0 0 1-2-2v-4.07c0-.58.17-1.15.5-1.63L8.8 4.6A2 2 0 0 1 10 2.75ZM4 8.5h1v7H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1Z"
               />
             </svg>
-            {subscription.subscribed ? "Subscribed" : "Subscribe"}
-            {subscription.tier && <span className="pill-action__meta">{subscription.tier}</span>}
+            Send a tip
           </button>
           <button className="pill-action pill-action--ghost" type="button" onClick={handleShare}>
             <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
@@ -248,19 +247,11 @@ export function ChannelHeader({ data, onFollowChange, onSubscriptionChange }: Ch
               <button
                 className="secondary-button"
                 type="button"
-                onClick={handleOpenTip}
-                ref={tipTriggerRef}
-              >
-                Send a tip
-              </button>
-              <button
-                className="secondary-button"
-                type="button"
                 onClick={handleToggleSubscription}
                 disabled={subscriptionLoading}
                 aria-pressed={subscription.subscribed}
               >
-                {subscription.subscribed ? "Manage perks" : "View perks"}
+                {subscription.subscribed ? `Subscribed${subscription.tier ? ` - ${subscription.tier}` : ""}` : "Subscribe"}
               </button>
             </div>
           </div>

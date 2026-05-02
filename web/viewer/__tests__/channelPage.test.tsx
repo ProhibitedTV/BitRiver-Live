@@ -359,6 +359,51 @@ describe("ChannelPage", () => {
     expect(screen.queryByText(/loading past broadcasts/i)).not.toBeInTheDocument();
   });
 
+  test("surfaces replay access when the channel is offline", async () => {
+    const user = userEvent.setup();
+    mockUseAuth.mockReturnValue(signedInAuthState());
+
+    fetchChannelPlaybackMock.mockResolvedValueOnce({
+      ...basePlaybackResponse,
+      live: false,
+      channel: {
+        ...basePlaybackResponse.channel,
+        liveState: "offline",
+        currentSessionId: undefined,
+      },
+      playback: undefined,
+    } as any);
+    fetchChannelVodsMock.mockResolvedValueOnce({
+      channelId: "chan-42",
+      items: [
+        {
+          id: "vod-1",
+          title: "Deep Space Beats - Late Night Replay",
+          durationSeconds: 3720,
+          publishedAt: new Date("2023-10-22T02:00:00Z").toISOString(),
+          playbackUrl: "https://cdn.example.com/vods/1.m3u8",
+        },
+      ],
+    } as any);
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledWith("chan-42"));
+    await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledWith("chan-42"));
+
+    expect(
+      await screen.findByRole("heading", { name: /catch the latest broadcast even while the channel is offline/i }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/late night replay/i).length).toBeGreaterThan(0);
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /open videos tab/i }));
+    });
+
+    expect(mockRouter.push).toHaveBeenCalledWith("/channels/chan-42?tab=videos", { scroll: false });
+    expect(screen.getByRole("tab", { name: "Videos" })).toHaveAttribute("aria-selected", "true");
+  });
+
   test("directs channel creators to the dashboard", async () => {
     mockUseAuth.mockReturnValue(
       signedInAuthState(

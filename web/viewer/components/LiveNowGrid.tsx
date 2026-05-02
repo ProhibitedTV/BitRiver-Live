@@ -24,7 +24,7 @@ export function LiveNowGrid({ channels, loading = false }: LiveNowGridProps) {
     return (
       <div className="state-panel">
         <strong>Nobody is live right now</strong>
-        <p className="muted">As soon as creators go live, their broadcasts will show up here.</p>
+        <p className="muted">As soon as creators start broadcasting, their live rooms will appear here automatically.</p>
         <div className="browse-actions">
           <Link href="/browse" className="secondary-button">
             Browse full directory

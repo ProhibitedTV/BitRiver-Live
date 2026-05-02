@@ -2810,3 +2810,296 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - Task 4 notes:
   - The working tree still shows modified `PLAN.md` and `TASKS.md` because this repair followed the repo's spec-driven workflow and recorded the diagnosis/results there; no source-code files were changed as part of the push repair itself.
   - GitHub reported the new-branch PR URL: `https://github.com/ProhibitedTV/BitRiver-Live/pull/new/fix-viewer-discovery-polish`
+
+## Scoped change: production-like local OBS rehearsal
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the production-like rehearsal plan before editing contract files
+  - Acceptance criteria:
+    - `PLAN.md` captures the LAN rehearsal scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered env/digest/boot tasks before changing `.env` or generated config files.
+    - The read-only diagnosis identifies whether the saved first-party image tags are real release artifacts or placeholders.
+
+- [x] Task 2 - Authenticate registry access and verify release-image availability
+  - Acceptance criteria:
+    - GHCR login is verified from this host.
+    - The configured first-party release tag is checked directly in GHCR.
+    - The repo's upstream Git release-tag state is checked so missing images can be attributed correctly.
+
+- [ ] Task 3 - If release images exist, update the LAN rehearsal contract files and pin digests
+  - Acceptance criteria:
+    - Root `.env` uses `10.0.0.108` for the OME/viewer/transcoder public URLs needed by this rehearsal.
+    - `deploy/ome/Server.generated.xml` is re-rendered from the updated env file.
+    - All required `*_IMAGE_DIGEST` values are pinned in `.env`.
+
+- [ ] Task 4 - Run production-path validation and record the result
+  - Acceptance criteria:
+    - `go run ./cmd/bitriver env validate --env-file ./.env` passes.
+    - `docker compose --env-file .env -f deploy/docker-compose.yml config` passes.
+    - `./scripts/require-image-digests.sh` passes.
+    - `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` either boots successfully or yields a precisely documented next blocker.
+
+### Execution log (production-like local OBS rehearsal)
+- Task 1 complete: recorded the requested production-like LAN rehearsal scope in `PLAN.md`/`TASKS.md` before mutating the deployment contract, based on the read-only diagnosis that the current `.env` still uses placeholder/loopback networking values and empty image digests.
+- Task 1 checks:
+  - `git diff --stat`
+  - `Get-Content .env | Select-String -Pattern '^(BITRIVER_LIVE_MODE|BITRIVER_DEPLOY_IMAGE_SOURCE|BITRIVER_LIVE_PORT|BITRIVER_OME_BIND|BITRIVER_OME_IP|BITRIVER_TRANSCODER_PUBLIC_BASE_URL|BITRIVER_TRANSCODER_HOST_PORT|BITRIVER_TRANSCODER_PUBLIC_PORT|NEXT_PUBLIC_VIEWER_URL|BITRIVER_LIVE_IMAGE_TAG|BITRIVER_VIEWER_IMAGE_TAG|BITRIVER_SRS_CONTROLLER_IMAGE_TAG|BITRIVER_TRANSCODER_IMAGE_TAG|BITRIVER_LIVE_IMAGE_DIGEST|BITRIVER_VIEWER_IMAGE_DIGEST|BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST|BITRIVER_TRANSCODER_IMAGE_DIGEST|BITRIVER_SRS_IMAGE_DIGEST|BITRIVER_OME_IMAGE_DIGEST|BITRIVER_REDIS_IMAGE_DIGEST|BITRIVER_POSTGRES_IMAGE_DIGEST|BITRIVER_NGINX_IMAGE_DIGEST|BITRIVER_ALPINE_3_IMAGE_DIGEST|BITRIVER_ALPINE_3_19_IMAGE_DIGEST|BITRIVER_DEBIAN_IMAGE_DIGEST)='`
+  - `Get-Content docs/contract-change-recipe.md`
+- Task 2 complete: GHCR access is now authenticated from this host, but the requested pull-mode rehearsal is blocked upstream because the configured first-party image tag does not exist and the remote repo has no Git release tags.
+- Task 2 findings:
+  - `gh auth status` reports an active `ProhibitedTV` GitHub CLI session on this machine.
+  - `gh auth token | docker login ghcr.io -u ProhibitedTV --password-stdin` succeeded, so registry auth is no longer the blocker.
+  - `docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-live:v1.2.3 --format "{{.Manifest.Digest}}"` returned `not found`, which means the configured first-party release tag is not currently published in GHCR.
+  - `git ls-remote --tags origin` returned no tags, which strongly suggests the saved `v1.2.3` values in `.env` / `deploy/.env.example` / docs are placeholders rather than release artifacts that this checkout can pull today.
+  - `docker buildx imagetools inspect redis:7-alpine --format "{{.Manifest.Digest}}"` succeeded, so the third-party digest path is healthy and only the unpublished first-party images are blocking pull mode.
+- Task 2 checks:
+  - `gh auth status`
+  - `gh auth token | docker login ghcr.io -u ProhibitedTV --password-stdin`
+  - `docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-live:v1.2.3 --format "{{.Manifest.Digest}}"`
+  - `docker buildx imagetools inspect redis:7-alpine --format "{{.Manifest.Digest}}"`
+  - `git ls-remote --tags origin`
+
+## Scoped change: build-mode local OBS rehearsal fix
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the build-mode rehearsal plan before editing contract files
+  - Acceptance criteria:
+    - `PLAN.md` captures the build-mode fallback scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered compose/script/docs/runtime steps before contract edits begin.
+    - The read-only diagnosis identifies whether the repo needs real contract fixes or only local workarounds.
+
+- [x] Task 2 - Fix the Compose contract blockers for source-build rehearsal
+  - Acceptance criteria:
+    - `deploy/docker-compose.yml` runs `postgres-migrations` through one intact shell command instead of the broken `entrypoint + scalar command` combination.
+    - `deploy/docker-compose.yml` grants `transcoder-public` the capabilities required by the bundled nginx config under the current hardening model.
+    - `docs/contract.md` documents the updated hardening exception accurately.
+
+- [x] Task 3 - Make quickstart smoke and operator docs source-checkout-safe
+  - Acceptance criteria:
+    - `scripts/test-quickstart.sh` no longer assumes unpublished first-party GHCR images exist.
+    - The smoke path uses local build mode for first-party images while keeping the rest of the guardrails intact.
+    - `docs/quickstart.md` and `deploy/README.md` clearly separate release-image pull mode from source-checkout local rehearsal/build mode.
+    - The repo smoke/verify wrappers accept the working Python launcher on this Windows host and their OME compose assertions match the current `docker compose config` output.
+
+- [x] Task 4 - Prepare the local rehearsal runtime state
+  - Acceptance criteria:
+    - Root `.env` uses the planned development/build/LAN viewer/HLS values for this host rehearsal while keeping OME on container-safe bind/public settings that actually boot under Compose.
+    - `deploy/ome/Server.generated.xml` is re-rendered from the updated env file.
+    - The resulting env/config pairing is suitable for local compose boot on the default ports.
+
+- [x] Task 5 - Run validation, bring the stack up, and record the rehearsal result
+  - Acceptance criteria:
+    - The targeted Go/storage test and Compose config validation pass.
+    - Local build-mode Compose startup is exercised with status/log inspection.
+    - `scripts/test-quickstart.sh` is rerun after the fixes.
+    - `./scripts/verify.sh` is attempted and any remaining host blocker is recorded precisely.
+
+### Execution log (build-mode local OBS rehearsal fix)
+- Task 1 complete: recorded the build-mode fallback scope in `PLAN.md`/`TASKS.md` before mutating the deployment contract, based on the read-only diagnosis that `production + pull` cannot work from this checkout because first-party GHCR images do not exist, while the source-build fallback still needs real contract fixes rather than ad-hoc manual workarounds.
+- Task 1 findings:
+  - `docs/quickstart.md` already frames `--image-source build` as development-only and separate from strict production pull mode.
+  - `deploy/docker-compose.yml` still has the broken `postgres-migrations` `entrypoint: ["/bin/sh","-c"]` plus scalar `command` combination that Compose tokenizes incorrectly.
+  - `deploy/nginx/transcoder-public.conf` still declares `user nginx;`, while `transcoder-public` currently keeps only `CHOWN`, which matches the earlier `setgid(101) failed` runtime failure.
+  - `scripts/test-quickstart.sh` seeds `BITRIVER_*_IMAGE_TAG=latest` and starts plain `docker compose up -d`, which cannot succeed from a source checkout because `ghcr.io/bitriver-live/bitriver-live:latest` is also unpublished.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 60`
+  - `Get-Content TASKS.md | Select-Object -Last 80`
+  - `Get-Content docs/quickstart.md | Select-Object -Skip 120 -First 80`
+  - `Get-Content cmd/bitriver/commands_env_compose.go | Select-Object -Skip 520 -First 140`
+  - `Get-Content deploy/docker-compose.yml | Select-Object -Skip 182 -First 52`
+  - `Get-Content deploy/docker-compose.yml | Select-Object -Skip 533 -First 23`
+  - `Get-Content scripts/test-quickstart.sh | Select-Object -First 220`
+  - `docker manifest inspect ghcr.io/bitriver-live/bitriver-live:latest` (confirmed unpublished)
+- Task 2 complete: rewired `postgres-migrations` to run through one intact `/bin/sh -c` command array, expanded `transcoder-public` capabilities to include `SETGID` and `SETUID` for the bundled `user nginx;` config, and updated `docs/contract.md` so the hardening exception matches the runtime requirement.
+- Task 2 checks:
+  - `docker compose --env-file .env -f deploy/docker-compose.yml config`
+  - `Get-Content deploy/docker-compose.yml | Select-Object -Skip 182 -First 52`
+  - `Get-Content deploy/docker-compose.yml | Select-Object -Skip 533 -First 23`
+  - `Get-Content docs/contract.md | Select-String -Pattern 'transcoder-public retains CHOWN, SETGID, and SETUID' -Context 0,0`
+- Task 3 complete: switched the repo smoke path to explicit source-checkout build mode by exporting build-mode overrides, clearing first-party digests for direct Compose interpolation, generating a temporary development/build `.env` when needed, and starting the stack with `docker compose ... up -d --build --pull never`. Updated `docs/quickstart.md` and `deploy/README.md` to separate release-image pull mode from local source-build rehearsals and to stop implying a saved production `.env` can simply be paired with a CLI `--build` flag. While validating the wrapper on this Windows host, also fixed the stale OME mount/API-port assertions in `scripts/test-quickstart.sh` and added Python launcher fallbacks in `scripts/test-quickstart.sh`, `scripts/check-env-example-placeholders.sh`, `scripts/check-contract-invariants.sh`, and `scripts/verify.sh`.
+- Task 3 checks:
+  - `Get-Content scripts/test-quickstart.sh | Select-String -Pattern 'BITRIVER_DEPLOY_IMAGE_SOURCE=build|BITRIVER_LIVE_MODE=development|up -d --build --pull never|BITRIVER_LIVE_IMAGE_DIGEST=""|BITRIVER_VIEWER_IMAGE_DIGEST=""|BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST=""|BITRIVER_TRANSCODER_IMAGE_DIGEST=""' -Context 0,0`
+  - `Get-Content docs/quickstart.md | Select-String -Pattern 'source-checkout local rehearsals|docker compose --env-file \.env -f deploy/docker-compose.yml up -d --build --pull never|saved \.env to local build settings|published-image pull contract' -Context 0,0`
+  - `Get-Content deploy/README.md | Select-String -Pattern 'source checkout|docker compose --env-file \.env -f \"\$COMPOSE_FILE\" up -d --build --pull never|first-party digest variables empty' -Context 0,0`
+  - `Get-Content scripts/check-env-example-placeholders.sh`
+  - `Get-Content scripts/check-contract-invariants.sh`
+  - `Get-Content scripts/verify.sh | Select-Object -First 80`
+  - `& 'C:\Program Files\Git\bin\bash.exe' -n ./scripts/test-quickstart.sh` (host-local MSYS signal-pipe failure on this machine; the real smoke execution remains part of Task 5)
+- Task 4 complete: updated the working-copy root `.env` to development/build mode with LAN viewer/HLS URLs (`http://10.0.0.108:8080/viewer` and `http://10.0.0.108:9080/hls`) and kept the default service ports intact. Live boot then proved that containerized OME cannot bind its listeners to the host LAN IP, so the final working Compose rehearsal state keeps `BITRIVER_OME_BIND=0.0.0.0` and `BITRIVER_OME_IP=0.0.0.0` while still exposing viewer/HLS traffic on the LAN host. Re-rendered `deploy/ome/Server.generated.xml` after each env correction so the generated config stayed aligned with the live compose inputs.
+- Task 4 checks:
+  - `Get-Content .env | Select-String -Pattern '^(BITRIVER_DEPLOY_IMAGE_SOURCE|BITRIVER_LIVE_MODE|BITRIVER_OME_BIND|BITRIVER_OME_IP|BITRIVER_TRANSCODER_PUBLIC_BASE_URL|NEXT_PUBLIC_VIEWER_URL)=' -Context 0,0`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go run ./cmd/bitriver ome render --force --env-file ./.env --quiet`
+  - `Get-Content deploy/ome/Server.generated.xml | Select-String -Pattern '<IP>0\.0\.0\.0</IP>|<Port>8081</Port>|<AccessToken>' -Context 0,0`
+- Task 5 complete: the focused storage ingest test passed, Compose config rendered successfully, the source-build stack built and booted on the default ports after correcting the OME bind/IP assumption, `/readyz`, `/admin`, and `/viewer` all returned `200`, the repo-native quickstart smoke wrapper passed end-to-end after the Windows portability fixes, and the stack was brought back up with an explicitly bootstrapped admin account ready for manual sign-in. `./scripts/verify.sh` was also rerun; it no longer fails on missing `python3`, but it still reports unrelated existing Go-suite failures in `cmd/transcoder` and `internal/auth`.
+- Task 5 checks:
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/storage -count=1 -timeout=120s -run TestIngestPipelineEndToEnd`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml config`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 postgres-migrations bitriver-live transcoder-public`
+  - `Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/readyz`
+  - `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/admin`
+  - `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/viewer`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/test-quickstart.sh`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml exec -T bitriver-live /app/bootstrap-admin --postgres-dsn <compose-network-dsn> --email <env admin email> --password <env admin password>`
+- Task 5 notes:
+  - The original rehearsal plan’s `BITRIVER_OME_BIND=10.0.0.108` / `BITRIVER_OME_IP=10.0.0.108` assumption is not compatible with the current containerized OME runtime on this host; OME treats that address as a real listener bind and fails with `Cannot assign requested address`. The working local Compose rehearsal therefore keeps OME bound to `0.0.0.0`.
+  - `./scripts/verify.sh` is no longer blocked by the Windows Python shim name, but it still fails in pre-existing suites unrelated to this rehearsal work: `cmd/transcoder` (`unexpected ffmpeg path` / health recovery assertions) and `internal/auth` (`TestValidateHonorsAbsoluteTTL`).
+  - The final stack was deliberately brought back up after `verify.sh` cleaned it down so manual browser/OBS testing can start immediately from the current checkout.
+
+## Scoped change: viewer chrome fixes for theme/auth/top spacing
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Reproduce and document the viewer chrome failures in the current runtime/code path
+  - Acceptance criteria:
+    - The read-only notes identify where the theme toggle writes state, where the auth dialog mounts, and which final CSS rules control the shell top spacing.
+    - `PLAN.md` and `TASKS.md` are updated for this scope before product code changes begin.
+    - The likely runtime failure mode is specific enough to guide a minimal patch rather than a blind redesign.
+
+- [x] Task 2 - Repair the theme toggle and auth CTA behavior
+  - Acceptance criteria:
+    - The light/dark toggle updates the active document theme reliably in the live viewer.
+    - Signed-out sign-in and join/sign-up CTAs visibly trigger the intended auth flow.
+    - Existing auth-link behavior for optional external signup destinations remains intact.
+
+- [x] Task 3 - Remove the unintended shell gap and tighten the header/content alignment
+  - Acceptance criteria:
+    - The main viewer shell no longer adds redundant top spacing above the left rail or main content.
+    - Desktop and mobile layouts still clear the fixed navbar cleanly.
+    - The spacing fix stays inside viewer CSS/components and does not alter deployment/runtime docs.
+
+- [x] Task 4 - Add or adjust focused viewer coverage and validate the result
+  - Acceptance criteria:
+    - Jest coverage reflects the theme/auth/runtime fixes.
+    - Viewer lint and build pass.
+    - Any residual issue or unverified browser-only behavior is recorded explicitly.
+
+### Execution log (viewer chrome fixes for theme/auth/top spacing)
+- Task 1 complete: finished the read-only diagnosis and then reproduced the live viewer failure path with targeted Playwright coverage. The actual blocker was narrower than the initial guess: the hidden mobile nav drawer still occupied the right edge of the viewport and intercepted pointer events, which made the visible theme and auth controls appear dead. The layout read also confirmed that the final rescue-pass `.viewer-shell` padding was applied at the whole-shell level, which explains the extra gap above the left rail.
+- Task 1 checks:
+  - `rg -n "theme|dark|light|toggle|sign in|sign up|signup|login|auth|gap|layout|shell|Navbar|Providers|useAuth|theme" web/viewer -g "!*node_modules*"`
+  - `Get-Content web/viewer/components/Navbar.tsx`
+  - `Get-Content web/viewer/hooks/useAuth.tsx`
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/components/Providers.tsx`
+  - `Get-Content web/viewer/components/ViewerShell.tsx`
+  - `Get-Content web/viewer/app/layout.tsx`
+  - `Get-Content web/viewer/styles/home.css`
+  - `Get-Content web/viewer/styles/globals.css`
+  - `Get-Content web/viewer/__tests__/navbar.test.tsx`
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts --grep "theme toggle updates the rendered document|navbar sign-in button redirects to the configured login URL"` (first run reproduced the live failures; hidden `.nav-drawer` intercepted pointer events on the theme button, and the sign-in test exposed selector ambiguity because there were two visible sign-in buttons)
+- Task 2 complete: fixed the click-dead navbar controls by making the hidden nav drawer truly non-interactive when `hidden` is present, then tightened the Playwright coverage so the top-right signed-out auth actions are exercised directly. The viewer now both redirects correctly when `loginUrl` is configured and opens the in-viewer sign-in/sign-up dialog flow when it is not.
+- Task 2 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx`
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts --grep "signed-out navbar actions open the in-viewer auth flow when no external login URL is configured|navbar sign-in button redirects to the configured login URL|theme toggle updates the rendered document"`
+- Task 3 complete: moved the navbar-clearance spacing off the whole `.viewer-shell` and onto `.viewer-shell__content-inner`, which removes the unexplained gap above the left rail/main content while keeping the fixed navbar clearance where the content actually needs it.
+- Task 3 checks:
+  - `Get-Content web/viewer/styles/globals.css | Select-String -Pattern '\.nav-drawer\[hidden\]|\.viewer-shell \{|padding-top: var\(--viewer-top-offset\);' -Context 0,2`
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts --grep "theme toggle updates the rendered document"`
+- Task 4 complete: added runtime-focused Playwright coverage for the local in-viewer auth flow, reran the focused navbar Jest suite, and finished with clean viewer lint/build passes.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx`
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts --grep "signed-out navbar actions open the in-viewer auth flow when no external login URL is configured|navbar sign-in button redirects to the configured login URL|theme toggle updates the rendered document"`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+
+## Scoped change: BitRiver Live v1 DLive-replacement overhaul
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Add self-serve first-channel creation support across backend and viewer client
+  - Acceptance criteria:
+    - Authenticated self-signup users can create their own first channel through `POST /api/channels` without already holding the creator role.
+    - Channel creation remains self-only for non-admins, and creating channels for another owner is still admin-only.
+    - Successful first-channel creation upgrades the account to creator-capable immediately.
+    - The viewer web client exposes a typed create-channel helper that the onboarding flow can use directly.
+
+- [x] Task 2 - Rebuild creator onboarding around first-channel setup and go-live actions
+  - Acceptance criteria:
+    - The creator entry flow clearly guides a new account through channel creation, OBS setup, preview readiness, and sharing the viewer link.
+    - Signed-in users without a channel land in a visible recovery/setup path instead of dead-end or permission-error states.
+    - The creator onboarding experience works cleanly on mobile and desktop.
+
+- [x] Task 3 - Refresh public navigation and information architecture
+  - Acceptance criteria:
+    - The top-level viewer IA is reoriented around `Home`, `Browse`, `Following`, `Go Live`, `Videos`, and `Profile`.
+    - Primary CTAs either navigate, open auth, or perform an action immediately; no silent dead buttons remain in the touched surfaces.
+    - The signed-in and signed-out navigation states both feel intentional and consistent across viewport sizes.
+
+- [x] Task 4 - Upgrade the home, browse, and channel experiences to feel productized
+  - Acceptance criteria:
+    - Home and browse prioritize live discovery and clear category browsing over setup/demo copy.
+    - The channel page is explicitly video-first with clear follow, tip, share, chat, and VOD actions above the fold.
+    - Subscriptions remain supported but are visually secondary to tips and live watching.
+
+- [x] Task 5 - Add focused coverage and validate the overhaul
+  - Acceptance criteria:
+    - Focused backend or viewer tests cover the creator bootstrap path and the touched navigation/channel flows.
+    - Viewer lint and production build pass.
+    - Any remaining gaps, especially around full manual OBS playback, are recorded explicitly.
+
+### Execution log (BitRiver Live v1 DLive-replacement overhaul)
+- Task 1 started: the read-only analysis confirmed that the current product already has live discovery, playback, chat, follow, tip, creator dashboard, and VOD primitives, so the right first move is enabling self-serve creator bootstrap rather than attempting a greenfield rewrite. The concrete backend gap is that `POST /api/channels` currently requires `creator` or `admin`, while self-signup users are created as `viewer` by default. The viewer-side gap is that `web/viewer/lib/viewer-api-channel.ts` has no typed `createChannel` helper yet, which is why the current onboarding flow cannot create a first channel directly.
+- Task 1 checks:
+  - `Get-Content web/viewer/lib/viewer-api-channel.ts`
+  - `Get-Content web/viewer/lib/viewer-api-types.ts`
+  - `Get-Content web/viewer/lib/navigation.ts`
+  - `Get-Content web/viewer/app/page.tsx`
+  - `Get-Content web/viewer/app/following/page.tsx`
+  - `Get-Content web/viewer/app/channels/[id]/page.tsx`
+  - `Get-Content web/viewer/app/creator/page.tsx`
+  - `Get-Content web/viewer/app/creator/getting-started/page.tsx`
+  - `Get-Content web/viewer/app/creator/live/[channelId]/page.tsx`
+  - `Get-Content web/viewer/components/ChannelHero.tsx`
+  - `Get-Content web/viewer/components/ChatPanel.tsx`
+  - `Get-Content web/viewer/components/TipDrawer.tsx`
+  - `Get-Content internal/api/auth_users_handlers.go`
+  - `Get-Content internal/api/channels_directory_handlers.go`
+  - `Get-Content internal/service/usecases.go`
+  - `Get-Content internal/storage/types.go`
+  - `Get-Content internal/storage/storage.go`
+  - `rg -n "create channel|POST /api/channels|roleCreator|SelfSignup|follow|tip|vod|creator" internal web/viewer -g "!*node_modules*"`
+- Task 1 complete: relaxed `POST /api/channels` to authenticate any signed-in user, reload the latest persisted actor roles, allow self-only first-channel creation for non-admin/non-creator users, and upgrade the owner to include the `creator` role after a successful first channel. Added a typed `createChannel` helper and payload export to the viewer API layer so the creator onboarding UI can create channels directly without inventing its own fetch wrapper. If the owner-role upgrade ever fails after channel creation, the handler now rolls the new channel back so onboarding does not leave half-created accounts behind.
+- Task 1 follow-up checks:
+  - `gofmt -w internal/service/usecases.go internal/api/channels_directory_handlers.go internal/api/handlers_test.go`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api -count=1 -timeout=120s -run "Test(SelfSignupUserCanCreateFirstChannelAndBecomeCreator|ViewerCannotCreateChannelForAnotherOwner|ChannelStreamLifecycle)$"`
+- Task 2 complete: rebuilt the creator entry flow around actual first-channel bootstrap instead of passive guidance. Signed-in viewers without channels now land on a visible setup path, can create their first channel directly from the getting-started page, refresh into creator-capable state immediately, and then continue into the same OBS, preview, share-link, and uploads flow used by existing creators. The creator overview page now distinguishes guest, first-channel, and active-creator states so the top-level studio route always gives the user a real next action instead of a dead-end.
+- Task 2 checks:
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/useAuth.test.tsx`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/creatorGettingStartedPage.test.tsx -t "lets a signed-in viewer create a first channel and unlock live setup"`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/creatorGettingStartedPage.test.tsx __tests__/creatorPage.test.tsx __tests__/creatorLivePage.test.tsx`
+- Task 3 complete: refreshed the public viewer IA around the literal destinations `Home`, `Browse`, `Following`, `Go Live`, `Videos`, and signed-in `Profile`, then tightened the navbar copy and CTA behavior so the main actions either navigate immediately, open auth, or send a creator into a real setup/live destination. Added a dedicated `/videos` surface so replay discovery is a first-class destination instead of being buried only inside channel tabs.
+- Task 3 checks:
+  - `Get-Content web/viewer/lib/navigation.ts`
+  - `Get-Content web/viewer/components/Navbar.tsx`
+  - `Get-Content web/viewer/components/ViewerShell.tsx`
+  - `Get-Content web/viewer/app/layout.tsx`
+  - `Get-Content web/viewer/app/videos/page.tsx`
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+- Task 4 complete: reworked the home, browse, and channel surfaces so the product reads like a real live platform instead of a prototype. Home now leads with live discovery and stronger recovery CTAs, browse has clearer live/category framing, the channel view is more video-first with follow/tip/share above the fold and replay access called out when offline, and the shared styling now supports the new replay/cards/navigation surfaces across desktop and mobile.
+- Task 4 checks:
+  - `Get-Content web/viewer/app/directory-view.tsx`
+  - `Get-Content web/viewer/app/browse/page.tsx`
+  - `Get-Content web/viewer/app/channels/[id]/page.tsx`
+  - `Get-Content web/viewer/components/ChannelHero.tsx`
+  - `Get-Content web/viewer/components/DirectoryGrid.tsx`
+  - `Get-Content web/viewer/components/CategoryRail.tsx`
+  - `Get-Content web/viewer/components/FeaturedChannel.tsx`
+  - `Get-Content web/viewer/styles/globals.css`
+- Task 5 complete: added focused browser/unit coverage for the new creator/live and replay navigation paths, updated the Playwright specs to the refreshed IA, and fixed one real runtime regression uncovered during validation: changing the tip currency was re-triggering the drawer reset logic and wiping the form before submit. After the fix, the targeted Jest suites, targeted Playwright suite, viewer lint, and production build all passed.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/navigation.test.ts __tests__/navbar.test.tsx __tests__/directoryPage.test.tsx __tests__/channelHero.test.tsx __tests__/channelPage.test.tsx __tests__/videosPage.test.tsx __tests__/creatorGettingStartedPage.test.tsx __tests__/creatorPage.test.tsx`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/tipDrawer.test.tsx __tests__/channelHero.test.tsx`
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts tests/creator-live-setup.spec.ts tests/navbar-mobile.spec.ts`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+- Task 5 notes:
+  - Targeted Jest coverage still emits existing non-failing React `act(...)` warnings in some creator/search/tip tests, but the suites pass and the new overhaul behavior is covered.
+  - Viewer production builds still report the existing Next client-render deopt warnings for several routes (`/`, `/browse`, `/following`, `/videos`, `/creator`, `/creator/getting-started`, `/profile`, `/getting-started`, `/404`); those warnings predate this pass and do not fail the build.
+  - This overhaul pass did not rerun a live manual OBS broadcast after the final UI changes, so the remaining manual acceptance item is still a human ingest/playback rehearsal against the running stack.

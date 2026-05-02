@@ -241,6 +241,13 @@ export type UpdateChannelPayload = {
   tags?: string[];
 };
 
+export type CreateChannelPayload = {
+  ownerId?: string;
+  title: string;
+  category?: string;
+  tags?: string[];
+};
+
 export type ChannelPlaybackResponse = {
   channel: ChannelPublic;
   owner: ChannelOwner;

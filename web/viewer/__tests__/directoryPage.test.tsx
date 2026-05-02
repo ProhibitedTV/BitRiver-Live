@@ -11,6 +11,9 @@ const searchDirectoryMock = viewerApiMocks.searchDirectory;
 const fetchFeaturedChannelsMock = viewerApiMocks.fetchFeaturedChannels;
 const fetchFollowingChannelsMock = viewerApiMocks.fetchFollowingChannels;
 const fetchLiveNowChannelsMock = viewerApiMocks.fetchLiveNowChannels;
+const fetchRecommendedChannelsMock = viewerApiMocks.fetchRecommendedChannels;
+const fetchTopCategoriesMock = viewerApiMocks.fetchTopCategories;
+const fetchTrendingChannelsMock = viewerApiMocks.fetchTrendingChannels;
 
 const baseDirectoryResponse = {
   channels: [
@@ -86,9 +89,16 @@ describe("DirectoryPage", () => {
       channels: [],
       generatedAt: new Date("2023-10-21T11:00:00Z").toISOString(),
     } as any;
+    const categoryResponse = {
+      categories: [],
+      generatedAt: new Date("2023-10-21T11:00:00Z").toISOString(),
+    } as any;
     fetchFeaturedChannelsMock.mockResolvedValue(sliceResponse);
     fetchFollowingChannelsMock.mockResolvedValue(sliceResponse);
     fetchLiveNowChannelsMock.mockResolvedValue(sliceResponse);
+    fetchRecommendedChannelsMock.mockResolvedValue(sliceResponse);
+    fetchTrendingChannelsMock.mockResolvedValue(sliceResponse);
+    fetchTopCategoriesMock.mockResolvedValue(categoryResponse);
   });
 
   test("loads directory entries and renders channel cards", async () => {
@@ -98,9 +108,13 @@ describe("DirectoryPage", () => {
 
     await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalledTimes(1));
     const quickJumpNav = screen.getByRole("navigation", { name: /quick jump links/i });
-    expect(within(quickJumpNav).getByRole("link", { name: /recommended/i })).toHaveAttribute("href", "#recommended");
     expect(within(quickJumpNav).getByRole("link", { name: /live now/i })).toHaveAttribute("href", "#live-now");
-    expect(within(quickJumpNav).getByRole("link", { name: /full directory/i })).toHaveAttribute("href", "#directory");
+    expect(within(quickJumpNav).getByRole("link", { name: /categories/i })).toHaveAttribute("href", "#top-categories");
+    expect(within(quickJumpNav).getByRole("link", { name: /videos/i })).toHaveAttribute("href", "/videos");
+    expect(within(quickJumpNav).getByRole("link", { name: /go live/i })).toHaveAttribute(
+      "href",
+      "/creator/getting-started",
+    );
 
     const heading = await screen.findByRole("heading", { level: 3, name: "Deep Space Beats" });
     const card = heading.closest("article");
@@ -192,7 +206,7 @@ describe("DirectoryPage", () => {
 
     await renderResolvedDirectoryPage();
 
-    expect(await screen.findByRole("heading", { level: 2, name: /recommended for you/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: /recommended live/i })).toBeInTheDocument();
     expect(screen.queryByText(/sign in to see channels you follow/i)).not.toBeInTheDocument();
   });
 
@@ -202,7 +216,9 @@ describe("DirectoryPage", () => {
 
     await renderResolvedDirectoryPage();
 
-    expect(await screen.findByRole("heading", { level: 1, name: /find the streams worth opening now/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /watch live now, then launch your own stream with confidence/i }),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/sign in to see channels you follow/i)).not.toBeInTheDocument();
   });
 

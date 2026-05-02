@@ -9,6 +9,7 @@ export type {
   ChatMessage,
   ChatMessageResponse,
   ChatUser,
+  CreateChannelPayload,
   CreateTipPayload,
   CreateUploadPayload,
   CryptoAddress,
@@ -49,6 +50,7 @@ export {
 export { fetchProfile, updateProfile } from "./viewer-api-profile";
 
 export {
+  createChannel,
   createTip,
   fetchChannelSessions,
   fetchChannelVods,

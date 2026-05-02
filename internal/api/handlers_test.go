@@ -2143,6 +2143,102 @@ func TestChannelStreamLifecycle(t *testing.T) {
 	}
 }
 
+func TestSelfSignupUserCanCreateFirstChannelAndBecomeCreator(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	viewer, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Fresh Viewer",
+		Email:       "fresh@example.com",
+		Password:    "supersecret123",
+		SelfSignup:  true,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
+	if viewer.HasRole(roleCreator) {
+		t.Fatal("expected new self-signup user to start without creator role")
+	}
+
+	payload := map[string]any{
+		"title":    "Fresh Channel",
+		"category": "Just Chatting",
+		"tags":     []string{"launch"},
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/channels", bytes.NewReader(body))
+	req = withUser(req, viewer)
+	rec := httptest.NewRecorder()
+
+	handler.Channels(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", rec.Code)
+	}
+
+	var channel channelResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &channel); err != nil {
+		t.Fatalf("decode channel response: %v", err)
+	}
+	if channel.OwnerID != viewer.ID {
+		t.Fatalf("expected owner %s, got %s", viewer.ID, channel.OwnerID)
+	}
+	if channel.StreamKey == "" {
+		t.Fatal("expected created channel to include stream key")
+	}
+
+	persistedUser, ok := store.GetUser(viewer.ID)
+	if !ok {
+		t.Fatalf("expected user %s to exist", viewer.ID)
+	}
+	if !persistedUser.HasRole(roleCreator) {
+		t.Fatalf("expected user roles %v to include creator", persistedUser.Roles)
+	}
+
+	channels := store.ListChannels(viewer.ID, "")
+	if len(channels) != 1 {
+		t.Fatalf("expected one owned channel, got %d", len(channels))
+	}
+}
+
+func TestViewerCannotCreateChannelForAnotherOwner(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	viewer, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Viewer",
+		Email:       "viewer@example.com",
+		Password:    "supersecret123",
+		SelfSignup:  true,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
+	target, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Target",
+		Email:       "target@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser target: %v", err)
+	}
+
+	payload := map[string]any{
+		"ownerId":  target.ID,
+		"title":    "Hijack Attempt",
+		"category": "gaming",
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/channels", bytes.NewReader(body))
+	req = withUser(req, viewer)
+	rec := httptest.NewRecorder()
+
+	handler.Channels(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d", rec.Code)
+	}
+
+	if owned := store.ListChannels(target.ID, ""); len(owned) != 0 {
+		t.Fatalf("expected target owner to keep zero channels, got %d", len(owned))
+	}
+}
+
 func TestChannelStreamEndpointsUnavailableWithoutIngest(t *testing.T) {
 	handler, store := newTestHandler(t)
 	handler.StreamsService = ingestUnavailableRepo{Repository: store}

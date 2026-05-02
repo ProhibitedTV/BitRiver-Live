@@ -424,7 +424,7 @@ export function Navbar() {
               </span>
               <span className="navbar-logo__copy">
                 <span className="navbar-logo__text">BitRiver Live</span>
-                <span className="navbar-logo__meta">Self-hosted creator network</span>
+                <span className="navbar-logo__meta">Independent live creators, replays, and go-live tools</span>
               </span>
             </Link>
           </div>
@@ -473,7 +473,7 @@ export function Navbar() {
             )}
             {canAccessCreatorTools && (
               <Link href={studioHref} className="nav-cta nav-cta--primary" onClick={closeMenu}>
-                {managedChannelId ? "Studio" : "Creator studio"}
+                {managedChannelId ? "Start stream" : "Finish creator setup"}
               </Link>
             )}
 
@@ -519,11 +519,11 @@ export function Navbar() {
                     <Link href="/profile" className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
                       Profile
                     </Link>
-                    {canAccessCreatorTools && (
-                      <Link href={studioHref} className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
-                        Creator studio
-                      </Link>
-                    )}
+                  {canAccessCreatorTools && (
+                    <Link href={studioHref} className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
+                      Go live
+                    </Link>
+                  )}
                     {isAdmin && (
                       <a href={adminUrl} className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
                         Control center
@@ -548,7 +548,7 @@ export function Navbar() {
                   </button>
                   {shouldOfferJoin && (
                     <button type="button" className="accent-button" onClick={handleJoin}>
-                      Join
+                      Create account
                     </button>
                   )}
                 </div>
@@ -579,7 +579,7 @@ export function Navbar() {
         <div className="nav-drawer__header">
           <div className="stack stack--2xs">
             <span className="navbar-context__eyebrow">Navigation</span>
-            <h2>Browse BitRiver Live</h2>
+            <h2>Explore BitRiver Live</h2>
           </div>
           <button type="button" className="secondary-button" onClick={closeMenu}>
             Close
@@ -626,14 +626,9 @@ export function Navbar() {
               {item.label}
             </Link>
           ))}
-          {user && (
-            <Link href="/profile" className="nav-drawer__link" onClick={closeMenu}>
-              Profile
-            </Link>
-          )}
           {canAccessCreatorTools && (
             <Link href={studioHref} className="nav-drawer__link" onClick={closeMenu}>
-              Creator studio
+              Go live dashboard
             </Link>
           )}
           {isAdmin && (
@@ -667,7 +662,7 @@ export function Navbar() {
             </button>
             {shouldOfferJoin && (
               <button type="button" className="accent-button" onClick={handleJoin}>
-                Join
+                Create account
               </button>
             )}
           </div>
