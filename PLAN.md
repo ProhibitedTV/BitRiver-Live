@@ -1549,3 +1549,31 @@
 - `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
 - `Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/api/viewer/me`
 - Headless browser smoke against `http://10.0.0.108:8080/viewer` to confirm the create-account flow is offered again and the redesigned homepage renders and hydrates on the live deployment
+
+## Scope (current change)
+- Repair the current verification blockers so the repository has a clean baseline before broader Twitch-style product work continues.
+- Keep this pass focused on test/check reliability and functional gate health; do not start the local Compose stack or change runtime deployment settings.
+- Avoid deployment-contract edits: leave `deploy/docker-compose.yml`, root `.env`, and `deploy/ome/Server.generated.xml` behaviorally unchanged.
+- Add only the backward-compatible `bitriver ome render --output` flag needed to keep OME render tests from mutating the tracked generated contract file.
+
+## Assumptions
+- The first repair pass should prioritize the standard gates rather than a live-stack rehearsal or broader product-gap sweep.
+- The local Compose stack being down is acceptable for this pass as long as Compose config validation still succeeds.
+- The stale viewer snapshot should follow the current `Featured live` copy because that wording better matches the discovery-first live platform goal.
+- Any Windows-specific test handling should preserve real coverage wherever possible and skip only host capabilities such as directory symlink creation when unavailable.
+
+## Risks
+- Transcoder health tests can hide real recovery bugs if the fix only widens timeouts, so recovery should be tied to successful state transitions or explicit component reset behavior.
+- Adding an OME output path flag must not weaken the canonical generated-file path used by normal operators and Compose.
+- Replacing wall-clock session sleeps with a test clock must not leak test-only API into public runtime surfaces.
+- Updating snapshots can mask UI drift if the assertion coverage is too broad, so the copy change should stay narrowly targeted.
+
+## Test plan
+- `go test ./cmd/transcoder -count=1 -timeout=120s`
+- `go test ./internal/auth -count=25 -run TestValidateHonorsAbsoluteTTL`
+- `go test ./internal/ingest ./scripts -count=1 -timeout=120s`
+- `npm.cmd --prefix web/viewer run test -- --silent`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `docker compose --env-file .env -f deploy/docker-compose.yml config`
+- `./scripts/verify.sh`

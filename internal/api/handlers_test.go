@@ -3059,7 +3059,9 @@ func TestChatReportsAPI(t *testing.T) {
 	handler.ChatGateway = chat.NewGateway(chat.GatewayConfig{Queue: queue, Store: store})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go storage.NewChatWorker(store, queue, nil).Run(ctx)
+	started := make(chan struct{})
+	go storage.NewChatWorker(store, queue, nil).WithStartedChannel(started).Run(ctx)
+	<-started
 
 	// Apply a ban to populate restrictions endpoint.
 	if err := store.ApplyChatEvent(chat.Event{Type: chat.EventTypeModeration, Moderation: &chat.ModerationEvent{Action: chat.ModerationActionBan, ChannelID: channel.ID, ActorID: owner.ID, TargetID: target.ID, Reason: "spam"}, OccurredAt: time.Now().UTC()}); err != nil {

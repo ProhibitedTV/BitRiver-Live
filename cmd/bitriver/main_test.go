@@ -1981,7 +1981,7 @@ func TestBuildOMERenderConfigSeparatesManagersAPIFromSignallingPorts(t *testing.
 
 func TestPollUntilSuccess(t *testing.T) {
 	calls := 0
-	ready, err := pollUntil(context.Background(), 50*time.Millisecond, time.Millisecond, func(context.Context) (bool, error) {
+	ready, err := pollUntil(context.Background(), 500*time.Millisecond, time.Millisecond, func(context.Context) (bool, error) {
 		calls++
 		return calls >= 3, nil
 	})

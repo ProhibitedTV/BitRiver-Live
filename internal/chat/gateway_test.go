@@ -120,7 +120,7 @@ func TestGatewayModerationFlow(t *testing.T) {
 		"type":       "timeout",
 		"channelId":  channel.ID,
 		"targetId":   viewer.ID,
-		"durationMs": 200,
+		"durationMs": 5000,
 	})
 	waitForType(t, ownerConn, "event")
 	waitForType(t, viewerConn, "event")
@@ -275,7 +275,9 @@ func expectError(t *testing.T, conn *chat.Conn) {
 
 func readJSON(t *testing.T, conn *chat.Conn) map[string]interface{} {
 	t.Helper()
-	data, err := conn.ReadMessage(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	data, err := conn.ReadMessage(ctx)
 	if err != nil {
 		t.Fatalf("ReadMessage: %v", err)
 	}

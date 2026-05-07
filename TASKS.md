@@ -3220,3 +3220,86 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - Task 4 notes:
   - Focused Jest still emits the existing non-failing `SearchBar` `act(...)` warnings, and `navbar.test.tsx` still logs the existing jsdom navigation warning; the suites pass and the updated homepage/signup path is covered.
   - Rebuilding the viewer required Docker access outside the sandbox on this host because Buildx needs `C:\Users\RhythmicCarnage\.docker\...`; once the command was rerun with approval, the image build and service restart succeeded.
+
+## Scoped change: repair verification gates
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the gate-repair scope before implementation
+  - Acceptance criteria:
+    - `PLAN.md` captures the gate-repair scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered repair tasks before code/test fixture edits begin.
+    - The scope explicitly excludes deployment contract changes and live stack startup.
+
+- [x] Task 2 - Stabilize transcoder test fixtures and health recovery
+  - Acceptance criteria:
+    - FFmpeg test setup cannot accidentally resolve to a host `ffmpeg.exe` on Windows.
+    - Health recovery tests verify that successful recovery clears degraded `ffmpeg` and publishing component state.
+    - Live symlink assertions remain covered where the host supports them and are explicitly skipped where Windows permissions prevent directory symlink creation.
+
+- [x] Task 3 - Render OME test configs outside the tracked contract file
+  - Acceptance criteria:
+    - `bitriver ome render --output <path>` writes to a caller-provided output path while preserving the default generated-file behavior.
+    - OME render tests in `internal/ingest` and `scripts` use temp output files instead of touching `deploy/ome/Server.generated.xml`.
+
+- [x] Task 4 - Replace auth session sleeps with deterministic time control
+  - Acceptance criteria:
+    - `internal/auth` session expiry tests use a package-private test clock option instead of short wall-clock sleeps.
+    - Runtime session behavior and exported APIs remain unchanged.
+
+- [x] Task 5 - Refresh the viewer snapshot baseline
+  - Acceptance criteria:
+    - `channelDisplayPrimitives` snapshots match the current `Featured live` copy.
+    - The focused viewer test suite no longer fails on a stale snapshot.
+
+- [x] Task 6 - Run the final gate and record results
+  - Acceptance criteria:
+    - The planned targeted Go, viewer, and Compose checks are recorded.
+    - `./scripts/verify.sh` is run and any remaining blocker is documented clearly.
+
+### Execution log (repair verification gates)
+- Task 1 complete: recorded the scoped gate-repair plan and queued the ordered implementation tasks before touching code, tests, or snapshots. The check confirmed this pass excludes deployment contract edits and live stack startup.
+- Task 1 checks:
+  - `git status --short --untracked-files=all`
+  - `Get-Content -Tail 50 PLAN.md`
+  - `Get-Content -Tail 90 TASKS.md`
+  - `git diff -- PLAN.md TASKS.md`
+- Task 2 complete: replaced the FFmpeg test fixture lookup with a platform-specific shim that invokes a Go test-helper FFmpeg fake, so Windows no longer falls through to a host `ffmpeg.exe`. Tightened health recovery assertions so recovered `ffmpeg`/publishing components must be `ok` after fake jobs finish, and kept live symlink mirror checks conditional on host directory-symlink support while preserving upload publishing recovery coverage across platforms.
+- Task 2 checks:
+  - `gofmt -w cmd/transcoder/main_test.go`
+  - `go test ./cmd/transcoder -count=1 -timeout=120s`
+- Task 3 complete: added the backward-compatible `bitriver ome render --output <path>` flag while preserving the default `deploy/ome/Server.generated.xml` output path. Updated the OME render helpers in `internal/ingest` and `scripts` to render into temp files, and folded in the narrow quickstart Bash harness fix so `go test ./scripts` no longer fails on Windows by selecting a usable Git Bash path or skipping only when no shell works.
+- Task 3 checks:
+  - `gofmt -w cmd/bitriver/ome_render.go internal/ingest/ome_config_test.go scripts/quickstart_test.go`
+  - `go test ./internal/ingest ./scripts -count=1 -timeout=120s`
+  - `go test ./cmd/bitriver -count=1 -timeout=120s`
+- Task 4 complete: added an internal clock hook to `SessionManager` and a package-private test clock option, then replaced the short expiry/idle/absolute-TTL sleeps in `internal/auth/session_test.go` with deterministic clock advancement. Exported session APIs are unchanged.
+- Task 4 checks:
+  - `gofmt -w internal/auth/session.go internal/auth/session_test.go`
+  - `go test ./internal/auth -count=25 -run TestValidateHonorsAbsoluteTTL`
+  - `go test ./internal/auth -count=1 -timeout=120s`
+- Task 5 complete: updated the stale `channelDisplayPrimitives` snapshot so the featured card eyebrow matches the current `Featured live` copy.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/channelDisplayPrimitives.test.tsx --silent`
+  - Note: Jest emitted the existing `.next/standalone/package.json` haste-map naming warning, but the focused suite and all snapshots passed.
+- Task 6 complete: ran the planned targeted checks and the full verification gate. The first full-gate passes exposed a few additional Windows/full-suite timing blockers, which are now repaired: live transcoder metadata waits now read completed metadata instead of racing file writers, the `pollUntil` success unit test has enough scheduler headroom, chat tests start their worker subscriptions before publishing and avoid too-short moderation windows, the upload timeout test has a wider observation window without changing the processor timeout under test, and the contract invariant script now passes the same explicit env file to Compose that the rest of the verification path uses. No Compose, root `.env`, API payload, schema, or generated OME contract edits were made.
+- Task 6 checks:
+  - `go test ./cmd/transcoder -count=1 -timeout=120s`
+  - `go test ./internal/auth -count=25 -run TestValidateHonorsAbsoluteTTL`
+  - `go test ./internal/ingest ./scripts -count=1 -timeout=120s`
+  - `npm.cmd --prefix web/viewer run test -- --silent`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml config`
+  - `npm.cmd --prefix web/viewer run build`
+  - `go test ./cmd/transcoder -count=10 -run TestUploadPublishesHTTPPlayback -timeout=120s`
+  - `go test ./cmd/bitriver -count=1 -run TestPollUntilSuccess -timeout=120s`
+  - `go test ./cmd/transcoder -count=1 -run TestJobProducesSegmentsAndCanBeStopped -timeout=120s`
+  - `go test ./internal/api -count=1 -run TestChatReportsAPI -timeout=120s`
+  - `go test ./internal/chat -count=1 -run TestGatewayModerationFlow -timeout=120s`
+  - `go test ./internal/service/uploads -count=1 -timeout=120s`
+  - `./scripts/check-contract-invariants.sh`
+  - `./scripts/verify.sh` (passed; run through Git Bash with workspace-local `GOCACHE` on Windows)
+- Task 6 notes:
+  - The full viewer/Jest gate still emits existing non-failing React `act(...)` warnings in directory search coverage.
+  - `git diff --check` exits cleanly; Git only reports local line-ending warnings.
+  - Git continues to warn that `C:\Users\RhythmicCarnage\.config\git\ignore` is not readable, but tracked status and diffs are still available.

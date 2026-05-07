@@ -7,6 +7,30 @@ import (
 	"time"
 )
 
+type sessionTestClock struct {
+	now time.Time
+}
+
+func newSessionTestClock() *sessionTestClock {
+	return &sessionTestClock{now: time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)}
+}
+
+func (c *sessionTestClock) Now() time.Time {
+	return c.now
+}
+
+func (c *sessionTestClock) Advance(d time.Duration) {
+	c.now = c.now.Add(d)
+}
+
+func withClock(now func() time.Time) SessionOption {
+	return func(m *SessionManager) {
+		if now != nil {
+			m.now = now
+		}
+	}
+}
+
 func TestSessionLifecycle(t *testing.T) {
 	manager := NewSessionManager(50 * time.Millisecond)
 	token, expiresAt, err := manager.Create("user-123")
@@ -47,13 +71,14 @@ func TestSessionLifecycle(t *testing.T) {
 
 func TestSessionExpiration(t *testing.T) {
 	store := NewMemorySessionStore()
-	manager := NewSessionManager(10*time.Millisecond, WithStore(store))
+	clock := newSessionTestClock()
+	manager := NewSessionManager(10*time.Millisecond, WithStore(store), withClock(clock.Now))
 	token, _, err := manager.Create("user-123")
 	if err != nil {
 		t.Fatalf("Create returned error: %v", err)
 	}
 
-	time.Sleep(20 * time.Millisecond)
+	clock.Advance(20 * time.Millisecond)
 	if err := manager.PurgeExpired(); err != nil {
 		t.Fatalf("PurgeExpired returned error: %v", err)
 	}
@@ -137,14 +162,15 @@ func TestConcurrentValidationAcrossManagers(t *testing.T) {
 
 func TestValidateRefreshesIdleTimeout(t *testing.T) {
 	store := NewMemorySessionStore()
-	manager := NewSessionManager(time.Hour, WithStore(store), WithIdleTimeout(50*time.Millisecond))
+	clock := newSessionTestClock()
+	manager := NewSessionManager(time.Hour, WithStore(store), WithIdleTimeout(50*time.Millisecond), withClock(clock.Now))
 
 	token, initialExpiry, err := manager.Create("user-refresh")
 	if err != nil {
 		t.Fatalf("Create returned error: %v", err)
 	}
 
-	time.Sleep(10 * time.Millisecond)
+	clock.Advance(10 * time.Millisecond)
 	_, refreshed, ok, err := manager.Validate(token)
 	if err != nil {
 		t.Fatalf("Validate returned error: %v", err)
@@ -162,7 +188,8 @@ func TestValidateRefreshesIdleTimeout(t *testing.T) {
 
 func TestValidateHonorsAbsoluteTTL(t *testing.T) {
 	store := NewMemorySessionStore()
-	manager := NewSessionManager(100*time.Millisecond, WithStore(store), WithIdleTimeout(80*time.Millisecond))
+	clock := newSessionTestClock()
+	manager := NewSessionManager(100*time.Millisecond, WithStore(store), WithIdleTimeout(80*time.Millisecond), withClock(clock.Now))
 
 	token, _, err := manager.Create("user-absolute")
 	if err != nil {
@@ -175,7 +202,7 @@ func TestValidateHonorsAbsoluteTTL(t *testing.T) {
 	}
 	absoluteExpiry := record.AbsoluteExpiresAt
 
-	time.Sleep(70 * time.Millisecond)
+	clock.Advance(70 * time.Millisecond)
 	_, refreshed, ok, err := manager.Validate(token)
 	if err != nil {
 		t.Fatalf("Validate returned error: %v", err)

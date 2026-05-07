@@ -21,8 +21,12 @@ fi
 echo "Found $compose_file"
 
 if command -v docker >/dev/null 2>&1; then
+  compose_env_file=".env"
+  if [[ ! -f "$compose_env_file" ]]; then
+    compose_env_file="$env_example"
+  fi
   echo "Validating docker compose config"
-  docker compose -f "$compose_file" config >/dev/null
+  docker compose --env-file "$compose_env_file" -f "$compose_file" config >/dev/null
 else
   echo "Skipping docker compose config validation: docker is not installed or not on PATH."
 fi

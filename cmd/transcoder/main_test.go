@@ -28,18 +28,19 @@ const testToken = "test-token"
 
 func useStubFFmpeg(t *testing.T) string {
 	t.Helper()
-	_, testFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("determine test file path")
+	shimDir := t.TempDir()
+	shimName := "ffmpeg"
+	shimContents := "#!/usr/bin/env sh\nBITRIVER_FFMPEG_HELPER=1 exec \"$BITRIVER_FFMPEG_HELPER_EXE\" -test.run=TestFFmpegHelperProcess -- \"$@\"\n"
+	if runtime.GOOS == "windows" {
+		shimName = "ffmpeg.cmd"
+		shimContents = "@echo off\r\nset BITRIVER_FFMPEG_HELPER=1\r\n\"%BITRIVER_FFMPEG_HELPER_EXE%\" -test.run=TestFFmpegHelperProcess -- %*\r\n"
 	}
-	stubPath, err := filepath.Abs(filepath.Join(filepath.Dir(testFile), "testdata", "ffmpeg"))
-	if err != nil {
-		t.Fatalf("resolve ffmpeg stub: %v", err)
+	shimPath := filepath.Join(shimDir, shimName)
+	if err := os.WriteFile(shimPath, []byte(shimContents), 0o755); err != nil {
+		t.Fatalf("write ffmpeg shim: %v", err)
 	}
-	if _, err := os.Stat(stubPath); err != nil {
-		t.Fatalf("stat ffmpeg stub: %v", err)
-	}
-	pathList := []string{filepath.Dir(stubPath)}
+	t.Setenv("BITRIVER_FFMPEG_HELPER_EXE", os.Args[0])
+	pathList := []string{shimDir}
 	if existing := os.Getenv("PATH"); existing != "" {
 		pathList = append(pathList, existing)
 	}
@@ -48,10 +49,233 @@ func useStubFFmpeg(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("ffmpeg stub not on PATH: %v", err)
 	}
-	if resolved != stubPath {
+	resolvedInfo, err := os.Stat(resolved)
+	if err != nil {
+		t.Fatalf("stat resolved ffmpeg shim: %v", err)
+	}
+	shimInfo, err := os.Stat(shimPath)
+	if err != nil {
+		t.Fatalf("stat expected ffmpeg shim: %v", err)
+	}
+	if !os.SameFile(resolvedInfo, shimInfo) {
 		t.Fatalf("unexpected ffmpeg path: %s", resolved)
 	}
-	return stubPath
+	return shimPath
+}
+
+func TestFFmpegHelperProcess(t *testing.T) {
+	if os.Getenv("BITRIVER_FFMPEG_HELPER") != "1" {
+		return
+	}
+	args := os.Args
+	for i, arg := range args {
+		if arg == "--" {
+			if err := runFFmpegStub(args[i+1:]); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			os.Exit(0)
+		}
+	}
+	fmt.Fprintln(os.Stderr, "missing ffmpeg helper argument separator")
+	os.Exit(1)
+}
+
+func runFFmpegStub(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("missing ffmpeg output target")
+	}
+	outputTarget := args[len(args)-1]
+	masterName := "index.m3u8"
+	segmentPattern := ""
+	varStreamMap := ""
+	format := ""
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "-master_pl_name":
+			if i+1 >= len(args) {
+				return fmt.Errorf("missing -master_pl_name value")
+			}
+			masterName = args[i+1]
+			i++
+		case "-var_stream_map":
+			if i+1 >= len(args) {
+				return fmt.Errorf("missing -var_stream_map value")
+			}
+			varStreamMap = args[i+1]
+			i++
+		case "-hls_segment_filename":
+			if i+1 >= len(args) {
+				return fmt.Errorf("missing -hls_segment_filename value")
+			}
+			segmentPattern = args[i+1]
+			i++
+		case "-f":
+			if i+1 >= len(args) {
+				return fmt.Errorf("missing -f value")
+			}
+			format = args[i+1]
+			i++
+		}
+	}
+
+	if format != "hls" {
+		target := filepath.FromSlash(outputTarget)
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(target, nil, 0o644)
+	}
+
+	outputDirWithVariant := pathDirSlash(outputTarget)
+	outputRoot := strings.TrimSuffix(outputDirWithVariant, "/%v")
+	masterPath := joinSlash(outputRoot, masterName)
+	if err := os.MkdirAll(filepath.FromSlash(outputRoot), 0o755); err != nil {
+		return err
+	}
+
+	names, bandwidths := parseVariantStreamMap(varStreamMap)
+	if len(names) == 0 {
+		names = []string{"variant"}
+	}
+
+	var master bytes.Buffer
+	master.WriteString("#EXTM3U\n#EXT-X-VERSION:3\n")
+	for idx, name := range names {
+		bandwidth := bandwidths[idx]
+		if bandwidth == "" {
+			bandwidth = "1000000"
+		}
+		master.WriteString("#EXT-X-STREAM-INF:BANDWIDTH=" + bandwidth + "\n")
+		master.WriteString(name + "/index.m3u8\n")
+	}
+	if err := writeStubFile(masterPath, master.Bytes()); err != nil {
+		return err
+	}
+
+	delay := 200 * time.Millisecond
+	if raw := strings.TrimSpace(os.Getenv("FFMPEG_STUB_DELAY")); raw != "" {
+		if parsed, err := time.ParseDuration(raw); err == nil {
+			delay = parsed
+		} else if seconds, err := strconv.ParseFloat(raw, 64); err == nil {
+			delay = time.Duration(seconds * float64(time.Second))
+		}
+	}
+
+	for idx, name := range names {
+		variantPlaylist := strings.ReplaceAll(outputTarget, "%v", name)
+		segmentFile := strings.ReplaceAll(segmentPattern, "%v", name)
+		segmentFile = strings.ReplaceAll(segmentFile, "%06d", "000000")
+		segmentFile = strings.ReplaceAll(segmentFile, "%d", "000000")
+		if err := writeStubFile(segmentFile, []byte("stub-segment-"+name+"\n")); err != nil {
+			return err
+		}
+		segmentBase := filepath.Base(filepath.FromSlash(segmentFile))
+		playlist := []byte("#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:4.000,\n" + segmentBase + "\n#EXT-X-ENDLIST\n")
+		if err := writeStubFile(variantPlaylist, playlist); err != nil {
+			return err
+		}
+		if idx < len(names)-1 || delay > 0 {
+			time.Sleep(delay)
+		}
+	}
+	return nil
+}
+
+func pathDirSlash(value string) string {
+	value = strings.TrimRight(filepath.ToSlash(value), "/")
+	idx := strings.LastIndex(value, "/")
+	if idx == -1 {
+		return "."
+	}
+	return value[:idx]
+}
+
+func joinSlash(parts ...string) string {
+	cleaned := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.Trim(part, "/")
+		if trimmed != "" {
+			cleaned = append(cleaned, trimmed)
+		}
+	}
+	if len(parts) > 0 && strings.HasPrefix(parts[0], "/") {
+		return "/" + strings.Join(cleaned, "/")
+	}
+	return strings.Join(cleaned, "/")
+}
+
+func parseVariantStreamMap(value string) ([]string, []string) {
+	var names []string
+	var bandwidths []string
+	current := -1
+	for _, token := range strings.Fields(value) {
+		switch {
+		case strings.HasPrefix(token, "name:"):
+			names = append(names, strings.TrimPrefix(token, "name:"))
+			bandwidths = append(bandwidths, "")
+			current = len(names) - 1
+		case strings.HasPrefix(token, "bandwidth:"):
+			if current == -1 {
+				names = append(names, fmt.Sprintf("variant-%d", len(names)))
+				bandwidths = append(bandwidths, "")
+				current = len(names) - 1
+			}
+			bandwidths[current] = strings.TrimPrefix(token, "bandwidth:")
+		}
+	}
+	return names, bandwidths
+}
+
+func writeStubFile(name string, data []byte) error {
+	target := filepath.FromSlash(name)
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(target, data, 0o644)
+}
+
+func supportsDirectorySymlink(t *testing.T) bool {
+	t.Helper()
+	root := t.TempDir()
+	target := filepath.Join(root, "target")
+	link := filepath.Join(root, "link")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatalf("prepare symlink target: %v", err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Logf("directory symlink support unavailable on this host: %v", err)
+		return false
+	}
+	info, err := os.Lstat(link)
+	if err != nil {
+		t.Logf("directory symlink support unavailable on this host: %v", err)
+		return false
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Logf("directory symlink probe did not create a symlink: %s", info.Mode())
+		return false
+	}
+	return true
+}
+
+func componentStatus(payload healthResponse, name string) string {
+	if payload.Components == nil {
+		return ""
+	}
+	component := payload.Components[name]
+	if component == nil {
+		return ""
+	}
+	status, _ := component["status"].(string)
+	return status
+}
+
+func runningProcessCount(s *server) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.processes)
 }
 
 func writeStubSample(t *testing.T, dst string) {
@@ -157,6 +381,7 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 		t.Skip("skipping transcoder lifecycle in short mode")
 	}
 	useStubFFmpeg(t)
+	canAssertLiveMirror := supportsDirectorySymlink(t)
 
 	tempDir := t.TempDir()
 	sample := filepath.Join(tempDir, "sample.mp4")
@@ -239,45 +464,49 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	master := filepath.Join(tempDir, "live", jobID, "index.m3u8")
 	liveLink := filepath.Join(publicDir, "live", jobID)
 
-	waitFor(t, 30*time.Second, "expected live manifest to be served", func() bool {
-		resp, err := http.Get(publicSrv.URL + fmt.Sprintf("/live/%s/index.m3u8", jobID))
-		if err != nil {
-			return false
-		}
-		defer func() {
-			_ = resp.Body.Close()
-		}()
-		if resp.StatusCode != http.StatusOK {
-			return false
-		}
-		data, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return false
-		}
-		return len(data) > 0
-	})
+	if canAssertLiveMirror {
+		waitFor(t, 30*time.Second, "expected live manifest to be served", func() bool {
+			resp, err := http.Get(publicSrv.URL + fmt.Sprintf("/live/%s/index.m3u8", jobID))
+			if err != nil {
+				return false
+			}
+			defer func() {
+				_ = resp.Body.Close()
+			}()
+			if resp.StatusCode != http.StatusOK {
+				return false
+			}
+			data, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return false
+			}
+			return len(data) > 0
+		})
 
-	info, err := os.Lstat(liveLink)
-	if err != nil {
-		t.Fatalf("stat live symlink: %v", err)
-	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("expected live mirror to be a symlink, got %s", info.Mode())
-	}
-	target, err := os.Readlink(liveLink)
-	if err != nil {
-		t.Fatalf("read live symlink: %v", err)
-	}
-	expectedTarget, err := filepath.Abs(filepath.Join(tempDir, "live", jobID))
-	if err != nil {
-		t.Fatalf("resolve expected target: %v", err)
-	}
-	resolvedTarget, err := filepath.Abs(target)
-	if err != nil {
-		t.Fatalf("resolve live symlink target: %v", err)
-	}
-	if resolvedTarget != expectedTarget {
-		t.Fatalf("unexpected live symlink target: %s", resolvedTarget)
+		info, err := os.Lstat(liveLink)
+		if err != nil {
+			t.Fatalf("stat live symlink: %v", err)
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("expected live mirror to be a symlink, got %s", info.Mode())
+		}
+		target, err := os.Readlink(liveLink)
+		if err != nil {
+			t.Fatalf("read live symlink: %v", err)
+		}
+		expectedTarget, err := filepath.Abs(filepath.Join(tempDir, "live", jobID))
+		if err != nil {
+			t.Fatalf("resolve expected target: %v", err)
+		}
+		resolvedTarget, err := filepath.Abs(target)
+		if err != nil {
+			t.Fatalf("resolve live symlink target: %v", err)
+		}
+		if resolvedTarget != expectedTarget {
+			t.Fatalf("unexpected live symlink target: %s", resolvedTarget)
+		}
+	} else {
+		t.Log("skipping live mirror symlink assertions because this host cannot create directory symlinks")
 	}
 
 	waitFor(t, 30*time.Second, "expected master playlist file to exist", func() bool {
@@ -291,27 +520,15 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 		return !running
 	})
 
-	waitFor(t, 5*time.Second, "expected live symlink to be removed", func() bool {
-		_, err := os.Lstat(liveLink)
-		return errors.Is(err, os.ErrNotExist)
-	})
+	if canAssertLiveMirror {
+		waitFor(t, 5*time.Second, "expected live symlink to be removed", func() bool {
+			_, err := os.Lstat(liveLink)
+			return errors.Is(err, os.ErrNotExist)
+		})
+	}
 
 	metaPath := filepath.Join(tempDir, "live", jobID, "metadata.json")
-	waitFor(t, 5*time.Second, "expected metadata file for first job", func() bool {
-		_, err := os.Stat(metaPath)
-		return err == nil
-	})
-	data, err := os.ReadFile(metaPath)
-	if err != nil {
-		t.Fatalf("read metadata: %v", err)
-	}
-	var persisted job
-	if err := json.Unmarshal(data, &persisted); err != nil {
-		t.Fatalf("decode metadata: %v", err)
-	}
-	if persisted.StoppedAt == nil {
-		t.Fatalf("expected stopped timestamp")
-	}
+	persisted := waitForStoppedJobMetadata(t, metaPath, "expected stopped metadata for first job")
 	if persisted.Playback != filepath.ToSlash(master) {
 		t.Fatalf("unexpected playback path: %s", persisted.Playback)
 	}
@@ -444,27 +661,15 @@ func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 		return !running
 	})
 
-	waitFor(t, 5*time.Second, "expected cancelled job symlink cleanup", func() bool {
-		_, err := os.Lstat(liveLink2)
-		return errors.Is(err, os.ErrNotExist)
-	})
+	if canAssertLiveMirror {
+		waitFor(t, 5*time.Second, "expected cancelled job symlink cleanup", func() bool {
+			_, err := os.Lstat(liveLink2)
+			return errors.Is(err, os.ErrNotExist)
+		})
+	}
 
 	metaPath2 := filepath.Join(tempDir, "live", jobID2, "metadata.json")
-	waitFor(t, 5*time.Second, "expected metadata file for cancelled job", func() bool {
-		_, err := os.Stat(metaPath2)
-		return err == nil
-	})
-	data2, err := os.ReadFile(metaPath2)
-	if err != nil {
-		t.Fatalf("read metadata 2: %v", err)
-	}
-	var persisted2 job
-	if err := json.Unmarshal(data2, &persisted2); err != nil {
-		t.Fatalf("decode metadata 2: %v", err)
-	}
-	if persisted2.StoppedAt == nil {
-		t.Fatalf("expected stopped timestamp for cancelled job")
-	}
+	waitForStoppedJobMetadata(t, metaPath2, "expected stopped metadata for cancelled job")
 }
 
 func TestNewServerRequiresPublicBaseURL(t *testing.T) {
@@ -563,9 +768,21 @@ func TestUploadPublishesHTTPPlayback(t *testing.T) {
 	}
 
 	metadataPath := filepath.Join(workDir, "uploads", uploadResp.JobID, "metadata.json")
-	waitFor(t, 45*time.Second, "expected upload metadata file to exist", func() bool {
-		_, err := os.Stat(metadataPath)
-		return err == nil
+	var persisted uploadJob
+	waitFor(t, 45*time.Second, "expected completed upload metadata", func() bool {
+		data, err := os.ReadFile(metadataPath)
+		if err != nil {
+			return false
+		}
+		var candidate uploadJob
+		if err := json.Unmarshal(data, &candidate); err != nil {
+			return false
+		}
+		if candidate.CompletedAt == nil {
+			return false
+		}
+		persisted = candidate
+		return true
 	})
 	waitFor(t, 30*time.Second, "expected upload process to stop", func() bool {
 		srv.mu.RLock()
@@ -573,18 +790,6 @@ func TestUploadPublishesHTTPPlayback(t *testing.T) {
 		srv.mu.RUnlock()
 		return proc == nil
 	})
-
-	data, err := os.ReadFile(metadataPath)
-	if err != nil {
-		t.Fatalf("read metadata: %v", err)
-	}
-	var persisted uploadJob
-	if err := json.Unmarshal(data, &persisted); err != nil {
-		t.Fatalf("decode metadata: %v", err)
-	}
-	if persisted.CompletedAt == nil {
-		t.Fatal("expected completed timestamp for upload")
-	}
 	if persisted.Playback != expectedPlayback {
 		t.Fatalf("unexpected persisted playback url: %s", persisted.Playback)
 	}
@@ -840,18 +1045,40 @@ func waitFor(t *testing.T, timeout time.Duration, reason string, fn func() bool)
 	}
 }
 
+func waitForStoppedJobMetadata(t *testing.T, path, reason string) job {
+	t.Helper()
+	var persisted job
+	waitFor(t, 5*time.Second, reason, func() bool {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return false
+		}
+		var candidate job
+		if err := json.Unmarshal(data, &candidate); err != nil {
+			return false
+		}
+		if candidate.StoppedAt == nil {
+			return false
+		}
+		persisted = candidate
+		return true
+	})
+	return persisted
+}
+
 func TestHealthTracksFFmpegFailuresAndRecovery(t *testing.T) {
 	tempDir := t.TempDir()
 	var exitPtr atomic.Pointer[error]
 	initialErr := errors.New("ffmpeg crashed")
 	exitPtr.Store(&initialErr)
-	_, ts := startStubTranscoder(t, tempDir, &exitPtr)
+	srv, ts := startStubTranscoder(t, tempDir, &exitPtr)
+	srv.publicBase = ""
 
 	submitJob(t, ts, "file:///tmp/input.mp4")
 
 	waitFor(t, 2*time.Second, "expected degraded health status after ffmpeg failure", func() bool {
 		status, _ := fetchHealth(t, ts)
-		return status.Status == "degraded"
+		return status.Status == "degraded" && componentStatus(status, componentFFmpeg) == "error"
 	})
 
 	exitPtr.Store(nil)
@@ -859,11 +1086,14 @@ func TestHealthTracksFFmpegFailuresAndRecovery(t *testing.T) {
 
 	waitFor(t, 2*time.Second, "expected healthy status after ffmpeg recovery", func() bool {
 		status, _ := fetchHealth(t, ts)
-		return status.Status == "ok"
+		return status.Status == "ok" && componentStatus(status, componentFFmpeg) == "ok" && runningProcessCount(srv) == 0
 	})
 }
 
 func TestHealthDegradedWhenPublishFailsAndRecovers(t *testing.T) {
+	if !supportsDirectorySymlink(t) {
+		t.Skip("live publishing recovery health uses directory symlink mirrors")
+	}
 	tempDir := t.TempDir()
 	var exitPtr atomic.Pointer[error]
 	srv, ts := startStubTranscoder(t, tempDir, &exitPtr)
@@ -896,7 +1126,7 @@ func TestHealthDegradedWhenPublishFailsAndRecovers(t *testing.T) {
 
 	waitFor(t, 2*time.Second, "expected healthy status after publish root repair", func() bool {
 		status, code := fetchHealth(t, ts)
-		return status.Status == "ok" && code == http.StatusOK
+		return status.Status == "ok" && code == http.StatusOK && componentStatus(status, componentPublishing) == "ok" && runningProcessCount(srv) == 0
 	})
 }
 
@@ -933,7 +1163,7 @@ func TestHealthDegradedWhenUploadPublishFails(t *testing.T) {
 
 	waitFor(t, 2*time.Second, "expected healthy status after publish root repair", func() bool {
 		status, code := fetchHealth(t, ts)
-		return status.Status == "ok" && code == http.StatusOK
+		return status.Status == "ok" && code == http.StatusOK && componentStatus(status, componentPublishing) == "ok" && runningProcessCount(srv) == 0
 	})
 }
 
