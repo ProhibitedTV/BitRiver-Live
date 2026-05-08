@@ -3303,3 +3303,54 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - The full viewer/Jest gate still emits existing non-failing React `act(...)` warnings in directory search coverage.
   - `git diff --check` exits cleanly; Git only reports local line-ending warnings.
   - Git continues to warn that `C:\Users\RhythmicCarnage\.config\git\ignore` is not readable, but tracked status and diffs are still available.
+
+## Scoped change: improve channel chat and signup onboarding
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Audit the current channel, chat, and signup flows
+  - Acceptance criteria:
+    - `PLAN.md` records this pass's scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered work before implementation begins.
+    - The audit confirms which existing backend/channel behavior should remain unchanged.
+
+- [x] Task 2 - Add realtime viewer chat over the existing WebSocket gateway
+  - Acceptance criteria:
+    - Signed-in channel viewers connect to `/api/chat/ws`, join the channel room, and render inbound message events without waiting for polling.
+    - REST chat history/polling and REST send remain as fallback when WebSocket is unavailable or not yet open.
+    - Duplicate message IDs are not rendered twice when history, WebSocket broadcasts, and acknowledgements overlap.
+
+- [x] Task 3 - Polish creator-intent signup and first-channel onboarding copy
+  - Acceptance criteria:
+    - Auth dialog signup copy reflects creator onboarding when the redirect target is a creator route.
+    - Generic viewer signup copy remains viewer-oriented.
+    - Creator getting-started copy does not contain mojibake or broken apostrophe rendering.
+
+- [x] Task 4 - Run focused validation and record results
+  - Acceptance criteria:
+    - Focused viewer tests for chat, channel page, auth dialog, and creator onboarding pass.
+    - Focused backend channel/chat/auth tests pass.
+    - Viewer lint/build results are recorded.
+
+### Execution log (improve channel chat and signup onboarding)
+- Task 1 complete: read the existing API, chat gateway, viewer channel page, chat panel, auth dialog, and creator onboarding code. Backend self-signup first-channel creation is already implemented and covered: a self-signup viewer can create their own first channel, gets a stream key, and is promoted to creator, while cross-owner channel creation is rejected. The clearest functionality gap is in the viewer chat panel, which still loads and sends through REST polling even though the backend exposes an authenticated `/api/chat/ws` live gateway. The signup flow is functional, but creator-intent signup still reads as a generic viewer account path.
+- Task 1 checks:
+  - `git status --short --untracked-files=all`
+  - `Get-ChildItem -Recurse -Filter AGENTS.md`
+  - `rg -n "signup|register|Create account|allowSelfSignup|ChatGateway|chat/reports|chat|channel|Channel" internal cmd web/viewer -S`
+  - `go test ./internal/api ./internal/chat ./internal/auth -count=1 -timeout=120s`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/chatPanel.test.tsx __tests__/channelPage.test.tsx __tests__/creatorGettingStartedPage.test.tsx __tests__/creatorPage.test.tsx __tests__/useAuth.test.tsx --silent`
+- Task 2 complete: added a viewer WebSocket URL helper and upgraded `ChatPanel` to open the authenticated `/api/chat/ws` gateway for signed-in viewers, send a `join` command, render inbound message events immediately, and submit chat messages over the socket while it is connected. REST history, polling, and REST send remain in place as fallback, and message IDs are de-duplicated so initial history, broadcasts, and acknowledgements do not double-render the same line.
+- Task 2 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/chatPanel.test.tsx --silent`
+- Task 3 complete: adjusted the auth dialog so signup copy reflects creator onboarding when the auth redirect target is a creator route, while generic viewer signup remains unchanged. Cleaned the first-channel checklist copy to avoid non-ASCII apostrophe rendering in the creator onboarding path.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/authDialog.test.tsx __tests__/creatorGettingStartedPage.test.tsx --silent`
+- Task 4 complete: ran the focused frontend and backend validation for the touched channel, chat, signup, and creator onboarding areas. Viewer lint and production build pass; the build still reports the existing Next.js client-rendering deopt warnings for several routes.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/chatPanel.test.tsx __tests__/channelPage.test.tsx __tests__/authDialog.test.tsx __tests__/creatorGettingStartedPage.test.tsx --silent`
+  - `go test ./internal/api ./internal/chat ./internal/auth -count=1 -timeout=120s`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+- Task 4 notes:
+  - The final focused Jest run emitted the existing `.next/standalone/package.json` haste-map naming collision warning after `next build` created `.next`; the suites passed.

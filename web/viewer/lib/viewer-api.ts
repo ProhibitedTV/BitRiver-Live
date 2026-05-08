@@ -1,4 +1,4 @@
-export { ViewerApiError } from "./viewer-api-core";
+export { ViewerApiError, viewerWebSocketUrl } from "./viewer-api-core";
 
 export type {
   CategoryDirectoryResponse,

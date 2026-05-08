@@ -65,6 +65,7 @@ describe("CreatorGettingStartedPage", () => {
     renderWithProviders(<CreatorGettingStartedPage />);
 
     expect(await screen.findByRole("heading", { level: 3, name: /create your first channel/i })).toBeInTheDocument();
+    expect(screen.getByText(/We'll upgrade this account for creator tools automatically/i)).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Channel name"), "My First Channel");
     await user.type(screen.getByLabelText("Primary category"), "Just Chatting");

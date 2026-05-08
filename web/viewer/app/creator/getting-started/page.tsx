@@ -338,7 +338,7 @@ export default function CreatorGettingStartedPage() {
                   </Button>
                 </div>
                 <p className="muted">
-                  We’ll upgrade this account for creator tools automatically once your first channel is created.
+                  We&apos;ll upgrade this account for creator tools automatically once your first channel is created.
                 </p>
                 {createChannelError ? <p className="error">{createChannelError}</p> : null}
                 {createChannelSuccess ? <p className="success">{createChannelSuccess}</p> : null}

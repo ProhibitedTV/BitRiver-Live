@@ -1577,3 +1577,27 @@
 - `npm.cmd --prefix web/viewer run build`
 - `docker compose --env-file .env -f deploy/docker-compose.yml config`
 - `./scripts/verify.sh`
+
+## Scope (current change)
+- Improve the core viewer functionality around channels, chat, and signup without changing the deployment contract.
+- Upgrade the channel chat panel from REST-only polling to the existing authenticated `/api/chat/ws` gateway, while keeping REST history loading and polling as fallback for guests or failed sockets.
+- Tighten the creator signup/onboarding path so creator-intent account creation points clearly toward first-channel setup instead of feeling like a viewer-only signup.
+- Keep backend channel creation semantics unchanged for this pass because self-signup first-channel creation and role promotion already have API coverage.
+
+## Assumptions
+- The existing `POST /api/channels` self-service path is the correct first-channel bootstrap: a self-signup viewer creates their own first channel and is promoted to creator.
+- The highest-value chat functionality gap is realtime delivery on the viewer channel page; moderation/report tooling can remain API-backed for this pass.
+- A WebSocket failure should not break chat history or the composer; REST polling and send APIs remain the fallback path.
+- Signup copy can adapt to creator intent using the existing auth redirect target, without adding new API payloads or signup roles.
+
+## Risks
+- WebSocket message envelopes use the gateway event shape, while the viewer renders REST chat DTOs; mapping and de-duplication must prevent duplicate messages when ack, broadcast, and polling overlap.
+- jsdom does not exercise real browser WebSocket behavior by default, so tests need a small controllable socket fake.
+- Auth dialog copy changes can accidentally regress generic viewer signup copy if creator-context detection is too broad.
+- Chat changes touch the live channel page's most interactive surface, so focused component tests should cover both socket and fallback paths.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- __tests__/chatPanel.test.tsx __tests__/channelPage.test.tsx __tests__/authDialog.test.tsx __tests__/creatorGettingStartedPage.test.tsx --silent`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `go test ./internal/api ./internal/chat ./internal/auth -count=1 -timeout=120s`
