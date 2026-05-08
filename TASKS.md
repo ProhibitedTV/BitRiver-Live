@@ -3354,3 +3354,22 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `npm.cmd --prefix web/viewer run build`
 - Task 4 notes:
   - The final focused Jest run emitted the existing `.next/standalone/package.json` haste-map naming collision warning after `next build` created `.next`; the suites passed.
+
+## Product Readiness Closure - VOD Publish and Chat Reports
+
+1. [x] Refresh product acceptance docs.
+   - Acceptance: `SPEC.md` names the self-hosted live streaming product criteria and `docs/testing.md` includes a manual acceptance checklist for real broadcast readiness.
+   - Checks: documentation review; no runtime contract changes.
+
+2. [x] Add creator VOD publish action.
+   - Acceptance: Ready upload cards with a `recordingId` expose a publish action that calls `POST /api/recordings/{id}/publish`, shows success/failure feedback, and refreshes uploads.
+   - Checks: `npm.cmd --prefix web/viewer run test -- --silent UploadManager viewer-api` passed (16 tests).
+
+3. [x] Add viewer chat report flow.
+   - Acceptance: Signed-in viewers can report another user's chat message with a reason; the request includes `targetId` and `messageId`, and the UI confirms submission or shows errors.
+   - Checks: `npm.cmd --prefix web/viewer run test -- --silent ChatPanel viewer-api` passed (20 tests).
+
+4. [x] Run viewer gates and record results.
+   - Acceptance: focused tests, lint, and build complete or any blocker is documented here.
+   - Checks: `npm.cmd --prefix web/viewer run test -- --silent UploadManager ChatPanel viewer-api` passed (33 tests); `npm.cmd --prefix web/viewer run test -- --silent` passed (174 tests); `npm.cmd --prefix web/viewer run lint` passed; `npm.cmd --prefix web/viewer run build` passed with existing Next.js client-render deopt and Browserslist warnings; `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s` passed with local `.gocache`; `docker compose --env-file .env -f deploy/docker-compose.yml config --quiet` passed with the local Docker config permission warning.
+   - Full verify: `./scripts/verify.sh` was attempted through Git Bash and timed out after 304 seconds before returning phase output.

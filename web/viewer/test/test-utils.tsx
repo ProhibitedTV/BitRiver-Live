@@ -27,6 +27,8 @@ export const viewerApiMocks = {
   fetchRecommendedChannels: jest.fn(),
   fetchTopCategories: jest.fn(),
   fetchTrendingChannels: jest.fn(),
+  publishRecording: jest.fn(),
+  reportChatMessage: jest.fn(),
   searchDirectory: jest.fn(),
   sendChatMessage: jest.fn(),
   subscribeChannel: jest.fn(),

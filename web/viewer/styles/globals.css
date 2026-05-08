@@ -1202,6 +1202,8 @@ button:focus-visible {
 .upload-card__actions {
   display: flex;
   justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .error {
@@ -2451,10 +2453,50 @@ button:focus-visible {
   border: 1px solid var(--border);
 }
 
+.chat-message__line {
+  display: grid;
+  gap: 0.45rem;
+}
+
 .chat-message__bubble p {
   margin: 0;
   color: var(--text);
   line-height: var(--line-height-base);
+}
+
+.chat-message__report-button {
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  padding: 0;
+  cursor: pointer;
+}
+
+.chat-message__report-button:hover,
+.chat-message__report-button:focus-visible {
+  color: var(--accent);
+}
+
+.chat-message__report-form {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.65rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.chat-message__report-form textarea {
+  min-height: 72px;
+}
+
+.chat-message__report-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .chat-message__time {

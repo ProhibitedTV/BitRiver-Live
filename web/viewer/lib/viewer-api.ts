@@ -8,6 +8,8 @@ export type {
   ChannelPublic,
   ChatMessage,
   ChatMessageResponse,
+  ChatReport,
+  ChatReportPayload,
   ChatUser,
   CreateChannelPayload,
   CreateTipPayload,
@@ -21,6 +23,7 @@ export type {
   Playback,
   ProfileSummary,
   ProfileView,
+  Recording,
   Rendition,
   RenditionManifest,
   SocialLink,
@@ -62,7 +65,9 @@ export {
   updateChannel,
 } from "./viewer-api-channel";
 
-export { fetchChannelChat, sendChatMessage } from "./viewer-api-chat";
+export { fetchChannelChat, reportChatMessage, sendChatMessage } from "./viewer-api-chat";
+
+export { publishRecording } from "./viewer-api-recordings";
 
 export { createUpload, deleteUpload, fetchChannelUploads } from "./viewer-api-upload";
 

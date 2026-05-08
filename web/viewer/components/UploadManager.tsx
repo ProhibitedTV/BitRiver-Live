@@ -4,7 +4,7 @@ import { ChangeEvent, DragEvent, FormEvent, useCallback, useEffect, useMemo, use
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../hooks/useAuth";
-import { UploadItem, ViewerApiError, createUpload, deleteUpload, fetchChannelUploads } from "../lib/viewer-api";
+import { UploadItem, ViewerApiError, createUpload, deleteUpload, fetchChannelUploads, publishRecording } from "../lib/viewer-api";
 import { Badge } from "./ui/Badge";
 import { Button, buttonClassName } from "./ui/Button";
 import { Card, CardBody, CardHeader } from "./ui/Card";
@@ -50,6 +50,10 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
   const [isDragActive, setIsDragActive] = useState(false);
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>("selecting");
   const [lastSubmission, setLastSubmission] = useState<PendingUploadSnapshot | null>(null);
+  const [publishError, setPublishError] = useState<string | undefined>();
+  const [publishNotice, setPublishNotice] = useState<string | undefined>();
+  const [publishingRecordingIds, setPublishingRecordingIds] = useState<Set<string>>(new Set());
+  const [publishedRecordingIds, setPublishedRecordingIds] = useState<Set<string>>(new Set());
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
 
   const hasCreatorRole = user?.roles?.includes("creator") ?? false;
@@ -296,6 +300,32 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
     }
   };
 
+  const handlePublish = async (item: UploadItem) => {
+    if (!canManage) return;
+    const recordingId = item.recordingId?.trim();
+    if (!recordingId) {
+      setPublishError("Recording details are not ready yet.");
+      return;
+    }
+    setPublishError(undefined);
+    setPublishNotice(undefined);
+    setPublishingRecordingIds((current) => new Set(current).add(recordingId));
+    try {
+      await publishRecording(recordingId);
+      setPublishedRecordingIds((current) => new Set(current).add(recordingId));
+      setPublishNotice(`${item.title || item.filename || "Recording"} is published to Videos.`);
+      await load(true);
+    } catch (err) {
+      setPublishError(mapPublishError(err));
+    } finally {
+      setPublishingRecordingIds((current) => {
+        const next = new Set(current);
+        next.delete(recordingId);
+        return next;
+      });
+    }
+  };
+
   if (authLoading) return null;
   if (!user) {
     return (
@@ -462,6 +492,8 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
             {loading ? "Refreshing..." : "Refresh"}
           </Button>
           {error ? <InlineAlert>{error}</InlineAlert> : null}
+          {publishError ? <InlineAlert>{publishError}</InlineAlert> : null}
+          {publishNotice ? <InlineAlert tone="info">{publishNotice}</InlineAlert> : null}
         </div>
         <div className="upload-manager__toolbar">
           <div className="upload-filter-row" role="group" aria-label="Upload filter">
@@ -494,6 +526,10 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
               const isReadyForPlayback = hasPlaybackUrl || isUploadItemReady(item.status);
               const hasRecordingWithoutPlayback = Boolean(item.recordingId && !hasPlaybackUrl);
               const recordingDetailHref = hasRecordingWithoutPlayback ? getRecordingDetailHref(item.recordingId) : null;
+              const recordingId = item.recordingId?.trim() ?? "";
+              const canPublish = recordingId.length > 0 && isUploadItemReady(item.status);
+              const isPublishing = recordingId.length > 0 && publishingRecordingIds.has(recordingId);
+              const wasPublished = recordingId.length > 0 && publishedRecordingIds.has(recordingId);
               return (
                 <li key={item.id} className="upload-card">
                   <div className="upload-status upload-status--card">
@@ -508,6 +544,11 @@ export function UploadManager({ channelId, ownerId }: UploadManagerProps) {
                   {item.status.toLowerCase().trim() === "processing" ? <p className="muted">Last updated: {new Date(item.updatedAt).toLocaleString()}</p> : null}
                   <p className="muted">{formatFileSize(item.sizeBytes)}</p>
                   <div className="upload-card__actions">
+                    {canPublish ? (
+                      <Button onClick={() => handlePublish(item)} disabled={isPublishing || wasPublished}>
+                        {wasPublished ? "Published" : isPublishing ? "Publishing..." : "Publish to Videos"}
+                      </Button>
+                    ) : null}
                     {isReadyForPlayback && hasPlaybackUrl ? (
                       <a className={buttonClassName("primary")} href={item.playbackUrl} target="_blank" rel="noreferrer">
                         Watch
@@ -622,6 +663,17 @@ function mapUploadError(err: unknown) {
     return bodyMessage || "Unable to create upload";
   }
   return err instanceof Error ? err.message : "Unable to create upload";
+}
+
+function mapPublishError(err: unknown) {
+  if (err instanceof ViewerApiError) {
+    const bodyMessage =
+      typeof err.body === "object" && err.body !== null && "message" in err.body && typeof err.body.message === "string"
+        ? err.body.message
+        : err.message;
+    return bodyMessage || "Unable to publish recording";
+  }
+  return err instanceof Error ? err.message : "Unable to publish recording";
 }
 
 function mapUploadItemError(message: string) {

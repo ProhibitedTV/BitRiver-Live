@@ -4,7 +4,7 @@ import Image from "next/image";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import type { ChatMessage } from "../lib/viewer-api";
-import { fetchChannelChat, sendChatMessage, viewerWebSocketUrl } from "../lib/viewer-api";
+import { fetchChannelChat, reportChatMessage, sendChatMessage, viewerWebSocketUrl } from "../lib/viewer-api";
 
 const POLL_INTERVAL_MS = 10_000;
 const MAX_RETRY_DELAY_MS = 60_000;
@@ -81,6 +81,11 @@ export function ChatPanel({
   const [showSettings, setShowSettings] = useState(false);
   const [showAvatars, setShowAvatars] = useState(true);
   const [showTimestamps, setShowTimestamps] = useState(true);
+  const [reportingMessageId, setReportingMessageId] = useState<string | undefined>();
+  const [reportReason, setReportReason] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportError, setReportError] = useState<string | undefined>();
+  const [reportNotice, setReportNotice] = useState<string | undefined>();
   const popoutTriggerRef = useRef<HTMLButtonElement | null>(null);
   const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const popoutDialogRef = useRef<HTMLElement | null>(null);
@@ -386,6 +391,54 @@ export function ChatPanel({
     }
   };
 
+  const openReportForm = (message: ChatMessage) => {
+    setReportingMessageId(message.id);
+    setReportReason("");
+    setReportError(undefined);
+    setReportNotice(undefined);
+  };
+
+  const closeReportForm = () => {
+    setReportingMessageId(undefined);
+    setReportReason("");
+    setReportError(undefined);
+  };
+
+  const handleReportSubmit = async (event: FormEvent<HTMLFormElement>, message: ChatMessage) => {
+    event.preventDefault();
+    if (!user) {
+      setReportError("Sign in to report chat messages.");
+      return;
+    }
+    const targetId = message.user?.id?.trim();
+    if (!targetId || targetId === user.id) {
+      setReportError("This message cannot be reported from your account.");
+      return;
+    }
+    const reason = reportReason.trim();
+    if (!reason) {
+      setReportError("Add a reason before submitting this report.");
+      return;
+    }
+
+    try {
+      setReportSubmitting(true);
+      setReportError(undefined);
+      await reportChatMessage(channelId, {
+        targetId,
+        messageId: message.id,
+        reason,
+      });
+      setReportNotice("Report submitted for moderator review.");
+      setReportingMessageId(undefined);
+      setReportReason("");
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : "Unable to submit report");
+    } finally {
+      setReportSubmitting(false);
+    }
+  };
+
   const isComposerDisabled = !user || sending;
 
   const shouldShowSignInPrompt = authRequired && !authLoading && !user;
@@ -590,6 +643,16 @@ export function ChatPanel({
           {error}
         </div>
       )}
+      {reportNotice && (
+        <div className="surface" role="status">
+          {reportNotice}
+        </div>
+      )}
+      {reportError && (
+        <div className="surface" role="alert">
+          {reportError}
+        </div>
+      )}
       {!loading && !error && shouldShowSignInPrompt && (
         <div className="surface stack" role="status">
           <p className="muted">Sign in to view and participate in chat.</p>
@@ -655,22 +718,60 @@ export function ChatPanel({
                       </span>
                     </div>
                     <div className="chat-message__bubble">
-                      {group.messages.map(({ message }) => (
-                        <p key={message.id}>
-                          {showTimestamps && (
-                            <time
-                              dateTime={message.sentAt}
-                              className="chat-message__time"
-                            >
-                              {new Date(message.sentAt).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit"
-                              })}
-                            </time>
-                          )}
-                          {message.message}
-                        </p>
-                      ))}
+                      {group.messages.map(({ message }) => {
+                        const targetId = message.user?.id?.trim() ?? "";
+                        const canReportMessage = Boolean(user && targetId && targetId !== user.id);
+                        const isReportingMessage = reportingMessageId === message.id;
+                        return (
+                          <div key={message.id} className="chat-message__line">
+                            <p>
+                              {showTimestamps && (
+                                <time
+                                  dateTime={message.sentAt}
+                                  className="chat-message__time"
+                                >
+                                  {new Date(message.sentAt).toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit"
+                                  })}
+                                </time>
+                              )}
+                              {message.message}
+                            </p>
+                            {canReportMessage ? (
+                              <button type="button" className="chat-message__report-button" onClick={() => openReportForm(message)}>
+                                Report
+                              </button>
+                            ) : null}
+                            {isReportingMessage ? (
+                              <form
+                                className="chat-message__report-form"
+                                onSubmit={(event) => handleReportSubmit(event, message)}
+                                aria-label={`Report chat message ${message.id}`}
+                              >
+                                <label className="sr-only" htmlFor={`chat-report-reason-${message.id}`}>
+                                  Report reason
+                                </label>
+                                <textarea
+                                  id={`chat-report-reason-${message.id}`}
+                                  value={reportReason}
+                                  onChange={(event) => setReportReason(event.target.value)}
+                                  placeholder="Reason for report"
+                                  rows={2}
+                                />
+                                <div className="chat-message__report-actions">
+                                  <button type="button" className="ghost-button" onClick={closeReportForm} disabled={reportSubmitting}>
+                                    Cancel
+                                  </button>
+                                  <button type="submit" className="accent-button" disabled={reportSubmitting}>
+                                    {reportSubmitting ? "Submitting..." : "Submit report"}
+                                  </button>
+                                </div>
+                              </form>
+                            ) : null}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </li>

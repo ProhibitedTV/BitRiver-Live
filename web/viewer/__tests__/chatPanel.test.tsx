@@ -8,6 +8,7 @@ import type { ChatMessage } from "../lib/viewer-api";
 jest.mock("../hooks/useAuth");
 const fetchChatMock = viewerApiMocks.fetchChannelChat;
 const sendChatMock = viewerApiMocks.sendChatMessage;
+const reportChatMock = viewerApiMocks.reportChatMessage;
 const originalWebSocket = global.WebSocket;
 
 class MockChatWebSocket {
@@ -188,6 +189,63 @@ test("sends a chat message when the user submits the form", async () => {
     expect(sendChatMock).toHaveBeenCalledWith("chan-99", "viewer-1", "Hello world");
     expect(screen.getByText("Hello world")).toBeInTheDocument();
   });
+});
+
+test("submits reports for another user's chat message", async () => {
+  fetchChatMock.mockResolvedValue([
+    {
+      id: "m-report-1",
+      message: "bad message",
+      sentAt: new Date("2026-05-07T18:00:00Z").toISOString(),
+      user: { id: "viewer-2", displayName: "Viewer Two" }
+    }
+  ]);
+  reportChatMock.mockResolvedValue({
+    id: "report-1",
+    channelId: "chan-report",
+    reporterId: "viewer-1",
+    targetId: "viewer-2",
+    reason: "Harassment",
+    messageId: "m-report-1",
+    status: "open",
+    createdAt: "2026-05-07T18:01:00Z",
+  });
+
+  const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+  render(<ChatPanel channelId="chan-report" roomId="room-1" />);
+
+  await screen.findByText("bad message");
+  await user.click(screen.getByRole("button", { name: "Report" }));
+  await user.type(screen.getByRole("textbox", { name: /report reason/i }), "Harassment");
+  await user.click(screen.getByRole("button", { name: "Submit report" }));
+
+  await waitFor(() => {
+    expect(reportChatMock).toHaveBeenCalledWith("chan-report", {
+      targetId: "viewer-2",
+      messageId: "m-report-1",
+      reason: "Harassment",
+    });
+  });
+  await waitFor(() => {
+    expect(screen.getByRole("status")).toHaveTextContent("Report submitted for moderator review.");
+  });
+  expect(screen.queryByRole("form", { name: /report chat message/i })).not.toBeInTheDocument();
+});
+
+test("does not offer report controls on the current user's own messages", async () => {
+  fetchChatMock.mockResolvedValue([
+    {
+      id: "m-own-1",
+      message: "my own note",
+      sentAt: new Date("2026-05-07T18:00:00Z").toISOString(),
+      user: { id: "viewer-1", displayName: "Viewer" }
+    }
+  ]);
+
+  render(<ChatPanel channelId="chan-own" roomId="room-1" />);
+
+  await screen.findByText("my own note");
+  expect(screen.queryByRole("button", { name: "Report" })).not.toBeInTheDocument();
 });
 
 test("joins live chat over websocket and renders inbound events without waiting for polling", async () => {

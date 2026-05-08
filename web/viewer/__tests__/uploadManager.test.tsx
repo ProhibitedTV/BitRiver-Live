@@ -17,6 +17,7 @@ jest.mock("../hooks/useAuth");
 
 const createUploadMock = viewerApiMocks.createUpload;
 const fetchUploadsMock = viewerApiMocks.fetchChannelUploads;
+const publishRecordingMock = viewerApiMocks.publishRecording;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -107,6 +108,88 @@ test("shows Open VOD as the primary action when playbackUrl is available", async
   expect(primaryAction).toHaveAttribute("rel", "noreferrer");
   expect(screen.queryByRole("link", { name: /view recording/i })).not.toBeInTheDocument();
   expect(screen.queryByText(/playback pending/i)).not.toBeInTheDocument();
+});
+
+test("publishes ready recordings to the public Videos surface", async () => {
+  mockAuthenticatedUser(ownerUser);
+  fetchUploadsMock
+    .mockResolvedValueOnce([
+      {
+        id: "upload-ready-publish",
+        channelId: "chan-1",
+        title: "Ready to publish",
+        filename: "ready-to-publish.mp4",
+        playbackUrl: "https://vod.example.com/library/ready-to-publish",
+        recordingId: "rec-publish-1",
+        sizeBytes: 3_000_000,
+        status: "ready",
+        progress: 100,
+        createdAt: "2026-01-02T03:04:05.000Z",
+        updatedAt: "2026-01-02T03:14:05.000Z",
+      },
+    ] as any)
+    .mockResolvedValueOnce([
+      {
+        id: "upload-ready-publish",
+        channelId: "chan-1",
+        title: "Ready to publish",
+        filename: "ready-to-publish.mp4",
+        playbackUrl: "https://vod.example.com/library/ready-to-publish",
+        recordingId: "rec-publish-1",
+        sizeBytes: 3_000_000,
+        status: "ready",
+        progress: 100,
+        createdAt: "2026-01-02T03:04:05.000Z",
+        updatedAt: "2026-01-02T03:14:05.000Z",
+      },
+    ] as any);
+  publishRecordingMock.mockResolvedValue({
+    id: "rec-publish-1",
+    channelId: "chan-1",
+    sessionId: "session-1",
+    title: "Ready to publish",
+    durationSeconds: 120,
+    publishedAt: "2026-01-02T03:30:00.000Z",
+    createdAt: "2026-01-02T03:04:05.000Z",
+  } as any);
+
+  renderWithProviders(<UploadManager channelId="chan-1" ownerId="owner-1" />);
+
+  const publishButton = await screen.findByRole("button", { name: "Publish to Videos" });
+  fireEvent.click(publishButton);
+
+  await waitFor(() => expect(publishRecordingMock).toHaveBeenCalledWith("rec-publish-1"));
+  expect(await screen.findByText(/ready to publish is published to videos/i)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Published" })).toBeDisabled();
+  expect(fetchUploadsMock).toHaveBeenCalledTimes(2);
+});
+
+test("shows publish failures without removing the upload card", async () => {
+  mockAuthenticatedUser(ownerUser);
+  fetchUploadsMock.mockResolvedValue([
+    {
+      id: "upload-publish-error",
+      channelId: "chan-1",
+      title: "Publish error",
+      filename: "publish-error.mp4",
+      playbackUrl: "https://vod.example.com/library/publish-error",
+      recordingId: "rec-error-1",
+      sizeBytes: 3_000_000,
+      status: "ready",
+      progress: 100,
+      createdAt: "2026-01-02T03:04:05.000Z",
+      updatedAt: "2026-01-02T03:14:05.000Z",
+    },
+  ] as any);
+  publishRecordingMock.mockRejectedValue(new Error("publish failed"));
+
+  renderWithProviders(<UploadManager channelId="chan-1" ownerId="owner-1" />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Publish to Videos" }));
+
+  expect(await screen.findByText(/publish failed/i)).toBeInTheDocument();
+  expect(screen.getByText("Publish error")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Publish to Videos" })).not.toBeDisabled();
 });
 
 test("shows View recording when a recording route template exists and playbackUrl is missing", async () => {

@@ -1601,3 +1601,30 @@
 - `npm.cmd --prefix web/viewer run lint`
 - `npm.cmd --prefix web/viewer run build`
 - `go test ./internal/api ./internal/chat ./internal/auth -count=1 -timeout=120s`
+
+## Scope: Product Readiness Closure - VOD Publish and Chat Reports
+
+### Summary
+Turn the latest product-readiness audit into a focused implementation pass without touching the deployment contract. This pass closes two user-visible functional gaps that block a Twitch-style self-hosted baseline: creators can publish upload-backed recordings into the public VOD surface, and signed-in viewers can report abusive chat messages from the live chat UI.
+
+### Goals
+- Refresh `SPEC.md` so the repo has product acceptance criteria for a self-hosted live streaming website, not only contributor workflow criteria.
+- Add a creator upload action that calls the existing `POST /api/recordings/{id}/publish` API and refreshes the upload list/public VOD path.
+- Add a chat-message report flow that calls the existing `POST /api/channels/{id}/chat/reports` API with `targetId`, `messageId`, and a viewer-supplied reason.
+- Document a self-hosted acceptance checklist in existing testing docs so the final product bar includes real broadcast, playback, chat, VOD, and moderation proof.
+
+### Assumptions
+- The deployment contract remains unchanged: no edits to `deploy/docker-compose.yml`, root `.env`, or `deploy/ome/Server.generated.xml`.
+- Existing backend APIs for recording publish and chat reports are the source of truth for this pass.
+- A full stream schedule data model and real Docker/OBS-style broadcast rehearsal are follow-up product gates, not hidden inside this UI-focused patch.
+
+### Risks
+- Upload items do not expose a `publishedAt` field today, so the UI can confirm the publish request and refresh rather than rendering a durable published badge from the upload payload.
+- Chat history groups consecutive messages by author; per-message report controls must stay attached to individual messages without making the thread noisy.
+- Viewer test mocks must stay aligned with the public `viewer-api` barrel exports.
+
+### Test Plan
+- `npm.cmd --prefix web/viewer run test -- --silent UploadManager ChatPanel viewer-api`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `./scripts/verify.sh` if local prerequisites are available within the remaining pass.
