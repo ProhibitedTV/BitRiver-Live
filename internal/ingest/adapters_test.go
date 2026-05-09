@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -27,7 +28,7 @@ func TestHTTPAdapterConstructorsNormalizeDefaults(t *testing.T) {
 
 	baseURL := "http://example.com/"
 	channel := newHTTPChannelAdapter(baseURL, "token", nil, nil, 0, 0)
-	application := newHTTPApplicationAdapter(baseURL, "user", "pass", nil, nil, 0, 0)
+	application := newHTTPApplicationAdapter(baseURL, "access-token", "user", "pass", nil, nil, 0, 0)
 	transcoder := newHTTPTranscoderAdapter(baseURL, "token", nil, nil, 0, 0)
 
 	adapters := map[string]struct {
@@ -217,7 +218,7 @@ func TestHTTPChannelAdapterRetriesOn429(t *testing.T) {
 }
 
 // TestHTTPApplicationAdapterLifecycle verifies that the application adapter
-// correctly uses basic auth and round-trips the origin and playback URLs.
+// uses OME raw-token Basic auth and round-trips the origin and playback URLs.
 func TestHTTPApplicationAdapterLifecycle(t *testing.T) {
 	t.Helper()
 	var created bool
@@ -227,9 +228,9 @@ func TestHTTPApplicationAdapterLifecycle(t *testing.T) {
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/applications":
 			created = true
-			user, pass, ok := r.BasicAuth()
-			if !ok || user != "admin" || pass != "password" {
-				t.Fatalf("expected basic auth credentials, got %q/%q", user, pass)
+			wantAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("ome-token"))
+			if got := r.Header.Get("Authorization"); got != wantAuth {
+				t.Fatalf("expected OME raw-token Basic auth, got %q", got)
 			}
 			var payload omeApplicationRequest
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -246,9 +247,9 @@ func TestHTTPApplicationAdapterLifecycle(t *testing.T) {
 			}
 		case r.Method == http.MethodDelete && r.URL.Path == "/v1/applications/channel-123":
 			deleted = true
-			user, pass, ok := r.BasicAuth()
-			if !ok || user != "admin" || pass != "password" {
-				t.Fatalf("expected basic auth on delete, got %q/%q", user, pass)
+			wantAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("ome-token"))
+			if got := r.Header.Get("Authorization"); got != wantAuth {
+				t.Fatalf("expected OME raw-token Basic auth on delete, got %q", got)
 			}
 			w.WriteHeader(http.StatusNoContent)
 		default:
@@ -257,7 +258,7 @@ func TestHTTPApplicationAdapterLifecycle(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := newHTTPApplicationAdapter(server.URL, "admin", "password", server.Client(), nil, 3, time.Nanosecond)
+	adapter := newHTTPApplicationAdapter(server.URL, "ome-token", "admin", "password", server.Client(), nil, 3, time.Nanosecond)
 	origin, playback, err := adapter.CreateApplication(context.Background(), "channel-123", []string{"1080p"})
 	if err != nil {
 		t.Fatalf("CreateApplication: %v", err)
@@ -273,6 +274,25 @@ func TestHTTPApplicationAdapterLifecycle(t *testing.T) {
 	}
 	if !deleted {
 		t.Fatal("expected application deletion to be invoked")
+	}
+}
+
+func TestHTTPApplicationAdapterFallsBackToBasicWithoutAccessToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, pass, ok := r.BasicAuth()
+		if !ok || user != "admin" || pass != "password" {
+			t.Fatalf("expected fallback basic auth credentials, got %q/%q", user, pass)
+		}
+		_ = json.NewEncoder(w).Encode(omeApplicationResponse{
+			OriginURL:   "http://origin",
+			PlaybackURL: "https://playback",
+		})
+	}))
+	defer server.Close()
+
+	adapter := newHTTPApplicationAdapter(server.URL, "", "admin", "password", server.Client(), nil, 3, time.Nanosecond)
+	if _, _, err := adapter.CreateApplication(context.Background(), "channel-123", []string{"1080p"}); err != nil {
+		t.Fatalf("CreateApplication: %v", err)
 	}
 }
 

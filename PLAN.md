@@ -1688,3 +1688,33 @@ Fix the deployed viewer behavior where signing in from the normal site chrome up
 - `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx __tests__/directoryPage.test.tsx __tests__/followingStatePresentation.test.tsx --silent`
 - `npm.cmd --prefix web/viewer run lint`
 - `npm.cmd --prefix web/viewer run build`
+
+## Scope: OME Ingest Health Auth Repair
+
+### Summary
+Fix the deployed OME ingest health failure where BitRiver reports OvenMediaEngine as down with `401 Unauthorized` even though the OME container is reachable. Keep this pass focused on aligning BitRiver's ingest control-plane requests with the existing OME AccessToken contract; do not change Compose ports, `.env`, generated OME XML, or the vendor OME container health contract.
+
+### Goals
+- Load the canonical `BITRIVER_OME_API_TOKEN` into ingest config.
+- Use OME's documented Basic auth credential form, where the raw rendered AccessToken is base64-encoded as the full Basic credential string.
+- Treat authenticated OME non-5xx responses as reachable for the shared `/healthz` probe path, because OME returns `404` for that path after authentication rather than exposing a native `/healthz`.
+- Preserve backward-compatible Basic auth fallback only when no OME API token is configured.
+- Add focused tests that catch the runtime mismatch: OME health should send `AccessToken`, and missing ingest config should require `BITRIVER_OME_API_TOKEN`.
+- Rebuild/redeploy the API service so `/healthz` and the viewer ingest status reflect the repaired OME health path.
+
+### Assumptions
+- The existing `deploy/ome/Server.generated.xml` already contains a rendered top-level `<Managers><API><AccessToken>` that matches `.env`.
+- OME process liveness in Compose can remain unauthenticated and tolerant of 401 responses because it only verifies that the API listener is reachable.
+- BitRiver's application-control API should follow the documented OME AccessToken-as-Basic-credential contract.
+
+### Risks
+- Tests and stubs currently expect Basic auth for OME adapter calls, so they need to be updated without weakening SRS/transcoder auth coverage.
+- Runtime logs may continue to show 401 entries from OME's own unauthenticated container health probe; the success condition is BitRiver ingest status no longer marking OME down.
+
+### Test Plan
+- `go test ./internal/config ./internal/ingest -count=1 -timeout=120s`
+- `go test ./internal/storage -run Ingest -count=1 -timeout=120s`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up --build -d bitriver-live`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/healthz -TimeoutSec 15`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/readyz -TimeoutSec 15`

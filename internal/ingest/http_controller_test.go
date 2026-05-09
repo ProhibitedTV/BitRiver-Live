@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -23,8 +24,7 @@ type flakyRoundTripper struct {
 }
 
 func (f *flakyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	if !f.failureReturned.Load() {
-		f.failureReturned.Store(true)
+	if f.failureReturned.CompareAndSwap(false, true) {
 		return nil, errors.New("temporary DNS failure")
 	}
 	return f.transport.RoundTrip(req)
@@ -159,6 +159,53 @@ func TestHTTPControllerHealthChecksRunConcurrentlyAndDeterministically(t *testin
 		if statuses[idx].Status != "ok" {
 			t.Fatalf("expected %s status ok, got %s", component, statuses[idx].Status)
 		}
+	}
+}
+
+func TestHTTPControllerHealthChecksUseOMERawTokenBasicAuth(t *testing.T) {
+	okServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(okServer.Close)
+
+	omeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wantAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("ome-token"))
+		if got := r.Header.Get("Authorization"); got != wantAuth {
+			t.Errorf("expected OME raw-token Basic auth, got %q", got)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if got := r.Header.Get("AccessToken"); got != "" {
+			t.Errorf("expected no AccessToken header, got %q", got)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(omeServer.Close)
+
+	controller := HTTPController{
+		config: Config{
+			SRSBaseURL:     okServer.URL,
+			OMEBaseURL:     omeServer.URL,
+			OMEAccessToken: "ome-token",
+			OMEUsername:    "legacy-user",
+			OMEPassword:    "legacy-pass",
+			JobBaseURL:     okServer.URL,
+			HealthEndpoint: "/healthz",
+			HealthTimeout:  500 * time.Millisecond,
+			HTTPClient:     okServer.Client(),
+		},
+	}
+
+	statuses := controller.HealthChecks(context.Background())
+	statusMap := make(map[string]HealthStatus)
+	for _, status := range statuses {
+		statusMap[status.Component] = status
+	}
+
+	if status := statusMap["ovenmediaengine"]; status.Status != "ok" {
+		t.Fatalf("expected OME health ok, got %+v", status)
 	}
 }
 

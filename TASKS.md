@@ -3436,3 +3436,35 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
      - `docker compose --env-file .env -f deploy/docker-compose.yml ps` passed; core services reported healthy/running.
      - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -TimeoutSec 15` returned 200.
      - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/readyz -TimeoutSec 15` returned 200.
+
+## OME Ingest Health Auth Repair
+
+1. [x] Align ingest OME auth with the AccessToken contract.
+   - Acceptance: ingest config loads `BITRIVER_OME_API_TOKEN` and requires it for complete OME control configuration.
+   - Acceptance: OME health and application control requests send `Authorization: Basic <base64(raw AccessToken)>` when the token is configured.
+   - Acceptance: authenticated OME `404` responses from the shared health path count as reachable, while `401/403` still fail.
+   - Acceptance: Basic auth remains a fallback for nonstandard legacy test/custom deployments with no token.
+   - Checks: focused config/ingest tests.
+   - Result: ingest config now resolves the OME access token from the rendered-token precedence; OME health/control calls use OME's raw-token Basic credential form after runtime probing showed `AccessToken:` headers still return 401.
+   - Check: `go test ./internal/config ./internal/ingest -count=1 -timeout=120s` passed with a workspace-local `GOCACHE`.
+
+2. [x] Update tests and local documentation comments.
+   - Acceptance: tests catch the deployed 401 regression by asserting OME health uses the raw-token Basic credential and accepts authenticated `404` as reachable.
+   - Acceptance: ingest package comments no longer claim OME uses Basic auth as the primary path.
+   - Checks: `go test ./internal/config ./internal/ingest ./internal/app -count=1 -timeout=120s`.
+   - Result: added health and adapter assertions for OME raw-token Basic auth, preserved legacy Basic fallback coverage, added runtime-config coverage so the API carries the token into `ingest.Config`, updated ingest package comments, and corrected the OME auth note in `docs/advanced-deployments.md`.
+   - Checks:
+     - `go test ./internal/config ./internal/ingest ./internal/app -count=1 -timeout=120s` passed with a workspace-local `GOCACHE`.
+     - `go test ./internal/storage -run Ingest -count=1 -timeout=120s` passed with a workspace-local `GOCACHE`.
+
+3. [x] Rebuild the running API service and verify deployed health.
+   - Acceptance: Compose stack stays up and BitRiver health endpoints serve successfully after the API rebuild.
+   - Acceptance: OME is no longer reported down in BitRiver ingest health after the rebuilt API starts.
+   - Checks: Compose build/up, `ps`, `/healthz`, and `/readyz`.
+   - Result: rebuilt `bitriver-live`; BitRiver `/healthz` now reports `status: ok` with `ovenmediaengine` status `ok`. Added `.gocache/` to `.dockerignore` after the local test cache inflated the Docker build context.
+   - Checks:
+     - `docker compose --env-file .env -f deploy/docker-compose.yml up --build -d bitriver-live` passed.
+     - `docker compose --env-file .env -f deploy/docker-compose.yml ps` passed; core services reported healthy/running.
+     - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/healthz -TimeoutSec 15` returned 200 and `status: ok`.
+     - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/readyz -TimeoutSec 15` returned 200.
+     - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -TimeoutSec 15` returned 200.
