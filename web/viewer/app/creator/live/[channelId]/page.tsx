@@ -21,6 +21,22 @@ import {
 
 const MASKED_STREAM_KEY = "********";
 
+type ScheduleDraft = {
+  id: string;
+  title: string;
+  startsAt: string;
+  durationMinutes: string;
+  description: string;
+};
+
+const emptyScheduleDraft: ScheduleDraft = {
+  id: "",
+  title: "",
+  startsAt: "",
+  durationMinutes: "60",
+  description: "",
+};
+
 function formatCategory(category?: string) {
   if (!category) {
     return "Uncategorized";
@@ -50,6 +66,29 @@ function formatTimestamp(timestamp?: string) {
   return new Date(timestamp).toLocaleString();
 }
 
+function toDateTimeLocalValue(timestamp?: string) {
+  if (!timestamp) {
+    return "";
+  }
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return localDate.toISOString().slice(0, 16);
+}
+
+function fromDateTimeLocalValue(value: string) {
+  if (!value) {
+    return undefined;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return undefined;
+  }
+  return date.toISOString();
+}
+
 function buildObsSettingsBlock(preferredIngestEndpoint?: string, streamKey?: string, streamKeyVisible = false) {
   const serverLine = preferredIngestEndpoint ? `Server: ${preferredIngestEndpoint}` : "Server: [not available yet]";
   const streamKeyLine = streamKey
@@ -72,6 +111,10 @@ export default function CreatorLivePage() {
   const [savingTitle, setSavingTitle] = useState(false);
   const [titleError, setTitleError] = useState<string | undefined>();
   const [titleSaved, setTitleSaved] = useState(false);
+  const [scheduleDraft, setScheduleDraft] = useState<ScheduleDraft>(emptyScheduleDraft);
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | undefined>();
+  const [scheduleSaved, setScheduleSaved] = useState(false);
   const [streamKeyVisible, setStreamKeyVisible] = useState(false);
   const [streamKeyCopyMessage, setStreamKeyCopyMessage] = useState<string | undefined>();
   const [ingestCopyMessage, setIngestCopyMessage] = useState<string | undefined>();
@@ -116,6 +159,28 @@ export default function CreatorLivePage() {
     setTestStreamUpdatedAt(new Date().toISOString());
   }, [loadManagedChannel, loadSessions, reload]);
 
+  const primaryScheduleEntry = useMemo(
+    () => (managedChannel?.schedule ?? playback?.channel.schedule ?? [])[0],
+    [managedChannel?.schedule, playback?.channel.schedule],
+  );
+  const scheduleDraftSeed = useMemo<ScheduleDraft>(
+    () => ({
+      id: primaryScheduleEntry?.id ?? "",
+      title: primaryScheduleEntry?.title ?? playback?.channel.title ?? "",
+      startsAt: toDateTimeLocalValue(primaryScheduleEntry?.startsAt),
+      durationMinutes: String(primaryScheduleEntry?.durationMinutes ?? 60),
+      description: primaryScheduleEntry?.description ?? "",
+    }),
+    [
+      playback?.channel.title,
+      primaryScheduleEntry?.description,
+      primaryScheduleEntry?.durationMinutes,
+      primaryScheduleEntry?.id,
+      primaryScheduleEntry?.startsAt,
+      primaryScheduleEntry?.title,
+    ],
+  );
+
   useEffect(() => {
     void refreshNow();
   }, [refreshNow]);
@@ -125,6 +190,16 @@ export default function CreatorLivePage() {
     setTitleSaved(false);
     setTitleError(undefined);
   }, [playback?.channel.title]);
+
+  useEffect(() => {
+    setScheduleDraft(scheduleDraftSeed);
+    setScheduleError(undefined);
+  }, [scheduleDraftSeed]);
+
+  useEffect(() => {
+    setScheduleSaved(false);
+    setScheduleError(undefined);
+  }, [channelId]);
 
   useEffect(() => {
     setStreamKeyVisible(false);
@@ -237,6 +312,79 @@ export default function CreatorLivePage() {
       setTitleError(err instanceof Error ? err.message : "Unable to update stream title");
     } finally {
       setSavingTitle(false);
+    }
+  };
+
+  const handleScheduleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const title = scheduleDraft.title.trim();
+    const startsAt = fromDateTimeLocalValue(scheduleDraft.startsAt);
+    const durationMinutes = Number.parseInt(scheduleDraft.durationMinutes, 10);
+
+    if (!title) {
+      setScheduleError("Scheduled title cannot be empty");
+      setScheduleSaved(false);
+      return;
+    }
+    if (!startsAt) {
+      setScheduleError("Start time is required");
+      setScheduleSaved(false);
+      return;
+    }
+    if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+      setScheduleError("Duration must be greater than zero");
+      setScheduleSaved(false);
+      return;
+    }
+
+    try {
+      setSavingSchedule(true);
+      setScheduleError(undefined);
+      setScheduleSaved(false);
+      const description = scheduleDraft.description.trim();
+      const updated = await updateChannel(channelId, {
+        schedule: [
+          {
+            ...(scheduleDraft.id ? { id: scheduleDraft.id } : {}),
+            title,
+            startsAt,
+            durationMinutes,
+            ...(description ? { description } : {}),
+          },
+        ],
+      });
+      setManagedChannel((prev) => (prev ? { ...prev, ...updated } : updated));
+      await reload(true);
+      const savedEntry = updated.schedule?.[0];
+      setScheduleDraft({
+        id: savedEntry?.id ?? "",
+        title: savedEntry?.title ?? updated.title,
+        startsAt: toDateTimeLocalValue(savedEntry?.startsAt),
+        durationMinutes: String(savedEntry?.durationMinutes ?? 60),
+        description: savedEntry?.description ?? "",
+      });
+      setScheduleSaved(true);
+    } catch (err) {
+      setScheduleError(err instanceof Error ? err.message : "Unable to update stream schedule");
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
+  const handleClearSchedule = async () => {
+    try {
+      setSavingSchedule(true);
+      setScheduleError(undefined);
+      setScheduleSaved(false);
+      const updated = await updateChannel(channelId, { schedule: [] });
+      setManagedChannel((prev) => (prev ? { ...prev, ...updated } : updated));
+      await reload(true);
+      setScheduleDraft({ ...emptyScheduleDraft, title: updated.title });
+      setScheduleSaved(true);
+    } catch (err) {
+      setScheduleError(err instanceof Error ? err.message : "Unable to clear stream schedule");
+    } finally {
+      setSavingSchedule(false);
     }
   };
 
@@ -408,6 +556,77 @@ export default function CreatorLivePage() {
             </div>
             {titleError ? <InlineAlert role="alert">{titleError}</InlineAlert> : null}
             {titleSaved && !titleError ? <p className="success">Stream title updated.</p> : null}
+          </form>
+
+          <form className="creator-live__section" aria-label="Update stream schedule" onSubmit={handleScheduleSubmit}>
+            <h4 className="creator-live__subheading">Upcoming stream</h4>
+            <div className="creator-live__schedule-grid">
+              <label className="input-stack" htmlFor="schedule-title-input">
+                <span className="muted">Scheduled title</span>
+                <input
+                  id="schedule-title-input"
+                  name="scheduleTitle"
+                  value={scheduleDraft.title}
+                  onChange={(event) => {
+                    setScheduleDraft((prev) => ({ ...prev, title: event.target.value }));
+                    setScheduleSaved(false);
+                  }}
+                  placeholder="Friday night stream"
+                />
+              </label>
+              <label className="input-stack" htmlFor="schedule-start-input">
+                <span className="muted">Start time</span>
+                <input
+                  id="schedule-start-input"
+                  name="scheduleStart"
+                  type="datetime-local"
+                  value={scheduleDraft.startsAt}
+                  onChange={(event) => {
+                    setScheduleDraft((prev) => ({ ...prev, startsAt: event.target.value }));
+                    setScheduleSaved(false);
+                  }}
+                />
+              </label>
+              <label className="input-stack" htmlFor="schedule-duration-input">
+                <span className="muted">Duration minutes</span>
+                <input
+                  id="schedule-duration-input"
+                  name="scheduleDuration"
+                  type="number"
+                  min={1}
+                  step={15}
+                  value={scheduleDraft.durationMinutes}
+                  onChange={(event) => {
+                    setScheduleDraft((prev) => ({ ...prev, durationMinutes: event.target.value }));
+                    setScheduleSaved(false);
+                  }}
+                />
+              </label>
+              <label className="input-stack creator-live__schedule-description" htmlFor="schedule-description-input">
+                <span className="muted">Description</span>
+                <textarea
+                  id="schedule-description-input"
+                  name="scheduleDescription"
+                  rows={3}
+                  value={scheduleDraft.description}
+                  onChange={(event) => {
+                    setScheduleDraft((prev) => ({ ...prev, description: event.target.value }));
+                    setScheduleSaved(false);
+                  }}
+                  placeholder="Optional notes for viewers"
+                />
+              </label>
+            </div>
+            <div className="workspace-card__actions">
+              <Button type="submit" disabled={savingSchedule}>
+                {savingSchedule ? "Saving..." : "Save schedule"}
+              </Button>
+              <Button type="button" variant="secondary" disabled={savingSchedule} onClick={() => void handleClearSchedule()}>
+                Clear schedule
+              </Button>
+            </div>
+            {scheduleError ? <InlineAlert role="alert">{scheduleError}</InlineAlert> : null}
+            {scheduleSaved && !scheduleError ? <p className="success">Schedule updated.</p> : null}
           </form>
 
           {managedLoading ? <p className="muted">Loading channel details...</p> : null}

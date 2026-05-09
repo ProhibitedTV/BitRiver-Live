@@ -6,6 +6,8 @@ export type {
   ChannelOwner,
   ChannelPlaybackResponse,
   ChannelPublic,
+  ChannelScheduleEntry,
+  ChannelScheduleInput,
   ChatMessage,
   ChatMessageResponse,
   ChatReport,

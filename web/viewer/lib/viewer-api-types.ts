@@ -4,10 +4,29 @@ export type ChannelPublic = {
   title: string;
   category?: string;
   tags: string[];
+  schedule?: ChannelScheduleEntry[];
   liveState: string;
   currentSessionId?: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ChannelScheduleEntry = {
+  id: string;
+  title: string;
+  startsAt: string;
+  durationMinutes?: number;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ChannelScheduleInput = {
+  id?: string;
+  title: string;
+  startsAt: string;
+  durationMinutes?: number;
+  description?: string;
 };
 
 export type ManagedChannel = ChannelPublic & {
@@ -272,6 +291,7 @@ export type UpdateChannelPayload = {
   title?: string;
   category?: string;
   tags?: string[];
+  schedule?: ChannelScheduleInput[];
 };
 
 export type CreateChannelPayload = {

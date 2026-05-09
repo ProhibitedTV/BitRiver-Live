@@ -3373,3 +3373,38 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
    - Acceptance: focused tests, lint, and build complete or any blocker is documented here.
    - Checks: `npm.cmd --prefix web/viewer run test -- --silent UploadManager ChatPanel viewer-api` passed (33 tests); `npm.cmd --prefix web/viewer run test -- --silent` passed (174 tests); `npm.cmd --prefix web/viewer run lint` passed; `npm.cmd --prefix web/viewer run build` passed with existing Next.js client-render deopt and Browserslist warnings; `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s` passed with local `.gocache`; `docker compose --env-file .env -f deploy/docker-compose.yml config --quiet` passed with the local Docker config permission warning.
    - Full verify: `./scripts/verify.sh` was attempted through Git Bash and timed out after 304 seconds before returning phase output.
+
+## Product Readiness Closure - Schedule and Final Gates
+
+1. [x] Add channel schedule storage and API contract.
+   - Acceptance: Channel schedule entries are typed, normalized, persisted in JSON and Postgres storage, included in public/managed channel responses, and updateable through the existing channel PATCH endpoint.
+   - Checks: focused storage/API tests.
+   - Result: added typed schedule entries, additive JSONB migrations, snapshot import support, PATCH parsing, playback response coverage, and isolated in-memory return copies.
+   - Check: `GOCACHE=.gocache go test ./internal/storage ./internal/api -count=1 -timeout=120s` passed.
+
+2. [x] Add creator schedule editing.
+   - Acceptance: The Go Live dashboard lets a channel owner edit at least one upcoming scheduled stream with title, start time, duration, and description, then saves it through the channel API.
+   - Checks: focused creator live viewer tests.
+   - Result: added an upcoming-stream form to the Go Live channel step with save/clear actions and API payload coverage.
+   - Check: `npm.cmd --prefix web/viewer run test -- __tests__/creatorLivePage.test.tsx --silent` passed.
+
+3. [x] Render the public schedule.
+   - Acceptance: The public channel Schedule tab displays upcoming stream entries when present and a clear empty state when absent.
+   - Checks: focused channel page viewer tests.
+   - Result: replaced the placeholder-only Schedule tab with sorted schedule cards, formatted start times, durations, and descriptions.
+   - Check: `npm.cmd --prefix web/viewer run test -- __tests__/channelPage.test.tsx --silent` passed.
+
+4. [x] Run final gates and record results.
+   - Acceptance: Viewer checks, Go checks, Compose config, and full verify either pass or the precise remaining blocker is recorded.
+   - Checks: test plan from `PLAN.md`.
+   - Result: all schedule/product-readiness gates passed. The first full Go run exposed a nondeterministic metrics concurrency test; the test now validates extra concurrent stops after starts are registered, and the full Go suite passes.
+   - Checks:
+     - `GOCACHE=.gocache GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage ./internal/api -count=1 -timeout=120s` passed.
+     - `npm.cmd --prefix web/viewer run test -- __tests__/creatorLivePage.test.tsx __tests__/channelPage.test.tsx --silent` passed.
+     - `npm.cmd --prefix web/viewer run test -- --silent` passed (175 tests).
+     - `GOCACHE=.gocache GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s` passed after the metrics test repair.
+     - `npm.cmd --prefix web/viewer run lint` passed.
+     - `npm.cmd --prefix web/viewer run build` passed with existing Browserslist and Next.js client-render deopt warnings.
+     - `docker compose --env-file .env -f deploy/docker-compose.yml config --quiet` passed with the local Docker config permission warning.
+     - `./scripts/verify.sh` passed through Git Bash with LibreOffice Python on `PATH` and Docker access approved for quickstart smoke.
+     - `docker compose --env-file .env -f deploy/docker-compose.yml ps` showed no running services after verify cleanup.

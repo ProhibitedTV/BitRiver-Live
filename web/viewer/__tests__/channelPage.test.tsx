@@ -179,6 +179,42 @@ describe("ChannelPage", () => {
     expect(await screen.findByText("Hello from viewer")).toBeInTheDocument();
   });
 
+  test("renders public schedule entries", async () => {
+    const user = userEvent.setup();
+    mockUseAuth.mockReturnValue(signedInAuthState());
+
+    fetchChannelPlaybackMock.mockResolvedValueOnce({
+      ...basePlaybackResponse,
+      channel: {
+        ...basePlaybackResponse.channel,
+        schedule: [
+          {
+            id: "schedule-1",
+            title: "Friday Night Runs",
+            startsAt: "2026-06-05T20:00:00.000Z",
+            durationMinutes: 90,
+            description: "Community speedrun showcase",
+            createdAt: "2026-03-21T00:00:00.000Z",
+            updatedAt: "2026-03-21T00:10:00.000Z",
+          },
+        ],
+      },
+    } as any);
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    const scheduleTab = await screen.findByRole("tab", { name: "Schedule" });
+    await act(async () => {
+      await user.click(scheduleTab);
+    });
+
+    expect(screen.getByRole("tabpanel", { name: "Schedule" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Friday Night Runs" })).toBeInTheDocument();
+    expect(screen.getByText("1 hr 30 min")).toBeInTheDocument();
+    expect(screen.getByText("Community speedrun showcase")).toBeInTheDocument();
+    expect(screen.queryByText(/hasn.t shared an upcoming schedule yet/i)).not.toBeInTheDocument();
+  });
+
   test("refreshes follow and subscription state immediately after logging in", async () => {
     const authState = guestAuthState();
 

@@ -6,7 +6,7 @@ BitRiver Live is a self-hostable live streaming website for communities that nee
 ## User Goals
 - Operators can deploy the stack with the repository's Docker Compose contract and verify it without private chat context.
 - Viewers can sign up, browse live channels, watch a stream, chat while signed in, follow creators, and report abusive chat.
-- Creators can create a channel, find ingest credentials, go live from a common encoder such as OBS, monitor stream health, and publish recordings as VODs.
+- Creators can create a channel, schedule upcoming streams, find ingest credentials, go live from a common encoder such as OBS, monitor stream health, and publish recordings as VODs.
 - Moderators and channel owners can review reports and take action on disruptive chat behavior.
 - Contributors can execute scoped work through `SPEC.md` -> `PLAN.md` -> `TASKS.md` in order.
 
@@ -14,6 +14,7 @@ BitRiver Live is a self-hostable live streaming website for communities that nee
 - A clean checkout can render the Compose contract and boot the canonical stack from the documented quickstart.
 - Public self-signup works when enabled, including sign-in, sign-out, session expiry, and creator onboarding.
 - A creator can create or manage a channel and retrieve RTMP ingest settings without editing deployment files.
+- A creator can publish an upcoming stream schedule that appears on the public channel page.
 - A real ingest session transitions the channel live, exposes playback to viewers, and returns offline after publish stops.
 - Live chat loads, sends messages, updates in near real time, handles auth-required states, and supports viewer reports.
 - Completed recordings stay private until a creator publishes them; published VODs appear on channel and Videos pages.

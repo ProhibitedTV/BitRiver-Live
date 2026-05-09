@@ -10,7 +10,13 @@ import { Button } from "../../../components/ui/Button";
 import { Card, CardHeader } from "../../../components/ui/Card";
 import { VodGallery } from "../../../components/VodGallery";
 import { useAuth } from "../../../hooks/useAuth";
-import type { ChannelPlaybackResponse, FollowState, SubscriptionState, VodItem } from "../../../lib/viewer-api";
+import type {
+  ChannelPlaybackResponse,
+  ChannelScheduleEntry,
+  FollowState,
+  SubscriptionState,
+  VodItem,
+} from "../../../lib/viewer-api";
 import { fetchChannelPlayback, fetchChannelVods } from "../../../lib/viewer-api";
 
 const CHANNEL_TABS = [
@@ -31,6 +37,36 @@ function formatVodDuration(durationSeconds: number) {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return minutes === 0 ? `${hours} hr` : `${hours} hr ${minutes} min`;
+}
+
+function formatScheduleDuration(durationMinutes?: number) {
+  if (!durationMinutes || durationMinutes <= 0) {
+    return undefined;
+  }
+  if (durationMinutes < 60) {
+    return `${durationMinutes} min`;
+  }
+  const hours = Math.floor(durationMinutes / 60);
+  const minutes = durationMinutes % 60;
+  return minutes === 0 ? `${hours} hr` : `${hours} hr ${minutes} min`;
+}
+
+function formatScheduleStart(startsAt: string) {
+  const date = new Date(startsAt);
+  if (Number.isNaN(date.getTime())) {
+    return "Time to be announced";
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function sortScheduleEntries(entries: ChannelScheduleEntry[]) {
+  return [...entries].sort((left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime());
 }
 
 function parseChannelTab(value: string | null | undefined): ChannelTabId | undefined {
@@ -272,6 +308,7 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
       return new Date(right.publishedAt).getTime() - new Date(left.publishedAt).getTime();
     })[0];
   }, [vods]);
+  const scheduleEntries = useMemo(() => sortScheduleEntries(data?.channel.schedule ?? []), [data?.channel.schedule]);
 
   return (
     <div className="workspace-page workspace-page--narrow channel-page">
@@ -383,7 +420,25 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
                 <div id="channel-tab-schedule" role="tabpanel" aria-labelledby="channel-tab-schedule-trigger" hidden={activeTab !== "schedule"} className="channel-tabs__panel">
                   <section className="surface stack">
                     <h3>Schedule</h3>
-                    <p className="muted">The broadcaster hasn&apos;t shared an upcoming schedule yet.</p>
+                    {scheduleEntries.length > 0 ? (
+                      <ol className="channel-schedule-list">
+                        {scheduleEntries.map((entry) => {
+                          const duration = formatScheduleDuration(entry.durationMinutes);
+                          return (
+                            <li key={entry.id} className="channel-schedule-card">
+                              <div className="channel-schedule-card__meta">
+                                <time dateTime={entry.startsAt}>{formatScheduleStart(entry.startsAt)}</time>
+                                {duration ? <span>{duration}</span> : null}
+                              </div>
+                              <h4>{entry.title}</h4>
+                              {entry.description ? <p className="muted">{entry.description}</p> : null}
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    ) : (
+                      <p className="muted">The broadcaster hasn&apos;t shared an upcoming schedule yet.</p>
+                    )}
                   </section>
                 </div>
                 <div id="channel-tab-videos" role="tabpanel" aria-labelledby="channel-tab-videos-trigger" hidden={activeTab !== "videos"} className="channel-tabs__panel">

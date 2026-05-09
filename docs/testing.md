@@ -72,6 +72,7 @@ stack:
 - Render and boot the canonical Compose stack from the documented quickstart.
 - Sign up as a viewer when self-signup is enabled, then sign out and sign back in.
 - Create or manage a creator channel and copy the displayed RTMP ingest settings.
+- Add an upcoming stream schedule in the creator Go Live dashboard and confirm it appears on the public channel Schedule tab.
 - Start a stream from a real RTMP encoder, confirm the channel moves to live, and watch playback from a separate viewer session.
 - Send chat messages as a signed-in viewer, confirm live updates arrive, and submit a report against another user's message.
 - Stop the stream and confirm the channel returns offline without leaving an active session behind.

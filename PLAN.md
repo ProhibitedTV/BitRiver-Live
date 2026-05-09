@@ -1628,3 +1628,37 @@ Turn the latest product-readiness audit into a focused implementation pass witho
 - `npm.cmd --prefix web/viewer run lint`
 - `npm.cmd --prefix web/viewer run build`
 - `./scripts/verify.sh` if local prerequisites are available within the remaining pass.
+
+## Scope: Product Readiness Closure - Schedule and Final Gates
+
+### Summary
+Finish the unresolved product-readiness items from the previous pass. Add a real channel schedule model instead of the public placeholder, expose creator editing in the live dashboard, render upcoming streams on public channel pages, and rerun the broad verification gates with enough time to complete.
+
+### Goals
+- Add a typed channel schedule model that works in JSON storage and Postgres-backed self-hosted installs.
+- Extend existing channel create/update/read payloads with backward-compatible optional schedule entries.
+- Let creators manage upcoming scheduled streams from the existing Go Live dashboard.
+- Replace the public channel Schedule placeholder with actual upcoming stream entries.
+- Re-run full verification and capture any remaining real-stack smoke limitations clearly.
+
+### Assumptions
+- A channel-level schedule array is the right minimal product shape for this pass: it supports one or more upcoming stream entries without introducing a separate moderation or calendar subsystem.
+- Adding a nullable/defaulted Postgres column is a schema migration, not a Compose or `.env` deployment-contract change.
+- A real OBS/manual broadcast rehearsal can be represented in docs and smoke gates here, but only automated if local Docker/encoder prerequisites are available.
+
+### Risks
+- Channel schedule JSON must be validated and normalized consistently across memory and Postgres repositories.
+- Existing channel PATCH behavior must remain backward-compatible for title/category/tag-only updates.
+- The public Schedule tab must stay useful when a creator has no upcoming entries.
+
+### Test Plan
+- `go test ./internal/storage ./internal/api -count=1 -timeout=120s`
+- `npm.cmd --prefix web/viewer run test -- --silent creatorLivePage channelPage viewer-api`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s`
+- `docker compose --env-file .env -f deploy/docker-compose.yml config --quiet`
+- `./scripts/verify.sh`
+
+### Status
+- Implemented. See `TASKS.md` for per-task results and final gate output.

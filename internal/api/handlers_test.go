@@ -2163,6 +2163,13 @@ func TestSelfSignupUserCanCreateFirstChannelAndBecomeCreator(t *testing.T) {
 		"title":    "Fresh Channel",
 		"category": "Just Chatting",
 		"tags":     []string{"launch"},
+		"schedule": []map[string]any{
+			{
+				"title":           "Launch Show",
+				"startsAt":        "2026-06-06T18:00:00Z",
+				"durationMinutes": 75,
+			},
+		},
 	}
 	body, _ := json.Marshal(payload)
 	req := httptest.NewRequest(http.MethodPost, "/api/channels", bytes.NewReader(body))
@@ -2183,6 +2190,9 @@ func TestSelfSignupUserCanCreateFirstChannelAndBecomeCreator(t *testing.T) {
 	}
 	if channel.StreamKey == "" {
 		t.Fatal("expected created channel to include stream key")
+	}
+	if len(channel.Schedule) != 1 || channel.Schedule[0].Title != "Launch Show" || channel.Schedule[0].DurationMinutes != 75 {
+		t.Fatalf("expected created channel schedule, got %#v", channel.Schedule)
 	}
 
 	persistedUser, ok := store.GetUser(viewer.ID)
@@ -2648,6 +2658,68 @@ func TestChannelByIDTrailingSlashMatchesBaseRoute(t *testing.T) {
 	}
 	if !reflect.DeepEqual(basePayload, slashPayload) {
 		t.Fatalf("expected trailing slash response to match base route\nbase: %#v\nslash: %#v", basePayload, slashPayload)
+	}
+}
+
+func TestChannelSchedulePatchPersistsAndPlaybackReturnsSchedule(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	owner, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Owner",
+		Email:       "owner@example.com",
+		Roles:       []string{"creator"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Studio", "gaming", []string{"retro"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	startsAt := time.Date(2026, 6, 5, 20, 0, 0, 0, time.UTC)
+	body, _ := json.Marshal(map[string]interface{}{
+		"schedule": []map[string]interface{}{
+			{
+				"title":           "Friday Night Runs",
+				"startsAt":        startsAt.Format(time.RFC3339Nano),
+				"durationMinutes": 120,
+				"description":     "Community speedrun showcase",
+			},
+		},
+	})
+	req := httptest.NewRequest(http.MethodPatch, "/api/channels/"+channel.ID, bytes.NewReader(body))
+	req = withUser(req, owner)
+	rec := httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected patch status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var patchPayload channelResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &patchPayload); err != nil {
+		t.Fatalf("decode patch response: %v", err)
+	}
+	if len(patchPayload.Schedule) != 1 {
+		t.Fatalf("expected one schedule entry, got %d", len(patchPayload.Schedule))
+	}
+	if patchPayload.Schedule[0].ID == "" || patchPayload.Schedule[0].Title != "Friday Night Runs" || patchPayload.Schedule[0].StartsAt != startsAt.Format(time.RFC3339Nano) {
+		t.Fatalf("unexpected patch schedule payload: %#v", patchPayload.Schedule[0])
+	}
+
+	playbackReq := httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID+"/playback", nil)
+	playbackRec := httptest.NewRecorder()
+	handler.ChannelByID(playbackRec, playbackReq)
+	if playbackRec.Code != http.StatusOK {
+		t.Fatalf("expected playback status 200, got %d: %s", playbackRec.Code, playbackRec.Body.String())
+	}
+
+	var playback channelPlaybackResponse
+	if err := json.Unmarshal(playbackRec.Body.Bytes(), &playback); err != nil {
+		t.Fatalf("decode playback response: %v", err)
+	}
+	if len(playback.Channel.Schedule) != 1 || playback.Channel.Schedule[0].Title != "Friday Night Runs" {
+		t.Fatalf("expected playback schedule to match patch response, got %#v", playback.Channel.Schedule)
 	}
 }
 
