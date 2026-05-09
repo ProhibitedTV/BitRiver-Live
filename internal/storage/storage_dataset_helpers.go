@@ -146,6 +146,7 @@ func cloneDataset(src dataset) dataset {
 			if channel.Tags != nil {
 				cloned.Tags = append([]string(nil), channel.Tags...)
 			}
+			cloned.Schedule = cloneChannelSchedule(channel.Schedule)
 			if channel.CurrentSessionID != nil {
 				current := *channel.CurrentSessionID
 				cloned.CurrentSessionID = &current

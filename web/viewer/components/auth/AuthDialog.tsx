@@ -8,6 +8,7 @@ export function AuthDialog() {
     allowSelfSignup,
     authDialogOpen,
     authFeedback,
+    authRedirectTo,
     authMode,
     closeAuthDialog,
     loading,
@@ -27,6 +28,13 @@ export function AuthDialog() {
   const [signUpPassword, setSignUpPassword] = useState("");
   const [mfaCode, setMFACode] = useState("");
   const initialFocusRef = useRef<HTMLInputElement | null>(null);
+  const authRedirectPath = authRedirectTo.split(/[?#]/, 1)[0] ?? "/";
+  const creatorIntentSignup =
+    authMode === "signup" &&
+    (authRedirectPath === "/creator" ||
+      authRedirectPath.startsWith("/creator/") ||
+      authRedirectPath.endsWith("/creator") ||
+      authRedirectPath.includes("/creator/"));
 
   useEffect(() => {
     if (!authDialogOpen) {
@@ -62,7 +70,9 @@ export function AuthDialog() {
     : mfaRequired
       ? "Verify your account"
       : authMode === "signup"
-        ? "Create your BitRiver account"
+        ? creatorIntentSignup
+          ? "Create your creator account"
+          : "Create your BitRiver account"
         : "Sign in to BitRiver Live";
 
   if (!authDialogOpen) {
@@ -86,8 +96,18 @@ export function AuthDialog() {
 
   return (
     <div className="auth-overlay" role="presentation">
-      <button type="button" className="auth-overlay__backdrop" aria-label="Close sign-in dialog" onClick={closeAuthDialog} />
-      <section className="auth-overlay__dialog surface" role="dialog" aria-modal="true" aria-labelledby="viewer-auth-title">
+      <button
+        type="button"
+        className="auth-overlay__backdrop"
+        aria-label="Close sign-in dialog"
+        onClick={closeAuthDialog}
+      />
+      <section
+        className="auth-overlay__dialog surface"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="viewer-auth-title"
+      >
         <header className="auth-overlay__header">
           <div className="stack stack--2xs">
             <span className="navbar-context__eyebrow">Viewer access</span>
@@ -117,7 +137,10 @@ export function AuthDialog() {
         ) : (
           <>
             {authFeedback ? (
-              <p className={`auth-overlay__feedback${authFeedback.variant === "error" ? " auth-overlay__feedback--error" : ""}`} role={authFeedback.variant === "error" ? "alert" : "status"}>
+              <p
+                className={`auth-overlay__feedback${authFeedback.variant === "error" ? " auth-overlay__feedback--error" : ""}`}
+                role={authFeedback.variant === "error" ? "alert" : "status"}
+              >
                 {authFeedback.message}
               </p>
             ) : null}
@@ -182,8 +205,12 @@ export function AuthDialog() {
             ) : authMode === "signup" ? (
               <form className="auth-overlay__form" onSubmit={handleSignUpSubmit}>
                 <div className="stack stack--2xs">
-                  <h3>Create your viewer account</h3>
-                  <p className="muted">Join without leaving the stream discovery flow.</p>
+                  <h3>{creatorIntentSignup ? "Create your creator account" : "Create your viewer account"}</h3>
+                  <p className="muted">
+                    {creatorIntentSignup
+                      ? "Create your account, then set up your first channel and OBS settings in the creator checklist."
+                      : "Create your account, get back to the stream fast, and unlock your creator path later."}
+                  </p>
                 </div>
 
                 <label className="auth-overlay__field">

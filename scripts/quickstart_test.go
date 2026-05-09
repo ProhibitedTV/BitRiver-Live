@@ -13,44 +13,63 @@ import (
 	"testing"
 )
 
-func newBashCommand(t *testing.T, scriptPath string) *exec.Cmd {
+func testBash(t *testing.T) string {
 	t.Helper()
-	bashPath := resolveTestBash(t)
-	return exec.Command(bashPath, scriptPath)
-}
-
-func resolveTestBash(t *testing.T) string {
-	t.Helper()
-	candidates := []string{}
-	if bashPath, err := exec.LookPath("bash"); err == nil {
-		candidates = append(candidates, bashPath)
+	var candidates []string
+	if configured := strings.TrimSpace(os.Getenv("BITRIVER_TEST_BASH")); configured != "" {
+		candidates = append(candidates, configured)
 	}
 	if runtime.GOOS == "windows" {
-		candidates = append(candidates,
-			`C:\Program Files\Git\bin\bash.exe`,
-			`C:\Program Files\Git\usr\bin\bash.exe`,
-		)
+		if programFiles := strings.TrimSpace(os.Getenv("ProgramFiles")); programFiles != "" {
+			candidates = append(candidates,
+				filepath.Join(programFiles, "Git", "bin", "bash.exe"),
+				filepath.Join(programFiles, "Git", "usr", "bin", "bash.exe"),
+			)
+		}
+		if programFilesX86 := strings.TrimSpace(os.Getenv("ProgramFiles(x86)")); programFilesX86 != "" {
+			candidates = append(candidates,
+				filepath.Join(programFilesX86, "Git", "bin", "bash.exe"),
+				filepath.Join(programFilesX86, "Git", "usr", "bin", "bash.exe"),
+			)
+		}
 	}
-	seen := make(map[string]struct{}, len(candidates))
+	if found, err := exec.LookPath("bash"); err == nil {
+		candidates = append(candidates, found)
+	}
+
+	seen := make(map[string]struct{})
+	var failures []string
 	for _, candidate := range candidates {
-		if candidate == "" {
+		if strings.TrimSpace(candidate) == "" {
 			continue
 		}
-		if _, exists := seen[candidate]; exists {
+		candidate = filepath.Clean(candidate)
+		if _, ok := seen[candidate]; ok {
 			continue
 		}
 		seen[candidate] = struct{}{}
-		if err := testBashUsable(candidate); err == nil {
+		if _, err := os.Stat(candidate); err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", candidate, err))
+			continue
+		}
+		cmd := exec.Command(candidate, "-lc", "printf ok")
+		output, err := cmd.CombinedOutput()
+		if err == nil && string(output) == "ok" {
 			return candidate
 		}
+		failures = append(failures, fmt.Sprintf("%s: %v %q", candidate, err, output))
 	}
-	t.Skip("skipping bash-wrapper test because no usable bash executable was found")
+	t.Skipf("usable bash not available for quickstart wrapper tests: %s", strings.Join(failures, "; "))
 	return ""
 }
 
-func testBashUsable(path string) error {
-	cmd := exec.Command(path, "--version")
-	return cmd.Run()
+func shellPath(path string) string {
+	clean := filepath.ToSlash(path)
+	if runtime.GOOS == "windows" && len(clean) >= 2 && clean[1] == ':' {
+		drive := strings.ToLower(clean[:1])
+		return "/" + drive + clean[2:]
+	}
+	return clean
 }
 
 func TestQuickstartDelegatesToCli(t *testing.T) {
@@ -97,12 +116,13 @@ func TestQuickstartDelegatesToCli(t *testing.T) {
 		}
 	}
 
-	cmd := newBashCommand(t, quickstartDst)
+	bash := testBash(t)
+	cmd := exec.Command(bash, shellPath(quickstartDst))
 	cmd.Dir = tempDir
 	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("PATH=%s%c%s", stubBin, os.PathListSeparator, os.Getenv("PATH")),
-		fmt.Sprintf("BITRIVER_QUICKSTART_REPO_ROOT=%s", tempDir),
-		fmt.Sprintf("GO_LOG=%s", logPath),
+		fmt.Sprintf("PATH=%s:%s", shellPath(stubBin), os.Getenv("PATH")),
+		fmt.Sprintf("BITRIVER_QUICKSTART_REPO_ROOT=%s", shellPath(tempDir)),
+		fmt.Sprintf("GO_LOG=%s", shellPath(logPath)),
 	)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
@@ -144,9 +164,10 @@ func TestQuickstartFailsWhenCliSourcesMissing(t *testing.T) {
 		t.Fatalf("write quickstart: %v", err)
 	}
 
-	cmd := newBashCommand(t, quickstartDst)
+	bash := testBash(t)
+	cmd := exec.Command(bash, shellPath(quickstartDst))
 	cmd.Dir = tempDir
-	cmd.Env = append(os.Environ(), fmt.Sprintf("BITRIVER_QUICKSTART_REPO_ROOT=%s", tempDir))
+	cmd.Env = append(os.Environ(), fmt.Sprintf("BITRIVER_QUICKSTART_REPO_ROOT=%s", shellPath(tempDir)))
 	output, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected quickstart to fail when cmd/bitriver is missing")

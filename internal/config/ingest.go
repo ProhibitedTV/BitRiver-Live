@@ -29,6 +29,7 @@ type IngestConfig struct {
 	SRSBaseURL        string
 	SRSToken          string
 	OMEBaseURL        string
+	OMEAccessToken    string
 	OMEUsername       string
 	OMEPassword       string
 	JobBaseURL        string
@@ -47,6 +48,7 @@ func LoadIngestFromEnv(env Environment) (IngestConfig, error) {
 		SRSBaseURL:        strings.TrimSpace(env.Get("BITRIVER_SRS_API")),
 		SRSToken:          strings.TrimSpace(env.Get("BITRIVER_SRS_TOKEN")),
 		OMEBaseURL:        strings.TrimSpace(env.Get("BITRIVER_OME_API")),
+		OMEAccessToken:    firstNonEmpty(strings.TrimSpace(env.Get("BITRIVER_OME_HEALTHCHECK_TOKEN")), strings.TrimSpace(env.Get("BITRIVER_OME_API_TOKEN"))),
 		OMEUsername:       strings.TrimSpace(env.Get("BITRIVER_OME_USERNAME")),
 		OMEPassword:       strings.TrimSpace(env.Get("BITRIVER_OME_PASSWORD")),
 		JobBaseURL:        strings.TrimSpace(env.Get("BITRIVER_TRANSCODER_API")),
@@ -149,7 +151,7 @@ func (c IngestConfig) Validate() error {
 
 func (c IngestConfig) hasAnyConfig() bool {
 	return c.SRSBaseURL != "" || c.SRSToken != "" ||
-		c.OMEBaseURL != "" || c.OMEUsername != "" || c.OMEPassword != "" ||
+		c.OMEBaseURL != "" || c.OMEAccessToken != "" || c.OMEUsername != "" || c.OMEPassword != "" ||
 		c.JobBaseURL != "" || c.JobToken != ""
 }
 
@@ -164,11 +166,8 @@ func (c IngestConfig) missingRequiredFields() []string {
 	if c.OMEBaseURL == "" {
 		missing = append(missing, "BITRIVER_OME_API")
 	}
-	if c.OMEUsername == "" {
-		missing = append(missing, "BITRIVER_OME_USERNAME")
-	}
-	if c.OMEPassword == "" {
-		missing = append(missing, "BITRIVER_OME_PASSWORD")
+	if c.OMEAccessToken == "" && (c.OMEUsername == "" || c.OMEPassword == "") {
+		missing = append(missing, "BITRIVER_OME_API_TOKEN")
 	}
 	if c.JobBaseURL == "" {
 		missing = append(missing, "BITRIVER_TRANSCODER_API")

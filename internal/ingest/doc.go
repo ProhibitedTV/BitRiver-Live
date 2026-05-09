@@ -14,7 +14,9 @@
 //  2. OvenMediaEngine (OME) application API
 //     - Creates per-channel applications containing playback endpoints and
 //     origin pull URLs consumed by the transcoding layer.
-//     - Authenticated with HTTP Basic Auth.
+//     - Authenticated with OME Basic auth using the rendered AccessToken as
+//     the raw credential string, with user/password Basic auth kept only for
+//     legacy-compatible endpoints.
 //     - Exposed through the applicationAdapter interface.
 //
 //  3. FFmpeg-based transcoding service

@@ -4,18 +4,61 @@ import Image from "next/image";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import type { ChatMessage } from "../lib/viewer-api";
-import { fetchChannelChat, sendChatMessage } from "../lib/viewer-api";
+import { fetchChannelChat, reportChatMessage, sendChatMessage, viewerWebSocketUrl } from "../lib/viewer-api";
 
 const POLL_INTERVAL_MS = 10_000;
 const MAX_RETRY_DELAY_MS = 60_000;
 const MAX_CONSECUTIVE_FAILURES = 5;
 const MAX_MESSAGES = 500;
 const RETRY_MESSAGE = "Unable to load chat. We'll retry in a bit.";
+const CHAT_SOCKET_PATH = "/api/chat/ws";
 
 type ChatMessageEntry = {
   message: ChatMessage;
   sentAtTs: number;
 };
+
+type ChatGatewayEnvelope = {
+  type?: string;
+  error?: string;
+  event?: {
+    type?: string;
+    occurredAt?: string;
+    message?: {
+      id?: string;
+      channelId?: string;
+      userId?: string;
+      content?: string;
+      createdAt?: string;
+    };
+  };
+};
+
+type ChatAuthUser = {
+  id: string;
+  displayName: string;
+};
+
+function chatMessageFromGatewayEnvelope(envelope: ChatGatewayEnvelope, currentUser?: ChatAuthUser): ChatMessage | undefined {
+  const event = envelope.event;
+  const message = event?.message;
+  if (event?.type !== "message" || !message?.id || !message.content) {
+    return undefined;
+  }
+
+  const userId = message.userId?.trim() ?? "";
+  return {
+    id: message.id,
+    message: message.content,
+    sentAt: message.createdAt ?? event.occurredAt ?? new Date().toISOString(),
+    user: userId
+      ? {
+          id: userId,
+          displayName: currentUser?.id === userId ? currentUser.displayName : userId,
+        }
+      : undefined,
+  };
+}
 
 export function ChatPanel({
   channelId,
@@ -38,12 +81,19 @@ export function ChatPanel({
   const [showSettings, setShowSettings] = useState(false);
   const [showAvatars, setShowAvatars] = useState(true);
   const [showTimestamps, setShowTimestamps] = useState(true);
+  const [reportingMessageId, setReportingMessageId] = useState<string | undefined>();
+  const [reportReason, setReportReason] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportError, setReportError] = useState<string | undefined>();
+  const [reportNotice, setReportNotice] = useState<string | undefined>();
   const popoutTriggerRef = useRef<HTMLButtonElement | null>(null);
   const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const popoutDialogRef = useRef<HTMLElement | null>(null);
   const settingsDialogRef = useRef<HTMLElement | null>(null);
   const popoutHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const settingsHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+  const [socketReady, setSocketReady] = useState(false);
 
   const isUnauthorizedError = (err: unknown) => {
     if (!(err instanceof Error)) {
@@ -87,7 +137,9 @@ export function ChatPanel({
 
       const next = Array.isArray(incoming)
         ? incoming.map(normalize)
-        : [...prev, normalize(incoming)];
+        : prev.some((entry) => entry.message.id === incoming.id)
+          ? prev
+          : [...prev, normalize(incoming)];
       const truncated =
         next.length <= MAX_MESSAGES ? next : next.slice(next.length - MAX_MESSAGES);
       if (truncated.length < 2) {
@@ -103,6 +155,92 @@ export function ChatPanel({
       return [...truncated].sort((a, b) => a.sentAtTs - b.sentAtTs);
     });
   };
+
+  useEffect(() => {
+    if (!user || typeof window === "undefined" || typeof WebSocket === "undefined") {
+      setSocketReady(false);
+      socketRef.current = null;
+      return undefined;
+    }
+
+    let cancelled = false;
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket(viewerWebSocketUrl(CHAT_SOCKET_PATH));
+    } catch {
+      setSocketReady(false);
+      socketRef.current = null;
+      return undefined;
+    }
+
+    socketRef.current = socket;
+    setSocketReady(false);
+
+    const handleOpen = () => {
+      if (cancelled) {
+        return;
+      }
+      socket.send(JSON.stringify({ type: "join", channelId }));
+      setSocketReady(true);
+      setAuthRequired(false);
+    };
+
+    const handleMessage = (event: MessageEvent) => {
+      if (cancelled || typeof event.data !== "string") {
+        return;
+      }
+      let envelope: ChatGatewayEnvelope;
+      try {
+        envelope = JSON.parse(event.data) as ChatGatewayEnvelope;
+      } catch {
+        return;
+      }
+      if (envelope.type === "error") {
+        setError(envelope.error || "Live chat connection error");
+        return;
+      }
+      const chatMessage = chatMessageFromGatewayEnvelope(envelope, user);
+      if (chatMessage) {
+        applyMessages(chatMessage);
+        setAuthRequired(false);
+      }
+    };
+
+    const handleClose = () => {
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
+      if (!cancelled) {
+        setSocketReady(false);
+      }
+    };
+
+    const handleError = () => {
+      if (!cancelled) {
+        setSocketReady(false);
+      }
+    };
+
+    socket.addEventListener("open", handleOpen);
+    socket.addEventListener("message", handleMessage);
+    socket.addEventListener("close", handleClose);
+    socket.addEventListener("error", handleError);
+
+    return () => {
+      cancelled = true;
+      socket.removeEventListener("open", handleOpen);
+      socket.removeEventListener("message", handleMessage);
+      socket.removeEventListener("close", handleClose);
+      socket.removeEventListener("error", handleError);
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
+      setSocketReady(false);
+      if (socket.readyState === 0 || socket.readyState === 1) {
+        socket.close();
+      }
+    };
+  }, [channelId, user]);
 
   const groupedMessages = useMemo(() => {
     const groups: {
@@ -233,6 +371,12 @@ export function ChatPanel({
 
     try {
       setSending(true);
+      const socket = socketRef.current;
+      if (socketReady && socket?.readyState === 1) {
+        socket.send(JSON.stringify({ type: "message", channelId, content: content.trim() }));
+        setContent("");
+        return;
+      }
       const message = await sendChatMessage(
         channelId,
         user.id,
@@ -244,6 +388,54 @@ export function ChatPanel({
       setError(err instanceof Error ? err.message : "Unable to send message");
     } finally {
       setSending(false);
+    }
+  };
+
+  const openReportForm = (message: ChatMessage) => {
+    setReportingMessageId(message.id);
+    setReportReason("");
+    setReportError(undefined);
+    setReportNotice(undefined);
+  };
+
+  const closeReportForm = () => {
+    setReportingMessageId(undefined);
+    setReportReason("");
+    setReportError(undefined);
+  };
+
+  const handleReportSubmit = async (event: FormEvent<HTMLFormElement>, message: ChatMessage) => {
+    event.preventDefault();
+    if (!user) {
+      setReportError("Sign in to report chat messages.");
+      return;
+    }
+    const targetId = message.user?.id?.trim();
+    if (!targetId || targetId === user.id) {
+      setReportError("This message cannot be reported from your account.");
+      return;
+    }
+    const reason = reportReason.trim();
+    if (!reason) {
+      setReportError("Add a reason before submitting this report.");
+      return;
+    }
+
+    try {
+      setReportSubmitting(true);
+      setReportError(undefined);
+      await reportChatMessage(channelId, {
+        targetId,
+        messageId: message.id,
+        reason,
+      });
+      setReportNotice("Report submitted for moderator review.");
+      setReportingMessageId(undefined);
+      setReportReason("");
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : "Unable to submit report");
+    } finally {
+      setReportSubmitting(false);
     }
   };
 
@@ -405,7 +597,10 @@ export function ChatPanel({
               </span>
             )}
             <span className="pill pill--ghost">
-              {messageEntries.length} messages
+            {messageEntries.length} messages
+            </span>
+            <span className="pill pill--ghost">
+              {socketReady ? "Live sync" : "Refreshing"}
             </span>
           </div>
         </div>
@@ -446,6 +641,16 @@ export function ChatPanel({
       {error && (
         <div className="surface" role="alert">
           {error}
+        </div>
+      )}
+      {reportNotice && (
+        <div className="surface" role="status">
+          {reportNotice}
+        </div>
+      )}
+      {reportError && (
+        <div className="surface" role="alert">
+          {reportError}
         </div>
       )}
       {!loading && !error && shouldShowSignInPrompt && (
@@ -513,22 +718,60 @@ export function ChatPanel({
                       </span>
                     </div>
                     <div className="chat-message__bubble">
-                      {group.messages.map(({ message }) => (
-                        <p key={message.id}>
-                          {showTimestamps && (
-                            <time
-                              dateTime={message.sentAt}
-                              className="chat-message__time"
-                            >
-                              {new Date(message.sentAt).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit"
-                              })}
-                            </time>
-                          )}
-                          {message.message}
-                        </p>
-                      ))}
+                      {group.messages.map(({ message }) => {
+                        const targetId = message.user?.id?.trim() ?? "";
+                        const canReportMessage = Boolean(user && targetId && targetId !== user.id);
+                        const isReportingMessage = reportingMessageId === message.id;
+                        return (
+                          <div key={message.id} className="chat-message__line">
+                            <p>
+                              {showTimestamps && (
+                                <time
+                                  dateTime={message.sentAt}
+                                  className="chat-message__time"
+                                >
+                                  {new Date(message.sentAt).toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit"
+                                  })}
+                                </time>
+                              )}
+                              {message.message}
+                            </p>
+                            {canReportMessage ? (
+                              <button type="button" className="chat-message__report-button" onClick={() => openReportForm(message)}>
+                                Report
+                              </button>
+                            ) : null}
+                            {isReportingMessage ? (
+                              <form
+                                className="chat-message__report-form"
+                                onSubmit={(event) => handleReportSubmit(event, message)}
+                                aria-label={`Report chat message ${message.id}`}
+                              >
+                                <label className="sr-only" htmlFor={`chat-report-reason-${message.id}`}>
+                                  Report reason
+                                </label>
+                                <textarea
+                                  id={`chat-report-reason-${message.id}`}
+                                  value={reportReason}
+                                  onChange={(event) => setReportReason(event.target.value)}
+                                  placeholder="Reason for report"
+                                  rows={2}
+                                />
+                                <div className="chat-message__report-actions">
+                                  <button type="button" className="ghost-button" onClick={closeReportForm} disabled={reportSubmitting}>
+                                    Cancel
+                                  </button>
+                                  <button type="submit" className="accent-button" disabled={reportSubmitting}>
+                                    {reportSubmitting ? "Submitting..." : "Submit report"}
+                                  </button>
+                                </div>
+                              </form>
+                            ) : null}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </li>

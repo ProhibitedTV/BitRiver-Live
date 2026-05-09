@@ -1,5 +1,6 @@
+import userEvent from "@testing-library/user-event";
 import { render, screen, waitFor } from "@testing-library/react";
-import { resetRouterMocks, setMockPathname, viewerApiMocks } from "../test/test-utils";
+import { mockRouter, resetRouterMocks, setMockPathname, viewerApiMocks } from "../test/test-utils";
 import BrowsePage from "../app/browse/page";
 import { directoryInputMatrix } from "../test/directory-input-matrix";
 
@@ -57,6 +58,7 @@ describe("BrowsePage", () => {
     jest.clearAllMocks();
     resetRouterMocks();
     setMockPathname("/browse");
+    window.history.replaceState({}, "", "/browse");
   });
 
   test.each(directoryInputMatrix)("applies shared directory loading behavior for $label", async ({ query, normalized, mode, errorMessage }) => {
@@ -91,38 +93,31 @@ describe("BrowsePage", () => {
     expect(searchDirectoryMock).not.toHaveBeenCalled();
   });
 
-  test("uses the dedicated category param to load and focus an exact category view", async () => {
-    window.history.replaceState({}, "", "/browse?category=Music");
-    fetchDirectoryMock.mockResolvedValueOnce({
-      channels: [
-        ...baseDirectoryResponse.channels,
-        {
-          channel: {
-            id: "chan-3",
-            ownerId: "owner-3",
-            title: "Checkpoint Central",
-            category: "Gaming",
-            tags: ["retro"],
-            liveState: "live",
-            currentSessionId: "session-3",
-            createdAt: new Date("2023-10-19T10:00:00Z").toISOString(),
-            updatedAt: new Date("2023-10-21T13:00:00Z").toISOString(),
-          },
-          owner: { id: "owner-3", displayName: "PadPro" },
-          profile: {},
-          live: true,
-          followerCount: 6,
-        },
-      ],
-      generatedAt: new Date("2023-10-21T13:00:00Z").toISOString(),
-    } as any);
+  it("hydrates topic drill-ins from the URL and keeps featured highlights actionable", async () => {
+    window.history.replaceState({}, "", "/browse?topic=Music");
+    fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
 
     render(<BrowsePage />);
 
-    await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalledWith("Music"));
+    await waitFor(() => expect(fetchDirectoryMock).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole("button", { name: "Music" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getAllByText("Topic: Music - 1 result").length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /open deep space beats by dj nova/i })).toHaveAttribute(
+      "href",
+      "/channels/chan-1",
+    );
+  });
+
+  it("pushes the selected topic into the browse URL when a filter chip is clicked", async () => {
+    const user = userEvent.setup();
+    fetchDirectoryMock.mockResolvedValueOnce(baseDirectoryResponse as any);
+
+    render(<BrowsePage />);
+
     expect((await screen.findAllByText("Deep Space Beats")).length).toBeGreaterThan(0);
-    expect(screen.queryByText("Checkpoint Central")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Music" })).toHaveAttribute("aria-pressed", "true");
-    expect(searchDirectoryMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Music" }));
+
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith("/browse?topic=Music"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Music" })).toHaveAttribute("aria-pressed", "true"));
   });
 });

@@ -1,5 +1,6 @@
 import "../test/test-utils";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { CategoryRail } from "../components/CategoryRail";
 import { DirectoryGrid } from "../components/DirectoryGrid";
 import { LiveNowGrid } from "../components/LiveNowGrid";
 import { ChannelRail } from "../components/ChannelRail";
@@ -288,6 +289,35 @@ describe("channel display primitives", () => {
 
     expect(screen.getByRole("heading", { level: 2, name: "Archive Sessions" })).toBeInTheDocument();
     jest.useRealTimers();
+  });
+
+  test("turns category chips into browse links", () => {
+    render(<CategoryRail categories={[{ name: "Music", channelCount: 7 }]} />);
+
+    expect(screen.getByRole("link", { name: /browse music channels/i })).toHaveAttribute(
+      "href",
+      "/browse?topic=Music",
+    );
+  });
+
+  test("shows recovery actions when discovery sections are empty", () => {
+    const view = render(<CategoryRail categories={[]} />);
+    expect(screen.getByRole("link", { name: "Open full directory" })).toHaveAttribute("href", "/browse");
+
+    view.rerender(<ChannelRail title="Live right now" channels={[]} />);
+    expect(screen.getByRole("link", { name: "Browse full directory" })).toHaveAttribute("href", "/browse");
+
+    view.rerender(<FeaturedChannel channels={[]} autoPlay={false} />);
+    expect(screen.getByRole("link", { name: "Browse full directory" })).toHaveAttribute("href", "/browse");
+
+    view.rerender(<LiveNowGrid channels={[]} />);
+    expect(screen.getByRole("link", { name: "Browse full directory" })).toHaveAttribute("href", "/browse");
+
+    view.rerender(<DirectoryGrid channels={[]} />);
+    expect(screen.getByRole("link", { name: "Open creator setup" })).toHaveAttribute(
+      "href",
+      "/creator/getting-started",
+    );
   });
 
 });

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DirectoryGrid } from "../../components/DirectoryGrid";
 import { SearchBar } from "../../components/SearchBar";
@@ -13,11 +14,10 @@ type FilterKey = string | null;
 export default function BrowsePage() {
   const {
     queryFromParams: searchParamQuery,
-    categoryFromParams,
+    topicFromParams,
     lastQueryFromParams,
-    lastCategoryFromParams,
+    lastTopicFromParams,
     navigateWithDirectoryState,
-    navigateWithQuery,
   } = useDirectorySearch({
     fallbackPathname: "/browse",
   });
@@ -51,18 +51,17 @@ export default function BrowsePage() {
   }, [categoryFromParams, loadChannels, query, queryHydrated]);
 
   useEffect(() => {
-    if (
-      !queryHydrated ||
-      lastQueryFromParams.current !== searchParamQuery ||
-      lastCategoryFromParams.current !== categoryFromParams
-    ) {
+    const queryChanged = lastQueryFromParams.current !== searchParamQuery;
+    const topicChanged = lastTopicFromParams.current !== topicFromParams;
+
+    if (!queryHydrated || queryChanged || topicChanged) {
       lastQueryFromParams.current = searchParamQuery;
-      lastCategoryFromParams.current = categoryFromParams;
-      setFilter(categoryFromParams || null);
+      lastTopicFromParams.current = topicFromParams;
       setQuery(searchParamQuery);
+      setFilter(topicFromParams);
       setQueryHydrated(true);
     }
-  }, [categoryFromParams, lastCategoryFromParams, lastQueryFromParams, queryHydrated, searchParamQuery]);
+  }, [lastQueryFromParams, lastTopicFromParams, queryHydrated, searchParamQuery, topicFromParams]);
 
   const categoryFilters = useMemo(() => {
     const filters = new Set<string>();
@@ -74,6 +73,14 @@ export default function BrowsePage() {
     });
     return Array.from(filters).sort((a, b) => a.localeCompare(b));
   }, [channels]);
+
+  const visibleFilters = useMemo(() => {
+    if (!filter || categoryFilters.includes(filter)) {
+      return categoryFilters;
+    }
+
+    return [filter, ...categoryFilters];
+  }, [categoryFilters, filter]);
 
   const sortedChannels = useMemo(() => {
     const list = channels
@@ -122,20 +129,34 @@ export default function BrowsePage() {
   }, [sortedChannels]);
 
   const handleSearch = (value: string) => {
-    const normalizedQuery = navigateWithQuery(value);
-    setQuery(normalizedQuery);
-    setFilter(null);
+    const next = navigateWithDirectoryState({ query: value, topic: filter });
+    setQuery(next.normalizedQuery);
   };
 
   const handleReset = () => {
-    const next = navigateWithDirectoryState({ query: "", category: "" });
-    setFilter(next.normalizedCategory || null);
+    const next = navigateWithDirectoryState({ query: "", topic: null });
+    setFilter(next.normalizedTopic);
     setQuery(next.normalizedQuery);
     setSort("live");
   };
 
+  const handleFilterSelect = (nextFilter: FilterKey) => {
+    const next = navigateWithDirectoryState({ query, topic: nextFilter });
+    setFilter(next.normalizedTopic);
+  };
+
   const showEmpty = !loading && !error && sortedChannels.length === 0;
-  const resultSummary = `${sortedChannels.length.toLocaleString()} result${sortedChannels.length === 1 ? "" : "s"}`;
+  const resultSummary = `${filter ? `Topic: ${filter} - ` : ""}${sortedChannels.length.toLocaleString()} result${
+    sortedChannels.length === 1 ? "" : "s"
+  }`;
+  const resultsHeading = query ? `Results for "${query}"` : filter ? `${filter} channels` : "All channels";
+  const resultsDescription = query
+    ? filter
+      ? `Showing channels that match "${query}" inside ${filter}.`
+      : "Review the filtered lineup below or keep refining until one room stands out."
+    : filter
+      ? `Browsing the ${filter} slice of the current directory.`
+      : "Scan the full network, then open the channel that feels most alive.";
 
   return (
     <div className="container container--wide browse-page stack stack--xl">
@@ -143,10 +164,10 @@ export default function BrowsePage() {
         <div className="page-header__copy stack stack--sm">
           <div className="stack stack--2xs">
             <span className="page-eyebrow">Browse</span>
-            <h1>Browse every channel</h1>
+            <h1>Find the live room that feels right right now</h1>
           </div>
           <p className="muted">
-            Use search, sort, and topic filters to move from a broad scan to the exact stream you want.
+            Search, sort, and filter your way from a wide network scan to the exact creator, category, or tag you want to open.
           </p>
         </div>
 
@@ -160,7 +181,7 @@ export default function BrowsePage() {
             <strong className="stat-pill__value">{channels.length}</strong>
           </div>
           <div className="stat-pill">
-            <span className="stat-pill__label">Categories</span>
+            <span className="stat-pill__label">Topics</span>
             <strong className="stat-pill__value">{categoryFilters.length}</strong>
           </div>
         </div>
@@ -169,8 +190,8 @@ export default function BrowsePage() {
       <section className="surface stack stack--md browse-controls">
         <div className="section-heading">
           <div>
-            <h2>Search and filter the directory</h2>
-            <p className="muted">Search by creator, category, or tags, then refine the results below.</p>
+            <h2>Search and shape the lineup</h2>
+            <p className="muted">Search by creator, category, or tags, then tighten the results until the next click is obvious.</p>
           </div>
           {(query || filter || sort !== "live") && (
             <button className="secondary-button" onClick={handleReset}>
@@ -205,14 +226,18 @@ export default function BrowsePage() {
         </div>
 
         <div className="chip-row chip-row--wrap" aria-label="Filter by category or tag">
-          <button className={`chip ${filter === null ? "chip--active" : ""}`} onClick={() => setFilter(null)} aria-pressed={filter === null}>
+          <button
+            className={`chip ${filter === null ? "chip--active" : ""}`}
+            onClick={() => handleFilterSelect(null)}
+            aria-pressed={filter === null}
+          >
             All
           </button>
-          {categoryFilters.map((category) => (
+          {visibleFilters.map((category) => (
             <button
               key={category}
               className={`chip ${filter === category ? "chip--active" : ""}`}
-              onClick={() => setFilter(category)}
+              onClick={() => handleFilterSelect(category)}
               aria-pressed={filter === category}
             >
               {category}
@@ -225,8 +250,8 @@ export default function BrowsePage() {
         <section className="surface stack stack--md">
           <div className="section-heading">
             <div>
-              <h2>Featured right now</h2>
-              <p className="muted">A small shortlist when you want a fast answer instead of a full scan.</p>
+              <h2>Start here</h2>
+              <p className="muted">A quick shortlist for the moments when you want a confident first pick instead of a full sweep.</p>
             </div>
             <span className="muted">{featuredChannels.length} highlights</span>
           </div>
@@ -235,7 +260,12 @@ export default function BrowsePage() {
             {featuredChannels.map((entry) => {
               const viewers = entry.viewerCount ?? 0;
               return (
-                <div key={entry.channel.id} className="featured-card">
+                <Link
+                  key={entry.channel.id}
+                  href={`/channels/${entry.channel.id}`}
+                  className="featured-card"
+                  aria-label={`Open ${entry.channel.title} by ${entry.owner.displayName}`}
+                >
                   <div className="featured-card__header">
                     <div className={`badge ${entry.live ? "badge--live" : "badge--muted"}`}>{entry.live ? "Live" : "Offline"}</div>
                     <span className="overlay__meta">{`${viewers.toLocaleString()} watching`}</span>
@@ -243,14 +273,17 @@ export default function BrowsePage() {
                   <h3>{entry.channel.title}</h3>
                   <p className="muted">{entry.channel.category ?? "Streaming"}</p>
                   <div className="featured-card__footer">
-                    <span className="pill pill--tag">{entry.owner.displayName}</span>
-                    {entry.channel.tags.slice(0, 2).map((tag) => (
-                      <span key={tag} className="pill pill--tag">
-                        #{tag}
-                      </span>
-                    ))}
+                    <div className="featured-card__tags">
+                      <span className="pill pill--tag">{entry.owner.displayName}</span>
+                      {entry.channel.tags.slice(0, 2).map((tag) => (
+                        <span key={tag} className="pill pill--tag">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                    <span className="featured-card__cta">Open channel</span>
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>
@@ -260,12 +293,8 @@ export default function BrowsePage() {
       <section className="browse-results stack stack--md">
         <div className="section-heading">
           <div>
-            <h2>{query ? `Results for "${query}"` : "All channels"}</h2>
-            <p className="muted">
-              {query
-                ? "Review the filtered lineup below or keep refining the search."
-                : "Scan the full network and open a channel when it looks promising."}
-            </p>
+            <h2>{resultsHeading}</h2>
+            <p className="muted">{resultsDescription}</p>
           </div>
           {!loading && !error && <span className="muted">{resultSummary}</span>}
         </div>

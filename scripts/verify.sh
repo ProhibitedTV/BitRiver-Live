@@ -12,7 +12,7 @@ Runs repository verification checks in a consistent order.
 
 Prerequisites:
   - go
-  - Python 3 (`python3`, `python`, or `py -3`) for the contract/doc checks
+  - python3, python, or py -3 (required by ./scripts/check-contract-invariants.sh)
 
 Options:
   --viewer  Force viewer lint/test checks even when no viewer changes are detected.
@@ -76,6 +76,23 @@ require_tool() {
   echo
   echo "Missing required tool: $tool_name" >&2
   echo "$reason" >&2
+  exit 1
+}
+
+require_python_runner() {
+  if python3 -c 'import sys' >/dev/null 2>&1; then
+    return 0
+  fi
+  if py -3 -c 'import sys' >/dev/null 2>&1; then
+    return 0
+  fi
+  if python -c 'import sys' >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo
+  echo "Missing required Python interpreter" >&2
+  echo "Install python3, python, or the Windows py launcher to run repository contract checks." >&2
   exit 1
 }
 
@@ -179,7 +196,7 @@ run_step "Go tests" \
 run_step "Architecture dependency direction check" ./scripts/check-architecture-deps.sh
 run_step "No internal/models imports outside internal/models" ./scripts/check-no-models-imports.sh
 run_step "Dependency source check" ./scripts/check-dependency-source.sh
-run_step "Python prerequisite check" ./scripts/python.sh --version
+require_python_runner
 run_step "Contract invariants check" ./scripts/check-contract-invariants.sh
 run_step "Production third-party digest gate" ./scripts/require-image-digests.sh --env-file .env
 

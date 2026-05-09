@@ -689,6 +689,7 @@ func (s *Storage) CreateChannel(ownerID, title, category string, tags []string) 
 		Title:     title,
 		Category:  strings.TrimSpace(category),
 		Tags:      normalizeTags(tags),
+		Schedule:  []domain.ChannelScheduleEntry{},
 		LiveState: "offline",
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -735,6 +736,13 @@ func (s *Storage) UpdateChannel(id string, update ChannelUpdate) (domain.Channel
 	if update.Tags != nil {
 		channel.Tags = normalizeTags(*update.Tags)
 	}
+	if update.Schedule != nil {
+		schedule, err := normalizeChannelSchedule(*update.Schedule, channel.Schedule, time.Now().UTC())
+		if err != nil {
+			return domain.Channel{}, err
+		}
+		channel.Schedule = schedule
+	}
 	if update.LiveState != nil {
 		state := strings.ToLower(strings.TrimSpace(*update.LiveState))
 		if state != "offline" && state != "live" && state != "starting" && state != "ended" {
@@ -751,6 +759,8 @@ func (s *Storage) UpdateChannel(id string, update ChannelUpdate) (domain.Channel
 
 	s.data = updatedData
 
+	channel.Tags = append([]string{}, channel.Tags...)
+	channel.Schedule = cloneChannelSchedule(channel.Schedule)
 	return channel, nil
 }
 
@@ -788,6 +798,8 @@ func (s *Storage) RotateChannelStreamKey(id string) (domain.Channel, error) {
 
 	s.data = updatedData
 
+	channel.Tags = append([]string{}, channel.Tags...)
+	channel.Schedule = cloneChannelSchedule(channel.Schedule)
 	return channel, nil
 }
 
@@ -803,6 +815,10 @@ func (s *Storage) GetChannel(id string) (domain.Channel, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	channel, ok := s.data.Channels[id]
+	if ok {
+		channel.Tags = append([]string{}, channel.Tags...)
+		channel.Schedule = cloneChannelSchedule(channel.Schedule)
+	}
 	return channel, ok
 }
 
@@ -818,6 +834,8 @@ func (s *Storage) GetChannelByStreamKey(streamKey string) (domain.Channel, bool)
 
 	for _, channel := range s.data.Channels {
 		if channel.StreamKey == key {
+			channel.Tags = append([]string{}, channel.Tags...)
+			channel.Schedule = cloneChannelSchedule(channel.Schedule)
 			return channel, true
 		}
 	}
@@ -849,6 +867,8 @@ func (s *Storage) ListChannels(ownerID, query string) []domain.Channel {
 				continue
 			}
 		}
+		channel.Tags = append([]string{}, channel.Tags...)
+		channel.Schedule = cloneChannelSchedule(channel.Schedule)
 		channels = append(channels, channel)
 	}
 	sort.Slice(channels, func(i, j int) bool {

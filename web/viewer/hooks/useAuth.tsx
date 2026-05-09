@@ -1,13 +1,22 @@
 "use client";
 
 import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { viewerRequest } from "../lib/viewer-api-core";
+import { useRouter } from "next/navigation";
+import { appendRedirectParam } from "../lib/auth-links";
+import { ViewerApiError, viewerRequest } from "../lib/viewer-api-core";
 
 type AuthUser = {
   id: string;
   displayName: string;
   email: string;
   roles: string[];
+};
+
+type RawAuthUser = {
+  id: string;
+  displayName: string;
+  email?: string;
+  roles?: string[];
 };
 
 type AuthMode = "signin" | "signup";
@@ -43,31 +52,25 @@ type AuthContextValue = {
   submitSignIn: (input: { email: string; password: string }) => Promise<void>;
   submitSignUp: (input: { displayName: string; email: string; password: string }) => Promise<void>;
   submitMFAVerification: (code: string) => Promise<void>;
+  refreshViewer: () => Promise<void>;
   signOut: () => Promise<void>;
 };
 
 type ViewerAuthResponse = {
   allowSelfSignup?: boolean;
-  user?: {
-    id: string;
-    displayName: string;
-    email?: string;
-    roles?: string[];
-  };
+  user?: RawAuthUser;
+  loginUrl?: string;
   logoutUrl?: string;
 };
 
 type LoginResponse = {
-  user?: {
-    id: string;
-    displayName: string;
-    email?: string;
-    roles?: string[];
-  };
+  user?: RawAuthUser;
   mfaRequired?: boolean;
   mfaToken?: string;
   enrollment?: MFAEnrollment;
 };
+
+type ViewerAuthMeta = Pick<ViewerAuthResponse, "allowSelfSignup" | "loginUrl" | "logoutUrl">;
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const AUTH_STATE_QUERY_KEYS = ["auth", "next", "mfa"] as const;
@@ -101,7 +104,11 @@ function buildCurrentViewerPath() {
   if (typeof window === "undefined") {
     return "/";
   }
-  return stripAuthStateFromPath(`${window.location.pathname}${window.location.search}${window.location.hash}`, window.location.origin);
+
+  return stripAuthStateFromPath(
+    `${window.location.pathname}${window.location.search}${window.location.hash}`,
+    window.location.origin,
+  );
 }
 
 function normalizeAuthMode(raw: string | null | undefined): AuthMode | undefined {
@@ -126,10 +133,11 @@ function normalizeMFAMode(raw: string | null | undefined): MFAMode | undefined {
   }
 }
 
-function formatAuthUser(user: ViewerAuthResponse["user"]): AuthUser | undefined {
+function formatAuthUser(user?: RawAuthUser): AuthUser | undefined {
   if (!user) {
     return undefined;
   }
+
   return {
     id: user.id,
     displayName: user.displayName,
@@ -138,11 +146,26 @@ function formatAuthUser(user: ViewerAuthResponse["user"]): AuthUser | undefined 
   };
 }
 
+function readViewerAuthMeta(body: unknown): ViewerAuthMeta {
+  if (!body || typeof body !== "object") {
+    return {};
+  }
+
+  const record = body as Record<string, unknown>;
+  return {
+    allowSelfSignup: typeof record.allowSelfSignup === "boolean" ? record.allowSelfSignup : undefined,
+    loginUrl: typeof record.loginUrl === "string" ? record.loginUrl : undefined,
+    logoutUrl: typeof record.logoutUrl === "string" ? record.logoutUrl : undefined,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const [user, setUser] = useState<AuthUser | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
   const [allowSelfSignup, setAllowSelfSignup] = useState(true);
+  const [loginUrl, setLoginUrl] = useState<string | undefined>();
   const [logoutUrl, setLogoutUrl] = useState("/api/viewer/me");
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [authMode, setAuthModeState] = useState<AuthMode>("signin");
@@ -159,12 +182,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(undefined);
       const data = await viewerRequest<ViewerAuthResponse>("/api/viewer/me");
       setAllowSelfSignup(data.allowSelfSignup ?? true);
+      setLoginUrl(data.loginUrl);
       setLogoutUrl(data.logoutUrl ?? "/api/viewer/me");
       setUser(formatAuthUser(data.user));
     } catch (err) {
+      const status = err instanceof ViewerApiError ? err.status : undefined;
+      const meta = err instanceof ViewerApiError ? readViewerAuthMeta(err.body) : {};
+
       setUser(undefined);
-      setLogoutUrl("/api/viewer/me");
-      setError(err instanceof Error ? err.message : "Unable to load viewer");
+      setLoginUrl(meta.loginUrl);
+      setLogoutUrl(meta.logoutUrl ?? "/api/viewer/me");
+      if (meta.allowSelfSignup !== undefined) {
+        setAllowSelfSignup(meta.allowSelfSignup);
+      }
+
+      if (status !== 401 && status !== 403) {
+        setError(err instanceof Error ? err.message : "Unable to load viewer");
+      } else {
+        setError(undefined);
+      }
     } finally {
       setLoading(false);
     }
@@ -222,7 +258,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const openAuthFlow = useCallback(
-    (requestedMode: AuthMode, redirectTo?: string, options?: { feedback?: AuthFeedback; nextMFAMode?: MFAMode; enrollment?: MFAEnrollment; token?: string }) => {
+    (
+      requestedMode: AuthMode,
+      redirectTo?: string,
+      options?: { feedback?: AuthFeedback; nextMFAMode?: MFAMode; enrollment?: MFAEnrollment; token?: string },
+    ) => {
       const resolvedRedirect = resolveRedirectTarget(redirectTo);
       const coercedMode = requestedMode === "signup" && !allowSelfSignup ? "signin" : requestedMode;
 
@@ -336,14 +376,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (resolvedRedirect !== currentPath) {
       window.location.assign(resolvedRedirect);
+      return;
     }
-  }, [authRedirectTo, loadViewer, resetAuthFlow, resolveRedirectTarget]);
+
+    router.refresh();
+  }, [authRedirectTo, loadViewer, resetAuthFlow, resolveRedirectTarget, router]);
 
   const signIn = useCallback(
     async (redirectTo?: string) => {
-      openAuthFlow("signin", redirectTo);
+      const resolvedRedirect = resolveRedirectTarget(redirectTo);
+      if (loginUrl && typeof window !== "undefined") {
+        window.location.href = appendRedirectParam(loginUrl, window.location.origin, resolvedRedirect, "redirect");
+        return;
+      }
+
+      openAuthFlow("signin", resolvedRedirect);
     },
-    [openAuthFlow],
+    [loginUrl, openAuthFlow, resolveRedirectTarget],
   );
 
   const signUp = useCallback(
@@ -480,11 +529,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signOutError = err instanceof Error ? err.message : "Unable to sign out";
     } finally {
       await loadViewer();
+      router.refresh();
       if (signOutError) {
         setError(signOutError);
       }
     }
-  }, [loadViewer, logoutUrl]);
+  }, [loadViewer, logoutUrl, router]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -506,6 +556,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       submitSignIn,
       submitSignUp,
       submitMFAVerification,
+      refreshViewer: loadViewer,
       signOut,
     }),
     [
@@ -514,8 +565,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authFeedback,
       authMode,
       authRedirectTo,
-      closeAuthDialog,
       clearAuthFeedback,
+      closeAuthDialog,
       error,
       loading,
       mfaEnrollment,
@@ -524,6 +575,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signOut,
       signUp,
+      loadViewer,
       submitMFAVerification,
       submitSignIn,
       submitSignUp,

@@ -63,33 +63,28 @@ func (cfg SecurityConfig) withDefaults() SecurityConfig {
 
 // defaultContentSecurityPolicy builds the default Content-Security-Policy value.
 func defaultContentSecurityPolicy(frameAncestors string) string {
-	value := frameAncestors
-	if value == "" {
-		value = defaultFrameAncestors
-	}
-
-	return "default-src 'self'; " +
-		"connect-src 'self'; " +
-		"img-src 'self' data:; " +
-		"script-src 'self'; " +
-		"style-src 'self'; " +
-		"font-src 'self'; " +
-		"object-src 'none'; " +
-		"base-uri 'self'; " +
-		"frame-ancestors " + value + "; " +
-		"form-action 'self'"
+	return buildContentSecurityPolicy(frameAncestors, false)
 }
 
 func defaultViewerContentSecurityPolicy(frameAncestors string) string {
+	return buildContentSecurityPolicy(frameAncestors, true)
+}
+
+func buildContentSecurityPolicy(frameAncestors string, allowInlineScripts bool) string {
 	value := frameAncestors
 	if value == "" {
 		value = defaultFrameAncestors
 	}
 
+	scriptSource := "script-src 'self'; "
+	if allowInlineScripts {
+		scriptSource = "script-src 'self' 'unsafe-inline'; "
+	}
+
 	return "default-src 'self'; " +
 		"connect-src 'self'; " +
 		"img-src 'self' data:; " +
-		"script-src 'self' 'unsafe-inline'; " +
+		scriptSource +
 		"style-src 'self'; " +
 		"font-src 'self'; " +
 		"object-src 'none'; " +
@@ -98,18 +93,8 @@ func defaultViewerContentSecurityPolicy(frameAncestors string) string {
 		"form-action 'self'"
 }
 
-func isViewerProxyPath(path string) bool {
+func viewerRouteRequiresInlineScripts(path string) bool {
 	return path == "/viewer" || strings.HasPrefix(path, "/viewer/")
-}
-
-func contentSecurityPolicyForRequest(cfg SecurityConfig, path string) string {
-	if cfg.ContentSecurityPolicy != "" {
-		return cfg.ContentSecurityPolicy
-	}
-	if isViewerProxyPath(path) {
-		return defaultViewerContentSecurityPolicy(cfg.FrameAncestors)
-	}
-	return defaultContentSecurityPolicy(cfg.FrameAncestors)
 }
 
 // securityHeadersMiddleware sets security headers before invoking the next handler.
@@ -117,8 +102,8 @@ func securityHeadersMiddleware(cfg SecurityConfig, next http.Handler) http.Handl
 	effective := cfg.withDefaults()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if policy := contentSecurityPolicyForRequest(effective, r.URL.Path); policy != "" {
-			w.Header().Set("Content-Security-Policy", policy)
+		if effective.ContentSecurityPolicy != "" && !viewerRouteRequiresInlineScripts(r.URL.Path) {
+			w.Header().Set("Content-Security-Policy", effective.ContentSecurityPolicy)
 		}
 		if effective.FrameOptions != "" {
 			w.Header().Set("X-Frame-Options", effective.FrameOptions)

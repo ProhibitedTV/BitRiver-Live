@@ -17,6 +17,15 @@ function resolveRequestTarget(path: string) {
   return new URL(normalizedPath, base).toString();
 }
 
+export function viewerWebSocketUrl(path: string): string {
+  const target = new URL(
+    resolveRequestTarget(path),
+    typeof window !== "undefined" ? window.location.href : SERVER_API_BASE
+  );
+  target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
+  return target.toString();
+}
+
 export class ViewerApiError extends Error {
   status: number;
   body?: unknown;

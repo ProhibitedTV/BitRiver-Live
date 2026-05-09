@@ -57,6 +57,7 @@ type ChannelsDirectoryUseCase interface {
 	ListProfiles() []domain.Profile
 	GetChannel(id string) (domain.Channel, bool)
 	GetUser(id string) (domain.User, bool)
+	UpdateUser(id string, update domain.UserUpdate) (domain.User, error)
 	GetProfile(userID string) (domain.Profile, bool)
 	CountFollowers(channelID string) int
 	ListFollowedChannelIDs(userID string) []string

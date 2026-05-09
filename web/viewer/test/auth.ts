@@ -60,6 +60,7 @@ const baseAuthState = (): Omit<AuthState, "user"> => ({
   submitSignIn: jest.fn(),
   submitSignUp: jest.fn(),
   submitMFAVerification: jest.fn(),
+  refreshViewer: jest.fn(),
   signOut: jest.fn(),
 });
 

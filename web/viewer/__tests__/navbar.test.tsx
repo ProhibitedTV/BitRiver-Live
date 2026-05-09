@@ -272,7 +272,7 @@ describe("Navbar", () => {
     expect(navDrawer).toBeInTheDocument();
 
     const drawer = within(navDrawer!);
-    ["Discover", "Browse", "Following"].forEach((label) => {
+    ["Home", "Browse", "Following", "Go Live", "Videos"].forEach((label) => {
       expect(drawer.getAllByRole("link", { name: new RegExp(label, "i") })).toHaveLength(1);
     });
   });
@@ -459,13 +459,13 @@ describe("Navbar", () => {
     expect(screen.queryByText(/running in local setup mode/i)).not.toBeInTheDocument();
   });
 
-  test("shows sign in and join calls-to-action when signed out", () => {
+  test("shows sign in and create-account calls-to-action when signed out", () => {
     mockAnonymousUser();
 
     renderWithProviders(<Navbar />);
 
     expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /join/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /create account/i })).toBeInTheDocument();
   });
 
   test("sign in CTA calls the auth handler with a redirect target", async () => {
@@ -488,7 +488,7 @@ describe("Navbar", () => {
     expect(signIn).toHaveBeenCalledWith("/channels/alpha?view=live#info");
   });
 
-  test("join CTA opens the in-viewer auth overlay with the current path as the redirect target", async () => {
+  test("create-account CTA opens the in-viewer auth overlay with the current path as the redirect target", async () => {
     const signUp = jest.fn();
     mockUseAuth.mockReturnValue({
       ...guestAuthState(),
@@ -500,7 +500,7 @@ describe("Navbar", () => {
 
     renderWithProviders(<Navbar />);
 
-    const joinButton = screen.getByRole("button", { name: /join/i });
+    const joinButton = screen.getByRole("button", { name: /create account/i });
     await act(async () => {
       await user.click(joinButton);
     });
@@ -508,7 +508,7 @@ describe("Navbar", () => {
     expect(signUp).toHaveBeenCalledWith("/browse?tag=music#top");
   });
 
-  test("join CTA routes to a configured onboarding URL", async () => {
+  test("create-account CTA routes to a configured onboarding URL", async () => {
     mockAnonymousUser();
     process.env.NEXT_PUBLIC_SIGNUP_URL = "https://accounts.example.com/onboarding";
     const { mockLocation, restore } = overrideWindowLocation({});
@@ -517,7 +517,7 @@ describe("Navbar", () => {
 
     renderWithProviders(<Navbar />);
 
-    const joinButton = screen.getByRole("button", { name: /join/i });
+    const joinButton = screen.getByRole("button", { name: /create account/i });
     await act(async () => {
       await user.click(joinButton);
     });
@@ -526,7 +526,7 @@ describe("Navbar", () => {
     restore();
   });
 
-  test("join CTA respects a configured auth base URL", async () => {
+  test("create-account CTA respects a configured auth base URL", async () => {
     mockAnonymousUser();
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://auth.example.com";
     const { mockLocation, restore } = overrideWindowLocation({});
@@ -535,7 +535,7 @@ describe("Navbar", () => {
 
     renderWithProviders(<Navbar />);
 
-    const joinButton = screen.getByRole("button", { name: /join/i });
+    const joinButton = screen.getByRole("button", { name: /create account/i });
     await act(async () => {
       await user.click(joinButton);
     });
@@ -551,7 +551,19 @@ describe("Navbar", () => {
     renderWithProviders(<Navbar />);
 
     expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /join/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /create account/i })).not.toBeInTheDocument();
+  });
+
+  test("hides the create-account CTA when self-signup is disabled on the current install", () => {
+    mockUseAuth.mockReturnValue({
+      ...guestAuthState(),
+      allowSelfSignup: false,
+    });
+
+    renderWithProviders(<Navbar />);
+
+    expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /create account/i })).not.toBeInTheDocument();
   });
 
   test("hides the join CTA when self-signup is disabled on the current install", () => {

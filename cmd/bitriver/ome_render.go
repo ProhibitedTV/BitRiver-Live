@@ -38,7 +38,7 @@ func runOME(args []string) error {
 func runOMERender(args []string) error {
 	fs := flag.NewFlagSet("ome render", flag.ContinueOnError)
 	envPath := fs.String("env-file", defaultEnvFile(), "path to env file")
-	outputPath := fs.String("output", filepath.Join(repoRoot(), "deploy", "ome", "Server.generated.xml"), "path to generated output file")
+	outputPath := fs.String("output", defaultOMEGeneratedConfigPath(), "path to write generated OME config")
 	force := fs.Bool("force", false, "force regeneration")
 	checkOnly := fs.Bool("check", false, "only verify the file exists")
 	quiet := fs.Bool("quiet", false, "suppress informational output")
@@ -46,11 +46,22 @@ func runOMERender(args []string) error {
 		return err
 	}
 
-	return renderOMEFromEnv(*envPath, *outputPath, *force, *checkOnly, *quiet)
+	return renderOMEFromEnvOutput(*envPath, *outputPath, *force, *checkOnly, *quiet)
 }
 
-func renderOMEFromEnv(envPath, outputPath string, force, checkOnly, quiet bool) error {
+func renderOMEFromEnv(envPath string, force, checkOnly, quiet bool) error {
+	return renderOMEFromEnvOutput(envPath, defaultOMEGeneratedConfigPath(), force, checkOnly, quiet)
+}
+
+func defaultOMEGeneratedConfigPath() string {
+	return filepath.Join(repoRoot(), "deploy", "ome", "Server.generated.xml")
+}
+
+func renderOMEFromEnvOutput(envPath, outputPath string, force, checkOnly, quiet bool) error {
 	templatePath := filepath.Join(repoRoot(), "deploy", "ome", "Server.xml")
+	if strings.TrimSpace(outputPath) == "" {
+		outputPath = defaultOMEGeneratedConfigPath()
+	}
 
 	if checkOnly {
 		if err := validateOMEGeneratedConfig(outputPath, config.LoadEnvironment()); err != nil {

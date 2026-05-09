@@ -1,4 +1,4 @@
-import { fetchChannelUploads, fetchDirectory, searchDirectory } from "../lib/viewer-api";
+import { fetchChannelUploads, fetchDirectory, publishRecording, reportChatMessage } from "../lib/viewer-api";
 
 describe("viewer api", () => {
   const originalFetch = global.fetch;
@@ -24,6 +24,48 @@ describe("viewer api", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/api/uploads?channelId=channel%2Fwith%20spaces%3F"),
       expect.objectContaining({ credentials: "include" })
+    );
+  });
+
+  it("encodes recording IDs when publishing recordings", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "rec/with spaces?" }),
+    });
+
+    await publishRecording("rec/with spaces?");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/recordings/rec%2Fwith%20spaces%3F/publish"),
+      expect.objectContaining({ method: "POST", credentials: "include" })
+    );
+  });
+
+  it("submits chat reports with message context", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 202,
+      json: async () => ({ id: "report-1" }),
+    });
+
+    await reportChatMessage("channel-1", {
+      targetId: "viewer-2",
+      messageId: "message-1",
+      reason: "Harassment",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/channels/channel-1/chat/reports"),
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify({
+          targetId: "viewer-2",
+          messageId: "message-1",
+          reason: "Harassment",
+        }),
+      })
     );
   });
 

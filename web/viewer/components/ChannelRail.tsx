@@ -83,7 +83,12 @@ export function ChannelRail({
       ) : channels.length === 0 ? (
         <div className="state-panel">
           <strong>No channels to show right now</strong>
-          <p className="muted">New channels will appear here as the network fills out.</p>
+          <p className="muted">Fresh creators and current momentum will surface here as soon as the network has something worth opening.</p>
+          <div className="browse-actions">
+            <Link href="/browse" className="secondary-button">
+              Browse full directory
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="content-rail__scroller" role="list">

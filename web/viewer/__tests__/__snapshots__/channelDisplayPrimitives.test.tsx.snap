@@ -448,7 +448,7 @@ exports[`channel display primitives uses shared badge copy in rails and featured
           <span
             class="featured-channel__eyebrow muted"
           >
-            Featured stream
+            Featured live
           </span>
           <h2
             class="featured-channel__title"

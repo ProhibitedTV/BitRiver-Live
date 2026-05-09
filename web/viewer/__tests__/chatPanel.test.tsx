@@ -8,16 +8,67 @@ import type { ChatMessage } from "../lib/viewer-api";
 jest.mock("../hooks/useAuth");
 const fetchChatMock = viewerApiMocks.fetchChannelChat;
 const sendChatMock = viewerApiMocks.sendChatMessage;
+const reportChatMock = viewerApiMocks.reportChatMessage;
+const originalWebSocket = global.WebSocket;
+
+class MockChatWebSocket {
+  static instances: MockChatWebSocket[] = [];
+
+  url: string;
+  readyState = 0;
+  sent: string[] = [];
+  listeners: Record<string, Array<(event: any) => void>> = {};
+
+  constructor(url: string) {
+    this.url = url;
+    MockChatWebSocket.instances.push(this);
+  }
+
+  addEventListener(type: string, listener: (event: any) => void) {
+    this.listeners[type] = [...(this.listeners[type] ?? []), listener];
+  }
+
+  removeEventListener(type: string, listener: (event: any) => void) {
+    this.listeners[type] = (this.listeners[type] ?? []).filter((candidate) => candidate !== listener);
+  }
+
+  send(payload: string) {
+    this.sent.push(payload);
+  }
+
+  close() {
+    this.readyState = 3;
+    this.emit("close", {});
+  }
+
+  open() {
+    this.readyState = 1;
+    this.emit("open", {});
+  }
+
+  receive(payload: unknown) {
+    this.emit("message", { data: JSON.stringify(payload) });
+  }
+
+  emit(type: string, event: unknown) {
+    for (const listener of this.listeners[type] ?? []) {
+      listener(event);
+    }
+  }
+}
 
 beforeEach(() => {
   jest.useFakeTimers({ legacyFakeTimers: true });
   jest.clearAllMocks();
+  MockChatWebSocket.instances = [];
+  (global as any).WebSocket = undefined;
   mockUseAuth.mockReturnValue(signedInAuthState());
 });
 
 afterEach(() => {
   jest.runOnlyPendingTimers();
   jest.useRealTimers();
+  (global as any).WebSocket = originalWebSocket;
 });
 
 const advanceTimers = async (ms: number) => {
@@ -138,6 +189,139 @@ test("sends a chat message when the user submits the form", async () => {
     expect(sendChatMock).toHaveBeenCalledWith("chan-99", "viewer-1", "Hello world");
     expect(screen.getByText("Hello world")).toBeInTheDocument();
   });
+});
+
+test("submits reports for another user's chat message", async () => {
+  fetchChatMock.mockResolvedValue([
+    {
+      id: "m-report-1",
+      message: "bad message",
+      sentAt: new Date("2026-05-07T18:00:00Z").toISOString(),
+      user: { id: "viewer-2", displayName: "Viewer Two" }
+    }
+  ]);
+  reportChatMock.mockResolvedValue({
+    id: "report-1",
+    channelId: "chan-report",
+    reporterId: "viewer-1",
+    targetId: "viewer-2",
+    reason: "Harassment",
+    messageId: "m-report-1",
+    status: "open",
+    createdAt: "2026-05-07T18:01:00Z",
+  });
+
+  const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+  render(<ChatPanel channelId="chan-report" roomId="room-1" />);
+
+  await screen.findByText("bad message");
+  await user.click(screen.getByRole("button", { name: "Report" }));
+  await user.type(screen.getByRole("textbox", { name: /report reason/i }), "Harassment");
+  await user.click(screen.getByRole("button", { name: "Submit report" }));
+
+  await waitFor(() => {
+    expect(reportChatMock).toHaveBeenCalledWith("chan-report", {
+      targetId: "viewer-2",
+      messageId: "m-report-1",
+      reason: "Harassment",
+    });
+  });
+  await waitFor(() => {
+    expect(screen.getByRole("status")).toHaveTextContent("Report submitted for moderator review.");
+  });
+  expect(screen.queryByRole("form", { name: /report chat message/i })).not.toBeInTheDocument();
+});
+
+test("does not offer report controls on the current user's own messages", async () => {
+  fetchChatMock.mockResolvedValue([
+    {
+      id: "m-own-1",
+      message: "my own note",
+      sentAt: new Date("2026-05-07T18:00:00Z").toISOString(),
+      user: { id: "viewer-1", displayName: "Viewer" }
+    }
+  ]);
+
+  render(<ChatPanel channelId="chan-own" roomId="room-1" />);
+
+  await screen.findByText("my own note");
+  expect(screen.queryByRole("button", { name: "Report" })).not.toBeInTheDocument();
+});
+
+test("joins live chat over websocket and renders inbound events without waiting for polling", async () => {
+  (global as any).WebSocket = MockChatWebSocket;
+  fetchChatMock.mockResolvedValue([]);
+
+  render(<ChatPanel channelId="chan-ws" roomId="room-1" />);
+
+  await waitFor(() => expect(fetchChatMock).toHaveBeenCalledWith("chan-ws"));
+  await waitFor(() => expect(MockChatWebSocket.instances).toHaveLength(1));
+
+  const socket = MockChatWebSocket.instances[0];
+  expect(socket.url).toBe("ws://localhost/api/chat/ws");
+
+  await act(async () => {
+    socket.open();
+  });
+
+  expect(socket.sent[0]).toBe(JSON.stringify({ type: "join", channelId: "chan-ws" }));
+  expect(screen.getByText("Live sync")).toBeInTheDocument();
+
+  await act(async () => {
+    socket.receive({
+      type: "event",
+      event: {
+        type: "message",
+        message: {
+          id: "m-ws-1",
+          channelId: "chan-ws",
+          userId: "viewer-2",
+          content: "A live hello",
+          createdAt: "2026-05-07T18:00:00Z",
+        },
+        occurredAt: "2026-05-07T18:00:00Z",
+      },
+    });
+    socket.receive({
+      type: "ack",
+      event: {
+        type: "message",
+        message: {
+          id: "m-ws-1",
+          channelId: "chan-ws",
+          userId: "viewer-2",
+          content: "A live hello",
+          createdAt: "2026-05-07T18:00:00Z",
+        },
+        occurredAt: "2026-05-07T18:00:00Z",
+      },
+    });
+  });
+
+  expect(screen.getAllByText("A live hello")).toHaveLength(1);
+});
+
+test("sends messages through the websocket when live chat is connected", async () => {
+  (global as any).WebSocket = MockChatWebSocket;
+  fetchChatMock.mockResolvedValue([]);
+
+  const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+  render(<ChatPanel channelId="chan-send" roomId="room-1" />);
+
+  await waitFor(() => expect(MockChatWebSocket.instances).toHaveLength(1));
+  const socket = MockChatWebSocket.instances[0];
+
+  await act(async () => {
+    socket.open();
+  });
+
+  const textarea = await screen.findByRole("textbox", { name: /chat message/i });
+  await user.type(textarea, "Live from socket");
+  await user.click(screen.getByRole("button", { name: /send/i }));
+
+  expect(sendChatMock).not.toHaveBeenCalled();
+  expect(socket.sent).toContain(JSON.stringify({ type: "message", channelId: "chan-send", content: "Live from socket" }));
+  expect(textarea).toHaveValue("");
 });
 
 test("uses channel chat even when no room id is provided", async () => {

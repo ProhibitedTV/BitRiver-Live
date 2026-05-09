@@ -1,4 +1,4 @@
-export { ViewerApiError } from "./viewer-api-core";
+export { ViewerApiError, viewerWebSocketUrl } from "./viewer-api-core";
 
 export type {
   CategoryDirectoryResponse,
@@ -6,9 +6,14 @@ export type {
   ChannelOwner,
   ChannelPlaybackResponse,
   ChannelPublic,
+  ChannelScheduleEntry,
+  ChannelScheduleInput,
   ChatMessage,
   ChatMessageResponse,
+  ChatReport,
+  ChatReportPayload,
   ChatUser,
+  CreateChannelPayload,
   CreateTipPayload,
   CreateUploadPayload,
   CryptoAddress,
@@ -20,6 +25,7 @@ export type {
   Playback,
   ProfileSummary,
   ProfileView,
+  Recording,
   Rendition,
   RenditionManifest,
   SocialLink,
@@ -49,6 +55,7 @@ export {
 export { fetchProfile, updateProfile } from "./viewer-api-profile";
 
 export {
+  createChannel,
   createTip,
   fetchChannelSessions,
   fetchChannelVods,
@@ -60,7 +67,9 @@ export {
   updateChannel,
 } from "./viewer-api-channel";
 
-export { fetchChannelChat, sendChatMessage } from "./viewer-api-chat";
+export { fetchChannelChat, reportChatMessage, sendChatMessage } from "./viewer-api-chat";
+
+export { publishRecording } from "./viewer-api-recordings";
 
 export { createUpload, deleteUpload, fetchChannelUploads } from "./viewer-api-upload";
 

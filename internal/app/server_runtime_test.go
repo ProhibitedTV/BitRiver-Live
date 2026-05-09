@@ -62,6 +62,26 @@ func testServerRuntimeInput() ServerRuntimeInput {
 	}
 }
 
+func TestLoadIngestConfigCarriesOMEAccessToken(t *testing.T) {
+	t.Setenv("BITRIVER_SRS_API", "http://srs:1985")
+	t.Setenv("BITRIVER_SRS_TOKEN", "srs-token")
+	t.Setenv("BITRIVER_OME_API", "http://ome:8081")
+	t.Setenv("BITRIVER_OME_API_TOKEN", "api-token")
+	t.Setenv("BITRIVER_OME_HEALTHCHECK_TOKEN", "rendered-token")
+	t.Setenv("BITRIVER_OME_USERNAME", "legacy-user")
+	t.Setenv("BITRIVER_OME_PASSWORD", "legacy-pass")
+	t.Setenv("BITRIVER_TRANSCODER_API", "http://transcoder:9000")
+	t.Setenv("BITRIVER_TRANSCODER_TOKEN", "transcoder-token")
+
+	cfg, err := LoadIngestConfig(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatalf("LoadIngestConfig: %v", err)
+	}
+	if cfg.OMEAccessToken != "rendered-token" {
+		t.Fatalf("expected rendered OME token to be carried into runtime config, got %q", cfg.OMEAccessToken)
+	}
+}
+
 func TestNewServerRuntimeClosesStoreAndSessionOnMFAStoreFailure(t *testing.T) {
 	origRepo := newPostgresRepository
 	origSession := newPostgresSessionStore

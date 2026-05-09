@@ -12,6 +12,7 @@ jest.mock("../hooks/useAuth");
 
 const fetchManagedChannelsMock = viewerApiMocks.fetchManagedChannels;
 const fetchChannelPlaybackMock = viewerApiMocks.fetchChannelPlayback;
+const createChannelMock = viewerApiMocks.createChannel;
 const originalViewerBasePath = process.env.NEXT_PUBLIC_VIEWER_BASE_PATH;
 
 describe("CreatorGettingStartedPage", () => {
@@ -41,6 +42,47 @@ describe("CreatorGettingStartedPage", () => {
     renderWithProviders(<CreatorGettingStartedPage />);
 
     expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /create account/i })).toBeInTheDocument();
+  });
+
+  test("lets a signed-in viewer create a first channel and unlock live setup", async () => {
+    mockAuthenticatedUser({ id: "viewer-1", roles: [] });
+    fetchManagedChannelsMock.mockResolvedValue([] as any);
+    createChannelMock.mockResolvedValue({
+      id: "chan-new",
+      ownerId: "viewer-1",
+      title: "My First Channel",
+      category: "Just Chatting",
+      tags: ["launch"],
+      liveState: "offline",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      streamKey: "sk-first",
+      ingestEndpoints: ["rtmp://ingest"],
+    } as any);
+
+    const user = userEvent.setup();
+    renderWithProviders(<CreatorGettingStartedPage />);
+
+    expect(await screen.findByRole("heading", { level: 3, name: /create your first channel/i })).toBeInTheDocument();
+    expect(screen.getByText(/We'll upgrade this account for creator tools automatically/i)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Channel name"), "My First Channel");
+    await user.type(screen.getByLabelText("Primary category"), "Just Chatting");
+    await user.type(screen.getByLabelText("Tags"), "launch");
+    await user.click(screen.getByRole("button", { name: /create channel/i }));
+
+    await waitFor(() => {
+      expect(createChannelMock).toHaveBeenCalledWith({
+        title: "My First Channel",
+        category: "Just Chatting",
+        tags: ["launch"],
+      });
+    });
+
+    expect(await screen.findByText(/channel created\. your live setup is ready below\./i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open live setup/i })).toHaveAttribute("href", "/creator/live/chan-new");
+    expect(screen.getByRole("button", { name: /copy viewer link/i })).toBeEnabled();
   });
 
   test("supports channel selection and keeps the live setup links in sync", async () => {

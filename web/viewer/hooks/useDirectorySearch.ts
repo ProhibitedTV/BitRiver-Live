@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useRef } from "react";
-import { normalizeDirectoryCategory, normalizeDirectoryQuery, resolveDirectoryNavigation } from "../lib/directory-state";
+import { normalizeDirectoryQuery, normalizeDirectoryTopic, resolveDirectoryNavigation } from "../lib/directory-state";
 
 export function useDirectorySearch({
   fallbackPathname,
@@ -13,23 +13,29 @@ export function useDirectorySearch({
   const router = useRouter();
   const pathname = usePathname() ?? fallbackPathname;
   const searchParamQuery = useMemo(() => normalizeDirectoryQuery(searchParams.get("q")), [searchParams]);
-  const categoryFromParams = useMemo(() => normalizeDirectoryCategory(searchParams.get("category")), [searchParams]);
+  const searchParamTopic = useMemo(() => normalizeDirectoryTopic(searchParams.get("topic")), [searchParams]);
   const lastQueryFromParams = useRef(searchParamQuery);
-  const lastCategoryFromParams = useRef(categoryFromParams);
+  const lastTopicFromParams = useRef(searchParamTopic);
 
   const navigateWithDirectoryState = useCallback(
-    ({ query, category }: { query: string; category?: string | null }) => {
+    ({
+      query,
+      topic,
+    }: {
+      query: string;
+      topic?: string | null;
+    }) => {
       const next = resolveDirectoryNavigation({
         pathname,
         currentParams: new URLSearchParams(searchParams.toString()),
         nextQuery: query,
         previousQuery: lastQueryFromParams.current,
-        nextCategory: category,
-        previousCategory: lastCategoryFromParams.current,
+        nextTopic: topic,
+        previousTopic: lastTopicFromParams.current,
       });
 
       lastQueryFromParams.current = next.normalizedQuery;
-      lastCategoryFromParams.current = next.normalizedCategory;
+      lastTopicFromParams.current = next.normalizedTopic;
 
       if (next.useReplace) {
         router.replace(next.url);
@@ -43,18 +49,19 @@ export function useDirectorySearch({
   );
 
   const navigateWithQuery = useCallback(
-    (value: string) => {
-      const next = navigateWithDirectoryState({ query: value, category: categoryFromParams });
-      return next.normalizedQuery;
-    },
-    [categoryFromParams, navigateWithDirectoryState]
+    (value: string) =>
+      navigateWithDirectoryState({
+        query: value,
+        topic: lastTopicFromParams.current,
+      }),
+    [navigateWithDirectoryState]
   );
 
   return {
     queryFromParams: searchParamQuery,
-    categoryFromParams,
+    topicFromParams: searchParamTopic,
     lastQueryFromParams,
-    lastCategoryFromParams,
+    lastTopicFromParams,
     navigateWithDirectoryState,
     navigateWithQuery,
   };

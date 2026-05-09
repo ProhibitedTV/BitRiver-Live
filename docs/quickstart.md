@@ -179,7 +179,12 @@ You can set the mode in `.env`, export it in the shell, or override per-run:
 
 ```bash
 go run ./cmd/bitriver quickstart --image-source pull
-go run ./cmd/bitriver compose up --image-source build --file deploy/docker-compose.yml
+```
+
+For source-checkout local rehearsals, do not keep a production `.env` and only flip the CLI flag. Switch the saved env file itself to local build settings first (`BITRIVER_LIVE_MODE=development` and `BITRIVER_DEPLOY_IMAGE_SOURCE=build`), then use direct Compose so the stack builds the first-party images from the checkout instead of expecting published GHCR artifacts:
+
+```bash
+docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never
 ```
 
 ### OME auth preflight
@@ -210,7 +215,7 @@ Before any containers are started (`deploy/check-env.sh`, `go run ./cmd/bitriver
 - **Authenticated registry pulls:** production bootstrap runs in pull mode and validates each required GHCR image reference with `docker manifest inspect`, which fails fast with `docker login ghcr.io` guidance when auth is missing.
 - **Pinned images:** each production image must include both tag and digest in `.env` (`BITRIVER_*_IMAGE_TAG` + `BITRIVER_*_IMAGE_DIGEST`) so deployments are immutable and reproducible.
 
-Use explicit development commands/overrides when intentionally running local-only workflows (`BITRIVER_LIVE_MODE=development` and `--image-source build`). Keep those out of committed production bootstrap runbooks.
+Use explicit development settings when intentionally running local-only workflows (`BITRIVER_LIVE_MODE=development` and `BITRIVER_DEPLOY_IMAGE_SOURCE=build`). Keep those out of committed production bootstrap runbooks.
 
 ### What the command configures
 
@@ -219,6 +224,14 @@ Use explicit development commands/overrides when intentionally running local-onl
 3. Launches the containers with `docker compose up --pull always --no-build -d` using the compose file in `deploy/`. Production quickstart expects authenticated GHCR access (`docker login ghcr.io`) and pinned tag+digest image references for API, viewer, SRS controller, and transcoder. The manifest enables `restart: unless-stopped` for each long-lived service so they come back online after crashes or host reboots. The `bitriver-live` API service intentionally waits for `srs-controller` and `transcoder` health checks (`/healthz`) before startup, so first boot can take slightly longer but avoids early dependency races.
 4. Renders `deploy/ome/Server.generated.xml` from the bundled template via the Go renderer, mapping `BITRIVER_OME_BIND` to the control listener fields, stamping WebRTC signalling ports from `BITRIVER_OME_SERVER_PORT` / `BITRIVER_OME_SERVER_TLS_PORT`, and stamping Managers API listener ports from `BITRIVER_OME_HTTP_PORT` / `BITRIVER_OME_HTTP_TLS_PORT` while mirroring the OME API token from `.env` so health checks see the same `<Managers><API><AccessToken>` value the compose preflight expects. If the template or token drifts, the generator stops Compose before OME starts. The only supported render path is `go run ./cmd/bitriver ome render` (or the `./scripts/render-ome-config.sh` wrapper). Compose also renders `deploy/srs/conf/srs.generated.conf`, replacing `${BITRIVER_SRS_TOKEN}` from `.env` so SRS ingest hooks stay aligned with the API token.
 5. Waits for the API readiness check to pass (`/readyz`), then invokes the `bootstrap-admin` helper to seed the admin account. After a successful run, the CLI prints any newly generated credentials once so you can store them securely. When the viewer proxy is configured (the default quickstart shape), opening the host root lands in the public viewer flow and administrators should head to `/admin` to sign in to the control centre. Once you sign in, use the control centre **System status** card (powered by `/api/status`) as the primary health view. The raw `/readyz` and `/healthz` endpoints remain available for automation and deep debugging.
+
+Within the public viewer shell, the standard signed-out sign-in and join actions now open an in-viewer auth dialog so people can authenticate without leaving discovery or channel pages. The standalone `/signup` page remains available for direct links, MFA handoff, and fallback entry when you want to send people straight to the dedicated auth surface.
+
+The homepage now behaves like a true discovery surface instead of a marketing splash: featured live content stays above the fold, recommendation shelves and live rows stay visible without extra clicks, and signed-out "Create account" actions on the homepage and navbar open the same in-viewer auth dialog whenever `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true`.
+
+The viewer discovery surfaces also keep navigation contextual: homepage category chips drill into `/browse?topic=...`, and the browse workspace preserves the active topic in URL state so refresh/back-forward navigation does not drop people out of the slice they were exploring.
+
+The public viewer navigation is now centered on the literal destinations `Home`, `Browse`, `Following`, `Go Live`, `Videos`, and signed-in `Profile`. Replay discovery is exposed through `/videos`, and signed-in people who have not created a channel yet can use the self-serve creator flow under `/creator` or `/creator/getting-started` to create a first channel, copy OBS settings, preview the stream, and share the public viewer link without admin intervention.
 
 Administrators and creators must complete multi-factor authentication (MFA) when signing in. The control centre prompts you to enroll the first time, provides recovery codes, and only issues a session after you verify a code. Keep the recovery codes somewhere safe in case you lose access to your authenticator.
 
@@ -334,17 +347,20 @@ All commands assume you are still in the repository root (where `.env` lives) so
   ```bash
   git pull --ff-only
   ```
-- Re-run the quickstart to apply env/template changes and restart services with the latest configuration. Add `--build` when Dockerfiles or local source changes require a rebuild:
+- Re-run the quickstart to apply env/template changes and restart services with the latest configuration when you are still using the published-image pull contract:
   ```bash
   go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml
-  go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml --build
   ```
   The Go command reuses your existing `.env` and Docker volumes, so configuration, database data, and media files persist across updates. This is the canonical deployment path on Linux, macOS, and Windows.
+  For a source checkout local rebuild, change the saved `.env` to `BITRIVER_LIVE_MODE=development` plus `BITRIVER_DEPLOY_IMAGE_SOURCE=build`, re-render `deploy/ome/Server.generated.xml`, and then run:
+  ```bash
+  docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never
+  ```
 `docker compose up` (including the quickstart wrapper) reruns the `ome-config` helper so OME consumes the credentials from `.env`, the current control-listener bind value from `BITRIVER_OME_BIND`, and the top-level `<Server><IP>` host from `BITRIVER_OME_IP` without requiring an extra compose override.
 - Running `git pull` followed by the quickstart keeps OME in a predictable state:
   - The helper preserves your `.env` while backfilling any new variables introduced upstream so you avoid silent crashes from missing credentials, including the OME managers token.
   - `deploy/ome/Server.generated.xml` is always re-rendered from `deploy/ome/Server.xml` and the refreshed `.env`, eliminating drift between the template and the live config mounted into the container.
-  - Database migrations run automatically before the stack restarts, giving you a clean, rerun-safe deploy loop whenever templates or env keys change. Add `--build` when you also need fresh local images.
+  - Database migrations run automatically before the stack restarts, giving you a clean, rerun-safe deploy loop whenever templates or env keys change. For source-checkout rebuilds, use the direct Compose build command above after switching the saved `.env` into development/build mode.
 - Codex CLI users: follow the [Codex CLI guide](codex-cli.md) for installation, authentication, and edit workflows tailored to this repository. Rerun `docker compose up -d` after applying Codex patches so containers reload configuration and binaries.
 - Need a safer, step-by-step upgrade flow? Use the upgrade runbook in [`docs/upgrades.md`](upgrades.md#upgrade-essentials-migrations-env-updates-and-ome-re-render) for Compose stop/start sequencing, migration timing, and `.env`/OME template handling.
 

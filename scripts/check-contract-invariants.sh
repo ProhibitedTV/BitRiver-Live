@@ -9,6 +9,7 @@ env_example="deploy/.env.example"
 contract_doc="docs/contract.md"
 generated_begin='<!-- BEGIN GENERATED ENV -->'
 generated_end='<!-- END GENERATED ENV -->'
+PYTHON_RUNNER=()
 
 echo "Checking deployment contract invariants..."
 
@@ -20,14 +21,9 @@ fi
 echo "Found $compose_file"
 
 if command -v docker >/dev/null 2>&1; then
-  compose_env_file=""
-  if [[ -f .env ]]; then
-    compose_env_file=".env"
-  elif [[ -f "$env_example" ]]; then
+  compose_env_file=".env"
+  if [[ ! -f "$compose_env_file" ]]; then
     compose_env_file="$env_example"
-  else
-    echo "Missing env file for docker compose validation: expected .env or $env_example" >&2
-    exit 1
   fi
   echo "Validating docker compose config"
   docker compose --env-file "$compose_env_file" -f "$compose_file" config >/dev/null
@@ -61,7 +57,18 @@ echo "Found generated section markers in $contract_doc"
 
 ./scripts/generate-contract-doc.sh --check
 
-./scripts/python.sh - <<'PY'
+if python3 -c 'import sys' >/dev/null 2>&1; then
+  PYTHON_RUNNER=(python3)
+elif py -3 -c 'import sys' >/dev/null 2>&1; then
+  PYTHON_RUNNER=(py -3)
+elif python -c 'import sys' >/dev/null 2>&1; then
+  PYTHON_RUNNER=(python)
+else
+  echo "Missing required Python interpreter: install python3, python, or the Windows py launcher." >&2
+  exit 1
+fi
+
+"${PYTHON_RUNNER[@]}" - <<'PY'
 from pathlib import Path
 import re
 import sys

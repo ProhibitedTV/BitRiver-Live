@@ -129,13 +129,20 @@ func TestStreamGaugeConcurrent(t *testing.T) {
 	starts := 100
 	stops := 150
 
-	wg.Add(starts + stops)
+	wg.Add(starts)
 	for i := 0; i < starts; i++ {
 		go func() {
 			defer wg.Done()
 			recorder.StreamStarted()
 		}()
 	}
+	wg.Wait()
+
+	if active := recorder.ActiveStreams(); active != int64(starts) {
+		t.Fatalf("active streams should match starts before stops; got %d want %d", active, starts)
+	}
+
+	wg.Add(stops)
 	for i := 0; i < stops; i++ {
 		go func() {
 			defer wg.Done()

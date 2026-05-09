@@ -2279,6 +2279,112 @@ func TestChannelStreamLifecycle(t *testing.T) {
 	}
 }
 
+func TestSelfSignupUserCanCreateFirstChannelAndBecomeCreator(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	viewer, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Fresh Viewer",
+		Email:       "fresh@example.com",
+		Password:    "supersecret123",
+		SelfSignup:  true,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
+	if viewer.HasRole(roleCreator) {
+		t.Fatal("expected new self-signup user to start without creator role")
+	}
+
+	payload := map[string]any{
+		"title":    "Fresh Channel",
+		"category": "Just Chatting",
+		"tags":     []string{"launch"},
+		"schedule": []map[string]any{
+			{
+				"title":           "Launch Show",
+				"startsAt":        "2026-06-06T18:00:00Z",
+				"durationMinutes": 75,
+			},
+		},
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/channels", bytes.NewReader(body))
+	req = withUser(req, viewer)
+	rec := httptest.NewRecorder()
+
+	handler.Channels(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", rec.Code)
+	}
+
+	var channel channelResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &channel); err != nil {
+		t.Fatalf("decode channel response: %v", err)
+	}
+	if channel.OwnerID != viewer.ID {
+		t.Fatalf("expected owner %s, got %s", viewer.ID, channel.OwnerID)
+	}
+	if channel.StreamKey == "" {
+		t.Fatal("expected created channel to include stream key")
+	}
+	if len(channel.Schedule) != 1 || channel.Schedule[0].Title != "Launch Show" || channel.Schedule[0].DurationMinutes != 75 {
+		t.Fatalf("expected created channel schedule, got %#v", channel.Schedule)
+	}
+
+	persistedUser, ok := store.GetUser(viewer.ID)
+	if !ok {
+		t.Fatalf("expected user %s to exist", viewer.ID)
+	}
+	if !persistedUser.HasRole(roleCreator) {
+		t.Fatalf("expected user roles %v to include creator", persistedUser.Roles)
+	}
+
+	channels := store.ListChannels(viewer.ID, "")
+	if len(channels) != 1 {
+		t.Fatalf("expected one owned channel, got %d", len(channels))
+	}
+}
+
+func TestViewerCannotCreateChannelForAnotherOwner(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	viewer, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Viewer",
+		Email:       "viewer@example.com",
+		Password:    "supersecret123",
+		SelfSignup:  true,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser viewer: %v", err)
+	}
+	target, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Target",
+		Email:       "target@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser target: %v", err)
+	}
+
+	payload := map[string]any{
+		"ownerId":  target.ID,
+		"title":    "Hijack Attempt",
+		"category": "gaming",
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/channels", bytes.NewReader(body))
+	req = withUser(req, viewer)
+	rec := httptest.NewRecorder()
+
+	handler.Channels(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d", rec.Code)
+	}
+
+	if owned := store.ListChannels(target.ID, ""); len(owned) != 0 {
+		t.Fatalf("expected target owner to keep zero channels, got %d", len(owned))
+	}
+}
+
 func TestChannelStreamEndpointsUnavailableWithoutIngest(t *testing.T) {
 	handler, store := newTestHandler(t)
 	handler.StreamsService = ingestUnavailableRepo{Repository: store}
@@ -2691,6 +2797,68 @@ func TestChannelByIDTrailingSlashMatchesBaseRoute(t *testing.T) {
 	}
 }
 
+func TestChannelSchedulePatchPersistsAndPlaybackReturnsSchedule(t *testing.T) {
+	handler, store := newTestHandler(t)
+
+	owner, err := store.CreateUser(storage.CreateUserParams{
+		DisplayName: "Owner",
+		Email:       "owner@example.com",
+		Roles:       []string{"creator"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser owner: %v", err)
+	}
+	channel, err := store.CreateChannel(owner.ID, "Studio", "gaming", []string{"retro"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	startsAt := time.Date(2026, 6, 5, 20, 0, 0, 0, time.UTC)
+	body, _ := json.Marshal(map[string]interface{}{
+		"schedule": []map[string]interface{}{
+			{
+				"title":           "Friday Night Runs",
+				"startsAt":        startsAt.Format(time.RFC3339Nano),
+				"durationMinutes": 120,
+				"description":     "Community speedrun showcase",
+			},
+		},
+	})
+	req := httptest.NewRequest(http.MethodPatch, "/api/channels/"+channel.ID, bytes.NewReader(body))
+	req = withUser(req, owner)
+	rec := httptest.NewRecorder()
+	handler.ChannelByID(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected patch status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var patchPayload channelResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &patchPayload); err != nil {
+		t.Fatalf("decode patch response: %v", err)
+	}
+	if len(patchPayload.Schedule) != 1 {
+		t.Fatalf("expected one schedule entry, got %d", len(patchPayload.Schedule))
+	}
+	if patchPayload.Schedule[0].ID == "" || patchPayload.Schedule[0].Title != "Friday Night Runs" || patchPayload.Schedule[0].StartsAt != startsAt.Format(time.RFC3339Nano) {
+		t.Fatalf("unexpected patch schedule payload: %#v", patchPayload.Schedule[0])
+	}
+
+	playbackReq := httptest.NewRequest(http.MethodGet, "/api/channels/"+channel.ID+"/playback", nil)
+	playbackRec := httptest.NewRecorder()
+	handler.ChannelByID(playbackRec, playbackReq)
+	if playbackRec.Code != http.StatusOK {
+		t.Fatalf("expected playback status 200, got %d: %s", playbackRec.Code, playbackRec.Body.String())
+	}
+
+	var playback channelPlaybackResponse
+	if err := json.Unmarshal(playbackRec.Body.Bytes(), &playback); err != nil {
+		t.Fatalf("decode playback response: %v", err)
+	}
+	if len(playback.Channel.Schedule) != 1 || playback.Channel.Schedule[0].Title != "Friday Night Runs" {
+		t.Fatalf("expected playback schedule to match patch response, got %#v", playback.Channel.Schedule)
+	}
+}
+
 func TestChatEndpointsLimit(t *testing.T) {
 	handler, store := newTestHandler(t)
 	user, err := store.CreateUser(storage.CreateUserParams{
@@ -3099,7 +3267,9 @@ func TestChatReportsAPI(t *testing.T) {
 	handler.ChatGateway = chat.NewGateway(chat.GatewayConfig{Queue: queue, Store: store})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go storage.NewChatWorker(store, queue, nil).Run(ctx)
+	started := make(chan struct{})
+	go storage.NewChatWorker(store, queue, nil).WithStartedChannel(started).Run(ctx)
+	<-started
 
 	// Apply a ban to populate restrictions endpoint.
 	if err := store.ApplyChatEvent(chat.Event{Type: chat.EventTypeModeration, Moderation: &chat.ModerationEvent{Action: chat.ModerationActionBan, ChannelID: channel.ID, ActorID: owner.ID, TargetID: target.ID, Reason: "spam"}, OccurredAt: time.Now().UTC()}); err != nil {

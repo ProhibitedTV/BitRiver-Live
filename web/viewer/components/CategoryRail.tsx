@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { CategorySummary } from "../lib/viewer-api";
 
+import Link from "next/link";
+
 interface CategoryRailProps {
   id?: string;
   categories: CategorySummary[];
@@ -27,13 +29,22 @@ export function CategoryRail({ id, categories, loading = false }: CategoryRailPr
       ) : categories.length === 0 ? (
         <div className="state-panel">
           <strong>No categories available yet</strong>
-          <p className="muted">Categories will appear here once channels start using them.</p>
+          <p className="muted">Once creators start tagging streams, the busiest topics will surface here automatically.</p>
+          <div className="browse-actions">
+            <Link href="/browse" className="secondary-button">
+              Open full directory
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="chip-rail" role="list">
           {categories.map((category) => (
             <div key={category.name} role="listitem">
-              <Link className="filter-chip" href={`/browse?category=${encodeURIComponent(category.name)}`}>
+              <Link
+                href={`/browse?topic=${encodeURIComponent(category.name)}`}
+                className="filter-chip"
+                aria-label={`Browse ${category.name} channels`}
+              >
                 <div className="filter-chip__label">{category.name}</div>
                 <div className="filter-chip__meta muted">{category.channelCount} live</div>
               </Link>

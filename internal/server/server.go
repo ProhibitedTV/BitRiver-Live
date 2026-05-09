@@ -282,8 +282,22 @@ func registerRoutes(mux *http.ServeMux, handler *api.Handler, cfg Config, record
 	mux.Handle("/admin/", adminHandler)
 
 	if cfg.ViewerOrigin != nil {
+		viewerSecurity := cfg.Security.withDefaults()
+		viewerContentSecurityPolicy := viewerSecurity.ContentSecurityPolicy
+		if cfg.Security.ContentSecurityPolicy == "" {
+			viewerContentSecurityPolicy = defaultViewerContentSecurityPolicy(viewerSecurity.FrameAncestors)
+		}
 		viewerProxy := httputil.NewSingleHostReverseProxy(cfg.ViewerOrigin)
+		viewerProxy.ModifyResponse = func(resp *http.Response) error {
+			if viewerContentSecurityPolicy != "" {
+				resp.Header.Set("Content-Security-Policy", viewerContentSecurityPolicy)
+			}
+			return nil
+		}
 		viewerProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+			if viewerContentSecurityPolicy != "" {
+				w.Header().Set("Content-Security-Policy", viewerContentSecurityPolicy)
+			}
 			if requestLogger := loggingWithRequest(cfg.Logger, ipResolver, r); requestLogger != nil {
 				requestLogger.Error("viewer proxy error", "error", err)
 			}

@@ -1,169 +1,78 @@
-## Scoped change: local redeploy for homepage QA
+## Scoped change: restore overlay auth flow from `codex/signin-polish`
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Record the local redeploy scope before runtime actions
+- [x] Task 1 - Record the selective overlay-restore plan before editing viewer auth
   - Acceptance criteria:
-    - `PLAN.md` captures the redeploy scope, assumptions, risks, and verification commands.
-    - `TASKS.md` lists the ordered rebuild and route-check tasks before Docker actions begin.
+    - `PLAN.md` captures the scoped overlay-auth restore, assumptions, risks, and focused viewer test commands.
+    - `TASKS.md` lists a small ordered implementation and validation sequence before auth/viewer files change.
+    - The read-only analysis identifies which branch pieces are being ported and which current-checkout behaviors must be preserved.
 
-- [x] Task 2 - Rebuild and recreate the local app services from the current checkout
+- [x] Task 2 - Restore the mounted overlay auth state and dialog wiring
   - Acceptance criteria:
-    - `bitriver-live` and `viewer` are rebuilt from the current source tree using the canonical Compose contract.
-    - Compose status/log output is captured after the rebuild attempt.
-    - The action stays limited to the app services unless a hard blocker requires wider intervention.
+    - `useAuth` supports in-viewer dialog state, signup/MFA flow handling, and current-route redirect preservation.
+    - External `loginUrl` redirects still work when provided by the runtime.
+    - `Providers` mounts the overlay dialog so viewer pages can trigger it again.
 
-- [x] Task 3 - Verify the redeployed local routes reflect the latest viewer code
+- [x] Task 3 - Rewire signed-out viewer CTAs back to overlay actions
   - Acceptance criteria:
-    - `http://localhost:8080/` responds after the rebuild.
-    - `http://localhost:8080/viewer` serves the updated homepage rescue content.
-    - `TASKS.md` records the post-redeploy status or any host blocker precisely.
+    - Navbar sign-in/join actions open the restored overlay for local auth installs.
+    - Following signed-out prompts use auth actions instead of hard-linking to `/signup#login-form`.
+    - `/signup` remains available as the standalone auth fallback and is not removed.
 
-### Execution log (local redeploy for homepage QA)
-- Task 1 complete: recorded the local redeploy scope in `PLAN.md` and `TASKS.md` before touching the running stack so the rebuild and route checks were explicit.
+- [x] Task 4 - Restore overlay styling and align viewer auth tests
+  - Acceptance criteria:
+    - The overlay dialog has the required `auth-overlay` styling hooks in viewer CSS.
+    - Viewer auth test helpers cover the expanded `useAuth` context shape.
+    - Focused Jest coverage is updated for `useAuth`, `AuthDialog`, navbar auth CTAs, and following CTA behavior.
+
+- [x] Task 5 - Run focused viewer validation and record the results
+  - Acceptance criteria:
+    - The targeted auth/viewer Jest commands are run and logged.
+    - Any residual warnings or gaps are recorded explicitly in the execution log.
+
+### Execution log (restore overlay auth flow from `codex/signin-polish`)
+- Task 1 complete: reviewed the current checkout against `codex/signin-polish`, confirmed the overlay flow lives primarily in `web/viewer/hooks/useAuth.tsx`, `web/viewer/components/auth/AuthDialog.tsx`, `web/viewer/components/Providers.tsx`, `web/viewer/components/Navbar.tsx`, `web/viewer/components/following/FollowingState.tsx`, viewer auth tests, and the `auth-overlay` CSS block, and recorded the selective-port plan here before editing.
 - Task 1 checks:
-  - `Get-Content PLAN.md | Select-Object -Last 30`
-  - `Get-Content TASKS.md -TotalCount 30`
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short`
-- Task 2 complete: checked the current Compose status, attempted a targeted `up -d --build` for `bitriver-live` and `viewer`, then forced a no-deps recreate to make sure the app containers actually restarted on the current checkout. The recreate succeeded and the app services now show fresh container ages.
+  - `git show codex/signin-polish:web/viewer/hooks/useAuth.tsx`
+  - `git show codex/signin-polish:web/viewer/components/auth/AuthDialog.tsx`
+  - `git show codex/signin-polish:web/viewer/components/Providers.tsx`
+  - `git show codex/signin-polish:web/viewer/components/Navbar.tsx`
+  - `git show codex/signin-polish:web/viewer/components/following/FollowingState.tsx`
+  - `git show codex/signin-polish:web/viewer/styles/globals.css | Select-Object -Skip 2520 -First 190`
+  - `Get-Content web/viewer/hooks/useAuth.tsx`
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/components/Providers.tsx`
+  - `Get-Content web/viewer/components/Navbar.tsx`
+  - `Get-Content web/viewer/components/following/FollowingState.tsx`
+- Task 2 complete: replaced the current redirect-only `useAuth` state with the selective overlay flow from `codex/signin-polish`, kept `/signup` out of the primary local sign-in path, preserved current-route redirect tracking plus MFA/signup handling, and retained redirect compatibility when `/api/viewer/me` returns a `loginUrl`. `Providers` now mounts the restored overlay dialog globally so viewer routes can open it again.
 - Task 2 checks:
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer` (timed out before returning cleanly, so a follow-up status check plus explicit recreate was used)
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --force-recreate --no-deps bitriver-live viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=40 bitriver-live viewer` (still blocked on this host by Docker config/pipe access denial)
-- Task 3 complete: verified the redeployed app is live locally. `/` still returns the expected `307` redirect, `/viewer` now serves the updated homepage rescue content including `Find the streams worth opening now`, `Watch live now`, and `Full directory`, and `/signup` still serves the sign-in-first auth page with `Back to viewer`.
+  - `Get-Content web/viewer/hooks/useAuth.tsx`
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+  - `Get-Content web/viewer/components/Providers.tsx`
+- Task 3 complete: rewired the signed-out navbar join/sign-in actions and the following unauthenticated prompt back through `useAuth`, so local installs open the overlay in place while explicitly external signup/login destinations still redirect when configured.
 - Task 3 checks:
-  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
-  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'Find the streams worth opening now|Watch live now|Full directory|Browse BitRiver Live' -AllMatches`
-  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup).Content | Select-String -Pattern 'Sign in to continue|Back to viewer' -AllMatches`
-
-## Scoped change: installer wizard UX redesign
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the installer redesign scope before touching the UI
-  - Acceptance criteria:
-    - `PLAN.md` captures the wizard redesign scope, assumptions, risks, and verification commands.
-    - `TASKS.md` lists the ordered implementation/verification tasks before installer files are edited.
-    - Read-only analysis identifies the current installer as the static `web/static` script generator and preserves the existing Ubuntu helper contract.
-
-- [x] Task 2 - Refactor installer state and helper logic into a reusable step model
-  - Acceptance criteria:
-    - Installer state separates presentation flow from generated install execution details.
-    - Validation, defaulting, system checks, review rows, and success-summary derivation live in reusable helpers instead of one large submit handler.
-    - Existing script-generation behavior remains reusable by the new flow.
-
-- [x] Task 3 - Rebuild the installer UI as the new 7-step Quick/Advanced flow
-  - Acceptance criteria:
-    - The wizard renders the required steps: Welcome, System Check, Install Mode, Core Settings, Review, Installing, Success.
-    - Quick Install is the default/recommended path; advanced options stay hidden until explicitly requested.
-    - The UI includes reusable pieces for step header, status list, field help text, review rows, progress stepper, error panel, and success panel.
-    - Entered values persist across validation errors, back navigation, and retry flows.
-
-- [x] Task 4 - Add focused test coverage for installer defaults, validation, and handoff behavior
-  - Acceptance criteria:
-    - Static-app tests cover quick defaults, advanced validation, system-check messaging, and success/install summary derivation.
-    - The new installer module is exercised without requiring a browser-only manual path.
-
-- [x] Task 5 - Update supporting docs and run verification, then record outcomes
-  - Acceptance criteria:
-    - Any operator/manual-QA docs touched by the new installer flow are updated in the same change.
-    - `node --test web/static/app.test.mjs web/static/installer.test.mjs` is run and recorded.
-    - `./scripts/verify.sh` is run and recorded, or a concrete host blocker is noted.
-
-### Execution log (installer wizard UX redesign)
-- Task 1 complete: recorded the installer redesign scope in `PLAN.md` and `TASKS.md` before editing the UI, and confirmed the current surface is the static `web/static` script generator that wraps `deploy/install/ubuntu.sh`.
-- Task 1 checks:
-  - `rg -n "installer wizard UX redesign|Redesign the control-center Home Server Installer|node --test web/static/app.test.mjs web/static/installer.test.mjs" PLAN.md TASKS.md`
-  - `Get-Content web/static/index.html | Select-Object -Skip 512 -First 200`
-  - `Get-Content web/static/app.js | Select-Object -Skip 2680 -First 240`
-- Task 2 complete: moved the installer state, defaults, validation, review summaries, execution handoff, and script-generation logic into the new `web/static/installer.js` module so presentation flow and install execution details are no longer tangled inside `web/static/app.js`.
-- Task 2 checks:
-  - `node --check web/static/installer.js`
-  - `rg -n "setupInstallerWizard|buildSystemChecks|validateInstallerDraft|computeInstallerScript|createInstallerExecution" web/static/installer.js`
-  - `rg -n "setupInstallerWizard" web/static/app.js`
-- Task 3 complete: replaced the single-form script generator with the new 7-step wizard flow, switched the settings page over to the new installer module, refreshed the product copy in `web/static/index.html`, and added the new stepper/card/review/success styling in `web/static/styles.css`.
-- Task 3 checks:
-  - `rg -n "Quick Install|System Check|Install Mode|Core Settings|Start handoff|Continue to success" web/static/installer.js web/static/index.html`
-  - `Get-Content web/static/styles.css | Select-Object -Skip 2120 -First 220`
-- Task 4 complete: added `web/static/installer.test.mjs` to cover quick defaults, advanced validation, system-check statuses, script generation, and success/review summaries, while keeping the existing `web/static/app.test.mjs` coverage green.
+  - `Get-Content web/viewer/components/Navbar.tsx`
+  - `Get-Content web/viewer/components/following/FollowingState.tsx`
+- Task 4 complete: restored the `auth-overlay` CSS block in viewer globals, expanded the shared auth mock helpers to cover the richer `useAuth` context shape, replaced the old redirect-centric `useAuth` tests with overlay-focused coverage, added a dedicated `authDialog.test.tsx` suite plus CTA expectation updates in navbar/following tests, and documented the restored viewer-overlay-vs-`/signup` behavior in `docs/quickstart.md`.
 - Task 4 checks:
-  - `node web/static/installer.test.mjs`
-  - `node web/static/app.test.mjs`
-  - `node --check web/static/installer.js`
-  - `node --check web/static/app.js`
-- Task 5 complete: documented the new browser installer flow in `docs/quickstart.md`, attempted the requested combined `node --test` command, captured the Windows `spawn EPERM` runner limitation, reran the static tests directly with `node <file>`, and ran the repo verification gate until it stopped at the local `.env` third-party digest blocker.
+  - `Get-Content web/viewer/styles/globals.css | Select-String -Pattern "auth-overlay" -Context 0,2`
+  - `Get-Content web/viewer/test/auth.ts`
+  - `Get-Content web/viewer/__tests__/useAuth.test.tsx`
+  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
+  - `Get-Content web/viewer/__tests__/navbar.test.tsx`
+  - `Get-Content web/viewer/__tests__/followingStatePresentation.test.tsx`
+  - `Get-Content web/viewer/__tests__/followingSidebar.test.tsx`
+  - `Get-Content docs/quickstart.md | Select-String -Pattern "in-viewer auth dialog|The standalone /signup page remains available" -Context 0,0`
+- Task 5 complete: the focused auth/viewer Jest coverage passed, the neighboring auth-adjacent regression sweep passed, viewer lint passed, and the production viewer build compiled successfully after the overlay restore.
 - Task 5 checks:
-  - `node --test web/static/app.test.mjs web/static/installer.test.mjs` (blocked on this Windows host by the Node test runner spawning subprocesses with `EPERM`)
-  - `node web/static/installer.test.mjs`
-  - `node web/static/app.test.mjs`
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (Go + contract phases passed; current local blocker is missing required `BITRIVER_*_IMAGE_DIGEST` values in `.env` for the production third-party digest gate)
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short`
-
-## Scoped change: installer preflight + QA follow-up
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the follow-up scope before editing backend or installer files
-  - Acceptance criteria:
-    - `PLAN.md` captures the preflight/cleanup scope, assumptions, risks, and verification commands.
-    - `TASKS.md` lists the ordered follow-up tasks before implementation starts.
-    - Read-only analysis confirms the server/API seam and the remaining legacy installer block to remove.
-
-- [x] Task 2 - Add a small server-side installer preflight endpoint with focused API tests
-  - Acceptance criteria:
-    - An authenticated admin-only endpoint reports actionable pass/warning/fail host checks for the installer System Check step.
-    - The endpoint stays observational/dry-run only and does not mutate host state.
-    - Focused `internal/api` tests cover auth/method handling plus representative pass/fail preflight results.
-
-- [x] Task 3 - Wire the installer System Check to the live preflight results and preserve recovery behavior
-  - Acceptance criteria:
-    - The wizard fetches real host preflight results before configuration and surfaces actionable copy in the existing System Check UI.
-    - User-entered values remain intact across preflight errors, validation errors, back navigation, and retry flows.
-    - If the preflight request fails, the wizard falls back to the existing local/browser-side readiness messaging instead of blocking progress.
-
-- [x] Task 4 - Add QA coverage for the new wizard flow and remove the legacy installer block
-  - Acceptance criteria:
-    - Browser-level/manual QA guidance covers the new wizard screens and key step transitions.
-    - Focused static-app tests cover the new preflight state/fallback behavior where practical.
-    - The unused legacy installer template/helper block is removed from `web/static` once the new flow is verified.
-
-- [x] Task 5 - Run focused verification, update task results, and record any remaining blockers
-  - Acceptance criteria:
-    - Focused Go/static-app checks are run and logged in this section.
-    - `./scripts/verify.sh` is rerun and any host/env blocker is documented precisely.
-    - `TASKS.md` reflects the final status/results for each follow-up task.
-
-### Execution log (installer preflight + QA follow-up)
-- Task 1 complete: recorded the follow-up scope in `PLAN.md` and `TASKS.md`, confirmed the existing `/api/setup` backend seam is the right place for a sibling preflight endpoint, and verified the remaining legacy installer template/helper code still lives in `web/static/index.html` and `web/static/app.js`.
-- Task 1 checks:
-  - `rg -n "installer preflight \\+ QA follow-up|Add a small authenticated server-side installer preflight endpoint" PLAN.md TASKS.md`
-  - `Get-Content internal/api/setup_handlers.go`
-  - `Get-Content internal/server/server.go`
-  - `rg -n "computeInstallerScript|setupInstaller\\(|installer-template" web/static/app.js web/static/index.html`
-- Task 2 complete: added the new admin-only `/api/install/preflight` dry-run endpoint, defaulted it through the API handler dependency graph, and covered both handler auth/JSON behavior plus representative host-pass/fail results in focused `internal/api` tests.
-- Task 2 checks:
-  - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.gocache'; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api -count=1`
-- Task 3 complete: wired the installer System Check step to request live host results from `/api/install/preflight`, kept the preflight fetch state separate from install execution state, added a refresh path, and preserved safe fallback guidance whenever the request fails.
-- Task 3 checks:
-  - `node --check web/static/installer.js`
-  - `node web/static/installer.test.mjs`
-- Task 4 complete: added UI-level static coverage for the System Check transition/live-fallback behavior, appended a dedicated installer checklist to `web/manual-qa.md`, and removed the dead legacy installer helper/template blocks from `web/static/app.js` and `web/static/index.html`.
-- Task 4 checks:
-  - `node web/static/installer.test.mjs`
-  - `node web/static/app.test.mjs`
-  - `rg -n "computeInstallerScript|setupInstaller\\(|installer-template" web/static/app.js web/static/index.html` (no matches)
-  - `Get-Content web/manual-qa.md | Select-Object -Last 30`
-- Task 5 complete: reran focused Go/static-app verification, including the touched `internal/server` package, then reran `./scripts/verify.sh`. The repo-wide gate passed through Go/unit/contract checks and stopped at the same local `.env` production digest requirement blocker.
-- Task 5 checks:
-  - `$env:GOCACHE='C:\Users\RhythmicCarnage\Desktop\BitRiver-Live\.gocache'; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1`
-  - `node --check web/static/installer.js`
-  - `node --check web/static/app.js`
-  - `node web/static/installer.test.mjs`
-  - `node web/static/app.test.mjs`
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (Go/unit/contract checks passed; current local blocker is the missing required `BITRIVER_*_IMAGE_DIGEST` values in `.env` for the production third-party digest gate)
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/useAuth.test.tsx __tests__/authDialog.test.tsx __tests__/navbar.test.tsx __tests__/followingStatePresentation.test.tsx`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/chatPanel.test.tsx __tests__/channelHero.test.tsx __tests__/uploadManager.test.tsx __tests__/followingSidebar.test.tsx`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+- Remaining validation notes:
+  - `navbar.test.tsx` still emits the existing jsdom "Not implemented: navigation" warning when real anchor navigation is exercised; the assertions pass and this predates the overlay restore.
+  - `chatPanel.test.tsx` still emits the existing non-failing React `act(...)` warnings from chat composer/dialog interactions; the suite passes and this change did not modify `ChatPanel`.
 
 ## Scoped change: homepage UI/UX rescue pass
 
@@ -2700,6 +2609,79 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'BitRiver Live|/signup#login-form|/viewer/signup|Failed to parse URL|Invalid URL' -AllMatches`
   - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup).Content | Select-String -Pattern 'Sign in to continue|data-allow-self-signup|Back to viewer' -AllMatches`
 
+## Scoped change: local redeploy and credential handoff
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the scoped redeploy plan before runtime actions
+  - Acceptance criteria:
+    - `PLAN.md` captures the local redeploy scope, assumptions, risks, and verification commands.
+    - `TASKS.md` lists the ordered deployment and credential-verification tasks before Docker actions begin.
+
+- [x] Task 2 - Run the documented local deployment workflow
+  - Acceptance criteria:
+    - The Windows quickstart entrypoint is exercised against the canonical repo contract.
+    - Compose service state/logs are captured after the deployment attempt.
+    - Any repo-side deployment blocker is isolated clearly from host-only issues.
+
+- [x] Task 3 - Verify login surfaces and capture the credentials actually used
+  - Acceptance criteria:
+    - The live auth/admin entry points are checked locally after deployment.
+    - The admin credentials used for this run are identified from quickstart output or the active `.env`.
+    - The final response can hand the user a concrete login path plus username/password.
+
+- [x] Task 4 - Run closing verification and record the outcome
+  - Acceptance criteria:
+    - Relevant quickstart/Compose/HTTP checks are rerun or summarized after the deployment attempt.
+    - `TASKS.md` records whether the stack reached a healthy running state and any remaining blockers.
+
+### Execution log (local redeploy and credential handoff)
+- Task 1 complete: appended this scoped redeploy-and-credential plan to `PLAN.md` and `TASKS.md` before rerunning Docker actions, using the existing repo-root `.env` and the canonical Windows quickstart entrypoint as the initial deployment target.
+- Task 1 checks:
+  - `rg -n "local redeploy and credential handoff|Redeploy the local BitRiver Live stack on this Windows host" PLAN.md TASKS.md`
+  - `rg -n "^(BITRIVER_LIVE_MODE|BITRIVER_DEPLOY_IMAGE_SOURCE|BITRIVER_LIVE_ADMIN_EMAIL|BITRIVER_LIVE_ADMIN_PASSWORD|NEXT_PUBLIC_VIEWER_URL|BITRIVER_TRANSCODER_PUBLIC_BASE_URL|BITRIVER_OME_BIND|BITRIVER_OME_IP)=" .env`
+- Task 2 complete: exercised the documented Windows quickstart entrypoint and isolated two repo-side workflow defects plus one host-only blocker before completing a local bring-up with the documented development-mode Compose override flow on an alternate port.
+- Task 2 findings:
+  - Host-only blocker: `TCP/8080` was already occupied by an unrelated `bitriverd.exe` from `C:\Users\RhythmicCarnage\Desktop\BitRiver-Studio-OS`, so the local shakedown had to move to `http://localhost:18080`.
+  - Repo blocker 1: `scripts/quickstart.ps1 --env-file .env --compose-file deploy/docker-compose.yml` fails `Doctor` under elevated execution because the spawned CLI process cannot find `docker` on `PATH`.
+  - Repo blocker 2: `deploy/docker-compose.yml` miswires `postgres-migrations` with `entrypoint: ["/bin/sh","-c"]` plus a scalar `command`, which Compose/tokenization turns into `["set","-e","if",...]`, so the migration job exits successfully without applying schema files.
+  - Workflow note: the canonical quickstart path also enforces the production contract in the saved `.env`, so the checked-in localhost/demo values are intentionally not quickstart-runnable end to end without production-safe overrides.
+- Task 2 checks:
+  - `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 --env-file .env --compose-file deploy/docker-compose.yml`
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go run ./cmd/bitriver quickstart --env-file .env --compose-file deploy/docker-compose.yml`
+  - `docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"`
+  - `Get-NetTCPConnection -LocalPort 8080 -State Listen | Select-Object LocalAddress,LocalPort,OwningProcess | Format-List`
+  - `Get-Process -Id (Get-NetTCPConnection -LocalPort 8080 -State Listen | Select-Object -ExpandProperty OwningProcess -Unique) | Select-Object Id,ProcessName,Path | Format-List`
+  - `docker pull docker/dockerfile:1`
+  - `docker pull ossrs/srs:v5.0.185`
+  - `$env:BITRIVER_LIVE_MODE='development'; $env:BITRIVER_LIVE_PORT='18080'; $env:NEXT_PUBLIC_VIEWER_URL='http://localhost:18080/viewer'; docker compose --env-file .env -f deploy/docker-compose.yml up -d --build`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+  - `docker inspect deploy-postgres-migrations-1 --format '{{json .Config.Entrypoint}} {{json .Config.Cmd}}'`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml run --rm --entrypoint psql postgres-migrations -h postgres -U brlive_app -d brlive_app -v ON_ERROR_STOP=1 -f /migrations/0001_initial.sql -f /migrations/0002_auth_sessions.sql -f /migrations/0002_chat_filters.sql -f /migrations/0003_oauth_accounts.sql -f /migrations/0004_auth_session_hashes.sql -f /migrations/0005_auth_session_absolute_expiry.sql -f /migrations/0006_profile_social_links.sql -f /migrations/0007_auth_mfa.sql -f /migrations/0008_legal_cases.sql -f /migrations/0009_appeals.sql -f /migrations/0010_payments_webhooks.sql`
+- Task 3 complete: verified the live local routes on `http://localhost:18080`, seeded the admin account inside the running stack, and confirmed the active `.env` admin email/password are accepted by the login API.
+- Task 3 findings:
+  - `http://localhost:18080/` returns `307` to `/viewer`.
+  - `http://localhost:18080/viewer` serves the public viewer shell.
+  - `http://localhost:18080/signup` serves the sign-in page with `login-form`.
+  - `http://localhost:18080/admin` returns `200`.
+  - After seeding the admin account, `POST /api/auth/login` with the active `.env` admin email/password returns `200` and an MFA enrollment payload (`mfaRequired: true`), confirming the credentials are valid for this deployment.
+- Task 3 checks:
+  - `docker compose --env-file .env -f deploy/docker-compose.yml exec -T postgres psql -U brlive_app -d brlive_app -c "\dt"`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml exec -T bitriver-live /app/bootstrap-admin --postgres-dsn "postgres://brlive_app:***@postgres:5432/brlive_app?sslmode=disable" --email <active .env admin email> --password <active .env admin password>`
+  - `Invoke-WebRequest -UseBasicParsing http://localhost:18080/ -MaximumRedirection 0`
+  - `Invoke-WebRequest -UseBasicParsing http://localhost:18080/viewer`
+  - `Invoke-WebRequest -UseBasicParsing http://localhost:18080/signup`
+  - `Invoke-WebRequest -UseBasicParsing http://localhost:18080/admin -MaximumRedirection 0`
+  - `Invoke-WebRequest -UseBasicParsing -Uri http://localhost:18080/api/auth/login -Method Post -ContentType 'application/json' -Body <active .env admin creds JSON>`
+- Task 4 complete: recorded the final deployment state and remaining workflow blockers after the local stack reached a usable running state on the alternate port.
+- Task 4 result:
+  - Local deployment is up and usable on `http://localhost:18080`, with healthy API/postgres/redis/OME/SRS/transcoder services and a verified admin login path.
+  - The deployment workflow is not fully healthy yet because the Windows quickstart wrapper loses Docker from `PATH`, and the Compose migration job silently no-ops due to the `postgres-migrations` command wiring.
+  - `bitriver-transcoder-public` still logs `setgid(101) failed (1: Operation not permitted)` under the current hardened container settings, so the local shakedown did not treat the HLS nginx sidecar as fully healthy.
+- Task 4 checks:
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=80 bitriver-live viewer postgres redis srs-controller ome transcoder transcoder-public`
+
 ### Execution log (platform-grade viewer UX/system redesign)
 - ✅ Task 1 complete: appended the scoped viewer-platform redesign plan to `PLAN.md`/`TASKS.md` before editing and captured the read-only diagnosis that currently the product works as a self-hosted creator/viewer platform, but the UX is fragmented by duplicated discovery entry points, ad-hoc page scaffolding, heavy inline styling, and shell/state tokens that are missing or inconsistent.
 - ✅ Task 1 findings:
@@ -2719,1396 +2701,792 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - ✅ Task 4 checks:
   - ✅ `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx creatorGettingStartedPage.test.tsx creatorLivePage.test.tsx profilePage.test.tsx uploadManager.test.tsx`
   - ⚠️ The targeted suite passes, but the existing test harness still emits non-failing React `act(...)` warnings from async polling/state-reset effects in the creator getting-started/live pages.
-## Scoped change: viewer control usability repair pass
+
+## Scoped change: viewer discovery journey polish
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Record the control-repair scope and initial read-only diagnosis
+- [x] Task 1 - Record the scoped discovery-journey plan before editing
   - Acceptance criteria:
-    - `PLAN.md` captures the viewer control-usability scope, assumptions, risks, and validation commands.
-    - `TASKS.md` lists the ordered reproduce/fix/validate steps before viewer code is edited.
-    - The initial diagnosis names at least the reported theme-toggle issue plus any additional confirmed or strongly suspected dead controls found during read-only inspection.
+    - `PLAN.md` captures the discovery-navigation scope, assumptions, risks, and focused viewer validation commands.
+    - `TASKS.md` lists the ordered implementation/validation steps before viewer files change.
+    - The read-only diagnosis identifies the concrete dead-end controls or passive recovery states to fix.
 
-- [x] Task 2 - Reproduce the broken controls with a focused interaction audit
+- [x] Task 2 - Make homepage and browse discovery controls actionable
   - Acceptance criteria:
-    - The current navbar/homepage/mobile-shell controls are checked with code inspection plus browser/test interaction where available.
-    - Concrete broken or misleading controls are recorded in the execution log with enough specificity to fix them.
-    - The confirmed fix list stays scoped to the highest-traffic usability blockers instead of drifting into broad redesign work.
+    - Homepage category chips take the user into Browse with relevant context instead of acting like dead buttons.
+    - Browse featured highlights open the corresponding channel or otherwise provide a direct watch action.
+    - Any new routing/query behavior stays consistent with the current viewer `basePath`.
 
-- [x] Task 3 - Implement the smallest viewer changes needed to make the confirmed controls usable
+- [x] Task 3 - Persist browse topic drill-ins and improve recovery states
   - Acceptance criteria:
-    - Broken controls either perform a meaningful action, navigate somewhere real, or are reframed so they are no longer dead UI.
-    - The light/dark toggle has observable, testable behavior instead of a no-op-feeling interaction.
-    - Any touched homepage/discovery controls remain keyboard-accessible and consistent across desktop/mobile layouts.
+    - Browse can hydrate a selected topic/category filter from URL state and keep it stable through navigation updates.
+    - The touched empty states include explicit next actions grounded in existing routes/behaviors.
+    - Viewer tests are updated where the interaction contract changes.
 
-- [x] Task 4 - Add or adjust coverage for the repaired controls
+- [x] Task 4 - Run focused validation and record the results
   - Acceptance criteria:
-    - Jest and/or Playwright coverage asserts the repaired behavior for the theme toggle and any other fixed controls.
-    - Tests focus on user-observable outcomes rather than implementation details.
-    - New coverage is stable on this host as far as the environment allows.
+    - The targeted browse/homepage Jest coverage passes.
+    - Viewer lint and production build are rerun and logged.
+    - Any residual warnings or gaps are captured explicitly in the execution log.
 
-- [x] Task 5 - Run focused validation and record the usability status
-  - Acceptance criteria:
-    - Targeted viewer tests and build validation are run and logged after the fixes.
-    - Browser-level interaction checks are attempted and their outcome is recorded precisely, including any host blocker.
-    - Remaining UI gaps, if any, are written down concretely for follow-up.
-
-### Execution log (viewer control usability repair pass)
-- Task 1 complete: appended the scoped control-repair plan to `PLAN.md` and `TASKS.md` before touching viewer code, with the initial read-only diagnosis that the reported theme toggle needs browser-level reproduction and the homepage category chips are already a confirmed dead control because they render as buttons with no action.
+### Execution log (viewer discovery journey polish)
+- Task 1 complete: recorded the scoped discovery-journey polish plan in `PLAN.md` and `TASKS.md` before editing, based on the read-only diagnosis that the homepage category chips are dead buttons, the browse "Featured right now" cards are non-actionable visual blocks, and several discovery empty states still strand first-time visitors with passive copy instead of clear recovery paths.
 - Task 1 checks:
-  - `Get-Content PLAN.md | Select-Object -Last 40`
-  - `Get-Content TASKS.md -TotalCount 60`
-  - `git status --short PLAN.md TASKS.md`
-- Task 2 complete: reproduced the breakage with a real browser pass and a static control audit. The closed `#viewer-nav-menu` drawer is still rendered and intercepting pointer events on desktop, which blocks clicks on the theme toggle, sign-in button, and account menu even when the drawer is supposedly closed. The same audit confirmed the homepage `CategoryRail` chips are dead buttons with no `onClick`, route, or filter behavior at all.
-- Task 2 findings:
-  - `npx.cmd playwright test tests/channel.spec.ts tests/navbar-mobile.spec.ts --reporter=list` failed in the browser with `#viewer-nav-menu` intercepting pointer events for the theme toggle, sign-in, and account-menu clicks; the mobile nav hidden-state assertion also failed because the drawer remained visible despite `hidden`.
-  - `web/viewer/styles/globals.css` contains a later `.nav-drawer { display: grid; }` rule that overrides the earlier closed-state `display: none`, which explains why the hidden drawer still occupies the page.
-  - `web/viewer/components/CategoryRail.tsx` renders category controls as plain `<button type="button">` elements without any action, so they are guaranteed no-ops on the homepage today.
-  - The older follow-button Playwright expectations in `tests/channel.spec.ts` also no longer match the current accessible label formatting (`Follow - 10 supporters` in the component versus the old middle-dot string in the spec), but that is test drift rather than the main usability blocker the user reported.
-- Task 2 checks:
-  - `npm.cmd --prefix web/viewer run test -- navbar.test.tsx directoryPage.test.tsx`
-  - `npm.cmd --prefix web/viewer run build`
-  - `npx.cmd playwright test tests/channel.spec.ts tests/navbar-mobile.spec.ts --reporter=list`
-  - `Get-Content web/viewer/styles/globals.css | Select-Object -Skip 1568 -First 60`
-  - `Get-Content web/viewer/styles/globals.css | Select-Object -Skip 3196 -First 70`
-  - `Get-Content web/viewer/components/CategoryRail.tsx`
-- Task 3 complete: added a global `[hidden] { display: none !important; }` rule so hidden UI cannot remain clickable/visible when later display rules try to override it, which restores real click access to the navbar theme toggle and other right-side controls. I also turned the homepage category chips into real browse links that carry the category name into the existing directory search flow instead of rendering inert buttons.
-- Task 3 checks:
-  - `git diff -- web/viewer/styles/globals.css web/viewer/components/CategoryRail.tsx`
-  - `npm.cmd --prefix web/viewer run test -- navbar.test.tsx directoryPage.test.tsx`
-  - `npm.cmd --prefix web/viewer run build`
-  - `npx.cmd playwright test tests/navbar-mobile.spec.ts tests/channel.spec.ts --grep "collapses into a toggle on small viewports|theme toggle updates the rendered document" --reporter=list`
-- Task 3 notes:
-  - The rebuilt-browser theme-toggle Playwright check now passes, confirming the user-reported dead control was being blocked by the hidden drawer overlay rather than by the theme-state logic itself.
-  - The focused mobile-navbar Playwright check progressed past the hidden/blocked state and now only fails on an outdated ambiguous locator (`Browse` versus `Browse all channels`), which is a test issue to clean up in Task 4 rather than a remaining product bug.
-- Task 4 complete: updated the shared viewer test helper to mock the homepage recommendation/category endpoints explicitly, added a homepage unit assertion that category chips now link into `/browse?q=...`, and tightened the mobile Playwright navbar spec so it targets the drawer's `Browse` link precisely instead of colliding with the hero CTA copy.
-- Task 4 checks:
-  - `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx navbar.test.tsx`
-  - `npx.cmd playwright test tests/navbar-mobile.spec.ts tests/channel.spec.ts --grep "collapses into a toggle on small viewports|theme toggle updates the rendered document" --reporter=list`
-- Task 4 notes:
-  - The Jest suite now covers the repaired category-chip behavior directly.
-  - The focused Playwright suite now passes for both the mobile drawer interaction and the navbar theme toggle.
-- Task 5 complete: reran the focused viewer validation suite, refreshed the local `bitriver-live` and `viewer` services, and confirmed `localhost:8080` is serving the rebuilt viewer shell. The only remaining validation blocker is the existing host setup issue where `./scripts/verify.sh --viewer` stops immediately because Python is not installed/aliased for the env-placeholder hygiene step on this Windows machine.
-- Task 5 checks:
-  - `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx navbar.test.tsx`
-  - `npm.cmd --prefix web/viewer run lint`
-  - `npm.cmd --prefix web/viewer run build`
-  - `npx.cmd playwright test tests/navbar-mobile.spec.ts tests/channel.spec.ts --grep "collapses into a toggle on small viewports|theme toggle updates the rendered document" --reporter=list`
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'Switch to (light|dark) theme|Browse by category|BitRiver Live' -AllMatches`
-  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
-- Task 5 notes:
-  - Focused Jest and Playwright coverage now pass for the repaired controls.
-  - Viewer lint and build both pass.
-  - The local app services were rebuilt and `http://localhost:8080/` still returns the expected `307` into the viewer flow while `/viewer` serves the updated shell markup.
-  - `./scripts/verify.sh --viewer` remains blocked on this host by the missing Python executable before it reaches the viewer-specific checks.
-
-## Scoped change: deploy current branch for viewer review
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the review-deploy scope before runtime actions
-  - Acceptance criteria:
-    - `PLAN.md` captures the deploy/verification scope, assumptions, risks, and commands.
-    - `TASKS.md` lists the rebuild and deployed-toggle verification steps before Docker actions begin.
-
-- [x] Task 2 - Rebuild and refresh the local app services from the current branch
-  - Acceptance criteria:
-    - `bitriver-live` and `viewer` are rebuilt from the current checkout using the canonical Compose contract.
-    - Compose status confirms the refreshed app services are up after the rebuild.
-    - The action stays scoped to the review deployment.
-
-- [x] Task 3 - Verify the deployed light/dark toggle on the running app
-  - Acceptance criteria:
-    - The deployed app at `localhost:8080` serves the current viewer shell from this branch.
-    - A focused browser check confirms the light/dark mode toggle works on the deployed instance.
-    - `TASKS.md` records any host blocker precisely if deployed verification cannot complete.
-
-### Execution log (deploy current branch for viewer review)
-- Task 1 complete: appended a focused deploy-for-review scope to `PLAN.md` and `TASKS.md` before touching Docker, centered on rebuilding the current branch and proving the deployed light/dark toggle works on `localhost:8080`.
-- Task 1 checks:
-  - `Get-Content PLAN.md | Select-Object -Last 40`
-  - `Get-Content TASKS.md | Select-Object -Last 60`
-  - `git status --short`
-- Task 2 complete: rebuilt the current checkout with `docker compose ... up -d --build bitriver-live viewer` and confirmed the review deployment is up. Compose status shows `bitriver-live` healthy on `0.0.0.0:8080` and the deployed `/viewer` HTML includes the current navbar shell with the `Switch to light theme` toggle button.
-- Task 2 checks:
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'Switch to (light|dark) theme|BitRiver Live' -AllMatches`
-- Task 3 complete: the first deployed browser check failed and revealed the real blocker: proxied `/viewer` pages were not hydrating because the default server CSP blocked the inline Next.js bootstrap scripts. After the follow-up CSP fix and a targeted no-deps recreate of `bitriver-live`/`viewer`, the deployed app now hydrates correctly and the light/dark toggle updates the rendered document on `localhost:8080`.
-- Task 3 checks:
-  - `@'...playwright probe...'@ | node -` against `http://127.0.0.1:8080/`
-  - `$env:PLAYWRIGHT_BASE_URL='http://127.0.0.1:8080'; npx.cmd playwright test tests/channel.spec.ts --grep "theme toggle updates the rendered document" --reporter=list`
-  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
-
-## Scoped change: viewer proxy CSP hydration fix
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the viewer-hydration blocker and scoped fix plan
-  - Acceptance criteria:
-    - `PLAN.md` captures the CSP/hydration scope, assumptions, risks, and validation commands.
-    - `TASKS.md` lists the ordered security-header, test, redeploy, and deployed-browser validation steps before code edits begin.
-
-- [x] Task 2 - Adjust default security-header behavior so proxied viewer pages can hydrate
-  - Acceptance criteria:
-    - The default CSP applied to proxied `/viewer` responses permits the inline Next.js bootstrap scripts required for hydration.
-    - Existing non-viewer routes keep the stricter current default unless explicitly configured otherwise.
-    - The implementation remains compatible with existing security-header override flags/env vars.
-
-- [x] Task 3 - Add regression coverage for viewer-path CSP behavior
-  - Acceptance criteria:
-    - `internal/server` tests assert the default viewer-path CSP behavior separately from the stricter non-viewer default.
-    - Tests also cover that custom security-header overrides still take precedence when configured.
-
-- [x] Task 4 - Update the security-header docs for proxied viewer defaults
-  - Acceptance criteria:
-    - `docs/advanced-deployments.md` describes the stricter default CSP for admin/API routes and the relaxed default applied to proxied viewer responses.
-    - Existing flag/env override guidance remains accurate.
-
-- [x] Task 5 - Rebuild the review deployment and prove the live theme toggle works
-  - Acceptance criteria:
-    - `bitriver-live` and `viewer` are rebuilt from the current checkout after the CSP fix.
-    - A real browser check against `http://localhost:8080` confirms the deployed theme toggle changes document theme state.
-    - `TASKS.md` records any remaining host blocker precisely if end-to-end deployed verification still cannot complete.
-
-### Execution log (viewer proxy CSP hydration fix)
-- Task 1 complete: the deployed `/viewer` HTML was current, but an escalated Playwright probe showed repeated browser console errors refusing inline scripts under the API's default `Content-Security-Policy`. Because those Next.js bootstrap scripts never execute, the proxied viewer does not hydrate and controls like the theme toggle remain inert on the live app even though the same component works in the isolated viewer test server.
-- Task 1 checks:
-  - `rg -n "Content-Security-Policy|script-src" internal/server cmd/server docs/advanced-deployments.md`
-  - `Get-Content internal/server/security.go`
-  - `Get-Content internal/server/security_headers_test.go`
-  - `@'...playwright probe...'@ | node -` against `http://127.0.0.1:8080/`
-- Task 2 complete: updated the security-header middleware so default CSP is now selected per request path. Proxied `/viewer` responses use a viewer-specific default that permits the inline Next.js bootstrap scripts needed for hydration, while non-viewer routes still receive the stricter existing default and explicit custom CSP overrides still pass through unchanged.
-- Task 2 checks:
-  - `git diff -- internal/server/security.go`
-  - `gofmt -w internal/server/security.go internal/server/security_headers_test.go`
-- Task 3 complete: added targeted middleware/server coverage for the new viewer-path default plus the custom-override path, then reran the focused `internal/server` suite successfully.
-- Task 3 checks:
-  - `git diff -- internal/server/security_headers_test.go`
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
-- Task 4 complete: updated `docs/advanced-deployments.md` so the default hardening section now distinguishes the stricter admin/API CSP from the proxied viewer default that allows the inline Next.js bootstrap required for hydration. The existing override flag/env guidance remains unchanged.
-- Task 4 checks:
-  - `rg -n "Proxied \`/viewer\` responses|Admin/API and other non-viewer routes" docs/advanced-deployments.md`
-  - `Get-Content docs/advanced-deployments.md | Select-Object -Skip 336 -First 16`
-- Task 5 complete: rebuilt the `bitriver-live` and `viewer` images from the current checkout, used a targeted `--force-recreate --no-deps` refresh to land the new images after Compose hit an unrelated container-reconciliation error elsewhere in the stack, and then reran real browser validation against `http://localhost:8080`. The deployed viewer now hydrates, the browser probe shows the theme toggle changing `body[data-theme]` plus `localStorage`, and the focused Playwright theme test passes against the live deployment.
-- Task 5 checks:
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer` (build completed, then hit an unrelated container reconciliation error while touching non-target services)
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --force-recreate --no-deps bitriver-live viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Headers['Content-Security-Policy']`
-  - `@'...playwright probe...'@ | node -` against `http://127.0.0.1:8080/`
-  - `$env:PLAYWRIGHT_BASE_URL='http://127.0.0.1:8080'; npx.cmd playwright test tests/channel.spec.ts --grep "theme toggle updates the rendered document" --reporter=list`
-  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
-
-## Scoped change: exact category browse links
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the category-link bug and the scoped fix plan
-  - Acceptance criteria:
-    - `PLAN.md` captures the exact category-link scope, assumptions, risks, and validation commands.
-    - `TASKS.md` lists the ordered API/viewer/test steps before code edits begin.
-    - The read-only diagnosis identifies both the misleading `?q=` category links and the current free-text directory search gap around `channel.category`.
-
-- [x] Task 2 - Add category-aware directory handling on the API/storage path
-  - Acceptance criteria:
-    - `/api/directory` accepts a dedicated `category` query parameter for exact category filtering.
-    - Free-text directory search also matches `channel.category` so existing search copy remains accurate.
-    - The implementation stays backward-compatible for callers that only use `q` today.
-
-- [x] Task 3 - Wire the viewer browse flow to the real category filter
-  - Acceptance criteria:
-    - Homepage category chips navigate with an exact category filter instead of `?q=...`.
-    - The browse page preserves and resets `q`/`category` state coherently.
-    - Existing browse search flows without a category continue to behave the same.
-
-- [x] Task 4 - Add regression coverage for the API and viewer category flows
-  - Acceptance criteria:
-    - API tests assert exact category filtering and free-text category matching.
-    - Viewer tests assert homepage category links use the dedicated param and the browse page loads the right API helper path for `?category=...`.
-
-- [x] Task 5 - Run focused validation and record the result
-  - Acceptance criteria:
-    - Targeted Go and viewer tests pass.
-    - Viewer production build passes.
-    - The local `bitriver-live` and `viewer` services are refreshed so the fix is reviewable on the running app.
-    - `TASKS.md` captures any remaining blocker precisely.
-
-### Execution log (exact category browse links)
-- Task 1 complete: confirmed the user-reported mismatch in read-only analysis. `CategoryRail` currently links to `/browse?q=<category>`, but `/api/directory` forwards only `q` into `ListChannels`, and the PostgreSQL search predicate currently matches title, owner display name, and tags only, not `c.category`. That means the homepage chips are currently semantically wrong even before considering result quality, and the browse/search copy is also overstating current search coverage.
-- Task 1 checks:
-  - `Get-Content internal/api/channels_directory_handlers.go`
-  - `Get-Content internal/storage/postgres_channels.go`
   - `Get-Content web/viewer/components/CategoryRail.tsx`
   - `Get-Content web/viewer/app/browse/page.tsx`
-  - `Get-Content web/viewer/hooks/useDirectorySearch.ts`
+  - `Get-Content web/viewer/components/ChannelRail.tsx`
+  - `Get-Content web/viewer/components/LiveNowGrid.tsx`
+  - `Get-Content web/viewer/components/DirectoryGrid.tsx`
+- Task 2 complete: converted homepage category chips into real browse drill-ins, made browse featured highlights open their corresponding channels, and kept the new discovery navigation on internal viewer routes so `basePath` handling stays consistent.
+- Task 2 checks:
+  - `Get-Content web/viewer/components/CategoryRail.tsx`
+  - `Get-Content web/viewer/app/browse/page.tsx`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/browsePage.test.tsx __tests__/channelDisplayPrimitives.test.tsx`
+- Task 3 complete: added URL-backed browse topic hydration/synchronization, kept the selected topic visible through browse summaries/headings, upgraded the touched discovery empty states with explicit recovery actions instead of passive copy, and documented the new discovery drill-in behavior in `docs/quickstart.md`.
+- Task 3 checks:
   - `Get-Content web/viewer/lib/directory-state.ts`
-- Task 2 complete: added a dedicated `category` query path to the directory handler and exact-match category filtering there, while also extending shared free-text channel matching to include `channel.Category` in both the Postgres and in-memory storage paths. That keeps existing `q` callers backward-compatible while making category search true everywhere the current UI says it is.
-- Task 2 checks:
-  - `git diff -- internal/api/channels_directory_handlers.go internal/storage/postgres_channels.go internal/storage/storage_channel_helpers.go`
-  - `gofmt -w internal/api/channels_directory_handlers.go internal/api/handlers_test.go internal/storage/storage_channel_helpers.go`
-- Task 3 complete: rewired the homepage category rail to `/browse?category=...`, extended the viewer directory helpers to preserve both `q` and `category`, and updated the browse page so category-linked entries load the exact category view while reset/search flows keep the URL state coherent.
-- Task 3 checks:
-  - `git diff -- web/viewer/components/CategoryRail.tsx web/viewer/app/browse/page.tsx web/viewer/hooks/useDirectorySearch.ts web/viewer/lib/directory-state.ts web/viewer/lib/viewer-api-directory.ts`
-- Task 4 complete: added API coverage for exact category filtering plus free-text category matching, updated the homepage category-link assertions to use the dedicated param, added browse-page coverage for `?category=Music`, and added viewer API request assertions for category-aware directory calls.
+  - `Get-Content web/viewer/hooks/useDirectorySearch.ts`
+  - `Get-Content web/viewer/components/FeaturedChannel.tsx`
+  - `Get-Content web/viewer/components/DirectoryGrid.tsx`
+  - `Get-Content docs/quickstart.md | Select-String -Pattern "homepage category chips drill into|browse workspace preserves the active topic" -Context 0,0`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/browsePage.test.tsx __tests__/channelDisplayPrimitives.test.tsx`
+- Task 4 complete: reran the planned browse/homepage Jest coverage, passed viewer lint and production build, and attempted the repo-native viewer verification script. The UX pass is green at the targeted test/build level; the only failing closing check was the existing Windows host blocker where `verify.sh` cannot find Python for the env-placeholder hygiene step.
 - Task 4 checks:
-  - `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx browsePage.test.tsx viewer-api.test.ts`
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api -count=1 -timeout=120s`
-- Task 5 complete: the targeted Go and viewer tests passed, the viewer production build passed, and the local `bitriver-live` plus `viewer` services were rebuilt from the current checkout. A live browser probe against `http://127.0.0.1:8080/viewer/browse?category=Music` confirmed the rebuilt route hydrates and requests `GET /api/directory?category=Music`; the local dataset simply does not have enough seeded category data to render a visible `Music` filter chip in that runtime check. I also updated `web/viewer/README.md` with the browse URL contract so the dedicated `category=` behavior is documented where viewer route semantics already live.
-- Task 5 checks:
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api -count=1 -timeout=120s`
-  - `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx browsePage.test.tsx viewer-api.test.ts`
-  - `npm.cmd --prefix web/viewer run build`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `@'...playwright browse probe...'@ | node -` against `http://127.0.0.1:8080/viewer/browse?category=Music`
-  - `Get-Content web/viewer/README.md | Select-Object -Skip 68 -First 8`
-
-## Scoped change: bootstrap admin access recovery UX
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the admin-access UX gap and recovery plan
-  - Acceptance criteria:
-    - `PLAN.md` captures the operator admin-access scope, assumptions, risks, and validation commands.
-    - `TASKS.md` lists the ordered CLI, messaging, docs, and validation steps before code edits begin.
-    - The read-only diagnosis confirms where bootstrap admin creds are generated, persisted, and currently surfaced.
-
-- [x] Task 2 - Add an operator-facing CLI command to recover bootstrap admin access details
-  - Acceptance criteria:
-    - The CLI can read the deployment `.env` and print the admin sign-in route plus bootstrap email on demand.
-    - Password output is opt-in so routine usage does not dump secrets by default.
-    - The output warns operators that env-backed bootstrap passwords may be stale if they already rotated the admin password later.
-
-- [x] Task 3 - Improve quickstart/install/admin auth messaging
-  - Acceptance criteria:
-    - Quickstart success output calls out the `/admin` route and where bootstrap creds live.
-    - Install output calls out the same recovery path instead of only flashing a generated password line.
-    - The closed-signup auth page gives operators a concise pointer to the bootstrap admin path without exposing secrets.
-
-- [x] Task 4 - Update docs and coverage for the new operator path
-  - Acceptance criteria:
-    - Tests cover the new CLI/admin summary behavior and the updated signup-copy contract.
-    - Quickstart/install docs mention the new recovery flow in the right operator-facing places.
-
-- [x] Task 5 - Run focused validation and record the result
-  - Acceptance criteria:
-    - Targeted `cmd/bitriver` and `internal/server` tests pass.
-    - `TASKS.md` records any remaining host blocker precisely.
-
-### Execution log (bootstrap admin access recovery UX)
-- Task 1 complete: confirmed the current bootstrap flow does persist the admin credentials, but the operator handoff is easy to miss. `quickstart` prints generated secrets once and then a success summary that shows the admin email plus env file path, while `install systemd` writes `BITRIVER_LIVE_ADMIN_EMAIL` and `BITRIVER_LIVE_ADMIN_PASSWORD` into the staged `.env` and only prints the generated password once when it auto-created one. The public `/signup` page, meanwhile, only tells viewers to ask an administrator for access, which leaves operators with no obvious pointer back to the bootstrap admin account when self-signup is disabled.
-- Task 1 checks:
-  - `Get-Content cmd/bitriver/install.go`
-  - `Get-Content cmd/bitriver/commands_env_compose.go`
-  - `Get-Content docs/quickstart.md`
-  - `Get-Content web/static/signup.js`
-  - `Get-Content web/static/signup.html`
-- Task 2 complete: added `env admin` to the BitRiver CLI so operators can reprint the bootstrap admin summary on demand from the deployment `.env`. The new subcommand derives the admin sign-in URL, prints the bootstrap email plus env file path, hides the password by default, reveals it only with `--show-password`, and always warns that the env-backed password may no longer match the live credential after a later rotation in `/admin`. I also wired the shared admin URL helper into quickstart summary generation so the CLI now has one canonical way to describe where operators should sign in.
-- Task 2 checks:
-  - `gofmt -w cmd/bitriver/main.go cmd/bitriver/commands_env_compose.go`
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1 -timeout=120s`
-- Task 3 complete: extended the quickstart success summary to call out the `/admin` sign-in URL, the env-backed bootstrap credential source, and the `env admin` recovery path; updated `install systemd` to print the same sign-in and recovery guidance instead of relying only on a one-time generated-password line; and refreshed the closed-signup auth copy so operators get a concise `/admin` + deployment `.env` pointer without exposing any secrets in the public UI.
-- Task 3 checks:
-  - `gofmt -w cmd/bitriver/install.go`
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1 -timeout=120s`
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
-- Task 4 complete: added focused `cmd/bitriver` coverage for the new `env admin` recovery flow, the expanded quickstart summary, and the installer recovery messaging; added `internal/server` coverage for the new `/signup` operator hint contract; and updated the quickstart plus Ubuntu install docs to explain how to revisit bootstrap admin access later with the new CLI helper.
-- Task 4 checks:
-  - `gofmt -w cmd/bitriver/main_test.go cmd/bitriver/install_test.go internal/server/server_test.go`
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1 -timeout=120s`
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
-- Task 5 complete: reran the focused `cmd/bitriver` and `internal/server` suites successfully and re-attempted the repo verification entrypoint. The targeted validation now passes for this scope; the only remaining blocker is unchanged from earlier work on this Windows host, where `./scripts/verify.sh` stops immediately at the env-example placeholder hygiene step because Python is not installed or aliased.
-- Task 5 checks:
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1 -timeout=120s`
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (blocked immediately at env example placeholder hygiene because Python is not installed/aliased on this host)
-
-## Scoped change: viewer-auth UX cohesion
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the auth/viewer cohesion gap and scoped plan
-  - Acceptance criteria:
-    - `PLAN.md` captures the auth/viewer cohesion scope, assumptions, risks, and validation commands.
-    - `TASKS.md` lists the ordered auth-markup, styling, docs/tests, and runtime validation steps before edits begin.
-    - The read-only diagnosis identifies why the current `/signup` page feels visually and structurally separate from `/viewer`.
-
-- [x] Task 2 - Rebuild the auth page structure around viewer continuity
-  - Acceptance criteria:
-    - The `/signup` page presents clear viewer-connected branding, hierarchy, and return-path context instead of a standalone utility form layout.
-    - Existing sign-in, sign-up, MFA, and self-signup-disabled behaviors remain intact.
-    - The page more clearly communicates how sign-in returns the user to the viewer flow they came from.
-
-- [x] Task 3 - Align auth styling and client-side context with the viewer experience
-  - Acceptance criteria:
-    - Static auth styling uses the same visual direction as the current viewer shell rather than the older static-admin look.
-    - The page updates its “back” and “return after auth” cues from the safe `next` destination when present.
-    - Mobile and desktop layouts both feel intentional and connected to the viewer product.
-
-- [x] Task 4 - Add docs/coverage for the new auth cohesion contract
-  - Acceptance criteria:
-    - Tests assert the new viewer-connected auth markup/copy contract.
-    - Relevant viewer-facing docs mention the auth landing contract where route/navigation behavior is already documented.
-
-- [x] Task 5 - Refresh the local review deployment and validate the live route
-  - Acceptance criteria:
-    - The local `bitriver-live` service is rebuilt from the current checkout so `/signup` serves the updated auth experience.
-    - Focused validation confirms the running auth page shows the new continuity cues and honors the `next`-based return link.
-    - `TASKS.md` records any host/runtime blocker precisely.
-
-### Execution log (viewer-auth UX cohesion)
-- Task 1 complete: read-only analysis confirmed that the auth route is functionally wired into the viewer flow through `next` and the navbar CTAs, but the page itself still uses an older standalone static design system (`web/static/styles.css`) that does not resemble the current `/viewer` shell hierarchy, spacing, or visual direction. The existing page also underplays the return destination even though the JS already resolves a safe `next` path, which is a big part of why the sign-in/sign-up flow feels detached from the viewer journey.
-- Task 1 checks:
-  - `Get-Content web/static/styles.css`
-  - `Get-Content web/static/signup.html`
-  - `Get-Content web/static/signup.js`
-  - `Get-Content web/viewer/styles/globals.css`
-  - `Get-Content web/viewer/components/Navbar.tsx`
-  - `Get-Content web/viewer/lib/auth-links.ts`
-  - `Get-Content internal/server/server_test.go`
-- Task 2 complete: rebuilt `web/static/signup.html` into a two-column auth landing that reads like a viewer continuation instead of a standalone form page. The page now has viewer-branded framing, a “return after auth” context panel, a clearer sign-in-first hierarchy, and the same sign-in/sign-up/MFA structure anchored inside one cohesive experience.
-- Task 2 checks:
-  - `Get-Content web/static/signup.html | Select-Object -First 140`
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
-- Task 3 complete: aligned the auth page styling and lightweight client-side context with the current viewer product language. `web/static/styles.css` now uses a viewer-like dark/teal shell, richer hierarchy, and responsive layout, while `web/static/signup.js` now rewrites return links plus the destination context card from the safe `next` route and hides the sign-up jump affordance when self-signup is disabled.
-- Task 3 checks:
-  - `Get-Content web/static/styles.css | Select-Object -First 320`
-  - `Get-Content web/static/signup.js | Select-Object -First 180`
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
-- Task 4 complete: added targeted server coverage for the new viewer-continuity auth scaffold and documented the auth landing contract in `web/viewer/README.md`. The tests now assert that `/signup` keeps its sign-in-first structure while also shipping the new viewer-framed stage, return-path context, and return-link hooks that the page JS rewrites from the safe `next` route.
-- Task 4 checks:
-  - `gofmt -w internal/server/server_test.go`
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
-- Task 5 complete: rebuilt the local app stack and verified the live `/signup` route against the running deployment. The deployed page now shows the new viewer-connected hero, the continuity panel text, and the `next`-aware return path/link. A browser probe against `http://127.0.0.1:8080/signup?next=%2Fviewer%2Fbrowse%3Fq%3Dmusic` confirmed the page renders `Sign in without dropping out of the viewer experience.`, shows `/viewer/browse?q=music` in the return context, points the top return link at that same route, and hides the sign-up jump affordance when self-signup is disabled on the local install.
-- Task 5 checks:
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - escalated browser probe from `web/viewer` against `http://127.0.0.1:8080/signup?next=%2Fviewer%2Fbrowse%3Fq%3Dmusic`
-
-## Scoped change: video-first homepage discovery pass
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the video-first homepage diagnosis and plan
-  - Acceptance criteria:
-    - `PLAN.md` captures the new homepage scope, assumptions, risks, and validation commands.
-    - `TASKS.md` lists the ordered homepage composition, styling, test, and redeploy tasks before edits begin.
-    - The read-only diagnosis captures why the current homepage still feels copy-first instead of content-first.
-
-- [x] Task 2 - Recompose the homepage hero around live content and creator previews
-  - Acceptance criteria:
-    - The first screen gives visual priority to featured/live content, not just explanatory copy.
-    - Users can immediately choose a highlighted broadcast or a live rail without scrolling deep into the page.
-    - Existing browse and search entry points remain present but no longer dominate the layout.
-
-- [x] Task 3 - Rebalance the surrounding shell and discovery sections to support the new hierarchy
-  - Acceptance criteria:
-    - The following/sidebar frame supports the homepage instead of competing with it for attention.
-    - Supporting sections below the fold feel like continuation rows under a media-first hero.
-    - Desktop and mobile layouts remain intentional and usable.
-
-- [x] Task 4 - Update homepage/viewer coverage for the new UX contract
-  - Acceptance criteria:
-    - Tests assert the new hero hierarchy and key homepage controls/sections.
-    - Any changed shell expectations stay covered by focused Jest tests.
-
-- [x] Task 5 - Run focused validation, redeploy locally, and record the outcome
-  - Acceptance criteria:
-    - Targeted viewer tests, lint, and build pass.
-    - The local `bitriver-live` and `viewer` services are refreshed from the current checkout.
-    - `TASKS.md` records any remaining host/runtime blocker precisely.
-
-### Execution log (video-first homepage discovery pass)
-- Task 1 complete: read-only inspection of `directory-view.tsx`, `home.css`, `ViewerShell.tsx`, `FollowingSidebar.tsx`, and the current homepage tests confirmed the user’s core critique. The page was opening with a large explanatory hero and a permanently weighty following rail, while the most compelling creator/video surfaces (`FeaturedChannel`, `LiveNowGrid`, and the rails) appeared as secondary sections instead of driving the first impression. The scoped plan kept the same discovery data and routes but shifted the hierarchy toward featured/live media.
-- Task 1 checks:
-  - `Get-Content web/viewer/app/directory-view.tsx`
-  - `Get-Content web/viewer/styles/home.css`
-  - `Get-Content web/viewer/components/ViewerShell.tsx`
-  - `Get-Content web/viewer/components/FollowingSidebar.tsx`
-  - `Get-Content web/viewer/__tests__/directoryPage.test.tsx`
-- Task 2 complete: rebuilt the homepage hero around a large featured-live stage plus a companion quick-picks stack instead of a text-dominant intro block. The new layout keeps browse/search available, but they now support the media modules instead of leading them. I also moved the `Live now` section ahead of the rest of the discovery rows so viewers hit active streams earlier.
-- Task 2 checks:
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live diff -- web/viewer/app/directory-view.tsx`
-- Task 3 complete: rebalanced the supporting shell and styling so the homepage reads more like a content destination. The desktop following rail is narrower and lighter, the hero now uses smaller support panels on the right, and the discovery sections below the fold read as continuation rows under the featured/live stage instead of competing hero blocks.
-- Task 3 checks:
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live diff -- web/viewer/styles/home.css web/viewer/styles/globals.css`
-- Task 4 complete: updated homepage coverage to assert the new quick-link set, the revised hero heading, and the presence of the live quick-picks stack beside the featured stage. Existing `ViewerShell` coverage still passes against the slimmer shell treatment.
-- Task 4 checks:
-  - `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx viewerShell.test.tsx`
-- Task 5 complete: focused viewer tests, lint, and production build all passed. I then rebuilt/recreated `bitriver-live` and `viewer` locally and verified that `http://localhost:8080/viewer` serves the new homepage copy (`Start with creators already on air`, `Video first, browse second`, `Find a creator, category, or tag`). The initial targeted `docker compose up -d --build` timed out before returning cleanly, so I followed it with Compose status checks and an explicit `--force-recreate --no-deps` refresh of the app services. The remaining practical caveat is content-related, not code-related: this local runtime currently has little or no live/featured seed data, so the new video-first shell is visible but mostly shows its loading/empty states until creators are active.
-- Task 5 checks:
-  - `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx viewerShell.test.tsx`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/browsePage.test.tsx __tests__/directoryPage.test.tsx __tests__/channelDisplayPrimitives.test.tsx`
   - `npm.cmd --prefix web/viewer run lint`
   - `npm.cmd --prefix web/viewer run build`
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` (blocked at env-example placeholder hygiene because Python is not installed/aliased on this Windows host)
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer` (timed out before returning cleanly)
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --force-recreate --no-deps bitriver-live viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
-  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'Start with creators already on air|Video first, browse second|Find a creator, category, or tag' -AllMatches`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` (blocked by missing `python`/`python3` on this Windows host during the env example placeholder hygiene step)
+- Task 4 notes:
+  - The focused Jest suites passed with existing non-failing console noise from older `act(...)` warnings in search interactions and the longstanding `next/image` mock warnings about `fill`/`priority` props in jsdom.
+  - `next build` completed successfully and surfaced the existing viewer/app warnings about pages being deopted into client-side rendering plus an outdated `caniuse-lite` database; neither warning blocked the production build.
 
-## Scoped change: auth overlay modal treatment
+## Scoped change: Git push repair
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Record the auth-overlay diagnosis and plan
+- [x] Task 1 - Record the scoped push-repair plan before changing Git state
   - Acceptance criteria:
-    - `PLAN.md` captures the modal-overlay auth scope, assumptions, risks, and validation commands.
-    - `TASKS.md` lists the ordered auth markup, styling, coverage, and runtime validation tasks before edits begin.
-    - The read-only diagnosis explains why the current `/signup` route still reads like a separate page instead of an overlay.
+    - `PLAN.md` captures the push-repair scope, assumptions, risks, and diagnostic commands.
+    - `TASKS.md` lists the ordered diagnosis/repair/verification steps before branch or push actions change repo state.
+    - The read-only diagnosis identifies whether divergence, auth, or remote policy is the likely blocker.
 
-- [x] Task 2 - Rebuild the auth markup into a centered overlay/dialog presentation
+- [x] Task 2 - Reproduce the push failure and identify the precise remote rejection
   - Acceptance criteria:
-    - The auth route visually reads as a modal card over dimmed viewer context instead of a split-page destination.
-    - Existing sign-in, sign-up, MFA, return-link, and self-signup-disabled flows remain intact.
-    - The primary sign-in action stays immediately visible and easy to understand.
+    - The exact `git push` failure mode is captured.
+    - The repo state needed to choose a safe repair path is documented in the execution log.
 
-- [x] Task 3 - Restyle the auth surface and backdrop for a viewer-overlay feel
+- [x] Task 3 - Repair the push path without rewriting shared `main` history
   - Acceptance criteria:
-    - The page background clearly resembles viewer context while remaining non-interactive and subordinate to the auth modal.
-    - The modal uses tighter hierarchy and spacing closer to streaming-platform auth overlays.
-    - Mobile and desktop both remain usable.
+    - The current commits are placed on a safe remote branch or otherwise pushed successfully.
+    - No force-push to `main` is used unless the user explicitly asked for it.
+    - Local Git state remains clean and understandable afterward.
 
-- [x] Task 4 - Update auth-route coverage for the new modal contract
+- [x] Task 4 - Verify the repaired remote state and record the outcome
   - Acceptance criteria:
-    - `internal/server` coverage asserts the new auth scaffold/copy hooks that define the overlay treatment.
-    - Existing operator/admin hint expectations remain intact.
+    - The successful push target is logged.
+    - Any remaining auth/policy blockers are recorded precisely if they still prevent publication.
 
-- [x] Task 5 - Run focused validation, refresh the local app, and record the outcome
-  - Acceptance criteria:
-    - Targeted `internal/server` tests pass.
-    - The local `bitriver-live` and `viewer` services are refreshed so the updated auth route is reviewable at `localhost:8080`.
-    - `TASKS.md` records any remaining host/runtime blocker precisely.
-
-### Execution log (auth overlay modal treatment)
-- Task 1 complete: read-only review of `web/static/signup.html`, `web/static/signup.js`, `web/static/styles.css`, and `internal/server/server_test.go` confirmed that the current auth route was still structured like a two-column destination page. Even though it shared viewer branding and return-context copy, it still devoted half the screen to explanatory content instead of presenting auth as a centered checkpoint over viewer context, which is the exact gap the user called out via the Twitch comparison.
+### Execution log (Git push repair)
+- Task 1 complete: recorded the push-repair scope in `PLAN.md` and `TASKS.md` before changing Git state, based on the read-only diagnosis that local `main` is currently `ahead 2, behind 22` relative to `origin/main`, which makes a non-fast-forward rejection the most likely push blocker.
 - Task 1 checks:
-  - `Get-Content web/static/signup.html`
-  - `Get-Content web/static/signup.js`
-  - `Get-Content web/static/styles.css`
-  - `Get-Content internal/server/server_test.go | Select-Object -Skip 300 -First 120`
-- Task 2 complete: rebuilt `web/static/signup.html` into a modal-first auth route. The page now centers a compact login dialog over a dimmed viewer-style backdrop, keeps the return link in a modal close position, and collapses sign-up into the same modal flow instead of presenting auth as a separate split-page destination. I also added lightweight sign-in/sign-up mode tabs tied to `#login-card` and `#signup-card` so the flow stays compact and more overlay-like.
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short --branch`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live remote -v`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live branch -vv`
+- Task 2 complete: reproduced the actual push against GitHub and confirmed the blocker is the expected non-fast-forward rejection on `main` (`[rejected] main -> main (fetch first)`), not a bad credential or branch-name issue. The local branch is ahead by the two unpublished commits `b4617f75 restored signin ui` and `4f34a498 Polish viewer discovery navigation and recovery states`.
 - Task 2 checks:
-  - `Get-Content web/static/signup.html`
-  - `node --check web/static/signup.js`
-- Task 3 complete: restyled `web/static/styles.css` so `/signup` reads like a streaming-platform overlay: blurred viewer context behind the modal, tighter modal spacing, full-width primary auth actions, and a compact return-context card instead of a large left-column explainer. The auth JS now hides or reveals the sign-up view based on hash mode while preserving the existing self-signup-disabled behavior and return-path rewrites.
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live push origin main` (sandbox blocked on outbound network)
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live push origin main` (with host network access; rejected as non-fast-forward)
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live log --oneline --decorate origin/main..HEAD`
+- Task 3 complete: created a safe repair branch from the current `HEAD` and pushed that branch to GitHub with upstream tracking instead of rebasing or force-pushing shared `main`. The local environment refused the repo-preferred `fix/...` nested ref path inside `.git`, so the repair used the flat branch name `fix-viewer-discovery-polish`.
 - Task 3 checks:
-  - `Get-Content web/static/styles.css`
-  - `Get-Content web/static/signup.js`
-- Task 4 complete: updated `internal/server/server_test.go` so the static signup route contract now asserts the modal scaffold (`auth-stage--modal`, `auth-modal__surface`), the simpler auth copy (`Log in to BitRiver Live`), the preserved return-path hook, and the auth-mode toggle hook. The existing operator/admin hint coverage stayed intact.
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live switch -c fix/viewer-discovery-polish` (blocked locally by ref creation/permission issues)
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live switch -c fix-viewer-discovery-polish`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live push -u origin fix-viewer-discovery-polish`
+- Task 4 complete: verified that `fix-viewer-discovery-polish` now tracks `origin/fix-viewer-discovery-polish` successfully. The original `main` branch still remains locally diverged from `origin/main` (`ahead 2, behind 22`), but the unpublished commits are now safely available on GitHub and ready for PR flow.
 - Task 4 checks:
-  - `gofmt -w internal/server/server_test.go`
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
-- Task 5 complete: rebuilt the local app stack and verified the live auth route from the running install. `http://localhost:8080/signup?next=%2Fviewer#signup-card` now serves the new modal scaffold and, in a real browser pass, correctly keeps the login card visible, hides the sign-up tab on this self-signup-disabled local install, points the close/return link back to `/viewer`, and surfaces the operator/admin feedback when someone lands on the sign-up hash. The canonical repo verify entrypoint is still blocked on this Windows host at the env-example placeholder hygiene step because Python is not installed/aliased.
-- Task 5 checks:
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `node --check web/static/signup.js`
-  - `(Invoke-WebRequest -UseBasicParsing 'http://localhost:8080/signup?next=%2Fviewer#signup-card').Content | Select-String -Pattern 'Log in to BitRiver Live|auth-stage auth-stage--modal|data-auth-mode="signin"|Need an account\? Sign up' -AllMatches`
-  - escalated Playwright probe against `http://127.0.0.1:8080/signup?next=%2Fviewer#signup-card`
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (blocked at env-example placeholder hygiene because Python is not installed/aliased on this host)
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short --branch`
+  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live branch -vv`
+- Task 4 notes:
+  - The working tree still shows modified `PLAN.md` and `TASKS.md` because this repair followed the repo's spec-driven workflow and recorded the diagnosis/results there; no source-code files were changed as part of the push repair itself.
+  - GitHub reported the new-branch PR URL: `https://github.com/ProhibitedTV/BitRiver-Live/pull/new/fix-viewer-discovery-polish`
 
-## Scoped change: real in-viewer auth overlay
+## Scoped change: production-like local OBS rehearsal
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Record the in-viewer auth-overlay diagnosis and implementation plan
+- [x] Task 1 - Record the production-like rehearsal plan before editing contract files
   - Acceptance criteria:
-    - `PLAN.md` captures the new in-viewer overlay scope, assumptions, risks, and validation commands.
-    - `TASKS.md` lists the ordered backend, viewer-overlay, CTA migration, and validation tasks before edits begin.
-    - The read-only diagnosis identifies why the current `/signup` route is still architecturally separate from `/viewer`.
+    - `PLAN.md` captures the LAN rehearsal scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered env/digest/boot tasks before changing `.env` or generated config files.
+    - The read-only diagnosis identifies whether the saved first-party image tags are real release artifacts or placeholders.
 
-- [x] Task 2 - Add a viewer-auth contract and compatibility redirect on the Go server
+- [x] Task 2 - Authenticate registry access and verify release-image availability
   - Acceptance criteria:
-    - The backend exposes a guest-safe viewer-auth response the viewer can call without treating anonymous users as hard failures.
-    - `/signup` forwards into the viewer overlay when the viewer is configured, while preserving a safe fallback when it is not.
-    - Focused server coverage locks the new route behavior and compatibility contract.
+    - GHCR login is verified from this host.
+    - The configured first-party release tag is checked directly in GHCR.
+    - The repo's upstream Git release-tag state is checked so missing images can be attributed correctly.
 
-- [x] Task 3 - Build the real auth overlay inside the Next.js viewer runtime
+- [ ] Task 3 - If release images exist, update the LAN rehearsal contract files and pin digests
   - Acceptance criteria:
-    - A global viewer-owned modal handles sign-in, sign-up, feedback, and MFA continuation without navigating away from `/viewer`.
-    - `useAuth` exposes the state/actions needed for opening the overlay, submitting auth requests, and refreshing the session after success.
-    - Successful auth keeps users in the viewer experience and returns them to the intended route.
+    - Root `.env` uses `10.0.0.108` for the OME/viewer/transcoder public URLs needed by this rehearsal.
+    - `deploy/ome/Server.generated.xml` is re-rendered from the updated env file.
+    - All required `*_IMAGE_DIGEST` values are pinned in `.env`.
 
-- [x] Task 4 - Retarget signed-out viewer controls to the in-app overlay
+- [ ] Task 4 - Run production-path validation and record the result
   - Acceptance criteria:
-    - Navbar, following-sidebar, and other existing sign-in/join entry points open the in-viewer overlay instead of treating `/signup` as the primary path.
-    - Updated viewer tests cover the new auth CTA contract and any changed auth-state helpers.
-    - Viewer-facing docs mention the new overlay-first auth flow if the navigation/runtime contract changes.
+    - `go run ./cmd/bitriver env validate --env-file ./.env` passes.
+    - `docker compose --env-file .env -f deploy/docker-compose.yml config` passes.
+    - `./scripts/require-image-digests.sh` passes.
+    - `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml` either boots successfully or yields a precisely documented next blocker.
 
-- [x] Task 5 - Run focused validation, redeploy locally, and record the outcome
-  - Acceptance criteria:
-    - Touched Go and viewer test suites pass, plus viewer lint/build.
-    - The local `bitriver-live` and `viewer` services are refreshed from the current checkout.
-    - A live browser probe confirms auth opens as an overlay on `/viewer`, and `TASKS.md` records any remaining blocker precisely.
-
-### Execution log (real in-viewer auth overlay)
-- Task 1 complete: read-only analysis confirmed that the current setup is still architecturally split. `useAuth` loads `/api/viewer/me` but falls back to redirecting out to `/signup`; the navbar `Join` CTA hard-navigates to `/signup#signup-card`; the following sidebar exposes a static `/signup` link; and the only existing viewer-side `AuthDialog` is just a thin "sign in/sign out" shell that still redirects. On the backend, `/api/viewer/me` is not explicitly registered even though the viewer expects it, and the self-signup flag currently only gets bootstrapped into the static `signup.html` route. That combination is why the auth flow still feels separate even after the prior modal styling pass.
+### Execution log (production-like local OBS rehearsal)
+- Task 1 complete: recorded the requested production-like LAN rehearsal scope in `PLAN.md`/`TASKS.md` before mutating the deployment contract, based on the read-only diagnosis that the current `.env` still uses placeholder/loopback networking values and empty image digests.
 - Task 1 checks:
-  - `Get-Content web/viewer/hooks/useAuth.tsx`
+  - `git diff --stat`
+  - `Get-Content .env | Select-String -Pattern '^(BITRIVER_LIVE_MODE|BITRIVER_DEPLOY_IMAGE_SOURCE|BITRIVER_LIVE_PORT|BITRIVER_OME_BIND|BITRIVER_OME_IP|BITRIVER_TRANSCODER_PUBLIC_BASE_URL|BITRIVER_TRANSCODER_HOST_PORT|BITRIVER_TRANSCODER_PUBLIC_PORT|NEXT_PUBLIC_VIEWER_URL|BITRIVER_LIVE_IMAGE_TAG|BITRIVER_VIEWER_IMAGE_TAG|BITRIVER_SRS_CONTROLLER_IMAGE_TAG|BITRIVER_TRANSCODER_IMAGE_TAG|BITRIVER_LIVE_IMAGE_DIGEST|BITRIVER_VIEWER_IMAGE_DIGEST|BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST|BITRIVER_TRANSCODER_IMAGE_DIGEST|BITRIVER_SRS_IMAGE_DIGEST|BITRIVER_OME_IMAGE_DIGEST|BITRIVER_REDIS_IMAGE_DIGEST|BITRIVER_POSTGRES_IMAGE_DIGEST|BITRIVER_NGINX_IMAGE_DIGEST|BITRIVER_ALPINE_3_IMAGE_DIGEST|BITRIVER_ALPINE_3_19_IMAGE_DIGEST|BITRIVER_DEBIAN_IMAGE_DIGEST)='`
+  - `Get-Content docs/contract-change-recipe.md`
+- Task 2 complete: GHCR access is now authenticated from this host, but the requested pull-mode rehearsal is blocked upstream because the configured first-party image tag does not exist and the remote repo has no Git release tags.
+- Task 2 findings:
+  - `gh auth status` reports an active `ProhibitedTV` GitHub CLI session on this machine.
+  - `gh auth token | docker login ghcr.io -u ProhibitedTV --password-stdin` succeeded, so registry auth is no longer the blocker.
+  - `docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-live:v1.2.3 --format "{{.Manifest.Digest}}"` returned `not found`, which means the configured first-party release tag is not currently published in GHCR.
+  - `git ls-remote --tags origin` returned no tags, which strongly suggests the saved `v1.2.3` values in `.env` / `deploy/.env.example` / docs are placeholders rather than release artifacts that this checkout can pull today.
+  - `docker buildx imagetools inspect redis:7-alpine --format "{{.Manifest.Digest}}"` succeeded, so the third-party digest path is healthy and only the unpublished first-party images are blocking pull mode.
+- Task 2 checks:
+  - `gh auth status`
+  - `gh auth token | docker login ghcr.io -u ProhibitedTV --password-stdin`
+  - `docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-live:v1.2.3 --format "{{.Manifest.Digest}}"`
+  - `docker buildx imagetools inspect redis:7-alpine --format "{{.Manifest.Digest}}"`
+  - `git ls-remote --tags origin`
+
+## Scoped change: build-mode local OBS rehearsal fix
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the build-mode rehearsal plan before editing contract files
+  - Acceptance criteria:
+    - `PLAN.md` captures the build-mode fallback scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered compose/script/docs/runtime steps before contract edits begin.
+    - The read-only diagnosis identifies whether the repo needs real contract fixes or only local workarounds.
+
+- [x] Task 2 - Fix the Compose contract blockers for source-build rehearsal
+  - Acceptance criteria:
+    - `deploy/docker-compose.yml` runs `postgres-migrations` through one intact shell command instead of the broken `entrypoint + scalar command` combination.
+    - `deploy/docker-compose.yml` grants `transcoder-public` the capabilities required by the bundled nginx config under the current hardening model.
+    - `docs/contract.md` documents the updated hardening exception accurately.
+
+- [x] Task 3 - Make quickstart smoke and operator docs source-checkout-safe
+  - Acceptance criteria:
+    - `scripts/test-quickstart.sh` no longer assumes unpublished first-party GHCR images exist.
+    - The smoke path uses local build mode for first-party images while keeping the rest of the guardrails intact.
+    - `docs/quickstart.md` and `deploy/README.md` clearly separate release-image pull mode from source-checkout local rehearsal/build mode.
+    - The repo smoke/verify wrappers accept the working Python launcher on this Windows host and their OME compose assertions match the current `docker compose config` output.
+
+- [x] Task 4 - Prepare the local rehearsal runtime state
+  - Acceptance criteria:
+    - Root `.env` uses the planned development/build/LAN viewer/HLS values for this host rehearsal while keeping OME on container-safe bind/public settings that actually boot under Compose.
+    - `deploy/ome/Server.generated.xml` is re-rendered from the updated env file.
+    - The resulting env/config pairing is suitable for local compose boot on the default ports.
+
+- [x] Task 5 - Run validation, bring the stack up, and record the rehearsal result
+  - Acceptance criteria:
+    - The targeted Go/storage test and Compose config validation pass.
+    - Local build-mode Compose startup is exercised with status/log inspection.
+    - `scripts/test-quickstart.sh` is rerun after the fixes.
+    - `./scripts/verify.sh` is attempted and any remaining host blocker is recorded precisely.
+
+### Execution log (build-mode local OBS rehearsal fix)
+- Task 1 complete: recorded the build-mode fallback scope in `PLAN.md`/`TASKS.md` before mutating the deployment contract, based on the read-only diagnosis that `production + pull` cannot work from this checkout because first-party GHCR images do not exist, while the source-build fallback still needs real contract fixes rather than ad-hoc manual workarounds.
+- Task 1 findings:
+  - `docs/quickstart.md` already frames `--image-source build` as development-only and separate from strict production pull mode.
+  - `deploy/docker-compose.yml` still has the broken `postgres-migrations` `entrypoint: ["/bin/sh","-c"]` plus scalar `command` combination that Compose tokenizes incorrectly.
+  - `deploy/nginx/transcoder-public.conf` still declares `user nginx;`, while `transcoder-public` currently keeps only `CHOWN`, which matches the earlier `setgid(101) failed` runtime failure.
+  - `scripts/test-quickstart.sh` seeds `BITRIVER_*_IMAGE_TAG=latest` and starts plain `docker compose up -d`, which cannot succeed from a source checkout because `ghcr.io/bitriver-live/bitriver-live:latest` is also unpublished.
+- Task 1 checks:
+  - `Get-Content PLAN.md | Select-Object -Last 60`
+  - `Get-Content TASKS.md | Select-Object -Last 80`
+  - `Get-Content docs/quickstart.md | Select-Object -Skip 120 -First 80`
+  - `Get-Content cmd/bitriver/commands_env_compose.go | Select-Object -Skip 520 -First 140`
+  - `Get-Content deploy/docker-compose.yml | Select-Object -Skip 182 -First 52`
+  - `Get-Content deploy/docker-compose.yml | Select-Object -Skip 533 -First 23`
+  - `Get-Content scripts/test-quickstart.sh | Select-Object -First 220`
+  - `docker manifest inspect ghcr.io/bitriver-live/bitriver-live:latest` (confirmed unpublished)
+- Task 2 complete: rewired `postgres-migrations` to run through one intact `/bin/sh -c` command array, expanded `transcoder-public` capabilities to include `SETGID` and `SETUID` for the bundled `user nginx;` config, and updated `docs/contract.md` so the hardening exception matches the runtime requirement.
+- Task 2 checks:
+  - `docker compose --env-file .env -f deploy/docker-compose.yml config`
+  - `Get-Content deploy/docker-compose.yml | Select-Object -Skip 182 -First 52`
+  - `Get-Content deploy/docker-compose.yml | Select-Object -Skip 533 -First 23`
+  - `Get-Content docs/contract.md | Select-String -Pattern 'transcoder-public retains CHOWN, SETGID, and SETUID' -Context 0,0`
+- Task 3 complete: switched the repo smoke path to explicit source-checkout build mode by exporting build-mode overrides, clearing first-party digests for direct Compose interpolation, generating a temporary development/build `.env` when needed, and starting the stack with `docker compose ... up -d --build --pull never`. Updated `docs/quickstart.md` and `deploy/README.md` to separate release-image pull mode from local source-build rehearsals and to stop implying a saved production `.env` can simply be paired with a CLI `--build` flag. While validating the wrapper on this Windows host, also fixed the stale OME mount/API-port assertions in `scripts/test-quickstart.sh` and added Python launcher fallbacks in `scripts/test-quickstart.sh`, `scripts/check-env-example-placeholders.sh`, `scripts/check-contract-invariants.sh`, and `scripts/verify.sh`.
+- Task 3 checks:
+  - `Get-Content scripts/test-quickstart.sh | Select-String -Pattern 'BITRIVER_DEPLOY_IMAGE_SOURCE=build|BITRIVER_LIVE_MODE=development|up -d --build --pull never|BITRIVER_LIVE_IMAGE_DIGEST=""|BITRIVER_VIEWER_IMAGE_DIGEST=""|BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST=""|BITRIVER_TRANSCODER_IMAGE_DIGEST=""' -Context 0,0`
+  - `Get-Content docs/quickstart.md | Select-String -Pattern 'source-checkout local rehearsals|docker compose --env-file \.env -f deploy/docker-compose.yml up -d --build --pull never|saved \.env to local build settings|published-image pull contract' -Context 0,0`
+  - `Get-Content deploy/README.md | Select-String -Pattern 'source checkout|docker compose --env-file \.env -f \"\$COMPOSE_FILE\" up -d --build --pull never|first-party digest variables empty' -Context 0,0`
+  - `Get-Content scripts/check-env-example-placeholders.sh`
+  - `Get-Content scripts/check-contract-invariants.sh`
+  - `Get-Content scripts/verify.sh | Select-Object -First 80`
+  - `& 'C:\Program Files\Git\bin\bash.exe' -n ./scripts/test-quickstart.sh` (host-local MSYS signal-pipe failure on this machine; the real smoke execution remains part of Task 5)
+- Task 4 complete: updated the working-copy root `.env` to development/build mode with LAN viewer/HLS URLs (`http://10.0.0.108:8080/viewer` and `http://10.0.0.108:9080/hls`) and kept the default service ports intact. Live boot then proved that containerized OME cannot bind its listeners to the host LAN IP, so the final working Compose rehearsal state keeps `BITRIVER_OME_BIND=0.0.0.0` and `BITRIVER_OME_IP=0.0.0.0` while still exposing viewer/HLS traffic on the LAN host. Re-rendered `deploy/ome/Server.generated.xml` after each env correction so the generated config stayed aligned with the live compose inputs.
+- Task 4 checks:
+  - `Get-Content .env | Select-String -Pattern '^(BITRIVER_DEPLOY_IMAGE_SOURCE|BITRIVER_LIVE_MODE|BITRIVER_OME_BIND|BITRIVER_OME_IP|BITRIVER_TRANSCODER_PUBLIC_BASE_URL|NEXT_PUBLIC_VIEWER_URL)=' -Context 0,0`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go run ./cmd/bitriver ome render --force --env-file ./.env --quiet`
+  - `Get-Content deploy/ome/Server.generated.xml | Select-String -Pattern '<IP>0\.0\.0\.0</IP>|<Port>8081</Port>|<AccessToken>' -Context 0,0`
+- Task 5 complete: the focused storage ingest test passed, Compose config rendered successfully, the source-build stack built and booted on the default ports after correcting the OME bind/IP assumption, `/readyz`, `/admin`, and `/viewer` all returned `200`, the repo-native quickstart smoke wrapper passed end-to-end after the Windows portability fixes, and the stack was brought back up with an explicitly bootstrapped admin account ready for manual sign-in. `./scripts/verify.sh` was also rerun; it no longer fails on missing `python3`, but it still reports unrelated existing Go-suite failures in `cmd/transcoder` and `internal/auth`.
+- Task 5 checks:
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/storage -count=1 -timeout=120s -run TestIngestPipelineEndToEnd`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml config`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 postgres-migrations bitriver-live transcoder-public`
+  - `Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/readyz`
+  - `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/admin`
+  - `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/viewer`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/test-quickstart.sh`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml exec -T bitriver-live /app/bootstrap-admin --postgres-dsn <compose-network-dsn> --email <env admin email> --password <env admin password>`
+- Task 5 notes:
+  - The original rehearsal plan’s `BITRIVER_OME_BIND=10.0.0.108` / `BITRIVER_OME_IP=10.0.0.108` assumption is not compatible with the current containerized OME runtime on this host; OME treats that address as a real listener bind and fails with `Cannot assign requested address`. The working local Compose rehearsal therefore keeps OME bound to `0.0.0.0`.
+  - `./scripts/verify.sh` is no longer blocked by the Windows Python shim name, but it still fails in pre-existing suites unrelated to this rehearsal work: `cmd/transcoder` (`unexpected ffmpeg path` / health recovery assertions) and `internal/auth` (`TestValidateHonorsAbsoluteTTL`).
+  - The final stack was deliberately brought back up after `verify.sh` cleaned it down so manual browser/OBS testing can start immediately from the current checkout.
+
+## Scoped change: viewer chrome fixes for theme/auth/top spacing
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Reproduce and document the viewer chrome failures in the current runtime/code path
+  - Acceptance criteria:
+    - The read-only notes identify where the theme toggle writes state, where the auth dialog mounts, and which final CSS rules control the shell top spacing.
+    - `PLAN.md` and `TASKS.md` are updated for this scope before product code changes begin.
+    - The likely runtime failure mode is specific enough to guide a minimal patch rather than a blind redesign.
+
+- [x] Task 2 - Repair the theme toggle and auth CTA behavior
+  - Acceptance criteria:
+    - The light/dark toggle updates the active document theme reliably in the live viewer.
+    - Signed-out sign-in and join/sign-up CTAs visibly trigger the intended auth flow.
+    - Existing auth-link behavior for optional external signup destinations remains intact.
+
+- [x] Task 3 - Remove the unintended shell gap and tighten the header/content alignment
+  - Acceptance criteria:
+    - The main viewer shell no longer adds redundant top spacing above the left rail or main content.
+    - Desktop and mobile layouts still clear the fixed navbar cleanly.
+    - The spacing fix stays inside viewer CSS/components and does not alter deployment/runtime docs.
+
+- [x] Task 4 - Add or adjust focused viewer coverage and validate the result
+  - Acceptance criteria:
+    - Jest coverage reflects the theme/auth/runtime fixes.
+    - Viewer lint and build pass.
+    - Any residual issue or unverified browser-only behavior is recorded explicitly.
+
+### Execution log (viewer chrome fixes for theme/auth/top spacing)
+- Task 1 complete: finished the read-only diagnosis and then reproduced the live viewer failure path with targeted Playwright coverage. The actual blocker was narrower than the initial guess: the hidden mobile nav drawer still occupied the right edge of the viewport and intercepted pointer events, which made the visible theme and auth controls appear dead. The layout read also confirmed that the final rescue-pass `.viewer-shell` padding was applied at the whole-shell level, which explains the extra gap above the left rail.
+- Task 1 checks:
+  - `rg -n "theme|dark|light|toggle|sign in|sign up|signup|login|auth|gap|layout|shell|Navbar|Providers|useAuth|theme" web/viewer -g "!*node_modules*"`
   - `Get-Content web/viewer/components/Navbar.tsx`
-  - `Get-Content web/viewer/components/following/FollowingState.tsx`
+  - `Get-Content web/viewer/hooks/useAuth.tsx`
   - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
   - `Get-Content web/viewer/components/Providers.tsx`
-  - `Get-Content web/viewer/app/layout.tsx`
-  - `Get-Content internal/api/auth_users_handlers.go`
-  - `Get-Content internal/server/server.go`
-  - `Get-Content web/static/signup.js`
-- Task 2 complete: added a real guest-safe `/api/viewer/me` handler on the Go API, registered it with optional auth semantics, and made `DELETE /api/viewer/me` an idempotent sign-out path that clears both session and MFA challenge cookies. I also changed `/signup` so viewer-enabled installs now redirect into the appropriate viewer route with `auth`/`mfa` state in the query string, while non-viewer installs still keep the embedded static auth page as a fallback.
-- Task 2 checks:
-  - `gofmt -w internal/api/auth_users_handlers.go internal/api/auth_users_handlers_test.go internal/server/server.go internal/server/server_test.go`
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api ./internal/server -count=1 -timeout=120s`
-- Task 3 complete: moved auth into the actual viewer runtime. `useAuth` now owns overlay state, guest-safe session/config loading, sign-in/sign-up/MFA submissions, and same-route auth completion. `Providers` now mounts a global `AuthDialog`, and the modal itself carries the real sign-in, sign-up, MFA, and “continue where you left off” flow inside the Next.js viewer shell instead of redirecting users to a separate page.
-- Task 3 checks:
-  - `npm.cmd --prefix web/viewer run test -- useAuth.test.tsx`
-  - `npm.cmd --prefix web/viewer run build`
-- Task 4 complete: retargeted the signed-out viewer entry points to the new overlay-first flow. The navbar now opens the in-viewer modal for internal auth and only falls back to hard navigation for truly external signup destinations; the following unauthenticated prompt now triggers `signIn()` directly instead of exposing a dead-feeling `/signup` link; and the viewer README now documents the overlay-first contract with `/signup` as compatibility-only behavior.
-- Task 4 checks:
-  - `npm.cmd --prefix web/viewer run test -- navbar.test.tsx followingStatePresentation.test.tsx`
-  - `npm.cmd --prefix web/viewer run lint`
-- Task 5 complete: reran the focused viewer and Go coverage, lint, and production build; rebuilt the running `bitriver-live` and `viewer` services; and then validated the live app with route-level and browser-level probes. The first `docker compose up -d --build` attempt timed out before the viewer image finished rebuilding, which initially left the old auth behavior live; rerunning the same build with a longer timeout resolved that, and the final browser probe against `http://127.0.0.1:8080/viewer` confirmed that the navbar Sign in button now opens the in-viewer auth dialog. I also verified that `http://localhost:8080/signup?next=%2Fviewer%2Fbrowse%3Fq%3Dmusic&mfa=verify` now returns a `307` redirect into `/viewer/browse?auth=signin&mfa=verify...` instead of serving the old auth page on this viewer-enabled install.
-- Task 5 checks:
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api ./internal/server -count=1 -timeout=120s`
-  - `npm.cmd --prefix web/viewer run test -- useAuth.test.tsx navbar.test.tsx followingStatePresentation.test.tsx`
-  - `npm.cmd --prefix web/viewer run lint`
-  - `npm.cmd --prefix web/viewer run build`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer` (first attempt timed out before the viewer image finished rebuilding; reran with a longer timeout and it completed)
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - escalated headless browser probe against `http://127.0.0.1:8080/viewer`
-  - `Invoke-WebRequest -UseBasicParsing 'http://localhost:8080/signup?next=%2Fviewer%2Fbrowse%3Fq%3Dmusic&mfa=verify' -MaximumRedirection 0`
-
-## Scoped change: viewer shell alignment and Docker project naming review
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the new shell-alignment scope and Docker naming diagnosis before editing
-  - Acceptance criteria:
-    - `PLAN.md` captures the viewer-shell alignment scope, assumptions, risks, and validation commands.
-    - `TASKS.md` lists the ordered UI tasks plus the approval-gated Docker naming follow-up before code edits begin.
-    - Read-only diagnosis identifies whether the `deploy` label is coming from Compose project naming and whether the homepage mismatch is a shell/layout issue.
-
-- [x] Task 2 - Tighten the desktop viewer shell and following rail hierarchy
-  - Acceptance criteria:
-    - The Following rail feels aligned with the Featured Live hero on desktop instead of starting on an awkwardly different rhythm.
-    - Signed-out guidance remains present, but extra explanatory copy no longer dominates the rail or pushes the layout off balance.
-    - Existing viewer shell/sidebar behavior stays usable on mobile and desktop.
-
-- [x] Task 3 - Update focused viewer coverage for the revised shell contract
-  - Acceptance criteria:
-    - Focused viewer tests cover the updated sidebar/header treatment and homepage structure where expectations changed.
-    - Existing auth-overlay and homepage behaviors remain covered after the shell cleanup.
-
-- [x] Task 4 - Run focused viewer validation, redeploy locally, and record the outcome
-  - Acceptance criteria:
-    - The targeted viewer test suites, lint, and production build pass.
-    - The local `bitriver-live` and `viewer` services are refreshed from the current checkout for review.
-    - `TASKS.md` records any remaining runtime or host blocker precisely.
-
-- [ ] Task 5 - Rename the Compose project to a clearer Docker Desktop stack name if approved
-  - Acceptance criteria:
-    - The Compose project name changes from the default `deploy` label to an explicit BitRiver-specific name.
-    - The deployment contract/docs are updated together if the change is approved and implemented.
-    - Compose config/runtime validation records the new stack naming without breaking the canonical workflow.
-
-### Execution log (viewer shell alignment and Docker project naming review)
-- Task 1 complete: read-only inspection confirmed the two user-reported issues come from different layers. Docker Desktop is showing the stack as `deploy` because the Compose project name is currently implicit and is inheriting from the compose-file directory, which makes any rename a deployment-contract/workflow change that needs approval first. The homepage mismatch is shell-driven: the desktop `viewer-sidebar` currently renders its own eyebrow, heading, and intro copy above `FollowingSidebar`, which makes the left rail start on a different visual rhythm than the hero block.
-- Task 1 checks:
-  - `Get-Content PLAN.md | Select-Object -Last 30`
-  - `Get-Content TASKS.md | Select-Object -Last 40`
-  - `Get-Content deploy/docker-compose.yml -TotalCount 40`
-  - `Get-Content .env -TotalCount 40`
-  - `Get-Content web/viewer/components/ViewerShell.tsx | Select-Object -Skip 130 -First 90`
-  - `Get-Content web/viewer/styles/globals.css | Select-Object -Skip 4260 -First 150`
-  - `Get-Content web/viewer/styles/home.css | Select-Object -Skip 970 -First 280`
-- Task 2 complete: removed the duplicate shell-owned sidebar intro/header on desktop, kept only the compact mobile close header, and tightened the `FollowingSidebar` header so the rail now carries one concise title plus one state card instead of layering explanatory copy above the actual following UI.
-- Task 2 checks:
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live diff -- web/viewer/components/ViewerShell.tsx web/viewer/components/FollowingSidebar.tsx web/viewer/styles/globals.css`
-- Task 3 complete: updated focused viewer coverage to lock in the cleaner contract. `ViewerShell` now asserts the old duplicate intro copy is gone, and `followingStatePresentation` now checks for the new `Following` heading plus the single guest prompt in the sidebar.
-- Task 3 checks:
-  - `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx followingStatePresentation.test.tsx directoryPage.test.tsx`
-  - `npm.cmd --prefix web/viewer run lint`
-  - `npm.cmd --prefix web/viewer run build`
-- Task 4 complete: reran the focused viewer validation after stripping the stale inner-column padding, added a browser-level Playwright regression for the desktop homepage shell, rebuilt the local `bitriver-live`/`viewer` stack, and then rechecked the deployed page on `http://127.0.0.1:8080/viewer`. The final browser probe showed the desktop shell in the correct mode, the following rail and featured hero aligned at the same top offset (`88px` each), the header rows within `6px` of each other, the old shell intro copy gone, and the guest sign-in message present only once.
-- Task 4 checks:
-  - `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx followingStatePresentation.test.tsx directoryPage.test.tsx`
-  - `npm.cmd --prefix web/viewer run lint`
-  - `npm.cmd --prefix web/viewer run build`
-  - `npx.cmd playwright test tests/homepage-layout.spec.ts --reporter=list`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - escalated headless browser probe against `http://127.0.0.1:8080/viewer`
-
-## Scoped change: workflow and CI verification pass
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the workflow-validation scope and inspect the defined CI jobs before running checks
-  - Acceptance criteria:
-    - `PLAN.md` captures the CI/workflow validation scope, assumptions, risks, and candidate commands.
-    - `TASKS.md` lists the ordered workflow-inspection, execution, and reporting tasks before running broad checks.
-    - The read-only pass identifies which workflows can be mirrored locally on this Windows host and which inherently depend on GitHub-hosted Linux/macOS runners or external services.
-
-- [x] Task 2 - Run the feasible local equivalents of the defined workflow gates
-  - Acceptance criteria:
-    - Local commands cover the main workflow categories: Go/unit gates, viewer CI, quickstart sanity, postgres integration, docs/workflow consistency, and monitoring config.
-    - Each command result is recorded clearly as pass, fail, or host/tooling blocker.
-    - No product-code edits are made unless a currently reproducible repository issue demands it.
-
-- [x] Task 3 - Summarize cross-platform confidence and remaining hosted-runner gaps
-  - Acceptance criteria:
-    - The final report distinguishes what was actually verified on this Windows host from what still requires Ubuntu/macOS GitHub Actions.
-    - Any blockers are tied back to specific workflow steps or missing host tools.
-    - The result is actionable for shipping a self-hosted live-streaming stack, not just a raw command dump.
-
-### Execution log (workflow and CI verification pass)
-- Task 1 complete: inspected the current workflow set under `.github/workflows` and mapped the important gates. The repo currently defines a top-level `ci.yml` with an Ubuntu `test-all` gate plus separate macOS/Windows Go coverage, a cross-platform quickstart sanity matrix, Ubuntu-only viewer CI, postgres integration, shell/docs/workflow consistency checks, monitoring validation, image scan, ingest e2e, and release flows. Tool availability on this host is mixed: `bash`, `py`, `go`, `docker`, `node`, `npm`, and `gh` are available, while `python3`, `psql`, `shellcheck`, and `act` are not currently on PATH.
-- Task 1 checks:
-  - `Get-Content .github/workflows/ci.yml`
-  - `Get-Content .github/workflows/go-unit-tests.yml`
-  - `Get-Content .github/workflows/viewer-ci.yml`
-  - `Get-Content .github/workflows/quickstart-smoke.yml`
-  - `Get-Content .github/workflows/postgres-tests.yml`
-  - `Get-Content scripts/verify.sh`
-  - `Get-Content scripts/test-all.sh`
-  - `Get-Command bash, python3, py, go, docker, node, npm, psql, shellcheck, gh, act -ErrorAction SilentlyContinue | Select-Object Name,Source`
-- Task 2 complete: after the Windows parity fixes below, the feasible local CI equivalents now run cleanly on this workstation. `go test ./... -count=1 -timeout=120s` passes with a workspace-local `GOCACHE`, `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -help` passes, `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -ValidateOnly` now passes after the PowerShell wrapper gained a writable fallback `GOCACHE`, and `docker compose --env-file .env -f deploy/docker-compose.yml config` still renders the deployment contract successfully (with a local Docker config permission warning from this host, but an exit code of 0).
-- Task 2 checks:
-  - `git branch --show-current`
-  - `pwsh -File scripts/quickstart.ps1 -help`
-  - `pwsh -File scripts/quickstart.ps1 -ValidateOnly`
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s`
-  - `gh auth status`
-  - `gh workflow list`
-- Task 3 complete: the hosted-runner picture is now clearer. This Windows host verified the core Go/runtime path and PowerShell quickstart entrypoint, but the manually dispatched hosted workflows exposed a second layer of issues: several standalone workflows (`go-unit-tests.yml`, `viewer-ci.yml`, `postgres-tests.yml`, `ingest-e2e.yml`) fail immediately under `workflow_dispatch` because they invoke local composite actions before checking out the repo, while other workflows surfaced real repo/script issues such as ShellCheck warnings, a brittle OME mount assertion in `test-quickstart.sh`, a monitoring config validation command problem, and a staged wizard-release regression.
-
-## Scoped change: Windows CI parity fixes for transcoder and quickstart tests
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Capture the concrete Windows test failures before implementation
-  - Acceptance criteria:
-    - `PLAN.md` records the narrowed Windows parity scope, assumptions, risks, and validation commands.
-    - `TASKS.md` records the exact failing packages and the current root-cause hypothesis.
-    - The implementation stays scoped to the failing test harnesses unless runtime code is proven necessary.
-
-- [x] Task 2 - Make the transcoder FFmpeg stub harness work on Windows without changing runtime behavior
-  - Acceptance criteria:
-    - `cmd/transcoder` tests use a deterministic FFmpeg stub on Windows instead of resolving a real system `ffmpeg.exe`.
-    - The Windows stub produces the same observable playlist/segment outputs the existing Unix stub-based tests expect.
-    - The previously failing transcoder package tests pass on this host.
-
-- [x] Task 3 - Make the quickstart shell-wrapper tests select a usable shell on Windows
-  - Acceptance criteria:
-    - The tests prefer a runnable Git Bash style shell over unusable WSL `bash.exe` on Windows.
-    - PATH manipulation in the harness uses platform-correct separators.
-    - The previously failing `scripts` package tests pass on this host without weakening their assertions.
-
-- [x] Task 4 - Rerun the cross-platform verification commands and dispatch safe hosted workflows
-  - Acceptance criteria:
-    - `go test ./...` passes on this Windows host from the current checkout.
-    - Windows quickstart PowerShell entrypoint checks complete locally with the available shell tooling.
-    - Safe validation workflows are dispatched from GitHub CLI against the current branch, and their run status is recorded.
-
-### Execution log (Windows CI parity fixes for transcoder and quickstart tests)
-- Task 1 complete: confirmed the Windows-local failures are test-harness issues in two isolated areas. `cmd/transcoder/main_test.go` currently assumes `testdata/ffmpeg` is directly executable and therefore fails to shadow a real `ffmpeg.exe` on Windows, which cascades into the health recovery assertions. `scripts/quickstart_test.go` assumes any `bash` on PATH is usable, but on this host the default resolution lands on WSL `bash.exe`, while usable Git Bash binaries exist separately under `C:\Program Files\Git\...`.
-- Task 1 checks:
-  - `Get-Content cmd/transcoder/main_test.go | Select-Object -First 220`
-  - `Get-Content cmd/transcoder/testdata/ffmpeg | Select-Object -First 200`
-  - `Get-Content scripts/quickstart_test.go | Select-Object -First 220`
-  - `Get-Content scripts/quickstart.sh | Select-Object -First 200`
-  - `Get-Content .github/workflows/quickstart-smoke.yml | Select-Object -First 220`
-  - `$candidates = @('C:\Program Files\Git\bin\bash.exe','C:\Program Files\Git\usr\bin\bash.exe','C:\WINDOWS\system32\bash.exe'); foreach ($p in $candidates) { '{0}`t{1}' -f $p, (Test-Path $p) }`
-- Task 2 in progress: the first round of fixes proved the quickstart harness issue was isolated, but also uncovered a real Windows runtime limitation in the transcoder live publish path. `go test ./scripts` now passes on this host after selecting a usable shell and fixing PATH handling. `go test ./cmd/transcoder` improved enough to expose the next blocker: Windows on this machine cannot create directory symlinks without administrator privileges (`New-Item -ItemType SymbolicLink ...` fails with "Administrator privilege required"), while `publishLive` currently relies on `os.Symlink`, so live manifest publication and the related health checks stay degraded even after the FFmpeg stub issue is addressed.
-- Task 2 checks:
-  - `gofmt -w cmd/transcoder/main_test.go scripts/quickstart_test.go`
-  - `New-Item -ItemType Directory -Force .gocache-transcoder | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-transcoder).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/transcoder -count=1 -timeout=120s`
-  - `New-Item -ItemType Directory -Force .gocache-scripts | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-scripts).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./scripts -count=1 -timeout=120s`
-  - `$tmp = Join-Path (Resolve-Path .).Path '.codex-symlink-check'; if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }; New-Item -ItemType Directory -Path $tmp | Out-Null; New-Item -ItemType Directory -Path (Join-Path $tmp 'target') | Out-Null; try { New-Item -ItemType SymbolicLink -Path (Join-Path $tmp 'link') -Target (Join-Path $tmp 'target') -ErrorAction Stop | Out-Null; 'symlink-ok' } catch { 'symlink-failed: ' + $_.Exception.Message }`
-- Task 2 complete: replaced the Windows-only FFmpeg stub path with a native `ffmpeg.exe` test shim so the transcoder suite no longer falls through to a real system `ffmpeg.exe`. The suite also now uses a Windows-capable live mirror path: `publishLive` still prefers `os.Symlink`, but on Windows it falls back to a directory junction created via `mklink /J`, and the lifecycle test now tolerates Windows junction semantics plus slower mirror cleanup timing. With those changes in place, `go test ./cmd/transcoder -count=1 -timeout=120s` passes on this host.
-- Task 2 checks:
-  - `cmd /c mklink /J "<workspace>\\.codex-junction-check\\link" "<workspace>\\.codex-junction-check\\target"`
-  - `New-Item -ItemType Directory -Force .gocache-transcoder | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-transcoder).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/transcoder -count=1 -timeout=120s`
-- Task 3 complete: the quickstart test harness now resolves a usable Git Bash-style shell on Windows instead of assuming the first `bash.exe` is runnable, uses the correct PATH separator on Windows, and stages a Windows-friendly `go.cmd` stub for the wrapper test. I also hardened `scripts/quickstart.ps1` itself so `-ValidateOnly` sets a writable fallback `GOCACHE` before launching `go run`, which removed the local `Access is denied` failure against the default Windows build cache path. `go test ./scripts -count=1 -timeout=120s` and the real `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -ValidateOnly` path both pass now.
-- Task 3 checks:
-  - `gofmt -w scripts/quickstart_test.go`
-  - `New-Item -ItemType Directory -Force .gocache-scripts | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-scripts).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./scripts -count=1 -timeout=120s`
-  - `New-Item -ItemType Directory -Force .gocache-quickstart | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-quickstart).Path; powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -ValidateOnly`
-- Task 4 complete: reran the broad Windows-local gate and then dispatched the safe hosted validation workflows for branch `codex/UI_UX_repair`. The local gate now passes end-to-end (`go test ./...` plus `docker compose ... config`). Hosted workflow dispatch succeeded for `ci.yml`, `docs-consistency.yml`, `go-unit-tests.yml`, `go-workflow-consistency.yml`, `image-scan.yml`, `ingest-e2e.yml`, `monitoring-config.yml`, `postgres-tests.yml`, `quickstart-smoke.yml`, `shellcheck.yml`, `viewer-ci.yml`, and `wizard-release.yml`. The resulting run list shows the current hosted blockers clearly: `CI` and `Docs consistency` passed, `Go workflow consistency` passed, while several workflow-dispatch-only jobs fail immediately because they use local composite actions before checkout, and several others fail on real repo/script issues (`shellcheck`, `monitoring-config`, `quickstart-smoke`, `wizard-release`, and an external Trivy install failure in `image-scan`).
-- Task 4 checks:
-  - `New-Item -ItemType Directory -Force .gocache-all | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-all).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s`
-  - `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -help`
-  - `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -ValidateOnly`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml config`
-  - `gh workflow run ci.yml --ref codex/UI_UX_repair`
-  - `gh workflow run docs-consistency.yml --ref codex/UI_UX_repair`
-  - `gh workflow run go-unit-tests.yml --ref codex/UI_UX_repair`
-  - `gh workflow run go-workflow-consistency.yml --ref codex/UI_UX_repair`
-  - `gh workflow run image-scan.yml --ref codex/UI_UX_repair`
-  - `gh workflow run ingest-e2e.yml --ref codex/UI_UX_repair`
-  - `gh workflow run monitoring-config.yml --ref codex/UI_UX_repair`
-  - `gh workflow run postgres-tests.yml --ref codex/UI_UX_repair`
-  - `gh workflow run quickstart-smoke.yml --ref codex/UI_UX_repair`
-  - `gh workflow run shellcheck.yml --ref codex/UI_UX_repair`
-  - `gh workflow run viewer-ci.yml --ref codex/UI_UX_repair`
-  - `gh workflow run wizard-release.yml --ref codex/UI_UX_repair`
-  - `gh run list --branch codex/UI_UX_repair --limit 20`
-  - `gh run view 23512035395 --log-failed`
-  - `gh run view 23512040120 --log-failed`
-  - `gh run view 23512041661 --log-failed`
-  - `gh run view 23512043069 --log-failed`
-  - `gh run view 23512044850 --log-failed`
-  - `gh run view 23512046165 --log-failed`
-  - `gh run view 23512047607 --log-failed`
-  - `gh run view 23512049060 --log-failed`
-
-## Scoped change: auth overlay route-copy trim
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the scoped auth-overlay copy cleanup before editing
-  - Acceptance criteria:
-    - `PLAN.md` captures the narrowed overlay-copy scope, assumptions, risks, and focused validation command.
-    - `TASKS.md` lists the ordered implementation and verification steps before `AuthDialog` is edited.
-    - Read-only inspection identifies the exact redundant sentence currently rendered in the route context card.
-
-- [x] Task 2 - Remove the redundant destination explanation from the auth overlay
-  - Acceptance criteria:
-    - The auth overlay still shows "Continue where you left off" and the destination path.
-    - The extra sentence describing the automatic return behavior is removed from the dialog.
-    - Existing sign-in/sign-up/MFA behavior remains unchanged.
-
-- [x] Task 3 - Add focused viewer coverage and run verification
-  - Acceptance criteria:
-    - A focused auth-dialog test locks in the trimmed route-context contract.
-    - The targeted viewer test command passes.
-    - `TASKS.md` records the executed command(s) and result.
-
-### Execution log (auth overlay route-copy trim)
-- Task 1 complete: captured the scoped copy-cleanup plan in `PLAN.md`/`TASKS.md` before touching the viewer component and confirmed the redundant sentence currently comes from `describeDestination()` inside `web/viewer/components/auth/AuthDialog.tsx`.
-- Task 1 checks:
-  - `Get-Content PLAN.md | Select-Object -Last 20`
-  - `Get-Content TASKS.md | Select-Object -Last 30`
-  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
-- Task 2 complete: removed the route-context paragraph from `AuthDialog` and deleted the now-unused `describeDestination()` helper, leaving the overlay card focused on the return header plus destination path only.
-- Task 2 checks:
-  - `Get-Content web/viewer/components/auth/AuthDialog.tsx | Select-Object -First 120`
-  - `git diff -- web/viewer/components/auth/AuthDialog.tsx web/viewer/__tests__/authDialog.test.tsx`
-- Task 3 complete: added focused `web/viewer/__tests__/authDialog.test.tsx` coverage for the trimmed route-context contract and ran the targeted viewer Jest command successfully. Jest still emitted the existing `.next/standalone/package.json` haste-collision warning from the worktree, but the suite passed cleanly.
-- Task 3 checks:
-  - `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx`
-
-## Scoped change: local redeploy for latest localhost review
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the local redeploy scope before runtime actions
-  - Acceptance criteria:
-    - `PLAN.md` captures the redeploy scope, assumptions, risks, and verification commands.
-    - `TASKS.md` lists the ordered rebuild and route-check tasks before Docker actions begin.
-
-- [x] Task 2 - Rebuild and recreate the local app services from the current checkout
-  - Acceptance criteria:
-    - `bitriver-live` and `viewer` are rebuilt from the current source tree using the canonical Compose contract.
-    - Compose status output is captured after the rebuild attempt.
-    - The action stays limited to the app services unless a hard blocker requires wider intervention.
-
-- [x] Task 3 - Verify the redeployed local routes reflect the latest app update
-  - Acceptance criteria:
-    - `http://localhost:8080/` responds after the rebuild.
-    - `http://localhost:8080/viewer` serves the current homepage content from the updated app.
-    - The live viewer auth entry path reflects the latest auth-overlay update.
-    - `TASKS.md` records the post-redeploy status or any host blocker precisely.
-
-### Execution log (local redeploy for latest localhost review)
-- Task 1 complete: recorded the redeploy scope in `PLAN.md` and `TASKS.md` before touching Docker so the rebuild/recreate steps and live route checks were explicit.
-- Task 1 checks:
-  - `Get-Content PLAN.md | Select-Object -Last 30`
-  - `Get-Content TASKS.md | Select-Object -Last 35`
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short`
-- Task 2 complete: captured the pre-redeploy Compose state, rebuilt `bitriver-live` and `viewer` from the current checkout with the canonical Compose contract, and confirmed the recreated app services came back on fresh container ages. Compose also refreshed the dependent app-path containers it needed during the targeted `up -d --build` flow, but no contract changes were made.
-- Task 2 checks:
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-- Task 3 complete: verified the redeployed stack is serving from the updated build. `/` still returns the expected `307` redirect, `/viewer` serves the current homepage copy including `Start with creators already on air`, `Watch live now`, and `Full directory`, and the live auth flow now resolves to `http://127.0.0.1:8080/viewer?auth=signin&next=%2Fviewer` on this stack (self-signup is currently disabled), where a browser-level check confirmed `CONTINUE WHERE YOU LEFT OFF`, `/viewer`, and the trimmed sign-in overlay copy are present while the removed auto-return sentence stays absent.
-- Task 3 checks:
-  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
-  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'Browse BitRiver Live|Watch live now|Full directory' -AllMatches`
-  - `(Invoke-WebRequest -UseBasicParsing 'http://localhost:8080/viewer?auth=signup').Content | Select-String -Pattern 'Continue where you left off|Create your BitRiver account|/viewer' -AllMatches` (route served, but the auth surface required a hydrated browser check on this self-signup-disabled stack)
-  - escalated headless browser probe against `http://127.0.0.1:8080/viewer?auth=signup`
-  - escalated headless browser probe against `http://127.0.0.1:8080/viewer` with a click on `Sign in`
-
-## Scoped change: public release readiness and repo hygiene pass
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the public-release audit scope before editing
-  - Acceptance criteria:
-    - `PLAN.md` captures the audit/improvement scope, assumptions, risks, and verification commands.
-    - `TASKS.md` lists the ordered hygiene/docs/release tasks before edits begin.
-    - The read-only audit identifies concrete trust/onboarding/release blockers rather than vague cleanup ideas.
-
-- [x] Task 2 - Remove internal-looking tracked clutter and harden ignore rules
-  - Acceptance criteria:
-    - Generated temp files and one-off release evidence logs are no longer tracked.
-    - `.gitignore` covers the relevant local temp/output paths without hiding real source files.
-    - Any docs that referenced removed artifact paths are updated or replaced with cleaner public guidance.
-
-- [x] Task 3 - Add the missing public repo governance and contribution surfaces
-  - Acceptance criteria:
-    - Root/community files cover contributing, security reporting, code of conduct, and changelog/release expectations.
-    - GitHub issue templates and a PR template exist for public collaboration.
-    - Added docs stay honest about current support scope and maintainer expectations.
-
-- [x] Task 4 - Rework onboarding docs so the repo lands well for first-time outsiders
-  - Acceptance criteria:
-    - `README.md` leads with a crisp value proposition and practical quickstart path.
-    - The README clearly states what works today, what is planned, and what is not supported.
-    - Broken/stale onboarding links or misleading internal-language sections are fixed in the touched docs.
-
-- [x] Task 5 - Align release-facing artifacts for a credible first public tag
-  - Acceptance criteria:
-    - Release docs/changelog support a real first public release instead of internal placeholder history.
-    - The repo has a clear release checklist and draft notes path for the recommended initial tag.
-    - Remaining public-release blockers are documented precisely after verification.
-
-- [x] Task 6 - Run relevant validation and record the final release-readiness status
-  - Acceptance criteria:
-    - Repo hygiene/docs checks are run and logged.
-    - The closest feasible repo-wide verification gate is attempted and recorded.
-    - `TASKS.md` captures any residual blockers that still prevent a confident public release.
-
-### Execution log (public release readiness and repo hygiene pass)
-- Task 1 complete: finished the read-only audit before editing. The strongest public-facing blockers are tracked temp/release-log artifacts under `.tmp/` and `artifacts/`, missing public collaboration/security files, missing issue/PR templates, a README that reads more like an internal maintainer memo than a first-release landing page, a broken quickstart anchor in `web/viewer/README.md`, and stale/speculative release docs (`docs/releases/release-checklist-report-*.md`, `docs/releases/v1.0.0.md`) that weaken trust.
-- Task 1 checks:
-  - `Get-ChildItem -Force | Select-Object Mode,Length,LastWriteTime,Name`
-  - `Get-Content README.md`
-  - `Get-Content deploy/.env.example`
-  - `Get-ChildItem .github -Recurse | Select-Object FullName`
-  - `git ls-files artifacts .tmp docs/releases`
-  - `rg -n "quick-start-docker-one-command|v1\\.2\\.3|artifacts/release-checks|internal/service" README.md web/viewer/README.md docs .github deploy`
-- Task 2 complete: removed tracked temp/release-evidence clutter (`.tmp/render-srs-config.sh`, `artifacts/release-checks-*`, and dated `docs/releases/release-checklist-report-*` files), deleted the stale speculative `docs/releases/v1.0.0.md`, and tightened `.gitignore` for repo-local scratch/output paths (`artifacts`, `.artifacts`, `.tmp`, `.codex-tmp`, `dist`, and targeted `.gocache-*` directories).
-- Task 2 checks:
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live diff --name-status -- .gitignore .tmp artifacts docs/releases`
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live check-ignore -v .tmp/example artifacts/example .artifacts/example .codex-tmp/example dist/example`
-  - `rg -n "artifacts/release-checks|\\.tmp/render-srs-config\\.sh" README.md docs deploy scripts .github`
-- Task 3 complete: added public-facing contributor/community files (`CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`) plus GitHub issue templates and a pull-request template so the repo has the expected trust and collaboration surfaces for outside contributors.
-- Task 3 checks:
-  - `Get-Item CONTRIBUTING.md,SECURITY.md,CODE_OF_CONDUCT.md,.github/pull_request_template.md | Select-Object Name,Length`
-  - `Get-ChildItem .github/ISSUE_TEMPLATE | Select-Object Name,Length`
-  - `Get-Content SECURITY.md`
-- Task 4 complete: rewrote the root `README.md` around a public-first pitch, a simpler quickstart, explicit support boundaries, and a small architecture overview. Also fixed the stale quickstart anchor in `web/viewer/README.md`.
-- Task 4 checks:
-  - `Get-Content README.md -TotalCount 120`
-  - `rg -n "quick-start-docker-one-command|#quickstart" README.md web/viewer/README.md`
-- Task 5 complete: added a root `CHANGELOG.md`, replaced the stale release-note story with `docs/releases/README.md` and `docs/releases/v1.2.3-draft.md`, and aligned the repo around the existing `v1.2.3` version lineage instead of the speculative checked-in `v1.0.0` note.
-- Task 5 checks:
-  - `Get-ChildItem docs/releases | Select-Object Name,Length`
-  - `Get-Content CHANGELOG.md`
-  - `rg -n "first public release|v1\\.0\\.0 release notes" CHANGELOG.md docs/releases docs`
-- Task 6 complete: validation surfaced and then cleared several low-risk release blockers in the repo itself. The shell/doc checks now pass, `docs/contract.md` was regenerated from `deploy/.env.example`, `scripts/check-doc-installer-language.sh` now points at the correct `docs/labs/cross-platform-plan.md`, `verify.sh` now uses a small Python 3 resolver helper for clearer cross-platform prerequisite handling, the OME render tests now write to temp outputs instead of racing on `deploy/ome/Server.generated.xml`, the Windows bash quickstart test now stubs `go` correctly, and the stream/transcoder gauges now clamp at read/export time so concurrent stop-before-start races do not leak negative state or order-dependent positives.
-- Task 6 result: the repo-wide `./scripts/verify.sh` gate now gets all the way through Go tests, architecture checks, dependency checks, and contract invariants. The remaining failure is precise and release-relevant: the local root `.env` used by this workstation does not yet pin real third-party image digests, so `scripts/require-image-digests.sh --env-file .env` stops the gate at the production digest-enforcement step. That is the main remaining blocker before a confident public release tag.
-- Task 6 checks:
-  - `& 'C:\Program Files\Git\bin\bash.exe' -n scripts/python.sh scripts/check-env-example-placeholders.sh scripts/check-contract-invariants.sh scripts/verify.sh`
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-no-committed-secrets.sh`
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-doc-installer-language.sh`
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/generate-contract-doc.sh`
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/generate-contract-doc.sh --check`
-  - `New-Item -ItemType Directory -Force .gocache-ingest | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-ingest).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/ingest -count=1 -timeout=120s`
-  - `New-Item -ItemType Directory -Force .gocache-scripts-fix | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-scripts-fix).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./scripts -count=1 -timeout=120s`
-  - `New-Item -ItemType Directory -Force .gocache-bitriver-fix | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-bitriver-fix).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1 -timeout=120s`
-  - `New-Item -ItemType Directory -Force .gocache-metrics-fix | Out-Null; $env:GOCACHE=(Resolve-Path .gocache-metrics-fix).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/observability/metrics -count=1 -timeout=120s`
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (current remaining blocker: local `.env` is missing required third-party digest pins for production pull mode)
-
-## Scoped change: second-pass outsider trust and adoption polish
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [ ] Task 1 - Record the trust/adoption polish scope and confirm the remaining rough edges
-  - Acceptance criteria:
-    - `PLAN.md` captures the narrowed second-pass scope, assumptions, risks, and focused checks before edits.
-    - `TASKS.md` lists the ordered public-surface tasks before files are changed.
-    - Read-only inspection identifies concrete remaining trust issues (for example unclear README opening, install/support ambiguity, stale repo URLs, or inconsistent release-stage wording).
-
-- [x] Task 2 - Tighten the README and install-facing docs for first-time trust
-  - Acceptance criteria:
-    - The README makes the project scope, intended operator, and quickest honest first success obvious in the first screenful.
-    - Public install docs remove stale or confusing wording, fix repo/link inconsistencies, and feel more like a maintained project than private notes.
-    - Public-facing packaging/docs metadata no longer point at the wrong GitHub repository path.
-
-- [x] Task 3 - Strengthen contributor/support/release legitimacy signals
-  - Acceptance criteria:
-    - The repo has a clear public support path for newcomers and issue-template routing reflects it.
-    - Contributor-facing docs are clearer about scope, expectations, and the best-supported path.
-    - Release-stage/versioning wording avoids confusing or internally contradictory messaging.
-
-- [x] Task 4 - Run focused validation and record the second-pass outcome
-  - Acceptance criteria:
-    - The touched docs/support/template surfaces are reviewed after edits.
-    - Relevant repo-hygiene checks are rerun and logged.
-    - `TASKS.md` records any remaining outsider-trust issues that should still block or temper a public release.
-
-### Execution log (second-pass outsider trust and adoption polish)
-- Task 1 complete: read-only review confirmed the remaining trust gaps are mostly presentation mismatches rather than missing mechanics. The top of `README.md` still made a newcomer infer too much about who the project is for and what success looks like, `docs/quickstart.md` still read like an internal operator notebook near the top, public package/docs metadata still referenced `github.com/bitriver-live/bitriver-live` even though this checkout's `origin` points at `github.com/ProhibitedTV/BitRiver-Live`, and the release-stage wording in `docs/production-status.md` still mixed a `v1.0` label into a repo that is otherwise aligned to `v1.2.3`.
-- Task 1 checks:
-  - `Get-Content README.md`
-  - `Get-Content CONTRIBUTING.md`
-  - `Get-Content CHANGELOG.md`
-  - `Get-Content docs/releases/README.md`
-  - `Get-Content docs/quickstart.md`
-  - `Get-Content SECURITY.md`
-  - `Get-Content docs/production-release.md`
-  - `Get-Content docs/versioning.md`
-  - `Get-Content .github/RELEASE_NOTES_TEMPLATE.md`
-  - `Get-ChildItem .github -Recurse | Select-Object FullName`
-  - `Test-Path bitriver-live-banner-text.png; Test-Path SUPPORT.md`
-  - `Get-Content docs/releases/v1.2.3-draft.md`
-  - `rg -n "â|�" README.md CONTRIBUTING.md docs web/viewer/README.md`
-  - `Get-Content docs/testing.md`
-  - `Get-Content web/viewer/README.md`
-  - `git remote -v`
-  - `Get-Content docs/architecture.md`
-  - `Get-Content .github/dependabot.yml`
-  - `rg -n "github.com/bitriver-live|ProhibitedTV/BitRiver-Live|cross-platform-plan" README.md docs web .github CONTRIBUTING.md SECURITY.md CHANGELOG.md`
-  - `Get-Content docs/production-single-host.md`
-  - `Get-Content LICENSE`
-  - `Get-Content CODE_OF_CONDUCT.md`
-  - `rg -n "releases/latest/download|ProhibitedTV/BitRiver-Live|github.com/bitriver-live/bitriver-live" README.md docs deploy .github web cmd scripts`
-  - `Get-Content scripts/generate-brew-formula.sh`
-  - `Get-Content deploy/installers/nfpm.yaml`
-  - `Get-Content .github/ISSUE_TEMPLATE/config.yml`
-  - `Get-Content .github/ISSUE_TEMPLATE/bug_report.yml`
-  - `Get-Content .github/ISSUE_TEMPLATE/feature_request.yml`
-- Task 2 complete: tightened the top of `README.md` around an honest operator fit, a clearer first-success quickstart, and a simpler support boundary, then reshaped the top of `docs/quickstart.md` so install paths, expected first success, and migration notes read like maintained public docs instead of internal notes. This pass also corrected the public GitHub repository path in install/package metadata (`docs/quickstart.md`, `scripts/generate-brew-formula.sh`, and `deploy/installers/nfpm.yaml`) and replaced the misleading architecture/quickstart references to the lab-only cross-platform plan with the supported production-status baseline.
-- Task 2 checks:
-  - `Get-Content README.md -TotalCount 180`
-  - `Get-Content docs/quickstart.md -TotalCount 180`
-  - `Get-Content docs/architecture.md -TotalCount 60`
-  - `Get-Content deploy/installers/nfpm.yaml`
-  - `Get-Content scripts/generate-brew-formula.sh`
-- Task 3 complete: added a root `SUPPORT.md`, linked it from `README.md` and `CONTRIBUTING.md`, added GitHub issue-template contact links for support/security, clarified maintainer priorities in `CONTRIBUTING.md`, tightened release-note hygiene guidance in `docs/releases/README.md`, and changed the confusing `v1.0` release-stage label in `docs/production-status.md` to a clearer `stable` stage.
-- Task 3 checks:
-  - `Get-Content SUPPORT.md`
-  - `Get-Content CONTRIBUTING.md`
-  - `Get-Content .github/ISSUE_TEMPLATE/config.yml`
-  - `Get-Content docs/production-status.md -TotalCount 120`
-  - `Get-Content docs/releases/README.md`
-- Task 4 complete: the second-pass trust/adoption surfaces were re-read after edits, the stale public repo URL and stale link grep returned no remaining matches, the docs installer-language check and committed-secret guard both passed, and the updated brew-formula shell script passed `bash -n` once rerun outside the sandbox after a Windows Git Bash signal-pipe permission failure in the sandboxed attempt.
-- Task 4 result: the remaining public-release caution is still operational rather than presentational. The repo now reads more intentionally to outsiders, but the final release gate still depends on a production-grade `.env` with pinned third-party image digests so `./scripts/verify.sh` can go fully green end to end.
-- Task 4 checks:
-  - `Get-Content README.md -TotalCount 180`
-  - `Get-Content docs/quickstart.md -TotalCount 180`
-  - `Get-Content SUPPORT.md`
-  - `Get-Content CONTRIBUTING.md`
-  - `Get-Content .github/ISSUE_TEMPLATE/config.yml`
-  - `Get-Content docs/production-status.md -TotalCount 120`
-  - `Get-Content docs/releases/README.md`
-  - `rg -n "github.com/bitriver-live/bitriver-live|docs/cross-platform-plan.md|### v1.0" README.md docs CONTRIBUTING.md .github deploy scripts` (no matches; `rg` exited 1)
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-doc-installer-language.sh`
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-no-committed-secrets.sh`
-  - `& 'C:\Program Files\Git\bin\bash.exe' -n scripts/generate-brew-formula.sh` (rerun outside sandbox after a Windows Git Bash permission failure in the sandboxed attempt)
-
-## Scoped change: local sync and release-ready UI/UX polish
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the local-sync and UI/UX polish scope before changes
-  - Acceptance criteria:
-    - `PLAN.md` captures the redeploy + UI/UX scope, assumptions, risks, and focused validation commands.
-    - `TASKS.md` lists the ordered sync, implementation, and verification tasks before edits or runtime changes begin.
-    - Read-only inspection identifies the concrete UI clutter to remove instead of relying on generic polish language.
-
-- [x] Task 2 - Fast-forward the local checkout to merged `main` and redeploy app services
-  - Acceptance criteria:
-    - The current branch is aligned to the merged `origin/main` commit without discarding local work.
-    - `bitriver-live` and `viewer` are rebuilt/recreated from the updated checkout using the canonical Compose contract.
-    - Post-redeploy checks confirm `localhost:8080` is serving the refreshed app.
-
-- [x] Task 3 - Simplify the viewer homepage and navigation around watch-first adoption
-  - Acceptance criteria:
-    - The homepage hero and discovery rows prioritize "watch something now" and "browse" without redundant editorial copy or unnecessary controls.
-    - Navigation keeps the primary actions obvious and removes low-value clutter for first-time users.
-    - Any touched styles or components stay consistent across desktop and mobile.
-
-- [x] Task 4 - Simplify creator onboarding/live setup around first success
-  - Acceptance criteria:
-    - Creator onboarding focuses on the shortest path to a first live stream and viewer link.
-    - Manual checklist friction and verbose explanatory text are reduced where the UI can infer the next step.
-    - Live setup still preserves the critical ingest/preview/share flow.
-
-- [x] Task 5 - Run focused viewer validation and record the redeployed outcome
-  - Acceptance criteria:
-    - Targeted viewer/unit tests pass for the touched flows.
-    - Focused Playwright coverage passes for homepage/channel/live-setup UX.
-    - `TASKS.md` records the redeploy command(s), verification result, and any remaining UI risks.
-
-### Execution log (local sync and release-ready UI/UX polish)
-- Task 1 complete: read-only analysis confirmed two separate needs before coding. First, the local branch `codex/release_test` was clean but 12 commits behind `origin/main`, so a fast-forward sync is needed before redeploying. Second, the product UX is currently more complex than the target audience needs: the homepage stacks multiple editorial/info panels and carousel controls, the navbar keeps extra preference/setup affordances visible, and the creator onboarding/live pages read like internal operator workspaces with too many manual confirmations and explanatory paragraphs for a "get your Twitch-like stream running" flow.
-- Task 1 checks:
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short`
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live branch --show-current`
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live log -1 --oneline`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `Get-ChildItem web/viewer -Force`
-  - `rg --files web/viewer | Select-Object -First 200`
-  - `Get-Content web/viewer/AGENTS.md`
-  - `Get-Content web/viewer/app/page.tsx`
   - `Get-Content web/viewer/components/ViewerShell.tsx`
-  - `Get-Content web/viewer/components/Navbar.tsx`
-  - `Get-Content web/viewer/app/creator/getting-started/page.tsx`
-  - `Get-Content web/viewer/app/getting-started/page.tsx`
-  - `git fetch origin --prune`
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live rev-parse HEAD`
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live rev-parse origin/main`
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live rev-list --left-right --count HEAD...origin/main`
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live log --oneline --decorate --graph --max-count 12 HEAD origin/main`
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short --branch`
-  - `Get-Content web/viewer/app/directory-page-shell.tsx`
-  - `Get-Content web/viewer/app/directory-view.tsx`
-  - `Get-Content web/viewer/components/FeaturedChannel.tsx`
-  - `Get-Content web/viewer/components/LiveNowGrid.tsx`
-  - `Get-Content web/viewer/components/CategoryRail.tsx`
+  - `Get-Content web/viewer/app/layout.tsx`
   - `Get-Content web/viewer/styles/home.css`
-  - `Get-Content -LiteralPath 'web/viewer/app/creator/live/[channelId]/page.tsx'`
-  - `Get-Content -LiteralPath 'web/viewer/app/creator/live/[channelId]/layout.tsx'`
-  - `Get-Content web/viewer/components/UploadManager.tsx`
-  - `Get-Content web/viewer/app/creator/page.tsx`
-  - `Get-Content web/viewer/components/ChannelRail.tsx`
-- Task 2 complete: fast-forwarded the local checkout to `origin/main` with `git pull --ff-only origin main`, then rebuilt the app services with the canonical Compose contract. The first `docker compose ... up -d --build bitriver-live viewer` timed out before returning cleanly on this host, so follow-up status checks plus a final rebuild/recreate were used to confirm the viewer service picked up the new UI build now running on `localhost:8080`.
+  - `Get-Content web/viewer/styles/globals.css`
+  - `Get-Content web/viewer/__tests__/navbar.test.tsx`
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts --grep "theme toggle updates the rendered document|navbar sign-in button redirects to the configured login URL"` (first run reproduced the live failures; hidden `.nav-drawer` intercepted pointer events on the theme button, and the sign-in test exposed selector ambiguity because there were two visible sign-in buttons)
+- Task 2 complete: fixed the click-dead navbar controls by making the hidden nav drawer truly non-interactive when `hidden` is present, then tightened the Playwright coverage so the top-right signed-out auth actions are exercised directly. The viewer now both redirects correctly when `loginUrl` is configured and opens the in-viewer sign-in/sign-up dialog flow when it is not.
 - Task 2 checks:
-  - `git fetch origin --prune`
-  - `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live rev-list --left-right --count HEAD...origin/main`
-  - `git pull --ff-only origin main`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer` (timed out before the CLI returned on this Windows host, but the rebuild progressed)
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer` (final viewer rebuild before live verification; timed out again before returning cleanly)
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-- Task 3 complete: simplified the viewer homepage around the two jobs an outsider understands immediately: watch what is on right now or start their own stream. The featured rail no longer exposes back/next/play controls, the following rail no longer repeats summary/error text or a footnote, homepage sections stay hidden when they would only show empty filler, and the hero now chooses between `Watch live now`, `Browse channels`, and `Start creator setup` based on what content the install actually has.
+  - `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx`
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts --grep "signed-out navbar actions open the in-viewer auth flow when no external login URL is configured|navbar sign-in button redirects to the configured login URL|theme toggle updates the rendered document"`
+- Task 3 complete: moved the navbar-clearance spacing off the whole `.viewer-shell` and onto `.viewer-shell__content-inner`, which removes the unexplained gap above the left rail/main content while keeping the fixed navbar clearance where the content actually needs it.
 - Task 3 checks:
-  - `Get-Content web/viewer/app/directory-view.tsx`
-  - `Get-Content web/viewer/components/FeaturedChannel.tsx`
-  - `Get-Content web/viewer/components/FollowingSidebar.tsx`
-  - `Get-Content web/viewer/components/CategoryRail.tsx`
-  - `Get-Content web/viewer/components/ChannelRail.tsx`
-  - `Get-Content web/viewer/components/LiveNowGrid.tsx`
-- Task 4 complete: simplified the creator surfaces down to the shortest believable first-success path. `creator/getting-started` now focuses on three steps (`Choose your channel`, `Copy your stream settings`, `Go live and share the channel`) instead of a manual checklist, and the live setup page now keeps the flow to four sections (`Channel`, `Stream settings`, `Go live`, `Share`) with direct OBS copy actions, a single signal/preview area, and less maintainer-style explanatory text.
+  - `Get-Content web/viewer/styles/globals.css | Select-String -Pattern '\.nav-drawer\[hidden\]|\.viewer-shell \{|padding-top: var\(--viewer-top-offset\);' -Context 0,2`
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts --grep "theme toggle updates the rendered document"`
+- Task 4 complete: added runtime-focused Playwright coverage for the local in-viewer auth flow, reran the focused navbar Jest suite, and finished with clean viewer lint/build passes.
 - Task 4 checks:
-  - `Get-Content web/viewer/app/creator/getting-started/page.tsx`
-  - `Get-Content -LiteralPath 'web/viewer/app/creator/live/[channelId]/page.tsx'`
-  - `Get-Content web/viewer/__tests__/creatorGettingStartedPage.test.tsx`
-  - `Get-Content web/viewer/__tests__/creatorLivePage.test.tsx`
-  - `Get-Content web/viewer/tests/creator-live-setup.spec.ts`
-- Task 5 complete: reran the focused viewer/unit suite, the browser smoke, and the viewer production build, then confirmed the rebuilt local viewer container is serving the updated homepage on `localhost:8080/viewer`. The live stack currently renders the cleaner empty-install homepage state because this local environment has no live directory content, which is the sensible outcome for the new watch-first/creator-first logic.
-- Task 5 checks:
-  - `npm.cmd --prefix web/viewer run test -- creatorGettingStartedPage.test.tsx creatorLivePage.test.tsx directoryPage.test.tsx navigation.test.ts viewerShell.test.tsx`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx`
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts --grep "signed-out navbar actions open the in-viewer auth flow when no external login URL is configured|navbar sign-in button redirects to the configured login URL|theme toggle updates the rendered document"`
   - `npm.cmd --prefix web/viewer run lint`
   - `npm.cmd --prefix web/viewer run build`
-  - `npx.cmd playwright test tests/homepage-layout.spec.ts tests/channel.spec.ts tests/creator-live-setup.spec.ts --reporter=list`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
-  - `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'Launch your first self-hosted channel|Start creator setup|Browse directory|Full directory' -AllMatches`
-  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer/creator/getting-started -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
 
-## Scoped change: viewer auth-overlay cleanup
+## Scoped change: BitRiver Live v1 DLive-replacement overhaul
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Record the auth-overlay cleanup scope before editing
+- [x] Task 1 - Add self-serve first-channel creation support across backend and viewer client
   - Acceptance criteria:
-    - `PLAN.md` captures the auth-overlay scope, assumptions, risks, and validation commands.
-    - `TASKS.md` lists the ordered dialog cleanup and verification tasks before code edits begin.
-    - Read-only inspection identifies where the raw `/viewer` copy and duplicate sign-in controls are rendered.
+    - Authenticated self-signup users can create their own first channel through `POST /api/channels` without already holding the creator role.
+    - Channel creation remains self-only for non-admins, and creating channels for another owner is still admin-only.
+    - Successful first-channel creation upgrades the account to creator-capable immediately.
+    - The viewer web client exposes a typed create-channel helper that the onboarding flow can use directly.
 
-- [x] Task 2 - Clean up the sign-in overlay copy and mode controls
+- [x] Task 2 - Rebuild creator onboarding around first-channel setup and go-live actions
   - Acceptance criteria:
-    - The auth dialog no longer shows raw redirect paths like `/viewer` as the visible return-context label.
-    - When self-signup is unavailable, the dialog no longer renders a redundant standalone `Sign in` mode tab above the `Sign in` submit action.
-    - Existing sign-in, sign-up, MFA, and redirect behavior remain intact.
+    - The creator entry flow clearly guides a new account through channel creation, OBS setup, preview readiness, and sharing the viewer link.
+    - Signed-in users without a channel land in a visible recovery/setup path instead of dead-end or permission-error states.
+    - The creator onboarding experience works cleanly on mobile and desktop.
 
-- [x] Task 3 - Run focused viewer verification and record the result
+- [x] Task 3 - Refresh public navigation and information architecture
   - Acceptance criteria:
-    - Focused auth-dialog/auth-hook tests pass for the touched flow.
-    - Viewer lint is rerun.
-    - `TASKS.md` records the verification results and any remaining host blocker if the broader viewer gate cannot complete.
+    - The top-level viewer IA is reoriented around `Home`, `Browse`, `Following`, `Go Live`, `Videos`, and `Profile`.
+    - Primary CTAs either navigate, open auth, or perform an action immediately; no silent dead buttons remain in the touched surfaces.
+    - The signed-in and signed-out navigation states both feel intentional and consistent across viewport sizes.
 
-### Execution log (viewer auth-overlay cleanup)
-- Task 1 complete: recorded the scope in `PLAN.md` and `TASKS.md` before editing, then confirmed in read-only inspection that `web/viewer/components/auth/AuthDialog.tsx` renders the raw `authRedirectTo` value in the route summary and always shows a `Sign in` tab even when sign-up is disabled, which is what creates the awkward `/viewer` label plus duplicate sign-in controls.
+- [x] Task 4 - Upgrade the home, browse, and channel experiences to feel productized
+  - Acceptance criteria:
+    - Home and browse prioritize live discovery and clear category browsing over setup/demo copy.
+    - The channel page is explicitly video-first with clear follow, tip, share, chat, and VOD actions above the fold.
+    - Subscriptions remain supported but are visually secondary to tips and live watching.
+
+- [x] Task 5 - Add focused coverage and validate the overhaul
+  - Acceptance criteria:
+    - Focused backend or viewer tests cover the creator bootstrap path and the touched navigation/channel flows.
+    - Viewer lint and production build pass.
+    - Any remaining gaps, especially around full manual OBS playback, are recorded explicitly.
+
+### Execution log (BitRiver Live v1 DLive-replacement overhaul)
+- Task 1 started: the read-only analysis confirmed that the current product already has live discovery, playback, chat, follow, tip, creator dashboard, and VOD primitives, so the right first move is enabling self-serve creator bootstrap rather than attempting a greenfield rewrite. The concrete backend gap is that `POST /api/channels` currently requires `creator` or `admin`, while self-signup users are created as `viewer` by default. The viewer-side gap is that `web/viewer/lib/viewer-api-channel.ts` has no typed `createChannel` helper yet, which is why the current onboarding flow cannot create a first channel directly.
 - Task 1 checks:
-  - `Get-Content PLAN.md | Select-Object -Last 30`
-  - `Get-Content TASKS.md | Select-Object -Last 40`
-  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
-  - `Get-Content web/viewer/hooks/useAuth.tsx`
-  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
-- Task 2 complete: replaced the raw route label with a friendlier return-summary in `AuthDialog`, removed the redundant auth-mode tab strip, and kept the existing in-form sign-in/sign-up switches plus redirect behavior intact. The sign-in overlay now shows human-facing labels like `Viewer home` instead of `/viewer`, and signed-out installs without public signup now surface only the real `Sign in` action.
+  - `Get-Content web/viewer/lib/viewer-api-channel.ts`
+  - `Get-Content web/viewer/lib/viewer-api-types.ts`
+  - `Get-Content web/viewer/lib/navigation.ts`
+  - `Get-Content web/viewer/app/page.tsx`
+  - `Get-Content web/viewer/app/following/page.tsx`
+  - `Get-Content web/viewer/app/channels/[id]/page.tsx`
+  - `Get-Content web/viewer/app/creator/page.tsx`
+  - `Get-Content web/viewer/app/creator/getting-started/page.tsx`
+  - `Get-Content web/viewer/app/creator/live/[channelId]/page.tsx`
+  - `Get-Content web/viewer/components/ChannelHero.tsx`
+  - `Get-Content web/viewer/components/ChatPanel.tsx`
+  - `Get-Content web/viewer/components/TipDrawer.tsx`
+  - `Get-Content internal/api/auth_users_handlers.go`
+  - `Get-Content internal/api/channels_directory_handlers.go`
+  - `Get-Content internal/service/usecases.go`
+  - `Get-Content internal/storage/types.go`
+  - `Get-Content internal/storage/storage.go`
+  - `rg -n "create channel|POST /api/channels|roleCreator|SelfSignup|follow|tip|vod|creator" internal web/viewer -g "!*node_modules*"`
+- Task 1 complete: relaxed `POST /api/channels` to authenticate any signed-in user, reload the latest persisted actor roles, allow self-only first-channel creation for non-admin/non-creator users, and upgrade the owner to include the `creator` role after a successful first channel. Added a typed `createChannel` helper and payload export to the viewer API layer so the creator onboarding UI can create channels directly without inventing its own fetch wrapper. If the owner-role upgrade ever fails after channel creation, the handler now rolls the new channel back so onboarding does not leave half-created accounts behind.
+- Task 1 follow-up checks:
+  - `gofmt -w internal/service/usecases.go internal/api/channels_directory_handlers.go internal/api/handlers_test.go`
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api -count=1 -timeout=120s -run "Test(SelfSignupUserCanCreateFirstChannelAndBecomeCreator|ViewerCannotCreateChannelForAnotherOwner|ChannelStreamLifecycle)$"`
+- Task 2 complete: rebuilt the creator entry flow around actual first-channel bootstrap instead of passive guidance. Signed-in viewers without channels now land on a visible setup path, can create their first channel directly from the getting-started page, refresh into creator-capable state immediately, and then continue into the same OBS, preview, share-link, and uploads flow used by existing creators. The creator overview page now distinguishes guest, first-channel, and active-creator states so the top-level studio route always gives the user a real next action instead of a dead-end.
 - Task 2 checks:
-  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
-  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
-- Task 3 complete: reran focused auth-dialog/auth-hook coverage and viewer lint successfully, then ran `./scripts/verify.sh --viewer`. The broader verify gate progressed through the Go and contract checks and stopped only at the existing production image-digest requirement in `.env`, which is outside this UI fix. After verification, the local `bitriver-live` and `viewer` services were explicitly recreated so the running stack picked up the auth-dialog update, and `http://localhost:8080/viewer` returned `200`.
-- Task 3 checks:
-  - `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx useAuth.test.tsx`
   - `npm.cmd --prefix web/viewer run lint`
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` (blocked only by missing required `BITRIVER_*_IMAGE_DIGEST` values in `.env`)
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer` (timed out before the CLI returned on this host)
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --force-recreate --no-deps bitriver-live viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
-
-## Scoped change: viewer auth-dialog return-summary removal
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the follow-up auth-dialog cleanup scope before editing
-  - Acceptance criteria:
-    - `PLAN.md` captures the narrower follow-up scope, assumptions, risks, and verification commands.
-    - `TASKS.md` lists the ordered remove-test-redeploy steps before code edits begin.
-    - Read-only inspection confirms the unwanted text box is still the `auth-overlay__route` block in `AuthDialog`.
-
-- [x] Task 2 - Remove the sign-in dialog return-summary box
-  - Acceptance criteria:
-    - The signed-out auth dialog no longer renders the `Continue where you left off` panel or any viewer-route summary text.
-    - Existing sign-in, sign-up, MFA, and duplicate-sign-in cleanup behavior remain intact.
-    - Focused auth-dialog tests are updated to assert the simpler presentation.
-
-- [x] Task 3 - Verify and redeploy the local viewer stack
-  - Acceptance criteria:
-    - Focused auth-dialog/auth-hook tests pass.
-    - Viewer lint is rerun.
-    - The local `bitriver-live` and `viewer` services are rebuilt/recreated and `http://localhost:8080/viewer` responds afterward.
-
-### Execution log (viewer auth-dialog return-summary removal)
-- Task 1 complete: recorded the follow-up scope in `PLAN.md` and `TASKS.md`, then confirmed in read-only inspection that the extra text box the user still sees is the `auth-overlay__route` block in `web/viewer/components/auth/AuthDialog.tsx`, along with the focused test coverage added in the prior pass.
-- Task 1 checks:
-  - `Get-Content PLAN.md | Select-Object -Last 30`
-  - `Get-Content TASKS.md | Select-Object -Last 40`
-  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
-  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
-- Task 2 complete: removed the entire `auth-overlay__route` block and the helper code that generated its return-summary copy, leaving the sign-in dialog focused only on the auth form/actions. Updated the focused auth-dialog test to assert that the box and its text do not render anymore.
-- Task 2 checks:
-  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
-  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
-- Task 3 complete: reran the focused auth-dialog/auth-hook tests and viewer lint successfully, rebuilt the local `bitriver-live` and `viewer` services with the canonical Compose contract, and confirmed `http://localhost:8080/viewer` returned `200` after the new viewer container started.
+  - `npm.cmd --prefix web/viewer run test -- __tests__/useAuth.test.tsx`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/creatorGettingStartedPage.test.tsx -t "lets a signed-in viewer create a first channel and unlock live setup"`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/creatorGettingStartedPage.test.tsx __tests__/creatorPage.test.tsx __tests__/creatorLivePage.test.tsx`
+- Task 3 complete: refreshed the public viewer IA around the literal destinations `Home`, `Browse`, `Following`, `Go Live`, `Videos`, and signed-in `Profile`, then tightened the navbar copy and CTA behavior so the main actions either navigate immediately, open auth, or send a creator into a real setup/live destination. Added a dedicated `/videos` surface so replay discovery is a first-class destination instead of being buried only inside channel tabs.
 - Task 3 checks:
-  - `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx useAuth.test.tsx`
+  - `Get-Content web/viewer/lib/navigation.ts`
+  - `Get-Content web/viewer/components/Navbar.tsx`
+  - `Get-Content web/viewer/components/ViewerShell.tsx`
+  - `Get-Content web/viewer/app/layout.tsx`
+  - `Get-Content web/viewer/app/videos/page.tsx`
+  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
+- Task 4 complete: reworked the home, browse, and channel surfaces so the product reads like a real live platform instead of a prototype. Home now leads with live discovery and stronger recovery CTAs, browse has clearer live/category framing, the channel view is more video-first with follow/tip/share above the fold and replay access called out when offline, and the shared styling now supports the new replay/cards/navigation surfaces across desktop and mobile.
+- Task 4 checks:
+  - `Get-Content web/viewer/app/directory-view.tsx`
+  - `Get-Content web/viewer/app/browse/page.tsx`
+  - `Get-Content web/viewer/app/channels/[id]/page.tsx`
+  - `Get-Content web/viewer/components/ChannelHero.tsx`
+  - `Get-Content web/viewer/components/DirectoryGrid.tsx`
+  - `Get-Content web/viewer/components/CategoryRail.tsx`
+  - `Get-Content web/viewer/components/FeaturedChannel.tsx`
+  - `Get-Content web/viewer/styles/globals.css`
+- Task 5 complete: added focused browser/unit coverage for the new creator/live and replay navigation paths, updated the Playwright specs to the refreshed IA, and fixed one real runtime regression uncovered during validation: changing the tip currency was re-triggering the drawer reset logic and wiping the form before submit. After the fix, the targeted Jest suites, targeted Playwright suite, viewer lint, and production build all passed.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/navigation.test.ts __tests__/navbar.test.tsx __tests__/directoryPage.test.tsx __tests__/channelHero.test.tsx __tests__/channelPage.test.tsx __tests__/videosPage.test.tsx __tests__/creatorGettingStartedPage.test.tsx __tests__/creatorPage.test.tsx`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/tipDrawer.test.tsx __tests__/channelHero.test.tsx`
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts tests/creator-live-setup.spec.ts tests/navbar-mobile.spec.ts`
   - `npm.cmd --prefix web/viewer run lint`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
+  - `npm.cmd --prefix web/viewer run build`
+- Task 5 notes:
+  - Targeted Jest coverage still emits existing non-failing React `act(...)` warnings in some creator/search/tip tests, but the suites pass and the new overhaul behavior is covered.
+  - Viewer production builds still report the existing Next client-render deopt warnings for several routes (`/`, `/browse`, `/following`, `/videos`, `/creator`, `/creator/getting-started`, `/profile`, `/getting-started`, `/404`); those warnings predate this pass and do not fail the build.
+  - This overhaul pass did not rerun a live manual OBS broadcast after the final UI changes, so the remaining manual acceptance item is still a human ingest/playback rehearsal against the running stack.
 
-## Scoped change: OME container log triage
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the OME log-triage scope and capture current runtime evidence
-  - Acceptance criteria:
-    - `PLAN.md` captures the OME log-analysis scope, assumptions, risks, and verification commands.
-    - `TASKS.md` lists the ordered capture, diagnosis, and follow-up tasks before log collection begins.
-    - Current Compose status plus recent `ome`-related logs are captured from the local install.
-
-- [x] Task 2 - Separate actionable repo-owned OME findings from upstream or host noise
-  - Acceptance criteria:
-    - The dominant `bitriver-ome` log patterns are grouped by severity and probable cause.
-    - Each actionable finding is traced to the closest owning repo surface (generated config, compose/env input, script, or runtime code).
-    - Non-actionable upstream/host noise is called out clearly.
-
-- [x] Task 3 - Implement and verify the smallest high-confidence fix if warranted
-  - Acceptance criteria:
-    - A change is made only if the OME log evidence points to a narrow repo-owned issue.
-    - Relevant focused verification is rerun after the change.
-    - `TASKS.md` records either the validated fix or an explicit note that this pass remained diagnosis-only.
-
-### Execution log (OME container log triage)
-- Task 1 complete: recorded the scoped OME log-triage plan in `PLAN.md` and `TASKS.md`, then captured the current `ome`, `ome-config`, and `ome-health-token-check` runtime state from the local Compose install. `bitriver-ome` is healthy, `ome-config` rendered successfully, and `ome-health-token-check` confirmed the rendered `<Managers><API><AccessToken>` matches the canonical runtime token source.
-- Task 1 checks:
-  - `Get-Content PLAN.md | Select-Object -Last 30`
-  - `Get-Content TASKS.md | Select-Object -Last 35`
--  - `docker compose --env-file .env -f deploy/docker-compose.yml ps ome ome-config ome-health-token-check`
--  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=200 ome ome-config ome-health-token-check`
-- Task 2 complete: separated the two dominant `bitriver-ome` log loops. The `127.0.0.1 GET /` `401` entries come from the Compose OME liveness probe and are noisy but currently by design under the deployment contract. The `172.18.0.7 GET /healthz` `401 Invalid credential` entries map back to the BitRiver API container calling ingest `HealthChecks()` on each `/healthz` request, which is repo-owned runtime behavior and a good candidate for a narrow code fix.
-- Task 2 checks:
--  - `Get-Content deploy/docker-compose.yml`
--  - `Get-Content deploy/ome/Server.generated.xml`
--  - `Get-Content internal/ingest/http_controller.go`
--  - `Get-Content internal/config/ingest.go`
--  - `Get-Content internal/api/handlers.go`
--  - `Get-Content internal/api/status_helpers.go`
--  - `Get-Content internal/storage/storage.go`
--  - `rg -n "HealthChecks|IngestHealth|LastIngestHealth|BITRIVER_INGEST_HEALTH|OME_API_TOKEN|AccessToken" internal cmd deploy docs scripts`
-- Task 3 complete: updated the lightweight API `/healthz` path to reuse the last recorded ingest-health snapshot instead of live-probing OME on every container healthcheck, while keeping `/api/status` on the live refresh path for operator diagnostics. Added focused handler coverage for cached-vs-live ingest health behavior, rebuilt the local API stack, and rechecked fresh OME logs.
-- Task 3 checks:
--  - `gofmt -w internal/api/handlers.go internal/api/status_helpers.go internal/api/handlers_test.go`
--  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Join-Path (Get-Location) '.gocache'); go test ./internal/api -count=1 -timeout=120s`
--  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
--  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/healthz -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
--  - `Start-Sleep -Seconds 70; docker compose --env-file .env -f deploy/docker-compose.yml logs --since=120s ome | Select-String -Pattern '172\.18\.0\.7|127\.0\.0\.1|Invalid credential|Authorization header is required'`
-- Result: the repeated API-owned `172.18.0.7 GET /healthz` `401 Invalid credential` lines stopped appearing after the rebuild. The remaining `127.0.0.1 GET /` `401 Authorization header is required` lines are still produced by the Compose OME liveness probe and remain a deployment-contract decision rather than an API runtime bug.
-
-## Scoped change: post-install docker log triage
+## Scoped change: redeploy viewer overhaul and live functionality check
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Record the log-triage scope and capture current runtime evidence
+- [x] Task 1 - Record the redeploy/runtime-check scope before touching the running stack
   - Acceptance criteria:
-    - `PLAN.md` captures the post-install log-analysis scope, assumptions, risks, and verification commands.
-    - `TASKS.md` lists the ordered capture, triage, and follow-up tasks before Docker log collection begins.
-    - Current Compose status and recent logs are captured from the local install.
+    - `PLAN.md` captures the redeploy scope, assumptions, risks, and live validation commands.
+    - `TASKS.md` lists the ordered redeploy and runtime-check steps before Docker commands begin.
+    - The scope stays limited to redeploying and validating the current checkout unless runtime checks reveal a concrete regression.
 
-- [x] Task 2 - Separate actionable repo-owned findings from host or third-party noise
+- [ ] Task 2 - Redeploy the current checkout onto the local Compose stack
   - Acceptance criteria:
-    - The main error/warning patterns are grouped by service and severity.
-    - Each actionable finding is traced to the closest owning code/config/docs surface in this repo.
-    - Non-actionable host/vendor noise is called out clearly so it is not mistaken for a code defect.
+    - The stack is rebuilt and relaunched from the current checkout with the existing local source-build workflow.
+    - `docker compose ps -a` shows the expected long-lived services running and `postgres-migrations` completed.
+    - If the redeploy fails, the blocking service/log is captured explicitly in the execution log.
 
-- [x] Task 3 - Implement and verify the smallest high-confidence repo fix if warranted
+- [x] Task 3 - Run live functionality checks against the redeployed stack and repair any runtime blocker they expose
   - Acceptance criteria:
-    - A code/doc/config change is made only if the logs point to a reproducible repo-owned issue with a narrow fix.
-    - Relevant focused verification is rerun after the change.
-    - `TASKS.md` records either the validated fix or an explicit note that this pass remained analysis-only.
+    - API readiness and the key public viewer routes respond successfully on the live deployment host.
+    - The redeployed viewer hydrates in a real browser so the shipped theme/auth/nav controls respond to input.
+    - The creator-facing route needed for the new go-live flow is reachable.
+    - Any remaining manual-only gap, such as authenticated interaction or real OBS ingest, is recorded explicitly.
 
-### Execution log (post-install docker log triage)
-- Task 1 complete: recorded the scoped log-triage plan in `PLAN.md` and `TASKS.md`, then captured the current Compose status plus recent logs from `bitriver-live`, `viewer`, `postgres`, `redis`, and `transcoder-public`. The log pull also exposed a host quirk: a broader `docker compose ... logs ... ome srs ...` command hit a Windows Docker pipe access denial, but the already-approved targeted log commands succeeded and produced enough evidence to continue.
+### Execution log (redeploy viewer overhaul and live functionality check)
+- Task 1 complete: recorded the redeploy/runtime-check scope in `PLAN.md` and queued the runtime steps here before reusing the local Docker stack. The read-only check also confirmed that the repo is already in a dirty worktree from earlier release/runtime work, so this pass must avoid destructive cleanup and focus on rebuilding the current checkout in place.
 - Task 1 checks:
-  - `Get-Content PLAN.md | Select-Object -Last 30`
-  - `Get-Content TASKS.md | Select-Object -Last 40`
-  - `git status --short PLAN.md TASKS.md`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 bitriver-live viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 postgres redis transcoder-public`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=200 bitriver-live viewer postgres redis ome srs transcoder-public` (blocked on this host by Windows Docker pipe access denial)
-- Task 2 complete: grouped the captured messages into three buckets. The highest-confidence repo bug was `authMiddleware` treating only `/api/directory` as public while still 401-ing public subroutes like `/api/directory/featured`, `/api/directory/recommended`, `/api/directory/live`, `/api/directory/trending`, and `/api/directory/categories`. Separate findings remain for repeated missing-table errors against Postgres-backed runtime tables and a `transcoder-public` nginx capability mismatch (`setgid(101) failed`) that would require deployment-contract follow-up before changing Compose hardening.
-- Task 2 checks:
-  - `rg -n "authMiddleware|/api/directory|DirectoryFeatured|DirectoryRecommended|DirectoryLive|DirectoryTrending|DirectoryCategories" internal/server/server.go internal/api/channels_directory_handlers.go`
-  - `Get-Content internal/server/server.go | Select-Object -Skip 680 -First 60`
-  - `Get-Content deploy/nginx/transcoder-public.conf | Select-Object -First 40`
-  - `Get-Content deploy/docker-compose.yml | Select-Object -Skip 532 -First 25`
-- Task 3 complete: updated `authMiddleware` so public directory subroutes stay optional-auth while `/api/directory/following` remains protected, then added focused middleware coverage for anonymous and expired-session requests against those routes. The targeted `internal/server` test package passed after formatting the touched files, and a local app rebuild confirmed the live stack now returns `200` for anonymous `/api/directory/featured` while keeping anonymous `/api/directory/following` protected.
-- Task 3 checks:
-  - `gofmt -w internal/server/server.go internal/server/server_test.go`
-  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/api/directory/featured -ErrorAction Stop | Select-Object StatusCode,Content } catch { $_.Exception.Response | Select-Object StatusCode }`
-  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/api/directory/following -ErrorAction Stop | Select-Object StatusCode,Content } catch { $_.Exception.Response | Select-Object StatusCode }`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=40 bitriver-live viewer` (blocked on this host by Windows Docker pipe access denial after the rebuild; route probes above were used as the runtime confirmation)
-
-## Scoped change: quickstart first-run wizard controls
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the quickstart wizard scope before editing runtime code
-  - Acceptance criteria:
-    - `PLAN.md` captures the guided quickstart/env-init scope, assumptions, risks, and validation commands.
-    - `TASKS.md` lists the ordered implementation and verification tasks before code edits begin.
-    - Read-only inspection identifies the current quickstart/env-init prompt gap and the closest reusable wizard/setup surfaces already in the repo.
-
-- [x] Task 2 - Implement the guided quickstart/env-init wizard
-  - Acceptance criteria:
-    - `cmd/bitriver env init` supports an opt-in wizard mode that prompts for key first-run controls and writes them into `.env`.
-    - `cmd/bitriver quickstart` can invoke the same wizard path before validation/orchestration without breaking the existing non-interactive flow.
-    - Focused `cmd/bitriver` tests cover the wizard prompts, env writes, and quickstart handoff.
-
-- [x] Task 3 - Document and verify the new guided flow
-  - Acceptance criteria:
-    - Operator docs mention the new wizard-driven quickstart path and explain what it configures.
-    - Relevant CLI/backend tests are rerun and recorded here.
-    - Broader verification (`go test ./...`, compose config, `./scripts/verify.sh`) is attempted and any host/environment blocker is captured explicitly.
-
-### Execution log (quickstart first-run wizard controls)
-- Task 1 complete: recorded the new scope in `PLAN.md`/`TASKS.md` after read-only inspection confirmed the current source quickstart only prompts for `BITRIVER_LIVE_ADMIN_EMAIL`, while the repo already has a richer Ubuntu installer wizard (`deploy/install/wizard.sh`) and a post-install control-centre setup wizard that can help shape the new first-run CLI flow.
-- Task 1 checks:
-  - `Get-ChildItem -Force`
-  - `Get-ChildItem -Recurse -Filter AGENTS.md | Select-Object -ExpandProperty FullName`
-  - `Get-Content SPEC.md`
-  - `rg -n "quickstart|wizard|setup" SPEC.md PLAN.md TASKS.md README.md docs scripts cmd deploy web -g '!**/node_modules/**'`
-  - `Get-Content deploy/install/wizard.sh`
-  - `Get-Content cmd/bitriver/commands_env_compose.go`
-  - `Get-Content cmd/bitriver/env_validation_helpers.go`
-  - `Get-Content cmd/server/setup_manager.go`
-- Task 2 complete: added a shared guided wizard path to `cmd/bitriver env init`, threaded the same opt-in flag through `quickstart`, and kept the default non-interactive flow unchanged for scripted use. The wizard now captures operator-facing first-run values (admin email, viewer/API URLs, API port, OME bind/public host, transcoder URL, and self-signup) while leaving secret generation automatic. Focused `cmd/bitriver` coverage now verifies the interactive env write, the non-interactive guardrail, and the quickstart-to-env-init handoff.
-- Task 2 checks:
-  - `gofmt -w cmd/bitriver/env_validation_helpers.go cmd/bitriver/commands_env_compose.go cmd/bitriver/main_test.go`
-  - `go test ./cmd/bitriver -count=1` (initial host cache failure: `Access is denied` under `%LOCALAPPDATA%\\go-build`)
-  - `$env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1`
-- Task 3 complete: documented the new `--wizard` flow in the README and quickstart guide so operators can discover the guided path without changing the existing default examples. Reran the full Go suite with the repo-local cache, validated Compose config with the explicit root `.env`, and attempted the repo's `./scripts/verify.sh` gate. The broader verify run reached the production third-party digest enforcement step and failed only because the local `.env` still omits the required third-party `@sha256:` digest pins, which is an existing host/configuration issue outside this CLI/docs change.
-- Task 3 checks:
-  - `rg -n -- "--wizard|first-run wizard|guided quickstart settings|setup-wizard style control" README.md docs/quickstart.md cmd/bitriver/commands_env_compose.go cmd/bitriver/env_validation_helpers.go`
-  - `$env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s`
-  - `docker compose -f deploy/docker-compose.yml config` (fails on this host unless `--env-file .env` is supplied explicitly; Compose did not pick up the root `.env` automatically here)
-  - `docker compose --env-file .env -f deploy/docker-compose.yml config`
-  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh` (blocked only by missing third-party image digest pins in `.env`: `BITRIVER_REDIS_IMAGE_DIGEST`, `BITRIVER_POSTGRES_IMAGE_DIGEST`, `BITRIVER_SRS_IMAGE_DIGEST`, `BITRIVER_OME_IMAGE_DIGEST`, `BITRIVER_NGINX_IMAGE_DIGEST`, `BITRIVER_ALPINE_3_IMAGE_DIGEST`, `BITRIVER_ALPINE_3_19_IMAGE_DIGEST`, `BITRIVER_DEBIAN_IMAGE_DIGEST`)
+  - `Get-Content PLAN.md | Select-Object -Last 80`
+  - `Get-Content TASKS.md | Select-Object -Last 120`
   - `git status --short`
+- Task 2 complete: rebuilt and relaunched the local source-build stack with `docker compose ... up -d --build --pull never`, then verified the expected service state with `docker compose ps -a`. The redeploy succeeded cleanly: `bitriver-live` came back healthy, `bitriver-viewer` restarted from the current checkout, and `postgres-migrations` exited successfully once. A follow-up `docker compose logs` attempt hit a host Docker permission issue, but that did not block the actual rebuild or service restart.
+- Task 2 checks:
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+- Task 3 in progress: the live HTTP checks show `/readyz` and the public `/viewer` host route responding, and the rendered navbar links already resolve to `/viewer/...` paths. The real blocker turned out to be deeper: a headless browser smoke reproduced the user's “buttons do nothing” report because the API server's default CSP rejects Next.js inline bootstrap scripts on the proxied viewer pages. With hydration blocked, the theme toggle never updates `data-theme`, sign-in never opens the auth dialog, and route bodies such as `/viewer/browse` stay inert even though the HTML shell loads. The next step is a minimal server-side CSP fix plus a fresh redeploy and rerun of the live smoke.
+- Task 3 checks so far:
+  - `Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/readyz`
+  - `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/viewer`
+  - `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/viewer/browse`
+  - `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/viewer/videos`
+  - `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/viewer/creator`
+  - Headless Playwright smoke against `http://10.0.0.108:8080/viewer` (confirmed correct `/viewer/...` link hrefs, but no theme/auth interaction and no hydrated route content)
+  - Headless Playwright console capture against `http://10.0.0.108:8080/viewer` (captured repeated CSP `script-src 'self'` violations for inline Next.js bootstrap scripts)
+- Task 3 complete: fixed the live runtime blocker by moving the viewer-specific CSP handling onto the proxied `/viewer` responses themselves and relaxing only that route family to `script-src 'self' 'unsafe-inline'`, which lets the shipped Next.js bootstrap scripts hydrate without weakening the API/admin defaults. Added focused `internal/server` coverage for both the middleware and proxied viewer route behavior, rebuilt the `bitriver-live` container, and reran the live browser smoke. The redeployed viewer now hydrates and responds: the theme toggle changes state again, the sign-in CTA opens the in-viewer auth dialog with the expected `?auth=signin&next=%2Fviewer` state, and `/viewer/browse` plus `/viewer/creator` render real page content instead of inert shells. The remaining gap is still manual/authenticated broadcast validation, especially a real OBS ingest and public playback pass.
+- Task 3 finishing checks:
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never bitriver-live`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+  - `Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/readyz`
+  - `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/viewer` (confirmed `Content-Security-Policy` now includes `script-src 'self' 'unsafe-inline'`)
+  - Headless Playwright smoke against `http://10.0.0.108:8080/viewer` (confirmed theme toggle state change, sign-in dialog open, and hydrated browse/creator content)
 
-## Scoped change: local redeploy refresh
+## Scoped change: re-enable public signup and redesign homepage discovery
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 
-- [x] Task 1 - Record the local redeploy scope before touching the running stack
+- [x] Task 1 - Record the signup + homepage scope before changing runtime or viewer files
   - Acceptance criteria:
-    - `PLAN.md` captures the local redeploy scope, assumptions, risks, and verification commands.
-    - `TASKS.md` lists the ordered redeploy and verification steps before runtime actions begin.
-    - Read-only context confirms the intended compose contract and current env file remain the repo-root defaults.
+    - `PLAN.md` captures the signup unblock, homepage redesign goals, risks, and validation commands.
+    - `TASKS.md` lists the runtime and viewer work in execution order before product edits begin.
+    - The scope stays limited to self-signup availability plus the homepage/discovery experience.
 
-- [x] Task 2 - Redeploy the local Compose stack and verify service health
+- [x] Task 2 - Re-enable public self-signup on the local deployment
   - Acceptance criteria:
-    - The relevant local services are recreated from the current checkout.
-    - Post-redeploy Compose status is captured.
-    - Local HTTP verification is attempted and any blocker is recorded explicitly.
+    - The local runtime no longer reports `allowSelfSignup=false` for guest viewer auth state.
+    - The live `bitriver-live` service is restarted cleanly after the env change.
+    - The signup CTA becomes available again in the shipped viewer.
 
-### Execution log (local redeploy refresh)
-- Task 1 complete: recorded the redeploy scope in `PLAN.md` and `TASKS.md` before running Docker commands. This refresh is operational only; the current checkout still points at the canonical root `.env` plus `deploy/docker-compose.yml` contract.
+- [x] Task 3 - Redesign the homepage into a more Twitch-style discovery surface
+  - Acceptance criteria:
+    - The homepage leads with live discovery and featured content instead of a marketing-first hero.
+    - The layout clearly separates featured content, recommended/live shelves, and browse-by-topic entry points.
+    - The signed-out experience makes account creation and watching feel immediate and intentional.
+
+- [x] Task 4 - Add focused coverage, redeploy, and verify the live result
+  - Acceptance criteria:
+    - Focused viewer tests cover the updated homepage behavior and any signup-related CTA expectations touched by the change.
+    - Viewer lint and production build pass.
+    - The redeployed `/viewer` experience is verified in a live browser smoke, including homepage hydration and the return of public signup.
+
+### Execution log (re-enable public signup and redesign homepage discovery)
+- Task 1 complete: confirmed that the current signup failure is not a frontend no-op. The live API is intentionally returning `signup_disabled` because the local root `.env` currently sets `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=false`, so guest registration is blocked before the auth dialog can succeed. The homepage read also confirmed that the current `/viewer` landing page still spends too much of its highest-value space on marketing copy and not enough on dense live discovery, which makes it feel less like Twitch and more like a polished prototype. The implementation path is therefore a small local runtime flip plus a viewer-only homepage restructure built on the existing discovery endpoints.
 - Task 1 checks:
-  - `Get-Content PLAN.md | Select-Object -Last 30`
-  - `Get-Content TASKS.md | Select-Object -Last 40`
-- Task 2 complete: ran a targeted local Compose refresh against `bitriver-live` and `viewer`, which also rebuilt/refreshed the dependent config and media services needed for the stack to settle cleanly. Post-redeploy Compose status shows the stack healthy, and `http://localhost:8080/viewer` returned `200`.
+  - `git status --short`
+  - `Get-Content PLAN.md | Select-Object -Last 120`
+  - `Get-Content TASKS.md | Select-Object -Last 180`
+  - `Get-Content .env | Select-String -Pattern "BITRIVER_LIVE_ALLOW_SELF_SIGNUP|NEXT_PUBLIC_VIEWER_URL|NEXT_VIEWER_BASE_PATH" -Context 0,0`
+  - `Get-Content web/viewer/app/directory-view.tsx`
+  - `Get-Content web/viewer/app/directory-page-shell.tsx`
+  - `Get-Content web/viewer/styles/home.css`
+  - `Get-Content web/viewer/components/FeaturedChannel.tsx`
+  - `Get-Content web/viewer/components/ChannelRail.tsx`
+  - `Get-Content web/viewer/__tests__/directoryPage.test.tsx`
+- Task 2 complete: flipped the local runtime back to public signup by setting `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true` in the root `.env` and restarting `bitriver-live`. A real guest signup against the deployed API now succeeds again instead of returning `signup_disabled`; the smoke account created during validation came back with a real user id and viewer role on the live stack.
 - Task 2 checks:
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `rg -n "^BITRIVER_LIVE_PORT=|^NEXT_PUBLIC_VIEWER_URL=" .env`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
-
-## Scoped change: viewer auth-dialog sign-in copy simplification
-
-Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
-
-- [x] Task 1 - Record the follow-up sign-in copy cleanup scope before editing
-  - Acceptance criteria:
-    - `PLAN.md` captures the narrower sign-in copy cleanup scope, assumptions, risks, and verification commands.
-    - `TASKS.md` lists the ordered edit, verification, and redeploy steps before code edits begin.
-    - Read-only inspection confirms the remaining unwanted text is the sign-in form's inner heading and muted paragraph in `AuthDialog`.
-
-- [x] Task 2 - Remove the redundant sign-in reassurance copy
-  - Acceptance criteria:
-    - The signed-out sign-in form no longer renders `Sign in without losing your place` or the supporting reassurance paragraph.
-    - Existing sign-in fields, actions, sign-up path, MFA flow, and redirect behavior remain intact.
-    - Focused auth-dialog tests are updated to assert the simpler sign-in presentation.
-
-- [x] Task 3 - Verify and redeploy the local viewer stack
-  - Acceptance criteria:
-    - Focused auth-dialog/auth-hook tests pass.
-    - Viewer lint is rerun.
-    - The local `bitriver-live` and `viewer` services are rebuilt/recreated and `http://localhost:8080/viewer` responds afterward.
-
-### Execution log (viewer auth-dialog sign-in copy simplification)
-- Task 1 complete: recorded the follow-up scope in `PLAN.md` and `TASKS.md`, then confirmed in read-only inspection that the remaining noisy copy the user called out is the sign-in form's inner heading (`Sign in without losing your place`) and muted reassurance paragraph in `web/viewer/components/auth/AuthDialog.tsx`.
-- Task 1 checks:
-  - `Get-Content PLAN.md | Select-Object -Last 30`
-  - `Get-Content TASKS.md | Select-Object -Last 40`
-  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
-  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
-- Task 2 complete: removed the sign-in form's inner reassurance heading and paragraph so the signed-out dialog now goes straight from the main title into the email/password fields and actions. Updated focused auth-dialog coverage to assert that the removed copy stays gone.
-- Task 2 checks:
-  - `Get-Content web/viewer/components/auth/AuthDialog.tsx`
-  - `Get-Content web/viewer/__tests__/authDialog.test.tsx`
-- Task 3 complete: reran the focused auth-dialog/auth-hook tests and viewer lint successfully, rebuilt the local `bitriver-live` and `viewer` services with the canonical Compose contract, and confirmed `http://localhost:8080/viewer` returned `200` after the new viewer container started.
+  - `Get-Content .env | Select-String -Pattern "BITRIVER_LIVE_ALLOW_SELF_SIGNUP" -Context 0,0`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d bitriver-live`
+  - `Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8080/api/auth/signup -ContentType 'application/json' -Body ...` (returned `201` for a disposable smoke account after the restart)
+- Task 3 complete: rebuilt the homepage into a denser, discovery-first landing experience with a featured live panel, recommendation stack, stronger browse/topic pivots, and a signed-out CTA hierarchy that feels closer to Twitch's information density without copying its visual language. The guest account-entry actions now use a real auth action component so the homepage `Create account` buttons open the in-viewer signup flow instead of silently only changing the query string.
 - Task 3 checks:
-  - `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx useAuth.test.tsx`
+  - `Get-Content web/viewer/app/directory-view.tsx`
+  - `Get-Content web/viewer/styles/home.css`
+  - `Get-Content web/viewer/components/auth/AuthActionLink.tsx`
+  - `Get-Content web/viewer/__tests__/directoryPage.test.tsx`
+- Task 4 complete: added homepage CTA regression coverage, reran the focused viewer validation, rebuilt the viewer image, restarted the live viewer container, and verified the deployed homepage in a headless browser. The live stack now shows the new `Live channels worth opening right now` hero, and clicking `Create account` on `http://10.0.0.108:8080/viewer` opens the `Create your BitRiver account` dialog on the running site. `docs/quickstart.md` now also documents the discovery-first homepage and the fact that homepage/navbar signup CTAs depend on `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true`.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/directoryPage.test.tsx`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx`
   - `npm.cmd --prefix web/viewer run lint`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-  - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-  - `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
+  - `npm.cmd --prefix web/viewer run build`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml build viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml up -d viewer`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+  - `node -e "const { chromium } = require('./web/viewer/node_modules/playwright'); ..."` (confirmed live homepage headline plus visible signup dialog on click)
+- Task 4 notes:
+  - Focused Jest still emits the existing non-failing `SearchBar` `act(...)` warnings, and `navbar.test.tsx` still logs the existing jsdom navigation warning; the suites pass and the updated homepage/signup path is covered.
+  - Rebuilding the viewer required Docker access outside the sandbox on this host because Buildx needs `C:\Users\RhythmicCarnage\.docker\...`; once the command was rerun with approval, the image build and service restart succeeded.
+
+## Scoped change: repair verification gates
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the gate-repair scope before implementation
+  - Acceptance criteria:
+    - `PLAN.md` captures the gate-repair scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered repair tasks before code/test fixture edits begin.
+    - The scope explicitly excludes deployment contract changes and live stack startup.
+
+- [x] Task 2 - Stabilize transcoder test fixtures and health recovery
+  - Acceptance criteria:
+    - FFmpeg test setup cannot accidentally resolve to a host `ffmpeg.exe` on Windows.
+    - Health recovery tests verify that successful recovery clears degraded `ffmpeg` and publishing component state.
+    - Live symlink assertions remain covered where the host supports them and are explicitly skipped where Windows permissions prevent directory symlink creation.
+
+- [x] Task 3 - Render OME test configs outside the tracked contract file
+  - Acceptance criteria:
+    - `bitriver ome render --output <path>` writes to a caller-provided output path while preserving the default generated-file behavior.
+    - OME render tests in `internal/ingest` and `scripts` use temp output files instead of touching `deploy/ome/Server.generated.xml`.
+
+- [x] Task 4 - Replace auth session sleeps with deterministic time control
+  - Acceptance criteria:
+    - `internal/auth` session expiry tests use a package-private test clock option instead of short wall-clock sleeps.
+    - Runtime session behavior and exported APIs remain unchanged.
+
+- [x] Task 5 - Refresh the viewer snapshot baseline
+  - Acceptance criteria:
+    - `channelDisplayPrimitives` snapshots match the current `Featured live` copy.
+    - The focused viewer test suite no longer fails on a stale snapshot.
+
+- [x] Task 6 - Run the final gate and record results
+  - Acceptance criteria:
+    - The planned targeted Go, viewer, and Compose checks are recorded.
+    - `./scripts/verify.sh` is run and any remaining blocker is documented clearly.
+
+### Execution log (repair verification gates)
+- Task 1 complete: recorded the scoped gate-repair plan and queued the ordered implementation tasks before touching code, tests, or snapshots. The check confirmed this pass excludes deployment contract edits and live stack startup.
+- Task 1 checks:
+  - `git status --short --untracked-files=all`
+  - `Get-Content -Tail 50 PLAN.md`
+  - `Get-Content -Tail 90 TASKS.md`
+  - `git diff -- PLAN.md TASKS.md`
+- Task 2 complete: replaced the FFmpeg test fixture lookup with a platform-specific shim that invokes a Go test-helper FFmpeg fake, so Windows no longer falls through to a host `ffmpeg.exe`. Tightened health recovery assertions so recovered `ffmpeg`/publishing components must be `ok` after fake jobs finish, and kept live symlink mirror checks conditional on host directory-symlink support while preserving upload publishing recovery coverage across platforms.
+- Task 2 checks:
+  - `gofmt -w cmd/transcoder/main_test.go`
+  - `go test ./cmd/transcoder -count=1 -timeout=120s`
+- Task 3 complete: added the backward-compatible `bitriver ome render --output <path>` flag while preserving the default `deploy/ome/Server.generated.xml` output path. Updated the OME render helpers in `internal/ingest` and `scripts` to render into temp files, and folded in the narrow quickstart Bash harness fix so `go test ./scripts` no longer fails on Windows by selecting a usable Git Bash path or skipping only when no shell works.
+- Task 3 checks:
+  - `gofmt -w cmd/bitriver/ome_render.go internal/ingest/ome_config_test.go scripts/quickstart_test.go`
+  - `go test ./internal/ingest ./scripts -count=1 -timeout=120s`
+  - `go test ./cmd/bitriver -count=1 -timeout=120s`
+- Task 4 complete: added an internal clock hook to `SessionManager` and a package-private test clock option, then replaced the short expiry/idle/absolute-TTL sleeps in `internal/auth/session_test.go` with deterministic clock advancement. Exported session APIs are unchanged.
+- Task 4 checks:
+  - `gofmt -w internal/auth/session.go internal/auth/session_test.go`
+  - `go test ./internal/auth -count=25 -run TestValidateHonorsAbsoluteTTL`
+  - `go test ./internal/auth -count=1 -timeout=120s`
+- Task 5 complete: updated the stale `channelDisplayPrimitives` snapshot so the featured card eyebrow matches the current `Featured live` copy.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/channelDisplayPrimitives.test.tsx --silent`
+  - Note: Jest emitted the existing `.next/standalone/package.json` haste-map naming warning, but the focused suite and all snapshots passed.
+- Task 6 complete: ran the planned targeted checks and the full verification gate. The first full-gate passes exposed a few additional Windows/full-suite timing blockers, which are now repaired: live transcoder metadata waits now read completed metadata instead of racing file writers, the `pollUntil` success unit test has enough scheduler headroom, chat tests start their worker subscriptions before publishing and avoid too-short moderation windows, the upload timeout test has a wider observation window without changing the processor timeout under test, and the contract invariant script now passes the same explicit env file to Compose that the rest of the verification path uses. No Compose, root `.env`, API payload, schema, or generated OME contract edits were made.
+- Task 6 checks:
+  - `go test ./cmd/transcoder -count=1 -timeout=120s`
+  - `go test ./internal/auth -count=25 -run TestValidateHonorsAbsoluteTTL`
+  - `go test ./internal/ingest ./scripts -count=1 -timeout=120s`
+  - `npm.cmd --prefix web/viewer run test -- --silent`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `docker compose --env-file .env -f deploy/docker-compose.yml config`
+  - `npm.cmd --prefix web/viewer run build`
+  - `go test ./cmd/transcoder -count=10 -run TestUploadPublishesHTTPPlayback -timeout=120s`
+  - `go test ./cmd/bitriver -count=1 -run TestPollUntilSuccess -timeout=120s`
+  - `go test ./cmd/transcoder -count=1 -run TestJobProducesSegmentsAndCanBeStopped -timeout=120s`
+  - `go test ./internal/api -count=1 -run TestChatReportsAPI -timeout=120s`
+  - `go test ./internal/chat -count=1 -run TestGatewayModerationFlow -timeout=120s`
+  - `go test ./internal/service/uploads -count=1 -timeout=120s`
+  - `./scripts/check-contract-invariants.sh`
+  - `./scripts/verify.sh` (passed; run through Git Bash with workspace-local `GOCACHE` on Windows)
+- Task 6 notes:
+  - The full viewer/Jest gate still emits existing non-failing React `act(...)` warnings in directory search coverage.
+  - `git diff --check` exits cleanly; Git only reports local line-ending warnings.
+  - Git continues to warn that `C:\Users\RhythmicCarnage\.config\git\ignore` is not readable, but tracked status and diffs are still available.
+
+## Scoped change: improve channel chat and signup onboarding
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Audit the current channel, chat, and signup flows
+  - Acceptance criteria:
+    - `PLAN.md` records this pass's scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists the ordered work before implementation begins.
+    - The audit confirms which existing backend/channel behavior should remain unchanged.
+
+- [x] Task 2 - Add realtime viewer chat over the existing WebSocket gateway
+  - Acceptance criteria:
+    - Signed-in channel viewers connect to `/api/chat/ws`, join the channel room, and render inbound message events without waiting for polling.
+    - REST chat history/polling and REST send remain as fallback when WebSocket is unavailable or not yet open.
+    - Duplicate message IDs are not rendered twice when history, WebSocket broadcasts, and acknowledgements overlap.
+
+- [x] Task 3 - Polish creator-intent signup and first-channel onboarding copy
+  - Acceptance criteria:
+    - Auth dialog signup copy reflects creator onboarding when the redirect target is a creator route.
+    - Generic viewer signup copy remains viewer-oriented.
+    - Creator getting-started copy does not contain mojibake or broken apostrophe rendering.
+
+- [x] Task 4 - Run focused validation and record results
+  - Acceptance criteria:
+    - Focused viewer tests for chat, channel page, auth dialog, and creator onboarding pass.
+    - Focused backend channel/chat/auth tests pass.
+    - Viewer lint/build results are recorded.
+
+### Execution log (improve channel chat and signup onboarding)
+- Task 1 complete: read the existing API, chat gateway, viewer channel page, chat panel, auth dialog, and creator onboarding code. Backend self-signup first-channel creation is already implemented and covered: a self-signup viewer can create their own first channel, gets a stream key, and is promoted to creator, while cross-owner channel creation is rejected. The clearest functionality gap is in the viewer chat panel, which still loads and sends through REST polling even though the backend exposes an authenticated `/api/chat/ws` live gateway. The signup flow is functional, but creator-intent signup still reads as a generic viewer account path.
+- Task 1 checks:
+  - `git status --short --untracked-files=all`
+  - `Get-ChildItem -Recurse -Filter AGENTS.md`
+  - `rg -n "signup|register|Create account|allowSelfSignup|ChatGateway|chat/reports|chat|channel|Channel" internal cmd web/viewer -S`
+  - `go test ./internal/api ./internal/chat ./internal/auth -count=1 -timeout=120s`
+  - `npm.cmd --prefix web/viewer run test -- __tests__/chatPanel.test.tsx __tests__/channelPage.test.tsx __tests__/creatorGettingStartedPage.test.tsx __tests__/creatorPage.test.tsx __tests__/useAuth.test.tsx --silent`
+- Task 2 complete: added a viewer WebSocket URL helper and upgraded `ChatPanel` to open the authenticated `/api/chat/ws` gateway for signed-in viewers, send a `join` command, render inbound message events immediately, and submit chat messages over the socket while it is connected. REST history, polling, and REST send remain in place as fallback, and message IDs are de-duplicated so initial history, broadcasts, and acknowledgements do not double-render the same line.
+- Task 2 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/chatPanel.test.tsx --silent`
+- Task 3 complete: adjusted the auth dialog so signup copy reflects creator onboarding when the auth redirect target is a creator route, while generic viewer signup remains unchanged. Cleaned the first-channel checklist copy to avoid non-ASCII apostrophe rendering in the creator onboarding path.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/authDialog.test.tsx __tests__/creatorGettingStartedPage.test.tsx --silent`
+- Task 4 complete: ran the focused frontend and backend validation for the touched channel, chat, signup, and creator onboarding areas. Viewer lint and production build pass; the build still reports the existing Next.js client-rendering deopt warnings for several routes.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/chatPanel.test.tsx __tests__/channelPage.test.tsx __tests__/authDialog.test.tsx __tests__/creatorGettingStartedPage.test.tsx --silent`
+  - `go test ./internal/api ./internal/chat ./internal/auth -count=1 -timeout=120s`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+- Task 4 notes:
+  - The final focused Jest run emitted the existing `.next/standalone/package.json` haste-map naming collision warning after `next build` created `.next`; the suites passed.
+
+## Product Readiness Closure - VOD Publish and Chat Reports
+
+1. [x] Refresh product acceptance docs.
+   - Acceptance: `SPEC.md` names the self-hosted live streaming product criteria and `docs/testing.md` includes a manual acceptance checklist for real broadcast readiness.
+   - Checks: documentation review; no runtime contract changes.
+
+2. [x] Add creator VOD publish action.
+   - Acceptance: Ready upload cards with a `recordingId` expose a publish action that calls `POST /api/recordings/{id}/publish`, shows success/failure feedback, and refreshes uploads.
+   - Checks: `npm.cmd --prefix web/viewer run test -- --silent UploadManager viewer-api` passed (16 tests).
+
+3. [x] Add viewer chat report flow.
+   - Acceptance: Signed-in viewers can report another user's chat message with a reason; the request includes `targetId` and `messageId`, and the UI confirms submission or shows errors.
+   - Checks: `npm.cmd --prefix web/viewer run test -- --silent ChatPanel viewer-api` passed (20 tests).
+
+4. [x] Run viewer gates and record results.
+   - Acceptance: focused tests, lint, and build complete or any blocker is documented here.
+   - Checks: `npm.cmd --prefix web/viewer run test -- --silent UploadManager ChatPanel viewer-api` passed (33 tests); `npm.cmd --prefix web/viewer run test -- --silent` passed (174 tests); `npm.cmd --prefix web/viewer run lint` passed; `npm.cmd --prefix web/viewer run build` passed with existing Next.js client-render deopt and Browserslist warnings; `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s` passed with local `.gocache`; `docker compose --env-file .env -f deploy/docker-compose.yml config --quiet` passed with the local Docker config permission warning.
+   - Full verify: `./scripts/verify.sh` was attempted through Git Bash and timed out after 304 seconds before returning phase output.
+
+## Product Readiness Closure - Schedule and Final Gates
+
+1. [x] Add channel schedule storage and API contract.
+   - Acceptance: Channel schedule entries are typed, normalized, persisted in JSON and Postgres storage, included in public/managed channel responses, and updateable through the existing channel PATCH endpoint.
+   - Checks: focused storage/API tests.
+   - Result: added typed schedule entries, additive JSONB migrations, snapshot import support, PATCH parsing, playback response coverage, and isolated in-memory return copies.
+   - Check: `GOCACHE=.gocache go test ./internal/storage ./internal/api -count=1 -timeout=120s` passed.
+
+2. [x] Add creator schedule editing.
+   - Acceptance: The Go Live dashboard lets a channel owner edit at least one upcoming scheduled stream with title, start time, duration, and description, then saves it through the channel API.
+   - Checks: focused creator live viewer tests.
+   - Result: added an upcoming-stream form to the Go Live channel step with save/clear actions and API payload coverage.
+   - Check: `npm.cmd --prefix web/viewer run test -- __tests__/creatorLivePage.test.tsx --silent` passed.
+
+3. [x] Render the public schedule.
+   - Acceptance: The public channel Schedule tab displays upcoming stream entries when present and a clear empty state when absent.
+   - Checks: focused channel page viewer tests.
+   - Result: replaced the placeholder-only Schedule tab with sorted schedule cards, formatted start times, durations, and descriptions.
+   - Check: `npm.cmd --prefix web/viewer run test -- __tests__/channelPage.test.tsx --silent` passed.
+
+4. [x] Run final gates and record results.
+   - Acceptance: Viewer checks, Go checks, Compose config, and full verify either pass or the precise remaining blocker is recorded.
+   - Checks: test plan from `PLAN.md`.
+   - Result: all schedule/product-readiness gates passed. The first full Go run exposed a nondeterministic metrics concurrency test; the test now validates extra concurrent stops after starts are registered, and the full Go suite passes.
+   - Checks:
+     - `GOCACHE=.gocache GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./internal/storage ./internal/api -count=1 -timeout=120s` passed.
+     - `npm.cmd --prefix web/viewer run test -- __tests__/creatorLivePage.test.tsx __tests__/channelPage.test.tsx --silent` passed.
+     - `npm.cmd --prefix web/viewer run test -- --silent` passed (175 tests).
+     - `GOCACHE=.gocache GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s` passed after the metrics test repair.
+     - `npm.cmd --prefix web/viewer run lint` passed.
+     - `npm.cmd --prefix web/viewer run build` passed with existing Browserslist and Next.js client-render deopt warnings.
+     - `docker compose --env-file .env -f deploy/docker-compose.yml config --quiet` passed with the local Docker config permission warning.
+     - `./scripts/verify.sh` passed through Git Bash with LibreOffice Python on `PATH` and Docker access approved for quickstart smoke.
+     - `docker compose --env-file .env -f deploy/docker-compose.yml ps` showed no running services after verify cleanup.
+
+## Viewer Auth UI Refresh
+
+1. [x] Refresh route data after auth state changes.
+   - Acceptance: successful same-page sign-in/sign-up/MFA completion updates auth context and triggers a Next.js route refresh without forcing a full navigation.
+   - Acceptance: sign-out also refreshes route data after `/api/viewer/me` settles.
+   - Checks: focused `useAuth` tests.
+   - Result: `AuthProvider` now calls `router.refresh()` after same-route auth success and after sign-out refresh settles; existing cross-route redirects remain full navigations.
+   - Check: `npm.cmd --prefix web/viewer run test -- __tests__/useAuth.test.tsx --silent` passed.
+
+2. [x] Validate affected viewer surfaces.
+   - Acceptance: Navbar/auth, directory discovery, and following-state tests continue to pass.
+   - Checks: focused viewer tests plus lint/build.
+   - Result: focused auth-adjacent surfaces still pass; production viewer build compiles with the existing Next.js client-render deopt warnings.
+   - Checks:
+     - `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx __tests__/directoryPage.test.tsx __tests__/followingStatePresentation.test.tsx --silent` passed.
+     - `npm.cmd --prefix web/viewer run lint` passed.
+     - `npm.cmd --prefix web/viewer run build` passed with existing deopt warnings.
+
+3. [x] Rebuild the running Docker viewer.
+   - Acceptance: Docker stack stays up and the rebuilt viewer/API routes serve successfully.
+   - Checks: Compose build/up, `ps`, and basic HTTP checks.
+   - Result: rebuilt and recreated `bitriver-viewer`; Compose stack remained up with core services healthy.
+   - Checks:
+     - `docker compose --env-file .env -f deploy/docker-compose.yml up --build -d viewer` passed.
+     - `docker compose --env-file .env -f deploy/docker-compose.yml ps` passed; core services reported healthy/running.
+     - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -TimeoutSec 15` returned 200.
+     - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/readyz -TimeoutSec 15` returned 200.
+
+## OME Ingest Health Auth Repair
+
+1. [x] Align ingest OME auth with the AccessToken contract.
+   - Acceptance: ingest config loads `BITRIVER_OME_API_TOKEN` and requires it for complete OME control configuration.
+   - Acceptance: OME health and application control requests send `Authorization: Basic <base64(raw AccessToken)>` when the token is configured.
+   - Acceptance: authenticated OME `404` responses from the shared health path count as reachable, while `401/403` still fail.
+   - Acceptance: Basic auth remains a fallback for nonstandard legacy test/custom deployments with no token.
+   - Checks: focused config/ingest tests.
+   - Result: ingest config now resolves the OME access token from the rendered-token precedence; OME health/control calls use OME's raw-token Basic credential form after runtime probing showed `AccessToken:` headers still return 401.
+   - Check: `go test ./internal/config ./internal/ingest -count=1 -timeout=120s` passed with a workspace-local `GOCACHE`.
+
+2. [x] Update tests and local documentation comments.
+   - Acceptance: tests catch the deployed 401 regression by asserting OME health uses the raw-token Basic credential and accepts authenticated `404` as reachable.
+   - Acceptance: ingest package comments no longer claim OME uses Basic auth as the primary path.
+   - Checks: `go test ./internal/config ./internal/ingest ./internal/app -count=1 -timeout=120s`.
+   - Result: added health and adapter assertions for OME raw-token Basic auth, preserved legacy Basic fallback coverage, added runtime-config coverage so the API carries the token into `ingest.Config`, updated ingest package comments, and corrected the OME auth note in `docs/advanced-deployments.md`.
+   - Checks:
+     - `go test ./internal/config ./internal/ingest ./internal/app -count=1 -timeout=120s` passed with a workspace-local `GOCACHE`.
+     - `go test ./internal/storage -run Ingest -count=1 -timeout=120s` passed with a workspace-local `GOCACHE`.
+
+3. [x] Rebuild the running API service and verify deployed health.
+   - Acceptance: Compose stack stays up and BitRiver health endpoints serve successfully after the API rebuild.
+   - Acceptance: OME is no longer reported down in BitRiver ingest health after the rebuilt API starts.
+   - Checks: Compose build/up, `ps`, `/healthz`, and `/readyz`.
+   - Result: rebuilt `bitriver-live`; BitRiver `/healthz` now reports `status: ok` with `ovenmediaengine` status `ok`. Added `.gocache/` to `.dockerignore` after the local test cache inflated the Docker build context.
+   - Checks:
+     - `docker compose --env-file .env -f deploy/docker-compose.yml up --build -d bitriver-live` passed.
+     - `docker compose --env-file .env -f deploy/docker-compose.yml ps` passed; core services reported healthy/running.
+     - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/healthz -TimeoutSec 15` returned 200 and `status: ok`.
+     - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/readyz -TimeoutSec 15` returned 200.
+     - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -TimeoutSec 15` returned 200.
+
+## Main Merge Conflict Resolution
+
+1. [x] Merge the current base into this branch using branch-preferred conflict policy.
+   - Acceptance: `origin/main` is merged into `fix-viewer-discovery-polish` with conflicting hunks resolved in favor of this branch.
+   - Checks: `git merge --no-commit --no-ff -X ours origin/main`.
+   - Result: merge completed cleanly with no remaining unmerged paths; Git reported "All conflicts fixed but you are still merging."
+
+2. [x] Run conflict hygiene checks.
+   - Acceptance: no unmerged paths remain and no conflict markers remain in tracked source/docs.
+   - Checks: unmerged-path scan, conflict-marker scan, staged diff whitespace check.
+   - Result: no unmerged paths; no conflict markers found; staged diff whitespace check passed.
+   - Checks:
+     - `git diff --name-only --diff-filter=U` returned no paths.
+     - `rg -n "^(<<<<<<<|=======|>>>>>>>)" --glob "!web/viewer/node_modules/**" .` returned no matches.
+     - `git diff --cached --check` passed.
+
+3. [x] Conclude the merge.
+   - Acceptance: merge resolution is committed on `fix-viewer-discovery-polish`.
+   - Checks: `git status` after commit.
+   - Result: merge resolution committed on `fix-viewer-discovery-polish`.
+   - Check: `git status` after commit.

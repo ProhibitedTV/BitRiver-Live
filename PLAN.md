@@ -1,4 +1,28 @@
 ## Scope (current change)
+- Restore the in-viewer overlay auth flow from `codex/signin-polish` onto the current checkout without wholesale branch checkout or unrelated viewer drift.
+- Re-enable the mounted overlay dialog, route signed-out viewer CTAs back through `useAuth`, and keep `/signup` available as the existing standalone fallback surface.
+- Preserve current external-auth compatibility where `/api/viewer/me` provides a `loginUrl`, so installs that still rely on redirect-based sign-in do not regress.
+- Keep the change viewer-only and avoid deployment-contract edits.
+
+## Assumptions
+- The user wants the old overlay sign-in/join experience back inside the viewer shell, not a full rollback of every auth-related branch change from `codex/signin-polish`.
+- The minimal selective port is the auth state/dialog wiring plus the CTA surfaces that currently send users to `/signup#login-form`.
+- Existing `/signup` behavior should remain intact for admin/MFA/direct-entry flows even after the overlay is restored.
+- Current viewer tests and auth mocks can be updated in place without touching backend contracts or operator docs.
+
+## Risks
+- Porting the branch `useAuth` logic too literally could break current external `loginUrl` redirect deployments, so redirect-based sign-in needs to remain supported when configured.
+- The current checkout may still return `401/403` for anonymous `/api/viewer/me` requests, so the overlay state layer must not regress guest loading/error behavior while adding dialog state.
+- Rewiring shared auth mocks can ripple across many viewer tests if the context shape changes are not kept backward-compatible.
+- Restoring the overlay without its CSS would produce a technically mounted but visually broken dialog, so style hooks need to be carried over with the component wiring.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- __tests__/useAuth.test.tsx`
+- `npm.cmd --prefix web/viewer run test -- __tests__/authDialog.test.tsx`
+- `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx`
+- `npm.cmd --prefix web/viewer run test -- __tests__/followingStatePresentation.test.tsx`
+
+## Scope (current change)
 - Improve the public-facing root `README.md` by featuring the new `bitriver-live-banner-text.png` asset near the top of the file.
 - Tighten the opening README copy so the project pitch reads more clearly to first-time visitors without changing any technical guidance or deployment contracts.
 - Keep this as a docs-only change and verify the asset path plus the standard repository verification gate.
@@ -1295,623 +1319,422 @@
 - `./scripts/verify.sh --viewer`
 
 ## Scope (current change)
-- Redeploy the locally running BitRiver Live app so `localhost:8080` serves the latest homepage rescue code from the current checkout instead of any older container build.
-- Keep the runtime action narrowly scoped to the application services that own the changed viewer experience: `bitriver-live` and `viewer`.
-- Confirm the redeployed routes are reachable and reflect the updated viewer shell/homepage so the user can inspect the changes locally right away.
+- Redeploy the local BitRiver Live stack on this Windows host and confirm the currently checked-in deployment workflow still works in practice from the canonical repo contract.
+- Use the existing repo-root `.env` as the source of truth for credentials and local listener values unless the quickstart path regenerates a different admin secret during this run.
+- Prefer the documented Windows quickstart entrypoint first, then inspect the resulting Compose state, logs, and reachable auth/admin surfaces so the user gets both a running stack and the exact credentials that were exercised.
 
 ## Assumptions
-- The current dirty checkout is the intended source of truth and should be what gets rebuilt into the local runtime.
-- Rebuilding `bitriver-live` and `viewer` is sufficient to surface the homepage/UI rescue changes without restarting unrelated healthy stateful services.
-- Route checks against `/`, `/viewer`, and optionally `/signup` are enough to confirm the redeploy succeeded for local visual QA.
+- The current repo-root `.env` is intentionally provisioned for this workstation and already contains the admin email/password that local login should use if bootstrap does not rotate them.
+- Docker daemon access on this machine still requires elevated execution, so the meaningful deployment checks need to run with host-level privileges.
+- For a localhost shakedown, a successful deployment can be validated by healthy Compose services plus reachable `http://localhost:8080/`, `/viewer`, `/signup`, and `/admin`.
 
 ## Risks
-- Docker layer caching can make a rebuild appear successful while still leaving stale behavior in the running app, so explicit route verification is required after recreation.
-- Recreating the app services will briefly interrupt the current local instance while the new containers start.
-- Host-side Docker or shell issues may block the redeploy even when the source tree is healthy, so service status/logs need to be captured if anything fails.
+- The quickstart path may still reject parts of the saved production `.env` or hit Compose/runtime issues before the stack is fully healthy, in which case we need to distinguish repo defects from host-only blockers.
+- Because deployment-contract edits require confirmation in this repo, any fix that touches `deploy/docker-compose.yml`, root `.env`, or generated OME expectations may need a pause before implementation.
+- Even when the stack starts, auth verification can still fail if bootstrap credentials drifted from the saved `.env`, so we need to confirm the actual login surface and account state before handing credentials back.
 
 ## Test plan
-- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 bitriver-live viewer`
-- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0`
-- `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern "Find the streams worth opening now|Watch live now|Full directory" -AllMatches`
-- `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup).Content | Select-String -Pattern "Sign in to continue|Back to viewer" -AllMatches`
-
-## Scope (current change)
-- Audit the current viewer UI with actual interaction checks so the most visible dead or misleading controls are fixed instead of only restyled.
-- Reproduce the reported navbar theme-toggle failure and identify other broken high-traffic controls on the current discovery shell and homepage before editing implementation code.
-- Prioritize fixes that make the shipped viewer materially usable right now: controls should either perform a real action, navigate somewhere meaningful, or be removed/reframed so they are no longer dead ends.
-- Keep the scope viewer-only unless a tiny supporting test/helper change is required to validate the repaired controls.
-
-## Assumptions
-- The user's report is grounded in the current runtime, so even controls with existing unit coverage still need browser-level validation.
-- The highest-impact broken controls are likely in the signed-out discovery experience (`Navbar`, homepage hero, category/discovery controls, mobile shell) because that is the first surface users hit.
-- Existing viewer tests are not yet sufficient to prove usability; we need a combination of static button audit, targeted Jest coverage, and at least one browser-level pass where the host allows it.
-- Viewer-only control/UX fixes do not require deployment-contract changes as long as routes, env contract, and backend APIs stay the same.
-
-## Risks
-- A broad "fix all buttons" pass could sprawl into unrelated redesign work, so the task list needs to stay tied to reproduced breakage on high-traffic controls.
-- Some controls may appear broken because their visual feedback is too subtle rather than because state never changes; we need to distinguish no-op behavior from weak affordance.
-- Browser automation may still hit the existing Windows Playwright/permission friction on this host, so validation needs a fallback path rather than assuming the first runner will work.
-- `PLAN.md`, `TASKS.md`, and multiple viewer files are already dirty in this checkout, so edits need to stay additive and avoid trampling unrelated in-progress work.
-
-## Test plan
-- `Get-Content web/viewer/components/Navbar.tsx`
-- `Get-Content web/viewer/components/CategoryRail.tsx`
-- `Get-Content web/viewer/app/directory-view.tsx`
-- `npm.cmd --prefix web/viewer run test -- navbar.test.tsx directoryPage.test.tsx`
-- `npm.cmd --prefix web/viewer run build`
-- `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts tests/navbar-mobile.spec.ts`
-- If Playwright remains blocked: `npx.cmd playwright test tests/channel.spec.ts tests/navbar-mobile.spec.ts --reporter=list`
-
-## Scope (current change)
-- Rebuild and redeploy the locally running `bitriver-live` and `viewer` services from the current branch so the user can review the latest viewer-control fixes in the real app.
-- Verify the specific acceptance check the user named: the light/dark mode toggle must work on the deployed app at `localhost:8080`, not only in the isolated viewer test server.
-- Keep this as a runtime refresh and validation pass only; do not broaden into additional product changes unless the deployment/verification uncovers a new blocker in the current branch.
-
-## Assumptions
-- The current checked-out branch and worktree contents are the intended source of truth for the review deployment.
-- Rebuilding `bitriver-live` and `viewer` is sufficient for this review pass because the recent changes are viewer-focused and do not require stateful service contract changes.
-- A focused browser check against the deployed app is the most meaningful proof for the user's review gate because the theme toggle is the named manual test.
-
-## Risks
-- Docker may reuse stale layers or leave an older container running unless we confirm service recreation and route-level behavior after the rebuild.
-- The deployed app may differ slightly from the local Playwright/Jest harness, so the light/dark toggle needs an explicit deployed-instance verification rather than inference from prior test runs.
-- Host-specific issues such as Docker pipe access, Playwright browser launch quirks, or route timing could block the verification even if the current branch is healthy, so results need to distinguish repo issues from host issues.
-
-## Test plan
-- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-- `npx.cmd playwright test tests/channel.spec.ts --grep "theme toggle updates the rendered document" --reporter=list` with `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080`
-- `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern "Switch to (light|dark) theme|BitRiver Live" -AllMatches`
-- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
-
-## Scope (current change)
-- Fix the deployed viewer hydration blocker uncovered during review deployment: the Go server's default CSP currently blocks the proxied Next.js viewer boot scripts on `/viewer`, leaving interactive controls inert on the live app.
-- Keep the fix narrowly scoped to security-header behavior for the proxied viewer path, preserving the stricter existing defaults for admin/API routes unless the viewer runtime specifically requires a relaxation.
-- Rebuild the local review deployment after the change and re-run a real browser check against `http://localhost:8080` so the light/dark toggle is proven working on the deployed app, not only in isolated viewer tests.
-- Update the operator-facing security-header docs so the new default viewer-path behavior is documented alongside the existing override flags and environment variables.
-
-## Assumptions
-- The deployed theme-toggle failure is caused by the confirmed CSP console errors blocking Next.js hydration, not by additional bugs in `Navbar.tsx`.
-- Allowing the proxied viewer route to execute the inline bootstrap scripts required by Next.js is the minimal runtime fix needed to restore interactivity.
-- Existing security-header override flags/env vars should keep their current meaning; only the default behavior for proxied viewer responses needs adjustment.
-
-## Risks
-- Relaxing CSP too broadly could weaken protections for admin or API surfaces that do not need inline scripts, so the change should stay path-aware and as narrow as possible.
-- Viewer proxy responses and locally served admin pages currently share middleware, so the implementation must avoid accidentally changing non-viewer routes.
-- Runtime verification may still hit host-specific Docker or Playwright friction, so the execution log needs to distinguish repo fixes from host blockers clearly.
-
-## Test plan
-- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
-- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-- `@'...playwright probe...'@ | node -` against `http://127.0.0.1:8080/`
-- `npx.cmd playwright test tests/channel.spec.ts --grep "theme toggle updates the rendered document" --reporter=list` with `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080`
-
-## Scope (current change)
-- Fix the misleading homepage category-chip browse links so they land on a real exact category filter instead of overloading the free-text `q` search parameter.
-- Add category-aware directory handling across the viewer and API so `/browse?category=...` loads exact category results, while existing free-text search keeps working and also starts matching `channel.category` to align with current UI copy.
-- Keep the change narrowly scoped to directory browsing behavior, category-link wiring, and the minimum test coverage needed to prove both the API and viewer paths.
-
-## Assumptions
-- The user is correct that `?q=<category>` is currently semantically wrong for category chips because the existing backend search is not an exact category filter.
-- Introducing a dedicated `category` query parameter is the clearest user-facing fix for homepage category chips, while also extending free-text search to include `channel.category` keeps the rest of the browse/search copy honest.
-- Directory result sets are still small enough that an exact category filter can be applied in the API layer without introducing pagination or contract changes elsewhere.
-
-## Risks
-- Query-param synchronization on the browse page can become confusing if `q` and `category` are not normalized and preserved consistently through search/reset flows.
-- Changing viewer API helper signatures could ripple through existing tests if the update is not kept backward-compatible.
-- Broadening free-text search to include category could subtly change result sets for existing browse queries, so API coverage needs to assert the intended matching behavior explicitly.
-
-## Test plan
-- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api -count=1 -timeout=120s`
-- `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx browsePage.test.tsx viewer-api.test.ts`
-- `npm.cmd --prefix web/viewer run build`
-- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --force-recreate --no-deps bitriver-live viewer`
-- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-
-## Scope (current change)
-- Revisit the initial admin-access UX so operators can reliably find the bootstrap control-center credentials after install/quickstart, especially when public self-signup is disabled by default.
-- Add a small operator-facing CLI recovery path that reads the deployment `.env` and prints the admin access summary on demand instead of relying on a one-time terminal flash during bootstrap.
-- Update quickstart/install/auth messaging so the operator sees where the bootstrap creds live, where to sign in (`/admin`), and what caveat applies if the password was rotated later.
-
-## Assumptions
-- The current install/quickstart flows already persist the bootstrap admin credentials in the deployment `.env`, but that storage location is not obvious enough to operators after the initial run.
-- A targeted CLI helper plus clearer summaries is safer than introducing a second secret store or exposing recovery internals too broadly in the public UI.
-- The public auth page can safely include a concise operator hint that points to `/admin` and the deployment environment file without exposing any actual secrets.
-
-## Risks
-- Printing bootstrap password values too casually could leak secrets into shell history or shared terminals, so any recovery command should default to redacting the password unless the operator opts in.
-- Operators who already rotated the admin password in the control center could misread the env-backed bootstrap password as the current live credential, so the output must warn about that distinction.
-- Updating the public signup copy too aggressively could make the page feel operator-centric for normal viewers, so the added guidance should stay short and secondary.
-
-## Test plan
-- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver -count=1 -timeout=120s`
-- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
-- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh`
-
-## Scope (current change)
-- Make the `/signup` auth surface feel like a continuation of the `/viewer` experience instead of a disconnected static utility page.
-- Keep the existing API/auth flow intact while tightening the visual language, return-path context, and navigation cues around sign-in/sign-up.
-- Refresh the local review deployment after the change so the updated auth surface is available on the running app for direct UX review.
-
-## Assumptions
-- The main problem is cohesion and continuity, not the underlying login/signup mechanics; the existing auth handlers and redirects can stay intact.
-- The fastest high-impact improvement is to restyle and restructure the static auth page to mirror the current viewer product language, then thread the existing `next` destination more visibly through the page.
-- A small doc update in the viewer README is appropriate because the auth landing behavior is part of the viewer navigation contract even though the page is served by the Go binary.
-
-## Risks
-- The static auth page lives outside the Next.js viewer app, so copying too much viewer styling directly could create a brittle parallel design system unless the scope stays focused on the highest-value shared cues.
-- Dynamic “return to where you left off” messaging can become misleading if the `next` parameter is not sanitized or displayed carefully.
-- Route-level UX validation requires rebuilding the running `bitriver-live` service after the embed changes, so host Docker issues could block final live review even if the code/tests pass.
-
-## Test plan
-- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
-- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-- `@'...playwright auth probe...'@ | node -` against `http://127.0.0.1:8080/signup?next=%2Fviewer%2Fbrowse%3Fq%3Dmusic`
-
-## Scope (current change)
-- Rework the `/viewer` homepage so the above-the-fold experience is video-centric and creator-centric instead of leading with long-form discovery copy.
-- Keep the existing discovery data sources, routes, and viewer shell, but shift the hierarchy toward featured/live previews, creator cards, and faster visual entry into content.
-- Limit the scope to the signed-out/signed-in homepage experience plus the minimum supporting tests and runtime refresh needed for local review.
-
-## Assumptions
-- The gap the user is calling out is primarily information architecture and visual emphasis, not missing backend data or a need for autoplay video playback.
-- Existing components such as `FeaturedChannel`, `LiveNowGrid`, `ChannelRail`, and `CategoryRail` already provide enough content primitives to build a stronger video-first homepage without changing APIs.
-- Viewer-only composition/styling changes do not require deployment-contract or operator-doc updates as long as routes and backend behavior stay the same.
-
-## Risks
-- Moving too much content above the fold can make the homepage feel busier rather than more engaging, so the new hierarchy needs to stay decisive and avoid turning every section into a hero.
-- Rebalancing the viewer shell around larger media modules could regress mobile layout or the current following-sidebar affordances if shared styles are changed too broadly.
-- Updating homepage copy, headings, and section order will likely require aligned Jest assertions and a live redeploy check so we do not ship a visually improved page with stale tests or stale containers.
-
-## Test plan
-- `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx viewerShell.test.tsx`
-- `npm.cmd --prefix web/viewer run lint`
-- `npm.cmd --prefix web/viewer run build`
-- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-
-## Scope (current change)
-- Rework the `/signup` auth presentation so it feels like a centered overlay/modal on top of the viewer instead of a separate full-page destination.
-- Keep the existing auth API flow, `next`-based return behavior, MFA/signup handling, and static-route serving intact while shifting the information architecture and styling toward a Twitch-like overlay pattern.
-- Refresh the local app after the change so the updated auth route is reviewable on `localhost:8080` in the real running install.
-
-## Assumptions
-- The user is asking for a presentation and interaction-framing change, not for a new SPA modal mounted inside the Next.js viewer runtime; a static auth page that visually behaves like an overlay is the right scope.
-- Existing auth JS already has the needed return-path behavior, so the main work is collapsing the page into a modal card and demoting the surrounding explanatory content into backdrop/context treatment.
-- This route-level UX change does not require deployment-contract updates as long as auth endpoints, redirects, and operator hints remain unchanged.
-
-## Risks
-- If the fake viewer backdrop is too decorative or too interactive-looking, users may think the background is usable while the auth card is open, so the backdrop needs to read clearly as dimmed context.
-- Compressing too much auth/help context into a modal-sized surface could hurt clarity around self-signup-disabled and MFA states if spacing or hierarchy gets too tight.
-- Because the route is static HTML/CSS/JS served by the Go binary, server tests that assert specific signup copy/scaffold will need coordinated updates when the modal contract changes.
-
-## Test plan
-- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
-- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-- `@'...auth route probe...'@ | node -` against `http://127.0.0.1:8080/signup?next=%2Fviewer`
-
-## Scope (current change)
-- Replace the viewer's auth redirects with a real in-app overlay mounted inside the Next.js `/viewer` experience for sign-in, sign-up, and MFA continuation.
-- Add a small viewer-auth API contract so the viewer can learn session state plus auth affordances (`allowSelfSignup`, logout path, and similar) without relying on the old static `/signup` page bootstrap.
-- Demote `/signup` from the primary UX to a compatibility path that forwards into the viewer overlay when the viewer is configured, while preserving a safe fallback for non-viewer deployments.
-
-## Assumptions
-- The user's main complaint is architectural, not just visual: auth should happen inside the viewer shell, so the right fix is to move the form flow into the viewer runtime instead of polishing the static route again.
-- `useAuth` is already the natural place to centralize session loading plus modal open/close state, and the global viewer layout can host the overlay once that hook exposes the needed controls.
-- Keeping `/signup` as a compatibility redirect when `ViewerOrigin` is configured is safer than deleting the route outright because existing OAuth/MFA/legacy links may still target it.
-- A viewer-specific `/api/viewer/me` response is the cleanest minimal contract because the viewer already expects that path and it can return guest-safe auth config with or without a live session.
-
-## Risks
-- Expanding `useAuth` from "session lookup" into full auth-flow state management could ripple through many signed-out CTAs and existing tests if the API is not kept tidy.
-- Redirect/refresh behavior after successful auth can feel jarring if the modal does not preserve the intended `next` route or if it reloads more of the viewer than necessary.
-- MFA and self-signup-disabled states currently live in the static route script, so porting them into React carries a real risk of regressions unless we keep the same API semantics and cover them explicitly.
-- Converting `/signup` into a compatibility redirect must not break installs that do not proxy the Next.js viewer; the server needs to branch cleanly on whether `ViewerOrigin` is configured.
-
-## Test plan
-- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/server -count=1 -timeout=120s`
-- `npm.cmd --prefix web/viewer run test -- useAuth.test.tsx navbar.test.tsx followingStatePresentation.test.tsx`
-- `npm.cmd --prefix web/viewer run lint`
-- `npm.cmd --prefix web/viewer run build`
-- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-- `@'...viewer auth overlay probe...'@ | node -` against `http://127.0.0.1:8080/viewer?auth=signup`
-
-## Scope (current change)
-- Tighten the `/viewer` desktop shell so the Following rail and Featured Live hero share a cleaner top alignment and the sidebar no longer burns vertical space on explanatory copy.
-- Keep the implementation narrowly scoped to viewer shell/homepage composition, focused tests, and a local redeploy for review.
-- Evaluate renaming the Docker Compose project from the default `deploy` label to a clearer stack name, but treat that as a deployment-contract change that requires explicit user approval before implementation.
-
-## Assumptions
-- The visible mismatch in the screenshot is being driven by the desktop shell/sidebar framing, especially the extra intro copy above `FollowingSidebar`, rather than by missing homepage data.
-- A more compact signed-out guidance treatment inside the following rail can preserve the onboarding message without pushing the sidebar out of rhythm with the hero.
-- Docker Desktop is showing `deploy` because Compose is inheriting its default project name from the compose-file directory; we should not change that contract until the user opts in.
-
-## Risks
-- Shared shell CSS changes could accidentally regress mobile sidebar behavior or other viewer pages if they are broader than necessary.
-- Compressing the following rail too aggressively could make signed-out guidance less clear if the CTA and explanation are not still obvious.
-- Renaming the Compose project will rename Docker resources and can surprise operators looking for the old stack name, so it must stay approval-gated.
-
-## Test plan
-- `Get-Content web/viewer/components/ViewerShell.tsx | Select-Object -Skip 130 -First 90`
-- `Get-Content web/viewer/styles/globals.css | Select-Object -Skip 4260 -First 150`
-- `Get-Content web/viewer/styles/home.css | Select-Object -Skip 970 -First 280`
-- `npm.cmd --prefix web/viewer run test -- directoryPage.test.tsx viewerShell.test.tsx followingStatePresentation.test.tsx`
-- `npm.cmd --prefix web/viewer run lint`
-- `npm.cmd --prefix web/viewer run build`
-- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-
-## Scope (current change)
-- Audit the GitHub Actions workflows defined under `.github/workflows` and run the closest feasible local equivalents from this Windows host.
-- Use the workflow definitions themselves as the source of truth for which checks matter to cross-platform confidence for a self-hosted streaming deployment.
-- Treat this as a verification/reporting pass only unless a currently reproducible repository failure demands a narrowly scoped fix.
-
-## Assumptions
-- We cannot literally reproduce GitHub-hosted `ubuntu-latest` and `macos-latest` runner environments from this one Windows workstation, but we can still execute the workflow entrypoints and scripts that are platform-agnostic or Windows-compatible.
-- The most meaningful local evidence will come from the canonical gates and workflow scripts: `scripts/verify.sh`, `scripts/test-all.sh`, `scripts/test-postgres.sh`, `scripts/test-quickstart.sh`, viewer CI commands, and workflow consistency/doc checks.
-- Some workflow steps may remain blocked by host-tool differences already known in this environment, especially `python3` inside Bash-based scripts and Linux-only tools such as `shellcheck`.
-
-## Risks
-- Running broad validation on a dirty worktree can mix current uncommitted viewer changes into the results, so the report needs to distinguish “current checkout passes locally” from “clean mainline CI status”.
-- Several workflows are Linux-specific or depend on GitHub-hosted service containers/actions, so local results alone cannot prove full cross-platform coverage for Ubuntu and macOS.
-- Long-running Docker and Playwright checks can consume time and resources; if one host prerequisite is missing, we should record the blocker precisely instead of forcing partial or misleading results.
-
-## Test plan
-- `Get-Content .github/workflows/ci.yml`
-- `Get-Content .github/workflows/go-unit-tests.yml`
-- `Get-Content .github/workflows/viewer-ci.yml`
-- `Get-Content .github/workflows/quickstart-smoke.yml`
-- `Get-Content .github/workflows/postgres-tests.yml`
-- `Get-Command bash, python3, py, go, docker, node, npm, psql, shellcheck, gh, act -ErrorAction SilentlyContinue | Select-Object Name,Source`
-- `pwsh -File scripts/quickstart.ps1 -help`
-- `pwsh -File scripts/quickstart.ps1 -ValidateOnly`
-- `go test ./... -count=1 -timeout=120s`
-- `npm.cmd --prefix web/viewer run test:integration`
-- `npm.cmd --prefix web/viewer run build`
-- `docker compose --env-file .env -f deploy/docker-compose.yml config`
-- `./scripts/test-postgres.sh`
-- `./scripts/test-quickstart.sh`
-- `./scripts/check-go-workflow-config.sh`
-- `./scripts/check-doc-installer-language.sh`
-- `./scripts/generate-contract-doc.sh --check`
-- `./scripts/check-monitoring-config.sh`
-
-## Scope (current change)
-- Close the Windows portability gaps uncovered by the CI verification pass so the repo's defined cross-platform Go and quickstart checks can run meaningfully on a self-hosted Windows workstation.
-- Keep runtime behavior unchanged; the fix should stay inside test harnesses unless a production path is truly required.
-- Continue to use the existing GitHub Actions workflows as the validation target, and dispatch safe hosted workflows only after the local Windows failures are addressed.
-
-## Assumptions
-- The failing `cmd/transcoder` tests are partly caused by the test helper assuming a Unix-style `ffmpeg` stub is executable on Windows, but the direct symlink probe shows there is also a real Windows runtime incompatibility in the transcoder's live publish path.
-- The failing `scripts` tests are caused by choosing an unusable `bash` binary (`C:\\WINDOWS\\system32\\bash.exe`) and by Unix-only PATH assumptions inside the test harness, not by a broken quickstart wrapper.
-- GitHub-hosted Ubuntu/macOS workflows remain the source of truth for non-Windows coverage, but getting the Windows-local equivalents green is necessary before dispatching them with confidence.
-
-## Risks
-- A too-clever Windows stub could diverge from the existing Unix `ffmpeg` stub semantics and mask real transcoder regressions if it does not produce the same playlist and segment shape.
-- Shell-resolution changes in the quickstart tests could accidentally weaken the assertions if they silently skip real wrapper execution instead of selecting a usable shell.
-- Changing the live publish path from "symlink only" to a Windows-capable fallback must preserve the current Unix behavior and still keep live manifests visible to the viewer while a stream is active.
-- Triggering hosted workflows before the local Windows failures are corrected would create noisy, avoidable red CI and make the cross-platform report less credible.
-
-## Test plan
-- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/transcoder -count=1 -timeout=120s`
-- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./scripts -count=1 -timeout=120s`
-- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./... -count=1 -timeout=120s`
-- `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -help`
 - `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 -ValidateOnly`
-- `$tmp = Join-Path (Resolve-Path .).Path '.codex-symlink-check'; if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }; New-Item -ItemType Directory -Path $tmp | Out-Null; New-Item -ItemType Directory -Path (Join-Path $tmp 'target') | Out-Null; try { New-Item -ItemType SymbolicLink -Path (Join-Path $tmp 'link') -Target (Join-Path $tmp 'target') -ErrorAction Stop | Out-Null; 'symlink-ok' } catch { 'symlink-failed: ' + $_.Exception.Message }`
+- `powershell -ExecutionPolicy Bypass -File scripts/quickstart.ps1 --env-file .env --compose-file deploy/docker-compose.yml`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/signup`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/admin -MaximumRedirection 0`
+
+## Scope (current change)
+- Tighten the viewer discovery journey so homepage and browse surfaces never present dead-end controls to first-time visitors.
+- Make homepage category chips actionable, make browse-page featured highlights open the relevant channel, and persist browse topic filters in the URL so drill-ins survive reload/back-forward navigation.
+- Improve the touched discovery empty states with explicit recovery actions instead of passive "nothing here yet" copy.
+- Keep the change viewer-only and avoid deployment-contract edits.
+
+## Assumptions
+- The highest-value UI/UX win for launch-readiness is to remove discovery dead ends rather than start another broad visual redesign.
+- Reusing the existing browse search/filter model is preferable to introducing a new backend category-filter API; a URL-level `topic` filter on top of the current client-side filtering is enough for now.
+- Homepage category drill-ins can safely route through `/browse` because that page already owns directory exploration and filtering.
+- Viewer-only route/query/state updates do not require operator-doc updates because runtime contracts and deployment workflows stay unchanged.
+
+## Risks
+- Adding a new browse URL parameter can create router-state drift or reset loops if query hydration and local filter state are not synchronized carefully.
+- Converting non-actionable cards/chips into links could break existing tests or styling if the DOM structure changes more than expected.
+- Empty-state CTA copy can become misleading if it promises behavior the current product cannot fulfill, so the actions need to stay grounded in existing routes.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- __tests__/browsePage.test.tsx __tests__/directoryPage.test.tsx __tests__/channelDisplayPrimitives.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+
+## Scope (current change)
+- Diagnose why the current checkout cannot be pushed to `origin` and repair the safest viable Git path so the current work is available remotely.
+- Confirm whether the blocker is non-fast-forward branch divergence, auth, or remote-policy rejection before making any branch or history changes.
+- Prefer a non-destructive fix that preserves the current commits exactly as they exist now; avoid force-pushing `main`.
+- Keep the change limited to Git workflow metadata and repo planning artifacts unless a small supporting doc update is required.
+
+## Assumptions
+- The immediate goal is to get the current local commits onto GitHub safely, not to rewrite shared history on `origin/main`.
+- Because local `main` is already behind `origin/main`, creating and pushing a dedicated branch is likely safer than rebasing/pushing `main` without explicit user direction.
+- The working tree is clean enough that branch creation or a push repair will not trample unrelated uncommitted work.
+
+## Risks
+- Rebasing or merging `origin/main` into the current `main` without confirmation could create unnecessary conflict resolution or change the exact commits the user expects to publish.
+- Pushing directly to `main` could still be blocked by branch protection or auth even after divergence is addressed, so the exact remote error needs to be captured first.
+- Any networked Git operation may require host-level approval or credentials outside the sandbox, so repair work may pause on environment access rather than repository state.
+
+## Test plan
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short --branch`
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live remote -v`
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live branch -vv`
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live push origin main`
+- If non-fast-forward on `main`: create/push a safe topic branch from the current `HEAD` and verify `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short --branch`
+
+## Scope (current change)
+- Prepare this Windows host for a production-leaning local OBS rehearsal using the current deployment contract (`production` + `pull`) and the existing repo-root `.env`.
+- Fix the known LAN-host contract mismatches first: loopback/demo public URLs, `0.0.0.0` OME values, and missing image digests.
+- Authenticate container-registry access, verify that the configured first-party release images actually exist, and only then pin digests plus attempt the canonical quickstart/Compose boot path.
+- Keep `deploy/docker-compose.yml` unchanged unless validation proves a contract bug is the active blocker after real first-party images are available.
+
+## Assumptions
+- The user wants the strict production-like pull workflow first, not a faster fallback to build mode.
+- The current `.env` image tags (`v1.2.3`) may be example/default values rather than already-verified published release tags, so registry reality must be checked before mutating the env file further.
+- This host can use a workspace-local Go build cache (`.gocache`) to avoid the existing Windows profile permission issue during Go-backed validators/renderers.
+- Local/LAN HTTP on `10.0.0.108` is acceptable for this rehearsal even though the saved `.env` remains in `production` mode.
+
+## Risks
+- If the configured first-party release tag does not exist in GHCR, the requested `pull`-mode rehearsal cannot complete without either publishing release images or switching to build mode.
+- Editing the tracked root `.env` for a machine-specific LAN rehearsal can create diff noise and must not be committed with live secrets.
+- Production digest enforcement requires both first-party and third-party pins; resolving only the public third-party digests is not enough to satisfy quickstart.
+- Rerendering `deploy/ome/Server.generated.xml` against the LAN rehearsal values will intentionally change a tracked generated contract file and must stay aligned with the actual `.env`.
+
+## Test plan
+- `gh auth status`
+- `gh auth token | docker login ghcr.io -u ProhibitedTV --password-stdin`
+- `git ls-remote --tags origin`
+- `docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-live:v1.2.3 --format "{{.Manifest.Digest}}"`
+- `docker buildx imagetools inspect redis:7-alpine --format "{{.Manifest.Digest}}"`
+- If first-party release images exist: `go run ./cmd/bitriver env validate --env-file ./.env`, `docker compose --env-file .env -f deploy/docker-compose.yml config`, `./scripts/require-image-digests.sh`, `go run ./cmd/bitriver ome render --force --env-file ./.env`, `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml`
+
+## Scope (current change)
+- Pivot the local OBS rehearsal from the impossible `production + pull` path to a supported source-checkout build path that uses the current repository contents.
+- Fix the concrete deployment-contract blockers already observed on this host: broken `postgres-migrations` command wiring, insufficient `transcoder-public` capabilities for the bundled nginx config, and a quickstart smoke script that assumes unpublished first-party GHCR images exist.
+- Keep public APIs, storage schemas, and viewer/backend contracts unchanged while making the documented local source-build path actually boot and stream.
+- Treat root `.env` and `deploy/ome/Server.generated.xml` as local runtime state for the rehearsal: update them for the host run, keep them aligned, and avoid committing secrets or host-specific values.
+
+## Assumptions
+- The near-term goal is a reliable source-build rehearsal on this Windows host, not publishing release tags or first-party GHCR images.
+- The repo should continue to support strict release-style `pull` mode later, but the source-checkout smoke and local rehearsal path must no longer depend on nonexistent `v1.2.3` or `latest` first-party images.
+- Default host ports (`8080`, `9080`, `1935`, `9000`, `9001`) are currently free and should be used unless a fresh conflict appears during implementation.
+- The safest local runtime path is direct `docker compose ... up -d --build --pull never` with a development-mode `.env`, rather than trying to force the strict production quickstart contract onto unpublished source artifacts.
+
+## Risks
+- `deploy/docker-compose.yml`, root `.env`, and `deploy/ome/Server.generated.xml` are contract files, so any change must stay synchronized with `docs/contract.md` and operator docs.
+- Fixing `postgres-migrations` and `transcoder-public` only in Compose while leaving Helm/docs inconsistent would create contract drift.
+- `scripts/test-quickstart.sh` and `./scripts/verify.sh` may still be partially blocked on this host by missing `python3`, even after the source-build smoke path itself is fixed.
+- The local rehearsal may still surface additional runtime issues after the stack starts (for example creator bootstrap, ingest preview timing, or OBS publishing), so validation needs to include actual route and service checks, not just `docker compose up`.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/storage -count=1 -timeout=120s -run TestIngestPipelineEndToEnd`
 - `docker compose --env-file .env -f deploy/docker-compose.yml config`
-- `gh workflow run "CI" --ref codex/UI_UX_repair`
-- `gh workflow run "Quickstart compose smoke" --ref codex/UI_UX_repair`
-
-## Scope (current change)
-- Remove the redundant destination-explanation sentence from the in-viewer auth overlay's route context card in `web/viewer/components/auth/AuthDialog.tsx`.
-- Keep the compact "Continue where you left off" header plus destination path visible so users still understand where auth returns them without restating automatic behavior.
-- Add focused viewer coverage for the trimmed auth-overlay copy contract.
-
-## Assumptions
-- The user wants the explanatory route paragraph removed from the auth overlay generally, not just for the `/viewer` root case, because the auto-return behavior is already implicit in the flow.
-- Existing auth redirect, MFA, and self-signup behavior should remain unchanged; this is a copy and hierarchy cleanup only.
-- This viewer-only adjustment does not change deployment contracts or require operator-doc updates.
-
-## Risks
-- Removing the sentence could make the route card feel too sparse if the destination path is not still visually obvious.
-- A narrowly scoped copy test can become brittle if it asserts too much surrounding markup instead of the user-visible contract.
-
-## Test plan
-- `Get-Content web/viewer/components/auth/AuthDialog.tsx`
-- `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx`
-
-## Scope (current change)
-- Redeploy the local app stack so `http://localhost:8080` reflects the latest checkout, including the most recent viewer/auth updates.
-- Use the canonical Compose contract (`.env` plus `deploy/docker-compose.yml`) without changing deployment settings.
-- Confirm the live HTTP routes after the rebuild/recreate instead of assuming local source edits were already picked up.
-
-## Assumptions
-- The required root `.env` already exists and is valid for the local review stack.
-- Rebuilding and recreating `bitriver-live` and `viewer` should be sufficient to surface the latest app changes on `localhost:8080`.
-- A successful route check on `/`, `/viewer`, and the current auth entry path is enough to confirm the redeploy worked for this request.
-
-## Risks
-- Docker build/recreate commands can time out or hit local daemon/config permission issues on this Windows host.
-- If the running app depends on stale supporting services or cached assets, a targeted app-service rebuild may not be enough and we may need to record that blocker.
-- HTTP verification can pass while still missing the intended UI update if we probe the wrong route, so the post-redeploy check needs to target the current viewer/auth surface.
-
-## Test plan
-- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/ -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode,Headers } catch { $_.Exception.Response | Select-Object StatusCode,Headers }`
-- `(Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer).Content | Select-String -Pattern 'Browse BitRiver Live|Watch live now|Full directory' -AllMatches`
-- `(Invoke-WebRequest -UseBasicParsing 'http://localhost:8080/viewer?auth=signup').Content | Select-String -Pattern 'Continue where you left off|Create your BitRiver account|/viewer' -AllMatches`
-
-## Scope (current change)
-- Audit the repository from a first-time open-source adopter's perspective and tighten the public-facing structure before a credible tagged release.
-- Focus on low-risk, high-signal improvements: repo hygiene, onboarding clarity, community/security metadata, release docs, and small docs/config fixes that improve trust.
-- Avoid speculative product rewrites; only make code/config changes when they clearly support safer setup or better release ergonomics.
-
-## Assumptions
-- The existing deployment/docs direction is broadly correct; the main gap is public presentation, consistency, and release readiness rather than missing core functionality.
-- Durable release/runbook docs under `docs/` should stay, but ad-hoc internal artifacts (temporary files, dated evidence logs, speculative release notes) can be removed or replaced with cleaner public equivalents.
-- Public contributors will expect standard repository signals (`CONTRIBUTING.md`, `SECURITY.md`, issue templates, changelog, release checklist) at the repo root or in `.github/`.
-
-## Risks
-- Rewriting the README too aggressively could drift from the actual deployment contract or overstate current support; copy changes need to stay precise and source-backed.
-- Removing tracked artifacts must not break any scripts or docs that still assume those files exist, so references need to be updated in the same pass.
-- Public release docs need to align with the repo's existing semver/release workflow; introducing a contradictory version story would create more confusion than it solves.
-
-## Test plan
-- `git ls-files artifacts .tmp docs/releases`
-- `./scripts/check-no-committed-secrets.sh`
-- `./scripts/check-doc-installer-language.sh`
-- `./scripts/generate-contract-doc.sh --check`
-- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh`
-
-## Scope (current change)
-- Do a second public-release polish pass focused only on outsider trust and adoption signals, not on product behavior or new features.
-- Tighten the first 30 seconds of the README, clarify install/onboarding surfaces, and remove stale or internally scoped wording from public docs and packaging metadata.
-- Add or refine low-risk legitimacy/support surfaces where they materially improve newcomer confidence.
-
-## Assumptions
-- The main remaining gaps are presentation and consistency issues rather than missing runtime capability.
-- Public adopters benefit more from a smaller number of crisp, trustworthy docs than from adding more sprawling internal-detail pages.
-- The current repository remote (`github.com/ProhibitedTV/BitRiver-Live`) is the right public source of truth for repository URLs shown in docs and package metadata.
-
-## Risks
-- Tightening quickstart/install docs too aggressively could accidentally hide important constraints that operators still need before production use.
-- Updating public repo URLs and support paths must stay aligned across docs, issue templates, and packaging metadata so the repo does not feel split-brained.
-- Release-stage wording needs to stay honest about the supported single-host baseline without creating a contradictory version story.
-
-## Test plan
-- `Get-Content README.md -TotalCount 160`
-- `Get-Content docs/quickstart.md -TotalCount 160`
-- `Get-Content CONTRIBUTING.md`
-- `Get-Content SUPPORT.md`
-- `Get-Content .github/ISSUE_TEMPLATE/config.yml`
-- `Get-Content docs/production-status.md`
-- `rg -n "github.com/bitriver-live/bitriver-live|docs/cross-platform-plan.md|v1.0|SUPPORT.md" README.md docs CONTRIBUTING.md .github deploy scripts`
-- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-doc-installer-language.sh`
-- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/check-no-committed-secrets.sh`
-
-## Scope (current change)
-- Fast-forward the local checkout to the merged `origin/main` commit and redeploy the app services so `localhost:8080` reflects the latest merged work.
-- Polish the release-facing viewer UI/UX with one goal in mind: help average people understand and launch a self-hosted Twitch-like experience without extra controls, dense copy, or maintainer-centric phrasing.
-- Focus on high-traffic/product surfaces first: viewer homepage, primary navigation/shell, and creator onboarding/live setup flows. Keep the deployment contract unchanged.
-
-## Assumptions
-- The merged public-release PR is already on `origin/main` and the current local feature branch can fast-forward cleanly to it.
-- The most valuable UX improvements are subtractive: fewer controls, shorter explanations, clearer primary actions, and a more obvious "watch or go live" path.
-- The core product behavior already works; this pass should simplify presentation and task flow rather than add new features.
-
-## Risks
-- Simplifying creator flows too aggressively could hide information people still need when copying ingest settings or validating a stream.
-- UI copy and layout changes can easily break existing viewer tests if text contracts or element hierarchy move more than intended.
-- Redeploying before aligning the local checkout to `origin/main` would risk rebuilding stale code and create confusion about what is actually live on `localhost:8080`.
-
-## Test plan
-- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live rev-list --left-right --count HEAD...origin/main`
-- `git pull --ff-only origin main`
-- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-- `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx navigation.test.ts viewerShell.test.tsx creatorGettingStartedPage.test.tsx creatorLivePage.test.tsx`
-- `npx.cmd playwright test tests/homepage-layout.spec.ts tests/channel.spec.ts tests/creator-live-setup.spec.ts --reporter=list`
-- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
-
-## Scope (current change)
-- Clean up the in-viewer sign-in overlay so it no longer exposes the raw redirect route (for example `/viewer`) as visible UI copy.
-- Remove the redundant duplicate "Sign in" controls that appear when self-signup is disabled, while keeping the auth flow and redirect behavior unchanged.
-- Add focused viewer test coverage for the cleaned-up auth-dialog presentation.
-
-## Assumptions
-- The reported issue is confined to `web/viewer/components/auth/AuthDialog.tsx`; backend auth APIs and redirect plumbing in `useAuth` should remain unchanged.
-- Replacing the raw route chip with friendlier return-context copy is acceptable as long as successful auth still sends the viewer back to the same route.
-- Hiding the single-mode tab control when sign-up is unavailable is the smallest fix for the duplicate-button complaint.
-
-## Risks
-- If the replacement return copy is too generic, the dialog could feel less grounded than the current route-specific presentation.
-- Tab visibility logic must still preserve the full sign-in/sign-up switcher when self-signup is allowed.
-- Tightening auth-dialog tests around copy and button counts can become brittle if selectors depend on exact phrasing unnecessarily.
-
-## Test plan
-- `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx useAuth.test.tsx`
-- `npm.cmd --prefix web/viewer run lint`
-- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer`
-
-## Scope (current change)
-- Remove the auth-dialog return-summary panel entirely so the sign-in window only shows auth actions and not any "continue where you left off" text box.
-- Keep the previous duplicate-sign-in cleanup intact while tightening the dialog to a simpler signed-out presentation.
-- Re-run focused viewer verification and refresh the local viewer stack so `localhost:8080/viewer` reflects the trimmed dialog.
-
-## Assumptions
-- The return-summary box is purely presentational and can be removed without affecting redirect behavior, because the actual post-auth redirect still lives in `useAuth`.
-- No backend, route, or auth-hook changes are needed; this follow-up should stay confined to the dialog component and its focused tests.
-- Viewer-only UI cleanup still does not require deployment-contract documentation changes.
-
-## Risks
-- Removing the panel changes dialog spacing, so the auth overlay could feel top-heavy if the remaining content does not flow cleanly.
-- Tests that currently assert the return-summary copy must be updated or they will fail for the wrong reason.
-- A local redeploy is still needed after the code change, otherwise the running viewer will continue showing stale overlay markup.
-
-## Test plan
-- `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx useAuth.test.tsx`
-- `npm.cmd --prefix web/viewer run lint`
-- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
-
-## Scope (current change)
-- Investigate the current local `bitriver-ome` container logs to identify the dominant error or warning patterns after install/redeploy.
-- Trace those log patterns back to generated OME config, Compose wiring, or other repo-owned runtime inputs before deciding whether a code/config/docs fix is warranted.
-- If the logs reveal a narrow repo-owned issue, implement the smallest safe fix and rerun focused validation; otherwise keep the outcome as an evidence-backed diagnosis.
-
-## Assumptions
-- The user is referring to the currently running local Compose stack defined by the repo-root `.env` and `deploy/docker-compose.yml`.
-- Recent OME logs still contain enough startup/runtime evidence to diagnose the noisy behavior without tearing down persistent state.
-- Some OME log noise may be caused by expected probe traffic or upstream image behavior, so only clearly actionable repo-owned findings should drive changes.
-
-## Risks
-- OME logging can be verbose, and changing the wrong config in response to a noisy warning could alter the deployment contract or media behavior unnecessarily.
-- Generated OME config is part of the deployment contract, so any fix touching `deploy/ome/Server.generated.xml`, `.env`, or Compose wiring needs careful attribution and, if contract-changing, may need a user check-in.
-- Docker log access on this Windows host has been intermittently blocked by pipe/config permission issues, so the investigation may need to rely on the commands that succeed instead of one broad log dump.
-
-## Test plan
-- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never`
 - `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
-- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=200 ome`
-- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=200 ome-config ome-health-token-check`
-- `Get-Content deploy/ome/Server.generated.xml -TotalCount 260`
-- `rg -n "OME|ome|Server.generated.xml|health token|access token|publishers|webrtc|rtmp" cmd internal deploy docs scripts`
-- If a repo fix is made: run the narrowest focused verification plus any relevant compose/runtime probe
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 postgres-migrations bitriver-live transcoder-public`
+- `./scripts/test-quickstart.sh`
+- `./scripts/verify.sh`
+- Route/runtime rehearsal checks: `http://10.0.0.108:8080/admin`, `/viewer`, `/viewer/creator/live/<channelId>`, RTMP ingest on `:1935`, and HLS playback on `http://10.0.0.108:9080/hls`
 
 ## Scope (current change)
-- Analyze the current local post-install Docker Compose logs for runtime errors or warning patterns that appear repo-owned and actionable from this codebase.
-- Correlate the most important findings to the owning service, source file, script, or contract surface before deciding whether a narrow code/doc fix is warranted.
-- If a high-confidence repo issue is reproducible from the logs, implement the smallest fix and re-run the relevant verification; otherwise keep this pass analysis-only with precise findings.
+- Repair the viewer chrome so the visible light/dark toggle, sign-in CTA, and sign-up/join CTA all respond predictably in the live app.
+- Remove the unnecessary top spacing in the homepage shell so the left rail and main content sit cleanly under the fixed navbar.
+- Keep the work viewer-only, with no backend API or deployment-contract changes.
+- Validate the fixes in the shipped viewer surface, not just isolated component logic, because the reported failures are runtime UX issues.
 
 ## Assumptions
-- The repo-root `.env` plus `deploy/docker-compose.yml` describe the local install the user wants analyzed.
-- Recent container logs still contain enough startup/runtime signal to identify post-install issues without tearing the stack down and reinstalling.
-- Some log noise may come from third-party services or host Docker behavior, so only findings with clear repo ownership should drive code changes.
+- The broken auth/theme behavior is likely caused by viewer-side state wiring or CSS layering rather than a backend auth outage, because the stack is already up and the controls render.
+- The visible top gap is caused by competing shell spacing rules in `web/viewer/styles/globals.css`, especially the later rescue-pass overrides that moved top spacing from the content wrapper to the whole shell.
+- A robust theme fix should update the document-level theme attribute in a way that both existing CSS selectors and browser-native UI elements honor consistently.
+- Sign-in and join should stay in-modal/in-viewer by default unless an explicit external auth URL is configured.
 
 ## Risks
-- Startup logs can contain benign one-time warnings, so we need to separate ambient noise from real user-facing defects before editing code.
-- A too-broad fix driven by logs could accidentally change the deployment contract or healthy service behavior, so any remediation should stay minimal and evidence-backed.
-- Docker access or missing historical logs on this host could limit what we can verify directly, in which case the investigation should report the evidence gap instead of guessing.
+- The viewer stylesheet contains multiple later override sections, so changing spacing or navbar layering in one block can accidentally regress another viewport if the final cascade is not checked carefully.
+- Auth CTA fixes that only satisfy Jest mocks could still miss a real runtime issue such as a hidden overlay, incorrect dialog mounting, or pointer-event conflict.
+- Moving theme state from body-only handling to document-level handling can affect tests and any selectors that assume a single attribute location, so the change needs targeted coverage.
 
 ## Test plan
-- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- If browser automation is needed to confirm live behavior: `npm.cmd --prefix web/viewer run test:playwright -- tests/navbar-mobile.spec.ts`
+
+## Scope (current change)
+- Rework the public viewer and creator web surfaces into a polished v1 live-platform experience centered on the core loop: discover, sign up, create a first channel, go live, watch, tip, and replay VOD.
+- Keep the deployment model and backend stack intact while tightening the information architecture, removing silent no-op UX, and making the viewer/watch experience feel intentional instead of experimental.
+- Add self-serve creator bootstrap so an authenticated self-signup user can create their own first channel without admin intervention and immediately enter the creator live flow.
+- Keep the change focused on viewer + creator surfaces plus the minimal backend/channel API updates required to support first-channel onboarding.
+
+## Assumptions
+- The existing viewer already has enough live, chat, follow, tip, and VOD primitives that the best path is a guided overhaul rather than a wholesale rebuild.
+- Open self-signup remains the default posture for this v1 launch, and the highest-friction missing capability is self-serve first-channel creation.
+- Tips and wallet-style support should be visually primary in the channel/watch UX, while subscriptions remain available but de-emphasized.
+- This pass should improve mobile responsiveness and shell consistency without trying to solve broader product areas like admin redesign, notifications, or a clips ecosystem.
+
+## Risks
+- Relaxing `POST /api/channels` for self-service onboarding can accidentally over-broaden channel creation if ownership checks and role upgrades are not kept self-only and first-channel-safe.
+- Refreshing the homepage, browse page, navigation, and channel page together creates a larger CSS and interaction surface, so shared shell regressions are a real possibility.
+- Creator onboarding will touch both backend permissions and viewer client state, which can produce misleading partial success if only one side is updated.
+- The repo already has unrelated modified contract/runtime files in the working tree, so this pass must stay disciplined about not overwriting unrelated changes while still updating the planning artifacts.
+
+## Test plan
+- Backend/bootstrap:
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api ./internal/auth ./internal/storage -count=1 -timeout=120s`
+- Viewer targeted:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx __tests__/browsePage.test.tsx __tests__/directoryPage.test.tsx __tests__/channelDisplayPrimitives.test.tsx`
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts`
+- Viewer validation:
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+
+## Scope (current change)
+- Redeploy the current checkout onto the existing local Compose stack so the viewer/creator overhaul is actually running in the live environment again.
+- Validate the redeployed stack at the runtime level rather than only through mocked viewer tests: confirm service/container health, API readiness, public viewer routes, and the key creator/live setup pages.
+- Fix any concrete runtime blocker exposed by the live redeploy when it prevents the shipped viewer from hydrating or responding to input, then redeploy and re-check the live surface.
+- Record any remaining gap explicitly if a fully manual broadcast or authenticated browser flow still requires human interaction.
+
+## Assumptions
+- The repo should still be running in the local source-build workflow established earlier (`BITRIVER_DEPLOY_IMAGE_SOURCE=build` with `docker compose ... up -d --build --pull never`).
+- The current `.env` and generated OME config are already aligned enough to let the stack rebuild from source without another contract change.
+- The highest-signal runtime proof for this pass is a successful rebuild plus live route checks on `http://10.0.0.108:8080`, not another full repository-wide verification sweep.
+- Because this machine shares the same working tree as earlier changes, redeploy commands must avoid resetting or cleaning anything.
+
+## Risks
+- Docker rebuilds can fail for host reasons unrelated to the app changes (daemon state, image cache, port collisions), so the first step must separate environment failure from product failure.
+- The redeployed viewer could still differ from the mocked Playwright coverage in areas that require real auth/session bootstrap or live ingest state, so runtime checks need to include both anonymous and creator-facing routes.
+- The API server's default CSP may be too strict for the Next.js viewer bootstrap, so a server-side header fix could be required even if the viewer build itself is healthy.
+- If the stack comes up but the admin/bootstrap data is stale, functional checks may need to stop at route availability rather than full signed-in action flows.
+
+## Test plan
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never`
 - `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
-- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=200`
-- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=200 bitriver-live viewer postgres redis ome srs transcoder-public`
-- `rg -n "<finding-specific-pattern>" cmd internal web deploy scripts docs`
-- If a repo fix is made: run the narrowest focused test(s) plus `./scripts/verify.sh` when the affected surface warrants it
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 bitriver-live viewer postgres-migrations transcoder-public`
+- `Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/readyz`
+- `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/viewer`
+- `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/browse`
+- `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/videos`
+- `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/creator`
+- `go test ./internal/server -count=1 -timeout=120s`
+- Headless browser smoke against `http://10.0.0.108:8080/viewer` to confirm the theme toggle, auth CTA, and hydrated route content all respond after redeploy
 
 ## Scope (current change)
-- Redesign the control-center Home Server Installer in `web/static` into a linear 7-step wizard that defaults to a Quick Install path while preserving the existing Ubuntu installer/script behavior underneath.
-- Refactor the installer into a dedicated step/state model so validation, preflight messaging, review, retry, and success handoff are separated from the current one-shot form rendering.
-- Improve operator-facing copy, hide advanced/technical details behind explicit reveal controls, and add focused static-app coverage for the installer defaults, validation, and handoff logic.
+- Re-enable public self-signup on this local deployment so guest users can actually create accounts from the shipped viewer experience.
+- Redesign the homepage to be more like a modern Twitch-style discovery surface: live content first, tighter copy, strong shelves, and a clearer split between featured content, recommended channels, and browse-by-topic exploration.
+- Keep the changes focused on the live local deployment plus the viewer homepage/auth entry points; avoid unrelated backend or creator-flow changes unless they are required to support signup or homepage behavior.
+- Treat the root `.env` change as local runtime state for this machine and redeploy the affected service after updating it.
 
 ## Assumptions
-- The current installer surface to redesign is the browser-based Home Server Installer rendered from `web/static/index.html` and `web/static/app.js`, not the Bash prompt wizard in `deploy/install/wizard.sh`.
-- Reusing the existing generated Ubuntu install script flow is the least invasive way to preserve functionality while still upgrading the user experience around it.
-- Quick Install can safely favor beginner-friendly defaults (for example built-in storage and a non-privileged default port) as long as Advanced Install still exposes the current installer capabilities.
+- The immediate signup blocker is the current runtime flag `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=false`, not a deeper auth/session failure.
+- A Twitch-inspired homepage for this pass means borrowing the information hierarchy and content density, not cloning Twitch styling or copy.
+- Existing discovery APIs (`featured`, `recommended`, `following`, `liveNow`, `trending`, `categories`) are sufficient to build a much stronger homepage without adding new backend endpoints.
+- The current local stack should only require a `bitriver-live` restart for the signup flag and a viewer rebuild/redeploy for homepage code changes.
 
 ## Risks
-- A large markup-only rewrite without a clear state model could make next/back/retry behavior brittle, so the logic should move into a dedicated installer module before styling-heavy work.
-- Changing defaults too aggressively could drift from the underlying installer contract, especially around storage, admin bootstrap, and address handling, so the generated script must remain grounded in `deploy/install/ubuntu.sh`.
-- The static control-center surface has lightweight test coverage today, so we need pure-function seams for installer validation and handoff logic instead of relying on manual browser-only verification.
+- Editing the tracked root `.env` is a deployment-contract change, so the local runtime adjustment must stay intentional and should not leak secrets or unrelated config edits.
+- Homepage changes touch a broad CSS surface and the most-trafficked viewer route, so regressions in spacing, mobile behavior, or inactive states are easy to introduce if the layout change is too aggressive.
+- A homepage that becomes too visually close to Twitch without using our own copy, color choices, and interaction patterns could feel derivative instead of intentional.
+- Redeploy validation needs both mocked viewer tests and a real browser smoke, because recent regressions only surfaced on the live `/viewer` mount.
 
 ## Test plan
-- `node --test web/static/app.test.mjs web/static/installer.test.mjs`
+- `npm.cmd --prefix web/viewer run test -- __tests__/directoryPage.test.tsx __tests__/navbar.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never viewer bitriver-live`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+- `Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/api/viewer/me`
+- Headless browser smoke against `http://10.0.0.108:8080/viewer` to confirm the create-account flow is offered again and the redesigned homepage renders and hydrates on the live deployment
+
+## Scope (current change)
+- Repair the current verification blockers so the repository has a clean baseline before broader Twitch-style product work continues.
+- Keep this pass focused on test/check reliability and functional gate health; do not start the local Compose stack or change runtime deployment settings.
+- Avoid deployment-contract edits: leave `deploy/docker-compose.yml`, root `.env`, and `deploy/ome/Server.generated.xml` behaviorally unchanged.
+- Add only the backward-compatible `bitriver ome render --output` flag needed to keep OME render tests from mutating the tracked generated contract file.
+
+## Assumptions
+- The first repair pass should prioritize the standard gates rather than a live-stack rehearsal or broader product-gap sweep.
+- The local Compose stack being down is acceptable for this pass as long as Compose config validation still succeeds.
+- The stale viewer snapshot should follow the current `Featured live` copy because that wording better matches the discovery-first live platform goal.
+- Any Windows-specific test handling should preserve real coverage wherever possible and skip only host capabilities such as directory symlink creation when unavailable.
+
+## Risks
+- Transcoder health tests can hide real recovery bugs if the fix only widens timeouts, so recovery should be tied to successful state transitions or explicit component reset behavior.
+- Adding an OME output path flag must not weaken the canonical generated-file path used by normal operators and Compose.
+- Replacing wall-clock session sleeps with a test clock must not leak test-only API into public runtime surfaces.
+- Updating snapshots can mask UI drift if the assertion coverage is too broad, so the copy change should stay narrowly targeted.
+
+## Test plan
+- `go test ./cmd/transcoder -count=1 -timeout=120s`
+- `go test ./internal/auth -count=25 -run TestValidateHonorsAbsoluteTTL`
+- `go test ./internal/ingest ./scripts -count=1 -timeout=120s`
+- `npm.cmd --prefix web/viewer run test -- --silent`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `docker compose --env-file .env -f deploy/docker-compose.yml config`
 - `./scripts/verify.sh`
 
 ## Scope (current change)
-- Add a small authenticated server-side installer preflight endpoint so the control-center installer can report actual host readiness during the System Check step instead of relying on browser-only warnings.
-- Reuse the existing installer draft/default/validation model in `web/static` while separating preflight fetch state from the existing handoff/execution state and keeping the current Ubuntu helper/script contract intact.
-- Add operator QA coverage for the new wizard flow, and remove the now-unused legacy installer template/helper code from `web/static` once the new flow has the needed coverage.
+- Improve the core viewer functionality around channels, chat, and signup without changing the deployment contract.
+- Upgrade the channel chat panel from REST-only polling to the existing authenticated `/api/chat/ws` gateway, while keeping REST history loading and polling as fallback for guests or failed sockets.
+- Tighten the creator signup/onboarding path so creator-intent account creation points clearly toward first-channel setup instead of feeling like a viewer-only signup.
+- Keep backend channel creation semantics unchanged for this pass because self-signup first-channel creation and role promotion already have API coverage.
 
 ## Assumptions
-- The browser installer is intended to assess the same host that serves the control center, so a lightweight server-side endpoint can improve readiness reporting without changing how the generated install command works.
-- A dry-run preflight should stay observational: inspect host capabilities, file/path readiness, and obvious installer prerequisites without mutating the system or attempting the install itself.
-- If a live preflight request fails, the wizard should keep the existing browser-side messaging as a fallback so the user is never blocked from reviewing or retrying the flow.
+- The existing `POST /api/channels` self-service path is the correct first-channel bootstrap: a self-signup viewer creates their own first channel and is promoted to creator.
+- The highest-value chat functionality gap is realtime delivery on the viewer channel page; moderation/report tooling can remain API-backed for this pass.
+- A WebSocket failure should not break chat history or the composer; REST polling and send APIs remain the fallback path.
+- Signup copy can adapt to creator intent using the existing auth redirect target, without adding new API payloads or signup roles.
 
 ## Risks
-- Host inspection can easily sprawl into installer logic duplication, so the endpoint should stay small and report only actionable checks tied directly to the Ubuntu helper requirements.
-- Wiring live preflight state into the wizard could accidentally clear user-entered answers or break back/retry navigation if it is mixed into the install-execution state model.
-- Removing the legacy installer block too early would be risky if the new wizard still depended on its markup or helper code, so cleanup should happen only after the new flow is wired and covered.
+- WebSocket message envelopes use the gateway event shape, while the viewer renders REST chat DTOs; mapping and de-duplication must prevent duplicate messages when ack, broadcast, and polling overlap.
+- jsdom does not exercise real browser WebSocket behavior by default, so tests need a small controllable socket fake.
+- Auth dialog copy changes can accidentally regress generic viewer signup copy if creator-context detection is too broad.
+- Chat changes touch the live channel page's most interactive surface, so focused component tests should cover both socket and fallback paths.
 
 ## Test plan
-- `go test ./internal/api -count=1`
-- `node web/static/installer.test.mjs`
-- `node web/static/app.test.mjs`
-- `node --check web/static/installer.js`
-- `node --check web/static/app.js`
-- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh`
-
-## Scope (current change)
-- Add a guided first-run wizard for the source-based `cmd/bitriver` flow so operators can set key quickstart controls instead of editing `.env` manually after the fact.
-- Support the wizard in both `go run ./cmd/bitriver env init` and `go run ./cmd/bitriver quickstart`, while preserving the existing non-interactive defaults for scripts/CI users who do not opt in.
-- Cover the new wizard prompts with focused `cmd/bitriver` tests and document the guided path in the quickstart docs and README.
-
-## Assumptions
-- The user pain is primarily about missing first-run controls, not about replacing the underlying Compose-based deployment contract.
-- A small guided set of prompts is enough for now: admin email, viewer/API URLs, API port, OME host settings, transcoder public URL, and self-signup.
-- Existing secret generation should remain automatic; the wizard should collect operator-facing deployment values without forcing users to hand-enter every secret up front.
-
-## Risks
-- Interactive prompt code can easily break non-interactive automation if the wizard ever runs unexpectedly, so the opt-in/TTY gating needs to stay explicit and well tested.
-- Writing wizard choices back into `.env` must stay aligned with the current validation and quickstart contract or users will get a friendlier prompt followed by the same validation failure.
-- The quickstart success path currently prints generated credentials based on first-run env state; adding wizard support could accidentally hide or misreport those generated values if the comparison logic is wrong.
-
-## Test plan
-- `go test ./cmd/bitriver -count=1`
-- `go test ./... -count=1 -timeout=120s`
-- `docker compose -f deploy/docker-compose.yml config`
-- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh`
-
-## Scope (current change)
-- Redeploy the local Docker Compose stack from the current workspace so the operator environment is refreshed against the latest checked-out repo state.
-- Keep the deployment contract unchanged; this is an operational local-stack refresh, not a code or config refactor.
-- Confirm the relevant local services are recreated successfully and report any runtime blocker clearly.
-
-## Assumptions
-- The user wants the current local Compose environment refreshed from this checkout, even though the most recent code changes were in the CLI/docs path rather than the long-running API/viewer runtime.
-- The existing root `.env` remains the intended local deployment input for this machine.
-- Docker Desktop/Engine is available locally because Compose config validation succeeded earlier in this session when `--env-file .env` was supplied.
-
-## Risks
-- Local redeploy may rebuild or recreate containers unexpectedly if the current stack has drifted or if images are stale.
-- Because the current `.env` still uses local loopback/demo-style values in some places, the redeploy only proves local operability, not production readiness.
-- If Docker or the local daemon state changed since the earlier checks, the redeploy could fail for host reasons unrelated to the repository changes.
-
-## Test plan
-- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
-- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
-
-## Scope (current change)
-- Simplify the signed-out auth dialog further by removing the extra sign-in reassurance heading and paragraph inside the sign-in form.
-- Keep the dialog focused on the title, fields, and actions only; do not change redirect behavior, auth APIs, or the prior duplicate-sign-in cleanup.
-- Re-run focused viewer checks and refresh the local viewer container so the simplified dialog is live at `localhost:8080/viewer`.
-
-## Assumptions
-- The top-level dialog title already provides enough context, so the inner `Sign in without losing your place` block is redundant.
-- This follow-up remains confined to `web/viewer/components/auth/AuthDialog.tsx` and focused auth-dialog tests.
-- Viewer-only copy removal still does not require deployment-contract documentation changes.
-
-## Risks
-- Removing the inner heading/subcopy changes the dialog rhythm slightly, so we should confirm the remaining fields/actions still read cleanly.
-- Focused tests need to assert the copy is gone so the change does not quietly regress.
-- A local rebuild is still required after the viewer edit, otherwise the running stack will keep serving stale dialog markup.
-
-## Test plan
-- `npm.cmd --prefix web/viewer run test -- authDialog.test.tsx useAuth.test.tsx`
+- `npm.cmd --prefix web/viewer run test -- __tests__/chatPanel.test.tsx __tests__/channelPage.test.tsx __tests__/authDialog.test.tsx __tests__/creatorGettingStartedPage.test.tsx --silent`
 - `npm.cmd --prefix web/viewer run lint`
-- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build bitriver-live viewer`
+- `npm.cmd --prefix web/viewer run build`
+- `go test ./internal/api ./internal/chat ./internal/auth -count=1 -timeout=120s`
+
+## Scope: Product Readiness Closure - VOD Publish and Chat Reports
+
+### Summary
+Turn the latest product-readiness audit into a focused implementation pass without touching the deployment contract. This pass closes two user-visible functional gaps that block a Twitch-style self-hosted baseline: creators can publish upload-backed recordings into the public VOD surface, and signed-in viewers can report abusive chat messages from the live chat UI.
+
+### Goals
+- Refresh `SPEC.md` so the repo has product acceptance criteria for a self-hosted live streaming website, not only contributor workflow criteria.
+- Add a creator upload action that calls the existing `POST /api/recordings/{id}/publish` API and refreshes the upload list/public VOD path.
+- Add a chat-message report flow that calls the existing `POST /api/channels/{id}/chat/reports` API with `targetId`, `messageId`, and a viewer-supplied reason.
+- Document a self-hosted acceptance checklist in existing testing docs so the final product bar includes real broadcast, playback, chat, VOD, and moderation proof.
+
+### Assumptions
+- The deployment contract remains unchanged: no edits to `deploy/docker-compose.yml`, root `.env`, or `deploy/ome/Server.generated.xml`.
+- Existing backend APIs for recording publish and chat reports are the source of truth for this pass.
+- A full stream schedule data model and real Docker/OBS-style broadcast rehearsal are follow-up product gates, not hidden inside this UI-focused patch.
+
+### Risks
+- Upload items do not expose a `publishedAt` field today, so the UI can confirm the publish request and refresh rather than rendering a durable published badge from the upload payload.
+- Chat history groups consecutive messages by author; per-message report controls must stay attached to individual messages without making the thread noisy.
+- Viewer test mocks must stay aligned with the public `viewer-api` barrel exports.
+
+### Test Plan
+- `npm.cmd --prefix web/viewer run test -- --silent UploadManager ChatPanel viewer-api`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `./scripts/verify.sh` if local prerequisites are available within the remaining pass.
+
+## Scope: Product Readiness Closure - Schedule and Final Gates
+
+### Summary
+Finish the unresolved product-readiness items from the previous pass. Add a real channel schedule model instead of the public placeholder, expose creator editing in the live dashboard, render upcoming streams on public channel pages, and rerun the broad verification gates with enough time to complete.
+
+### Goals
+- Add a typed channel schedule model that works in JSON storage and Postgres-backed self-hosted installs.
+- Extend existing channel create/update/read payloads with backward-compatible optional schedule entries.
+- Let creators manage upcoming scheduled streams from the existing Go Live dashboard.
+- Replace the public channel Schedule placeholder with actual upcoming stream entries.
+- Re-run full verification and capture any remaining real-stack smoke limitations clearly.
+
+### Assumptions
+- A channel-level schedule array is the right minimal product shape for this pass: it supports one or more upcoming stream entries without introducing a separate moderation or calendar subsystem.
+- Adding a nullable/defaulted Postgres column is a schema migration, not a Compose or `.env` deployment-contract change.
+- A real OBS/manual broadcast rehearsal can be represented in docs and smoke gates here, but only automated if local Docker/encoder prerequisites are available.
+
+### Risks
+- Channel schedule JSON must be validated and normalized consistently across memory and Postgres repositories.
+- Existing channel PATCH behavior must remain backward-compatible for title/category/tag-only updates.
+- The public Schedule tab must stay useful when a creator has no upcoming entries.
+
+### Test Plan
+- `go test ./internal/storage ./internal/api -count=1 -timeout=120s`
+- `npm.cmd --prefix web/viewer run test -- --silent creatorLivePage channelPage viewer-api`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s`
+- `docker compose --env-file .env -f deploy/docker-compose.yml config --quiet`
+- `./scripts/verify.sh`
+
+### Status
+- Implemented. See `TASKS.md` for per-task results and final gate output.
+
+## Scope: Viewer Auth UI Refresh
+
+### Summary
+Fix the deployed viewer behavior where signing in from the normal site chrome updates the auth cookie but leaves route-level UI in its previous guest state until a navigation path forces a refresh. Keep this focused on client auth refresh behavior; do not change auth payloads, cookies, deployment config, or database schema.
+
+### Goals
+- Refresh Next.js route data after successful sign-in, sign-up, MFA completion, and sign-out when the user stays on the same route.
+- Preserve the existing redirect behavior when auth was opened with a different safe destination.
+- Add focused auth-provider coverage proving a same-page sign-in calls the route refresh path and updates the visible auth state.
+- Rebuild/redeploy the viewer container so the running Docker stack reflects the fix.
+
+### Assumptions
+- The backend auth flow and cookies are working; the stale UX is caused by client route data not refreshing after the cookie changes.
+- A client-side `router.refresh()` is the right Next.js primitive because it refreshes server components and cached route payloads without a full browser reload.
+- No deployment contract change is needed.
+
+### Risks
+- Calling refresh before the viewer session has been reloaded could briefly preserve guest data, so refresh should happen after `/api/viewer/me` completes.
+- Existing tests that render `AuthProvider` need a small router mock once the provider uses `useRouter`.
+
+### Test Plan
+- `npm.cmd --prefix web/viewer run test -- __tests__/useAuth.test.tsx --silent`
+- `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx __tests__/directoryPage.test.tsx __tests__/followingStatePresentation.test.tsx --silent`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+
+## Scope: OME Ingest Health Auth Repair
+
+### Summary
+Fix the deployed OME ingest health failure where BitRiver reports OvenMediaEngine as down with `401 Unauthorized` even though the OME container is reachable. Keep this pass focused on aligning BitRiver's ingest control-plane requests with the existing OME AccessToken contract; do not change Compose ports, `.env`, generated OME XML, or the vendor OME container health contract.
+
+### Goals
+- Load the canonical `BITRIVER_OME_API_TOKEN` into ingest config.
+- Use OME's documented Basic auth credential form, where the raw rendered AccessToken is base64-encoded as the full Basic credential string.
+- Treat authenticated OME non-5xx responses as reachable for the shared `/healthz` probe path, because OME returns `404` for that path after authentication rather than exposing a native `/healthz`.
+- Preserve backward-compatible Basic auth fallback only when no OME API token is configured.
+- Add focused tests that catch the runtime mismatch: OME health should send `AccessToken`, and missing ingest config should require `BITRIVER_OME_API_TOKEN`.
+- Rebuild/redeploy the API service so `/healthz` and the viewer ingest status reflect the repaired OME health path.
+
+### Assumptions
+- The existing `deploy/ome/Server.generated.xml` already contains a rendered top-level `<Managers><API><AccessToken>` that matches `.env`.
+- OME process liveness in Compose can remain unauthenticated and tolerant of 401 responses because it only verifies that the API listener is reachable.
+- BitRiver's application-control API should follow the documented OME AccessToken-as-Basic-credential contract.
+
+### Risks
+- Tests and stubs currently expect Basic auth for OME adapter calls, so they need to be updated without weakening SRS/transcoder auth coverage.
+- Runtime logs may continue to show 401 entries from OME's own unauthenticated container health probe; the success condition is BitRiver ingest status no longer marking OME down.
+
+### Test Plan
+- `go test ./internal/config ./internal/ingest -count=1 -timeout=120s`
+- `go test ./internal/storage -run Ingest -count=1 -timeout=120s`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up --build -d bitriver-live`
 - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
-- `try { Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -MaximumRedirection 0 -ErrorAction Stop | Select-Object StatusCode } catch { $_.Exception.Response | Select-Object StatusCode }`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/healthz -TimeoutSec 15`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/readyz -TimeoutSec 15`
+
+## Scope: Main Merge Conflict Resolution
+
+### Summary
+Merge the current `origin/main` into `fix-viewer-discovery-polish` and resolve any conflicts in favor of this branch. Keep this pass limited to conflict resolution and merge hygiene; do not introduce new product behavior beyond the merge result.
+
+### Assumptions
+- `origin/main` is the intended base branch for the PR conflict.
+- "Our branch" means the currently checked out `fix-viewer-discovery-polish` branch.
+- The right conflict policy is Git's `-X ours` behavior: keep incoming non-conflicting base changes, but choose this branch's hunks where both sides touch the same lines.
+
+### Risks
+- The base branch carries a large number of non-conflicting file additions, removals, and edits, so the resulting merge commit is broad even though conflict resolution itself is mechanical.
+- Full verification may be expensive after a broad merge; run lightweight conflict hygiene unless a later pass asks for full gates.
+
+### Test Plan
+- `git merge --no-commit --no-ff -X ours origin/main`
+- `git diff --name-only --diff-filter=U`
+- `rg -n "<<<<<<<|=======|>>>>>>>" --glob "!web/viewer/node_modules/**" .`
+- `git diff --cached --check`

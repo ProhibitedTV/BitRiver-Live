@@ -80,8 +80,13 @@ export function FeaturedChannel({
         <div className="state-panel">
           <strong>No featured broadcast yet</strong>
           <p className="muted">
-            Once BitRiver highlights a standout creator, their stream will appear here so you can jump in instantly.
+            As soon as a standout creator emerges, their stream will appear here so new viewers have a strong first watch.
           </p>
+          <div className="browse-actions">
+            <Link href="/browse" className="secondary-button">
+              Browse full directory
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -123,8 +128,8 @@ export function FeaturedChannel({
               <span className="overlay__meta">{formatFollowerLabel(activeChannel.followerCount)}</span>
             </div>
           </div>
-          <div className="featured-channel__content">
-            <span className="featured-channel__eyebrow muted">Featured stream</span>
+            <div className="featured-channel__content">
+            <span className="featured-channel__eyebrow muted">Featured live</span>
             <h2 className="featured-channel__title">{activeChannel.channel.title}</h2>
             <p className="featured-channel__subtitle muted">{activeChannel.owner.displayName}</p>
             <p className="muted">
