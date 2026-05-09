@@ -3408,3 +3408,31 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
      - `docker compose --env-file .env -f deploy/docker-compose.yml config --quiet` passed with the local Docker config permission warning.
      - `./scripts/verify.sh` passed through Git Bash with LibreOffice Python on `PATH` and Docker access approved for quickstart smoke.
      - `docker compose --env-file .env -f deploy/docker-compose.yml ps` showed no running services after verify cleanup.
+
+## Viewer Auth UI Refresh
+
+1. [x] Refresh route data after auth state changes.
+   - Acceptance: successful same-page sign-in/sign-up/MFA completion updates auth context and triggers a Next.js route refresh without forcing a full navigation.
+   - Acceptance: sign-out also refreshes route data after `/api/viewer/me` settles.
+   - Checks: focused `useAuth` tests.
+   - Result: `AuthProvider` now calls `router.refresh()` after same-route auth success and after sign-out refresh settles; existing cross-route redirects remain full navigations.
+   - Check: `npm.cmd --prefix web/viewer run test -- __tests__/useAuth.test.tsx --silent` passed.
+
+2. [x] Validate affected viewer surfaces.
+   - Acceptance: Navbar/auth, directory discovery, and following-state tests continue to pass.
+   - Checks: focused viewer tests plus lint/build.
+   - Result: focused auth-adjacent surfaces still pass; production viewer build compiles with the existing Next.js client-render deopt warnings.
+   - Checks:
+     - `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx __tests__/directoryPage.test.tsx __tests__/followingStatePresentation.test.tsx --silent` passed.
+     - `npm.cmd --prefix web/viewer run lint` passed.
+     - `npm.cmd --prefix web/viewer run build` passed with existing deopt warnings.
+
+3. [x] Rebuild the running Docker viewer.
+   - Acceptance: Docker stack stays up and the rebuilt viewer/API routes serve successfully.
+   - Checks: Compose build/up, `ps`, and basic HTTP checks.
+   - Result: rebuilt and recreated `bitriver-viewer`; Compose stack remained up with core services healthy.
+   - Checks:
+     - `docker compose --env-file .env -f deploy/docker-compose.yml up --build -d viewer` passed.
+     - `docker compose --env-file .env -f deploy/docker-compose.yml ps` passed; core services reported healthy/running.
+     - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -TimeoutSec 15` returned 200.
+     - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/readyz -TimeoutSec 15` returned 200.

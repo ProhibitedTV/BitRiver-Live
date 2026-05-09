@@ -2,6 +2,14 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AuthProvider, useAuth } from "../hooks/useAuth";
 
+const mockRouterRefresh = jest.fn();
+
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({
+    refresh: mockRouterRefresh,
+  }),
+}));
+
 function AuthHarness() {
   const {
     allowSelfSignup,
@@ -142,6 +150,7 @@ describe("useAuth", () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
+    mockRouterRefresh.mockReset();
     window.history.replaceState({}, "", "/viewer");
   });
 
@@ -298,6 +307,73 @@ describe("useAuth", () => {
     expect(search.get("mfa")).toBe("verify");
   });
 
+  test("successful same-page sign-in refreshes route data after the viewer session loads", async () => {
+    const responses = [
+      {
+        ok: true,
+        status: 200,
+        json: async () => ({ allowSelfSignup: true }),
+        text: async () => "",
+      },
+      {
+        ok: true,
+        status: 200,
+        json: async () => ({ user: { id: "viewer-1", displayName: "Viewer" } }),
+        text: async () => "",
+      },
+      {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          allowSelfSignup: true,
+          user: {
+            id: "viewer-1",
+            displayName: "Viewer",
+            email: "viewer@example.com",
+            roles: ["viewer"],
+          },
+        }),
+        text: async () => "",
+      },
+    ];
+
+    global.fetch = jest.fn(async () => {
+      const next = responses.shift();
+      if (!next) {
+        throw new Error("Unexpected fetch call");
+      }
+      return next as Response;
+    }) as jest.MockedFunction<typeof fetch>;
+
+    const user = userEvent.setup();
+    render(
+      <AuthProvider>
+        <AuthHarness />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-loading")).toHaveTextContent("idle");
+    });
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /open sign in/i }));
+      await user.click(screen.getByRole("button", { name: /submit sign in/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-user")).toHaveTextContent("Viewer");
+      expect(screen.getByTestId("auth-open")).toHaveTextContent("closed");
+      expect(screen.getByTestId("auth-error")).toHaveTextContent("none");
+    });
+    expect(mockRouterRefresh).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      3,
+      "/api/viewer/me",
+      expect.objectContaining({ credentials: "include", cache: "no-store" }),
+    );
+  });
+
   test("successful sign-up refreshes the viewer session and closes the dialog in place", async () => {
     const responses = [
       {
@@ -357,6 +433,7 @@ describe("useAuth", () => {
       expect(screen.getByTestId("auth-open")).toHaveTextContent("closed");
       expect(screen.getByTestId("auth-error")).toHaveTextContent("none");
     });
+    expect(mockRouterRefresh).toHaveBeenCalledTimes(1);
 
     const search = new URLSearchParams(window.location.search);
     expect(search.get("auth")).toBeNull();
@@ -407,6 +484,7 @@ describe("useAuth", () => {
       expect(screen.getByTestId("auth-error")).toHaveTextContent("none");
       expect(screen.getByTestId("auth-loading")).toHaveTextContent("idle");
     });
+    expect(mockRouterRefresh).toHaveBeenCalledTimes(1);
   });
 
   test("signOut preserves failure message while loadViewer remains source of truth", async () => {
@@ -455,6 +533,7 @@ describe("useAuth", () => {
       expect(screen.getByTestId("auth-error")).toHaveTextContent("sign out failed");
       expect(screen.getByTestId("auth-loading")).toHaveTextContent("idle");
     });
+    expect(mockRouterRefresh).toHaveBeenCalledTimes(1);
   });
 
   test("signOut keeps loading true until loadViewer refresh settles", async () => {

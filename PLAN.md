@@ -1662,3 +1662,29 @@ Finish the unresolved product-readiness items from the previous pass. Add a real
 
 ### Status
 - Implemented. See `TASKS.md` for per-task results and final gate output.
+
+## Scope: Viewer Auth UI Refresh
+
+### Summary
+Fix the deployed viewer behavior where signing in from the normal site chrome updates the auth cookie but leaves route-level UI in its previous guest state until a navigation path forces a refresh. Keep this focused on client auth refresh behavior; do not change auth payloads, cookies, deployment config, or database schema.
+
+### Goals
+- Refresh Next.js route data after successful sign-in, sign-up, MFA completion, and sign-out when the user stays on the same route.
+- Preserve the existing redirect behavior when auth was opened with a different safe destination.
+- Add focused auth-provider coverage proving a same-page sign-in calls the route refresh path and updates the visible auth state.
+- Rebuild/redeploy the viewer container so the running Docker stack reflects the fix.
+
+### Assumptions
+- The backend auth flow and cookies are working; the stale UX is caused by client route data not refreshing after the cookie changes.
+- A client-side `router.refresh()` is the right Next.js primitive because it refreshes server components and cached route payloads without a full browser reload.
+- No deployment contract change is needed.
+
+### Risks
+- Calling refresh before the viewer session has been reloaded could briefly preserve guest data, so refresh should happen after `/api/viewer/me` completes.
+- Existing tests that render `AuthProvider` need a small router mock once the provider uses `useRouter`.
+
+### Test Plan
+- `npm.cmd --prefix web/viewer run test -- __tests__/useAuth.test.tsx --silent`
+- `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx __tests__/directoryPage.test.tsx __tests__/followingStatePresentation.test.tsx --silent`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
