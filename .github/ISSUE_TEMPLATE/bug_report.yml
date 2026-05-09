@@ -1,0 +1,51 @@
+name: Bug report
+description: Report a reproducible problem in BitRiver Live.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include commands, pages, or API calls when relevant.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Tell us how you ran the project.
+      placeholder: |
+        - OS:
+        - Docker / Compose version:
+        - Go / Node version:
+        - Deployment path: docker-compose / launcher / source checkout
+        - Image tag or commit:
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Paste the smallest useful error message, stack trace, or log snippet. Do not include secrets.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched existing issues first.
+          required: true
+        - label: I removed or redacted secrets from logs and screenshots.
+          required: true

@@ -30,6 +30,10 @@ export function toDirectorySearchParams({
     params.set("topic", normalizedTopic);
   }
 
+  if (normalizedCategory.length > 0) {
+    params.set("category", normalizedCategory);
+  }
+
   return params;
 }
 
@@ -37,9 +41,15 @@ export function mapDirectoryError(error: unknown): string {
   return error instanceof Error ? error.message : DIRECTORY_LOAD_ERROR;
 }
 
-export async function loadDirectoryChannels(query: string): Promise<DirectoryResponse> {
+export async function loadDirectoryChannels(query: string, category?: string): Promise<DirectoryResponse> {
   const normalizedQuery = normalizeDirectoryQuery(query);
-  return normalizedQuery.length > 0 ? searchDirectory(normalizedQuery) : fetchDirectory();
+  const normalizedCategory = normalizeDirectoryCategory(category);
+  if (normalizedQuery.length > 0) {
+    return normalizedCategory.length > 0
+      ? searchDirectory(normalizedQuery, normalizedCategory)
+      : searchDirectory(normalizedQuery);
+  }
+  return normalizedCategory.length > 0 ? fetchDirectory(normalizedCategory) : fetchDirectory();
 }
 
 type DirectoryNavigationInput = {

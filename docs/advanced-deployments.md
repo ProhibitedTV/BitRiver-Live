@@ -336,7 +336,9 @@ If queues back up (late segments, rising encode latency, or dropped viewer conne
 
 The API emits hardening headers by default so the control centre and embedded viewer ship with internet-safe defaults:
 
-- `Content-Security-Policy`: `default-src 'self'; connect-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
+- `Content-Security-Policy`:
+  - Admin/API and other non-viewer routes use `default-src 'self'; connect-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
+  - Proxied `/viewer` responses use the same default directives, but `script-src` is relaxed to `script-src 'self' 'unsafe-inline'` so the Next.js viewer bootstrap can hydrate and attach interactive controls.
 - `X-Frame-Options`: `DENY`
 - `Referrer-Policy`: `no-referrer`
 - `Permissions-Policy`: `camera=(), microphone=(), geolocation=()`

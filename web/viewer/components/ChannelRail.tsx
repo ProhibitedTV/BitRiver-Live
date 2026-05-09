@@ -78,7 +78,7 @@ export function ChannelRail({
       {loading ? (
         <div className="state-panel state-panel--loading" aria-busy="true">
           <strong>Loading channels</strong>
-          <p className="muted">Pulling the latest picks into this row now.</p>
+          <p className="muted">Loading this row now.</p>
         </div>
       ) : channels.length === 0 ? (
         <div className="state-panel">

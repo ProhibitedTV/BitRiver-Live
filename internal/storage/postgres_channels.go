@@ -501,7 +501,7 @@ func (r *postgresRepository) ListChannels(ownerID, query string) []domain.Channe
 	if trimmedQuery != "" {
 		args = append(args, "%"+trimmedQuery+"%")
 		argPos := len(args)
-		clauses = append(clauses, fmt.Sprintf("(c.title ILIKE $%[1]d OR u.display_name ILIKE $%[1]d OR EXISTS (SELECT 1 FROM unnest(c.tags) AS tag WHERE tag ILIKE $%[1]d))", argPos))
+		clauses = append(clauses, fmt.Sprintf("(c.title ILIKE $%[1]d OR c.category ILIKE $%[1]d OR u.display_name ILIKE $%[1]d OR EXISTS (SELECT 1 FROM unnest(c.tags) AS tag WHERE tag ILIKE $%[1]d))", argPos))
 	}
 	if len(clauses) > 0 {
 		baseQuery += " WHERE " + strings.Join(clauses, " AND ")

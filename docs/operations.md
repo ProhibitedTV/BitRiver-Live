@@ -57,9 +57,12 @@ and `/api/status` for operator-facing summaries with remediation tips and log hi
   are healthy. Returns HTTP `503` when those dependencies fail, which is the signal to drain traffic or fail a rollout.
 - **`GET /healthz` (dependency visibility):** Mirrors `/readyz` for core dependencies and adds ingest component status for
   SRS/OME/transcoder. It only flips to HTTP `503` when core dependencies fail, so ingest-only failures still produce `200`
-  with degraded JSON payloads. Use this for dashboards and on-call triage.
+  with degraded JSON payloads. When an ingest snapshot was already recorded, `/healthz` reuses that cached snapshot so
+  routine container liveness probes do not fan out into fresh downstream ingest checks on every request. Use this for
+  dashboards and on-call triage.
 - **`GET /api/status` (operator summary):** Aggregates readiness plus ingest probes, remediation hints, and log suggestions
-  used in the control centre Overview. Use this endpoint when you want a human-readable payload for alerts or ChatOps.
+  used in the control centre Overview. This endpoint performs the on-demand ingest refresh path, so use it when you want a
+  human-readable payload for alerts or ChatOps.
 
 **Typical monitoring flows:**
 

@@ -23,7 +23,6 @@ export function FeaturedChannel({
   const slides = useMemo(() => channels.filter(Boolean), [channels]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
-  const [manualAutoPlayOverride, setManualAutoPlayOverride] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -35,9 +34,6 @@ export function FeaturedChannel({
 
     const handleReducedMotionChange = (event: MediaQueryListEvent) => {
       setPrefersReducedMotion(event.matches);
-      if (event.matches) {
-        setManualAutoPlayOverride(null);
-      }
     };
 
     if (typeof mediaQuery.addEventListener === "function") {
@@ -50,18 +46,13 @@ export function FeaturedChannel({
   }, []);
 
   useEffect(() => {
-    setManualAutoPlayOverride(null);
-  }, [autoPlay]);
-
-  useEffect(() => {
     setActiveIndex(0);
   }, [slides.length]);
 
-  const reducedMotionModeActive = prefersReducedMotion && manualAutoPlayOverride !== true;
-  const autoPlayEnabled = manualAutoPlayOverride === null ? autoPlay && !reducedMotionModeActive : manualAutoPlayOverride;
+  const autoPlayEnabled = autoPlay && !prefersReducedMotion;
 
   useEffect(() => {
-    if (reducedMotionModeActive || !autoPlayEnabled || slides.length <= 1) {
+    if (!autoPlayEnabled || slides.length <= 1) {
       return undefined;
     }
 
@@ -70,7 +61,7 @@ export function FeaturedChannel({
     }, autoPlayIntervalMs);
 
     return () => window.clearInterval(timer);
-  }, [autoPlayEnabled, reducedMotionModeActive, slides.length, autoPlayIntervalMs]);
+  }, [autoPlayEnabled, slides.length, autoPlayIntervalMs]);
 
   if (loading) {
     return (
@@ -142,7 +133,7 @@ export function FeaturedChannel({
             <h2 className="featured-channel__title">{activeChannel.channel.title}</h2>
             <p className="featured-channel__subtitle muted">{activeChannel.owner.displayName}</p>
             <p className="muted">
-              {activeChannel.profile.bio ?? "Get to know this creator's story and tune into their latest broadcast."}
+              {activeChannel.profile.bio ?? "Open the channel to watch live and follow updates from this creator."}
             </p>
             <div className="tag-list">
               {activeChannel.channel.category && <span className="tag">{activeChannel.channel.category}</span>}
@@ -158,60 +149,29 @@ export function FeaturedChannel({
                 href={`/channels/${activeChannel.channel.id}`}
                 aria-label="View featured channel"
               >
-                Watch channel
+                Watch now
               </Link>
             </div>
           </div>
         </article>
       </div>
 
-      <footer className="featured-channel__footer" aria-label="Featured channel controls">
-        <div className="featured-channel__pagination" role="group" aria-label="Featured channel pagination">
-          {slides.map((slide, index) => (
-            <button
-              key={slide.channel.id}
-              type="button"
-              className={`featured-channel__dot${index === activeIndex ? " featured-channel__dot--active" : ""}`}
-              onClick={() => setActiveIndex(index)}
-              aria-label={`Show featured channel ${slide.channel.title}`}
-              aria-pressed={index === activeIndex}
-            />
-          ))}
-        </div>
-        <div className="featured-channel__controls" role="group" aria-label="Carousel navigation">
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => setActiveIndex((activeIndex - 1 + slides.length) % slides.length)}
-            aria-label="Previous featured channel"
-            disabled={slides.length <= 1}
-          >
-            Back
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => setActiveIndex((activeIndex + 1) % slides.length)}
-            aria-label="Next featured channel"
-            disabled={slides.length <= 1}
-          >
-            Next
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => {
-              setManualAutoPlayOverride((prev) => {
-                const current = prev === null ? autoPlayEnabled : prev;
-                return !current;
-              });
-            }}
-            aria-label={`${autoPlayEnabled ? "Pause" : "Resume"} autoplay`}
-          >
-            {autoPlayEnabled ? "Pause" : "Play"}
-          </button>
-        </div>
-      </footer>
+      {slides.length > 1 ? (
+        <footer className="featured-channel__footer" aria-label="Featured channel controls">
+          <div className="featured-channel__pagination" role="group" aria-label="Featured channel pagination">
+            {slides.map((slide, index) => (
+              <button
+                key={slide.channel.id}
+                type="button"
+                className={`featured-channel__dot${index === activeIndex ? " featured-channel__dot--active" : ""}`}
+                onClick={() => setActiveIndex(index)}
+                aria-label={`Show featured channel ${slide.channel.title}`}
+                aria-pressed={index === activeIndex}
+              />
+            ))}
+          </div>
+        </footer>
+      ) : null}
     </section>
   );
 }

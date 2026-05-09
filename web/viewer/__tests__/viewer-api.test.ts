@@ -99,4 +99,22 @@ describe("viewer api", () => {
       }
     }
   });
+
+  it("encodes exact category filters in directory requests", async () => {
+    await fetchDirectory("Science & Tech");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/directory?category=Science+%26+Tech"),
+      expect.objectContaining({ credentials: "include" })
+    );
+  });
+
+  it("preserves category filters when searching the directory", async () => {
+    await searchDirectory("retro", "Science & Tech");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/directory?q=retro&category=Science+%26+Tech"),
+      expect.objectContaining({ credentials: "include" })
+    );
+  });
 });

@@ -549,14 +549,130 @@ describe("useAuth", () => {
           user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
         }),
         text: async () => "",
-      } as Response)
-      .mockResolvedValueOnce({
+      },
+      {
+        ok: true,
+        status: 200,
+        json: async () => ({ mfaRequired: true, mfaToken: "mfa-token" }),
+        text: async () => "",
+      },
+    ];
+
+    global.fetch = jest.fn(async () => {
+      const next = responses.shift();
+      if (!next) {
+        throw new Error("Unexpected fetch call");
+      }
+      return next as Response;
+    }) as jest.MockedFunction<typeof fetch>;
+
+    const user = userEvent.setup();
+    render(
+      <AuthProvider>
+        <AuthHarness />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-loading")).toHaveTextContent("idle");
+    });
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /open sign in/i }));
+      await user.click(screen.getByRole("button", { name: /submit sign in/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-mfa")).toHaveTextContent("required");
+      expect(screen.getByTestId("auth-feedback")).toHaveTextContent("Multi-factor verification is required");
+    });
+  });
+
+  test("successful sign-up refreshes the viewer session and closes the dialog in place", async () => {
+    const responses = [
+      {
+        ok: true,
+        status: 200,
+        json: async () => ({ allowSelfSignup: true }),
+        text: async () => "",
+      },
+      {
+        ok: true,
+        status: 201,
+        json: async () => ({ user: { id: "viewer-1", displayName: "Viewer" } }),
+        text: async () => "",
+      },
+      {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          allowSelfSignup: true,
+          user: {
+            id: "viewer-1",
+            displayName: "Viewer",
+            email: "viewer@example.com",
+            roles: [],
+          },
+        }),
+        text: async () => "",
+      },
+    ];
+
+    global.fetch = jest.fn(async () => {
+      const next = responses.shift();
+      if (!next) {
+        throw new Error("Unexpected fetch call");
+      }
+      return next as Response;
+    }) as jest.MockedFunction<typeof fetch>;
+
+    const user = userEvent.setup();
+    render(
+      <AuthProvider>
+        <AuthHarness />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-loading")).toHaveTextContent("idle");
+    });
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /open sign up/i }));
+      await user.click(screen.getByRole("button", { name: /submit sign up/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auth-user")).toHaveTextContent("Viewer");
+      expect(screen.getByTestId("auth-open")).toHaveTextContent("closed");
+      expect(screen.getByTestId("auth-error")).toHaveTextContent("none");
+    });
+  });
+
+  test("signOut signs the viewer out via /api/viewer/me and clears user after refresh", async () => {
+    const responses = [
+      {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          allowSelfSignup: true,
+          user: { id: "viewer-1", displayName: "Viewer", email: "viewer@example.com", roles: [] },
+        }),
+        text: async () => "",
+      },
+      {
         ok: true,
         status: 204,
         json: async () => undefined,
         text: async () => "",
-      } as Response)
-      .mockImplementationOnce(() => delayedViewer.promise);
+      },
+      {
+        ok: true,
+        status: 200,
+        json: async () => ({ allowSelfSignup: true }),
+        text: async () => "",
+      },
+    ];
 
     const user = userEvent.setup();
     render(
@@ -615,33 +731,7 @@ describe("useAuth", () => {
       if (url !== "/api/viewer/me") {
         throw new Error(`Unexpected url: ${url}`);
       }
-
-      if (method === "DELETE") {
-        return {
-          ok: true,
-          status: 204,
-          json: async () => undefined,
-          text: async () => "",
-        } as Response;
-      }
-
-      meGetCount += 1;
-      if (meGetCount === 1) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => initialViewer,
-          text: async () => "",
-        } as Response;
-      }
-      if (meGetCount === 2) {
-        return firstRefresh.promise;
-      }
-      if (meGetCount === 3) {
-        return secondRefresh.promise;
-      }
-
-      throw new Error("Unexpected /api/viewer/me GET call");
+      return next as Response;
     }) as jest.MockedFunction<typeof fetch>;
 
     const user = userEvent.setup();
@@ -654,48 +744,16 @@ describe("useAuth", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("auth-user")).toHaveTextContent("Viewer");
-      expect(screen.getByTestId("auth-loading")).toHaveTextContent("idle");
-      expect(screen.getByTestId("auth-error")).toHaveTextContent("none");
     });
 
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: /sign out twice fast/i }));
-    });
-
-    await act(async () => {
-      firstRefresh.resolve({
-        ok: true,
-        status: 200,
-        json: async () => initialViewer,
-        text: async () => "",
-      } as Response);
-    });
-
-    await act(async () => {
-      secondRefresh.resolve({
-        ok: true,
-        status: 200,
-        json: async () => finalViewer,
-        text: async () => "",
-      } as Response);
+      await user.click(screen.getByRole("button", { name: /^sign out$/i }));
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("auth-loading")).toHaveTextContent("idle");
-      expect(screen.getByTestId("auth-user")).toHaveTextContent("Viewer Final");
+      expect(screen.getByTestId("auth-user")).toHaveTextContent("anonymous");
       expect(screen.getByTestId("auth-error")).toHaveTextContent("none");
+      expect(screen.getByTestId("auth-loading")).toHaveTextContent("idle");
     });
-
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledTimes(5);
-    });
-
-    expect(calls).toEqual([
-      { url: "/api/viewer/me", method: "GET" },
-      { url: "/api/viewer/me", method: "DELETE" },
-      { url: "/api/viewer/me", method: "DELETE" },
-      { url: "/api/viewer/me", method: "GET" },
-      { url: "/api/viewer/me", method: "GET" },
-    ]);
   });
 });

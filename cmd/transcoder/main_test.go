@@ -278,6 +278,205 @@ func runningProcessCount(s *server) int {
 	return len(s.processes)
 }
 
+func writeWindowsFFmpegStub(t *testing.T) string {
+	t.Helper()
+	stubDir, err := os.MkdirTemp("", "bitriver-ffmpeg-stub-*")
+	if err != nil {
+		t.Fatalf("create ffmpeg stub temp dir: %v", err)
+	}
+	t.Cleanup(func() {
+		for attempt := 0; attempt < 5; attempt++ {
+			if removeErr := os.RemoveAll(stubDir); removeErr == nil || errors.Is(removeErr, os.ErrNotExist) {
+				return
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+	})
+	stubSourcePath := filepath.Join(stubDir, "main.go")
+	stubBinaryPath := filepath.Join(stubDir, "ffmpeg.exe")
+	shimSource := `package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+)
+
+func main() {
+	if err := run(os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+type variant struct {
+	name      string
+	bandwidth string
+}
+
+func run(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("expected ffmpeg arguments")
+	}
+
+	outputTarget := args[len(args)-1]
+	masterName := "index.m3u8"
+	segmentPattern := ""
+	varStreamMap := ""
+	format := ""
+
+	for i := 0; i < len(args); {
+		switch args[i] {
+		case "-master_pl_name":
+			if i+1 >= len(args) {
+				return fmt.Errorf("missing value for %s", args[i])
+			}
+			masterName = args[i+1]
+			i += 2
+		case "-var_stream_map":
+			if i+1 >= len(args) {
+				return fmt.Errorf("missing value for %s", args[i])
+			}
+			varStreamMap = args[i+1]
+			i += 2
+		case "-hls_segment_filename":
+			if i+1 >= len(args) {
+				return fmt.Errorf("missing value for %s", args[i])
+			}
+			segmentPattern = args[i+1]
+			i += 2
+		case "-f":
+			if i+1 >= len(args) {
+				return fmt.Errorf("missing value for %s", args[i])
+			}
+			format = args[i+1]
+			i += 2
+		default:
+			i++
+		}
+	}
+
+	if format != "hls" {
+		if err := os.MkdirAll(filepath.Dir(outputTarget), 0o755); err != nil {
+			return fmt.Errorf("prepare non-hls output: %w", err)
+		}
+		if err := os.WriteFile(outputTarget, []byte{}, 0o644); err != nil {
+			return fmt.Errorf("write non-hls output: %w", err)
+		}
+		return nil
+	}
+
+	outputDirWithVariant := filepath.Dir(outputTarget)
+	outputRoot := strings.TrimSuffix(strings.TrimSuffix(outputDirWithVariant, "/%v"), "\\%v")
+	if err := os.MkdirAll(outputRoot, 0o755); err != nil {
+		return fmt.Errorf("prepare output root: %w", err)
+	}
+
+	variants := []variant{}
+	current := -1
+	for _, token := range strings.Fields(varStreamMap) {
+		switch {
+		case strings.HasPrefix(token, "name:"):
+			variants = append(variants, variant{name: strings.TrimPrefix(token, "name:")})
+			current = len(variants) - 1
+		case strings.HasPrefix(token, "bandwidth:"):
+			if current == -1 {
+				variants = append(variants, variant{name: fmt.Sprintf("variant-%d", len(variants))})
+				current = len(variants) - 1
+			}
+			variants[current].bandwidth = strings.TrimPrefix(token, "bandwidth:")
+		}
+	}
+	if len(variants) == 0 {
+		variants = append(variants, variant{name: "variant"})
+	}
+
+	var master strings.Builder
+	master.WriteString("#EXTM3U\n")
+	master.WriteString("#EXT-X-VERSION:3\n")
+	for _, currentVariant := range variants {
+		bandwidth := currentVariant.bandwidth
+		if bandwidth == "" {
+			bandwidth = "1000000"
+		}
+		fmt.Fprintf(&master, "#EXT-X-STREAM-INF:BANDWIDTH=%s\n", bandwidth)
+		fmt.Fprintf(&master, "%s/index.m3u8\n", currentVariant.name)
+	}
+	masterPath := filepath.Join(outputRoot, masterName)
+	if err := os.WriteFile(masterPath, []byte(master.String()), 0o644); err != nil {
+		return fmt.Errorf("write master playlist: %w", err)
+	}
+
+	delay := 200 * time.Millisecond
+	if raw := strings.TrimSpace(os.Getenv("FFMPEG_STUB_DELAY")); raw != "" {
+		seconds, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			return fmt.Errorf("parse FFMPEG_STUB_DELAY: %w", err)
+		}
+		delay = time.Duration(seconds * float64(time.Second))
+	}
+
+	for _, currentVariant := range variants {
+		variantPlaylist := strings.ReplaceAll(outputTarget, "%v", currentVariant.name)
+		segmentFile := strings.ReplaceAll(segmentPattern, "%v", currentVariant.name)
+		segmentFile = strings.ReplaceAll(segmentFile, "%06d", "000000")
+		segmentFile = strings.ReplaceAll(segmentFile, "%d", "000000")
+
+		if err := os.MkdirAll(filepath.Dir(variantPlaylist), 0o755); err != nil {
+			return fmt.Errorf("prepare variant playlist dir: %w", err)
+		}
+		if err := os.MkdirAll(filepath.Dir(segmentFile), 0o755); err != nil {
+			return fmt.Errorf("prepare segment dir: %w", err)
+		}
+		if err := os.WriteFile(segmentFile, []byte("stub-segment-"+currentVariant.name+"\n"), 0o644); err != nil {
+			return fmt.Errorf("write segment: %w", err)
+		}
+
+		variantData := strings.Join([]string{
+			"#EXTM3U",
+			"#EXT-X-VERSION:3",
+			"#EXTINF:4.000,",
+			filepath.Base(segmentFile),
+			"#EXT-X-ENDLIST",
+			"",
+		}, "\n")
+		if err := os.WriteFile(variantPlaylist, []byte(variantData), 0o644); err != nil {
+			return fmt.Errorf("write variant playlist: %w", err)
+		}
+		time.Sleep(delay)
+	}
+
+	return nil
+}
+`
+	if err := os.WriteFile(stubSourcePath, []byte(shimSource), 0o644); err != nil {
+		t.Fatalf("write ffmpeg shim source: %v", err)
+	}
+	cmd := exec.Command("go", "build", "-o", stubBinaryPath, stubSourcePath)
+	cmd.Env = append(os.Environ(),
+		"GOTOOLCHAIN=local",
+		"GOPROXY=off",
+		"GOSUMDB=off",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("build ffmpeg shim: %v\n%s", err, output)
+	}
+	return stubBinaryPath
+}
+
+func sameExecutablePath(got string, want string) bool {
+	got = filepath.Clean(got)
+	want = filepath.Clean(want)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(got, want)
+	}
+	return got == want
+}
+
 func writeStubSample(t *testing.T, dst string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
@@ -379,6 +578,9 @@ func TestAuthorizeInvalidTokenLogsWarning(t *testing.T) {
 func TestJobProducesSegmentsAndCanBeStopped(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping transcoder lifecycle in short mode")
+	}
+	if runtime.GOOS == "windows" {
+		t.Setenv("FFMPEG_STUB_DELAY", "1")
 	}
 	useStubFFmpeg(t)
 	canAssertLiveMirror := supportsDirectorySymlink(t)

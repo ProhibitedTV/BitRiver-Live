@@ -3468,3 +3468,25 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
      - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/healthz -TimeoutSec 15` returned 200 and `status: ok`.
      - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/readyz -TimeoutSec 15` returned 200.
      - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/viewer -TimeoutSec 15` returned 200.
+
+## Main Merge Conflict Resolution
+
+1. [x] Merge the current base into this branch using branch-preferred conflict policy.
+   - Acceptance: `origin/main` is merged into `fix-viewer-discovery-polish` with conflicting hunks resolved in favor of this branch.
+   - Checks: `git merge --no-commit --no-ff -X ours origin/main`.
+   - Result: merge completed cleanly with no remaining unmerged paths; Git reported "All conflicts fixed but you are still merging."
+
+2. [x] Run conflict hygiene checks.
+   - Acceptance: no unmerged paths remain and no conflict markers remain in tracked source/docs.
+   - Checks: unmerged-path scan, conflict-marker scan, staged diff whitespace check.
+   - Result: no unmerged paths; no conflict markers found; staged diff whitespace check passed.
+   - Checks:
+     - `git diff --name-only --diff-filter=U` returned no paths.
+     - `rg -n "^(<<<<<<<|=======|>>>>>>>)" --glob "!web/viewer/node_modules/**" .` returned no matches.
+     - `git diff --cached --check` passed.
+
+3. [x] Conclude the merge.
+   - Acceptance: merge resolution is committed on `fix-viewer-discovery-polish`.
+   - Checks: `git status` after commit.
+   - Result: merge resolution committed on `fix-viewer-discovery-polish`.
+   - Check: `git status` after commit.

@@ -416,6 +416,12 @@ type authResponse struct {
 	User      userResponse `json:"user"`
 }
 
+type viewerAuthResponse struct {
+	AllowSelfSignup bool          `json:"allowSelfSignup"`
+	LogoutURL       string        `json:"logoutUrl,omitempty"`
+	User            *userResponse `json:"user,omitempty"`
+}
+
 type userResponse struct {
 	ID          string   `json:"id"`
 	DisplayName string   `json:"displayName"`
@@ -444,6 +450,34 @@ func newAuthResponse(user domain.User, expires time.Time) authResponse {
 	return authResponse{
 		ExpiresAt: expires.UTC().Format(time.RFC3339Nano),
 		User:      newUserResponse(user),
+	}
+}
+
+// ViewerMe returns viewer auth/session state without treating anonymous viewers
+// as hard failures so the viewer shell can render auth affordances in place.
+func (h *Handler) ViewerMe(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		response := viewerAuthResponse{
+			AllowSelfSignup: h.AllowSelfSignup,
+			LogoutURL:       "/api/viewer/me",
+		}
+		if user, ok := UserFromContext(r.Context()); ok {
+			payload := newUserResponse(user)
+			response.User = &payload
+		}
+		WriteJSON(w, http.StatusOK, response)
+	case http.MethodDelete:
+		token := ExtractToken(r)
+		if err := h.sessionManager().Revoke(token); err != nil {
+			WriteError(w, http.StatusInternalServerError, err)
+			return
+		}
+		h.clearMFAChallengeCookie(w, r)
+		h.ClearSessionCookie(w, r)
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		WriteMethodNotAllowed(w, r, http.MethodGet, http.MethodDelete)
 	}
 }
 

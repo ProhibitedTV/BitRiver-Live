@@ -565,4 +565,16 @@ describe("Navbar", () => {
     expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /create account/i })).not.toBeInTheDocument();
   });
+
+  test("hides the join CTA when self-signup is disabled on the current install", () => {
+    mockUseAuth.mockReturnValue({
+      ...guestAuthState(),
+      allowSelfSignup: false,
+    });
+
+    renderWithProviders(<Navbar />);
+
+    expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /join/i })).not.toBeInTheDocument();
+  });
 });

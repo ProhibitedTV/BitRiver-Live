@@ -174,6 +174,48 @@ func TestServerAppliesConfiguredSecurityHeaders(t *testing.T) {
 	assertHeaderEquals(t, res, "X-Content-Type-Options", customHeaders.ContentTypeOptions)
 }
 
+func TestServerAppliesViewerContentSecurityPolicyWhenViewerOriginConfigured(t *testing.T) {
+	t.Parallel()
+
+	handler, _ := newTestHandler(t)
+	viewer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer viewer.Close()
+
+	originReq, err := http.NewRequest(http.MethodGet, viewer.URL, nil)
+	if err != nil {
+		t.Fatalf("parse viewer origin: %v", err)
+	}
+
+	srv, err := New(handler, Config{
+		Addr:         "127.0.0.1:0",
+		TLS:          TLSConfig{},
+		RateLimit:    RateLimitConfig{},
+		CORS:         CORSConfig{},
+		Security:     SecurityConfig{},
+		ViewerOrigin: originReq.URL,
+	})
+	if err != nil {
+		t.Fatalf("New error: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/viewer", nil)
+
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+
+	res := rec.Result()
+	assertHeaderEquals(t, res, "Content-Security-Policy", defaultViewerContentSecurityPolicy(defaultFrameAncestors))
+	assertHeaderEquals(t, res, "X-Frame-Options", defaultFrameOptions)
+	assertHeaderEquals(t, res, "Referrer-Policy", defaultReferrerPolicy)
+	assertHeaderEquals(t, res, "Permissions-Policy", defaultPermissionsPolicy)
+	assertHeaderEquals(t, res, "X-Content-Type-Options", defaultContentTypeOptions)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected proxied viewer response, got %d", res.StatusCode)
+	}
+}
+
 func assertDefaultSecurityHeaders(t *testing.T, res *http.Response) {
 	t.Helper()
 	assertHeaderEquals(t, res, "Content-Security-Policy", defaultContentSecurityPolicy(defaultFrameAncestors))

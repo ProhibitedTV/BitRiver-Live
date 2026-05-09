@@ -1,0 +1,47 @@
+name: Feature request
+description: Propose an improvement to the product, docs, or developer experience.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What pain point or gap are you trying to address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: Describe the smallest change that would help.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Mention workarounds or other options you evaluated.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Deployment and quickstart
+        - Viewer UX
+        - API or control plane
+        - Docs and onboarding
+        - CI, release, or packaging
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Expectations
+      options:
+        - label: I checked that this is not already covered by existing issues or docs.
+          required: true
+        - label: I understand maintainers may ask for a narrower initial scope.
+          required: true

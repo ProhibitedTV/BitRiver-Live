@@ -15,7 +15,7 @@ export function LiveNowGrid({ channels, loading = false }: LiveNowGridProps) {
     return (
       <div className="state-panel state-panel--loading" aria-busy="true">
         <strong>Loading live channels</strong>
-        <p className="muted">Checking which creators are currently on air.</p>
+        <p className="muted">Checking who is live right now.</p>
       </div>
     );
   }

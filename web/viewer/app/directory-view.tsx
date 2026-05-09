@@ -191,6 +191,28 @@ export function HomePageView({
     ? `We couldn't load the personalized discovery rows right now: ${homeError}`
     : null;
   const directoryErrorMessage = directoryError ? `We couldn't load the directory right now: ${directoryError}` : null;
+  const heroEyebrow = hasDiscoveryContent ? "Self-hosted live" : "First stream";
+  const heroTitle = liveNow.length > 0
+    ? "Watch live or launch your own channel"
+    : hasChannelsToBrowse
+      ? "Browse channels or launch your own"
+      : "Launch your first self-hosted channel";
+  const heroLede = liveNow.length > 0
+    ? "Watch what is live now, then use creator setup when you are ready to stream from your own stack."
+    : hasChannelsToBrowse
+      ? "Browse what is already on this install, then use creator setup when you are ready to start streaming yourself."
+      : "Your install is ready. Create a channel, copy the OBS settings, and share the viewer link once the preview is live.";
+  const primaryHeroAction = liveNow.length > 0
+    ? { href: "#live-now", label: "Watch live now" }
+    : hasChannelsToBrowse
+      ? { href: "#directory", label: "Browse channels" }
+      : { href: "/creator/getting-started", label: "Start creator setup" };
+  const secondaryHeroAction = hasChannelsToBrowse
+    ? { href: "/creator/getting-started", label: "Start streaming" }
+    : { href: "#directory", label: "Browse directory" };
+  const featuredEmptyMessage = hasDiscoveryContent
+    ? "Featured streams will show up here as soon as one is available."
+    : "No one is live yet. Use creator setup to bring the first channel online, then come back here to watch it like a viewer.";
 
   return (
     <div className="home-page">
@@ -369,6 +391,18 @@ export function HomePageView({
             <div className="state-panel state-panel--error" role="alert">
               <strong>Directory unavailable</strong>
               <p className="muted">{directoryErrorMessage}</p>
+            </div>
+          ) : channels.length === 0 && !query ? (
+            <div className="state-panel">
+              <strong>No channels yet</strong>
+              <p className="muted">
+                Start with creator setup, go live from OBS, and this directory will become the public home for every stream on your install.
+              </p>
+              <div className="home-hero__spotlight-actions">
+                <Link href="/creator/getting-started" className="primary-button">
+                  Start creator setup
+                </Link>
+              </div>
             </div>
           ) : (
             <DirectoryGrid channels={channels} />

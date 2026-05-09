@@ -66,22 +66,6 @@ export default function CreatorGettingStartedPage() {
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveError, setLiveError] = useState<string | undefined>();
   const [copyMessage, setCopyMessage] = useState<string | undefined>();
-  const [manualChecks, setManualChecks] = useState<ManualChecks>({
-    obsConfigured: false,
-    viewerLinkShared: false,
-    vodUploaded: false,
-  });
-
-  useEffect(() => {
-    setManualChecks(loadStoredChecks());
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.localStorage.setItem(MANUAL_CHECKS_STORAGE_KEY, JSON.stringify(manualChecks));
-  }, [manualChecks]);
 
   const loadChannels = useCallback(async () => {
     if (!user) {
@@ -152,7 +136,6 @@ export default function CreatorGettingStartedPage() {
   }, [refreshLiveStatus, selectedChannel?.id]);
 
   const liveSetupLink = selectedChannel ? `/creator/live/${selectedChannel.id}` : "/creator";
-  const uploadsLink = selectedChannel ? `/creator/uploads/${selectedChannel.id}` : "/creator";
   const viewerLink = selectedChannel ? buildViewerPath(`/channels/${selectedChannel.id}`) : buildViewerPath("/browse");
   const hasChannel = Boolean(selectedChannel?.id);
   const needsFirstChannel = Boolean(user) && !channelsLoading && channels.length === 0;
@@ -210,8 +193,8 @@ export default function CreatorGettingStartedPage() {
     <div className="workspace-shell">
       <section className="workspace-hero">
         <div className="workspace-hero__copy">
-          <span className="page-eyebrow">Creator onboarding</span>
-          <h2>Get your first stream ready without guesswork</h2>
+          <span className="page-eyebrow">Creator setup</span>
+          <h2>Get your first stream live</h2>
           <p className="muted">
             This checklist moves from first-channel setup to OBS to public sharing so you always know the next move.
           </p>
@@ -381,10 +364,10 @@ export default function CreatorGettingStartedPage() {
         <Card className="workspace-card step-card" aria-labelledby="creator-step-2">
           <CardHeader className="workspace-card__header">
             <div className="step-card__status">
-              <h3 id="creator-step-2">2) Copy OBS settings</h3>
-              <Badge tone={step2Done ? "success" : "neutral"}>{step2Done ? "Complete" : "Manual confirmation"}</Badge>
+              <h3 id="creator-step-2">2) Copy your stream settings</h3>
+              <Badge tone={hasChannel ? "info" : "neutral"}>{hasChannel ? "Next step" : "Choose a channel first"}</Badge>
             </div>
-            <p className="muted">Open the guided live setup to copy the ingest endpoint and stream key into OBS.</p>
+            <p className="muted">The live setup page gives you the OBS server URL, stream key, preview, and share link in one place.</p>
           </CardHeader>
           <CardBody className="workspace-card__header">
             {hasChannel ? (
@@ -414,10 +397,10 @@ export default function CreatorGettingStartedPage() {
         <Card className="workspace-card step-card" aria-labelledby="creator-step-3">
           <CardHeader className="workspace-card__header">
             <div className="step-card__status">
-              <h3 id="creator-step-3">3) Go live</h3>
-              <Badge tone={step3Done ? "success" : "info"}>{step3Done ? "Complete" : "Pending"}</Badge>
+              <h3 id="creator-step-3">3) Go live and share the channel</h3>
+              <Badge tone={liveStatusTone}>{liveStatusLabel}</Badge>
             </div>
-            <p className="muted">We read the public playback signal so you can confirm the platform is receiving your stream.</p>
+            <p className="muted">Once OBS is connected, check the live status here and copy the same viewer link your audience will use.</p>
           </CardHeader>
           <CardBody className="workspace-card__header">
             {hasChannel ? (

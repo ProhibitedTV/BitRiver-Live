@@ -144,10 +144,9 @@ describe("CreatorLivePage", () => {
 
     expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual([
       "1) Channel",
-      "2) OBS Setup",
-      "3) Test Stream",
-      "4) Preview",
-      "5) Share",
+      "2) Stream settings",
+      "3) Go live",
+      "4) Share",
     ]);
 
     expect(screen.getByLabelText("Current channel")).toHaveValue("Main Channel");
@@ -155,11 +154,11 @@ describe("CreatorLivePage", () => {
     expect(screen.getByLabelText("Switch channel")).toHaveValue("chan-1");
     expect(screen.getByLabelText("Preferred ingest URL")).toHaveValue("rtmp://ingest.example.com/live");
     expect(screen.getByLabelText("Stream key")).toHaveValue("********");
-    expect(screen.getByLabelText("OBS settings block")).toHaveValue(
-      "Service: Custom\nServer: rtmp://ingest.example.com/live\nStream Key: [hidden - reveal to copy]",
-    );
-    expect(screen.getByText(/this page refreshes the current live signals every 4 seconds/i)).toBeInTheDocument();
-    expect(screen.getByText(/BitRiver is receiving your stream, but the preview player is still warming up/i)).toBeInTheDocument();
+    expect(screen.getByText(/service: custom/i)).toBeInTheDocument();
+    expect(screen.getByText(/server: rtmp:\/\/ingest\.example\.com\/live/i)).toBeInTheDocument();
+    expect(screen.getByText(/stream key: reveal or copy it above when you need it/i)).toBeInTheDocument();
+    expect(screen.getByText(/this page checks the signal every 4 seconds/i)).toBeInTheDocument();
+    expect(screen.getByText(/keep OBS running while the preview starts/i)).toBeInTheDocument();
     expect(screen.getByTestId("creator-preview-player")).toHaveTextContent(
       JSON.stringify({ channelId: "chan-1", live: false, liveState: "starting" }),
     );
@@ -171,9 +170,6 @@ describe("CreatorLivePage", () => {
 
     await user.click(screen.getByRole("button", { name: "Reveal" }));
     await waitFor(() => expect(screen.getByLabelText("Stream key")).toHaveValue("sk_live_123"));
-    expect(screen.getByLabelText("OBS settings block")).toHaveValue(
-      "Service: Custom\nServer: rtmp://ingest.example.com/live\nStream Key: sk_live_123",
-    );
 
     await user.click(screen.getByRole("button", { name: "Refresh now" }));
     await waitFor(() => expect(reload).toHaveBeenCalledWith(true));

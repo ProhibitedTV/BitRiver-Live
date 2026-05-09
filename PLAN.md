@@ -1718,3 +1718,23 @@ Fix the deployed OME ingest health failure where BitRiver reports OvenMediaEngin
 - `docker compose --env-file .env -f deploy/docker-compose.yml ps`
 - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/healthz -TimeoutSec 15`
 - `Invoke-WebRequest -UseBasicParsing http://localhost:8080/readyz -TimeoutSec 15`
+
+## Scope: Main Merge Conflict Resolution
+
+### Summary
+Merge the current `origin/main` into `fix-viewer-discovery-polish` and resolve any conflicts in favor of this branch. Keep this pass limited to conflict resolution and merge hygiene; do not introduce new product behavior beyond the merge result.
+
+### Assumptions
+- `origin/main` is the intended base branch for the PR conflict.
+- "Our branch" means the currently checked out `fix-viewer-discovery-polish` branch.
+- The right conflict policy is Git's `-X ours` behavior: keep incoming non-conflicting base changes, but choose this branch's hunks where both sides touch the same lines.
+
+### Risks
+- The base branch carries a large number of non-conflicting file additions, removals, and edits, so the resulting merge commit is broad even though conflict resolution itself is mechanical.
+- Full verification may be expensive after a broad merge; run lightweight conflict hygiene unless a later pass asks for full gates.
+
+### Test Plan
+- `git merge --no-commit --no-ff -X ours origin/main`
+- `git diff --name-only --diff-filter=U`
+- `rg -n "<<<<<<<|=======|>>>>>>>" --glob "!web/viewer/node_modules/**" .`
+- `git diff --cached --check`

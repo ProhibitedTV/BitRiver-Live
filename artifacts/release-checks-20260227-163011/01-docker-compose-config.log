@@ -1,5 +1,0 @@
-==> Command: docker compose -f deploy/docker-compose.yml config
-==> Started: 2026-02-27T16:30:11+00:00
-bash: command not found: docker
-==> Exit code: 127
-==> Finished: 2026-02-27T16:30:11+00:00

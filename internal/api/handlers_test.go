@@ -166,6 +166,23 @@ func (r ingestHealthRepository) LastIngestHealth() ([]ingest.HealthStatus, time.
 	return r.health, time.Now()
 }
 
+type trackingIngestHealthRepository struct {
+	storage.Repository
+	cached    []ingest.HealthStatus
+	live      []ingest.HealthStatus
+	cachedAt  time.Time
+	liveCalls int
+}
+
+func (r *trackingIngestHealthRepository) IngestHealth(context.Context) []ingest.HealthStatus {
+	r.liveCalls++
+	return append([]ingest.HealthStatus(nil), r.live...)
+}
+
+func (r *trackingIngestHealthRepository) LastIngestHealth() ([]ingest.HealthStatus, time.Time) {
+	return append([]ingest.HealthStatus(nil), r.cached...), r.cachedAt
+}
+
 func (r ingestUnavailableRepo) StartStream(channelID string, renditions []string) (domain.StreamSession, error) {
 	return domain.StreamSession{}, storage.ErrIngestControllerUnavailable
 }
@@ -961,23 +978,22 @@ func TestDirectoryFiltersChannelsByQuery(t *testing.T) {
 
 	cases := []struct {
 		name    string
-		query   string
+		path    string
 		wantIDs []string
 	}{
-		{name: "no filter", query: "", wantIDs: []string{lounge.ID, arcade.ID, beats.ID}},
-		{name: "title filter", query: "lounge", wantIDs: []string{lounge.ID}},
-		{name: "owner filter", query: "RETROMASTER", wantIDs: []string{arcade.ID}},
-		{name: "tag filter", query: "MuSiC", wantIDs: []string{beats.ID}},
-		{name: "no matches", query: "unknown", wantIDs: []string{}},
+		{name: "no filter", path: "/api/directory", wantIDs: []string{lounge.ID, arcade.ID, beats.ID}},
+		{name: "title filter", path: "/api/directory?q=lounge", wantIDs: []string{lounge.ID}},
+		{name: "owner filter", path: "/api/directory?q=RETROMASTER", wantIDs: []string{arcade.ID}},
+		{name: "tag filter", path: "/api/directory?q=MuSiC", wantIDs: []string{beats.ID}},
+		{name: "category search filter", path: "/api/directory?q=TECHNOLOGY", wantIDs: []string{lounge.ID}},
+		{name: "exact category filter", path: "/api/directory?category=music", wantIDs: []string{beats.ID}},
+		{name: "query within category filter", path: "/api/directory?q=beats&category=music", wantIDs: []string{beats.ID}},
+		{name: "no matches", path: "/api/directory?q=unknown", wantIDs: []string{}},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			path := "/api/directory"
-			if strings.TrimSpace(tc.query) != "" {
-				path = fmt.Sprintf("/api/directory?q=%s", tc.query)
-			}
-			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 			rec := httptest.NewRecorder()
 			handler.Directory(rec, req)
 			if rec.Code != http.StatusOK {
@@ -1736,6 +1752,78 @@ func TestHealthReportsIngestStatus(t *testing.T) {
 	}
 }
 
+func TestHealthUsesCachedIngestStatusWhenAvailable(t *testing.T) {
+	handler, store := newTestHandler(t)
+	repo := &trackingIngestHealthRepository{
+		Repository: store,
+		cached:     []ingest.HealthStatus{{Component: "ovenmediaengine", Status: "ok"}},
+		live:       []ingest.HealthStatus{{Component: "ovenmediaengine", Status: "error", Detail: "should not be used"}},
+		cachedAt:   time.Now().UTC().Add(-1 * time.Minute),
+	}
+	handler.SystemService = repo
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Health(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if repo.liveCalls != 0 {
+		t.Fatalf("expected /healthz to reuse cached ingest snapshot, got %d live calls", repo.liveCalls)
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode health payload: %v", err)
+	}
+	if payload["status"] != "ok" {
+		t.Fatalf("expected cached ingest health to keep overall status ok, got %v", payload["status"])
+	}
+
+	services, ok := payload["services"].([]interface{})
+	if !ok || len(services) != 1 {
+		t.Fatalf("expected one cached service entry, got %T (%d)", payload["services"], len(services))
+	}
+	service, ok := services[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("unexpected service entry type %T", services[0])
+	}
+	if status, _ := service["status"].(string); status != "ok" {
+		t.Fatalf("expected cached service status ok, got %s", status)
+	}
+}
+
+func TestHealthFallsBackToLiveIngestStatusWhenCacheMissing(t *testing.T) {
+	handler, store := newTestHandler(t)
+	repo := &trackingIngestHealthRepository{
+		Repository: store,
+		live:       []ingest.HealthStatus{{Component: "ovenmediaengine", Status: "error", Detail: "offline"}},
+	}
+	handler.SystemService = repo
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Health(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if repo.liveCalls != 1 {
+		t.Fatalf("expected /healthz to refresh ingest health when cache is empty, got %d live calls", repo.liveCalls)
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode health payload: %v", err)
+	}
+	if payload["status"] != "degraded" {
+		t.Fatalf("expected live ingest failure to degrade health payload, got %v", payload["status"])
+	}
+}
+
 func TestHealthIncludesDependencyStatuses(t *testing.T) {
 	handler, _ := newTestHandler(t)
 	handler.RateLimiter = pingFunc(func(context.Context) error { return nil })
@@ -2013,6 +2101,54 @@ func TestStatusAggregatesReadinessAndIngest(t *testing.T) {
 		if check.CheckedAt.IsZero() {
 			t.Fatalf("expected checkedAt to be set for %s", check.Name)
 		}
+	}
+}
+
+func TestStatusRefreshesIngestHealthEvenWhenCacheExists(t *testing.T) {
+	handler, store := newTestHandler(t)
+	repo := &trackingIngestHealthRepository{
+		Repository: store,
+		cached:     []ingest.HealthStatus{{Component: "ovenmediaengine", Status: "ok"}},
+		live:       []ingest.HealthStatus{{Component: "ovenmediaengine", Status: "error", Detail: "offline"}},
+		cachedAt:   time.Now().UTC().Add(-1 * time.Minute),
+	}
+	handler.SystemService = repo
+
+	req := httptest.NewRequest(http.MethodGet, "/status", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Status(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if repo.liveCalls != 1 {
+		t.Fatalf("expected /status to refresh ingest health, got %d live calls", repo.liveCalls)
+	}
+
+	var payload statusResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode status payload: %v", err)
+	}
+	if payload.Status != "down" {
+		t.Fatalf("expected live ingest failure to mark status payload down, got %s", payload.Status)
+	}
+
+	var found bool
+	for _, check := range payload.Checks {
+		if check.Name != "ovenmediaengine" {
+			continue
+		}
+		found = true
+		if check.Status != "down" {
+			t.Fatalf("expected refreshed ovenmediaengine check to be down, got %s", check.Status)
+		}
+		if check.Detail != "offline" {
+			t.Fatalf("expected refreshed ovenmediaengine detail to match live probe, got %q", check.Detail)
+		}
+	}
+	if !found {
+		t.Fatalf("expected ovenmediaengine status check in payload")
 	}
 }
 

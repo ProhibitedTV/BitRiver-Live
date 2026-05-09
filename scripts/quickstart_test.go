@@ -103,9 +103,17 @@ func TestQuickstartDelegatesToCli(t *testing.T) {
 	if err := os.MkdirAll(stubBin, 0o755); err != nil {
 		t.Fatalf("create stub bin: %v", err)
 	}
-	goStub := "#!/usr/bin/env bash\nset -euo pipefail\necho \"$(pwd):$*\" >>\"$GO_LOG\"\n"
-	if err := os.WriteFile(filepath.Join(stubBin, "go"), []byte(goStub), 0o755); err != nil {
+	goStubPath := filepath.Join(stubBin, "go")
+	goStubBytes := []byte("#!/usr/bin/env bash\nset -euo pipefail\necho \"$(pwd):$*\" >>\"$GO_LOG\"\n")
+	if err := os.WriteFile(goStubPath, goStubBytes, 0o755); err != nil {
 		t.Fatalf("write go stub: %v", err)
+	}
+	if runtime.GOOS == "windows" {
+		goCmdStubPath := filepath.Join(stubBin, "go.cmd")
+		goCmdStubBytes := []byte("@echo off\r\necho %CD%:%*>>\"%GO_LOG%\"\r\n")
+		if err := os.WriteFile(goCmdStubPath, goCmdStubBytes, 0o755); err != nil {
+			t.Fatalf("write go.cmd stub: %v", err)
+		}
 	}
 
 	bash := testBash(t)
@@ -256,6 +264,18 @@ func TestPowerShellQuickstartPropagatesCliExitCodes(t *testing.T) {
 	}
 	if !strings.Contains(script, "$processPATH = [System.Environment]::GetEnvironmentVariable('PATH', 'Process')") {
 		t.Fatalf("expected PowerShell quickstart wrapper to capture the process PATH value before normalizing environment casing")
+	}
+	if !strings.Contains(script, "$processGOCACHE = [System.Environment]::GetEnvironmentVariable('GOCACHE', 'Process')") {
+		t.Fatalf("expected PowerShell quickstart wrapper to capture the process GOCACHE value before launching the CLI")
+	}
+	if !strings.Contains(script, "bitriver-live-go-build-cache") {
+		t.Fatalf("expected PowerShell quickstart wrapper to provide a writable fallback GOCACHE location")
+	}
+	if !strings.Contains(script, "SetEnvironmentVariable('GOCACHE', $goCacheRoot, 'Process')") {
+		t.Fatalf("expected PowerShell quickstart wrapper to set GOCACHE before launching the CLI")
+	}
+	if !strings.Contains(script, "SetEnvironmentVariable('GOCACHE', $processGOCACHE, 'Process')") {
+		t.Fatalf("expected PowerShell quickstart wrapper to restore the original GOCACHE value after Start-Process")
 	}
 	if !strings.Contains(script, "SetEnvironmentVariable('Path', $normalizedPath, 'Process')") {
 		t.Fatalf("expected PowerShell quickstart wrapper to preserve a canonical Path value for the child process")

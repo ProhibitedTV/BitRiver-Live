@@ -231,13 +231,13 @@ func (r *Recorder) ObserveViewerQoE(label ViewerQoELabel) {
 
 // ActiveStreams exposes the current gauge of concurrently active streams.
 func (r *Recorder) ActiveStreams() int64 {
-	return r.activeStreams.Load()
+	return nonNegativeGaugeValue(r.activeStreams.Load())
 }
 
 // ActiveTranscoderJobs exposes the current number of active transcoder jobs
 // tracked by the recorder.
 func (r *Recorder) ActiveTranscoderJobs() int64 {
-	return r.activeTranscoder.Load()
+	return nonNegativeGaugeValue(r.activeTranscoder.Load())
 }
 
 // SetIngestHealth normalizes ingest service identifiers, maps status strings to
@@ -288,7 +288,7 @@ func (r *Recorder) TranscoderJobCounts() (events map[TranscoderJobLabel]uint64, 
 	for k, v := range r.transcoderEvents {
 		events[k] = v
 	}
-	return events, r.activeTranscoder.Load()
+	return events, nonNegativeGaugeValue(r.activeTranscoder.Load())
 }
 
 // Reset clears all counters and gauges on the recorder. It is intended for
@@ -385,7 +385,7 @@ func (r *Recorder) Write(w io.Writer) {
 
 	_, _ = fmt.Fprintln(w, "# HELP bitriver_active_streams Current number of streams marked as live")
 	_, _ = fmt.Fprintln(w, "# TYPE bitriver_active_streams gauge")
-	_, _ = fmt.Fprintf(w, "bitriver_active_streams %d\n", r.activeStreams.Load())
+	_, _ = fmt.Fprintf(w, "bitriver_active_streams %d\n", nonNegativeGaugeValue(r.activeStreams.Load()))
 
 	_, _ = fmt.Fprintln(w, "# HELP bitriver_ingest_health Health status reported by ingest dependencies (1=ok,0=disabled,-1=degraded)")
 	_, _ = fmt.Fprintln(w, "# TYPE bitriver_ingest_health gauge")
@@ -425,7 +425,7 @@ func (r *Recorder) Write(w io.Writer) {
 
 	_, _ = fmt.Fprintln(w, "# HELP bitriver_transcoder_active_jobs Current number of active transcoder jobs")
 	_, _ = fmt.Fprintln(w, "# TYPE bitriver_transcoder_active_jobs gauge")
-	_, _ = fmt.Fprintf(w, "bitriver_transcoder_active_jobs %d\n", r.activeTranscoder.Load())
+	_, _ = fmt.Fprintf(w, "bitriver_transcoder_active_jobs %d\n", nonNegativeGaugeValue(r.activeTranscoder.Load()))
 
 	_, _ = fmt.Fprintln(w, "# HELP bitriver_monetization_events_total Monetization events by type")
 	_, _ = fmt.Fprintln(w, "# TYPE bitriver_monetization_events_total counter")
@@ -606,15 +606,14 @@ func looksLikeIdentifier(segment string) bool {
 }
 
 func (r *Recorder) decrementGauge(gauge *atomic.Int64) {
-	for {
-		current := gauge.Load()
-		if current <= 0 {
-			return
-		}
-		if gauge.CompareAndSwap(current, current-1) {
-			return
-		}
+	gauge.Add(-1)
+}
+
+func nonNegativeGaugeValue(value int64) int64 {
+	if value < 0 {
+		return 0
 	}
+	return value
 }
 
 func normalizeName(name string) string {

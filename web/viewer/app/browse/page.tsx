@@ -29,11 +29,11 @@ export default function BrowsePage() {
   const [filter, setFilter] = useState<FilterKey>(null);
   const [queryHydrated, setQueryHydrated] = useState(false);
 
-  const loadChannels = useCallback(async (search = "") => {
+  const loadChannels = useCallback(async (search = "", category = "") => {
     try {
       setLoading(true);
       setError(undefined);
-      const response = await loadDirectoryChannels(search);
+      const response = await loadDirectoryChannels(search, category);
       setChannels(response.channels);
     } catch (err) {
       setError(mapDirectoryError(err));
@@ -47,8 +47,8 @@ export default function BrowsePage() {
       return;
     }
 
-    void loadChannels(query);
-  }, [loadChannels, query, queryHydrated]);
+    void loadChannels(query, categoryFromParams);
+  }, [categoryFromParams, loadChannels, query, queryHydrated]);
 
   useEffect(() => {
     const queryChanged = lastQueryFromParams.current !== searchParamQuery;

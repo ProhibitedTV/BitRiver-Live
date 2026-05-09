@@ -12,6 +12,7 @@ bin/
 *.so
 *.dylib
 .gocache/
+/.gocache-*/
 
 # Editors
 .idea/
@@ -21,6 +22,11 @@ bin/
 # App data
 /data/
 .env
+/artifacts/
+/.artifacts/
+/.tmp/
+/.codex-tmp/
+/dist/
 /deploy/srs/conf/srs.generated.conf
 /web/viewer/.next/
 /web/viewer/playwright-report/

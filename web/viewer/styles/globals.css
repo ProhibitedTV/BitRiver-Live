@@ -107,6 +107,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -4349,11 +4353,17 @@ button:focus-visible {
 }
 
 .viewer-shell__content-inner {
+  max-width: none;
+  margin: 0;
+  padding: 0;
   gap: var(--space-2xl);
   padding-top: var(--viewer-top-offset);
 }
 
 .viewer-sidebar {
+  display: grid;
+  gap: var(--space-md);
+  padding: 1rem;
   border-radius: 1.25rem;
   border-color: var(--panel-outline);
   background: linear-gradient(180deg, rgba(15, 18, 28, 0.96), rgba(9, 11, 17, 0.98));
@@ -4367,18 +4377,37 @@ button:focus-visible {
   padding: 0.95rem 1.05rem;
 }
 
+.viewer-sidebar__intro {
+  margin-bottom: var(--space-md);
+  font-size: var(--font-size-xs);
+}
+
 .viewer-shell__toggle {
   min-height: 2.75rem;
 }
 
+.following-sidebar {
+  gap: 0.85rem;
+}
+
 .following-sidebar__header {
+  display: grid;
+  gap: 0.55rem;
   align-items: flex-start;
+  padding-bottom: var(--space-xs);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
 }
 
 .following-sidebar__title-row {
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
+}
+
+.following-sidebar__header h3 {
+  margin: 0;
+  font-size: clamp(1.35rem, 1.7vw, 1.6rem);
+  letter-spacing: -0.02em;
 }
 
 .following-sidebar__count {
@@ -4397,11 +4426,30 @@ button:focus-visible {
 }
 
 .following-sidebar__summary {
-  max-width: 24ch;
+  max-width: none;
+  margin: 0;
+}
+
+.following-sidebar__state {
+  gap: var(--space-sm);
+}
+
+.following-sidebar__state--prompt {
+  border-style: solid;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="light"] .following-sidebar__state--prompt {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.following-sidebar__state--prompt .primary-button {
+  width: 100%;
+  justify-content: center;
 }
 
 .following-sidebar__link {
-  padding: 0.8rem;
+  padding: 0.7rem;
   border-radius: 1rem;
   background: rgba(255, 255, 255, 0.03);
 }
@@ -4444,9 +4492,13 @@ button:focus-visible {
 
 @media (min-width: 1024px) {
   .viewer-shell {
-    grid-template-columns: minmax(280px, 304px) minmax(0, 1fr);
-    gap: var(--space-xl);
-    padding-inline: var(--space-lg);
+    grid-template-columns: minmax(236px, 264px) minmax(0, 1fr);
+    gap: var(--space-lg);
+    padding-inline: var(--space-md);
+  }
+
+  .following-sidebar__footnote {
+    display: none;
   }
 }
 

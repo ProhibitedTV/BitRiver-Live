@@ -467,9 +467,9 @@ export function Navbar() {
 
           <div className="navbar-right">
             {isAdmin && (
-              <a href={adminUrl} className="nav-cta nav-cta--secondary nav-utility-link" onClick={closeMenu}>
+              <Link href={adminUrl} className="nav-cta nav-cta--secondary nav-utility-link" onClick={closeMenu}>
                 Control center
-              </a>
+              </Link>
             )}
             {canAccessCreatorTools && (
               <Link href={studioHref} className="nav-cta nav-cta--primary" onClick={closeMenu}>
@@ -525,9 +525,9 @@ export function Navbar() {
                     </Link>
                   )}
                     {isAdmin && (
-                      <a href={adminUrl} className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
+                      <Link href={adminUrl} className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
                         Control center
-                      </a>
+                      </Link>
                     )}
                     <button
                       type="button"
@@ -632,9 +632,9 @@ export function Navbar() {
             </Link>
           )}
           {isAdmin && (
-            <a href={adminUrl} className="nav-drawer__link" onClick={closeMenu}>
+            <Link href={adminUrl} className="nav-drawer__link" onClick={closeMenu}>
               Control center
-            </a>
+            </Link>
           )}
         </div>
 

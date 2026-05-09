@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/mail"
+	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -19,6 +21,9 @@ import (
 )
 
 var entropyRead = rand.Read
+var interactivePromptInput io.Reader = os.Stdin
+var interactivePromptOutput io.Writer = os.Stdout
+var interactivePromptAvailable = stdinIsTerminal
 
 // This file contains environment template helpers, secret generation, and
 // env validation rules used by quickstart and installer flows.
@@ -278,13 +283,13 @@ func promptForAdminEmail(existing map[string]string) {
 	}
 
 	defaultEmail := defaultEnvSecrets.adminEmail
-	if !stdinIsTerminal() {
+	if !interactivePromptAvailable() {
 		existing["BITRIVER_LIVE_ADMIN_EMAIL"] = defaultEmail
 		return
 	}
 
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Fprintf(os.Stdout, "Enter the administrator email for BitRiver Live [%s]: ", defaultEmail)
+	reader := bufio.NewReader(interactivePromptInput)
+	fmt.Fprintf(interactivePromptOutput, "Enter the administrator email for BitRiver Live [%s]: ", defaultEmail)
 	line, err := reader.ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
 		existing["BITRIVER_LIVE_ADMIN_EMAIL"] = defaultEmail
@@ -295,6 +300,298 @@ func promptForAdminEmail(existing map[string]string) {
 		email = defaultEmail
 	}
 	existing["BITRIVER_LIVE_ADMIN_EMAIL"] = email
+}
+
+func promptForQuickstartWizard(existing map[string]string, envPath string) error {
+	if !interactivePromptAvailable() {
+		return errors.New("the quickstart wizard requires an interactive terminal")
+	}
+
+	reader := bufio.NewReader(interactivePromptInput)
+	fmt.Fprintln(interactivePromptOutput, "BitRiver Live first-run wizard")
+	fmt.Fprintf(interactivePromptOutput, "Updating %s with guided quickstart settings. Missing required secrets will still be generated automatically.\n\n", envPath)
+
+	adminEmail, err := promptRequiredWizardValue(reader, "Administrator email", wizardAdminEmailDefault(existing), validateWizardEmail)
+	if err != nil {
+		return err
+	}
+	viewerURL, err := promptRequiredWizardValue(reader, "Public viewer URL (example: https://stream.example.com/viewer)", wizardPublicURLDefault(existing, "NEXT_PUBLIC_VIEWER_URL"), func(value string) error {
+		return validateWizardPublicURL("Public viewer URL", value)
+	})
+	if err != nil {
+		return err
+	}
+	publicAPIURL, err := promptOptionalWizardValue(reader, "Public API URL (optional; leave blank to keep same-origin proxying)", wizardPublicURLDefault(existing, "NEXT_PUBLIC_API_BASE_URL"), func(value string) error {
+		return validateWizardPublicURL("Public API URL", value)
+	})
+	if err != nil {
+		return err
+	}
+	apiPort, err := promptRequiredWizardValue(reader, "API/control port", wizardAPIPortDefault(existing), validateWizardPort)
+	if err != nil {
+		return err
+	}
+	omeBind, err := promptRequiredWizardValue(reader, "OME bind host or IP", wizardHostDefault(existing, "BITRIVER_OME_BIND"), func(value string) error {
+		return validateWizardHostValue("OME bind host or IP", value)
+	})
+	if err != nil {
+		return err
+	}
+	omeIP, err := promptRequiredWizardValue(reader, "OME public host or IP", wizardHostDefault(existing, "BITRIVER_OME_IP"), func(value string) error {
+		return validateWizardHostValue("OME public host or IP", value)
+	})
+	if err != nil {
+		return err
+	}
+	transcoderURL, err := promptRequiredWizardValue(reader, "Transcoder public base URL (example: https://cdn.example.com/hls)", wizardPublicURLDefault(existing, "BITRIVER_TRANSCODER_PUBLIC_BASE_URL"), func(value string) error {
+		return validateWizardPublicURL("Transcoder public base URL", value)
+	})
+	if err != nil {
+		return err
+	}
+	allowSelfSignup, err := promptWizardBool(reader, "Allow viewers to self-register accounts", wizardAllowSelfSignupDefault(existing))
+	if err != nil {
+		return err
+	}
+
+	existing["BITRIVER_LIVE_ADMIN_EMAIL"] = adminEmail
+	existing["NEXT_PUBLIC_VIEWER_URL"] = viewerURL
+	existing["NEXT_PUBLIC_API_BASE_URL"] = publicAPIURL
+	existing["BITRIVER_LIVE_PORT"] = apiPort
+	existing["BITRIVER_LIVE_ADDR"] = fmt.Sprintf(":%s", apiPort)
+	existing["BITRIVER_OME_BIND"] = omeBind
+	existing["BITRIVER_OME_IP"] = omeIP
+	existing["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"] = transcoderURL
+	existing["BITRIVER_LIVE_ALLOW_SELF_SIGNUP"] = strconv.FormatBool(allowSelfSignup)
+
+	fmt.Fprintln(interactivePromptOutput)
+	fmt.Fprintln(interactivePromptOutput, "Wizard selections:")
+	fmt.Fprintf(interactivePromptOutput, "  Admin email: %s\n", adminEmail)
+	fmt.Fprintf(interactivePromptOutput, "  Viewer URL: %s\n", viewerURL)
+	if publicAPIURL == "" {
+		fmt.Fprintln(interactivePromptOutput, "  Public API URL: (same-origin proxy)")
+	} else {
+		fmt.Fprintf(interactivePromptOutput, "  Public API URL: %s\n", publicAPIURL)
+	}
+	fmt.Fprintf(interactivePromptOutput, "  API/control port: %s\n", apiPort)
+	fmt.Fprintf(interactivePromptOutput, "  OME bind host/IP: %s\n", omeBind)
+	fmt.Fprintf(interactivePromptOutput, "  OME public host/IP: %s\n", omeIP)
+	fmt.Fprintf(interactivePromptOutput, "  Transcoder public base URL: %s\n", transcoderURL)
+	fmt.Fprintf(interactivePromptOutput, "  Self-signup: %t\n", allowSelfSignup)
+	fmt.Fprintln(interactivePromptOutput, "  Secrets: existing values stay in place; any missing required secrets will still be generated during env init.")
+	fmt.Fprintln(interactivePromptOutput)
+
+	return nil
+}
+
+func promptRequiredWizardValue(reader *bufio.Reader, label, defaultValue string, validate func(string) error) (string, error) {
+	for {
+		value, err := promptWizardValue(reader, label, defaultValue)
+		if err != nil {
+			return "", err
+		}
+		if value == "" {
+			fmt.Fprintln(interactivePromptOutput, "  A value is required.")
+			continue
+		}
+		if err := validate(value); err != nil {
+			fmt.Fprintf(interactivePromptOutput, "  %s\n", err)
+			continue
+		}
+		return value, nil
+	}
+}
+
+func promptOptionalWizardValue(reader *bufio.Reader, label, defaultValue string, validate func(string) error) (string, error) {
+	for {
+		value, err := promptWizardValue(reader, label, defaultValue)
+		if err != nil {
+			return "", err
+		}
+		if value == "" {
+			return "", nil
+		}
+		if err := validate(value); err != nil {
+			fmt.Fprintf(interactivePromptOutput, "  %s\n", err)
+			continue
+		}
+		return value, nil
+	}
+}
+
+func promptWizardValue(reader *bufio.Reader, label, defaultValue string) (string, error) {
+	if defaultValue != "" {
+		fmt.Fprintf(interactivePromptOutput, "%s [%s]: ", label, defaultValue)
+	} else {
+		fmt.Fprintf(interactivePromptOutput, "%s: ", label)
+	}
+
+	line, err := reader.ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", err
+	}
+	if errors.Is(err, io.EOF) && line == "" {
+		return "", io.EOF
+	}
+
+	value := strings.TrimSpace(line)
+	if value == "" {
+		value = strings.TrimSpace(defaultValue)
+	}
+	return value, nil
+}
+
+func promptWizardBool(reader *bufio.Reader, label string, defaultValue bool) (bool, error) {
+	defaultHint := "y/N"
+	if defaultValue {
+		defaultHint = "Y/n"
+	}
+
+	for {
+		fmt.Fprintf(interactivePromptOutput, "%s [%s]: ", label, defaultHint)
+		line, err := reader.ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return false, err
+		}
+		if errors.Is(err, io.EOF) && line == "" {
+			return false, io.EOF
+		}
+
+		reply := strings.ToLower(strings.TrimSpace(line))
+		if reply == "" {
+			return defaultValue, nil
+		}
+
+		switch reply {
+		case "y", "yes", "true":
+			return true, nil
+		case "n", "no", "false":
+			return false, nil
+		default:
+			fmt.Fprintln(interactivePromptOutput, "  Please answer yes or no.")
+		}
+	}
+}
+
+func wizardAdminEmailDefault(existing map[string]string) string {
+	current := strings.TrimSpace(existing["BITRIVER_LIVE_ADMIN_EMAIL"])
+	if current != "" && !isForbiddenValue("BITRIVER_LIVE_ADMIN_EMAIL", current) {
+		if err := validateWizardEmail(current); err == nil {
+			return current
+		}
+	}
+	return defaultEnvSecrets.adminEmail
+}
+
+func wizardPublicURLDefault(existing map[string]string, key string) string {
+	current := strings.TrimSpace(existing[key])
+	if current == "" {
+		return ""
+	}
+	if err := validateWizardPublicURL(key, current); err != nil {
+		return ""
+	}
+	return current
+}
+
+func wizardAPIPortDefault(existing map[string]string) string {
+	if port := strings.TrimSpace(existing["BITRIVER_LIVE_PORT"]); port != "" {
+		if err := validateWizardPort(port); err == nil {
+			return port
+		}
+	}
+	addr := strings.TrimSpace(existing["BITRIVER_LIVE_ADDR"])
+	if strings.HasPrefix(addr, ":") {
+		port := strings.TrimPrefix(addr, ":")
+		if err := validateWizardPort(port); err == nil {
+			return port
+		}
+	}
+	return "8080"
+}
+
+func wizardHostDefault(existing map[string]string, key string) string {
+	current := strings.TrimSpace(existing[key])
+	if current == "" {
+		return ""
+	}
+	if err := validateWizardHostValue(key, current); err != nil {
+		return ""
+	}
+	return current
+}
+
+func wizardAllowSelfSignupDefault(existing map[string]string) bool {
+	value := strings.ToLower(strings.TrimSpace(existing["BITRIVER_LIVE_ALLOW_SELF_SIGNUP"]))
+	return value == "true" || value == "yes" || value == "1"
+}
+
+func validateWizardEmail(value string) error {
+	if _, err := mail.ParseAddress(strings.TrimSpace(value)); err != nil {
+		return fmt.Errorf("enter a valid email address")
+	}
+	return nil
+}
+
+func validateWizardPort(value string) error {
+	port, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || port < 1 || port > 65535 {
+		return fmt.Errorf("enter a port between 1 and 65535")
+	}
+	return nil
+}
+
+func validateWizardPublicURL(fieldName, value string) error {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("%s must be a full http:// or https:// URL", fieldName)
+	}
+
+	switch strings.ToLower(parsed.Scheme) {
+	case "http", "https":
+	default:
+		return fmt.Errorf("%s must use http or https", fieldName)
+	}
+
+	host := strings.ToLower(parsed.Hostname())
+	if isWizardLoopbackHost(host) {
+		return fmt.Errorf("%s must not point at localhost or another loopback address", fieldName)
+	}
+	if isWizardExampleHost(host) {
+		return fmt.Errorf("%s must not use example.com placeholder values", fieldName)
+	}
+
+	return nil
+}
+
+func validateWizardHostValue(fieldName, value string) error {
+	host := strings.TrimSpace(value)
+	if host == "" {
+		return fmt.Errorf("%s is required", fieldName)
+	}
+	if strings.Contains(host, "://") || strings.Contains(host, "/") || strings.Contains(host, " ") {
+		return fmt.Errorf("%s must be a host or IP value, not a URL or path", fieldName)
+	}
+
+	lower := strings.ToLower(host)
+	if isWizardLoopbackHost(lower) {
+		return fmt.Errorf("%s must not use localhost or loopback placeholders", fieldName)
+	}
+	if isWizardExampleHost(lower) {
+		return fmt.Errorf("%s must not use example.com placeholder values", fieldName)
+	}
+
+	return nil
+}
+
+func isWizardLoopbackHost(host string) bool {
+	host = strings.TrimSpace(strings.ToLower(host))
+	return host == "localhost" || host == "0.0.0.0" || host == "::" || host == "::1" || strings.HasPrefix(host, "127.")
+}
+
+func isWizardExampleHost(host string) bool {
+	host = strings.TrimSpace(strings.ToLower(host))
+	return host == "example.com" || strings.HasSuffix(host, ".example.com")
 }
 
 func stdinIsTerminal() bool {

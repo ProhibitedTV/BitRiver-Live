@@ -20,7 +20,7 @@ The viewer talks to the Go API for channel data, chat, and authentication. When 
 
 - [Node.js 18+](https://nodejs.org/en/download/package-manager)
 - npm (bundled with Node.js on most platforms)
-- A running BitRiver Live API (follow the [Docker quickstart](../../README.md#quick-start-docker-one-command) or the manual workflow in the root README)
+- A running BitRiver Live API (follow the [root quickstart](../../README.md#quickstart) or the more detailed manual workflow in the root docs)
 
 ## Quick preview
 
@@ -71,6 +71,24 @@ When adding or changing viewer routes in the navbar:
 
 This keeps route definitions and role policy in one shared module so desktop
 and mobile navigation stay consistent.
+
+## Browse URL contract
+
+- `/browse?q=...` performs free-text directory search across channel title,
+  owner display name, category, and tags.
+- `/browse?category=...` applies an exact category filter and is the URL shape
+  used by homepage category chips.
+
+## Auth Landing Contract
+
+- Viewer `Sign in` and `Join` CTAs now open an in-viewer auth overlay instead
+  of treating `/signup` as the primary destination.
+- The overlay keeps a safe `next` route in the current URL so successful auth
+  can continue where the viewer left off without dropping out of `/viewer`.
+- `/signup` is now a compatibility path for viewer-enabled installs: it
+  forwards into the viewer overlay when the Next.js viewer is configured, and
+  only falls back to the embedded static auth page when no viewer runtime is
+  available.
 
 ## Testing
 

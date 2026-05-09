@@ -57,9 +57,6 @@ func (cfg SecurityConfig) withDefaults() SecurityConfig {
 	if cfg.ContentTypeOptions == "" {
 		cfg.ContentTypeOptions = defaults.ContentTypeOptions
 	}
-	if cfg.ContentSecurityPolicy == "" {
-		cfg.ContentSecurityPolicy = defaultContentSecurityPolicy(cfg.FrameAncestors)
-	}
 
 	return cfg
 }

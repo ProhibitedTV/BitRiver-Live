@@ -174,7 +174,7 @@ type envValidatorResult struct {
 // runEnv runs env and exits when the work completes or a dependency fails.
 func runEnv(args []string) error {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: env <init|validate> [flags]")
+		fmt.Fprintln(os.Stderr, "Usage: env <init|validate|admin> [flags]")
 		return errors.New("env subcommand required")
 	}
 
@@ -183,6 +183,8 @@ func runEnv(args []string) error {
 		return runEnvInit(args[1:])
 	case "validate":
 		return runEnvValidate(args[1:])
+	case "admin":
+		return runEnvAdmin(args[1:])
 	default:
 		return fmt.Errorf("unknown env subcommand: %s", args[0])
 	}
@@ -193,6 +195,7 @@ func runEnvInit(args []string) error {
 	fs := flag.NewFlagSet("env init", flag.ContinueOnError)
 	envPath := fs.String("env-file", defaultEnvFile(), "path to write the environment file")
 	examplePath := fs.String("example", defaultExampleEnv(), "path to the example env file")
+	wizard := fs.Bool("wizard", false, "prompt for guided first-run quickstart settings before writing the env file")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -207,7 +210,13 @@ func runEnvInit(args []string) error {
 		return err
 	}
 
-	promptForAdminEmail(existingValues)
+	if *wizard {
+		if err := promptForQuickstartWizard(existingValues, *envPath); err != nil {
+			return err
+		}
+	} else {
+		promptForAdminEmail(existingValues)
+	}
 
 	generated, _, err := generateEnvValues(existingValues)
 	if err != nil {
@@ -270,6 +279,22 @@ func runEnvValidate(args []string) error {
 
 	fmt.Fprintf(os.Stdout, "Environment file %s looks ready.\n", *envPath)
 	return nil
+}
+
+func runEnvAdmin(args []string) error {
+	fs := flag.NewFlagSet("env admin", flag.ContinueOnError)
+	envPath := fs.String("env-file", defaultEnvFile(), "path to the deployment environment file")
+	showPassword := fs.Bool("show-password", false, "print the env-backed bootstrap admin password")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	values, err := loadEnvValues(*envPath, false)
+	if err != nil {
+		return err
+	}
+
+	return printBootstrapAdminAccessSummary(os.Stdout, *envPath, values, *showPassword)
 }
 
 // runCompose runs compose and exits when the work completes or a dependency fails.
@@ -499,6 +524,7 @@ func runQuickstart(args []string) error {
 	composeFile := fs.String("compose-file", defaultComposeFile(), "compose file to use")
 	limits := fs.Bool("limits", false, "include deploy/docker-compose.limits.yml resource overlay")
 	envFile := fs.String("env-file", defaultEnvFile(), "environment file path")
+	wizard := fs.Bool("wizard", false, "run the guided first-run setup wizard before env init/validate")
 	build := fs.Bool("build", false, "build images from the local source tree before starting (development-only; rejected in production mode)")
 	imageSource := fs.String("image-source", "", "image source mode: pull (default, production) or build (development-only)")
 	if err := fs.Parse(args); err != nil {
@@ -526,7 +552,11 @@ func runQuickstart(args []string) error {
 	}
 
 	printQuickstartStageHeader("Env init")
-	if err := envInitRunner([]string{"--env-file", *envFile}); err != nil {
+	envInitArgs := []string{"--env-file", *envFile}
+	if *wizard {
+		envInitArgs = append(envInitArgs, "--wizard")
+	}
+	if err := envInitRunner(envInitArgs); err != nil {
 		return quickstartStageFailure("Env init", err, fmt.Sprintf("Check that %s is writable, then run quickstart again.", *envFile))
 	}
 
@@ -814,12 +844,90 @@ func printQuickstartSuccessSummary(composeFile, envFile string, values map[strin
 	fmt.Fprintln(os.Stdout, "\nBitRiver Live is running")
 	fmt.Fprintf(os.Stdout, "- Control/API URL: %s\n", apiURL)
 	fmt.Fprintf(os.Stdout, "- Viewer URL: %s\n", viewerURL)
+	fmt.Fprintf(os.Stdout, "- Admin sign-in URL: %s\n", resolveAdminSignInURL(values))
 	fmt.Fprintf(os.Stdout, "- Admin email: %s\n", adminEmail)
 	fmt.Fprintf(os.Stdout, "- Env file: %s\n", envFile)
+	fmt.Fprintf(os.Stdout, "- Bootstrap credentials: stored in %s (use the CLI's `env admin` subcommand later if you need this summary again)\n", envFile)
+	fmt.Fprintln(os.Stdout, "- Password note: if you rotate the admin password later in /admin, the env-backed bootstrap password becomes a historical seed value.")
 	fmt.Fprintln(os.Stdout, "- Useful next commands:")
 	fmt.Fprintf(os.Stdout, "  - docker compose --file %s --env-file %s ps\n", composeFile, envFile)
 	fmt.Fprintf(os.Stdout, "  - docker compose --file %s --env-file %s logs -f\n", composeFile, envFile)
 	fmt.Fprintf(os.Stdout, "  - docker compose --file %s --env-file %s down\n", composeFile, envFile)
+}
+
+func printBootstrapAdminAccessSummary(out io.Writer, envPath string, values map[string]string, showPassword bool) error {
+	adminEmail := strings.TrimSpace(values["BITRIVER_LIVE_ADMIN_EMAIL"])
+	if adminEmail == "" {
+		return errors.New("BITRIVER_LIVE_ADMIN_EMAIL missing from environment")
+	}
+
+	password := strings.TrimSpace(values["BITRIVER_LIVE_ADMIN_PASSWORD"])
+
+	fmt.Fprintln(out, "Bootstrap admin access")
+	fmt.Fprintf(out, "- Admin sign-in URL: %s\n", resolveAdminSignInURL(values))
+	fmt.Fprintf(out, "- Admin email: %s\n", adminEmail)
+	fmt.Fprintf(out, "- Env file: %s\n", envPath)
+	switch {
+	case password == "":
+		fmt.Fprintln(out, "- Bootstrap password: (not set in env)")
+	case showPassword:
+		fmt.Fprintf(out, "- Bootstrap password: %s\n", password)
+	default:
+		fmt.Fprintln(out, "- Bootstrap password: hidden by default; rerun with --show-password to reveal the env-backed seed credential")
+	}
+	fmt.Fprintln(out, "- Note: the env-backed bootstrap password is only the original seed credential. If you changed it later in /admin, use the newer password instead.")
+
+	return nil
+}
+
+func resolveAdminSignInURL(values map[string]string) string {
+	if baseURL := resolveControlBaseURL(values); baseURL != "" {
+		return strings.TrimRight(baseURL, "/") + "/admin"
+	}
+	return fmt.Sprintf("http://localhost:%s/admin", resolveAPIPort(values))
+}
+
+func resolveControlBaseURL(values map[string]string) string {
+	for _, candidate := range []struct {
+		rawValue   string
+		trimSuffix string
+	}{
+		{rawValue: values["NEXT_PUBLIC_API_BASE_URL"], trimSuffix: "/api"},
+		{rawValue: values["NEXT_PUBLIC_VIEWER_URL"], trimSuffix: "/viewer"},
+	} {
+		if normalized := normalizePublicBaseURL(candidate.rawValue, candidate.trimSuffix); normalized != "" {
+			return normalized
+		}
+	}
+
+	return fmt.Sprintf("http://localhost:%s", resolveAPIPort(values))
+}
+
+func normalizePublicBaseURL(rawValue, trimSuffix string) string {
+	trimmed := strings.TrimSpace(rawValue)
+	if trimmed == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+
+	cleanPath := strings.TrimRight(parsed.EscapedPath(), "/")
+	lowerPath := strings.ToLower(cleanPath)
+	lowerSuffix := strings.ToLower(strings.TrimSpace(trimSuffix))
+	if lowerSuffix != "" && strings.HasSuffix(lowerPath, lowerSuffix) {
+		cleanPath = cleanPath[:len(cleanPath)-len(lowerSuffix)]
+	}
+	cleanPath = strings.TrimRight(cleanPath, "/")
+
+	parsed.Path = cleanPath
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+
+	return strings.TrimRight(parsed.String(), "/")
 }
 
 func resolveDeployImageSource(explicitMode string, envValues map[string]string, runtimeEnv config.Environment) (deployImageSourceConfig, error) {

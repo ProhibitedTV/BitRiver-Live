@@ -153,19 +153,19 @@ export function ViewerShell({ children }: ViewerShellProps) {
       <aside
         id="viewer-sidebar"
         className="viewer-sidebar"
-        aria-label="Following sidebar"
+        aria-label={desktopSidebar ? "Following sidebar" : undefined}
         role={modalSidebarOpen ? "dialog" : undefined}
         aria-modal={modalSidebarOpen ? true : undefined}
-        aria-labelledby="viewer-sidebar-title"
+        aria-labelledby={!desktopSidebar ? "viewer-sidebar-title" : undefined}
         ref={sidebarRef}
         tabIndex={-1}
       >
-        <div className="viewer-sidebar__header-row">
-          <div className="stack stack--2xs">
-            <p className="viewer-sidebar__eyebrow">Live network</p>
-            <h2 id="viewer-sidebar-title">Following</h2>
-          </div>
-          {!desktopSidebar && (
+        {!desktopSidebar && (
+          <div className="viewer-sidebar__header-row">
+            <div className="stack stack--2xs">
+              <p className="viewer-sidebar__eyebrow">Your network</p>
+              <h2 id="viewer-sidebar-title">Following</h2>
+            </div>
             <button type="button" className="viewer-sidebar__close" onClick={closeSidebar} aria-label="Close following sidebar">
               Close
             </button>

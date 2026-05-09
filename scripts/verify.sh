@@ -198,7 +198,7 @@ run_step "No internal/models imports outside internal/models" ./scripts/check-no
 run_step "Dependency source check" ./scripts/check-dependency-source.sh
 require_python_runner
 run_step "Contract invariants check" ./scripts/check-contract-invariants.sh
-run_step "Production third-party digest gate" ./scripts/require-image-digests.sh
+run_step "Production third-party digest gate" ./scripts/require-image-digests.sh --env-file .env
 
 docker_available=false
 if command -v docker >/dev/null 2>&1; then
