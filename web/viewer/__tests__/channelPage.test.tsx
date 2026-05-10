@@ -7,7 +7,15 @@ import ChannelPage from "../app/channels/[id]/page";
 jest.mock("../hooks/useAuth");
 
 jest.mock("../components/Player", () => ({
-  Player: () => <div data-testid="player" />
+  Player: ({ onRetry }: { onRetry?: () => void }) => (
+    <div data-testid="player">
+      {onRetry ? (
+        <button type="button" onClick={onRetry}>
+          Retry player playback
+        </button>
+      ) : null}
+    </div>
+  )
 }));
 
 const fetchChannelPlaybackMock = viewerApiMocks.fetchChannelPlayback;

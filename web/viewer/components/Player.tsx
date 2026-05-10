@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import Link from "next/link";
 import Hls from "hls.js";
 import { reportViewerQoE } from "../lib/viewer-api";
 import type { Playback } from "../lib/viewer-api";
+import { Button } from "./ui/Button";
 import { UIState } from "./player-ui-state";
 
 type PlayerProps = {
@@ -12,16 +14,35 @@ type PlayerProps = {
   live?: boolean;
   liveState?: string;
   loading?: boolean;
+  onRetry?: () => void;
+  recoveryHref?: string;
+  recoveryLabel?: string;
 };
 
 const ERROR_GRACE_MS = 3500;
 
-export function Player({ playback, channelId, live = false, liveState, loading = false }: PlayerProps) {
+export function Player({
+  playback,
+  channelId,
+  live = false,
+  liveState,
+  loading = false,
+  onRetry,
+  recoveryHref,
+  recoveryLabel = "Browse live channels"
+}: PlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const playerId = useId();
   const lastSampleRef = useRef<number>(0);
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [runtimeState, setRuntimeState] = useState<UIState>(loading ? UIState.LoadingStream : UIState.StreamEnded);
+  const playbackSourceKey = playback?.playbackUrl ? `${playback.sessionId}:${playback.playbackUrl}` : undefined;
+  const previousPlaybackSourceKeyRef = useRef<string | undefined>(playbackSourceKey);
+  const playbackSourceChanged = previousPlaybackSourceKeyRef.current !== playbackSourceKey;
+
+  if (playbackSourceChanged) {
+    previousPlaybackSourceKeyRef.current = playbackSourceKey;
+  }
 
   const clearErrorTimeout = useCallback(() => {
     if (!errorTimeoutRef.current) {
@@ -272,6 +293,9 @@ export function Player({ playback, channelId, live = false, liveState, loading =
       }
       return UIState.StreamEnded;
     }
+    if (playbackSourceChanged && playback.playbackUrl) {
+      return UIState.LoadingStream;
+    }
     if (runtimeState === UIState.StreamEnded) {
       return UIState.LoadingStream;
     }
@@ -343,6 +367,27 @@ export function Player({ playback, channelId, live = false, liveState, loading =
     );
   };
 
+  const renderRecoveryActions = (state: UIState) => {
+    if (state === UIState.LoadingStream || state === UIState.LiveHealthy || (!onRetry && !recoveryHref)) {
+      return null;
+    }
+
+    return (
+      <div className="player-state-actions">
+        {onRetry ? (
+          <Button onClick={onRetry} variant={state === UIState.StreamUnavailable ? "primary" : "secondary"}>
+            {state === UIState.StreamEnded ? "Check for live stream" : "Retry playback"}
+          </Button>
+        ) : null}
+        {recoveryHref ? (
+          <Link className="secondary-button" href={recoveryHref} prefetch={false}>
+            {recoveryLabel}
+          </Link>
+        ) : null}
+      </div>
+    );
+  };
+
   const renderStateScreen = (state: UIState) => {
     const content = stateContent[state];
     return (
@@ -353,6 +398,7 @@ export function Player({ playback, channelId, live = false, liveState, loading =
         </p>
         <h3>{content.title}</h3>
         <p className="muted">{content.body}</p>
+        {renderRecoveryActions(state)}
       </div>
     );
   };

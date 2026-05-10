@@ -125,4 +125,49 @@ test.describe("channel playback and chat integration", () => {
         .getByRole("button", { name: "Send", exact: true })
     ).toBeDisabled();
   });
+
+  test("offers player recovery when channel loads without a playable source", async ({ page }) => {
+    let playbackAttempts = 0;
+    const unavailablePlayback = {
+      ...playbackResponse,
+      playback: playbackResponse.playback
+        ? {
+            ...playbackResponse.playback,
+            playbackUrl: undefined,
+            originUrl: undefined,
+            renditions: []
+          }
+        : undefined
+    };
+
+    await page.route("**/api/viewer/me", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(authenticatedViewer) });
+    });
+
+    await page.route(`**/api/channels/${channelId}/playback`, async (route) => {
+      playbackAttempts += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(playbackAttempts === 1 ? unavailablePlayback : playbackResponse)
+      });
+    });
+
+    await page.route(`**/api/channels/${channelId}/vods`, async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(vodCollection) });
+    });
+
+    await page.route(`**/api/channels/${channelId}/chat**`, async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(chatHistory) });
+    });
+
+    await page.goto(`/channels/${channelId}`);
+
+    await expect(page.getByRole("heading", { name: "Stream unavailable" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Browse live channels" })).toHaveAttribute("href", "/browse");
+    await page.getByRole("button", { name: "Retry playback" }).click();
+
+    await expect.poll(() => playbackAttempts).toBeGreaterThan(1);
+    await expect(page.getByRole("heading", { name: "Available renditions" })).toBeVisible();
+  });
 });

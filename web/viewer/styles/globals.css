@@ -2857,6 +2857,13 @@ button:focus-visible {
   height: 100%;
 }
 
+.player-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
 .footer {
   margin-top: 3rem;
   padding: 2rem 0;
