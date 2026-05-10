@@ -1364,3 +1364,26 @@
 - `npm.cmd --prefix web/viewer run test -- __tests__/browsePage.test.tsx __tests__/directoryPage.test.tsx __tests__/channelDisplayPrimitives.test.tsx`
 - `npm.cmd --prefix web/viewer run lint`
 - `npm.cmd --prefix web/viewer run build`
+
+## Scope (current change)
+- Address GitHub issue #1218 by making the live player recovery states actionable when playback fails or drops.
+- Keep the fix viewer-only: `Player` state messaging, channel-page retry wiring, and focused viewer tests.
+- Preserve existing playback API contracts, channel data contracts, Docker Compose, `.env`, and generated OME config.
+- Treat broader watch-page layout and chat UX issues as separate GitHub issue slices after this recovery-control pass.
+
+## Assumptions
+- Viewers need an in-page retry control and a clear path back to Browse when playback is unavailable; passive refresh copy is not enough for a finished live-streaming product.
+- The channel page already owns playback refetching, so `Player` can request recovery through a callback instead of importing API logic.
+- Existing browser/Jest coverage around channel playback can be extended without changing backend behavior.
+
+## Risks
+- Retry controls inside `Player` could trigger duplicate playback requests if the channel page polling loop is not respected.
+- Adding buttons to state screens can disturb compact player layouts on small screens if the action row is not constrained.
+- Existing HLS/jsdom mocks may need small updates to assert recovery UI without relying on real media playback.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- __tests__/player.test.tsx __tests__/channelPage.test.tsx`
+- `npm.cmd --prefix web/viewer run test:playwright -- tests/channel-chat-playback.spec.ts`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `./scripts/verify.sh --viewer`

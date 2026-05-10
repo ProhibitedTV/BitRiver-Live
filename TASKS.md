@@ -2760,3 +2760,56 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - Task 4 notes:
   - The focused Jest suites passed with existing non-failing console noise from older `act(...)` warnings in search interactions and the longstanding `next/image` mock warnings about `fill`/`priority` props in jsdom.
   - `next build` completed successfully and surfaced the existing viewer/app warnings about pages being deopted into client-side rendering plus an outdated `caniuse-lite` database; neither warning blocked the production build.
+
+## Scoped change: GitHub issue #1218 player recovery controls
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the scoped player-recovery plan before editing
+  - Acceptance criteria:
+    - `PLAN.md` captures the #1218 scope, assumptions, risks, and focused viewer validation commands.
+    - `TASKS.md` lists the ordered implementation/validation steps before player files change.
+    - The read-only diagnosis identifies the passive playback recovery gap being fixed.
+
+- [x] Task 2 - Add actionable recovery controls to live player states
+  - Acceptance criteria:
+    - `Player` exposes retry and browse actions on unavailable/reconnecting/ended states where they help recovery.
+    - Channel pages can refetch playback through the player retry control without changing API contracts.
+    - The player state screen stays usable and accessible across live, offline, loading, and unavailable states.
+
+- [x] Task 3 - Extend viewer coverage for player recovery
+  - Acceptance criteria:
+    - Jest coverage verifies player retry/browse actions and channel-page refetch wiring.
+    - Playwright playback coverage asserts the unavailable player surface offers recovery once the channel loads but playback is unavailable.
+    - Any updated test fixtures keep existing chat/playback happy-path coverage intact.
+
+- [x] Task 4 - Run focused validation and record the results
+  - Acceptance criteria:
+    - Focused player/channel tests pass.
+    - Viewer lint and production build are rerun and logged.
+    - `./scripts/verify.sh --viewer` is attempted and any host blocker is recorded.
+
+### Execution log (GitHub issue #1218 player recovery controls)
+- Task 1 complete: recorded the scoped #1218 player-recovery plan in `PLAN.md` and `TASKS.md` before editing, based on the read-only diagnosis that `Player` currently reports unavailable/reconnecting states but only tells viewers to refresh instead of offering an in-page retry or route back to live discovery.
+- Task 1 checks:
+  - `Get-Content web/viewer/components/Player.tsx`
+  - `Get-Content web/viewer/components/player-ui-state.ts`
+  - `Get-Content -LiteralPath 'web/viewer/app/channels/[id]/page.tsx'`
+  - `Get-Content web/viewer/__tests__/player.test.tsx`
+  - `Get-Content web/viewer/tests/channel-chat-playback.spec.ts`
+- Task 2 complete: added optional `Player` recovery actions for unavailable/ended/starting states, wired the public channel page to refetch playback through the existing retry handler, and kept creator/player callers unchanged unless they opt into recovery actions.
+- Task 2 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/player.test.tsx __tests__/channelPage.test.tsx`
+- Task 3 complete: extended unit coverage for player retry/browse actions, channel-page player retry refetching, recovered playback-source rendering, and added a browser spec for the channel-loaded-but-playback-unavailable recovery path.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/player.test.tsx __tests__/channelPage.test.tsx`
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel-chat-playback.spec.ts` (blocked before test execution because `start:test` still calls `next start` while the viewer is configured for standalone output)
+  - `$env:PLAYWRIGHT_BROWSERS_PATH='0'; npx.cmd playwright install chromium`
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 PLAYWRIGHT_BROWSERS_PATH=0 npx.cmd playwright test tests/channel-chat-playback.spec.ts` with a one-off local Next dev server from `web/viewer`
+- Task 4 complete: reran focused player/channel tests, verified the browser recovery path with the local Playwright browser cache, passed viewer lint and production build, and attempted the repo viewer gate. The closing repo gate still stops at this Windows host's missing `python`/`python3` alias during env-placeholder hygiene.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/player.test.tsx __tests__/channelPage.test.tsx`
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 PLAYWRIGHT_BROWSERS_PATH=0 npx.cmd playwright test tests/channel-chat-playback.spec.ts` with a one-off local Next dev server from `web/viewer`
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` (blocked by missing `python`/`python3` on this Windows host during env-placeholder hygiene)

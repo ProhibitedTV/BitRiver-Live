@@ -7,7 +7,15 @@ import ChannelPage from "../app/channels/[id]/page";
 jest.mock("../hooks/useAuth");
 
 jest.mock("../components/Player", () => ({
-  Player: () => <div data-testid="player" />
+  Player: ({ onRetry }: { onRetry?: () => void }) => (
+    <div data-testid="player">
+      {onRetry ? (
+        <button type="button" onClick={onRetry}>
+          Retry player playback
+        </button>
+      ) : null}
+    </div>
+  )
 }));
 
 const fetchChannelPlaybackMock = viewerApiMocks.fetchChannelPlayback;
@@ -177,6 +185,29 @@ describe("ChannelPage", () => {
       expect(sendChatMessageMock).toHaveBeenCalledWith("chan-42", "viewer-1", "Hello from viewer")
     );
     expect(await screen.findByText("Hello from viewer")).toBeInTheDocument();
+  });
+
+  test("lets the embedded player refresh playback without leaving the channel", async () => {
+    const user = userEvent.setup();
+    const refreshedResponse = {
+      ...basePlaybackResponse,
+      viewerCount: 321
+    };
+
+    fetchChannelPlaybackMock.mockResolvedValueOnce(basePlaybackResponse as any);
+    fetchChannelPlaybackMock.mockResolvedValueOnce(refreshedResponse as any);
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId("player")).toBeInTheDocument();
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "Retry player playback" }));
+    });
+
+    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledTimes(2));
+    expect(fetchChannelPlaybackMock).toHaveBeenNthCalledWith(2, "chan-42");
   });
 
   test("refreshes follow and subscription state immediately after logging in", async () => {
