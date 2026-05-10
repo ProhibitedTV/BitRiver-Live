@@ -218,6 +218,7 @@ func registerRoutes(mux *http.ServeMux, handler *api.Handler, cfg Config, record
 	mux.HandleFunc("/api/auth/oauth/providers", handler.OAuthProviders)
 	mux.HandleFunc("/api/auth/oauth/", handler.OAuthByProvider)
 	mux.HandleFunc("/api/auth/session", handler.Session)
+	mux.HandleFunc("/api/viewer/me", handler.ViewerMe)
 	mux.HandleFunc("/api/auth/mfa", handler.MFAStatus)
 	mux.HandleFunc("/api/auth/mfa/enroll", handler.MFAEnroll)
 	mux.HandleFunc("/api/auth/mfa/verify", handler.MFAVerify)
@@ -245,6 +246,7 @@ func registerRoutes(mux *http.ServeMux, handler *api.Handler, cfg Config, record
 	mux.HandleFunc("/api/moderation/automod", handler.ModerationAutoMod)
 	mux.HandleFunc("/api/analytics/overview", handler.AnalyticsOverview)
 	mux.HandleFunc("/api/metrics/qoe", handler.ViewerQoE)
+	mux.HandleFunc("/api/install/preflight", handler.InstallerPreflight)
 	mux.HandleFunc("/api/setup", handler.SetupWizard)
 	mux.HandleFunc("/api/legal/dmca", handler.LegalDMCA)
 	mux.HandleFunc("/api/legal/dmca/", handler.LegalDMCAByID)
@@ -269,15 +271,33 @@ func registerRoutes(mux *http.ServeMux, handler *api.Handler, cfg Config, record
 	mux.Handle("/static/", http.StripPrefix("/static/", fileServer))
 	adminHandler := embeddedHTMLHandler(index)
 	signupHandler := embeddedHTMLHandler(withBodyDataAttribute(signupDocument, "data-allow-self-signup", fmt.Sprintf("%t", handler.AllowSelfSignup)))
-	mux.Handle("/signup", signupHandler)
-	mux.Handle("/signup/", signupHandler)
-	mux.Handle("/signup.html", signupHandler)
+	compatSignupHandler := http.Handler(signupHandler)
+	if cfg.ViewerOrigin != nil {
+		compatSignupHandler = viewerSignupRedirectHandler()
+	}
+	mux.Handle("/signup", compatSignupHandler)
+	mux.Handle("/signup/", compatSignupHandler)
+	mux.Handle("/signup.html", compatSignupHandler)
 	mux.Handle("/admin", adminHandler)
 	mux.Handle("/admin/", adminHandler)
 
 	if cfg.ViewerOrigin != nil {
+		viewerSecurity := cfg.Security.withDefaults()
+		viewerContentSecurityPolicy := viewerSecurity.ContentSecurityPolicy
+		if cfg.Security.ContentSecurityPolicy == "" {
+			viewerContentSecurityPolicy = defaultViewerContentSecurityPolicy(viewerSecurity.FrameAncestors)
+		}
 		viewerProxy := httputil.NewSingleHostReverseProxy(cfg.ViewerOrigin)
+		viewerProxy.ModifyResponse = func(resp *http.Response) error {
+			if viewerContentSecurityPolicy != "" {
+				resp.Header.Set("Content-Security-Policy", viewerContentSecurityPolicy)
+			}
+			return nil
+		}
 		viewerProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+			if viewerContentSecurityPolicy != "" {
+				w.Header().Set("Content-Security-Policy", viewerContentSecurityPolicy)
+			}
 			if requestLogger := loggingWithRequest(cfg.Logger, ipResolver, r); requestLogger != nil {
 				requestLogger.Error("viewer proxy error", "error", err)
 			}
@@ -687,9 +707,12 @@ func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 			return
 		}
 		optionalAuth := false
+		if path == "/api/viewer/me" && (r.Method == http.MethodGet || r.Method == http.MethodDelete) {
+			optionalAuth = true
+		}
 		if r.Method == http.MethodGet {
 			switch {
-			case path == "/api/directory":
+			case isPublicDirectoryPath(path):
 				optionalAuth = true
 			case strings.HasPrefix(path, "/api/channels/"):
 				optionalAuth = true
@@ -728,6 +751,16 @@ func authMiddleware(handler *api.Handler, next http.Handler) http.Handler {
 	})
 }
 
+func isPublicDirectoryPath(path string) bool {
+	if path == "/api/directory" {
+		return true
+	}
+	if !strings.HasPrefix(path, "/api/directory/") {
+		return false
+	}
+	return path != "/api/directory/following"
+}
+
 // spaHandler performs spa handler and propagates validation or dependency failures to the caller.
 func embeddedHTMLHandler(document []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -741,6 +774,126 @@ func embeddedHTMLHandler(document []byte) http.HandlerFunc {
 			return
 		}
 		_, _ = w.Write(document)
+	}
+}
+
+func viewerSignupRedirectHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			http.Error(w, fmt.Sprintf("method %s not allowed", r.Method), http.StatusMethodNotAllowed)
+			return
+		}
+		http.Redirect(w, r, buildViewerSignupRedirect(r), http.StatusTemporaryRedirect)
+	}
+}
+
+func buildViewerSignupRedirect(r *http.Request) string {
+	query := url.Values{}
+	if r != nil && r.URL != nil {
+		query = r.URL.Query()
+	}
+
+	redirectPath, nextPath := resolveViewerSignupTargets(query.Get("next"))
+	parsed, err := url.Parse(redirectPath)
+	if err != nil || parsed == nil || parsed.IsAbs() {
+		parsed = &url.URL{Path: "/viewer"}
+	}
+	if parsed.Path == "" {
+		parsed.Path = "/viewer"
+	}
+
+	values := parsed.Query()
+	values.Set("auth", normalizeViewerAuthMode(query.Get("auth"), query.Get("mode")))
+	if mfaMode := normalizeViewerMFAMode(query.Get("mfa")); mfaMode != "" {
+		values.Set("mfa", mfaMode)
+		values.Set("auth", "signin")
+	}
+	if nextPath != "" {
+		values.Set("next", nextPath)
+	} else {
+		values.Del("next")
+	}
+	parsed.RawQuery = values.Encode()
+	parsed.Fragment = ""
+	return parsed.String()
+}
+
+func resolveViewerSignupTargets(rawNext string) (string, string) {
+	nextPath := sanitizeViewerSignupPath(rawNext)
+	if nextPath == "" || nextPath == "/" {
+		return "/viewer", ""
+	}
+	if nextPath == "/viewer" || strings.HasPrefix(nextPath, "/viewer/") {
+		return nextPath, nextPath
+	}
+	return "/viewer", ""
+}
+
+func sanitizeViewerSignupPath(input string) string {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return ""
+	}
+	parsed, err := url.Parse(trimmed)
+	if err == nil {
+		if parsed.IsAbs() {
+			trimmed = parsed.Path
+			if parsed.RawQuery != "" {
+				trimmed = trimmed + "?" + parsed.RawQuery
+			}
+			if parsed.Fragment != "" {
+				trimmed = trimmed + "#" + parsed.Fragment
+			}
+		} else {
+			trimmed = parsed.RequestURI()
+			if parsed.Fragment != "" {
+				trimmed = trimmed + "#" + parsed.Fragment
+			}
+		}
+	}
+	trimmed = strings.TrimSpace(trimmed)
+	if trimmed == "" || strings.HasPrefix(trimmed, "//") {
+		return ""
+	}
+	if !strings.HasPrefix(trimmed, "/") {
+		trimmed = "/" + trimmed
+	}
+	parsed, err = url.Parse(trimmed)
+	if err != nil || parsed == nil {
+		return ""
+	}
+	switch {
+	case parsed.Path == "", parsed.Path == "/", parsed.Path == "/viewer", strings.HasPrefix(parsed.Path, "/viewer/"):
+		query := parsed.Query()
+		query.Del("auth")
+		query.Del("next")
+		query.Del("mfa")
+		parsed.RawQuery = query.Encode()
+		return parsed.String()
+	case strings.HasPrefix(parsed.Path, "/signup"), strings.HasPrefix(parsed.Path, "/admin"), strings.HasPrefix(parsed.Path, "/api/"):
+		return ""
+	default:
+		return ""
+	}
+}
+
+func normalizeViewerAuthMode(rawValues ...string) string {
+	for _, raw := range rawValues {
+		if strings.EqualFold(strings.TrimSpace(raw), "signup") {
+			return "signup"
+		}
+	}
+	return "signin"
+}
+
+func normalizeViewerMFAMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "enroll":
+		return "enroll"
+	case "verify":
+		return "verify"
+	default:
+		return ""
 	}
 }
 

@@ -180,16 +180,27 @@ type OAuthAccount struct {
 }
 
 type Channel struct {
-	ID               string    `json:"id"`
-	OwnerID          string    `json:"ownerId"`
-	StreamKey        string    `json:"streamKey"`
-	Title            string    `json:"title"`
-	Category         string    `json:"category,omitempty"`
-	Tags             []string  `json:"tags"`
-	LiveState        string    `json:"liveState"`
-	CurrentSessionID *string   `json:"currentSessionId,omitempty"`
-	CreatedAt        time.Time `json:"createdAt"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+	ID               string                 `json:"id"`
+	OwnerID          string                 `json:"ownerId"`
+	StreamKey        string                 `json:"streamKey"`
+	Title            string                 `json:"title"`
+	Category         string                 `json:"category,omitempty"`
+	Tags             []string               `json:"tags"`
+	Schedule         []ChannelScheduleEntry `json:"schedule,omitempty"`
+	LiveState        string                 `json:"liveState"`
+	CurrentSessionID *string                `json:"currentSessionId,omitempty"`
+	CreatedAt        time.Time              `json:"createdAt"`
+	UpdatedAt        time.Time              `json:"updatedAt"`
+}
+
+type ChannelScheduleEntry struct {
+	ID              string    `json:"id"`
+	Title           string    `json:"title"`
+	StartsAt        time.Time `json:"startsAt"`
+	DurationMinutes int       `json:"durationMinutes,omitempty"`
+	Description     string    `json:"description,omitempty"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
 }
 
 type StreamSession struct {

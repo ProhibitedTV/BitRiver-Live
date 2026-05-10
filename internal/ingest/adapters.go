@@ -3,6 +3,7 @@ package ingest
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -106,9 +107,11 @@ type httpChannelAdapter struct {
 }
 
 // httpApplicationAdapter is an HTTP implementation of applicationAdapter
-// that communicates with an OvenMediaEngine (OME) API using basic auth.
+// that communicates with an OvenMediaEngine (OME) API using the rendered
+// AccessToken as an HTTP Basic credential.
 type httpApplicationAdapter struct {
 	baseURL       string
+	accessToken   string
 	username      string
 	password      string
 	client        *http.Client
@@ -233,10 +236,11 @@ func newHTTPChannelAdapter(baseURL, token string, client *http.Client, logger *s
 // newHTTPApplicationAdapter constructs an HTTP-based applicationAdapter.
 // See newHTTPChannelAdapter for behavior of the logger, attempts, interval,
 // and client parameters.
-func newHTTPApplicationAdapter(baseURL, username, password string, client *http.Client, logger *slog.Logger, attempts int, interval time.Duration) *httpApplicationAdapter {
+func newHTTPApplicationAdapter(baseURL, accessToken, username, password string, client *http.Client, logger *slog.Logger, attempts int, interval time.Duration) *httpApplicationAdapter {
 	cfg := normalizeAdapterConfig(logger, attempts, interval)
 	return &httpApplicationAdapter{
 		baseURL:       strings.TrimRight(baseURL, "/"),
+		accessToken:   accessToken,
 		username:      username,
 		password:      password,
 		client:        client,
@@ -324,7 +328,7 @@ func (a *httpApplicationAdapter) CreateApplication(ctx context.Context, channelI
 	}
 	var response omeApplicationResponse
 	if err := postJSON(ctx, a.client, fmt.Sprintf("%s/v1/applications", a.baseURL), payload, &response, func(req *http.Request) {
-		req.SetBasicAuth(a.username, a.password)
+		setOMEAuth(req, a.accessToken, a.username, a.password)
 	}, a.logger, a.maxAttempts, a.retryInterval); err != nil {
 		if span != nil {
 			span.RecordError(err)
@@ -344,7 +348,7 @@ func (a *httpApplicationAdapter) DeleteApplication(ctx context.Context, channelI
 		defer span.End()
 	}
 	err := deleteRequest(ctx, a.client, fmt.Sprintf("%s/v1/applications/%s", a.baseURL, channelID), func(req *http.Request) {
-		req.SetBasicAuth(a.username, a.password)
+		setOMEAuth(req, a.accessToken, a.username, a.password)
 	}, a.logger, a.maxAttempts, a.retryInterval)
 	if err != nil && span != nil {
 		span.RecordError(err)
@@ -655,6 +659,23 @@ func setBearer(req *http.Request, token string) {
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+}
+
+// setOMEAuth sets OME API Basic auth using the raw rendered AccessToken as
+// the full Basic credential string. Basic user/password auth is retained only
+// for legacy/custom OME-compatible endpoints without an access token.
+func setOMEAuth(req *http.Request, accessToken, username, password string) {
+	accessToken = strings.TrimSpace(accessToken)
+	if accessToken != "" {
+		req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(accessToken)))
+		return
+	}
+	username = strings.TrimSpace(username)
+	password = strings.TrimSpace(password)
+	if username == "" && password == "" {
+		return
+	}
+	req.SetBasicAuth(username, password)
 }
 
 // CloneRenditions returns a shallow copy of the provided renditions slice.

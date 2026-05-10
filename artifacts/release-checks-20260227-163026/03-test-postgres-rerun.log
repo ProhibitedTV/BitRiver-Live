@@ -1,3 +1,0 @@
-using provided BITRIVER_TEST_POSTGRES_DSN; skipping docker setup
-running go test -tags postgres ./internal/storage/...
-ok  	bitriver-live/internal/storage	0.788s

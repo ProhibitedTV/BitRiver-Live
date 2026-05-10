@@ -44,6 +44,9 @@ func channelMatchesQuery(channel domain.Channel, owner domain.User, normalizedQu
 	if strings.Contains(strings.ToLower(channel.Title), normalizedQuery) {
 		return true
 	}
+	if strings.Contains(strings.ToLower(channel.Category), normalizedQuery) {
+		return true
+	}
 	if owner.DisplayName != "" && strings.Contains(strings.ToLower(owner.DisplayName), normalizedQuery) {
 		return true
 	}

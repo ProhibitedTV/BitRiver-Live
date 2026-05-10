@@ -255,7 +255,11 @@ func (r *postgresRepository) importSnapshotChannels(ctx context.Context, tx pgx.
 		if channel.CurrentSessionID != nil && strings.TrimSpace(*channel.CurrentSessionID) != "" {
 			current = strings.TrimSpace(*channel.CurrentSessionID)
 		}
-		_, err := tx.Exec(ctx, "INSERT INTO channels (id, owner_id, stream_key, title, category, tags, live_state, current_session_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING", id, strings.TrimSpace(channel.OwnerID), strings.TrimSpace(channel.StreamKey), strings.TrimSpace(channel.Title), strings.TrimSpace(channel.Category), tags, strings.TrimSpace(channel.LiveState), current, created, updated)
+		schedule, err := encodeChannelSchedule(channel.Schedule)
+		if err != nil {
+			return fmt.Errorf("encode channel %s schedule: %w", id, err)
+		}
+		_, err = tx.Exec(ctx, "INSERT INTO channels (id, owner_id, stream_key, title, category, tags, schedule, live_state, current_session_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO NOTHING", id, strings.TrimSpace(channel.OwnerID), strings.TrimSpace(channel.StreamKey), strings.TrimSpace(channel.Title), strings.TrimSpace(channel.Category), tags, schedule, strings.TrimSpace(channel.LiveState), current, created, updated)
 		if err != nil {
 			return fmt.Errorf("insert channel %s: %w", id, err)
 		}

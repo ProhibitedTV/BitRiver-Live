@@ -4,10 +4,29 @@ export type ChannelPublic = {
   title: string;
   category?: string;
   tags: string[];
+  schedule?: ChannelScheduleEntry[];
   liveState: string;
   currentSessionId?: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ChannelScheduleEntry = {
+  id: string;
+  title: string;
+  startsAt: string;
+  durationMinutes?: number;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ChannelScheduleInput = {
+  id?: string;
+  title: string;
+  startsAt: string;
+  durationMinutes?: number;
+  description?: string;
 };
 
 export type ManagedChannel = ChannelPublic & {
@@ -197,6 +216,28 @@ export type ChatMessageResponse = {
   createdAt: string;
 };
 
+export type ChatReportPayload = {
+  targetId: string;
+  reason: string;
+  messageId?: string;
+  evidenceUrl?: string;
+};
+
+export type ChatReport = {
+  id: string;
+  channelId: string;
+  reporterId: string;
+  targetId: string;
+  reason: string;
+  status: string;
+  resolution?: string;
+  messageId?: string;
+  evidenceUrl?: string;
+  createdAt: string;
+  resolvedAt?: string;
+  resolverId?: string;
+};
+
 export type VodItem = {
   id: string;
   title: string;
@@ -209,6 +250,17 @@ export type VodItem = {
 export type VodCollection = {
   channelId: string;
   items: VodItem[];
+};
+
+export type Recording = {
+  id: string;
+  channelId: string;
+  sessionId: string;
+  title: string;
+  durationSeconds: number;
+  playbackBaseUrl?: string;
+  publishedAt?: string;
+  createdAt: string;
 };
 
 export type UploadItem = {
@@ -237,6 +289,14 @@ export type CreateUploadPayload = {
 
 export type UpdateChannelPayload = {
   title?: string;
+  category?: string;
+  tags?: string[];
+  schedule?: ChannelScheduleInput[];
+};
+
+export type CreateChannelPayload = {
+  ownerId?: string;
+  title: string;
   category?: string;
   tags?: string[];
 };

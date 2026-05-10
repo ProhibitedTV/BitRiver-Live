@@ -1,19 +1,30 @@
 # BitRiver Live Quickstart
 
-## TL;DR
+This guide is the fastest honest path from a fresh checkout or release asset to a working BitRiver Live stack.
 
-### Platform entry command (syntax only)
+If you are evaluating the project, start here. If you are preparing a production rollout, get through one successful local run first, then continue with [`docs/production-single-host.md`](production-single-host.md), [`docs/security.md`](security.md), and [`docs/production-release.md`](production-release.md).
 
-| Platform | Entry command |
-| --- | --- |
-| macOS | `brew install --formula https://github.com/bitriver-live/bitriver-live/releases/latest/download/bitriver-live.rb && bitriver-live` |
-| Linux | Install the `.deb` or `.rpm` from the latest release, then run `bitriver-live` (desktop shortcut: **Start BitRiver Live**). |
-| Windows | Install `bitriver-live-<version>.msi`, then launch **Start BitRiver Live** or run `bitriver-live.ps1`. |
-| Source checkout (any shell) | `go run ./cmd/bitriver quickstart` (PowerShell: `pwsh -c "go run ./cmd/bitriver quickstart"`) |
+## Before you start
 
-### Shared backend pipeline (all launchers)
+- Supported baseline: operator-managed single-host deployment using `deploy/docker-compose.yml` plus the repository-root `.env`.
+- First-success goal: reach `http://localhost:8080/viewer`, sign in at `/admin`, and pass `go run ./cmd/bitriver smoke --env-file ./.env`.
+- First run can take several minutes while Docker pulls images, renders config, runs migrations, and waits for readiness.
+- Not the right fit: hands-off HA, Kubernetes-first deployment, or a managed-service expectation.
 
-All entrypoints above execute one canonical deployment contract: `deploy/docker-compose.yml` + the root `.env`.
+## Choose an install path
+
+| Path | Use this when | Entry point |
+| --- | --- | --- |
+| Source checkout (recommended for evaluation and contribution) | You want the quickest path from a clone to a working local stack, or you expect to inspect/change code. | `go run ./cmd/bitriver quickstart` (PowerShell: `pwsh -c "go run ./cmd/bitriver quickstart"`) |
+| macOS release launcher | You want to validate the packaged launcher experience from a tagged release. | `brew install --formula https://github.com/ProhibitedTV/BitRiver-Live/releases/latest/download/bitriver-live.rb && bitriver-live` |
+| Linux release package | You want the packaged CLI/launcher on a Linux host. | Install the `.deb` or `.rpm` from the [latest release](https://github.com/ProhibitedTV/BitRiver-Live/releases/latest), then run `bitriver-live`. |
+| Windows release installer | You want the packaged Windows entry point. | Install `bitriver-live-<version>.msi` from the [latest release](https://github.com/ProhibitedTV/BitRiver-Live/releases/latest), then launch **Start BitRiver Live** or run `bitriver-live.ps1`. |
+
+The control centre's browser-based Home Server Installer now mirrors the Ubuntu helper with a seven-step flow: Welcome, System Check, Install Mode, Core Settings, Review, Installing, and Success. Quick Install is the default path, while Advanced Install opens the lower-level storage, network, and service controls only when you explicitly ask for them.
+
+## Shared backend pipeline (all launchers)
+
+All entrypoints above execute one canonical deployment contract: `deploy/docker-compose.yml` plus the root `.env`.
 
 | Stage | What runs |
 | --- | --- |
@@ -23,14 +34,30 @@ All entrypoints above execute one canonical deployment contract: `deploy/docker-
 | Migrations | Apply database migrations via the same control-plane flow. |
 | Compose up | Start services with `deploy/docker-compose.yml`. |
 | Readiness | Poll `/readyz` until core services are healthy. |
-| Bootstrap | Seed/print admin credentials when required. |
+| Bootstrap | Seed or print admin credentials when required. |
 
-Installer and source quickstarts are different launch surfaces for the same operational pipeline; choose based on packaging preference, not deployment behaviour.
+Choose the entry point based on packaging preference and operating system, not because you expect a different deployment model.
 
+## First successful run
 
-## Release note: legacy OME custom compose override removed
+For the quickest source-based evaluation:
 
-BitRiver Live no longer ships `deploy/docker-compose.ome-custom.yml`, and `BITRIVER_OME_CUSTOM_CONFIG` is no longer used. The default quickstart/Compose flow already renders and mounts `deploy/ome/Server.generated.xml` automatically.
+```bash
+cp deploy/.env.example .env
+go run ./cmd/bitriver env init --env-file ./.env
+BITRIVER_LIVE_MODE=development go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml --image-source build
+go run ./cmd/bitriver smoke --env-file ./.env
+```
+
+Success looks like:
+
+- `http://localhost:8080/viewer` serves the viewer
+- `http://localhost:8080/admin` serves the control centre
+- `go run ./cmd/bitriver smoke --env-file ./.env` exits successfully
+
+## Migration note for older local scripts
+
+BitRiver Live no longer ships `deploy/docker-compose.ome-custom.yml`, and `BITRIVER_OME_CUSTOM_CONFIG` is no longer used. The default quickstart and Compose flow already renders and mounts `deploy/ome/Server.generated.xml` automatically.
 
 If your local scripts still include that override filename or env toggle, remove them and use only `deploy/docker-compose.yml`.
 
@@ -77,7 +104,7 @@ Result levels:
 
 ### Tier 1 coverage
 
-The Go-based quickstart defines the canonical deployment contract across Tier 1 platforms—Windows 10/11 with Docker Desktop, macOS with Docker Desktop, and Ubuntu/Debian with Docker Engine plus the Compose plugin. Launcher wrappers and installers remain compatibility entrypoints that forward into the same Compose + `.env` pipeline. See [`docs/cross-platform-plan.md`](labs/cross-platform-plan.md#canonical-production-deployment-path) for the contract and support matrix.
+The Go-based quickstart defines the canonical deployment contract across Tier 1 platforms: Windows 10/11 with Docker Desktop, macOS with Docker Desktop, and Ubuntu/Debian with Docker Engine plus the Compose plugin. Launcher wrappers and installers remain compatibility entrypoints that forward into the same Compose + `.env` pipeline. For the supported operator baseline, see [`docs/production-status.md`](production-status.md) and [`docs/production-single-host.md`](production-single-host.md).
 
 ## First step: run environment preflight
 
@@ -115,7 +142,24 @@ go run ./cmd/bitriver quickstart
 pwsh -c "go run ./cmd/bitriver quickstart"
 ```
 
-The Go CLI renders `deploy/ome/Server.generated.xml` directly (no Python dependency) before launching Compose. The quickstart waits for the API `/readyz` probe to succeed before seeding the admin user via the bundled `bootstrap-admin` binary, then prints a "Generated credentials" block for any secrets it auto-created so you can store them securely before logging in.
+Need setup-wizard style control on first run instead of taking the default quickstart/env-init values? Add `--wizard` to either command:
+
+```bash
+go run ./cmd/bitriver env init --env-file ./.env --wizard
+go run ./cmd/bitriver quickstart --env-file ./.env --compose-file deploy/docker-compose.yml --wizard
+```
+
+The wizard is interactive and collects the key first-run controls that usually send operators back into `.env`: admin email, viewer/API URLs, API port, OME bind/public host values, transcoder public URL, and self-signup. Missing required secrets are still generated automatically, and non-interactive shells keep the existing no-wizard behavior.
+
+The Go CLI renders `deploy/ome/Server.generated.xml` directly (no Python dependency) before launching Compose. The quickstart waits for the API `/readyz` probe to succeed before seeding the admin user via the bundled `bootstrap-admin` binary, then prints a "Generated credentials" block for any secrets it auto-created so you can store them securely before logging in. The success summary now also points administrators at `/admin`, reminds you that the bootstrap credentials live in the deployment `.env`, and supports a recovery helper when you need to revisit them later:
+
+```bash
+bitriver-live env admin --env-file ./.env
+# Source checkout equivalent:
+go run ./cmd/bitriver env admin --env-file ./.env
+```
+
+Add `--show-password` only when you explicitly need to reveal the env-backed seed password. If you rotate the admin password later in `/admin`, treat the `.env` value as historical and use the newer live credential instead.
 
 ### Deployment image source mode (`BITRIVER_DEPLOY_IMAGE_SOURCE`)
 
@@ -135,7 +179,12 @@ You can set the mode in `.env`, export it in the shell, or override per-run:
 
 ```bash
 go run ./cmd/bitriver quickstart --image-source pull
-go run ./cmd/bitriver compose up --image-source build --file deploy/docker-compose.yml
+```
+
+For source-checkout local rehearsals, do not keep a production `.env` and only flip the CLI flag. Switch the saved env file itself to local build settings first (`BITRIVER_LIVE_MODE=development` and `BITRIVER_DEPLOY_IMAGE_SOURCE=build`), then use direct Compose so the stack builds the first-party images from the checkout instead of expecting published GHCR artifacts:
+
+```bash
+docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never
 ```
 
 ### OME auth preflight
@@ -166,19 +215,23 @@ Before any containers are started (`deploy/check-env.sh`, `go run ./cmd/bitriver
 - **Authenticated registry pulls:** production bootstrap runs in pull mode and validates each required GHCR image reference with `docker manifest inspect`, which fails fast with `docker login ghcr.io` guidance when auth is missing.
 - **Pinned images:** each production image must include both tag and digest in `.env` (`BITRIVER_*_IMAGE_TAG` + `BITRIVER_*_IMAGE_DIGEST`) so deployments are immutable and reproducible.
 
-Use explicit development commands/overrides when intentionally running local-only workflows (`BITRIVER_LIVE_MODE=development` and `--image-source build`). Keep those out of committed production bootstrap runbooks.
+Use explicit development settings when intentionally running local-only workflows (`BITRIVER_LIVE_MODE=development` and `BITRIVER_DEPLOY_IMAGE_SOURCE=build`). Keep those out of committed production bootstrap runbooks.
 
 ### What the command configures
 
 1. Verifies that both Docker and Docker Compose V2 are available and warns when disk space under the Docker data root is below 15GB.
-2. Generates `.env` with the same defaults baked into `deploy/docker-compose.yml`, defaults `BITRIVER_LIVE_MODE` to `production` when the key is missing, empty, or still at the example placeholder, prompts for the administrator email when it is missing or still set to the example value, keeps `BITRIVER_LIVE_MODE=production` in the persisted file, and rotates required credentials (admin password, Postgres/Redis, SRS, OME, transcoder, metrics) to strong random values unless the file already exists. Fresh clones still need production-safe routable/public values for the quickstart-prod networking keys before `env validate`/`quickstart` will pass (`BITRIVER_TRANSCODER_PUBLIC_BASE_URL`, `BITRIVER_OME_BIND`, `BITRIVER_OME_IP`, and `NEXT_PUBLIC_VIEWER_URL`). When a pre-existing `.env` is missing required credentials, the helper backfills them (including the OME API username/password and the `BITRIVER_OME_BIND` listener address for the control listener) so Compose can start once production networking values are in place.
+2. Generates `.env` with the same defaults baked into `deploy/docker-compose.yml`, defaults `BITRIVER_LIVE_MODE` to `production` when the key is missing, empty, or still at the example placeholder, and rotates required credentials (admin password, Postgres/Redis, SRS, OME, transcoder, metrics) to strong random values unless the file already exists. By default the helper only prompts for the administrator email when it is missing or still set to the example value; with `--wizard`, it also collects the main first-run controls (viewer/API URLs, API port, OME bind/public host, transcoder public URL, and self-signup) before writing the file. Fresh clones still need production-safe routable/public values for the quickstart-prod networking keys before `env validate`/`quickstart` will pass (`BITRIVER_TRANSCODER_PUBLIC_BASE_URL`, `BITRIVER_OME_BIND`, `BITRIVER_OME_IP`, and `NEXT_PUBLIC_VIEWER_URL`). When a pre-existing `.env` is missing required credentials, the helper backfills them (including the OME API username/password and the `BITRIVER_OME_BIND` listener address for the control listener) so Compose can start once production networking values are in place.
 3. Launches the containers with `docker compose up --pull always --no-build -d` using the compose file in `deploy/`. Production quickstart expects authenticated GHCR access (`docker login ghcr.io`) and pinned tag+digest image references for API, viewer, SRS controller, and transcoder. The manifest enables `restart: unless-stopped` for each long-lived service so they come back online after crashes or host reboots. The `bitriver-live` API service intentionally waits for `srs-controller` and `transcoder` health checks (`/healthz`) before startup, so first boot can take slightly longer but avoids early dependency races.
 4. Renders `deploy/ome/Server.generated.xml` from the bundled template via the Go renderer, mapping `BITRIVER_OME_BIND` to the control listener fields, stamping WebRTC signalling ports from `BITRIVER_OME_SERVER_PORT` / `BITRIVER_OME_SERVER_TLS_PORT`, and stamping Managers API listener ports from `BITRIVER_OME_HTTP_PORT` / `BITRIVER_OME_HTTP_TLS_PORT` while mirroring the OME API token from `.env` so health checks see the same `<Managers><API><AccessToken>` value the compose preflight expects. If the template or token drifts, the generator stops Compose before OME starts. The only supported render path is `go run ./cmd/bitriver ome render` (or the `./scripts/render-ome-config.sh` wrapper). Compose also renders `deploy/srs/conf/srs.generated.conf`, replacing `${BITRIVER_SRS_TOKEN}` from `.env` so SRS ingest hooks stay aligned with the API token.
 5. Waits for the API readiness check to pass (`/readyz`), then invokes the `bootstrap-admin` helper to seed the admin account. After a successful run, the CLI prints any newly generated credentials once so you can store them securely. When the viewer proxy is configured (the default quickstart shape), opening the host root lands in the public viewer flow and administrators should head to `/admin` to sign in to the control centre. Once you sign in, use the control centre **System status** card (powered by `/api/status`) as the primary health view. The raw `/readyz` and `/healthz` endpoints remain available for automation and deep debugging.
 
 Within the public viewer shell, the standard signed-out sign-in and join actions now open an in-viewer auth dialog so people can authenticate without leaving discovery or channel pages. The standalone `/signup` page remains available for direct links, MFA handoff, and fallback entry when you want to send people straight to the dedicated auth surface.
 
+The homepage now behaves like a true discovery surface instead of a marketing splash: featured live content stays above the fold, recommendation shelves and live rows stay visible without extra clicks, and signed-out "Create account" actions on the homepage and navbar open the same in-viewer auth dialog whenever `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=true`.
+
 The viewer discovery surfaces also keep navigation contextual: homepage category chips drill into `/browse?topic=...`, and the browse workspace preserves the active topic in URL state so refresh/back-forward navigation does not drop people out of the slice they were exploring.
+
+The public viewer navigation is now centered on the literal destinations `Home`, `Browse`, `Following`, `Go Live`, `Videos`, and signed-in `Profile`. Replay discovery is exposed through `/videos`, and signed-in people who have not created a channel yet can use the self-serve creator flow under `/creator` or `/creator/getting-started` to create a first channel, copy OBS settings, preview the stream, and share the public viewer link without admin intervention.
 
 Administrators and creators must complete multi-factor authentication (MFA) when signing in. The control centre prompts you to enroll the first time, provides recovery codes, and only issues a session after you verify a code. Keep the recovery codes somewhere safe in case you lose access to your authenticator.
 
@@ -294,17 +347,20 @@ All commands assume you are still in the repository root (where `.env` lives) so
   ```bash
   git pull --ff-only
   ```
-- Re-run the quickstart to apply env/template changes and restart services with the latest configuration. Add `--build` when Dockerfiles or local source changes require a rebuild:
+- Re-run the quickstart to apply env/template changes and restart services with the latest configuration when you are still using the published-image pull contract:
   ```bash
   go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml
-  go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml --build
   ```
   The Go command reuses your existing `.env` and Docker volumes, so configuration, database data, and media files persist across updates. This is the canonical deployment path on Linux, macOS, and Windows.
+  For a source checkout local rebuild, change the saved `.env` to `BITRIVER_LIVE_MODE=development` plus `BITRIVER_DEPLOY_IMAGE_SOURCE=build`, re-render `deploy/ome/Server.generated.xml`, and then run:
+  ```bash
+  docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never
+  ```
 `docker compose up` (including the quickstart wrapper) reruns the `ome-config` helper so OME consumes the credentials from `.env`, the current control-listener bind value from `BITRIVER_OME_BIND`, and the top-level `<Server><IP>` host from `BITRIVER_OME_IP` without requiring an extra compose override.
 - Running `git pull` followed by the quickstart keeps OME in a predictable state:
   - The helper preserves your `.env` while backfilling any new variables introduced upstream so you avoid silent crashes from missing credentials, including the OME managers token.
   - `deploy/ome/Server.generated.xml` is always re-rendered from `deploy/ome/Server.xml` and the refreshed `.env`, eliminating drift between the template and the live config mounted into the container.
-  - Database migrations run automatically before the stack restarts, giving you a clean, rerun-safe deploy loop whenever templates or env keys change. Add `--build` when you also need fresh local images.
+  - Database migrations run automatically before the stack restarts, giving you a clean, rerun-safe deploy loop whenever templates or env keys change. For source-checkout rebuilds, use the direct Compose build command above after switching the saved `.env` into development/build mode.
 - Codex CLI users: follow the [Codex CLI guide](codex-cli.md) for installation, authentication, and edit workflows tailored to this repository. Rerun `docker compose up -d` after applying Codex patches so containers reload configuration and binaries.
 - Need a safer, step-by-step upgrade flow? Use the upgrade runbook in [`docs/upgrades.md`](upgrades.md#upgrade-essentials-migrations-env-updates-and-ome-re-render) for Compose stop/start sequencing, migration timing, and `.env`/OME template handling.
 

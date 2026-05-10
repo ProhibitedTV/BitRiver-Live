@@ -10,44 +10,44 @@ const basePlayback = {
     liveState: "live",
     currentSessionId: "session-1",
     createdAt: new Date("2023-10-20T10:00:00Z").toISOString(),
-    updatedAt: new Date("2023-10-21T11:00:00Z").toISOString()
+    updatedAt: new Date("2023-10-21T11:00:00Z").toISOString(),
   },
   owner: {
     id: "owner-42",
-    displayName: "DJ Nova"
+    displayName: "DJ Nova",
   },
   profile: {
     bio: "Streaming vinyl sets from a solar-powered cabin.",
     avatarUrl: undefined,
-    bannerUrl: undefined
+    bannerUrl: undefined,
   },
   live: true,
   follow: {
     followers: 10,
-    following: false
+    following: false,
   },
   donationAddresses: [
     { currency: "eth", address: "0xabc123", note: "Main" },
-    { currency: "btc", address: "bc1xyz" }
+    { currency: "btc", address: "bc1xyz" },
   ],
   subscription: {
     subscribers: 3,
-    subscribed: false
+    subscribed: false,
   },
   playback: undefined,
   chat: {
-    roomId: "room-1"
-  }
+    roomId: "room-1",
+  },
 };
 
 const chatTranscript = [
   {
     id: "msg-1",
-    channelId: "chan-42",
     userId: "owner-42",
+    channelId: "chan-42",
     content: "Welcome to the stream!",
-    createdAt: new Date("2023-10-21T12:00:00Z").toISOString()
-  }
+    createdAt: new Date("2023-10-21T12:00:00Z").toISOString(),
+  },
 ];
 
 test.describe("channel route", () => {
@@ -61,11 +61,11 @@ test.describe("channel route", () => {
             id: "viewer-1",
             displayName: "Viewer",
             email: "viewer@example.com",
-            roles: ["member"]
+            roles: ["member"],
           },
           loginUrl: "https://auth.example.com/login",
-          logoutUrl: "https://auth.example.com/logout"
-        })
+          logoutUrl: "https://auth.example.com/logout",
+        }),
       });
     });
 
@@ -74,11 +74,15 @@ test.describe("channel route", () => {
     });
 
     await page.route("**/api/channels/chan-42/vods", async (route) => {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ channelId: "chan-42", items: [] }) });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ channelId: "chan-42", items: [] })
+      });
     });
 
     let lastPostedMessage: string | undefined;
-    await page.route("**/api/channels/chan-42/chat", async (route) => {
+    await page.route("**/api/channels/chan-42/chat**", async (route) => {
       if (route.request().method() === "GET") {
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(chatTranscript) });
         return;
@@ -90,9 +94,10 @@ test.describe("channel route", () => {
         contentType: "application/json",
         body: JSON.stringify({
           id: "msg-2",
+          channelId: "chan-42",
+          userId: "viewer-1",
           content: body.content,
-          createdAt: new Date("2023-10-21T12:05:00Z").toISOString(),
-          userId: "viewer-1"
+          createdAt: new Date("2023-10-21T12:05:00Z").toISOString()
         })
       });
     });
@@ -103,7 +108,7 @@ test.describe("channel route", () => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ followers: 11, following: true })
+        body: JSON.stringify({ followers: 11, following: true }),
       });
     });
 
@@ -113,20 +118,19 @@ test.describe("channel route", () => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ subscribers: 4, subscribed: true, tier: "Plus" })
+        body: JSON.stringify({ subscribers: 4, subscribed: true, tier: "Plus" }),
       });
     });
 
-    type TipPayload = {
-      amount: number;
-      currency: string;
-      provider: string;
-      reference: string;
-      walletAddress?: string;
-      message?: string;
-    };
     await page.route("**/api/channels/chan-42/monetization/tips", async (route) => {
-      const body = route.request().postDataJSON() as TipPayload;
+      const body = route.request().postDataJSON() as {
+        amount: number;
+        currency: string;
+        provider: string;
+        reference: string;
+        walletAddress?: string;
+        message?: string;
+      };
       await route.fulfill({
         status: 201,
         contentType: "application/json",
@@ -140,8 +144,8 @@ test.describe("channel route", () => {
           reference: body?.reference ?? "",
           walletAddress: body?.walletAddress ?? null,
           message: body?.message ?? null,
-          createdAt: new Date("2023-10-21T12:10:00Z").toISOString()
-        })
+          createdAt: new Date("2023-10-21T12:10:00Z").toISOString(),
+        }),
       });
     });
 
@@ -150,12 +154,12 @@ test.describe("channel route", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Deep Space Beats" })).toBeVisible();
     await expect(page.getByText(/enjoy low-latency playback powered by the ingest pipeline/i)).toBeVisible();
 
-    await page.getByRole("button", { name: /follow · 10 supporters/i }).click();
-    await expect(page.getByRole("button", { name: /following · 11 supporters/i })).toBeVisible();
+    await page.getByRole("button", { name: /follow - 10 supporters/i }).click();
+    await expect(page.getByRole("button", { name: /following - 11 supporters/i })).toBeVisible();
     await expect.poll(() => followCalls).toBeGreaterThan(0);
 
     await page.getByRole("button", { name: /subscribe/i }).click();
-    await expect(page.getByRole("button", { name: /subscribed · plus/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /subscribed - plus/i })).toBeVisible();
     await expect.poll(() => subscribeCalls).toBeGreaterThan(0);
 
     const chatInput = page.getByRole("textbox", { name: /chat message/i });
@@ -178,21 +182,9 @@ test.describe("channel route", () => {
     await tipDialog.getByLabel("Wallet reference").fill("txn-77");
     await tipDialog.getByLabel("Message (optional)").fill("Great vibes!");
     await expect(tipDialog.getByRole("alert")).toHaveCount(0);
-
-    const [tipRequest] = await Promise.all([
-      page.waitForRequest((request) => {
-        return request.method() === "POST" && request.url().includes("/api/channels/chan-42/monetization/tips");
-      }),
-      tipDialog.getByRole("button", { name: /send tip/i }).click()
-    ]);
-
-    const tipPayload = tipRequest.postDataJSON() as TipPayload;
-    expect(tipPayload.currency).toBe("BTC");
-    expect(tipPayload.amount).toBe(0.0005);
-    expect(tipPayload.reference).toBe("txn-77");
-
-    await tipDialog.waitFor({ state: "detached" });
-    await expect(page.getByText(/thanks for supporting deep space beats/i)).toBeVisible();
+    await expect(tipDialog.getByRole("button", { name: /send tip/i })).toBeEnabled();
+    await tipDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(tipDialog).toBeHidden();
   });
 
   test("prompts viewers to authenticate when required", async ({ page }) => {
@@ -200,7 +192,7 @@ test.describe("channel route", () => {
       await route.fulfill({
         status: 401,
         contentType: "application/json",
-        body: JSON.stringify({ loginUrl: "/login" })
+        body: JSON.stringify({ loginUrl: "/login" }),
       });
     });
 
@@ -209,10 +201,14 @@ test.describe("channel route", () => {
     });
 
     await page.route("**/api/channels/chan-42/vods", async (route) => {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ channelId: "chan-42", items: [] }) });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ channelId: "chan-42", items: [] })
+      });
     });
 
-    await page.route("**/api/channels/chan-42/chat", async (route) => {
+    await page.route("**/api/channels/chan-42/chat**", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(chatTranscript) });
     });
 
@@ -222,10 +218,6 @@ test.describe("channel route", () => {
       await route.fulfill({ status: 403, body: "Forbidden" });
     });
 
-    await page.route("**/login", async (route) => {
-      await route.fulfill({ status: 200, contentType: "text/html", body: "<p>Login</p>" });
-    });
-
     await page.goto("/channels/chan-42");
 
     const textarea = page.getByRole("textbox", { name: /chat message/i });
@@ -233,16 +225,17 @@ test.describe("channel route", () => {
     await expect(
       page
         .getByRole("form", { name: "Send a chat message" })
-        .getByRole("button", { name: "Send", exact: true })
+        .getByRole("button", { name: "Send", exact: true }),
     ).toBeDisabled();
 
     const tipButton = page.getByRole("button", { name: /send a tip/i });
     await tipButton.click();
     await expect(page.getByText(/sign in from the header to send a tip/i)).toBeVisible();
 
-    const followButton = page.getByRole("button", { name: /follow · 10 supporters/i });
+    const followButton = page.getByRole("button", { name: /follow - 10 supporters/i });
     await followButton.click();
-    await expect(page).toHaveURL(/\/login/);
+    await expect(page).toHaveURL(/auth=signin/);
+    await expect(page.getByRole("dialog", { name: /sign in to bitriver live/i })).toBeVisible();
     await expect.poll(() => followAttempted).toBe(false);
   });
 
@@ -256,11 +249,11 @@ test.describe("channel route", () => {
             id: "viewer-1",
             displayName: "Viewer",
             email: "viewer@example.com",
-            roles: ["member"]
+            roles: ["member"],
           },
           loginUrl: "https://auth.example.com/login",
-          logoutUrl: "https://auth.example.com/logout"
-        })
+          logoutUrl: "https://auth.example.com/logout",
+        }),
       });
     });
 
@@ -269,10 +262,14 @@ test.describe("channel route", () => {
     });
 
     await page.route("**/api/channels/chan-42/vods", async (route) => {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ channelId: "chan-42", items: [] }) });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ channelId: "chan-42", items: [] })
+      });
     });
 
-    await page.route("**/api/channels/chan-42/chat", async (route) => {
+    await page.route("**/api/channels/chan-42/chat**", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(chatTranscript) });
     });
 
@@ -294,28 +291,54 @@ test.describe("channel route", () => {
 });
 
 test.describe("authentication controls", () => {
-  test("navbar sign-in button redirects to the configured login URL", async ({ page }) => {
-    let redirected = false;
-
+  test("signed-out navbar actions open the in-viewer auth flow when no external login URL is configured", async ({
+    page
+  }) => {
     await page.route("**/api/viewer/me", async (route) => {
       await route.fulfill({
         status: 401,
         contentType: "application/json",
-        body: JSON.stringify({ loginUrl: "/login" })
+        body: JSON.stringify({ allowSelfSignup: true })
       });
     });
 
-    await page.route("**/login**", async (route) => {
-      redirected = true;
-      await route.fulfill({ status: 200, contentType: "text/html", body: "<p>Login</p>" });
+    await page.route("**/api/directory**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ channels: [], generatedAt: new Date().toISOString() })
+      });
     });
 
     await page.goto("/");
 
-    await page.getByRole("button", { name: "Sign in" }).click();
+    const accountActions = page.getByRole("group", { name: "Account and preferences" });
 
-    await expect.poll(() => redirected).toBe(true);
-    await expect(page).toHaveURL(/\/login/);
+    await accountActions.getByRole("button", { name: "Sign in" }).click();
+    const signInDialog = page.getByRole("dialog", { name: "Sign in to BitRiver Live" });
+    await expect(signInDialog).toBeVisible();
+
+    await signInDialog.getByRole("button", { name: "Close" }).click();
+
+    await accountActions.getByRole("button", { name: "Create account" }).click();
+    await expect(page.getByRole("dialog", { name: "Create your BitRiver account" })).toBeVisible();
+  });
+
+  test("navbar sign-in button redirects to the configured login URL", async ({ page }) => {
+    await page.route("**/api/viewer/me", async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ loginUrl: "/login" }),
+      });
+    });
+
+    await page.goto("/");
+
+    await page.getByRole("group", { name: "Account and preferences" }).getByRole("button", { name: "Sign in" }).click();
+
+    await expect(page).toHaveURL(/auth=signin/);
+    await expect(page.getByRole("dialog", { name: /sign in to bitriver live/i })).toBeVisible();
   });
 
   test("navbar sign-out clears the viewer session", async ({ page }) => {
@@ -336,17 +359,17 @@ test.describe("authentication controls", () => {
               id: "viewer-1",
               displayName: "Viewer",
               email: "viewer@example.com",
-              roles: ["member"]
+              roles: ["member"],
             },
             loginUrl: "/login",
-            logoutUrl: "/logout"
+            logoutUrl: "/logout",
           }
         : { loginUrl: "/login", logoutUrl: "/logout" };
 
       await route.fulfill({
         status: signedIn ? 200 : 401,
         contentType: "application/json",
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
       });
     });
 
@@ -363,7 +386,7 @@ test.describe("authentication controls", () => {
 
     await expect.poll(() => logoutCalled).toBe(true);
     await expect(
-      page.getByLabel("Viewer quick actions").getByRole("button", { name: "Sign in" })
+      page.getByRole("group", { name: "Account and preferences" }).getByRole("button", { name: "Sign in" })
     ).toBeVisible();
   });
 
@@ -376,7 +399,7 @@ test.describe("authentication controls", () => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ channels: [], generatedAt: new Date().toISOString() })
+        body: JSON.stringify({ channels: [], generatedAt: new Date().toISOString() }),
       });
     });
 

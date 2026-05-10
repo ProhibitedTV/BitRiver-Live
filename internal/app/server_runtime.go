@@ -360,6 +360,7 @@ func LoadIngestConfig(logger *slog.Logger) (ingest.Config, error) {
 		SRSBaseURL:        parsed.SRSBaseURL,
 		SRSToken:          parsed.SRSToken,
 		OMEBaseURL:        parsed.OMEBaseURL,
+		OMEAccessToken:    parsed.OMEAccessToken,
 		OMEUsername:       parsed.OMEUsername,
 		OMEPassword:       parsed.OMEPassword,
 		JobBaseURL:        parsed.JobBaseURL,

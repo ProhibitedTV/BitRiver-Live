@@ -9,6 +9,17 @@ ENV_FILE="$REPO_ROOT/.env"
 COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
 COMPOSE_CONFIG_OUTPUT="$(mktemp)"
 CREATED_ENV_FILE=false
+PYTHON_RUNNER=()
+
+SMOKE_IMAGE_SOURCE=build
+SMOKE_LIVE_MODE=development
+
+export BITRIVER_DEPLOY_IMAGE_SOURCE="$SMOKE_IMAGE_SOURCE"
+export BITRIVER_LIVE_MODE="$SMOKE_LIVE_MODE"
+export BITRIVER_LIVE_IMAGE_DIGEST=""
+export BITRIVER_VIEWER_IMAGE_DIGEST=""
+export BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST=""
+export BITRIVER_TRANSCODER_IMAGE_DIGEST=""
 
 cleanup() {
   rm -f "$COMPOSE_CONFIG_OUTPUT"
@@ -35,6 +46,7 @@ fi
 if [ ! -f "$ENV_FILE" ]; then
   CREATED_ENV_FILE=true
   cat >"$ENV_FILE" <<'ENV'
+BITRIVER_DEPLOY_IMAGE_SOURCE=build
 BITRIVER_LIVE_IMAGE_TAG=latest
 BITRIVER_VIEWER_IMAGE_TAG=latest
 BITRIVER_SRS_CONTROLLER_IMAGE_TAG=latest
@@ -43,7 +55,7 @@ BITRIVER_SRS_IMAGE_TAG=v5.0.185
 BITRIVER_OME_IMAGE_TAG=0.16.0
 BITRIVER_LIVE_PORT=8080
 BITRIVER_LIVE_STORAGE_DRIVER=postgres
-BITRIVER_LIVE_MODE=production
+BITRIVER_LIVE_MODE=development
 BITRIVER_LIVE_ADDR=:8080
 BITRIVER_LIVE_POSTGRES_DSN=postgres://bitriver:bitriver@postgres:5432/bitriver?sslmode=disable
 BITRIVER_POSTGRES_DB=bitriver
@@ -97,6 +109,17 @@ if ! command -v go >/dev/null 2>&1; then
   exit 1
 fi
 
+if python3 -c 'import sys' >/dev/null 2>&1; then
+  PYTHON_RUNNER=(python3)
+elif py -3 -c 'import sys' >/dev/null 2>&1; then
+  PYTHON_RUNNER=(py -3)
+elif python -c 'import sys' >/dev/null 2>&1; then
+  PYTHON_RUNNER=(python)
+else
+  echo "error: python3, python, or py -3 is required for quickstart smoke checks" >&2
+  exit 1
+fi
+
 echo "Rendering OME config from template..."
 (
   cd "$REPO_ROOT" &&
@@ -129,17 +152,17 @@ grep_healthcheck "transcoder" "http://localhost:9000/healthz"
 grep_healthcheck "postgres" "pg_isready"
 grep_healthcheck "redis" "redis-cli"
 
-if ! grep -q "Server.generated.xml:/opt/ovenmediaengine/bin/origin_conf/Server.xml" "$COMPOSE_CONFIG_OUTPUT"; then
+if ! grep -q "Server.generated.xml" "$COMPOSE_CONFIG_OUTPUT" || ! grep -q "target: /opt/ovenmediaengine/bin/origin_conf/Server.xml" "$COMPOSE_CONFIG_OUTPUT"; then
   echo "error: expected OME to mount deploy/ome/Server.generated.xml into origin_conf" >&2
   exit 1
 fi
 
-if ! grep -q "Server.generated.xml:/opt/ovenmediaengine/bin/edge_conf/Server.xml" "$COMPOSE_CONFIG_OUTPUT"; then
+if ! grep -q "Server.generated.xml" "$COMPOSE_CONFIG_OUTPUT" || ! grep -q "target: /opt/ovenmediaengine/bin/edge_conf/Server.xml" "$COMPOSE_CONFIG_OUTPUT"; then
   echo "error: expected OME to mount deploy/ome/Server.generated.xml into edge_conf" >&2
   exit 1
 fi
 
-python3 - "$ENV_FILE" "$OME_CONFIG" <<'PY'
+"${PYTHON_RUNNER[@]}" - "$ENV_FILE" "$OME_CONFIG" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -164,8 +187,8 @@ if missing:
 
 bind_default = "0.0.0.0"
 expected_bind = env_values.get("BITRIVER_OME_BIND", bind_default)
-expected_port = env_values.get("BITRIVER_OME_SERVER_PORT", "9000")
-expected_tls_port = env_values.get("BITRIVER_OME_SERVER_TLS_PORT", "9443")
+expected_port = env_values.get("BITRIVER_OME_HTTP_PORT", "8081")
+expected_tls_port = env_values.get("BITRIVER_OME_HTTP_TLS_PORT", "8082")
 
 tree = ET.parse(config_path)
 root = tree.getroot()
@@ -267,7 +290,7 @@ print("OME config validation passed.")
 PY
 
 echo "Starting docker compose stack..."
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build --pull never
 
 set -a
 # shellcheck disable=SC1090

@@ -26,13 +26,15 @@ available on `PATH` (it does not provide a pure-Docker startup path with no loca
 If you're operating from an installed package rather than a source checkout, use the installed `bitriver-live` launcher flow in
 [`docs/quickstart.md`](../docs/quickstart.md) instead of invoking the repository wrapper script directly.
 
-If you invoke Compose directly, set the Compose file path and ensure `.env` is populated:
+If you invoke Compose directly from a source checkout, set the Compose file path, switch the saved root `.env` to local build mode (`BITRIVER_LIVE_MODE=development` and `BITRIVER_DEPLOY_IMAGE_SOURCE=build`), and ensure `.env` is populated:
 
 ```bash
 export COMPOSE_FILE=deploy/docker-compose.yml
 ./deploy/check-env.sh
-docker compose up --build
+docker compose --env-file .env -f "$COMPOSE_FILE" up -d --build --pull never
 ```
+
+Published package/release installs should stay on the pull-mode launcher flow described in [`docs/quickstart.md`](../docs/quickstart.md); the direct Compose command above is the supported local rehearsal path when you need to build first-party images from this checkout.
 
 Compose always re-renders `ome/Server.generated.xml` via the `ome-config` helper before starting OvenMediaEngine. Update `.env`
 with your OME credentials first—`ome-test-*` defaults are rejected and will cause the render step to fail. The `ome-config`
@@ -57,7 +59,7 @@ If you have local automation that still references the removed file or `BITRIVER
 ```bash
 export COMPOSE_FILE=deploy/docker-compose.yml
 ./deploy/check-env.sh
-docker compose up --build
+docker compose --env-file .env -f "$COMPOSE_FILE" up -d --build --pull never
 ```
 
 ## Syncing canonical deploy assets into Helm
@@ -106,6 +108,8 @@ BITRIVER_VIEWER_IMAGE_DIGEST=@sha256:...
 Keep each digest paired with its matching tag (never mix a new tag with an old digest). When you need to override
 third-party images, use the corresponding `*_IMAGE_DIGEST` fields in `deploy/.env.example` and rerun
 `./deploy/check-env.sh` before restarting Compose.
+
+For source-checkout local build rehearsals, leave the first-party digest variables empty and rely on `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never` to build the API, viewer, SRS controller, and transcoder images from the working tree.
 
 ### OME healthcheck
 

@@ -1,6 +1,7 @@
 package ingeststub
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -38,6 +39,7 @@ type Options struct {
 	// skipped.
 	SRSToken        string
 	TranscoderToken string
+	OMEAccessToken  string
 	OMEUser         string
 	OMEPassword     string
 }
@@ -174,7 +176,7 @@ func (c *ControlPlane) handleDeleteChannel(w http.ResponseWriter, r *http.Reques
 }
 
 func (c *ControlPlane) handleCreateApplication(w http.ResponseWriter, r *http.Request) {
-	if !c.expectBasic(w, r, c.opts.OMEUser, c.opts.OMEPassword) {
+	if !c.expectOMEAuth(w, r) {
 		return
 	}
 	type appRequest struct {
@@ -210,7 +212,7 @@ func (c *ControlPlane) handleCreateApplication(w http.ResponseWriter, r *http.Re
 }
 
 func (c *ControlPlane) handleDeleteApplication(w http.ResponseWriter, r *http.Request) {
-	if !c.expectBasic(w, r, c.opts.OMEUser, c.opts.OMEPassword) {
+	if !c.expectOMEAuth(w, r) {
 		return
 	}
 	channelID := strings.TrimPrefix(r.URL.Path, "/v1/applications/")
@@ -318,6 +320,19 @@ func (c *ControlPlane) expectBasic(w http.ResponseWriter, r *http.Request, user,
 		return false
 	}
 	return true
+}
+
+func (c *ControlPlane) expectOMEAuth(w http.ResponseWriter, r *http.Request) bool {
+	expected := strings.TrimSpace(c.opts.OMEAccessToken)
+	if expected != "" {
+		wantAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte(expected))
+		if got := r.Header.Get("Authorization"); got != wantAuth {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return false
+		}
+		return true
+	}
+	return c.expectBasic(w, r, c.opts.OMEUser, c.opts.OMEPassword)
 }
 
 func cloneAnyRenditions(input []map[string]interface{}) []map[string]interface{} {

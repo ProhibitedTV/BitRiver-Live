@@ -1079,6 +1079,155 @@ func TestRunQuickstartBootstrapsAfterReady(t *testing.T) {
 	}
 }
 
+func TestRunEnvInitWizardWritesOperatorChoices(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+
+	originalInput := interactivePromptInput
+	originalOutput := interactivePromptOutput
+	originalAvailable := interactivePromptAvailable
+	t.Cleanup(func() {
+		interactivePromptInput = originalInput
+		interactivePromptOutput = originalOutput
+		interactivePromptAvailable = originalAvailable
+	})
+
+	interactivePromptInput = strings.NewReader(strings.Join([]string{
+		"wizard-admin@example.com",
+		"https://stream.example.net/viewer",
+		"",
+		"9091",
+		"203.0.113.10",
+		"203.0.113.11",
+		"https://cdn.example.net/hls",
+		"y",
+	}, "\n") + "\n")
+	var promptOutput bytes.Buffer
+	interactivePromptOutput = &promptOutput
+	interactivePromptAvailable = func() bool { return true }
+
+	if err := runEnvInit([]string{"--env-file", envPath, "--wizard"}); err != nil {
+		t.Fatalf("run env init wizard: %v", err)
+	}
+
+	values, err := loadEnvValues(envPath, false)
+	if err != nil {
+		t.Fatalf("load env: %v", err)
+	}
+	if values["BITRIVER_LIVE_ADMIN_EMAIL"] != "wizard-admin@example.com" {
+		t.Fatalf("unexpected admin email: %q", values["BITRIVER_LIVE_ADMIN_EMAIL"])
+	}
+	if values["NEXT_PUBLIC_VIEWER_URL"] != "https://stream.example.net/viewer" {
+		t.Fatalf("unexpected viewer URL: %q", values["NEXT_PUBLIC_VIEWER_URL"])
+	}
+	if values["NEXT_PUBLIC_API_BASE_URL"] != "" {
+		t.Fatalf("expected public API URL to remain blank, got %q", values["NEXT_PUBLIC_API_BASE_URL"])
+	}
+	if values["BITRIVER_LIVE_PORT"] != "9091" || values["BITRIVER_LIVE_ADDR"] != ":9091" {
+		t.Fatalf("expected API port/address to update, got port=%q addr=%q", values["BITRIVER_LIVE_PORT"], values["BITRIVER_LIVE_ADDR"])
+	}
+	if values["BITRIVER_OME_BIND"] != "203.0.113.10" {
+		t.Fatalf("unexpected OME bind value: %q", values["BITRIVER_OME_BIND"])
+	}
+	if values["BITRIVER_OME_IP"] != "203.0.113.11" {
+		t.Fatalf("unexpected OME IP value: %q", values["BITRIVER_OME_IP"])
+	}
+	if values["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"] != "https://cdn.example.net/hls" {
+		t.Fatalf("unexpected transcoder URL: %q", values["BITRIVER_TRANSCODER_PUBLIC_BASE_URL"])
+	}
+	if values["BITRIVER_LIVE_ALLOW_SELF_SIGNUP"] != "true" {
+		t.Fatalf("expected self-signup to be enabled, got %q", values["BITRIVER_LIVE_ALLOW_SELF_SIGNUP"])
+	}
+	if strings.TrimSpace(values["BITRIVER_LIVE_ADMIN_PASSWORD"]) == "" {
+		t.Fatalf("expected env init to keep generating required secrets")
+	}
+	if !strings.Contains(promptOutput.String(), "BitRiver Live first-run wizard") {
+		t.Fatalf("expected wizard banner in output, got %q", promptOutput.String())
+	}
+}
+
+func TestRunEnvInitWizardRequiresInteractiveTerminal(t *testing.T) {
+	originalAvailable := interactivePromptAvailable
+	t.Cleanup(func() {
+		interactivePromptAvailable = originalAvailable
+	})
+	interactivePromptAvailable = func() bool { return false }
+
+	err := runEnvInit([]string{"--env-file", filepath.Join(t.TempDir(), ".env"), "--wizard"})
+	if err == nil {
+		t.Fatal("expected wizard mode to require an interactive terminal")
+	}
+	if !strings.Contains(err.Error(), "interactive terminal") {
+		t.Fatalf("expected interactive terminal guidance, got %v", err)
+	}
+}
+
+func TestRunQuickstartPassesWizardFlagToEnvInit(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	composePath := filepath.Join(t.TempDir(), "compose.yml")
+	values := buildValidProductionEnv(t)
+	values["BITRIVER_LIVE_PORT"] = "18080"
+	var lines []string
+	for key, value := range values {
+		lines = append(lines, fmt.Sprintf("%s=%s", key, value))
+	}
+	if err := os.WriteFile(envPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	originalDoctor := doctorRunner
+	originalEnvInit := envInitRunner
+	originalEnvValidate := envValidateRunner
+	originalWaiter := quickstartWaiter
+	originalComposeHealthWaiter := quickstartComposeHealthWaiter
+	originalOMEPreflight := quickstartOMEAuthPreflightRunner
+	originalImagePreflight := deployImageSourcePreflightRunner
+	originalDockerVersion := dockerVersionRunner
+	originalComposeVersion := dockerComposeVersionRunner
+	originalPortPreflight := quickstartHostPortPreflightRunner
+	originalMigrations := migrationsRunner
+	originalComposeUp := composeUpRunner
+	originalBootstrap := bootstrapAdminRunner
+	t.Cleanup(func() {
+		doctorRunner = originalDoctor
+		envInitRunner = originalEnvInit
+		envValidateRunner = originalEnvValidate
+		quickstartWaiter = originalWaiter
+		quickstartComposeHealthWaiter = originalComposeHealthWaiter
+		quickstartOMEAuthPreflightRunner = originalOMEPreflight
+		deployImageSourcePreflightRunner = originalImagePreflight
+		dockerVersionRunner = originalDockerVersion
+		dockerComposeVersionRunner = originalComposeVersion
+		quickstartHostPortPreflightRunner = originalPortPreflight
+		migrationsRunner = originalMigrations
+		composeUpRunner = originalComposeUp
+		bootstrapAdminRunner = originalBootstrap
+	})
+
+	doctorRunner = func([]string) bool { return true }
+	envInitRunner = func(args []string) error {
+		expected := []string{"--env-file", envPath, "--wizard"}
+		if !reflect.DeepEqual(args, expected) {
+			t.Fatalf("env init args = %v, want %v", args, expected)
+		}
+		return nil
+	}
+	envValidateRunner = func([]string) error { return nil }
+	quickstartWaiter = func(map[string]string, string, string) error { return nil }
+	quickstartComposeHealthWaiter = func(string, string) error { return nil }
+	quickstartOMEAuthPreflightRunner = func(string, map[string]string) error { return nil }
+	deployImageSourcePreflightRunner = func(string, map[string]string, string) error { return nil }
+	dockerVersionRunner = func() error { return nil }
+	dockerComposeVersionRunner = func() error { return nil }
+	quickstartHostPortPreflightRunner = func(map[string]string) error { return nil }
+	migrationsRunner = func(string, string) error { return nil }
+	composeUpRunner = func([]string) error { return nil }
+	bootstrapAdminRunner = func(string, string, map[string]string) error { return nil }
+
+	if err := runQuickstart([]string{"--env-file", envPath, "--compose-file", composePath, "--wizard"}); err != nil {
+		t.Fatalf("quickstart failed: %v", err)
+	}
+}
+
 func TestRunQuickstartFailsWhenDeploymentPreflightFails(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), ".env")
 	composePath := filepath.Join(t.TempDir(), "compose.yml")
@@ -1194,8 +1343,12 @@ func TestPrintQuickstartSuccessSummaryIncludesHelpfulDetails(t *testing.T) {
 		"BitRiver Live is running",
 		"Control/API URL: http://localhost:18080",
 		"Viewer URL: http://localhost:18080/viewer",
+		"Admin sign-in URL: http://localhost:18080/admin",
 		"Admin email: admin@example.com",
 		"Env file: .env",
+		"Bootstrap credentials: stored in .env",
+		"env admin",
+		"Password note: if you rotate the admin password later in /admin",
 		"docker compose --file deploy/docker-compose.yml --env-file .env ps",
 		"docker compose --file deploy/docker-compose.yml --env-file .env logs -f",
 		"docker compose --file deploy/docker-compose.yml --env-file .env down",
@@ -1204,6 +1357,71 @@ func TestPrintQuickstartSuccessSummaryIncludesHelpfulDetails(t *testing.T) {
 		if !strings.Contains(out, check) {
 			t.Fatalf("expected output to contain %q, got %q", check, out)
 		}
+	}
+}
+
+func TestRunEnvAdminHidesPasswordByDefault(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	content := strings.Join([]string{
+		"BITRIVER_LIVE_ADMIN_EMAIL=admin@example.com",
+		"BITRIVER_LIVE_ADMIN_PASSWORD=SeedPassword123",
+		"NEXT_PUBLIC_API_BASE_URL=https://stream.example.com/api",
+	}, "\n") + "\n"
+	if err := os.WriteFile(envPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	var runErr error
+	out := captureStdout(t, func() {
+		runErr = runEnvAdmin([]string{"--env-file", envPath})
+	})
+	if runErr != nil {
+		t.Fatalf("runEnvAdmin failed: %v", runErr)
+	}
+
+	checks := []string{
+		"Bootstrap admin access",
+		"Admin sign-in URL: https://stream.example.com/admin",
+		"Admin email: admin@example.com",
+		"Env file: " + envPath,
+		"Bootstrap password: hidden by default",
+		"rerun with --show-password",
+		"original seed credential",
+	}
+	for _, check := range checks {
+		if !strings.Contains(out, check) {
+			t.Fatalf("expected output to contain %q, got %q", check, out)
+		}
+	}
+	if strings.Contains(out, "SeedPassword123") {
+		t.Fatalf("expected hidden password to stay out of output, got %q", out)
+	}
+}
+
+func TestRunEnvAdminShowsPasswordWhenRequested(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	content := strings.Join([]string{
+		"BITRIVER_LIVE_ADMIN_EMAIL=admin@example.com",
+		"BITRIVER_LIVE_ADMIN_PASSWORD=SeedPassword123",
+		"NEXT_PUBLIC_VIEWER_URL=https://stream.example.com/viewer",
+	}, "\n") + "\n"
+	if err := os.WriteFile(envPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+
+	var runErr error
+	out := captureStdout(t, func() {
+		runErr = runEnvAdmin([]string{"--env-file", envPath, "--show-password"})
+	})
+	if runErr != nil {
+		t.Fatalf("runEnvAdmin failed: %v", runErr)
+	}
+
+	if !strings.Contains(out, "Admin sign-in URL: https://stream.example.com/admin") {
+		t.Fatalf("expected viewer URL fallback to trim /viewer, got %q", out)
+	}
+	if !strings.Contains(out, "Bootstrap password: SeedPassword123") {
+		t.Fatalf("expected password to be shown when requested, got %q", out)
 	}
 }
 
@@ -1981,7 +2199,7 @@ func TestBuildOMERenderConfigSeparatesManagersAPIFromSignallingPorts(t *testing.
 
 func TestPollUntilSuccess(t *testing.T) {
 	calls := 0
-	ready, err := pollUntil(context.Background(), 50*time.Millisecond, time.Millisecond, func(context.Context) (bool, error) {
+	ready, err := pollUntil(context.Background(), 500*time.Millisecond, time.Millisecond, func(context.Context) (bool, error) {
 		calls++
 		return calls >= 3, nil
 	})

@@ -13,7 +13,7 @@ export function DirectoryGrid({ channels }: { channels: DirectoryChannel[] }) {
       <div className="state-panel">
         <strong>No channels yet</strong>
         <p className="muted">
-          Creators have not gone live yet. Check back soon or invite your favorite broadcasters to join BitRiver Live.
+          Nobody is live yet. Check back soon, browse other categories, or start the creator setup flow and become one of the first channels on air.
         </p>
         <div className="browse-actions">
           <Link href="/creator/getting-started" className="primary-button">

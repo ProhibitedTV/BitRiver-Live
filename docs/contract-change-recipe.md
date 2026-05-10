@@ -29,7 +29,7 @@ Run these before requesting review:
 ./scripts/test-quickstart.sh
 ```
 
-Prerequisite note: `./scripts/verify.sh` requires `python3` on `PATH` because `./scripts/check-contract-invariants.sh` validates generated artifact references via an embedded Python block.
+Prerequisite note: `./scripts/verify.sh` requires a usable Python 3 interpreter (`python3`, `python`, or `py -3`) because `./scripts/check-contract-invariants.sh` validates generated artifact references via an embedded Python block.
 
 If your branch uses an equivalent smoke/quickstart verification flow, include that command output in the PR notes.
 

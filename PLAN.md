@@ -1366,24 +1366,375 @@
 - `npm.cmd --prefix web/viewer run build`
 
 ## Scope (current change)
-- Address GitHub issue #1218 by making the live player recovery states actionable when playback fails or drops.
-- Keep the fix viewer-only: `Player` state messaging, channel-page retry wiring, and focused viewer tests.
-- Preserve existing playback API contracts, channel data contracts, Docker Compose, `.env`, and generated OME config.
-- Treat broader watch-page layout and chat UX issues as separate GitHub issue slices after this recovery-control pass.
+- Diagnose why the current checkout cannot be pushed to `origin` and repair the safest viable Git path so the current work is available remotely.
+- Confirm whether the blocker is non-fast-forward branch divergence, auth, or remote-policy rejection before making any branch or history changes.
+- Prefer a non-destructive fix that preserves the current commits exactly as they exist now; avoid force-pushing `main`.
+- Keep the change limited to Git workflow metadata and repo planning artifacts unless a small supporting doc update is required.
 
 ## Assumptions
-- Viewers need an in-page retry control and a clear path back to Browse when playback is unavailable; passive refresh copy is not enough for a finished live-streaming product.
-- The channel page already owns playback refetching, so `Player` can request recovery through a callback instead of importing API logic.
-- Existing browser/Jest coverage around channel playback can be extended without changing backend behavior.
+- The immediate goal is to get the current local commits onto GitHub safely, not to rewrite shared history on `origin/main`.
+- Because local `main` is already behind `origin/main`, creating and pushing a dedicated branch is likely safer than rebasing/pushing `main` without explicit user direction.
+- The working tree is clean enough that branch creation or a push repair will not trample unrelated uncommitted work.
 
 ## Risks
-- Retry controls inside `Player` could trigger duplicate playback requests if the channel page polling loop is not respected.
-- Adding buttons to state screens can disturb compact player layouts on small screens if the action row is not constrained.
-- Existing HLS/jsdom mocks may need small updates to assert recovery UI without relying on real media playback.
+- Rebasing or merging `origin/main` into the current `main` without confirmation could create unnecessary conflict resolution or change the exact commits the user expects to publish.
+- Pushing directly to `main` could still be blocked by branch protection or auth even after divergence is addressed, so the exact remote error needs to be captured first.
+- Any networked Git operation may require host-level approval or credentials outside the sandbox, so repair work may pause on environment access rather than repository state.
 
 ## Test plan
-- `npm.cmd --prefix web/viewer run test -- __tests__/player.test.tsx __tests__/channelPage.test.tsx`
-- `npm.cmd --prefix web/viewer run test:playwright -- tests/channel-chat-playback.spec.ts`
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short --branch`
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live remote -v`
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live branch -vv`
+- `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live push origin main`
+- If non-fast-forward on `main`: create/push a safe topic branch from the current `HEAD` and verify `git -c safe.directory=C:/Users/RhythmicCarnage/Desktop/BitRiver-Live status --short --branch`
+
+## Scope (current change)
+- Prepare this Windows host for a production-leaning local OBS rehearsal using the current deployment contract (`production` + `pull`) and the existing repo-root `.env`.
+- Fix the known LAN-host contract mismatches first: loopback/demo public URLs, `0.0.0.0` OME values, and missing image digests.
+- Authenticate container-registry access, verify that the configured first-party release images actually exist, and only then pin digests plus attempt the canonical quickstart/Compose boot path.
+- Keep `deploy/docker-compose.yml` unchanged unless validation proves a contract bug is the active blocker after real first-party images are available.
+
+## Assumptions
+- The user wants the strict production-like pull workflow first, not a faster fallback to build mode.
+- The current `.env` image tags (`v1.2.3`) may be example/default values rather than already-verified published release tags, so registry reality must be checked before mutating the env file further.
+- This host can use a workspace-local Go build cache (`.gocache`) to avoid the existing Windows profile permission issue during Go-backed validators/renderers.
+- Local/LAN HTTP on `10.0.0.108` is acceptable for this rehearsal even though the saved `.env` remains in `production` mode.
+
+## Risks
+- If the configured first-party release tag does not exist in GHCR, the requested `pull`-mode rehearsal cannot complete without either publishing release images or switching to build mode.
+- Editing the tracked root `.env` for a machine-specific LAN rehearsal can create diff noise and must not be committed with live secrets.
+- Production digest enforcement requires both first-party and third-party pins; resolving only the public third-party digests is not enough to satisfy quickstart.
+- Rerendering `deploy/ome/Server.generated.xml` against the LAN rehearsal values will intentionally change a tracked generated contract file and must stay aligned with the actual `.env`.
+
+## Test plan
+- `gh auth status`
+- `gh auth token | docker login ghcr.io -u ProhibitedTV --password-stdin`
+- `git ls-remote --tags origin`
+- `docker buildx imagetools inspect ghcr.io/bitriver-live/bitriver-live:v1.2.3 --format "{{.Manifest.Digest}}"`
+- `docker buildx imagetools inspect redis:7-alpine --format "{{.Manifest.Digest}}"`
+- If first-party release images exist: `go run ./cmd/bitriver env validate --env-file ./.env`, `docker compose --env-file .env -f deploy/docker-compose.yml config`, `./scripts/require-image-digests.sh`, `go run ./cmd/bitriver ome render --force --env-file ./.env`, `go run ./cmd/bitriver quickstart --compose-file deploy/docker-compose.yml`
+
+## Scope (current change)
+- Pivot the local OBS rehearsal from the impossible `production + pull` path to a supported source-checkout build path that uses the current repository contents.
+- Fix the concrete deployment-contract blockers already observed on this host: broken `postgres-migrations` command wiring, insufficient `transcoder-public` capabilities for the bundled nginx config, and a quickstart smoke script that assumes unpublished first-party GHCR images exist.
+- Keep public APIs, storage schemas, and viewer/backend contracts unchanged while making the documented local source-build path actually boot and stream.
+- Treat root `.env` and `deploy/ome/Server.generated.xml` as local runtime state for the rehearsal: update them for the host run, keep them aligned, and avoid committing secrets or host-specific values.
+
+## Assumptions
+- The near-term goal is a reliable source-build rehearsal on this Windows host, not publishing release tags or first-party GHCR images.
+- The repo should continue to support strict release-style `pull` mode later, but the source-checkout smoke and local rehearsal path must no longer depend on nonexistent `v1.2.3` or `latest` first-party images.
+- Default host ports (`8080`, `9080`, `1935`, `9000`, `9001`) are currently free and should be used unless a fresh conflict appears during implementation.
+- The safest local runtime path is direct `docker compose ... up -d --build --pull never` with a development-mode `.env`, rather than trying to force the strict production quickstart contract onto unpublished source artifacts.
+
+## Risks
+- `deploy/docker-compose.yml`, root `.env`, and `deploy/ome/Server.generated.xml` are contract files, so any change must stay synchronized with `docs/contract.md` and operator docs.
+- Fixing `postgres-migrations` and `transcoder-public` only in Compose while leaving Helm/docs inconsistent would create contract drift.
+- `scripts/test-quickstart.sh` and `./scripts/verify.sh` may still be partially blocked on this host by missing `python3`, even after the source-build smoke path itself is fixed.
+- The local rehearsal may still surface additional runtime issues after the stack starts (for example creator bootstrap, ingest preview timing, or OBS publishing), so validation needs to include actual route and service checks, not just `docker compose up`.
+
+## Test plan
+- `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/storage -count=1 -timeout=120s -run TestIngestPipelineEndToEnd`
+- `docker compose --env-file .env -f deploy/docker-compose.yml config`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 postgres-migrations bitriver-live transcoder-public`
+- `./scripts/test-quickstart.sh`
+- `./scripts/verify.sh`
+- Route/runtime rehearsal checks: `http://10.0.0.108:8080/admin`, `/viewer`, `/viewer/creator/live/<channelId>`, RTMP ingest on `:1935`, and HLS playback on `http://10.0.0.108:9080/hls`
+
+## Scope (current change)
+- Repair the viewer chrome so the visible light/dark toggle, sign-in CTA, and sign-up/join CTA all respond predictably in the live app.
+- Remove the unnecessary top spacing in the homepage shell so the left rail and main content sit cleanly under the fixed navbar.
+- Keep the work viewer-only, with no backend API or deployment-contract changes.
+- Validate the fixes in the shipped viewer surface, not just isolated component logic, because the reported failures are runtime UX issues.
+
+## Assumptions
+- The broken auth/theme behavior is likely caused by viewer-side state wiring or CSS layering rather than a backend auth outage, because the stack is already up and the controls render.
+- The visible top gap is caused by competing shell spacing rules in `web/viewer/styles/globals.css`, especially the later rescue-pass overrides that moved top spacing from the content wrapper to the whole shell.
+- A robust theme fix should update the document-level theme attribute in a way that both existing CSS selectors and browser-native UI elements honor consistently.
+- Sign-in and join should stay in-modal/in-viewer by default unless an explicit external auth URL is configured.
+
+## Risks
+- The viewer stylesheet contains multiple later override sections, so changing spacing or navbar layering in one block can accidentally regress another viewport if the final cascade is not checked carefully.
+- Auth CTA fixes that only satisfy Jest mocks could still miss a real runtime issue such as a hidden overlay, incorrect dialog mounting, or pointer-event conflict.
+- Moving theme state from body-only handling to document-level handling can affect tests and any selectors that assume a single attribute location, so the change needs targeted coverage.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx`
 - `npm.cmd --prefix web/viewer run lint`
 - `npm.cmd --prefix web/viewer run build`
-- `./scripts/verify.sh --viewer`
+- If browser automation is needed to confirm live behavior: `npm.cmd --prefix web/viewer run test:playwright -- tests/navbar-mobile.spec.ts`
+
+## Scope (current change)
+- Rework the public viewer and creator web surfaces into a polished v1 live-platform experience centered on the core loop: discover, sign up, create a first channel, go live, watch, tip, and replay VOD.
+- Keep the deployment model and backend stack intact while tightening the information architecture, removing silent no-op UX, and making the viewer/watch experience feel intentional instead of experimental.
+- Add self-serve creator bootstrap so an authenticated self-signup user can create their own first channel without admin intervention and immediately enter the creator live flow.
+- Keep the change focused on viewer + creator surfaces plus the minimal backend/channel API updates required to support first-channel onboarding.
+
+## Assumptions
+- The existing viewer already has enough live, chat, follow, tip, and VOD primitives that the best path is a guided overhaul rather than a wholesale rebuild.
+- Open self-signup remains the default posture for this v1 launch, and the highest-friction missing capability is self-serve first-channel creation.
+- Tips and wallet-style support should be visually primary in the channel/watch UX, while subscriptions remain available but de-emphasized.
+- This pass should improve mobile responsiveness and shell consistency without trying to solve broader product areas like admin redesign, notifications, or a clips ecosystem.
+
+## Risks
+- Relaxing `POST /api/channels` for self-service onboarding can accidentally over-broaden channel creation if ownership checks and role upgrades are not kept self-only and first-channel-safe.
+- Refreshing the homepage, browse page, navigation, and channel page together creates a larger CSS and interaction surface, so shared shell regressions are a real possibility.
+- Creator onboarding will touch both backend permissions and viewer client state, which can produce misleading partial success if only one side is updated.
+- The repo already has unrelated modified contract/runtime files in the working tree, so this pass must stay disciplined about not overwriting unrelated changes while still updating the planning artifacts.
+
+## Test plan
+- Backend/bootstrap:
+  - `New-Item -ItemType Directory -Force .gocache | Out-Null; $env:GOCACHE=(Resolve-Path .gocache).Path; $env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./internal/api ./internal/auth ./internal/storage -count=1 -timeout=120s`
+- Viewer targeted:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx __tests__/browsePage.test.tsx __tests__/directoryPage.test.tsx __tests__/channelDisplayPrimitives.test.tsx`
+  - `npm.cmd --prefix web/viewer run test:playwright -- tests/channel.spec.ts`
+- Viewer validation:
+  - `npm.cmd --prefix web/viewer run lint`
+  - `npm.cmd --prefix web/viewer run build`
+
+## Scope (current change)
+- Redeploy the current checkout onto the existing local Compose stack so the viewer/creator overhaul is actually running in the live environment again.
+- Validate the redeployed stack at the runtime level rather than only through mocked viewer tests: confirm service/container health, API readiness, public viewer routes, and the key creator/live setup pages.
+- Fix any concrete runtime blocker exposed by the live redeploy when it prevents the shipped viewer from hydrating or responding to input, then redeploy and re-check the live surface.
+- Record any remaining gap explicitly if a fully manual broadcast or authenticated browser flow still requires human interaction.
+
+## Assumptions
+- The repo should still be running in the local source-build workflow established earlier (`BITRIVER_DEPLOY_IMAGE_SOURCE=build` with `docker compose ... up -d --build --pull never`).
+- The current `.env` and generated OME config are already aligned enough to let the stack rebuild from source without another contract change.
+- The highest-signal runtime proof for this pass is a successful rebuild plus live route checks on `http://10.0.0.108:8080`, not another full repository-wide verification sweep.
+- Because this machine shares the same working tree as earlier changes, redeploy commands must avoid resetting or cleaning anything.
+
+## Risks
+- Docker rebuilds can fail for host reasons unrelated to the app changes (daemon state, image cache, port collisions), so the first step must separate environment failure from product failure.
+- The redeployed viewer could still differ from the mocked Playwright coverage in areas that require real auth/session bootstrap or live ingest state, so runtime checks need to include both anonymous and creator-facing routes.
+- The API server's default CSP may be too strict for the Next.js viewer bootstrap, so a server-side header fix could be required even if the viewer build itself is healthy.
+- If the stack comes up but the admin/bootstrap data is stale, functional checks may need to stop at route availability rather than full signed-in action flows.
+
+## Test plan
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+- `docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=120 bitriver-live viewer postgres-migrations transcoder-public`
+- `Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/readyz`
+- `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/viewer`
+- `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/browse`
+- `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/videos`
+- `Invoke-WebRequest -UseBasicParsing http://10.0.0.108:8080/creator`
+- `go test ./internal/server -count=1 -timeout=120s`
+- Headless browser smoke against `http://10.0.0.108:8080/viewer` to confirm the theme toggle, auth CTA, and hydrated route content all respond after redeploy
+
+## Scope (current change)
+- Re-enable public self-signup on this local deployment so guest users can actually create accounts from the shipped viewer experience.
+- Redesign the homepage to be more like a modern Twitch-style discovery surface: live content first, tighter copy, strong shelves, and a clearer split between featured content, recommended channels, and browse-by-topic exploration.
+- Keep the changes focused on the live local deployment plus the viewer homepage/auth entry points; avoid unrelated backend or creator-flow changes unless they are required to support signup or homepage behavior.
+- Treat the root `.env` change as local runtime state for this machine and redeploy the affected service after updating it.
+
+## Assumptions
+- The immediate signup blocker is the current runtime flag `BITRIVER_LIVE_ALLOW_SELF_SIGNUP=false`, not a deeper auth/session failure.
+- A Twitch-inspired homepage for this pass means borrowing the information hierarchy and content density, not cloning Twitch styling or copy.
+- Existing discovery APIs (`featured`, `recommended`, `following`, `liveNow`, `trending`, `categories`) are sufficient to build a much stronger homepage without adding new backend endpoints.
+- The current local stack should only require a `bitriver-live` restart for the signup flag and a viewer rebuild/redeploy for homepage code changes.
+
+## Risks
+- Editing the tracked root `.env` is a deployment-contract change, so the local runtime adjustment must stay intentional and should not leak secrets or unrelated config edits.
+- Homepage changes touch a broad CSS surface and the most-trafficked viewer route, so regressions in spacing, mobile behavior, or inactive states are easy to introduce if the layout change is too aggressive.
+- A homepage that becomes too visually close to Twitch without using our own copy, color choices, and interaction patterns could feel derivative instead of intentional.
+- Redeploy validation needs both mocked viewer tests and a real browser smoke, because recent regressions only surfaced on the live `/viewer` mount.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- __tests__/directoryPage.test.tsx __tests__/navbar.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up -d --build --pull never viewer bitriver-live`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps -a`
+- `Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/api/viewer/me`
+- Headless browser smoke against `http://10.0.0.108:8080/viewer` to confirm the create-account flow is offered again and the redesigned homepage renders and hydrates on the live deployment
+
+## Scope (current change)
+- Repair the current verification blockers so the repository has a clean baseline before broader Twitch-style product work continues.
+- Keep this pass focused on test/check reliability and functional gate health; do not start the local Compose stack or change runtime deployment settings.
+- Avoid deployment-contract edits: leave `deploy/docker-compose.yml`, root `.env`, and `deploy/ome/Server.generated.xml` behaviorally unchanged.
+- Add only the backward-compatible `bitriver ome render --output` flag needed to keep OME render tests from mutating the tracked generated contract file.
+
+## Assumptions
+- The first repair pass should prioritize the standard gates rather than a live-stack rehearsal or broader product-gap sweep.
+- The local Compose stack being down is acceptable for this pass as long as Compose config validation still succeeds.
+- The stale viewer snapshot should follow the current `Featured live` copy because that wording better matches the discovery-first live platform goal.
+- Any Windows-specific test handling should preserve real coverage wherever possible and skip only host capabilities such as directory symlink creation when unavailable.
+
+## Risks
+- Transcoder health tests can hide real recovery bugs if the fix only widens timeouts, so recovery should be tied to successful state transitions or explicit component reset behavior.
+- Adding an OME output path flag must not weaken the canonical generated-file path used by normal operators and Compose.
+- Replacing wall-clock session sleeps with a test clock must not leak test-only API into public runtime surfaces.
+- Updating snapshots can mask UI drift if the assertion coverage is too broad, so the copy change should stay narrowly targeted.
+
+## Test plan
+- `go test ./cmd/transcoder -count=1 -timeout=120s`
+- `go test ./internal/auth -count=25 -run TestValidateHonorsAbsoluteTTL`
+- `go test ./internal/ingest ./scripts -count=1 -timeout=120s`
+- `npm.cmd --prefix web/viewer run test -- --silent`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `docker compose --env-file .env -f deploy/docker-compose.yml config`
+- `./scripts/verify.sh`
+
+## Scope (current change)
+- Improve the core viewer functionality around channels, chat, and signup without changing the deployment contract.
+- Upgrade the channel chat panel from REST-only polling to the existing authenticated `/api/chat/ws` gateway, while keeping REST history loading and polling as fallback for guests or failed sockets.
+- Tighten the creator signup/onboarding path so creator-intent account creation points clearly toward first-channel setup instead of feeling like a viewer-only signup.
+- Keep backend channel creation semantics unchanged for this pass because self-signup first-channel creation and role promotion already have API coverage.
+
+## Assumptions
+- The existing `POST /api/channels` self-service path is the correct first-channel bootstrap: a self-signup viewer creates their own first channel and is promoted to creator.
+- The highest-value chat functionality gap is realtime delivery on the viewer channel page; moderation/report tooling can remain API-backed for this pass.
+- A WebSocket failure should not break chat history or the composer; REST polling and send APIs remain the fallback path.
+- Signup copy can adapt to creator intent using the existing auth redirect target, without adding new API payloads or signup roles.
+
+## Risks
+- WebSocket message envelopes use the gateway event shape, while the viewer renders REST chat DTOs; mapping and de-duplication must prevent duplicate messages when ack, broadcast, and polling overlap.
+- jsdom does not exercise real browser WebSocket behavior by default, so tests need a small controllable socket fake.
+- Auth dialog copy changes can accidentally regress generic viewer signup copy if creator-context detection is too broad.
+- Chat changes touch the live channel page's most interactive surface, so focused component tests should cover both socket and fallback paths.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- __tests__/chatPanel.test.tsx __tests__/channelPage.test.tsx __tests__/authDialog.test.tsx __tests__/creatorGettingStartedPage.test.tsx --silent`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `go test ./internal/api ./internal/chat ./internal/auth -count=1 -timeout=120s`
+
+## Scope: Product Readiness Closure - VOD Publish and Chat Reports
+
+### Summary
+Turn the latest product-readiness audit into a focused implementation pass without touching the deployment contract. This pass closes two user-visible functional gaps that block a Twitch-style self-hosted baseline: creators can publish upload-backed recordings into the public VOD surface, and signed-in viewers can report abusive chat messages from the live chat UI.
+
+### Goals
+- Refresh `SPEC.md` so the repo has product acceptance criteria for a self-hosted live streaming website, not only contributor workflow criteria.
+- Add a creator upload action that calls the existing `POST /api/recordings/{id}/publish` API and refreshes the upload list/public VOD path.
+- Add a chat-message report flow that calls the existing `POST /api/channels/{id}/chat/reports` API with `targetId`, `messageId`, and a viewer-supplied reason.
+- Document a self-hosted acceptance checklist in existing testing docs so the final product bar includes real broadcast, playback, chat, VOD, and moderation proof.
+
+### Assumptions
+- The deployment contract remains unchanged: no edits to `deploy/docker-compose.yml`, root `.env`, or `deploy/ome/Server.generated.xml`.
+- Existing backend APIs for recording publish and chat reports are the source of truth for this pass.
+- A full stream schedule data model and real Docker/OBS-style broadcast rehearsal are follow-up product gates, not hidden inside this UI-focused patch.
+
+### Risks
+- Upload items do not expose a `publishedAt` field today, so the UI can confirm the publish request and refresh rather than rendering a durable published badge from the upload payload.
+- Chat history groups consecutive messages by author; per-message report controls must stay attached to individual messages without making the thread noisy.
+- Viewer test mocks must stay aligned with the public `viewer-api` barrel exports.
+
+### Test Plan
+- `npm.cmd --prefix web/viewer run test -- --silent UploadManager ChatPanel viewer-api`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `./scripts/verify.sh` if local prerequisites are available within the remaining pass.
+
+## Scope: Product Readiness Closure - Schedule and Final Gates
+
+### Summary
+Finish the unresolved product-readiness items from the previous pass. Add a real channel schedule model instead of the public placeholder, expose creator editing in the live dashboard, render upcoming streams on public channel pages, and rerun the broad verification gates with enough time to complete.
+
+### Goals
+- Add a typed channel schedule model that works in JSON storage and Postgres-backed self-hosted installs.
+- Extend existing channel create/update/read payloads with backward-compatible optional schedule entries.
+- Let creators manage upcoming scheduled streams from the existing Go Live dashboard.
+- Replace the public channel Schedule placeholder with actual upcoming stream entries.
+- Re-run full verification and capture any remaining real-stack smoke limitations clearly.
+
+### Assumptions
+- A channel-level schedule array is the right minimal product shape for this pass: it supports one or more upcoming stream entries without introducing a separate moderation or calendar subsystem.
+- Adding a nullable/defaulted Postgres column is a schema migration, not a Compose or `.env` deployment-contract change.
+- A real OBS/manual broadcast rehearsal can be represented in docs and smoke gates here, but only automated if local Docker/encoder prerequisites are available.
+
+### Risks
+- Channel schedule JSON must be validated and normalized consistently across memory and Postgres repositories.
+- Existing channel PATCH behavior must remain backward-compatible for title/category/tag-only updates.
+- The public Schedule tab must stay useful when a creator has no upcoming entries.
+
+### Test Plan
+- `go test ./internal/storage ./internal/api -count=1 -timeout=120s`
+- `npm.cmd --prefix web/viewer run test -- --silent creatorLivePage channelPage viewer-api`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./... -count=1 -timeout=120s`
+- `docker compose --env-file .env -f deploy/docker-compose.yml config --quiet`
+- `./scripts/verify.sh`
+
+### Status
+- Implemented. See `TASKS.md` for per-task results and final gate output.
+
+## Scope: Viewer Auth UI Refresh
+
+### Summary
+Fix the deployed viewer behavior where signing in from the normal site chrome updates the auth cookie but leaves route-level UI in its previous guest state until a navigation path forces a refresh. Keep this focused on client auth refresh behavior; do not change auth payloads, cookies, deployment config, or database schema.
+
+### Goals
+- Refresh Next.js route data after successful sign-in, sign-up, MFA completion, and sign-out when the user stays on the same route.
+- Preserve the existing redirect behavior when auth was opened with a different safe destination.
+- Add focused auth-provider coverage proving a same-page sign-in calls the route refresh path and updates the visible auth state.
+- Rebuild/redeploy the viewer container so the running Docker stack reflects the fix.
+
+### Assumptions
+- The backend auth flow and cookies are working; the stale UX is caused by client route data not refreshing after the cookie changes.
+- A client-side `router.refresh()` is the right Next.js primitive because it refreshes server components and cached route payloads without a full browser reload.
+- No deployment contract change is needed.
+
+### Risks
+- Calling refresh before the viewer session has been reloaded could briefly preserve guest data, so refresh should happen after `/api/viewer/me` completes.
+- Existing tests that render `AuthProvider` need a small router mock once the provider uses `useRouter`.
+
+### Test Plan
+- `npm.cmd --prefix web/viewer run test -- __tests__/useAuth.test.tsx --silent`
+- `npm.cmd --prefix web/viewer run test -- __tests__/navbar.test.tsx __tests__/directoryPage.test.tsx __tests__/followingStatePresentation.test.tsx --silent`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+
+## Scope: OME Ingest Health Auth Repair
+
+### Summary
+Fix the deployed OME ingest health failure where BitRiver reports OvenMediaEngine as down with `401 Unauthorized` even though the OME container is reachable. Keep this pass focused on aligning BitRiver's ingest control-plane requests with the existing OME AccessToken contract; do not change Compose ports, `.env`, generated OME XML, or the vendor OME container health contract.
+
+### Goals
+- Load the canonical `BITRIVER_OME_API_TOKEN` into ingest config.
+- Use OME's documented Basic auth credential form, where the raw rendered AccessToken is base64-encoded as the full Basic credential string.
+- Treat authenticated OME non-5xx responses as reachable for the shared `/healthz` probe path, because OME returns `404` for that path after authentication rather than exposing a native `/healthz`.
+- Preserve backward-compatible Basic auth fallback only when no OME API token is configured.
+- Add focused tests that catch the runtime mismatch: OME health should send `AccessToken`, and missing ingest config should require `BITRIVER_OME_API_TOKEN`.
+- Rebuild/redeploy the API service so `/healthz` and the viewer ingest status reflect the repaired OME health path.
+
+### Assumptions
+- The existing `deploy/ome/Server.generated.xml` already contains a rendered top-level `<Managers><API><AccessToken>` that matches `.env`.
+- OME process liveness in Compose can remain unauthenticated and tolerant of 401 responses because it only verifies that the API listener is reachable.
+- BitRiver's application-control API should follow the documented OME AccessToken-as-Basic-credential contract.
+
+### Risks
+- Tests and stubs currently expect Basic auth for OME adapter calls, so they need to be updated without weakening SRS/transcoder auth coverage.
+- Runtime logs may continue to show 401 entries from OME's own unauthenticated container health probe; the success condition is BitRiver ingest status no longer marking OME down.
+
+### Test Plan
+- `go test ./internal/config ./internal/ingest -count=1 -timeout=120s`
+- `go test ./internal/storage -run Ingest -count=1 -timeout=120s`
+- `docker compose --env-file .env -f deploy/docker-compose.yml up --build -d bitriver-live`
+- `docker compose --env-file .env -f deploy/docker-compose.yml ps`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/healthz -TimeoutSec 15`
+- `Invoke-WebRequest -UseBasicParsing http://localhost:8080/readyz -TimeoutSec 15`
+
+## Scope: Main Merge Conflict Resolution
+
+### Summary
+Merge the current `origin/main` into `fix-viewer-discovery-polish` and resolve any conflicts in favor of this branch. Keep this pass limited to conflict resolution and merge hygiene; do not introduce new product behavior beyond the merge result.
+
+### Assumptions
+- `origin/main` is the intended base branch for the PR conflict.
+- "Our branch" means the currently checked out `fix-viewer-discovery-polish` branch.
+- The right conflict policy is Git's `-X ours` behavior: keep incoming non-conflicting base changes, but choose this branch's hunks where both sides touch the same lines.
+
+### Risks
+- The base branch carries a large number of non-conflicting file additions, removals, and edits, so the resulting merge commit is broad even though conflict resolution itself is mechanical.
+- Full verification may be expensive after a broad merge; run lightweight conflict hygiene unless a later pass asks for full gates.
+
+### Test Plan
+- `git merge --no-commit --no-ff -X ours origin/main`
+- `git diff --name-only --diff-filter=U`
+- `rg -n "<<<<<<<|=======|>>>>>>>" --glob "!web/viewer/node_modules/**" .`
+- `git diff --cached --check`

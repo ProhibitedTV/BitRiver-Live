@@ -3,6 +3,9 @@ package storage
 import (
 	"errors"
 	"testing"
+	"time"
+
+	"bitriver-live/internal/domain"
 )
 
 func TestDeleteUserPersistFailureLeavesDataUntouched(t *testing.T) {
@@ -148,6 +151,57 @@ func TestUpdateChannelPersistFailureLeavesDataUntouched(t *testing.T) {
 	}
 	if current.Title != channel.Title {
 		t.Fatalf("expected title %q, got %q", channel.Title, current.Title)
+	}
+}
+
+func TestUpdateChannelSchedulePersistsNormalizedEntries(t *testing.T) {
+	store := newTestStore(t)
+
+	owner, err := store.CreateUser(CreateUserParams{
+		DisplayName: "Owner",
+		Email:       "owner@example.com",
+		Roles:       []string{"creator"},
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	channel, err := store.CreateChannel(owner.ID, "Title", "gaming", []string{"fun"})
+	if err != nil {
+		t.Fatalf("CreateChannel: %v", err)
+	}
+
+	later := time.Date(2026, 6, 2, 18, 30, 0, 0, time.UTC)
+	earlier := time.Date(2026, 6, 1, 18, 30, 0, 0, time.UTC)
+	schedule := []domain.ChannelScheduleEntry{
+		{Title: " Later show ", StartsAt: later, Description: " speedruns "},
+		{Title: "Soon show", StartsAt: earlier, DurationMinutes: 45},
+	}
+	updated, err := store.UpdateChannel(channel.ID, ChannelUpdate{Schedule: &schedule})
+	if err != nil {
+		t.Fatalf("UpdateChannel schedule: %v", err)
+	}
+
+	if len(updated.Schedule) != 2 {
+		t.Fatalf("expected two schedule entries, got %d", len(updated.Schedule))
+	}
+	if updated.Schedule[0].Title != "Soon show" || !updated.Schedule[0].StartsAt.Equal(earlier) || updated.Schedule[0].DurationMinutes != 45 {
+		t.Fatalf("expected earlier entry to be first and preserved, got %#v", updated.Schedule[0])
+	}
+	if updated.Schedule[1].Title != "Later show" || updated.Schedule[1].Description != "speedruns" || updated.Schedule[1].DurationMinutes != 60 {
+		t.Fatalf("expected later entry to be trimmed with default duration, got %#v", updated.Schedule[1])
+	}
+	if updated.Schedule[0].ID == "" || updated.Schedule[1].ID == "" {
+		t.Fatalf("expected generated schedule IDs, got %#v", updated.Schedule)
+	}
+
+	updated.Schedule[0].Title = "mutated"
+	persisted, ok := store.GetChannel(channel.ID)
+	if !ok {
+		t.Fatalf("expected channel to remain")
+	}
+	if persisted.Schedule[0].Title != "Soon show" {
+		t.Fatalf("expected returned schedules to be isolated copies, got %q", persisted.Schedule[0].Title)
 	}
 }
 

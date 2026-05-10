@@ -1,6 +1,9 @@
 package server
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 const (
 	defaultFrameAncestors     = "'none'"
@@ -54,24 +57,34 @@ func (cfg SecurityConfig) withDefaults() SecurityConfig {
 	if cfg.ContentTypeOptions == "" {
 		cfg.ContentTypeOptions = defaults.ContentTypeOptions
 	}
-	if cfg.ContentSecurityPolicy == "" {
-		cfg.ContentSecurityPolicy = defaultContentSecurityPolicy(cfg.FrameAncestors)
-	}
 
 	return cfg
 }
 
 // defaultContentSecurityPolicy builds the default Content-Security-Policy value.
 func defaultContentSecurityPolicy(frameAncestors string) string {
+	return buildContentSecurityPolicy(frameAncestors, false)
+}
+
+func defaultViewerContentSecurityPolicy(frameAncestors string) string {
+	return buildContentSecurityPolicy(frameAncestors, true)
+}
+
+func buildContentSecurityPolicy(frameAncestors string, allowInlineScripts bool) string {
 	value := frameAncestors
 	if value == "" {
 		value = defaultFrameAncestors
 	}
 
+	scriptSource := "script-src 'self'; "
+	if allowInlineScripts {
+		scriptSource = "script-src 'self' 'unsafe-inline'; "
+	}
+
 	return "default-src 'self'; " +
 		"connect-src 'self'; " +
 		"img-src 'self' data:; " +
-		"script-src 'self'; " +
+		scriptSource +
 		"style-src 'self'; " +
 		"font-src 'self'; " +
 		"object-src 'none'; " +
@@ -80,12 +93,16 @@ func defaultContentSecurityPolicy(frameAncestors string) string {
 		"form-action 'self'"
 }
 
+func viewerRouteRequiresInlineScripts(path string) bool {
+	return path == "/viewer" || strings.HasPrefix(path, "/viewer/")
+}
+
 // securityHeadersMiddleware sets security headers before invoking the next handler.
 func securityHeadersMiddleware(cfg SecurityConfig, next http.Handler) http.Handler {
 	effective := cfg.withDefaults()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if effective.ContentSecurityPolicy != "" {
+		if effective.ContentSecurityPolicy != "" && !viewerRouteRequiresInlineScripts(r.URL.Path) {
 			w.Header().Set("Content-Security-Policy", effective.ContentSecurityPolicy)
 		}
 		if effective.FrameOptions != "" {

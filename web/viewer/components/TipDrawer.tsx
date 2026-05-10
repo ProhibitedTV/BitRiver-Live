@@ -53,6 +53,7 @@ export function TipDrawer({
 
   const drawerRef = useRef<HTMLElement | null>(null);
   const firstFieldRef = useRef<HTMLInputElement | null>(null);
+  const resetForCurrentOpenRef = useRef(false);
 
   const closeDrawer = useCallback(() => {
     onClose();
@@ -76,21 +77,36 @@ export function TipDrawer({
 
   useEffect(() => {
     if (!open) {
+      resetForCurrentOpenRef.current = false;
       return;
     }
+    if (resetForCurrentOpenRef.current) {
+      return;
+    }
+    resetForCurrentOpenRef.current = true;
+
+    const nextSelection =
+      currencyOptions.length === 0
+        ? CUSTOM_CURRENCY_OPTION
+        : (currencyOptions[0] ?? CUSTOM_CURRENCY_OPTION);
+    const nextCurrency =
+      nextSelection === CUSTOM_CURRENCY_OPTION ? "" : nextSelection.trim();
+    const nextWalletAddress =
+      donationAddresses.find((address) =>
+        address.currency
+          ? address.currency.toUpperCase() === nextCurrency.toUpperCase()
+          : false
+      )?.address ?? "";
+
     setError(undefined);
     setSubmitting(false);
     setAmount("");
     setReference("");
     setMessage("");
-    if (currencyOptions.length === 0) {
-      setCurrencySelection(CUSTOM_CURRENCY_OPTION);
-    } else {
-      setCurrencySelection(currencyOptions[0] ?? "");
-    }
+    setCurrencySelection(nextSelection);
     setCustomCurrency("");
-    setWalletAddress(matchingAddresses[0]?.address ?? "");
-  }, [open, currencyOptions, matchingAddresses]);
+    setWalletAddress(nextWalletAddress);
+  }, [open, currencyOptions, donationAddresses]);
 
   useEffect(() => {
     if (!open) {

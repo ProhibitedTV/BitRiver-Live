@@ -26,6 +26,7 @@ type Config struct {
 	SRSBaseURL        string
 	SRSToken          string
 	OMEBaseURL        string
+	OMEAccessToken    string
 	OMEUsername       string
 	OMEPassword       string
 	JobBaseURL        string
@@ -61,7 +62,7 @@ func fromConfig(parsed config.IngestConfig) Config {
 	for _, profile := range parsed.LadderProfiles {
 		profiles = append(profiles, Rendition{Name: profile.Name, Bitrate: profile.Bitrate})
 	}
-	return Config{SRSBaseURL: parsed.SRSBaseURL, SRSToken: parsed.SRSToken, OMEBaseURL: parsed.OMEBaseURL, OMEUsername: parsed.OMEUsername, OMEPassword: parsed.OMEPassword, JobBaseURL: parsed.JobBaseURL, JobToken: parsed.JobToken, LadderProfiles: profiles, HealthEndpoint: parsed.HealthEndpoint, HealthTimeout: parsed.HealthTimeout, MaxBootAttempts: parsed.MaxBootAttempts, RetryInterval: parsed.RetryInterval, HTTPMaxAttempts: parsed.HTTPMaxAttempts, HTTPRetryInterval: parsed.HTTPRetryInterval}
+	return Config{SRSBaseURL: parsed.SRSBaseURL, SRSToken: parsed.SRSToken, OMEBaseURL: parsed.OMEBaseURL, OMEAccessToken: parsed.OMEAccessToken, OMEUsername: parsed.OMEUsername, OMEPassword: parsed.OMEPassword, JobBaseURL: parsed.JobBaseURL, JobToken: parsed.JobToken, LadderProfiles: profiles, HealthEndpoint: parsed.HealthEndpoint, HealthTimeout: parsed.HealthTimeout, MaxBootAttempts: parsed.MaxBootAttempts, RetryInterval: parsed.RetryInterval, HTTPMaxAttempts: parsed.HTTPMaxAttempts, HTTPRetryInterval: parsed.HTTPRetryInterval}
 }
 
 // Enabled reports whether enough configuration has been provided to talk to
@@ -101,7 +102,7 @@ func (c Config) Validate() error {
 
 func (c Config) hasAnyConfig() bool {
 	return c.SRSBaseURL != "" || c.SRSToken != "" ||
-		c.OMEBaseURL != "" || c.OMEUsername != "" || c.OMEPassword != "" ||
+		c.OMEBaseURL != "" || c.OMEAccessToken != "" || c.OMEUsername != "" || c.OMEPassword != "" ||
 		c.JobBaseURL != "" || c.JobToken != ""
 }
 
@@ -116,11 +117,8 @@ func (c Config) missingRequiredFields() []string {
 	if c.OMEBaseURL == "" {
 		missing = append(missing, "BITRIVER_OME_API")
 	}
-	if c.OMEUsername == "" {
-		missing = append(missing, "BITRIVER_OME_USERNAME")
-	}
-	if c.OMEPassword == "" {
-		missing = append(missing, "BITRIVER_OME_PASSWORD")
+	if c.OMEAccessToken == "" && (c.OMEUsername == "" || c.OMEPassword == "") {
+		missing = append(missing, "BITRIVER_OME_API_TOKEN")
 	}
 	if c.JobBaseURL == "" {
 		missing = append(missing, "BITRIVER_TRANSCODER_API")

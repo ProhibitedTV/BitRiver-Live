@@ -187,27 +187,40 @@ describe("ChannelPage", () => {
     expect(await screen.findByText("Hello from viewer")).toBeInTheDocument();
   });
 
-  test("lets the embedded player refresh playback without leaving the channel", async () => {
+  test("renders public schedule entries", async () => {
     const user = userEvent.setup();
-    const refreshedResponse = {
-      ...basePlaybackResponse,
-      viewerCount: 321
-    };
+    mockUseAuth.mockReturnValue(signedInAuthState());
 
-    fetchChannelPlaybackMock.mockResolvedValueOnce(basePlaybackResponse as any);
-    fetchChannelPlaybackMock.mockResolvedValueOnce(refreshedResponse as any);
+    fetchChannelPlaybackMock.mockResolvedValueOnce({
+      ...basePlaybackResponse,
+      channel: {
+        ...basePlaybackResponse.channel,
+        schedule: [
+          {
+            id: "schedule-1",
+            title: "Friday Night Runs",
+            startsAt: "2026-06-05T20:00:00.000Z",
+            durationMinutes: 90,
+            description: "Community speedrun showcase",
+            createdAt: "2026-03-21T00:00:00.000Z",
+            updatedAt: "2026-03-21T00:10:00.000Z",
+          },
+        ],
+      },
+    } as any);
 
     render(<ChannelPage params={{ id: "chan-42" }} />);
 
-    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledTimes(1));
-    expect(await screen.findByTestId("player")).toBeInTheDocument();
-
+    const scheduleTab = await screen.findByRole("tab", { name: "Schedule" });
     await act(async () => {
-      await user.click(screen.getByRole("button", { name: "Retry player playback" }));
+      await user.click(scheduleTab);
     });
 
-    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledTimes(2));
-    expect(fetchChannelPlaybackMock).toHaveBeenNthCalledWith(2, "chan-42");
+    expect(screen.getByRole("tabpanel", { name: "Schedule" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Friday Night Runs" })).toBeInTheDocument();
+    expect(screen.getByText("1 hr 30 min")).toBeInTheDocument();
+    expect(screen.getByText("Community speedrun showcase")).toBeInTheDocument();
+    expect(screen.queryByText(/hasn.t shared an upcoming schedule yet/i)).not.toBeInTheDocument();
   });
 
   test("refreshes follow and subscription state immediately after logging in", async () => {
@@ -388,6 +401,51 @@ describe("ChannelPage", () => {
 
     expect(await screen.findByText(/no past broadcasts yet/i)).toBeInTheDocument();
     expect(screen.queryByText(/loading past broadcasts/i)).not.toBeInTheDocument();
+  });
+
+  test("surfaces replay access when the channel is offline", async () => {
+    const user = userEvent.setup();
+    mockUseAuth.mockReturnValue(signedInAuthState());
+
+    fetchChannelPlaybackMock.mockResolvedValueOnce({
+      ...basePlaybackResponse,
+      live: false,
+      channel: {
+        ...basePlaybackResponse.channel,
+        liveState: "offline",
+        currentSessionId: undefined,
+      },
+      playback: undefined,
+    } as any);
+    fetchChannelVodsMock.mockResolvedValueOnce({
+      channelId: "chan-42",
+      items: [
+        {
+          id: "vod-1",
+          title: "Deep Space Beats - Late Night Replay",
+          durationSeconds: 3720,
+          publishedAt: new Date("2023-10-22T02:00:00Z").toISOString(),
+          playbackUrl: "https://cdn.example.com/vods/1.m3u8",
+        },
+      ],
+    } as any);
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledWith("chan-42"));
+    await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledWith("chan-42"));
+
+    expect(
+      await screen.findByRole("heading", { name: /catch the latest broadcast even while the channel is offline/i }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/late night replay/i).length).toBeGreaterThan(0);
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /open videos tab/i }));
+    });
+
+    expect(mockRouter.push).toHaveBeenCalledWith("/channels/chan-42?tab=videos", { scroll: false });
+    expect(screen.getByRole("tab", { name: "Videos" })).toHaveAttribute("aria-selected", "true");
   });
 
   test("directs channel creators to the dashboard", async () => {

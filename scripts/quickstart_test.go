@@ -3,15 +3,74 @@ package scripts_test
 import (
 	"bytes"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+func testBash(t *testing.T) string {
+	t.Helper()
+	var candidates []string
+	if configured := strings.TrimSpace(os.Getenv("BITRIVER_TEST_BASH")); configured != "" {
+		candidates = append(candidates, configured)
+	}
+	if runtime.GOOS == "windows" {
+		if programFiles := strings.TrimSpace(os.Getenv("ProgramFiles")); programFiles != "" {
+			candidates = append(candidates,
+				filepath.Join(programFiles, "Git", "bin", "bash.exe"),
+				filepath.Join(programFiles, "Git", "usr", "bin", "bash.exe"),
+			)
+		}
+		if programFilesX86 := strings.TrimSpace(os.Getenv("ProgramFiles(x86)")); programFilesX86 != "" {
+			candidates = append(candidates,
+				filepath.Join(programFilesX86, "Git", "bin", "bash.exe"),
+				filepath.Join(programFilesX86, "Git", "usr", "bin", "bash.exe"),
+			)
+		}
+	}
+	if found, err := exec.LookPath("bash"); err == nil {
+		candidates = append(candidates, found)
+	}
+
+	seen := make(map[string]struct{})
+	var failures []string
+	for _, candidate := range candidates {
+		if strings.TrimSpace(candidate) == "" {
+			continue
+		}
+		candidate = filepath.Clean(candidate)
+		if _, ok := seen[candidate]; ok {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		if _, err := os.Stat(candidate); err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", candidate, err))
+			continue
+		}
+		cmd := exec.Command(candidate, "-lc", "printf ok")
+		output, err := cmd.CombinedOutput()
+		if err == nil && string(output) == "ok" {
+			return candidate
+		}
+		failures = append(failures, fmt.Sprintf("%s: %v %q", candidate, err, output))
+	}
+	t.Skipf("usable bash not available for quickstart wrapper tests: %s", strings.Join(failures, "; "))
+	return ""
+}
+
+func shellPath(path string) string {
+	clean := filepath.ToSlash(path)
+	if runtime.GOOS == "windows" && len(clean) >= 2 && clean[1] == ':' {
+		drive := strings.ToLower(clean[:1])
+		return "/" + drive + clean[2:]
+	}
+	return clean
+}
 
 func TestQuickstartDelegatesToCli(t *testing.T) {
 	wd, err := os.Getwd()
@@ -44,17 +103,26 @@ func TestQuickstartDelegatesToCli(t *testing.T) {
 	if err := os.MkdirAll(stubBin, 0o755); err != nil {
 		t.Fatalf("create stub bin: %v", err)
 	}
-	goStub := "#!/usr/bin/env bash\nset -euo pipefail\necho \"$(pwd):$*\" >>\"$GO_LOG\"\n"
-	if err := os.WriteFile(filepath.Join(stubBin, "go"), []byte(goStub), 0o755); err != nil {
+	goStubPath := filepath.Join(stubBin, "go")
+	goStubBytes := []byte("#!/usr/bin/env bash\nset -euo pipefail\necho \"$(pwd):$*\" >>\"$GO_LOG\"\n")
+	if err := os.WriteFile(goStubPath, goStubBytes, 0o755); err != nil {
 		t.Fatalf("write go stub: %v", err)
 	}
+	if runtime.GOOS == "windows" {
+		goCmdStubPath := filepath.Join(stubBin, "go.cmd")
+		goCmdStubBytes := []byte("@echo off\r\necho %CD%:%*>>\"%GO_LOG%\"\r\n")
+		if err := os.WriteFile(goCmdStubPath, goCmdStubBytes, 0o755); err != nil {
+			t.Fatalf("write go.cmd stub: %v", err)
+		}
+	}
 
-	cmd := exec.Command("bash", quickstartDst)
+	bash := testBash(t)
+	cmd := exec.Command(bash, shellPath(quickstartDst))
 	cmd.Dir = tempDir
 	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("PATH=%s:%s", stubBin, os.Getenv("PATH")),
-		fmt.Sprintf("BITRIVER_QUICKSTART_REPO_ROOT=%s", tempDir),
-		fmt.Sprintf("GO_LOG=%s", logPath),
+		fmt.Sprintf("PATH=%s:%s", shellPath(stubBin), os.Getenv("PATH")),
+		fmt.Sprintf("BITRIVER_QUICKSTART_REPO_ROOT=%s", shellPath(tempDir)),
+		fmt.Sprintf("GO_LOG=%s", shellPath(logPath)),
 	)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
@@ -96,9 +164,10 @@ func TestQuickstartFailsWhenCliSourcesMissing(t *testing.T) {
 		t.Fatalf("write quickstart: %v", err)
 	}
 
-	cmd := exec.Command("bash", quickstartDst)
+	bash := testBash(t)
+	cmd := exec.Command(bash, shellPath(quickstartDst))
 	cmd.Dir = tempDir
-	cmd.Env = append(os.Environ(), fmt.Sprintf("BITRIVER_QUICKSTART_REPO_ROOT=%s", tempDir))
+	cmd.Env = append(os.Environ(), fmt.Sprintf("BITRIVER_QUICKSTART_REPO_ROOT=%s", shellPath(tempDir)))
 	output, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected quickstart to fail when cmd/bitriver is missing")
@@ -195,6 +264,18 @@ func TestPowerShellQuickstartPropagatesCliExitCodes(t *testing.T) {
 	}
 	if !strings.Contains(script, "$processPATH = [System.Environment]::GetEnvironmentVariable('PATH', 'Process')") {
 		t.Fatalf("expected PowerShell quickstart wrapper to capture the process PATH value before normalizing environment casing")
+	}
+	if !strings.Contains(script, "$processGOCACHE = [System.Environment]::GetEnvironmentVariable('GOCACHE', 'Process')") {
+		t.Fatalf("expected PowerShell quickstart wrapper to capture the process GOCACHE value before launching the CLI")
+	}
+	if !strings.Contains(script, "bitriver-live-go-build-cache") {
+		t.Fatalf("expected PowerShell quickstart wrapper to provide a writable fallback GOCACHE location")
+	}
+	if !strings.Contains(script, "SetEnvironmentVariable('GOCACHE', $goCacheRoot, 'Process')") {
+		t.Fatalf("expected PowerShell quickstart wrapper to set GOCACHE before launching the CLI")
+	}
+	if !strings.Contains(script, "SetEnvironmentVariable('GOCACHE', $processGOCACHE, 'Process')") {
+		t.Fatalf("expected PowerShell quickstart wrapper to restore the original GOCACHE value after Start-Process")
 	}
 	if !strings.Contains(script, "SetEnvironmentVariable('Path', $normalizedPath, 'Process')") {
 		t.Fatalf("expected PowerShell quickstart wrapper to preserve a canonical Path value for the child process")
@@ -453,27 +534,9 @@ func renderOMEConfig(t *testing.T, repoRoot, envContents string) []byte {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	outputPath := filepath.Join(repoRoot, "deploy", "ome", "Server.generated.xml")
-	original, err := os.ReadFile(outputPath)
-	var originalMode os.FileMode
-	if err == nil {
-		stat, statErr := os.Stat(outputPath)
-		if statErr != nil {
-			t.Fatalf("stat generated config: %v", statErr)
-		}
-		originalMode = stat.Mode()
-		t.Cleanup(func() {
-			_ = os.WriteFile(outputPath, original, originalMode)
-		})
-	} else if errors.Is(err, os.ErrNotExist) {
-		t.Cleanup(func() {
-			_ = os.Remove(outputPath)
-		})
-	} else {
-		t.Fatalf("read generated config: %v", err)
-	}
+	outputPath := filepath.Join(t.TempDir(), "Server.generated.xml")
 
-	cmd := exec.Command("go", "run", "./cmd/bitriver", "ome", "render", "--force", "--env-file", envPath)
+	cmd := exec.Command("go", "run", "./cmd/bitriver", "ome", "render", "--force", "--env-file", envPath, "--output", outputPath)
 	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(),
 		"GOTOOLCHAIN=local",

@@ -8,6 +8,10 @@ import type { CryptoAddress } from "../lib/viewer-api";
 const createTipMock = viewerApiMocks.createTip;
 
 const donationAddresses: CryptoAddress[] = [{ currency: "btc", address: "bc1-test-address" }];
+const multiCurrencyDonationAddresses: CryptoAddress[] = [
+  { currency: "eth", address: "0xabc123", note: "Main" },
+  { currency: "btc", address: "bc1-test-address" }
+];
 
 function TipDrawerHarness() {
   const [open, setOpen] = useState(false);
@@ -120,5 +124,52 @@ describe("TipDrawer", () => {
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: /send a tip/i })).not.toBeInTheDocument());
     expect(trigger).toHaveFocus();
+  });
+
+  test("changing currency keeps typed values and updates the matching wallet address", async () => {
+    createTipMock.mockResolvedValue({} as any);
+
+    const user = userEvent.setup();
+    render(
+      <TipDrawer
+        open
+        channelId="chan-123"
+        channelTitle="Lo-fi Beats"
+        donationAddresses={multiCurrencyDonationAddresses}
+        onClose={jest.fn()}
+        onSuccess={jest.fn()}
+      />
+    );
+
+    const amountInput = screen.getByLabelText("Amount");
+    const referenceInput = screen.getByLabelText("Wallet reference");
+    const messageInput = screen.getByLabelText("Message (optional)");
+    const currencySelect = screen.getByLabelText("Currency");
+    const walletAddressInput = screen.getByLabelText("Wallet address (optional)");
+
+    await user.type(amountInput, "0.75");
+    await user.type(referenceInput, "txn-btc-1");
+    await user.type(messageInput, "Great stream");
+    await user.selectOptions(currencySelect, "BTC");
+
+    await waitFor(() => expect(walletAddressInput).toHaveValue("bc1-test-address"));
+    expect(amountInput).toHaveValue(0.75);
+    expect(referenceInput).toHaveValue("txn-btc-1");
+    expect(messageInput).toHaveValue("Great stream");
+
+    await user.click(screen.getByRole("button", { name: /send tip/i }));
+
+    await waitFor(() => {
+      expect(createTipMock).toHaveBeenCalledWith(
+        "chan-123",
+        expect.objectContaining({
+          amount: 0.75,
+          currency: "BTC",
+          reference: "txn-btc-1",
+          walletAddress: "bc1-test-address",
+          message: "Great stream"
+        })
+      );
+    });
   });
 });

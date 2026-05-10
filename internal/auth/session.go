@@ -61,6 +61,7 @@ type SessionManager struct {
 	idleTimeout  time.Duration
 	tokenLength  int
 	tokenFactory func(int) (string, error)
+	now          func() time.Time
 }
 
 // NewSessionManager constructs a SessionManager with the provided absolute TTL and options.
@@ -73,6 +74,7 @@ func NewSessionManager(ttl time.Duration, opts ...SessionOption) *SessionManager
 		absoluteTTL:  ttl,
 		tokenLength:  32,
 		tokenFactory: generateToken,
+		now:          time.Now,
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -94,7 +96,7 @@ func (m *SessionManager) Create(userID string) (string, time.Time, error) {
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	now := time.Now()
+	now := m.currentTime()
 	absoluteExpiresAt := now.Add(m.absoluteTTL)
 	expiresAt := absoluteExpiresAt
 	if m.idleTimeout > 0 {
@@ -121,7 +123,7 @@ func (m *SessionManager) Validate(token string) (string, time.Time, bool, error)
 	if !ok {
 		return "", time.Time{}, false, nil
 	}
-	now := time.Now()
+	now := m.currentTime()
 	absoluteExpiresAt := record.AbsoluteExpiresAt
 	if absoluteExpiresAt.IsZero() {
 		absoluteExpiresAt = record.ExpiresAt
@@ -156,7 +158,7 @@ func (m *SessionManager) Revoke(token string) error {
 
 // PurgeExpired removes any expired sessions from the backing store.
 func (m *SessionManager) PurgeExpired() error {
-	return m.store.PurgeExpired(time.Now())
+	return m.store.PurgeExpired(m.currentTime())
 }
 
 // Ping verifies the underlying session store is reachable when it exposes a ping method.
@@ -180,6 +182,13 @@ func generateToken(length int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(bytes), nil
+}
+
+func (m *SessionManager) currentTime() time.Time {
+	if m != nil && m.now != nil {
+		return m.now()
+	}
+	return time.Now()
 }
 
 // ErrInvalidUserID is returned when attempting to create a session without a user identifier.

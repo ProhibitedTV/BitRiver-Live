@@ -23,7 +23,7 @@ func TestLoadIngestFromEnvMissingFields(t *testing.T) {
 	if err == nil || !errors.As(err, &missing) {
 		t.Fatalf("expected missing error, got %v", err)
 	}
-	want := []string{"BITRIVER_SRS_TOKEN", "BITRIVER_OME_API", "BITRIVER_OME_USERNAME", "BITRIVER_OME_PASSWORD", "BITRIVER_TRANSCODER_API", "BITRIVER_TRANSCODER_TOKEN"}
+	want := []string{"BITRIVER_SRS_TOKEN", "BITRIVER_OME_API", "BITRIVER_OME_API_TOKEN", "BITRIVER_TRANSCODER_API", "BITRIVER_TRANSCODER_TOKEN"}
 	if !slices.Equal(missing.Missing, want) {
 		t.Fatalf("missing mismatch: got %v want %v", missing.Missing, want)
 	}
@@ -37,8 +37,7 @@ func TestLoadIngestFromEnvDefaultsAndOverrides(t *testing.T) {
 		"BITRIVER_SRS_API":                    "http://srs:1985",
 		"BITRIVER_SRS_TOKEN":                  "secret",
 		"BITRIVER_OME_API":                    "http://ome:8081",
-		"BITRIVER_OME_USERNAME":               "admin",
-		"BITRIVER_OME_PASSWORD":               "password",
+		"BITRIVER_OME_API_TOKEN":              "ome-access-token",
 		"BITRIVER_TRANSCODER_API":             "http://transcoder:9000",
 		"BITRIVER_TRANSCODER_TOKEN":           "job-secret",
 		"BITRIVER_INGEST_HTTP_MAX_ATTEMPTS":   "5",
@@ -51,6 +50,9 @@ func TestLoadIngestFromEnvDefaultsAndOverrides(t *testing.T) {
 	if cfg.HTTPMaxAttempts != 5 || cfg.HTTPRetryInterval != time.Second {
 		t.Fatalf("unexpected retry overrides: %#v", cfg)
 	}
+	if cfg.OMEAccessToken != "ome-access-token" {
+		t.Fatalf("unexpected OME access token: %q", cfg.OMEAccessToken)
+	}
 	if cfg.HealthEndpoint != "/healthz" {
 		t.Fatalf("expected default health endpoint, got %q", cfg.HealthEndpoint)
 	}
@@ -59,13 +61,32 @@ func TestLoadIngestFromEnvDefaultsAndOverrides(t *testing.T) {
 	}
 }
 
+func TestLoadIngestFromEnvPrefersOMEHealthcheckTokenOverride(t *testing.T) {
+	env := Environment{values: map[string]string{
+		"BITRIVER_SRS_API":               "http://srs:1985",
+		"BITRIVER_SRS_TOKEN":             "secret",
+		"BITRIVER_OME_API":               "http://ome:8081",
+		"BITRIVER_OME_API_TOKEN":         "ome-api-token",
+		"BITRIVER_OME_HEALTHCHECK_TOKEN": "ome-rendered-token",
+		"BITRIVER_TRANSCODER_API":        "http://transcoder:9000",
+		"BITRIVER_TRANSCODER_TOKEN":      "job-secret",
+	}}
+
+	cfg, err := LoadIngestFromEnv(env)
+	if err != nil {
+		t.Fatalf("LoadIngestFromEnv: %v", err)
+	}
+	if cfg.OMEAccessToken != "ome-rendered-token" {
+		t.Fatalf("expected rendered OME token override, got %q", cfg.OMEAccessToken)
+	}
+}
+
 func TestLoadIngestFromEnvValidationErrors(t *testing.T) {
 	_, err := LoadIngestFromEnv(Environment{values: map[string]string{
 		"BITRIVER_SRS_API":                  "http://srs:1985",
 		"BITRIVER_SRS_TOKEN":                "secret",
 		"BITRIVER_OME_API":                  "http://ome:8081",
-		"BITRIVER_OME_USERNAME":             "admin",
-		"BITRIVER_OME_PASSWORD":             "password",
+		"BITRIVER_OME_API_TOKEN":            "ome-access-token",
 		"BITRIVER_TRANSCODER_API":           "http://transcoder:9000",
 		"BITRIVER_TRANSCODER_TOKEN":         "job-secret",
 		"BITRIVER_INGEST_MAX_BOOT_ATTEMPTS": "oops",

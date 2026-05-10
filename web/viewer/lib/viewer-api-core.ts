@@ -17,6 +17,15 @@ function resolveRequestTarget(path: string) {
   return new URL(normalizedPath, base).toString();
 }
 
+export function viewerWebSocketUrl(path: string): string {
+  const target = new URL(
+    resolveRequestTarget(path),
+    typeof window !== "undefined" ? window.location.href : SERVER_API_BASE
+  );
+  target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
+  return target.toString();
+}
+
 export class ViewerApiError extends Error {
   status: number;
   body?: unknown;
@@ -27,7 +36,15 @@ export class ViewerApiError extends Error {
     const bodyMessage =
       typeof body === "object" && body !== null && "message" in body && typeof body.message === "string"
         ? body.message
-        : undefined;
+        : typeof body === "object" &&
+            body !== null &&
+            "error" in body &&
+            typeof body.error === "object" &&
+            body.error !== null &&
+            "message" in body.error &&
+            typeof body.error.message === "string"
+          ? body.error.message
+          : undefined;
     super(message ?? bodyMessage ?? fallbackMessage);
     this.name = "ViewerApiError";
     this.status = status;

@@ -84,3 +84,55 @@ content flows through unchanged.
    then the "No VODs yet" empty state once the fetch resolves. If the VOD API
    returns an error, the gallery shows a retry button that clears the error and
    reloads the list.
+
+## Control center installer wizard
+
+1. Sign in as an administrator, open **Administration** -> **Settings**, and
+   scroll to **Install BitRiver Live**.
+
+   *Expected:* the installer opens on **Welcome** with the 7-step progress bar
+   visible, Quick Install language emphasized, and no advanced service fields
+   visible yet.
+
+2. Click **Run system check**.
+
+   *Expected:* the wizard advances to **System Check**, shows pass/warning/fail
+   rows with plain-language actions, includes a **Refresh checks** button, and
+   keeps raw host details hidden until **Show technical details** is expanded.
+
+3. Confirm the host-readiness messaging uses live server-side results when the
+   endpoint is available.
+
+   *Expected:* checks mention the real host shape (for example supported
+   Ubuntu/systemd state, installer tools, paths, port readiness, TLS files, or
+   external service reachability) instead of only browser-side warnings. If the
+   endpoint is temporarily unavailable, the wizard should show the fallback
+   guidance message and still allow **Continue** and **Refresh checks**.
+
+4. Continue to **Install Mode** and **Core Settings**.
+
+   *Expected:* **Quick Install** is selected by default and marked
+   recommended. Switching to **Advanced Install** reveals the database, TLS,
+   Redis, and lower-level service fields; switching back to **Quick Install**
+   hides them again.
+
+5. Fill in required fields with at least one deliberate validation error first
+   (for example an invalid email or weak password), then correct it.
+
+   *Expected:* inline helper text stays visible for every field, the validation
+   error appears next to the affected input, and all entered values remain in
+   place after the error and after fixing it.
+
+6. Continue to **Review** and expand **Show technical details**.
+
+   *Expected:* the review step summarizes the chosen install path, sign-in
+   details, storage/services, and any advanced technical choices before the
+   handoff starts.
+
+7. Click **Start handoff** and then continue to **Success**.
+
+   *Expected:* the **Installing** step uses the progress UI rather than raw log
+   output, the generated command stays available behind technical details, and
+   the **Success** step shows the app URL, admin URL, config path, data path,
+   and next steps. Using **Back** and **Start over** should keep the flow
+   predictable instead of dropping you into a blank state.

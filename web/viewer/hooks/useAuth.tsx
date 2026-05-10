@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { appendRedirectParam } from "../lib/auth-links";
 import { ViewerApiError, viewerRequest } from "../lib/viewer-api-core";
 
@@ -51,6 +52,7 @@ type AuthContextValue = {
   submitSignIn: (input: { email: string; password: string }) => Promise<void>;
   submitSignUp: (input: { displayName: string; email: string; password: string }) => Promise<void>;
   submitMFAVerification: (code: string) => Promise<void>;
+  refreshViewer: () => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -158,6 +160,7 @@ function readViewerAuthMeta(body: unknown): ViewerAuthMeta {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const [user, setUser] = useState<AuthUser | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
@@ -373,8 +376,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (resolvedRedirect !== currentPath) {
       window.location.assign(resolvedRedirect);
+      return;
     }
-  }, [authRedirectTo, loadViewer, resetAuthFlow, resolveRedirectTarget]);
+
+    router.refresh();
+  }, [authRedirectTo, loadViewer, resetAuthFlow, resolveRedirectTarget, router]);
 
   const signIn = useCallback(
     async (redirectTo?: string) => {
@@ -523,11 +529,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signOutError = err instanceof Error ? err.message : "Unable to sign out";
     } finally {
       await loadViewer();
+      router.refresh();
       if (signOutError) {
         setError(signOutError);
       }
     }
-  }, [loadViewer, logoutUrl]);
+  }, [loadViewer, logoutUrl, router]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -549,6 +556,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       submitSignIn,
       submitSignUp,
       submitMFAVerification,
+      refreshViewer: loadViewer,
       signOut,
     }),
     [
@@ -567,6 +575,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signOut,
       signUp,
+      loadViewer,
       submitMFAVerification,
       submitSignIn,
       submitSignUp,

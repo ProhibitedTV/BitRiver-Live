@@ -24,18 +24,12 @@ export function FollowingSidebar() {
     refreshIntervalMs: REFRESH_INTERVAL_MS,
   });
 
-  const getSummary = () => {
-    if (status === "loading") {
-      return FOLLOWING_COPY.loading;
+  const summary = (() => {
+    if (status === "ready") {
+      return channels.length > 0 ? FOLLOWING_COPY.summaryFollowed(channels.length) : FOLLOWING_COPY.empty;
     }
-    if (status === "error") {
-      return error ?? FOLLOWING_COPY.error;
-    }
-    if (status === "unauthenticated") {
-      return FOLLOWING_COPY.unauthenticated;
-    }
-    return channels.length > 0 ? FOLLOWING_COPY.summaryFollowed(channels.length) : FOLLOWING_COPY.empty;
-  };
+    return null;
+  })();
 
   const renderAvatar = (entry: DirectoryChannel) => {
     const avatar = entry.profile.avatarUrl ?? entry.profile.bannerUrl;
@@ -67,18 +61,18 @@ export function FollowingSidebar() {
       <header className="following-sidebar__header">
         <div className="stack stack--2xs">
           <div className="following-sidebar__title-row">
-            <p className="following-sidebar__eyebrow">Following</p>
+            <p className="following-sidebar__eyebrow">Live network</p>
             {status === "ready" && <span className="following-sidebar__count">{channels.length}</span>}
           </div>
-          <h4>Keep your circle close</h4>
+          <h3>Following</h3>
         </div>
-        <span className="following-sidebar__summary muted">{getSummary()}</span>
+        {summary ? <p className="following-sidebar__summary muted">{summary}</p> : null}
       </header>
 
       {status === "loading" ? (
         <FollowingLoadingBlock className="following-sidebar__state muted" />
       ) : status === "unauthenticated" ? (
-        <FollowingUnauthenticatedPrompt className="following-sidebar__state following-sidebar__state--empty stack" />
+        <FollowingUnauthenticatedPrompt className="following-sidebar__state following-sidebar__state--prompt stack" />
       ) : status === "error" ? (
         <FollowingErrorBlock
           className="following-sidebar__state following-sidebar__state--error"
@@ -109,10 +103,6 @@ export function FollowingSidebar() {
           )}
         />
       )}
-
-      <p className="following-sidebar__footnote muted">
-        This list refreshes automatically so live creators surface without a full page reload.
-      </p>
     </div>
   );
 }

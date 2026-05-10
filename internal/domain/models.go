@@ -37,6 +37,7 @@ type ChannelUpdate struct {
 	Title     *string
 	Category  *string
 	Tags      *[]string
+	Schedule  *[]ChannelScheduleEntry
 	LiveState *string
 }
 

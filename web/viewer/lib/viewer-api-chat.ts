@@ -1,5 +1,5 @@
 import { viewerRequest } from "./viewer-api-core";
-import type { ChatMessage, ChatMessageResponse } from "./viewer-api-types";
+import type { ChatMessage, ChatMessageResponse, ChatReport, ChatReportPayload } from "./viewer-api-types";
 
 function toChatMessage(response: ChatMessageResponse): ChatMessage {
   const normalizedUserId = response.userId.trim();
@@ -35,4 +35,11 @@ export function sendChatMessage(
     method: "POST",
     body: JSON.stringify({ userId, content })
   }).then(toChatMessage);
+}
+
+export function reportChatMessage(channelId: string, payload: ChatReportPayload): Promise<ChatReport> {
+  return viewerRequest<ChatReport>(`/api/channels/${encodeURIComponent(channelId)}/chat/reports`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

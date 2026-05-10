@@ -58,6 +58,39 @@ describe("AuthDialog", () => {
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
   });
 
+  it("uses creator signup copy when account creation returns to onboarding", () => {
+    mockUseAuth.mockReturnValue(
+      buildAuthState({
+        user: undefined,
+        authDialogOpen: true,
+        authMode: "signup",
+        authRedirectTo: "/creator/getting-started",
+      }),
+    );
+
+    renderWithProviders(<AuthDialog />);
+
+    expect(screen.getByRole("heading", { level: 2, name: /create your creator account/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: /create your creator account/i })).toBeInTheDocument();
+    expect(screen.getByText(/set up your first channel and OBS settings/i)).toBeInTheDocument();
+  });
+
+  it("keeps generic signup copy for viewer account creation", () => {
+    mockUseAuth.mockReturnValue(
+      buildAuthState({
+        user: undefined,
+        authDialogOpen: true,
+        authMode: "signup",
+        authRedirectTo: "/channels/chan-1",
+      }),
+    );
+
+    renderWithProviders(<AuthDialog />);
+
+    expect(screen.getByRole("heading", { level: 3, name: /create your viewer account/i })).toBeInTheDocument();
+    expect(screen.queryByText(/set up your first channel and OBS settings/i)).not.toBeInTheDocument();
+  });
+
   it("closes when the backdrop button is clicked", async () => {
     const closeAuthDialog = jest.fn();
     mockUseAuth.mockReturnValue(

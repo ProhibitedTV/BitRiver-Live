@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 files=(
   "README.md"
-  "docs/cross-platform-plan.md"
+  "docs/labs/cross-platform-plan.md"
   "docs/quickstart.md"
   "docs/advanced-deployments.md"
 )

@@ -1,5 +1,5 @@
 import userEvent from "@testing-library/user-event";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { mockAuthenticatedUser, renderWithProviders, viewerApiMocks } from "../test/test-utils";
 import CreatorLivePage from "../app/creator/live/[channelId]/page";
 import { CreatorChannelProvider } from "../hooks/useCreatorChannel";
@@ -95,18 +95,28 @@ describe("CreatorLivePage", () => {
         peakConcurrent: 0,
       },
     ] as any);
-    updateChannelMock.mockResolvedValue({
+    updateChannelMock.mockImplementation(async (_channelId: string, payload: any) => ({
       id: "chan-1",
       ownerId: "creator-1",
-      title: "Main Channel",
+      title: payload.title ?? "Main Channel",
       category: "Science & Tech",
       tags: ["setup"],
+      schedule:
+        payload.schedule?.map((entry: any, index: number) => ({
+          id: entry.id ?? `schedule-${index + 1}`,
+          title: entry.title,
+          startsAt: entry.startsAt,
+          durationMinutes: entry.durationMinutes,
+          description: entry.description,
+          createdAt: "2026-03-21T00:00:00.000Z",
+          updatedAt: "2026-03-21T00:10:00.000Z",
+        })) ?? [],
       liveState: "offline",
       createdAt: "2026-03-21T00:00:00.000Z",
       updatedAt: "2026-03-21T00:10:00.000Z",
       streamKey: "sk_live_123",
       ingestEndpoints: ["rtmp://ingest.example.com/live", "rtmp://backup.example.com/live"],
-    } as any);
+    }));
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: {
@@ -134,21 +144,21 @@ describe("CreatorLivePage", () => {
 
     expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual([
       "1) Channel",
-      "2) OBS Setup",
-      "3) Test Stream",
-      "4) Preview",
-      "5) Share",
+      "2) Stream settings",
+      "3) Go live",
+      "4) Share",
     ]);
 
     expect(screen.getByLabelText("Current channel")).toHaveValue("Main Channel");
+    expect(screen.getByLabelText("Scheduled title")).toHaveValue("Main Channel");
     expect(screen.getByLabelText("Switch channel")).toHaveValue("chan-1");
     expect(screen.getByLabelText("Preferred ingest URL")).toHaveValue("rtmp://ingest.example.com/live");
     expect(screen.getByLabelText("Stream key")).toHaveValue("********");
-    expect(screen.getByLabelText("OBS settings block")).toHaveValue(
-      "Service: Custom\nServer: rtmp://ingest.example.com/live\nStream Key: [hidden - reveal to copy]",
-    );
-    expect(screen.getByText(/this page refreshes the current live signals every 4 seconds/i)).toBeInTheDocument();
-    expect(screen.getByText(/BitRiver is receiving your stream, but the preview player is still warming up/i)).toBeInTheDocument();
+    expect(screen.getByText(/service: custom/i)).toBeInTheDocument();
+    expect(screen.getByText(/server: rtmp:\/\/ingest\.example\.com\/live/i)).toBeInTheDocument();
+    expect(screen.getByText(/stream key: reveal or copy it above when you need it/i)).toBeInTheDocument();
+    expect(screen.getByText(/this page checks the signal every 4 seconds/i)).toBeInTheDocument();
+    expect(screen.getByText(/keep OBS running while the preview starts/i)).toBeInTheDocument();
     expect(screen.getByTestId("creator-preview-player")).toHaveTextContent(
       JSON.stringify({ channelId: "chan-1", live: false, liveState: "starting" }),
     );
@@ -160,12 +170,31 @@ describe("CreatorLivePage", () => {
 
     await user.click(screen.getByRole("button", { name: "Reveal" }));
     await waitFor(() => expect(screen.getByLabelText("Stream key")).toHaveValue("sk_live_123"));
-    expect(screen.getByLabelText("OBS settings block")).toHaveValue(
-      "Service: Custom\nServer: rtmp://ingest.example.com/live\nStream Key: sk_live_123",
-    );
 
     await user.click(screen.getByRole("button", { name: "Refresh now" }));
     await waitFor(() => expect(reload).toHaveBeenCalledWith(true));
+
+    fireEvent.change(screen.getByLabelText("Scheduled title"), { target: { value: "Friday Night Runs" } });
+    fireEvent.change(screen.getByLabelText("Start time"), { target: { value: "2026-06-05T20:00" } });
+    fireEvent.change(screen.getByLabelText("Duration minutes"), { target: { value: "90" } });
+    fireEvent.change(screen.getByLabelText("Description"), { target: { value: "Community speedrun showcase" } });
+    fireEvent.submit(screen.getByRole("form", { name: "Update stream schedule" }));
+
+    await waitFor(() =>
+      expect(updateChannelMock).toHaveBeenCalledWith(
+        "chan-1",
+        expect.objectContaining({
+          schedule: [
+            expect.objectContaining({
+              title: "Friday Night Runs",
+              durationMinutes: 90,
+              description: "Community speedrun showcase",
+            }),
+          ],
+        }),
+      ),
+    );
+    expect(await screen.findByText("Schedule updated.")).toBeInTheDocument();
 
     expect(screen.getByRole("link", { name: "Open viewer" })).toHaveAttribute(
       "href",

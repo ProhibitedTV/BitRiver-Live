@@ -11,6 +11,16 @@ jest.mock("../components/FollowingSidebar", () => ({
 }));
 
 describe("ViewerShell", () => {
+  it("does not render duplicate sidebar intro copy above the following rail", () => {
+    render(
+      <ViewerShell>
+        <div>Page content</div>
+      </ViewerShell>
+    );
+
+    expect(screen.queryByText(/keep an eye on the creators you already know/i)).not.toBeInTheDocument();
+  });
+
   it("toggles the mobile following sidebar button state", () => {
     render(
       <ViewerShell>

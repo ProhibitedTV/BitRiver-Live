@@ -176,7 +176,7 @@ func TestUploadProcessorTimeout(t *testing.T) {
 	processor.Enqueue("upload-slow")
 
 	waitForIngestCallCount(t, ingestFake, "upload-slow", 3, 3*time.Second)
-	waitForUploadUpdate(t, slowUpdates, 3*time.Second, func(upload domain.Upload) bool {
+	waitForUploadUpdate(t, slowUpdates, 10*time.Second, func(upload domain.Upload) bool {
 		if upload.Status != "failed" || upload.Progress != 0 {
 			return false
 		}

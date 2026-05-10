@@ -12,28 +12,49 @@ import (
 )
 
 type createChannelRequest struct {
-	OwnerID  string   `json:"ownerId"`
-	Title    string   `json:"title"`
-	Category string   `json:"category"`
-	Tags     []string `json:"tags"`
+	OwnerID  string                   `json:"ownerId"`
+	Title    string                   `json:"title"`
+	Category string                   `json:"category"`
+	Tags     []string                 `json:"tags"`
+	Schedule []channelScheduleRequest `json:"schedule,omitempty"`
 }
 
 type updateChannelRequest struct {
-	Title    *string   `json:"title"`
-	Category *string   `json:"category"`
-	Tags     *[]string `json:"tags"`
+	Title    *string                   `json:"title"`
+	Category *string                   `json:"category"`
+	Tags     *[]string                 `json:"tags"`
+	Schedule *[]channelScheduleRequest `json:"schedule"`
+}
+
+type channelScheduleRequest struct {
+	ID              string `json:"id,omitempty"`
+	Title           string `json:"title"`
+	StartsAt        string `json:"startsAt"`
+	DurationMinutes int    `json:"durationMinutes,omitempty"`
+	Description     string `json:"description,omitempty"`
 }
 
 type channelPublicResponse struct {
-	ID               string   `json:"id"`
-	OwnerID          string   `json:"ownerId"`
-	Title            string   `json:"title"`
-	Category         string   `json:"category,omitempty"`
-	Tags             []string `json:"tags"`
-	LiveState        string   `json:"liveState"`
-	CurrentSessionID *string  `json:"currentSessionId,omitempty"`
-	CreatedAt        string   `json:"createdAt"`
-	UpdatedAt        string   `json:"updatedAt"`
+	ID               string                    `json:"id"`
+	OwnerID          string                    `json:"ownerId"`
+	Title            string                    `json:"title"`
+	Category         string                    `json:"category,omitempty"`
+	Tags             []string                  `json:"tags"`
+	Schedule         []channelScheduleResponse `json:"schedule,omitempty"`
+	LiveState        string                    `json:"liveState"`
+	CurrentSessionID *string                   `json:"currentSessionId,omitempty"`
+	CreatedAt        string                    `json:"createdAt"`
+	UpdatedAt        string                    `json:"updatedAt"`
+}
+
+type channelScheduleResponse struct {
+	ID              string `json:"id"`
+	Title           string `json:"title"`
+	StartsAt        string `json:"startsAt"`
+	DurationMinutes int    `json:"durationMinutes,omitempty"`
+	Description     string `json:"description,omitempty"`
+	CreatedAt       string `json:"createdAt"`
+	UpdatedAt       string `json:"updatedAt"`
 }
 
 type channelResponse struct {
@@ -133,10 +154,15 @@ func (h *Handler) Directory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := ""
+	category := ""
 	if r.URL != nil {
 		query = strings.TrimSpace(r.URL.Query().Get("q"))
+		category = strings.TrimSpace(r.URL.Query().Get("category"))
 	}
 	channels := h.channelsService().ListChannels("", query)
+	if category != "" {
+		channels = filterChannelsByCategory(channels, category)
+	}
 	followerCounts := h.followerCountsForChannels(channels)
 	h.writeDirectoryResponse(w, channels, followerCounts)
 }
@@ -252,6 +278,21 @@ func filterLiveChannels(channels []domain.Channel) []domain.Channel {
 	return live
 }
 
+func filterChannelsByCategory(channels []domain.Channel, category string) []domain.Channel {
+	trimmedCategory := strings.TrimSpace(category)
+	if trimmedCategory == "" {
+		return channels
+	}
+
+	filtered := make([]domain.Channel, 0, len(channels))
+	for _, channel := range channels {
+		if strings.EqualFold(strings.TrimSpace(channel.Category), trimmedCategory) {
+			filtered = append(filtered, channel)
+		}
+	}
+	return filtered
+}
+
 // sortChannelsByFollowers performs sort channels by followers and propagates validation or dependency failures to the caller.
 func (h *Handler) sortChannelsByFollowers(channels []domain.Channel, followerCounts map[string]int, liveFirst bool) []domain.Channel {
 	sort.Slice(channels, func(i, j int) bool {
@@ -357,6 +398,7 @@ func buildChannelResponse(channel domain.Channel, includeStreamKey bool) channel
 			Title:     channel.Title,
 			Category:  channel.Category,
 			Tags:      append([]string{}, channel.Tags...),
+			Schedule:  newChannelScheduleResponse(channel.Schedule),
 			LiveState: channel.LiveState,
 			CreatedAt: channel.CreatedAt.Format(time.RFC3339Nano),
 			UpdatedAt: channel.UpdatedAt.Format(time.RFC3339Nano),
@@ -380,6 +422,49 @@ func newChannelResponse(channel domain.Channel) channelResponse {
 // newChannelPublicResponse builds and returns channel public response using the supplied dependencies.
 func newChannelPublicResponse(channel domain.Channel) channelPublicResponse {
 	return buildChannelResponse(channel, false).channelPublicResponse
+}
+
+// newChannelScheduleResponse builds a public schedule response preserving storage ordering.
+func newChannelScheduleResponse(entries []domain.ChannelScheduleEntry) []channelScheduleResponse {
+	if len(entries) == 0 {
+		return nil
+	}
+	response := make([]channelScheduleResponse, 0, len(entries))
+	for _, entry := range entries {
+		response = append(response, channelScheduleResponse{
+			ID:              entry.ID,
+			Title:           entry.Title,
+			StartsAt:        entry.StartsAt.Format(time.RFC3339Nano),
+			DurationMinutes: entry.DurationMinutes,
+			Description:     entry.Description,
+			CreatedAt:       entry.CreatedAt.Format(time.RFC3339Nano),
+			UpdatedAt:       entry.UpdatedAt.Format(time.RFC3339Nano),
+		})
+	}
+	return response
+}
+
+// parseChannelScheduleRequest validates wire timestamps before storage-level normalization.
+func parseChannelScheduleRequest(requests []channelScheduleRequest) ([]domain.ChannelScheduleEntry, error) {
+	entries := make([]domain.ChannelScheduleEntry, 0, len(requests))
+	for _, req := range requests {
+		var startsAt time.Time
+		if rawStartsAt := strings.TrimSpace(req.StartsAt); rawStartsAt != "" {
+			parsed, err := time.Parse(time.RFC3339Nano, rawStartsAt)
+			if err != nil {
+				return nil, fmt.Errorf("invalid schedule startsAt %q", rawStartsAt)
+			}
+			startsAt = parsed
+		}
+		entries = append(entries, domain.ChannelScheduleEntry{
+			ID:              strings.TrimSpace(req.ID),
+			Title:           req.Title,
+			StartsAt:        startsAt,
+			DurationMinutes: req.DurationMinutes,
+			Description:     req.Description,
+		})
+	}
+	return entries, nil
 }
 
 // newOwnerResponse builds and returns owner response using the supplied dependencies.
@@ -472,9 +557,12 @@ func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 		}
 		WriteJSON(w, http.StatusOK, response)
 	case http.MethodPost:
-		actor, ok := h.requireRole(w, r, roleAdmin, roleCreator)
+		actor, ok := h.requireAuthenticatedUser(w, r)
 		if !ok {
 			return
+		}
+		if persistedActor, exists := h.channelsService().GetUser(actor.ID); exists {
+			actor = persistedActor
 		}
 		var req createChannelRequest
 		if !DecodeAndValidate(w, r, &req) {
@@ -487,10 +575,49 @@ func (h *Handler) Channels(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
 			return
 		}
+		ownedChannels := h.channelsService().ListChannels(req.OwnerID, "")
+		ownerNeedsCreatorBootstrap := req.OwnerID == actor.ID && !actor.HasRole(roleAdmin) && !actor.HasRole(roleCreator)
+		if ownerNeedsCreatorBootstrap && len(ownedChannels) > 0 {
+			WriteError(w, http.StatusForbidden, fmt.Errorf("forbidden"))
+			return
+		}
+		var scheduleUpdate *[]domain.ChannelScheduleEntry
+		if req.Schedule != nil {
+			schedule, err := parseChannelScheduleRequest(req.Schedule)
+			if err != nil {
+				WriteError(w, http.StatusBadRequest, err)
+				return
+			}
+			scheduleUpdate = &schedule
+		}
 		channel, err := h.channelsService().CreateChannel(req.OwnerID, req.Title, req.Category, req.Tags)
 		if err != nil {
 			WriteError(w, http.StatusBadRequest, err)
 			return
+		}
+		if scheduleUpdate != nil {
+			updated, err := h.channelsService().UpdateChannel(channel.ID, domain.ChannelUpdate{Schedule: scheduleUpdate})
+			if err != nil {
+				if rollbackErr := h.channelsService().DeleteChannel(channel.ID); rollbackErr != nil {
+					WriteError(w, http.StatusBadRequest, fmt.Errorf("set channel schedule after creating channel %s: %w (rollback failed: %v)", channel.ID, err, rollbackErr))
+					return
+				}
+				WriteError(w, http.StatusBadRequest, fmt.Errorf("set channel schedule after creating channel %s: %w", channel.ID, err))
+				return
+			}
+			channel = updated
+		}
+		if owner, exists := h.channelsService().GetUser(req.OwnerID); exists && len(ownedChannels) == 0 && !owner.HasRole(roleCreator) {
+			roles := append([]string{}, owner.Roles...)
+			roles = append(roles, roleCreator)
+			if _, err := h.channelsService().UpdateUser(owner.ID, domain.UserUpdate{Roles: &roles}); err != nil {
+				if rollbackErr := h.channelsService().DeleteChannel(channel.ID); rollbackErr != nil {
+					WriteError(w, http.StatusInternalServerError, fmt.Errorf("upgrade owner %s to creator after creating channel %s: %w (rollback failed: %v)", owner.ID, channel.ID, err, rollbackErr))
+					return
+				}
+				WriteError(w, http.StatusInternalServerError, fmt.Errorf("upgrade owner %s to creator after creating channel %s: %w", owner.ID, channel.ID, err))
+				return
+			}
 		}
 		WriteJSON(w, http.StatusCreated, newChannelResponse(channel))
 	default:
@@ -547,6 +674,14 @@ func (h *Handler) ChannelByID(w http.ResponseWriter, r *http.Request) {
 			if req.Tags != nil {
 				tagsCopy := append([]string{}, (*req.Tags)...)
 				update.Tags = &tagsCopy
+			}
+			if req.Schedule != nil {
+				schedule, err := parseChannelScheduleRequest(*req.Schedule)
+				if err != nil {
+					WriteError(w, http.StatusBadRequest, err)
+					return
+				}
+				update.Schedule = &schedule
 			}
 			channel, err := h.channelsService().UpdateChannel(channelID, update)
 			if err != nil {

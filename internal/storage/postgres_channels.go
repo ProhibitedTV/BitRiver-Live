@@ -36,6 +36,7 @@ func (r *postgresRepository) CreateChannel(ownerID, title, category string, tags
 		id                string
 		normalizedTags    []string
 		trimmedCategory   string
+		scheduleJSON      []byte
 	)
 	err := r.withConn(func(ctx context.Context, conn *pgxpool.Conn) error {
 		tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
@@ -62,15 +63,20 @@ func (r *postgresRepository) CreateChannel(ownerID, title, category string, tags
 		}
 		normalizedTags = normalizeTags(tags)
 		trimmedCategory = strings.TrimSpace(category)
+		scheduleJSON, err = encodeChannelSchedule(nil)
+		if err != nil {
+			return err
+		}
 		now := time.Now().UTC()
 
-		err = tx.QueryRow(ctx, "INSERT INTO channels (id, owner_id, stream_key, title, category, tags, live_state, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, 'offline', $7, $8) RETURNING created_at, updated_at",
+		err = tx.QueryRow(ctx, "INSERT INTO channels (id, owner_id, stream_key, title, category, tags, schedule, live_state, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, 'offline', $8, $9) RETURNING created_at, updated_at",
 			id,
 			ownerID,
 			streamKey,
 			trimmedTitle,
 			trimmedCategory,
 			normalizedTags,
+			scheduleJSON,
 			now,
 			now,
 		).Scan(&insertedCreatedAt, &insertedUpdatedAt)
@@ -93,6 +99,7 @@ func (r *postgresRepository) CreateChannel(ownerID, title, category string, tags
 		Title:     trimmedTitle,
 		Category:  trimmedCategory,
 		Tags:      normalizedTags,
+		Schedule:  []domain.ChannelScheduleEntry{},
 		LiveState: "offline",
 		CreatedAt: insertedCreatedAt.UTC(),
 		UpdatedAt: insertedUpdatedAt.UTC(),
@@ -126,10 +133,11 @@ func (r *postgresRepository) UpdateChannel(id string, update ChannelUpdate) (dom
 			tags                                 []string
 			liveState                            string
 			currentSession                       pgtype.Text
+			scheduleBytes                        []byte
 			createdAt, updatedAt                 time.Time
 		)
-		row := tx.QueryRow(ctx, "SELECT id, owner_id, stream_key, title, category, tags, live_state, current_session_id, created_at, updated_at FROM channels WHERE id = $1 FOR UPDATE", id)
-		if err := row.Scan(&channelID, &ownerID, &streamKey, &title, &category, &tags, &liveState, &currentSession, &createdAt, &updatedAt); err != nil {
+		row := tx.QueryRow(ctx, "SELECT id, owner_id, stream_key, title, category, tags, schedule, live_state, current_session_id, created_at, updated_at FROM channels WHERE id = $1 FOR UPDATE", id)
+		if err := row.Scan(&channelID, &ownerID, &streamKey, &title, &category, &tags, &scheduleBytes, &liveState, &currentSession, &createdAt, &updatedAt); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return fmt.Errorf("channel %s not found", id)
 			}
@@ -146,6 +154,11 @@ func (r *postgresRepository) UpdateChannel(id string, update ChannelUpdate) (dom
 			CreatedAt: createdAt.UTC(),
 			UpdatedAt: updatedAt.UTC(),
 		}
+		schedule, err := decodeChannelSchedule(scheduleBytes)
+		if err != nil {
+			return err
+		}
+		channel.Schedule = schedule
 		if category.Valid {
 			channel.Category = category.String
 		}
@@ -167,6 +180,13 @@ func (r *postgresRepository) UpdateChannel(id string, update ChannelUpdate) (dom
 		if update.Tags != nil {
 			channel.Tags = normalizeTags(*update.Tags)
 		}
+		if update.Schedule != nil {
+			schedule, err := normalizeChannelSchedule(*update.Schedule, channel.Schedule, time.Now().UTC())
+			if err != nil {
+				return err
+			}
+			channel.Schedule = schedule
+		}
 		if update.LiveState != nil {
 			state := strings.ToLower(strings.TrimSpace(*update.LiveState))
 			switch state {
@@ -178,10 +198,15 @@ func (r *postgresRepository) UpdateChannel(id string, update ChannelUpdate) (dom
 		}
 
 		channel.UpdatedAt = time.Now().UTC()
-		_, err = tx.Exec(ctx, "UPDATE channels SET title = $1, category = $2, tags = $3, live_state = $4, updated_at = $5 WHERE id = $6",
+		scheduleJSON, err := encodeChannelSchedule(channel.Schedule)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, "UPDATE channels SET title = $1, category = $2, tags = $3, schedule = $4, live_state = $5, updated_at = $6 WHERE id = $7",
 			channel.Title,
 			channel.Category,
 			channel.Tags,
+			scheduleJSON,
 			channel.LiveState,
 			channel.UpdatedAt,
 			channel.ID,
@@ -229,10 +254,11 @@ func (r *postgresRepository) RotateChannelStreamKey(id string) (domain.Channel, 
 			tags                                 []string
 			liveState                            string
 			currentSession                       pgtype.Text
+			scheduleBytes                        []byte
 			createdAt, updatedAt                 time.Time
 		)
-		row := tx.QueryRow(ctx, "SELECT id, owner_id, stream_key, title, category, tags, live_state, current_session_id, created_at, updated_at FROM channels WHERE id = $1 FOR UPDATE", id)
-		if err := row.Scan(&channelID, &ownerID, &streamKey, &title, &category, &tags, &liveState, &currentSession, &createdAt, &updatedAt); err != nil {
+		row := tx.QueryRow(ctx, "SELECT id, owner_id, stream_key, title, category, tags, schedule, live_state, current_session_id, created_at, updated_at FROM channels WHERE id = $1 FOR UPDATE", id)
+		if err := row.Scan(&channelID, &ownerID, &streamKey, &title, &category, &tags, &scheduleBytes, &liveState, &currentSession, &createdAt, &updatedAt); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return fmt.Errorf("channel %s not found", id)
 			}
@@ -261,6 +287,11 @@ func (r *postgresRepository) RotateChannelStreamKey(id string) (domain.Channel, 
 			CreatedAt: createdAt.UTC(),
 			UpdatedAt: now,
 		}
+		schedule, err := decodeChannelSchedule(scheduleBytes)
+		if err != nil {
+			return err
+		}
+		channel.Schedule = schedule
 		if category.Valid {
 			channel.Category = category.String
 		}
@@ -342,10 +373,11 @@ func (r *postgresRepository) GetChannel(id string) (domain.Channel, bool) {
 			tags                                 []string
 			liveState                            string
 			currentSession                       pgtype.Text
+			scheduleBytes                        []byte
 			createdAt, updatedAt                 time.Time
 		)
-		err := conn.QueryRow(ctx, "SELECT id, owner_id, stream_key, title, category, tags, live_state, current_session_id, created_at, updated_at FROM channels WHERE id = $1", id).
-			Scan(&channelID, &ownerID, &streamKey, &title, &category, &tags, &liveState, &currentSession, &createdAt, &updatedAt)
+		err := conn.QueryRow(ctx, "SELECT id, owner_id, stream_key, title, category, tags, schedule, live_state, current_session_id, created_at, updated_at FROM channels WHERE id = $1", id).
+			Scan(&channelID, &ownerID, &streamKey, &title, &category, &tags, &scheduleBytes, &liveState, &currentSession, &createdAt, &updatedAt)
 		if err != nil {
 			return err
 		}
@@ -359,6 +391,11 @@ func (r *postgresRepository) GetChannel(id string) (domain.Channel, bool) {
 			CreatedAt: createdAt.UTC(),
 			UpdatedAt: updatedAt.UTC(),
 		}
+		schedule, err := decodeChannelSchedule(scheduleBytes)
+		if err != nil {
+			return err
+		}
+		channel.Schedule = schedule
 		if category.Valid {
 			channel.Category = category.String
 		}
@@ -401,17 +438,23 @@ func (r *postgresRepository) GetChannelByStreamKey(streamKey string) (domain.Cha
 			category       pgtype.Text
 			tags           []string
 			currentSession pgtype.Text
+			scheduleBytes  []byte
 			createdAt      time.Time
 			updatedAt      time.Time
 		)
-		row := conn.QueryRow(ctx, "SELECT id, owner_id, stream_key, title, category, tags, live_state, current_session_id, created_at, updated_at FROM channels WHERE stream_key = $1", key)
-		if err := row.Scan(&channel.ID, &channel.OwnerID, &channel.StreamKey, &channel.Title, &category, &tags, &channel.LiveState, &currentSession, &createdAt, &updatedAt); err != nil {
+		row := conn.QueryRow(ctx, "SELECT id, owner_id, stream_key, title, category, tags, schedule, live_state, current_session_id, created_at, updated_at FROM channels WHERE stream_key = $1", key)
+		if err := row.Scan(&channel.ID, &channel.OwnerID, &channel.StreamKey, &channel.Title, &category, &tags, &scheduleBytes, &channel.LiveState, &currentSession, &createdAt, &updatedAt); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil
 			}
 			return fmt.Errorf("load channel by stream key: %w", err)
 		}
 		channel.Tags = append([]string{}, tags...)
+		schedule, err := decodeChannelSchedule(scheduleBytes)
+		if err != nil {
+			return err
+		}
+		channel.Schedule = schedule
 		if category.Valid {
 			channel.Category = category.String
 		}
@@ -444,7 +487,7 @@ func (r *postgresRepository) ListChannels(ownerID, query string) []domain.Channe
 	}
 	ctx, cancel := r.acquireContext()
 	defer cancel()
-	baseQuery := "SELECT c.id, c.owner_id, c.stream_key, c.title, c.category, c.tags, c.live_state, c.current_session_id, c.created_at, c.updated_at FROM channels c JOIN users u ON u.id = c.owner_id"
+	baseQuery := "SELECT c.id, c.owner_id, c.stream_key, c.title, c.category, c.tags, c.schedule, c.live_state, c.current_session_id, c.created_at, c.updated_at FROM channels c JOIN users u ON u.id = c.owner_id"
 	trimmedOwner := strings.TrimSpace(ownerID)
 	trimmedQuery := strings.TrimSpace(query)
 	var (
@@ -458,7 +501,7 @@ func (r *postgresRepository) ListChannels(ownerID, query string) []domain.Channe
 	if trimmedQuery != "" {
 		args = append(args, "%"+trimmedQuery+"%")
 		argPos := len(args)
-		clauses = append(clauses, fmt.Sprintf("(c.title ILIKE $%[1]d OR u.display_name ILIKE $%[1]d OR EXISTS (SELECT 1 FROM unnest(c.tags) AS tag WHERE tag ILIKE $%[1]d))", argPos))
+		clauses = append(clauses, fmt.Sprintf("(c.title ILIKE $%[1]d OR c.category ILIKE $%[1]d OR u.display_name ILIKE $%[1]d OR EXISTS (SELECT 1 FROM unnest(c.tags) AS tag WHERE tag ILIKE $%[1]d))", argPos))
 	}
 	if len(clauses) > 0 {
 		baseQuery += " WHERE " + strings.Join(clauses, " AND ")
@@ -478,9 +521,10 @@ func (r *postgresRepository) ListChannels(ownerID, query string) []domain.Channe
 			tags                                    []string
 			liveState                               string
 			currentSession                          pgtype.Text
+			scheduleBytes                           []byte
 			createdAt, updatedAt                    time.Time
 		)
-		if err := rows.Scan(&channelID, &ownerIDVal, &streamKey, &title, &category, &tags, &liveState, &currentSession, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&channelID, &ownerIDVal, &streamKey, &title, &category, &tags, &scheduleBytes, &liveState, &currentSession, &createdAt, &updatedAt); err != nil {
 			return nil
 		}
 		channel := domain.Channel{
@@ -493,6 +537,11 @@ func (r *postgresRepository) ListChannels(ownerID, query string) []domain.Channe
 			CreatedAt: createdAt.UTC(),
 			UpdatedAt: updatedAt.UTC(),
 		}
+		schedule, err := decodeChannelSchedule(scheduleBytes)
+		if err != nil {
+			return nil
+		}
+		channel.Schedule = schedule
 		if category.Valid {
 			channel.Category = category.String
 		}

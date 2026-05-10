@@ -10,11 +10,11 @@ coverage.
 `./scripts/verify.sh` requires these tools on `PATH`:
 
 - `go` (for `go test ./...`)
-- `python3` (used by `./scripts/check-contract-invariants.sh` to validate generated artifact references in `docs/contract.md`)
+- Python 3 (`python3`, `python`, or `py -3`) used by the contract/doc validation helpers
 - `docker` (optional; Docker-dependent verify phases (`docker compose ... config`, `./scripts/test-quickstart.sh`) are skipped when Docker is unavailable)
 - `node` + `npm` (optional; required only when viewer lint/test checks are selected)
 
-If `python3` is missing, `./scripts/verify.sh` now fails fast with a clear prerequisite error before running the verify sequence.
+If no usable Python 3 interpreter is available, `./scripts/verify.sh` fails fast with a clear prerequisite error before running the verify sequence.
 
 ## Test taxonomy and single entrypoints
 
@@ -62,6 +62,25 @@ or:
 ```bash
 BITRIVER_TEST_ALL_INGEST_E2E=1 ./scripts/test-all.sh
 ```
+
+## Self-hosted product acceptance checklist
+
+Before calling a release candidate a working self-hosted live streaming website,
+pair the automated gates with a real happy-path rehearsal against the Compose
+stack:
+
+- Render and boot the canonical Compose stack from the documented quickstart.
+- Sign up as a viewer when self-signup is enabled, then sign out and sign back in.
+- Create or manage a creator channel and copy the displayed RTMP ingest settings.
+- Add an upcoming stream schedule in the creator Go Live dashboard and confirm it appears on the public channel Schedule tab.
+- Start a stream from a real RTMP encoder, confirm the channel moves to live, and watch playback from a separate viewer session.
+- Send chat messages as a signed-in viewer, confirm live updates arrive, and submit a report against another user's message.
+- Stop the stream and confirm the channel returns offline without leaving an active session behind.
+- Confirm a completed recording stays unpublished until the creator publishes it, then verify the VOD appears on the channel and Videos pages.
+- Run backup/restore or deploy smoke guidance when the change touches operations, persistence, or release packaging.
+
+Record the exact environment, commands, encoder settings, and observed URLs in
+the release or PR notes so the rehearsal is reproducible.
 
 ## Dependency source of truth
 

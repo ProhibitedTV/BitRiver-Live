@@ -69,6 +69,7 @@ func (c *HTTPController) ensureAdapters() {
 	if c.applications == nil {
 		c.applications = newHTTPApplicationAdapter(
 			c.config.OMEBaseURL,
+			c.config.OMEAccessToken,
 			c.config.OMEUsername,
 			c.config.OMEPassword,
 			c.config.HTTPClient,
@@ -327,9 +328,10 @@ func (c *HTTPController) HealthChecks(ctx context.Context) []HealthStatus {
 	c.ensureAdapters()
 
 	type service struct {
-		name string
-		base string
-		auth func(*http.Request)
+		name         string
+		base         string
+		auth         func(*http.Request)
+		acceptStatus func(int) bool
 	}
 
 	services := []service{
@@ -339,9 +341,10 @@ func (c *HTTPController) HealthChecks(ctx context.Context) []HealthStatus {
 			auth: bearerAuth(c.config.SRSToken),
 		},
 		{
-			name: "ovenmediaengine",
-			base: c.config.OMEBaseURL,
-			auth: basicAuth(c.config.OMEUsername, c.config.OMEPassword),
+			name:         "ovenmediaengine",
+			base:         c.config.OMEBaseURL,
+			auth:         omeAccessAuth(c.config.OMEAccessToken, c.config.OMEUsername, c.config.OMEPassword),
+			acceptStatus: omeHealthStatusOK,
 		},
 		{
 			name: "transcoder",
@@ -397,7 +400,11 @@ func (c *HTTPController) HealthChecks(ctx context.Context) []HealthStatus {
 			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
 
-			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			acceptStatus := svc.acceptStatus
+			if acceptStatus == nil {
+				acceptStatus = httpSuccessStatus
+			}
+			if acceptStatus(resp.StatusCode) {
 				status.Status = "ok"
 			} else {
 				status.Status = "error"
@@ -425,9 +432,32 @@ func bearerAuth(token string) func(*http.Request) {
 	}
 }
 
-// basicAuth returns a request mutator that sets HTTP Basic Auth on
-// outgoing requests. If both username and password are empty,
-// nil is returned and no auth is applied.
+// omeAccessAuth returns a request mutator for OME API calls. OME uses Basic
+// auth where the raw AccessToken is the full pre-base64 credential string.
+// User/password Basic auth is retained only as a fallback for custom legacy
+// endpoints with no configured token.
+func omeAccessAuth(accessToken, username, password string) func(*http.Request) {
+	if strings.TrimSpace(accessToken) == "" && strings.TrimSpace(username) == "" && strings.TrimSpace(password) == "" {
+		return nil
+	}
+	return func(req *http.Request) {
+		setOMEAuth(req, accessToken, username, password)
+	}
+}
+
+func httpSuccessStatus(statusCode int) bool {
+	return statusCode >= 200 && statusCode < 300
+}
+
+func omeHealthStatusOK(statusCode int) bool {
+	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
+		return false
+	}
+	return statusCode >= 200 && statusCode < 500
+}
+
+// basicAuth returns a request mutator that sets HTTP Basic Auth on outgoing
+// requests. If both username and password are empty, nil is returned.
 func basicAuth(username, password string) func(*http.Request) {
 	username = strings.TrimSpace(username)
 	password = strings.TrimSpace(password)

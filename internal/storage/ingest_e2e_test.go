@@ -17,6 +17,7 @@ func TestIngestPipelineEndToEnd(t *testing.T) {
 		LiveJobIDs:      []string{"job-live-1", "job-live-2"},
 		SRSToken:        "srs-secret",
 		TranscoderToken: "transcoder-secret",
+		OMEAccessToken:  "ome-access-token",
 		OMEUser:         "ome-user",
 		OMEPassword:     "ome-pass",
 	})
@@ -26,6 +27,7 @@ func TestIngestPipelineEndToEnd(t *testing.T) {
 		SRSBaseURL:        stub.BaseURL(),
 		SRSToken:          "srs-secret",
 		OMEBaseURL:        stub.BaseURL(),
+		OMEAccessToken:    "ome-access-token",
 		OMEUsername:       "ome-user",
 		OMEPassword:       "ome-pass",
 		JobBaseURL:        stub.BaseURL(),

@@ -39,7 +39,7 @@ Rules:
 
 ## Deployment contract (canonical)
 
-BitRiver Live has one deployment pipeline regardless of launcher: `deploy/docker-compose.yml` orchestrated with the repository-root `.env` lifecycle (generate/validate/render/bootstrap). Platform-specific launchers only change command syntax; they must not introduce a second operational runbook. See [`docs/quickstart.md`](quickstart.md#shared-backend-pipeline-all-launchers) for the shared stage sequence and [`docs/cross-platform-plan.md`](labs/cross-platform-plan.md#canonical-production-deployment-path) for cross-platform rollout constraints.
+BitRiver Live has one deployment pipeline regardless of launcher: `deploy/docker-compose.yml` orchestrated with the repository-root `.env` lifecycle (generate/validate/render/bootstrap). Platform-specific launchers only change command syntax; they must not introduce a second operational runbook. See [`docs/quickstart.md`](quickstart.md#shared-backend-pipeline-all-launchers) for the shared stage sequence and [`docs/production-status.md`](production-status.md) for the supported operator baseline.
 
 
 ## Domain migration status
