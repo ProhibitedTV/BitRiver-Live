@@ -45,6 +45,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - The final API and proxied viewer checks poll until ready instead of racing service startup.
     - Compose startup is phased so dependency health/completion is checked before starting the API/viewer layer.
     - Trivy installation in CI retries and extracts a complete archive before scanning.
+    - The one-shot `postgres-migrations` completion waiter can inspect stopped containers after Compose starts dependencies.
+    - The Trivy install pin targets an available official release asset.
     - The change is validated with syntax/unit checks, pushed, and confirmed in the next CI run.
 
 ### Execution log (PR #1233 CI readiness)
@@ -102,6 +104,13 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because this workstation has no usable Python runtime.
   - Follow-up after endpoint polling: `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
   - Follow-up after phased Compose startup: `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
+- Task 7 latest diagnosis: CI run `25830088634` got all dependency health checks green, then failed at `postgres-migrations` completion with `error: no container found for service postgres-migrations`; the script was querying only running containers even though the migration job is expected to be stopped/exited. The same run's image scan failed in `Install Trivy` because `https://github.com/aquasecurity/trivy/releases/download/v0.50.1/trivy_0.50.1_Linux-64bit.tar.gz` returned 404 across retries. The official Trivy releases page shows `v0.70.0` as the current immutable release with Linux tarball assets.
+- Task 7 latest fixes: `wait_for_completed_check` now queries stopped containers with `docker compose ps -a -q` before inspecting one-shot exit status, and the CI Trivy install pin now targets `v0.70.0`.
+- Task 7 latest local checks:
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/test-quickstart.sh'` - passed.
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
+  - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched Markdown/workflow files.
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because this workstation has no usable Python runtime.
 
 ## Scoped change: issue #1220 chat controls and signed-out chat UX
 

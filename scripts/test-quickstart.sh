@@ -403,7 +403,7 @@ wait_for_health() {
 wait_for_completed_check() {
   local service_name="$1"
 
-  container_id=$(docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" ps -q "$service_name")
+  container_id=$(docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" ps -a -q "$service_name")
   if [ -z "$container_id" ]; then
     echo "error: no container found for service $service_name" >&2
     return 2

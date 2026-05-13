@@ -414,7 +414,7 @@ jobs:
       - name: Install Trivy
         run: |
           set -euo pipefail
-          TRIVY_VERSION=0.50.1
+          TRIVY_VERSION=0.70.0
           archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
           url="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archive}"
           curl --fail --location --retry 5 --retry-delay 2 --retry-all-errors --output "$archive" "$url"

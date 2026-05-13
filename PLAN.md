@@ -12,6 +12,9 @@
 - Address the follow-up quickstart smoke race where the final proxied viewer curl can run before the viewer sidecar is ready, even after container health dependencies have turned green.
 - Address the remaining quickstart startup race by booting Compose dependencies first, waiting for their health/completion, and only then starting the API/viewer layer.
 - Address the recurring image vulnerability scan failure by downloading the Trivy archive with retries to a file before extraction instead of streaming a possibly truncated response into `tar`.
+- Address the latest CI run `25830088634` failures:
+  - The phased smoke now reaches healthy dependencies but misses the exited `postgres-migrations` one-shot because `docker compose ps -q` only reports running containers in this context.
+  - The hardened Trivy download now fails deterministically because the pinned `v0.50.1` GitHub release asset returns 404; update to the current official immutable `v0.70.0` Linux archive.
 
 ## Assumptions
 - The backend gate fixes are acceptable in this PR because they are blocking PR #1233's merge readiness and are narrowly scoped to test/API security-header contract drift.
@@ -20,7 +23,7 @@
 - The approved script change should only create a temporary root `.env` from `deploy/.env.example` when `.env` is absent, and it must clean that temporary file up.
 - The user's approval covers the required script/check behavior changes needed to get the PR ready, including the narrow `scripts/verify.sh` fallback repair.
 - The quickstart smoke should still build first-party images from the working tree before pulling missing non-buildable runtime images, because some helper services reuse locally built images without declaring their own `build:` block.
-- The user's follow-up approval covers the workflow hardening needed for the recurring Trivy install failure.
+- The user's follow-up approval covers the workflow hardening needed for the recurring Trivy install failure, including moving off the broken old Trivy release asset.
 
 ## Risks
 - Security header middleware ordering is broad; the CSP default fix must keep viewer routes exempt from the API/admin default CSP so the dedicated viewer CSP can be set by proxy handling.
@@ -33,7 +36,8 @@
 - Running the `transcoder` service as the host UID/GID in the smoke override must stay limited to the smoke harness so the deployment contract's fixed runtime UID remains unchanged.
 - Polling the final viewer/API curls should not hide persistent routing failures; diagnostics must include Compose status and relevant service logs when the endpoint never becomes reachable.
 - Phased quickstart startup should preserve the deployed service graph while avoiding Compose's early dependency-failure short-circuit on slow hosted runners.
-- Trivy install hardening touches CI workflow behavior; the change should stay mechanical and preserve the pinned Trivy version.
+- Trivy install hardening touches CI workflow behavior; the version bump should stay limited to a known official GitHub release asset and avoid changing scanner policy.
+- One-shot completion waiting should include stopped containers without changing application-service health behavior.
 
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver ./internal/server -count=1`
