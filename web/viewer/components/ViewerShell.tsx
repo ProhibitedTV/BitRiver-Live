@@ -169,8 +169,8 @@ export function ViewerShell({ children }: ViewerShellProps) {
             <button type="button" className="viewer-sidebar__close" onClick={closeSidebar} aria-label="Close following sidebar">
               Close
             </button>
-          )}
-        </div>
+          </div>
+        )}
         <p className="viewer-sidebar__intro muted">
           Keep your regular creators one click away while you explore live rooms, replays, and new communities.
         </p>

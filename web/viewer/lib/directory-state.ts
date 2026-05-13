@@ -11,6 +11,10 @@ export function normalizeDirectoryTopic(value: string | null | undefined): strin
   return normalized.length > 0 ? normalized : null;
 }
 
+export function normalizeDirectoryCategory(value: string | null | undefined): string {
+  return (value ?? "").trim();
+}
+
 export function toDirectorySearchParams({
   query,
   topic,
@@ -28,10 +32,6 @@ export function toDirectorySearchParams({
 
   if (normalizedTopic) {
     params.set("topic", normalizedTopic);
-  }
-
-  if (normalizedCategory.length > 0) {
-    params.set("category", normalizedCategory);
   }
 
   return params;

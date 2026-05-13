@@ -1,4 +1,4 @@
-import { fetchChannelUploads, fetchDirectory, publishRecording, reportChatMessage } from "../lib/viewer-api";
+import { fetchChannelUploads, fetchDirectory, publishRecording, reportChatMessage, searchDirectory } from "../lib/viewer-api";
 
 describe("viewer api", () => {
   const originalFetch = global.fetch;

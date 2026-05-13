@@ -234,9 +234,66 @@ test.describe("channel route", () => {
 
     const followButton = page.getByRole("button", { name: /follow - 10 supporters/i });
     await followButton.click();
-    await expect(page).toHaveURL(/auth=signin/);
-    await expect(page.getByRole("dialog", { name: /sign in to bitriver live/i })).toBeVisible();
+    await expect(page).toHaveURL(/\/login\?redirect=%2Fchannels%2Fchan-42$/);
     await expect.poll(() => followAttempted).toBe(false);
+  });
+
+  test("keeps mobile watch navigation focused on video, chat, and details", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await page.route("**/api/viewer/me", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          user: {
+            id: "viewer-1",
+            displayName: "Viewer",
+            email: "viewer@example.com",
+            roles: ["member"],
+          },
+        }),
+      });
+    });
+
+    await page.route("**/api/channels/chan-42/playback", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(basePlayback) });
+    });
+
+    await page.route("**/api/channels/chan-42/vods", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ channelId: "chan-42", items: [] })
+      });
+    });
+
+    await page.route("**/api/channels/chan-42/chat**", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(chatTranscript) });
+    });
+
+    await page.goto("/channels/chan-42");
+
+    const player = page.locator(".channel-player");
+    const chat = page.locator("#channel-chat");
+    await expect(player).toBeVisible();
+    await expect(chat).toBeVisible();
+    const playerBox = await player.boundingBox();
+    const chatBox = await chat.boundingBox();
+    expect(playerBox).not.toBeNull();
+    expect(chatBox).not.toBeNull();
+    expect(playerBox?.y ?? 0).toBeLessThan(chatBox?.y ?? 0);
+
+    const watchNav = page.getByRole("navigation", { name: "Watch page sections" });
+    await expect(watchNav.getByRole("link", { name: "Chat" })).toBeVisible();
+    await expect(watchNav.getByRole("link", { name: "Details" })).toBeVisible();
+    await expect(watchNav.getByRole("button", { name: "Videos" })).toBeVisible();
+
+    await watchNav.getByRole("link", { name: "Chat" }).click();
+    await expect(chat).toBeInViewport();
+
+    await watchNav.getByRole("button", { name: "Videos" }).click();
+    await expect(page.getByRole("tab", { name: "Videos" })).toHaveAttribute("aria-selected", "true");
   });
 
   test("surfaces tip errors when submission fails", async ({ page }) => {
@@ -337,8 +394,7 @@ test.describe("authentication controls", () => {
 
     await page.getByRole("group", { name: "Account and preferences" }).getByRole("button", { name: "Sign in" }).click();
 
-    await expect(page).toHaveURL(/auth=signin/);
-    await expect(page.getByRole("dialog", { name: /sign in to bitriver live/i })).toBeVisible();
+    await expect(page).toHaveURL(/\/login\?redirect=%2F$/);
   });
 
   test("navbar sign-out clears the viewer session", async ({ page }) => {

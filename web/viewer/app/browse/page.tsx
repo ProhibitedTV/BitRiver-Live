@@ -47,8 +47,8 @@ export default function BrowsePage() {
       return;
     }
 
-    void loadChannels(query, categoryFromParams);
-  }, [categoryFromParams, loadChannels, query, queryHydrated]);
+    void loadChannels(query, filter ?? "");
+  }, [filter, loadChannels, query, queryHydrated]);
 
   useEffect(() => {
     const queryChanged = lastQueryFromParams.current !== searchParamQuery;
@@ -324,7 +324,7 @@ export default function BrowsePage() {
               <h2>We hit a snag</h2>
               <p className="muted">{error}</p>
               <div className="browse-actions">
-                <button className="primary-button" onClick={() => void loadChannels(query)}>
+                <button className="primary-button" onClick={() => void loadChannels(query, filter ?? "")}>
                   Retry loading
                 </button>
                 <button className="secondary-button" onClick={handleReset}>

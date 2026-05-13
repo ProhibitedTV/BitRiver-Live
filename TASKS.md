@@ -3490,3 +3490,59 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
    - Checks: `git status` after commit.
    - Result: merge resolution committed on `fix-viewer-discovery-polish`.
    - Check: `git status` after commit.
+
+## GitHub Issue #1219 Watch Page Priority
+
+1. [x] Record the scoped #1219 plan before editing.
+   - Acceptance: `PLAN.md` captures scope, assumptions, risks, and validation for #1219.
+   - Acceptance: `TASKS.md` lists ordered tasks before channel page/CSS edits.
+   - Result: read-only analysis found `main` already has player recovery, schedule tabs, and a replay card; the remaining gap is duplicate offline actions, missing mobile watch affordances, and explicit refresh-state regression coverage.
+   - Checks:
+     - `Get-Content -LiteralPath 'web\viewer\app\channels\[id]\page.tsx'`
+     - `Get-Content web\viewer\components\ChatPanel.tsx`
+     - `Get-Content web\viewer\components\ChannelHero.tsx`
+     - `Get-Content web\viewer\components\VodGallery.tsx`
+     - `Get-Content web\viewer\__tests__\channelPage.test.tsx`
+     - `Get-Content web\viewer\tests\channel.spec.ts`
+     - `rg -n "channel-page|channel-player|channel-replay|channel-owner|channel-tabs|channel-hero|chat-panel" web/viewer/styles/globals.css`
+
+2. [x] Make live/offline watch hierarchy explicit.
+   - Acceptance: live pages keep player/chat first, then actions/metadata.
+   - Acceptance: offline pages expose exactly one primary action area, driven by VOD/schedule availability.
+   - Acceptance: creator-owner management stays visually separated from the public watch flow.
+
+3. [x] Add mobile watch-page affordances.
+   - Acceptance: mobile users get compact links to chat, details, and videos/schedule near the player.
+   - Acceptance: desktop layout remains two-column video/chat without extra mobile-only controls.
+   - Acceptance: CSS avoids layout jumps during background playback refresh.
+
+4. [x] Add/update focused channel coverage.
+   - Acceptance: Jest covers offline-with-VOD, offline-without-VOD, and refresh preserving active tabs.
+   - Acceptance: Playwright covers mobile channel hierarchy and the existing live/chat flow still passes.
+
+5. [x] Run validation and record results.
+   - Acceptance: focused Jest, focused Playwright, lint, build, and repo viewer gate are run or host blockers are recorded.
+
+### Execution log (GitHub issue #1219 watch page priority)
+- Task 1 complete: recorded the scoped #1219 plan before editing and confirmed the current baseline has player recovery, replay cards, public schedules, and channel tab URL state already present on `main`.
+- Task 2 complete: made the channel page decide when player recovery actions are primary, removed player retry/browse actions from offline player states, and upgraded the offline replay card into the single primary offline action area for VOD, replay-error, schedule, and no-content states. Creator controls now read as creator-only tooling.
+- Task 2 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/channelPage.test.tsx __tests__/player.test.tsx` passed. Jest emitted a non-failing haste warning because the existing `.next/standalone/package.json` from a prior build is still present under `web/viewer/.next`.
+- Task 3 complete: added a mobile-only watch navigation under the player with Chat, Details, Videos, and Schedule affordances, plus scroll targets for chat/details and CSS that keeps the desktop two-column watch layout unchanged.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/channelPage.test.tsx __tests__/player.test.tsx` passed.
+- Task 4 complete: added Jest coverage for no-replay offline recovery, scheduled offline recovery, and background playback refresh preserving the active tab. Added Playwright mobile hierarchy coverage for player, chat, details, and tab switching.
+- Task 4 validation also exposed stale current-main blockers outside the watch page: the viewer build had stale directory/category state references and several compile blockers in browse, creator setup, category rail, and viewer shell components; the channel Playwright auth redirect assertions expected the fallback modal despite a configured `loginUrl`. These were repaired narrowly so #1219 coverage could run against the current intended auth behavior.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/channelPage.test.tsx __tests__/player.test.tsx` passed.
+  - `npm.cmd --prefix web/viewer run build` passed.
+  - Standalone-server Playwright run for `tests/channel-chat-playback.spec.ts tests/channel.spec.ts` passed: 12 tests passed.
+- Task 5 complete: ran focused and broad viewer validation. The first full Jest run exposed stale viewer gate drift on current main; repaired the broken auth test block, restored featured carousel controls, aligned stale creator/following/auth assertions with current UI behavior, imported `searchDirectory` in viewer API tests, and made the playback retry Playwright fixture deterministic.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run test -- __tests__/creatorGettingStartedPage.test.tsx __tests__/useAuth.test.tsx __tests__/channelDisplayPrimitives.test.tsx __tests__/followingStatePresentation.test.tsx __tests__/followingSidebar.test.tsx __tests__/viewer-api.test.ts --silent` passed.
+  - `npm.cmd --prefix web/viewer run test -- --silent` passed: 24 suites, 187 tests.
+  - `npm.cmd --prefix web/viewer run lint` passed.
+  - `npm.cmd --prefix web/viewer run build` passed.
+  - Standalone-server Playwright run for `tests/channel-chat-playback.spec.ts tests/channel.spec.ts` passed: 12 tests passed.
+  - `docker compose --env-file .env -f deploy/docker-compose.yml config` passed; Docker emitted non-fatal warnings about denied access to the user Docker config file.
+  - `& "C:\Program Files\Git\bin\bash.exe" -lc "cd /c/Users/RhythmicCarnage/Desktop/BitRiver-Live && ./scripts/verify.sh --viewer"` started and passed the go.sum and CI-contract checks, then stopped at the host prerequisite check because this machine has `C:\Windows\py.exe` but no installed Python runtime (`py -0p` reports no installed Pythons).

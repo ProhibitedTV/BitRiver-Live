@@ -1738,3 +1738,33 @@ Merge the current `origin/main` into `fix-viewer-discovery-polish` and resolve a
 - `git diff --name-only --diff-filter=U`
 - `rg -n "<<<<<<<|=======|>>>>>>>" --glob "!web/viewer/node_modules/**" .`
 - `git diff --cached --check`
+
+## Scope: GitHub Issue #1219 Watch Page Priority
+
+### Summary
+Tighten the channel watch page hierarchy so live, offline-with-replays, offline-without-replays, and mobile states feel viewer-first instead of dashboard-like. Keep the pass viewer-only and avoid deployment contract changes.
+
+### Goals
+- Make the video/player the first visual priority, followed by chat and compact channel actions.
+- Present one primary offline recovery/content action area instead of duplicating player and replay-card actions.
+- Add a small mobile watch navigation affordance so video, chat, details, and videos are easy to reach without forcing users through a long stack.
+- Keep creator-owner tools visually separate from the public watch flow.
+- Add regression coverage that playback refreshes do not reset the active tab.
+
+### Assumptions
+- `main` already includes baseline player recovery, public schedules, VOD replay cards, and channel tab URL state.
+- The channel page should decide whether player recovery or replay/schedule recovery is primary; `Player` should stay generic.
+- Mobile smoke coverage can assert structural hierarchy and affordances without taking screenshot snapshots in this pass.
+
+### Risks
+- Removing player recovery actions from offline pages could hide a useful live-check button unless the offline action area explicitly exposes one.
+- Mobile anchors can feel noisy if visible on desktop, so CSS should scope them to small screens.
+- Timer-driven refresh coverage can become flaky if fake timers are not restored reliably.
+- Full viewer validation may expose stale current-main tests or compile blockers outside #1219; repair only the narrow blockers needed to restore the viewer gate.
+
+### Test Plan
+- `npm.cmd --prefix web/viewer run test -- __tests__/channelPage.test.tsx __tests__/player.test.tsx`
+- `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 PLAYWRIGHT_BROWSERS_PATH=0 npx.cmd playwright test tests/channel-chat-playback.spec.ts tests/channel.spec.ts` with a local viewer server if the package Playwright wrapper remains blocked by standalone output.
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `./scripts/verify.sh --viewer`

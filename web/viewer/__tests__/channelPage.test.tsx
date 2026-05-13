@@ -448,6 +448,79 @@ describe("ChannelPage", () => {
     expect(screen.getByRole("tab", { name: "Videos" })).toHaveAttribute("aria-selected", "true");
   });
 
+  test("surfaces one offline action area when no replays are available", async () => {
+    const user = userEvent.setup();
+    mockUseAuth.mockReturnValue(signedInAuthState());
+
+    fetchChannelPlaybackMock.mockResolvedValueOnce({
+      ...basePlaybackResponse,
+      live: false,
+      channel: {
+        ...basePlaybackResponse.channel,
+        liveState: "offline",
+        currentSessionId: undefined,
+      },
+      playback: undefined,
+    } as any);
+    fetchChannelPlaybackMock.mockResolvedValueOnce(basePlaybackResponse as any);
+    fetchChannelVodsMock.mockResolvedValueOnce({ channelId: "chan-42", items: [] } as any);
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    expect(await screen.findByRole("heading", { name: "This channel is offline right now" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry player playback" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /open videos tab/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /browse live channels/i })).toHaveAttribute("href", "/browse");
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /check live status/i }));
+    });
+
+    await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledTimes(2));
+  });
+
+  test("surfaces schedule as the primary offline action when no replay is ready", async () => {
+    const user = userEvent.setup();
+    mockUseAuth.mockReturnValue(signedInAuthState());
+
+    fetchChannelPlaybackMock.mockResolvedValueOnce({
+      ...basePlaybackResponse,
+      live: false,
+      channel: {
+        ...basePlaybackResponse.channel,
+        liveState: "offline",
+        currentSessionId: undefined,
+        schedule: [
+          {
+            id: "schedule-1",
+            title: "Friday Night Runs",
+            startsAt: "2026-06-05T20:00:00.000Z",
+            durationMinutes: 90,
+            description: "Community speedrun showcase",
+            createdAt: "2026-03-21T00:00:00.000Z",
+            updatedAt: "2026-03-21T00:10:00.000Z",
+          },
+        ],
+      },
+      playback: undefined,
+    } as any);
+    fetchChannelVodsMock.mockResolvedValueOnce({ channelId: "chan-42", items: [] } as any);
+
+    render(<ChannelPage params={{ id: "chan-42" }} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "This channel is offline; the next stream is scheduled" }),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /view schedule/i }));
+    });
+
+    expect(mockRouter.push).toHaveBeenCalledWith("/channels/chan-42?tab=schedule", { scroll: false });
+    expect(screen.getByRole("tab", { name: "Schedule" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: "Friday Night Runs" })).toBeInTheDocument();
+  });
+
   test("directs channel creators to the dashboard", async () => {
     mockUseAuth.mockReturnValue(
       signedInAuthState(
@@ -659,5 +732,38 @@ describe("ChannelPage", () => {
 
     await waitFor(() => expect(fetchChannelVodsMock).toHaveBeenCalledTimes(2));
     expect(fetchChannelVodsMock).toHaveBeenNthCalledWith(2, "chan-84");
+  });
+
+  test("keeps the active tab during background playback refreshes", async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    mockUseAuth.mockReturnValue(signedInAuthState());
+
+    fetchChannelPlaybackMock.mockResolvedValueOnce(basePlaybackResponse as any);
+    fetchChannelPlaybackMock.mockResolvedValueOnce({
+      ...basePlaybackResponse,
+      viewerCount: 99,
+    } as any);
+
+    try {
+      render(<ChannelPage params={{ id: "chan-42" }} />);
+
+      const videosTab = await screen.findByRole("tab", { name: "Videos" });
+      await act(async () => {
+        await user.click(videosTab);
+      });
+
+      expect(screen.getByRole("tab", { name: "Videos" })).toHaveAttribute("aria-selected", "true");
+
+      await act(async () => {
+        jest.advanceTimersByTime(30000);
+      });
+
+      await waitFor(() => expect(fetchChannelPlaybackMock).toHaveBeenCalledTimes(2));
+      expect(screen.getByRole("tab", { name: "Videos" })).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByRole("tabpanel", { name: "Videos" })).toBeVisible();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

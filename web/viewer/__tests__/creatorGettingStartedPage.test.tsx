@@ -118,11 +118,11 @@ describe("CreatorGettingStartedPage", () => {
 
     await waitFor(() => expect(fetchManagedChannelsMock).toHaveBeenCalled());
 
-    expect(screen.getAllByRole("link", { name: /open live setup/i })).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: /open live setup/i })).toHaveLength(1);
     for (const link of screen.getAllByRole("link", { name: /open live setup/i })) {
       expect(link).toHaveAttribute("href", "/creator/live/chan-1");
     }
-    expect(screen.getByRole("link", { name: /open viewer page/i })).toHaveAttribute("href", "/viewer/channels/chan-1");
+    expect(screen.getByRole("link", { name: /open public preview/i })).toHaveAttribute("href", "/viewer/channels/chan-1");
     expect(screen.getByRole("link", { name: /preview viewer page/i })).toHaveAttribute("href", "/viewer/channels/chan-1");
 
     await user.selectOptions(screen.getByLabelText("Channel"), "chan-2");
@@ -130,7 +130,7 @@ describe("CreatorGettingStartedPage", () => {
     for (const link of screen.getAllByRole("link", { name: /open live setup/i })) {
       expect(link).toHaveAttribute("href", "/creator/live/chan-2");
     }
-    expect(screen.getByRole("link", { name: /open viewer page/i })).toHaveAttribute("href", "/viewer/channels/chan-2");
+    expect(screen.getByRole("link", { name: /open public preview/i })).toHaveAttribute("href", "/viewer/channels/chan-2");
     expect(screen.getByRole("link", { name: /preview viewer page/i })).toHaveAttribute("href", "/viewer/channels/chan-2");
   });
 
@@ -155,7 +155,7 @@ describe("CreatorGettingStartedPage", () => {
     renderWithProviders(<CreatorGettingStartedPage />);
 
     expect(await screen.findByText(/current status: live/i)).toBeInTheDocument();
-    expect(screen.getByText("Live")).toBeInTheDocument();
+    expect(screen.getAllByText("Live").length).toBeGreaterThan(1);
 
     await user.click(screen.getByRole("button", { name: /copy viewer link/i }));
     expect(await screen.findByText(/viewer link copied/i)).toBeInTheDocument();
