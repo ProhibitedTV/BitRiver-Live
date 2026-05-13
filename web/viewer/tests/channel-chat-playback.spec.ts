@@ -65,6 +65,7 @@ test.describe("channel playback and chat integration", () => {
 
   test("offers retry when playback API fails then recovers", async ({ page }) => {
     let playbackAttempts = 0;
+    let allowPlaybackRecovery = false;
 
     await page.route("**/api/viewer/me", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(authenticatedViewer) });
@@ -72,7 +73,7 @@ test.describe("channel playback and chat integration", () => {
 
     await page.route(`**/api/channels/${channelId}/playback`, async (route) => {
       playbackAttempts += 1;
-      if (playbackAttempts === 1) {
+      if (!allowPlaybackRecovery) {
         await route.fulfill({ status: 502, body: "upstream offline" });
         return;
       }
@@ -91,6 +92,7 @@ test.describe("channel playback and chat integration", () => {
 
     const alert = page.getByRole("alert").filter({ hasText: /couldn't load this channel/i });
     await expect(alert).toBeVisible();
+    allowPlaybackRecovery = true;
     await alert.getByRole("button", { name: "Try again" }).click();
 
     await expect(page.getByRole("heading", { level: 1, name: playbackResponse.channel.title })).toBeVisible();

@@ -132,7 +132,7 @@ describe("Following state presentation", () => {
       expect(screen.getByText(FOLLOWING_COPY.summaryFollowed(1))).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("heading", { name: "Keep your circle close" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Following" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Creators you follow" })).not.toBeInTheDocument();
   });
 });

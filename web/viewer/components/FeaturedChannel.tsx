@@ -23,6 +23,7 @@ export function FeaturedChannel({
   const slides = useMemo(() => channels.filter(Boolean), [channels]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [autoPlayOverride, setAutoPlayOverride] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -49,7 +50,7 @@ export function FeaturedChannel({
     setActiveIndex(0);
   }, [slides.length]);
 
-  const autoPlayEnabled = autoPlay && !prefersReducedMotion;
+  const autoPlayEnabled = slides.length > 1 && (autoPlayOverride ?? (autoPlay && !prefersReducedMotion));
 
   useEffect(() => {
     if (!autoPlayEnabled || slides.length <= 1) {
@@ -94,6 +95,26 @@ export function FeaturedChannel({
 
   const activeChannel = slides[activeIndex];
   const previewImage = getChannelPreviewImage(activeChannel);
+  const canNavigate = slides.length > 1;
+  const autoPlayToggleLabel = autoPlayEnabled ? "Pause autoplay" : "Resume autoplay";
+
+  const showPrevious = () => {
+    if (!canNavigate) {
+      return;
+    }
+    setActiveIndex((current) => (current - 1 + slides.length) % slides.length);
+  };
+
+  const showNext = () => {
+    if (!canNavigate) {
+      return;
+    }
+    setActiveIndex((current) => (current + 1) % slides.length);
+  };
+
+  const toggleAutoPlay = () => {
+    setAutoPlayOverride((current) => !(current ?? (autoPlay && !prefersReducedMotion)));
+  };
 
   return (
     <section
@@ -149,29 +170,38 @@ export function FeaturedChannel({
                 href={`/channels/${activeChannel.channel.id}`}
                 aria-label="View featured channel"
               >
-                Watch now
+                Watch channel
               </Link>
             </div>
           </div>
         </article>
       </div>
 
-      {slides.length > 1 ? (
-        <footer className="featured-channel__footer" aria-label="Featured channel controls">
-          <div className="featured-channel__pagination" role="group" aria-label="Featured channel pagination">
-            {slides.map((slide, index) => (
-              <button
-                key={slide.channel.id}
-                type="button"
-                className={`featured-channel__dot${index === activeIndex ? " featured-channel__dot--active" : ""}`}
-                onClick={() => setActiveIndex(index)}
-                aria-label={`Show featured channel ${slide.channel.title}`}
-                aria-pressed={index === activeIndex}
-              />
-            ))}
-          </div>
-        </footer>
-      ) : null}
+      <footer className="featured-channel__footer" aria-label="Featured channel controls">
+        <div className="featured-channel__pagination" role="group" aria-label="Featured channel pagination">
+          {slides.map((slide, index) => (
+            <button
+              key={slide.channel.id}
+              type="button"
+              className={`featured-channel__dot${index === activeIndex ? " featured-channel__dot--active" : ""}`}
+              onClick={() => setActiveIndex(index)}
+              aria-label={`Show featured channel ${slide.channel.title}`}
+              aria-pressed={index === activeIndex}
+            />
+          ))}
+        </div>
+        <div className="featured-channel__controls" role="group" aria-label="Carousel navigation">
+          <button type="button" className="secondary-button" onClick={showPrevious} disabled={!canNavigate} aria-label="Previous featured channel">
+            Back
+          </button>
+          <button type="button" className="secondary-button" onClick={showNext} disabled={!canNavigate} aria-label="Next featured channel">
+            Next
+          </button>
+          <button type="button" className="secondary-button" onClick={toggleAutoPlay} aria-label={autoPlayToggleLabel}>
+            {autoPlayEnabled ? "Pause" : "Play"}
+          </button>
+        </div>
+      </footer>
     </section>
   );
 }

@@ -1,8 +1,6 @@
 import Link from "next/link";
 import type { CategorySummary } from "../lib/viewer-api";
 
-import Link from "next/link";
-
 interface CategoryRailProps {
   id?: string;
   categories: CategorySummary[];

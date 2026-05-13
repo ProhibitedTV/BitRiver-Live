@@ -299,6 +299,11 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
     updateTabUrl("videos");
   }, [updateTabUrl]);
 
+  const openScheduleTab = useCallback(() => {
+    setActiveTab("schedule");
+    updateTabUrl("schedule");
+  }, [updateTabUrl]);
+
   const latestVod = useMemo(() => {
     if (vods.length === 0) {
       return undefined;
@@ -309,6 +314,26 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
     })[0];
   }, [vods]);
   const scheduleEntries = useMemo(() => sortScheduleEntries(data?.channel.schedule ?? []), [data?.channel.schedule]);
+  const showPlayerRecoveryActions = Boolean(data?.live || data?.channel.liveState === "starting");
+  const hasScheduleEntries = scheduleEntries.length > 0;
+  const offlineActionHeading = latestVod
+    ? "Catch the latest broadcast even while the channel is offline"
+    : vodError
+      ? "Replay shelf needs a retry"
+      : vodsLoading
+        ? "Checking for recent replays"
+        : hasScheduleEntries
+          ? "This channel is offline; the next stream is scheduled"
+          : "This channel is offline right now";
+  const offlineActionBody = latestVod
+    ? `${latestVod.title} is ready from the Videos tab. Published ${new Date(latestVod.publishedAt).toLocaleDateString()} - ${formatVodDuration(latestVod.durationSeconds)}.`
+    : vodError
+      ? `We couldn't load the replay shelf yet: ${vodError}`
+      : vodsLoading
+        ? "BitRiver is checking whether this creator has recent VODs ready for playback."
+        : hasScheduleEntries
+          ? `${scheduleEntries[0].title} starts ${formatScheduleStart(scheduleEntries[0].startsAt)}.`
+          : "There are no published replays or upcoming schedule entries yet. Browse other live channels or check again in a moment.";
 
   return (
     <div className="workspace-page workspace-page--narrow channel-page">
@@ -350,48 +375,77 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
                 live={data.live}
                 liveState={data.channel.liveState}
                 loading={loading}
-                onRetry={handleRetry}
-                recoveryHref="/browse"
+                onRetry={showPlayerRecoveryActions ? handleRetry : undefined}
+                recoveryHref={showPlayerRecoveryActions ? "/browse" : undefined}
               />
+              <nav className="channel-watch-nav" aria-label="Watch page sections">
+                <a href="#channel-chat">Chat</a>
+                <a href="#channel-details">Details</a>
+                <button type="button" onClick={openVideosTab}>
+                  Videos
+                </button>
+                {hasScheduleEntries ? (
+                  <button type="button" onClick={openScheduleTab}>
+                    Schedule
+                  </button>
+                ) : null}
+              </nav>
             </div>
-            <aside className="channel-page__chat">
+            <aside className="channel-page__chat" id="channel-chat">
               <div className="channel-page__chat-inner">
                 <ChatPanel channelId={id} roomId={data.chat?.roomId} viewerCount={data.viewerCount} />
               </div>
             </aside>
           </div>
 
-          <div className="channel-page__main stack">
+          <div className="channel-page__main stack" id="channel-details">
             <ChannelHeader data={data} onFollowChange={handleFollowChange} onSubscriptionChange={handleSubscriptionChange} />
 
             {!data.live && (
-              <section className="channel-replay-card surface">
+              <section className="channel-replay-card surface" aria-labelledby="channel-offline-actions-title">
                 <div className="stack stack--2xs">
-                  <span className="page-eyebrow">Replay access</span>
-                  <h3>
-                    {latestVod
-                      ? "Catch the latest broadcast even while the channel is offline"
-                      : vodsLoading
-                        ? "Checking for recent replays"
-                        : "No replays published yet"}
-                  </h3>
-                  <p className="muted">
-                    {latestVod
-                      ? `${latestVod.title} is ready from the Videos tab. Published ${new Date(latestVod.publishedAt).toLocaleDateString()} - ${formatVodDuration(latestVod.durationSeconds)}.`
-                      : vodError
-                        ? `We couldn't load the replay shelf yet: ${vodError}`
-                        : vodsLoading
-                          ? "BitRiver is checking whether this creator has recent VODs ready for playback."
-                          : "Once the creator publishes a VOD, it will appear here and in the Videos tab."}
-                  </p>
+                  <span className="page-eyebrow">Offline actions</span>
+                  <h3 id="channel-offline-actions-title">{offlineActionHeading}</h3>
+                  <p className="muted">{offlineActionBody}</p>
                 </div>
                 <div className="channel-page__actions">
-                  <button type="button" className="primary-button" onClick={openVideosTab}>
-                    Open Videos tab
-                  </button>
-                  <Link href="/videos" className="secondary-button">
-                    Browse more replays
-                  </Link>
+                  {latestVod ? (
+                    <>
+                      <button type="button" className="primary-button" onClick={openVideosTab}>
+                        Open Videos tab
+                      </button>
+                      <Link href="/videos" className="secondary-button">
+                        Browse more replays
+                      </Link>
+                    </>
+                  ) : vodError ? (
+                    <>
+                      <button type="button" className="primary-button" onClick={handleVodRetry}>
+                        Try loading replays
+                      </button>
+                      <Link href="/browse" className="secondary-button">
+                        Browse live channels
+                      </Link>
+                    </>
+                  ) : hasScheduleEntries ? (
+                    <>
+                      <button type="button" className="primary-button" onClick={openScheduleTab}>
+                        View schedule
+                      </button>
+                      <Link href="/browse" className="secondary-button">
+                        Browse live channels
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      <Link href="/browse" className="primary-button">
+                        Browse live channels
+                      </Link>
+                      <button type="button" className="secondary-button" onClick={handleRetry}>
+                        Check live status
+                      </button>
+                    </>
+                  )}
                 </div>
               </section>
             )}
@@ -456,9 +510,9 @@ export default function ChannelPage({ params }: { params: { id: string } }) {
             </section>
 
             {user?.id === data.channel.ownerId || user?.roles.includes("creator") ? (
-              <section className="channel-owner-card">
-                <span className="page-eyebrow">Creator tools</span>
-                <h3>Manage uploads</h3>
+              <section className="channel-owner-card" aria-labelledby="channel-owner-tools-title">
+                <span className="page-eyebrow">Creator-only tools</span>
+                <h3 id="channel-owner-tools-title">Manage uploads</h3>
                 <p className="muted">Use your creator dashboard to register VODs and monitor processing once streams finish.</p>
                 <div className="channel-page__actions">
                   <Link href={`/creator/uploads/${data.channel.id}`} className="secondary-button">

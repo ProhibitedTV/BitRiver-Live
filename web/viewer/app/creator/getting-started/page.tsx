@@ -66,6 +66,7 @@ export default function CreatorGettingStartedPage() {
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveError, setLiveError] = useState<string | undefined>();
   const [copyMessage, setCopyMessage] = useState<string | undefined>();
+  const [manualChecks, setManualChecks] = useState<ManualChecks>(() => loadStoredChecks());
 
   const loadChannels = useCallback(async () => {
     if (!user) {
@@ -122,6 +123,13 @@ export default function CreatorGettingStartedPage() {
   }, [refreshLiveStatus]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(MANUAL_CHECKS_STORAGE_KEY, JSON.stringify(manualChecks));
+  }, [manualChecks]);
+
+  useEffect(() => {
     if (!selectedChannel?.id) {
       return;
     }
@@ -136,6 +144,7 @@ export default function CreatorGettingStartedPage() {
   }, [refreshLiveStatus, selectedChannel?.id]);
 
   const liveSetupLink = selectedChannel ? `/creator/live/${selectedChannel.id}` : "/creator";
+  const uploadsLink = selectedChannel ? `/creator/uploads/${selectedChannel.id}` : "/creator";
   const viewerLink = selectedChannel ? buildViewerPath(`/channels/${selectedChannel.id}`) : buildViewerPath("/browse");
   const hasChannel = Boolean(selectedChannel?.id);
   const needsFirstChannel = Boolean(user) && !channelsLoading && channels.length === 0;
@@ -188,6 +197,22 @@ export default function CreatorGettingStartedPage() {
   const step4Done = manualChecks.viewerLinkShared;
   const step5Done = manualChecks.vodUploaded;
   const completedSteps = [step1Done, step2Done, step3Done, step4Done, step5Done].filter(Boolean).length;
+  const liveStatusTone: "neutral" | "info" | "success" | "danger" = liveLoading
+    ? "info"
+    : liveError
+      ? "danger"
+      : step3Done
+        ? "success"
+        : "neutral";
+  const liveStatusLabel = liveLoading
+    ? "Checking"
+    : liveError
+      ? "Needs attention"
+      : step3Done
+        ? "Live"
+        : hasChannel
+          ? "Offline"
+          : "Choose a channel";
 
   return (
     <div className="workspace-shell">

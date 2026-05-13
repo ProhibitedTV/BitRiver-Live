@@ -191,6 +191,14 @@ export function HomePageView({
     ? `We couldn't load the personalized discovery rows right now: ${homeError}`
     : null;
   const directoryErrorMessage = directoryError ? `We couldn't load the directory right now: ${directoryError}` : null;
+  const hasDiscoveryContent =
+    featured.length > 0 ||
+    recommended.length > 0 ||
+    following.length > 0 ||
+    liveNow.length > 0 ||
+    trending.length > 0 ||
+    categories.length > 0;
+  const hasChannelsToBrowse = hasDiscoveryContent || channels.length > 0;
   const heroEyebrow = hasDiscoveryContent ? "Self-hosted live" : "First stream";
   const heroTitle = liveNow.length > 0
     ? "Watch live or launch your own channel"
