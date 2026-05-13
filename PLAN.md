@@ -4,6 +4,9 @@
   - `cmd/bitriver/env_validation_test.go` still calls `renderOMEFromEnv` with an output path even though that helper now delegates to the default generated OME path.
   - `internal/server/security_headers_test.go` expects the default CSP header, but `SecurityConfig.withDefaults()` currently fills every default security header except `ContentSecurityPolicy`.
 - Address the follow-up CI contract failure where `scripts/check-contract-invariants.sh` selects `deploy/.env.example` for Compose substitution but Compose still tries to load service-level `env_file: ../.env`.
+- Address the next follow-up CI failures from run `25827555245`:
+  - Shell lint now fails on existing scripts that use `CDPATH= cd` and on callback/trap-only functions that ShellCheck cannot prove reachable.
+  - The later `scripts/verify.sh` Docker Compose validation still falls back to `deploy/.env.example`, which does not satisfy Compose's service-level `env_file: ../.env` requirement when the root `.env` is absent in CI.
 - Treat the image vulnerability scan Trivy download failure as likely transient unless it recurs after a fresh push; changing CI install behavior would require explicit approval because it touches workflow behavior.
 
 ## Assumptions
@@ -11,15 +14,19 @@
 - Restoring the default CSP in `withDefaults()` preserves the existing viewer proxy behavior because `/viewer` route responses still receive the viewer-specific inline-script CSP in the proxy path.
 - No deployment contract changes are needed.
 - The approved script change should only create a temporary root `.env` from `deploy/.env.example` when `.env` is absent, and it must clean that temporary file up.
+- The user's approval covers the required script/check behavior changes needed to get the PR ready, including the narrow `scripts/verify.sh` fallback repair.
 
 ## Risks
 - Security header middleware ordering is broad; the CSP default fix must keep viewer routes exempt from the API/admin default CSP so the dedicated viewer CSP can be set by proxy handling.
 - OME renderer tests should keep using the temp workspace output rather than accidentally writing to the real repository generated config.
 - The contract check must not overwrite an operator's real root `.env`.
+- Shell lint fixes should stay mechanical and narrow so they do not change deploy smoke semantics.
+- The verify fallback must clean up only a temporary `.env` it created and must leave real operator `.env` files untouched.
 
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver ./internal/server -count=1`
 - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'PATH="/c/Program Files/Docker/Docker/resources/bin:$PATH" ./scripts/check-contract-invariants.sh'`
+- `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/verify.sh scripts/check-go-sum-not-empty.sh scripts/refresh-go-sum.sh scripts/require-image-digests.sh scripts/deploy-smoke.sh'`
 - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer`
 - Recheck PR #1233 GitHub Actions after pushing.
 

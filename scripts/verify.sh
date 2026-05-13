@@ -178,6 +178,33 @@ should_run_viewer_checks() {
   viewer_changes_present
 }
 
+run_docker_compose_config_validation() {
+  local compose_env_file=".env"
+  local created_temp_env_file=false
+
+  if [[ ! -f "$compose_env_file" ]]; then
+    if [[ ! -f deploy/.env.example ]]; then
+      echo "Missing env file: expected .env or deploy/.env.example" >&2
+      return 1
+    fi
+
+    echo "Root .env missing; using temporary copy of deploy/.env.example for compose config validation"
+    cp deploy/.env.example "$compose_env_file"
+    created_temp_env_file=true
+  fi
+
+  set +e
+  docker compose --env-file "$compose_env_file" -f deploy/docker-compose.yml config
+  local compose_rc=$?
+  set -e
+
+  if [[ "$created_temp_env_file" == true ]]; then
+    rm -f "$compose_env_file"
+  fi
+
+  return "$compose_rc"
+}
+
 if [[ "${BITRIVER_VERIFY_SOURCE_ONLY:-0}" == "1" ]]; then
   if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
     return 0
@@ -206,19 +233,7 @@ if command -v docker >/dev/null 2>&1; then
 fi
 
 if [[ "$docker_available" == true ]]; then
-  compose_env_file=""
-  if [[ -f .env ]]; then
-    compose_env_file=".env"
-  elif [[ -f deploy/.env.example ]]; then
-    compose_env_file="deploy/.env.example"
-  else
-    echo
-    echo "==> Docker Compose config validation"
-    echo "Missing env file: expected .env or deploy/.env.example" >&2
-    exit 1
-  fi
-
-  run_step "Docker Compose config validation" docker compose --env-file "$compose_env_file" -f deploy/docker-compose.yml config
+  run_step "Docker Compose config validation" run_docker_compose_config_validation
   run_step "Quickstart smoke" ./scripts/test-quickstart.sh
 else
   echo

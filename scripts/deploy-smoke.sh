@@ -30,13 +30,14 @@ PROJECT_NAME="bitriver-smoke-${RANDOM}-$$"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-180}"
 WAIT_INTERVAL="${WAIT_INTERVAL:-3}"
 READY_URL=""
-SMOKE_RESULT="FAIL"
 
+# shellcheck disable=SC2317
 cleanup() {
   docker compose --project-name "$PROJECT_NAME" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down -v --remove-orphans >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
+# shellcheck disable=SC2317
 wait_for_readyz() {
   if curl -fsS "$READY_URL" >/dev/null; then
     return 0
@@ -57,7 +58,6 @@ docker compose --project-name "$PROJECT_NAME" --env-file "$ENV_FILE" -f "$COMPOS
 
 echo "Waiting for API readiness at $READY_URL ..."
 if bounded_poll "$WAIT_TIMEOUT" "$WAIT_INTERVAL" wait_for_readyz; then
-  SMOKE_RESULT="PASS"
   echo "PASS: deploy smoke succeeded ($READY_URL reachable)"
   exit 0
 fi
