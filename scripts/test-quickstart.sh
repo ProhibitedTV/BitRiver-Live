@@ -334,15 +334,8 @@ docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" pull --ignore
 
 dump_compose_diagnostics() {
   docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" ps -a >&2 || true
-  docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" logs --tail=160 bitriver-live viewer srs-controller srs ome transcoder transcoder-public postgres redis >&2 || true
+  docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" logs --tail=60 bitriver-live viewer srs-controller transcoder postgres-migrations srs-config ome-config ome-health-token-check postgres redis >&2 || true
 }
-
-echo "Starting docker compose stack..."
-if ! docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" up -d --no-build --pull never; then
-  echo "error: docker compose stack failed to start" >&2
-  dump_compose_diagnostics
-  exit 1
-fi
 
 set -a
 # shellcheck disable=SC1090
@@ -350,6 +343,18 @@ set -a
 set +a
 
 WAIT_TIMEOUT=${WAIT_TIMEOUT:-300}
+
+start_compose_services() {
+  local label="$1"
+  shift
+
+  echo "Starting $label..."
+  if ! docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" up -d --no-build --pull never "$@"; then
+    echo "error: docker compose $label failed to start" >&2
+    dump_compose_diagnostics
+    exit 1
+  fi
+}
 
 wait_for_health_check() {
   local service_name="$1"
@@ -370,7 +375,7 @@ wait_for_health_check() {
     ;;
   unhealthy)
     echo "error: service $service_name reported unhealthy" >&2
-    docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" logs --tail=160 "$service_name" >&2 || true
+    docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" logs --tail=80 "$service_name" >&2 || true
     docker inspect "$container_id"
     return 2
     ;;
@@ -391,6 +396,50 @@ wait_for_health() {
   poll_rc=$?
   if [ "$poll_rc" -eq 124 ]; then
     echo "error: timed out waiting for $service_name to become healthy (last status: $WAIT_FOR_HEALTH_LAST_STATUS)" >&2
+  fi
+  exit 1
+}
+
+wait_for_completed_check() {
+  local service_name="$1"
+
+  container_id=$(docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" ps -q "$service_name")
+  if [ -z "$container_id" ]; then
+    echo "error: no container found for service $service_name" >&2
+    return 2
+  fi
+
+  status=$(docker inspect -f '{{.State.Status}}' "$container_id")
+  exit_code=$(docker inspect -f '{{.State.ExitCode}}' "$container_id")
+  WAIT_FOR_COMPLETED_LAST_STATUS="$status"
+
+  case "$status" in
+  exited)
+    if [ "$exit_code" = "0" ]; then
+      echo "Service $service_name completed successfully."
+      return 0
+    fi
+    echo "error: service $service_name exited with code $exit_code" >&2
+    docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" logs --tail=80 "$service_name" >&2 || true
+    return 2
+    ;;
+  *)
+    return 1
+    ;;
+  esac
+}
+
+wait_for_completed() {
+  local service_name="$1"
+  WAIT_FOR_COMPLETED_LAST_STATUS="unknown"
+
+  if bounded_poll "$WAIT_TIMEOUT" 5 wait_for_completed_check "$service_name"; then
+    return 0
+  fi
+
+  poll_rc=$?
+  if [ "$poll_rc" -eq 124 ]; then
+    echo "error: timed out waiting for $service_name to complete (last status: $WAIT_FOR_COMPLETED_LAST_STATUS)" >&2
   fi
   exit 1
 }
@@ -420,18 +469,47 @@ wait_for_endpoint() {
   exit 1
 }
 
-SERVICES_WITH_HEALTHCHECKS=(
-  bitriver-live
-  srs-controller
-  srs
-  ome
-  transcoder
+DEPENDENCY_SERVICES=(
   postgres
   redis
+  srs
+  srs-controller
+  ome
+  transcoder
+  postgres-migrations
 )
 
-echo "Waiting for services to report healthy..."
-for service in "${SERVICES_WITH_HEALTHCHECKS[@]}"; do
+APPLICATION_SERVICES=(
+  bitriver-live
+  viewer
+  transcoder-public
+)
+
+DEPENDENCY_SERVICES_WITH_HEALTHCHECKS=(
+  postgres
+  redis
+  srs
+  srs-controller
+  ome
+  transcoder
+)
+
+APPLICATION_SERVICES_WITH_HEALTHCHECKS=(
+  bitriver-live
+)
+
+start_compose_services "dependency services" "${DEPENDENCY_SERVICES[@]}"
+
+echo "Waiting for dependency services to report healthy..."
+for service in "${DEPENDENCY_SERVICES_WITH_HEALTHCHECKS[@]}"; do
+  wait_for_health "$service"
+done
+wait_for_completed "postgres-migrations"
+
+start_compose_services "application services" "${APPLICATION_SERVICES[@]}"
+
+echo "Waiting for application services to report healthy..."
+for service in "${APPLICATION_SERVICES_WITH_HEALTHCHECKS[@]}"; do
   wait_for_health "$service"
 done
 

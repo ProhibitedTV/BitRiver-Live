@@ -10,6 +10,7 @@
 - Address the subsequent quickstart smoke failure where a clean GitHub runner starts Compose with `--pull never` before third-party runtime images such as `redis:7-alpine` and `debian:12-slim` exist locally.
 - Address the latest quickstart smoke failure where the Linux runner's host bind mount can leave `deploy/transcoder-data` unwritable for the `transcoder` container's fixed UID.
 - Address the follow-up quickstart smoke race where the final proxied viewer curl can run before the viewer sidecar is ready, even after container health dependencies have turned green.
+- Address the remaining quickstart startup race by booting Compose dependencies first, waiting for their health/completion, and only then starting the API/viewer layer.
 - Address the recurring image vulnerability scan failure by downloading the Trivy archive with retries to a file before extraction instead of streaming a possibly truncated response into `tar`.
 
 ## Assumptions
@@ -31,6 +32,7 @@
 - The temporary quickstart smoke Compose override must remain test-only; it should not alter `deploy/docker-compose.yml` or the production helper-service user contract.
 - Running the `transcoder` service as the host UID/GID in the smoke override must stay limited to the smoke harness so the deployment contract's fixed runtime UID remains unchanged.
 - Polling the final viewer/API curls should not hide persistent routing failures; diagnostics must include Compose status and relevant service logs when the endpoint never becomes reachable.
+- Phased quickstart startup should preserve the deployed service graph while avoiding Compose's early dependency-failure short-circuit on slow hosted runners.
 - Trivy install hardening touches CI workflow behavior; the change should stay mechanical and preserve the pinned Trivy version.
 
 ## Test plan

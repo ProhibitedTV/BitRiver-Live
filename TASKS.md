@@ -43,6 +43,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - The quickstart smoke prepares the host transcoder bind mount and test-only Unix user override so the transcoder can become healthy on Linux CI.
     - The smoke fixture uses the same non-loopback transcoder public URL used by the CI image build fixture.
     - The final API and proxied viewer checks poll until ready instead of racing service startup.
+    - Compose startup is phased so dependency health/completion is checked before starting the API/viewer layer.
     - Trivy installation in CI retries and extracts a complete archive before scanning.
     - The change is validated with syntax/unit checks, pushed, and confirmed in the next CI run.
 
@@ -93,12 +94,14 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Follow-up `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
 - Task 7 in progress: CI run `25828715591` advanced through build/pull/config jobs and then failed because `bitriver-transcoder` became unhealthy during quickstart smoke startup. The same run still failed `Image vulnerability scan` while streaming the Trivy archive into `tar` (`gzip: stdin: unexpected end of file`), so the recurring scanner install failure is now in scope with the user's approval.
 - Task 7 follow-up: CI run `25829197707` moved past shell lint and guards, but the Ubuntu gate still failed late in quickstart smoke after OME and core services were starting. The smoke's final API/viewer curls are one-shot checks, so they can race the viewer sidecar even after dependency healthchecks are green.
+- Task 7 second follow-up: CI run `25829744630` still failed during `docker compose up` before the script's own health waits could isolate the service. The smoke should start dependency services first, wait for health and migration completion explicitly, and then start the API/viewer services.
 - Task 7 local checks:
   - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/test-quickstart.sh'` - passed.
   - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
   - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched Markdown/workflow files.
   - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because this workstation has no usable Python runtime.
   - Follow-up after endpoint polling: `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
+  - Follow-up after phased Compose startup: `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
 
 ## Scoped change: issue #1220 chat controls and signed-out chat UX
 
