@@ -1,3 +1,47 @@
+## Scoped change: PR #1233 CI readiness
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Diagnose failing PR checks
+  - Acceptance criteria:
+    - Fetch PR #1233 status and failing job logs where available.
+    - Record the specific failing commands and root causes in `PLAN.md`/`TASKS.md`.
+    - Distinguish code failures from transient or workflow-level failures.
+
+- [x] Task 2 - Fix Ubuntu test-all gate failures
+  - Acceptance criteria:
+    - OME render tests use the current renderer helper/API correctly.
+    - Default server security config applies the default CSP to non-viewer routes.
+    - Viewer route CSP behavior remains covered by existing tests.
+
+- [-] Task 3 - Validate locally and update the PR branch
+  - Acceptance criteria:
+    - Focused Go tests pass.
+    - Repo viewer gate passes locally or records any remaining blocker.
+    - Changes are committed, pushed, and PR #1233 is updated for merge readiness.
+
+### Execution log (PR #1233 CI readiness)
+- Task 1 complete: `gh auth status` is still blocked by an invalid local GitHub token, so Actions inspection used the GitHub connector. PR #1233's CI run failed in `Ubuntu test-all gate` and `Image vulnerability scan`. The Ubuntu gate failed on `cmd/bitriver/env_validation_test.go` calling `renderOMEFromEnv` with the old five-argument shape and `internal/server/security_headers_test.go` receiving an empty default CSP header. The image scan failed while installing Trivy with `gzip: stdin: unexpected end of file`; no workflow edit is planned unless it recurs after a fresh push.
+- Task 1 checks:
+  - `gh auth status` - failed due invalid local token for `ProhibitedTV`.
+  - GitHub connector: fetched PR #1233 metadata and workflow run `25826344573`.
+  - GitHub connector: fetched failing job logs for `Ubuntu test-all gate` and `Image vulnerability scan`.
+  - `rg -n "renderOMEFromEnv|Content-Security-Policy|SecurityHeaders|securityHeaders|security header|CSP|default-src" cmd internal PLAN.md TASKS.md`
+  - `Get-Content cmd/bitriver/env_validation_test.go | Select-Object -Skip 500 -First 120`
+  - `Get-Content cmd/bitriver/ome_render.go | Select-Object -First 180`
+  - `Get-Content internal/server/security.go | Select-Object -First 180`
+  - `Get-Content internal/server/server.go | Select-Object -Skip 250 -First 100`
+  - `Get-Content internal/server/security_headers_test.go`
+- Task 2 complete: updated the OME render tests to call `renderOMEFromEnvOutput` when they need a temp output path, and restored default CSP population in `SecurityConfig.withDefaults()` after frame-ancestor defaults are resolved. Viewer routes still skip the API/admin default CSP in middleware and keep the dedicated viewer proxy CSP coverage.
+- Task 2 checks:
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; go test ./cmd/bitriver ./internal/server -count=1` - blocked by a pre-existing Windows Go cache path issue.
+  - `New-Item -ItemType Directory -Force -Path .codex-tmp\go-cache; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./cmd/bitriver ./internal/server -count=1` - passed.
+- Task 3 validation so far:
+  - `$env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; & 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - did not reach project checks because Git Bash could not find `dirname` when launched without login PATH setup.
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - reached project checks and stopped at the contract stage because this workstation has no usable Python interpreter (`py -0p` reports no installed Pythons).
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./... -count=1 -timeout=120s` - passed.
+  - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched files.
+
 ## Scoped change: issue #1220 chat controls and signed-out chat UX
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

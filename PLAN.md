@@ -1,4 +1,25 @@
 ## Scope (current change)
+- Get PR #1233 ready for merge by fixing the current failing CI checks without widening the chat-control feature scope.
+- Address the Ubuntu test-all gate failures reproduced locally and in Actions logs:
+  - `cmd/bitriver/env_validation_test.go` still calls `renderOMEFromEnv` with an output path even though that helper now delegates to the default generated OME path.
+  - `internal/server/security_headers_test.go` expects the default CSP header, but `SecurityConfig.withDefaults()` currently fills every default security header except `ContentSecurityPolicy`.
+- Treat the image vulnerability scan Trivy download failure as likely transient unless it recurs after a fresh push; changing CI install behavior would require explicit approval because it touches workflow behavior.
+
+## Assumptions
+- The backend gate fixes are acceptable in this PR because they are blocking PR #1233's merge readiness and are narrowly scoped to test/API security-header contract drift.
+- Restoring the default CSP in `withDefaults()` preserves the existing viewer proxy behavior because `/viewer` route responses still receive the viewer-specific inline-script CSP in the proxy path.
+- No deployment contract changes are needed.
+
+## Risks
+- Security header middleware ordering is broad; the CSP default fix must keep viewer routes exempt from the API/admin default CSP so the dedicated viewer CSP can be set by proxy handling.
+- OME renderer tests should keep using the temp workspace output rather than accidentally writing to the real repository generated config.
+
+## Test plan
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver ./internal/server -count=1`
+- `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer`
+- Recheck PR #1233 GitHub Actions after pushing.
+
+## Scope (current change)
 - Address GitHub issue #1220 by reducing live chat chrome and making secondary chat actions less dominant.
 - Keep chat data contracts unchanged while updating only the viewer `ChatPanel` presentation and tests.
 - Consolidate settings and pop-out into a compact chat options menu, make pop-out a direct action, and keep connection status visible without using a permanent header pill.

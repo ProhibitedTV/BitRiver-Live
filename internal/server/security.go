@@ -45,6 +45,9 @@ func (cfg SecurityConfig) withDefaults() SecurityConfig {
 	if cfg.FrameAncestors == "" {
 		cfg.FrameAncestors = defaults.FrameAncestors
 	}
+	if cfg.ContentSecurityPolicy == "" {
+		cfg.ContentSecurityPolicy = defaultContentSecurityPolicy(cfg.FrameAncestors)
+	}
 	if cfg.FrameOptions == "" {
 		cfg.FrameOptions = defaults.FrameOptions
 	}
