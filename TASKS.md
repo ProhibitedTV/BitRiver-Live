@@ -81,6 +81,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
   - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched Markdown files.
   - Fresh CI run `25828160170` confirmed the first pull ordering was wrong because `ome-health-token-check` reused the locally built `bitriver-live/ome-config:local` image without its own `build:` block. Follow-up syntax, scripts test, and diff-check commands passed after reordering build/pull/start.
+  - Fresh CI run `25828368236` confirmed the build/pull/start order was correct and then failed in Linux bind-mount writes for the one-shot `srs-config` and `ome-config` jobs. The smoke now adds a temporary Unix-only Compose override so those repo-writing helper jobs run as the host UID/GID while leaving `deploy/docker-compose.yml` unchanged.
+  - Follow-up `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
 
 ## Scoped change: issue #1220 chat controls and signed-out chat UX
 

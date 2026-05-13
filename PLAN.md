@@ -25,6 +25,7 @@
 - Shell lint fixes should stay mechanical and narrow so they do not change deploy smoke semantics.
 - The verify fallback must clean up only a temporary `.env` it created and must leave real operator `.env` files untouched.
 - Pulling missing third-party images in `scripts/test-quickstart.sh` adds network dependency to the Docker smoke, but the CI runner already needs network to build/pull base layers and scan images.
+- The temporary quickstart smoke Compose override must remain test-only; it should not alter `deploy/docker-compose.yml` or the production helper-service user contract.
 
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver ./internal/server -count=1`

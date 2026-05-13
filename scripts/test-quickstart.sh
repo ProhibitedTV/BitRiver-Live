@@ -8,8 +8,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="$REPO_ROOT/.env"
 COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
 COMPOSE_CONFIG_OUTPUT="$(mktemp)"
+COMPOSE_SMOKE_OVERRIDE=""
 CREATED_ENV_FILE=false
 PYTHON_RUNNER=()
+COMPOSE_RUNTIME_ARGS=("-f" "$COMPOSE_FILE")
 
 SMOKE_IMAGE_SOURCE=build
 SMOKE_LIVE_MODE=development
@@ -21,10 +23,30 @@ export BITRIVER_VIEWER_IMAGE_DIGEST=""
 export BITRIVER_SRS_CONTROLLER_IMAGE_DIGEST=""
 export BITRIVER_TRANSCODER_IMAGE_DIGEST=""
 
+if [[ "${OSTYPE:-}" != msys* && "${OSTYPE:-}" != cygwin* ]]; then
+  COMPOSE_SMOKE_OVERRIDE="$(mktemp)"
+  host_uid="$(id -u)"
+  host_gid="$(id -g)"
+  cat >"$COMPOSE_SMOKE_OVERRIDE" <<YAML
+services:
+  srs-config:
+    user: "${host_uid}:${host_gid}"
+  ome-config:
+    user: "${host_uid}:${host_gid}"
+  ome-health-token-check:
+    user: "${host_uid}:${host_gid}"
+YAML
+  COMPOSE_RUNTIME_ARGS+=("-f" "$COMPOSE_SMOKE_OVERRIDE")
+fi
+
 cleanup() {
   rm -f "$COMPOSE_CONFIG_OUTPUT"
-  if docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps >/dev/null 2>&1; then
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down -v --remove-orphans >/dev/null 2>&1 || true
+  if docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" ps >/dev/null 2>&1; then
+    docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
+  fi
+
+  if [[ -n "$COMPOSE_SMOKE_OVERRIDE" ]]; then
+    rm -f "$COMPOSE_SMOKE_OVERRIDE"
   fi
 
   if [ "$CREATED_ENV_FILE" = true ]; then
@@ -102,7 +124,7 @@ ENV
 fi
 
 echo "Rendering docker compose config..."
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config >"$COMPOSE_CONFIG_OUTPUT"
+docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" config >"$COMPOSE_CONFIG_OUTPUT"
 
 if ! command -v go >/dev/null 2>&1; then
   echo "error: go is required to render the OME config" >&2
@@ -290,13 +312,13 @@ print("OME config validation passed.")
 PY
 
 echo "Building local docker compose images..."
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build
+docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" build
 
 echo "Pulling missing third-party runtime images..."
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull --ignore-buildable --policy missing
+docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" pull --ignore-buildable --policy missing
 
 echo "Starting docker compose stack..."
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-build --pull never
+docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" up -d --no-build --pull never
 
 set -a
 # shellcheck disable=SC1090
@@ -308,7 +330,7 @@ WAIT_TIMEOUT=${WAIT_TIMEOUT:-300}
 wait_for_health_check() {
   local service_name="$1"
 
-  container_id=$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps -q "$service_name")
+  container_id=$(docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" ps -q "$service_name")
   if [ -z "$container_id" ]; then
     echo "error: no container found for service $service_name" >&2
     return 2
