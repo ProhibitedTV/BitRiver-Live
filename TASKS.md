@@ -49,6 +49,7 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - The Trivy install pin targets an available official release asset.
     - First-party Go Docker images build binaries with a Go patch line that includes the `CVE-2025-68121` stdlib fix.
     - Application services start after explicit dependency validation without Compose reprocessing the dependency graph.
+    - The API runtime image and pgx dependency no longer produce blocking critical Trivy findings.
     - The change is validated with syntax/unit checks, pushed, and confirmed in the next CI run.
 
 ### Execution log (PR #1233 CI readiness)
@@ -119,6 +120,13 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
 - Task 7 second follow-up local checks:
   - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/test-quickstart.sh'` - passed.
   - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
+  - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched files.
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because this workstation has no usable Python runtime.
+- Task 7 image-scan second follow-up: CI run `25830760564` cleared the Go stdlib CVE and then failed on `ghcr.io/bitriver-live/bitriver-live:ci` because the Debian runtime layer contains critical package findings and the real Postgres binary embeds `github.com/jackc/pgx/v5 v5.7.4` with `CVE-2026-33816` fixed in `v5.9.0`.
+- Task 7 third follow-up fixes: the API runtime image now uses Alpine `3.23` with `curl` preserved for healthchecks, SRS/transcoder Alpine runtime stages now use Alpine `3.23`, and the real pgx module requirement plus checksum are updated to `github.com/jackc/pgx/v5 v5.9.0`.
+- Task 7 third follow-up local checks:
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/test-quickstart.sh'` - passed.
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./... -count=1 -timeout=120s` - passed.
   - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched files.
   - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because this workstation has no usable Python runtime.
 

@@ -5,7 +5,7 @@ go 1.21
 require (
 	github.com/jackc/pgpassfile v1.0.0
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a
-	github.com/jackc/pgx/v5 v5.7.4
+	github.com/jackc/pgx/v5 v5.9.0
 	github.com/jackc/puddle/v2 v2.2.2
 	github.com/redis/go-redis/v9 v9.5.1
 	golang.org/x/crypto v0.27.0
