@@ -47,6 +47,8 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Trivy installation in CI retries and extracts a complete archive before scanning.
     - The one-shot `postgres-migrations` completion waiter can inspect stopped containers after Compose starts dependencies.
     - The Trivy install pin targets an available official release asset.
+    - First-party Go Docker images build binaries with a Go patch line that includes the `CVE-2025-68121` stdlib fix.
+    - Application services start after explicit dependency validation without Compose reprocessing the dependency graph.
     - The change is validated with syntax/unit checks, pushed, and confirmed in the next CI run.
 
 ### Execution log (PR #1233 CI readiness)
@@ -110,6 +112,14 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/test-quickstart.sh'` - passed.
   - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
   - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched Markdown/workflow files.
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because this workstation has no usable Python runtime.
+- Task 7 image-scan follow-up: CI run `25830437975` confirmed Trivy `v0.70.0` installs and the separate `ome-config` OS-package scan passes, then failed in the blocking first-party scan because the `ome-config` Go binary was built with Go `v1.21.13` and Trivy reported stdlib `CVE-2025-68121` fixed by Go `1.24.13`, `1.25.7`, and newer. The fix should update all first-party Go Docker builder images from `golang:1.21*` to a fixed patch line while keeping `go.mod` at `go 1.21`.
+- Task 7 Ubuntu follow-up: CI run `25830437975` moved past the `postgres-migrations` lookup and showed the migration job completing successfully in diagnostics. The remaining Ubuntu failure happens after dependencies are already validated, so application startup should use `--no-deps` to avoid Compose reprocessing the dependency graph and one-shot job during the second phase.
+- Task 7 second follow-up fixes: all first-party Go Docker builders now use Go `1.25.7` builder images, and application service startup now uses `docker compose up --no-deps` after the script has explicitly validated dependency health and migration completion.
+- Task 7 second follow-up local checks:
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/test-quickstart.sh'` - passed.
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
+  - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched files.
   - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because this workstation has no usable Python runtime.
 
 ## Scoped change: issue #1220 chat controls and signed-out chat UX

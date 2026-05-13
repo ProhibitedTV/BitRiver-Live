@@ -356,6 +356,18 @@ start_compose_services() {
   fi
 }
 
+start_compose_services_without_deps() {
+  local label="$1"
+  shift
+
+  echo "Starting $label..."
+  if ! docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" up -d --no-build --pull never --no-deps "$@"; then
+    echo "error: docker compose $label failed to start" >&2
+    dump_compose_diagnostics
+    exit 1
+  fi
+}
+
 wait_for_health_check() {
   local service_name="$1"
 
@@ -506,7 +518,7 @@ for service in "${DEPENDENCY_SERVICES_WITH_HEALTHCHECKS[@]}"; do
 done
 wait_for_completed "postgres-migrations"
 
-start_compose_services "application services" "${APPLICATION_SERVICES[@]}"
+start_compose_services_without_deps "application services" "${APPLICATION_SERVICES[@]}"
 
 echo "Waiting for application services to report healthy..."
 for service in "${APPLICATION_SERVICES_WITH_HEALTHCHECKS[@]}"; do

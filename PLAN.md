@@ -15,6 +15,8 @@
 - Address the latest CI run `25830088634` failures:
   - The phased smoke now reaches healthy dependencies but misses the exited `postgres-migrations` one-shot because `docker compose ps -q` only reports running containers in this context.
   - The hardened Trivy download now fails deterministically because the pinned `v0.50.1` GitHub release asset returns 404; update to the current official immutable `v0.70.0` Linux archive.
+  - With Trivy `v0.70.0`, the scanner reaches first-party Go binaries and blocks on Go stdlib `CVE-2025-68121` from the `golang:1.21` builder images; rebuild all first-party Go binaries from a fixed Go patch line while leaving the module target at `go 1.21`.
+  - After explicit dependency health/completion waits, application startup should not ask Compose to re-evaluate or restart the one-shot dependency chain.
 
 ## Assumptions
 - The backend gate fixes are acceptable in this PR because they are blocking PR #1233's merge readiness and are narrowly scoped to test/API security-header contract drift.
@@ -38,6 +40,8 @@
 - Phased quickstart startup should preserve the deployed service graph while avoiding Compose's early dependency-failure short-circuit on slow hosted runners.
 - Trivy install hardening touches CI workflow behavior; the version bump should stay limited to a known official GitHub release asset and avoid changing scanner policy.
 - One-shot completion waiting should include stopped containers without changing application-service health behavior.
+- Bumping Docker builder images should not imply raising the source checkout's minimum Go version or changing `go.mod`.
+- Starting application services with `--no-deps` depends on the preceding explicit health/completion waits staying complete and ordered.
 
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver ./internal/server -count=1`
