@@ -1,5 +1,6 @@
 import {
   adminUser,
+  creatorUser,
   mockAnonymousUser,
   mockAuthenticatedUser,
   mockUseAuth,
@@ -9,7 +10,7 @@ import {
   viewerUser,
   guestAuthState,
 } from "../test/test-utils";
-import { act, screen, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Navbar } from "../components/Navbar";
 import { readFileSync } from "node:fs";
@@ -123,14 +124,21 @@ describe("Navbar", () => {
     window.history.replaceState({}, "", "/");
   });
 
-  test("shows a control center link to admins", () => {
+  test("keeps the control center link inside the account menu for admins", async () => {
     mockAuthenticatedUser(adminUser);
+    const user = userEvent.setup();
 
     renderWithProviders(<Navbar />);
 
-    const controlCenterLink = document.querySelector<HTMLAnchorElement>(".navbar-right .nav-cta[href='/admin']");
-    expect(controlCenterLink).not.toBeNull();
-    expect(controlCenterLink).toHaveTextContent(/control center/i);
+    expect(document.querySelector<HTMLAnchorElement>(".navbar-right .nav-cta[href='/admin']")).toBeNull();
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /open account menu/i }));
+    });
+
+    const accountMenu = document.getElementById("viewer-user-menu");
+    expect(accountMenu).toHaveClass("avatar-menu__items--open");
+    expect(within(accountMenu!).getByRole("link", { name: /control center/i })).toHaveAttribute("href", "/admin");
   });
 
   test("does not render a control center link for non-admins", () => {
@@ -139,6 +147,24 @@ describe("Navbar", () => {
     renderWithProviders(<Navbar />);
 
     expect(screen.queryByRole("link", { name: /control center/i })).not.toBeInTheDocument();
+  });
+
+  test("moves creator go-live utilities out of the persistent header", async () => {
+    mockAuthenticatedUser(creatorUser);
+    fetchManagedChannelsMock.mockResolvedValue([{ id: "channel-alpha" }] as any);
+    const user = userEvent.setup();
+
+    renderWithProviders(<Navbar />);
+
+    expect(document.querySelector<HTMLAnchorElement>(".navbar-right .nav-cta")).toBeNull();
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /open account menu/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: /go live/i })).toHaveAttribute("href", "/creator/live/channel-alpha");
+    });
   });
 
   test("closes the account menu on outside click", async () => {
@@ -272,7 +298,7 @@ describe("Navbar", () => {
     expect(navDrawer).toBeInTheDocument();
 
     const drawer = within(navDrawer!);
-    ["Home", "Browse", "Following", "Go Live", "Videos"].forEach((label) => {
+    ["Home", "Browse", "Following", "Videos"].forEach((label) => {
       expect(drawer.getAllByRole("link", { name: new RegExp(label, "i") })).toHaveLength(1);
     });
   });

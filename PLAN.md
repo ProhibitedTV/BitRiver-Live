@@ -1,4 +1,31 @@
 ## Scope (current change)
+- Address GitHub issue #1217 by reducing persistent viewer navbar density and clarifying the primary navigation/action hierarchy.
+- Keep the default header viewer-first: public discovery routes and search stay prominent, while creator/admin/account/preferences actions move into compact account/site menu surfaces.
+- Keep route behavior stable for sign-in, create-account, profile, creator setup/go-live, admin control center, and theme switching.
+- Update the viewer navigation contract and focused navbar tests, with mobile drawer coverage preserved.
+- Avoid deployment contract edits.
+
+## Assumptions
+- The merged watch-page work on `main` is the current baseline, and issue #1219 can be closed as completed because PR #1231 landed.
+- The next issue should be the oldest remaining open product issue, #1217.
+- Viewer-facing discovery routes should remain quickly reachable from the persistent header, but `Go Live`, `Profile`, `Control center`, and theme switching are secondary utilities rather than default primary tabs.
+- The existing `Navbar` menu and drawer state can be extended without adding dependencies or changing auth contracts.
+
+## Risks
+- Moving nav items out of the primary list can break tests or user expectations if the drawer/account menu does not keep those routes discoverable.
+- Admin and creator links depend on runtime API base URL and managed channel loading, so the menu wiring must preserve configured destinations.
+- Navbar CSS has accumulated multiple override sections; edits need to land in the effective rules without broad layout churn.
+- Playwright coverage may be host-sensitive because it builds and starts the Next.js viewer.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- navigation.test.ts navbar.test.tsx`
+- `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx`
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `npm.cmd --prefix web/viewer run test:playwright -- tests/navbar-mobile.spec.ts`
+- `./scripts/verify.sh --viewer`
+
+## Scope (current change)
 - Restore the in-viewer overlay auth flow from `codex/signin-polish` onto the current checkout without wholesale branch checkout or unrelated viewer drift.
 - Re-enable the mounted overlay dialog, route signed-out viewer CTAs back through `useAuth`, and keep `/signup` available as the existing standalone fallback surface.
 - Preserve current external-auth compatibility where `/api/viewer/me` provides a `loginUrl`, so installs that still rely on redirect-based sign-in do not regress.

@@ -1,3 +1,70 @@
+## Scoped change: issue #1217 navbar density and action hierarchy
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the navbar-density diagnosis and scoped implementation plan
+  - Acceptance criteria:
+    - `PLAN.md` captures issue #1217 scope, assumptions, risks, and the focused viewer validation plan.
+    - `TASKS.md` lists the ordered implementation and validation sequence before navbar source edits begin.
+    - The read-only pass identifies current primary nav, drawer, account, CSS, and test surfaces.
+
+- [x] Task 2 - Simplify the persistent navbar route/action hierarchy
+  - Acceptance criteria:
+    - Persistent primary nav emphasizes viewer discovery routes instead of creator/account utilities.
+    - Creator/admin/profile/theme utilities remain reachable through account/site menu surfaces.
+    - Guest sign-in and create-account flows remain available and keep their existing auth behavior.
+
+- [x] Task 3 - Tighten mobile drawer and navbar styling around the new hierarchy
+  - Acceptance criteria:
+    - Drawer links do not duplicate primary route destinations or utility CTAs confusingly.
+    - Effective CSS rules reduce desktop header crowding and preserve mobile no-overflow behavior.
+    - Menu buttons keep clear accessible labels and keyboard/outside-click dismissal behavior.
+
+- [x] Task 4 - Update viewer docs and focused tests
+  - Acceptance criteria:
+    - `web/viewer/README.md` reflects the updated navigation contract.
+    - Navigation/navbar unit tests cover the final guest/member/creator/admin route visibility and utility placement.
+    - Playwright mobile navbar coverage still asserts drawer behavior and no horizontal overflow.
+
+- [x] Task 5 - Run validation and record results
+  - Acceptance criteria:
+    - Focused Jest checks, lint, build, targeted Playwright, and the repo viewer gate are run or explicitly recorded with host blockers.
+    - `TASKS.md` records all command results and any residual gaps.
+
+### Execution log (issue #1217 navbar density and action hierarchy)
+- Task 1 complete: closed issue #1219 as completed after confirming merged PR #1231, selected the oldest remaining open product issue (#1217), created branch `codex/issue-1217-nav-density`, reviewed `web/viewer/components/Navbar.tsx`, `web/viewer/lib/navigation.ts`, `web/viewer/README.md`, navbar unit tests, mobile Playwright coverage, and effective navbar CSS override sections before editing.
+- Task 1 checks:
+  - `git pull --ff-only origin main`
+  - `git checkout -b codex/issue-1217-nav-density`
+  - GitHub connector: fetched PR #1231 and closed issue #1219 with `state_reason=completed`
+  - GitHub connector: searched open issues and selected issue #1217
+  - `Get-Content web/viewer/components/Navbar.tsx`
+  - `Get-Content web/viewer/lib/navigation.ts`
+  - `Get-Content web/viewer/README.md -TotalCount 160`
+  - `Get-Content web/viewer/__tests__/navbar.test.tsx`
+  - `Get-Content web/viewer/__tests__/navigation.test.ts`
+  - `Get-Content web/viewer/tests/navbar-mobile.spec.ts`
+  - `rg -n "Navbar|navigation|nav-|navbar|drawer|theme|Control center|Start stream|Create account|Menu|Close|Light|Dark" web/viewer/__tests__ web/viewer/tests web/viewer/styles web/viewer/components web/viewer/lib`
+- Task 2 complete: removed `Go Live` and `Profile` from the persistent primary route config, moved creator/admin/profile/setup/theme utilities into the compact account/site menu, and preserved signed-out sign-in/create-account CTAs with their existing redirect/overlay behavior.
+- Task 2 checks:
+  - `npm.cmd --prefix web/viewer run test -- navigation.test.ts navbar.test.tsx` (passed)
+- Task 3 complete: updated the mobile drawer utility section to expose creator setup/go-live outside the primary route list, added profile/sign-out grouping for signed-in drawer accounts, and added small menu styling hooks for the site menu and drawer account actions.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- navigation.test.ts navbar.test.tsx` (passed)
+- Task 4 complete: updated `web/viewer/README.md` with the viewer-first navigation contract, adjusted navigation/navbar unit tests for the final route matrix and account-menu utility placement, and updated the theme Playwright flow to open the site menu before toggling theme.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- navigation.test.ts navbar.test.tsx` (passed)
+- Task 5 complete: focused navbar/navigation Jest coverage, adjacent shell coverage, viewer lint, production build, and targeted mobile Playwright coverage passed. The repo viewer gate was invoked and recorded; it failed in unrelated Go checks before reaching viewer checks.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run test -- navigation.test.ts navbar.test.tsx` (passed)
+  - `npm.cmd --prefix web/viewer run test -- viewerShell.test.tsx` (passed)
+  - `npm.cmd --prefix web/viewer run lint` (passed)
+  - `npm.cmd --prefix web/viewer run build` (passed; existing Next client-rendering and Browserslist warnings were emitted)
+  - `npx.cmd playwright install chromium` (completed; local project browser cache was already present)
+  - `Copy-Item -Path web\viewer\.next\static -Destination web\viewer\.next\standalone\.next\static -Recurse -Force` (prepared the standalone server for hydrated Playwright smoke testing)
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 PLAYWRIGHT_BROWSERS_PATH=0 npx.cmd playwright test tests/navbar-mobile.spec.ts` with a temporary standalone server (passed)
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` (failed outside this viewer/navbar scope: `cmd/bitriver` tests still call `renderOMEFromEnv` with the old signature, and `internal/server` security header tests expected CSP headers that were absent)
+
 ## Scoped change: restore overlay auth flow from `codex/signin-polish`
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

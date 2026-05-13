@@ -461,17 +461,23 @@ test.describe("authentication controls", () => {
 
     await page.goto("/");
 
-    const toggle = page.getByRole("button", { name: /switch to (light|dark) theme/i });
+    const siteMenu = page.getByRole("button", { name: "Open site menu" });
     const body = page.locator("body");
     const initialTheme = await body.getAttribute("data-theme");
 
+    await siteMenu.click();
+    let toggle = page.locator("#viewer-user-menu").getByRole("button", { name: /switch to (light|dark) theme/i });
     await toggle.click();
     if (initialTheme === "light") {
       await expect(body).not.toHaveAttribute("data-theme", "light");
-      await expect(toggle).toHaveAttribute("aria-label", /switch to light theme/i);
+      await siteMenu.click();
+      toggle = page.locator("#viewer-user-menu").getByRole("button", { name: /switch to light theme/i });
+      await expect(toggle).toBeVisible();
     } else {
       await expect(body).toHaveAttribute("data-theme", "light");
-      await expect(toggle).toHaveAttribute("aria-label", /switch to dark theme/i);
+      await siteMenu.click();
+      toggle = page.locator("#viewer-user-menu").getByRole("button", { name: /switch to dark theme/i });
+      await expect(toggle).toBeVisible();
     }
 
     await toggle.click();

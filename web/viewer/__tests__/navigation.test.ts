@@ -10,19 +10,19 @@ describe("navigation config", () => {
   test.each([
     {
       actor: { isAuthenticated: false, roles: [] },
-      expected: ["Home", "Browse", "Following", "Go Live", "Videos"],
+      expected: ["Home", "Browse", "Following", "Videos"],
     },
     {
       actor: { isAuthenticated: true, roles: [] },
-      expected: ["Home", "Browse", "Following", "Go Live", "Videos", "Profile"],
+      expected: ["Home", "Browse", "Following", "Videos"],
     },
     {
       actor: { isAuthenticated: true, roles: ["creator"] },
-      expected: ["Home", "Browse", "Following", "Go Live", "Videos", "Profile"],
+      expected: ["Home", "Browse", "Following", "Videos"],
     },
     {
       actor: { isAuthenticated: true, roles: ["admin"] },
-      expected: ["Home", "Browse", "Following", "Go Live", "Videos", "Profile"],
+      expected: ["Home", "Browse", "Following", "Videos"],
     },
   ])("resolves the expected nav labels for $actor", ({ actor, expected }) => {
     const audience = getNavigationAudience(actor);
@@ -50,5 +50,12 @@ describe("navigation config", () => {
 
     expect(new Set(navHrefs).size).toBe(navHrefs.length);
     expect(new Set(quickLinkHrefs).size).toBe(quickLinkHrefs.length);
+  });
+
+  test("keeps account and creator utilities out of the persistent primary nav", () => {
+    const primaryLabels = CANONICAL_NAV_ITEMS.map((item) => item.label);
+
+    expect(primaryLabels).not.toContain("Go Live");
+    expect(primaryLabels).not.toContain("Profile");
   });
 });
