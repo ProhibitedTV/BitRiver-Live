@@ -289,9 +289,14 @@ if healthcheck_token and legacy_token and healthcheck_token != legacy_token:
 print("OME config validation passed.")
 PY
 
-echo "Starting docker compose stack..."
+echo "Building local docker compose images..."
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build
+
+echo "Pulling missing third-party runtime images..."
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull --ignore-buildable --policy missing
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build --pull never
+
+echo "Starting docker compose stack..."
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-build --pull never
 
 set -a
 # shellcheck disable=SC1090

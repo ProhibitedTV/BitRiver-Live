@@ -74,12 +74,13 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
   - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because this workstation has no usable Python interpreter.
   - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched Markdown files.
-- Task 6 complete: `scripts/test-quickstart.sh` now pulls missing non-buildable Compose images before starting the stack, then keeps the existing `docker compose up -d --build --pull never` path so first-party services still come from local source builds.
+- Task 6 complete: `scripts/test-quickstart.sh` now builds local Compose images first, pulls missing non-buildable runtime images, and then starts the stack with `--no-build --pull never`. Building before pulling avoids fetching helper services such as `bitriver-live/ome-config:local`, which are reused by non-buildable healthcheck jobs after the local image is built.
 - Task 6 checks:
   - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/test-quickstart.sh scripts/verify.sh scripts/check-go-sum-not-empty.sh scripts/refresh-go-sum.sh scripts/require-image-digests.sh scripts/deploy-smoke.sh'` - passed.
   - `docker compose --env-file .env -f deploy/docker-compose.yml pull --ignore-buildable --policy missing --dry-run` - blocked on this workstation by Docker config/buildx access permissions before validating the Compose pull plan.
   - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
   - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched Markdown files.
+  - Fresh CI run `25828160170` confirmed the first pull ordering was wrong because `ome-health-token-check` reused the locally built `bitriver-live/ome-config:local` image without its own `build:` block. Follow-up syntax, scripts test, and diff-check commands passed after reordering build/pull/start.
 
 ## Scoped change: issue #1220 chat controls and signed-out chat UX
 

@@ -16,7 +16,7 @@
 - No deployment contract changes are needed.
 - The approved script change should only create a temporary root `.env` from `deploy/.env.example` when `.env` is absent, and it must clean that temporary file up.
 - The user's approval covers the required script/check behavior changes needed to get the PR ready, including the narrow `scripts/verify.sh` fallback repair.
-- The quickstart smoke should still build first-party images from the working tree, but it may pull missing third-party runtime images in CI instead of assuming runner cache state.
+- The quickstart smoke should still build first-party images from the working tree before pulling missing non-buildable runtime images, because some helper services reuse locally built images without declaring their own `build:` block.
 
 ## Risks
 - Security header middleware ordering is broad; the CSP default fix must keep viewer routes exempt from the API/admin default CSP so the dedicated viewer CSP can be set by proxy handling.
