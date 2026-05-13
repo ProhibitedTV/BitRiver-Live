@@ -2453,6 +2453,73 @@ button:focus-visible {
 .chat-panel__actions {
   display: flex;
   gap: var(--space-2xs);
+  position: relative;
+}
+
+.chat-panel__options-trigger {
+  min-height: 2.45rem;
+}
+
+.chat-panel__options-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  width: min(18rem, calc(100vw - 2rem));
+  display: grid;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+  z-index: 5;
+}
+
+.chat-panel__options-menu[hidden] {
+  display: none;
+}
+
+.chat-panel__connection {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.chat-panel__connection-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.chat-panel__connection-dot--live {
+  background: var(--success);
+}
+
+.chat-panel__menu-action,
+.chat-panel__menu-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: 2.6rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.8rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.chat-panel__menu-action:hover,
+.chat-panel__menu-action:focus-visible,
+.chat-panel__menu-setting:hover,
+.chat-panel__menu-setting:focus-within {
+  border-color: var(--accent);
+  background: rgba(79, 209, 197, 0.1);
 }
 
 .chat-panel__body {
@@ -2558,17 +2625,23 @@ button:focus-visible {
   color: var(--accent);
 }
 
-.chat-message__report-form {
+.chat-panel__report-form {
   display: grid;
   gap: 0.5rem;
-  padding: 0.65rem;
-  border-radius: 0.75rem;
-  border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.14);
 }
 
-.chat-message__report-form textarea {
-  min-height: 72px;
+.chat-panel__report-field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.chat-panel__report-field span {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.chat-panel__report-field textarea {
+  min-height: 96px;
 }
 
 .chat-message__report-actions {
@@ -2606,6 +2679,15 @@ button:focus-visible {
   justify-content: space-between;
   gap: var(--space-sm);
   flex-wrap: wrap;
+}
+
+.chat-panel__signin-card {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.chat-panel__signin-card .primary-button {
+  justify-self: start;
 }
 
 .chat-skeletons {

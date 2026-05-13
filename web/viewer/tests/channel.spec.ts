@@ -220,13 +220,10 @@ test.describe("channel route", () => {
 
     await page.goto("/channels/chan-42");
 
-    const textarea = page.getByRole("textbox", { name: /chat message/i });
-    await expect(textarea).toBeDisabled();
-    await expect(
-      page
-        .getByRole("form", { name: "Send a chat message" })
-        .getByRole("button", { name: "Send", exact: true }),
-    ).toBeDisabled();
+    await expect(page.getByText("Sign in to view and participate in chat.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign in to chat" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: /chat message/i })).toHaveCount(0);
+    await expect(page.getByRole("form", { name: "Send a chat message" })).toHaveCount(0);
 
     const tipButton = page.getByRole("button", { name: /send a tip/i });
     await tipButton.click();

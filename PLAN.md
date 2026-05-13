@@ -1,4 +1,31 @@
 ## Scope (current change)
+- Address GitHub issue #1220 by reducing live chat chrome and making secondary chat actions less dominant.
+- Keep chat data contracts unchanged while updating only the viewer `ChatPanel` presentation and tests.
+- Consolidate settings and pop-out into a compact chat options menu, make pop-out a direct action, and keep connection status visible without using a permanent header pill.
+- Move message reporting out of the message bubble flow into a modal/sheet so the thread does not jump when a report form opens.
+- Replace the signed-out disabled composer with a clear sign-in CTA state.
+
+## Assumptions
+- The user wants the next oldest open product issue after merged PR #1232, which is issue #1220.
+- A focused viewer-only implementation is preferable to touching `internal/chat/websocket.go`, since the issue is about UI clutter and current backend contracts already cover chat/report submission.
+- Current chat tests already provide enough mocked API/WebSocket coverage to validate the intended behavior without adding backend tests.
+- The repo viewer gate still has unrelated Go/backend failures from the prior run; this change should record that separately if it persists.
+
+## Risks
+- Refactoring chat controls can break keyboard/focus behavior if the new options menu is not dismissible by outside click and Escape.
+- Moving reports into a modal can break report submission tests unless the selected message state is handled carefully.
+- Removing the disabled signed-out composer changes existing assertions in Jest and Playwright, so auth-required tests must be updated together.
+- Chat panel CSS is global and shared with channel layouts, so style changes should stay scoped to `chat-panel`/`chat-message` selectors.
+
+## Test plan
+- `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx`
+- `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx`
+- `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 PLAYWRIGHT_BROWSERS_PATH=0 npx.cmd playwright test tests/channel-chat-playback.spec.ts` with a temporary standalone viewer server
+- `npm.cmd --prefix web/viewer run lint`
+- `npm.cmd --prefix web/viewer run build`
+- `./scripts/verify.sh --viewer`
+
+## Scope (current change)
 - Address GitHub issue #1217 by reducing persistent viewer navbar density and clarifying the primary navigation/action hierarchy.
 - Keep the default header viewer-first: public discovery routes and search stay prominent, while creator/admin/account/preferences actions move into compact account/site menu surfaces.
 - Keep route behavior stable for sign-in, create-account, profile, creator setup/go-live, admin control center, and theme switching.

@@ -1,3 +1,75 @@
+## Scoped change: issue #1220 chat controls and signed-out chat UX
+
+Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
+
+- [x] Task 1 - Record the chat-control diagnosis and scoped implementation plan
+  - Acceptance criteria:
+    - `PLAN.md` captures issue #1220 scope, assumptions, risks, and validation commands.
+    - `TASKS.md` lists ordered implementation and validation tasks before chat source edits begin.
+    - The read-only pass identifies current header controls, settings/popout dialogs, inline report form, signed-out composer, tests, and CSS surfaces.
+
+- [x] Task 2 - Consolidate secondary chat controls into a compact options menu
+  - Acceptance criteria:
+    - Chat header shows title plus only viewer-relevant counts by default.
+    - Pop-out and display settings are discoverable from one compact options control.
+    - The options menu supports outside-click and Escape dismissal.
+    - Pop-out opens directly without a confirmation modal.
+
+- [x] Task 3 - Move reporting and signed-out chat into calmer surfaces
+  - Acceptance criteria:
+    - Report actions open a modal/sheet instead of expanding inline inside message bubbles.
+    - Report submit/cancel/error behavior remains intact.
+    - Signed-out chat shows one clear sign-in CTA instead of a disabled composer.
+
+- [x] Task 4 - Update focused tests and docs
+  - Acceptance criteria:
+    - ChatPanel tests cover the options menu, direct pop-out action, settings toggles, report modal, and signed-out CTA.
+    - Playwright chat auth coverage reflects the new signed-out state.
+    - User-visible viewer behavior is documented where appropriate.
+
+- [x] Task 5 - Run validation and record results
+  - Acceptance criteria:
+    - Focused Jest, lint, build, targeted Playwright, and the repo viewer gate are run or explicitly recorded with unrelated blockers.
+    - `TASKS.md` records command results and any residual warnings.
+
+### Execution log (issue #1220 chat controls and signed-out chat UX)
+- Task 1 complete: closed issue #1217 as completed after confirming merged PR #1232, selected the next oldest open product issue (#1220), created branch `codex/issue-1220-chat-controls`, and reviewed `web/viewer/components/ChatPanel.tsx`, `web/viewer/__tests__/chatPanel.test.tsx`, `web/viewer/tests/channel-chat-playback.spec.ts`, channel auth smoke coverage, chat CSS, and viewer docs before editing.
+- Task 1 checks:
+  - `git pull --ff-only origin main`
+  - GitHub connector: fetched PR #1232 and closed issue #1217 with `state_reason=completed`
+  - GitHub connector: searched open issues and selected issue #1220
+  - `git checkout -b codex/issue-1220-chat-controls`
+  - `Get-Content web/viewer/components/ChatPanel.tsx`
+  - `Get-Content web/viewer/__tests__/chatPanel.test.tsx`
+  - `Get-Content web/viewer/styles/globals.css | Select-Object -Skip 2400 -First 230`
+  - `Get-Content web/viewer/tests/channel-chat-playback.spec.ts`
+  - `rg -n "chat-panel|chat-header|chat-actions|chat-settings|chat-popout|report|composer|settings|popout|viewer count|Live sync|Refreshing" web/viewer/styles web/viewer/__tests__ web/viewer/tests web/viewer/components/ChatPanel.tsx`
+- Task 2 complete: replaced permanent header controls with a compact chat options menu, kept counts visible in the header, moved connection status into the menu, preserved avatar/timestamp toggles, and made pop-out open directly from the menu.
+- Task 2 checks:
+  - `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx` - passed 16 tests; existing fake-timer `act(...)` warnings were still emitted around typed input/report interactions.
+- Task 3 complete: moved message reporting into a dedicated dialog with Escape/focus handling and replaced the signed-out disabled composer with a sign-in CTA card.
+- Task 3 checks:
+  - `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx` - passed 16 tests; existing fake-timer `act(...)` warnings were still emitted around typed input/report interactions.
+- Task 4 complete: updated ChatPanel, ChannelPage, and Playwright chat/auth coverage for the compact options menu, direct pop-out action, report dialog, and signed-out sign-in CTA; documented the chat control contract in `web/viewer/README.md`.
+- Task 4 checks:
+  - `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx` - passed 16 tests; existing fake-timer `act(...)` warnings were still emitted around typed input/report interactions.
+  - `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx` - passed 19 tests.
+  - `npm.cmd --prefix web/viewer run lint` - passed with no ESLint warnings or errors.
+  - `npm.cmd --prefix web/viewer run build` - passed; existing Browserslist/deopt warnings were emitted by Next.js.
+  - `npx.cmd playwright test tests/channel-chat-playback.spec.ts` against the standalone build - passed 4 tests.
+  - `npx.cmd playwright test tests/channel.spec.ts` against the standalone build - passed 8 tests.
+- Task 5 complete: ran the viewer-focused gate commands and recorded the remaining repository gate blockers.
+- Task 5 checks:
+  - `npm.cmd --prefix web/viewer run test -- chatPanel.test.tsx` - passed 16 tests; existing fake-timer `act(...)` warnings were still emitted around typed input/report interactions.
+  - `npm.cmd --prefix web/viewer run test -- channelPage.test.tsx` - passed 19 tests.
+  - `npm.cmd --prefix web/viewer run lint` - passed with no ESLint warnings or errors.
+  - `npm.cmd --prefix web/viewer run build` - passed; existing Browserslist/deopt warnings were emitted by Next.js.
+  - `npx.cmd playwright test tests/channel-chat-playback.spec.ts` against the standalone build - passed 4 tests.
+  - `npx.cmd playwright test tests/channel.spec.ts` against the standalone build - passed 8 tests.
+  - `npm.cmd --prefix web/viewer run lint` after final cleanup - passed with no ESLint warnings or errors.
+  - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer` - failed before viewer checks on existing backend blockers: `cmd/bitriver/env_validation_test.go` still calls `renderOMEFromEnv` with the old five-argument signature, and `internal/server/security_headers_test.go` still expects CSP headers that the current server responses do not set.
+  - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched files.
+
 ## Scoped change: issue #1217 navbar density and action hierarchy
 
 Status legend: `[ ]` not started, `[-]` in progress, `[x]` done

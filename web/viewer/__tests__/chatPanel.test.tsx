@@ -1,6 +1,6 @@
 import { guestAuthState, mockUseAuth, signedInAuthState, viewerTwoUser } from "../test/auth";
 import { viewerApiMocks } from "../test/test-utils";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChatPanel } from "../components/ChatPanel";
 import type { ChatMessage } from "../lib/viewer-api";
@@ -215,7 +215,8 @@ test("submits reports for another user's chat message", async () => {
   render(<ChatPanel channelId="chan-report" roomId="room-1" />);
 
   await screen.findByText("bad message");
-  await user.click(screen.getByRole("button", { name: "Report" }));
+  await user.click(screen.getByRole("button", { name: /report message from viewer two/i }));
+  expect(screen.getByRole("dialog", { name: /report chat message/i })).toBeInTheDocument();
   await user.type(screen.getByRole("textbox", { name: /report reason/i }), "Harassment");
   await user.click(screen.getByRole("button", { name: "Submit report" }));
 
@@ -229,7 +230,7 @@ test("submits reports for another user's chat message", async () => {
   await waitFor(() => {
     expect(screen.getByRole("status")).toHaveTextContent("Report submitted for moderator review.");
   });
-  expect(screen.queryByRole("form", { name: /report chat message/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: /report chat message/i })).not.toBeInTheDocument();
 });
 
 test("does not offer report controls on the current user's own messages", async () => {
@@ -265,7 +266,9 @@ test("joins live chat over websocket and renders inbound events without waiting 
   });
 
   expect(socket.sent[0]).toBe(JSON.stringify({ type: "join", channelId: "chan-ws" }));
-  expect(screen.getByText("Live sync")).toBeInTheDocument();
+  const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+  await user.click(screen.getByRole("button", { name: /open chat options/i }));
+  expect(within(screen.getByLabelText("Chat options")).getByText("Live sync")).toBeVisible();
 
   await act(async () => {
     socket.receive({
@@ -351,7 +354,7 @@ test("treats unauthorized chat fetch as empty state for guests", async () => {
 
   await waitFor(() => {
     expect(fetchChatMock).toHaveBeenCalledWith("chan-guest");
-    expect(screen.getByText(/no messages yet/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /sign in to chat/i })).toBeInTheDocument();
   });
 
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -359,9 +362,8 @@ test("treats unauthorized chat fetch as empty state for guests", async () => {
   await advanceTimers(30_000);
   expect(fetchChatMock).toHaveBeenCalledTimes(1);
 
-  const textarea = screen.getByRole("textbox", { name: /chat message/i });
-  expect(textarea).toBeDisabled();
-  expect(textarea).toHaveAttribute("placeholder", "Sign in to participate in chat");
+  expect(screen.queryByRole("textbox", { name: /chat message/i })).not.toBeInTheDocument();
+  expect(screen.queryByText(/no messages yet/i)).not.toBeInTheDocument();
 });
 
 test("clears chat, shows sign-in prompt, and pauses polling on structured 401s", async () => {
@@ -400,9 +402,8 @@ test("clears chat, shows sign-in prompt, and pauses polling on structured 401s",
   await runAllTimers();
   expect(fetchChatMock).toHaveBeenCalledTimes(2);
 
-  const textarea = screen.getByRole("textbox", { name: /chat message/i });
-  expect(textarea).toBeDisabled();
-  expect(textarea).toHaveAttribute("placeholder", "Sign in to participate in chat");
+  expect(screen.queryByRole("textbox", { name: /chat message/i })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /sign in to chat/i })).toBeInTheDocument();
 });
 
 test("backs off after consecutive server errors and shows retry surface", async () => {
@@ -450,7 +451,7 @@ test("resumes chat polling once a guest signs in", async () => {
 
   await waitFor(() => {
     expect(fetchChatMock).toHaveBeenCalledWith("chan-auth");
-    expect(screen.getByText(/no messages yet/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /sign in to chat/i })).toBeInTheDocument();
   });
   expect(fetchChatMock).toHaveBeenCalledTimes(1);
 
@@ -476,7 +477,7 @@ test("resumes chat polling once a guest signs in", async () => {
   expect(textarea).toHaveAttribute("placeholder", "Share your thoughts");
 });
 
-test("escape closes active dialogs", async () => {
+test("chat options menu exposes secondary actions and closes on Escape", async () => {
   fetchChatMock.mockResolvedValue([]);
   const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
 
@@ -484,97 +485,73 @@ test("escape closes active dialogs", async () => {
 
   await screen.findByText(/no messages yet/i);
 
-  await user.click(screen.getByRole("button", { name: /open pop-out chat window/i }));
-  expect(screen.getByRole("dialog", { name: /pop out chat/i })).toBeInTheDocument();
+  const trigger = screen.getByRole("button", { name: /open chat options/i });
+  await user.click(trigger);
+  const menu = screen.getByLabelText("Chat options");
+  expect(menu).toBeVisible();
+  expect(within(menu).getByRole("button", { name: /open pop-out chat/i })).toBeVisible();
+  expect(within(menu).getByRole("checkbox", { name: /toggle chat avatars/i })).toBeChecked();
+  expect(within(menu).getByRole("checkbox", { name: /toggle chat message timestamps/i })).toBeChecked();
 
   await user.keyboard("{Escape}");
   await waitFor(() => {
-    expect(screen.queryByRole("dialog", { name: /pop out chat/i })).not.toBeInTheDocument();
+    expect(menu).not.toBeVisible();
   });
-
-  await user.click(screen.getByRole("button", { name: /open chat settings/i }));
-  expect(screen.getByRole("dialog", { name: /chat settings/i })).toBeInTheDocument();
-
-  await user.keyboard("{Escape}");
-  await waitFor(() => {
-    expect(screen.queryByRole("dialog", { name: /chat settings/i })).not.toBeInTheDocument();
-  });
+  expect(trigger).toHaveFocus();
 });
 
-test("tab cycles within the pop-out dialog", async () => {
+test("chat options menu toggles display settings without a modal", async () => {
   fetchChatMock.mockResolvedValue([]);
   const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
 
   render(<ChatPanel channelId="chan-focus" roomId="room-1" />);
 
   await screen.findByText(/no messages yet/i);
-  await user.click(screen.getByRole("button", { name: /open pop-out chat window/i }));
-
-  const closeButton = screen.getByRole("button", { name: /close pop-out chat dialog/i });
-  const cancelButton = screen.getByRole("button", { name: /cancel/i });
-  const openWindowButton = screen.getByRole("button", { name: /open chat in new window/i });
-
-  await waitFor(() => {
-    expect(screen.getByRole("heading", { name: /pop out chat/i })).toHaveFocus();
-  });
-
-  openWindowButton.focus();
-  fireEvent.keyDown(openWindowButton, { key: "Tab", code: "Tab", keyCode: 9, which: 9, bubbles: true });
-  expect(closeButton).toHaveFocus();
-
-  closeButton.focus();
-  fireEvent.keyDown(closeButton, {
-    key: "Tab",
-    code: "Tab",
-    keyCode: 9,
-    which: 9,
-    shiftKey: true,
-    bubbles: true
-  });
-  expect(openWindowButton).toHaveFocus();
-
-  cancelButton.focus();
-  fireEvent.keyDown(cancelButton, { key: "Tab" });
-  expect(cancelButton).toHaveFocus();
+  await user.click(screen.getByRole("button", { name: /open chat options/i }));
+  const timestampsToggle = screen.getByRole("checkbox", { name: /toggle chat message timestamps/i });
+  await user.click(timestampsToggle);
+  expect(timestampsToggle).not.toBeChecked();
+  expect(screen.queryByRole("dialog", { name: /chat settings/i })).not.toBeInTheDocument();
 });
 
-test("focus returns to the originating trigger when dialogs close", async () => {
+test("opens pop-out chat directly from the options menu", async () => {
   fetchChatMock.mockResolvedValue([]);
   const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+  const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
 
   render(<ChatPanel channelId="chan-return" roomId="room-1" />);
 
   await screen.findByText(/no messages yet/i);
 
-  const popoutTrigger = screen.getByRole("button", { name: /open pop-out chat window/i });
-  await user.click(popoutTrigger);
-  expect(screen.getByRole("dialog", { name: /pop out chat/i })).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: /cancel/i }));
-  await waitFor(() => {
-    expect(popoutTrigger).toHaveFocus();
-  });
+  const trigger = screen.getByRole("button", { name: /open chat options/i });
+  await user.click(trigger);
+  await user.click(screen.getByRole("button", { name: /open pop-out chat/i }));
 
-  const settingsTrigger = screen.getByRole("button", { name: /open chat settings/i });
-  await user.click(settingsTrigger);
-  expect(screen.getByRole("dialog", { name: /chat settings/i })).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: /save chat settings/i }));
-  await waitFor(() => {
-    expect(settingsTrigger).toHaveFocus();
-  });
+  expect(openSpy).toHaveBeenCalledWith(expect.any(String), "bitriver-chat-popout", "width=420,height=720,noopener,noreferrer");
+  expect(screen.getByLabelText("Chat options")).not.toBeVisible();
+  expect(trigger).toHaveFocus();
+  openSpy.mockRestore();
 });
 
-test("opening one chat dialog closes the other", async () => {
-  fetchChatMock.mockResolvedValue([]);
+test("escape closes the report dialog", async () => {
+  fetchChatMock.mockResolvedValue([
+    {
+      id: "m-dialog-report",
+      message: "needs review",
+      sentAt: new Date("2026-05-07T18:00:00Z").toISOString(),
+      user: { id: "viewer-2", displayName: "Viewer Two" }
+    }
+  ]);
   const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
 
   render(<ChatPanel channelId="chan-exclusive" roomId="room-1" />);
 
-  await screen.findByText(/no messages yet/i);
+  await screen.findByText("needs review");
+  await user.click(screen.getByRole("button", { name: /report message from viewer two/i }));
+  expect(screen.getByRole("dialog", { name: /report chat message/i })).toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: /open pop-out chat window/i }));
-  expect(screen.getByRole("dialog", { name: /pop out chat/i })).toBeInTheDocument();
-
-  await user.click(screen.getByRole("button", { name: /open chat settings/i }));
-  expect(screen.queryByRole("dialog", { name: /pop out chat/i })).not.toBeInTheDocument();
-  expect(screen.getByRole("dialog", { name: /chat settings/i })).toBeInTheDocument();
+  await user.keyboard("{Escape}");
+  await waitFor(() => {
+    expect(screen.queryByRole("dialog", { name: /report chat message/i })).not.toBeInTheDocument();
+  });
 });

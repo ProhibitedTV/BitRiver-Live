@@ -96,6 +96,16 @@ and mobile navigation stay consistent.
   only falls back to the embedded static auth page when no viewer runtime is
   available.
 
+## Chat Control Contract
+
+- Keep the live chat header focused on the title and viewer-facing counts.
+- Put secondary actions such as pop-out, sync detail, and display toggles behind
+  the compact chat options control.
+- Reports should open a separate review dialog/sheet instead of expanding the
+  message row inside the thread.
+- Signed-out chat should present one clear sign-in CTA rather than a disabled
+  composer that looks broken.
+
 ## Testing
 
 Run the lint, unit, and Playwright suites from the viewer directory:
