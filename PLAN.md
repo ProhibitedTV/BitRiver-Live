@@ -3,19 +3,23 @@
 - Address the Ubuntu test-all gate failures reproduced locally and in Actions logs:
   - `cmd/bitriver/env_validation_test.go` still calls `renderOMEFromEnv` with an output path even though that helper now delegates to the default generated OME path.
   - `internal/server/security_headers_test.go` expects the default CSP header, but `SecurityConfig.withDefaults()` currently fills every default security header except `ContentSecurityPolicy`.
+- Address the follow-up CI contract failure where `scripts/check-contract-invariants.sh` selects `deploy/.env.example` for Compose substitution but Compose still tries to load service-level `env_file: ../.env`.
 - Treat the image vulnerability scan Trivy download failure as likely transient unless it recurs after a fresh push; changing CI install behavior would require explicit approval because it touches workflow behavior.
 
 ## Assumptions
 - The backend gate fixes are acceptable in this PR because they are blocking PR #1233's merge readiness and are narrowly scoped to test/API security-header contract drift.
 - Restoring the default CSP in `withDefaults()` preserves the existing viewer proxy behavior because `/viewer` route responses still receive the viewer-specific inline-script CSP in the proxy path.
 - No deployment contract changes are needed.
+- The approved script change should only create a temporary root `.env` from `deploy/.env.example` when `.env` is absent, and it must clean that temporary file up.
 
 ## Risks
 - Security header middleware ordering is broad; the CSP default fix must keep viewer routes exempt from the API/admin default CSP so the dedicated viewer CSP can be set by proxy handling.
 - OME renderer tests should keep using the temp workspace output rather than accidentally writing to the real repository generated config.
+- The contract check must not overwrite an operator's real root `.env`.
 
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver ./internal/server -count=1`
+- `& 'C:\Program Files\Git\bin\bash.exe' -lc 'PATH="/c/Program Files/Docker/Docker/resources/bin:$PATH" ./scripts/check-contract-invariants.sh'`
 - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer`
 - Recheck PR #1233 GitHub Actions after pushing.
 

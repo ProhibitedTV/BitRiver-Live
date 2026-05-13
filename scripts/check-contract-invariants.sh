@@ -10,6 +10,15 @@ contract_doc="docs/contract.md"
 generated_begin='<!-- BEGIN GENERATED ENV -->'
 generated_end='<!-- END GENERATED ENV -->'
 PYTHON_RUNNER=()
+created_temp_root_env=false
+
+cleanup_temp_root_env() {
+  if [[ "$created_temp_root_env" == "true" ]]; then
+    rm -f .env
+  fi
+}
+
+trap cleanup_temp_root_env EXIT
 
 echo "Checking deployment contract invariants..."
 
@@ -23,7 +32,13 @@ echo "Found $compose_file"
 if command -v docker >/dev/null 2>&1; then
   compose_env_file=".env"
   if [[ ! -f "$compose_env_file" ]]; then
-    compose_env_file="$env_example"
+    if [[ ! -f "$env_example" ]]; then
+      echo "Missing required file: $env_example" >&2
+      exit 1
+    fi
+    echo "Root .env missing; using temporary copy of $env_example for compose config validation"
+    cp "$env_example" "$compose_env_file"
+    created_temp_root_env=true
   fi
   echo "Validating docker compose config"
   docker compose --env-file "$compose_env_file" -f "$compose_file" config >/dev/null

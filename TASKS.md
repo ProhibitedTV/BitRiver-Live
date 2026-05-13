@@ -20,6 +20,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - Repo viewer gate passes locally or records any remaining blocker.
     - Changes are committed, pushed, and PR #1233 is updated for merge readiness.
 
+- [x] Task 4 - Fix CI contract env fallback
+  - Acceptance criteria:
+    - Contract invariants Compose validation works in CI when root `.env` is absent.
+    - The fallback does not overwrite a real root `.env`.
+    - Temporary fallback `.env` files are cleaned up.
+
 ### Execution log (PR #1233 CI readiness)
 - Task 1 complete: `gh auth status` is still blocked by an invalid local GitHub token, so Actions inspection used the GitHub connector. PR #1233's CI run failed in `Ubuntu test-all gate` and `Image vulnerability scan`. The Ubuntu gate failed on `cmd/bitriver/env_validation_test.go` calling `renderOMEFromEnv` with the old five-argument shape and `internal/server/security_headers_test.go` receiving an empty default CSP header. The image scan failed while installing Trivy with `gzip: stdin: unexpected end of file`; no workflow edit is planned unless it recurs after a fresh push.
 - Task 1 checks:
@@ -41,6 +47,13 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - reached project checks and stopped at the contract stage because this workstation has no usable Python interpreter (`py -0p` reports no installed Pythons).
   - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./... -count=1 -timeout=120s` - passed.
   - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched files.
+- Task 4 in progress: the fresh PR run showed the previous Go failures fixed, then failed in `scripts/check-contract-invariants.sh` because `docker compose --env-file deploy/.env.example -f deploy/docker-compose.yml config` still loads the Compose service-level `env_file: ../.env`, which is absent in CI.
+- Task 4 complete: `scripts/check-contract-invariants.sh` now creates a temporary root `.env` from `deploy/.env.example` only when `.env` is missing, uses that file for Compose config validation, and removes it on exit. The script does not overwrite a real root `.env`.
+- Task 4 checks:
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/check-contract-invariants.sh'` - passed.
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc './scripts/check-contract-invariants.sh'` - Compose validation and generated docs check passed locally with real root `.env`; stopped at missing local Python interpreter.
+  - Temporary no-`.env` fixture running `./scripts/check-contract-invariants.sh` - Compose validation reached the later Python step and the temporary root `.env` was cleaned up.
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
 
 ## Scoped change: issue #1220 chat controls and signed-out chat UX
 
