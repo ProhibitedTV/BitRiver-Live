@@ -38,6 +38,13 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - First-party services still build from the source checkout during the quickstart smoke.
     - The change is validated with syntax/unit checks and confirmed in the next CI run.
 
+- [-] Task 7 - Fix final quickstart smoke and image scan failures
+  - Acceptance criteria:
+    - The quickstart smoke prepares the host transcoder bind mount and test-only Unix user override so the transcoder can become healthy on Linux CI.
+    - The smoke fixture uses the same non-loopback transcoder public URL used by the CI image build fixture.
+    - Trivy installation in CI retries and extracts a complete archive before scanning.
+    - The change is validated with syntax/unit checks, pushed, and confirmed in the next CI run.
+
 ### Execution log (PR #1233 CI readiness)
 - Task 1 complete: `gh auth status` is still blocked by an invalid local GitHub token, so Actions inspection used the GitHub connector. PR #1233's CI run failed in `Ubuntu test-all gate` and `Image vulnerability scan`. The Ubuntu gate failed on `cmd/bitriver/env_validation_test.go` calling `renderOMEFromEnv` with the old five-argument shape and `internal/server/security_headers_test.go` receiving an empty default CSP header. The image scan failed while installing Trivy with `gzip: stdin: unexpected end of file`; no workflow edit is planned unless it recurs after a fresh push.
 - Task 1 checks:
@@ -83,6 +90,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Fresh CI run `25828160170` confirmed the first pull ordering was wrong because `ome-health-token-check` reused the locally built `bitriver-live/ome-config:local` image without its own `build:` block. Follow-up syntax, scripts test, and diff-check commands passed after reordering build/pull/start.
   - Fresh CI run `25828368236` confirmed the build/pull/start order was correct and then failed in Linux bind-mount writes for the one-shot `srs-config` and `ome-config` jobs. The smoke now adds a temporary Unix-only Compose override so those repo-writing helper jobs run as the host UID/GID while leaving `deploy/docker-compose.yml` unchanged.
   - Follow-up `bash -n scripts/test-quickstart.sh`, `go test ./scripts -count=1`, and `git diff --check` - passed.
+- Task 7 in progress: CI run `25828715591` advanced through build/pull/config jobs and then failed because `bitriver-transcoder` became unhealthy during quickstart smoke startup. The same run still failed `Image vulnerability scan` while streaming the Trivy archive into `tar` (`gzip: stdin: unexpected end of file`), so the recurring scanner install failure is now in scope with the user's approval.
+- Task 7 local checks:
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/test-quickstart.sh'` - passed.
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
+  - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched Markdown/workflow files.
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because this workstation has no usable Python runtime.
 
 ## Scoped change: issue #1220 chat controls and signed-out chat UX
 

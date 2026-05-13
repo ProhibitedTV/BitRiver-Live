@@ -9,7 +9,9 @@ ENV_FILE="$REPO_ROOT/.env"
 COMPOSE_FILE="$REPO_ROOT/deploy/docker-compose.yml"
 COMPOSE_CONFIG_OUTPUT="$(mktemp)"
 COMPOSE_SMOKE_OVERRIDE=""
+TRANSCODER_DATA_DIR="$REPO_ROOT/deploy/transcoder-data"
 CREATED_ENV_FILE=false
+CREATED_TRANSCODER_DATA_DIR=false
 PYTHON_RUNNER=()
 COMPOSE_RUNTIME_ARGS=("-f" "$COMPOSE_FILE")
 
@@ -35,6 +37,8 @@ services:
     user: "${host_uid}:${host_gid}"
   ome-health-token-check:
     user: "${host_uid}:${host_gid}"
+  transcoder:
+    user: "${host_uid}:${host_gid}"
 YAML
   COMPOSE_RUNTIME_ARGS+=("-f" "$COMPOSE_SMOKE_OVERRIDE")
 fi
@@ -51,6 +55,12 @@ cleanup() {
 
   if [ "$CREATED_ENV_FILE" = true ]; then
     rm -f "$ENV_FILE"
+  fi
+
+  if [ "$CREATED_TRANSCODER_DATA_DIR" = true ]; then
+    rmdir "$TRANSCODER_DATA_DIR/public/live" "$TRANSCODER_DATA_DIR/public/uploads" 2>/dev/null || true
+    rmdir "$TRANSCODER_DATA_DIR/public" "$TRANSCODER_DATA_DIR/live" "$TRANSCODER_DATA_DIR/uploads" 2>/dev/null || true
+    rmdir "$TRANSCODER_DATA_DIR" 2>/dev/null || true
   fi
 }
 trap cleanup EXIT
@@ -102,7 +112,7 @@ BITRIVER_OME_API=http://ome:8081
 BITRIVER_OME_HTTP_PORT=8081
 BITRIVER_OME_SIGNALLING_PORT=9000
 BITRIVER_TRANSCODER_API=http://transcoder:9000
-BITRIVER_TRANSCODER_PUBLIC_BASE_URL=http://localhost:9080
+BITRIVER_TRANSCODER_PUBLIC_BASE_URL=https://example.com/hls
 BITRIVER_TRANSCODER_HOST_PORT=9001
 BITRIVER_INGEST_HEALTH=/healthz
 BITRIVER_SRS_RTMP_PORT=1935
@@ -122,6 +132,11 @@ BITRIVER_TRANSCODER_TOKEN=local-dev-token
 BITRIVER_LIVE_CHAT_QUEUE_REDIS_PASSWORD=bitriver
 ENV
 fi
+
+if [ ! -d "$TRANSCODER_DATA_DIR" ]; then
+  CREATED_TRANSCODER_DATA_DIR=true
+fi
+mkdir -p "$TRANSCODER_DATA_DIR/live" "$TRANSCODER_DATA_DIR/uploads" "$TRANSCODER_DATA_DIR/public/live" "$TRANSCODER_DATA_DIR/public/uploads"
 
 echo "Rendering docker compose config..."
 docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" config >"$COMPOSE_CONFIG_OUTPUT"
@@ -317,8 +332,17 @@ docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" build
 echo "Pulling missing third-party runtime images..."
 docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" pull --ignore-buildable --policy missing
 
+dump_compose_diagnostics() {
+  docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" ps -a >&2 || true
+  docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" logs --tail=160 bitriver-live srs-controller srs ome transcoder postgres redis >&2 || true
+}
+
 echo "Starting docker compose stack..."
-docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" up -d --no-build --pull never
+if ! docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" up -d --no-build --pull never; then
+  echo "error: docker compose stack failed to start" >&2
+  dump_compose_diagnostics
+  exit 1
+fi
 
 set -a
 # shellcheck disable=SC1090
@@ -346,6 +370,7 @@ wait_for_health_check() {
     ;;
   unhealthy)
     echo "error: service $service_name reported unhealthy" >&2
+    docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" logs --tail=160 "$service_name" >&2 || true
     docker inspect "$container_id"
     return 2
     ;;

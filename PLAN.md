@@ -8,7 +8,8 @@
   - Shell lint now fails on existing scripts that use `CDPATH= cd` and on callback/trap-only functions that ShellCheck cannot prove reachable.
   - The later `scripts/verify.sh` Docker Compose validation still falls back to `deploy/.env.example`, which does not satisfy Compose's service-level `env_file: ../.env` requirement when the root `.env` is absent in CI.
 - Address the subsequent quickstart smoke failure where a clean GitHub runner starts Compose with `--pull never` before third-party runtime images such as `redis:7-alpine` and `debian:12-slim` exist locally.
-- Treat the image vulnerability scan Trivy download failure as likely transient unless it recurs after a fresh push; changing CI install behavior would require explicit approval because it touches workflow behavior.
+- Address the latest quickstart smoke failure where the Linux runner's host bind mount can leave `deploy/transcoder-data` unwritable for the `transcoder` container's fixed UID.
+- Address the recurring image vulnerability scan failure by downloading the Trivy archive with retries to a file before extraction instead of streaming a possibly truncated response into `tar`.
 
 ## Assumptions
 - The backend gate fixes are acceptable in this PR because they are blocking PR #1233's merge readiness and are narrowly scoped to test/API security-header contract drift.
@@ -17,6 +18,7 @@
 - The approved script change should only create a temporary root `.env` from `deploy/.env.example` when `.env` is absent, and it must clean that temporary file up.
 - The user's approval covers the required script/check behavior changes needed to get the PR ready, including the narrow `scripts/verify.sh` fallback repair.
 - The quickstart smoke should still build first-party images from the working tree before pulling missing non-buildable runtime images, because some helper services reuse locally built images without declaring their own `build:` block.
+- The user's follow-up approval covers the workflow hardening needed for the recurring Trivy install failure.
 
 ## Risks
 - Security header middleware ordering is broad; the CSP default fix must keep viewer routes exempt from the API/admin default CSP so the dedicated viewer CSP can be set by proxy handling.
@@ -26,12 +28,16 @@
 - The verify fallback must clean up only a temporary `.env` it created and must leave real operator `.env` files untouched.
 - Pulling missing third-party images in `scripts/test-quickstart.sh` adds network dependency to the Docker smoke, but the CI runner already needs network to build/pull base layers and scan images.
 - The temporary quickstart smoke Compose override must remain test-only; it should not alter `deploy/docker-compose.yml` or the production helper-service user contract.
+- Running the `transcoder` service as the host UID/GID in the smoke override must stay limited to the smoke harness so the deployment contract's fixed runtime UID remains unchanged.
+- Trivy install hardening touches CI workflow behavior; the change should stay mechanical and preserve the pinned Trivy version.
 
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver ./internal/server -count=1`
 - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'PATH="/c/Program Files/Docker/Docker/resources/bin:$PATH" ./scripts/check-contract-invariants.sh'`
 - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/verify.sh scripts/check-go-sum-not-empty.sh scripts/refresh-go-sum.sh scripts/require-image-digests.sh scripts/deploy-smoke.sh'`
 - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/test-quickstart.sh'`
+- `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./scripts -count=1`
+- `git diff --check`
 - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer`
 - Recheck PR #1233 GitHub Actions after pushing.
 
