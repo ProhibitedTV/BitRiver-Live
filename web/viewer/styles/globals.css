@@ -3403,6 +3403,11 @@ button:focus-visible {
   font-weight: 800;
 }
 
+.site-menu-button {
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
 .avatar-menu__header {
   gap: 0.2rem;
 }
@@ -3539,6 +3544,14 @@ button:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);
+}
+
+.nav-drawer__account-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .viewer-shell {

@@ -7,6 +7,7 @@ test.describe("navbar mobile layout", () => {
 
     const toggle = page.getByRole("button", { name: "Open navigation menu" });
     await expect(toggle).toBeVisible();
+    await expect(page.locator(".nav-tabs")).toBeHidden();
 
     const navMenu = page.locator("#viewer-nav-menu");
     await expect(navMenu).toBeHidden();
@@ -14,6 +15,7 @@ test.describe("navbar mobile layout", () => {
     await toggle.click();
     await expect(navMenu).toBeVisible();
     await expect(navMenu.getByRole("link", { name: "Browse", exact: true })).toBeVisible();
+    await expect(navMenu.getByRole("link", { name: "Creator setup", exact: true })).toBeVisible();
 
     const hasHorizontalOverflow = await page.evaluate(() => {
       return document.documentElement.scrollWidth > window.innerWidth;
@@ -51,7 +53,9 @@ test.describe("navbar mobile layout", () => {
     await expect(sidebarToggle).toBeFocused();
 
     await sidebarToggle.click();
-    await page.locator(".viewer-shell__backdrop").click();
+    const backdropBox = await page.locator(".viewer-shell__backdrop").boundingBox();
+    expect(backdropBox).not.toBeNull();
+    await page.mouse.click(backdropBox!.x + backdropBox!.width - 6, backdropBox!.y + backdropBox!.height - 6);
     await expect(sidebarToggle).toBeFocused();
   });
 });

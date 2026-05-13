@@ -57,12 +57,18 @@ Set `BITRIVER_VIEWER_ORIGIN` on the Go API (for example, `http://127.0.0.1:3000`
 
 ## Navigation contract
 
-`components/Navbar.tsx` now reads all route tabs and drawer quick links from
+`components/Navbar.tsx` reads persistent route tabs and drawer quick links from
 `lib/navigation.ts`.
+
+The persistent header is intentionally viewer-first: home, browse, following,
+videos, and search stay visible by default. Profile, creator setup/go-live,
+admin control center, setup guidance, and theme switching live in the compact
+account/site menu or mobile drawer so utility actions do not crowd the default
+watching and discovery path.
 
 When adding or changing viewer routes in the navbar:
 
-1. Update `CANONICAL_NAV_ITEMS` for primary desktop + drawer links.
+1. Update `CANONICAL_NAV_ITEMS` only for persistent viewer discovery routes.
 2. Update `CANONICAL_QUICK_LINK_ITEMS` for secondary drawer shortcuts.
 3. Use `visibleTo` and `getNavigationAudience` to define role visibility for
    `guest`, `member`, `creator`, and `admin` personas.

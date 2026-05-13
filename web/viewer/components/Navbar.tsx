@@ -380,6 +380,16 @@ export function Navbar() {
     void signUp(redirectTarget);
   };
 
+  const handleThemeToggle = () => {
+    const nextTheme = theme === "light" ? "dark" : "light";
+    setTheme(nextTheme);
+    setHasExplicitThemePreference(true);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+    }
+    setUserMenuOpen(false);
+  };
+
   const handleSearch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmed = searchQuery.trim();
@@ -466,82 +476,8 @@ export function Navbar() {
           </div>
 
           <div className="navbar-right">
-            {isAdmin && (
-              <Link href={adminUrl} className="nav-cta nav-cta--secondary nav-utility-link" onClick={closeMenu}>
-                Control center
-              </Link>
-            )}
-            {canAccessCreatorTools && (
-              <Link href={studioHref} className="nav-cta nav-cta--primary" onClick={closeMenu}>
-                {managedChannelId ? "Start stream" : "Finish creator setup"}
-              </Link>
-            )}
-
             <div className="nav-icon-group" role="group" aria-label="Account and preferences">
-              <button
-                className="icon-button icon-button--text"
-                type="button"
-                onClick={() => {
-                  const nextTheme = theme === "light" ? "dark" : "light";
-                  setTheme(nextTheme);
-                  setHasExplicitThemePreference(true);
-                  if (typeof window !== "undefined") {
-                    window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
-                  }
-                }}
-                aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
-              >
-                {theme === "light" ? "Dark" : "Light"}
-              </button>
-
-              {user ? (
-                <div className="avatar-menu" aria-label="Account menu">
-                  <button
-                    type="button"
-                    className="avatar-button"
-                    aria-label="Open account menu"
-                    aria-expanded={userMenuOpen}
-                    aria-controls="viewer-user-menu"
-                    ref={avatarButtonRef}
-                    onClick={() => setUserMenuOpen((prev) => !prev)}
-                  >
-                    {avatarGlyph}
-                  </button>
-                  <div
-                    id="viewer-user-menu"
-                    ref={avatarMenuRef}
-                    className={`avatar-menu__items${userMenuOpen ? " avatar-menu__items--open" : ""}`}
-                  >
-                    <div className="avatar-menu__header">
-                      <span className="avatar-menu__eyebrow">Signed in as</span>
-                      <span className="avatar-menu__name">{user.displayName}</span>
-                    </div>
-                    <Link href="/profile" className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
-                      Profile
-                    </Link>
-                  {canAccessCreatorTools && (
-                    <Link href={studioHref} className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
-                      Go live
-                    </Link>
-                  )}
-                    {isAdmin && (
-                      <Link href={adminUrl} className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
-                        Control center
-                      </Link>
-                    )}
-                    <button
-                      type="button"
-                      className="avatar-menu__link"
-                      onClick={() => {
-                        setUserMenuOpen(false);
-                        void signOut();
-                      }}
-                    >
-                      Sign out
-                    </button>
-                  </div>
-                </div>
-              ) : (
+              {!user && (
                 <div className="auth-buttons">
                   <button type="button" className={signupUrl ? "ghost-button" : "accent-button"} onClick={handleSignIn}>
                     Sign in
@@ -553,6 +489,61 @@ export function Navbar() {
                   )}
                 </div>
               )}
+
+              <div className={user ? "avatar-menu" : "avatar-menu avatar-menu--site"} aria-label={user ? "Account menu" : "Site menu"}>
+                <button
+                  type="button"
+                  className={user ? "avatar-button" : "icon-button site-menu-button"}
+                  aria-label={user ? "Open account menu" : "Open site menu"}
+                  aria-expanded={userMenuOpen}
+                  aria-controls="viewer-user-menu"
+                  ref={avatarButtonRef}
+                  onClick={() => setUserMenuOpen((prev) => !prev)}
+                >
+                  {user ? avatarGlyph : <span aria-hidden="true">...</span>}
+                </button>
+                <div
+                  id="viewer-user-menu"
+                  ref={avatarMenuRef}
+                  className={`avatar-menu__items${userMenuOpen ? " avatar-menu__items--open" : ""}`}
+                >
+                  <div className="avatar-menu__header">
+                    <span className="avatar-menu__eyebrow">{user ? "Signed in as" : "Site menu"}</span>
+                    <span className="avatar-menu__name">{user?.displayName ?? "Preferences and tools"}</span>
+                  </div>
+                  <Link href={LOCAL_SETUP_DOCS_ROUTE} className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
+                    Setup guide
+                  </Link>
+                  {user && (
+                    <Link href="/profile" className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
+                      Profile
+                    </Link>
+                  )}
+                  <Link href={studioHref} className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
+                    {canAccessCreatorTools ? "Go live" : "Creator setup"}
+                  </Link>
+                  {isAdmin && (
+                    <Link href={adminUrl} className="avatar-menu__link" onClick={() => setUserMenuOpen(false)}>
+                      Control center
+                    </Link>
+                  )}
+                  <button type="button" className="avatar-menu__link" onClick={handleThemeToggle}>
+                    Switch to {theme === "light" ? "dark" : "light"} theme
+                  </button>
+                  {user && (
+                    <button
+                      type="button"
+                      className="avatar-menu__link"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        void signOut();
+                      }}
+                    >
+                      Sign out
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -626,11 +617,9 @@ export function Navbar() {
               {item.label}
             </Link>
           ))}
-          {canAccessCreatorTools && (
-            <Link href={studioHref} className="nav-drawer__link" onClick={closeMenu}>
-              Go live dashboard
-            </Link>
-          )}
+          <Link href={studioHref} className="nav-drawer__link" onClick={closeMenu}>
+            {canAccessCreatorTools ? "Go live" : "Creator setup"}
+          </Link>
           {isAdmin && (
             <Link href={adminUrl} className="nav-drawer__link" onClick={closeMenu}>
               Control center
@@ -644,16 +633,21 @@ export function Navbar() {
               <span className="navbar-context__eyebrow">Account</span>
               <strong>{user.displayName}</strong>
             </div>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => {
-                closeMenu();
-                void signOut();
-              }}
-            >
-              Sign out
-            </button>
+            <div className="nav-drawer__account-actions">
+              <Link href="/profile" className="secondary-button" onClick={closeMenu}>
+                Profile
+              </Link>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  closeMenu();
+                  void signOut();
+                }}
+              >
+                Sign out
+              </button>
+            </div>
           </div>
         ) : (
           <div className="nav-drawer__cta">

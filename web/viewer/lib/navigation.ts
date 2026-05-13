@@ -17,9 +17,7 @@ export const CANONICAL_NAV_ITEMS: readonly NavigationItem[] = [
   { label: "Home", href: "/", visibleTo: ALL_AUDIENCES },
   { label: "Browse", href: "/browse", visibleTo: ALL_AUDIENCES },
   { label: "Following", href: "/following", visibleTo: ALL_AUDIENCES },
-  { label: "Go Live", href: "/creator", visibleTo: ALL_AUDIENCES },
   { label: "Videos", href: "/videos", visibleTo: ALL_AUDIENCES },
-  { label: "Profile", href: "/profile", visibleTo: ["member", "creator", "admin"] },
 ];
 
 export const CANONICAL_QUICK_LINK_ITEMS: readonly NavigationItem[] = [
