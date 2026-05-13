@@ -7,6 +7,7 @@
 - Address the next follow-up CI failures from run `25827555245`:
   - Shell lint now fails on existing scripts that use `CDPATH= cd` and on callback/trap-only functions that ShellCheck cannot prove reachable.
   - The later `scripts/verify.sh` Docker Compose validation still falls back to `deploy/.env.example`, which does not satisfy Compose's service-level `env_file: ../.env` requirement when the root `.env` is absent in CI.
+- Address the subsequent quickstart smoke failure where a clean GitHub runner starts Compose with `--pull never` before third-party runtime images such as `redis:7-alpine` and `debian:12-slim` exist locally.
 - Treat the image vulnerability scan Trivy download failure as likely transient unless it recurs after a fresh push; changing CI install behavior would require explicit approval because it touches workflow behavior.
 
 ## Assumptions
@@ -15,6 +16,7 @@
 - No deployment contract changes are needed.
 - The approved script change should only create a temporary root `.env` from `deploy/.env.example` when `.env` is absent, and it must clean that temporary file up.
 - The user's approval covers the required script/check behavior changes needed to get the PR ready, including the narrow `scripts/verify.sh` fallback repair.
+- The quickstart smoke should still build first-party images from the working tree, but it may pull missing third-party runtime images in CI instead of assuming runner cache state.
 
 ## Risks
 - Security header middleware ordering is broad; the CSP default fix must keep viewer routes exempt from the API/admin default CSP so the dedicated viewer CSP can be set by proxy handling.
@@ -22,11 +24,13 @@
 - The contract check must not overwrite an operator's real root `.env`.
 - Shell lint fixes should stay mechanical and narrow so they do not change deploy smoke semantics.
 - The verify fallback must clean up only a temporary `.env` it created and must leave real operator `.env` files untouched.
+- Pulling missing third-party images in `scripts/test-quickstart.sh` adds network dependency to the Docker smoke, but the CI runner already needs network to build/pull base layers and scan images.
 
 ## Test plan
 - `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test ./cmd/bitriver ./internal/server -count=1`
 - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'PATH="/c/Program Files/Docker/Docker/resources/bin:$PATH" ./scripts/check-contract-invariants.sh'`
 - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/verify.sh scripts/check-go-sum-not-empty.sh scripts/refresh-go-sum.sh scripts/require-image-digests.sh scripts/deploy-smoke.sh'`
+- `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/test-quickstart.sh'`
 - `& 'C:\Program Files\Git\bin\bash.exe' ./scripts/verify.sh --viewer`
 - Recheck PR #1233 GitHub Actions after pushing.
 

@@ -290,6 +290,7 @@ print("OME config validation passed.")
 PY
 
 echo "Starting docker compose stack..."
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull --ignore-buildable --policy missing
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build --pull never
 
 set -a

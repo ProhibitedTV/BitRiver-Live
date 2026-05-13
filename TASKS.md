@@ -32,6 +32,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
     - `scripts/verify.sh` validates Docker Compose with a temporary root `.env` when CI has no committed root `.env`.
     - The verify fallback does not overwrite a real root `.env` and cleans temporary files on exit.
 
+- [x] Task 6 - Fix clean-runner quickstart smoke image pulls
+  - Acceptance criteria:
+    - `scripts/test-quickstart.sh` can start Compose on a clean runner without assuming third-party images are already cached.
+    - First-party services still build from the source checkout during the quickstart smoke.
+    - The change is validated with syntax/unit checks and confirmed in the next CI run.
+
 ### Execution log (PR #1233 CI readiness)
 - Task 1 complete: `gh auth status` is still blocked by an invalid local GitHub token, so Actions inspection used the GitHub connector. PR #1233's CI run failed in `Ubuntu test-all gate` and `Image vulnerability scan`. The Ubuntu gate failed on `cmd/bitriver/env_validation_test.go` calling `renderOMEFromEnv` with the old five-argument shape and `internal/server/security_headers_test.go` receiving an empty default CSP header. The image scan failed while installing Trivy with `gzip: stdin: unexpected end of file`; no workflow edit is planned unless it recurs after a fresh push.
 - Task 1 checks:
@@ -67,6 +73,12 @@ Status legend: `[ ]` not started, `[-]` in progress, `[x]` done
   - Temporary no-`.env` fixture sourcing `scripts/verify.sh` and running `run_docker_compose_config_validation` - Compose config rendered, fallback message printed, and the temporary root `.env` was cleaned up.
   - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
   - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'GOCACHE="$PWD/.codex-tmp/go-cache" ./scripts/verify.sh --viewer'` - stopped at the host prerequisite gate because this workstation has no usable Python interpreter.
+  - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched Markdown files.
+- Task 6 complete: `scripts/test-quickstart.sh` now pulls missing non-buildable Compose images before starting the stack, then keeps the existing `docker compose up -d --build --pull never` path so first-party services still come from local source builds.
+- Task 6 checks:
+  - `& 'C:\Program Files\Git\bin\bash.exe' -lc 'bash -n scripts/test-quickstart.sh scripts/verify.sh scripts/check-go-sum-not-empty.sh scripts/refresh-go-sum.sh scripts/require-image-digests.sh scripts/deploy-smoke.sh'` - passed.
+  - `docker compose --env-file .env -f deploy/docker-compose.yml pull --ignore-buildable --policy missing --dry-run` - blocked on this workstation by Docker config/buildx access permissions before validating the Compose pull plan.
+  - `$env:GOTOOLCHAIN='local'; $env:GOPROXY='off'; $env:GOSUMDB='off'; $env:GOCACHE=(Resolve-Path .codex-tmp\go-cache).Path; go test ./scripts -count=1` - passed.
   - `git diff --check` - passed; Git reported expected CRLF normalization warnings for touched Markdown files.
 
 ## Scoped change: issue #1220 chat controls and signed-out chat UX
