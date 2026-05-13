@@ -334,7 +334,7 @@ docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" pull --ignore
 
 dump_compose_diagnostics() {
   docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" ps -a >&2 || true
-  docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" logs --tail=160 bitriver-live srs-controller srs ome transcoder postgres redis >&2 || true
+  docker compose --env-file "$ENV_FILE" "${COMPOSE_RUNTIME_ARGS[@]}" logs --tail=160 bitriver-live viewer srs-controller srs ome transcoder transcoder-public postgres redis >&2 || true
 }
 
 echo "Starting docker compose stack..."
@@ -395,6 +395,31 @@ wait_for_health() {
   exit 1
 }
 
+curl_endpoint_check() {
+  local label="$1"
+  local url="$2"
+
+  if curl -fsSL "$url" >/dev/null; then
+    echo "$label endpoint is reachable."
+    return 0
+  fi
+
+  return 1
+}
+
+wait_for_endpoint() {
+  local label="$1"
+  local url="$2"
+
+  if bounded_poll "$WAIT_TIMEOUT" 5 curl_endpoint_check "$label" "$url"; then
+    return 0
+  fi
+
+  echo "error: timed out waiting for $label endpoint at $url" >&2
+  dump_compose_diagnostics
+  exit 1
+}
+
 SERVICES_WITH_HEALTHCHECKS=(
   bitriver-live
   srs-controller
@@ -414,7 +439,7 @@ API_PORT=${BITRIVER_LIVE_PORT:-8080}
 VIEWER_PATH=${NEXT_VIEWER_BASE_PATH:-/viewer}
 
 echo "CURLing API and viewer endpoints..."
-curl -fsS "http://localhost:${API_PORT}/healthz" >/dev/null
-curl -fsSL "http://localhost:${API_PORT}${VIEWER_PATH}" >/dev/null
+wait_for_endpoint "API health" "http://localhost:${API_PORT}/healthz"
+wait_for_endpoint "viewer" "http://localhost:${API_PORT}${VIEWER_PATH}"
 
 echo "Quickstart compose smoke checks passed."
